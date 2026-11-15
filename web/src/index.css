@@ -289,6 +289,10 @@ thead .row:last-child {
   outline: 2px solid var(--highlight);
   outline-offset: 2px;
 }
+/* For a field whose container shows the focus instead. */
+.focus-within-shown:focus-visible {
+  outline: none;
+}
 
 /* Base UI normally injects this rule as an inline <style> for select popups; main.tsx turns that off
    (CSPProvider disableStyleElements) because the content security policy forbids inline styles. */

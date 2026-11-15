@@ -13,6 +13,7 @@ import { Rules } from '@/views/rules.tsx';
 import { SettingsView } from '@/views/settings.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
+import { SearchOptions } from '@/views/search-options.tsx';
 import { SystemView } from '@/views/system.tsx';
 
 const SECTIONS = ['suggestions', 'overview', 'decisions', 'labels', 'rules', 'changes', 'settings'] as const;
@@ -29,8 +30,16 @@ const NAMES: Record<(typeof SECTIONS)[number], string> = {
 /** Shows the sign-in screen until the viewer is signed in, then the dashboard. */
 export function App() {
   const route = useRoute();
-  if (route[0] === 'system') return <SystemView />;
+  if (route[0] === 'system') return route[1] === 'search' ? <SearchOptionsPage /> : <SystemView />;
   return <Gate route={route} />;
+}
+
+function SearchOptionsPage() {
+  return (
+    <main className="mx-auto w-full max-w-4xl px-4 py-8">
+      <SearchOptions />
+    </main>
+  );
 }
 
 function Gate({ route }: { route: string[] }) {
