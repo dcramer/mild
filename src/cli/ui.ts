@@ -213,17 +213,51 @@ export async function pause(hint = 'Enter when done, s to stop'): Promise<boolea
 }
 
 /**
- * Read pasted JSON, which may arrive as one line or many. Keeps reading until it parses or the
- * reader enters an empty line. Returns what was typed, trimmed; empty if nothing was entered.
+ * Read pasted JSON without showing it, since it holds a secret. It may arrive as one line or many:
+ * reading stops when it parses, or at an empty line. Returns what was entered, trimmed.
  */
 export async function pasteJson(question: string): Promise<string> {
-  let pasted = await ask(`${TEXT}${question}`);
-  while (pasted.startsWith('{') && !parses(pasted)) {
-    const more = await readLine();
-    if (more === null || more.trim() === '') break;
-    pasted += `\n${more}`;
+  if (!interactive) {
+    let pasted = await ask(`${TEXT}${question}`);
+    while (pasted.startsWith('{') && !parses(pasted)) {
+      const more = await readLine();
+      if (more === null || more.trim() === '') break;
+      pasted += `\n${more}`;
+    }
+    return pasted.trim();
   }
-  return pasted.trim();
+
+  // Key-by-key, so the terminal does not echo what is pasted.
+  suspendReader();
+  const input = process.stdin;
+  out(`${TEXT}${question} `);
+  const pasted = await new Promise<string>((resolve) => {
+    let buffer = '';
+    const onData = (chunk: Buffer) => {
+      for (const ch of chunk.toString('utf8')) {
+        if (ch === '\u0003') {
+          input.setRawMode(false);
+          out('\n');
+          process.exit(130);
+        }
+        if (ch === '\u007F' || ch === '\b') buffer = buffer.slice(0, -1);
+        else buffer += ch === '\r' ? '\n' : ch;
+      }
+      if (!buffer.includes('\n')) return;
+      const entered = buffer.trim();
+      if (entered.startsWith('{') && !parses(entered) && !buffer.endsWith('\n\n')) return;
+      input.off('data', onData);
+      input.setRawMode(false);
+      input.pause();
+      resolve(entered);
+    };
+    input.setRawMode(true);
+    input.resume();
+    input.on('data', onData);
+  });
+  out(`${pc.dim(pasted.startsWith('{') ? 'received, not shown' : pasted)}\n`);
+  if (tracking) rows += 1;
+  return pasted;
 }
 
 function parses(json: string): boolean {
@@ -233,6 +267,11 @@ function parses(json: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** A prompt that stays open while something else may answer first. Whoever finishes it starts a new line. */
+export function waiting(question: string): void {
+  out(`${TEXT}${question} `);
 }
 
 /** A URL the reader has to open, set apart so it is easy to find and copy. */
@@ -252,6 +291,7 @@ export interface Ui {
   plain: (text: string) => void;
   blank: () => void;
   link: (url: string) => void;
+  waiting: (question: string) => void;
   fields: (rows: readonly (readonly [string, string])[]) => void;
   table: (headers: readonly string[], rows: readonly (readonly string[])[]) => void;
   select: <T>(question: string, options: readonly Option<T>[]) => Promise<T>;
@@ -265,4 +305,4 @@ export interface Ui {
   spin: <T>(label: string, work: () => Promise<T>) => Promise<T>;
 }
 
-export const ui: Ui = { heading, step, ...say, link, fields, table, select, text, pause, pasteJson, mark, collapse, spin };
+export const ui: Ui = { heading, step, ...say, link, waiting, fields, table, select, text, pause, pasteJson, mark, collapse, spin };

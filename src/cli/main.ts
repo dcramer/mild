@@ -15,7 +15,7 @@ import { type Account, connectAccount, listAccounts } from '../store/accounts.ts
 import { getAction, listRecentActions } from '../store/actions.ts';
 import { listCategories, updateCategory } from '../store/categories.ts';
 import { openDb } from '../store/db.ts';
-import { GOOGLE_TASK_COUNT, runInit } from './init.ts';
+import { type SetupState, runInit } from './init.ts';
 import { closeTerminal, readLine } from './terminal.ts';
 import { disposition, paint, spin, ui } from './ui.ts';
 import { addRule, listRules, removeRule } from '../store/rules.ts';
@@ -100,7 +100,11 @@ async function connectGmail(config: Config, options: { port?: number; host?: str
       onUrl: (url) => {
         ui.info('Open this in a browser and approve access:');
         ui.link(url);
-        ui.info("If the browser ends on a page that will not load, paste that page's address here.");
+        ui.info('If the browser is on another machine, the page it ends on will not load: paste its address here.');
+        ui.info('"Access blocked" means this account is not a test user and the app is not published:');
+        ui.info('https://console.cloud.google.com/auth/audience');
+        ui.blank();
+        ui.waiting('Waiting for the browser, or paste the address:');
       },
     });
     const profile = await spin('Checking the account', () => createGmailApi(client).getProfile());
@@ -111,6 +115,7 @@ async function connectGmail(config: Config, options: { port?: number; host?: str
     return profile.emailAddress;
   } finally {
     paste.abort();
+    ui.blank();
   }
 }
 
@@ -142,13 +147,13 @@ async function init(args: string[]): Promise<void> {
     saveSettings: (settings) => saveSettings(config, settings),
     hasGoogleClient: () => hasClientSecrets(config),
     // A home set up before progress was recorded has a client and no state file: treat it as finished.
-    googleProgress: () =>
+    setupState: () =>
       existsSync(config.setupStatePath)
-        ? ((JSON.parse(readFileSync(config.setupStatePath, 'utf8')) as { googleTasks?: number }).googleTasks ?? 0)
+        ? (JSON.parse(readFileSync(config.setupStatePath, 'utf8')) as SetupState)
         : hasClientSecrets(config)
-          ? GOOGLE_TASK_COUNT
-          : 0,
-    setGoogleProgress: (done) => writeFileSync(config.setupStatePath, JSON.stringify({ googleTasks: done }), { mode: 0o600 }),
+          ? { googleTasks: 99, access: 'publish' }
+          : { googleTasks: 0 },
+    saveSetupState: (state) => writeFileSync(config.setupStatePath, JSON.stringify(state), { mode: 0o600 }),
     installGoogleClient: (json) => installClient(config, json),
     connectedAccounts: () => withDb((db) => listAccounts(db).map((a) => a.email)),
     connectGmail: () => connectGmail(config, { ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) }),

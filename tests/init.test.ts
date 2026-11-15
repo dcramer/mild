@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { type InitDeps, runInit } from '../src/cli/init.ts';
+import { type InitDeps, type SetupState, runInit } from '../src/cli/init.ts';
 import type { Ui } from '../src/cli/ui.ts';
 import { DEFAULT_SETTINGS, loadConfig, parseSettings, renderSettings, resolveHome, saveSettings } from '../src/config.ts';
 import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
@@ -17,13 +17,20 @@ const freshHome = () => mkdtempSync(join(tmpdir(), 'sift-home-'));
  */
 function wizard(
   answers: (string | number)[],
-  state: { client?: boolean; accounts?: string[]; models?: string[]; loginFails?: boolean; progress?: number } = {},
+  state: { client?: boolean; accounts?: string[]; models?: string[]; loginFails?: boolean; progress?: number; access?: 'test' | 'publish' } = {},
 ) {
   const config = loadConfig({ SIFT_HOME: freshHome() });
   const said: string[] = [];
   const asked: string[] = [];
   const calls: string[] = [];
-  const world = { client: state.client ?? false, accounts: [...(state.accounts ?? [])], progress: state.progress ?? (state.client ? 7 : 0) };
+  // With no progress given, a home that has a client is one that finished setup as a test user.
+  const finished = state.client === true && state.progress === undefined;
+  const access = state.access ?? (finished ? 'test' : undefined);
+  const world: { client: boolean; accounts: string[]; setup: SetupState } = {
+    client: state.client ?? false,
+    accounts: [...(state.accounts ?? [])],
+    setup: { googleTasks: state.progress ?? (finished ? 6 : 0), ...(access ? { access } : {}) },
+  };
   const next = (question: string) => {
     asked.push(question);
     const answer = answers.shift();
@@ -42,6 +49,7 @@ function wizard(
     plain: record,
     blank: () => {},
     link: (url) => record(`link: ${url}`),
+    waiting: record,
     fields: (rows) => rows.forEach(([label, value]) => record(`${label.trim()}: ${value}`)),
     table: (_headers, rows) => rows.forEach((row) => record(row.join(' | '))),
     select: async (question, options) => {
@@ -62,9 +70,9 @@ function wizard(
     ui,
     saveSettings: (settings) => saveSettings(config, settings),
     hasGoogleClient: () => world.client,
-    googleProgress: () => world.progress,
-    setGoogleProgress: (done) => {
-      world.progress = done;
+    setupState: () => world.setup,
+    saveSetupState: (next) => {
+      world.setup = next;
     },
     installGoogleClient: (json) => {
       calls.push(`install ${json}`);
@@ -88,10 +96,15 @@ function wizard(
 }
 
 const CLIENT = '{"installed":{}}';
-/** Answers for the seven Google tasks: three pauses, the client paste, three more pauses. */
-const GOOGLE = ['done', 'done', 'done', CLIENT, 'done', 'done', 'done'];
+/** The five tasks everyone does: three pauses, the client paste, one more pause. */
+const COMMON = ['done', 'done', 'done', CLIENT, 'done'];
+const TEST_USER = 0;
+const PUBLISH = 1;
+/** The whole Google setup as a test user. */
+const GOOGLE = [...COMMON, TEST_USER, 'done'];
 const KEEP = 0;
 const REDO = 1;
+const links = (said: string[]) => said.filter((line) => line.startsWith('link: ')).map((line) => line.slice(6).replace('https://console.cloud.google.com', ''));
 
 describe('sift init', () => {
   it('walks a new user through every step and writes the files', async () => {
@@ -109,46 +122,55 @@ describe('sift init', () => {
   it('gives each Google task its link and values, and takes the client JSON at the task that produces it', async () => {
     const w = wizard([...GOOGLE, 3]);
     await runInit(w.deps);
-    expect(w.said.filter((line) => line.startsWith('link: '))).toEqual([
-      'link: https://console.cloud.google.com/projectcreate',
-      'link: https://console.cloud.google.com/apis/library/gmail.googleapis.com',
-      'link: https://console.cloud.google.com/auth/overview',
-      'link: https://console.cloud.google.com/auth/clients',
-      'link: https://console.cloud.google.com/auth/scopes',
-      'link: https://console.cloud.google.com/auth/branding',
-      'link: https://console.cloud.google.com/auth/audience',
+    expect(links(w.said)).toEqual([
+      '/projectcreate',
+      '/apis/library/gmail.googleapis.com',
+      '/auth/overview',
+      '/auth/clients',
+      '/auth/scopes',
+      '/auth/audience',
     ]);
-    expect(w.asked.slice(0, 7)).toEqual(['pause', 'pause', 'pause', 'Paste the JSON here (s to stop):', 'pause', 'pause', 'pause']);
+    expect(w.asked.slice(0, 7)).toEqual(['pause', 'pause', 'pause', 'Paste the JSON here (s to stop):', 'pause', 'Who signs in to this app?', 'pause']);
     expect(w.text()).toContain('Audience: External');
     expect(w.text()).toContain('Application type: Desktop app');
     expect(w.text()).toContain('Open "Data Access" in the left menu');
     expect(w.text()).toContain('Scopes: https://www.googleapis.com/auth/gmail.modify');
-    expect(w.text()).toContain('https://www.googleapis.com/auth/gmail.settings.basic');
+    expect(w.text()).toContain('Under "Test users"');
+    expect(w.world.setup).toEqual({ googleTasks: 6, access: 'test' });
   });
 
-  it('resumes the Google tasks where an earlier run stopped', async () => {
+  it('branches to branding and publishing when the user chooses to publish', async () => {
+    const w = wizard([...COMMON, PUBLISH, 'done', 'done', 3]);
+    await runInit(w.deps);
+    expect(links(w.said).slice(5)).toEqual(['/auth/branding', '/auth/audience']);
+    expect(w.world.setup).toEqual({ googleTasks: 7, access: 'publish' });
+    expect(w.calls).toEqual([`install ${CLIENT}`, 'gmail']);
+  });
+
+  it('resumes the Google tasks where an earlier run stopped, and holds Gmail sign-in until they are done', async () => {
     const first = wizard(['done', 'done', 'skip', 3]);
     await runInit(first.deps);
-    expect(first.world.progress).toBe(2);
+    expect(first.world.setup).toEqual({ googleTasks: 2 });
     expect(first.text()).toContain('skip: Stopped here');
     expect(first.text()).toContain('skip: Needs step 1 finished');
     expect(first.text()).toContain('warn: Still needed: the Google client and a Gmail account');
 
-    // The client was pasted but the run stopped before scopes: Gmail sign-in must wait for the rest.
+    // The client is saved but the run stopped at scopes.
     const partway = wizard(['skip', 3], { client: true, progress: 4 });
     await runInit(partway.deps);
     expect(partway.calls).toEqual([]);
     expect(partway.text()).toContain('skip: Needs step 1 finished');
 
-    const later = wizard(['done', 'done', 'done', 3], { client: true, progress: 4 });
+    const later = wizard(['done', TEST_USER, 'done', 3], { client: true, progress: 4 });
     await runInit(later.deps);
-    expect(later.said.filter((line) => line.startsWith('link: '))).toEqual([
-      'link: https://console.cloud.google.com/auth/scopes',
-      'link: https://console.cloud.google.com/auth/branding',
-      'link: https://console.cloud.google.com/auth/audience',
-    ]);
-    expect(later.world.progress).toBe(7);
+    expect(links(later.said)).toEqual(['/auth/scopes', '/auth/audience']);
     expect(later.calls).toEqual(['gmail']);
+
+    // Stopped after choosing to publish: the choice is remembered.
+    const chosen = wizard(['done', 'done', 3], { client: true, progress: 5, access: 'publish' });
+    await runInit(chosen.deps);
+    expect(links(chosen.said)).toEqual(['/auth/branding', '/auth/audience']);
+    expect(chosen.asked).not.toContain('Who signs in to this app?');
   });
 
   it('offers each finished step with one keystroke to keep it', async () => {
@@ -172,14 +194,14 @@ describe('sift init', () => {
   });
 
   it('asks again when the pasted client is the wrong kind, and stops on s', async () => {
-    const w = wizard(['done', 'done', 'done', '{"web":{}}', CLIENT, 'done', 'done', 'done', 1, 1]);
+    const w = wizard(['done', 'done', 'done', '{"web":{}}', CLIENT, 'done', TEST_USER, 'done', 1, 1]);
     await runInit(w.deps);
     expect(w.calls).toEqual(['install {"web":{}}', `install ${CLIENT}`, 'gmail', 'login openai api_key']);
     expect(w.text()).toContain('fail: What you pasted is not a Desktop app client');
 
     const stopped = wizard(['done', 'done', 'done', 's', 3]);
     await runInit(stopped.deps);
-    expect(stopped.world.progress).toBe(3);
+    expect(stopped.world.setup.googleTasks).toBe(3);
     expect(stopped.calls).toEqual([]);
   });
 

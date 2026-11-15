@@ -17,15 +17,24 @@ export const MODEL_CHOICES: readonly ModelChoice[] = [
   { label: 'Anthropic API key', provider: 'anthropic', type: 'api_key' },
 ];
 
+/** Who may sign in to the user's Google app. Decides the last tasks of the Google setup. */
+export type Access = 'test' | 'publish';
+
+export interface SetupState {
+  /** Google setup tasks finished, counted along the path `access` selects. */
+  googleTasks: number;
+  access?: Access;
+}
+
 /** What the wizard needs from the rest of sift. Everything that touches the network or the disk is injected. */
 export interface InitDeps {
   config: Config;
   ui: Ui;
   saveSettings(settings: Settings): void;
   hasGoogleClient(): boolean;
-  /** How many of the Google setup tasks are finished, so a later run resumes where this one stopped. */
-  googleProgress(): number;
-  setGoogleProgress(done: number): void;
+  /** How far the Google setup has got, so a later run resumes where this one stopped. */
+  setupState(): SetupState;
+  saveSetupState(state: SetupState): void;
   /** Save the pasted client JSON into the home directory. Throws a readable message if it is the wrong kind. */
   installGoogleClient(json: string): void;
   connectedAccounts(): string[];
@@ -53,14 +62,16 @@ export async function runInit(deps: InitDeps): Promise<void> {
   if (!existsSync(config.guidelinesPath)) writeFileSync(config.guidelinesPath, GUIDELINES_TEMPLATE, { mode: 0o600 });
 
   ui.step(1, STEPS, 'Google OAuth client');
-  if (deps.googleProgress() >= GOOGLE_TASKS.length && deps.hasGoogleClient()) {
-    if (await keep(ui, 'Client in place', 'Set it up again')) await googleClient(deps, 0);
-  } else await googleClient(deps, deps.googleProgress());
+  if (googleReady(deps)) {
+    if (await keep(ui, 'Client in place', 'Set it up again')) {
+      deps.saveSetupState({ googleTasks: 0 });
+      await googleClient(deps);
+    }
+  } else await googleClient(deps);
 
   ui.step(2, STEPS, 'Gmail account');
   let accounts = deps.connectedAccounts();
-  const googleReady = () => deps.hasGoogleClient() && deps.googleProgress() >= GOOGLE_TASKS.length;
-  if (!googleReady()) ui.skip('Needs step 1 finished');
+  if (!googleReady(deps)) ui.skip('Needs step 1 finished');
   else if (accounts.length === 0 || (await keep(ui, `Connected ${paint.bold(accounts.join(', '))}`, 'Connect another account'))) {
     try {
       const email = await deps.connectGmail();
@@ -98,7 +109,7 @@ export async function runInit(deps: InitDeps): Promise<void> {
   }
 
   ui.blank();
-  const missing = [googleReady() ? null : 'the Google client', accounts.length > 0 ? null : 'a Gmail account'].filter((item) => item !== null);
+  const missing = [googleReady(deps) ? null : 'the Google client', accounts.length > 0 ? null : 'a Gmail account'].filter((item) => item !== null);
   if (missing.length > 0) {
     ui.warn(`Still needed: ${missing.join(' and ')}. Run ${paint.cmd('sift init')} again.`);
     ui.blank();
@@ -179,43 +190,71 @@ const GOOGLE_TASKS: readonly Task[] = [
       ['', 'https://www.googleapis.com/auth/gmail.settings.basic'],
     ],
   },
-  {
-    title: 'Fill in the branding',
-    url: 'https://console.cloud.google.com/auth/branding',
-    todo: ['Publishing needs the required fields here filled in. Save when done.', 'Leave the logo empty: adding one makes Google review the app.'],
-    values: [
-      ['App name', 'sift'],
-      ['User support email', 'your own address'],
-      ['Developer contact', 'your own address'],
-    ],
-  },
-  {
-    title: 'Publish the app',
-    url: 'https://console.cloud.google.com/auth/audience',
-    todo: [
-      'Choose "Publish app" and confirm, so the status reads "In production".',
-      'Left in "Testing", Google ends your sign-in every 7 days. It needs no review for your own use;',
-      'when you sign in you will see "Google hasn\'t verified this app": choose Advanced, then continue.',
-    ],
-  },
 ];
 
+/** The last tasks, after choosing who may sign in. */
+const ACCESS_TASKS: Record<Access, readonly Task[]> = {
+  test: [
+    {
+      title: 'Add yourself as a test user',
+      url: 'https://console.cloud.google.com/auth/audience',
+      todo: ['Under "Test users", choose "Add users" and enter the Gmail address sift will read.'],
+    },
+  ],
+  publish: [
+    {
+      title: 'Fill in the branding',
+      url: 'https://console.cloud.google.com/auth/branding',
+      todo: ['Publishing needs every required field here. Save when done.'],
+    },
+    {
+      title: 'Publish the app',
+      url: 'https://console.cloud.google.com/auth/audience',
+      todo: [
+        'Choose "Publish app" and confirm, so the publishing status reads "In production".',
+        'Google may then ask you to verify the app before it lets you sign in.',
+      ],
+    },
+  ],
+};
+
+const tasksFor = (access: Access | undefined) => [...GOOGLE_TASKS, ...(access ? ACCESS_TASKS[access] : [])];
+
+/** True once the client is saved and every task on the chosen path is done. */
+function googleReady(deps: InitDeps): boolean {
+  const state = deps.setupState();
+  return deps.hasGoogleClient() && state.access !== undefined && state.googleTasks >= tasksFor(state.access).length;
+}
+
 /**
- * The Google setup from task `from` on. Progress is saved after every task, so stopping part-way and
- * running `sift init` again carries on from the same place.
+ * The Google setup, from wherever the saved state says it had reached. State is saved after every task,
+ * so stopping part-way and running `sift init` again carries on from the same place.
  */
-async function googleClient(deps: InitDeps, from: number): Promise<void> {
+async function googleClient(deps: InitDeps): Promise<void> {
   const { ui } = deps;
-  if (from === 0) {
+  let state = deps.setupState();
+  if (state.googleTasks === 0) {
     ui.info('sift reads your mail through a Google client that you own, so nobody sits in between.');
     ui.blank();
   }
 
   // One task on screen at a time: each folds into a single done line when the user comes back.
-  for (const [index, task] of GOOGLE_TASKS.entries()) {
-    if (index < from) continue;
+  for (;;) {
+    if (state.googleTasks >= GOOGLE_TASKS.length && state.access === undefined) {
+      // Google only lets an app's test users or, once it is published, everyone sign in.
+      const access = await ui.select<Access>('Who signs in to this app?', [
+        { label: 'Just me, as a test user', hint: 'works straight away; Google signs you out every 7 days', value: 'test' },
+        { label: 'Publish the app', hint: 'no weekly sign-out; Google may require verification first', value: 'publish' },
+      ]);
+      state = { googleTasks: state.googleTasks, access };
+      deps.saveSetupState(state);
+    }
+    const tasks = tasksFor(state.access);
+    const task = tasks[state.googleTasks];
+    if (!task) return;
+
     ui.mark();
-    ui.plain(`${paint.bold(task.title)}  ${paint.dim(`${index + 1} of ${GOOGLE_TASKS.length}`)}`);
+    ui.plain(`${paint.bold(task.title)}  ${paint.dim(`${state.googleTasks + 1} of ${state.access ? tasks.length : `${tasks.length}+`}`)}`);
     ui.link(task.url);
     ui.blank();
     for (const item of task.todo) ui.info(item);
@@ -229,7 +268,8 @@ async function googleClient(deps: InitDeps, from: number): Promise<void> {
       ui.skip('Stopped here');
       return;
     }
-    deps.setGoogleProgress(index + 1);
+    state = { googleTasks: state.googleTasks + 1, ...(state.access ? { access: state.access } : {}) };
+    deps.saveSetupState(state);
     ui.collapse(task.title);
   }
 }
@@ -247,8 +287,6 @@ async function pasteClient(deps: InitDeps): Promise<boolean> {
     }
   }
 }
-
-export const GOOGLE_TASK_COUNT = GOOGLE_TASKS.length;
 
 async function pickModel(deps: InitDeps, choice: ModelChoice): Promise<void> {
   const { ui, config } = deps;

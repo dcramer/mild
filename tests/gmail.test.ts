@@ -188,7 +188,7 @@ describe('parseCallback', () => {
   });
 
   it('rejects a wrong state, a denial and a missing code', () => {
-    expect(() => parseCallback('/?code=abc&state=other', 's1')).toThrow(/state mismatch/);
+    expect(() => parseCallback('/?code=abc&state=other', 's1')).toThrow(/different sign-in attempt/);
     expect(() => parseCallback('/?error=access_denied&state=s1', 's1')).toThrow(/access_denied/);
     expect(() => parseCallback('/?state=s1', 's1')).toThrow(/no authorization code/);
   });

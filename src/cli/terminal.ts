@@ -9,13 +9,17 @@ const waiting: ((line: string | null) => void)[] = [];
 
 function start(): void {
   if (reader) return;
-  reader = createInterface({ input: process.stdin });
-  reader.on('line', (line) => {
+  const mine = createInterface({ input: process.stdin });
+  reader = mine;
+  mine.on('line', (line) => {
+    // A closed reader stays attached to the input and would still hand over lines, including ones meant
+    // for a key-by-key prompt that hides what is typed.
+    if (reader !== mine) return;
     const next = waiting.shift();
     if (next) next(line);
     else buffered.push(line);
   });
-  reader.on('close', () => {
+  mine.on('close', () => {
     ended = true;
     for (const waiter of waiting.splice(0)) waiter(null);
   });
@@ -61,7 +65,7 @@ export async function ask(question: string, signal?: AbortSignal): Promise<strin
 export function suspendReader(): void {
   const current = reader;
   reader = undefined;
-  current?.removeAllListeners('close');
+  current?.removeAllListeners();
   current?.close();
 }
 

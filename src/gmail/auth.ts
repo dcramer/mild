@@ -64,7 +64,7 @@ export function parseCallback(url: string, expectedState: string): string {
   const params = new URL(url.trim(), 'http://127.0.0.1').searchParams;
   const error = params.get('error');
   if (error) throw new Error(`Google refused authorization: ${error}`);
-  if (params.get('state') !== expectedState) throw new Error('OAuth state mismatch; start again with `sift auth`.');
+  if (params.get('state') !== expectedState) throw new Error('That address is from a different sign-in attempt. Start again and use the newest link.');
   const code = params.get('code');
   if (!code) throw new Error('The redirect URL has no authorization code.');
   return code;
