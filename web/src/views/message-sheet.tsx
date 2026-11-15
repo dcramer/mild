@@ -46,7 +46,7 @@ function DecisionEntry({ d }: { d: Decision }) {
     d.mode === 'observe' ? 'observe mode' : null,
   ].filter(Boolean);
   return (
-    <li className="rounded-lg border p-3">
+    <li className="sheet bg-card p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">Decision</span>
         <DispositionBadge disposition={d.disposition} />
@@ -70,7 +70,7 @@ function DecisionEntry({ d }: { d: Decision }) {
 function ActionEntry({ a }: { a: Action }) {
   const bad = a.status !== 'done' && a.status !== 'undone';
   return (
-    <li className="rounded-lg border p-3">
+    <li className="sheet bg-card p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">Mailbox change</span>
         <span className={`inline-flex h-5 items-center rounded-full border px-2 text-xs font-medium ${bad ? 'border-destructive/50 text-destructive' : ''}`}>
@@ -115,13 +115,13 @@ function Body({ detail }: { detail: MessageDetail }) {
       </dl>
 
       <section>
-        <h3 className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">History</h3>
+        <h3 className="slug mb-2 text-muted-foreground">History</h3>
         {history.length === 0 ? <Empty>Not triaged yet.</Empty> : <ol className="flex flex-col gap-2">{history.map((entry) => entry.node)}</ol>}
       </section>
 
       {headers.length > 0 ? (
         <section>
-          <h3 className="mb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">Headers used for triage</h3>
+          <h3 className="slug mb-1 text-muted-foreground">Headers used for triage</h3>
           <p className="mb-2 text-xs text-muted-foreground">sift stores these headers and the subject. It never stores the body.</p>
           <dl className="text-xs">
             {headers.map(([name, value]) => (
@@ -152,7 +152,7 @@ function Loaded({ target }: { target: MessageRef }) {
   return (
     <>
       <SheetHeader>
-        <SheetTitle className="pr-8">{(data?.subject ?? target.subject) || '(no subject)'}</SheetTitle>
+        <SheetTitle className="pr-8 font-heading text-2xl leading-tight font-normal">{(data?.subject ?? target.subject) || '(no subject)'}</SheetTitle>
         <SheetDescription>What sift decided and did for this message.</SheetDescription>
       </SheetHeader>
       {loading ? (

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DispositionBadge, Empty, ErrorNote, Highlight, Panel, Sub, TierLabel } from '@/components/bits.tsx';
+import { DispositionBadge, Empty, ErrorNote, Panel, Sub, TierLabel } from '@/components/bits.tsx';
 import { Picker } from '@/components/picker.tsx';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -49,7 +49,7 @@ function Group({
     <li className="grid gap-x-6 gap-y-3 border-b px-4 py-3.5 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto]">
       <div className="min-w-0">
         <div className="flex flex-wrap items-baseline gap-x-2">
-          <span className="truncate font-medium">{group.senderName ?? group.sender}</span>
+          <span className="truncate font-heading text-[19px] leading-tight">{group.senderName ?? group.sender}</span>
           {group.senderName ? <span className="truncate text-[13px] text-muted-foreground">{group.sender}</span> : null}
           <span className="text-[13px] text-muted-foreground tabular-nums">· {count(group.messages)}</span>
         </div>
@@ -73,7 +73,7 @@ function Group({
 
       <div className="flex flex-col gap-2 md:items-end">
         <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
-          {unsure ? <Highlight className="mx-0 px-1.5 text-xs font-medium">sift was not sure</Highlight> : <DispositionBadge disposition={group.disposition} />}
+          {unsure ? <span className="stamp bg-highlight text-highlight-ink">sift was not sure</span> : <DispositionBadge disposition={group.disposition} />}
           <TierLabel stage={group.stage} />
         </div>
         <Sub>{group.sample[0]?.reason}</Sub>

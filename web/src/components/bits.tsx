@@ -31,15 +31,15 @@ export function Marked({ text, term }: { text: string; term?: string }) {
 
 /** A bordered surface. shadcn's Card with the dashboard's flat, hairline treatment. */
 export function Panel({ className, ...props }: React.ComponentProps<typeof Card>) {
-  return <Card className={cn('gap-0 rounded-lg border py-0 shadow-none ring-0', className)} {...props} />;
+  return <Card className={cn('sheet gap-0 py-0 ring-0', className)} {...props} />;
 }
 
 export function PanelHeader({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
   return (
     <div className="flex items-start gap-4 border-b px-4 py-3">
       <div className="min-w-0 flex-1">
-        <h2 className="text-sm font-medium">{title}</h2>
-        {description ? <p className="mt-0.5 text-[13px] text-muted-foreground">{description}</p> : null}
+        <h2 className="font-heading text-[21px] leading-tight">{title}</h2>
+        {description ? <p className="mt-1 text-[13px] text-muted-foreground">{description}</p> : null}
       </div>
       {action}
     </div>
@@ -51,21 +51,19 @@ export function TierLabel({ stage }: { stage: string }) {
   const t = tier(stage);
   return (
     <span className="inline-flex items-center gap-2 whitespace-nowrap">
-      <span aria-hidden className="size-2.5 shrink-0 rounded-[2px] ring-1 ring-foreground/15" style={{ background: t.color }} />
+      <span aria-hidden className="size-2.5 shrink-0 rounded-[1px] ring-1 ring-foreground/20" style={{ background: t.color }} />
       {t.name}
     </span>
   );
 }
 
-const PILL = 'inline-flex h-5 items-center rounded-full px-2 text-xs font-medium whitespace-nowrap';
-
-/** What sift did with a message. Monochrome by weight: outline, tint, solid; mail left for the reader is highlighted. */
+/** What sift did with a message, as a stamp. Weight carries the meaning: outline, tint, solid ink; mail left for the reader is highlighted. */
 export function DispositionBadge({ disposition }: { disposition: string }) {
   const name = dispositionName(disposition);
-  if (disposition === 'review') return <Highlight className="mx-0 px-1.5 text-xs font-medium whitespace-nowrap">{name}</Highlight>;
-  if (disposition === 'spam') return <span className={cn(PILL, 'bg-foreground text-background')}>{name}</span>;
-  if (disposition === 'archive') return <span className={cn(PILL, 'bg-secondary text-secondary-foreground')}>{name}</span>;
-  return <span className={cn(PILL, 'border text-foreground')}>{name}</span>;
+  if (disposition === 'review') return <span className="stamp bg-highlight text-highlight-ink">{name}</span>;
+  if (disposition === 'spam') return <span className="stamp bg-foreground text-background">{name}</span>;
+  if (disposition === 'archive') return <span className="stamp bg-secondary text-secondary-foreground">{name}</span>;
+  return <span className="stamp border border-foreground/30">{name}</span>;
 }
 
 export function Sub({ children, mono }: { children: ReactNode; mono?: boolean }) {
@@ -105,7 +103,7 @@ export function Empty({ children }: { children: ReactNode }) {
 
 export function ErrorNote({ message }: { message: string }) {
   return (
-    <p role="alert" className="rounded-lg border border-destructive/40 px-3 py-2 text-sm">
+    <p role="alert" className="sheet border-destructive/50 bg-card px-3 py-2 text-sm">
       <span className="font-medium text-destructive">Could not refresh.</span> {message} Is <code className="font-mono text-[13px]">sift dashboard</code> still
       running?
     </p>
@@ -113,6 +111,6 @@ export function ErrorNote({ message }: { message: string }) {
 }
 
 /** Table header and cell classes shared by every table, so they line up with the panel's 16px gutter. */
-export const TH = 'h-9 px-4 text-xs font-normal text-muted-foreground';
+export const TH = 'slug h-9 px-4 text-muted-foreground';
 export const TD = 'px-4 py-2.5';
 export const NUM = 'text-right tabular-nums';

@@ -12,9 +12,9 @@ const chartConfig = Object.fromEntries(TIERS.map((t) => [t.key, { label: t.name,
 function Stat({ label, value, note, tone }: { label: string; value: string; note?: string | null; tone?: 'highlight' | 'alert' }) {
   return (
     <div className="flex flex-col gap-1 bg-card px-4 py-3.5">
-      <dt className="truncate text-[13px] text-muted-foreground">{label}</dt>
-      <dd className={`text-2xl leading-8 font-semibold tracking-tight tabular-nums ${tone === 'alert' ? 'text-destructive' : ''}`}>
-        {tone === 'highlight' ? <Highlight className="mx-0 inline-block px-1.5 py-0 leading-8">{value}</Highlight> : value}
+      <dt className="slug truncate text-muted-foreground">{label}</dt>
+      <dd className={`font-heading text-[38px] leading-10 ${tone === 'alert' ? 'text-destructive' : ''}`}>
+        {tone === 'highlight' ? <Highlight className="mx-0 inline-block px-2 py-0 leading-10">{value}</Highlight> : value}
       </dd>
       <dd className="min-h-4 truncate text-xs text-muted-foreground tabular-nums">{note}</dd>
     </div>
@@ -75,7 +75,7 @@ export function Overview({ data, onOpen, onViewAll }: { data: Summary; onOpen: (
   return (
     <div className="flex flex-col gap-4">
       {/* One strip of figures, divided by hairlines. The first is the point of sift, so it gets the highlighter. */}
-      <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border md:grid-cols-4 xl:grid-cols-7 [&>div:last-child]:col-span-2 xl:[&>div:last-child]:col-span-1">
+      <dl className="sheet grid grid-cols-2 gap-px overflow-hidden bg-border md:grid-cols-4 xl:grid-cols-7 [&>div:last-child]:col-span-2 xl:[&>div:last-child]:col-span-1">
         <Stat
           label="No model needed"
           value={percent(t.withoutInference, t.decisions)}

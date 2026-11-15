@@ -1,14 +1,16 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
-@import '@fontsource-variable/geist';
+@import '@fontsource-variable/schibsted-grotesk';
+@import '@fontsource/instrument-serif/400.css';
+@import '@fontsource/instrument-serif/400-italic.css';
 @import '@fontsource-variable/geist-mono';
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-heading: var(--font-sans);
-  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-heading: 'Instrument Serif', ui-serif, Georgia, serif;
+  --font-sans: 'Schibsted Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
   --color-highlight: var(--highlight);
   --color-highlight-ink: var(--highlight-ink);
@@ -53,37 +55,40 @@
 }
 
 :root {
-  /* Monochrome, in the manner of Geist: near-white surfaces, hairline borders, near-black ink. */
-  --background: #fafafa;
-  --foreground: #171717;
-  --card: #ffffff;
-  --card-foreground: #171717;
-  --popover: #ffffff;
-  --popover-foreground: #171717;
-  --primary: #171717;
-  --primary-foreground: #ffffff;
-  --secondary: #f2f2f2;
-  --secondary-foreground: #171717;
-  --muted: #f5f5f5;
-  --muted-foreground: #666666;
-  --accent: #f2f2f2;
-  --accent-foreground: #171717;
-  --destructive: #c8102e;
-  --border: #eaeaea;
-  --input: #e0e0e0;
-  --ring: #a3a3a3;
-  --radius: 0.5rem;
+  /* A proof sheet on a desk: warm paper, ink, a highlighter, and a red pencil for what went wrong. */
+  --background: #f1eee6;
+  --foreground: #1a1814;
+  --card: #fbf9f4;
+  --card-foreground: #1a1814;
+  --popover: #fbf9f4;
+  --popover-foreground: #1a1814;
+  --primary: #1a1814;
+  --primary-foreground: #fbf9f4;
+  --secondary: #ebe6da;
+  --secondary-foreground: #1a1814;
+  --muted: #ece8de;
+  --muted-foreground: #6b665b;
+  --accent: #ebe6da;
+  --accent-foreground: #1a1814;
+  --destructive: #b3261e;
+  --border: #d9d3c5;
+  --input: #c9c2b2;
+  --ring: #1a1814;
+  --radius: 0.2rem;
 
   /* The one colour: a highlighter pen, for what the reader should look at. Text on it is always dark. */
   --highlight: #ffe94a;
-  --highlight-ink: #171717;
+  --highlight-ink: #1a1814;
+
+  /* Corners cut by hand, not by a compass: the highlighter's shape, shared by everything you press. */
+  --cut: 0.5em 0.2em 0.55em 0.25em / 0.25em 0.5em 0.2em 0.45em;
 
   /* Tiers are an ordered cascade, cheapest first, so they share one ink that thins as cost rises.
      Mail no tier could decide gets the highlighter. Checked as an ordinal ramp against each surface. */
-  --tier-rules: #171717;
-  --tier-sender: #555555;
-  --tier-classifier: #8a8a8a;
-  --tier-agent: #b5b5b5;
+  --tier-rules: #1a1814;
+  --tier-sender: #55514a;
+  --tier-classifier: #8b867b;
+  --tier-agent: #b0aa9c;
   --tier-fallback: var(--highlight);
 
   --chart-1: var(--tier-rules);
@@ -102,53 +107,32 @@
 }
 
 .dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
-  --card: #111111;
-  --card-foreground: #ededed;
-  --popover: #141414;
-  --popover-foreground: #ededed;
-  --primary: #ededed;
-  --primary-foreground: #0a0a0a;
-  --secondary: #1f1f1f;
-  --secondary-foreground: #ededed;
-  --muted: #1a1a1a;
-  --muted-foreground: #a1a1a1;
-  --accent: #1f1f1f;
-  --accent-foreground: #ededed;
-  --destructive: #ff6166;
-  --border: #2a2a2a;
-  --input: #333333;
-  --ring: #6b6b6b;
+  --background: #141310;
+  --foreground: #ece8df;
+  --card: #1b1a16;
+  --card-foreground: #ece8df;
+  --popover: #1f1e19;
+  --popover-foreground: #ece8df;
+  --primary: #ece8df;
+  --primary-foreground: #141310;
+  --secondary: #28261f;
+  --secondary-foreground: #ece8df;
+  --muted: #23211c;
+  --muted-foreground: #a39d90;
+  --accent: #28261f;
+  --accent-foreground: #ece8df;
+  --destructive: #ff7a6b;
+  --border: #34312a;
+  --input: #454138;
+  --ring: #ece8df;
 
   --highlight: #ffe033;
-  --highlight-ink: #0a0a0a;
+  --highlight-ink: #141310;
 
-  --tier-rules: #ededed;
-  --tier-sender: #a8a8a8;
-  --tier-classifier: #737373;
-  --tier-agent: #4d4d4d;
-}
-
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-  html {
-    @apply font-sans;
-  }
-}
-
-/* Base UI normally injects this rule as an inline <style> for select popups; main.tsx turns that off
-   (CSPProvider disableStyleElements) because the content security policy forbids inline styles. */
-.base-ui-disable-scrollbar {
-  scrollbar-width: none;
-}
-.base-ui-disable-scrollbar::-webkit-scrollbar {
-  display: none;
+  --tier-rules: #ece8df;
+  --tier-sender: #aaa598;
+  --tier-classifier: #757064;
+  --tier-agent: #4f4b43;
 }
 
 @layer components {
@@ -158,18 +142,106 @@
     padding: 0.05em 0.25em;
     color: var(--highlight-ink);
     background-color: var(--highlight);
-    border-radius: 0.55em 0.2em 0.6em 0.25em / 0.25em 0.55em 0.2em 0.5em;
+    border-radius: var(--cut);
     -webkit-box-decoration-break: clone;
     box-decoration-break: clone;
   }
   mark.hl {
     font: inherit;
   }
+
+  /* The desk under the sheets: a faint dot grid, like layout paper. */
+  .paper {
+    background-color: var(--background);
+    background-image: radial-gradient(color-mix(in oklab, var(--foreground) 11%, transparent) 1px, transparent 1.5px);
+    background-size: 20px 20px;
+  }
+
+  /* A sheet of paper lying on the desk: square, ruled in ink, with the edge of the sheet beneath showing. */
+  .sheet {
+    border: 1px solid color-mix(in oklab, var(--foreground) 22%, var(--card));
+    border-radius: 2px;
+    box-shadow: 3px 3px 0 0 color-mix(in oklab, var(--foreground) 9%, transparent);
+  }
+
+  /* Small capitals set in the typewriter face, for labels and column heads. */
+  .slug {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
+  /* A rubber stamp: what sift did, or would do, with a message. */
+  .stamp {
+    display: inline-flex;
+    align-items: center;
+    height: 1.25rem;
+    padding-inline: 0.45rem;
+    border-radius: var(--cut);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
 }
 
 @layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
   body {
+    @apply bg-background text-foreground;
     font-size: 14px;
     -webkit-font-smoothing: antialiased;
   }
+}
+
+/* The rules below are deliberately outside any layer, so they win over the generated components' own
+   utility classes without editing those files. */
+
+/* Everything you press shares the highlighter's hand-cut corners. */
+[data-slot='button'],
+[data-slot='select-trigger'],
+[data-slot='input'] {
+  border-radius: 0.7em 0.3em 0.75em 0.35em / 0.4em 0.7em 0.3em 0.65em;
+}
+[data-slot='select-trigger'],
+[data-slot='input'],
+[data-slot='button'][data-variant='outline'] {
+  border-color: color-mix(in oklab, var(--foreground) 30%, var(--card));
+  background-color: var(--card);
+}
+[data-slot='select-content'],
+[data-slot='sheet-content'] {
+  border-radius: 2px;
+}
+
+/* Focus is a highlighter outline, the same yellow that marks what needs you. */
+:focus-visible {
+  outline: 2px solid var(--highlight);
+  outline-offset: 2px;
+}
+
+/* The current tab is marked the way you would on paper: highlighted. */
+[data-slot='tabs-list'][data-variant='line'] [data-slot='tabs-trigger'] {
+  isolation: isolate;
+}
+[data-slot='tabs-list'][data-variant='line'] [data-slot='tabs-trigger']::after {
+  inset: 50% -0.4em auto -0.4em;
+  height: 1.7em;
+  margin-top: -0.85em;
+  z-index: -1;
+  background: var(--highlight);
+  border-radius: var(--cut);
+}
+[data-slot='tabs-list'][data-variant='line'] [data-slot='tabs-trigger'][data-active],
+[data-slot='tabs-list'][data-variant='line'] [data-slot='tabs-trigger'][data-active] span {
+  color: var(--highlight-ink);
 }

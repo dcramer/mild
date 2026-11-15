@@ -39,16 +39,16 @@ export function App() {
   const accounts = summary.data?.accounts ?? [];
 
   return (
-    <Tabs value={tab} onValueChange={(value) => setTab(String(value))} className="min-h-svh gap-0 bg-background">
-      <header className="sticky top-0 z-10 border-b bg-background/85 backdrop-blur">
+    <Tabs value={tab} onValueChange={(value) => setTab(String(value))} className="paper min-h-svh gap-0">
+      <header className="sticky top-0 z-10 border-b border-foreground/25 bg-card">
         <div className="mx-auto flex min-h-12 max-w-7xl flex-wrap items-center gap-x-5 px-4">
-          <h1 className="text-base font-semibold tracking-tight">
-            <span className="hl">sift</span>
+          <h1 className="font-heading text-[26px] leading-none italic">
+            <span className="hl mx-0 px-2">sift</span>
           </h1>
           <TabsList variant="line" className="h-12 gap-4 p-0">
             <TabsTrigger value="suggestions">
               Suggestions
-              {waitingCount > 0 ? <span className="hl mx-0 px-1.5 text-xs font-medium tabular-nums">{waitingCount}</span> : null}
+              {waitingCount > 0 ? <span className="ml-0.5 font-mono text-[11px] text-muted-foreground tabular-nums">{waitingCount}</span> : null}
             </TabsTrigger>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="decisions">Decisions</TabsTrigger>
