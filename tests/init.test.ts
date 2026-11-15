@@ -93,7 +93,7 @@ describe('sift init', () => {
     expect(readFileSync(w.config.guidelinesPath, 'utf8')).toContain('Guidelines for sift');
     expect(w.text()).toContain('ok: Connected');
     expect(w.text()).toContain('Newsletters');
-    expect(w.text()).toContain('sift starts by observing');
+    expect(w.text()).toContain('Ready');
   });
 
   it('pauses after each Google task, with its link and the values to enter', async () => {
@@ -122,7 +122,7 @@ describe('sift init', () => {
     expect(w.asked).toEqual([]);
     expect(w.calls).toEqual([]);
     expect(w.text()).toContain('ok: Using');
-    expect(w.text()).toContain('sift starts by observing');
+    expect(w.text()).toContain('Ready');
   });
 
   it('lets the Google tasks be left part-way and says what is still needed', async () => {
@@ -149,7 +149,7 @@ describe('sift init', () => {
     await runInit(failed.deps);
     expect(failed.text()).toContain('fail: Sign-in did not finish: cancelled');
     expect(failed.config.settings.model).toBeUndefined();
-    expect(failed.text()).toContain('sift starts by observing');
+    expect(failed.text()).toContain('Ready');
 
     const typed = wizard([2, 'claude-test'], { client: true, accounts: ['me@example.org'], models: [] });
     await runInit(typed.deps);

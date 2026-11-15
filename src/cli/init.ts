@@ -45,7 +45,7 @@ const reason = (error: unknown) => (error instanceof Error ? error.message : Str
 export async function runInit(deps: InitDeps): Promise<void> {
   const { config, ui } = deps;
 
-  ui.heading('setup', `everything is kept in ${paint.path(config.home)}`);
+  ui.heading('setup', paint.path(config.home));
   if (!existsSync(config.settingsPath)) deps.saveSettings(config.settings);
   if (!existsSync(config.guidelinesPath)) writeFileSync(config.guidelinesPath, GUIDELINES_TEMPLATE, { mode: 0o600 });
 
@@ -62,7 +62,7 @@ export async function runInit(deps: InitDeps): Promise<void> {
       const email = await deps.connectGmail();
       accounts = [email];
       ui.ok(`Connected ${paint.bold(email)}`);
-      ui.info('sift handles mail that arrives from now on. It never sweeps what is already in your inbox.');
+      ui.info('Only mail that arrives from now on is sorted.');
     } catch (error) {
       ui.fail(`Sign-in did not finish: ${reason(error)}`);
     }
@@ -71,45 +71,39 @@ export async function runInit(deps: InitDeps): Promise<void> {
   ui.step(3, STEPS, 'Model');
   if (config.settings.model) ui.ok(`Using ${paint.bold(config.settings.model)}`);
   else {
-    ui.info('Rules and learned senders decide mail for free. A model decides what they do not cover;');
-    ui.info('without one, that mail is left in your inbox for you.');
+    ui.info('Sorts mail that no rule or learned sender covers. Without one, that mail stays in your inbox.');
     ui.blank();
     const choice = await ui.select<ModelChoice | null>('How should sift reach a model?', [
       ...MODEL_CHOICES.map((c) => ({ label: c.label, ...(c.hint ? { hint: c.hint } : {}), value: c })),
       { label: 'No model for now', value: null },
     ]);
     if (choice) await pickModel(deps, choice);
-    else ui.skip('No model. Add one later by running sift init again');
+    else ui.skip('No model');
   }
 
   ui.step(4, STEPS, 'Preferences');
   const [account] = accounts;
   if (account === undefined) ui.skip('Needs a connected account');
   else {
-    ui.info('What sift does with each kind of mail the model identifies:');
-    ui.blank();
     ui.table(
       ['Kind', 'sift will', 'Label'],
       deps.categories(account).map((c) => [c.name, disposition(c.disposition), c.label ?? '']),
     );
     ui.blank();
-    ui.info(`To change one: ${paint.cmd('sift categories set <key> --do <keep|archive|review|spam>')}`);
-    ui.info(`Anything else, in your own words: ${paint.path(config.guidelinesPath)}`);
+    ui.info(`Change one with ${paint.cmd('sift categories set <key> --do <keep|archive|review|spam>')}`);
+    ui.info(`Anything else goes in ${paint.path(config.guidelinesPath)}, in your own words`);
   }
 
   ui.blank();
   const missing = [deps.hasGoogleClient() ? null : 'the Google client', accounts.length > 0 ? null : 'a Gmail account'].filter((item) => item !== null);
   if (missing.length > 0) {
-    ui.warn(`Still needed: ${missing.join(' and ')}. Run ${paint.cmd('sift init')} again when you are ready.`);
+    ui.warn(`Still needed: ${missing.join(' and ')}. Run ${paint.cmd('sift init')} again.`);
     ui.blank();
     return;
   }
-  ui.plain(`${paint.mark(' Ready ')} sift starts by observing: it records what it would do and changes nothing in Gmail.`);
+  ui.plain(`${paint.mark(' Ready ')} Start with ${paint.cmd('sift run')}, watch with ${paint.cmd('sift dashboard')}.`);
   ui.blank();
-  ui.plain(`${paint.cmd('sift run')}         start syncing and deciding`);
-  ui.plain(`${paint.cmd('sift dashboard')}   see what it decided and why`);
-  ui.blank();
-  ui.info(`When you trust it, set act = true in ${paint.path(config.settingsPath)}`);
+  ui.info(`sift only observes until you set act = true in ${paint.path(config.settingsPath)}`);
   ui.blank();
 }
 
@@ -127,8 +121,7 @@ const GOOGLE_TASKS: readonly Task[] = [
   {
     title: 'Create a project',
     url: 'https://console.cloud.google.com/projectcreate',
-    todo: ['Give it any name and choose Create.', 'When it finishes, make sure the new project is the one selected in the bar at the top.'],
-    values: [['Project name', 'sift']],
+    todo: ['Create it, then make sure it is the project selected in the bar at the top.'],
   },
   {
     title: 'Enable the Gmail API',
@@ -149,7 +142,7 @@ const GOOGLE_TASKS: readonly Task[] = [
   {
     title: 'Create the client',
     url: 'https://console.cloud.google.com/auth/clients',
-    todo: ['Choose "Create client", then Create.', 'In the window that appears, choose "Download JSON". Keep the file; sift asks for its contents at the end.'],
+    todo: ['Create the client, then choose "Download JSON". sift asks for its contents at the end.'],
     values: [
       ['Application type', 'Desktop app'],
       ['Name', 'sift'],
@@ -179,7 +172,6 @@ const GOOGLE_TASKS: readonly Task[] = [
 async function googleClient(deps: InitDeps): Promise<void> {
   const { ui } = deps;
   ui.info('sift reads your mail through a Google client that you own, so nobody sits in between.');
-  ui.info(`This takes about five minutes, once. There are ${GOOGLE_TASKS.length} short tasks; sift waits after each.`);
 
   ui.blank();
 
@@ -196,7 +188,7 @@ async function googleClient(deps: InitDeps): Promise<void> {
     }
     ui.blank();
     if (!(await ui.pause())) {
-      ui.skip(`Stopped here. Run ${paint.cmd('sift init')} to pick this up again`);
+      ui.skip('Stopped here');
       return;
     }
     ui.collapse(task.title);
@@ -204,9 +196,9 @@ async function googleClient(deps: InitDeps): Promise<void> {
 
   ui.blank();
   for (;;) {
-    const pasted = await ui.pasteJson('Paste the contents of the JSON file you downloaded, or Enter to do this later:');
+    const pasted = await ui.pasteJson('Paste the downloaded JSON (Enter to skip):');
     if (pasted === '') {
-      ui.skip('Skipped for now');
+      ui.skip('Skipped');
       return;
     }
     try {
@@ -227,7 +219,6 @@ async function pickModel(deps: InitDeps, choice: ModelChoice): Promise<void> {
     ui.fail(`Sign-in did not finish: ${reason(error)}`);
     return;
   }
-  ui.ok('Signed in');
 
   let models: string[] = [];
   try {
@@ -237,13 +228,13 @@ async function pickModel(deps: InitDeps, choice: ModelChoice): Promise<void> {
   }
 
   let id: string | null;
-  if (models.length === 0) id = (await ui.text('The provider did not list its models. Model id to use, or Enter to skip:')) || null;
+  if (models.length === 0) id = (await ui.text('Model id (Enter to skip):')) || null;
   else {
     ui.info('A smaller, cheaper model is usually enough to sort mail.');
     id = await ui.select<string | null>('Which model?', [...models.map((m) => ({ label: m, value: m })), { label: 'Decide later', value: null }]);
   }
   if (id === null) {
-    ui.skip(`No model chosen. Set one later in ${paint.path(config.settingsPath)}`);
+    ui.skip('No model');
     return;
   }
   deps.saveSettings({ ...config.settings, model: `${choice.provider}/${id}` });

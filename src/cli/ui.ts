@@ -161,8 +161,7 @@ export async function select<T>(question: string, options: readonly Option<T>[])
       const hint = option.hint ? `  ${pc.dim(option.hint)}` : '';
       menu.push(active ? `${PAD}${SYMBOL.pointer} ${pc.bold(option.label)}${hint}` : `${TEXT}${pc.dim(option.label)}`);
     });
-    const more = options.length > VISIBLE ? `${at + 1} of ${options.length} · ` : '';
-    menu.push(`${TEXT}${pc.dim(`${more}↑↓ to move, enter to choose`)}`);
+    if (options.length > VISIBLE) menu.push(`${TEXT}${pc.dim(`${at + 1} of ${options.length}`)}`);
     if (drawn > 0) out(`\u001B[${drawn}A`);
     out(`\u001B[0J${menu.join('\n')}\n`);
     drawn = menu.length;
@@ -207,7 +206,7 @@ export function text(question: string, signal?: AbortSignal): Promise<string> {
 /**
  * Wait for the reader to do something elsewhere and come back. Returns false if they chose to skip.
  */
-export async function pause(hint = 'Press Enter when that is done, or type s to skip for now'): Promise<boolean> {
+export async function pause(hint = 'Enter when done, s to stop'): Promise<boolean> {
   const answer = await ask(`${TEXT}${pc.dim(`${hint}:`)}`);
   if (tracking) rows += 1;
   return !/^s(kip)?$/i.test(answer);

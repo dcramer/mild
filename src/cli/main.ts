@@ -48,7 +48,7 @@ function help(): void {
   ui.info('Less often');
   for (const [name, what] of OTHER_COMMANDS) ui.plain(paint.dim(`sift ${name.padEnd(width)}  ${what}`));
   ui.blank();
-  ui.info(`Everything is kept in ${paint.path(loadConfig().home)}`);
+  ui.info(paint.path(loadConfig().home));
   ui.blank();
 }
 
@@ -65,7 +65,7 @@ function status(): void {
   ui.heading('status', paint.path(config.home));
   ui.fields([
     ['Gmail', accounts.length > 0 ? accounts.map((a) => a.email).join(', ') : paint.dim(hasClientSecrets(config) ? 'not connected' : 'not set up')],
-    ['Model', settings.model ?? paint.dim('none; mail no rule covers is left for you')],
+    ['Model', settings.model ?? paint.dim('none')],
     ['Mode', `${settings.act ? 'acting on decisions' : 'observing only'}${paint.dim(` · every ${settings.interval}s`)}`],
     ['Guidance', existsSync(config.guidelinesPath) ? paint.path(config.guidelinesPath) : paint.dim('none written')],
   ]);
@@ -100,8 +100,7 @@ async function connectGmail(config: Config, options: { port?: number; host?: str
       onUrl: (url) => {
         ui.info('Open this in a browser and approve access:');
         ui.link(url);
-        ui.info('Waiting for you to approve. If the browser ends on a page that will not load,');
-        ui.info("paste that page's address here and press Enter.");
+        ui.info("If the browser ends on a page that will not load, paste that page's address here.");
       },
     });
     const profile = await spin('Checking the account', () => createGmailApi(client).getProfile());
@@ -121,7 +120,6 @@ async function auth(args: string[]): Promise<void> {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`Invalid --port: ${values.port}`);
   const email = await connectGmail(loadConfig(), { port, ...(values.host ? { host: values.host } : {}) });
   ui.ok(`Connected ${paint.bold(email)}`);
-  ui.info('sift handles mail that arrives from now on.');
 }
 
 async function init(args: string[]): Promise<void> {
@@ -181,8 +179,7 @@ const mailboxFor = (config: Config, email: string) => createGmailMailbox(clientF
 
 function printOutcome(outcome: Outcome): void {
   if (outcome.status === 'done') {
-    ui.ok(`Done ${paint.dim(`· change #${outcome.actionId}`)}`);
-    ui.info(`Reverse it with ${paint.cmd(`sift undo ${outcome.actionId}`)}`);
+    ui.ok(`Done ${paint.dim(`· sift undo ${outcome.actionId} reverses it`)}`);
   } else if (outcome.status === 'skipped') ui.skip(`Nothing changed: ${outcome.reason}`);
   else {
     ui.fail(`Change #${outcome.actionId} ${outcome.status === 'unknown' ? 'could not be confirmed' : 'failed'}: ${outcome.reason}`);
@@ -269,8 +266,8 @@ async function dashboard(args: string[]): Promise<void> {
     server.listen(port, values.host, resolve);
   });
   ui.heading('dashboard');
-  ui.plain(`Open ${paint.bold(`http://localhost:${port}`)}`);
-  ui.info('Read-only, and only reachable from this machine. Ctrl+C to stop.');
+  ui.plain(paint.bold(`http://localhost:${port}`));
+  ui.info('Reachable from this machine only.');
   ui.blank();
   await new Promise<void>((resolve) => {
     const stop = () => server.close(() => resolve());
@@ -306,7 +303,6 @@ async function loginCommand(args: string[]): Promise<void> {
   const config = loadConfig();
   await login(openModels(config), config, provider, values['api-key'] ? 'api_key' : 'oauth', ui);
   ui.ok(`Signed in to ${paint.bold(provider)}`);
-  ui.info(`List its models with ${paint.cmd('sift models')}, then set model in ${paint.path(config.settingsPath)}`);
 }
 
 async function listModels(): Promise<void> {
@@ -351,7 +347,6 @@ function categories(args: string[]): void {
       listCategories(db, account.id).map((c) => [paint.bold(c.key), c.name, disposition(c.disposition), c.label ? paint.dim(c.label) : '']),
     );
     ui.blank();
-    if (verb !== 'set') ui.info(`Change one with ${paint.cmd('sift categories set <key> --do <keep|archive|review|spam>')}`);
   } finally {
     db.close();
   }
@@ -389,9 +384,7 @@ async function run(args: string[]): Promise<void> {
       log: (line: string) => ui.plain(`${paint.dim(new Date().toLocaleTimeString(undefined, { hour12: false }))}  ${line}`),
     };
     ui.heading(act ? 'acting' : 'observing', `${modelSpec ?? 'no model'} · every ${interval}s`);
-    if (act) ui.info('Decisions are carried out in Gmail. Every change can be reversed with sift undo.');
-    else ui.info(`Decisions are recorded and Gmail is not changed. Set act = true in ${paint.path(config.settingsPath)} to carry them out.`);
-    if (!modelSpec) ui.info(`No model is set, so mail no rule covers is left for you. ${paint.cmd('sift init')} sets one up.`);
+    if (!act) ui.info(`Gmail is not changed until you set act = true in ${paint.path(config.settingsPath)}`);
     ui.blank();
 
     if (values.once) {
@@ -449,7 +442,6 @@ function rules(args: string[]): void {
       };
       const ruleId = addRule(db, account.id, { match, disposition, ...(values.label ? { label: values.label } : {}) }, 'user');
       ui.ok(`Added ${paint.bold(ruleId)}`);
-      ui.info('It applies to mail sorted from now on.');
       return;
     }
     if (verb !== undefined && verb !== 'list') throw new Error('Usage: sift rules <list|add|remove>');

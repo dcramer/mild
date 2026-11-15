@@ -100,18 +100,13 @@ export function parseSettings(text: string, path = 'sift.toml'): Settings {
 
 /** `sift.toml` with every setting and what it does. The comments are sift's; hand edits to values are kept. */
 export function renderSettings(settings: Settings): string {
-  return `# sift settings. Edit this file, or run \`sift init\` again.
-
-# The model for mail that no rule or learned sender covers, as "provider/model-id".
-# \`sift models\` lists the ones you can use. Leave it unset to keep the model tier off;
-# that mail is then left in the inbox for you.
+  return `# \`sift models\` lists what you can use. Unset: mail no rule or learned sender covers stays in your inbox.
 ${settings.model ? `model = ${JSON.stringify(settings.model)}` : '# model = "provider/model-id"'}
 
-# false: sync and record what sift would do, changing nothing in Gmail.
-# true: carry decisions out (archive, label, mark spam). Everything can be undone with \`sift undo\`.
+# false: record what sift would do. true: carry it out in Gmail (reversible with \`sift undo\`).
 act = ${settings.act}
 
-# Seconds between passes.
+# Seconds between checks for new mail.
 interval = ${settings.interval}
 
 [dashboard]
@@ -127,10 +122,7 @@ export function saveSettings(config: Config, settings: Settings): void {
 
 export const GUIDELINES_TEMPLATE = `# Guidelines for sift
 
-Write here, in your own words, anything that helps sort your mail. sift reads this file on every
-pass and gives it to the model, along with the categories from \`sift categories\`.
-
-Examples (delete these and write your own):
+The model reads this before sorting each message. Replace these examples with your own:
 
 - Mail from recruiters is cold outreach, even when it sounds personal.
 - Anything from my accountant or my bank is personal, not a notification.

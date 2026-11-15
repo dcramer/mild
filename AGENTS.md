@@ -2,6 +2,15 @@
 
 **sift** is a self-hosted daemon that triages a Gmail inbox: it labels, archives, creates filters and unsubscribes, using inference only when cheaper tiers abstain. Design, the decision cascade and what is built so far are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): follow it, and update it in the same commit when a decision changes. Open work is in [TODO.md](TODO.md): work from it, remove items when they land, and add what you find.
 
+## Don't state the obvious
+
+This is the core rule here, for how you write and how you build.
+
+- **Interface text, docs, comments, commit messages and your replies:** say only what the reader could not work out from what is already in front of them. No preamble, no restating a heading or a table in a sentence, no describing what a control plainly does, no reassurance. If a line can go without anyone missing it, it goes.
+- **Code:** no comment that repeats the code, no wrapper or option nobody asked for, no handling for cases that cannot happen.
+
+A reason, a consequence, a limit or a gotcha is not obvious. Keep those.
+
 ## Commands
 
 Package manager is **pnpm**. Node 24 (`.nvmrc`). Node runs the `.ts` sources directly, so there is no build step; relative imports use the `.ts` extension and only erasable TypeScript syntax is allowed (no enums, namespaces or parameter properties).
