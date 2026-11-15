@@ -151,7 +151,10 @@ const GOOGLE_TASKS: readonly Task[] = [
   {
     title: 'Allow access to Gmail',
     url: 'https://console.cloud.google.com/auth/scopes',
-    todo: ['Choose "Add or remove scopes".', 'Paste both scopes below into "Manually add scopes", then Add to table, Update and Save.'],
+    todo: [
+      'Open "Data Access" in the left menu, then choose "Add or remove scopes".',
+      'Paste both scopes below into "Manually add scopes", then Add to table, Update and Save.',
+    ],
     values: [
       ['Scopes', 'https://www.googleapis.com/auth/gmail.modify'],
       ['', 'https://www.googleapis.com/auth/gmail.settings.basic'],
