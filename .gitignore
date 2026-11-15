@@ -13,3 +13,15 @@ auth.json
 *.db
 *.db-wal
 *.db-shm
+*.sqlite
+.env.*
+coverage/
+
+# Credentials, in case one is ever copied into the checkout. They belong in sift's home directory.
+client_secret*.json
+google-client.json
+model-auth.json
+dashboard-key
+device-id
+setup.json
+sift.toml

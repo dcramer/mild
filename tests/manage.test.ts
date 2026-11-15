@@ -243,7 +243,7 @@ describe('signing in with Google', () => {
       signIn,
       sessionSecret: SECRET,
       signInAddresses: ['http://localhost:1', 'https://box.example.ts.net'],
-      allowedHosts: ['box.example.ts.net', 'maximus'],
+      allowedHosts: ['box.example.ts.net', 'homebox'],
       now: () => 1000,
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -302,9 +302,9 @@ describe('signing in with Google', () => {
 
   it('explains why sign-in is not possible at a plain address, without a client, or with a Desktop client', async () => {
     const port = await startWithSignIn();
-    const plain = await call(port, 'GET', '/api/session', undefined, { host: `maximus:${port}` });
+    const plain = await call(port, 'GET', '/api/session', undefined, { host: `homebox:${port}` });
     expect(plain.body).toMatchObject({ canSignIn: false, reason: 'address', addresses: ['http://localhost:1', 'https://box.example.ts.net'] });
-    expect((await call(port, 'GET', '/auth/login', undefined, { host: `maximus:${port}` })).headers['location']).toBe('/');
+    expect((await call(port, 'GET', '/auth/login', undefined, { host: `homebox:${port}` })).headers['location']).toBe('/');
 
     kind = 'desktop';
     expect((await call(port, 'GET', '/api/session', undefined, { host: 'box.example.ts.net', 'x-forwarded-proto': 'https' })).body).toMatchObject({
@@ -348,7 +348,7 @@ describe('signing in with Google', () => {
     // Every test request comes from this machine, so this checks the header alone is not enough to be
     // offered sign-in at a name that is not localhost.
     const port = await startWithSignIn();
-    expect((await call(port, 'GET', '/api/session', undefined, { host: `maximus:${port}`, 'x-forwarded-proto': 'http' })).body).toMatchObject({
+    expect((await call(port, 'GET', '/api/session', undefined, { host: `homebox:${port}`, 'x-forwarded-proto': 'http' })).body).toMatchObject({
       canSignIn: false,
     });
   });

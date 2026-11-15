@@ -378,7 +378,7 @@ describe('feedback endpoint', () => {
     const assets = mkdtempSync(join(tmpdir(), 'sift-web-'));
     mkdirSync(join(assets, 'assets'));
     writeFileSync(join(assets, 'index.html'), '<!doctype html>');
-    const server = createDashboardServer(db, { assetsDir: assets, allowedHosts: ['maximus'], now: () => 77 });
+    const server = createDashboardServer(db, { assetsDir: assets, allowedHosts: ['homebox'], now: () => 77 });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     close = () => server.close();
     return (server.address() as AddressInfo).port;
@@ -431,7 +431,7 @@ describe('feedback endpoint', () => {
   it("accepts the page when it is opened by one of the machine's own names", async () => {
     suggest('news@example.com', 'archive', NEWS);
     const port = await start();
-    expect((await post(port, answer, { host: `maximus:${port}`, origin: `http://maximus:${port}` })).status).toBe(200);
+    expect((await post(port, answer, { host: `homebox:${port}`, origin: `http://homebox:${port}` })).status).toBe(200);
   });
 
   it('refuses a write that did not come from the dashboard page', async () => {
