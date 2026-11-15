@@ -3,7 +3,7 @@ import type { StageKey } from './api.ts';
 /** Tiers in cascade order, cheapest first. Each has a fixed ink (see index.css); mail no tier decided is highlighted. */
 export const TIERS: { key: StageKey; name: string; color: string }[] = [
   { key: 'rules', name: 'Rules', color: 'var(--tier-rules)' },
-  { key: 'sender', name: 'Sender memory', color: 'var(--tier-sender)' },
+  { key: 'sender', name: 'Senders (before rules)', color: 'var(--tier-sender)' },
   { key: 'classifier', name: 'Decision model', color: 'var(--tier-classifier)' },
   { key: 'agent', name: 'Agent', color: 'var(--tier-agent)' },
   { key: 'fallback', name: 'Undecided', color: 'var(--tier-fallback)' },
@@ -13,6 +13,18 @@ export const tier = (key: string) => TIERS.find((t) => t.key === key) ?? { key, 
 const DISPOSITIONS: Record<string, string> = { keep: 'Kept in inbox', archive: 'Archived', spam: 'Marked spam', review: 'Left for review' };
 export const dispositionName = (key: string) => DISPOSITIONS[key] ?? key;
 export const DISPOSITION_KEYS = Object.keys(DISPOSITIONS);
+
+/** What a label can be set to do, as a choice. */
+export const ACTIONS = [
+  ['keep', 'Keep in inbox'],
+  ['archive', 'Archive'],
+  ['spam', 'Mark spam'],
+  ['review', 'Leave for me'],
+] as const;
+export type ActionKey = (typeof ACTIONS)[number][0];
+const WILL: Record<string, string> = { keep: 'kept', archive: 'archived', spam: 'marked spam', review: 'left for you' };
+/** What happens to mail with a given action, for the end of a sentence. */
+export const willBe = (key: string) => WILL[key] ?? key;
 
 const OUTCOMES: Record<string, string> = {
   observed: 'Observed only',

@@ -6,11 +6,10 @@ import type { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { type FeedbackInput, applyFeedback } from '../learn/feedback.ts';
 import { listAccounts } from '../store/accounts.ts';
-import { listCategories, updateCategory } from '../store/categories.ts';
+import { addLabel, updateLabel } from '../store/labels.ts';
 import { addRule, removeRule } from '../store/rules.ts';
-import { forgetSender, listSenders, setSender } from '../store/senders.ts';
 import type { Controls, SignIn } from './controls.ts';
-import { listChanges, listDecisions, listRuleSummaries, listSuggestions, messageDetail, summarize } from './queries.ts';
+import { listChanges, listDecisions, listLabelSummaries, listRuleSummaries, listSuggestions, messageDetail, summarize } from './queries.ts';
 import type { ManageState } from './types.ts';
 
 /** Where `pnpm build:web` puts the built web app. */
@@ -56,7 +55,7 @@ function listAssets(dir: string): Map<string, { file: string; type: string }> {
 const json = (res: ServerResponse, status: number, body: unknown) =>
   res.writeHead(status, { ...HEADERS, 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(body));
 
-const DISPOSITIONS = new Set(['keep', 'archive', 'spam', 'review']);
+const LABEL_ID = /^[a-z0-9_-]{1,40}$/;
 const MAX_BODY = 20_000;
 
 /** Read a small JSON body. Null if it is too large or not a JSON object. */
@@ -76,25 +75,14 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown> |
 
 /** Check an answer to a suggestion field by field. Null if it is not well formed. */
 function parseFeedback(body: Record<string, unknown>): FeedbackInput | null {
-  const { accountId, sender, verdict, suggested, correct, category, scope, decisionId } = body;
+  const { accountId, sender, label, disposition, scope, decisionId } = body;
   if (typeof accountId !== 'string' || typeof sender !== 'string') return null;
-  if (verdict !== 'right' && verdict !== 'wrong') return null;
+  if (typeof label !== 'string' || !LABEL_ID.test(label)) return null;
   if (scope !== 'sender' && scope !== 'message') return null;
-  if (suggested !== undefined && (typeof suggested !== 'string' || !DISPOSITIONS.has(suggested))) return null;
-  if (correct !== undefined && correct !== 'keep' && correct !== 'archive' && correct !== 'spam') return null;
-  if (category !== undefined && (typeof category !== 'string' || !/^[a-z0-9_-]{1,40}$/.test(category))) return null;
+  if (disposition !== undefined && disposition !== 'keep' && disposition !== 'archive' && disposition !== 'spam') return null;
   if (decisionId !== undefined && (typeof decisionId !== 'number' || !Number.isInteger(decisionId))) return null;
   if (scope === 'message' && decisionId === undefined) return null;
-  return {
-    accountId,
-    sender,
-    verdict,
-    scope,
-    ...(suggested === undefined ? {} : { suggested: suggested as NonNullable<FeedbackInput['suggested']> }),
-    ...(correct === undefined ? {} : { correct }),
-    ...(category === undefined ? {} : { category }),
-    ...(decisionId === undefined ? {} : { decisionId }),
-  };
+  return { accountId, sender, label, scope, ...(disposition === undefined ? {} : { disposition }), ...(decisionId === undefined ? {} : { decisionId }) };
 }
 
 export interface DashboardOptions {
@@ -177,43 +165,37 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       const input = parseFeedback(body);
       return input && applyFeedback(db, input, now());
     },
-    '/api/categories': (body) => {
-      const { accountId, key, disposition, label } = body;
-      if (!str(accountId) || !str(key, 40)) return null;
+    '/api/labels': (body) => {
+      const { accountId, id, name, description, disposition } = body;
+      if (!str(accountId) || !str(id, 40)) return null;
+      if (name !== undefined && !str(name, 60)) return null;
+      if (description !== undefined && (typeof description !== 'string' || description.length > 600)) return null;
       if (disposition !== undefined && !decided(disposition) && disposition !== 'review') return null;
-      if (label !== undefined && label !== null && !str(label, 100)) return null;
-      const changed = updateCategory(
-        db,
-        accountId,
-        key,
-        { ...(disposition === undefined ? {} : { disposition }), ...(label === undefined ? {} : { label }) },
-        now(),
-      );
-      if (!changed) throw new Error(`There is no category "${key}".`);
+      const change: Parameters<typeof updateLabel>[3] = {};
+      if (name !== undefined) change.name = name;
+      if (description !== undefined) change.description = description;
+      if (disposition !== undefined) change.disposition = disposition;
+      if (!updateLabel(db, accountId, id, change, now())) throw new Error(`There is no label "${id}".`);
       return { ok: true };
     },
+    '/api/labels/add': (body) => {
+      const { accountId, name, description, disposition } = body;
+      if (!str(accountId) || !str(name, 60) || typeof description !== 'string' || description.length > 600) return null;
+      if (!decided(disposition) && disposition !== 'review') return null;
+      if (!listAccounts(db).some((a) => a.id === accountId)) return null;
+      return { id: addLabel(db, accountId, { name, description, disposition }, now()).id };
+    },
     '/api/rules': (body) => {
-      const { accountId, match, disposition, label } = body;
-      if (!str(accountId) || !decided(disposition) || typeof match !== 'object' || match === null) return null;
-      if (label !== undefined && !str(label, 100)) return null;
+      const { accountId, match, label, disposition } = body;
+      if (!str(accountId) || typeof label !== 'string' || !LABEL_ID.test(label) || typeof match !== 'object' || match === null) return null;
+      if (disposition !== undefined && !decided(disposition)) return null;
       const conditions = Object.entries(match).filter(([, value]) => value !== '');
       if (conditions.length === 0 || !conditions.every(([key, value]) => RULE_KEYS.has(key) && str(value))) return null;
-      return { id: addRule(db, accountId, { match: Object.fromEntries(conditions), disposition, ...(label ? { label } : {}) }, 'user', now()) };
+      return { id: addRule(db, accountId, { match: Object.fromEntries(conditions), labelId: label, ...(disposition ? { disposition } : {}) }, 'user', now()) };
     },
     '/api/rules/remove': (body) => {
       if (!str(body['id'], 40)) return null;
       if (!removeRule(db, body['id'])) throw new Error('That rule no longer exists.');
-      return { ok: true };
-    },
-    '/api/senders': (body) => {
-      const { accountId, address, disposition, forget } = body;
-      if (!str(accountId) || !str(address)) return null;
-      if (forget === true) {
-        if (!forgetSender(db, accountId, address)) throw new Error('That sender is not remembered.');
-        return { ok: true };
-      }
-      if (!decided(disposition)) return null;
-      setSender(db, accountId, address, disposition, now());
       return { ok: true };
     },
     '/api/settings': (body) => {
@@ -257,17 +239,13 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
 
   const manageState = (): ManageState => {
     const accounts = listAccounts(db);
+    const synced = db.prepare('SELECT last_synced_at AS at FROM accounts WHERE id = ?');
     return {
       settings: controls?.settings() ?? { act: false, interval: 60, model: null },
       guidelines: controls?.guidelines() ?? '',
       activity: controls?.activity() ?? { sorting: false, lastPassAt: null, problems: [] },
-      accounts: accounts.map((a) => ({ id: a.id, email: a.email, lastSyncedAt: null })),
-      categories: Object.fromEntries(
-        accounts.map((a) => [
-          a.id,
-          listCategories(db, a.id).map((c) => ({ key: c.key, name: c.name, description: c.description, disposition: c.disposition, label: c.label ?? null })),
-        ]),
-      ),
+      accounts: accounts.map((a) => ({ id: a.id, email: a.email, lastSyncedAt: (synced.get(a.id) as { at: number | null } | undefined)?.at ?? null })),
+      labels: Object.fromEntries(accounts.map((a) => [a.id, listLabelSummaries(db, a.id)])),
     };
   };
 
@@ -413,7 +391,6 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       if (url.pathname === '/api/rules') return void json(res, 200, { rules: listRuleSummaries(db) });
       if (url.pathname === '/api/suggestions') return void json(res, 200, listSuggestions(db, { includeKept: query.get('kept') === '1' }));
       if (url.pathname === '/api/manage') return void json(res, 200, manageState());
-      if (url.pathname === '/api/senders') return void json(res, 200, { senders: listSenders(db) });
       if (url.pathname === '/api/changes') return void json(res, 200, { changes: listChanges(db, 200) });
       if (url.pathname === '/api/models') {
         void (controls ? controls.models() : Promise.resolve([]))

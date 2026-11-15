@@ -1,8 +1,8 @@
 import { type ReactNode, useEffect, useState } from 'react';
-import { ErrorNote, Outcome, Sub } from '@/components/bits.tsx';
+import { ErrorNote, Outcome } from '@/components/bits.tsx';
 import { type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count } from '@/lib/format.ts';
-import { Button, Code, Loading, Note, Select, Sheet, SheetHead, SubNav, Table, Td, TextArea, Th, Tr } from '@/system';
+import { Button, Code, Loading, Note, Select, Sheet, SheetHead, SubNav, TextArea } from '@/system';
 
 const INTERVALS = [
   ['30', 'Every 30 seconds'],
@@ -17,17 +17,9 @@ const DAYS = [
   ['14', 'The last 2 weeks'],
   ['30', 'The last month'],
 ] as const;
-const DOES = [
-  ['keep', 'Keep in inbox'],
-  ['archive', 'Archive'],
-  ['review', 'Leave for me'],
-  ['spam', 'Mark spam'],
-] as const;
-
 const PAGES = [
   { to: 'settings/running', label: 'Running' },
   { to: 'settings/accounts', label: 'Accounts' },
-  { to: 'settings/kinds', label: 'Kinds of mail' },
   { to: 'settings/guidelines', label: 'Guidelines' },
   { to: 'settings/older', label: 'Older mail' },
 ] as const;
@@ -93,9 +85,7 @@ function Running({ state, reload }: { state: ManageState; reload: () => void }) 
         />
         {confirming && !settings.act ? (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 pt-1 pb-4">
-            <p className="min-w-0 flex-1 basis-72">
-              sift will start archiving, labelling and marking spam on new mail, by itself, for every kind of mail set to do so.
-            </p>
+            <p className="min-w-0 flex-1 basis-72">sift will start archiving, labelling and marking spam on new mail, by itself, as each label says.</p>
             <div className="flex items-center gap-2">
               <Button
                 variant="mark"
@@ -232,53 +222,7 @@ function Guidelines({ saved }: { saved: string }) {
   );
 }
 
-function Kinds({ state, reload }: { state: ManageState; reload: () => void }) {
-  const { busy, error, run } = useAction();
-  return (
-    <>
-      {state.accounts.map((account) => (
-        <Sheet key={account.id}>
-          <SheetHead
-            title={state.accounts.length > 1 ? `Kinds of mail · ${account.email}` : 'Kinds of mail'}
-            description="The model only names the kind. What happens to it is set here."
-          />
-          <Table>
-            <thead>
-              <Tr>
-                <Th>Kind</Th>
-                <Th>sift will</Th>
-                <Th>Label</Th>
-              </Tr>
-            </thead>
-            <tbody>
-              {(state.categories[account.id] ?? []).map((category) => (
-                <Tr key={category.key}>
-                  <Td className="max-w-xl">
-                    <span className="font-medium">{category.name}</span>
-                    <span className="mt-0.5 block text-[13px] text-muted-foreground">{category.description}</span>
-                  </Td>
-                  <Td className="py-2">
-                    <Select
-                      label={`What sift does with ${category.name}`}
-                      value={category.disposition as (typeof DOES)[number][0]}
-                      options={DOES}
-                      disabled={busy}
-                      onChange={(disposition) => run(() => api.setCategory(account.id, category.key, disposition), reload)}
-                    />
-                  </Td>
-                  <Td>{category.label ? <Sub mono>{category.label}</Sub> : null}</Td>
-                </Tr>
-              ))}
-            </tbody>
-          </Table>
-          <Outcome error={error} />
-        </Sheet>
-      ))}
-    </>
-  );
-}
-
-/** Everything about how sift runs and what it does with mail, a page at a time. */
+/** How sift runs, a page at a time. What it does with mail is under Labels. */
 export function SettingsView({ page = 'running' }: { page: string | undefined }) {
   const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
   const current = PAGES.some((p) => p.to === `settings/${page}`) ? `settings/${page}` : PAGES[0].to;
@@ -292,8 +236,6 @@ export function SettingsView({ page = 'running' }: { page: string | undefined })
       ) : data ? (
         current === 'settings/accounts' ? (
           <Accounts state={data} />
-        ) : current === 'settings/kinds' ? (
-          <Kinds state={data} reload={reload} />
         ) : current === 'settings/guidelines' ? (
           <Guidelines saved={data.guidelines} />
         ) : current === 'settings/older' ? (

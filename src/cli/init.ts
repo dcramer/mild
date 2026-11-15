@@ -1,6 +1,6 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import { type Config, GUIDELINES_TEMPLATE, type Settings } from '../config.ts';
-import type { Category } from '../triage/stages/model.ts';
+import type { Label } from '../triage/types.ts';
 import { type Ui, disposition, paint } from './ui.ts';
 
 /** A way to reach a model. `provider` is a pi-ai provider id. */
@@ -45,7 +45,7 @@ export interface InitDeps {
   loginModel(choice: ModelChoice): Promise<void>;
   /** Model ids the signed-in provider offers. */
   availableModels(provider: string): Promise<string[]>;
-  categories(account: string): Category[];
+  labels(account: string): Label[];
   /** This machine's Tailscale name, or null without Tailscale. */
   tailscaleName(): string | null;
   /** Serve the dashboard over HTTPS on the tailnet (`tailscale serve`). Rejects with what went wrong. */
@@ -108,14 +108,14 @@ export async function runInit(deps: InitDeps): Promise<void> {
 
   ui.step(5, STEPS, 'Preferences');
   const [account] = accounts;
-  if (account === undefined) ui.info('Set in the dashboard, under Settings.');
+  if (account === undefined) ui.info('Set in the dashboard, under Labels.');
   else {
     ui.table(
-      ['Kind', 'sift will', 'Label'],
-      deps.categories(account).map((c) => [c.name, disposition(c.disposition), c.label ?? '']),
+      ['Label', 'sift will', 'In Gmail'],
+      deps.labels(account).map((l) => [l.name, disposition(l.disposition), l.gmailLabel]),
     );
     ui.blank();
-    ui.info('Change these in the dashboard, under Settings.');
+    ui.info('Change these in the dashboard, under Labels.');
   }
 
   ui.blank();

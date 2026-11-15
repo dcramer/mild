@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { DispositionBadge, ErrorNote } from '@/components/bits.tsx';
 import { type SuggestionGroup, type Suggestions, api, useLoaded } from '@/lib/api.ts';
-import { count, percent, tier } from '@/lib/format.ts';
+import { count, percent, tier, willBe } from '@/lib/format.ts';
 import { Button, Check, Empty, Highlight, Loading, Note, Select, Sheet, Stamp } from '@/system';
 import type { MessageRef } from '@/views/message-sheet.tsx';
 
-type Kind = Suggestions['categories'][string][number];
-const DOES: Record<string, string> = { keep: 'kept', archive: 'archived', spam: 'spam', review: 'kept' };
-const groupKey = (g: SuggestionGroup) => `${g.accountId}/${g.sender}/${g.disposition}`;
+type Label = Suggestions['labels'][string][number];
+const groupKey = (g: SuggestionGroup) => `${g.accountId}/${g.sender}/${g.disposition}/${g.labelId ?? ''}`;
 
 /** The sample with repeated subjects folded together, newest first. */
 function subjects(sample: SuggestionGroup['sample']) {
@@ -20,25 +19,26 @@ function subjects(sample: SuggestionGroup['sample']) {
   return [...seen.values()];
 }
 
-/** One sender's waiting mail: who, what sift would do and why, and the answer. */
+/** One sender's waiting mail: who, what sift says it is and would do, and the answer. */
 function Group({
   group,
-  kinds,
+  labels,
   onOpen,
   onAnswered,
 }: {
   group: SuggestionGroup;
-  kinds: readonly Kind[];
+  labels: readonly Label[];
   onOpen: (message: MessageRef) => void;
   onAnswered: (taught: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const unsure = group.disposition === 'review';
+  // Mail decided before labels existed has an action but no label.
+  const unsure = group.labelId === null && group.disposition === 'review';
   const shown = subjects(group.sample);
   const more = group.messages - group.sample.length;
 
-  const answer = async (verdict: 'right' | 'wrong', category?: string) => {
+  const answer = async (label: string) => {
     setBusy(true);
     setError(null);
     try {
@@ -46,9 +46,7 @@ function Group({
         accountId: group.accountId,
         sender: group.sender,
         scope: 'sender',
-        verdict,
-        suggested: group.disposition,
-        ...(category ? { category } : {}),
+        label,
       });
       onAnswered(result.taught ?? 'Noted.');
     } catch (failure) {
@@ -83,28 +81,35 @@ function Group({
 
       <div className="flex min-w-0 flex-col gap-2">
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          {unsure ? <Stamp tone="look">Not sure</Stamp> : <DispositionBadge disposition={group.disposition} />}
+          {unsure ? (
+            <Stamp tone="look">Not sure</Stamp>
+          ) : (
+            <>
+              {group.labelId ? <span className="name">{group.labelName ?? group.labelId}</span> : null}
+              <DispositionBadge disposition={group.disposition} />
+            </>
+          )}
           <span className="text-[13px] text-muted-foreground tabular-nums">
             {count(group.messages)} {group.messages === 1 ? 'message' : 'messages'} · {tier(group.stage).name}
           </span>
         </p>
         {group.sample[0]?.reason ? <p className="text-[13px] text-muted-foreground">{group.sample[0].reason}</p> : null}
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
-          {unsure ? null : (
-            <Button variant="ink" size="sm" busy={busy} onClick={() => void answer('right')}>
+          {group.labelId === null ? null : (
+            <Button variant="ink" size="sm" busy={busy} onClick={() => void answer(group.labelId ?? '')}>
               Right
             </Button>
           )}
           <Select
-            label="What kind of mail it is"
+            label="What it is"
             value=""
             disabled={busy}
             options={[
-              ['', unsure ? 'It is…' : 'No, it is…'] as const,
-              ...kinds.filter((k) => k.key !== group.category).map((k) => [k.key, `${k.name} (${DOES[k.disposition] ?? k.disposition})`] as const),
+              ['', group.labelId === null ? 'It is…' : 'No, it is…'] as const,
+              ...labels.filter((l) => l.id !== group.labelId).map((l) => [l.id, `${l.name} (${willBe(l.disposition)})`] as const),
             ]}
             onChange={(key) => {
-              if (key !== '') void answer('wrong', key);
+              if (key !== '') void answer(key);
             }}
           />
         </div>
@@ -169,7 +174,7 @@ export function SuggestionsView({ onOpen, onChanged }: { onOpen: (message: Messa
               <Group
                 key={groupKey(group)}
                 group={group}
-                kinds={data.categories[group.accountId] ?? []}
+                labels={data.labels[group.accountId] ?? []}
                 onOpen={onOpen}
                 onAnswered={(line) => {
                   setTaught((lines) => [line, ...lines].slice(0, 3));
@@ -182,7 +187,7 @@ export function SuggestionsView({ onOpen, onChanged }: { onOpen: (message: Messa
         )}
       </Sheet>
       <p className="text-[13px] text-muted-foreground">
-        An answer covers all mail from that sender, including what arrives later. The messages are stored whole as examples.
+        An answer makes a rule for that sender, so it covers what arrives later too. The messages are stored whole as examples.
       </p>
     </div>
   );

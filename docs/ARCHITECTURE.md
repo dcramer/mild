@@ -2,25 +2,34 @@
 
 sift polls Gmail for new inbox mail and decides, per message, a **disposition** (`keep`, `archive`, `spam`, or `review`) and independently a **subscription action** (`preserve` or `unsubscribe`). It is designed so that most mail never reaches a language model.
 
-## Decision cascade
+## Labels, rules and the cascade
 
-Tiers run cheapest first. A tier either decides or abstains; the first decision wins.
+Two things are decided about every message, and they are kept apart.
+
+- **What it is: a label.** Each account has one list of labels (`labels`), seeded with cautious defaults and added to by the user. A label has a name, a description the model reads, a Gmail label, and an action.
+- **What happens: the label's action** (keep, archive, spam, or leave it for the user). No tier picks an action. A rule may carry the user's own exception to its label's action ("this one is a newsletter, but keep it").
+
+A label's id and Gmail label never change after it is made, so renaming one orphans nothing.
+
+Tiers run cheapest first. A tier either names a label or abstains; the first answer wins.
 
 | Tier | Where | Cost | Status |
 | --- | --- | --- | --- |
 | 1. Gmail filters | Gmail itself; runs even when sift is down | none | not built |
-| 2. Local rules | `src/triage/stages/rules.ts` | none | built and wired (`sift rules`) |
-| 3. Sender memory | `src/triage/stages/sender.ts` | one cached search per new sender | wired, but nothing populates it yet |
-| 4. Decision model (Jev / Clef via pi-ai `classify`) | `src/triage/stages/classifier.ts` | ~$0.0001 per message | stage built, provider not wired |
-| 5. Model | `src/triage/stages/model.ts`, `src/model/` | one model call | built; not yet run against a real model |
+| 2. Rules | `src/triage/stages/rules.ts` | none | built and wired |
+| 3. Decision model (Jev / Clef via pi-ai `classify`) | `src/triage/stages/classifier.ts` | ~$0.0001 per message | stage built, provider not wired |
+| 4. Model | `src/triage/stages/model.ts`, `src/model/` | one model call | built; not yet run against a real model |
 | Fallback | `src/triage/pipeline.ts` | none | built |
 
-The fallback is `review`: the message stays where it is, gets a review label, and a question is queued for the user.
+The fallback is `review`: the message stays where it is, gets the review label, and is shown to the user.
+
+**A rule** says that mail matching some conditions is a label. It is the only deterministic thing sift knows, and there is one kind: what used to be a separate memory of senders is a rule with a single "from" condition. Rules come from the user (`user`), from the user correcting a suggestion (`correction`), or from sift itself (`agent`) once a model has given a sender's last three messages the same label.
 
 Rules that matter across tiers:
 
-- A matching `keep` rule is a protection and beats any other rule.
-- Sender memory never hides a sender the user has written to; it abstains.
+- A rule whose outcome is `keep` is a protection and beats any other rule.
+- A rule sift learned never hides mail from someone the user has written to; the user's own rules do what they say.
+- A rule whose label has been removed does nothing.
 - Spam has a higher confidence bar than archive.
 - Errors abstain. Nothing fails toward a mutation.
 
@@ -85,7 +94,7 @@ Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 4. Send one atomic label change containing only what differs, so unread state and unrelated labels are untouched.
 5. Read the labels back and record `done` or `failed`. If the call itself errored, record `unknown`.
 
-`unknown` and `pending` actions are settled by `reconcile`, which reads the mailbox and never replays the change. Archive and spam always add an audit label (`sift/archived` or a reason label, `sift/spam`). Spam is refused unless the sender is known and a search shows the user has never written to them; a failed search also refuses.
+`unknown` and `pending` actions are settled by `reconcile`, which reads the mailbox and never replays the change. **In Gmail a message sift acts on gets two labels:** the one for what it is (`sift/newsletters`) and, when sift moved it, one for what sift did (`sift/did/archived`, `sift/did/spam`). The executor adds the second itself, so anything sift moved can be found in Gmail whatever the caller passed. Mail left for the user gets `sift/review`. Spam is refused unless the sender is known and a search shows the user has never written to them; a failed search also refuses.
 
 Undo reverses exactly what the action changed, keeps anything the user changed afterwards, refuses trashed mail, and is itself an audited action.
 
@@ -95,9 +104,8 @@ Preferences live in two places, by kind.
 
 - **Broad guidance is a Markdown file**, `guidelines.md` in the home directory, in the user's own words ("recruiters count as cold outreach", "anything from my accountant is personal"). It is read on every pass and given to the model.
 - **Everything structured or learned is in the database:**
-  - `categories`: the kinds of mail and what to do with each (keep, archive, review, spam, and a label). Seeded with cautious defaults; changed with `sift categories set`.
-  - `rules`: explicit matches the user adds.
-  - `senders`: what sift has learned to do with a sender.
+  - `labels`: what mail can be and what to do with each. Seeded with cautious defaults (nothing is marked spam); changed and added to in the dashboard, under Labels.
+  - `rules`: what sift knows without a model, the user's and the ones it learned.
   - `correspondents`: whether the user has ever written to an address, cached.
 
 ## Model tier
@@ -105,11 +113,11 @@ Preferences live in two places, by kind.
 When no rule or sender record decides a message, one model call does. It is deliberately not an agent.
 
 - **The model has no tools and takes no action.** Deterministic code gathers the evidence first: the stored headers, the body (fetched on demand, truncated, never stored), how much mail this sender has sent, what was done with it, and whether the user has ever written to them.
-- **Its only output is a category** from the user's list, or `unsure`, with a one-line reason. The reply is validated; anything else abstains.
-- **The category's setting decides the outcome**, so the user's choice, not the model, determines what happens to the message.
+- **Its only output is a label** from the user's list, or `unsure`, with a one-line reason. The reply is validated; anything else abstains.
+- **The label's action decides the outcome**, so the user's choice, not the model, determines what happens to the message.
 - **Two protections apply whatever the model says:** mail from someone the user has written to is never archived or marked spam on the model's word (and "could not check" counts as yes), and `unsure` or an unknown category leaves the message for review.
-- **The prompt marks the email as untrusted** and keeps it apart from the guidelines and the header facts. The worst an injected email can do is get itself put in the wrong category, which the audit log can undo.
-- **Learning:** after three consecutive model decisions for a sender agree on category and outcome, the sender is written to `senders` and later mail from them is decided without inference. Senders who send mixed mail never settle and are never learned. Changing a category forgets the senders learned under it.
+- **The prompt marks the email as untrusted** and keeps it apart from the guidelines and the header facts. The worst an injected email can do is get itself given the wrong label, which the audit log can undo.
+- **Learning:** after three consecutive model decisions give a sender the same label, and each ended the way that label says, sift writes a rule for the sender and later mail from them is decided without inference. A rule the user made for that sender is left alone. (Next: propose the rule to the user instead of saving it; see TODO.md.)
 
 Models are reached through pi-ai (`src/model/`, the only module that imports it). `sift login <provider>` signs in, including with a ChatGPT subscription, and stores the credential in `model-auth.json`. The `model` setting in `sift.toml` turns the tier on; without it, mail no rule covers is left for review. pi-durable is not used: a triage run is one call, and the message queue in SQLite already gives retry and decide-once.
 
@@ -131,8 +139,8 @@ Everything sift keeps is in one directory, the home: `~/.config/sift` by default
 
 sift suggests first and acts second. While it only observes, every decision is a suggestion, and the dashboard's Suggestions view is where the user teaches it.
 
-- **A suggestion** is the current decision for a message, made while observing, that the user has not answered. Decisions that only repeat what the user already said (their rules, senders they taught) are not suggestions.
-- **Suggestions are grouped by sender** and by what sift would do, so one answer settles a sender: "Right", or "No, it is…" with the kind of mail it is. What then happens follows from that category's setting.
+- **A suggestion** is the current decision for a message, made while observing, that the user has not answered. Decisions that only repeat what the user already said (a rule they wrote, or made by correcting sift) are not suggestions; ones from a rule sift learned are.
+- **Suggestions are grouped by sender**, label and what sift would do, so one answer settles a sender: "Right", or "No, it is…" with another label. The answer becomes a rule for that sender; what then happens is the label's action.
 - **An answer is durable.** It writes a sender record (`source` `user` or `correction`), so that sender's later mail is decided by the sender tier, with no model and no further suggestion. It overrides anything sift learned by itself.
 - **Every answer is scored.** `feedback` records right, wrong, or "answered" (sift had no suggestion, which is not a mistake), per decision, so accuracy can be reported per tier.
 - **Every marked message becomes an example.** The answer creates an `examples` row; the next pass of `sift run` fetches the whole message (raw RFC 822, all headers, readable text) into it. These are the evaluation and training set. A message that has since been deleted keeps its answer and is marked gone.
@@ -147,7 +155,7 @@ One SQLite database, `sift.db` in the home directory (schema in `src/store/migra
 - **feedback, examples:** the user's answers to suggestions, and the full content of each message they answered for. `examples` is the only place message content is stored, and only for mail the user marked.
 - **decisions:** an append-only log, each with its mode (observe or act) and outcome. Every triage outcome is recorded, including "keep" and "could not decide", with the tier that made it, the reason, the confidence, and what it cost (model, tokens, dollars, duration). A message can have several decisions; the latest is current.
 - **actions:** the audit log of every mailbox change, with labels before and after, linked to the decision it carried out.
-- **senders, rules, questions, accounts:** learned sender memory, local rules, questions waiting on the user, and each account's history cursor and last sync time.
+- **labels, rules, questions, accounts:** what mail can be, what sift knows without a model, questions waiting on the user, and each account's history cursor and last sync time.
 
 OAuth tokens are kept in files beside the database, not in it. pi-durable keeps its own database alongside.
 
@@ -166,7 +174,7 @@ The dashboard is where the user watches sift, teaches it and manages it. `sift r
 
 **What it may do**
 
-Everything that manages sift: answer suggestions, switch between observing and acting, choose the model and interval, edit the guidelines, set what happens to each kind of mail, add and remove rules, change or forget senders, undo a mailbox change, pull in older mail, and trigger a check.
+Everything that manages sift: answer suggestions, switch between observing and acting, choose the model and interval, edit the guidelines, add and edit labels and what happens to each, add and remove rules, undo a mailbox change, pull in older mail, and trigger a check.
 
 - It changes the database and `sift.toml` directly. A running sift re-reads its settings before every pass, and a change wakes it, so nothing needs restarting.
 - It never imports Gmail, the executor or the daemon (lint enforces this). The few things that need them (signing in, undo, pulling in older mail, check now) are passed in by the process as `SignIn` and `Controls` (`src/dashboard/controls.ts`), so every mailbox change still goes through the executor and the audit log.

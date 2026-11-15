@@ -11,15 +11,18 @@ import {
 } from '../store/actions.ts';
 import type { Mailbox } from './mailbox.ts';
 
-export type MessageAction =
-  /** Add a label and leave the message where it is. */
-  | { type: 'label'; label: string }
-  /** Remove from the inbox. `label` names why; defaults to `sift/archived`. */
-  | { type: 'archive'; label?: string }
-  | { type: 'spam' };
+export interface MessageAction {
+  /** `label` leaves the message where it is; `archive` and `spam` take it out of the inbox. */
+  type: 'label' | 'archive' | 'spam';
+  /** Gmail labels to add, by name: what the mail is. */
+  labels?: string[];
+}
 
-/** Applied to every archived or spammed message, so anything sift moved can be found in Gmail itself. */
-export const AUDIT_LABELS = { archive: 'sift/archived', spam: 'sift/spam' } as const;
+/**
+ * What sift did, as a second Gmail label beside the one for what the mail is. Applied here to every
+ * archived or spammed message whatever the caller passes, so anything sift moved can be found in Gmail itself.
+ */
+export const AUDIT_LABELS = { archive: 'sift/did/archived', spam: 'sift/did/spam' } as const;
 
 export type Outcome =
   | { status: 'done'; actionId: number; finalLabels: string[] }
@@ -115,16 +118,14 @@ export async function execute(deps: ActionDeps, accountId: string, messageId: st
   if (current === null) return { status: 'skipped', reason: 'message no longer exists' };
   if (!current.includes('INBOX')) return { status: 'skipped', reason: 'message is not in the inbox' };
 
-  let change: LabelChange;
-  if (action.type === 'label') {
-    change = { add: [await deps.mailbox.ensureLabel(action.label)], remove: [] };
-  } else if (action.type === 'archive') {
-    change = { add: [await deps.mailbox.ensureLabel(action.label ?? AUDIT_LABELS.archive)], remove: ['INBOX'] };
-  } else {
+  if (action.type === 'spam') {
     const refusal = await spamRefusal(deps, accountId, messageId);
     if (refusal) return { status: 'skipped', reason: refusal };
-    change = { add: [await deps.mailbox.ensureLabel(AUDIT_LABELS.spam), 'SPAM'], remove: ['INBOX'] };
   }
+  const names = [...(action.labels ?? []), ...(action.type === 'label' ? [] : [AUDIT_LABELS[action.type]])];
+  const add: string[] = [];
+  for (const name of new Set(names)) add.push(await deps.mailbox.ensureLabel(name));
+  const change: LabelChange = action.type === 'label' ? { add, remove: [] } : { add: [...add, ...(action.type === 'spam' ? ['SPAM'] : [])], remove: ['INBOX'] };
 
   return applyChange(deps, { accountId, messageId, type: action.type, ...(decisionId === undefined ? {} : { decisionId }) }, current, change);
 }

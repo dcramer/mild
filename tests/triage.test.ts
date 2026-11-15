@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_LABELS } from '../src/store/labels.ts';
 import { bulkSignals, parseAddress } from '../src/triage/features.ts';
 import { triage } from '../src/triage/pipeline.ts';
 import { classifierStage } from '../src/triage/stages/classifier.ts';
 import { type Rule, rulesStage } from '../src/triage/stages/rules.ts';
-import { senderStage } from '../src/triage/stages/sender.ts';
 import { facts } from './helpers.ts';
+
+const LABELS = DEFAULT_LABELS;
 
 describe('pipeline', () => {
   it('sends a message to review when every stage abstains', async () => {
-    const decision = await triage([rulesStage([]), senderStage(() => null)], facts());
+    const decision = await triage([rulesStage([], LABELS)], facts());
     expect(decision).toMatchObject({ disposition: 'review', stage: 'fallback', subscription: 'preserve' });
+    expect(decision.labelId).toBeUndefined();
   });
 
   it('stops at the first stage that decides', async () => {
@@ -17,80 +20,108 @@ describe('pipeline', () => {
     const classifier = classifierStage(
       async () => {
         classifierCalls++;
-        return { disposition: 'keep', confidence: 1 };
+        return { labelId: 'personal', confidence: 1 };
       },
+      LABELS,
       { minConfidence: 0.9, minSpamConfidence: 0.99 },
     );
-    const rules = rulesStage([{ id: 'r1', match: { fromDomain: 'example.com' }, disposition: 'archive', label: 'sift/newsletters' }]);
+    const rules = rulesStage([{ id: 'r1', match: { fromDomain: 'example.com' }, labelId: 'newsletter' }], LABELS);
     const decision = await triage([rules, classifier], facts());
-    expect(decision).toMatchObject({ disposition: 'archive', stage: 'rules', ruleId: 'r1', label: 'sift/newsletters' });
+    expect(decision).toMatchObject({ disposition: 'archive', stage: 'rules', ruleId: 'r1', labelId: 'newsletter', gmailLabel: 'sift/newsletters' });
     expect(classifierCalls).toBe(0);
   });
 });
 
 describe('rules stage', () => {
-  const archiveDomain: Rule = { id: 'archive', match: { fromDomain: 'example.com' }, disposition: 'archive' };
+  const newsletters: Rule = { id: 'archive', match: { fromDomain: 'example.com' }, labelId: 'newsletter' };
+  const decide = (rules: Rule[], input = facts(), options = {}) => rulesStage(rules, LABELS, options).decide(input);
+
+  it('names a label, and the label decides what happens', async () => {
+    expect(await decide([newsletters])).toMatchObject({
+      labelId: 'newsletter',
+      gmailLabel: 'sift/newsletters',
+      disposition: 'archive',
+      reason: 'rule: from domain example.com is Newsletters',
+    });
+    const asks = await decide([{ id: 'r', match: { fromDomain: 'example.com' }, labelId: 'cold_outreach' }]);
+    expect(asks).toMatchObject({ labelId: 'cold_outreach', disposition: 'review' });
+  });
+
+  it("lets a rule's own action beat its label's", async () => {
+    expect(await decide([{ ...newsletters, disposition: 'keep' }])).toMatchObject({
+      labelId: 'newsletter',
+      gmailLabel: 'sift/newsletters',
+      disposition: 'keep',
+    });
+  });
+
+  it('ignores a rule whose label no longer exists', async () => {
+    expect(await decide([{ id: 'r', match: { fromDomain: 'example.com' }, labelId: 'gone' }, newsletters])).toMatchObject({ ruleId: 'archive' });
+  });
 
   it('requires every condition in a match', async () => {
-    const rule: Rule = { id: 'r', match: { fromDomain: 'example.com', subjectContains: 'invoice' }, disposition: 'archive' };
-    expect(await rulesStage([rule]).decide(facts())).toBeNull();
-    expect(await rulesStage([rule]).decide(facts({ subject: 'Your INVOICE' }))).toMatchObject({ ruleId: 'r' });
+    const rule: Rule = { id: 'r', match: { fromDomain: 'example.com', subjectContains: 'invoice' }, labelId: 'transactional' };
+    expect(await decide([rule])).toBeNull();
+    expect(await decide([rule], facts({ subject: 'Your INVOICE' }))).toMatchObject({ ruleId: 'r' });
   });
 
   it('never matches an empty match', async () => {
-    expect(await rulesStage([{ id: 'r', match: {}, disposition: 'archive' }]).decide(facts())).toBeNull();
+    expect(await decide([{ id: 'r', match: {}, labelId: 'newsletter' }])).toBeNull();
   });
 
-  it('lets a keep rule beat an earlier archive rule', async () => {
-    const keep: Rule = { id: 'keep', match: { from: 'news@example.com' }, disposition: 'keep' };
-    expect(await rulesStage([archiveDomain, keep]).decide(facts())).toMatchObject({ disposition: 'keep', ruleId: 'keep' });
+  it('lets a rule that keeps mail beat an earlier one that archives it', async () => {
+    const keep: Rule = { id: 'keep', match: { from: 'news@example.com' }, labelId: 'personal' };
+    expect(await decide([newsletters, keep])).toMatchObject({ disposition: 'keep', ruleId: 'keep' });
   });
 
   it('skips a rule when an exception matches', async () => {
-    const rule: Rule = { ...archiveDomain, except: [{ subjectContains: 'receipt' }] };
-    expect(await rulesStage([rule]).decide(facts({ subject: 'Your receipt' }))).toBeNull();
+    expect(await decide([{ ...newsletters, except: [{ subjectContains: 'receipt' }] }], facts({ subject: 'Your receipt' }))).toBeNull();
   });
 
   it('matches To but not Cc', async () => {
-    const rule: Rule = { id: 'r', match: { to: 'jobs@example.org' }, disposition: 'archive' };
-    const cc = facts({ cc: [{ address: 'jobs@example.org', domain: 'example.org' }] });
-    expect(await rulesStage([rule]).decide(cc)).toBeNull();
+    const rule: Rule = { id: 'r', match: { to: 'jobs@example.org' }, labelId: 'cold_outreach' };
+    expect(await decide([rule], facts({ cc: [{ address: 'jobs@example.org', domain: 'example.org' }] }))).toBeNull();
   });
 
   it('matches on List-Id', async () => {
-    const rule: Rule = { id: 'r', match: { listId: 'dev.lists.example.com' }, disposition: 'archive' };
-    const listed = facts({ headers: { 'list-id': 'Dev List <dev.lists.example.com>' } });
-    expect(await rulesStage([rule]).decide(listed)).toMatchObject({ ruleId: 'r' });
-  });
-});
-
-describe('sender stage', () => {
-  it('abstains instead of hiding a sender the user has written to', async () => {
-    const stage = senderStage(() => ({ disposition: 'archive', userHasReplied: true }));
-    expect(await stage.decide(facts())).toBeNull();
+    const rule: Rule = { id: 'r', match: { listId: 'dev.lists.example.com' }, labelId: 'newsletter' };
+    expect(await decide([rule], facts({ headers: { 'list-id': 'Dev List <dev.lists.example.com>' } }))).toMatchObject({ ruleId: 'r' });
   });
 
-  it('applies a learned disposition', async () => {
-    const stage = senderStage(() => ({ disposition: 'archive', label: 'sift/marketing', userHasReplied: false }));
-    expect(await stage.decide(facts())).toMatchObject({ disposition: 'archive', label: 'sift/marketing', stage: 'sender' });
+  it('never hides mail from someone the owner has written to on a rule sift learned, but does on one the user made', async () => {
+    const written = { hasWritten: () => true };
+    expect(await decide([{ ...newsletters, learned: true }], facts(), written)).toBeNull();
+    expect(await decide([{ ...newsletters, learned: true }], facts(), { hasWritten: () => undefined })).toMatchObject({
+      disposition: 'archive',
+      reason: 'learned: from domain example.com is Newsletters',
+    });
+    expect(await decide([{ id: 'k', match: { fromDomain: 'example.com' }, labelId: 'personal', learned: true }], facts(), written)).toMatchObject({
+      disposition: 'keep',
+    });
+    expect(await decide([newsletters], facts(), written)).toMatchObject({ disposition: 'archive' });
   });
 });
 
 describe('classifier stage', () => {
   const options = { minConfidence: 0.9, minSpamConfidence: 0.99 };
+  const spam = [...LABELS, { id: 'scam', name: 'Scam', description: '', disposition: 'spam' as const, gmailLabel: 'sift/scam' }];
 
-  it('abstains below the confidence bar', async () => {
-    const stage = classifierStage(async () => ({ disposition: 'archive', confidence: 0.8 }), options);
-    expect(await stage.decide(facts())).toBeNull();
+  it('names a label above the bar and abstains below it', async () => {
+    expect(await classifierStage(async () => ({ labelId: 'newsletter', confidence: 0.95 }), LABELS, options).decide(facts())).toMatchObject({
+      labelId: 'newsletter',
+      disposition: 'archive',
+      stage: 'classifier',
+    });
+    expect(await classifierStage(async () => ({ labelId: 'newsletter', confidence: 0.8 }), LABELS, options).decide(facts())).toBeNull();
   });
 
-  it('holds spam to the higher bar', async () => {
-    const stage = classifierStage(async () => ({ disposition: 'spam', confidence: 0.95 }), options);
-    expect(await stage.decide(facts())).toBeNull();
+  it('holds a label that marks spam to the higher bar', async () => {
+    expect(await classifierStage(async () => ({ labelId: 'scam', confidence: 0.95 }), spam, options).decide(facts())).toBeNull();
   });
 
-  it('abstains when the classifier errors', async () => {
-    expect(await classifierStage(async () => null, options).decide(facts())).toBeNull();
+  it('abstains when the classifier errors or names a label that does not exist', async () => {
+    expect(await classifierStage(async () => null, LABELS, options).decide(facts())).toBeNull();
+    expect(await classifierStage(async () => ({ labelId: 'gone', confidence: 1 }), LABELS, options).decide(facts())).toBeNull();
   });
 });
 

@@ -7,7 +7,7 @@ import { dashboardUrls, listenAddresses, localAddresses, machineNames, resolveHe
 import type { Ui } from '../src/cli/ui.ts';
 import { DEFAULT_SETTINGS, loadConfig, parseSettings, renderSettings, resolveHome, saveSettings } from '../src/config.ts';
 import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
-import { DEFAULT_CATEGORIES } from '../src/store/categories.ts';
+import { DEFAULT_LABELS } from '../src/store/labels.ts';
 
 const freshHome = () => mkdtempSync(join(tmpdir(), 'sift-home-'));
 
@@ -103,7 +103,7 @@ function wizard(
       if (state.loginFails) throw new Error('cancelled');
     },
     availableModels: async () => state.models ?? ['small', 'large'],
-    categories: () => [...DEFAULT_CATEGORIES],
+    labels: () => [...DEFAULT_LABELS],
     tailscaleName: () => (state.tailscale === undefined ? 'box.example.ts.net' : state.tailscale),
     enableTailscaleServe: async (port) => {
       calls.push(`serve ${port}`);

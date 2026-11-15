@@ -22,8 +22,8 @@ export function recordDecision(
   const result = db
     .prepare(
       `INSERT INTO decisions
-         (account_id, message_id, stage, disposition, subscription, label, rule_id, confidence, reason,
-          model, input_tokens, output_tokens, cost_usd, duration_ms, decided_at, mode, outcome, category)
+         (account_id, message_id, stage, disposition, subscription, gmail_label, rule_id, confidence, reason,
+          model, input_tokens, output_tokens, cost_usd, duration_ms, decided_at, mode, outcome, label_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
@@ -32,7 +32,7 @@ export function recordDecision(
       decision.stage,
       decision.disposition,
       decision.subscription,
-      decision.label ?? null,
+      decision.gmailLabel ?? null,
       decision.ruleId ?? null,
       decision.confidence ?? null,
       decision.reason,
@@ -44,7 +44,7 @@ export function recordDecision(
       options.now ?? Date.now(),
       mode,
       mode === 'observe' ? 'observed' : null,
-      decision.category ?? null,
+      decision.labelId ?? null,
     );
   return Number(result.lastInsertRowid);
 }
@@ -57,13 +57,13 @@ export interface UnsettledDecision {
   id: number;
   messageId: string;
   disposition: Disposition;
-  label?: string;
+  gmailLabel?: string;
 }
 
 /** `act` decisions that were recorded but never carried out (a crash or a provider error), oldest first. */
 export function listUnsettledDecisions(db: DatabaseSync, accountId: string): UnsettledDecision[] {
   const rows = db
-    .prepare(`SELECT id, message_id, disposition, label FROM decisions WHERE account_id = ? AND outcome IS NULL AND mode = 'act' ORDER BY id`)
-    .all(accountId) as unknown as { id: number; message_id: string; disposition: Disposition; label: string | null }[];
-  return rows.map((r) => ({ id: r.id, messageId: r.message_id, disposition: r.disposition, ...(r.label ? { label: r.label } : {}) }));
+    .prepare(`SELECT id, message_id, disposition, gmail_label FROM decisions WHERE account_id = ? AND outcome IS NULL AND mode = 'act' ORDER BY id`)
+    .all(accountId) as unknown as { id: number; message_id: string; disposition: Disposition; gmail_label: string | null }[];
+  return rows.map((r) => ({ id: r.id, messageId: r.message_id, disposition: r.disposition, ...(r.gmail_label ? { gmailLabel: r.gmail_label } : {}) }));
 }

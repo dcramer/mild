@@ -2,7 +2,7 @@
 
 Self-hosted inbox triage for Gmail. sift labels, archives, filters and unsubscribes on your behalf, asynchronously, and reaches for a language model only when cheaper methods cannot decide.
 
-**Status: early.** sift can connect a Gmail account, sync new inbox mail, decide it with local rules, learned senders and (optionally) one model call per message, and carry the decision out (archive, label, spam) with a full audit log and undo. A local dashboard shows what it decided and did. It has not yet been run against a real mailbox or a real model. Open work is in [TODO.md](TODO.md); the design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+**Status: early.** sift can connect a Gmail account, sync new inbox mail, decide what each message is with rules and (optionally) one model call per message, and carry the decision out (archive, label, spam) with a full audit log and undo. A local dashboard shows what it decided and did. It has not yet been run against a real mailbox or a real model. Open work is in [TODO.md](TODO.md); the design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Set up
 
@@ -32,7 +32,7 @@ Nothing needs an environment variable. Everything sift keeps is in one directory
 | --- | --- |
 | `sift.toml` | Settings: the model, whether to act or only observe, how often to check, the dashboard's port and address. |
 | `guidelines.md` | Your own words about how to sort your mail. |
-| `sift.db` | Rules, categories, learned senders, the record of every message, decision and change, and the full content of mail you have marked. |
+| `sift.db` | Labels, rules, the record of every message, decision and change, and the full content of mail you have marked. |
 | `google-client.json`, `google/`, `model-auth.json` | Credentials. Owner-only. |
 
 Back the directory up or move it as a unit. To keep it somewhere else, pass `--home <dir>` or set `SIFT_HOME`.
@@ -51,23 +51,17 @@ That one process sorts your mail and serves the dashboard; there is nothing else
 
 Rules decide mail without any model. A matching `keep` rule always wins.
 
-```bash
-pnpm sift rules add --do archive --from-domain example.com --label sift/newsletters
-```
+sift gives every message one **label** (Newsletters, Receipts, Cold outreach, and any you add), and the label says what happens: keep, archive, mark spam, or leave it for you. You manage labels in the dashboard.
 
-What the model does with mail no rule covers is your setting, per category:
+A **rule** says what mail is without asking a model:
 
 ```bash
-pnpm sift categories
+pnpm sift rules add --is newsletter --from-domain example.com
 ```
 
-```bash
-pnpm sift categories set newsletter --do keep
-```
+When the model has given a sender's mail the same label three times, sift writes that rule itself and stops asking the model about them.
 
-After a sender's mail has been put in the same category three times, sift remembers the sender and stops asking the model about them.
-
-Archived mail gets a label such as `sift/newsletters`, mail left for you gets `sift/review`, and spam gets `sift/spam`, so everything sift touched can be found in Gmail itself. sift never deletes mail. Every change is in the audit log and can be reversed:
+In Gmail, mail sift acts on gets its label (`sift/newsletters`) and, if sift moved it, a second one for what sift did (`sift/did/archived`, `sift/did/spam`). Mail left for you gets `sift/review`. So everything sift touched can be found in Gmail itself. sift never deletes mail. Every change is in the audit log and can be reversed:
 
 ```bash
 pnpm sift log
@@ -91,7 +85,7 @@ You manage sift from here:
 - **Overview:** decisions per day by tier, how much was decided without a model, model cost, the backlog and the most frequent senders.
 - **Decisions:** every decision, searchable by subject or sender and filterable by tier and outcome. Choosing a row shows that message's full history: each decision, its reason and cost, and each mailbox change.
 - **Rules:** add and remove rules; see how often and how recently each matched.
-- **Senders:** every sender sift remembers. Change what happens to their mail, or forget them.
+- **Labels:** what mail can be, and what sift does with each. Add your own.
 - **Changes:** everything sift has done in Gmail, each with Undo.
 - **Settings:** switch between observing and acting, choose the model and how often to check, pull in older mail to teach with, set what happens to each kind of mail, and edit your guidelines. Changes apply to the running sift straight away.
 

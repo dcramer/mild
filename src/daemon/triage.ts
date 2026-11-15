@@ -3,14 +3,13 @@ import { execute } from '../actions/executor.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
 import { planAction } from '../actions/plan.ts';
 import type { Account } from '../store/accounts.ts';
-import { listCategories } from '../store/categories.ts';
+import { listLabels } from '../store/labels.ts';
 import { listUnsettledDecisions, recordDecision, settleDecision } from '../store/decisions.ts';
 import { listUndecided } from '../store/messages.ts';
-import { countRuleHit, listRules } from '../store/rules.ts';
-import { learnSender, lookupSender } from '../store/senders.ts';
+import { countRuleHit, learnSender, listRules } from '../store/rules.ts';
+import { cachedCorrespondent } from '../store/senders.ts';
 import { triage } from '../triage/pipeline.ts';
 import { rulesStage } from '../triage/stages/rules.ts';
-import { senderStage } from '../triage/stages/sender.ts';
 import { type Judge, modelStage } from '../triage/stages/model.ts';
 import type { Decision, Disposition, Stage } from '../triage/types.ts';
 import { type EvidenceSources, gatherEvidence } from './evidence.ts';
@@ -19,7 +18,7 @@ export interface TriageDeps {
   db: DatabaseSync;
   /** Null means observe: decisions are recorded and nothing in the mailbox changes. */
   mailbox: Mailbox | null;
-  /** The inference tier. Omitted when no model is configured: mail no rule or sender record covers goes to review. */
+  /** The inference tier. Omitted when no model is configured: mail no rule covers goes to review. */
   model?: ModelTier;
   now?: () => number;
 }
@@ -40,19 +39,21 @@ export interface TriageReport {
   /** Decisions whose action was not attempted, e.g. the message had left the inbox or spam was refused. */
   skipped: number;
   /** Actions that failed or whose result is unconfirmed. */
-  troubled: number /** Senders remembered this pass, so their future mail needs no inference. */;
+  troubled: number;
+  /** Rules sift made this pass, so that sender's future mail needs no inference. */
   learned: number;
 }
 
 /** The cascade for one account, cheapest first. The decision-model tier would slot in before the model. */
 function stagesFor(deps: TriageDeps, accountId: string): Stage[] {
   const { db, model } = deps;
-  const stages = [rulesStage(listRules(db, accountId)), senderStage((facts) => lookupSender(db, facts.accountId, facts.from.address))];
+  const labels = listLabels(db, accountId);
+  const stages = [rulesStage(listRules(db, accountId), labels, { hasWritten: (facts) => cachedCorrespondent(db, facts.accountId, facts.from.address) })];
   if (model) {
     stages.push(
       modelStage({
         judge: model.judge,
-        categories: listCategories(db, accountId),
+        labels,
         guidelines: model.guidelines,
         gather: (facts) => gatherEvidence({ db, ...model.sources, ...(deps.now ? { now: deps.now } : {}) }, facts),
       }),
@@ -71,7 +72,7 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
   const now = deps.now ?? Date.now;
   const report: TriageReport = { decided: { keep: 0, archive: 0, spam: 0, review: 0 }, acted: 0, skipped: 0, troubled: 0, learned: 0 };
 
-  const carryOut = async (decisionId: number, messageId: string, decision: Pick<Decision, 'disposition' | 'label'>, box: Mailbox) => {
+  const carryOut = async (decisionId: number, messageId: string, decision: Pick<Decision, 'disposition' | 'gmailLabel'>, box: Mailbox) => {
     const action = planAction(decision);
     if (!action) {
       settleDecision(db, decisionId, 'none');

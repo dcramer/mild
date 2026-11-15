@@ -7,6 +7,8 @@ import { Button, Empty, Figure, Figures, Sheet, SheetHead, StackedBars, Table, T
 
 export function Overview({ data, period, onOpen }: { data: Summary; period: ReactNode; onOpen: (row: DecisionRow) => void }) {
   const t = data.totals;
+  // Before senders were folded into rules they were a tier of their own. It is shown only where that history exists.
+  const used = (stage: string) => stage !== 'sender' || data.byStage.some((row) => row.stage === 'sender' && row.decisions > 0);
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start gap-x-10 gap-y-4">
@@ -35,7 +37,7 @@ export function Overview({ data, period, onOpen }: { data: Summary; period: Reac
           ) : (
             <StackedBars
               unit="decisions"
-              series={TIERS}
+              series={TIERS.filter((tier) => used(tier.key))}
               rows={data.daily.map((d) => ({ key: d.day, label: shortDay(d.day), title: longDay(d.day), values: d.counts }))}
             />
           )}
@@ -53,16 +55,18 @@ export function Overview({ data, period, onOpen }: { data: Summary; period: Reac
               </Tr>
             </thead>
             <tbody>
-              {data.byStage.map((row) => (
-                <Tr key={row.stage}>
-                  <Td>
-                    <TierLabel stage={row.stage} />
-                  </Td>
-                  <Td num>{count(row.decisions)}</Td>
-                  <Td num>{percent(row.decisions, t.decisions)}</Td>
-                  <Td num>{money(row.costUsd)}</Td>
-                </Tr>
-              ))}
+              {data.byStage
+                .filter((row) => used(row.stage))
+                .map((row) => (
+                  <Tr key={row.stage}>
+                    <Td>
+                      <TierLabel stage={row.stage} />
+                    </Td>
+                    <Td num>{count(row.decisions)}</Td>
+                    <Td num>{percent(row.decisions, t.decisions)}</Td>
+                    <Td num>{money(row.costUsd)}</Td>
+                  </Tr>
+                ))}
             </tbody>
           </Table>
         </Sheet>

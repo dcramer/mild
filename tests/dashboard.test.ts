@@ -44,7 +44,13 @@ function seeded(): DatabaseSync {
     NOW,
   );
   const base = { subscription: 'preserve', reason: 'test' } as const;
-  recordDecision(db, ACCOUNT, 'a', { ...base, disposition: 'archive', stage: 'rules', ruleId: 'r1', label: 'sift/news' }, { now: NOW - DAY });
+  recordDecision(
+    db,
+    ACCOUNT,
+    'a',
+    { ...base, disposition: 'archive', stage: 'rules', ruleId: 'r1', labelId: 'newsletter', gmailLabel: 'sift/newsletters' },
+    { now: NOW - DAY },
+  );
   recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'archive', stage: 'sender' }, { now: NOW - DAY });
   recordDecision(
     db,
@@ -158,7 +164,14 @@ describe('summarize', () => {
     const summary = summarize(seeded(), 7, NOW);
     expect(summary.topSenders[0]).toEqual({ address: 'news@example.com', messages: 3, lastDisposition: 'keep' });
     expect(summary.recent.map((r) => r.id)).toEqual([3, 2, 1]);
-    expect(summary.recent[2]).toMatchObject({ subject: 'Weekly digest', fromName: 'Example News', stage: 'rules', label: 'sift/news', actionId: null });
+    expect(summary.recent[2]).toMatchObject({
+      subject: 'Weekly digest',
+      fromName: 'Example News',
+      stage: 'rules',
+      labelId: 'newsletter',
+      gmailLabel: 'sift/newsletters',
+      actionId: null,
+    });
   });
 
   it('handles an empty database', () => {
@@ -258,7 +271,7 @@ describe('dashboard server', () => {
 
   it('lists rules with their hits', async () => {
     const db = seeded();
-    const id = addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, disposition: 'archive', label: 'sift/news' }, 'user', NOW);
+    const id = addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user', NOW);
     recordDecision(db, ACCOUNT, 'waiting', { disposition: 'archive', subscription: 'preserve', stage: 'rules', ruleId: id, reason: 'r' }, { now: NOW });
     expect(listRuleSummaries(db)).toEqual([
       {
@@ -266,8 +279,10 @@ describe('dashboard server', () => {
         accountId: ACCOUNT,
         match: { fromDomain: 'example.com' },
         except: [],
+        labelId: 'newsletter',
+        labelName: 'Newsletters',
+        override: null,
         disposition: 'archive',
-        label: 'sift/news',
         source: 'user',
         hits: 0,
         lastHitAt: NOW,

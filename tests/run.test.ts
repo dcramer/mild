@@ -64,7 +64,7 @@ beforeEach(() => {
 
 describe('runOnce', () => {
   it('observes by default: records what it would do and changes nothing', async () => {
-    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, disposition: 'archive' }, 'user');
+    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
     await runOnce(db, options(false));
 
     expect(decisions()).toMatchObject([
@@ -77,22 +77,19 @@ describe('runOnce', () => {
   });
 
   it('acts on decisions, links each action to its decision and counts rule hits', async () => {
-    const ruleId = addRule(
-      db,
-      ACCOUNT,
-      { match: { listId: 'news.example.com', from: 'news@example.com' }, disposition: 'archive', label: 'sift/news' },
-      'user',
-    );
-    addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, disposition: 'keep' }, 'user');
+    const ruleId = addRule(db, ACCOUNT, { match: { listId: 'news.example.com', from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'personal' }, 'user');
     await runOnce(db, options(true));
 
-    expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/news']);
-    expect(mailbox.labels.get('ada')).toEqual(['INBOX', 'UNREAD']);
+    // Both get the label for what they are; only the archived one gets the label for what sift did.
+    expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/newsletters', 'L:sift/did/archived']);
+    expect(mailbox.labels.get('ada')).toEqual(['INBOX', 'UNREAD', 'L:sift/personal']);
     expect(decisions()).toMatchObject([
-      { message_id: 'ada', disposition: 'keep', mode: 'act', outcome: 'none' },
+      { message_id: 'ada', disposition: 'keep', mode: 'act', outcome: 'done' },
       { message_id: 'news', disposition: 'archive', mode: 'act', outcome: 'done', rule_id: ruleId },
     ]);
-    expect(db.prepare('SELECT message_id, type, status, decision_id FROM actions').all()).toEqual([
+    expect(db.prepare('SELECT message_id, type, status, decision_id FROM actions ORDER BY message_id').all()).toEqual([
+      { message_id: 'ada', type: 'label', status: 'done', decision_id: 1 },
       { message_id: 'news', type: 'archive', status: 'done', decision_id: 2 },
     ]);
     expect(listRules(db, ACCOUNT).map((r) => r.hits)).toEqual([1, 1]);
@@ -112,7 +109,7 @@ describe('runOnce', () => {
   });
 
   it('records why a decision was not carried out', async () => {
-    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, disposition: 'spam' }, 'user');
+    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'marketing', disposition: 'spam' }, 'user');
     mailbox.sentTo.add('news@example.com');
     mailbox.labels.set('ada', ['UNREAD']);
     await runOnce(db, options(true));
@@ -125,7 +122,7 @@ describe('runOnce', () => {
   });
 
   it('keeps a decision it could not carry out and retries it on the next pass', async () => {
-    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, disposition: 'archive' }, 'user');
+    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
     inbox = [inbox[0]!];
     mailbox.failReads = true;
     const [failed] = await runOnce(db, options(true));
@@ -136,7 +133,7 @@ describe('runOnce', () => {
     inbox = [];
     await runOnce(db, options(true));
     expect(decisions()).toMatchObject([{ message_id: 'news', outcome: 'done' }]);
-    expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/archived']);
+    expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/newsletters', 'L:sift/did/archived']);
   });
 });
 
@@ -166,32 +163,32 @@ describe('triage queue', () => {
 
 describe('inference tier', () => {
   const judged: string[] = [];
-  const model = (category: string) => ({
+  const model = (label: string) => ({
     guidelines: () => '',
     judge: async ({ evidence }: { evidence: { facts: { messageId: string } } }) => {
       judged.push(evidence.facts.messageId);
-      return { category, reason: 'looks like a mailing', confidence: 0.9, usage: { model: 'test/model', inputTokens: 800, outputTokens: 20, costUsd: 0.002 } };
+      return { label, reason: 'looks like a mailing', confidence: 0.9, usage: { model: 'test/model', inputTokens: 800, outputTokens: 20, costUsd: 0.002 } };
     },
   });
 
-  it('classifies what no rule covers, acts on the category setting and records the cost', async () => {
+  it('classifies what no rule covers, does what the label says and records the cost', async () => {
     judged.length = 0;
     inbox = [inbox[0]!];
     await runOnce(db, { ...options(true), model: model('newsletter') });
 
-    expect(db.prepare('SELECT stage, disposition, category, label, model, cost_usd, outcome FROM decisions').get()).toEqual({
+    expect(db.prepare('SELECT stage, disposition, label_id, gmail_label, model, cost_usd, outcome FROM decisions').get()).toEqual({
       stage: 'agent',
       disposition: 'archive',
-      category: 'newsletter',
-      label: 'sift/newsletters',
+      label_id: 'newsletter',
+      gmail_label: 'sift/newsletters',
       model: 'test/model',
       cost_usd: 0.002,
       outcome: 'done',
     });
-    expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/newsletters']);
+    expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/newsletters', 'L:sift/did/archived']);
   });
 
-  it('stops calling the model for a sender once it has been learned', async () => {
+  it('makes a rule for a sender the model keeps labelling the same way, and stops calling the model for them', async () => {
     judged.length = 0;
     for (const id of ['n1', 'n2', 'n3', 'n4']) {
       inbox = [message(id, 'News <news@example.com>')];
@@ -199,12 +196,14 @@ describe('inference tier', () => {
       await runOnce(db, { ...options(true), model: model('newsletter') });
     }
     expect(judged).toEqual(['n1', 'n2', 'n3']);
-    expect(db.prepare(`SELECT stage, disposition, category FROM decisions WHERE message_id = 'n4'`).get()).toEqual({
-      stage: 'sender',
+    expect(db.prepare(`SELECT stage, disposition, label_id, reason FROM decisions WHERE message_id = 'n4'`).get()).toEqual({
+      stage: 'rules',
       disposition: 'archive',
-      category: 'newsletter',
+      label_id: 'newsletter',
+      reason: 'learned: from news@example.com is Newsletters',
     });
-    expect(logs.some((line) => line.includes('learned 1 sender'))).toBe(true);
+    expect(listRules(db, ACCOUNT)).toMatchObject([{ match: { from: 'news@example.com' }, labelId: 'newsletter', source: 'agent', learned: true }]);
+    expect(logs.some((line) => line.includes('learned 1 rule'))).toBe(true);
   });
 
   it('gathers evidence and classifies in observe mode without changing the mailbox', async () => {
@@ -221,15 +220,15 @@ describe('examples', () => {
   it('stores marked messages whole on the next pass, while only observing', async () => {
     inbox = [inbox[0]!];
     bodies.set('news', 'The full text of the newsletter.');
-    await runOnce(db, { ...options(false), model: { guidelines: () => '', judge: async () => ({ category: 'newsletter', reason: 'r' }) } });
-    applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', verdict: 'right', suggested: 'archive', scope: 'sender' });
+    await runOnce(db, { ...options(false), model: { guidelines: () => '', judge: async () => ({ label: 'newsletter', reason: 'r' }) } });
+    applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' });
 
     inbox = [];
     const [result] = await runOnce(db, options(false));
     expect(result?.captured).toBe(1);
     expect(logs.at(-1)).toContain('stored 1 marked message as examples');
-    const example = db.prepare('SELECT category, disposition, body_text, raw FROM examples').get() as { raw: Uint8Array; body_text: string };
-    expect(example).toMatchObject({ category: 'newsletter', disposition: 'archive', body_text: 'The full text of the newsletter.' });
+    const example = db.prepare('SELECT label_id, disposition, body_text, raw FROM examples').get() as { raw: Uint8Array; body_text: string };
+    expect(example).toMatchObject({ label_id: 'newsletter', disposition: 'archive', body_text: 'The full text of the newsletter.' });
     expect(Buffer.from(example.raw).toString()).toContain('The full text of the newsletter.');
     expect(mailbox.modifyCalls).toBe(0);
   });

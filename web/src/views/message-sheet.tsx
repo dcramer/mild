@@ -62,7 +62,7 @@ function DecisionEntry({ d }: { d: Decision }) {
       what={
         <>
           <DispositionBadge disposition={d.disposition} />
-          {d.label ? <Code>{d.label}</Code> : null}
+          {d.labelName ? <span className="font-medium">{d.labelName}</span> : null}
         </>
       }
     >

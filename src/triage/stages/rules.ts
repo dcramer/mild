@@ -1,5 +1,5 @@
 import { parseListId } from '../features.ts';
-import type { DecidedDisposition, MessageFacts, Stage, SubscriptionAction } from '../types.ts';
+import { type DecidedDisposition, type Label, type MessageFacts, type Stage, type SubscriptionAction, labelled } from '../types.ts';
 
 /** Every condition present must hold. A match with no conditions never matches. */
 export interface RuleMatch {
@@ -14,14 +14,18 @@ export interface RuleMatch {
   subjectContains?: string;
 }
 
+/** Mail matching `match` is `labelId`. What happens to it is the label's action, unless the rule carries its own. */
 export interface Rule {
   id: string;
   match: RuleMatch;
   /** If any of these match, the rule does not apply. */
   except?: RuleMatch[];
-  disposition: DecidedDisposition;
+  labelId: string;
+  /** An exception to the label's action, for this rule only. */
+  disposition?: DecidedDisposition;
   subscription?: SubscriptionAction;
-  label?: string;
+  /** sift made this rule itself, from what a model kept deciding. The user's own rules are trusted further. */
+  learned?: boolean;
 }
 
 export function matches(match: RuleMatch, facts: MessageFacts): boolean {
@@ -41,24 +45,46 @@ function applies(rule: Rule, facts: MessageFacts): boolean {
   return matches(rule.match, facts) && !(rule.except ?? []).some((e) => matches(e, facts));
 }
 
+const CONDITION: Record<keyof RuleMatch, string> = { from: 'from', fromDomain: 'from domain', to: 'to', listId: 'list', subjectContains: 'subject contains' };
+
+/** A rule's conditions in words, for the audit log and the dashboard. */
+export function describeMatch(match: RuleMatch): string {
+  return (Object.keys(CONDITION) as (keyof RuleMatch)[])
+    .filter((key) => match[key] !== undefined)
+    .map((key) => `${CONDITION[key]} ${match[key]}`)
+    .join(', ');
+}
+
+export interface RulesOptions {
+  /** Whether the owner has ever written to the sender. Undefined means not known. */
+  hasWritten?: (facts: MessageFacts) => boolean | undefined;
+}
+
 /**
- * Local deterministic rules. A matching `keep` rule is a protection and beats every other match;
- * otherwise the first matching rule in order wins.
+ * Deterministic rules, the user's and the ones sift learned. A rule whose outcome is `keep` is a
+ * protection and beats every other match; otherwise the first match in order wins. A rule whose label
+ * no longer exists is ignored, and a learned rule never hides mail from someone the owner has written to.
  */
-export function rulesStage(rules: readonly Rule[]): Stage {
+export function rulesStage(rules: readonly Rule[], labels: readonly Label[], options: RulesOptions = {}): Stage {
   return {
     name: 'rules',
     decide(facts) {
-      const hits = rules.filter((rule) => applies(rule, facts));
-      const rule = hits.find((r) => r.disposition === 'keep') ?? hits[0];
-      if (!rule) return null;
+      const hits = rules.flatMap((rule) => {
+        const label = labels.find((l) => l.id === rule.labelId);
+        if (!label || !applies(rule, facts)) return [];
+        const outcome = labelled(label, rule.disposition);
+        const hides = outcome.disposition === 'archive' || outcome.disposition === 'spam';
+        if (rule.learned && hides && options.hasWritten?.(facts) === true) return [];
+        return [{ rule, label, outcome }];
+      });
+      const hit = hits.find((h) => h.outcome.disposition === 'keep') ?? hits[0];
+      if (!hit) return null;
       return {
-        disposition: rule.disposition,
-        subscription: rule.subscription ?? 'preserve',
-        ...(rule.label ? { label: rule.label } : {}),
+        ...hit.outcome,
+        subscription: hit.rule.subscription ?? 'preserve',
         stage: 'rules',
-        ruleId: rule.id,
-        reason: `matched rule ${rule.id}`,
+        ruleId: hit.rule.id,
+        reason: `${hit.rule.learned ? 'learned' : 'rule'}: ${describeMatch(hit.rule.match)} is ${hit.label.name}`,
       };
     },
   };

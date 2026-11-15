@@ -36,17 +36,33 @@ export interface MessageFacts {
 export interface Decision {
   disposition: Disposition;
   subscription: SubscriptionAction;
-  /** User-facing label to apply, e.g. `sift/newsletters`. */
-  label?: string;
+  /** What the mail is: a label's id. Absent only when no tier could place it. */
+  labelId?: string;
+  /** That label's name in Gmail, e.g. `sift/newsletters`. */
+  gmailLabel?: string;
   stage: StageName;
   /** Human-readable explanation, stored in the audit log. */
   reason: string;
   ruleId?: string;
   confidence?: number;
-  /** The category the model tier chose, when it decided. */
-  category?: string;
   /** Set by a stage that used a model, so the cost of every decision is on record. */
   usage?: DecisionUsage;
+}
+
+/** A kind of mail, and what the user wants done with it. Every tier names one of these; none picks an action. */
+export interface Label {
+  id: string;
+  name: string;
+  /** How to recognise it. Shown to the model. */
+  description: string;
+  /** What sift does with mail that carries this label. `review` leaves it in the inbox for the user. */
+  disposition: Disposition;
+  gmailLabel: string;
+}
+
+/** The part of a decision that follows from the label, with `override` in place of the label's own action if given. */
+export function labelled(label: Label, override?: DecidedDisposition): Pick<Decision, 'disposition' | 'labelId' | 'gmailLabel'> {
+  return { disposition: override ?? label.disposition, labelId: label.id, gmailLabel: label.gmailLabel };
 }
 
 export interface DecisionUsage {

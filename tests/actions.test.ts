@@ -25,24 +25,23 @@ beforeEach(() => {
 describe('execute', () => {
   it('archives with an audit label, preserving unread state and other labels', async () => {
     const outcome = await execute(deps, ACCOUNT, 'm1', { type: 'archive' });
-    expect(outcome).toMatchObject({ status: 'done', finalLabels: ['UNREAD', 'L:mine', 'L:sift/archived'] });
+    expect(outcome).toMatchObject({ status: 'done', finalLabels: ['UNREAD', 'L:mine', 'L:sift/did/archived'] });
     const action = getAction(db, 1);
     expect(action).toMatchObject({
       type: 'archive',
       status: 'done',
       originalLabels: ['INBOX', 'UNREAD', 'L:mine'],
-      payload: { add: ['L:sift/archived'], remove: ['INBOX'] },
+      payload: { add: ['L:sift/did/archived'], remove: ['INBOX'] },
     });
   });
 
-  it('uses the given reason label when archiving', async () => {
-    await execute(deps, ACCOUNT, 'm1', { type: 'archive', label: 'sift/newsletters' });
-    expect(mailbox.labels.get('m1')).toContain('L:sift/newsletters');
-    expect(mailbox.labels.get('m1')).not.toContain('L:sift/archived');
+  it('adds both labels when archiving: what the mail is, and what sift did', async () => {
+    await execute(deps, ACCOUNT, 'm1', { type: 'archive', labels: ['sift/newsletters'] });
+    expect(mailbox.labels.get('m1')).toEqual(['UNREAD', 'L:mine', 'L:sift/newsletters', 'L:sift/did/archived']);
   });
 
   it('labels without moving the message', async () => {
-    await execute(deps, ACCOUNT, 'm1', { type: 'label', label: 'sift/review' });
+    await execute(deps, ACCOUNT, 'm1', { type: 'label', labels: ['sift/review'] });
     expect(mailbox.labels.get('m1')).toEqual(['INBOX', 'UNREAD', 'L:mine', 'L:sift/review']);
   });
 
@@ -56,13 +55,13 @@ describe('execute', () => {
 
   it('skips when the message already has the label', async () => {
     mailbox.labels.set('m1', ['INBOX', 'L:sift/review']);
-    expect(await execute(deps, ACCOUNT, 'm1', { type: 'label', label: 'sift/review' })).toMatchObject({ status: 'skipped' });
+    expect(await execute(deps, ACCOUNT, 'm1', { type: 'label', labels: ['sift/review'] })).toMatchObject({ status: 'skipped' });
     expect(mailbox.modifyCalls).toBe(0);
   });
 
   it('marks spam with an audit label', async () => {
     expect(await execute(deps, ACCOUNT, 'm1', { type: 'spam' })).toMatchObject({ status: 'done' });
-    expect(mailbox.labels.get('m1')).toEqual(['UNREAD', 'L:mine', 'L:sift/spam', 'SPAM']);
+    expect(mailbox.labels.get('m1')).toEqual(['UNREAD', 'L:mine', 'L:sift/did/spam', 'SPAM']);
   });
 
   it('refuses spam for a sender the user has written to, an unknown sender, or a failed lookup', async () => {
@@ -85,7 +84,7 @@ describe('execute', () => {
 
     mailbox.failModify = null;
     expect(await reconcile(deps)).toBe(1);
-    expect(getAction(db, 1)).toMatchObject({ status: 'done', finalLabels: ['UNREAD', 'L:mine', 'L:sift/archived'] });
+    expect(getAction(db, 1)).toMatchObject({ status: 'done', finalLabels: ['UNREAD', 'L:mine', 'L:sift/did/archived'] });
     expect(mailbox.modifyCalls).toBe(1);
   });
 
@@ -101,7 +100,7 @@ describe('execute', () => {
   it('settles a crash that left an action pending', async () => {
     db.prepare(
       `INSERT INTO actions (account_id, message_id, type, payload_json, original_labels, status, created_at) VALUES (?, 'm1', 'archive', ?, '["INBOX"]', 'pending', 0)`,
-    ).run(ACCOUNT, JSON.stringify({ add: ['L:sift/archived'], remove: ['INBOX'] }));
+    ).run(ACCOUNT, JSON.stringify({ add: ['L:sift/did/archived'], remove: ['INBOX'] }));
     await reconcile(deps);
     expect(getAction(db, 1)).toMatchObject({ status: 'failed', error: 'change was not applied' });
   });
@@ -118,7 +117,7 @@ describe('undo', () => {
 
   it('keeps changes the user made afterwards', async () => {
     await execute(deps, ACCOUNT, 'm1', { type: 'archive' });
-    mailbox.labels.set('m1', ['INBOX', 'L:sift/archived', 'L:later']);
+    mailbox.labels.set('m1', ['INBOX', 'L:sift/did/archived', 'L:later']);
     await undo(deps, 1);
     expect(mailbox.labels.get('m1')).toEqual(['INBOX', 'L:later']);
   });
@@ -146,12 +145,15 @@ describe('undo', () => {
 describe('planAction', () => {
   const base = { subscription: 'preserve', stage: 'rules', reason: '' } as const;
 
-  it('maps decisions to actions', () => {
+  it('maps decisions to actions, always carrying the label for what the mail is', () => {
     expect(planAction({ ...base, disposition: 'keep' })).toBeNull();
-    expect(planAction({ ...base, disposition: 'keep', label: 'sift/people' })).toEqual({ type: 'label', label: 'sift/people' });
-    expect(planAction({ ...base, disposition: 'archive' })).toEqual({ type: 'archive' });
-    expect(planAction({ ...base, disposition: 'archive', label: 'sift/news' })).toEqual({ type: 'archive', label: 'sift/news' });
-    expect(planAction({ ...base, disposition: 'spam' })).toEqual({ type: 'spam' });
-    expect(planAction({ ...base, disposition: 'review' })).toEqual({ type: 'label', label: 'sift/review' });
+    expect(planAction({ ...base, disposition: 'keep', gmailLabel: 'sift/personal' })).toEqual({ type: 'label', labels: ['sift/personal'] });
+    expect(planAction({ ...base, disposition: 'archive', gmailLabel: 'sift/news' })).toEqual({ type: 'archive', labels: ['sift/news'] });
+    expect(planAction({ ...base, disposition: 'spam', gmailLabel: 'sift/junk' })).toEqual({ type: 'spam', labels: ['sift/junk'] });
+    expect(planAction({ ...base, disposition: 'review' })).toEqual({ type: 'label', labels: ['sift/review'] });
+    expect(planAction({ ...base, disposition: 'review', gmailLabel: 'sift/cold-outreach' })).toEqual({
+      type: 'label',
+      labels: ['sift/cold-outreach', 'sift/review'],
+    });
   });
 });

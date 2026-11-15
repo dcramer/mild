@@ -11,18 +11,18 @@ const MAX_REASON = 300;
  */
 export function createJudge(models: Models, model: Model<Api>, onError: (message: string) => void = () => {}): Judge {
   return async (input) => {
-    const keys = [...input.categories.map((c) => c.key), UNSURE];
+    const ids = [...input.labels.map((l) => l.id), UNSURE];
     const tool: Tool = {
       name: VERDICT_TOOL,
-      description: 'Record which category this email belongs to.',
+      description: 'Record which label this email gets.',
       parameters: {
         type: 'object',
         properties: {
-          category: { type: 'string', enum: keys, description: 'The key of the single best category.' },
+          label: { type: 'string', enum: ids, description: 'The id of the single best label.' },
           confidence: { type: 'number', minimum: 0, maximum: 1, description: 'How sure you are, from 0 to 1.' },
           reason: { type: 'string', description: 'One short sentence explaining the choice.' },
         },
-        required: ['category', 'confidence', 'reason'],
+        required: ['label', 'confidence', 'reason'],
         additionalProperties: false,
       },
       constrainedSampling: { type: 'json_schema', strict: 'prefer' },
@@ -47,16 +47,16 @@ export function createJudge(models: Models, model: Model<Api>, onError: (message
 
     const call = message.content.find((block) => block.type === 'toolCall' && block.name === VERDICT_TOOL);
     const args = call?.type === 'toolCall' ? call.arguments : undefined;
-    const category = args?.['category'];
+    const label = args?.['label'];
     const reason = args?.['reason'];
     const confidence = args?.['confidence'];
-    if (typeof category !== 'string' || !keys.includes(category) || typeof reason !== 'string') {
+    if (typeof label !== 'string' || !ids.includes(label) || typeof reason !== 'string') {
       onError('model did not return a usable verdict');
       return null;
     }
 
     return {
-      category,
+      label,
       reason: reason.replace(/\s+/g, ' ').trim().slice(0, MAX_REASON),
       ...(typeof confidence === 'number' && confidence >= 0 && confidence <= 1 ? { confidence } : {}),
       usage: {

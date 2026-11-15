@@ -18,7 +18,7 @@ import { createJudge } from '../model/judge.ts';
 import { login, openModels, resolveModel } from '../model/models.ts';
 import { type Account, connectAccount, listAccounts } from '../store/accounts.ts';
 import { getAction, listRecentActions } from '../store/actions.ts';
-import { listCategories, updateCategory } from '../store/categories.ts';
+import { listLabels, updateLabel } from '../store/labels.ts';
 import { openDb } from '../store/db.ts';
 import { type SetupState, runInit } from './init.ts';
 import { listenAddresses, machineNames, tailscaleName } from './network.ts';
@@ -37,7 +37,7 @@ const MAIN_COMMANDS: readonly (readonly [string, string])[] = [
 ];
 const OTHER_COMMANDS: readonly (readonly [string, string])[] = [
   ['rules', 'list | add --do <keep|archive|spam> --from-domain <d> | remove <id>'],
-  ['categories', 'list | set <key> --do <keep|archive|review|spam>'],
+  ['labels', 'list | set <id> --do <keep|archive|review|spam>'],
   ['log', 'recent changes to your mailbox'],
   ['undo <id>', 'reverse one change'],
   ['dashboard', 'serve the dashboard without sorting mail'],
@@ -80,7 +80,7 @@ function status(): void {
   const troubled = count('actions', `WHERE status IN ('failed', 'unknown', 'pending')`);
   ui.fields([
     ['Recorded', `${plural(count('messages'), 'message')} · ${plural(count('decisions'), 'decision')} · ${plural(count('actions'), 'change')}`],
-    ['Learned', `${plural(count('rules'), 'rule')} · ${plural(count('senders'), 'sender')}`],
+    ['Rules', plural(count('rules'), 'rule')],
     ...(questions > 0 ? [['Waiting', paint.mark(` ${plural(questions, 'question')} for you `)] as const] : []),
     ...(troubled > 0 ? [['Check', paint.bad(`${plural(troubled, 'change')} failed or unconfirmed; see sift log`)] as const] : []),
   ]);
@@ -120,7 +120,7 @@ async function init(): Promise<void> {
     connectedAccounts: () => withDb((db) => listAccounts(db).map((a) => a.email)),
     loginModel: (choice) => login(models, config, choice.provider, choice.type, ui),
     availableModels: async (provider) => (await models.getAvailable(provider)).map((m) => m.id),
-    categories: (account) => withDb((db) => listCategories(db, account)),
+    labels: (account) => withDb((db) => listLabels(db, account)),
     googleClientKind: () => (hasClientSecrets(config) ? loadClientSecrets(config).kind : null),
     tailscaleName,
     enableTailscaleServe: async (servePort) => {
@@ -186,9 +186,8 @@ async function apply(args: string[]): Promise<void> {
   let action: MessageAction;
   if (type === 'label') {
     if (!values.label) throw new Error('sift apply label needs --label <name>.');
-    action = { type, label: values.label };
-  } else if (type === 'archive') action = values.label ? { type, label: values.label } : { type };
-  else action = { type };
+    action = { type, labels: [values.label] };
+  } else action = values.label ? { type, labels: [values.label] } : { type };
 
   const config = loadConfig();
   const db = openDb(config.dbPath);
@@ -437,31 +436,23 @@ async function listModels(): Promise<void> {
   }
 }
 
-function categories(args: string[]): void {
-  const { values, positionals } = parseArgs({
-    args,
-    allowPositionals: true,
-    options: { account: { type: 'string' }, do: { type: 'string' }, label: { type: 'string' }, 'no-label': { type: 'boolean', default: false } },
-  });
-  const [verb, key] = positionals;
+function labels(args: string[]): void {
+  const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { account: { type: 'string' }, do: { type: 'string' } } });
+  const [verb, id] = positionals;
   const config = loadConfig();
   const db = openDb(config.dbPath);
   try {
     const account = pickAccount(listAccounts(db), values.account);
     if (verb === 'set') {
-      const disposition = values.do;
-      if (!key || (disposition === undefined && values.label === undefined && !values['no-label']))
-        throw new Error('Usage: sift categories set <key> --do <keep|archive|review|spam> [--label <name> | --no-label]');
-      if (disposition !== undefined && disposition !== 'keep' && disposition !== 'archive' && disposition !== 'review' && disposition !== 'spam')
-        throw new Error('--do must be keep, archive, review or spam.');
-      const label = values['no-label'] ? null : values.label;
-      if (!updateCategory(db, account.id, key, { ...(disposition ? { disposition } : {}), ...(label === undefined ? {} : { label }) }))
-        throw new Error(`No category "${key}". Run \`sift categories\` to list them.`);
-    } else if (verb !== undefined && verb !== 'list') throw new Error('Usage: sift categories [list | set <key> ...]');
+      const does = values.do;
+      if (!id || (does !== 'keep' && does !== 'archive' && does !== 'review' && does !== 'spam'))
+        throw new Error('Usage: sift labels set <id> --do <keep|archive|review|spam>');
+      if (!updateLabel(db, account.id, id, { disposition: does })) throw new Error(`No label "${id}". Run \`sift labels\` to list them.`);
+    } else if (verb !== undefined && verb !== 'list') throw new Error('Usage: sift labels [list | set <id> --do ...]');
     ui.blank();
     ui.table(
-      ['Key', 'Kind', 'sift will', 'Label'],
-      listCategories(db, account.id).map((c) => [paint.bold(c.key), c.name, disposition(c.disposition), c.label ? paint.dim(c.label) : '']),
+      ['Id', 'Label', 'sift will', 'In Gmail'],
+      listLabels(db, account.id).map((l) => [paint.bold(l.id), l.name, disposition(l.disposition), paint.dim(l.gmailLabel)]),
     );
     ui.blank();
   } finally {
@@ -582,7 +573,7 @@ function rules(args: string[]): void {
       to: { type: 'string' },
       'list-id': { type: 'string' },
       'subject-contains': { type: 'string' },
-      label: { type: 'string' },
+      is: { type: 'string' },
     },
   });
   const [verb, id] = positionals;
@@ -597,9 +588,10 @@ function rules(args: string[]): void {
     }
     const account = pickAccount(listAccounts(db), values.account);
     if (verb === 'add') {
-      const disposition = values.do;
-      if (disposition !== 'keep' && disposition !== 'archive' && disposition !== 'spam')
-        throw new Error('sift rules add needs --do keep, --do archive or --do spam.');
+      const override = values.do;
+      if (!values.is) throw new Error('sift rules add needs --is <label-id>. Run `sift labels` to list them.');
+      if (override !== undefined && override !== 'keep' && override !== 'archive' && override !== 'spam')
+        throw new Error('--do must be keep, archive or spam. Leave it out to do what the label does.');
       const match: RuleMatch = {
         ...(values.from ? { from: values.from } : {}),
         ...(values['from-domain'] ? { fromDomain: values['from-domain'] } : {}),
@@ -607,26 +599,27 @@ function rules(args: string[]): void {
         ...(values['list-id'] ? { listId: values['list-id'] } : {}),
         ...(values['subject-contains'] ? { subjectContains: values['subject-contains'] } : {}),
       };
-      const ruleId = addRule(db, account.id, { match, disposition, ...(values.label ? { label: values.label } : {}) }, 'user');
+      const ruleId = addRule(db, account.id, { match, labelId: values.is, ...(override ? { disposition: override } : {}) }, 'user');
       ui.ok(`Added ${paint.bold(ruleId)}`);
       return;
     }
     if (verb !== undefined && verb !== 'list') throw new Error('Usage: sift rules <list|add|remove>');
     const all = listRules(db, account.id);
+    const names = new Map(listLabels(db, account.id).map((l) => [l.id, l.name]));
     if (all.length === 0) {
-      ui.skip(`No rules yet. Add one with ${paint.cmd('sift rules add --do archive --from-domain example.com')}`);
+      ui.skip(`No rules yet. Add one with ${paint.cmd('sift rules add --is newsletter --from-domain example.com')}`);
       return;
     }
     ui.blank();
     ui.table(
-      ['Id', 'When mail matches', 'sift will', 'Label', 'Matches'],
+      ['Id', 'When mail is', 'It is', 'Exception', 'Matches'],
       all.map((rule) => [
         paint.bold(rule.id),
         Object.entries(rule.match)
           .map(([key, value]) => `${paint.dim(CONDITION_NAMES[key] ?? key)} ${value}`)
           .join('  '),
-        disposition(rule.disposition),
-        rule.label ? paint.dim(rule.label) : '',
+        names.get(rule.labelId) ?? paint.dim(`${rule.labelId} (removed)`),
+        rule.disposition ? disposition(rule.disposition) : '',
         String(rule.hits),
       ]),
     );
@@ -657,7 +650,7 @@ async function main(): Promise<void> {
   else if (command === 'rules') rules(args);
   else if (command === 'login') await loginCommand(args);
   else if (command === 'models') await listModels();
-  else if (command === 'categories') categories(args);
+  else if (command === 'labels') labels(args);
   else if (command === undefined || command === 'help' || command === '--help' || command === '-h') help();
   else if ((PLANNED as readonly string[]).includes(command)) {
     ui.fail(`${paint.cmd(`sift ${command}`)} is not built yet.`);

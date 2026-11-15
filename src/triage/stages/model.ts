@@ -1,15 +1,5 @@
 import type { BulkSignals } from '../features.ts';
-import type { DecisionUsage, Disposition, MessageFacts, Stage } from '../types.ts';
-
-/** A kind of mail and what the user wants done with it. */
-export interface Category {
-  key: string;
-  name: string;
-  /** How to recognise it. Shown to the model. */
-  description: string;
-  disposition: Disposition;
-  label?: string;
-}
+import { type DecisionUsage, type Disposition, type Label, type MessageFacts, type Stage, labelled } from '../types.ts';
 
 /** Everything the model is shown about one message. Gathered by deterministic code, never by the model. */
 export interface Evidence {
@@ -30,8 +20,8 @@ export interface Evidence {
 export const UNSURE = 'unsure';
 
 export interface Verdict {
-  /** A category key, or `unsure`. */
-  category: string;
+  /** A label's id, or `unsure`. */
+  label: string;
   reason: string;
   /** 0 to 1, as reported by the model. Not calibrated. */
   confidence?: number;
@@ -39,27 +29,26 @@ export interface Verdict {
 }
 
 /** Port for the model. Returns null when the call failed or the answer was unusable: that abstains. */
-export type Judge = (input: { evidence: Evidence; categories: readonly Category[]; guidelines: string }) => Promise<Verdict | null>;
+export type Judge = (input: { evidence: Evidence; labels: readonly Label[]; guidelines: string }) => Promise<Verdict | null>;
 
 export interface ModelStageDeps {
   gather: (facts: MessageFacts) => Promise<Evidence>;
   judge: Judge;
-  categories: readonly Category[];
+  labels: readonly Label[];
   /** The user's broad guidance in plain language. May be empty. */
   guidelines: string;
 }
 
 /**
  * The inference tier. The model has no tools and takes no action: it reads the evidence and names a
- * category. What happens next comes from the user's settings for that category, and two protections
- * apply whatever the model says.
+ * label. What happens next is that label's action, and two protections apply whatever the model says.
  */
 export function modelStage(deps: ModelStageDeps): Stage {
   return {
     name: 'agent',
     async decide(facts) {
       const evidence = await deps.gather(facts);
-      const verdict = await deps.judge({ evidence, categories: deps.categories, guidelines: deps.guidelines });
+      const verdict = await deps.judge({ evidence, labels: deps.labels, guidelines: deps.guidelines });
       if (!verdict) return null;
 
       const base = {
@@ -68,25 +57,20 @@ export function modelStage(deps: ModelStageDeps): Stage {
         ...(verdict.confidence === undefined ? {} : { confidence: verdict.confidence }),
         ...(verdict.usage ? { usage: verdict.usage } : {}),
       };
-      const category = deps.categories.find((c) => c.key === verdict.category);
-      // `unsure`, or a category that does not exist: the model could not place it, so the user decides.
-      if (!category)
-        return { ...base, disposition: 'review', reason: verdict.category === UNSURE ? verdict.reason : `model named an unknown category: ${verdict.reason}` };
+      const label = deps.labels.find((l) => l.id === verdict.label);
+      // `unsure`, or a label that does not exist: the model could not place it, so the user decides.
+      if (!label)
+        return { ...base, disposition: 'review', reason: verdict.label === UNSURE ? verdict.reason : `model named an unknown label: ${verdict.reason}` };
 
-      const hides = category.disposition === 'archive' || category.disposition === 'spam';
+      const outcome = labelled(label);
+      const hides = outcome.disposition === 'archive' || outcome.disposition === 'spam';
       // Mail from someone the user has written to is never hidden on a model's word. Unknown counts as yes.
       if (hides && evidence.sender.userHasWritten !== false) {
         const why = evidence.sender.userHasWritten === null ? 'could not check whether you have written to this sender' : 'you have written to this sender';
-        return { ...base, disposition: 'review', category: category.key, reason: `${category.name}, but ${why}: ${verdict.reason}` };
+        return { ...base, ...outcome, disposition: 'review', reason: `${label.name}, but ${why}: ${verdict.reason}` };
       }
 
-      return {
-        ...base,
-        disposition: category.disposition,
-        category: category.key,
-        ...(category.label ? { label: category.label } : {}),
-        reason: `${category.name}: ${verdict.reason}`,
-      };
+      return { ...base, ...outcome, reason: `${label.name}: ${verdict.reason}` };
     },
   };
 }

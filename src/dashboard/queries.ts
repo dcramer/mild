@@ -1,8 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { accuracy, pendingSuggestions } from '../learn/feedback.ts';
-import { listCategories } from '../store/categories.ts';
+import { listLabels } from '../store/labels.ts';
 import {
   type DecisionRow,
+  type LabelSummary,
   type MessageDetail,
   type RuleSummary,
   STAGES,
@@ -93,7 +94,9 @@ interface DecisionSqlRow {
   decided_at: number;
   stage: StageKey;
   disposition: string;
-  label: string | null;
+  label_id: string | null;
+  label_name: string | null;
+  gmail_label: string | null;
   reason: string;
   confidence: number | null;
   model: string | null;
@@ -110,11 +113,12 @@ interface DecisionSqlRow {
 }
 
 const DECISION_SELECT = `
-  SELECT d.id, d.account_id, d.message_id, d.decided_at, d.stage, d.disposition, d.label, d.reason, d.confidence, d.model, d.cost_usd,
+  SELECT d.id, d.account_id, d.message_id, d.decided_at, d.stage, d.disposition, d.label_id, l.name AS label_name, d.gmail_label, d.reason, d.confidence, d.model, d.cost_usd,
          m.from_address, m.from_name, m.subject, d.mode, d.outcome, d.outcome_detail,
          a.id AS action_id, a.type AS action_type, a.status AS action_status
   FROM decisions d
   JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
+  LEFT JOIN labels l ON l.account_id = d.account_id AND l.id = d.label_id
   LEFT JOIN actions a ON a.id = (SELECT max(id) FROM actions WHERE decision_id = d.id)`;
 
 const toDecisionRow = (r: DecisionSqlRow): DecisionRow => ({
@@ -124,7 +128,9 @@ const toDecisionRow = (r: DecisionSqlRow): DecisionRow => ({
   decidedAt: r.decided_at,
   stage: r.stage,
   disposition: r.disposition,
-  label: r.label,
+  labelId: r.label_id,
+  labelName: r.label_name,
+  gmailLabel: r.gmail_label,
   reason: r.reason,
   confidence: r.confidence,
   model: r.model,
@@ -272,21 +278,25 @@ export function messageDetail(db: DatabaseSync, accountId: string, messageId: st
   };
 }
 
-/** Every rule in evaluation order, with how often and how recently it decided a message. */
+/** Every rule in evaluation order, with its label, what it does, and how often and how recently it decided a message. */
 export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
   const rows = db
     .prepare(
-      `SELECT r.id, r.account_id, r.match_json, r.except_json, r.disposition, r.label, r.source, r.hits, r.filter_id, r.created_at,
+      `SELECT r.id, r.account_id, r.match_json, r.except_json, r.label_id, l.name AS label_name, r.disposition AS override, l.disposition AS label_does,
+              r.source, r.hits, r.filter_id, r.created_at,
               (SELECT max(decided_at) FROM decisions d WHERE d.rule_id = r.id) AS last_hit_at
-       FROM rules r ORDER BY r.account_id, r.position, r.id`,
+       FROM rules r LEFT JOIN labels l ON l.account_id = r.account_id AND l.id = r.label_id
+       ORDER BY r.account_id, r.position, r.id`,
     )
     .all() as unknown as {
     id: string;
     account_id: string;
     match_json: string;
     except_json: string;
-    disposition: string;
-    label: string | null;
+    label_id: string;
+    label_name: string | null;
+    override: string | null;
+    label_does: string | null;
     source: string;
     hits: number;
     filter_id: string | null;
@@ -298,13 +308,38 @@ export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
     accountId: r.account_id,
     match: JSON.parse(r.match_json) as Record<string, string>,
     except: JSON.parse(r.except_json) as Record<string, string>[],
-    disposition: r.disposition,
-    label: r.label,
+    labelId: r.label_id,
+    labelName: r.label_name,
+    override: r.override,
+    disposition: r.label_name === null ? null : (r.override ?? r.label_does),
     source: r.source,
     hits: r.hits,
     lastHitAt: r.last_hit_at,
     filterId: r.filter_id,
     createdAt: r.created_at,
+  }));
+}
+
+/** An account's labels, each with how much depends on it and how often sift has had it right. */
+export function listLabelSummaries(db: DatabaseSync, accountId: string): LabelSummary[] {
+  const counts = (sql: string) =>
+    new Map((db.prepare(sql).all(accountId) as unknown as { id: string; n: number; right?: number }[]).map((r) => [r.id, r] as const));
+  const rules = counts('SELECT label_id AS id, count(*) AS n FROM rules WHERE account_id = ? GROUP BY label_id');
+  const messages = counts(
+    `SELECT d.label_id AS id, count(*) AS n FROM decisions d
+     WHERE d.account_id = ? AND d.label_id IS NOT NULL
+       AND d.id = (SELECT max(id) FROM decisions x WHERE x.account_id = d.account_id AND x.message_id = d.message_id)
+     GROUP BY d.label_id`,
+  );
+  const record = counts(
+    `SELECT d.label_id AS id, count(*) AS n, sum(f.verdict = 'right') AS right FROM feedback f JOIN decisions d ON d.id = f.decision_id
+     WHERE f.account_id = ? AND f.verdict IN ('right', 'wrong') AND d.label_id IS NOT NULL GROUP BY d.label_id`,
+  );
+  return listLabels(db, accountId).map((l) => ({
+    ...l,
+    rules: rules.get(l.id)?.n ?? 0,
+    messages: messages.get(l.id)?.n ?? 0,
+    record: { reviewed: record.get(l.id)?.n ?? 0, right: record.get(l.id)?.right ?? 0 },
   }));
 }
 
@@ -316,12 +351,15 @@ const MAX_GROUPS = 100;
  * that sift would treat the same way. Biggest groups first, since they teach the most.
  */
 export function listSuggestions(db: DatabaseSync, options: { includeKept?: boolean } = {}): Suggestions {
+  const accounts = db.prepare('SELECT id FROM accounts').all() as { id: string }[];
+  const labels = new Map(accounts.map(({ id }) => [id, listLabels(db, id)] as const));
+  const names = new Map([...labels].flatMap(([account, list]) => list.map((l) => [`${account}\n${l.id}`, l.name] as const)));
   const groups = new Map<string, SuggestionGroup>();
   let waiting = 0;
   for (const s of pendingSuggestions(db)) {
     if (s.disposition === 'keep' && !options.includeKept) continue;
     waiting++;
-    const key = `${s.accountId}\n${s.fromAddress}\n${s.disposition}`;
+    const key = `${s.accountId}\n${s.fromAddress}\n${s.disposition}\n${s.labelId ?? ''}`;
     let group = groups.get(key);
     if (!group) {
       group = {
@@ -329,8 +367,8 @@ export function listSuggestions(db: DatabaseSync, options: { includeKept?: boole
         sender: s.fromAddress,
         senderName: s.fromName,
         disposition: s.disposition,
-        category: s.category,
-        label: s.label,
+        labelId: s.labelId,
+        labelName: (s.labelId && names.get(`${s.accountId}\n${s.labelId}`)) ?? null,
         stage: s.stage,
         messages: 0,
         latestAt: s.decidedAt,
@@ -343,15 +381,12 @@ export function listSuggestions(db: DatabaseSync, options: { includeKept?: boole
       group.sample.push({ decisionId: s.decisionId, messageId: s.messageId, subject: s.subject, reason: s.reason, decidedAt: s.decidedAt });
   }
   const { reviewed, right } = accuracy(db);
-  const accounts = db.prepare('SELECT id FROM accounts').all() as { id: string }[];
   const examples = db.prepare(`SELECT sum(status = 'captured') AS captured, sum(status = 'pending') AS pending FROM examples`).get() as {
     captured: number | null;
     pending: number | null;
   };
   return {
-    categories: Object.fromEntries(
-      accounts.map(({ id }) => [id, listCategories(db, id).map((c) => ({ key: c.key, name: c.name, disposition: c.disposition }))]),
-    ),
+    labels: Object.fromEntries([...labels].map(([id, list]) => [id, list.map((l) => ({ id: l.id, name: l.name, disposition: l.disposition }))])),
     examples: { captured: examples.captured ?? 0, pending: examples.pending ?? 0 },
     groups: [...groups.values()].toSorted((a, b) => b.messages - a.messages || b.latestAt - a.latestAt).slice(0, MAX_GROUPS),
     waiting,

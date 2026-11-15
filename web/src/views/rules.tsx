@@ -5,7 +5,7 @@ import { ago, count } from '@/lib/format.ts';
 import { Button, Code, Empty, Input, Loading, Select, Sheet, SheetHead, Table, Td, Th, Tr } from '@/system';
 
 const CONDITIONS: Record<string, string> = { from: 'from', fromDomain: 'from domain', to: 'to', listId: 'list', subjectContains: 'subject contains' };
-const SOURCES: Record<string, string> = { user: 'You', agent: 'sift', correction: 'You, correcting sift' };
+const SOURCES: Record<string, string> = { user: 'You', agent: 'sift learned it', correction: 'You, correcting sift' };
 
 function Conditions({ match }: { match: Record<string, string> }) {
   return (
@@ -23,23 +23,25 @@ function Conditions({ match }: { match: Record<string, string> }) {
 }
 
 const WHEN = [
-  ['fromDomain', 'From domain'],
   ['from', 'From address'],
+  ['fromDomain', 'From domain'],
   ['listId', 'Mailing list id'],
   ['to', 'Sent to'],
   ['subjectContains', 'Subject contains'],
 ] as const;
-const THEN = [
-  ['archive', 'Archive'],
-  ['keep', 'Keep in inbox'],
-  ['spam', 'Mark spam'],
+const EXCEPTION = [
+  ['', 'Do what the label does'],
+  ['keep', 'But keep in inbox'],
+  ['archive', 'But archive'],
+  ['spam', 'But mark spam'],
 ] as const;
 
-function AddRule({ accountId, onAdded }: { accountId: string; onAdded: () => void }) {
+function AddRule({ accountId, labels, onAdded }: { accountId: string; labels: readonly (readonly [string, string])[]; onAdded: () => void }) {
   const { busy, error, run } = useAction();
-  const [when, setWhen] = useState<(typeof WHEN)[number][0]>('fromDomain');
+  const [when, setWhen] = useState<(typeof WHEN)[number][0]>('from');
   const [value, setValue] = useState('');
-  const [then, setThen] = useState<(typeof THEN)[number][0]>('archive');
+  const [label, setLabel] = useState('');
+  const [exception, setException] = useState<(typeof EXCEPTION)[number][0]>('');
   return (
     <>
       <form
@@ -47,7 +49,7 @@ function AddRule({ accountId, onAdded }: { accountId: string; onAdded: () => voi
         onSubmit={(event) => {
           event.preventDefault();
           run(
-            () => api.addRule({ accountId, match: { [when]: value.trim() }, disposition: then }),
+            () => api.addRule({ accountId, match: { [when]: value.trim() }, label, ...(exception === '' ? {} : { disposition: exception }) }),
             () => {
               setValue('');
               onAdded();
@@ -59,12 +61,14 @@ function AddRule({ accountId, onAdded }: { accountId: string; onAdded: () => voi
         <Input
           className="w-64"
           aria-label="Value to match"
-          placeholder={when === 'fromDomain' ? 'example.com' : ''}
+          placeholder={when === 'fromDomain' ? 'example.com' : when === 'from' ? 'name@example.com' : ''}
           value={value}
           onChange={(event) => setValue(event.target.value)}
         />
-        <Select label="What sift does" value={then} options={THEN} onChange={setThen} />
-        <Button variant="ink" type="submit" size="sm" busy={busy} disabled={value.trim() === ''}>
+        <span className="text-[13px] text-muted-foreground">is</span>
+        <Select label="Label" value={label} options={[['', 'Choose a label'] as const, ...labels]} onChange={setLabel} />
+        <Select label="Exception to the label's action" value={exception} options={EXCEPTION} onChange={setException} />
+        <Button variant="ink" type="submit" size="sm" busy={busy} disabled={value.trim() === '' || label === ''}>
           Add rule
         </Button>
       </form>
@@ -73,30 +77,36 @@ function AddRule({ accountId, onAdded }: { accountId: string; onAdded: () => voi
   );
 }
 
+/** Everything sift knows without asking a model: the user's rules and the ones it learned. */
 export function Rules() {
   const { data, error, loading, reload } = useLoaded('rules', (signal) => api.rules(signal));
-  const accounts = useLoaded('rule-accounts', (signal) => api.manage(signal), 300_000);
+  const manage = useLoaded('rule-accounts', (signal) => api.manage(signal), 60_000);
   const remove = useAction();
-  const accountId = accounts.data?.accounts[0]?.id;
+  const accountId = manage.data?.accounts[0]?.id;
+  const labels = accountId ? (manage.data?.labels[accountId] ?? []).map((l) => [l.id, l.name] as const) : [];
   const multipleAccounts = new Set(data?.rules.map((r) => r.accountId)).size > 1;
   return (
     <div className="flex flex-col gap-4">
       {error ? <ErrorNote message={error} /> : null}
       <Sheet>
-        <SheetHead title="Rules" description="Checked in order, before anything else. A matching keep rule always wins." />
-        {accountId ? <AddRule accountId={accountId} onAdded={reload} /> : null}
+        <SheetHead
+          title="Rules"
+          description="A rule says what mail is; its label decides what happens. Checked in order, before any model, and one that keeps mail always wins."
+        />
+        {accountId ? <AddRule accountId={accountId} labels={labels} onAdded={reload} /> : null}
         <Outcome error={remove.error} />
         {loading ? (
           <Loading />
         ) : !data || data.rules.length === 0 ? (
-          <Empty>No rules yet.</Empty>
+          <Empty>No rules yet. Answering a suggestion makes one for that sender.</Empty>
         ) : (
           <Table>
             <thead>
               <Tr>
                 <Th>When mail is</Th>
+                <Th>It is</Th>
                 <Th>sift does</Th>
-                <Th>Added by</Th>
+                <Th>From</Th>
                 <Th num>Matches</Th>
                 <Th>Last matched</Th>
                 <Th />
@@ -114,11 +124,16 @@ export function Rules() {
                     ))}
                     {multipleAccounts ? <Sub>{rule.accountId}</Sub> : null}
                   </Td>
-                  <Td className="whitespace-nowrap">
-                    <DispositionBadge disposition={rule.disposition} />
-                    {rule.label ? <Sub mono>{rule.label}</Sub> : null}
+                  <Td className="font-medium whitespace-nowrap">
+                    {rule.labelName ?? <span className="font-normal text-destructive">A label that was removed</span>}
                   </Td>
-                  <Td quiet>{SOURCES[rule.source] ?? rule.source}</Td>
+                  <Td className="whitespace-nowrap">
+                    {rule.disposition ? <DispositionBadge disposition={rule.disposition} /> : <span className="text-muted-foreground">Nothing</span>}
+                    {rule.override ? <Sub>exception to the label</Sub> : null}
+                  </Td>
+                  <Td quiet className="whitespace-nowrap">
+                    {SOURCES[rule.source] ?? rule.source}
+                  </Td>
                   <Td num>{count(rule.hits)}</Td>
                   <Td quiet className="whitespace-nowrap">
                     {rule.lastHitAt ? ago(rule.lastHitAt) : 'Never'}

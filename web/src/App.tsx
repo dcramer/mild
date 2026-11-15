@@ -8,8 +8,8 @@ import { ChangesView } from '@/views/changes.tsx';
 import { Decisions } from '@/views/decisions.tsx';
 import { type MessageRef, MessageSheet } from '@/views/message-sheet.tsx';
 import { Overview } from '@/views/overview.tsx';
+import { LabelsView } from '@/views/labels.tsx';
 import { Rules } from '@/views/rules.tsx';
-import { SendersView } from '@/views/senders.tsx';
 import { SettingsView } from '@/views/settings.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
@@ -22,13 +22,13 @@ const PERIODS = [
   ['90', 'Last 90 days'],
 ] as const;
 
-const SECTIONS = ['suggestions', 'overview', 'decisions', 'rules', 'senders', 'changes', 'settings'] as const;
+const SECTIONS = ['suggestions', 'overview', 'decisions', 'labels', 'rules', 'changes', 'settings'] as const;
 const NAMES: Record<(typeof SECTIONS)[number], string> = {
   suggestions: 'Suggestions',
   overview: 'Overview',
   decisions: 'Decisions',
+  labels: 'Labels',
   rules: 'Rules',
-  senders: 'Senders',
   changes: 'Changes',
   settings: 'Settings',
 };
@@ -102,10 +102,10 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
           </div>
         ) : section === 'decisions' ? (
           <Decisions days={days} period={period} onOpen={openMessage} />
+        ) : section === 'labels' ? (
+          <LabelsView />
         ) : section === 'rules' ? (
           <Rules />
-        ) : section === 'senders' ? (
-          <SendersView />
         ) : section === 'changes' ? (
           <ChangesView onOpen={setOpen} />
         ) : (

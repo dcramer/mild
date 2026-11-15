@@ -29,7 +29,7 @@ export function DecisionTable({ rows, onOpen, search }: { rows: DecisionRow[]; o
             </Td>
             <Td className="whitespace-nowrap">
               <DispositionBadge disposition={row.disposition} />
-              {row.label ? <Sub mono>{row.label}</Sub> : null}
+              {row.labelName ? <Sub>{row.labelName}</Sub> : null}
             </Td>
             <Td className="max-w-96">
               {row.reason}

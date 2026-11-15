@@ -12,10 +12,9 @@ import type { Controls, ManagedSettings, SignIn } from '../src/dashboard/control
 import { createDashboardServer } from '../src/dashboard/server.ts';
 import type { RawMessage } from '../src/gmail/api.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
-import { listCategories } from '../src/store/categories.ts';
+import { listLabels } from '../src/store/labels.ts';
 import { openDb } from '../src/store/db.ts';
 import { listRules } from '../src/store/rules.ts';
-import { lookupSender } from '../src/store/senders.ts';
 import { FakeMailbox, facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -102,7 +101,9 @@ describe('managing sift from the dashboard', () => {
       activity: { sorting: true },
       accounts: [{ id: ACCOUNT }],
     });
-    expect((body['categories'] as Record<string, { key: string }[]>)[ACCOUNT]?.map((c) => c.key)).toContain('newsletter');
+    expect((body['labels'] as Record<string, { id: string; gmailLabel: string; rules: number }[]>)[ACCOUNT]).toContainEqual(
+      expect.objectContaining({ id: 'newsletter', gmailLabel: 'sift/newsletters', rules: 0, messages: 0, record: { reviewed: 0, right: 0 } }),
+    );
     expect((await call(port, 'GET', '/api/models')).body).toEqual({ models: ['p/small', 'p/large'] });
   });
 
@@ -117,33 +118,60 @@ describe('managing sift from the dashboard', () => {
     expect(settings).toEqual({ act: true, interval: 300, model: null });
   });
 
-  it('edits the guidelines, categories, rules and senders', async () => {
+  it('edits the guidelines, labels and rules', async () => {
     const port = await start();
     expect((await call(port, 'POST', '/api/guidelines', { text: 'Recruiters are cold outreach.' })).status).toBe(200);
     expect(guidelines).toBe('Recruiters are cold outreach.');
     expect((await call(port, 'POST', '/api/guidelines', { text: 'x'.repeat(9000) })).status).toBe(400);
 
-    expect((await call(port, 'POST', '/api/categories', { accountId: ACCOUNT, key: 'newsletter', disposition: 'keep' })).status).toBe(200);
-    expect(listCategories(db, ACCOUNT).find((c) => c.key === 'newsletter')?.disposition).toBe('keep');
-    expect((await call(port, 'POST', '/api/categories', { accountId: ACCOUNT, key: 'nonsense', disposition: 'keep' })).status).toBe(409);
-    expect((await call(port, 'POST', '/api/categories', { accountId: ACCOUNT, key: 'newsletter', disposition: 'delete' })).status).toBe(400);
+    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'newsletter', disposition: 'keep', name: 'Reading' })).status).toBe(200);
+    expect(listLabels(db, ACCOUNT).find((l) => l.id === 'newsletter')).toMatchObject({ disposition: 'keep', name: 'Reading', gmailLabel: 'sift/newsletters' });
+    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'nonsense', disposition: 'keep' })).status).toBe(409);
+    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'newsletter', disposition: 'delete' })).status).toBe(400);
+
+    const mine = await call(port, 'POST', '/api/labels/add', {
+      accountId: ACCOUNT,
+      name: 'Investor updates',
+      description: 'Updates from companies I invested in.',
+      disposition: 'keep',
+    });
+    expect(mine.body).toEqual({ id: 'investor-updates' });
+    expect(listLabels(db, ACCOUNT).at(-1)).toEqual({
+      id: 'investor-updates',
+      name: 'Investor updates',
+      description: 'Updates from companies I invested in.',
+      disposition: 'keep',
+      gmailLabel: 'sift/investor-updates',
+    });
+    for (const taken of ['investor updates', 'Review', 'Did', 'Cold outreach', '!!!'])
+      expect((await call(port, 'POST', '/api/labels/add', { accountId: ACCOUNT, name: taken, description: '', disposition: 'keep' })).status).toBe(409);
+    expect((await call(port, 'POST', '/api/labels/add', { accountId: 'nobody@example.org', name: 'X', description: '', disposition: 'keep' })).status).toBe(
+      400,
+    );
 
     const added = await call(port, 'POST', '/api/rules', {
       accountId: ACCOUNT,
       match: { fromDomain: 'example.com', subjectContains: '' },
-      disposition: 'archive',
+      label: 'investor-updates',
     });
-    expect(listRules(db, ACCOUNT)).toMatchObject([{ id: added.body['id'], match: { fromDomain: 'example.com' }, disposition: 'archive', source: 'user' }]);
-    expect((await call(port, 'POST', '/api/rules', { accountId: ACCOUNT, match: {}, disposition: 'archive' })).status).toBe(400);
-    expect((await call(port, 'POST', '/api/rules', { accountId: ACCOUNT, match: { body: 'x' }, disposition: 'archive' })).status).toBe(400);
+    const excepted = await call(port, 'POST', '/api/rules', { accountId: ACCOUNT, match: { from: 'a@example.com' }, label: 'marketing', disposition: 'keep' });
+    expect(listRules(db, ACCOUNT)).toMatchObject([
+      { id: added.body['id'], match: { fromDomain: 'example.com' }, labelId: 'investor-updates', source: 'user' },
+      { id: excepted.body['id'], labelId: 'marketing', disposition: 'keep' },
+    ]);
+    expect(listRules(db, ACCOUNT)[0]).not.toHaveProperty('disposition');
+    expect((await call(port, 'GET', '/api/rules')).body['rules']).toMatchObject([
+      { labelName: 'Investor updates', override: null, disposition: 'keep' },
+      { labelName: 'Marketing', override: 'keep', disposition: 'keep' },
+    ]);
+    expect((await call(port, 'POST', '/api/rules', { accountId: ACCOUNT, match: {}, label: 'marketing' })).status).toBe(400);
+    expect((await call(port, 'POST', '/api/rules', { accountId: ACCOUNT, match: { body: 'x' }, label: 'marketing' })).status).toBe(400);
+    expect((await call(port, 'POST', '/api/rules', { accountId: ACCOUNT, match: { from: 'a@example.com' }, label: 'no-such-label' })).status).toBe(409);
+    expect(
+      (await call(port, 'POST', '/api/rules', { accountId: ACCOUNT, match: { from: 'a@example.com' }, label: 'marketing', disposition: 'review' })).status,
+    ).toBe(400);
     expect((await call(port, 'POST', '/api/rules/remove', { id: added.body['id'] })).status).toBe(200);
     expect((await call(port, 'POST', '/api/rules/remove', { id: added.body['id'] })).status).toBe(409);
-
-    expect((await call(port, 'POST', '/api/senders', { accountId: ACCOUNT, address: 'News@Example.com', disposition: 'archive' })).status).toBe(200);
-    expect(lookupSender(db, ACCOUNT, 'news@example.com')).toMatchObject({ disposition: 'archive' });
-    expect(((await call(port, 'GET', '/api/senders')).body['senders'] as unknown[]).length).toBe(1);
-    expect((await call(port, 'POST', '/api/senders', { accountId: ACCOUNT, address: 'news@example.com', forget: true })).status).toBe(200);
-    expect(lookupSender(db, ACCOUNT, 'news@example.com')).toBeNull();
   });
 
   it('asks the running sift to undo, pull in older mail and check now', async () => {
@@ -161,10 +189,10 @@ describe('managing sift from the dashboard', () => {
     for (const path of [
       '/api/settings',
       '/api/guidelines',
-      '/api/categories',
+      '/api/labels',
+      '/api/labels/add',
       '/api/rules',
       '/api/rules/remove',
-      '/api/senders',
       '/api/undo',
       '/api/backfill',
       '/api/check',

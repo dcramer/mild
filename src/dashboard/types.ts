@@ -39,7 +39,10 @@ export interface DecisionRow {
   decidedAt: number;
   stage: StageKey;
   disposition: string;
-  label: string | null;
+  /** What sift said the mail is, or null if it could not place it. The name is null if that label has since gone. */
+  labelId: string | null;
+  labelName: string | null;
+  gmailLabel: string | null;
   reason: string;
   confidence: number | null;
   model: string | null;
@@ -93,8 +96,14 @@ export interface RuleSummary {
   accountId: string;
   match: Record<string, string>;
   except: Record<string, string>[];
-  disposition: string;
-  label: string | null;
+  labelId: string;
+  /** Null if the label has been removed; the rule then does nothing. */
+  labelName: string | null;
+  /** The rule's own action, when it is an exception to its label's. */
+  override: string | null;
+  /** What happens to mail the rule matches: the override, else the label's action. */
+  disposition: string | null;
+  /** `user`: written by the user. `correction`: made by correcting sift. `agent`: learned by sift. */
   source: string;
   hits: number;
   lastHitAt: number | null;
@@ -110,8 +119,9 @@ export interface SuggestionGroup {
   senderName: string | null;
   /** What sift would do. `review` means it had no suggestion. */
   disposition: string;
-  category: string | null;
-  label: string | null;
+  /** What sift says the mail is, or null if it could not place it. */
+  labelId: string | null;
+  labelName: string | null;
   stage: StageKey;
   messages: number;
   latestAt: number;
@@ -125,8 +135,8 @@ export interface Suggestions {
   waiting: number;
   /** From the user's answers so far. */
   accuracy: { reviewed: number; right: number };
-  /** The kinds of mail the user can say something is, per account, with what sift does for each. */
-  categories: Record<string, { key: string; name: string; disposition: string }[]>;
+  /** The labels the user can say something is, per account, with what sift does for each. */
+  labels: Record<string, { id: string; name: string; disposition: string }[]>;
   /** Marked messages kept whole as examples, and how many are still to be fetched. */
   examples: { captured: number; pending: number };
 }
@@ -135,11 +145,10 @@ export interface Suggestions {
 export interface FeedbackRequest {
   accountId: string;
   sender: string;
-  verdict: 'right' | 'wrong';
-  suggested?: string;
-  correct?: string;
-  /** The kind of mail it is; what happens follows from that category's setting. */
-  category?: string;
+  /** What the mail is: a label's id. Agreeing with sift sends the label it gave. */
+  label: string;
+  /** An exception to the label's action, for this sender only. */
+  disposition?: string;
   scope: 'sender' | 'message';
   decisionId?: number;
 }
@@ -151,18 +160,22 @@ export interface ManageState {
   activity: { sorting: boolean; lastPassAt: number | null; problems: string[] };
   accounts: { id: string; email: string; lastSyncedAt: number | null }[];
   /** Per account, in order. */
-  categories: Record<string, { key: string; name: string; description: string; disposition: string; label: string | null }[]>;
+  labels: Record<string, LabelSummary[]>;
 }
 
-export interface SenderRow {
-  accountId: string;
-  address: string;
+/** A label: what mail is, and what sift does with it. */
+export interface LabelSummary {
+  id: string;
+  name: string;
+  description: string;
   disposition: string;
-  label: string | null;
-  category: string | null;
-  source: string;
-  updatedAt: number;
+  gmailLabel: string;
+  /** Rules that say mail is this label. */
+  rules: number;
+  /** Messages whose current decision carries this label. */
   messages: number;
+  /** Of the suggestions for this label the user has answered, how many sift had right. */
+  record: { reviewed: number; right: number };
 }
 
 /** A change sift made to the mailbox. */

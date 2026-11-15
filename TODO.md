@@ -6,19 +6,36 @@ The working list for sift. Remove an item when it lands; add what you find. Desi
 
 sift suggests first and acts second. By default it only observes: every decision is a suggestion, shown in the dashboard. The user teaches it there (right, wrong, do this instead) until it stops making mistakes, and only then lets it act. The dashboard is where that happens; a Chrome extension that talks to it comes later.
 
+## Labels and rules
+
+The model: every message gets a label (what it is); the label carries the action (what happens); a rule says what mail is without a model. Built: labels with defaults and the user's own, rules that name a label with an optional exception, senders folded into rules, both Gmail labels on mail sift acts on, a Labels screen. Next, in order:
+
+- [ ] **Narrower rules from an answer.** Today an answer makes a rule for everything from that sender. A real case: sift flagged an auction notice, the user said it was personal, and every later email from that sender was kept. Let the answer choose its scope: this message only, this sender, this domain, this mailing list, or this sender when the subject contains something.
+- [ ] **Rules that still need a judgement.** "From this sender, but only when it is about X" often cannot be written as a header or subject match. Let a rule carry a plain-language condition that a model checks, so the rule narrows what the model is asked (one sender, one yes/no question) instead of replacing it. Decide how it is shown, what it costs, and when it is turned into a plain rule.
+- [ ] **Use history with the sender as a signal.** A real case: an investor update sift was not sure about, from someone the user had corresponded with. Today "has the user written to this address" only stops sift hiding mail. Record more (how many messages each way, when last, whether this message is in a thread the user took part in, the same for the sender's domain), give it to every tier, and let it decide: mail from someone the user writes to should be kept without asking.
+- [ ] **Propose rules instead of saving them.** When sift has given a sender (or domain, or list) the same label several times, show "12 of 12 from this sender were Newsletters. Make it a rule?" in the review queue. Today it saves the rule silently after three.
+- [ ] **One review queue.** Suggestions, mail sift was not sure about, proposed rules and rules the user later contradicted, in one place.
+- [ ] **Teach from Gmail.** Notice when the user moves labelled mail back to the inbox, or changes its sift label in Gmail, and treat that as a correction.
+- [ ] **Promote stable rules to Gmail filters**, where a filter can express them. Check what filters can do (they may not be able to mark spam).
+- [ ] **Audit rules.** Flag a rule the user contradicts, one that never fires, and one a spot-check by the model disagrees with.
+- [ ] More per label than where the mail goes: mark as read, unsubscribe.
+- [ ] Rules with more than one condition and with exceptions, from the dashboard; reorder rules.
+- [ ] Merge Decisions and Changes into one activity view.
+- [ ] Choose which account a rule or label is for when there is more than one (the Rules screen uses the first).
+
 ## Teaching loop
 
-Built: the Suggestions view, answers by sender ("Right" or "No, it is <category>"), sender records from answers, accuracy from answers, and marked messages stored whole as examples. Tried in a browser on synthetic data only.
+Built: the Suggestions view, answers by sender ("Right" or "No, it is <label>") that make a rule for the sender, accuracy from answers, and marked messages stored whole as examples. Tried in a browser on synthetic data only.
 
 - [ ] Use it on real mail and see what is awkward.
 - [ ] Answer for one message without teaching the sender (the API supports it; the view does not offer it).
 - [ ] Correct mail sift already kept, from the Decisions view and the message panel.
-- [ ] Use examples to test sift: replay the model over `examples` and report accuracy per category (`evals/`).
+- [ ] Use examples to test sift: replay the model over `examples` and report accuracy per label (`evals/`).
 - [ ] Use examples to teach the model: pick relevant ones as few-shot examples in the prompt.
 - [ ] Turn repeated corrections into a suggested guideline or rule, shown to the user before it is saved.
-- [ ] Re-decide waiting suggestions when a category setting or the guidelines change.
-- [ ] Accuracy per tier and per category on the Overview; say when a sender or category has been right often enough to trust.
-- [ ] Trust in pieces: act on this sender or this category while everything else stays a suggestion, instead of one global `act` switch.
+- [ ] Re-decide waiting suggestions when a label's action or the guidelines change.
+- [ ] Accuracy per tier on the Overview; say when a label has been right often enough to trust (each label already shows its record).
+- [ ] Trust in pieces: let sift act on this label while the rest stay suggestions, with the global switch kept as a kill switch.
 - [ ] Let a Chrome extension call the API: it cannot use the page's cookie or Origin, so it needs its own token, issued to a signed-in user.
 - [ ] Decide how long examples are kept and add a way to delete them; they hold full message content.
 
@@ -29,7 +46,6 @@ Built: the Suggestions view, answers by sender ("Right" or "No, it is <category>
 - [ ] Show an expired Google sign-in on the dashboard and in `sift status`, not only in the `run` log. Test users are signed out every 7 days.
 - [ ] Find out what publishing actually requires (branding fields, verification for these scopes) and make that path of `init` exact.
 - [ ] Check the Google Cloud Console links and field names in `init` against the live console; they were written from memory of its current layout.
-- [ ] Let `init` set category preferences interactively, not just show them.
 - [ ] `sift config`: show and set single settings without editing `sift.toml`.
 
 ## Verify against real Gmail
@@ -74,8 +90,7 @@ The dashboard manages sift, behind Google sign-in. That sign-in also connects th
 - [ ] Sign in to a model provider from the dashboard; it still needs `sift init`.
 - [ ] Use Tailscale's identity headers to skip the Google round trip for viewers on the tailnet.
 - [ ] Remove an account, and its token and data, from the dashboard.
-- [ ] Edit a category's label, name and description; add and remove categories.
-- [ ] Reorder rules; rules with more than one condition and with exceptions.
+- [ ] Remove a label, and say what becomes of its rules and of mail already labelled; reorder labels.
 - [ ] Answer queued questions.
 - [ ] Per-sender and per-rule detail: the messages matched, hits over time, rules that never fire.
 - [ ] Keep filters and the open message in the URL so a view can be bookmarked (the section and settings page already are).
@@ -84,13 +99,11 @@ The dashboard manages sift, behind Google sign-in. That sign-in also connects th
 
 ## Inference tier
 
-Built: one model call per message that names a category; the category's setting in the database decides what happens. Not yet run against a real model or a real mailbox.
+Built: one model call per message that names a label; the label's action decides what happens. Not yet run against a real model or a real mailbox.
 
 - [ ] Finish a ChatGPT subscription sign-in (`sift login openai-codex`; both it and `sift login openai` reach OpenAI's sign-in page) and run a real classification end to end. Confirm the token refreshes and survives a restart, and try the device-code login inside Docker.
 - [ ] Recommend a model in `sift init` (it lists what the provider offers but gives no guidance beyond "smaller is usually enough").
-- [ ] Measure it: a labelled synthetic set in `evals/`, accuracy per category, how often it answers "unsure", cost per message.
-- [ ] Show the category, the guidelines in force and learned senders on the dashboard.
-- [ ] `sift senders`: list, correct and forget what has been learned about a sender.
+- [ ] Measure it: a labelled synthetic set in `evals/`, accuracy per label, how often it answers "unsure", cost per message.
 - [ ] Thread context for the model: earlier messages in the thread and whether the owner took part.
 - [ ] Decision model tier (Jev or Clef through pi-ai `classify`) in front of the model, once there are enough decisions to set thresholds.
 - [ ] Header heuristics as a built-in tier (List-Id, List-Unsubscribe, Precedence, Auto-Submitted) for obviously bulk mail.
