@@ -6,3 +6,13 @@ allowBuilds:
   # Install scripts of transitive pi-ai dependencies; not needed for the providers sift uses.
   '@google/genai': false
   protobufjs: false
+
+# pi-ai depends on the SDK of every provider it has. sift registers three (src/model/models.ts), and
+# pi-ai loads an SDK only when a model that needs it is called, so the rest are left out of the install.
+overrides:
+  '@aws-sdk/client-bedrock-runtime': '-'
+  '@google/genai': '-'
+  '@smithy/node-http-handler': '-'
+  # Optional peers of the openai package, for reaching it through Bedrock.
+  '@aws-sdk/credential-provider-node': '-'
+  '@smithy/signature-v4': '-'

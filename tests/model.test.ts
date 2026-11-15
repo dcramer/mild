@@ -322,4 +322,17 @@ describe('providers', () => {
     const model = resolveModel(models, listed[0]!);
     expect(await models.getAuth(model)).toMatchObject({ auth: { apiKey: 'k' } });
   });
+
+  // pnpm-workspace.yaml leaves the other providers' SDKs out of the install; these must not need them.
+  it('has what each registered provider loads when it is first called', async () => {
+    await expect(
+      Promise.all([
+        import('@earendil-works/pi-ai/api/openai-responses'),
+        import('@earendil-works/pi-ai/api/openai-decisions'),
+        import('@earendil-works/pi-ai/api/openai-codex-responses'),
+        import('@earendil-works/pi-ai/api/anthropic-messages'),
+        import('@earendil-works/pi-ai/oauth'),
+      ]),
+    ).resolves.toHaveLength(5);
+  });
 });
