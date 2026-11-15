@@ -1,0 +1,40 @@
+import type { DatabaseSync } from 'node:sqlite';
+import type { Address, MessageFacts } from '../triage/types.ts';
+
+interface Row {
+  id: string;
+  thread_id: string;
+  from_address: string;
+  from_domain: string;
+  from_name: string | null;
+  received_at: number;
+  subject: string;
+  to_json: string;
+  cc_json: string;
+  headers_json: string;
+  labels_json: string;
+}
+
+/** Recorded messages that have no decision yet, oldest first, rebuilt as triage input. This is the triage queue. */
+export function listUndecided(db: DatabaseSync, accountId: string, limit: number): MessageFacts[] {
+  const rows = db
+    .prepare(
+      `SELECT id, thread_id, from_address, from_domain, from_name, received_at, subject, to_json, cc_json, headers_json, labels_json
+       FROM messages m
+       WHERE account_id = ? AND NOT EXISTS (SELECT 1 FROM decisions d WHERE d.account_id = m.account_id AND d.message_id = m.id)
+       ORDER BY received_at, id LIMIT ?`,
+    )
+    .all(accountId, limit) as unknown as Row[];
+  return rows.map((r) => ({
+    accountId,
+    messageId: r.id,
+    threadId: r.thread_id,
+    from: { address: r.from_address, domain: r.from_domain, ...(r.from_name ? { name: r.from_name } : {}) },
+    to: JSON.parse(r.to_json) as Address[],
+    cc: JSON.parse(r.cc_json) as Address[],
+    subject: r.subject,
+    labelIds: JSON.parse(r.labels_json) as string[],
+    headers: JSON.parse(r.headers_json) as Record<string, string>,
+    receivedAt: r.received_at,
+  }));
+}

@@ -1,0 +1,105 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
+  "options": {
+    "typeAware": true,
+    "reportUnusedDisableDirectives": "warn"
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "rules": {
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+    "typescript/consistent-type-imports": ["warn", { "fixStyle": "inline-type-imports" }],
+    "typescript/no-deprecated": "warn",
+    "typescript/no-unsafe-type-assertion": "off",
+    // Typed SQL row helpers (`one<Row>(sql)`) name their result type with a single-use parameter.
+    "typescript/no-unnecessary-type-parameters": "off",
+    // tsc already checks exhaustive switches (noImplicitReturns); this rule flags them.
+    "typescript/consistent-return": "off",
+    "oxc/no-map-spread": "off",
+    "import/no-unassigned-import": "off",
+    "no-await-in-loop": "off"
+  },
+  "overrides": [
+    {
+      "files": ["src/triage/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "group": ["node:*", "@googleapis/*", "googleapis", "google-auth-library", "@earendil-works/*"], "message": "triage/ is pure: no I/O. Inject what you need through a port (see src/triage/stages)." },
+              {
+                "group": ["**/gmail/**", "**/store/**", "**/actions/**", "**/agent/**", "**/daemon/**", "**/learn/**", "**/cli/**", "**/config.ts"],
+                "message": "triage/ is pure and depends on nothing else in src/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["tests/**/*.ts"],
+      "rules": { "unicorn/consistent-function-scoping": "off" }
+    },
+    {
+      "files": ["src/model/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/gmail/**", "**/actions/**", "**/store/**", "**/daemon/**", "@googleapis/*", "googleapis", "google-auth-library"],
+                "message": "model/ only turns evidence into a verdict. It never reaches Gmail, the database or anything that acts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/dashboard/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/gmail/**", "**/actions/**", "**/agent/**", "**/daemon/**", "@googleapis/*", "googleapis", "google-auth-library"],
+                "message": "dashboard/ is a read-only view of the database. It never reaches Gmail or changes anything."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["web/src/**/*.ts", "web/src/**/*.tsx"],
+      "plugins": ["typescript", "unicorn", "oxc", "import", "react"],
+      "env": { "browser": true },
+      "rules": { "react/react-in-jsx-scope": "off" }
+    },
+    {
+      "files": ["src/store/**/*.ts", "src/actions/**/*.ts", "src/cli/**/*.ts", "src/daemon/**/*.ts", "src/learn/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." },
+              { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "ignorePatterns": [".claude/**", "node_modules/**", "data/**", "web/dist/**", "web/src/components/ui/**"]
+}

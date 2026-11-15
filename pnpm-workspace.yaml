@@ -1,0 +1,8 @@
+packages:
+  - web
+
+allowBuilds:
+  esbuild: true
+  # Install scripts of transitive pi-ai dependencies; not needed for the providers sift uses.
+  '@google/genai': false
+  protobufjs: false

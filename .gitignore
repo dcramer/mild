@@ -1,0 +1,15 @@
+node_modules
+dist
+*.log
+.DS_Store
+*.tsbuildinfo
+.claude/worktrees/
+CLAUDE.local.md
+
+# Private runtime state: mail metadata, tokens, policy. Never commit.
+data/
+.env
+auth.json
+*.db
+*.db-wal
+*.db-shm

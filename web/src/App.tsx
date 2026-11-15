@@ -1,0 +1,89 @@
+import { MonitorIcon, MoonIcon, SunIcon } from 'lucide-react';
+import { useState } from 'react';
+import { ErrorNote } from '@/components/bits.tsx';
+import { Picker } from '@/components/picker.tsx';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { type Days, type DecisionRow, api, useLoaded } from '@/lib/api.ts';
+import { ago } from '@/lib/format.ts';
+import { useTheme } from '@/lib/theme.ts';
+import { Decisions } from '@/views/decisions.tsx';
+import { type MessageRef, MessageSheet } from '@/views/message-sheet.tsx';
+import { Overview } from '@/views/overview.tsx';
+import { Rules } from '@/views/rules.tsx';
+
+const PERIODS = [
+  ['1', 'Last 24 hours'],
+  ['7', 'Last 7 days'],
+  ['30', 'Last 30 days'],
+  ['90', 'Last 90 days'],
+] as const;
+const THEME_ICONS = { system: MonitorIcon, light: SunIcon, dark: MoonIcon };
+const THEME_NAMES = { system: 'Theme: follow system', light: 'Theme: light', dark: 'Theme: dark' };
+
+export function App() {
+  const [days, setDays] = useState<Days>(7);
+  const [tab, setTab] = useState('overview');
+  const [open, setOpen] = useState<MessageRef | null>(null);
+  const { theme, cycle } = useTheme();
+  const summary = useLoaded(`summary-${days}`, (signal) => api.summary(days, signal));
+  const ThemeIcon = THEME_ICONS[theme];
+  const openMessage = (row: DecisionRow) => setOpen({ accountId: row.accountId, messageId: row.messageId, subject: row.subject });
+  const accounts = summary.data?.accounts ?? [];
+
+  return (
+    <Tabs value={tab} onValueChange={(value) => setTab(String(value))} className="min-h-svh gap-0 bg-background">
+      <header className="sticky top-0 z-10 border-b bg-background/85 backdrop-blur">
+        <div className="mx-auto flex min-h-12 max-w-7xl flex-wrap items-center gap-x-5 px-4">
+          <h1 className="text-base font-semibold tracking-tight">
+            <span className="hl">sift</span>
+          </h1>
+          <TabsList variant="line" className="h-12 gap-4 p-0">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="decisions">Decisions</TabsTrigger>
+            <TabsTrigger value="rules">Rules</TabsTrigger>
+          </TabsList>
+          <p className="hidden min-w-0 flex-1 truncate text-right text-[13px] text-muted-foreground md:block">
+            {summary.data
+              ? accounts.length === 0
+                ? 'No account connected. Run sift auth.'
+                : accounts.map((a) => `${a.email} · ${a.lastSyncedAt ? `synced ${ago(a.lastSyncedAt)}` : 'not synced yet'}`).join('   ')
+              : ''}
+          </p>
+          <div className="ml-auto flex items-center gap-1 py-2 md:ml-0">
+            {tab === 'rules' ? null : (
+              <Picker
+                label="Period"
+                value={String(days) as (typeof PERIODS)[number][0]}
+                options={PERIODS}
+                onChange={(value) => setDays(Number(value) as Days)}
+              />
+            )}
+            <Button variant="ghost" size="icon-sm" aria-label={THEME_NAMES[theme]} title={THEME_NAMES[theme]} onClick={cycle}>
+              <ThemeIcon />
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto w-full max-w-7xl px-4 py-5">
+        <TabsContent value="overview" className="flex flex-col gap-3">
+          {summary.error ? <ErrorNote message={summary.error} /> : null}
+          {summary.data ? (
+            <Overview data={summary.data} onOpen={openMessage} onViewAll={() => setTab('decisions')} />
+          ) : summary.loading ? (
+            <Skeleton className="h-96 w-full" />
+          ) : null}
+        </TabsContent>
+        <TabsContent value="decisions">
+          <Decisions days={days} onOpen={openMessage} />
+        </TabsContent>
+        <TabsContent value="rules">
+          <Rules />
+        </TabsContent>
+      </main>
+      <MessageSheet target={open} onClose={() => setOpen(null)} />
+    </Tabs>
+  );
+}
