@@ -43,6 +43,8 @@ export interface DecisionRow {
   labelId: string | null;
   labelName: string | null;
   gmailLabel: string | null;
+  /** The decision also says to unsubscribe. */
+  unsubscribe: boolean;
   reason: string;
   confidence: number | null;
   model: string | null;
@@ -145,6 +147,9 @@ export interface RuleSummary {
   override: string | null;
   /** What happens to mail the rule matches: the override, else the label's action. */
   disposition: string | null;
+  /** Extras for mail the rule matches, from the rule or its label. */
+  markRead: boolean;
+  unsubscribe: boolean;
   /** `user`: written by the user. `correction`: made by correcting sift. `agent`: learned by sift. */
   source: string;
   hits: number;
@@ -165,6 +170,8 @@ export interface SuggestionGroup {
   labelId: string | null;
   labelName: string | null;
   stage: StageKey;
+  /** sift would also unsubscribe from this sender. */
+  unsubscribe: boolean;
   /** How many different guesses sift made across this sender's waiting mail. More than one means it is mixed. */
   guesses: number;
   messages: number;
@@ -195,6 +202,8 @@ export interface FeedbackRequest {
   label: string;
   /** An exception to the label's action, for this rule only. */
   disposition?: string;
+  /** Also unsubscribe, whether or not the label does. */
+  unsubscribe?: boolean;
   /** How far the answer reaches. Everything but `once` makes a rule. */
   scope: 'sender' | 'domain' | 'subject' | 'once';
   /** For `subject`: the words the subject must contain. */
@@ -223,6 +232,8 @@ export interface LabelSummary {
   disposition: string;
   /** Also mark the mail read. Only with `keep` and `archive`. */
   markRead: boolean;
+  /** Also leave the sender's mailing list, where that can be done safely. */
+  unsubscribe: boolean;
   gmailLabel: string;
   /** Rules that say mail is this label. */
   rules: number;

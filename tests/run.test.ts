@@ -9,6 +9,7 @@ import { connectAccount } from '../src/store/accounts.ts';
 import { openDb } from '../src/store/db.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
+import { rememberCorrespondent } from '../src/store/senders.ts';
 import { FakeMailbox } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -215,6 +216,59 @@ describe('inference tier', () => {
     expect(judged).toEqual(['news']);
     expect(db.prepare('SELECT disposition, mode, outcome FROM decisions').get()).toEqual({ disposition: 'archive', mode: 'observe', outcome: 'observed' });
     expect(mailbox.modifyCalls).toBe(0);
+  });
+});
+
+describe('unsubscribing', () => {
+  const asked: string[] = [];
+  const withUnsubscribe = (act: boolean, result: 'done' | 'refused' = 'done'): RunOptions => ({
+    ...options(act),
+    unsubscribe: async (_account, messageId) => {
+      asked.push(messageId);
+      return result === 'done' ? { status: 'done', actionId: 1 } : { status: 'refused', reason: 'no way to' };
+    },
+  });
+
+  it('follows the mailbox change for a label that unsubscribes, and only while acting', async () => {
+    asked.length = 0;
+    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    inbox = [inbox[0]!];
+    await runOnce(db, withUnsubscribe(false));
+    expect(asked).toEqual([]);
+    expect(db.prepare('SELECT subscription FROM decisions').get()).toEqual({ subscription: 'unsubscribe' });
+
+    db.exec('DELETE FROM decisions');
+    await runOnce(db, withUnsubscribe(true));
+    expect(asked).toEqual(['news']);
+    expect(mailbox.labels.get('news')).toContain('L:sift/did/archived');
+    expect(logs.at(-1)).toContain('unsubscribed from 1 sender');
+  });
+
+  it('can be asked for by a rule whose label does not, and is not counted when it could not be done', async () => {
+    asked.length = 0;
+    addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'notification', subscription: 'unsubscribe', markRead: true }, 'user');
+    inbox = [inbox[1]!];
+    await runOnce(db, withUnsubscribe(true, 'refused'));
+    expect(asked).toEqual(['ada']);
+    // Kept, labelled, and marked read as the rule asks.
+    expect(mailbox.labels.get('ada')).toEqual(['INBOX', 'L:sift/notifications']);
+    expect(logs.at(-1)).not.toContain('unsubscribed');
+  });
+
+  it('never unsubscribes from someone the user has written to, or when the mailbox change did not happen', async () => {
+    asked.length = 0;
+    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    rememberCorrespondent(db, ACCOUNT, 'news@example.com', true);
+    inbox = [inbox[0]!];
+    await runOnce(db, withUnsubscribe(true));
+    expect(mailbox.labels.get('news')).toContain('L:sift/did/archived');
+    expect(asked).toEqual([]);
+
+    db.exec('DELETE FROM actions; DELETE FROM decisions; DELETE FROM correspondents');
+    mailbox.labels.set('news', ['UNREAD']);
+    await runOnce(db, withUnsubscribe(true));
+    expect(db.prepare('SELECT outcome FROM decisions').get()).toEqual({ outcome: 'skipped' });
+    expect(asked).toEqual([]);
   });
 });
 

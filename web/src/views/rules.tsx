@@ -2,8 +2,8 @@ import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { DispositionBadge, ErrorNote, Outcome, Sub } from '@/components/bits.tsx';
 import { api, useAction, useLoaded } from '@/lib/api.ts';
-import { ago, count } from '@/lib/format.ts';
-import { Button, Code, Dialog, Empty, FilterGroup, Input, ListView, Loading, Select, Table, Td, Th, Tr } from '@/system';
+import { ago, count, extras } from '@/lib/format.ts';
+import { Button, Check, Code, Dialog, Empty, FilterGroup, Input, ListView, Loading, Select, Table, Td, Th, Tr } from '@/system';
 
 const CONDITIONS: Record<string, string> = { from: 'from', fromDomain: 'from domain', to: 'to', listId: 'list', subjectContains: 'subject contains' };
 const SOURCES = [
@@ -58,10 +58,20 @@ function AddRuleDialog({
   const [value, setValue] = useState('');
   const [label, setLabel] = useState('');
   const [exception, setException] = useState<(typeof EXCEPTION)[number][0]>('');
+  const [markRead, setMarkRead] = useState(false);
+  const [unsubscribe, setUnsubscribe] = useState(false);
   const ready = value.trim() !== '' && label !== '';
   const add = () =>
     run(
-      () => api.addRule({ accountId, match: { [when]: value.trim() }, label, ...(exception === '' ? {} : { disposition: exception }) }),
+      () =>
+        api.addRule({
+          accountId,
+          match: { [when]: value.trim() },
+          label,
+          ...(exception === '' ? {} : { disposition: exception }),
+          ...(markRead ? { markRead } : {}),
+          ...(unsubscribe ? { unsubscribe } : {}),
+        }),
       () => {
         onAdded();
         onClose();
@@ -117,6 +127,12 @@ function AddRuleDialog({
           <div>
             <Select label="What sift does" value={exception} options={EXCEPTION} onChange={setException} />
           </div>
+          <Check checked={markRead} onChange={setMarkRead}>
+            Also mark it read
+          </Check>
+          <Check checked={unsubscribe} onChange={setUnsubscribe}>
+            Also unsubscribe, when the sender offers a safe way
+          </Check>
         </div>
       </form>
     </Dialog>
@@ -208,6 +224,7 @@ export function Rules() {
                   <Td className="whitespace-nowrap">
                     {rule.disposition ? <DispositionBadge would disposition={rule.disposition} /> : <span className="text-muted-foreground">Nothing</span>}
                     {rule.override ? <Sub>exception to the label</Sub> : null}
+                    {extras(rule) ? <Sub>and {extras(rule)}</Sub> : null}
                   </Td>
                   <Td quiet className="whitespace-nowrap">
                     {SOURCES.find(([key]) => key === rule.source)?.[1] ?? rule.source}

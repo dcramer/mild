@@ -23,7 +23,10 @@ export interface Rule {
   labelId: string;
   /** An exception to the label's action, for this rule only. */
   disposition?: DecidedDisposition;
+  /** `unsubscribe` adds that to what the label does, for mail this rule matches. */
   subscription?: SubscriptionAction;
+  /** Also mark the mail read, when it is kept or archived, whether or not the label does. */
+  markRead?: boolean;
   /** sift made this rule itself, from what a model kept deciding. The user's own rules are trusted further. */
   learned?: boolean;
 }
@@ -87,7 +90,9 @@ export function rulesStage(rules: readonly Rule[], labels: readonly Label[], opt
       if (!hit) return null;
       return {
         ...hit.outcome,
-        subscription: hit.rule.subscription ?? 'preserve',
+        // A rule's extras add to its label's; they never take one away.
+        ...(hit.rule.subscription === 'unsubscribe' ? { subscription: 'unsubscribe' as const } : {}),
+        ...(hit.rule.markRead && (hit.outcome.disposition === 'keep' || hit.outcome.disposition === 'archive') ? { markRead: true } : {}),
         stage: 'rules',
         ruleId: hit.rule.id,
         reason: `${hit.rule.learned ? 'learned' : 'rule'}: ${describeMatch(hit.rule.match)} is ${hit.label.name}`,

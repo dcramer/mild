@@ -14,6 +14,8 @@ export interface Suggestion {
   disposition: Disposition;
   /** With `spam`: sift would also block the sender. */
   block: boolean;
+  /** sift would also unsubscribe. */
+  unsubscribe: boolean;
   /** The label sift gave it, or null if it could not place it. */
   labelId: string | null;
   reason: string;
@@ -32,6 +34,7 @@ interface Row {
   stage: StageName;
   disposition: Disposition;
   block: number;
+  subscription: string;
   label_id: string | null;
   reason: string;
   confidence: number | null;
@@ -49,6 +52,7 @@ const toSuggestion = (r: Row): Suggestion => ({
   stage: r.stage,
   disposition: r.disposition,
   block: r.block === 1,
+  unsubscribe: r.subscription === 'unsubscribe',
   labelId: r.label_id,
   reason: r.reason,
   confidence: r.confidence,
@@ -81,7 +85,7 @@ export function pendingSuggestions(db: DatabaseSync, filter: { accountId?: strin
   }
   const rows = db
     .prepare(
-      `SELECT d.id, d.account_id, d.message_id, d.stage, d.disposition, d.block, d.label_id, d.reason, d.confidence, d.decided_at,
+      `SELECT d.id, d.account_id, d.message_id, d.stage, d.disposition, d.block, d.subscription, d.label_id, d.reason, d.confidence, d.decided_at,
               m.received_at, m.from_address, m.from_name, m.subject
        FROM decisions d
        JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
@@ -108,7 +112,7 @@ export type FeedbackScope =
   /** Only the mail that is waiting (or the one decision given). Nothing lasting is learned. */
   | 'once';
 
-const SUGGESTION_COLUMNS = `d.id, d.account_id, d.message_id, d.stage, d.disposition, d.block, d.label_id, d.reason, d.confidence, d.decided_at,
+const SUGGESTION_COLUMNS = `d.id, d.account_id, d.message_id, d.stage, d.disposition, d.block, d.subscription, d.label_id, d.reason, d.confidence, d.decided_at,
               m.received_at, m.from_address, m.from_name, m.subject`;
 
 /** The decision that currently stands for a message, in the shape of a suggestion, or null if it has none. */
@@ -129,6 +133,8 @@ export interface FeedbackInput {
   label: string;
   /** An exception to the label's action, for this rule only. */
   disposition?: DecidedDisposition;
+  /** Also unsubscribe from this mail, whether or not the label does. Carried by the rule. */
+  unsubscribe?: boolean;
   scope: FeedbackScope;
   /** For `subject`: the words the subject must contain. */
   contains?: string;
@@ -239,7 +245,11 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
           db,
           input.accountId,
           match,
-          { labelId: label.id, ...(input.disposition ? { disposition: input.disposition } : {}) },
+          {
+            labelId: label.id,
+            ...(input.disposition ? { disposition: input.disposition } : {}),
+            ...(input.unsubscribe ? { subscription: 'unsubscribe' as const } : {}),
+          },
           all.every((t) => verdictFor(t) === 'right') ? 'user' : 'correction',
           now,
         )
@@ -253,7 +263,7 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
         given.messageId,
         {
           ...labelled(label, input.disposition),
-          subscription: 'preserve',
+          ...(input.unsubscribe ? { subscription: 'unsubscribe' as const } : {}),
           stage: 'rules',
           ...(ruleId ? { ruleId } : {}),
           reason: `you said this is ${label.name}`,
@@ -269,7 +279,9 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
   return {
     reviewed: targets.length + (given ? 1 : 0),
     corrected: given && changes ? given.messageId : null,
-    taught: match ? `From now on, ${whose} is ${label.name}: ${label.block && !input.disposition ? BLOCKED : WILL[outcome]}.` : null,
+    taught: match
+      ? `From now on, ${whose} is ${label.name}: ${label.block && !input.disposition ? BLOCKED : WILL[outcome]}${label.unsubscribe || input.unsubscribe ? ', and unsubscribed from' : ''}.`
+      : null,
   };
 }
 

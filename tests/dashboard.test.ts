@@ -322,6 +322,8 @@ describe('dashboard server', () => {
         labelName: 'Newsletters',
         override: null,
         disposition: 'archive',
+        markRead: false,
+        unsubscribe: true,
         source: 'user',
         hits: 0,
         lastHitAt: NOW,

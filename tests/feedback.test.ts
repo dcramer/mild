@@ -109,7 +109,11 @@ describe('teaching', () => {
     suggest('other@example.com', 'archive', NEWS);
 
     const result = applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' }, 50);
-    expect(result).toEqual({ reviewed: 2, corrected: null, taught: 'From now on, mail from news@example.com is Newsletters: archived.' });
+    expect(result).toEqual({
+      reviewed: 2,
+      corrected: null,
+      taught: 'From now on, mail from news@example.com is Newsletters: archived, and unsubscribed from.',
+    });
     expect(ruleFor('news@example.com')).toEqual([{ labelId: 'newsletter', source: 'user' }]);
     expect(pendingSuggestions(db).map((s) => s.fromAddress)).toEqual(['other@example.com']);
     expect(accuracy(db)).toMatchObject({ reviewed: 2, right: 2 });
@@ -132,7 +136,7 @@ describe('teaching', () => {
   it('an exception keeps the label but does something else for that sender', () => {
     suggest('digest@example.com', 'archive', NEWS);
     const result = applyFeedback(db, { accountId: ACCOUNT, sender: 'digest@example.com', label: 'newsletter', disposition: 'keep', scope: 'sender' });
-    expect(result.taught).toBe('From now on, mail from digest@example.com is Newsletters: kept in your inbox.');
+    expect(result.taught).toBe('From now on, mail from digest@example.com is Newsletters: kept in your inbox, and unsubscribed from.');
     expect(ruleFor('digest@example.com')).toEqual([{ labelId: 'newsletter', disposition: 'keep', source: 'user' }]);
     // sift had the label right, so it is not a mistake.
     expect(accuracy(db)).toMatchObject({ reviewed: 1, right: 1 });
@@ -317,7 +321,7 @@ describe('how far an answer reaches', () => {
     expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'a@shop.example', label: 'marketing', scope: 'domain' })).toEqual({
       reviewed: 2,
       corrected: null,
-      taught: 'From now on, mail from anyone at shop.example is Marketing: archived.',
+      taught: 'From now on, mail from anyone at shop.example is Marketing: archived, and unsubscribed from.',
     });
     expect(matches()).toEqual([{ match: { fromDomain: 'shop.example' }, labelId: 'marketing' }]);
     expect(pendingSuggestions(db).map((s) => s.fromAddress)).toEqual(['c@example.com']);
@@ -493,7 +497,7 @@ describe('feedback endpoint', () => {
     const port = await start();
     expect(await post(port, answer)).toEqual({
       status: 200,
-      body: { reviewed: 1, corrected: null, fixed: null, taught: 'From now on, mail from news@example.com is Newsletters: archived.' },
+      body: { reviewed: 1, corrected: null, fixed: null, taught: 'From now on, mail from news@example.com is Newsletters: archived, and unsubscribed from.' },
     });
     expect(db.prepare('SELECT created_at FROM feedback').get()).toEqual({ created_at: 77 });
     const suggestions = (await (await fetch(`http://localhost:${port}/api/suggestions`)).json()) as { waiting: number; accuracy: unknown };

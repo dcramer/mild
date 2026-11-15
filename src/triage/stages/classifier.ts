@@ -28,7 +28,6 @@ export function classifierStage(classify: Classify, labels: readonly Label[], op
       if (result.confidence < bar) return null;
       return {
         ...labelled(label),
-        subscription: 'preserve',
         stage: 'classifier',
         confidence: result.confidence,
         reason: `classifier chose ${label.name} at ${result.confidence.toFixed(2)}`,

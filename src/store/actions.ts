@@ -131,3 +131,14 @@ export function unsubscribedAt(db: DatabaseSync, accountId: string, sender: stri
     .get(accountId, sender) as { at: number | null };
   return row.at;
 }
+
+/** When an unsubscribe request to this sender last failed, or null. */
+export function lastUnsubscribeFailure(db: DatabaseSync, accountId: string, sender: string): number | null {
+  const row = db
+    .prepare(
+      `SELECT max(a.created_at) AS at FROM actions a JOIN messages m ON m.account_id = a.account_id AND m.id = a.message_id
+       WHERE a.account_id = ? AND a.type = 'unsubscribe' AND a.status = 'failed' AND m.from_address = ?`,
+    )
+    .get(accountId, sender) as { at: number | null };
+  return row.at;
+}

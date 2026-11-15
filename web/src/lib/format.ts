@@ -30,6 +30,10 @@ const WILL: Record<string, string> = {
   block: 'marked spam and the sender blocked',
   review: 'left for you',
 };
+/** The extras a label, rule or decision carries, as words to follow what it does: "marked read, unsubscribed". */
+export const extras = (of: { markRead?: boolean; unsubscribe?: boolean }) =>
+  [of.markRead ? 'marked read' : null, of.unsubscribe ? 'unsubscribed' : null].filter(Boolean).join(', ');
+
 /** What happens to mail with a given action, for the end of a sentence. */
 export const willBe = (key: string) => WILL[key] ?? key;
 

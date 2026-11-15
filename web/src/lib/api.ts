@@ -80,12 +80,16 @@ export const api = {
   changes: (signal: AbortSignal) => get<{ changes: ChangeRow[] }>('/api/changes', {}, signal),
   saveSettings: (change: { act?: boolean; interval?: number; model?: string | null }) => post('/api/settings', change),
   saveGuidelines: (text: string) => post('/api/guidelines', { text }),
-  saveLabel: (accountId: string, id: string, change: { name?: string; description?: string; disposition?: string }) =>
-    post('/api/labels', { accountId, id, ...change }),
-  addLabel: (label: { accountId: string; name: string; description: string; disposition: string; markRead?: boolean }) =>
+  saveLabel: (
+    accountId: string,
+    id: string,
+    change: { name?: string; description?: string; disposition?: string; markRead?: boolean; unsubscribe?: boolean },
+  ) => post('/api/labels', { accountId, id, ...change }),
+  addLabel: (label: { accountId: string; name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }) =>
     post<{ id: string }>('/api/labels/add', label),
   /** `label` is what the mail is; `disposition` an exception to that label's action. */
-  addRule: (rule: { accountId: string; match: Record<string, string>; label: string; disposition?: string }) => post('/api/rules', rule),
+  addRule: (rule: { accountId: string; match: Record<string, string>; label: string; disposition?: string; markRead?: boolean; unsubscribe?: boolean }) =>
+    post('/api/rules', rule),
   removeRule: (id: string) => post('/api/rules/remove', { id }),
   undo: (id: number) => post<{ message: string }>('/api/undo', { id }),
   backfill: (days: number) => post<{ added: number }>('/api/backfill', { days }),

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
 import { type MessageAction, type Outcome, execute, undo } from '../actions/executor.ts';
+import { unsubscribe } from '../actions/unsubscribe.ts';
 import { type Config, loadConfig, saveSettings } from '../config.ts';
 import { backfill } from '../daemon/backfill.ts';
 import type { Activity, Controls, SignIn } from '../dashboard/controls.ts';
@@ -519,6 +520,7 @@ async function run(args: string[]): Promise<void> {
       return {
         act,
         ...(tier ? { model: tier } : {}),
+        unsubscribe: (accountId: string, messageId: string) => unsubscribe({ db }, accountId, messageId),
         connect: (account: Account) => {
           const client = clientFor(config, loadClientSecrets(config), account.email);
           return { api: createGmailApi(client), mailbox: createGmailMailbox(client) };

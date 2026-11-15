@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { undo } from '../src/actions/executor.ts';
-import { isPublicAddress, unsubscribe } from '../src/actions/unsubscribe.ts';
+import { RETRY_AFTER_MS, isPublicAddress, unsubscribe } from '../src/actions/unsubscribe.ts';
 import { messageDetail } from '../src/dashboard/queries.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { getAction } from '../src/store/actions.ts';
@@ -19,10 +19,11 @@ let db: DatabaseSync;
 let posts: { url: string; address: string }[];
 let status: number | Error;
 let resolves: Record<string, string[]>;
+let clock: number;
 
 const deps = () => ({
   db,
-  now: () => 500,
+  now: () => clock,
   resolve: async (host: string) => {
     const found = resolves[host];
     if (!found) throw new Error('ENOTFOUND');
@@ -44,6 +45,7 @@ beforeEach(() => {
   connectAccount(db, ACCOUNT, '1', 0);
   posts = [];
   status = 200;
+  clock = 500;
   resolves = { 'lists.example.com': ['203.0.113.7'] };
 });
 
@@ -107,15 +109,23 @@ describe('unsubscribe', () => {
     expect(db.prepare('SELECT count(*) AS n FROM actions').get()).toEqual({ n: 0 });
   });
 
-  it('records a refusal, a redirect it did not follow and a failed request, and lets the user try again', async () => {
+  it('records a redirect it did not follow, a refusal and a failed request, and leaves the sender alone for a week after each', async () => {
     message('m', { ...ONE_CLICK, ...PROVEN });
+    const later = () => (clock += RETRY_AFTER_MS + 1);
     status = 302;
     expect(await unsubscribe(deps(), ACCOUNT, 'm')).toMatchObject({ status: 'failed', reason: expect.stringContaining('redirect') });
+    // sift calls this for every message from the sender; it does not try a failing address again straight away.
+    expect(await unsubscribe(deps(), ACCOUNT, 'm')).toMatchObject({ status: 'refused', reason: expect.stringContaining('failed recently') });
+    expect(posts).toHaveLength(1);
+
+    later();
     status = 500;
     expect(await unsubscribe(deps(), ACCOUNT, 'm')).toMatchObject({ status: 'failed', reason: expect.stringContaining('(500)') });
+    later();
     status = new Error('socket hang up');
     expect(await unsubscribe(deps(), ACCOUNT, 'm')).toMatchObject({ status: 'failed', reason: expect.stringContaining('not known whether it took') });
     expect(db.prepare('SELECT status, count(*) AS n FROM actions GROUP BY status').all()).toEqual([{ status: 'failed', n: 3 }]);
+    later();
     status = 204;
     expect(await unsubscribe(deps(), ACCOUNT, 'm')).toMatchObject({ status: 'done' });
   });

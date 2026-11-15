@@ -198,6 +198,7 @@ function Body({
                   <DispositionBadge would={current.mode === 'observe'} disposition={current.disposition} />
                 )}
                 {current.labelId === null && current.disposition === 'review' ? <span className="font-medium">Could not place it</span> : null}
+                {current.unsubscribe ? <span className="text-[13px] text-muted-foreground">and unsubscribe</span> : null}
               </p>
               <p className="text-[13px] text-muted-foreground">
                 {current.reason} <span className="whitespace-nowrap">({tier(current.stage).name})</span>

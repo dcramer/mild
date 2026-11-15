@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { execute } from '../actions/executor.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
+import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import { planAction } from '../actions/plan.ts';
 import type { Account } from '../store/accounts.ts';
 import { listLabels } from '../store/labels.ts';
@@ -21,6 +22,11 @@ export interface TriageDeps {
   mailbox: Mailbox | null;
   /** The inference tier. Omitted when no model is configured: mail no rule covers goes to review. */
   model?: ModelTier;
+  /**
+   * Leaves a mailing list. Called for a decision that says to unsubscribe, after its mailbox change has
+   * gone through. Omitted in tests and tools that must not reach the network.
+   */
+  unsubscribe?: (accountId: string, messageId: string) => Promise<UnsubscribeOutcome>;
   now?: () => number;
 }
 
@@ -45,6 +51,8 @@ export interface TriageReport {
   learned: number;
   /** Senders blocked this pass. */
   blocked: number;
+  /** Mailing lists left this pass. */
+  unsubscribed: number;
 }
 
 /** The cascade for one account, cheapest first. The decision-model tier would slot in before the model. */
@@ -73,7 +81,15 @@ function stagesFor(deps: TriageDeps, accountId: string): Stage[] {
 export async function triageAccount(deps: TriageDeps, account: Account, limit = 200): Promise<TriageReport> {
   const { db, mailbox } = deps;
   const now = deps.now ?? Date.now;
-  const report: TriageReport = { decided: { keep: 0, archive: 0, spam: 0, review: 0 }, acted: 0, skipped: 0, troubled: 0, learned: 0, blocked: 0 };
+  const report: TriageReport = {
+    decided: { keep: 0, archive: 0, spam: 0, review: 0 },
+    acted: 0,
+    skipped: 0,
+    troubled: 0,
+    learned: 0,
+    blocked: 0,
+    unsubscribed: 0,
+  };
 
   const carryOut = async (decisionId: number, messageId: string, decision: Pick<Decision, 'disposition' | 'gmailLabel' | 'markRead'>, box: Mailbox) => {
     const action = planAction(decision);
@@ -117,6 +133,15 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
       blockSender(db, account.id, facts.from.address, decision.labelId, now())
     )
       report.blocked++;
+    // Unsubscribing follows the mailbox change, never goes ahead of it, and never happens to someone the user writes to.
+    if (
+      (status === 'done' || status === 'none') &&
+      decision.subscription === 'unsubscribe' &&
+      deps.unsubscribe &&
+      cachedCorrespondent(db, account.id, facts.from.address) !== true &&
+      (await deps.unsubscribe(account.id, facts.messageId)).status === 'done'
+    )
+      report.unsubscribed++;
   }
   return report;
 }

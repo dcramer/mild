@@ -99,6 +99,7 @@ interface DecisionSqlRow {
   stage: StageKey;
   disposition: string;
   block: number;
+  subscription: string;
   label_id: string | null;
   label_name: string | null;
   gmail_label: string | null;
@@ -118,7 +119,7 @@ interface DecisionSqlRow {
 }
 
 const DECISION_SELECT = `
-  SELECT d.id, d.account_id, d.message_id, d.decided_at, d.stage, d.disposition, d.block, d.label_id, l.name AS label_name, d.gmail_label, d.reason, d.confidence, d.model, d.cost_usd,
+  SELECT d.id, d.account_id, d.message_id, d.decided_at, d.stage, d.disposition, d.block, d.subscription, d.label_id, l.name AS label_name, d.gmail_label, d.reason, d.confidence, d.model, d.cost_usd,
          m.from_address, m.from_name, m.subject, d.mode, d.outcome, d.outcome_detail,
          a.id AS action_id, a.type AS action_type, a.status AS action_status
   FROM decisions d
@@ -136,6 +137,7 @@ const toDecisionRow = (r: DecisionSqlRow): DecisionRow => ({
   labelId: r.label_id,
   labelName: r.label_name,
   gmailLabel: r.gmail_label,
+  unsubscribe: r.subscription === 'unsubscribe',
   reason: r.reason,
   confidence: r.confidence,
   model: r.model,
@@ -360,6 +362,7 @@ export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
   const rows = db
     .prepare(
       `SELECT r.id, r.account_id, r.match_json, r.except_json, r.label_id, l.name AS label_name, r.disposition AS override, CASE WHEN l.block = 1 THEN 'block' ELSE l.disposition END AS label_does,
+              (r.mark_read = 1 OR l.mark_read = 1) AS mark_read, (r.subscription = 'unsubscribe' OR l.unsubscribe = 1) AS unsubscribe,
               r.source, r.hits, r.filter_id, r.created_at,
               (SELECT max(decided_at) FROM decisions d WHERE d.rule_id = r.id) AS last_hit_at
        FROM rules r LEFT JOIN labels l ON l.account_id = r.account_id AND l.id = r.label_id
@@ -374,6 +377,8 @@ export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
     label_name: string | null;
     override: string | null;
     label_does: string | null;
+    mark_read: number | null;
+    unsubscribe: number | null;
     source: string;
     hits: number;
     filter_id: string | null;
@@ -389,6 +394,8 @@ export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
     labelName: r.label_name,
     override: r.override,
     disposition: r.label_name === null ? null : (r.override ?? r.label_does),
+    markRead: r.mark_read === 1,
+    unsubscribe: r.unsubscribe === 1,
     source: r.source,
     hits: r.hits,
     lastHitAt: r.last_hit_at,
@@ -421,6 +428,7 @@ export function listLabelSummaries(db: DatabaseSync, accountId: string): LabelSu
     description: l.description,
     disposition: outcomeOf(l),
     markRead: l.markRead ?? false,
+    unsubscribe: l.unsubscribe ?? false,
     gmailLabel: l.gmailLabel,
     rules: rules.get(l.id)?.n ?? 0,
     messages: messages.get(l.id)?.n ?? 0,
@@ -458,6 +466,7 @@ export function listSuggestions(db: DatabaseSync, options: { includeKept?: boole
         labelId: s.labelId,
         labelName: null,
         stage: s.stage,
+        unsubscribe: s.unsubscribe,
         guesses: 1,
         messages: 0,
         latestAt: s.decidedAt,
@@ -485,6 +494,7 @@ export function listSuggestions(db: DatabaseSync, options: { includeKept?: boole
     group.labelId = top.suggestion.labelId;
     group.labelName = (top.suggestion.labelId && names.get(`${group.accountId}\n${top.suggestion.labelId}`)) ?? null;
     group.stage = top.suggestion.stage;
+    group.unsubscribe = top.suggestion.unsubscribe;
   }
   const { reviewed, right } = accuracy(db);
   const examples = db.prepare(`SELECT sum(status = 'captured') AS captured, sum(status = 'pending') AS pending FROM examples`).get() as {

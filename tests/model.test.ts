@@ -33,9 +33,9 @@ describe('model stage', () => {
     const decision = await stage({ label: 'marketing', reason: 'a sale announcement', confidence: 0.9 }).decide(facts());
     expect(decision).toEqual({
       disposition: 'archive',
+      subscription: 'unsubscribe',
       labelId: 'marketing',
       gmailLabel: 'sift/marketing',
-      subscription: 'preserve',
       stage: 'agent',
       confidence: 0.9,
       reason: 'Marketing: a sale announcement',
@@ -202,6 +202,7 @@ describe('preferences in the database', () => {
       description: 'Things I read.',
       disposition: 'keep',
       gmailLabel: 'sift/newsletters',
+      unsubscribe: true,
     });
     expect(updateLabel(db, ACCOUNT, 'nope', { disposition: 'keep' })).toBe(false);
   });

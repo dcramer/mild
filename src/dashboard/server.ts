@@ -87,7 +87,7 @@ const SCOPES = new Set(['sender', 'domain', 'subject', 'once']);
 
 /** Check an answer to a suggestion field by field. Null if it is not well formed. */
 function parseFeedback(body: Record<string, unknown>): FeedbackInput | null {
-  const { accountId, sender, label, disposition, scope, contains, decisionId, messageId } = body;
+  const { accountId, sender, label, disposition, scope, contains, decisionId, messageId, unsubscribe } = body;
   if (typeof accountId !== 'string' || typeof sender !== 'string') return null;
   if (typeof label !== 'string' || !LABEL_ID.test(label)) return null;
   if (typeof scope !== 'string' || !SCOPES.has(scope)) return null;
@@ -96,6 +96,7 @@ function parseFeedback(body: Record<string, unknown>): FeedbackInput | null {
   if (scope === 'subject' && (typeof contains !== 'string' || contains.trim() === '')) return null;
   if (decisionId !== undefined && (typeof decisionId !== 'number' || !Number.isInteger(decisionId))) return null;
   if (messageId !== undefined && !str(messageId)) return null;
+  if (unsubscribe !== undefined && typeof unsubscribe !== 'boolean') return null;
   return {
     accountId,
     sender,
@@ -105,6 +106,7 @@ function parseFeedback(body: Record<string, unknown>): FeedbackInput | null {
     ...(typeof contains === 'string' ? { contains } : {}),
     ...(decisionId === undefined ? {} : { decisionId }),
     ...(messageId === undefined ? {} : { messageId }),
+    ...(unsubscribe ? { unsubscribe } : {}),
   };
 }
 
@@ -219,34 +221,54 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       }
     },
     '/api/labels': (body) => {
-      const { accountId, id, name, description, disposition, markRead } = body;
+      const { accountId, id, name, description, disposition, markRead, unsubscribe } = body;
       if (!str(accountId) || !str(id, 40)) return null;
       if (name !== undefined && !str(name, 60)) return null;
       if (description !== undefined && (typeof description !== 'string' || description.length > 600)) return null;
       if (disposition !== undefined && !outcome(disposition)) return null;
       if (markRead !== undefined && typeof markRead !== 'boolean') return null;
+      if (unsubscribe !== undefined && typeof unsubscribe !== 'boolean') return null;
       const change: Parameters<typeof updateLabel>[3] = {};
       if (name !== undefined) change.name = name;
       if (description !== undefined) change.description = description;
       if (disposition !== undefined) Object.assign(change, fromOutcome(disposition));
       if (markRead !== undefined) change.markRead = markRead;
+      if (unsubscribe !== undefined) change.unsubscribe = unsubscribe;
       if (!updateLabel(db, accountId, id, change, now())) throw new Error(`There is no label "${id}".`);
       return { ok: true };
     },
     '/api/labels/add': (body) => {
-      const { accountId, name, description, disposition, markRead } = body;
+      const { accountId, name, description, disposition, markRead, unsubscribe } = body;
       if (!str(accountId) || !str(name, 60) || typeof description !== 'string' || description.length > 600) return null;
       if (!outcome(disposition) || (markRead !== undefined && typeof markRead !== 'boolean')) return null;
+      if (unsubscribe !== undefined && typeof unsubscribe !== 'boolean') return null;
       if (!listAccounts(db).some((a) => a.id === accountId)) return null;
-      return { id: addLabel(db, accountId, { name, description, ...fromOutcome(disposition), ...(markRead ? { markRead } : {}) }, now()).id };
+      return {
+        id: addLabel(
+          db,
+          accountId,
+          { name, description, ...fromOutcome(disposition), ...(markRead ? { markRead } : {}), ...(unsubscribe ? { unsubscribe } : {}) },
+          now(),
+        ).id,
+      };
     },
     '/api/rules': (body) => {
-      const { accountId, match, label, disposition } = body;
+      const { accountId, match, label, disposition, markRead, unsubscribe } = body;
       if (!str(accountId) || typeof label !== 'string' || !LABEL_ID.test(label) || typeof match !== 'object' || match === null) return null;
       if (disposition !== undefined && !decided(disposition)) return null;
+      if ((markRead !== undefined && typeof markRead !== 'boolean') || (unsubscribe !== undefined && typeof unsubscribe !== 'boolean')) return null;
       const conditions = Object.entries(match).filter(([, value]) => value !== '');
       if (conditions.length === 0 || !conditions.every(([key, value]) => RULE_KEYS.has(key) && str(value))) return null;
-      return { id: addRule(db, accountId, { match: Object.fromEntries(conditions), labelId: label, ...(disposition ? { disposition } : {}) }, 'user', now()) };
+      const extras = { ...(markRead ? { markRead } : {}), ...(unsubscribe ? { subscription: 'unsubscribe' as const } : {}) };
+      return {
+        id: addRule(
+          db,
+          accountId,
+          { match: Object.fromEntries(conditions), labelId: label, ...(disposition ? { disposition } : {}), ...extras },
+          'user',
+          now(),
+        ),
+      };
     },
     '/api/rules/remove': (body) => {
       if (!str(body['id'], 40)) return null;

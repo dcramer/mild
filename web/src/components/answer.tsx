@@ -2,17 +2,19 @@ import { ArrowRightIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { FeedbackRequest } from '@/lib/api.ts';
 import { willBe } from '@/lib/format.ts';
-import { Button, Input, Select } from '@/system';
+import { Button, Check, Input, Select } from '@/system';
 
 export interface AnswerLabel {
   id: string;
   name: string;
   disposition: string;
+  /** The label already unsubscribes, so the answer need not ask for it. */
+  unsubscribe?: boolean;
 }
 
 type Scope = FeedbackRequest['scope'];
 type Exception = '' | 'keep' | 'archive' | 'spam';
-export type AnswerValue = Pick<FeedbackRequest, 'label' | 'scope' | 'contains' | 'disposition'>;
+export type AnswerValue = Pick<FeedbackRequest, 'label' | 'scope' | 'contains' | 'disposition' | 'unsubscribe'>;
 
 const EXCEPTIONS = [
   ['', 'as the label says'],
@@ -49,11 +51,18 @@ export function Answer({
   const [scope, setScope] = useState<Scope>('sender');
   const [contains, setContains] = useState('');
   const [exception, setException] = useState<Exception>('');
+  const [unsubscribe, setUnsubscribe] = useState(false);
   const label = labels.find((l) => l.id === chosen);
   const domain = sender.split('@')[1] ?? '';
   const ready = label !== undefined && (scope !== 'subject' || contains.trim() !== '');
   const answer: AnswerValue | null = label
-    ? { label: label.id, scope, ...(scope === 'subject' ? { contains: contains.trim() } : {}), ...(exception ? { disposition: exception } : {}) }
+    ? {
+        label: label.id,
+        scope,
+        ...(scope === 'subject' ? { contains: contains.trim() } : {}),
+        ...(exception ? { disposition: exception } : {}),
+        ...(unsubscribe && scope !== 'once' ? { unsubscribe } : {}),
+      }
     : null;
 
   useEffect(() => {
@@ -119,6 +128,12 @@ export function Answer({
           ) : null}
           <Select label="Exception to the label's action" value={exception} options={EXCEPTIONS} onChange={setException} />
         </div>
+        {/* A rule can carry this itself; for a label that already unsubscribes there is nothing to add. */}
+        {label && !label.unsubscribe && scope !== 'once' ? (
+          <Check checked={unsubscribe} onChange={setUnsubscribe}>
+            and unsubscribe, when the sender offers a safe way
+          </Check>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-3">
@@ -127,7 +142,7 @@ export function Answer({
             ? 'Choose what this is.'
             : scope === 'once'
               ? `Only ${whose}: ${label.name}, ${does}. No rule is made.`
-              : `From now on, ${whose} is ${label.name}: ${does}.`}
+              : `From now on, ${whose} is ${label.name}: ${does}${label.unsubscribe || unsubscribe ? ', and unsubscribed from' : ''}.`}
         </p>
         {acted && label && label.id !== guess ? <p className="text-[13px] text-muted-foreground">This message is put right in Gmail too.</p> : null}
         {error ? <p className="text-[13px] text-destructive">{error}</p> : null}

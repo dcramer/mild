@@ -2,7 +2,7 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import { request } from 'node:https';
 import { isIP } from 'node:net';
 import type { DatabaseSync } from 'node:sqlite';
-import { finishAction, insertPendingAction, unsubscribedAt } from '../store/actions.ts';
+import { finishAction, insertPendingAction, lastUnsubscribeFailure, unsubscribedAt } from '../store/actions.ts';
 import { bulkSignals, passedDmarc } from '../triage/features.ts';
 
 export type UnsubscribeOutcome =
@@ -48,6 +48,7 @@ export function isPublicAddress(address: string): boolean {
 }
 
 const TIMEOUT_MS = 10_000;
+export const RETRY_AFTER_MS = 7 * 86_400_000;
 
 /** RFC 8058: one POST with a fixed body, to the address already checked, following nothing. */
 const postOneClick: PostOneClick = (url, address) =>
@@ -74,13 +75,14 @@ const postOneClick: PostOneClick = (url, address) =>
 
 /**
  * Unsubscribe from the list a message came from, the one way sift can do it safely: the sender's own
- * one-click address (RFC 8058), and only when the user asked.
+ * one-click address (RFC 8058), and only where the user's label or rule says to.
  *
  * The address comes from the email, so nothing about it is trusted. It is used only if the message
  * passed DMARC (so the header is the real sender's), is HTTPS on the standard port with no credentials,
  * and resolves to a public address (so it cannot be pointed at this machine or its network). One POST
  * is made; a redirect is not followed. Lists that can only be left by sending an email are refused:
- * sift does not send mail. Recorded as an action before the request, and never repeated for a sender.
+ * sift does not send mail. Recorded as an action before the request, never repeated for a sender it
+ * worked for, and not retried for a week for one it failed for.
  */
 export async function unsubscribe(deps: UnsubscribeDeps, accountId: string, messageId: string): Promise<UnsubscribeOutcome> {
   const now = deps.now ?? Date.now;
@@ -101,6 +103,10 @@ export async function unsubscribe(deps: UnsubscribeDeps, accountId: string, mess
   if (!passedDmarc(headers)) return { status: 'refused', reason: 'The message did not prove who sent it, so its unsubscribe address is not trusted.' };
   if (unsubscribedAt(deps.db, accountId, message.from_address) !== null)
     return { status: 'refused', reason: 'You have already unsubscribed from this sender.' };
+  // sift runs this for every message a label says to unsubscribe from: a sender whose address fails is left alone for a while.
+  const failed = lastUnsubscribeFailure(deps.db, accountId, message.from_address);
+  if (failed !== null && now() - failed < RETRY_AFTER_MS)
+    return { status: 'refused', reason: 'Unsubscribing from this sender failed recently; it will be tried again later.' };
 
   let url: URL;
   try {

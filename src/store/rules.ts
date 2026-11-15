@@ -19,6 +19,7 @@ interface Row {
   label_id: string;
   disposition: DecidedDisposition | null;
   subscription: SubscriptionAction;
+  mark_read: number;
   source: RuleSource;
   hits: number;
 }
@@ -26,7 +27,9 @@ interface Row {
 /** An account's rules in evaluation order. */
 export function listRules(db: DatabaseSync, accountId: string): StoredRule[] {
   const rows = db
-    .prepare('SELECT id, match_json, except_json, label_id, disposition, subscription, source, hits FROM rules WHERE account_id = ? ORDER BY position, id')
+    .prepare(
+      'SELECT id, match_json, except_json, label_id, disposition, subscription, mark_read, source, hits FROM rules WHERE account_id = ? ORDER BY position, id',
+    )
     .all(accountId) as unknown as Row[];
   return rows.map((r) => {
     const except = JSON.parse(r.except_json) as RuleMatch[];
@@ -37,6 +40,7 @@ export function listRules(db: DatabaseSync, accountId: string): StoredRule[] {
       labelId: r.label_id,
       ...(r.disposition ? { disposition: r.disposition } : {}),
       subscription: r.subscription,
+      ...(r.mark_read === 1 ? { markRead: true } : {}),
       ...(r.source === 'agent' ? { learned: true } : {}),
       source: r.source,
       hits: r.hits,
@@ -51,8 +55,8 @@ export function addRule(db: DatabaseSync, accountId: string, rule: Omit<Rule, 'i
   const id = `r-${randomBytes(4).toString('hex')}`;
   const { next } = db.prepare('SELECT coalesce(max(position), 0) + 1 AS next FROM rules WHERE account_id = ?').get(accountId) as { next: number };
   db.prepare(
-    `INSERT INTO rules (id, account_id, position, match_json, except_json, label_id, disposition, subscription, source, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO rules (id, account_id, position, match_json, except_json, label_id, disposition, subscription, mark_read, source, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     accountId,
@@ -62,6 +66,7 @@ export function addRule(db: DatabaseSync, accountId: string, rule: Omit<Rule, 'i
     rule.labelId,
     rule.disposition ?? null,
     rule.subscription ?? 'preserve',
+    rule.markRead ? 1 : 0,
     source,
     now,
   );
@@ -92,13 +97,20 @@ export function setRule(
   db: DatabaseSync,
   accountId: string,
   match: RuleMatch,
-  rule: { labelId: string; disposition?: DecidedDisposition },
+  rule: { labelId: string; disposition?: DecidedDisposition; subscription?: SubscriptionAction; markRead?: boolean },
   source: RuleSource,
   now: number = Date.now(),
 ): string {
   const existing = ruleMatching(db, accountId, match);
   if (!existing) return addRule(db, accountId, { match, ...rule }, source, now);
-  db.prepare('UPDATE rules SET label_id = ?, disposition = ?, source = ? WHERE id = ?').run(rule.labelId, rule.disposition ?? null, source, existing.id);
+  db.prepare('UPDATE rules SET label_id = ?, disposition = ?, subscription = ?, mark_read = ?, source = ? WHERE id = ?').run(
+    rule.labelId,
+    rule.disposition ?? null,
+    rule.subscription ?? 'preserve',
+    rule.markRead ? 1 : 0,
+    source,
+    existing.id,
+  );
   return existing.id;
 }
 

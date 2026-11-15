@@ -193,6 +193,17 @@ describe('managing sift from the dashboard', () => {
     ];
     expect(shown?.find((l) => l.id === 'marketing')).toMatchObject({ disposition: 'archive', markRead: true });
     expect(shown?.find((l) => l.id === 'phishing')).toMatchObject({ disposition: 'block', markRead: false });
+    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'personal', unsubscribe: true })).status).toBe(200);
+    expect(listLabels(db, ACCOUNT).find((l) => l.id === 'personal')).toMatchObject({ disposition: 'keep', unsubscribe: true });
+    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'personal', unsubscribe: 'yes' })).status).toBe(400);
+    const extra = await call(port, 'POST', '/api/rules', {
+      accountId: ACCOUNT,
+      match: { from: 'x@example.com' },
+      label: 'security',
+      unsubscribe: true,
+      markRead: true,
+    });
+    expect(listRules(db, ACCOUNT).find((r) => r.id === extra.body['id'])).toMatchObject({ subscription: 'unsubscribe', markRead: true });
     // "Leave it for me" is no longer something a label can be set to do.
     expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'review' })).status).toBe(400);
     expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', markRead: 'yes' })).status).toBe(400);

@@ -2,7 +2,7 @@ import { PencilIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type LabelSummary, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ACTIONS, type ActionKey, count, percent } from '@/lib/format.ts';
+import { ACTIONS, type ActionKey, count, extras, percent } from '@/lib/format.ts';
 import {
   Button,
   Card,
@@ -35,6 +35,7 @@ interface Draft {
   description: string;
   disposition: ActionKey;
   markRead: boolean;
+  unsubscribe: boolean;
 }
 
 /** Add a label, or change one. `label` is the one being changed. */
@@ -45,6 +46,7 @@ function LabelDialog({ accountId, label, onClose, onSaved }: { accountId: string
     description: label?.description ?? '',
     disposition: (label?.disposition as ActionKey) ?? 'keep',
     markRead: label?.markRead ?? false,
+    unsubscribe: label?.unsubscribe ?? false,
   });
   const save = () =>
     run(
@@ -112,6 +114,17 @@ function LabelDialog({ accountId, label, onClose, onSaved }: { accountId: string
               Also mark it read
             </Check>
           ) : null}
+          <Check checked={draft.unsubscribe} onChange={(unsubscribe) => setDraft({ ...draft, unsubscribe })}>
+            Also unsubscribe, when the sender offers a safe way
+          </Check>
+          {draft.unsubscribe ? (
+            <span className="text-[13px] text-muted-foreground">
+              Only while sift is acting, never from someone you have written to, and it cannot be undone from here.
+              {draft.disposition === 'spam' || draft.disposition === 'block'
+                ? ' Answering a spammer’s link tells them the address is read; sift only does it when the message proves who sent it.'
+                : ''}
+            </span>
+          ) : null}
         </div>
       </form>
     </Dialog>
@@ -136,7 +149,7 @@ function LabelCard({
   const facts = [
     `${count(label.messages)} ${label.messages === 1 ? 'message' : 'messages'}`,
     `${count(label.rules)} ${label.rules === 1 ? 'rule' : 'rules'}`,
-    label.markRead ? 'marked read' : null,
+    extras(label) || null,
     label.record.reviewed > 0 ? `right ${percent(label.record.right, label.record.reviewed)} of ${count(label.record.reviewed)}` : null,
   ].filter(Boolean);
   return (

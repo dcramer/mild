@@ -76,6 +76,7 @@ function SuggestionRow({
       <Td className="whitespace-nowrap">
         <span className="flex items-center gap-2">
           <Guess labelName={group.labelName} disposition={group.disposition} />
+          {group.unsubscribe ? <span className="text-[13px] text-muted-foreground">and unsubscribe</span> : null}
         </span>
         {mixed ? <Sub>for most of them; mixed</Sub> : null}
         {error ? <span className="mt-1 block text-[13px] text-destructive">{error}</span> : null}

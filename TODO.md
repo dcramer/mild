@@ -10,8 +10,7 @@ sift is a better Gmail filter and spam filter: models work out what mail is, and
 
 In this order.
 
-1. **Unsubscribe and other extras on labels and rules** (under Labels and rules).
-2. **What a rule means, and what sift knows about a sender** (the first two items under Labels and rules). These decide how far automation can be trusted.
+1. **What a rule means, and what sift knows about a sender** (the first two items under Labels and rules). These decide how far automation can be trusted.
 3. **Settings designed with intent** (under Dashboard).
 4. **Figures and a chart above Suggestions** (under Dashboard).
 5. **Keyboard shortcuts in the design system** (under Dashboard).
@@ -27,12 +26,8 @@ Built: labels with defaults and the user's own; outcomes keep, archive, mark spa
   - **Usually:** the sender's usual label is a strong prior handed to the model, which still looks at each message and can say "not this one". Cheaper than a cold judgement, and it cannot hide the odd important message.
   - Which one an answer makes by default (probably "usually", promoted to "always" once it has held for long enough), how each is shown so it is clear what a rule will do, and how this fits soft rules below, which are the same idea with the condition written out.
 - [ ] **Know the sender.** Keep running facts per sender address and per sender domain (not for shared domains such as gmail.com, where the domain says nothing): when first seen, how much they have sent and how often, how much of it the user opened, replied to or left unread, what labels their mail has had and how consistently, how the user has answered about them, whether the user writes to them. Use them three ways: as evidence for the model and for rules; to decide when a sender is settled enough to propose a rule for; and shown wherever a sender appears. A real case: an investor update sift was not sure about, from someone the user had corresponded with, which this would have settled. Today sift only knows whether the user has ever written to an address.
-- [ ] **Unsubscribe, automatically.** Not a button: an extra a label or a rule can carry, "and unsubscribe, if the sender offers a safe way", so that "mail like this" can mean archive and unsubscribe. The request itself is built and tested (`unsubscribe` in `src/actions`: one-click only, message passed DMARC, public HTTPS address, no redirects, once per sender) but nothing calls it. To do:
-  - Store it on labels (an extra, like mark read) and on rules (the `subscription` column is already there), and have the daemon make the request after the mailbox change succeeds, only while acting.
-  - Defaults: on for labels that archive bulk mail from companies (Marketing, Cold outreach). Off for Junk and Phishing: answering a scammer's unsubscribe link confirms the address is read.
-  - Never for a sender the user has written to, and do not retry a sender whose request failed for a week.
-  - Show it: in a suggestion ("would archive and unsubscribe"), in a decision, and in Changes. It cannot be undone, so say that where it is switched on.
-- [ ] **More than one action per rule and label.** Today a label has one outcome plus "mark read". Settle the shape as extras are added (unsubscribe, flag, digest) so a rule or label reads as a short list of what happens, and a rule can override any of them.
+- [ ] **Unsubscribe, the rest.** Built: unsubscribe is an extra, like mark read, that a label or a rule carries; the default labels for bulk mail (Newsletters, Marketing, Cold outreach, Junk) have it on; sift makes the sender's one-click request after the mailbox change succeeds, only while acting, never for someone the user has written to, and leaves a sender alone for a week after a failure. Not yet run against a real list. Still to do: lists that need an email sent or a page opened are skipped, so show their link for the user to open; show on the Labels and Rules screens how many senders each has unsubscribed from; and say plainly, before acting is switched on, that these labels will start unsubscribing.
+- [ ] **More extras.** A label or rule now reads as an outcome plus extras (mark read, unsubscribe). Next: flag a message (star or mark important), and digest. Forwarding would need permission to send or a verified forwarding address, which sift does not have.
 - [ ] **Per-label trust.** Let sift act on some labels while the rest stay suggestions, with the global switch kept as a kill switch. Each label already shows how often sift has been right about it. This is where "leave it for me" went.
 - [ ] **Blocking is the costliest mistake.** A real security notice labelled Phishing gets its sender blocked. Show blocked senders plainly (they are rules sift made) and make unblocking one press.
 - [ ] **Batch into a daily digest.** An outcome for a label: take the mail out of the inbox as it arrives, then once a day put one message in the inbox covering what came in, written by a separate agent with its own prompt whose job is to pull out what might matter (a failed build among forty passed ones, a review request among notifications). Service notifications such as GitHub's are the obvious first use. To design: the digest agent and what it may read; when it runs and what an empty day does; how a digest item links back to its message. Inserting the digest works with the access sift already has (`users.messages.insert`), so it needs no permission to send.
@@ -46,7 +41,6 @@ Built: labels with defaults and the user's own; outcomes keep, archive, mark spa
 - [ ] Rules with more than one condition and with exceptions, from the dashboard; reorder rules.
 - [ ] Remove a label, and say what becomes of its rules and of mail already labelled; reorder labels.
 - [ ] Choose which account a rule or label is for when there is more than one (the Rules screen uses the first).
-- [ ] Flag a message (star or mark important) as an extra. Forwarding would need permission to send or a verified forwarding address, which sift does not have.
 
 ## Beyond triage
 

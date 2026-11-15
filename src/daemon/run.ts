@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { reconcile } from '../actions/executor.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
+import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
 import { type Account, listAccounts } from '../store/accounts.ts';
 import { keepSuggestionBodies } from './bodies.ts';
@@ -16,6 +17,8 @@ export interface RunOptions {
   connect: (account: Account) => { api: GmailApi; mailbox: Mailbox };
   /** The inference tier, if a model is configured. */
   model?: { judge: Judge; guidelines: () => string };
+  /** Leaves a mailing list, for decisions that say to. Without it sift never unsubscribes. */
+  unsubscribe?: (accountId: string, messageId: string) => Promise<UnsubscribeOutcome>;
   log: (line: string) => void;
   now?: () => number;
 }
@@ -46,6 +49,7 @@ export async function runOnce(db: DatabaseSync, options: RunOptions): Promise<Pa
         {
           ...deps,
           mailbox: options.act ? mailbox : null,
+          ...(options.unsubscribe ? { unsubscribe: options.unsubscribe } : {}),
           ...(options.model ? { model: { judge: options.model.judge, guidelines: options.model.guidelines(), sources: { api, mailbox } } } : {}),
         },
         account,
@@ -77,6 +81,7 @@ function describe(result: PassResult, act: boolean): string | null {
     if (triage.acted > 0) parts.push(`${triage.acted} changed`);
     if (triage.skipped > 0) parts.push(`${triage.skipped} skipped`);
     if (triage.learned > 0) parts.push(`learned ${triage.learned} rule${triage.learned === 1 ? '' : 's'}`);
+    if (triage.unsubscribed > 0) parts.push(`unsubscribed from ${triage.unsubscribed} sender${triage.unsubscribed === 1 ? '' : 's'}`);
     if (triage.blocked > 0) parts.push(`blocked ${triage.blocked} sender${triage.blocked === 1 ? '' : 's'}`);
     if (triage.troubled > 0) parts.push(`${triage.troubled} need attention (see sift log)`);
   }

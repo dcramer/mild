@@ -47,6 +47,7 @@ export const DEFAULT_LABELS: readonly Label[] = [
     description: 'Editorial or community content sent to a list the owner appears to have subscribed to.',
     disposition: 'archive',
     gmailLabel: 'sift/newsletters',
+    unsubscribe: true,
   },
   {
     id: 'marketing',
@@ -54,6 +55,7 @@ export const DEFAULT_LABELS: readonly Label[] = [
     description: 'Promotions, sales, product announcements, webinars and re-engagement mail from a company.',
     disposition: 'archive',
     gmailLabel: 'sift/marketing',
+    unsubscribe: true,
   },
   {
     id: 'cold_outreach',
@@ -61,6 +63,7 @@ export const DEFAULT_LABELS: readonly Label[] = [
     description: 'An unsolicited pitch from a stranger: sales, recruiting, partnerships, guest posts, fundraising, surveys.',
     disposition: 'archive',
     gmailLabel: 'sift/cold-outreach',
+    unsubscribe: true,
   },
   {
     id: 'junk',
@@ -69,6 +72,7 @@ export const DEFAULT_LABELS: readonly Label[] = [
       'Mail the owner never asked for and would not want: scams, phishing, deceptive offers, bulk mail from a sender with no relationship to the owner.',
     disposition: 'spam',
     gmailLabel: 'sift/junk',
+    unsubscribe: true,
   },
   {
     id: 'phishing',
@@ -89,19 +93,22 @@ interface Row {
   gmail_label: string;
   block: number;
   mark_read: number;
+  unsubscribe: number;
 }
 
 const INSERT =
-  'INSERT INTO labels (account_id, id, name, description, disposition, gmail_label, position, updated_at, block, mark_read) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+  'INSERT INTO labels (account_id, id, name, description, disposition, gmail_label, position, updated_at, block, mark_read, unsubscribe) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
 /** An account's labels in order, seeding the defaults the first time. */
 export function listLabels(db: DatabaseSync, accountId: string, now: number = Date.now()): Label[] {
-  const select = db.prepare('SELECT id, name, description, disposition, gmail_label, block, mark_read FROM labels WHERE account_id = ? ORDER BY position, id');
+  const select = db.prepare(
+    'SELECT id, name, description, disposition, gmail_label, block, mark_read, unsubscribe FROM labels WHERE account_id = ? ORDER BY position, id',
+  );
   let rows = select.all(accountId) as unknown as Row[];
   if (rows.length === 0) {
     const insert = db.prepare(INSERT);
     DEFAULT_LABELS.forEach((l, index) =>
-      insert.run(accountId, l.id, l.name, l.description, l.disposition, l.gmailLabel, index, now, l.block ? 1 : 0, l.markRead ? 1 : 0),
+      insert.run(accountId, l.id, l.name, l.description, l.disposition, l.gmailLabel, index, now, l.block ? 1 : 0, l.markRead ? 1 : 0, l.unsubscribe ? 1 : 0),
     );
     rows = select.all(accountId) as unknown as Row[];
   }
@@ -113,6 +120,7 @@ export function listLabels(db: DatabaseSync, accountId: string, now: number = Da
     gmailLabel: r.gmail_label,
     ...(r.block === 1 ? { block: true } : {}),
     ...(r.mark_read === 1 ? { markRead: true } : {}),
+    ...(r.unsubscribe === 1 ? { unsubscribe: true } : {}),
   }));
 }
 
@@ -141,7 +149,7 @@ function normalise(disposition: Disposition, block: boolean, markRead: boolean):
 export function addLabel(
   db: DatabaseSync,
   accountId: string,
-  label: { name: string; description: string; disposition: Disposition; block?: boolean; markRead?: boolean },
+  label: { name: string; description: string; disposition: Disposition; block?: boolean; markRead?: boolean; unsubscribe?: boolean },
   now: number = Date.now(),
 ): Label {
   const name = label.name.trim();
@@ -151,7 +159,15 @@ export function addLabel(
   if (existing.some((l) => l.id === id || l.id.replace(/_/g, '-') === id || l.gmailLabel === `sift/${id}` || l.name.toLowerCase() === name.toLowerCase()))
     throw new Error(`There is already a label "${name}".`);
   const extras = normalise(label.disposition, label.block ?? false, label.markRead ?? false);
-  const created: Label = { id, name, description: label.description.trim(), disposition: label.disposition, gmailLabel: `sift/${id}`, ...extras };
+  const created: Label = {
+    id,
+    name,
+    description: label.description.trim(),
+    disposition: label.disposition,
+    gmailLabel: `sift/${id}`,
+    ...extras,
+    ...(label.unsubscribe ? { unsubscribe: true } : {}),
+  };
   db.prepare(INSERT).run(
     accountId,
     created.id,
@@ -163,6 +179,7 @@ export function addLabel(
     now,
     created.block ? 1 : 0,
     created.markRead ? 1 : 0,
+    created.unsubscribe ? 1 : 0,
   );
   return created;
 }
@@ -175,7 +192,7 @@ export function updateLabel(
   db: DatabaseSync,
   accountId: string,
   id: string,
-  change: { name?: string; description?: string; disposition?: Disposition; block?: boolean; markRead?: boolean },
+  change: { name?: string; description?: string; disposition?: Disposition; block?: boolean; markRead?: boolean; unsubscribe?: boolean },
   now: number = Date.now(),
 ): boolean {
   const current = listLabels(db, accountId, now).find((l) => l.id === id);
@@ -187,12 +204,15 @@ export function updateLabel(
     change.block ?? (change.disposition === undefined && (current.block ?? false)),
     change.markRead ?? current.markRead ?? false,
   );
-  db.prepare('UPDATE labels SET name = ?, description = ?, disposition = ?, block = ?, mark_read = ?, updated_at = ? WHERE account_id = ? AND id = ?').run(
+  db.prepare(
+    'UPDATE labels SET name = ?, description = ?, disposition = ?, block = ?, mark_read = ?, unsubscribe = ?, updated_at = ? WHERE account_id = ? AND id = ?',
+  ).run(
     change.name?.trim() || current.name,
     change.description?.trim() ?? current.description,
     disposition,
     extras.block ? 1 : 0,
     extras.markRead ? 1 : 0,
+    (change.unsubscribe ?? current.unsubscribe ?? false) ? 1 : 0,
     now,
     accountId,
     id,

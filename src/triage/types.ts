@@ -66,13 +66,19 @@ export interface Label {
   block?: boolean;
   /** With `keep` or `archive`: mark the mail read as well. */
   markRead?: boolean;
+  /** Also leave the sender's mailing list, where that can be done safely. */
+  unsubscribe?: boolean;
 }
 
 /** The part of a decision that follows from the label, with `override` in place of the label's own action if given. */
-export function labelled(label: Label, override?: DecidedDisposition): Pick<Decision, 'disposition' | 'labelId' | 'gmailLabel' | 'block' | 'markRead'> {
+export function labelled(
+  label: Label,
+  override?: DecidedDisposition,
+): Pick<Decision, 'disposition' | 'subscription' | 'labelId' | 'gmailLabel' | 'block' | 'markRead'> {
   const disposition = override ?? label.disposition;
   return {
     disposition,
+    subscription: label.unsubscribe ? 'unsubscribe' : 'preserve',
     labelId: label.id,
     gmailLabel: label.gmailLabel,
     // An exception replaces the label's action, so it does not inherit the block.
