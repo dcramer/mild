@@ -127,10 +127,10 @@ export function parseSettings(text: string, path = 'sift.toml'): Settings {
 
 /** `sift.toml` with every setting and what it does. The comments are sift's; hand edits to values are kept. */
 export function renderSettings(settings: Settings): string {
-  return `# \`sift models\` lists what you can use. Unset: mail no rule or learned sender covers stays in your inbox.
+  return `# Chosen in the dashboard, under Settings, or with \`sift init\`. Unset: mail no rule or learned sender covers stays in your inbox.
 ${settings.model ? `model = ${JSON.stringify(settings.model)}` : '# model = "provider/model-id"'}
 
-# false: record what sift would do. true: carry it out in Gmail (reversible with \`sift undo\`).
+# false: record what sift would do. true: carry it out in Gmail (each change can be undone in the dashboard).
 act = ${settings.act}
 
 # Seconds between checks for new mail.

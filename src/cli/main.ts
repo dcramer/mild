@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
-import { type MessageAction, type Outcome, execute, undo } from '../actions/executor.ts';
+import { undo } from '../actions/executor.ts';
 import { unsubscribe } from '../actions/unsubscribe.ts';
 import { type Config, loadConfig, saveSettings } from '../config.ts';
 import { backfill } from '../daemon/backfill.ts';
@@ -13,25 +13,19 @@ import type { Activity, Controls, SignIn } from '../dashboard/controls.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
 import { ensureWebBuilt } from './web-build.ts';
 import { type PassResult, type Wake, createWake, runLoop, runOnce } from '../daemon/run.ts';
-import { syncAccount } from '../daemon/sync.ts';
 import { createGmailApi } from '../gmail/api.ts';
 import { browserSignInUrl, clientFor, completeBrowserSignIn, hasClientSecrets, installClient, loadClientSecrets, saveRefreshToken } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { createJudge } from '../model/judge.ts';
 import { login, openModels, resolveModel } from '../model/models.ts';
 import { type Account, connectAccount, listAccounts } from '../store/accounts.ts';
-import { getAction, lastStandingChange, listRecentActions } from '../store/actions.ts';
-import { listLabels, updateLabel } from '../store/labels.ts';
+import { getAction, lastStandingChange } from '../store/actions.ts';
 import { openDb } from '../store/db.ts';
 import { type SetupState, runInit } from './init.ts';
 import { signInRefusal } from './sign-in.ts';
 import { listenAddresses, machineNames, tailscaleName } from './network.ts';
 import { closeTerminal } from './terminal.ts';
-import { disposition, paint, spin, ui } from './ui.ts';
-import { addRule, listRules, removeRule } from '../store/rules.ts';
-import type { RuleMatch } from '../triage/stages/rules.ts';
-
-const PLANNED = ['review'] as const;
+import { paint, ui } from './ui.ts';
 
 /** sift is set up and started from here; looking at and steering it happens in the dashboard. */
 const MAIN_COMMANDS: readonly (readonly [string, string])[] = [
@@ -40,14 +34,8 @@ const MAIN_COMMANDS: readonly (readonly [string, string])[] = [
   ['status', 'What is set up and how much sift has recorded'],
 ];
 const OTHER_COMMANDS: readonly (readonly [string, string])[] = [
-  ['rules', 'list | add --do <keep|archive|spam> --from-domain <d> | remove <id>'],
-  ['labels', 'list | set <id> --do <keep|archive|review|spam>'],
-  ['log', 'recent changes to your mailbox'],
-  ['undo <id>', 'reverse one change'],
   ['dashboard', 'serve the dashboard without sorting mail'],
   ['dev', 'for working on sift: run, restarting and reloading as the code changes'],
-  ['login <provider>', 'sign in to a model provider'],
-  ['models', 'list the models you can use'],
 ];
 
 function help(): void {
@@ -87,7 +75,7 @@ function status(): void {
     ['Recorded', `${plural(count('messages'), 'message')} · ${plural(count('decisions'), 'decision')} · ${plural(count('actions'), 'change')}`],
     ['Rules', plural(count('rules'), 'rule')],
     ...(questions > 0 ? [['Waiting', paint.mark(` ${plural(questions, 'question')} for you `)] as const] : []),
-    ...(troubled > 0 ? [['Check', paint.bad(`${plural(troubled, 'change')} failed or unconfirmed; see sift log`)] as const] : []),
+    ...(troubled > 0 ? [['Check', paint.bad(`${plural(troubled, 'change')} failed or unconfirmed; see Changes in the dashboard`)] as const] : []),
   ]);
   ui.blank();
   if (!ready) {
@@ -144,108 +132,7 @@ async function init(): Promise<void> {
   });
 }
 
-async function sync(args: string[]): Promise<void> {
-  const { values } = parseArgs({ args, options: { verbose: { type: 'boolean', default: false } } });
-  const config = loadConfig();
-  const db = openDb(config.dbPath);
-  try {
-    const accounts = listAccounts(db);
-    if (accounts.length === 0) throw new Error('No Gmail account is connected yet. Run `sift init`.');
-    const secrets = loadClientSecrets(config);
-    for (const account of accounts) {
-      const report = await spin(`Checking ${account.email}`, () => syncAccount(db, createGmailApi(clientFor(config, secrets, account.email)), account));
-      const recovery = report.mode === 'recovery' ? paint.dim(' · history had expired, searched the last 7 days') : '';
-      ui.ok(`${paint.bold(account.email)}  ${plural(report.added.length, 'new message')}${paint.dim(` · ${report.skipped} skipped`)}${recovery}`);
-      if (values.verbose && report.added.length > 0) {
-        ui.blank();
-        ui.table(
-          ['Message id', 'From', 'Subject'],
-          report.added.map((m) => [paint.dim(m.messageId), m.from.address, m.subject.slice(0, 60)]),
-        );
-      }
-    }
-  } finally {
-    db.close();
-  }
-}
-
 const mailboxFor = (config: Config, email: string) => createGmailMailbox(clientFor(config, loadClientSecrets(config), email));
-
-function printOutcome(outcome: Outcome): void {
-  if (outcome.status === 'done') {
-    ui.ok(`Done ${paint.dim(`· sift undo ${outcome.actionId} reverses it`)}`);
-  } else if (outcome.status === 'skipped') ui.skip(`Nothing changed: ${outcome.reason}`);
-  else {
-    ui.fail(`Change #${outcome.actionId} ${outcome.status === 'unknown' ? 'could not be confirmed' : 'failed'}: ${outcome.reason}`);
-    process.exitCode = 1;
-  }
-}
-
-async function apply(args: string[]): Promise<void> {
-  const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { label: { type: 'string' }, account: { type: 'string' } } });
-  const [type, messageId] = positionals;
-  if (!messageId || (type !== 'archive' && type !== 'label' && type !== 'spam'))
-    throw new Error('Usage: sift apply <archive|label|spam> <message-id> [--label <name>]');
-
-  let action: MessageAction;
-  if (type === 'label') {
-    if (!values.label) throw new Error('sift apply label needs --label <name>.');
-    action = { type, labels: [values.label] };
-  } else action = values.label ? { type, labels: [values.label] } : { type };
-
-  const config = loadConfig();
-  const db = openDb(config.dbPath);
-  try {
-    const account = pickAccount(listAccounts(db), values.account);
-    printOutcome(await execute({ db, mailbox: mailboxFor(config, account.email) }, account.id, messageId, action));
-  } finally {
-    db.close();
-  }
-}
-
-function log(args: string[]): void {
-  const { values } = parseArgs({ args, options: { limit: { type: 'string', default: '20' } } });
-  const limit = Number(values.limit);
-  if (!Number.isInteger(limit) || limit < 1) throw new Error(`Invalid --limit: ${values.limit}`);
-  const config = loadConfig();
-  const db = openDb(config.dbPath);
-  const actions = listRecentActions(db, limit);
-  db.close();
-  if (actions.length === 0) {
-    ui.skip('No changes yet');
-    return;
-  }
-  const state = (status: string) => (status === 'done' ? status : status === 'undone' ? paint.dim(status) : paint.bad(status));
-  ui.blank();
-  ui.table(
-    ['#', 'When', 'Change', 'Result', 'Message'],
-    actions.map((a) => [
-      String(a.id),
-      paint.dim(new Date(a.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })),
-      a.payload.undoOf === undefined ? a.type : `undo of #${a.payload.undoOf}`,
-      state(a.status),
-      `${paint.dim(a.messageId)}${a.error ? `  ${paint.bad(a.error)}` : ''}`,
-    ]),
-  );
-  ui.blank();
-}
-
-async function undoCommand(args: string[]): Promise<void> {
-  const id = Number(args[0]);
-  if (!Number.isInteger(id) || id < 1) throw new Error('Usage: sift undo <action-id>  (see `sift log`)');
-  const config = loadConfig();
-  const db = openDb(config.dbPath);
-  try {
-    const action = getAction(db, id);
-    if (!action) throw new Error(`There is no change #${id}.`);
-    const outcome = await undo({ db, mailbox: mailboxFor(config, action.accountId) }, id);
-    if (outcome.status === 'done') ui.ok(`Reversed change #${id} ${paint.dim(`· recorded as #${outcome.actionId}`)}`);
-    else if (outcome.status === 'skipped') ui.ok(`Change #${id} had already been put back by hand; marked as undone`);
-    else printOutcome(outcome);
-  } finally {
-    db.close();
-  }
-}
 
 /** The secret in the dashboard's access link, created the first time it is needed. */
 function sessionSecret(config: Config): string {
@@ -410,70 +297,16 @@ async function dashboard(args: string[]): Promise<void> {
   db.close();
 }
 
-function pickAccount(accounts: Account[], email: string | undefined): Account {
-  const account = email ? accounts.find((a) => a.email === email.toLowerCase()) : accounts.length === 1 ? accounts[0] : undefined;
-  if (!account) throw new Error(accounts.length === 0 ? 'No Gmail account is connected yet. Run `sift init`.' : 'Choose an account with --account <email>.');
-  return account;
-}
-
 async function openModelTier(config: Config, spec: string) {
   const models = openModels(config);
   const model = resolveModel(models, spec);
   if (!(await models.getAuth(model)))
-    throw new Error(`Not signed in to ${model.provider}. Run \`sift login ${model.provider}\` or set its API key in the environment.`);
+    throw new Error(`Not signed in to ${model.provider}. Run \`sift init\` and choose Model, or set its API key in the environment.`);
   return {
     judge: createJudge(models, model, (message) => ui.fail(`Model call failed: ${message}`)),
     // Read on every pass, so edits to the file take effect without a restart.
     guidelines: () => (existsSync(config.guidelinesPath) ? readFileSync(config.guidelinesPath, 'utf8') : ''),
   };
-}
-
-async function loginCommand(args: string[]): Promise<void> {
-  const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { 'api-key': { type: 'boolean', default: false } } });
-  const [provider] = positionals;
-  if (!provider) throw new Error('Usage: sift login <provider> [--api-key]   e.g. sift login openai-codex');
-  const config = loadConfig();
-  await login(openModels(config), config, provider, values['api-key'] ? 'api_key' : 'oauth', ui);
-  ui.ok(`Signed in to ${paint.bold(provider)}`);
-}
-
-async function listModels(): Promise<void> {
-  const config = loadConfig();
-  const available = await spin('Listing models', () => openModels(config).getAvailable());
-  if (available.length === 0) {
-    ui.skip(`No models yet. Sign in with ${paint.cmd('sift init')} or ${paint.cmd('sift login <provider>')}`);
-    return;
-  }
-  const current = config.settings.model;
-  for (const model of available) {
-    const spec = `${model.provider}/${model.id}`;
-    if (spec === current) ui.plain(`${paint.mark(` ${spec} `)} ${paint.dim('in use')}`);
-    else ui.plain(spec);
-  }
-}
-
-function labels(args: string[]): void {
-  const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { account: { type: 'string' }, do: { type: 'string' } } });
-  const [verb, id] = positionals;
-  const config = loadConfig();
-  const db = openDb(config.dbPath);
-  try {
-    const account = pickAccount(listAccounts(db), values.account);
-    if (verb === 'set') {
-      const does = values.do;
-      if (!id || (does !== 'keep' && does !== 'archive' && does !== 'review' && does !== 'spam'))
-        throw new Error('Usage: sift labels set <id> --do <keep|archive|review|spam>');
-      if (!updateLabel(db, account.id, id, { disposition: does })) throw new Error(`No label "${id}". Run \`sift labels\` to list them.`);
-    } else if (verb !== undefined && verb !== 'list') throw new Error('Usage: sift labels [list | set <id> --do ...]');
-    ui.blank();
-    ui.table(
-      ['Id', 'Label', 'sift will', 'In Gmail'],
-      listLabels(db, account.id).map((l) => [paint.bold(l.id), l.name, disposition(l.disposition), paint.dim(l.gmailLabel)]),
-    );
-    ui.blank();
-  } finally {
-    db.close();
-  }
 }
 
 async function run(args: string[]): Promise<void> {
@@ -625,76 +458,6 @@ async function dev(args: string[]): Promise<void> {
   });
 }
 
-const CONDITION_NAMES: Record<string, string> = { from: 'from', fromDomain: 'from domain', to: 'to', listId: 'list', subjectContains: 'subject has' };
-
-function rules(args: string[]): void {
-  const { values, positionals } = parseArgs({
-    args,
-    allowPositionals: true,
-    options: {
-      account: { type: 'string' },
-      do: { type: 'string' },
-      from: { type: 'string' },
-      'from-domain': { type: 'string' },
-      to: { type: 'string' },
-      'list-id': { type: 'string' },
-      'subject-contains': { type: 'string' },
-      is: { type: 'string' },
-    },
-  });
-  const [verb, id] = positionals;
-  const config = loadConfig();
-  const db = openDb(config.dbPath);
-  try {
-    if (verb === 'remove') {
-      if (!id) throw new Error('Usage: sift rules remove <rule-id>');
-      if (!removeRule(db, id)) throw new Error(`No rule ${id}.`);
-      ui.ok(`Removed ${paint.bold(id)}`);
-      return;
-    }
-    const account = pickAccount(listAccounts(db), values.account);
-    if (verb === 'add') {
-      const override = values.do;
-      if (!values.is) throw new Error('sift rules add needs --is <label-id>. Run `sift labels` to list them.');
-      if (override !== undefined && override !== 'keep' && override !== 'archive' && override !== 'spam')
-        throw new Error('--do must be keep, archive or spam. Leave it out to do what the label does.');
-      const match: RuleMatch = {
-        ...(values.from ? { from: values.from } : {}),
-        ...(values['from-domain'] ? { fromDomain: values['from-domain'] } : {}),
-        ...(values.to ? { to: values.to } : {}),
-        ...(values['list-id'] ? { listId: values['list-id'] } : {}),
-        ...(values['subject-contains'] ? { subjectContains: values['subject-contains'] } : {}),
-      };
-      const ruleId = addRule(db, account.id, { match, labelId: values.is, ...(override ? { disposition: override } : {}) }, 'user');
-      ui.ok(`Added ${paint.bold(ruleId)}`);
-      return;
-    }
-    if (verb !== undefined && verb !== 'list') throw new Error('Usage: sift rules <list|add|remove>');
-    const all = listRules(db, account.id);
-    const names = new Map(listLabels(db, account.id).map((l) => [l.id, l.name]));
-    if (all.length === 0) {
-      ui.skip(`No rules yet. Add one with ${paint.cmd('sift rules add --is newsletter --from-domain example.com')}`);
-      return;
-    }
-    ui.blank();
-    ui.table(
-      ['Id', 'When mail is', 'It is', 'Exception', 'Matches'],
-      all.map((rule) => [
-        paint.bold(rule.id),
-        Object.entries(rule.match)
-          .map(([key, value]) => `${paint.dim(CONDITION_NAMES[key] ?? key)} ${value}`)
-          .join('  '),
-        names.get(rule.labelId) ?? paint.dim(`${rule.labelId} (removed)`),
-        rule.disposition ? disposition(rule.disposition) : '',
-        String(rule.hits),
-      ]),
-    );
-    ui.blank();
-  } finally {
-    db.close();
-  }
-}
-
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   // --home works before or after the command; it is the same as setting SIFT_HOME.
@@ -707,22 +470,11 @@ async function main(): Promise<void> {
   const [command, ...args] = argv;
   if (command === 'status') status();
   else if (command === 'init') await init();
-  else if (command === 'sync') await sync(args);
-  else if (command === 'apply') await apply(args);
-  else if (command === 'log') log(args);
-  else if (command === 'undo') await undoCommand(args);
   else if (command === 'dashboard') await dashboard(args);
   else if (command === 'run') await run(args);
   else if (command === 'dev') await dev(args);
-  else if (command === 'rules') rules(args);
-  else if (command === 'login') await loginCommand(args);
-  else if (command === 'models') await listModels();
-  else if (command === 'labels') labels(args);
   else if (command === undefined || command === 'help' || command === '--help' || command === '-h') help();
-  else if ((PLANNED as readonly string[]).includes(command)) {
-    ui.fail(`${paint.cmd(`sift ${command}`)} is not built yet.`);
-    process.exitCode = 1;
-  } else {
+  else {
     ui.fail(`There is no ${paint.cmd(`sift ${command}`)} command. ${paint.cmd('sift help')} lists them.`);
     process.exitCode = 2;
   }

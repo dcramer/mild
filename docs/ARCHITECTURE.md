@@ -46,7 +46,7 @@ Decisions flow back down so the same mail is cheaper next time.
 
 ```
 src/
-  cli/        entry point: sift status | auth | run | review | undo | rules
+  cli/        entry point: sift init | run | status | dev
   config.ts   data directory and paths
   store/      SQLite (node:sqlite) and numbered SQL migrations
   triage/     pure pipeline: types, header features, stages
@@ -120,9 +120,13 @@ When no rule or sender record decides a message, one model call does. It is deli
 - **The prompt marks the email as untrusted** and keeps it apart from the guidelines and the header facts. The worst an injected email can do is get itself given the wrong label, which the audit log can undo.
 - **Learning:** after three consecutive model decisions give a sender the same label, and each ended the way that label says, sift writes a rule for the sender and later mail from them is decided without inference. A rule the user made for that sender is left alone. (Next: propose the rule to the user instead of saving it; see TODO.md.)
 
-Models are reached through pi-ai (`src/model/`, the only module that imports it). `sift login <provider>` signs in, including with a ChatGPT subscription, and stores the credential in `model-auth.json`. The `model` setting in `sift.toml` turns the tier on; without it, mail no rule covers is left for review. pi-durable is not used: a triage run is one call, and the message queue in SQLite already gives retry and decide-once.
+Models are reached through pi-ai (`src/model/`, the only module that imports it). The model step of `sift init` signs in, including with a ChatGPT subscription, and stores the credential in `model-auth.json`. The `model` setting in `sift.toml` turns the tier on; without it, mail no rule covers is left for review. pi-durable is not used: a triage run is one call, and the message queue in SQLite already gives retry and decide-once.
 
 There is no shell and no filesystem here. A sandboxed agent with those is planned only for a possible operator-facing assistant that does open-ended analysis.
+
+## The command line
+
+Four commands: `init` sets sift up, `run` sorts mail and serves the dashboard, `status` says what is set up, and `dev` is `run` for working on sift. `dashboard` serves the dashboard without sorting. Everything else (rules, labels, the log of changes, undo, choosing a model) is in the dashboard and has no command; `sync`, `apply`, `undo`, `log`, `rules`, `labels`, `login` and `models` were removed on 2026-11-15.
 
 ## Home directory
 
@@ -205,4 +209,4 @@ Gmail has no API for it, so sift makes the request a mail client would: the send
 - Using a ChatGPT subscription from a third-party harness is unofficial; whether OpenAI permits it is unconfirmed. An API key works as a fallback.
 - The model tier has only run against a scripted test provider.
 - Docker egress is not yet restricted to Google and the model providers.
-- How questions reach the user beyond `sift review` (a digest would need a send path, which sift does not have).
+- How questions reach the user beyond the dashboard (a digest would need a send path, which sift does not have).

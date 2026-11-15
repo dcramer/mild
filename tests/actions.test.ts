@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { type ActionDeps, execute, reconcile, undo } from '../src/actions/executor.ts';
 import { planAction } from '../src/actions/plan.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
-import { getAction, listRecentActions } from '../src/store/actions.ts';
+import { getAction } from '../src/store/actions.ts';
 import { openDb } from '../src/store/db.ts';
 import { FakeMailbox, facts } from './helpers.ts';
 
@@ -50,7 +50,7 @@ describe('execute', () => {
     expect(await execute(deps, ACCOUNT, 'm1', { type: 'archive' })).toEqual({ status: 'skipped', reason: 'message is not in the inbox' });
     expect(await execute(deps, ACCOUNT, 'gone', { type: 'archive' })).toEqual({ status: 'skipped', reason: 'message no longer exists' });
     expect(mailbox.modifyCalls).toBe(0);
-    expect(listRecentActions(db, 10)).toEqual([]);
+    expect(db.prepare('SELECT count(*) AS n FROM actions').get()).toEqual({ n: 0 });
   });
 
   it('skips when the message already has the label', async () => {

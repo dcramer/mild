@@ -15,7 +15,7 @@ export function resolveModel(models: Models, spec: string): Model<Api> {
   const slash = spec.indexOf('/');
   if (slash <= 0 || slash === spec.length - 1) throw new Error(`The model must look like provider/model-id, not "${spec}".`);
   const model = models.getModel(spec.slice(0, slash), spec.slice(slash + 1));
-  if (!model) throw new Error(`Unknown model "${spec}". Run \`sift models\` to list the models you can use.`);
+  if (!model) throw new Error(`Unknown model "${spec}". Choose one in the dashboard, under Settings.`);
   return model;
 }
 
