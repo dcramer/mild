@@ -1,9 +1,9 @@
 import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-/** The surface everything sits on: a framed sheet with the edge of the one beneath showing. */
+/** A group of things that belong together, set apart by a frame alone: it has no fill of its own, so the page shows through. */
 export function Sheet({ className, ...props }: ComponentProps<'div'>) {
-  return <div className={cn('sheet flex flex-col bg-card text-sm text-card-foreground', className)} {...props} />;
+  return <div className={cn('sheet flex flex-col text-sm', className)} {...props} />;
 }
 
 export function SheetHead({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {

@@ -10,7 +10,7 @@ A proof sheet on a dark desk: ink on near-black, one highlighter pen, hard edges
 
 - **Dark only.**
 - **Two colours mean something.** Yellow (`highlight`) means "look here": the name, the current section, the headline figure, what is waiting on the reader, a search match. Red (`destructive`) means a failure. Nothing else is coloured; everything else is the ink colour at some strength.
-- **As little chrome as it takes.** A list sits straight on the page with no surface behind it. A sheet has a frame, and is for a group of settings or a figure, not for a table. Inside either, space and type separate things before any line does. Controls are filled (`--fill`), not outlined. Notes and headings have no box and no rule. The only lines inside a sheet are faint dashes between rows (`--rule`).
+- **As little chrome as it takes.** Nothing on the page has a fill of its own: a list sits straight on it, and a sheet or a card is set apart by a thin frame alone. Only what floats above the page (a panel, a dialog, a menu) is filled, so it can cover what is under it. A sheet is for a group of settings or a figure, not for a table. Inside either, space and type separate things before any line does. Controls are filled (`--fill`), not outlined. Notes and headings have no box and no rule. The only lines inside a sheet are faint dashes between rows (`--rule`).
 - **Lines are ink, thinned.** `--frame` for a sheet's edge, `--rule` between rows. Never a separate grey.
 - **One shadow.** `--edge`: hard, offset down and right, the edge of the sheet beneath. A `mark` button is raised by the same edge and pressing pushes it down.
 - **Things you press have hand-cut corners** (`--cut-control`); the highlighter stroke has its own (`--cut`). Surfaces are square.

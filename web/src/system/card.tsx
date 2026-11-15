@@ -11,7 +11,7 @@ export function Card({ className, ...props }: ComponentProps<'article'>) {
   return (
     <article
       className={cn(
-        'relative flex flex-col gap-3 rounded-[2px] border border-(--frame) bg-card p-4 text-sm',
+        'relative flex flex-col gap-3 rounded-[2px] border border-(--frame) p-4 text-sm',
         'has-[.card-open:hover]:border-foreground/35 has-[.card-open:focus-visible]:border-foreground/35',
         className,
       )}
