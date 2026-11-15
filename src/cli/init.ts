@@ -46,8 +46,6 @@ export interface InitDeps {
   /** Model ids the signed-in provider offers. */
   availableModels(provider: string): Promise<string[]>;
   categories(account: string): Category[];
-  /** Addresses on this machine that another machine could reach. */
-  networkAddresses(): { address: string; label: string }[];
   /** Where a browser finds the dashboard under the current settings, best first. */
   dashboardUrls(): string[];
 }
@@ -155,16 +153,10 @@ async function chooseLocation(deps: InitDeps): Promise<void> {
     { label: 'From another machine', hint: 'sift runs on a server', value: true },
   ]);
 
-  let host: string | undefined;
-  if (remote) {
-    ui.info('The dashboard has no login: anyone on a network it listens on can read it.');
-    ui.blank();
-    const addresses = deps.networkAddresses();
-    host = await ui.select('Which network should it listen on?', [
-      ...addresses.map((a) => ({ label: a.address, hint: a.label, value: a.address })),
-      { label: 'All of them', hint: addresses.length === 0 ? 'no addresses found yet' : 'every network this machine is on', value: 'all' },
-    ]);
-  }
+  // On a server it listens on every network the machine is on, so whichever name or address you use works.
+  // `dashboard.host` in sift.toml can narrow that to one address.
+  const host = remote ? 'all' : undefined;
+  if (remote) ui.info('The dashboard has no login: anyone on a network this machine is on can read it.');
 
   const { dashboardHost: _previous, ...rest } = config.settings;
   deps.saveSettings(host ? { ...rest, dashboardHost: host } : rest);

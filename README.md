@@ -18,7 +18,7 @@ pnpm sift init
 
 `init` walks you through whatever is not done yet and can be run again at any time:
 
-1. **Where sift runs.** On this machine, or on a server you reach from another one. For a server it lists the machine's addresses (Tailscale first) and the dashboard listens on the one you pick, or on all of them.
+1. **Where sift runs.** On this machine, or on a server you reach from another one. On a server the dashboard listens on every network the machine is on, so its hostname, LAN address and Tailscale name all work.
 2. **Google OAuth client.** sift reads your mail through a client you own, so no third party sits in between. `init` takes you through creating one a page at a time: the link, the values to enter, then it waits. You paste the client's JSON when you create it. At the end you choose between adding yourself as a test user (works straight away; Google signs you out every 7 days) and publishing the app.
 3. **Gmail account.** Google's sign-in. If the browser is not on the machine running sift, the page it ends on will not load: paste that page's address back into the terminal.
 4. **Model.** Optional. A ChatGPT Plus or Pro subscription or an API key, then a model. Without one, mail that no rule covers stays in your inbox.
@@ -81,13 +81,9 @@ Using a ChatGPT subscription from a third-party tool is not something OpenAI doc
 
 ## Dashboard
 
-`sift run` serves it and prints its address. It needs the page built once:
+`sift run` serves it and prints its addresses. The page is built automatically the first time and whenever its sources change.
 
-```bash
-pnpm build:web
-```
-
-It has no login, so who can read it is decided by where it listens: this machine only by default. On a server, `init` (or `dashboard.host` in `sift.toml`) makes it listen on one of the machine's addresses, or `"all"` of them. It then answers to any of that machine's own names and addresses, including its Tailscale name, and to nothing else. Use Tailscale for a server; do not put it on the public internet.
+It has no login, so who can read it is decided by where it listens: this machine only by default. On a server, `init` sets `dashboard.host = "all"` in `sift.toml` so it listens on every network the machine is on; a single address there narrows it. It then answers to any of that machine's own names and addresses, including its Tailscale name, and to nothing else. Use Tailscale for a server; do not put it on the public internet.
 
 - **Overview:** decisions per day by tier, how much was decided without a model, model cost, the backlog and the most frequent senders.
 - **Decisions:** every decision, searchable by subject or sender and filterable by tier and outcome. Choosing a row shows that message's full history: each decision, its reason and cost, and each mailbox change.

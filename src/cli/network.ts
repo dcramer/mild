@@ -78,10 +78,11 @@ export function machineNames(): string[] {
   const short = host.split('.')[0] ?? host;
   const name = tailscaleName();
   // Every address, including container bridges that `localAddresses` leaves out of menus: a request to any of them is still a request to this machine.
+  // IPv6 addresses appear in a Host header in brackets.
   const addresses = Object.values(networkInterfaces())
     .flatMap((entries) => entries ?? [])
-    .filter((entry) => entry.family === 'IPv4' && !entry.internal)
-    .map((entry) => entry.address);
+    .filter((entry) => !entry.internal)
+    .map((entry) => (entry.family === 'IPv6' ? `[${entry.address.split('%')[0]}]` : entry.address));
   return [...new Set([...addresses, host, short, `${short}.local`, ...(name ? [name] : [])])];
 }
 
@@ -89,7 +90,8 @@ export function machineNames(): string[] {
 export async function listenAddresses(settings: Settings): Promise<string[]> {
   const { dashboardHost } = settings;
   if (dashboardHost === undefined) return ['127.0.0.1'];
-  if (dashboardHost === 'all') return ['0.0.0.0'];
+  // `::` takes IPv4 as well. A name such as a Tailscale one can resolve to IPv6 first, so IPv4 alone is not enough.
+  if (dashboardHost === 'all') return ['::'];
   const address = await resolveHere(dashboardHost);
   if (!address) throw new Error(`dashboard.host is ${dashboardHost}, which does not point at this machine.`);
   return address === '127.0.0.1' ? ['127.0.0.1'] : ['127.0.0.1', address];
@@ -100,9 +102,10 @@ export function dashboardUrls(settings: Settings, port: number = settings.dashbo
   const { dashboardHost } = settings;
   if (dashboardHost === undefined) return [`http://localhost:${port}`];
   const name = tailscaleName();
+  const short = hostname().split('.')[0] ?? hostname();
   const addresses = localAddresses();
   let hosts: string[];
-  if (dashboardHost === 'all') hosts = [...(name ? [name] : []), ...addresses.map((a) => a.address)];
+  if (dashboardHost === 'all') hosts = [short, ...(name ? [name] : []), ...addresses.map((a) => a.address)];
   else {
     // The Tailscale name only applies if the chosen address is the Tailscale one.
     const viaTailscale = addresses.some((a) => a.tailscale && a.address === dashboardHost);

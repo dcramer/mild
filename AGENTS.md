@@ -23,7 +23,7 @@ Package manager is **pnpm**. Node 24 (`.nvmrc`). Node runs the `.ts` sources dir
 | `pnpm vitest run tests/foo.test.ts` | One test file. Add `-t "name"` for one test. |
 | `pnpm format` | `oxlint --fix` then `oxfmt`. |
 | `pnpm sift <command>` | Run the CLI from source. |
-| `pnpm build:web` | Build the dashboard into `web/dist`. sift reads that build at startup, so restart it after rebuilding. |
+| `pnpm build:web` | Build the dashboard into `web/dist`. `sift run` does this itself when the page is missing or older than its sources; restart sift to pick up a new build. |
 | `pnpm dev:web` | The dashboard with hot reload, taking data from a running `sift run` or `sift dashboard`. |
 
 Lint warnings are findings to fix. Don't add `oxlint-disable` comments; fix the code or change the rule in `.oxlintrc.json` with a reason.

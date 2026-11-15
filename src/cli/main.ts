@@ -3,7 +3,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { type MessageAction, type Outcome, execute, undo } from '../actions/executor.ts';
 import { type Config, loadConfig, saveSettings } from '../config.ts';
-import { WEB_DIST, createDashboardServer } from '../dashboard/server.ts';
+import { createDashboardServer } from '../dashboard/server.ts';
+import { ensureWebBuilt } from './web-build.ts';
 import { runLoop, runOnce } from '../daemon/run.ts';
 import { syncAccount } from '../daemon/sync.ts';
 import { createGmailApi } from '../gmail/api.ts';
@@ -16,7 +17,7 @@ import { getAction, listRecentActions } from '../store/actions.ts';
 import { listCategories, updateCategory } from '../store/categories.ts';
 import { openDb } from '../store/db.ts';
 import { type SetupState, runInit } from './init.ts';
-import { dashboardUrls, listenAddresses, localAddresses, machineNames } from './network.ts';
+import { dashboardUrls, listenAddresses, machineNames } from './network.ts';
 import { closeTerminal, readLine } from './terminal.ts';
 import { disposition, paint, spin, ui } from './ui.ts';
 import { addRule, listRules, removeRule } from '../store/rules.ts';
@@ -164,7 +165,6 @@ async function init(args: string[]): Promise<void> {
     loginModel: (choice) => login(models, config, choice.provider, choice.type, ui),
     availableModels: async (provider) => (await models.getAvailable(provider)).map((m) => m.id),
     categories: (account) => withDb((db) => listCategories(db, account)),
-    networkAddresses: localAddresses,
     dashboardUrls: () => dashboardUrls(config.settings),
   });
 }
@@ -284,6 +284,7 @@ async function serveDashboard(config: Config, db: ReturnType<typeof openDb>, opt
   const listen = options.host ? [options.host] : await listenAddresses(settings);
   // Beyond localhost, answer to any name or address that is this machine, and to nothing else.
   const beyondLocalhost = listen.some((address) => address !== '127.0.0.1');
+  await ensureWebBuilt();
   const allowedHosts = beyondLocalhost
     ? [...machineNames(), ...(settings.dashboardHost && settings.dashboardHost !== 'all' ? [settings.dashboardHost] : [])]
     : [];
@@ -308,7 +309,6 @@ async function serveDashboard(config: Config, db: ReturnType<typeof openDb>, opt
   const [first, ...others] = dashboardUrls(settings, port);
   ui.fields([['Dashboard', paint.bold(first ?? '')], ...others.map((url) => ['', url] as const)]);
   if (beyondLocalhost) ui.info('No login: anyone on those networks can read it.');
-  if (!existsSync(`${WEB_DIST}index.html`)) ui.warn(`The dashboard page is not built yet. Run ${paint.cmd('pnpm build:web')} and start sift again.`);
   return () => {
     for (const server of servers) {
       server.close();
