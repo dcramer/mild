@@ -42,6 +42,13 @@ Everything Gmail-facing has only run against fakes.
 
 ## Deployment and isolation
 
+- [ ] **Encrypt what is sensitive at rest.** Email is sensitive and today everything is plain files with owner-only permissions: subjects, senders and headers in `messages`, whole messages in `examples`, reasons in `decisions`, the Gmail refresh tokens, the model credentials, the Google client secret and the session secret. Design first; the open questions:
+  - Where the key lives. sift runs unattended and must read mail metadata to work, so a key beside the database only protects a copied database or backup. The alternatives are the OS keyring or a TPM, a passphrase typed at start (no unattended restart), or a key held by the signed-in browser (then nothing sorts while nobody is signed in).
+  - What is encrypted: the whole database (SQLCipher or similar; `node:sqlite` has none built in), or only the sensitive columns, which keeps counts and charts queryable but not search over subjects and senders.
+  - Whether examples, the only stored bodies, get a stricter key than metadata, readable only while someone is signed in.
+  - Per-account keys, so one account's data cannot be read with another's sign-in. This goes with keeping people apart.
+  - What a lost key costs, and how backup and key rotation work.
+
 Decided 2026-11-15: no shell or filesystem for triage. The model runs in-process in the core container and has no tools at all, so there is no model-written code to sandbox. A sandbox container is deferred until an operator-facing agent exists.
 
 - [ ] Register only the model providers sift supports instead of `pi-ai/providers/all`, which pulls in the AWS and Google SDKs and makes up most of the image's dependencies.
