@@ -14,6 +14,7 @@ In this order.
 2. **What a rule means, and what sift knows about a sender** (the first two items under Labels and rules). These decide how far automation can be trusted.
 3. **Settings designed with intent** (under Dashboard).
 4. **Figures and a chart above Suggestions** (under Dashboard).
+5. **Keyboard shortcuts in the design system** (under Dashboard).
 
 ## Labels and rules
 
@@ -77,7 +78,7 @@ The dashboard manages sift, behind Google sign-in. That sign-in also connects th
 - [ ] Show an expired Google sign-in where it will be seen: it is in Settings and the `run` log today, not in the masthead or `sift status`. Test users are signed out every 7 days.
 - [ ] Labels are cards and everything else is rows. Decide whether labels should be rows too.
 - [ ] Narrow screens: Suggestions has a phone layout; Rules, Decisions, Changes and the Overview tables still scroll sideways.
-- [ ] Keyboard for Suggestions: move between rows, open, answer.
+- [ ] **Keyboard shortcuts as part of the design system.** Obvious things get the keys people already know (J and K or the arrows for next and previous in the panel and down a list, Enter to open, Escape to close, / to search, the number keys for a label), and each shortcut is shown on the page where it applies, so it is learned by looking. To design before building: one part that both binds a key and draws its hint, so the two cannot drift apart; how the hint looks beside a button, in a row and in a menu without adding clutter; what happens to hints on a touch screen; and a switch in Settings that turns shortcuts and their hints off. The panel has previous and next buttons and the answer has number keys and Enter today, each done by hand.
 - [ ] Design system parts still missing: a confirmation for a press that cannot be taken back (removing a rule acts at once), somewhere for "done" that survives the list reloading, a text link, a form layout, and a select for a long list (the model select has no search).
 - [ ] Message text is plain and cut at 4,000 characters, as the model sees it. Decide whether reading needs more (longer text, quoted replies folded, links listed).
 - [ ] Suggestion bodies are fetched once per waiting message; reuse the text the model tier already fetched instead of asking Gmail twice.
