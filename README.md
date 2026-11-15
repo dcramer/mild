@@ -32,7 +32,7 @@ Nothing needs an environment variable. Everything sift keeps is in one directory
 | --- | --- |
 | `sift.toml` | Settings: the model, whether to act or only observe, how often to check, the dashboard's port and address. |
 | `guidelines.md` | Your own words about how to sort your mail. |
-| `sift.db` | Rules, categories, learned senders, and the record of every message, decision and change. |
+| `sift.db` | Rules, categories, learned senders, the record of every message, decision and change, and the full content of mail you have marked. |
 | `google-client.json`, `google/`, `model-auth.json` | Credentials. Owner-only. |
 
 Back the directory up or move it as a unit. To keep it somewhere else, pass `--home <dir>` or set `SIFT_HOME`.
@@ -85,11 +85,12 @@ Using a ChatGPT subscription from a third-party tool is not something OpenAI doc
 
 It has no login, so who can read it is decided by where it listens: this machine only by default. On a server, `init` sets `dashboard.host = "all"` in `sift.toml` so it listens on every network the machine is on; a single address there narrows it. It then answers to any of that machine's own names and addresses, including its Tailscale name, and to nothing else. Use Tailscale for a server; do not put it on the public internet.
 
+- **Suggestions:** what sift would do, grouped by sender. Answer "Right" or say what kind of mail it is; that settles the sender from then on. Each message you answer for is stored whole, as an example to test and train sift with.
 - **Overview:** decisions per day by tier, how much was decided without a model, model cost, the backlog and the most frequent senders.
 - **Decisions:** every decision, searchable by subject or sender and filterable by tier and outcome. Choosing a row shows that message's full history: each decision, its reason and cost, and each mailbox change.
 - **Rules:** each rule, what it does, and how often and how recently it matched.
 
-![The sift dashboard](docs/images/dashboard.png)
+![Suggestions](docs/images/suggestions.png)
 
 The page is a small React app in `web/` (shadcn/ui on Base UI, Tailwind, Recharts). `pnpm dev:web` runs it with hot reload against a running sift. `sift dashboard` serves the page on its own, without sorting mail.
 

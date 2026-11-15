@@ -4,6 +4,7 @@ import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import type { Judge } from '../triage/stages/model.ts';
 import { type Account, listAccounts } from '../store/accounts.ts';
+import { captureExamples } from './examples.ts';
 import { type SyncReport, syncAccount } from './sync.ts';
 import { type TriageReport, triageAccount } from './triage.ts';
 
@@ -22,6 +23,8 @@ export interface PassResult {
   email: string;
   sync?: SyncReport;
   triage?: TriageReport;
+  /** Marked messages whose full content was stored this pass. */
+  captured?: number;
   error?: string;
 }
 
@@ -46,6 +49,7 @@ export async function runOnce(db: DatabaseSync, options: RunOptions): Promise<Pa
         },
         account,
       );
+      result.captured = await captureExamples(db, api, account.id, options.now);
       const line = describe(result, options.act);
       if (line) options.log(`${account.email}: ${line}`);
     } catch (error) {
@@ -73,6 +77,7 @@ function describe(result: PassResult, act: boolean): string | null {
     if (triage.learned > 0) parts.push(`learned ${triage.learned} sender${triage.learned === 1 ? '' : 's'}`);
     if (triage.troubled > 0) parts.push(`${triage.troubled} need attention (see sift log)`);
   }
+  if (result.captured) parts.push(`stored ${result.captured} marked message${result.captured === 1 ? '' : 's'} as examples`);
   return parts.length > 0 ? parts.join('; ') : null;
 }
 

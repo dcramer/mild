@@ -71,7 +71,7 @@
             "patterns": [
               {
                 "group": ["**/gmail/**", "**/actions/**", "**/agent/**", "**/daemon/**", "@googleapis/*", "googleapis", "google-auth-library"],
-                "message": "dashboard/ is a read-only view of the database. It never reaches Gmail or changes anything."
+                "message": "dashboard/ shows the database and records what the user teaches sift (src/learn). It never reaches Gmail or changes the mailbox."
               }
             ]
           }

@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { type RunOptions, runOnce } from '../src/daemon/run.ts';
 import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
+import { applyFeedback } from '../src/learn/feedback.ts';
 import { connectAccount } from '../src/store/accounts.ts';
 import { openDb } from '../src/store/db.ts';
 import { listUndecided } from '../src/store/messages.ts';
@@ -43,6 +44,7 @@ function api(): GmailApi {
     searchInbox: async () => ({ ids: [] }),
     getMetadata: async (id) => inbox.find((m) => m.id === id) ?? null,
     getBodyText: async (id) => bodies.get(id) ?? null,
+    getRaw: async (id) => (bodies.has(id) ? Buffer.from(`Subject: raw ${id}\r\n\r\n${bodies.get(id)}`) : null),
   };
 }
 
@@ -211,6 +213,24 @@ describe('inference tier', () => {
     await runOnce(db, { ...options(false), model: model('marketing') });
     expect(judged).toEqual(['news']);
     expect(db.prepare('SELECT disposition, mode, outcome FROM decisions').get()).toEqual({ disposition: 'archive', mode: 'observe', outcome: 'observed' });
+    expect(mailbox.modifyCalls).toBe(0);
+  });
+});
+
+describe('examples', () => {
+  it('stores marked messages whole on the next pass, while only observing', async () => {
+    inbox = [inbox[0]!];
+    bodies.set('news', 'The full text of the newsletter.');
+    await runOnce(db, { ...options(false), model: { guidelines: () => '', judge: async () => ({ category: 'newsletter', reason: 'r' }) } });
+    applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', verdict: 'right', suggested: 'archive', scope: 'sender' });
+
+    inbox = [];
+    const [result] = await runOnce(db, options(false));
+    expect(result?.captured).toBe(1);
+    expect(logs.at(-1)).toContain('stored 1 marked message as examples');
+    const example = db.prepare('SELECT category, disposition, body_text, raw FROM examples').get() as { raw: Uint8Array; body_text: string };
+    expect(example).toMatchObject({ category: 'newsletter', disposition: 'archive', body_text: 'The full text of the newsletter.' });
+    expect(Buffer.from(example.raw).toString()).toContain('The full text of the newsletter.');
     expect(mailbox.modifyCalls).toBe(0);
   });
 });

@@ -8,15 +8,20 @@ sift suggests first and acts second. By default it only observes: every decision
 
 ## Teaching loop
 
-This is the next real piece of work. Nothing below exists yet.
+Built: the Suggestions view, answers by sender ("Right" or "No, it is <category>"), sender records from answers, accuracy from answers, and marked messages stored whole as examples. Tried in a browser on synthetic data only.
 
-- [ ] A suggestions view: what sift would do with each message, grouped by sender or kind, newest first.
-- [ ] Approve or correct a suggestion: "right", or "should have been <kept|archived|...>", for this message, this sender, or this kind of mail.
-- [ ] Turn a correction into something durable: a sender record, a rule, a category change or a line in the guidelines, and show the user which.
-- [ ] Re-decide waiting suggestions after a correction, so the effect is visible straight away.
-- [ ] Track accuracy from those answers, per tier and per category, and show when a sender or category has been right often enough to trust.
-- [ ] Let trust be granted in pieces: act on this sender or this category while everything else stays a suggestion, instead of one global `act` switch.
-- [ ] The dashboard needs to accept writes for all of this. It has no login today; design that first (a per-install token, same-origin checks, what a Chrome extension would use).
+- [ ] Use it on real mail and see what is awkward.
+- [ ] Answer for one message without teaching the sender (the API supports it; the view does not offer it).
+- [ ] Correct mail sift already kept, from the Decisions view and the message panel.
+- [ ] Show what has been taught and let it be undone: a Senders view over `senders`, with source and when.
+- [ ] Use examples to test sift: replay the model over `examples` and report accuracy per category (`evals/`).
+- [ ] Use examples to teach the model: pick relevant ones as few-shot examples in the prompt.
+- [ ] Turn repeated corrections into a suggested guideline or rule, shown to the user before it is saved.
+- [ ] Re-decide waiting suggestions when a category setting or the guidelines change.
+- [ ] Accuracy per tier and per category on the Overview; say when a sender or category has been right often enough to trust.
+- [ ] Trust in pieces: act on this sender or this category while everything else stays a suggestion, instead of one global `act` switch.
+- [ ] A token for writes, which a Chrome extension will need (the page itself is recognised by its Origin).
+- [ ] Decide how long examples are kept and add a way to delete them; they hold full message content.
 
 ## Setup
 

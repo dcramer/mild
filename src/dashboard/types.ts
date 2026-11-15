@@ -102,3 +102,44 @@ export interface RuleSummary {
   filterId: string | null;
   createdAt: number;
 }
+
+/** Mail from one sender that sift would treat the same way, waiting for the user to confirm or correct. */
+export interface SuggestionGroup {
+  accountId: string;
+  sender: string;
+  senderName: string | null;
+  /** What sift would do. `review` means it had no suggestion. */
+  disposition: string;
+  category: string | null;
+  label: string | null;
+  stage: StageKey;
+  messages: number;
+  latestAt: number;
+  /** The newest few, for context. */
+  sample: { decisionId: number; messageId: string; subject: string; reason: string; decidedAt: number }[];
+}
+
+export interface Suggestions {
+  groups: SuggestionGroup[];
+  /** Messages waiting across all groups. */
+  waiting: number;
+  /** From the user's answers so far. */
+  accuracy: { reviewed: number; right: number };
+  /** The kinds of mail the user can say something is, per account, with what sift does for each. */
+  categories: Record<string, { key: string; name: string; disposition: string }[]>;
+  /** Marked messages kept whole as examples, and how many are still to be fetched. */
+  examples: { captured: number; pending: number };
+}
+
+/** The body of POST /api/feedback. */
+export interface FeedbackRequest {
+  accountId: string;
+  sender: string;
+  verdict: 'right' | 'wrong';
+  suggested?: string;
+  correct?: string;
+  /** The kind of mail it is; what happens follows from that category's setting. */
+  category?: string;
+  scope: 'sender' | 'message';
+  decisionId?: number;
+}

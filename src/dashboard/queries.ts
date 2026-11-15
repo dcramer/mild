@@ -1,5 +1,16 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { type DecisionRow, type MessageDetail, type RuleSummary, STAGES, type StageKey, type Summary } from './types.ts';
+import { accuracy, pendingSuggestions } from '../learn/feedback.ts';
+import { listCategories } from '../store/categories.ts';
+import {
+  type DecisionRow,
+  type MessageDetail,
+  type RuleSummary,
+  STAGES,
+  type StageKey,
+  type SuggestionGroup,
+  type Suggestions,
+  type Summary,
+} from './types.ts';
 
 export type { DecisionRow, MessageDetail, RuleSummary, StageKey, Summary } from './types.ts';
 
@@ -294,4 +305,55 @@ export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
     filterId: r.filter_id,
     createdAt: r.created_at,
   }));
+}
+
+const SAMPLE = 4;
+const MAX_GROUPS = 100;
+
+/**
+ * What is waiting on the user, grouped so one answer can settle a sender: mail from the same sender
+ * that sift would treat the same way. Biggest groups first, since they teach the most.
+ */
+export function listSuggestions(db: DatabaseSync, options: { includeKept?: boolean } = {}): Suggestions {
+  const groups = new Map<string, SuggestionGroup>();
+  let waiting = 0;
+  for (const s of pendingSuggestions(db)) {
+    if (s.disposition === 'keep' && !options.includeKept) continue;
+    waiting++;
+    const key = `${s.accountId}\n${s.fromAddress}\n${s.disposition}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        accountId: s.accountId,
+        sender: s.fromAddress,
+        senderName: s.fromName,
+        disposition: s.disposition,
+        category: s.category,
+        label: s.label,
+        stage: s.stage,
+        messages: 0,
+        latestAt: s.decidedAt,
+        sample: [],
+      };
+      groups.set(key, group);
+    }
+    group.messages++;
+    if (group.sample.length < SAMPLE)
+      group.sample.push({ decisionId: s.decisionId, messageId: s.messageId, subject: s.subject, reason: s.reason, decidedAt: s.decidedAt });
+  }
+  const { reviewed, right } = accuracy(db);
+  const accounts = db.prepare('SELECT id FROM accounts').all() as { id: string }[];
+  const examples = db.prepare(`SELECT sum(status = 'captured') AS captured, sum(status = 'pending') AS pending FROM examples`).get() as {
+    captured: number | null;
+    pending: number | null;
+  };
+  return {
+    categories: Object.fromEntries(
+      accounts.map(({ id }) => [id, listCategories(db, id).map((c) => ({ key: c.key, name: c.name, disposition: c.disposition }))]),
+    ),
+    examples: { captured: examples.captured ?? 0, pending: examples.pending ?? 0 },
+    groups: [...groups.values()].toSorted((a, b) => b.messages - a.messages || b.latestAt - a.latestAt).slice(0, MAX_GROUPS),
+    waiting,
+    accuracy: { reviewed, right },
+  };
 }

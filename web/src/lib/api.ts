@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export type { DecisionRow, MessageDetail, RuleSummary, StageKey, Summary } from '../../../src/dashboard/types.ts';
-import type { DecisionRow, MessageDetail, RuleSummary, Summary } from '../../../src/dashboard/types.ts';
+export type {
+  DecisionRow,
+  FeedbackRequest,
+  MessageDetail,
+  RuleSummary,
+  StageKey,
+  SuggestionGroup,
+  Suggestions,
+  Summary,
+} from '../../../src/dashboard/types.ts';
+import type { DecisionRow, FeedbackRequest, MessageDetail, RuleSummary, Suggestions, Summary } from '../../../src/dashboard/types.ts';
 
 export type Days = 1 | 7 | 30 | 90;
 
@@ -33,11 +42,25 @@ export const api = {
     get<DecisionPage>('/api/decisions', { days: q.days, stage: q.stage, disposition: q.disposition, q: q.search, limit: q.limit, offset: q.offset }, signal),
   message: (account: string, id: string, signal: AbortSignal) => get<MessageDetail>('/api/message', { account, id }, signal),
   rules: (signal: AbortSignal) => get<{ rules: RuleSummary[] }>('/api/rules', {}, signal),
+  suggestions: (includeKept: boolean, signal: AbortSignal) => get<Suggestions>('/api/suggestions', includeKept ? { kept: 1 } : {}, signal),
+  /** Tell sift whether a suggestion was right. Resolves with what it learned. */
+  feedback: async (answer: FeedbackRequest): Promise<{ reviewed: number; taught: string | null }> => {
+    const response = await fetch('/api/feedback', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-sift': '1' },
+      body: JSON.stringify(answer),
+    });
+    const body = (await response.json()) as { reviewed: number; taught: string | null; error?: string };
+    if (!response.ok) throw new Error(body.error ?? `The server answered ${response.status}.`);
+    return body;
+  },
 };
 
 export interface Loaded<T> {
   data: T | null;
   error: string | null;
+  /** Load again now. */
+  reload: () => void;
   /** True only before the first result; refreshes keep showing the previous data. */
   loading: boolean;
 }
@@ -47,7 +70,8 @@ export interface Loaded<T> {
  * A failed refresh keeps the last good data on screen and reports the error beside it.
  */
 export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Promise<T>, refreshMs = 30_000): Loaded<T> {
-  const [state, setState] = useState<Loaded<T>>({ data: null, error: null, loading: true });
+  const [state, setState] = useState<Omit<Loaded<T>, 'reload'>>({ data: null, error: null, loading: true });
+  const [nonce, setNonce] = useState(0);
   const latest = useRef(fetcher);
   latest.current = fetcher;
 
@@ -71,7 +95,7 @@ export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Prom
       controller.abort();
       clearInterval(timer);
     };
-  }, [key, load, refreshMs]);
+  }, [key, load, refreshMs, nonce]);
 
-  return state;
+  return { ...state, reload: () => setNonce((n) => n + 1) };
 }

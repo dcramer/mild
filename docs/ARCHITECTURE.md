@@ -127,11 +127,24 @@ Everything sift keeps is in one directory, the home: `~/.config/sift` by default
 
 `sift init` (`src/cli/init.ts`) sets all of this up. Each step checks the real state first, so running it again only asks about what is missing, and every step can be skipped.
 
+## Teaching
+
+sift suggests first and acts second. While it only observes, every decision is a suggestion, and the dashboard's Suggestions view is where the user teaches it.
+
+- **A suggestion** is the current decision for a message, made while observing, that the user has not answered. Decisions that only repeat what the user already said (their rules, senders they taught) are not suggestions.
+- **Suggestions are grouped by sender** and by what sift would do, so one answer settles a sender: "Right", or "No, it is…" with the kind of mail it is. What then happens follows from that category's setting.
+- **An answer is durable.** It writes a sender record (`source` `user` or `correction`), so that sender's later mail is decided by the sender tier, with no model and no further suggestion. It overrides anything sift learned by itself.
+- **Every answer is scored.** `feedback` records right, wrong, or "answered" (sift had no suggestion, which is not a mistake), per decision, so accuracy can be reported per tier.
+- **Every marked message becomes an example.** The answer creates an `examples` row; the next pass of `sift run` fetches the whole message (raw RFC 822, all headers, readable text) into it. These are the evaluation and training set. A message that has since been deleted keeps its answer and is marked gone.
+
+Code: `src/learn/feedback.ts` (suggestions, answers, accuracy), `src/daemon/examples.ts` (capture).
+
 ## State
 
 One SQLite database, `sift.db` in the home directory (schema in `src/store/migrations/`). It is the complete record of what sift saw and did, and everything else (the dashboard, undo, future analytics) reads from it.
 
-- **messages:** one row per message sift has seen: sender, recipients, subject, the triage headers and the labels at sync time. Never the body or a snippet. This is enough to triage a message again without refetching it.
+- **messages:** one row per message sift has seen: sender, recipients, subject, the triage headers and the labels at sync time. No body. This is enough to triage a message again without refetching it.
+- **feedback, examples:** the user's answers to suggestions, and the full content of each message they answered for. `examples` is the only place message content is stored, and only for mail the user marked.
 - **decisions:** an append-only log, each with its mode (observe or act) and outcome. Every triage outcome is recorded, including "keep" and "could not decide", with the tier that made it, the reason, the confidence, and what it cost (model, tokens, dollars, duration). A message can have several decisions; the latest is current.
 - **actions:** the audit log of every mailbox change, with labels before and after, linked to the decision it carried out.
 - **senders, rules, questions, accounts:** learned sender memory, local rules, questions waiting on the user, and each account's history cursor and last sync time.
@@ -142,7 +155,7 @@ OAuth tokens are kept in files beside the database, not in it. pi-durable keeps 
 
 `sift run` serves a JSON API (`src/dashboard/`) and the static web app built from `web/`, in the same process that sorts mail. `sift dashboard` serves them alone.
 
-- **Read-only.** The server only reads the database; lint forbids it importing Gmail or action code. It accepts only GET.
+- **It never touches the mailbox.** Lint forbids it importing Gmail or action code. The one thing it can change is what sift has been taught: `POST /api/feedback`. That request must carry the page's own Origin, a JSON content type and a custom header, which another website cannot send without a preflight the server never approves. There is no token yet; a browser extension will need one.
 - **No login, so reach is the control.** It listens on localhost; on a server, `dashboard.host` adds one of the machine's addresses or `all` of them (Tailscale is the intended case). Beyond localhost it answers to any name or address that is this machine (its addresses, hostname and Tailscale name) and rejects every other Host, which blocks DNS rebinding. It is never meant for the public internet.
 - **Untrusted content.** Subjects and sender names come from email. React renders them as text, and the page is served with a content security policy that allows no inline script, no inline style and nothing from another origin.
 - **Stack.** shadcn/ui components (on Base UI) with Tailwind, and Recharts for the chart. The components live in `web/src/components/ui` as generated source. Two of them needed a change for the content security policy: `chart.tsx` no longer renders an inline `<style>`, and Base UI's style injection is turned off in `main.tsx` with its one rule moved into `index.css`. Re-check both when updating components.

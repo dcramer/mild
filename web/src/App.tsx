@@ -12,6 +12,7 @@ import { Decisions } from '@/views/decisions.tsx';
 import { type MessageRef, MessageSheet } from '@/views/message-sheet.tsx';
 import { Overview } from '@/views/overview.tsx';
 import { Rules } from '@/views/rules.tsx';
+import { SuggestionsView } from '@/views/suggestions.tsx';
 
 const PERIODS = [
   ['1', 'Last 24 hours'],
@@ -24,10 +25,12 @@ const THEME_NAMES = { system: 'Theme: follow system', light: 'Theme: light', dar
 
 export function App() {
   const [days, setDays] = useState<Days>(7);
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useState('suggestions');
   const [open, setOpen] = useState<MessageRef | null>(null);
   const { theme, cycle } = useTheme();
   const summary = useLoaded(`summary-${days}`, (signal) => api.summary(days, signal));
+  const waiting = useLoaded('waiting', (signal) => api.suggestions(false, signal));
+  const waitingCount = waiting.data?.waiting ?? 0;
   const ThemeIcon = THEME_ICONS[theme];
   const openMessage = (row: DecisionRow) => setOpen({ accountId: row.accountId, messageId: row.messageId, subject: row.subject });
   const accounts = summary.data?.accounts ?? [];
@@ -40,6 +43,10 @@ export function App() {
             <span className="hl">sift</span>
           </h1>
           <TabsList variant="line" className="h-12 gap-4 p-0">
+            <TabsTrigger value="suggestions">
+              Suggestions
+              {waitingCount > 0 ? <span className="hl mx-0 px-1.5 text-xs font-medium tabular-nums">{waitingCount}</span> : null}
+            </TabsTrigger>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="decisions">Decisions</TabsTrigger>
             <TabsTrigger value="rules">Rules</TabsTrigger>
@@ -52,7 +59,7 @@ export function App() {
               : ''}
           </p>
           <div className="ml-auto flex items-center gap-1 py-2 md:ml-0">
-            {tab === 'rules' ? null : (
+            {tab === 'rules' || tab === 'suggestions' ? null : (
               <Picker
                 label="Period"
                 value={String(days) as (typeof PERIODS)[number][0]}
@@ -68,6 +75,9 @@ export function App() {
       </header>
 
       <main className="mx-auto w-full max-w-7xl px-4 py-5">
+        <TabsContent value="suggestions">
+          <SuggestionsView onOpen={setOpen} onChanged={waiting.reload} />
+        </TabsContent>
         <TabsContent value="overview" className="flex flex-col gap-3">
           {summary.error ? <ErrorNote message={summary.error} /> : null}
           {summary.data ? (

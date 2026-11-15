@@ -62,6 +62,8 @@ export interface GmailApi {
   getMetadata(messageId: string): Promise<RawMessage | null>;
   /** The message's readable text, truncated; null when the message no longer exists. Does not mark it read. Never stored. */
   getBodyText(messageId: string): Promise<string | null>;
+  /** The whole message as received (RFC 822); null when it no longer exists. Does not mark it read. */
+  getRaw(messageId: string): Promise<Buffer | null>;
 }
 
 export const isNotFound = (error: unknown) => {
@@ -113,6 +115,16 @@ export function createGmailApi(auth: OAuth2Client): GmailApi {
       try {
         const { data } = await client.users.messages.get({ userId, id: messageId, format: 'full' });
         return extractText(data.payload);
+      } catch (error) {
+        if (isNotFound(error)) return null;
+        throw error;
+      }
+    },
+
+    async getRaw(messageId) {
+      try {
+        const { data } = await client.users.messages.get({ userId, id: messageId, format: 'raw' });
+        return data.raw ? Buffer.from(data.raw, 'base64url') : null;
       } catch (error) {
         if (isNotFound(error)) return null;
         throw error;
