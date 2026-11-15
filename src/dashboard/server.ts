@@ -51,21 +51,25 @@ const json = (res: ServerResponse, status: number, body: unknown) =>
 export interface DashboardOptions {
   /** Directory holding the built web app. */
   assetsDir?: string;
+  /** Names and addresses, besides localhost, that the dashboard answers to. */
+  allowedHosts?: readonly string[];
   now?: () => number;
 }
 
 /**
- * A read-only view of the database for the machine's own user. There is no login, so it answers only
- * requests addressed to a loopback name; that also stops other sites reaching it through DNS rebinding.
+ * A read-only view of the database. There is no login, so who can reach it is decided by where it
+ * listens. It also answers only requests addressed to localhost or a name the user configured, which
+ * stops another website reaching it through DNS rebinding.
  */
 export function createDashboardServer(db: DatabaseSync, options: DashboardOptions = {}): Server {
   const assets = listAssets(options.assetsDir ?? WEB_DIST);
   const now = options.now ?? Date.now;
+  const hosts = new Set([...LOCAL_HOSTS, ...(options.allowedHosts ?? []).map((h) => h.toLowerCase())]);
 
   return createServer((req, res) => {
     const host = (req.headers.host ?? '').replace(/:\d+$/, '').toLowerCase();
-    if (!LOCAL_HOSTS.has(host)) {
-      res.writeHead(403, { 'content-type': 'text/plain' }).end('The sift dashboard only answers on localhost.');
+    if (!hosts.has(host)) {
+      res.writeHead(403, { 'content-type': 'text/plain' }).end('The sift dashboard does not answer to this address. Set dashboard.host in sift.toml.');
       return;
     }
     if (req.method !== 'GET') {

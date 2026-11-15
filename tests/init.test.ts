@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { type InitDeps, type SetupState, runInit } from '../src/cli/init.ts';
+import { localAddresses, resolveHere } from '../src/cli/network.ts';
 import type { Ui } from '../src/cli/ui.ts';
 import { DEFAULT_SETTINGS, loadConfig, parseSettings, renderSettings, resolveHome, saveSettings } from '../src/config.ts';
 import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
@@ -17,7 +18,15 @@ const freshHome = () => mkdtempSync(join(tmpdir(), 'sift-home-'));
  */
 function wizard(
   answers: (string | number)[],
-  state: { client?: boolean; accounts?: string[]; models?: string[]; loginFails?: boolean; progress?: number; access?: 'test' | 'publish' } = {},
+  state: {
+    client?: boolean;
+    accounts?: string[];
+    models?: string[];
+    loginFails?: boolean;
+    progress?: number;
+    access?: 'test' | 'publish';
+    location?: 'ask';
+  } = {},
 ) {
   const config = loadConfig({ SIFT_HOME: freshHome() });
   const said: string[] = [];
@@ -29,8 +38,11 @@ function wizard(
   const world: { client: boolean; accounts: string[]; setup: SetupState } = {
     client: state.client ?? false,
     accounts: [...(state.accounts ?? [])],
-    setup: { googleTasks: state.progress ?? (finished ? 6 : 0), ...(access ? { access } : {}) },
+    setup: { googleTasks: state.progress ?? (finished ? 6 : 0), ...(access ? { access } : {}), ...(finished ? { location: 'local' as const } : {}) },
   };
+  // Step 1 always asks one thing first: where sift runs (new home) or whether to keep that (finished home).
+  // Unless a test is about that step, answer with the first option: this machine, or keep it.
+  if (state.location !== 'ask') answers.unshift(0);
   const next = (question: string) => {
     asked.push(question);
     const answer = answers.shift();
@@ -91,6 +103,11 @@ function wizard(
     },
     availableModels: async () => state.models ?? ['small', 'large'],
     categories: () => [...DEFAULT_CATEGORIES],
+    networkAddresses: () => [
+      { address: '100.64.0.7', label: 'Tailscale' },
+      { address: '192.168.1.20', label: 'local network, eth0' },
+    ],
+    resolveHere: async (host) => (host === 'box.example.ts.net' ? '100.64.0.7' : null),
   };
   return { deps, config, said, asked, calls, world, text: () => said.join('\n') };
 }
@@ -130,36 +147,36 @@ describe('sift init', () => {
       '/auth/scopes',
       '/auth/audience',
     ]);
-    expect(w.asked.slice(0, 7)).toEqual(['pause', 'pause', 'pause', 'Paste the JSON here (s to stop):', 'pause', 'Who signs in to this app?', 'pause']);
+    expect(w.asked.slice(1, 8)).toEqual(['pause', 'pause', 'pause', 'Paste the JSON here (s to stop):', 'pause', 'Who signs in to this app?', 'pause']);
     expect(w.text()).toContain('Audience: External');
     expect(w.text()).toContain('Application type: Desktop app');
     expect(w.text()).toContain('Open "Data Access" in the left menu');
     expect(w.text()).toContain('Scopes: https://www.googleapis.com/auth/gmail.modify');
     expect(w.text()).toContain('Under "Test users"');
-    expect(w.world.setup).toEqual({ googleTasks: 6, access: 'test' });
+    expect(w.world.setup).toEqual({ googleTasks: 6, access: 'test', location: 'local' });
   });
 
   it('branches to branding and publishing when the user chooses to publish', async () => {
     const w = wizard([...COMMON, PUBLISH, 'done', 'done', 3]);
     await runInit(w.deps);
     expect(links(w.said).slice(5)).toEqual(['/auth/branding', '/auth/audience']);
-    expect(w.world.setup).toEqual({ googleTasks: 7, access: 'publish' });
+    expect(w.world.setup).toEqual({ googleTasks: 7, access: 'publish', location: 'local' });
     expect(w.calls).toEqual([`install ${CLIENT}`, 'gmail']);
   });
 
   it('resumes the Google tasks where an earlier run stopped, and holds Gmail sign-in until they are done', async () => {
     const first = wizard(['done', 'done', 'skip', 3]);
     await runInit(first.deps);
-    expect(first.world.setup).toEqual({ googleTasks: 2 });
+    expect(first.world.setup).toEqual({ googleTasks: 2, location: 'local' });
     expect(first.text()).toContain('skip: Stopped here');
-    expect(first.text()).toContain('skip: Needs step 1 finished');
+    expect(first.text()).toContain('skip: Needs step 2 finished');
     expect(first.text()).toContain('warn: Still needed: the Google client and a Gmail account');
 
     // The client is saved but the run stopped at scopes.
     const partway = wizard(['skip', 3], { client: true, progress: 4 });
     await runInit(partway.deps);
     expect(partway.calls).toEqual([]);
-    expect(partway.text()).toContain('skip: Needs step 1 finished');
+    expect(partway.text()).toContain('skip: Needs step 2 finished');
 
     const later = wizard(['done', TEST_USER, 'done', 3], { client: true, progress: 4 });
     await runInit(later.deps);
@@ -177,8 +194,9 @@ describe('sift init', () => {
     const w = wizard([KEEP, KEEP, KEEP], { client: true, accounts: ['me@example.org'] });
     saveSettings(w.config, { ...DEFAULT_SETTINGS, model: 'openai/x' });
     await runInit(w.deps);
-    expect(w.asked).toHaveLength(3);
+    expect(w.asked).toHaveLength(4);
     expect(w.calls).toEqual([]);
+    expect(w.text()).toContain('ok: Dashboard on this machine only');
     expect(w.text()).toContain('ok: Client in place');
     expect(w.text()).toContain('ok: Using');
     expect(w.text()).toContain('Ready');
@@ -203,6 +221,30 @@ describe('sift init', () => {
     await runInit(stopped.deps);
     expect(stopped.world.setup.googleTasks).toBe(3);
     expect(stopped.calls).toEqual([]);
+  });
+
+  it('asks where sift runs and, on a server, which address the dashboard is reached by', async () => {
+    const server = wizard([1, 0, 'skip', 3], { location: 'ask' });
+    await runInit(server.deps);
+    expect(server.asked.slice(0, 2)).toEqual(['Where will you open the dashboard?', 'Which address do you reach this machine by?']);
+    expect(loadConfig({ SIFT_HOME: server.config.home }).settings.dashboardHost).toBe('100.64.0.7');
+    expect(server.world.setup.location).toBe('remote');
+    expect(server.text()).toContain('no login');
+    expect(server.text()).toContain('ok: Dashboard at');
+
+    // A typed hostname must point at this machine.
+    const named = wizard([1, 2, 'elsewhere.example', 'box.example.ts.net', 'skip', 3], { location: 'ask' });
+    await runInit(named.deps);
+    expect(named.text()).toContain('fail: elsewhere.example does not point at this machine from here.');
+    expect(named.config.settings.dashboardHost).toBe('box.example.ts.net');
+
+    // Changing back to this machine clears the address.
+    const back = wizard([REDO, 0, KEEP, KEEP, 3], { client: true, accounts: ['me@example.org'], location: 'ask' });
+    saveSettings(back.config, { ...DEFAULT_SETTINGS, dashboardHost: '100.64.0.7' });
+    back.world.setup.location = 'remote';
+    await runInit(back.deps);
+    expect(loadConfig({ SIFT_HOME: back.config.home }).settings).toEqual(DEFAULT_SETTINGS);
+    expect(back.world.setup.location).toBe('local');
   });
 
   it('keeps going when model sign-in fails, and takes a typed id when no models are listed', async () => {
@@ -243,7 +285,7 @@ describe('settings', () => {
   });
 
   it('round-trips through sift.toml', () => {
-    const settings = { model: 'openai-codex/some-model', act: true, interval: 120, dashboardPort: 9000 };
+    const settings = { model: 'openai-codex/some-model', act: true, interval: 120, dashboardPort: 9000, dashboardHost: 'box.example.ts.net' };
     expect(parseSettings(renderSettings(settings))).toEqual(settings);
     expect(parseSettings(renderSettings(DEFAULT_SETTINGS))).toEqual(DEFAULT_SETTINGS);
     expect(parseSettings('')).toEqual(DEFAULT_SETTINGS);
@@ -254,7 +296,8 @@ describe('settings', () => {
     expect(() => parseSettings('act = "yes"')).toThrow('act must be true or false');
     expect(() => parseSettings('model = "no-slash"')).toThrow('provider/model-id');
     expect(() => parseSettings('interval = 1')).toThrow('at least 5');
-    expect(() => parseSettings('[dashboard]\nhost = "x"')).toThrow('unknown setting dashboard.host');
+    expect(() => parseSettings('[dashboard]\nbind = "x"')).toThrow('unknown setting dashboard.bind');
+    expect(() => parseSettings('[dashboard]\nhost = "http://x/"')).toThrow('dashboard.host must be a hostname or IP address');
     expect(() => parseSettings('act = ')).toThrow('not valid TOML');
   });
 
@@ -274,5 +317,17 @@ describe('settings', () => {
     writeFileSync(file, desktop);
     installClient(other, file);
     expect(loadClientSecrets(other, {})).toEqual({ clientId: 'id', clientSecret: 'secret' });
+  });
+});
+
+describe('network', () => {
+  it('lists only addresses another machine could reach', () => {
+    for (const { address } of localAddresses()) expect(address.startsWith('127.')).toBe(false);
+  });
+
+  it('accepts a host only if it is an address of this machine', async () => {
+    expect(await resolveHere('127.0.0.1')).toBe('127.0.0.1');
+    expect(await resolveHere('192.0.2.1')).toBeNull();
+    expect(await resolveHere('no-such-host.invalid')).toBeNull();
   });
 });

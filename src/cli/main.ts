@@ -2,7 +2,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { type MessageAction, type Outcome, execute, undo } from '../actions/executor.ts';
-import { type Config, loadConfig, saveSettings } from '../config.ts';
+import { type Config, dashboardUrl, loadConfig, saveSettings } from '../config.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
 import { runLoop, runOnce } from '../daemon/run.ts';
 import { syncAccount } from '../daemon/sync.ts';
@@ -16,6 +16,7 @@ import { getAction, listRecentActions } from '../store/actions.ts';
 import { listCategories, updateCategory } from '../store/categories.ts';
 import { openDb } from '../store/db.ts';
 import { type SetupState, runInit } from './init.ts';
+import { localAddresses, resolveHere } from './network.ts';
 import { closeTerminal, readLine } from './terminal.ts';
 import { disposition, paint, spin, ui } from './ui.ts';
 import { addRule, listRules, removeRule } from '../store/rules.ts';
@@ -68,6 +69,7 @@ function status(): void {
     ['Model', settings.model ?? paint.dim('none')],
     ['Mode', `${settings.act ? 'acting on decisions' : 'observing only'}${paint.dim(` · every ${settings.interval}s`)}`],
     ['Guidance', existsSync(config.guidelinesPath) ? paint.path(config.guidelinesPath) : paint.dim('none written')],
+    ['Dashboard', `${dashboardUrl(settings)}${paint.dim(settings.dashboardHost ? '' : ' · this machine only')}`],
   ]);
   ui.blank();
   const questions = count('questions', 'WHERE answered_at IS NULL');
@@ -100,11 +102,13 @@ async function connectGmail(config: Config, options: { port?: number; host?: str
       onUrl: (url) => {
         ui.info('Open this in a browser and approve access:');
         ui.link(url);
-        ui.info('If the browser is on another machine, the page it ends on will not load: paste its address here.');
+        if (config.settings.dashboardHost)
+          ui.info('The page the browser ends on will not load, because it points back at this server: paste its address here.');
+        else ui.info('If the browser is on another machine, the page it ends on will not load: paste its address here.');
         ui.info('"Access blocked" means this account is not a test user and the app is not published:');
         ui.info('https://console.cloud.google.com/auth/audience');
         ui.blank();
-        ui.waiting('Waiting for the browser, or paste the address:');
+        ui.waiting(config.settings.dashboardHost ? 'Paste the address:' : 'Waiting for the browser, or paste the address:');
       },
     });
     const profile = await spin('Checking the account', () => createGmailApi(client).getProfile());
@@ -160,6 +164,8 @@ async function init(args: string[]): Promise<void> {
     loginModel: (choice) => login(models, config, choice.provider, choice.type, ui),
     availableModels: async (provider) => (await models.getAvailable(provider)).map((m) => m.id),
     categories: (account) => withDb((db) => listCategories(db, account)),
+    networkAddresses: localAddresses,
+    resolveHere,
   });
 }
 
@@ -268,26 +274,50 @@ async function undoCommand(args: string[]): Promise<void> {
 }
 
 async function dashboard(args: string[]): Promise<void> {
-  const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string', default: '127.0.0.1' } } });
+  const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string' } } });
   const config = loadConfig();
-  const port = values.port === undefined ? config.settings.dashboardPort : Number(values.port);
+  const { settings } = config;
+  const port = values.port === undefined ? settings.dashboardPort : Number(values.port);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Invalid --port: ${values.port}`);
+
+  // Always on localhost; also on the configured address when sift runs on a server. --host replaces both
+  // (a container listens on 0.0.0.0 and leaves it to the port mapping to decide who can reach it).
+  let listen = ['127.0.0.1'];
+  const allowedHosts: string[] = [];
+  if (settings.dashboardHost) {
+    const address = await resolveHere(settings.dashboardHost);
+    if (!address && !values.host)
+      throw new Error(
+        `dashboard.host is ${settings.dashboardHost}, which does not point at this machine. Fix it in ${config.settingsPath} or run \`sift init\`.`,
+      );
+    allowedHosts.push(settings.dashboardHost, ...(address ? [address] : []));
+    if (address && address !== '127.0.0.1') listen.push(address);
+  }
+  if (values.host) listen = [values.host];
+
   const db = openDb(config.dbPath);
-  const server = createDashboardServer(db);
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(port, values.host, resolve);
-  });
+  const servers = listen.map(() => createDashboardServer(db, { allowedHosts }));
+  await Promise.all(
+    servers.map(
+      (server, index) =>
+        new Promise<void>((resolve, reject) => {
+          server.once('error', reject);
+          server.listen(port, listen[index], resolve);
+        }),
+    ),
+  );
   ui.heading('dashboard');
-  ui.plain(paint.bold(`http://localhost:${port}`));
-  ui.info('Reachable from this machine only.');
+  ui.plain(paint.bold(dashboardUrl({ ...settings, dashboardPort: port })));
+  ui.info(settings.dashboardHost ? 'No login: anyone who can reach that address can read it.' : 'Reachable from this machine only.');
   ui.blank();
   await new Promise<void>((resolve) => {
-    const stop = () => server.close(() => resolve());
-    process.once('SIGINT', stop);
-    process.once('SIGTERM', stop);
+    process.once('SIGINT', resolve);
+    process.once('SIGTERM', resolve);
   });
-  server.closeAllConnections();
+  for (const server of servers) {
+    server.close();
+    server.closeAllConnections();
+  }
   db.close();
 }
 

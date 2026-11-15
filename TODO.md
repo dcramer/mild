@@ -4,7 +4,7 @@ The working list for sift. Remove an item when it lands; add what you find. Desi
 
 ## Setup
 
-- [ ] Run `sift init` for real, start to finish, on a laptop and inside Docker.
+- [ ] Run `sift init` for real, start to finish, on a laptop, on a headless server and inside Docker (where the dashboard address is the host's, not the container's).
 - [ ] Let `init` change a step that is already done (switch model, add a second account) instead of only filling gaps.
 - [ ] Show an expired Google sign-in on the dashboard and in `sift status`, not only in the `run` log. Test users are signed out every 7 days.
 - [ ] Find out what publishing actually requires (branding fields, verification for these scopes) and make that path of `init` exact.
@@ -39,6 +39,7 @@ Later, only if an operator-facing agent is built (one you talk to: "why did you 
 
 A React app in `web/` (shadcn/ui on Base UI, Tailwind, Recharts) served by `sift dashboard`.
 
+- [ ] Offer `tailscale serve` as the way to reach the dashboard from other devices: sift stays on localhost and Tailscale adds HTTPS and identity. Today it listens on the Tailscale address over plain HTTP.
 - [ ] Let the dashboard act, not only show: undo a change, answer a question, correct a decision, edit rules and what each category does. This is where steering sift should live; the CLI commands for these are stopgaps. It needs a deliberate design for a page with no login (localhost only, a per-install token, same-origin checks).
 - [ ] Senders view: per-sender volume, what sift does with them, and a way to see their messages.
 - [ ] Rule detail: the messages a rule matched, hits over time, rules that never fire.

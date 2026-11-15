@@ -119,10 +119,11 @@ There is no shell and no filesystem here. A sandboxed agent with those is planne
 
 Everything sift keeps is in one directory, the home: `~/.config/sift` by default (`$XDG_CONFIG_HOME/sift`), or wherever `--home` or `SIFT_HOME` points (the Docker image uses `/data`). Keeping settings, guidance, the database and credentials together means it can be backed up or moved as a unit. No setting requires an environment variable.
 
-- `sift.toml`: settings (`model`, `act`, `interval`, `dashboard.port`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
+- `sift.toml`: settings (`model`, `act`, `interval`, `dashboard.port`, `dashboard.host`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
 - `guidelines.md`: the user's broad guidance, read on every pass.
 - `sift.db`: everything structured or learned.
 - `google-client.json`, `google/`, `model-auth.json`, `device-id`: credentials, owner-only, kept out of the database.
+- `setup.json`: how far `sift init` has got, so it resumes.
 
 `sift init` (`src/cli/init.ts`) sets all of this up. Each step checks the real state first, so running it again only asks about what is missing, and every step can be skipped.
 
@@ -142,7 +143,7 @@ OAuth tokens are kept in files beside the database, not in it. pi-durable keeps 
 `sift dashboard` serves a JSON API (`src/dashboard/`) and the static web app built from `web/`.
 
 - **Read-only.** The server only reads the database; lint forbids it importing Gmail or action code. It accepts only GET.
-- **Local only.** There is no login, so it answers only requests addressed to a loopback name, which also blocks DNS rebinding.
+- **No login, so reach is the control.** It listens on localhost, and also on `dashboard.host` when the user says sift runs on a server (a Tailscale address is the intended case). It answers only requests addressed to localhost or that configured host, which blocks DNS rebinding. It is never meant for the public internet.
 - **Untrusted content.** Subjects and sender names come from email. React renders them as text, and the page is served with a content security policy that allows no inline script, no inline style and nothing from another origin.
 - **Stack.** shadcn/ui components (on Base UI) with Tailwind, and Recharts for the chart. The components live in `web/src/components/ui` as generated source. Two of them needed a change for the content security policy: `chart.tsx` no longer renders an inline `<style>`, and Base UI's style injection is turned off in `main.tsx` with its one rule moved into `index.css`. Re-check both when updating components.
 - **Look.** Monochrome with hairline borders and Geist type. The only colour is a yellow highlighter, used for the headline figure, anything waiting on the user, undecided mail and search matches. Tiers are drawn as one ink that thins as cost rises, because they are an ordered cascade.

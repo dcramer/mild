@@ -1,5 +1,5 @@
 import { existsSync, writeFileSync } from 'node:fs';
-import { type Config, GUIDELINES_TEMPLATE, type Settings } from '../config.ts';
+import { type Config, GUIDELINES_TEMPLATE, type Settings, dashboardUrl } from '../config.ts';
 import type { Category } from '../triage/stages/model.ts';
 import { type Ui, disposition, paint } from './ui.ts';
 
@@ -24,6 +24,8 @@ export interface SetupState {
   /** Google setup tasks finished, counted along the path `access` selects. */
   googleTasks: number;
   access?: Access;
+  /** Whether the dashboard is opened on this machine or from another. Unset until the user has said. */
+  location?: 'local' | 'remote';
 }
 
 /** What the wizard needs from the rest of sift. Everything that touches the network or the disk is injected. */
@@ -44,9 +46,13 @@ export interface InitDeps {
   /** Model ids the signed-in provider offers. */
   availableModels(provider: string): Promise<string[]>;
   categories(account: string): Category[];
+  /** Addresses on this machine that another machine could reach. */
+  networkAddresses(): { address: string; label: string }[];
+  /** The local address a name or IP refers to, or null if it does not point at this machine. */
+  resolveHere(host: string): Promise<string | null>;
 }
 
-const STEPS = 4;
+const STEPS = 5;
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /**
@@ -61,17 +67,21 @@ export async function runInit(deps: InitDeps): Promise<void> {
   if (!existsSync(config.settingsPath)) deps.saveSettings(config.settings);
   if (!existsSync(config.guidelinesPath)) writeFileSync(config.guidelinesPath, GUIDELINES_TEMPLATE, { mode: 0o600 });
 
-  ui.step(1, STEPS, 'Google OAuth client');
+  ui.step(1, STEPS, 'Where sift runs');
+  if (deps.setupState().location === undefined || (await keep(ui, whereDashboard(config), 'Change it'))) await chooseLocation(deps);
+
+  ui.step(2, STEPS, 'Google OAuth client');
   if (googleReady(deps)) {
     if (await keep(ui, 'Client in place', 'Set it up again')) {
-      deps.saveSetupState({ googleTasks: 0 });
+      const { location } = deps.setupState();
+      deps.saveSetupState({ googleTasks: 0, ...(location ? { location } : {}) });
       await googleClient(deps);
     }
   } else await googleClient(deps);
 
-  ui.step(2, STEPS, 'Gmail account');
+  ui.step(3, STEPS, 'Gmail account');
   let accounts = deps.connectedAccounts();
-  if (!googleReady(deps)) ui.skip('Needs step 1 finished');
+  if (!googleReady(deps)) ui.skip('Needs step 2 finished');
   else if (accounts.length === 0 || (await keep(ui, `Connected ${paint.bold(accounts.join(', '))}`, 'Connect another account'))) {
     try {
       const email = await deps.connectGmail();
@@ -83,7 +93,7 @@ export async function runInit(deps: InitDeps): Promise<void> {
     }
   }
 
-  ui.step(3, STEPS, 'Model');
+  ui.step(4, STEPS, 'Model');
   if (!config.settings.model || (await keep(ui, `Using ${paint.bold(config.settings.model)}`, 'Change it'))) {
     ui.info('Sorts mail that no rule or learned sender covers. Without one, that mail stays in your inbox.');
     ui.blank();
@@ -95,7 +105,7 @@ export async function runInit(deps: InitDeps): Promise<void> {
     else ui.skip('No model');
   }
 
-  ui.step(4, STEPS, 'Preferences');
+  ui.step(5, STEPS, 'Preferences');
   const [account] = accounts;
   if (account === undefined) ui.skip('Needs a connected account');
   else {
@@ -115,7 +125,9 @@ export async function runInit(deps: InitDeps): Promise<void> {
     ui.blank();
     return;
   }
-  ui.plain(`${paint.mark(' Ready ')} Start with ${paint.cmd('sift run')}, watch with ${paint.cmd('sift dashboard')}.`);
+  ui.plain(
+    `${paint.mark(' Ready ')} Start with ${paint.cmd('sift run')}, watch with ${paint.cmd('sift dashboard')} at ${paint.bold(dashboardUrl(config.settings))}`,
+  );
   ui.blank();
   ui.info(`sift only observes until you set act = true in ${paint.path(config.settingsPath)}`);
   ui.blank();
@@ -132,6 +144,45 @@ async function keep(ui: Ui, done: string, redo: string): Promise<boolean> {
   ]);
   if (!again) ui.collapse(done);
   return again;
+}
+
+const whereDashboard = (config: Config) =>
+  config.settings.dashboardHost ? `Dashboard at ${paint.bold(dashboardUrl(config.settings))}` : 'Dashboard on this machine only';
+
+/** Ask whether the dashboard is opened here or from another machine, and if so at which address. */
+async function chooseLocation(deps: InitDeps): Promise<void> {
+  const { ui, config } = deps;
+  const remote = await ui.select('Where will you open the dashboard?', [
+    { label: 'On this machine', value: false },
+    { label: 'From another machine', hint: 'sift runs on a server', value: true },
+  ]);
+
+  let host: string | undefined;
+  if (remote) {
+    ui.info('The dashboard has no login: anyone who can reach the address you pick can read it.');
+    ui.info('A Tailscale address keeps that to your own devices.');
+    ui.blank();
+    const typed = Symbol('typed');
+    const picked = await ui.select<string | typeof typed>('Which address do you reach this machine by?', [
+      ...deps.networkAddresses().map((a) => ({ label: a.address, hint: a.label, value: a.address })),
+      { label: 'A hostname', hint: 'for example its Tailscale name', value: typed },
+    ]);
+    host = picked === typed ? await askHostname(deps) : picked;
+  }
+
+  const { dashboardHost: _previous, ...rest } = config.settings;
+  deps.saveSettings(host ? { ...rest, dashboardHost: host } : rest);
+  deps.saveSetupState({ ...deps.setupState(), location: host ? 'remote' : 'local' });
+  ui.ok(whereDashboard(config));
+}
+
+async function askHostname(deps: InitDeps): Promise<string | undefined> {
+  for (;;) {
+    const name = await deps.ui.text('Hostname (Enter to keep it on this machine only):');
+    if (name === '') return undefined;
+    if (await deps.resolveHere(name)) return name;
+    deps.ui.fail(`${name} does not point at this machine from here.`);
+  }
 }
 
 interface Task {
@@ -232,7 +283,7 @@ function googleReady(deps: InitDeps): boolean {
  */
 async function googleClient(deps: InitDeps): Promise<void> {
   const { ui } = deps;
-  let state = deps.setupState();
+  const state = { ...deps.setupState() };
   if (state.googleTasks === 0) {
     ui.info('sift reads your mail through a Google client that you own, so nobody sits in between.');
     ui.blank();
@@ -246,8 +297,8 @@ async function googleClient(deps: InitDeps): Promise<void> {
         { label: 'Just me, as a test user', hint: 'works straight away; Google signs you out every 7 days', value: 'test' },
         { label: 'Publish the app', hint: 'no weekly sign-out; Google may require verification first', value: 'publish' },
       ]);
-      state = { googleTasks: state.googleTasks, access };
-      deps.saveSetupState(state);
+      state.access = access;
+      deps.saveSetupState({ ...state });
     }
     const tasks = tasksFor(state.access);
     const task = tasks[state.googleTasks];
@@ -268,8 +319,8 @@ async function googleClient(deps: InitDeps): Promise<void> {
       ui.skip('Stopped here');
       return;
     }
-    state = { googleTasks: state.googleTasks + 1, ...(state.access ? { access: state.access } : {}) };
-    deps.saveSetupState(state);
+    state.googleTasks += 1;
+    deps.saveSetupState({ ...state });
     ui.collapse(task.title);
   }
 }

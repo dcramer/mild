@@ -284,14 +284,27 @@ describe('dashboard server', () => {
     expect((await fetch(`${base}/api/nope`)).status).toBe(404);
   });
 
-  it('answers only requests addressed to localhost', async () => {
-    const base = await start();
+  it('answers only to localhost and to hosts the user configured', async () => {
     const { request } = await import('node:http');
-    const status = await new Promise<number>((resolve, reject) => {
-      const req = request(`${base}/api/summary`, { headers: { host: 'evil.example' } }, (res) => resolve(res.statusCode ?? 0));
-      req.on('error', reject);
-      req.end();
-    });
-    expect(status).toBe(403);
+    const statusFor = (base: string, host: string) =>
+      new Promise<number>((resolve, reject) => {
+        const req = request(`${base}/api/summary`, { headers: { host } }, (res) => resolve(res.statusCode ?? 0));
+        req.on('error', reject);
+        req.end();
+      });
+
+    const base = await start();
+    expect(await statusFor(base, 'evil.example')).toBe(403);
+    expect(await statusFor(base, '100.64.0.7:8787')).toBe(403);
+    close?.();
+
+    const server = createDashboardServer(seeded(), { assetsDir: builtAssets(), allowedHosts: ['Box.example.ts.net', '100.64.0.7'], now: () => NOW });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    close = () => server.close();
+    const configured = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    expect(await statusFor(configured, 'box.example.ts.net:8787')).toBe(200);
+    expect(await statusFor(configured, '100.64.0.7')).toBe(200);
+    expect(await statusFor(configured, 'localhost:1')).toBe(200);
+    expect(await statusFor(configured, 'evil.example')).toBe(403);
   });
 });

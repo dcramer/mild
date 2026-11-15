@@ -12,6 +12,11 @@ export interface Settings {
   /** Seconds between passes. */
   interval: number;
   dashboardPort: number;
+  /**
+   * The name or address other machines use to reach the dashboard, when sift runs on a server. The
+   * dashboard then listens there as well as on localhost, and sift prints URLs with it. Unset: this machine only.
+   */
+  dashboardHost?: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = { act: false, interval: 60, dashboardPort: 8787 };
@@ -89,10 +94,14 @@ export function parseSettings(text: string, path = 'sift.toml'): Settings {
       settings.interval = value;
     } else if (key === 'dashboard') {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) throw bad('dashboard', 'a table');
-      for (const [sub, port] of Object.entries(value)) {
-        if (sub !== 'port') throw new Error(`${path}: unknown setting dashboard.${sub}.`);
-        if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535) throw bad('dashboard.port', 'a port number');
-        settings.dashboardPort = port;
+      for (const [sub, port] of Object.entries(value as Record<string, unknown>)) {
+        if (sub === 'port') {
+          if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535) throw bad('dashboard.port', 'a port number');
+          settings.dashboardPort = port;
+        } else if (sub === 'host') {
+          if (typeof port !== 'string' || !/^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/.test(port)) throw bad('dashboard.host', 'a hostname or IP address');
+          settings.dashboardHost = port;
+        } else throw new Error(`${path}: unknown setting dashboard.${sub}.`);
       }
     } else {
       throw new Error(`${path}: unknown setting ${key}.`);
@@ -114,6 +123,9 @@ interval = ${settings.interval}
 
 [dashboard]
 port = ${settings.dashboardPort}
+# The name or address other machines reach this one by (a Tailscale address, say). The dashboard then
+# listens there too. It has no login: anyone who can reach that address can read it. Unset: localhost only.
+${settings.dashboardHost ? `host = ${JSON.stringify(settings.dashboardHost)}` : '# host = "100.x.y.z"'}
 `;
 }
 
@@ -131,3 +143,6 @@ The model reads this before sorting each message. Replace these examples with yo
 - Anything from my accountant or my bank is personal, not a notification.
 - I read the Example Weekly newsletter; treat it as personal.
 `;
+
+/** Where to point a browser for the dashboard. */
+export const dashboardUrl = (settings: Settings) => `http://${settings.dashboardHost ?? 'localhost'}:${settings.dashboardPort}`;

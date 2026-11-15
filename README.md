@@ -18,10 +18,11 @@ pnpm sift init
 
 `init` walks you through whatever is not done yet and can be run again at any time:
 
-1. **Google OAuth client.** sift reads your mail through a client you own, so no third party sits in between. `init` takes you through creating one, a page at a time: it gives the link and the values to enter, waits while you do it, then asks you to paste the client's JSON.
-2. **Gmail account.** It opens Google's sign-in. If the browser is on another machine and ends on a page that will not load, paste that page's URL back into the terminal.
-3. **Model.** Optional. Choose a ChatGPT Plus or Pro subscription, or an API key, then pick a model. Without one, mail that no rule covers is left in your inbox.
-4. **Preferences.** It shows what sift does with each kind of mail and where to change it.
+1. **Where sift runs.** On this machine, or on a server you reach from another one. For a server it lists the machine's addresses (Tailscale first) and the dashboard listens on the one you pick.
+2. **Google OAuth client.** sift reads your mail through a client you own, so no third party sits in between. `init` takes you through creating one a page at a time: the link, the values to enter, then it waits. You paste the client's JSON when you create it. At the end you choose between adding yourself as a test user (works straight away; Google signs you out every 7 days) and publishing the app.
+3. **Gmail account.** Google's sign-in. If the browser is not on the machine running sift, the page it ends on will not load: paste that page's address back into the terminal.
+4. **Model.** Optional. A ChatGPT Plus or Pro subscription or an API key, then a model. Without one, mail that no rule covers stays in your inbox.
+5. **Preferences.** What sift does with each kind of mail, and where to change it.
 
 ![sift init](docs/images/cli.png)
 
@@ -29,7 +30,7 @@ Nothing needs an environment variable. Everything sift keeps is in one directory
 
 | File | What it is |
 | --- | --- |
-| `sift.toml` | Settings: the model, whether to act or only observe, how often to check, the dashboard port. |
+| `sift.toml` | Settings: the model, whether to act or only observe, how often to check, the dashboard's port and address. |
 | `guidelines.md` | Your own words about how to sort your mail. |
 | `sift.db` | Rules, categories, learned senders, and the record of every message, decision and change. |
 | `google-client.json`, `google/`, `model-auth.json` | Credentials. Owner-only. |
@@ -88,7 +89,7 @@ pnpm build:web
 pnpm sift dashboard
 ```
 
-Opens a read-only page at http://localhost:8787. It has no login and answers only on localhost.
+Serves a read-only page at http://localhost:8787. It has no login, so who can read it is decided by where it listens: this machine only, unless `init` or `dashboard.host` in `sift.toml` names an address other machines reach it by. Use a Tailscale address for a server; do not put it on the public internet.
 
 - **Overview:** decisions per day by tier, how much was decided without a model, model cost, the backlog and the most frequent senders.
 - **Decisions:** every decision, searchable by subject or sender and filterable by tier and outcome. Choosing a row shows that message's full history: each decision, its reason and cost, and each mailbox change.
