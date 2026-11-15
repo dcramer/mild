@@ -98,14 +98,6 @@ export function table(headers: readonly string[], body: readonly (readonly strin
   for (const row of body) line(`${TEXT}${row.map((cell, column) => padTo(cell, widths[column] ?? 0)).join('  ')}`.trimEnd());
 }
 
-/** What sift does with a kind of mail, weighted like the dashboard's badges. */
-export function disposition(value: string): string {
-  if (value === 'review') return paint.mark(` ${value} `);
-  if (value === 'spam') return pc.inverse(` ${value} `);
-  if (value === 'archive') return value;
-  return pc.dim(value);
-}
-
 const FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 /** Show a small spinner while `work` runs. In a pipe it just runs the work. */

@@ -46,7 +46,7 @@ Decisions flow back down so the same mail is cheaper next time.
 
 ```
 src/
-  cli/        entry point: sift status | auth | run | review | undo | rules
+  cli/        entry point: sift init | run | status | dev
   config.ts   data directory and paths
   store/      SQLite (node:sqlite) and numbered SQL migrations
   triage/     pure pipeline: types, header features, stages
@@ -120,21 +120,25 @@ When no rule or sender record decides a message, one model call does. It is deli
 - **The prompt marks the email as untrusted** and keeps it apart from the guidelines and the header facts. The worst an injected email can do is get itself given the wrong label, which the audit log can undo.
 - **Learning:** after three consecutive model decisions give a sender the same label, and each ended the way that label says, sift writes a rule for the sender and later mail from them is decided without inference. A rule the user made for that sender is left alone. (Next: propose the rule to the user instead of saving it; see TODO.md.)
 
-Models are reached through pi-ai (`src/model/`, the only module that imports it). `sift login <provider>` signs in, including with a ChatGPT subscription, and stores the credential in `model-auth.json`. The `model` setting in `sift.toml` turns the tier on; without it, mail no rule covers is left for review. pi-durable is not used: a triage run is one call, and the message queue in SQLite already gives retry and decide-once.
+Models are reached through pi-ai (`src/model/`, the only module that imports it). The model step of `sift init` signs in, including with a ChatGPT subscription, and stores the credential in `model-auth.json`. The `model` setting in `sift.toml` turns the tier on; without it, mail no rule covers is left for review. pi-durable is not used: a triage run is one call, and the message queue in SQLite already gives retry and decide-once.
 
 There is no shell and no filesystem here. A sandboxed agent with those is planned only for a possible operator-facing assistant that does open-ended analysis.
+
+## The command line
+
+Four commands: `init` sets sift up, `run` sorts mail and serves the dashboard, `status` says what is set up, and `dev` is `run` for working on sift. `dashboard` serves the dashboard without sorting. Everything else (rules, labels, the log of changes, undo, choosing a model) is in the dashboard and has no command; `sync`, `apply`, `undo`, `log`, `rules`, `labels`, `login` and `models` were removed on 2026-11-15. Options are in [CLI.md](CLI.md).
 
 ## Home directory
 
 Everything sift keeps is in one directory, the home: `~/.config/sift` by default (`$XDG_CONFIG_HOME/sift`), or wherever `--home` or `SIFT_HOME` points (the Docker image uses `/data`). Keeping settings, guidance, the database and credentials together means it can be backed up or moved as a unit. No setting requires an environment variable.
 
-- `sift.toml`: settings (`model`, `act`, `interval`, `dashboard.port`, `dashboard.host`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
+- `sift.toml`: settings (`model`, `act`, `interval`, `dashboard.port`, `dashboard.host`, `dashboard.allow`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
 - `guidelines.md`: the user's broad guidance, read on every pass.
 - `sift.db`: everything structured or learned.
 - `google-client.json`, `google/`, `model-auth.json`, `device-id`, `dashboard-key`: credentials and the session secret, owner-only, kept out of the database.
 - `setup.json`: how far `sift init` has got, so it resumes.
 
-`sift init` (`src/cli/init.ts`) sets all of this up. Each step checks the real state first, so running it again only asks about what is missing, and every step can be skipped.
+`sift init` (`src/cli/init.ts`) sets all of this up. A first run walks through every step, and one stopped part-way carries on with what is missing. Once the dashboard has an address and the Google client is finished, it instead lists the steps with what each is set to and redoes the one the user picks. The model and the sign-in list are optional, so leaving them unset does not bring the walk-through back.
 
 ## Teaching
 
@@ -171,6 +175,7 @@ The dashboard is where the user watches sift, teaches it and manages it. `sift r
 
 - **Someone signed in with Google as a connected account.** One sign-in does both jobs: it gives sift its access to the account (the Gmail scopes and a refresh token) and it proves the viewer owns that account. There is no separate login and no terminal step. The page's static files are public; every `/api/` route needs the session.
 - **The first sign-in connects the first account.** After that, a sign-in must be for a connected account. Someone already signed in can connect another (Settings).
+- **An allow list narrows that.** When `dashboard.allow` in `sift.toml` lists addresses (a step in `sift init`), no other Google account can sign in, the first included, and a session ends when its address is taken off the list. It is read on every request. It limits the dashboard only: an account left off the list stays connected and its mail is still sorted.
 - **Sessions** are a signed cookie (HMAC with a per-install secret in `dashboard-key`), HttpOnly, SameSite=Lax, 30 days, and stop working if the account is removed.
 - **Google's constraint.** It returns a browser only to `localhost` or an HTTPS address on a real domain. So the dashboard is used at `http://localhost:8787`, or over Tailscale at `https://<machine>.<tailnet>.ts.net` (`tailscale serve` proxies to localhost and passes the original scheme in a header, which is believed only from this machine). At a plain hostname or address the page says where to go. The Google client must be a "Web application" one listing `<origin>/auth/callback` for each address. A Desktop client left from an older setup is refused, and `sift init` replaces it.
 - **Host and origin checks.** It answers only to names and addresses that are this machine (blocking DNS rebinding), and every write must come from the dashboard's own page: its Origin, a JSON content type and a custom header.
@@ -204,4 +209,4 @@ Gmail has no API for it, so sift makes the request a mail client would: the send
 - Using a ChatGPT subscription from a third-party harness is unofficial; whether OpenAI permits it is unconfirmed. An API key works as a fallback.
 - The model tier has only run against a scripted test provider.
 - Docker egress is not yet restricted to Google and the model providers.
-- How questions reach the user beyond `sift review` (a digest would need a send path, which sift does not have).
+- How questions reach the user beyond the dashboard (a digest would need a send path, which sift does not have).

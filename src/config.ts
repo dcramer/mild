@@ -17,6 +17,11 @@ export interface Settings {
    * addresses or names, or `all` for every network it is on. Unset: this machine only.
    */
   dashboardHost?: string;
+  /**
+   * The only Google accounts that may sign in to the dashboard, and so the only ones that can be connected.
+   * Unset: the first account to sign in connects itself, and after that only connected accounts can.
+   */
+  dashboardAllow?: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = { act: false, interval: 60, dashboardPort: 8787 };
@@ -74,6 +79,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   };
 }
 
+export const isAddress = (value: string) => /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(value);
+
 /** Parse `sift.toml`. Unknown keys and wrong types are errors, so a typo is not silently ignored. */
 export function parseSettings(text: string, path = 'sift.toml'): Settings {
   let raw: Record<string, unknown>;
@@ -104,6 +111,11 @@ export function parseSettings(text: string, path = 'sift.toml'): Settings {
         } else if (sub === 'host') {
           if (typeof port !== 'string' || !/^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/.test(port)) throw bad('dashboard.host', 'a hostname or IP address');
           settings.dashboardHost = port === '0.0.0.0' ? 'all' : port;
+        } else if (sub === 'allow') {
+          // An empty list would lock everyone out; leaving the key out is how to have no limit.
+          const list = Array.isArray(port) ? port.filter((address): address is string => typeof address === 'string' && isAddress(address)) : [];
+          if (!Array.isArray(port) || list.length === 0 || list.length !== port.length) throw bad('dashboard.allow', 'a list of email addresses');
+          settings.dashboardAllow = list.map((address) => address.toLowerCase());
         } else throw new Error(`${path}: unknown setting dashboard.${sub}.`);
       }
     } else {
@@ -115,10 +127,10 @@ export function parseSettings(text: string, path = 'sift.toml'): Settings {
 
 /** `sift.toml` with every setting and what it does. The comments are sift's; hand edits to values are kept. */
 export function renderSettings(settings: Settings): string {
-  return `# \`sift models\` lists what you can use. Unset: mail no rule or learned sender covers stays in your inbox.
+  return `# Chosen in the dashboard, under Settings, or with \`sift init\`. Unset: mail no rule or learned sender covers stays in your inbox.
 ${settings.model ? `model = ${JSON.stringify(settings.model)}` : '# model = "provider/model-id"'}
 
-# false: record what sift would do. true: carry it out in Gmail (reversible with \`sift undo\`).
+# false: record what sift would do. true: carry it out in Gmail (each change can be undone in the dashboard).
 act = ${settings.act}
 
 # Seconds between checks for new mail.
@@ -127,8 +139,11 @@ interval = ${settings.interval}
 [dashboard]
 port = ${settings.dashboardPort}
 # Where else the dashboard listens: one of this machine's addresses (a Tailscale one, say), or "all" for
-# every network it is on. It has no login: anyone who can reach it there can read it. Unset: localhost only.
+# every network it is on. Unset: localhost only.
 ${settings.dashboardHost ? `host = ${JSON.stringify(settings.dashboardHost)}` : '# host = "all"'}
+# The only Google accounts that may sign in. Unset: the first to sign in connects itself, and after that
+# only connected accounts can.
+${settings.dashboardAllow ? `allow = ${JSON.stringify(settings.dashboardAllow)}` : '# allow = ["you@example.com"]'}
 `;
 }
 

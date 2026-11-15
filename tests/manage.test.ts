@@ -7,6 +7,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MAX_BACKFILL, backfill } from '../src/daemon/backfill.ts';
 import { type RunOptions, createWake, runLoop } from '../src/daemon/run.ts';
+import { signInRefusal } from '../src/cli/sign-in.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
 import type { Controls, ManagedSettings, SignIn } from '../src/dashboard/controls.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
@@ -274,8 +275,10 @@ describe('signing in with Google', () => {
   const SECRET = 'session-secret';
   let completed: string[];
   let kind: 'web' | 'desktop' | null;
+  let allow: string[] | undefined;
   const signIn: SignIn = {
     client: () => kind,
+    allowed: (email) => allow?.includes(email) ?? true,
     url: (redirectUri, state, challenge) => `https://accounts.example/auth?redirect=${encodeURIComponent(redirectUri)}&state=${state}&challenge=${challenge}`,
     complete: async (redirectUri, code, _verifier, allowNew) => {
       completed.push(`${redirectUri} ${code} new=${allowNew}`);
@@ -312,6 +315,7 @@ describe('signing in with Google', () => {
   beforeEach(() => {
     completed = [];
     kind = 'web';
+    allow = undefined;
   });
 
   it('serves the page to anyone but the data only to someone signed in', async () => {
@@ -387,6 +391,32 @@ describe('signing in with Google', () => {
     const added = await call(port, 'GET', `/auth/callback?state=${stateFrom(add.headers)}&code=second`, undefined, cookie);
     expect(completed.at(-1)).toContain('new=true');
     expect((await call(port, 'GET', '/api/session', undefined, { cookie: cookieFrom(added.headers) })).body).toMatchObject({ email: 'work@example.com' });
+  });
+
+  it('with a list of allowed accounts, refuses everyone else, the first account included', () => {
+    const allowed = ['me@example.org'];
+    expect(signInRefusal('stranger@example.com', { connected: [], allowNew: false, allowed })).toContain('not on the list');
+    expect(signInRefusal('stranger@example.com', { connected: ['me@example.org'], allowNew: true, allowed })).toContain('not on the list');
+    // Being connected already is not enough once the list leaves the account out.
+    expect(signInRefusal('work@example.com', { connected: ['work@example.com'], allowNew: false, allowed })).toContain('not on the list');
+    expect(signInRefusal('Me@Example.org', { connected: [], allowNew: false, allowed })).toBeNull();
+    // On the list but not connected: still needs someone signed in to add it.
+    expect(signInRefusal('me@example.org', { connected: ['work@example.com'], allowNew: false, allowed })).toContain('not the account sift is connected to');
+
+    const open = { allowed: undefined };
+    expect(signInRefusal('first@example.com', { connected: [], allowNew: false, ...open })).toBeNull();
+    expect(signInRefusal('stranger@example.com', { connected: ['me@example.org'], allowNew: false, ...open })).toContain('not the account');
+    expect(signInRefusal('work@example.com', { connected: ['me@example.org'], allowNew: true, ...open })).toBeNull();
+  });
+
+  it('ends a session when its account is taken off the list', async () => {
+    const port = await startWithSignIn();
+    const login = await call(port, 'GET', '/auth/login');
+    const cookie = { cookie: cookieFrom((await call(port, 'GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`)).headers) };
+    expect((await call(port, 'GET', '/api/summary', undefined, cookie)).status).toBe(200);
+    allow = ['work@example.com'];
+    expect((await call(port, 'GET', '/api/summary', undefined, cookie)).status).toBe(401);
+    expect((await call(port, 'GET', '/api/session', undefined, cookie)).body).toMatchObject({ email: null });
   });
 
   it('ends a session on sign-out, when it expires, and when its account is removed', async () => {

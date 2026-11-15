@@ -116,11 +116,6 @@ export function listOpenActions(db: DatabaseSync, scope?: { accountId: string; m
   return (rows as unknown as Row[]).map(fromRow);
 }
 
-export function listRecentActions(db: DatabaseSync, limit: number): ActionRecord[] {
-  const rows = db.prepare(`SELECT ${COLUMNS} FROM actions WHERE message_id IS NOT NULL ORDER BY id DESC LIMIT ?`).all(limit);
-  return (rows as unknown as Row[]).map(fromRow);
-}
-
 /** When the user unsubscribed from this sender through sift, or null. */
 export function unsubscribedAt(db: DatabaseSync, accountId: string, sender: string): number | null {
   const row = db

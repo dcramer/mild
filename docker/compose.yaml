@@ -15,7 +15,7 @@ services:
     ports:
       # This machine only. To reach the dashboard from other devices, publish on the address they use
       # (for example 100.x.y.z:8787:8787 for Tailscale) and set dashboard.host in sift.toml to the same
-      # address, so sift answers to it. The dashboard has no login.
+      # address, so sift answers to it. Signing in still needs localhost or an HTTPS address.
       - 127.0.0.1:8787:8787
     volumes:
       # Settings, database and credentials. Must be writable: refresh tokens rotate.
