@@ -97,8 +97,8 @@ export function SystemView() {
           {INKS.map(([swatch, name, use]) => (
             <div key={name} className="flex flex-col gap-2 bg-card p-4">
               <span aria-hidden className={`h-10 border border-(--frame) ${swatch}`} />
-              <span className="font-mono text-xs">{name}</span>
-              <span className="text-[13px] text-muted-foreground">{use}</span>
+              <span className="font-mono text-[13px]">{name}</span>
+              <span className="text-sm text-muted-foreground">{use}</span>
             </div>
           ))}
         </div>
@@ -200,7 +200,7 @@ export function SystemView() {
               .map((name) => (
                 <Card key={name}>
                   <CardHead title={name} note="A card stands for one thing" aside="12" onOpen={() => setDrawer(true)} />
-                  <p className="text-[13px] text-muted-foreground">Head, body, foot. Pressing the card opens it; the foot holds what needs no opening.</p>
+                  <p className="text-sm text-muted-foreground">Head, body, foot. Pressing the card opens it; the foot holds what needs no opening.</p>
                   <CardFoot>
                     <Button variant="ink">Right</Button>
                     <Button>Something else</Button>
@@ -378,7 +378,7 @@ function Row({ label, note, children }: { label: string; note?: string; children
       </div>
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-3">{children}</div>
-        {note ? <p className="text-[13px] text-muted-foreground">{note}</p> : null}
+        {note ? <p className="text-sm text-muted-foreground">{note}</p> : null}
       </div>
     </div>
   );

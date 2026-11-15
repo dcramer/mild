@@ -30,7 +30,7 @@ function Setting({ title, note, children }: { title: string; note?: string; chil
     <div className="row flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3.5">
       <div className="min-w-0 flex-1 basis-64">
         <p className="font-medium">{title}</p>
-        {note ? <p className="text-[13px] text-muted-foreground">{note}</p> : null}
+        {note ? <p className="text-sm text-muted-foreground">{note}</p> : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">{children}</div>
     </div>
@@ -141,7 +141,7 @@ function Accounts({ state }: { state: ManageState }) {
       {state.accounts.map((account) => (
         <div key={account.id} className="row flex flex-wrap items-baseline gap-x-4 px-4 py-3.5">
           <span className="name">{account.email}</span>
-          <span className="text-[13px] text-muted-foreground">{account.lastSyncedAt ? `Synced ${ago(account.lastSyncedAt)}` : 'Not synced yet'}</span>
+          <span className="text-sm text-muted-foreground">{account.lastSyncedAt ? `Synced ${ago(account.lastSyncedAt)}` : 'Not synced yet'}</span>
         </div>
       ))}
     </Sheet>

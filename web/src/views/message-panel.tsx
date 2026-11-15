@@ -37,7 +37,7 @@ function Entry({ what, at, children }: { what: ReactNode; at: number; children: 
     <li className="flex flex-col gap-1.5 border-t border-dashed border-(--rule) py-3.5 first:border-t-0 first:pt-0">
       <p className="flex flex-wrap items-center gap-2">
         {what}
-        <span className="ml-auto text-xs text-muted-foreground tabular-nums">{dateTime(at)}</span>
+        <span className="ml-auto text-[13px] text-muted-foreground tabular-nums">{dateTime(at)}</span>
       </p>
       {children}
     </li>
@@ -64,9 +64,9 @@ function DecisionEntry({ d }: { d: Decision }) {
       }
     >
       <p>{d.reason}</p>
-      <p className="text-xs text-muted-foreground">{facts.join(' · ')}</p>
+      <p className="text-[13px] text-muted-foreground">{facts.join(' · ')}</p>
       {d.actionId === null ? (
-        <div className="text-xs">
+        <div className="text-[13px]">
           <Result row={d} />
         </div>
       ) : null}
@@ -85,11 +85,11 @@ function ActionEntry({ a }: { a: Action }) {
           <span className={bad ? 'font-medium text-destructive' : 'text-muted-foreground'}>
             {a.type} {a.status}
           </span>
-          <span className="font-mono text-xs text-muted-foreground">#{a.id}</span>
+          <span className="font-mono text-[13px] text-muted-foreground">#{a.id}</span>
         </>
       }
     >
-      <div className="flex flex-col gap-1 text-[13px]">
+      <div className="flex flex-col gap-1 text-sm">
         <Labels title="Added" labels={a.added} />
         <Labels title="Removed" labels={a.removed} />
         {a.error ? <p className="text-destructive">{a.error}</p> : null}
@@ -173,13 +173,13 @@ function Body({
                   <button
                     type="button"
                     className={cn(
-                      'flex w-full cursor-pointer items-baseline gap-3 px-2 py-1.5 text-left text-[13px] text-muted-foreground',
+                      'flex w-full cursor-pointer items-baseline gap-3 px-2 py-1.5 text-left text-sm text-muted-foreground',
                       'hover:bg-(--fill) hover:text-foreground',
                     )}
                     onClick={() => onPick(m.messageId)}
                   >
                     <span className="min-w-0 flex-1 truncate">{m.subject || '(no subject)'}</span>
-                    <span className="shrink-0 text-xs tabular-nums">{ago(m.receivedAt)}</span>
+                    <span className="shrink-0 text-[13px] tabular-nums">{ago(m.receivedAt)}</span>
                   </button>
                 </li>
               ))}
@@ -198,12 +198,12 @@ function Body({
                   <DispositionBadge would={current.mode === 'observe'} disposition={current.disposition} />
                 )}
                 {current.labelId === null && current.disposition === 'review' ? <span className="font-medium">Could not place it</span> : null}
-                {current.unsubscribe ? <span className="text-[13px] text-muted-foreground">and unsubscribe</span> : null}
+                {current.unsubscribe ? <span className="text-sm text-muted-foreground">and unsubscribe</span> : null}
               </p>
-              <p className="text-[13px] text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {current.reason} <span className="whitespace-nowrap">({tier(current.stage).name})</span>
               </p>
-              <p className="text-[13px] text-muted-foreground">{standing(current)}</p>
+              <p className="text-sm text-muted-foreground">{standing(current)}</p>
             </>
           ) : (
             <p className="text-muted-foreground">Not sorted yet.</p>

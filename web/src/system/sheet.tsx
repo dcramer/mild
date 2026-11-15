@@ -11,7 +11,7 @@ export function SheetHead({ title, description, action }: { title: string; descr
     <div className="flex items-start gap-4 px-4 pt-4 pb-2">
       <div className="min-w-0 flex-1">
         <h2 className="title">{title}</h2>
-        {description ? <p className="mt-1 text-[13px] text-muted-foreground">{description}</p> : null}
+        {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
       </div>
       {action}
     </div>

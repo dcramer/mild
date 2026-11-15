@@ -73,7 +73,7 @@ function LabelDialog({ accountId, label, onClose, onSaved }: { accountId: string
           <Button variant="quiet" onClick={onClose}>
             Cancel
           </Button>
-          {error ? <p className="text-[13px] text-destructive">{error}</p> : null}
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
         </>
       }
     >
@@ -85,21 +85,21 @@ function LabelDialog({ accountId, label, onClose, onSaved }: { accountId: string
         }}
       >
         <label className="flex flex-col gap-1.5">
-          <span className="text-[13px] font-medium">Name</span>
+          <span className="text-sm font-medium">Name</span>
           <Input autoFocus maxLength={60} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-[13px] font-medium">How to recognise it</span>
+          <span className="text-sm font-medium">How to recognise it</span>
           <TextArea
             className="min-h-28"
             maxLength={600}
             value={draft.description}
             onChange={(event) => setDraft({ ...draft, description: event.target.value })}
           />
-          <span className="text-[13px] text-muted-foreground">The model reads this to decide. Say what belongs and what does not.</span>
+          <span className="text-sm text-muted-foreground">The model reads this to decide. Say what belongs and what does not.</span>
         </label>
         <div className="flex flex-col gap-1.5">
-          <span className="text-[13px] font-medium">What sift does with it</span>
+          <span className="text-sm font-medium">What sift does with it</span>
           <div>
             <Select
               label="What sift does with it"
@@ -108,7 +108,7 @@ function LabelDialog({ accountId, label, onClose, onSaved }: { accountId: string
               onChange={(disposition) => setDraft({ ...draft, disposition })}
             />
           </div>
-          <span className="text-[13px] text-muted-foreground">{EXPLAIN[draft.disposition]}</span>
+          <span className="text-sm text-muted-foreground">{EXPLAIN[draft.disposition]}</span>
           {canMarkRead(draft.disposition) ? (
             <Check checked={draft.markRead} onChange={(markRead) => setDraft({ ...draft, markRead })}>
               Also mark it read
@@ -118,7 +118,7 @@ function LabelDialog({ accountId, label, onClose, onSaved }: { accountId: string
             Also unsubscribe, when the sender offers a safe way
           </Check>
           {draft.unsubscribe ? (
-            <span className="text-[13px] text-muted-foreground">
+            <span className="text-sm text-muted-foreground">
               Only while sift is acting, never from someone you have written to, and it cannot be undone from here.
               {draft.disposition === 'spam' || draft.disposition === 'block'
                 ? ' Answering a spammer’s link tells them the address is read; sift only does it when the message proves who sent it.'
@@ -155,9 +155,9 @@ function LabelCard({
   return (
     <Card>
       <CardHead title={label.name} note={account ?? undefined} aside={<Code>{label.gmailLabel}</Code>} />
-      <p className="text-[13px] text-muted-foreground">{label.description}</p>
-      <p className="text-[13px] text-muted-foreground tabular-nums">{facts.join(' · ')}</p>
-      {error ? <p className="text-[13px] text-destructive">{error}</p> : null}
+      <p className="text-sm text-muted-foreground">{label.description}</p>
+      <p className="text-sm text-muted-foreground tabular-nums">{facts.join(' · ')}</p>
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <CardFoot>
         <Select
           label={`What sift does with ${label.name}`}

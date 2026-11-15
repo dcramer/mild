@@ -59,14 +59,14 @@ function SuggestionRow({
         <span className="name block truncate">{group.senderName ?? group.sender}</span>
         {group.senderName ? <Sub>{group.sender}</Sub> : null}
         {/* On a phone the mail and the answers have no column: the subject sits here and the row opens to answer. */}
-        <span className="mt-1 block truncate text-[13px] text-muted-foreground md:hidden">
+        <span className="mt-1 block truncate text-sm text-muted-foreground md:hidden">
           {count(group.messages)} · {first?.subject || '(no subject)'}
         </span>
       </Td>
       <Td className="hidden max-w-0 md:table-cell md:w-full">
         <span className="flex items-baseline gap-2">
           <span className="truncate">{first?.subject || '(no subject)'}</span>
-          {first && first.times > 1 ? <span className="shrink-0 text-[13px] text-muted-foreground tabular-nums">×{first.times}</span> : null}
+          {first && first.times > 1 ? <span className="shrink-0 text-sm text-muted-foreground tabular-nums">×{first.times}</span> : null}
         </span>
         <Sub>
           {count(group.messages)} {group.messages === 1 ? 'message' : 'messages'}
@@ -76,10 +76,10 @@ function SuggestionRow({
       <Td className="whitespace-nowrap">
         <span className="flex items-center gap-2">
           <Guess labelName={group.labelName} disposition={group.disposition} />
-          {group.unsubscribe ? <span className="text-[13px] text-muted-foreground">and unsubscribe</span> : null}
+          {group.unsubscribe ? <span className="text-sm text-muted-foreground">and unsubscribe</span> : null}
         </span>
         {mixed ? <Sub>for most of them; mixed</Sub> : null}
-        {error ? <span className="mt-1 block text-[13px] text-destructive">{error}</span> : null}
+        {error ? <span className="mt-1 block text-sm text-destructive">{error}</span> : null}
       </Td>
       <Td quiet className="hidden text-right whitespace-nowrap tabular-nums md:table-cell">
         {ago(group.latestReceivedAt)}
@@ -221,7 +221,7 @@ export function SuggestionsView({ onOpen, onChanged, epoch }: { onOpen: OpenMess
           </Table>
         )}
       </div>
-      {facts.length > 0 ? <p className="text-[13px] text-muted-foreground tabular-nums">{facts.join(' · ')}</p> : null}
+      {facts.length > 0 ? <p className="text-sm text-muted-foreground tabular-nums">{facts.join(' · ')}</p> : null}
     </ListView>
   );
 }

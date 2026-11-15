@@ -20,7 +20,7 @@ export function Select<T extends string>({
     <Base.Root items={items} value={value} disabled={disabled ?? false} onValueChange={(next) => next !== null && onChange(next)}>
       <Base.Trigger
         aria-label={label}
-        className="press inline-flex h-(--control) max-w-full cursor-pointer items-center justify-between gap-1.5 border border-(--frame) pr-2 pl-3 text-[13px] font-medium whitespace-nowrap select-none hover:border-foreground/30 data-disabled:pointer-events-none data-disabled:opacity-45 data-popup-open:border-foreground/45"
+        className="press inline-flex h-(--control) max-w-full cursor-pointer items-center justify-between gap-1.5 border border-(--frame) pr-2 pl-3 text-sm font-medium whitespace-nowrap select-none hover:border-foreground/30 data-disabled:pointer-events-none data-disabled:opacity-45 data-popup-open:border-foreground/45"
       >
         <span className="truncate">
           <Base.Value />
@@ -29,7 +29,7 @@ export function Select<T extends string>({
       </Base.Trigger>
       <Base.Portal>
         <Base.Positioner sideOffset={4} align="start" alignItemWithTrigger={false} className="z-50">
-          <Base.Popup className="sheet max-h-(--available-height) min-w-(--anchor-width) overflow-y-auto bg-popover p-1 text-[13px] outline-none">
+          <Base.Popup className="sheet max-h-(--available-height) min-w-(--anchor-width) overflow-y-auto bg-popover p-1 text-sm outline-none">
             <Base.List>
               {items.map((item) => (
                 <Base.Item

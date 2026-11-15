@@ -9,7 +9,7 @@ export function Disclosure({ summary, children }: { summary: string; children: R
         <ChevronRightIcon aria-hidden className="size-3 transition-transform group-open:rotate-90 motion-reduce:transition-none" />
         {summary}
       </summary>
-      <div className="mt-3 flex flex-col gap-2 text-[13px] text-muted-foreground">{children}</div>
+      <div className="mt-3 flex flex-col gap-2 text-sm text-muted-foreground">{children}</div>
     </details>
   );
 }

@@ -39,9 +39,9 @@ export function CardHead({ title, note, aside, onOpen }: { title: string; note?:
         ) : (
           <h3 className="name truncate">{title}</h3>
         )}
-        {note ? <p className="truncate text-[13px] text-muted-foreground">{note}</p> : null}
+        {note ? <p className="truncate text-sm text-muted-foreground">{note}</p> : null}
       </div>
-      {aside ? <div className="shrink-0 text-[13px] text-muted-foreground tabular-nums">{aside}</div> : null}
+      {aside ? <div className="shrink-0 text-sm text-muted-foreground tabular-nums">{aside}</div> : null}
     </header>
   );
 }

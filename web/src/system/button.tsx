@@ -6,7 +6,7 @@ const BASE =
 
 const VARIANT = {
   /** The one thing on the screen that is waiting on the reader. At most one per screen. */
-  mark: 'press-raised bg-highlight font-semibold text-highlight-ink',
+  mark: 'bg-highlight font-semibold text-highlight-ink hover:brightness-105',
   /** The main action of a sheet or a row. */
   ink: 'bg-foreground font-semibold text-background hover:bg-foreground/85',
   /** Everything else. */
@@ -17,7 +17,7 @@ const VARIANT = {
 
 /** `md` everywhere a control sits in a row or a toolbar; `lg` for the one action a screen is about. */
 const SIZE = {
-  md: 'h-(--control) px-3 text-[13px]',
+  md: 'h-(--control) px-3 text-sm',
   lg: 'h-12 px-5 text-base',
 } as const;
 

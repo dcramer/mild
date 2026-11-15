@@ -72,7 +72,7 @@ export function Decisions({ days, onDays, onOpen, epoch }: { days: Days; onDays:
         )}
       </div>
       {data && data.total > PAGE ? (
-        <div className="flex items-center justify-end gap-2 text-[13px] text-muted-foreground tabular-nums">
+        <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground tabular-nums">
           <span>
             {count(offset + 1)}–{count(Math.min(offset + PAGE, data.total))} of {count(data.total)}
           </span>

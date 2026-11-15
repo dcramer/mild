@@ -91,7 +91,7 @@ function AddRuleDialog({
           <Button variant="quiet" onClick={onClose}>
             Cancel
           </Button>
-          {error ? <p className="text-[13px] text-destructive">{error}</p> : null}
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
         </>
       }
     >
@@ -103,7 +103,7 @@ function AddRuleDialog({
         }}
       >
         <div className="flex flex-col gap-1.5">
-          <span className="text-[13px] font-medium">When mail is</span>
+          <span className="text-sm font-medium">When mail is</span>
           <div className="flex flex-wrap items-center gap-2">
             <Select label="Condition" value={when} options={WHEN} onChange={setWhen} />
             <Input
@@ -117,13 +117,13 @@ function AddRuleDialog({
           </div>
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="text-[13px] font-medium">It is</span>
+          <span className="text-sm font-medium">It is</span>
           <div>
             <Select label="Label" value={label} options={[['', 'Choose a label'] as const, ...labels]} onChange={setLabel} />
           </div>
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="text-[13px] font-medium">sift does</span>
+          <span className="text-sm font-medium">sift does</span>
           <div>
             <Select label="What sift does" value={exception} options={EXCEPTION} onChange={setException} />
           </div>

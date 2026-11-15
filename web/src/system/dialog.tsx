@@ -40,7 +40,7 @@ export function Dialog({
           <header className="flex items-start gap-4 px-5 pt-5 pb-4 md:px-6">
             <div className="min-w-0 flex-1">
               <Base.Title className="title break-words">{title}</Base.Title>
-              {subtitle ? <div className="mt-0.5 text-[13px] text-muted-foreground">{subtitle}</div> : null}
+              {subtitle ? <div className="mt-0.5 text-sm text-muted-foreground">{subtitle}</div> : null}
             </div>
             <Base.Close
               aria-label="Close"

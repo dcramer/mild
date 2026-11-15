@@ -41,10 +41,10 @@ export function Panel({
           <header className="flex items-start gap-3 px-5 pt-4 pb-4 md:px-7">
             <div className="min-w-0 flex-1 pt-1">
               <Base.Title className="title break-words">{title}</Base.Title>
-              {subtitle ? <div className="mt-0.5 text-[13px] text-muted-foreground">{subtitle}</div> : null}
+              {subtitle ? <div className="mt-0.5 text-sm text-muted-foreground">{subtitle}</div> : null}
             </div>
             <div className="flex shrink-0 items-center gap-0.5">
-              {position ? <span className="mr-2 hidden text-[13px] whitespace-nowrap text-muted-foreground tabular-nums sm:inline">{position}</span> : null}
+              {position ? <span className="mr-2 hidden text-sm whitespace-nowrap text-muted-foreground tabular-nums sm:inline">{position}</span> : null}
               {onPrevious || onNext ? (
                 <>
                   <button type="button" aria-label="Previous" className={ICON} disabled={!onPrevious} onClick={onPrevious}>

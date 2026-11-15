@@ -21,21 +21,21 @@ export function MessageBody({ detail, untitled }: { detail: MessageDetail; untit
     <article className="flex min-w-0 flex-col gap-4">
       <header className="flex flex-col gap-1">
         {untitled ? null : <h3 className="text-base font-semibold break-words">{detail.subject || '(no subject)'}</h3>}
-        <p className="text-[13px] text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           {detail.fromName ? `${detail.fromName} <${detail.fromAddress}>` : detail.fromAddress}
           {detail.to.length > 0 ? ` to ${people(detail.to)}` : ''}
           {detail.cc.length > 0 ? `, cc ${people(detail.cc)}` : ''}
         </p>
-        <p className="text-[13px] text-muted-foreground tabular-nums">{dateTime(detail.receivedAt)}</p>
+        <p className="text-sm text-muted-foreground tabular-nums">{dateTime(detail.receivedAt)}</p>
       </header>
       {detail.body === null ? (
-        <p className="text-[13px] text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           sift is not holding this message’s text. It keeps the text only while mail it would move, or could not place, is waiting on you.
         </p>
       ) : detail.body === '' ? (
-        <p className="text-[13px] text-muted-foreground">This message has no readable text, or is no longer in Gmail.</p>
+        <p className="text-sm text-muted-foreground">This message has no readable text, or is no longer in Gmail.</p>
       ) : (
-        <div className="max-w-[68ch] text-sm leading-relaxed break-words whitespace-pre-wrap">{detail.body}</div>
+        <div className="max-w-[68ch] text-[15px] leading-relaxed break-words whitespace-pre-wrap">{detail.body}</div>
       )}
     </article>
   );
@@ -45,17 +45,16 @@ const CONDITIONS: Record<string, string> = { from: 'from', fromDomain: 'from dom
 
 /** Where the sender stands on unsubscribing, as far as sift can tell. It says nothing when there is nothing to say. */
 export function Unsubscribe({ detail }: { detail: MessageDetail }) {
-  if (detail.unsubscribe === 'done') return <p className="text-[13px] text-muted-foreground">sift has unsubscribed you from this sender.</p>;
-  if (detail.unsubscribe === 'available') return <p className="text-[13px] text-muted-foreground">This sender offers a one-click unsubscribe.</p>;
-  if (detail.unsubscribe === 'manual')
-    return <p className="text-[13px] text-muted-foreground">This sender has an unsubscribe link, but not one sift can use.</p>;
+  if (detail.unsubscribe === 'done') return <p className="text-sm text-muted-foreground">sift has unsubscribed you from this sender.</p>;
+  if (detail.unsubscribe === 'available') return <p className="text-sm text-muted-foreground">This sender offers a one-click unsubscribe.</p>;
+  if (detail.unsubscribe === 'manual') return <p className="text-sm text-muted-foreground">This sender has an unsubscribe link, but not one sift can use.</p>;
   return null;
 }
 
 /** What sift knows about a sender, as a few plain lines. */
 export function SenderFacts({ sender }: { sender: SenderProfile }) {
   return (
-    <ul className="flex flex-col gap-1.5 text-[13px]">
+    <ul className="flex flex-col gap-1.5 text-sm">
       <li>
         {sender.messages === 0
           ? 'No mail recorded from them.'

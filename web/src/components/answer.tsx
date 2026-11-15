@@ -95,7 +95,7 @@ export function Answer({
         <div className="flex flex-wrap gap-1.5">
           {labels.map((l, index) => (
             <Button key={l.id} variant={chosen === l.id ? 'ink' : 'plain'} aria-pressed={chosen === l.id} onClick={() => setChosen(l.id)}>
-              {index < 9 ? <span className="hidden font-mono text-[11px] font-normal opacity-60 md:inline">{index + 1}</span> : null}
+              {index < 9 ? <span className="hidden font-mono text-xs font-normal opacity-60 md:inline">{index + 1}</span> : null}
               {l.name}
             </Button>
           ))}
@@ -144,10 +144,10 @@ export function Answer({
               ? `Only ${whose}: ${label.name}, ${does}. No rule is made.`
               : `From now on, ${whose} is ${label.name}: ${does}${label.unsubscribe || unsubscribe ? ', and unsubscribed from' : ''}.`}
         </p>
-        {acted && label && label.id !== guess ? <p className="text-[13px] text-muted-foreground">This message is put right in Gmail too.</p> : null}
-        {error ? <p className="text-[13px] text-destructive">{error}</p> : null}
+        {acted && label && label.id !== guess ? <p className="text-sm text-muted-foreground">This message is put right in Gmail too.</p> : null}
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <div className="flex flex-wrap items-center gap-3">
-          <Button variant="mark" size="lg" busy={busy} disabled={!ready} onClick={() => answer && onSubmit(answer)}>
+          <Button variant="mark" busy={busy} disabled={!ready} onClick={() => answer && onSubmit(answer)}>
             {label && label.id === guess && scope === 'sender' && !exception ? 'Right' : 'Teach sift'}
             <ArrowRightIcon aria-hidden />
           </Button>

@@ -46,7 +46,7 @@ export function ListView({
             <span className="statement">{title}</span>
             {count ? <span className="text-muted-foreground tabular-nums">{count}</span> : null}
           </h2>
-          {description ? <p className="mt-1 max-w-2xl text-[13px] text-muted-foreground">{description}</p> : null}
+          {description ? <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </header>
@@ -76,14 +76,14 @@ export function ListView({
                 aria-label={on > 0 ? `Filters, ${on} on` : 'Filters'}
                 aria-expanded={open}
                 className={cn(
-                  'flex shrink-0 cursor-pointer items-center gap-2 border-l border-(--frame) px-3 text-[13px] font-medium',
+                  'flex shrink-0 cursor-pointer items-center gap-2 border-l border-(--frame) px-3 text-sm font-medium',
                   open ? 'bg-(--fill-strong)' : 'text-muted-foreground hover:bg-(--fill) hover:text-foreground',
                 )}
                 onClick={() => setOpen(!open)}
               >
                 <SlidersHorizontalIcon aria-hidden className="size-4" />
                 Filters
-                {on > 0 ? <span className="hl mx-0 px-1.5 py-0 text-xs tabular-nums">{on}</span> : null}
+                {on > 0 ? <span className="hl mx-0 px-1.5 py-0 text-[13px] tabular-nums">{on}</span> : null}
               </button>
             ) : null}
           </div>
@@ -94,7 +94,7 @@ export function ListView({
                   <button
                     type="button"
                     aria-label={`Clear ${filter.label}`}
-                    className="press flex h-6 cursor-pointer items-center gap-1 bg-(--fill) pr-1.5 pl-2 text-xs font-medium hover:bg-(--fill-strong)"
+                    className="press flex h-6 cursor-pointer items-center gap-1 bg-(--fill) pr-1.5 pl-2 text-[13px] font-medium hover:bg-(--fill-strong)"
                     onClick={filter.clear}
                   >
                     {filter.label}
@@ -141,14 +141,14 @@ export function FilterGroup<T extends string>({
 }) {
   return (
     <fieldset className="flex flex-col gap-1">
-      <legend className="mb-1 text-[13px] font-medium">{label}</legend>
+      <legend className="mb-1 text-sm font-medium">{label}</legend>
       {options.map(([key, text]) => (
         <button
           key={key}
           type="button"
           role="radio"
           aria-checked={key === value}
-          className="press -mx-2 flex min-h-7 cursor-pointer items-center gap-2 px-2 text-left text-[13px] text-muted-foreground hover:bg-(--fill) hover:text-foreground aria-checked:font-medium aria-checked:text-foreground"
+          className="press -mx-2 flex min-h-7 cursor-pointer items-center gap-2 px-2 text-left text-sm text-muted-foreground hover:bg-(--fill) hover:text-foreground aria-checked:font-medium aria-checked:text-foreground"
           onClick={() => onChange(key)}
         >
           <span className="min-w-0 flex-1 truncate">{text}</span>

@@ -54,7 +54,7 @@ function Blocked({ session }: { session: Session }) {
         <p className="text-muted-foreground">It only returns to localhost or to HTTPS. Open sift at one of these instead:</p>
         <div className="flex flex-col gap-2">
           {session.addresses.map((address) => (
-            <Button key={address} href={address} className="justify-between font-mono text-[13px] font-medium">
+            <Button key={address} href={address} className="justify-between font-mono text-sm font-medium">
               {address.replace(/^https?:\/\//, '')}
               <ArrowRightIcon aria-hidden />
             </Button>
@@ -94,5 +94,5 @@ function Blocked({ session }: { session: Session }) {
 }
 
 function Step({ children }: { children: ReactNode }) {
-  return <div className="mt-2 flex flex-col gap-2 text-[13px] text-muted-foreground">{children}</div>;
+  return <div className="mt-2 flex flex-col gap-2 text-sm text-muted-foreground">{children}</div>;
 }

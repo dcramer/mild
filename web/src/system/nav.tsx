@@ -27,7 +27,7 @@ export function Sections({ items, current }: { items: readonly NavItem[]; curren
               className="flex items-baseline gap-1.5 rounded-(--cut) px-2.5 py-1 text-sm font-medium text-muted-foreground hover:text-foreground aria-[current=page]:bg-highlight aria-[current=page]:text-highlight-ink"
             >
               {item.label}
-              {item.count ? <span className="text-[13px] tabular-nums opacity-70">{item.count}</span> : null}
+              {item.count ? <span className="text-sm tabular-nums opacity-70">{item.count}</span> : null}
             </a>
           </li>
         ))}
@@ -55,7 +55,7 @@ export function Masthead({ items, current, aside }: { items: readonly NavItem[];
       </a>
       <div className="hidden min-w-0 flex-1 items-center gap-x-5 md:flex">
         <Sections items={items} current={current} />
-        <div className="ml-auto flex items-center gap-3 text-[13px] text-muted-foreground">{aside}</div>
+        <div className="ml-auto flex items-center gap-3 text-sm text-muted-foreground">{aside}</div>
       </div>
 
       <p className="name min-w-0 flex-1 truncate md:hidden">{here?.label}</p>
@@ -90,7 +90,7 @@ export function Masthead({ items, current, aside }: { items: readonly NavItem[];
                 ))}
               </ul>
             </nav>
-            {aside ? <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 pt-10 text-[13px] text-muted-foreground">{aside}</div> : null}
+            {aside ? <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 pt-10 text-sm text-muted-foreground">{aside}</div> : null}
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
@@ -122,7 +122,7 @@ export function SubNav({ label, items, current, children }: { label: string; ite
               <a
                 href={`#${item.to}`}
                 aria-current={item.to === current ? 'page' : undefined}
-                className="block border-l-2 border-transparent px-2.5 py-1.5 text-[13px] whitespace-nowrap text-muted-foreground hover:text-foreground aria-[current=page]:border-highlight aria-[current=page]:font-semibold aria-[current=page]:text-foreground"
+                className="block border-l-2 border-transparent px-2.5 py-1.5 text-sm whitespace-nowrap text-muted-foreground hover:text-foreground aria-[current=page]:border-highlight aria-[current=page]:font-semibold aria-[current=page]:text-foreground"
               >
                 {item.label}
               </a>

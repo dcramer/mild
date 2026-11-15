@@ -11,9 +11,9 @@ sift is a better Gmail filter and spam filter: models work out what mail is, and
 In this order.
 
 1. **What a rule means, and what sift knows about a sender** (the first two items under Labels and rules). These decide how far automation can be trusted.
-3. **Settings designed with intent** (under Dashboard).
-4. **Figures and a chart above Suggestions** (under Dashboard).
-5. **Keyboard shortcuts in the design system** (under Dashboard).
+2. **Settings designed with intent** (under Dashboard).
+3. **Figures and a chart above Suggestions** (under Dashboard).
+4. **Keyboard shortcuts in the design system** (under Dashboard).
 
 ## Labels and rules
 
