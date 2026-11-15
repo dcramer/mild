@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { type Days, type DecisionRow, api, useLoaded } from '@/lib/api.ts';
 import { ago } from '@/lib/format.ts';
+import { Wordmark } from '@/system';
 import { Decisions } from '@/views/decisions.tsx';
 import { type MessageRef, MessageSheet } from '@/views/message-sheet.tsx';
 import { Overview } from '@/views/overview.tsx';
@@ -14,6 +15,7 @@ import { SendersView } from '@/views/senders.tsx';
 import { SettingsView } from '@/views/settings.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
+import { SystemView } from '@/views/system.tsx';
 
 const PERIODS = [
   ['1', 'Last 24 hours'],
@@ -24,6 +26,11 @@ const PERIODS = [
 
 /** Shows the sign-in screen until the viewer is signed in, then the dashboard. */
 export function App() {
+  if (window.location.hash === '#system') return <SystemView />;
+  return <Gate />;
+}
+
+function Gate() {
   const session = useLoaded('session', (signal) => api.session(signal), 300_000);
   if (!session.data) return session.error ? <p className="p-6 text-sm text-destructive">{session.error}</p> : null;
   if (session.data.required && session.data.email === null) {
@@ -46,8 +53,8 @@ function Dashboard({ signedInAs }: { signedInAs: string | null }) {
     <Tabs value={tab} onValueChange={(value) => setTab(String(value))} className="min-h-svh gap-0">
       {/* No bar: the name and the sections sit straight on the page, the dateline opposite. */}
       <header className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-4 pt-5">
-        <h1 className="wordmark">
-          <span className="hl mx-0 px-2 py-0.5">sift</span>
+        <h1>
+          <Wordmark />
         </h1>
         <TabsList variant="line" className="h-9 flex-wrap gap-x-4 p-0">
           <TabsTrigger value="suggestions">

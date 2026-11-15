@@ -1,0 +1,29 @@
+import { CheckIcon, CopyIcon } from 'lucide-react';
+import { useState } from 'react';
+
+/** A value the reader has to carry somewhere else, whole: a command to run, an address to register. */
+export function Copyable({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  // The clipboard is only offered to pages on localhost or HTTPS.
+  const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+  return (
+    <div className="flex items-stretch border border-(--frame) bg-background">
+      <code className="min-w-0 flex-1 px-3 py-2 font-mono text-[12.5px] leading-relaxed break-all select-all">{value}</code>
+      {clipboard ? (
+        <button
+          type="button"
+          aria-label={copied ? 'Copied' : `Copy ${label}`}
+          className="flex w-9 shrink-0 cursor-pointer items-center justify-center border-l border-(--frame) text-muted-foreground hover:bg-foreground/8 hover:text-foreground"
+          onClick={() =>
+            void clipboard.writeText(value).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            })
+          }
+        >
+          {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+        </button>
+      ) : null}
+    </div>
+  );
+}

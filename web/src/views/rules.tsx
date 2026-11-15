@@ -1,9 +1,9 @@
-import { DispositionBadge, Empty, ErrorNote, NUM, Panel, PanelHeader, Sub, TD, TH } from '@/components/bits.tsx';
+import { DispositionBadge, Empty, ErrorNote, NUM, Sub, TD, TH } from '@/components/bits.tsx';
+import { Button, Sheet, SheetHead } from '@/system';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useState } from 'react';
 import { Picker } from '@/components/picker.tsx';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count } from '@/lib/format.ts';
@@ -65,7 +65,7 @@ function AddRule({ accountId, onAdded }: { accountId: string; onAdded: () => voi
         onChange={(event) => setValue(event.target.value)}
       />
       <Picker label="What sift does" value={then} options={THEN} onChange={setThen} />
-      <Button type="submit" size="sm" disabled={busy || value.trim() === ''}>
+      <Button variant="ink" type="submit" size="sm" disabled={busy || value.trim() === ''}>
         Add rule
       </Button>
       {error ? <span className="text-[13px] text-destructive">{error}</span> : null}
@@ -82,8 +82,8 @@ export function Rules() {
   return (
     <div className="flex flex-col gap-3">
       {error ? <ErrorNote message={error} /> : null}
-      <Panel>
-        <PanelHeader title="Rules" description="Checked in order. A matching keep rule always wins." />
+      <Sheet>
+        <SheetHead title="Rules" description="Checked in order. A matching keep rule always wins." />
         {accountId ? <AddRule accountId={accountId} onAdded={reload} /> : null}
         {remove.error ? <p className="border-b px-4 py-2 text-[13px] text-destructive">{remove.error}</p> : null}
         {loading ? (
@@ -127,7 +127,7 @@ export function Rules() {
                   <TableCell className={`${TD} ${NUM}`}>{count(rule.hits)}</TableCell>
                   <TableCell className={`${TD} text-muted-foreground`}>{rule.lastHitAt ? ago(rule.lastHitAt) : 'Never'}</TableCell>
                   <TableCell className={`${TD} text-right`}>
-                    <Button variant="ghost" size="sm" disabled={remove.busy} onClick={() => remove.run(() => api.removeRule(rule.id), reload)}>
+                    <Button variant="quiet" size="sm" disabled={remove.busy} onClick={() => remove.run(() => api.removeRule(rule.id), reload)}>
                       Remove
                     </Button>
                   </TableCell>
@@ -136,7 +136,7 @@ export function Rules() {
             </TableBody>
           </Table>
         )}
-      </Panel>
+      </Sheet>
     </div>
   );
 }

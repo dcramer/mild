@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { DispositionBadge, Empty, ErrorNote, Panel, Sub, TierLabel } from '@/components/bits.tsx';
+import { Button, Sheet } from '@/system';
+import { DispositionBadge, Empty, ErrorNote, Sub, TierLabel } from '@/components/bits.tsx';
 import { Picker } from '@/components/picker.tsx';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { type SuggestionGroup, type Suggestions, api, useLoaded } from '@/lib/api.ts';
 import { count, percent } from '@/lib/format.ts';
@@ -79,7 +79,7 @@ function Group({
         <Sub>{group.sample[0]?.reason}</Sub>
         <div className="flex flex-wrap items-center gap-1.5">
           {unsure ? null : (
-            <Button size="sm" disabled={busy} onClick={() => void answer('right')}>
+            <Button variant="ink" size="sm" disabled={busy} onClick={() => void answer('right')}>
               Right
             </Button>
           )}
@@ -133,7 +133,7 @@ export function SuggestionsView({ onOpen, onChanged }: { onOpen: (message: Messa
           ))}
         </ul>
       ) : null}
-      <Panel>
+      <Sheet>
         {loading ? (
           <div className="p-4">
             <Skeleton className="h-64 w-full" />
@@ -157,7 +157,7 @@ export function SuggestionsView({ onOpen, onChanged }: { onOpen: (message: Messa
             ))}
           </ul>
         )}
-      </Panel>
+      </Sheet>
       <p className="text-[13px] text-muted-foreground">
         An answer covers all mail from that sender, including what arrives later. The messages are stored whole as examples.
       </p>

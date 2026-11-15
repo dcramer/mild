@@ -1,4 +1,5 @@
-import { DispositionBadge, Marked, ModelCost, Result, Sub, TD, TH, TierLabel } from '@/components/bits.tsx';
+import { DispositionBadge, ModelCost, Result, Sub, TD, TH, TierLabel } from '@/components/bits.tsx';
+import { Marked } from '@/system';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { DecisionRow } from '@/lib/api.ts';
 import { ago, dateTime } from '@/lib/format.ts';

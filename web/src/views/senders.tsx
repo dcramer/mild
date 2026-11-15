@@ -1,6 +1,6 @@
-import { Empty, ErrorNote, NUM, Panel, PanelHeader, Sub, TD, TH } from '@/components/bits.tsx';
+import { Empty, ErrorNote, NUM, Sub, TD, TH } from '@/components/bits.tsx';
+import { Button, Sheet, SheetHead } from '@/system';
 import { Picker } from '@/components/picker.tsx';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api, useAction, useLoaded } from '@/lib/api.ts';
@@ -21,8 +21,8 @@ export function SendersView() {
     <div className="flex flex-col gap-3">
       {error ? <ErrorNote message={error} /> : null}
       {action.error ? <p className="text-[13px] text-destructive">{action.error}</p> : null}
-      <Panel>
-        <PanelHeader title="Senders" description="Decided without a model." />
+      <Sheet>
+        <SheetHead title="Senders" description="Decided without a model." />
         {loading ? (
           <div className="p-4">
             <Skeleton className="h-40 w-full" />
@@ -63,7 +63,7 @@ export function SendersView() {
                   <TableCell className={`${TD} text-muted-foreground`}>{ago(sender.updatedAt)}</TableCell>
                   <TableCell className={`${TD} text-right`}>
                     <Button
-                      variant="ghost"
+                      variant="quiet"
                       size="sm"
                       disabled={action.busy}
                       onClick={() => action.run(() => api.forgetSender(sender.accountId, sender.address), reload)}
@@ -76,7 +76,7 @@ export function SendersView() {
             </TableBody>
           </Table>
         )}
-      </Panel>
+      </Sheet>
     </div>
   );
 }

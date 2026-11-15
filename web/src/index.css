@@ -89,6 +89,13 @@
   /* Corners cut by hand, not by a compass: the highlighter's shape, shared by everything you press. */
   --cut: 0.5em 0.2em 0.55em 0.25em / 0.25em 0.5em 0.2em 0.45em;
 
+  /* The same hand, at the size of a control. */
+  --cut-control: 0.7em 0.3em 0.75em 0.35em / 0.4em 0.7em 0.3em 0.65em;
+
+  /* The edge of the sheet beneath: the only shadow, always hard and offset down-right. */
+  --edge: color-mix(in oklab, var(--foreground) 9%, transparent);
+  --edge-strong: color-mix(in oklab, var(--foreground) 30%, transparent);
+
   /* Lines are drawn in the ink colour at low strength, never a separate grey. */
   --rule: color-mix(in oklab, var(--foreground) 14%, transparent);
   --frame: color-mix(in oklab, var(--foreground) 26%, transparent);
@@ -135,7 +142,7 @@
   .sheet {
     border: 1px solid var(--frame);
     border-radius: 2px;
-    box-shadow: 3px 3px 0 0 color-mix(in oklab, var(--foreground) 9%, transparent);
+    box-shadow: 3px 3px 0 0 var(--edge);
   }
 
   /* Display type: titles, figures, names and the wordmark. */
@@ -165,6 +172,16 @@
     line-height: 1;
   }
 
+  /* The one line a screen opens with. */
+  .statement {
+    font-family: var(--face-display);
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+  }
+
   /* Small capitals in the mono face, for labels and column heads. */
   .slug {
     font-family: var(--font-mono);
@@ -190,6 +207,64 @@
   }
 }
 
+@layer components {
+  /* Things you press: hand-cut corners, and a short travel when pressed. */
+  .press {
+    border-radius: var(--cut-control);
+    transition:
+      background-color 120ms ease-out,
+      color 120ms ease-out,
+      transform 80ms ease-out,
+      box-shadow 80ms ease-out;
+  }
+  .press:active {
+    transform: translate(1px, 1px);
+  }
+  /* Raised off the page by the same edge a sheet has; pressing pushes it down onto it. */
+  .press-raised {
+    box-shadow: 3px 3px 0 0 var(--edge-strong);
+  }
+  .press-raised:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 4px 4px 0 0 var(--edge-strong);
+  }
+  .press-raised:active {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 0 var(--edge-strong);
+  }
+
+  /* Three dots that fill in turn while a press is being acted on. */
+  .busy-dots {
+    width: 1.1em;
+    height: 0.25em;
+    background:
+      radial-gradient(circle, currentColor 60%, transparent 62%) 0 50% / 0.25em 0.25em no-repeat,
+      radial-gradient(circle, currentColor 60%, transparent 62%) 50% 50% / 0.25em 0.25em no-repeat,
+      radial-gradient(circle, currentColor 60%, transparent 62%) 100% 50% / 0.25em 0.25em no-repeat;
+    animation: busy-dots 900ms steps(4, jump-none) infinite;
+  }
+  @keyframes busy-dots {
+    0% {
+      clip-path: inset(0 100% 0 0);
+    }
+    100% {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .press,
+    .busy-dots {
+      transition: none;
+      animation: none;
+    }
+    .press:hover,
+    .press:active {
+      transform: none;
+    }
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -211,7 +286,7 @@
 [data-slot='button'],
 [data-slot='select-trigger'],
 [data-slot='input'] {
-  border-radius: 0.7em 0.3em 0.75em 0.35em / 0.4em 0.7em 0.3em 0.65em;
+  border-radius: var(--cut-control);
 }
 [data-slot='select-trigger'],
 [data-slot='input'],

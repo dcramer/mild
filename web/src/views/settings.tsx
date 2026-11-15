@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ErrorNote, Panel, PanelHeader, Sub, TD, TH } from '@/components/bits.tsx';
+import { Button, Sheet, SheetHead } from '@/system';
+import { ErrorNote, Sub, TD, TH } from '@/components/bits.tsx';
 import { Picker } from '@/components/picker.tsx';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
@@ -52,8 +52,8 @@ function Running({ state, reload }: { state: ManageState; reload: () => void }) 
   ];
 
   return (
-    <Panel>
-      <PanelHeader
+    <Sheet>
+      <SheetHead
         title="How sift runs"
         description={
           !activity.sorting
@@ -64,7 +64,7 @@ function Running({ state, reload }: { state: ManageState; reload: () => void }) 
         }
         action={
           activity.sorting ? (
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => run(() => api.checkNow(), reload)}>
+            <Button variant="line" size="sm" disabled={busy} onClick={() => run(() => api.checkNow(), reload)}>
               Check now
             </Button>
           ) : null
@@ -80,13 +80,14 @@ function Running({ state, reload }: { state: ManageState; reload: () => void }) 
         note={settings.act ? 'Decisions are carried out in Gmail. Each can be undone under Changes.' : 'Nothing in Gmail is changed.'}
       >
         {settings.act ? (
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => save({ act: false })}>
+          <Button variant="line" size="sm" disabled={busy} onClick={() => save({ act: false })}>
             Go back to observing
           </Button>
         ) : confirming ? (
           <>
             <span className="text-[13px] text-muted-foreground">sift will start archiving and labelling new mail.</span>
             <Button
+              variant="ink"
               size="sm"
               disabled={busy}
               onClick={() => {
@@ -96,12 +97,12 @@ function Running({ state, reload }: { state: ManageState; reload: () => void }) 
             >
               Start acting
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>
+            <Button variant="quiet" size="sm" onClick={() => setConfirming(false)}>
               Cancel
             </Button>
           </>
         ) : (
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => setConfirming(true)}>
+          <Button variant="line" size="sm" disabled={busy} onClick={() => setConfirming(true)}>
             Let sift act…
           </Button>
         )}
@@ -118,17 +119,17 @@ function Running({ state, reload }: { state: ManageState; reload: () => void }) 
         />
       </Row>
       {error ? <p className="px-4 py-2 text-[13px] text-destructive">{error}</p> : null}
-    </Panel>
+    </Sheet>
   );
 }
 
 function Accounts({ state }: { state: ManageState }) {
   return (
-    <Panel>
-      <PanelHeader
+    <Sheet>
+      <SheetHead
         title="Accounts"
         action={
-          <Button variant="outline" size="sm" render={<a href="/auth/login?add=1" />}>
+          <Button variant="line" size="sm" href="/auth/login?add=1">
             Connect another
           </Button>
         }
@@ -138,7 +139,7 @@ function Accounts({ state }: { state: ManageState }) {
           {account.email}
         </div>
       ))}
-    </Panel>
+    </Sheet>
   );
 }
 
@@ -147,11 +148,12 @@ function OlderMail() {
   const [days, setDays] = useState<(typeof DAYS)[number][0]>('7');
   const [result, setResult] = useState<string | null>(null);
   return (
-    <Panel>
-      <PanelHeader title="Older mail" />
+    <Sheet>
+      <SheetHead title="Older mail" />
       <Row title="Pull in as suggestions" note="Up to 300 messages, one model call each. They are never acted on, even while sift is acting.">
         <Picker label="How far back" value={days} options={DAYS} onChange={setDays} />
         <Button
+          variant="ink"
           size="sm"
           disabled={busy}
           onClick={() =>
@@ -168,7 +170,7 @@ function OlderMail() {
       </Row>
       {result ? <p className="px-4 py-2 text-[13px]">{result}</p> : null}
       {error ? <p className="px-4 py-2 text-[13px] text-destructive">{error}</p> : null}
-    </Panel>
+    </Sheet>
   );
 }
 
@@ -181,12 +183,13 @@ function Guidelines({ saved }: { saved: string }) {
     setStored(saved);
   }, [saved]);
   return (
-    <Panel>
-      <PanelHeader
+    <Sheet>
+      <SheetHead
         title="Guidelines"
         description="The model reads this before sorting each message."
         action={
           <Button
+            variant="ink"
             size="sm"
             disabled={busy || text === stored}
             onClick={() =>
@@ -208,15 +211,15 @@ function Guidelines({ saved }: { saved: string }) {
         onChange={(event) => setText(event.target.value)}
       />
       {error ? <p className="px-4 py-2 text-[13px] text-destructive">{error}</p> : null}
-    </Panel>
+    </Sheet>
   );
 }
 
 function Categories({ state, reload }: { state: ManageState; reload: () => void }) {
   const { busy, error, run } = useAction();
   return (
-    <Panel>
-      <PanelHeader title="Kinds of mail" />
+    <Sheet>
+      <SheetHead title="Kinds of mail" />
       {state.accounts.map((account) => (
         <Table key={account.id}>
           <TableHeader>
@@ -250,7 +253,7 @@ function Categories({ state, reload }: { state: ManageState; reload: () => void 
         </Table>
       ))}
       {error ? <p className="px-4 py-2 text-[13px] text-destructive">{error}</p> : null}
-    </Panel>
+    </Sheet>
   );
 }
 

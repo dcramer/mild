@@ -1,7 +1,7 @@
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
-import { DispositionBadge, Empty, Highlight, NUM, Panel, PanelHeader, TD, TH, TierLabel } from '@/components/bits.tsx';
+import { Button, Highlight, Sheet, SheetHead } from '@/system';
+import { DispositionBadge, Empty, NUM, TD, TH, TierLabel } from '@/components/bits.tsx';
 import { DecisionTable } from '@/components/decision-table.tsx';
-import { Button } from '@/components/ui/button';
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { DecisionRow, Summary } from '@/lib/api.ts';
@@ -96,13 +96,13 @@ export function Overview({ data, onOpen, onViewAll }: { data: Summary; onOpen: (
       </dl>
 
       <div className="grid gap-4 lg:grid-cols-5">
-        <Panel className="lg:col-span-3">
-          <PanelHeader title="Decisions per day" description="Darker ink is a cheaper tier." />
+        <Sheet className="lg:col-span-3">
+          <SheetHead title="Decisions per day" description="Darker ink is a cheaper tier." />
           {t.decisions === 0 ? <Empty>No decisions in this period.</Empty> : <PerDay daily={data.daily} />}
-        </Panel>
+        </Sheet>
 
-        <Panel className="lg:col-span-2">
-          <PanelHeader title="By tier" />
+        <Sheet className="lg:col-span-2">
+          <SheetHead title="By tier" />
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -125,12 +125,12 @@ export function Overview({ data, onOpen, onViewAll }: { data: Summary; onOpen: (
               ))}
             </TableBody>
           </Table>
-        </Panel>
+        </Sheet>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-5">
-        <Panel className="lg:col-span-3">
-          <PanelHeader title="Most frequent senders" />
+        <Sheet className="lg:col-span-3">
+          <SheetHead title="Most frequent senders" />
           {data.topSenders.length === 0 ? (
             <Empty>No mail recorded in this period.</Empty>
           ) : (
@@ -159,10 +159,10 @@ export function Overview({ data, onOpen, onViewAll }: { data: Summary; onOpen: (
               </TableBody>
             </Table>
           )}
-        </Panel>
+        </Sheet>
 
-        <Panel className="lg:col-span-2">
-          <PanelHeader title="Outcomes" />
+        <Sheet className="lg:col-span-2">
+          <SheetHead title="Outcomes" />
           {data.byDisposition.length === 0 ? (
             <Empty>Nothing decided in this period.</Empty>
           ) : (
@@ -187,14 +187,14 @@ export function Overview({ data, onOpen, onViewAll }: { data: Summary; onOpen: (
               </TableBody>
             </Table>
           )}
-        </Panel>
+        </Sheet>
       </div>
 
-      <Panel>
-        <PanelHeader
+      <Sheet>
+        <SheetHead
           title="Latest decisions"
           action={
-            <Button variant="outline" size="sm" onClick={onViewAll}>
+            <Button variant="line" size="sm" onClick={onViewAll}>
               View all
             </Button>
           }
@@ -204,7 +204,7 @@ export function Overview({ data, onOpen, onViewAll }: { data: Summary; onOpen: (
         ) : (
           <DecisionTable rows={data.recent} onOpen={onOpen} />
         )}
-      </Panel>
+      </Sheet>
     </div>
   );
 }

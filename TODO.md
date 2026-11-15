@@ -58,7 +58,15 @@ Later, only if an operator-facing agent is built (one you talk to: "why did you 
 
 The dashboard manages sift, behind Google sign-in. That sign-in also connects the Gmail account.
 
-- [ ] **Design the components.** The page has a settled style but its parts were never designed: suggestion rows, the figures strip, tables, selects and buttons, the message panel, settings rows, the chart, empty and loading states. Take each in turn.
+- [ ] **Move every screen onto the design system** (docs/DESIGN.md). Done so far: sign-in, and buttons, sheets, stamps and notes everywhere. Each of these still needs designing as a part, then the screens that use it:
+  - [ ] Select and input (still shadcn's, skinned).
+  - [ ] Tabs and the page header.
+  - [ ] Table, and the decision row.
+  - [ ] The suggestion row: sender, sample subjects, what sift would do, the answer.
+  - [ ] The figures strip and the chart on Overview.
+  - [ ] The message drawer.
+  - [ ] Settings rows, and confirmation of a risky change.
+  - [ ] Empty and loading states.
 - [ ] Try the sign-in for real: a Web application client, `tailscale serve`, the redirect URIs, and a second account.
 - [ ] Keep people apart: today everyone signed in sees every connected account. Scope each session to its own account before more than one person uses an install.
 - [ ] Filter every view by account once there is more than one.

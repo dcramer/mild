@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Empty, ErrorNote, Panel, PanelHeader, Sub, TD, TH } from '@/components/bits.tsx';
-import { Button } from '@/components/ui/button';
+import { Button, Sheet, SheetHead } from '@/system';
+import { Empty, ErrorNote, Sub, TD, TH } from '@/components/bits.tsx';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api, useAction, useLoaded } from '@/lib/api.ts';
@@ -19,8 +19,8 @@ export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void 
       {error ? <ErrorNote message={error} /> : null}
       {action.error ? <p className="text-[13px] text-destructive">{action.error}</p> : null}
       {note ? <p className="text-[13px]">{note}</p> : null}
-      <Panel>
-        <PanelHeader title="Changes" description="sift never deletes mail." />
+      <Sheet>
+        <SheetHead title="Changes" description="sift never deletes mail." />
         {loading ? (
           <div className="p-4">
             <Skeleton className="h-40 w-full" />
@@ -67,7 +67,7 @@ export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void 
                     <TableCell className={`${TD} text-right`}>
                       {change.status === 'done' && change.type !== 'undo' ? (
                         <Button
-                          variant="outline"
+                          variant="line"
                           size="sm"
                           disabled={action.busy}
                           onClick={() =>
@@ -87,7 +87,7 @@ export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void 
             </TableBody>
           </Table>
         )}
-      </Panel>
+      </Sheet>
     </div>
   );
 }

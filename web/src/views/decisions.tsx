@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Empty, ErrorNote, Panel } from '@/components/bits.tsx';
+import { Button, Sheet } from '@/system';
+import { Empty, ErrorNote } from '@/components/bits.tsx';
 import { DecisionTable } from '@/components/decision-table.tsx';
 import { Picker } from '@/components/picker.tsx';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { type Days, type DecisionRow, api, useLoaded } from '@/lib/api.ts';
@@ -46,7 +46,7 @@ export function Decisions({ days, onOpen }: { days: Days; onOpen: (row: Decision
         {data ? <span className="ml-auto text-[13px] text-muted-foreground tabular-nums">{count(data.total)} decisions</span> : null}
       </div>
       {error ? <ErrorNote message={error} /> : null}
-      <Panel>
+      <Sheet>
         {loading ? (
           <div className="p-4">
             <Skeleton className="h-64 w-full" />
@@ -56,16 +56,16 @@ export function Decisions({ days, onOpen }: { days: Days; onOpen: (row: Decision
         ) : (
           <DecisionTable rows={data.rows} onOpen={onOpen} search={search} />
         )}
-      </Panel>
+      </Sheet>
       {data && data.total > PAGE ? (
         <div className="flex items-center justify-end gap-2 text-[13px] text-muted-foreground tabular-nums">
           <span>
             {count(offset + 1)}–{count(Math.min(offset + PAGE, data.total))} of {count(data.total)}
           </span>
-          <Button variant="outline" size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>
+          <Button variant="line" size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>
             Newer
           </Button>
-          <Button variant="outline" size="sm" disabled={offset + PAGE >= data.total} onClick={() => setOffset(offset + PAGE)}>
+          <Button variant="line" size="sm" disabled={offset + PAGE >= data.total} onClick={() => setOffset(offset + PAGE)}>
             Older
           </Button>
         </div>
