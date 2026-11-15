@@ -40,6 +40,7 @@ Later, only if an operator-facing agent is built (one you talk to: "why did you 
 A React app in `web/` (shadcn/ui on Base UI, Tailwind, Recharts) served by `sift dashboard`.
 
 - [ ] Offer `tailscale serve` as the way to reach the dashboard from other devices: sift stays on localhost and Tailscale adds HTTPS and identity. Today it listens on the Tailscale address over plain HTTP.
+- [ ] `pnpm dev:web` proxies to localhost:8787; make it follow `dashboard.port`.
 - [ ] Let the dashboard act, not only show: undo a change, answer a question, correct a decision, edit rules and what each category does. This is where steering sift should live; the CLI commands for these are stopgaps. It needs a deliberate design for a page with no login (localhost only, a per-install token, same-origin checks).
 - [ ] Senders view: per-sender volume, what sift does with them, and a way to see their messages.
 - [ ] Rule detail: the messages a rule matched, hits over time, rules that never fire.

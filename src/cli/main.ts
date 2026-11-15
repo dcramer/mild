@@ -2,8 +2,8 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { type MessageAction, type Outcome, execute, undo } from '../actions/executor.ts';
-import { type Config, dashboardUrl, loadConfig, saveSettings } from '../config.ts';
-import { createDashboardServer } from '../dashboard/server.ts';
+import { type Config, loadConfig, saveSettings } from '../config.ts';
+import { WEB_DIST, createDashboardServer } from '../dashboard/server.ts';
 import { runLoop, runOnce } from '../daemon/run.ts';
 import { syncAccount } from '../daemon/sync.ts';
 import { createGmailApi } from '../gmail/api.ts';
@@ -16,7 +16,7 @@ import { getAction, listRecentActions } from '../store/actions.ts';
 import { listCategories, updateCategory } from '../store/categories.ts';
 import { openDb } from '../store/db.ts';
 import { type SetupState, runInit } from './init.ts';
-import { localAddresses, resolveHere } from './network.ts';
+import { dashboardUrls, listenAddresses, localAddresses, machineNames } from './network.ts';
 import { closeTerminal, readLine } from './terminal.ts';
 import { disposition, paint, spin, ui } from './ui.ts';
 import { addRule, listRules, removeRule } from '../store/rules.ts';
@@ -27,8 +27,7 @@ const PLANNED = ['review'] as const;
 /** sift is set up and started from here; looking at and steering it happens in the dashboard. */
 const MAIN_COMMANDS: readonly (readonly [string, string])[] = [
   ['init', 'Set sift up, or finish setting it up'],
-  ['run', 'Sync and sort your mail, continuously'],
-  ['dashboard', 'See what sift decided and why, in your browser'],
+  ['run', 'Sort your mail continuously, and serve the dashboard'],
   ['status', 'What is set up and how much sift has recorded'],
 ];
 const OTHER_COMMANDS: readonly (readonly [string, string])[] = [
@@ -36,6 +35,7 @@ const OTHER_COMMANDS: readonly (readonly [string, string])[] = [
   ['categories', 'list | set <key> --do <keep|archive|review|spam>'],
   ['log', 'recent changes to your mailbox'],
   ['undo <id>', 'reverse one change'],
+  ['dashboard', 'serve the dashboard without sorting mail'],
   ['auth', 'connect a Gmail account'],
   ['login <provider>', 'sign in to a model provider'],
   ['models', 'list the models you can use'],
@@ -69,7 +69,7 @@ function status(): void {
     ['Model', settings.model ?? paint.dim('none')],
     ['Mode', `${settings.act ? 'acting on decisions' : 'observing only'}${paint.dim(` · every ${settings.interval}s`)}`],
     ['Guidance', existsSync(config.guidelinesPath) ? paint.path(config.guidelinesPath) : paint.dim('none written')],
-    ['Dashboard', `${dashboardUrl(settings)}${paint.dim(settings.dashboardHost ? '' : ' · this machine only')}`],
+    ['Dashboard', `${dashboardUrls(settings)[0]}${paint.dim(settings.dashboardHost ? '' : ' · this machine only')}`],
   ]);
   ui.blank();
   const questions = count('questions', 'WHERE answered_at IS NULL');
@@ -165,7 +165,7 @@ async function init(args: string[]): Promise<void> {
     availableModels: async (provider) => (await models.getAvailable(provider)).map((m) => m.id),
     categories: (account) => withDb((db) => listCategories(db, account)),
     networkAddresses: localAddresses,
-    resolveHere,
+    dashboardUrls: () => dashboardUrls(config.settings),
   });
 }
 
@@ -273,51 +273,70 @@ async function undoCommand(args: string[]): Promise<void> {
   }
 }
 
-async function dashboard(args: string[]): Promise<void> {
-  const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string' } } });
-  const config = loadConfig();
+/**
+ * Start serving the dashboard from this process and say where it is. Used by `run`, so one process
+ * keeps sift online, and by `dashboard` on its own.
+ */
+async function serveDashboard(config: Config, db: ReturnType<typeof openDb>, options: { port?: number; host?: string } = {}): Promise<() => void> {
   const { settings } = config;
-  const port = values.port === undefined ? settings.dashboardPort : Number(values.port);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Invalid --port: ${values.port}`);
+  const port = options.port ?? settings.dashboardPort;
+  // --host replaces the setting: a container listens on 0.0.0.0 and its port mapping decides who can reach it.
+  const listen = options.host ? [options.host] : await listenAddresses(settings);
+  // Beyond localhost, answer to any name or address that is this machine, and to nothing else.
+  const beyondLocalhost = listen.some((address) => address !== '127.0.0.1');
+  const allowedHosts = beyondLocalhost
+    ? [...machineNames(), ...(settings.dashboardHost && settings.dashboardHost !== 'all' ? [settings.dashboardHost] : [])]
+    : [];
 
-  // Always on localhost; also on the configured address when sift runs on a server. --host replaces both
-  // (a container listens on 0.0.0.0 and leaves it to the port mapping to decide who can reach it).
-  let listen = ['127.0.0.1'];
-  const allowedHosts: string[] = [];
-  if (settings.dashboardHost) {
-    const address = await resolveHere(settings.dashboardHost);
-    if (!address && !values.host)
-      throw new Error(
-        `dashboard.host is ${settings.dashboardHost}, which does not point at this machine. Fix it in ${config.settingsPath} or run \`sift init\`.`,
-      );
-    allowedHosts.push(settings.dashboardHost, ...(address ? [address] : []));
-    if (address && address !== '127.0.0.1') listen.push(address);
-  }
-  if (values.host) listen = [values.host];
-
-  const db = openDb(config.dbPath);
   const servers = listen.map(() => createDashboardServer(db, { allowedHosts }));
   await Promise.all(
     servers.map(
       (server, index) =>
         new Promise<void>((resolve, reject) => {
-          server.once('error', reject);
+          server.once('error', (error: NodeJS.ErrnoException) =>
+            reject(
+              error.code === 'EADDRINUSE'
+                ? new Error(`Port ${port} is already in use. Is sift already running? If not, change dashboard.port in ${config.settingsPath}.`)
+                : error,
+            ),
+          );
           server.listen(port, listen[index], resolve);
         }),
     ),
   );
+
+  const [first, ...others] = dashboardUrls(settings, port);
+  ui.fields([['Dashboard', paint.bold(first ?? '')], ...others.map((url) => ['', url] as const)]);
+  if (beyondLocalhost) ui.info('No login: anyone on those networks can read it.');
+  if (!existsSync(`${WEB_DIST}index.html`)) ui.warn(`The dashboard page is not built yet. Run ${paint.cmd('pnpm build:web')} and start sift again.`);
+  return () => {
+    for (const server of servers) {
+      server.close();
+      server.closeAllConnections();
+    }
+  };
+}
+
+function portOption(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Invalid --port: ${value}`);
+  return port;
+}
+
+async function dashboard(args: string[]): Promise<void> {
+  const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string' } } });
+  const port = portOption(values.port);
+  const config = loadConfig();
+  const db = openDb(config.dbPath);
   ui.heading('dashboard');
-  ui.plain(paint.bold(dashboardUrl({ ...settings, dashboardPort: port })));
-  ui.info(settings.dashboardHost ? 'No login: anyone who can reach that address can read it.' : 'Reachable from this machine only.');
+  const stop = await serveDashboard(config, db, { ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) });
   ui.blank();
   await new Promise<void>((resolve) => {
     process.once('SIGINT', resolve);
     process.once('SIGTERM', resolve);
   });
-  for (const server of servers) {
-    server.close();
-    server.closeAllConnections();
-  }
+  stop();
   db.close();
 }
 
@@ -403,6 +422,9 @@ async function run(args: string[]): Promise<void> {
       observe: { type: 'boolean', default: false },
       once: { type: 'boolean', default: false },
       interval: { type: 'string' },
+      port: { type: 'string' },
+      host: { type: 'string' },
+      'no-dashboard': { type: 'boolean', default: false },
     },
   });
   if (values.act && values.observe) throw new Error('Choose one of --act and --observe.');
@@ -428,17 +450,27 @@ async function run(args: string[]): Promise<void> {
     };
     ui.heading(act ? 'acting' : 'observing', `${modelSpec ?? 'no model'} · every ${interval}s`);
     if (!act) ui.info(`Gmail is not changed until you set act = true in ${paint.path(config.settingsPath)}`);
-    ui.blank();
 
     if (values.once) {
+      ui.blank();
       const results = await runOnce(db, options);
       if (results.some((r) => r.error)) process.exitCode = 1;
       return;
     }
+    // One process keeps sift online: the same one that sorts mail serves the dashboard.
+    const port = portOption(values.port);
+    const stopDashboard = values['no-dashboard']
+      ? () => {}
+      : await serveDashboard(config, db, { ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) });
+    ui.blank();
     const stop = new AbortController();
     process.once('SIGINT', () => stop.abort());
     process.once('SIGTERM', () => stop.abort());
-    await runLoop(db, { ...options, intervalMs: interval * 1000, signal: stop.signal });
+    try {
+      await runLoop(db, { ...options, intervalMs: interval * 1000, signal: stop.signal });
+    } finally {
+      stopDashboard();
+    }
   } finally {
     db.close();
   }

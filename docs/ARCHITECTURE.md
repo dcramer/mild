@@ -68,7 +68,7 @@ Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 
 ## The run loop
 
-`sift run` repeats one pass per account: settle unconfirmed actions, sync, then triage every recorded message that has no decision.
+`sift run` is the one long-running process: it serves the dashboard and repeats one pass per account: settle unconfirmed actions, sync, then triage every recorded message that has no decision.
 
 - **Observe is the default.** Decisions are recorded with `mode = observe` and the mailbox is not touched. `--act` carries them out. Observed decisions are never acted on later.
 - **Decide, record, then act.** The decision row is written before any mailbox change. Its `outcome` then records what happened: `none` (nothing needed doing), `done`, `skipped` with the reason (left the inbox, spam refused), `failed` or `unknown`.
@@ -140,10 +140,10 @@ OAuth tokens are kept in files beside the database, not in it. pi-durable keeps 
 
 ### Dashboard
 
-`sift dashboard` serves a JSON API (`src/dashboard/`) and the static web app built from `web/`.
+`sift run` serves a JSON API (`src/dashboard/`) and the static web app built from `web/`, in the same process that sorts mail. `sift dashboard` serves them alone.
 
 - **Read-only.** The server only reads the database; lint forbids it importing Gmail or action code. It accepts only GET.
-- **No login, so reach is the control.** It listens on localhost, and also on `dashboard.host` when the user says sift runs on a server (a Tailscale address is the intended case). It answers only requests addressed to localhost or that configured host, which blocks DNS rebinding. It is never meant for the public internet.
+- **No login, so reach is the control.** It listens on localhost; on a server, `dashboard.host` adds one of the machine's addresses or `all` of them (Tailscale is the intended case). Beyond localhost it answers to any name or address that is this machine (its addresses, hostname and Tailscale name) and rejects every other Host, which blocks DNS rebinding. It is never meant for the public internet.
 - **Untrusted content.** Subjects and sender names come from email. React renders them as text, and the page is served with a content security policy that allows no inline script, no inline style and nothing from another origin.
 - **Stack.** shadcn/ui components (on Base UI) with Tailwind, and Recharts for the chart. The components live in `web/src/components/ui` as generated source. Two of them needed a change for the content security policy: `chart.tsx` no longer renders an inline `<style>`, and Base UI's style injection is turned off in `main.tsx` with its one rule moved into `index.css`. Re-check both when updating components.
 - **Look.** Monochrome with hairline borders and Geist type. The only colour is a yellow highlighter, used for the headline figure, anything waiting on the user, undecided mail and search matches. Tiers are drawn as one ink that thins as cost rises, because they are an ordered cascade.

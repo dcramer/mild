@@ -1,5 +1,5 @@
 import { existsSync, writeFileSync } from 'node:fs';
-import { type Config, GUIDELINES_TEMPLATE, type Settings, dashboardUrl } from '../config.ts';
+import { type Config, GUIDELINES_TEMPLATE, type Settings } from '../config.ts';
 import type { Category } from '../triage/stages/model.ts';
 import { type Ui, disposition, paint } from './ui.ts';
 
@@ -48,8 +48,8 @@ export interface InitDeps {
   categories(account: string): Category[];
   /** Addresses on this machine that another machine could reach. */
   networkAddresses(): { address: string; label: string }[];
-  /** The local address a name or IP refers to, or null if it does not point at this machine. */
-  resolveHere(host: string): Promise<string | null>;
+  /** Where a browser finds the dashboard under the current settings, best first. */
+  dashboardUrls(): string[];
 }
 
 const STEPS = 5;
@@ -68,7 +68,7 @@ export async function runInit(deps: InitDeps): Promise<void> {
   if (!existsSync(config.guidelinesPath)) writeFileSync(config.guidelinesPath, GUIDELINES_TEMPLATE, { mode: 0o600 });
 
   ui.step(1, STEPS, 'Where sift runs');
-  if (deps.setupState().location === undefined || (await keep(ui, whereDashboard(config), 'Change it'))) await chooseLocation(deps);
+  if (deps.setupState().location === undefined || (await keep(ui, whereDashboard(deps), 'Change it'))) await chooseLocation(deps);
 
   ui.step(2, STEPS, 'Google OAuth client');
   if (googleReady(deps)) {
@@ -125,9 +125,7 @@ export async function runInit(deps: InitDeps): Promise<void> {
     ui.blank();
     return;
   }
-  ui.plain(
-    `${paint.mark(' Ready ')} Start with ${paint.cmd('sift run')}, watch with ${paint.cmd('sift dashboard')} at ${paint.bold(dashboardUrl(config.settings))}`,
-  );
+  ui.plain(`${paint.mark(' Ready ')} Start it with ${paint.cmd('sift run')}. The dashboard is at ${paint.bold(deps.dashboardUrls()[0] ?? '')}`);
   ui.blank();
   ui.info(`sift only observes until you set act = true in ${paint.path(config.settingsPath)}`);
   ui.blank();
@@ -146,10 +144,10 @@ async function keep(ui: Ui, done: string, redo: string): Promise<boolean> {
   return again;
 }
 
-const whereDashboard = (config: Config) =>
-  config.settings.dashboardHost ? `Dashboard at ${paint.bold(dashboardUrl(config.settings))}` : 'Dashboard on this machine only';
+const whereDashboard = (deps: InitDeps) =>
+  deps.config.settings.dashboardHost ? `Dashboard at ${paint.bold(deps.dashboardUrls()[0] ?? '')}` : 'Dashboard on this machine only';
 
-/** Ask whether the dashboard is opened here or from another machine, and if so at which address. */
+/** Ask whether the dashboard is opened here or from another machine, and if so where it should listen. */
 async function chooseLocation(deps: InitDeps): Promise<void> {
   const { ui, config } = deps;
   const remote = await ui.select('Where will you open the dashboard?', [
@@ -159,30 +157,20 @@ async function chooseLocation(deps: InitDeps): Promise<void> {
 
   let host: string | undefined;
   if (remote) {
-    ui.info('The dashboard has no login: anyone who can reach the address you pick can read it.');
-    ui.info('A Tailscale address keeps that to your own devices.');
+    ui.info('The dashboard has no login: anyone on a network it listens on can read it.');
     ui.blank();
-    const typed = Symbol('typed');
-    const picked = await ui.select<string | typeof typed>('Which address do you reach this machine by?', [
-      ...deps.networkAddresses().map((a) => ({ label: a.address, hint: a.label, value: a.address })),
-      { label: 'A hostname', hint: 'for example its Tailscale name', value: typed },
+    const addresses = deps.networkAddresses();
+    host = await ui.select('Which network should it listen on?', [
+      ...addresses.map((a) => ({ label: a.address, hint: a.label, value: a.address })),
+      { label: 'All of them', hint: addresses.length === 0 ? 'no addresses found yet' : 'every network this machine is on', value: 'all' },
     ]);
-    host = picked === typed ? await askHostname(deps) : picked;
   }
 
   const { dashboardHost: _previous, ...rest } = config.settings;
   deps.saveSettings(host ? { ...rest, dashboardHost: host } : rest);
   deps.saveSetupState({ ...deps.setupState(), location: host ? 'remote' : 'local' });
-  ui.ok(whereDashboard(config));
-}
-
-async function askHostname(deps: InitDeps): Promise<string | undefined> {
-  for (;;) {
-    const name = await deps.ui.text('Hostname (Enter to keep it on this machine only):');
-    if (name === '') return undefined;
-    if (await deps.resolveHere(name)) return name;
-    deps.ui.fail(`${name} does not point at this machine from here.`);
-  }
+  ui.ok(whereDashboard(deps));
+  for (const url of deps.dashboardUrls().slice(1)) ui.info(`also ${url}`);
 }
 
 interface Task {

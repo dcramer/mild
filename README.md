@@ -18,7 +18,7 @@ pnpm sift init
 
 `init` walks you through whatever is not done yet and can be run again at any time:
 
-1. **Where sift runs.** On this machine, or on a server you reach from another one. For a server it lists the machine's addresses (Tailscale first) and the dashboard listens on the one you pick.
+1. **Where sift runs.** On this machine, or on a server you reach from another one. For a server it lists the machine's addresses (Tailscale first) and the dashboard listens on the one you pick, or on all of them.
 2. **Google OAuth client.** sift reads your mail through a client you own, so no third party sits in between. `init` takes you through creating one a page at a time: the link, the values to enter, then it waits. You paste the client's JSON when you create it. At the end you choose between adding yourself as a test user (works straight away; Google signs you out every 7 days) and publishing the app.
 3. **Gmail account.** Google's sign-in. If the browser is not on the machine running sift, the page it ends on will not load: paste that page's address back into the terminal.
 4. **Model.** Optional. A ChatGPT Plus or Pro subscription or an API key, then a model. Without one, mail that no rule covers stays in your inbox.
@@ -47,7 +47,7 @@ pnpm sift status
 pnpm sift run
 ```
 
-sift starts by **observing**: it syncs new mail every 60 seconds, records what it would do, and changes nothing in Gmail. It handles mail that arrives after you connect; it never sweeps what is already in your inbox. Watch the dashboard for a while, then set `act = true` in `sift.toml` (or run `sift run --act` to try it once).
+That one process sorts your mail and serves the dashboard; there is nothing else to keep running. sift starts by **observing**: it syncs new mail every 60 seconds, records what it would do, and changes nothing in Gmail. It handles mail that arrives after you connect; it never sweeps what is already in your inbox. Watch the dashboard for a while, then set `act = true` in `sift.toml` (or run `sift run --act` to try it once).
 
 Rules decide mail without any model. A matching `keep` rule always wins.
 
@@ -81,15 +81,13 @@ Using a ChatGPT subscription from a third-party tool is not something OpenAI doc
 
 ## Dashboard
 
+`sift run` serves it and prints its address. It needs the page built once:
+
 ```bash
 pnpm build:web
 ```
 
-```bash
-pnpm sift dashboard
-```
-
-Serves a read-only page at http://localhost:8787. It has no login, so who can read it is decided by where it listens: this machine only, unless `init` or `dashboard.host` in `sift.toml` names an address other machines reach it by. Use a Tailscale address for a server; do not put it on the public internet.
+It has no login, so who can read it is decided by where it listens: this machine only by default. On a server, `init` (or `dashboard.host` in `sift.toml`) makes it listen on one of the machine's addresses, or `"all"` of them. It then answers to any of that machine's own names and addresses, including its Tailscale name, and to nothing else. Use Tailscale for a server; do not put it on the public internet.
 
 - **Overview:** decisions per day by tier, how much was decided without a model, model cost, the backlog and the most frequent senders.
 - **Decisions:** every decision, searchable by subject or sender and filterable by tier and outcome. Choosing a row shows that message's full history: each decision, its reason and cost, and each mailbox change.
@@ -97,7 +95,7 @@ Serves a read-only page at http://localhost:8787. It has no login, so who can re
 
 ![The sift dashboard](docs/images/dashboard.png)
 
-The page is a small React app in `web/` (shadcn/ui on Base UI, Tailwind, Recharts). `pnpm dev:web` runs it with hot reload against a running `sift dashboard`.
+The page is a small React app in `web/` (shadcn/ui on Base UI, Tailwind, Recharts). `pnpm dev:web` runs it with hot reload against a running sift. `sift dashboard` serves the page on its own, without sorting mail.
 
 ## Develop
 
@@ -127,4 +125,4 @@ When `init` asks for the Google client file, give a path inside the container; m
 docker compose -f docker/compose.yaml up
 ```
 
-This starts sift and the dashboard at http://localhost:8787.
+This starts sift, with the dashboard at http://localhost:8787. The compose file says how to reach it from other devices.

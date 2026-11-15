@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { type InitDeps, type SetupState, runInit } from '../src/cli/init.ts';
-import { localAddresses, resolveHere } from '../src/cli/network.ts';
+import { dashboardUrls, listenAddresses, localAddresses, machineNames, resolveHere } from '../src/cli/network.ts';
 import type { Ui } from '../src/cli/ui.ts';
 import { DEFAULT_SETTINGS, loadConfig, parseSettings, renderSettings, resolveHome, saveSettings } from '../src/config.ts';
 import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
@@ -107,7 +107,8 @@ function wizard(
       { address: '100.64.0.7', label: 'Tailscale' },
       { address: '192.168.1.20', label: 'local network, eth0' },
     ],
-    resolveHere: async (host) => (host === 'box.example.ts.net' ? '100.64.0.7' : null),
+    dashboardUrls: () =>
+      config.settings.dashboardHost ? [`http://box.example.ts.net:8787`, `http://${config.settings.dashboardHost}:8787`] : ['http://localhost:8787'],
   };
   return { deps, config, said, asked, calls, world, text: () => said.join('\n') };
 }
@@ -223,24 +224,23 @@ describe('sift init', () => {
     expect(stopped.calls).toEqual([]);
   });
 
-  it('asks where sift runs and, on a server, which address the dashboard is reached by', async () => {
+  it('asks where sift runs and, on a server, which network the dashboard listens on', async () => {
     const server = wizard([1, 0, 'skip', 3], { location: 'ask' });
     await runInit(server.deps);
-    expect(server.asked.slice(0, 2)).toEqual(['Where will you open the dashboard?', 'Which address do you reach this machine by?']);
+    expect(server.asked.slice(0, 2)).toEqual(['Where will you open the dashboard?', 'Which network should it listen on?']);
     expect(loadConfig({ SIFT_HOME: server.config.home }).settings.dashboardHost).toBe('100.64.0.7');
     expect(server.world.setup.location).toBe('remote');
     expect(server.text()).toContain('no login');
     expect(server.text()).toContain('ok: Dashboard at');
+    expect(server.text()).toContain('also http://100.64.0.7:8787');
 
-    // A typed hostname must point at this machine.
-    const named = wizard([1, 2, 'elsewhere.example', 'box.example.ts.net', 'skip', 3], { location: 'ask' });
-    await runInit(named.deps);
-    expect(named.text()).toContain('fail: elsewhere.example does not point at this machine from here.');
-    expect(named.config.settings.dashboardHost).toBe('box.example.ts.net');
+    const everywhere = wizard([1, 2, 'skip', 3], { location: 'ask' });
+    await runInit(everywhere.deps);
+    expect(everywhere.config.settings.dashboardHost).toBe('all');
 
-    // Changing back to this machine clears the address.
+    // Changing back to this machine clears the setting.
     const back = wizard([REDO, 0, KEEP, KEEP, 3], { client: true, accounts: ['me@example.org'], location: 'ask' });
-    saveSettings(back.config, { ...DEFAULT_SETTINGS, dashboardHost: '100.64.0.7' });
+    saveSettings(back.config, { ...DEFAULT_SETTINGS, dashboardHost: 'all' });
     back.world.setup.location = 'remote';
     await runInit(back.deps);
     expect(loadConfig({ SIFT_HOME: back.config.home }).settings).toEqual(DEFAULT_SETTINGS);
@@ -329,5 +329,24 @@ describe('network', () => {
     expect(await resolveHere('127.0.0.1')).toBe('127.0.0.1');
     expect(await resolveHere('192.0.2.1')).toBeNull();
     expect(await resolveHere('no-such-host.invalid')).toBeNull();
+  });
+
+  it('listens on localhost alone, one more address, or everything, as the setting says', async () => {
+    expect(await listenAddresses(DEFAULT_SETTINGS)).toEqual(['127.0.0.1']);
+    expect(await listenAddresses({ ...DEFAULT_SETTINGS, dashboardHost: 'all' })).toEqual(['0.0.0.0']);
+    expect(parseSettings('[dashboard]\nhost = "0.0.0.0"').dashboardHost).toBe('all');
+    await expect(listenAddresses({ ...DEFAULT_SETTINGS, dashboardHost: '192.0.2.1' })).rejects.toThrow('does not point at this machine');
+    for (const { address } of localAddresses()) expect(await listenAddresses({ ...DEFAULT_SETTINGS, dashboardHost: address })).toEqual(['127.0.0.1', address]);
+  });
+
+  it("answers to this machine's own names and addresses, and prints URLs a browser can use", () => {
+    const names = machineNames();
+    for (const { address } of localAddresses()) expect(names).toContain(address);
+    expect(names.some((name) => name.endsWith('.local'))).toBe(true);
+    expect(names).not.toContain('localhost');
+
+    expect(dashboardUrls(DEFAULT_SETTINGS)).toEqual(['http://localhost:8787']);
+    expect(dashboardUrls({ ...DEFAULT_SETTINGS, dashboardHost: '192.0.2.9' }, 9000)).toEqual(['http://192.0.2.9:9000']);
+    for (const url of dashboardUrls({ ...DEFAULT_SETTINGS, dashboardHost: 'all' })) expect(url).toMatch(/^http:\/\/[^/]+:8787$/);
   });
 });

@@ -13,8 +13,8 @@ export interface Settings {
   interval: number;
   dashboardPort: number;
   /**
-   * The name or address other machines use to reach the dashboard, when sift runs on a server. The
-   * dashboard then listens there as well as on localhost, and sift prints URLs with it. Unset: this machine only.
+   * Where the dashboard listens besides localhost, when sift runs on a server: one of this machine's
+   * addresses or names, or `all` for every network it is on. Unset: this machine only.
    */
   dashboardHost?: string;
 }
@@ -100,7 +100,7 @@ export function parseSettings(text: string, path = 'sift.toml'): Settings {
           settings.dashboardPort = port;
         } else if (sub === 'host') {
           if (typeof port !== 'string' || !/^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/.test(port)) throw bad('dashboard.host', 'a hostname or IP address');
-          settings.dashboardHost = port;
+          settings.dashboardHost = port === '0.0.0.0' ? 'all' : port;
         } else throw new Error(`${path}: unknown setting dashboard.${sub}.`);
       }
     } else {
@@ -123,9 +123,9 @@ interval = ${settings.interval}
 
 [dashboard]
 port = ${settings.dashboardPort}
-# The name or address other machines reach this one by (a Tailscale address, say). The dashboard then
-# listens there too. It has no login: anyone who can reach that address can read it. Unset: localhost only.
-${settings.dashboardHost ? `host = ${JSON.stringify(settings.dashboardHost)}` : '# host = "100.x.y.z"'}
+# Where else the dashboard listens: one of this machine's addresses (a Tailscale one, say), or "all" for
+# every network it is on. It has no login: anyone who can reach it there can read it. Unset: localhost only.
+${settings.dashboardHost ? `host = ${JSON.stringify(settings.dashboardHost)}` : '# host = "all"'}
 `;
 }
 
@@ -143,6 +143,3 @@ The model reads this before sorting each message. Replace these examples with yo
 - Anything from my accountant or my bank is personal, not a notification.
 - I read the Example Weekly newsletter; treat it as personal.
 `;
-
-/** Where to point a browser for the dashboard. */
-export const dashboardUrl = (settings: Settings) => `http://${settings.dashboardHost ?? 'localhost'}:${settings.dashboardPort}`;

@@ -1,29 +1,25 @@
 # docker compose -f docker/compose.yaml up
-x-sift: &sift
-  build:
-    context: ..
-    dockerfile: docker/Dockerfile
-  restart: unless-stopped
-  read_only: true
-  cap_drop: [ALL]
-  security_opt: [no-new-privileges:true]
-  tmpfs: [/tmp]
-  volumes:
-    # Database and OAuth tokens. Must be writable: refresh tokens rotate.
-    - sift-data:/data
-
 services:
-  # Syncs and triages. Observes only; add "--act" to the command to let it change Gmail.
+  # One process: sorts mail and serves the dashboard.
   sift:
-    <<: *sift
-    command: [run]
-
-  # Read-only web page over the same database, published on this machine only.
-  dashboard:
-    <<: *sift
-    command: [dashboard, --host, 0.0.0.0]
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    # Inside a container sift listens on every interface; the mapping below decides who can reach it.
+    command: [run, --host, 0.0.0.0]
     ports:
+      # This machine only. To reach the dashboard from other devices, publish on the address they use
+      # (for example 100.x.y.z:8787:8787 for Tailscale) and set dashboard.host in sift.toml to the same
+      # address, so sift answers to it. The dashboard has no login.
       - 127.0.0.1:8787:8787
+    volumes:
+      # Settings, database and credentials. Must be writable: refresh tokens rotate.
+      - sift-data:/data
 
 volumes:
   sift-data:
