@@ -50,6 +50,7 @@ Built: the Suggestions view, answers by sender ("Right" or "No, it is <label>") 
 
 ## Setup
 
+- [ ] **Recommend a default model.** When the provider is OpenAI or ChatGPT, preselect the newest version of the Luna family from the list the provider returns (highest version number whose name matches), if there is one, instead of making the user pick from the whole list. Do the same for other providers' small, cheap families.
 - [ ] **A clean README.** Say plainly what sift is for (a better Gmail filter and spam filter that learns from you and turns what it learns into rules), then the onboarding, which is install and `sift init`. Move everything else (the CLI reference, Docker detail, how the dashboard is built) out to docs/.
 - [ ] Run `sift init` inside Docker, where the dashboard address is the host's, not the container's. (It has been run for real on a headless server.)
 - [ ] Let `init` change a step that is already done (switch model, add a second account) instead of only filling gaps.
@@ -102,7 +103,7 @@ The dashboard manages sift, behind Google sign-in. That sign-in also connects th
 - [ ] Try the sign-in for real: a Web application client, `tailscale serve`, the redirect URIs, and a second account.
 - [ ] Keep people apart: today everyone signed in sees every connected account. Scope each session to its own account before more than one person uses an install.
 - [ ] Filter every view by account once there is more than one.
-- [ ] Sign in to a model provider from the dashboard; it still needs `sift init`.
+- [ ] **Sign in to ChatGPT (and other model providers) from the dashboard**, as Gmail already is, so setup in the terminal ends at the Google client. The device-code flow suits a page: show the code and the link, wait, then offer the models.
 - [ ] Use Tailscale's identity headers to skip the Google round trip for viewers on the tailnet.
 - [ ] Remove an account, and its token and data, from the dashboard.
 - [ ] Remove a label, and say what becomes of its rules and of mail already labelled; reorder labels.
