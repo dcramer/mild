@@ -64,7 +64,7 @@ pnpm sift undo <action-id>
 Without a model, mail that no rule covers is left for review. To turn the model tier on, sign in to a provider, pick a model and set `SIFT_MODEL`:
 
 ```bash
-pnpm sift login openai
+pnpm sift login openai-codex
 ```
 
 ```bash
@@ -72,10 +72,12 @@ pnpm sift models
 ```
 
 ```bash
-SIFT_MODEL=provider/model-id pnpm sift run
+SIFT_MODEL=openai-codex/<model-id> pnpm sift run
 ```
 
-`sift login openai` signs in with a ChatGPT subscription; add `--api-key` to use an API key instead. The model only names a category for each message. What happens to that category is your setting:
+`sift login openai-codex` signs in with a ChatGPT Plus or Pro subscription, the same way the Codex CLI does. It offers a browser login (which calls back on `localhost:1455`) or a device code, which is the one to pick in Docker or over SSH. `sift login openai` is OpenAI's newer "Sign in with ChatGPT"; `sift login <provider> --api-key` stores an API key instead. Using a subscription from a third-party tool is not something OpenAI documents as supported, so keep an API key as a fallback.
+
+The model only names a category for each message. What happens to that category is your setting:
 
 ```bash
 pnpm sift categories

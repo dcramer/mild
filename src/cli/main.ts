@@ -11,7 +11,7 @@ import { createGmailApi } from '../gmail/api.ts';
 import { authorize, clientFor, loadClientSecrets, saveRefreshToken } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { createJudge } from '../model/judge.ts';
-import { openModels, resolveModel } from '../model/models.ts';
+import { login, openModels, resolveModel } from '../model/models.ts';
 import { type Account, connectAccount, listAccounts } from '../store/accounts.ts';
 import { getAction, listRecentActions } from '../store/actions.ts';
 import { listCategories, updateCategory } from '../store/categories.ts';
@@ -49,7 +49,7 @@ const USAGE = `Usage: sift <command>
              rules remove <rule-id>
            (rules take --account <email> if more than one account is connected)
   login    Sign in to a model provider for the inference tier: sift login <provider> [--api-key]
-             e.g. sift login openai   (Sign in with ChatGPT; uses your subscription)
+             e.g. sift login openai-codex   (ChatGPT Plus/Pro subscription)
   models   List the models you can use, to set SIFT_MODEL=provider/model-id
   categories  Show the kinds of mail and what sift does with each
              categories set <key> --do <keep|archive|review|spam> [--label <name> | --no-label]
@@ -226,30 +226,27 @@ async function openModelTier(config: Config, spec: string) {
   };
 }
 
-/** Ask one line on the terminal. */
-function ask(question: string): Promise<string> {
+/** Ask one line on the terminal. If `signal` aborts first, stops waiting and answers with an empty string. */
+function ask(question: string, signal?: AbortSignal): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => {
-    rl.question(`${question} `, (answer) => {
+    const finish = (answer: string) => {
+      signal?.removeEventListener('abort', onAbort);
       rl.close();
       resolve(answer.trim());
-    });
+    };
+    const onAbort = () => finish('');
+    signal?.addEventListener('abort', onAbort, { once: true });
+    rl.question(`${question} `, finish);
   });
 }
 
-async function login(args: string[]): Promise<void> {
+async function loginCommand(args: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { 'api-key': { type: 'boolean', default: false } } });
   const [provider] = positionals;
-  if (!provider) throw new Error('Usage: sift login <provider> [--api-key]   e.g. sift login openai');
-  const models = openModels(loadConfig());
-  await models.login(provider, values['api-key'] ? 'api_key' : 'oauth', {
-    prompt: (prompt) => ask(prompt.message),
-    notify: (event) => {
-      if (event.type === 'auth_url') console.log(`Open this URL in a browser:\n\n${event.url}\n`);
-      else if (event.type === 'device_code') console.log(`Enter the code ${event.userCode} at ${event.verificationUri}`);
-      else console.log(event.message);
-    },
-  });
+  if (!provider) throw new Error('Usage: sift login <provider> [--api-key]   e.g. sift login openai-codex');
+  const config = loadConfig();
+  await login(openModels(config), config, provider, values['api-key'] ? 'api_key' : 'oauth', { ask, say: (line) => console.log(line) });
   console.log(`Signed in to ${provider}. Run \`sift models\` and set SIFT_MODEL to turn the inference tier on.`);
 }
 
@@ -400,7 +397,7 @@ async function main(): Promise<void> {
   else if (command === 'dashboard') await dashboard(args);
   else if (command === 'run') await run(args);
   else if (command === 'rules') rules(args);
-  else if (command === 'login') await login(args);
+  else if (command === 'login') await loginCommand(args);
   else if (command === 'models') await listModels();
   else if (command === 'categories') categories(args);
   else if (command === undefined || command === 'help' || command === '--help' || command === '-h') console.log(USAGE);

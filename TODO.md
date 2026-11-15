@@ -40,7 +40,7 @@ A React app in `web/` (shadcn/ui on Base UI, Tailwind, Recharts) served by `sift
 
 Built: one model call per message that names a category; the category's setting in the database decides what happens. Not yet run against a real model or a real mailbox.
 
-- [ ] Sign in with a ChatGPT subscription (`sift login openai`) and run a real classification end to end. Confirm the token refreshes and survives a restart.
+- [ ] Finish a ChatGPT subscription sign-in (`sift login openai-codex`; both it and `sift login openai` reach OpenAI's sign-in page) and run a real classification end to end. Confirm the token refreshes and survives a restart, and try the device-code login inside Docker.
 - [ ] Pick a default model and document it; today `SIFT_MODEL` must be set by hand.
 - [ ] Measure it: a labelled synthetic set in `evals/`, accuracy per category, how often it answers "unsure", cost per message.
 - [ ] Show the category, the guidelines in force and learned senders on the dashboard.
