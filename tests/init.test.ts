@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -15,12 +15,15 @@ const freshHome = () => mkdtempSync(join(tmpdir(), 'sift-home-'));
  * steps would. Answers are consumed in order: a string for a text or paste prompt, a number for the
  * index chosen in a menu, and 'skip' or 'done' for a pause.
  */
-function wizard(answers: (string | number)[], state: { client?: boolean; accounts?: string[]; models?: string[]; loginFails?: boolean } = {}) {
+function wizard(
+  answers: (string | number)[],
+  state: { client?: boolean; accounts?: string[]; models?: string[]; loginFails?: boolean; progress?: number } = {},
+) {
   const config = loadConfig({ SIFT_HOME: freshHome() });
   const said: string[] = [];
   const asked: string[] = [];
   const calls: string[] = [];
-  const world = { client: state.client ?? false, accounts: [...(state.accounts ?? [])] };
+  const world = { client: state.client ?? false, accounts: [...(state.accounts ?? [])], progress: state.progress ?? (state.client ? 7 : 0) };
   const next = (question: string) => {
     asked.push(question);
     const answer = answers.shift();
@@ -59,6 +62,10 @@ function wizard(answers: (string | number)[], state: { client?: boolean; account
     ui,
     saveSettings: (settings) => saveSettings(config, settings),
     hasGoogleClient: () => world.client,
+    googleProgress: () => world.progress,
+    setGoogleProgress: (done) => {
+      world.progress = done;
+    },
     installGoogleClient: (json) => {
       calls.push(`install ${json}`);
       if (json.includes('web')) throw new Error('What you pasted is not a Desktop app client');
@@ -77,15 +84,18 @@ function wizard(answers: (string | number)[], state: { client?: boolean; account
     availableModels: async () => state.models ?? ['small', 'large'],
     categories: () => [...DEFAULT_CATEGORIES],
   };
-  return { deps, config, said, asked, calls, text: () => said.join('\n') };
+  return { deps, config, said, asked, calls, world, text: () => said.join('\n') };
 }
 
-const TASKS = ['done', 'done', 'done', 'done', 'done', 'done'];
 const CLIENT = '{"installed":{}}';
+/** Answers for the seven Google tasks: three pauses, the client paste, three more pauses. */
+const GOOGLE = ['done', 'done', 'done', CLIENT, 'done', 'done', 'done'];
+const KEEP = 0;
+const REDO = 1;
 
 describe('sift init', () => {
   it('walks a new user through every step and writes the files', async () => {
-    const w = wizard([...TASKS, CLIENT, 0, 0]);
+    const w = wizard([...GOOGLE, 0, 0]);
     await runInit(w.deps);
 
     expect(w.calls).toEqual([`install ${CLIENT}`, 'gmail', 'login openai-codex oauth']);
@@ -96,62 +106,91 @@ describe('sift init', () => {
     expect(w.text()).toContain('Ready');
   });
 
-  it('pauses after each Google task, with its link and the values to enter', async () => {
-    const w = wizard([...TASKS, CLIENT, 3]);
+  it('gives each Google task its link and values, and takes the client JSON at the task that produces it', async () => {
+    const w = wizard([...GOOGLE, 3]);
     await runInit(w.deps);
-    expect(w.asked.filter((q) => q === 'pause')).toHaveLength(6);
-    const links = w.said.filter((line) => line.startsWith('link: '));
-    expect(links).toEqual([
+    expect(w.said.filter((line) => line.startsWith('link: '))).toEqual([
       'link: https://console.cloud.google.com/projectcreate',
       'link: https://console.cloud.google.com/apis/library/gmail.googleapis.com',
       'link: https://console.cloud.google.com/auth/overview',
       'link: https://console.cloud.google.com/auth/clients',
       'link: https://console.cloud.google.com/auth/scopes',
+      'link: https://console.cloud.google.com/auth/branding',
       'link: https://console.cloud.google.com/auth/audience',
     ]);
+    expect(w.asked.slice(0, 7)).toEqual(['pause', 'pause', 'pause', 'Paste the JSON here (s to stop):', 'pause', 'pause', 'pause']);
     expect(w.text()).toContain('Audience: External');
     expect(w.text()).toContain('Application type: Desktop app');
+    expect(w.text()).toContain('Open "Data Access" in the left menu');
     expect(w.text()).toContain('Scopes: https://www.googleapis.com/auth/gmail.modify');
     expect(w.text()).toContain('https://www.googleapis.com/auth/gmail.settings.basic');
   });
 
-  it('asks nothing when everything is already set up', async () => {
-    const w = wizard([], { client: true, accounts: ['me@example.org'] });
+  it('resumes the Google tasks where an earlier run stopped', async () => {
+    const first = wizard(['done', 'done', 'skip', 3]);
+    await runInit(first.deps);
+    expect(first.world.progress).toBe(2);
+    expect(first.text()).toContain('skip: Stopped here');
+    expect(first.text()).toContain('skip: Needs step 1 finished');
+    expect(first.text()).toContain('warn: Still needed: the Google client and a Gmail account');
+
+    // The client was pasted but the run stopped before scopes: Gmail sign-in must wait for the rest.
+    const partway = wizard(['skip', 3], { client: true, progress: 4 });
+    await runInit(partway.deps);
+    expect(partway.calls).toEqual([]);
+    expect(partway.text()).toContain('skip: Needs step 1 finished');
+
+    const later = wizard(['done', 'done', 'done', 3], { client: true, progress: 4 });
+    await runInit(later.deps);
+    expect(later.said.filter((line) => line.startsWith('link: '))).toEqual([
+      'link: https://console.cloud.google.com/auth/scopes',
+      'link: https://console.cloud.google.com/auth/branding',
+      'link: https://console.cloud.google.com/auth/audience',
+    ]);
+    expect(later.world.progress).toBe(7);
+    expect(later.calls).toEqual(['gmail']);
+  });
+
+  it('offers each finished step with one keystroke to keep it', async () => {
+    const w = wizard([KEEP, KEEP, KEEP], { client: true, accounts: ['me@example.org'] });
     saveSettings(w.config, { ...DEFAULT_SETTINGS, model: 'openai/x' });
     await runInit(w.deps);
-    expect(w.asked).toEqual([]);
+    expect(w.asked).toHaveLength(3);
     expect(w.calls).toEqual([]);
+    expect(w.text()).toContain('ok: Client in place');
     expect(w.text()).toContain('ok: Using');
     expect(w.text()).toContain('Ready');
   });
 
-  it('lets the Google tasks be left part-way and says what is still needed', async () => {
-    const w = wizard(['done', 'skip', 3]);
+  it('lets a finished step be redone: a new client, another account, a different model', async () => {
+    const w = wizard([REDO, ...GOOGLE, REDO, REDO, 1, 1], { client: true, accounts: ['first@example.org'] });
+    saveSettings(w.config, { ...DEFAULT_SETTINGS, model: 'openai/x' });
     await runInit(w.deps);
-    expect(w.calls).toEqual([]);
-    expect(w.text()).toContain('skip: Stopped here');
-    expect(w.text()).toContain('skip: Needs the Google client from step 1');
-    expect(w.text()).toContain('warn: Still needed: the Google client and a Gmail account');
-    expect(loadConfig({ SIFT_HOME: w.config.home }).settings.model).toBeUndefined();
-    expect(existsSync(w.config.settingsPath)).toBe(true);
-  });
-
-  it('asks again when the pasted client is the wrong kind', async () => {
-    const w = wizard([...TASKS, '{"web":{}}', CLIENT, 1, 1]);
-    await runInit(w.deps);
-    expect(w.calls).toEqual(['install {"web":{}}', `install ${CLIENT}`, 'gmail', 'login openai api_key']);
-    expect(w.text()).toContain('fail: What you pasted is not a Desktop app client');
+    expect(w.calls).toEqual([`install ${CLIENT}`, 'gmail', 'login openai api_key']);
+    expect(w.world.accounts).toEqual(['first@example.org', 'me@example.org']);
     expect(w.config.settings.model).toBe('openai/large');
   });
 
+  it('asks again when the pasted client is the wrong kind, and stops on s', async () => {
+    const w = wizard(['done', 'done', 'done', '{"web":{}}', CLIENT, 'done', 'done', 'done', 1, 1]);
+    await runInit(w.deps);
+    expect(w.calls).toEqual(['install {"web":{}}', `install ${CLIENT}`, 'gmail', 'login openai api_key']);
+    expect(w.text()).toContain('fail: What you pasted is not a Desktop app client');
+
+    const stopped = wizard(['done', 'done', 'done', 's', 3]);
+    await runInit(stopped.deps);
+    expect(stopped.world.progress).toBe(3);
+    expect(stopped.calls).toEqual([]);
+  });
+
   it('keeps going when model sign-in fails, and takes a typed id when no models are listed', async () => {
-    const failed = wizard([0], { client: true, accounts: ['me@example.org'], loginFails: true });
+    const failed = wizard([KEEP, KEEP, 0], { client: true, accounts: ['me@example.org'], loginFails: true });
     await runInit(failed.deps);
     expect(failed.text()).toContain('fail: Sign-in did not finish: cancelled');
     expect(failed.config.settings.model).toBeUndefined();
     expect(failed.text()).toContain('Ready');
 
-    const typed = wizard([2, 'claude-test'], { client: true, accounts: ['me@example.org'], models: [] });
+    const typed = wizard([KEEP, KEEP, 2, 'claude-test'], { client: true, accounts: ['me@example.org'], models: [] });
     await runInit(typed.deps);
     expect(typed.config.settings.model).toBe('anthropic/claude-test');
   });

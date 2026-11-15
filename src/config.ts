@@ -34,6 +34,8 @@ export interface Config {
   /** Model provider credentials (API keys, OAuth tokens). */
   modelAuthPath: string;
   deviceIdPath: string;
+  /** How far `sift init` has got. */
+  setupStatePath: string;
   settings: Settings;
 }
 
@@ -59,6 +61,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     googleTokenDir: join(home, 'google'),
     modelAuthPath: join(home, 'model-auth.json'),
     deviceIdPath: join(home, 'device-id'),
+    setupStatePath: join(home, 'setup.json'),
     settings: existsSync(settingsPath) ? parseSettings(readFileSync(settingsPath, 'utf8'), settingsPath) : { ...DEFAULT_SETTINGS },
   };
 }

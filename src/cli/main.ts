@@ -1,5 +1,5 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { type MessageAction, type Outcome, execute, undo } from '../actions/executor.ts';
 import { type Config, loadConfig, saveSettings } from '../config.ts';
@@ -15,7 +15,7 @@ import { type Account, connectAccount, listAccounts } from '../store/accounts.ts
 import { getAction, listRecentActions } from '../store/actions.ts';
 import { listCategories, updateCategory } from '../store/categories.ts';
 import { openDb } from '../store/db.ts';
-import { runInit } from './init.ts';
+import { GOOGLE_TASK_COUNT, runInit } from './init.ts';
 import { closeTerminal, readLine } from './terminal.ts';
 import { disposition, paint, spin, ui } from './ui.ts';
 import { addRule, listRules, removeRule } from '../store/rules.ts';
@@ -141,6 +141,14 @@ async function init(args: string[]): Promise<void> {
     ui,
     saveSettings: (settings) => saveSettings(config, settings),
     hasGoogleClient: () => hasClientSecrets(config),
+    // A home set up before progress was recorded has a client and no state file: treat it as finished.
+    googleProgress: () =>
+      existsSync(config.setupStatePath)
+        ? ((JSON.parse(readFileSync(config.setupStatePath, 'utf8')) as { googleTasks?: number }).googleTasks ?? 0)
+        : hasClientSecrets(config)
+          ? GOOGLE_TASK_COUNT
+          : 0,
+    setGoogleProgress: (done) => writeFileSync(config.setupStatePath, JSON.stringify({ googleTasks: done }), { mode: 0o600 }),
     installGoogleClient: (json) => installClient(config, json),
     connectedAccounts: () => withDb((db) => listAccounts(db).map((a) => a.email)),
     connectGmail: () => connectGmail(config, { ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) }),

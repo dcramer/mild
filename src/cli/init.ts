@@ -23,6 +23,9 @@ export interface InitDeps {
   ui: Ui;
   saveSettings(settings: Settings): void;
   hasGoogleClient(): boolean;
+  /** How many of the Google setup tasks are finished, so a later run resumes where this one stopped. */
+  googleProgress(): number;
+  setGoogleProgress(done: number): void;
   /** Save the pasted client JSON into the home directory. Throws a readable message if it is the wrong kind. */
   installGoogleClient(json: string): void;
   connectedAccounts(): string[];
@@ -50,17 +53,18 @@ export async function runInit(deps: InitDeps): Promise<void> {
   if (!existsSync(config.guidelinesPath)) writeFileSync(config.guidelinesPath, GUIDELINES_TEMPLATE, { mode: 0o600 });
 
   ui.step(1, STEPS, 'Google OAuth client');
-  if (deps.hasGoogleClient()) ui.ok('In place');
-  else await googleClient(deps);
+  if (deps.googleProgress() >= GOOGLE_TASKS.length && deps.hasGoogleClient()) {
+    if (await keep(ui, 'Client in place', 'Set it up again')) await googleClient(deps, 0);
+  } else await googleClient(deps, deps.googleProgress());
 
   ui.step(2, STEPS, 'Gmail account');
   let accounts = deps.connectedAccounts();
-  if (accounts.length > 0) ui.ok(`Connected ${paint.bold(accounts.join(', '))}`);
-  else if (!deps.hasGoogleClient()) ui.skip('Needs the Google client from step 1');
-  else {
+  const googleReady = () => deps.hasGoogleClient() && deps.googleProgress() >= GOOGLE_TASKS.length;
+  if (!googleReady()) ui.skip('Needs step 1 finished');
+  else if (accounts.length === 0 || (await keep(ui, `Connected ${paint.bold(accounts.join(', '))}`, 'Connect another account'))) {
     try {
       const email = await deps.connectGmail();
-      accounts = [email];
+      accounts = deps.connectedAccounts();
       ui.ok(`Connected ${paint.bold(email)}`);
       ui.info('Only mail that arrives from now on is sorted.');
     } catch (error) {
@@ -69,8 +73,7 @@ export async function runInit(deps: InitDeps): Promise<void> {
   }
 
   ui.step(3, STEPS, 'Model');
-  if (config.settings.model) ui.ok(`Using ${paint.bold(config.settings.model)}`);
-  else {
+  if (!config.settings.model || (await keep(ui, `Using ${paint.bold(config.settings.model)}`, 'Change it'))) {
     ui.info('Sorts mail that no rule or learned sender covers. Without one, that mail stays in your inbox.');
     ui.blank();
     const choice = await ui.select<ModelChoice | null>('How should sift reach a model?', [
@@ -95,7 +98,7 @@ export async function runInit(deps: InitDeps): Promise<void> {
   }
 
   ui.blank();
-  const missing = [deps.hasGoogleClient() ? null : 'the Google client', accounts.length > 0 ? null : 'a Gmail account'].filter((item) => item !== null);
+  const missing = [googleReady() ? null : 'the Google client', accounts.length > 0 ? null : 'a Gmail account'].filter((item) => item !== null);
   if (missing.length > 0) {
     ui.warn(`Still needed: ${missing.join(' and ')}. Run ${paint.cmd('sift init')} again.`);
     ui.blank();
@@ -107,6 +110,19 @@ export async function runInit(deps: InitDeps): Promise<void> {
   ui.blank();
 }
 
+/**
+ * A step that is already done: show it, and let the user go on with Enter or redo it. Returns true to redo.
+ */
+async function keep(ui: Ui, done: string, redo: string): Promise<boolean> {
+  ui.mark();
+  const again = await ui.select(done, [
+    { label: 'Keep it', value: false },
+    { label: redo, value: true },
+  ]);
+  if (!again) ui.collapse(done);
+  return again;
+}
+
 interface Task {
   title: string;
   url: string;
@@ -114,6 +130,8 @@ interface Task {
   todo: readonly string[];
   /** Exact values to enter, when the page is a form. */
   values?: readonly (readonly [string, string])[];
+  /** This task ends with the client's JSON, which is pasted here. */
+  collectsClient?: boolean;
 }
 
 /** Creating the Google client, one page at a time. Google renames these screens now and then; the links go straight to each. */
@@ -142,7 +160,8 @@ const GOOGLE_TASKS: readonly Task[] = [
   {
     title: 'Create the client',
     url: 'https://console.cloud.google.com/auth/clients',
-    todo: ['Create the client, then choose "Download JSON". sift asks for its contents at the end.'],
+    todo: ['Create the client, then choose "Download JSON".'],
+    collectsClient: true,
     values: [
       ['Application type', 'Desktop app'],
       ['Name', 'sift'],
@@ -161,6 +180,16 @@ const GOOGLE_TASKS: readonly Task[] = [
     ],
   },
   {
+    title: 'Fill in the branding',
+    url: 'https://console.cloud.google.com/auth/branding',
+    todo: ['Publishing needs the required fields here filled in. Save when done.', 'Leave the logo empty: adding one makes Google review the app.'],
+    values: [
+      ['App name', 'sift'],
+      ['User support email', 'your own address'],
+      ['Developer contact', 'your own address'],
+    ],
+  },
+  {
     title: 'Publish the app',
     url: 'https://console.cloud.google.com/auth/audience',
     todo: [
@@ -171,15 +200,20 @@ const GOOGLE_TASKS: readonly Task[] = [
   },
 ];
 
-/** Returns once the client is saved or the user has chosen to leave it for later. */
-async function googleClient(deps: InitDeps): Promise<void> {
+/**
+ * The Google setup from task `from` on. Progress is saved after every task, so stopping part-way and
+ * running `sift init` again carries on from the same place.
+ */
+async function googleClient(deps: InitDeps, from: number): Promise<void> {
   const { ui } = deps;
-  ui.info('sift reads your mail through a Google client that you own, so nobody sits in between.');
-
-  ui.blank();
+  if (from === 0) {
+    ui.info('sift reads your mail through a Google client that you own, so nobody sits in between.');
+    ui.blank();
+  }
 
   // One task on screen at a time: each folds into a single done line when the user comes back.
   for (const [index, task] of GOOGLE_TASKS.entries()) {
+    if (index < from) continue;
     ui.mark();
     ui.plain(`${paint.bold(task.title)}  ${paint.dim(`${index + 1} of ${GOOGLE_TASKS.length}`)}`);
     ui.link(task.url);
@@ -190,29 +224,31 @@ async function googleClient(deps: InitDeps): Promise<void> {
       ui.fields(task.values);
     }
     ui.blank();
-    if (!(await ui.pause())) {
+    const finished = task.collectsClient ? await pasteClient(deps) : await ui.pause();
+    if (!finished) {
       ui.skip('Stopped here');
       return;
     }
+    deps.setGoogleProgress(index + 1);
     ui.collapse(task.title);
   }
+}
 
-  ui.blank();
+/** Ask for the client JSON until it is accepted. False if the user stops. */
+async function pasteClient(deps: InitDeps): Promise<boolean> {
   for (;;) {
-    const pasted = await ui.pasteJson('Paste the downloaded JSON (Enter to skip):');
-    if (pasted === '') {
-      ui.skip('Skipped');
-      return;
-    }
+    const pasted = await deps.ui.pasteJson('Paste the JSON here (s to stop):');
+    if (pasted === '' || /^s(top|kip)?$/i.test(pasted)) return false;
     try {
       deps.installGoogleClient(pasted);
-      ui.ok('Client saved');
-      return;
+      return true;
     } catch (error) {
-      ui.fail(reason(error));
+      deps.ui.fail(reason(error));
     }
   }
 }
+
+export const GOOGLE_TASK_COUNT = GOOGLE_TASKS.length;
 
 async function pickModel(deps: InitDeps, choice: ModelChoice): Promise<void> {
   const { ui, config } = deps;
