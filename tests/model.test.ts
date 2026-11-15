@@ -5,8 +5,11 @@ import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCal
 import { describe, expect, it } from 'vitest';
 import { gatherEvidence } from '../src/daemon/evidence.ts';
 import { MAX_BODY_CHARS, extractText } from '../src/gmail/body.ts';
+import { MODEL_CHOICES } from '../src/cli/init.ts';
+import { loadConfig } from '../src/config.ts';
 import { fileCredentialStore } from '../src/model/credentials.ts';
 import { createJudge } from '../src/model/judge.ts';
+import { openModels, resolveModel } from '../src/model/models.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts';
 import { openDb } from '../src/store/db.ts';
@@ -303,5 +306,20 @@ describe('model credentials', () => {
     expect(statSync(path).mode & 0o777).toBe(0o600);
     await reopened.delete('other');
     expect(await store.read('other')).toBeUndefined();
+  });
+});
+
+describe('providers', () => {
+  it('registers the ones sift init offers and no others', async () => {
+    const config = loadConfig({ SIFT_HOME: mkdtempSync(join(tmpdir(), 'sift-models-')) });
+    const models = openModels(config);
+    expect(models.getProviders().map((p) => p.id)).toEqual(MODEL_CHOICES.map((c) => c.provider));
+    expect(() => resolveModel(models, 'google/anything')).toThrow('Unknown model');
+
+    await fileCredentialStore(config.modelAuthPath).modify('anthropic', async () => ({ type: 'api_key', key: 'k' }));
+    const listed = (await models.getAvailable('anthropic')).map((m) => `${m.provider}/${m.id}`);
+    expect(listed.length).toBeGreaterThan(0);
+    const model = resolveModel(models, listed[0]!);
+    expect(await models.getAuth(model)).toMatchObject({ auth: { apiKey: 'k' } });
   });
 });
