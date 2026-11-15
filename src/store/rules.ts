@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { Rule, RuleMatch } from '../triage/stages/rules.ts';
+import type { Rule, RuleMatch, RuleTier } from '../triage/stages/rules.ts';
 import type { DecidedDisposition, SubscriptionAction } from '../triage/types.ts';
 import { listLabels } from './labels.ts';
 
@@ -20,6 +20,8 @@ interface Row {
   disposition: DecidedDisposition | null;
   subscription: SubscriptionAction;
   mark_read: number;
+  tier: RuleTier;
+  condition: string | null;
   source: RuleSource;
   hits: number;
 }
@@ -28,7 +30,7 @@ interface Row {
 export function listRules(db: DatabaseSync, accountId: string): StoredRule[] {
   const rows = db
     .prepare(
-      'SELECT id, match_json, except_json, label_id, disposition, subscription, mark_read, source, hits FROM rules WHERE account_id = ? ORDER BY position, id',
+      'SELECT id, match_json, except_json, label_id, disposition, subscription, mark_read, tier, condition, source, hits FROM rules WHERE account_id = ? ORDER BY position, id',
     )
     .all(accountId) as unknown as Row[];
   return rows.map((r) => {
@@ -41,6 +43,8 @@ export function listRules(db: DatabaseSync, accountId: string): StoredRule[] {
       ...(r.disposition ? { disposition: r.disposition } : {}),
       subscription: r.subscription,
       ...(r.mark_read === 1 ? { markRead: true } : {}),
+      ...(r.tier === 'usually' ? { tier: r.tier } : {}),
+      ...(r.condition ? { when: r.condition } : {}),
       ...(r.source === 'agent' ? { learned: true } : {}),
       source: r.source,
       hits: r.hits,
@@ -55,8 +59,8 @@ export function addRule(db: DatabaseSync, accountId: string, rule: Omit<Rule, 'i
   const id = `r-${randomBytes(4).toString('hex')}`;
   const { next } = db.prepare('SELECT coalesce(max(position), 0) + 1 AS next FROM rules WHERE account_id = ?').get(accountId) as { next: number };
   db.prepare(
-    `INSERT INTO rules (id, account_id, position, match_json, except_json, label_id, disposition, subscription, mark_read, source, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO rules (id, account_id, position, match_json, except_json, label_id, disposition, subscription, mark_read, tier, condition, source, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     accountId,
@@ -67,6 +71,8 @@ export function addRule(db: DatabaseSync, accountId: string, rule: Omit<Rule, 'i
     rule.disposition ?? null,
     rule.subscription ?? 'preserve',
     rule.markRead ? 1 : 0,
+    rule.tier ?? 'always',
+    rule.when?.trim() || null,
     source,
     now,
   );
@@ -83,7 +89,7 @@ export function countRuleHit(db: DatabaseSync, id: string): void {
 }
 
 /** The rule with exactly these conditions and no exceptions, if there is one. */
-function ruleMatching(db: DatabaseSync, accountId: string, match: RuleMatch): { id: string; source: RuleSource } | undefined {
+export function ruleMatching(db: DatabaseSync, accountId: string, match: RuleMatch): { id: string; source: RuleSource } | undefined {
   return db
     .prepare(`SELECT id, source FROM rules WHERE account_id = ? AND match_json = ? AND except_json = '[]' ORDER BY position LIMIT 1`)
     .get(accountId, JSON.stringify(match)) as { id: string; source: RuleSource } | undefined;
@@ -97,17 +103,25 @@ export function setRule(
   db: DatabaseSync,
   accountId: string,
   match: RuleMatch,
-  rule: { labelId: string; disposition?: DecidedDisposition; subscription?: SubscriptionAction; markRead?: boolean },
+  rule: { labelId: string; disposition?: DecidedDisposition; subscription?: SubscriptionAction; markRead?: boolean; tier?: RuleTier; when?: string },
   source: RuleSource,
   now: number = Date.now(),
 ): string {
+  // Whatever sift was proposing for this mail is settled by the user saying what it is.
+  db.prepare(`UPDATE proposals SET status = 'accepted', resolved_at = ? WHERE account_id = ? AND match_json = ? AND status = 'open'`).run(
+    now,
+    accountId,
+    JSON.stringify(match),
+  );
   const existing = ruleMatching(db, accountId, match);
   if (!existing) return addRule(db, accountId, { match, ...rule }, source, now);
-  db.prepare('UPDATE rules SET label_id = ?, disposition = ?, subscription = ?, mark_read = ?, source = ? WHERE id = ?').run(
+  db.prepare('UPDATE rules SET label_id = ?, disposition = ?, subscription = ?, mark_read = ?, tier = ?, condition = ?, source = ? WHERE id = ?').run(
     rule.labelId,
     rule.disposition ?? null,
     rule.subscription ?? 'preserve',
     rule.markRead ? 1 : 0,
+    rule.tier ?? 'always',
+    rule.when?.trim() || null,
     source,
     existing.id,
   );
@@ -121,33 +135,5 @@ export function setRule(
 export function blockSender(db: DatabaseSync, accountId: string, address: string, labelId: string, now: number = Date.now()): boolean {
   if (ruleMatching(db, accountId, { from: address })) return false;
   addRule(db, accountId, { match: { from: address }, labelId }, 'agent', now);
-  return true;
-}
-
-/** How many consecutive model decisions must agree before sift makes a rule of them. */
-export const LEARN_AFTER = 3;
-
-/**
- * Make a rule for a sender once the model has given their last few messages the same label, so later
- * mail from them needs no inference. Senders who send mixed mail never settle and are never learned,
- * and a rule the user made for the sender is left alone. Returns true if a rule was written.
- */
-export function learnSender(db: DatabaseSync, accountId: string, address: string, now: number = Date.now()): boolean {
-  const recent = db
-    .prepare(
-      `SELECT d.label_id, d.disposition FROM decisions d
-       JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
-       WHERE d.account_id = ? AND m.from_address = ? AND d.stage = 'agent'
-       ORDER BY d.id DESC LIMIT ?`,
-    )
-    .all(accountId, address, LEARN_AFTER) as unknown as { label_id: string | null; disposition: string }[];
-  const [first] = recent;
-  if (!first || recent.length < LEARN_AFTER || first.label_id === null) return false;
-  const label = listLabels(db, accountId, now).find((l) => l.id === first.label_id);
-  // Each must have ended the way the label says. One where a protection held sift back is not settled.
-  if (!label || !recent.every((r) => r.label_id === first.label_id && r.disposition === label.disposition)) return false;
-  const existing = ruleMatching(db, accountId, { from: address });
-  if (existing && existing.source !== 'agent') return false;
-  setRule(db, accountId, { from: address }, { labelId: first.label_id }, 'agent', now);
   return true;
 }

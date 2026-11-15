@@ -8,6 +8,7 @@ import { lastStandingChange } from '../src/store/actions.ts';
 import { connectAccount } from '../src/store/accounts.ts';
 import { openDb } from '../src/store/db.ts';
 import { listUndecided } from '../src/store/messages.ts';
+import { listProposals, resolveProposal } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import { FakeMailbox } from './helpers.ts';
@@ -191,22 +192,55 @@ describe('inference tier', () => {
     expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/newsletters', 'L:sift/did/archived']);
   });
 
-  it('makes a rule for a sender the model keeps labelling the same way, and stops calling the model for them', async () => {
+  it('proposes a rule for a sender the model keeps labelling the same way, and keeps judging until it is accepted', async () => {
     judged.length = 0;
-    for (const id of ['n1', 'n2', 'n3', 'n4']) {
+    const arrive = async (id: string) => {
       inbox = [message(id, 'News <news@example.com>')];
       mailbox.labels.set(id, ['INBOX']);
       await runOnce(db, { ...options(true), model: model('newsletter') });
-    }
-    expect(judged).toEqual(['n1', 'n2', 'n3']);
-    expect(db.prepare(`SELECT stage, disposition, label_id, reason FROM decisions WHERE message_id = 'n4'`).get()).toEqual({
+    };
+    for (const id of ['n1', 'n2', 'n3', 'n4', 'n5', 'n6']) await arrive(id);
+    expect(judged).toEqual(['n1', 'n2', 'n3', 'n4', 'n5', 'n6']);
+    expect(listRules(db, ACCOUNT)).toEqual([]);
+    expect(logs.some((line) => line.includes('proposed 1 rule'))).toBe(true);
+
+    resolveProposal(db, listProposals(db, ACCOUNT)[0]!.id, true);
+    await arrive('n7');
+    expect(judged).not.toContain('n7');
+    expect(db.prepare(`SELECT stage, disposition, label_id, reason FROM decisions WHERE message_id = 'n7'`).get()).toEqual({
       stage: 'rules',
       disposition: 'archive',
       label_id: 'newsletter',
-      reason: 'learned: from news@example.com is Newsletters',
+      reason: 'rule: from news@example.com is Newsletters',
     });
-    expect(listRules(db, ACCOUNT)).toMatchObject([{ match: { from: 'news@example.com' }, labelId: 'newsletter', source: 'agent', learned: true }]);
-    expect(logs.some((line) => line.includes('learned 1 rule'))).toBe(true);
+  });
+
+  it('has the model check a rule that says what a sender usually is, and asks when a message is something else', async () => {
+    judged.length = 0;
+    const ruleId = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter', tier: 'usually' }, 'user');
+    inbox = [message('u1', 'News <news@example.com>')];
+    mailbox.labels.set('u1', ['INBOX']);
+    await runOnce(db, { ...options(true), model: model('newsletter') });
+    expect(judged).toEqual(['u1']);
+    expect(db.prepare(`SELECT stage, disposition, rule_id, prior_rule_id, reason FROM decisions WHERE message_id = 'u1'`).get()).toEqual({
+      stage: 'agent',
+      disposition: 'archive',
+      rule_id: ruleId,
+      prior_rule_id: ruleId,
+      reason: 'rule: from news@example.com is usually Newsletters. looks like a mailing',
+    });
+
+    inbox = [message('u2', 'News <news@example.com>')];
+    mailbox.labels.set('u2', ['INBOX']);
+    await runOnce(db, { ...options(true), model: model('transactional') });
+    expect(db.prepare(`SELECT disposition, label_id, rule_id, prior_rule_id, reason FROM decisions WHERE message_id = 'u2'`).get()).toEqual({
+      disposition: 'keep',
+      label_id: 'transactional',
+      rule_id: null,
+      prior_rule_id: ruleId,
+      reason: 'not the usual Newsletters. Receipts and transactions: looks like a mailing',
+    });
+    expect(mailbox.labels.get('u2')).toContain('INBOX');
   });
 
   it('gathers evidence and classifies in observe mode without changing the mailbox', async () => {

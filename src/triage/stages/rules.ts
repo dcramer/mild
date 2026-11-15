@@ -1,6 +1,8 @@
 import { parseListId } from '../features.ts';
 import { type DecidedDisposition, type Label, type MessageFacts, type Stage, type SubscriptionAction, labelled } from '../types.ts';
 
+export type RuleTier = 'always' | 'usually';
+
 /** Every condition present must hold. A match with no conditions never matches. */
 export interface RuleMatch {
   /** Exact sender address. */
@@ -27,6 +29,13 @@ export interface Rule {
   subscription?: SubscriptionAction;
   /** Also mark the mail read, when it is kept or archived, whether or not the label does. */
   markRead?: boolean;
+  /**
+   * `always` (the default) decides by itself. `usually` is a prior: when a model tier follows, the model
+   * is told and still reads each message, so the odd one that is something else is not swept up.
+   */
+  tier?: RuleTier;
+  /** A condition in plain language ("auction notices for lots I did not bid on"). Only a model can apply it. */
+  when?: string;
   /** sift made this rule itself, from what a model kept deciding. The user's own rules are trusted further. */
   learned?: boolean;
 }
@@ -66,37 +75,66 @@ export interface RulesOptions {
   hasWritten?: (facts: MessageFacts) => boolean | undefined;
 }
 
+export interface RuleHit {
+  rule: Rule;
+  label: Label;
+}
+
+/** Whether a rule needs a model to apply it. */
+export const isJudged = (rule: Rule) => rule.tier === 'usually' || rule.when !== undefined;
+
+/** What a rule does to mail it applies to: its label's action, its own exception, and its extras on top. */
+export function ruleOutcome({ rule, label }: RuleHit): ReturnType<typeof labelled> & { ruleId: string } {
+  const outcome = labelled(label, rule.disposition);
+  const stays = outcome.disposition === 'keep' || outcome.disposition === 'archive';
+  return {
+    ...outcome,
+    // A rule's extras add to its label's; they never take one away.
+    ...(rule.subscription === 'unsubscribe' ? { subscription: 'unsubscribe' as const } : {}),
+    ...(rule.markRead && stays ? { markRead: true } : {}),
+    ruleId: rule.id,
+  };
+}
+
 /**
- * Deterministic rules, the user's and the ones sift learned. A rule whose outcome is `keep` is a
- * protection and beats every other match. Otherwise the most specific match wins (more conditions, then
- * an exact sender over a domain), so "this sender when the subject contains X" beats "this sender"
- * whichever was written first; ties go to the earlier rule. A rule whose label no longer exists is
- * ignored, and a learned rule never hides mail from someone the owner has written to.
+ * The rule that speaks for a message, if any. A rule whose outcome is `keep` is a protection and beats
+ * every other match. Otherwise the most specific match wins (more conditions, then an exact sender over
+ * a domain), so "this sender when the subject contains X" beats "this sender" whichever was written
+ * first; ties go to the earlier rule. A rule whose label no longer exists is ignored, and a learned rule
+ * never hides mail from someone the owner has written to.
  */
-export function rulesStage(rules: readonly Rule[], labels: readonly Label[], options: RulesOptions = {}): Stage {
+export function pickRule(rules: readonly Rule[], labels: readonly Label[], facts: MessageFacts, options: RulesOptions = {}): RuleHit | null {
+  const hits = rules.flatMap((rule) => {
+    const label = labels.find((l) => l.id === rule.labelId);
+    if (!label || !applies(rule, facts)) return [];
+    const { disposition } = labelled(label, rule.disposition);
+    const hides = disposition === 'archive' || disposition === 'spam';
+    if (rule.learned && hides && options.hasWritten?.(facts) === true) return [];
+    return [{ rule, label, keeps: disposition === 'keep' }];
+  });
+  const ranked = hits.toSorted((a, b) => specificity(b.rule.match) - specificity(a.rule.match));
+  // Only a rule that decides by itself can protect: a judged one may turn out not to apply.
+  return ranked.find((h) => h.keeps && !isJudged(h.rule)) ?? ranked[0] ?? null;
+}
+
+/** A rule's conditions and what it says, in words. */
+export function describeRule({ rule, label }: RuleHit): string {
+  const when = rule.when ? `, when it is ${rule.when},` : '';
+  return `${describeMatch(rule.match)}${when} is ${rule.tier === 'usually' ? 'usually ' : ''}${label.name}`;
+}
+
+/**
+ * Deterministic rules. `judged` says a model tier follows: then a rule that needs judging abstains here
+ * and reaches the model as a prior. Without a model, a `usually` rule is all there is and decides; a
+ * rule with a plain-language condition cannot be applied at all.
+ */
+export function rulesStage(rules: readonly Rule[], labels: readonly Label[], options: RulesOptions & { judged?: boolean } = {}): Stage {
   return {
     name: 'rules',
     decide(facts) {
-      const hits = rules.flatMap((rule) => {
-        const label = labels.find((l) => l.id === rule.labelId);
-        if (!label || !applies(rule, facts)) return [];
-        const outcome = labelled(label, rule.disposition);
-        const hides = outcome.disposition === 'archive' || outcome.disposition === 'spam';
-        if (rule.learned && hides && options.hasWritten?.(facts) === true) return [];
-        return [{ rule, label, outcome }];
-      });
-      const ranked = hits.toSorted((a, b) => specificity(b.rule.match) - specificity(a.rule.match));
-      const hit = ranked.find((h) => h.outcome.disposition === 'keep') ?? ranked[0];
-      if (!hit) return null;
-      return {
-        ...hit.outcome,
-        // A rule's extras add to its label's; they never take one away.
-        ...(hit.rule.subscription === 'unsubscribe' ? { subscription: 'unsubscribe' as const } : {}),
-        ...(hit.rule.markRead && (hit.outcome.disposition === 'keep' || hit.outcome.disposition === 'archive') ? { markRead: true } : {}),
-        stage: 'rules',
-        ruleId: hit.rule.id,
-        reason: `${hit.rule.learned ? 'learned' : 'rule'}: ${describeMatch(hit.rule.match)} is ${hit.label.name}`,
-      };
+      const hit = pickRule(rules, labels, facts, options);
+      if (!hit || hit.rule.when !== undefined || (options.judged && isJudged(hit.rule))) return null;
+      return { ...ruleOutcome(hit), stage: 'rules', reason: `${hit.rule.learned ? 'learned' : 'rule'}: ${describeRule(hit)}` };
     },
   };
 }

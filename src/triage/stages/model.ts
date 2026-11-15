@@ -1,4 +1,5 @@
 import type { BulkSignals } from '../features.ts';
+import { type RuleHit, describeRule, ruleOutcome } from './rules.ts';
 import { type DecisionUsage, type Disposition, type Label, type MessageFacts, type Stage, labelled } from '../types.ts';
 
 /** Everything the model is shown about one message. Gathered by deterministic code, never by the model. */
@@ -15,6 +16,8 @@ export interface Evidence {
     /** What sift did with earlier mail from this address. */
     pastDispositions: Partial<Record<Disposition, number>>;
   };
+  /** What the owner's rule says this sender's mail usually is. The model may find this message is something else. */
+  prior?: { labelId: string; labelName: string; when?: string };
 }
 
 export const UNSURE = 'unsure';
@@ -33,6 +36,8 @@ export type Judge = (input: { evidence: Evidence; labels: readonly Label[]; guid
 
 export interface ModelStageDeps {
   gather: (facts: MessageFacts) => Promise<Evidence>;
+  /** The judged rule that speaks for a message, if any. */
+  prior?: (facts: MessageFacts) => RuleHit | null;
   judge: Judge;
   labels: readonly Label[];
   /** The user's broad guidance in plain language. May be empty. */
@@ -47,30 +52,51 @@ export function modelStage(deps: ModelStageDeps): Stage {
   return {
     name: 'agent',
     async decide(facts) {
-      const evidence = await deps.gather(facts);
+      const prior = deps.prior?.(facts) ?? null;
+      const gathered = await deps.gather(facts);
+      const evidence: Evidence = prior
+        ? { ...gathered, prior: { labelId: prior.label.id, labelName: prior.label.name, ...(prior.rule.when ? { when: prior.rule.when } : {}) } }
+        : gathered;
       const verdict = await deps.judge({ evidence, labels: deps.labels, guidelines: deps.guidelines });
       if (!verdict) return null;
 
       const base = {
         subscription: 'preserve' as const,
         stage: 'agent' as const,
+        ...(prior ? { priorRuleId: prior.rule.id } : {}),
         ...(verdict.confidence === undefined ? {} : { confidence: verdict.confidence }),
         ...(verdict.usage ? { usage: verdict.usage } : {}),
       };
+      // The model agrees with the owner's rule: the rule's outcome applies. A rule the owner made is trusted
+      // to hide mail; one sift learned is not, and falls through to the protection below.
+      if (prior && verdict.label === prior.label.id && !prior.rule.learned)
+        return { ...base, ...ruleOutcome(prior), reason: `rule: ${describeRule(prior)}. ${verdict.reason}` };
+      const unusual = prior && verdict.label !== prior.label.id ? `not the usual ${prior.label.name}. ` : '';
+
       const label = deps.labels.find((l) => l.id === verdict.label);
       // `unsure`, or a label that does not exist: the model could not place it, so the user decides.
       if (!label)
-        return { ...base, disposition: 'review', reason: verdict.label === UNSURE ? verdict.reason : `model named an unknown label: ${verdict.reason}` };
+        return {
+          ...base,
+          disposition: 'review',
+          reason: unusual + (verdict.label === UNSURE ? verdict.reason : `model named an unknown label: ${verdict.reason}`),
+        };
 
       const outcome = labelled(label);
       const hides = outcome.disposition === 'archive' || outcome.disposition === 'spam';
       // Mail from someone the user has written to is never hidden on a model's word. Unknown counts as yes.
       if (hides && evidence.sender.userHasWritten !== false) {
         const why = evidence.sender.userHasWritten === null ? 'could not check whether you have written to this sender' : 'you have written to this sender';
-        return { ...base, disposition: 'review', labelId: label.id, gmailLabel: label.gmailLabel, reason: `${label.name}, but ${why}: ${verdict.reason}` };
+        return {
+          ...base,
+          disposition: 'review',
+          labelId: label.id,
+          gmailLabel: label.gmailLabel,
+          reason: `${unusual}${label.name}, but ${why}: ${verdict.reason}`,
+        };
       }
 
-      return { ...base, ...outcome, reason: `${label.name}: ${verdict.reason}` };
+      return { ...base, ...outcome, reason: `${unusual}${label.name}: ${verdict.reason}` };
     },
   };
 }

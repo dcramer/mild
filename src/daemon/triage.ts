@@ -7,13 +7,14 @@ import type { Account } from '../store/accounts.ts';
 import { listLabels } from '../store/labels.ts';
 import { listUnsettledDecisions, recordDecision, settleDecision } from '../store/decisions.ts';
 import { listUndecided } from '../store/messages.ts';
-import { blockSender, countRuleHit, learnSender, listRules } from '../store/rules.ts';
+import { proposeForSender, proposeSettled } from '../store/proposals.ts';
+import { blockSender, countRuleHit, listRules } from '../store/rules.ts';
 import { cachedCorrespondent } from '../store/senders.ts';
 import { passedDmarc } from '../triage/features.ts';
 import { triage } from '../triage/pipeline.ts';
-import { rulesStage } from '../triage/stages/rules.ts';
+import { isJudged, pickRule, rulesStage } from '../triage/stages/rules.ts';
 import { type Judge, modelStage } from '../triage/stages/model.ts';
-import type { Decision, Disposition, Stage } from '../triage/types.ts';
+import type { Decision, Disposition, MessageFacts, Stage } from '../triage/types.ts';
 import { type EvidenceSources, gatherEvidence } from './evidence.ts';
 
 export interface TriageDeps {
@@ -47,8 +48,8 @@ export interface TriageReport {
   skipped: number;
   /** Actions that failed or whose result is unconfirmed. */
   troubled: number;
-  /** Rules sift made this pass, so that sender's future mail needs no inference. */
-  learned: number;
+  /** Rules sift proposed this pass, for the user to accept. */
+  proposed: number;
   /** Senders blocked this pass. */
   blocked: number;
   /** Mailing lists left this pass. */
@@ -59,7 +60,9 @@ export interface TriageReport {
 function stagesFor(deps: TriageDeps, accountId: string): Stage[] {
   const { db, model } = deps;
   const labels = listLabels(db, accountId);
-  const stages = [rulesStage(listRules(db, accountId), labels, { hasWritten: (facts) => cachedCorrespondent(db, facts.accountId, facts.from.address) })];
+  const rules = listRules(db, accountId);
+  const options = { hasWritten: (facts: MessageFacts) => cachedCorrespondent(db, facts.accountId, facts.from.address) };
+  const stages = [rulesStage(rules, labels, { ...options, judged: model !== undefined })];
   if (model) {
     stages.push(
       modelStage({
@@ -67,6 +70,10 @@ function stagesFor(deps: TriageDeps, accountId: string): Stage[] {
         labels,
         guidelines: model.guidelines,
         gather: (facts) => gatherEvidence({ db, ...model.sources, ...(deps.now ? { now: deps.now } : {}) }, facts),
+        prior: (facts) => {
+          const hit = pickRule(rules, labels, facts, options);
+          return hit && isJudged(hit.rule) ? hit : null;
+        },
       }),
     );
   }
@@ -86,7 +93,7 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     acted: 0,
     skipped: 0,
     troubled: 0,
-    learned: 0,
+    proposed: 0,
     blocked: 0,
     unsubscribed: 0,
   };
@@ -120,7 +127,12 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
       now: now(),
     });
     if (decision.ruleId) countRuleHit(db, decision.ruleId);
-    if (decision.stage === 'agent' && learnSender(db, account.id, facts.from.address, now())) report.learned++;
+    if (decision.stage === 'agent') {
+      const proposed = decision.priorRuleId
+        ? proposeSettled(db, account.id, decision.priorRuleId, now())
+        : proposeForSender(db, account.id, facts.from.address, now());
+      if (proposed) report.proposed++;
+    }
     report.decided[decision.disposition]++;
     const status = act ? await carryOut(decisionId, facts.messageId, decision, mailbox) : null;
     // Blocking acts on the sender's address, so the address must be proven: a message that only claims to be

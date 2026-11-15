@@ -80,7 +80,7 @@ function describe(result: PassResult, act: boolean): string | null {
     if (decided.length > 0) parts.push(`${act ? 'decided' : 'would'} ${decided.map(([d, n]) => `${d} ${n}`).join(', ')}`);
     if (triage.acted > 0) parts.push(`${triage.acted} changed`);
     if (triage.skipped > 0) parts.push(`${triage.skipped} skipped`);
-    if (triage.learned > 0) parts.push(`learned ${triage.learned} rule${triage.learned === 1 ? '' : 's'}`);
+    if (triage.proposed > 0) parts.push(`proposed ${triage.proposed} rule${triage.proposed === 1 ? '' : 's'}`);
     if (triage.unsubscribed > 0) parts.push(`unsubscribed from ${triage.unsubscribed} sender${triage.unsubscribed === 1 ? '' : 's'}`);
     if (triage.blocked > 0) parts.push(`blocked ${triage.blocked} sender${triage.blocked === 1 ? '' : 's'}`);
     if (triage.troubled > 0) parts.push(`${triage.troubled} need attention (see sift log)`);

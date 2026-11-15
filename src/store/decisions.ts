@@ -23,8 +23,8 @@ export function recordDecision(
     .prepare(
       `INSERT INTO decisions
          (account_id, message_id, stage, disposition, subscription, gmail_label, rule_id, confidence, reason,
-          model, input_tokens, output_tokens, cost_usd, duration_ms, decided_at, mode, outcome, label_id, block, mark_read)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          model, input_tokens, output_tokens, cost_usd, duration_ms, decided_at, mode, outcome, label_id, block, mark_read, prior_rule_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       accountId,
@@ -47,6 +47,7 @@ export function recordDecision(
       decision.labelId ?? null,
       decision.block ? 1 : 0,
       decision.markRead ? 1 : 0,
+      decision.priorRuleId ?? null,
     );
   return Number(result.lastInsertRowid);
 }

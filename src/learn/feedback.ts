@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { listLabels } from '../store/labels.ts';
 import { recordDecision } from '../store/decisions.ts';
 import { setRule } from '../store/rules.ts';
-import type { RuleMatch } from '../triage/stages/rules.ts';
+import type { RuleMatch, RuleTier } from '../triage/stages/rules.ts';
 import { type DecidedDisposition, type Disposition, type StageName, labelled } from '../triage/types.ts';
 
 /** A decision sift made while only observing, that the user has not yet confirmed or corrected. */
@@ -93,7 +93,7 @@ export function pendingSuggestions(db: DatabaseSync, filter: { accountId?: strin
        WHERE d.id = (SELECT max(id) FROM decisions x WHERE x.account_id = d.account_id AND x.message_id = d.message_id)
          AND d.mode = 'observe'
          AND NOT EXISTS (SELECT 1 FROM feedback f WHERE f.decision_id = d.id)
-         AND NOT (d.stage = 'rules' AND coalesce(r.source, 'user') != 'agent')
+         AND NOT ((d.stage = 'rules' OR d.rule_id IS NOT NULL) AND coalesce(r.source, 'user') != 'agent')
          ${where.map((clause) => `AND ${clause}`).join(' ')}
        ORDER BY d.decided_at DESC, d.id DESC LIMIT ?`,
     )
@@ -136,6 +136,14 @@ export interface FeedbackInput {
   /** Also unsubscribe from this mail, whether or not the label does. Carried by the rule. */
   unsubscribe?: boolean;
   scope: FeedbackScope;
+  /**
+   * Whether the rule decides by itself or is a prior the model still checks. Left out, a rule that would
+   * hide everything from a sender or domain is `usually`, so the odd message that matters is still read;
+   * anything narrower, anything that keeps mail, and a block are `always`.
+   */
+  tier?: RuleTier;
+  /** A condition in plain language that narrows the rule. Only a model can apply it. */
+  when?: string;
   /** For `subject`: the words the subject must contain. */
   contains?: string;
   /** For `once`: answer for this one decision instead of everything waiting from the sender. */
@@ -208,6 +216,11 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
         ? `mail from ${input.sender} with "${contains}" in the subject`
         : `mail from ${input.sender}`;
 
+  const when = input.when?.trim() ?? '';
+  const hides = outcome === 'archive' || outcome === 'spam';
+  const blocks = label.block === true && !input.disposition;
+  const tier: RuleTier = input.tier ?? (when !== '' || (hides && !blocks && (input.scope === 'sender' || input.scope === 'domain')) ? 'usually' : 'always');
+
   // Agreeing with a decision that already stands changes nothing about the message itself.
   const changes = given !== null && (given.labelId !== label.id || given.disposition !== outcome);
 
@@ -249,6 +262,8 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
             labelId: label.id,
             ...(input.disposition ? { disposition: input.disposition } : {}),
             ...(input.unsubscribe ? { subscription: 'unsubscribe' as const } : {}),
+            tier,
+            ...(when === '' ? {} : { when }),
           },
           all.every((t) => verdictFor(t) === 'right') ? 'user' : 'correction',
           now,
@@ -280,7 +295,9 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
     reviewed: targets.length + (given ? 1 : 0),
     corrected: given && changes ? given.messageId : null,
     taught: match
-      ? `From now on, ${whose} is ${label.name}: ${label.block && !input.disposition ? BLOCKED : WILL[outcome]}${label.unsubscribe || input.unsubscribe ? ', and unsubscribed from' : ''}.`
+      ? `From now on, ${whose}${when === '' ? '' : `, when it is ${when},`} is ${tier === 'usually' && when === '' ? 'usually ' : ''}${label.name}: ${blocks ? BLOCKED : WILL[outcome]}${
+          label.unsubscribe || input.unsubscribe ? ', and unsubscribed from' : ''
+        }.${tier === 'usually' ? ' sift still reads each one and asks about any that is something else.' : ''}`
       : null,
   };
 }

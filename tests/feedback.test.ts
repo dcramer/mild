@@ -45,7 +45,7 @@ beforeEach(() => {
 const ruleFor = (address: string) =>
   listRules(db, ACCOUNT)
     .filter((r) => r.match.from === address)
-    .map(({ labelId, disposition, source }) => ({ labelId, ...(disposition ? { disposition } : {}), source }));
+    .map(({ labelId, disposition, tier, source }) => ({ labelId, ...(disposition ? { disposition } : {}), ...(tier ? { tier } : {}), source }));
 
 const NEWS = { labelId: 'newsletter', gmailLabel: 'sift/newsletters' } as const;
 
@@ -112,9 +112,11 @@ describe('teaching', () => {
     expect(result).toEqual({
       reviewed: 2,
       corrected: null,
-      taught: 'From now on, mail from news@example.com is Newsletters: archived, and unsubscribed from.',
+      taught:
+        'From now on, mail from news@example.com is usually Newsletters: archived, and unsubscribed from. sift still reads each one and asks about any that is something else.',
     });
-    expect(ruleFor('news@example.com')).toEqual([{ labelId: 'newsletter', source: 'user' }]);
+    // Hiding everything from a sender is a prior the model keeps checking, not a blanket.
+    expect(ruleFor('news@example.com')).toEqual([{ labelId: 'newsletter', tier: 'usually', source: 'user' }]);
     expect(pendingSuggestions(db).map((s) => s.fromAddress)).toEqual(['other@example.com']);
     expect(accuracy(db)).toMatchObject({ reviewed: 2, right: 2 });
   });
@@ -147,7 +149,7 @@ describe('teaching', () => {
     applyFeedback(db, { accountId: ACCOUNT, sender: 'cold@example.net', label: 'marketing', scope: 'sender' });
     expect(db.prepare('SELECT verdict, correct FROM feedback').get()).toEqual({ verdict: 'answered', correct: 'archive' });
     expect(accuracy(db)).toMatchObject({ reviewed: 0, right: 0 });
-    expect(ruleFor('cold@example.net')).toEqual([{ labelId: 'marketing', source: 'correction' }]);
+    expect(ruleFor('cold@example.net')).toEqual([{ labelId: 'marketing', tier: 'usually', source: 'correction' }]);
   });
 
   it('says so when the label blocks the sender', () => {
@@ -250,7 +252,7 @@ describe('correcting a decision that is not waiting', () => {
     const result = applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender', messageId: id, mode: 'act' });
     expect(result).toMatchObject({ reviewed: 1, corrected: null });
     expect(decisionsFor(id)).toHaveLength(1);
-    expect(ruleFor('news@example.com')).toEqual([{ labelId: 'newsletter', source: 'user' }]);
+    expect(ruleFor('news@example.com')).toEqual([{ labelId: 'newsletter', tier: 'usually', source: 'user' }]);
   });
 
   it('settles what is waiting from the sender at the same time, and refuses a message from someone else', () => {
@@ -267,7 +269,7 @@ describe('correcting a decision that is not waiting', () => {
 });
 
 describe('how far an answer reaches', () => {
-  const matches = () => listRules(db, ACCOUNT).map((r) => ({ match: r.match, labelId: r.labelId }));
+  const matches = () => listRules(db, ACCOUNT).map((r) => ({ match: r.match, labelId: r.labelId, ...(r.tier ? { tier: r.tier } : {}) }));
 
   it('a subject answer settles only matching mail and makes a rule that beats a broader one for the sender', async () => {
     recordSync(
@@ -298,7 +300,7 @@ describe('how far an answer reaches', () => {
     applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', label: 'marketing', scope: 'sender' });
     expect(matches()).toEqual([
       { match: { from: 'bids@example.com', subjectContains: 'outbid' }, labelId: 'personal' },
-      { match: { from: 'bids@example.com' }, labelId: 'marketing' },
+      { match: { from: 'bids@example.com' }, labelId: 'marketing', tier: 'usually' },
     ]);
 
     // The narrower rule wins whichever was written first, and not only because it keeps the mail.
@@ -321,9 +323,10 @@ describe('how far an answer reaches', () => {
     expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'a@shop.example', label: 'marketing', scope: 'domain' })).toEqual({
       reviewed: 2,
       corrected: null,
-      taught: 'From now on, mail from anyone at shop.example is Marketing: archived, and unsubscribed from.',
+      taught:
+        'From now on, mail from anyone at shop.example is usually Marketing: archived, and unsubscribed from. sift still reads each one and asks about any that is something else.',
     });
-    expect(matches()).toEqual([{ match: { fromDomain: 'shop.example' }, labelId: 'marketing' }]);
+    expect(matches()).toEqual([{ match: { fromDomain: 'shop.example' }, labelId: 'marketing', tier: 'usually' }]);
     expect(pendingSuggestions(db).map((s) => s.fromAddress)).toEqual(['c@example.com']);
   });
 
@@ -497,7 +500,13 @@ describe('feedback endpoint', () => {
     const port = await start();
     expect(await post(port, answer)).toEqual({
       status: 200,
-      body: { reviewed: 1, corrected: null, fixed: null, taught: 'From now on, mail from news@example.com is Newsletters: archived, and unsubscribed from.' },
+      body: {
+        reviewed: 1,
+        corrected: null,
+        fixed: null,
+        taught:
+          'From now on, mail from news@example.com is usually Newsletters: archived, and unsubscribed from. sift still reads each one and asks about any that is something else.',
+      },
     });
     expect(db.prepare('SELECT created_at FROM feedback').get()).toEqual({ created_at: 77 });
     const suggestions = (await (await fetch(`http://localhost:${port}/api/suggestions`)).json()) as { waiting: number; accuracy: unknown };

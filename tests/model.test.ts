@@ -11,7 +11,8 @@ import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts';
 import { openDb } from '../src/store/db.ts';
 import { recordDecision } from '../src/store/decisions.ts';
-import { LEARN_AFTER, addRule, learnSender, listRules } from '../src/store/rules.ts';
+import { PROPOSE_AFTER, listProposals, proposeForSender, proposeSettled, resolveProposal } from '../src/store/proposals.ts';
+import { addRule, listRules } from '../src/store/rules.ts';
 import { bulkSignals } from '../src/triage/features.ts';
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../src/triage/prompt.ts';
 import { type Evidence, type Verdict, modelStage } from '../src/triage/stages/model.ts';
@@ -176,7 +177,7 @@ describe('preferences in the database', () => {
   const modelDecision = (db: ReturnType<typeof seeded>, id: string, labelId: string, disposition: 'keep' | 'archive' | 'review') => {
     recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id })], '2');
     recordDecision(db, ACCOUNT, id, { disposition, subscription: 'preserve', stage: 'agent', labelId, reason: 'r' });
-    return learnSender(db, ACCOUNT, 'news@example.com');
+    return proposeForSender(db, ACCOUNT, 'news@example.com');
   };
 
   it('seeds default labels, each with a Gmail label and an outcome, and lets the user change them', () => {
@@ -207,28 +208,81 @@ describe('preferences in the database', () => {
     expect(updateLabel(db, ACCOUNT, 'nope', { disposition: 'keep' })).toBe(false);
   });
 
-  it(`makes a rule for a sender after ${LEARN_AFTER} model decisions with the same label`, () => {
+  const ids = (n: number, prefix = 'm') => Array.from({ length: n }, (_, i) => `${prefix}${i}`);
+
+  it(`proposes a rule for a sender after ${PROPOSE_AFTER} model decisions with the same label, and writes it only when accepted`, () => {
     const db = seeded();
-    expect(modelDecision(db, 'a', 'newsletter', 'archive')).toBe(false);
-    expect(modelDecision(db, 'b', 'newsletter', 'archive')).toBe(false);
+    for (const id of ids(PROPOSE_AFTER - 1)) expect(modelDecision(db, id, 'newsletter', 'archive')).toBe(false);
+    expect(modelDecision(db, 'last', 'newsletter', 'archive')).toBe(true);
     expect(listRules(db, ACCOUNT)).toEqual([]);
-    expect(modelDecision(db, 'c', 'newsletter', 'archive')).toBe(true);
-    expect(listRules(db, ACCOUNT)).toMatchObject([{ match: { from: 'news@example.com' }, labelId: 'newsletter', source: 'agent', learned: true }]);
-    // It carries no action of its own, so it follows the label when the label changes.
+    const [proposal] = listProposals(db, ACCOUNT);
+    expect(proposal).toMatchObject({ kind: 'rule', match: { from: 'news@example.com' }, labelId: 'newsletter', agreed: PROPOSE_AFTER });
+    // One more agreeing message does not open a second proposal.
+    expect(modelDecision(db, 'again', 'newsletter', 'archive')).toBe(false);
+
+    expect(resolveProposal(db, proposal!.id, true)).toBe(true);
+    // It is the user's rule now, and carries no action of its own, so it follows the label when the label changes.
+    expect(listRules(db, ACCOUNT)).toMatchObject([{ match: { from: 'news@example.com' }, labelId: 'newsletter', source: 'user' }]);
     expect(listRules(db, ACCOUNT)[0]).not.toHaveProperty('disposition');
+    expect(listProposals(db, ACCOUNT)).toEqual([]);
+    expect(resolveProposal(db, proposal!.id, true)).toBe(false);
   });
 
-  it('does not learn senders who send mixed mail, or mail a protection held back', () => {
+  it('does not propose again what the user dismissed', () => {
+    const db = seeded();
+    for (const id of ids(PROPOSE_AFTER)) modelDecision(db, id, 'newsletter', 'archive');
+    resolveProposal(db, listProposals(db, ACCOUNT)[0]!.id, false);
+    expect(modelDecision(db, 'later', 'newsletter', 'archive')).toBe(false);
+    expect(listProposals(db, ACCOUNT)).toEqual([]);
+    expect(listRules(db, ACCOUNT)).toEqual([]);
+  });
+
+  it('does not propose for senders who send mixed mail, or mail a protection held back', () => {
     const db = seeded();
     modelDecision(db, 'a', 'transactional', 'keep');
-    modelDecision(db, 'b', 'marketing', 'archive');
+    for (const id of ids(PROPOSE_AFTER - 2)) modelDecision(db, id, 'marketing', 'archive');
     expect(modelDecision(db, 'c', 'marketing', 'archive')).toBe(false);
 
     // Marketing archives, but each of these was left for review because the owner had written to the sender.
     const held = seeded();
-    modelDecision(held, 'a', 'marketing', 'review');
-    modelDecision(held, 'b', 'marketing', 'review');
+    for (const id of ids(PROPOSE_AFTER - 1)) modelDecision(held, id, 'marketing', 'review');
     expect(modelDecision(held, 'c', 'marketing', 'review')).toBe(false);
+  });
+
+  it('proposes nothing for a sender who already has a rule', () => {
+    const db = seeded();
+    addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'personal' }, 'user');
+    for (const id of ids(PROPOSE_AFTER)) expect(modelDecision(db, id, 'newsletter', 'archive')).toBe(false);
+    expect(listProposals(db, ACCOUNT)).toEqual([]);
+  });
+
+  it('proposes to stop checking a rule the model has agreed with every time', () => {
+    const db = seeded();
+    const ruleId = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter', tier: 'usually' }, 'user');
+    const checked = (id: string, agreed: boolean) => {
+      recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id })], '2');
+      recordDecision(db, ACCOUNT, id, {
+        disposition: 'archive',
+        subscription: 'preserve',
+        stage: 'agent',
+        labelId: agreed ? 'newsletter' : 'transactional',
+        priorRuleId: ruleId,
+        ...(agreed ? { ruleId } : {}),
+        reason: 'r',
+      });
+      return proposeSettled(db, ACCOUNT, ruleId);
+    };
+    for (const id of ids(5)) expect(checked(id, true)).toBe(false);
+    // One disagreement starts the count again.
+    expect(checked('odd', false)).toBe(false);
+    for (const id of ids(9, 'n')) expect(checked(id, true)).toBe(false);
+    expect(checked('tenth', true)).toBe(true);
+    const [proposal] = listProposals(db, ACCOUNT);
+    expect(proposal).toMatchObject({ kind: 'always', ruleId, agreed: 10 });
+
+    resolveProposal(db, proposal!.id, true);
+    expect(listRules(db, ACCOUNT)).toMatchObject([{ id: ruleId, labelId: 'newsletter' }]);
+    expect(listRules(db, ACCOUNT)[0]).not.toHaveProperty('tier');
   });
 
   it('keeps only the extras that go with what a label does', () => {
@@ -240,20 +294,6 @@ describe('preferences in the database', () => {
     updateLabel(db, ACCOUNT, 'junk', { disposition: 'archive', markRead: true });
     expect(listLabels(db, ACCOUNT).find((l) => l.id === 'junk')).toEqual(expect.objectContaining({ disposition: 'archive', markRead: true }));
     expect(listLabels(db, ACCOUNT).find((l) => l.id === 'junk')).not.toHaveProperty('block');
-  });
-
-  it('leaves a rule the user made for the sender alone, and updates its own', () => {
-    const db = seeded();
-    addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'personal' }, 'user');
-    for (const id of ['a', 'b']) modelDecision(db, id, 'newsletter', 'archive');
-    expect(modelDecision(db, 'c', 'newsletter', 'archive')).toBe(false);
-    expect(listRules(db, ACCOUNT)).toMatchObject([{ labelId: 'personal', source: 'user' }]);
-
-    const learned = seeded();
-    for (const id of ['a', 'b', 'c']) modelDecision(learned, id, 'newsletter', 'archive');
-    for (const id of ['d', 'e']) modelDecision(learned, id, 'marketing', 'archive');
-    expect(modelDecision(learned, 'f', 'marketing', 'archive')).toBe(true);
-    expect(listRules(learned, ACCOUNT)).toMatchObject([{ labelId: 'marketing', source: 'agent' }]);
   });
 });
 
