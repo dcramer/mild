@@ -194,7 +194,7 @@ export function Overview({ data, onOpen, onViewAll }: { data: Summary; onOpen: (
         <SheetHead
           title="Latest decisions"
           action={
-            <Button variant="line" size="sm" onClick={onViewAll}>
+            <Button variant="plain" size="sm" onClick={onViewAll}>
               View all
             </Button>
           }

@@ -97,8 +97,11 @@
   --edge-strong: color-mix(in oklab, var(--foreground) 30%, transparent);
 
   /* Lines are drawn in the ink colour at low strength, never a separate grey. */
-  --rule: color-mix(in oklab, var(--foreground) 14%, transparent);
-  --frame: color-mix(in oklab, var(--foreground) 26%, transparent);
+  --rule: color-mix(in oklab, var(--foreground) 8%, transparent);
+  --frame: color-mix(in oklab, var(--foreground) 17%, transparent);
+  /* What a control is filled with, in place of an outline. */
+  --fill: color-mix(in oklab, var(--foreground) 7%, transparent);
+  --fill-strong: color-mix(in oklab, var(--foreground) 13%, transparent);
 
   /* Tiers are an ordered cascade, cheapest first, so they share one ink that thins as cost rises.
      Mail no tier could decide gets the highlighter. Checked as an ordinal ramp against the card. */
@@ -291,15 +294,19 @@
 [data-slot='select-trigger'],
 [data-slot='input'],
 [data-slot='button'][data-variant='outline'] {
-  border-color: var(--frame);
-  background-color: transparent;
+  border-color: transparent;
+  background-color: var(--fill);
+}
+[data-slot='select-trigger']:hover,
+[data-slot='input']:hover {
+  background-color: var(--fill-strong);
 }
 [data-slot='select-content'],
 [data-slot='sheet-content'] {
   border-radius: 2px;
 }
 
-/* Lines within a sheet are faint dashes, like the rules of a form; its heading sits over a solid one. */
+/* The only lines within a sheet are faint dashes between rows. A heading is set apart by space. */
 .sheet [data-slot='table-row'],
 .sheet .row {
   border-bottom: 1px dashed var(--rule);
@@ -308,9 +315,8 @@
 .sheet .row:last-child {
   border-bottom: 0;
 }
-.sheet [data-slot='table-header'] [data-slot='table-row'],
-.sheet .sheet-head {
-  border-bottom: 1px solid var(--frame);
+.sheet [data-slot='table-header'] [data-slot='table-row'] {
+  border-bottom: 1px dashed var(--rule);
 }
 .stats {
   background-color: var(--rule);

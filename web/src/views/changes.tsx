@@ -67,7 +67,7 @@ export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void 
                     <TableCell className={`${TD} text-right`}>
                       {change.status === 'done' && change.type !== 'undo' ? (
                         <Button
-                          variant="line"
+                          variant="plain"
                           size="sm"
                           disabled={action.busy}
                           onClick={() =>

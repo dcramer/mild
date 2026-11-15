@@ -62,10 +62,10 @@ export function Decisions({ days, onOpen }: { days: Days; onOpen: (row: Decision
           <span>
             {count(offset + 1)}–{count(Math.min(offset + PAGE, data.total))} of {count(data.total)}
           </span>
-          <Button variant="line" size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>
+          <Button variant="plain" size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>
             Newer
           </Button>
-          <Button variant="line" size="sm" disabled={offset + PAGE >= data.total} onClick={() => setOffset(offset + PAGE)}>
+          <Button variant="plain" size="sm" disabled={offset + PAGE >= data.total} onClick={() => setOffset(offset + PAGE)}>
             Older
           </Button>
         </div>

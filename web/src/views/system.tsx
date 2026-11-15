@@ -7,8 +7,9 @@ const INKS = [
   ['bg-card', 'card', 'A sheet.'],
   ['bg-foreground', 'foreground', 'Ink: text, and the main action.'],
   ['bg-muted-foreground', 'muted-foreground', 'Secondary text.'],
-  ['bg-(--frame)', '--frame', 'A sheet’s edge, a control’s outline.'],
+  ['bg-(--frame)', '--frame', 'A sheet’s edge.'],
   ['bg-(--rule)', '--rule', 'Lines between rows, dashed.'],
+  ['bg-(--fill)', '--fill', 'What a control is filled with.'],
   ['bg-highlight', 'highlight', 'Look here. Nothing else is yellow.'],
   ['bg-destructive', 'destructive', 'A failure. Nothing else is red.'],
 ] as const;
@@ -16,7 +17,7 @@ const INKS = [
 const VARIANTS = [
   ['mark', 'What the screen is waiting on. One per screen, at most.'],
   ['ink', 'The main action of a sheet or row.'],
-  ['line', 'Everything else.'],
+  ['plain', 'Everything else.'],
   ['quiet', 'Repeated down a list, and ways out.'],
 ] as const;
 
@@ -114,7 +115,7 @@ export function SystemView() {
       </Sheet>
 
       <Sheet>
-        <SheetHead title="Note" description="Said to the reader outside the flow of the page. Dashed, so it never reads as a sheet." />
+        <SheetHead title="Note" description="Said to the reader outside the flow of the page. No box; the label sets it apart." />
         <div className="grid gap-4 p-4 sm:grid-cols-3">
           <Note title="Plain">
             <p>Something worth knowing that needs nothing done.</p>

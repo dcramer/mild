@@ -64,7 +64,7 @@ function Running({ state, reload }: { state: ManageState; reload: () => void }) 
         }
         action={
           activity.sorting ? (
-            <Button variant="line" size="sm" disabled={busy} onClick={() => run(() => api.checkNow(), reload)}>
+            <Button variant="plain" size="sm" disabled={busy} onClick={() => run(() => api.checkNow(), reload)}>
               Check now
             </Button>
           ) : null
@@ -80,7 +80,7 @@ function Running({ state, reload }: { state: ManageState; reload: () => void }) 
         note={settings.act ? 'Decisions are carried out in Gmail. Each can be undone under Changes.' : 'Nothing in Gmail is changed.'}
       >
         {settings.act ? (
-          <Button variant="line" size="sm" disabled={busy} onClick={() => save({ act: false })}>
+          <Button variant="plain" size="sm" disabled={busy} onClick={() => save({ act: false })}>
             Go back to observing
           </Button>
         ) : confirming ? (
@@ -102,7 +102,7 @@ function Running({ state, reload }: { state: ManageState; reload: () => void }) 
             </Button>
           </>
         ) : (
-          <Button variant="line" size="sm" disabled={busy} onClick={() => setConfirming(true)}>
+          <Button variant="plain" size="sm" disabled={busy} onClick={() => setConfirming(true)}>
             Let sift act…
           </Button>
         )}
@@ -129,7 +129,7 @@ function Accounts({ state }: { state: ManageState }) {
       <SheetHead
         title="Accounts"
         action={
-          <Button variant="line" size="sm" href="/auth/login?add=1">
+          <Button variant="plain" size="sm" href="/auth/login?add=1">
             Connect another
           </Button>
         }

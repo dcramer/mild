@@ -7,13 +7,13 @@ export function Copyable({ value, label }: { value: string; label: string }) {
   // The clipboard is only offered to pages on localhost or HTTPS.
   const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
   return (
-    <div className="flex items-stretch border border-(--frame) bg-background">
+    <div className="flex items-stretch bg-(--fill)">
       <code className="min-w-0 flex-1 px-3 py-2 font-mono text-[12.5px] leading-relaxed break-all select-all">{value}</code>
       {clipboard ? (
         <button
           type="button"
           aria-label={copied ? 'Copied' : `Copy ${label}`}
-          className="flex w-9 shrink-0 cursor-pointer items-center justify-center border-l border-(--frame) text-muted-foreground hover:bg-foreground/8 hover:text-foreground"
+          className="flex w-9 shrink-0 cursor-pointer items-center justify-center text-muted-foreground hover:bg-(--fill) hover:text-foreground"
           onClick={() =>
             void clipboard.writeText(value).then(() => {
               setCopied(true);

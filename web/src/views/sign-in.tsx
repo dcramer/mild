@@ -34,7 +34,7 @@ function Ready({ session }: { session: Session }) {
         Sign in with Google
         <ArrowRightIcon aria-hidden />
       </Button>
-      <div className="mt-1 border-t border-dashed border-(--rule) pt-4">
+      <div className="mt-2">
         <Disclosure summary="Google says redirect_uri_mismatch">
           <p>Add this to the client's authorised redirect URIs, in Google Cloud:</p>
           <Copyable value={session.redirectUri} label="redirect URI" />
@@ -94,5 +94,5 @@ function Blocked({ session }: { session: Session }) {
 }
 
 function Step({ children }: { children: ReactNode }) {
-  return <div className="flex flex-col gap-2 border-t border-dashed border-(--rule) pt-4 text-[13px] text-muted-foreground">{children}</div>;
+  return <div className="mt-2 flex flex-col gap-2 text-[13px] text-muted-foreground">{children}</div>;
 }

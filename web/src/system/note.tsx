@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 
 /**
  * Something said to the reader outside the flow of the page. `look` needs them to do something;
- * `failure` is the only place red appears.
+ * `failure` is the only place red appears. No box: the label sets it apart.
  */
 export function Note({
   tone = 'plain',
@@ -17,10 +17,7 @@ export function Note({
   className?: string;
 }) {
   return (
-    <div
-      role={tone === 'failure' ? 'alert' : undefined}
-      className={cn('flex flex-col gap-2 border border-dashed px-4 py-3 text-sm', tone === 'failure' ? 'border-destructive/60' : 'border-(--frame)', className)}
-    >
+    <div role={tone === 'failure' ? 'alert' : undefined} className={cn('flex flex-col gap-1.5 text-sm', className)}>
       {title ? (
         <p className="slug">
           <span className={cn(tone === 'look' && 'hl', tone === 'failure' && 'text-destructive')}>{title}</span>

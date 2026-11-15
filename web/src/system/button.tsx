@@ -10,9 +10,9 @@ const VARIANT = {
   /** The main action of a sheet or a row. */
   ink: 'bg-foreground text-background hover:bg-foreground/85',
   /** Everything else. */
-  line: 'border-(--frame) hover:bg-foreground/8',
+  plain: 'bg-(--fill) hover:bg-(--fill-strong)',
   /** Actions that repeat down a list, and ways out. */
-  quiet: 'text-muted-foreground hover:bg-foreground/8 hover:text-foreground',
+  quiet: 'text-muted-foreground hover:bg-(--fill) hover:text-foreground',
 } as const;
 
 const SIZE = {
@@ -32,7 +32,7 @@ interface Own {
 type Props = Own & (({ href: string } & Omit<ComponentProps<'a'>, 'children'>) | ({ href?: undefined } & Omit<ComponentProps<'button'>, 'children'>));
 
 /** Something you press. Given `href` it is a link that looks the same. */
-export function Button({ variant = 'line', size = 'md', busy = false, className, children, ...rest }: Props) {
+export function Button({ variant = 'plain', size = 'md', busy = false, className, children, ...rest }: Props) {
   const classes = cn(BASE, VARIANT[variant], SIZE[size], busy && 'pointer-events-none', className);
   const content = (
     <>

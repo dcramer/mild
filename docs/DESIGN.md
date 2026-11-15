@@ -10,7 +10,8 @@ A proof sheet on a dark desk: ink on near-black, one highlighter pen, hard edges
 
 - **Dark only.**
 - **Two colours mean something.** Yellow (`highlight`) means "look here": the name, the current section, the headline figure, what is waiting on the reader, a search match. Red (`destructive`) means a failure. Nothing else is coloured; everything else is the ink colour at some strength.
-- **Lines are ink, thinned.** `--frame` for a sheet's edge and a control's outline, `--rule` (dashed) between rows. Never a separate grey.
+- **As little chrome as it takes.** A sheet has a frame; inside it, space and type separate things before any line does. Controls are filled (`--fill`), not outlined. Notes and headings have no box and no rule. The only lines inside a sheet are faint dashes between rows (`--rule`).
+- **Lines are ink, thinned.** `--frame` for a sheet's edge, `--rule` between rows. Never a separate grey.
 - **One shadow.** `--edge`: hard, offset down and right, the edge of the sheet beneath. A `mark` button is raised by the same edge and pressing pushes it down.
 - **Things you press have hand-cut corners** (`--cut-control`); the highlighter stroke has its own (`--cut`). Surfaces are square.
 - **Type is by role.** Display face (`.statement`, `.figure`, `.title`, `.name`, the wordmark) for what is named or counted; text face for reading; mono small capitals (`.slug`) for labels and column heads; mono for anything typed or pasted.
@@ -22,9 +23,9 @@ Tokens and the role classes are in `web/src/index.css`.
 
 | Part | Use |
 | --- | --- |
-| `Button` | `mark`: what the screen is waiting on, one per screen at most. `ink`: the main action of a sheet or row. `line`: everything else. `quiet`: repeated down a list, and ways out. With `href` it is a link. `busy` while a press is being acted on. |
+| `Button` | `mark`: what the screen is waiting on, one per screen at most. `ink`: the main action of a sheet or row. `plain`: everything else, filled not outlined. `quiet`: repeated down a list, and ways out. With `href` it is a link. `busy` while a press is being acted on. |
 | `Sheet`, `SheetHead` | The surface everything sits on. Rows inside take the class `row`. |
-| `Note` | Said to the reader outside the flow: `plain`, `look` (needs them), `failure`. Dashed, so it never reads as a sheet. |
+| `Note` | Said to the reader outside the flow: `plain`, `look` (needs them), `failure`. No box. |
 | `Stamp` | A short verdict. Weight is meaning: `outline`, `tint`, `ink`; `look` for what is left to the reader. |
 | `Highlight`, `Marked` | A stroke of highlighter; a search term marked in text. |
 | `Code`, `Copyable` | Something typed, inline; a value carried somewhere else whole, with a copy button where the browser allows one. |

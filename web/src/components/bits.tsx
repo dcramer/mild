@@ -59,7 +59,7 @@ export function Empty({ children }: { children: ReactNode }) {
 
 export function ErrorNote({ message }: { message: string }) {
   return (
-    <Note tone="failure" title="Could not refresh" className="bg-card">
+    <Note tone="failure" title="Could not refresh">
       <p>
         {message} Is <Code>sift run</Code> still going?
       </p>
