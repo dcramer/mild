@@ -15,8 +15,6 @@ export interface Controls {
   undo(actionId: number): Promise<string>;
   /** Pull the last `days` days of the inbox in as suggestions. Resolves with how many messages were new. */
   backfill(days: number): Promise<number>;
-  /** Leave the mailing list a message came from, if it can be done safely. Resolves with a sentence describing what happened; rejects with why not. */
-  unsubscribe(accountId: string, messageId: string): Promise<string>;
   /** Start a pass now instead of waiting for the interval. */
   checkNow(): void;
   activity(): Activity;

@@ -102,7 +102,7 @@ function ActionEntry({ a }: { a: Action }) {
   );
 }
 
-function Body({ detail, reload }: { detail: MessageDetail; reload: () => void }) {
+function Body({ detail }: { detail: MessageDetail }) {
   const history = [
     ...detail.decisions.map((d) => ({ at: d.decidedAt, order: 0, node: <DecisionEntry key={`d${d.id}`} d={d} /> })),
     ...detail.actions.map((a) => ({ at: a.createdAt, order: 1, node: <ActionEntry key={`a${a.id}`} a={a} /> })),
@@ -116,7 +116,7 @@ function Body({ detail, reload }: { detail: MessageDetail; reload: () => void })
         </Part>
         <Part title="This sender">
           <SenderFacts sender={detail.sender} />
-          <Unsubscribe detail={detail} onDone={reload} />
+          <Unsubscribe detail={detail} />
         </Part>
       </div>
     </div>
@@ -129,9 +129,7 @@ export function MessageDialog({ target, onClose }: { target: MessageRef | null; 
 }
 
 function Loaded({ target, onClose }: { target: MessageRef; onClose: () => void }) {
-  const { data, error, loading, reload } = useLoaded(`${target.accountId}/${target.messageId}`, (signal) =>
-    api.message(target.accountId, target.messageId, signal),
-  );
+  const { data, error, loading } = useLoaded(`${target.accountId}/${target.messageId}`, (signal) => api.message(target.accountId, target.messageId, signal));
   return (
     <Dialog open wide onClose={onClose} title={(data?.subject ?? target.subject) || '(no subject)'}>
       {loading ? (
@@ -139,7 +137,7 @@ function Loaded({ target, onClose }: { target: MessageRef; onClose: () => void }
           <Loading />
         </div>
       ) : data ? (
-        <Body detail={data} reload={reload} />
+        <Body detail={data} />
       ) : (
         <Note tone="failure" title="Could not load this message">
           <p>{error}</p>

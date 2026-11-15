@@ -195,7 +195,7 @@ function SuggestionDialog({
             </Part>
             <Part title="This sender">
               <SenderFacts sender={detail.data.sender} />
-              {message.data ? <Unsubscribe detail={message.data} onDone={message.reload} /> : null}
+              {message.data ? <Unsubscribe detail={message.data} /> : null}
             </Part>
             <Answer
               labels={labels}

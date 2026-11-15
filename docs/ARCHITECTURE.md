@@ -196,7 +196,7 @@ Everything that manages sift: answer suggestions, switch between observing and a
 
 ## Unsubscribing
 
-Gmail has no API for it, so sift makes the request a mail client would: the sender's one-click address (RFC 8058), a single POST. It happens only when the user presses the button on a message, is recorded as an action before the request, and is never repeated for a sender. The address comes from the email, so it is used only if the message passed DMARC, the address is plain HTTPS on the standard port, and it resolves to the public internet; the connection is made to the address that was checked, and a redirect is not followed. Lists that can only be left by sending an email are refused, since sift cannot send. Code: `src/actions/unsubscribe.ts`.
+Gmail has no API for it, so sift makes the request a mail client would: the sender's one-click address (RFC 8058), a single POST. The request is built and tested (`unsubscribe` in `src/actions`) but nothing calls it yet: it is to run automatically for labels and rules set to unsubscribe (TODO.md), not from a button. It is recorded as an action before the request, and is never repeated for a sender. The address comes from the email, so it is used only if the message passed DMARC, the address is plain HTTPS on the standard port, and it resolves to the public internet; the connection is made to the address that was checked, and a redirect is not followed. Lists that can only be left by sending an email are refused, since sift cannot send. Code: `src/actions/unsubscribe.ts`.
 
 ## Open questions
 

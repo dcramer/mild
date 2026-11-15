@@ -4,7 +4,6 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs, promisify } from 'node:util';
 import { type MessageAction, type Outcome, execute, undo } from '../actions/executor.ts';
-import { unsubscribe } from '../actions/unsubscribe.ts';
 import { type Config, loadConfig, saveSettings } from '../config.ts';
 import { backfill } from '../daemon/backfill.ts';
 import type { Activity, Controls, SignIn } from '../dashboard/controls.ts';
@@ -311,11 +310,6 @@ function buildControls(config: Config, db: ReturnType<typeof openDb>, live: { wa
       let added = 0;
       for (const account of listAccounts(db)) added += await backfill(db, createGmailApi(clientFor(config, secrets, account.email)), account.id, days);
       return added;
-    },
-    unsubscribe: async (accountId, messageId) => {
-      const outcome = await unsubscribe({ db }, accountId, messageId);
-      if (outcome.status === 'done') return 'Unsubscribed. Mail already on its way may still arrive.';
-      throw new Error(outcome.reason);
     },
     checkNow: () => live.wake?.now(),
     activity: () => live.activity,

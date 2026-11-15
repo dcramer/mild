@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { type MessageDetail, type SenderProfile, api, useAction } from '@/lib/api.ts';
+import type { MessageDetail, SenderProfile } from '@/lib/api.ts';
 import { dateTime, shortDate, willBe } from '@/lib/format.ts';
-import { Button, Code } from '@/system';
+import { Code } from '@/system';
 
 /** A heading inside a dialog or a card, over the few lines it names. */
 export function Part({ title, children }: { title: string; children: ReactNode }) {
@@ -43,28 +43,13 @@ export function MessageBody({ detail, untitled }: { detail: MessageDetail; untit
 
 const CONDITIONS: Record<string, string> = { from: 'from', fromDomain: 'from domain', to: 'to', listId: 'list', subjectContains: 'subject contains' };
 
-/** Leave the list a message came from, where sift can do that safely; otherwise say why it is not offered. */
-export function Unsubscribe({ detail, onDone }: { detail: MessageDetail; onDone?: () => void }) {
-  const { busy, error, run } = useAction();
-  if (detail.unsubscribe === 'none') return null;
-  if (detail.unsubscribe === 'done') return <p className="text-[13px] text-muted-foreground">You have unsubscribed from this sender.</p>;
+/** Where the sender stands on unsubscribing, as far as sift can tell. It says nothing when there is nothing to say. */
+export function Unsubscribe({ detail }: { detail: MessageDetail }) {
+  if (detail.unsubscribe === 'done') return <p className="text-[13px] text-muted-foreground">sift has unsubscribed you from this sender.</p>;
+  if (detail.unsubscribe === 'available') return <p className="text-[13px] text-muted-foreground">This sender offers a one-click unsubscribe.</p>;
   if (detail.unsubscribe === 'manual')
-    return (
-      <p className="text-[13px] text-muted-foreground">
-        This list has an unsubscribe link sift will not use for you: it needs a page opened or an email sent, or the message did not prove who sent it.
-      </p>
-    );
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div>
-        <Button busy={busy} onClick={() => run(() => api.unsubscribe(detail.accountId, detail.messageId), onDone)}>
-          Unsubscribe from this list
-        </Button>
-      </div>
-      <p className="text-[13px] text-muted-foreground">One request to the sender’s own unsubscribe address. It cannot be undone from here.</p>
-      {error ? <p className="text-[13px] text-destructive">{error}</p> : null}
-    </div>
-  );
+    return <p className="text-[13px] text-muted-foreground">This sender has an unsubscribe link, but not one sift can use.</p>;
+  return null;
 }
 
 /** What sift knows about a sender, as a few plain lines. */

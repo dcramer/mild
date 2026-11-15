@@ -81,8 +81,8 @@ export interface MessageDetail {
   body: string | null;
   sender: SenderProfile;
   /**
-   * Whether sift can leave the list this message came from. `available`: yes, with one request to the sender.
-   * `done`: the user already has. `manual`: the message has an unsubscribe link sift will not use (it needs an
+   * Whether sift could leave the list this message came from. `available`: yes, with one request to the sender.
+   * `done`: it already has. `manual`: the message has an unsubscribe link sift will not use (it needs an
    * email sent or a page opened, or the message did not prove who sent it). `none`: it offers no way.
    */
   unsubscribe: 'available' | 'done' | 'manual' | 'none';

@@ -202,12 +202,6 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       if (!listAccounts(db).some((a) => a.id === accountId)) return null;
       return { id: addLabel(db, accountId, { name, description, ...fromOutcome(disposition), ...(markRead ? { markRead } : {}) }, now()).id };
     },
-    '/api/unsubscribe': async (body) => {
-      const { accountId, messageId } = body;
-      if (!str(accountId) || !str(messageId)) return null;
-      if (!controls) throw new Error('Nothing is running that can unsubscribe.');
-      return { message: await controls.unsubscribe(accountId, messageId) };
-    },
     '/api/rules': (body) => {
       const { accountId, match, label, disposition } = body;
       if (!str(accountId) || typeof label !== 'string' || !LABEL_ID.test(label) || typeof match !== 'object' || match === null) return null;
