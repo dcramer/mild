@@ -99,5 +99,5 @@
       }
     }
   ],
-  "ignorePatterns": [".claude/**", "node_modules/**", "data/**", "web/dist/**", "web/src/components/ui/**"]
+  "ignorePatterns": [".claude/**", "node_modules/**", "data/**", "web/dist/**"]
 }

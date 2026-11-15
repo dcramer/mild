@@ -1,6 +1,4 @@
 @import 'tailwindcss';
-@import 'tw-animate-css';
-@import 'shadcn/tailwind.css';
 @import '@fontsource-variable/bricolage-grotesque';
 @import '@fontsource-variable/hanken-grotesk';
 @import '@fontsource-variable/jetbrains-mono';
@@ -13,19 +11,6 @@
   --font-mono: var(--face-mono);
   --color-highlight: var(--highlight);
   --color-highlight-ink: var(--highlight-ink);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -110,20 +95,6 @@
   --tier-classifier: #74726a;
   --tier-agent: #4e4c46;
   --tier-fallback: var(--highlight);
-
-  --chart-1: var(--tier-rules);
-  --chart-2: var(--tier-sender);
-  --chart-3: var(--tier-classifier);
-  --chart-4: var(--tier-agent);
-  --chart-5: var(--tier-fallback);
-  --sidebar: var(--card);
-  --sidebar-foreground: var(--foreground);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--accent);
-  --sidebar-accent-foreground: var(--accent-foreground);
-  --sidebar-border: var(--border);
-  --sidebar-ring: var(--ring);
 }
 
 @layer components {
@@ -255,6 +226,14 @@
     }
   }
 
+  /* On a touch screen, controls are tall enough for a thumb. */
+  @media (pointer: coarse) {
+    .press,
+    .field {
+      min-height: 2.5rem;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .press,
     .busy-dots {
@@ -282,67 +261,21 @@
   }
 }
 
-/* The rules below are deliberately outside any layer, so they win over the generated components' own
-   utility classes without editing those files. */
-
-/* Everything you press shares the highlighter's hand-cut corners. */
-[data-slot='button'],
-[data-slot='select-trigger'],
-[data-slot='input'] {
-  border-radius: var(--cut-control);
-}
-[data-slot='select-trigger'],
-[data-slot='input'],
-[data-slot='button'][data-variant='outline'] {
-  border-color: transparent;
-  background-color: var(--fill);
-}
-[data-slot='select-trigger']:hover,
-[data-slot='input']:hover {
-  background-color: var(--fill-strong);
-}
-[data-slot='select-content'],
-[data-slot='sheet-content'] {
-  border-radius: 2px;
-}
-
 /* The only lines within a sheet are faint dashes between rows. A heading is set apart by space. */
-.sheet [data-slot='table-row'],
 .sheet .row {
   border-bottom: 1px dashed var(--rule);
 }
-.sheet [data-slot='table-body'] [data-slot='table-row']:last-child,
 .sheet .row:last-child {
   border-bottom: 0;
 }
-.sheet [data-slot='table-header'] [data-slot='table-row'] {
+.sheet thead .row:last-child {
   border-bottom: 1px dashed var(--rule);
-}
-.stats {
-  background-color: var(--rule);
 }
 
 /* Focus is a highlighter outline, the same yellow that marks what needs you. */
 :focus-visible {
   outline: 2px solid var(--highlight);
   outline-offset: 2px;
-}
-
-/* The current section is highlighted, like the name. */
-[data-slot='tabs-list'][data-variant='line'] [data-slot='tabs-trigger'] {
-  isolation: isolate;
-}
-[data-slot='tabs-list'][data-variant='line'] [data-slot='tabs-trigger']::after {
-  inset: 50% -0.4em auto -0.4em;
-  height: 1.7em;
-  margin-top: -0.85em;
-  z-index: -1;
-  background: var(--highlight);
-  border-radius: var(--cut);
-}
-[data-slot='tabs-list'][data-variant='line'] [data-slot='tabs-trigger'][data-active],
-[data-slot='tabs-list'][data-variant='line'] [data-slot='tabs-trigger'][data-active] span {
-  color: var(--highlight-ink);
 }
 
 /* Base UI normally injects this rule as an inline <style> for select popups; main.tsx turns that off

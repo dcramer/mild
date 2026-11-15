@@ -58,15 +58,9 @@ Later, only if an operator-facing agent is built (one you talk to: "why did you 
 
 The dashboard manages sift, behind Google sign-in. That sign-in also connects the Gmail account.
 
-- [ ] **Move every screen onto the design system** (docs/DESIGN.md). Done so far: sign-in, and buttons, sheets, stamps and notes everywhere. Each of these still needs designing as a part, then the screens that use it:
-  - [ ] Select and input (still shadcn's, skinned).
-  - [ ] Tabs and the page header.
-  - [ ] Table, and the decision row.
-  - [ ] The suggestion row: sender, sample subjects, what sift would do, the answer.
-  - [ ] The figures strip and the chart on Overview.
-  - [ ] The message drawer.
-  - [ ] Settings rows, and confirmation of a risky change.
-  - [ ] Empty and loading states.
+- [ ] Design system (docs/DESIGN.md), parts still missing: a confirmation for a destructive press (Remove, Forget and Undo act at once), a toast or other place for "done" that survives a reload of the list, a text link, a multi-line form layout, and a part for a long list (the model select has no search).
+- [ ] The specimen page (`/#system`) is reachable without signing in. It holds no data; decide whether to keep it in the production build.
+- [ ] Narrow screens: tables scroll sideways. Decide which become stacked rows on a phone.
 - [ ] Try the sign-in for real: a Web application client, `tailscale serve`, the redirect URIs, and a second account.
 - [ ] Keep people apart: today everyone signed in sees every connected account. Scope each session to its own account before more than one person uses an install.
 - [ ] Filter every view by account once there is more than one.
@@ -77,10 +71,9 @@ The dashboard manages sift, behind Google sign-in. That sign-in also connects th
 - [ ] Reorder rules; rules with more than one condition and with exceptions.
 - [ ] Answer queued questions.
 - [ ] Per-sender and per-rule detail: the messages matched, hits over time, rules that never fire.
-- [ ] Split the bundle (about 800 kB, mostly Recharts) if load time matters.
-- [ ] Keep filters, tab and open message in the URL so a view can be bookmarked.
+- [ ] Keep filters and the open message in the URL so a view can be bookmarked (the section and settings page already are).
 - [ ] `pnpm dev:web` proxies to localhost:8787; make it follow `dashboard.port`.
-- [ ] Revisit Vercel's UI SDK if shadcn ships a base built on it (evaluated 2026-11-15, not adopted; see docs/ARCHITECTURE.md).
+- [ ] Revisit Vercel's UI SDK as the behaviour layer under `web/src/system` once it is past beta and works under the content security policy (evaluated 2026-11-15; see docs/ARCHITECTURE.md).
 
 ## Inference tier
 

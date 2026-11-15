@@ -22,8 +22,9 @@ export function DispositionBadge({ disposition }: { disposition: string }) {
   return <Stamp tone={STAMP[disposition as keyof typeof STAMP] ?? 'outline'}>{dispositionName(disposition)}</Stamp>;
 }
 
+/** A second line under the point of a cell. */
 export function Sub({ children, mono }: { children: ReactNode; mono?: boolean }) {
-  return <span className={cn('block truncate text-xs text-muted-foreground', mono && 'font-mono')}>{children}</span>;
+  return <span className={cn('mt-0.5 block truncate text-xs text-muted-foreground', mono && 'font-mono')}>{children}</span>;
 }
 
 /** What became of a decision in the mailbox. */
@@ -45,18 +46,17 @@ export function Result({ row }: { row: Pick<DecisionRow, 'actionId' | 'actionTyp
   );
 }
 
-export function ModelCost({ row }: { row: Pick<DecisionRow, 'model' | 'costUsd'> }) {
-  return row.model ? (
-    <Sub mono>
-      {row.model} · {money(row.costUsd)}
-    </Sub>
-  ) : null;
+/** Which tier decided, and what the model cost if one was used. */
+export function DecidedBy({ row }: { row: Pick<DecisionRow, 'stage' | 'model' | 'costUsd' | 'confidence'> }) {
+  const facts = [
+    tier(row.stage).name,
+    row.model ? `${row.model} · ${money(row.costUsd)}` : null,
+    row.confidence === null ? null : `confidence ${row.confidence.toFixed(2)}`,
+  ];
+  return <Sub>{facts.filter(Boolean).join(' · ')}</Sub>;
 }
 
-export function Empty({ children }: { children: ReactNode }) {
-  return <p className="px-4 py-10 text-center text-sm text-muted-foreground">{children}</p>;
-}
-
+/** The server could not be reached or refused; what was on screen stays. */
 export function ErrorNote({ message }: { message: string }) {
   return (
     <Note tone="failure" title="Could not refresh">
@@ -67,7 +67,8 @@ export function ErrorNote({ message }: { message: string }) {
   );
 }
 
-/** Table header and cell classes shared by every table, so they line up with the panel's 16px gutter. */
-export const TH = 'slug h-9 px-4 text-muted-foreground';
-export const TD = 'px-4 py-2.5';
-export const NUM = 'text-right tabular-nums';
+/** Something a change just did or failed to do, under the control that caused it. */
+export function Outcome({ error, done }: { error?: string | null; done?: string | null }) {
+  if (error) return <p className="px-4 pb-3 text-[13px] text-destructive">{error}</p>;
+  return done ? <p className="px-4 pb-3 text-[13px] text-muted-foreground">{done}</p> : null;
+}

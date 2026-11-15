@@ -45,7 +45,7 @@ src/
   dashboard/  read-only JSON API over the database, and the server for the built web app (`sift dashboard`)
   daemon/     orchestration: sync pass, triage pass, and the `sift run` loop
   model/      the only module that talks to model providers (pi-ai): login, credentials, the classifier call
-web/          the dashboard page: React, shadcn/ui, Tailwind, Recharts; builds to web/dist
+web/          the dashboard page: React, Tailwind, its own design system on Base UI; builds to web/dist
 tests/        synthetic fixtures only
 docker/       Dockerfile and compose file
 ```
@@ -177,10 +177,10 @@ Everything that manages sift: answer suggestions, switch between observing and a
 **The page**
 
 - **Untrusted content.** Subjects and sender names come from email. React renders them as text, and the page is served with a content security policy that allows no inline script, no inline style and nothing from another origin.
-- **Stack.** shadcn/ui components (on Base UI) with Tailwind, and Recharts for the chart. The components live in `web/src/components/ui` as generated source. Two of them needed a change for the content security policy: `chart.tsx` no longer renders an inline `<style>`, and Base UI's style injection is turned off in `main.tsx` with its one rule moved into `index.css`. Re-check both when updating components.
-- **Look.** Dark only: ink-black sheets with a faint frame and an offset edge, off-white ink. Bricolage Grotesque for titles and figures, Hanken Grotesk for text, JetBrains Mono in small capitals for labels and stamps. The only colour is a yellow highlighter, used for the name, the current section, the headline figure, anything waiting on the user, undecided mail and search matches; red marks failures. Things you press have the highlighter's hand-cut corners. Lines are the ink colour at low strength (dashed between rows), never a separate grey. There is no app bar: the name and sections sit on the page. Tiers are one ink that thins as cost rises, because they are an ordered cascade.
+- **Stack.** React and Tailwind, with sift's own design system (`web/src/system`, [DESIGN.md](DESIGN.md)). Behaviour that is hard to get right (the select's list, the drawer's focus trap) comes from Base UI's unstyled primitives, wrapped inside the system's parts so no screen imports them; the look is all sift's. Base UI's style injection is turned off in `main.tsx` for the content security policy, with its one rule moved into `index.css`. The chart is drawn by the system itself, so there is no chart library.
+- **Look.** See [DESIGN.md](DESIGN.md). Tiers are one ink that thins as cost rises, because they are an ordered cascade.
 - **Shared types.** `src/dashboard/types.ts` defines the API's JSON and has no imports, so the web app imports it directly.
-- **Vercel's UI SDK** (`@ui-sdk/react`, announced 2026-11-12) was evaluated and not adopted: it is a 0.1 beta of unstyled primitives with no chart or table, no shadcn integration, and it injects a runtime `<style>` by default. Revisit if shadcn ships a base built on it.
+- **Vercel's UI SDK** (`@ui-sdk/react`, announced 2026-11-12) was evaluated and not adopted yet: it is a 0.1 beta, and it injects a runtime `<style>` by default. It would do the job Base UI does now, supplying behaviour under the system's parts. Because only `web/src/system` imports the primitives, moving to it later changes those few files and no screen.
 
 ## Open questions
 

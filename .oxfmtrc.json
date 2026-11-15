@@ -10,7 +10,6 @@
   "arrowParens": "always",
   "bracketSpacing": true,
   "ignorePatterns": [
-    "web/src/components/ui/**",
     "web/dist/**"
   ]
 }

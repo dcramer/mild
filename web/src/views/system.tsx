@@ -1,6 +1,56 @@
 import { ArrowRightIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
-import { Button, Code, Copyable, Disclosure, Highlight, Marked, Note, Sheet, SheetHead, Stamp, Wordmark } from '@/system';
+import { type ReactNode, useState } from 'react';
+import {
+  Button,
+  Check,
+  Code,
+  Copyable,
+  Disclosure,
+  Drawer,
+  Empty,
+  Figure,
+  Figures,
+  Highlight,
+  Input,
+  Loading,
+  Marked,
+  Masthead,
+  Note,
+  Sections,
+  Select,
+  Sheet,
+  SheetHead,
+  StackedBars,
+  Stamp,
+  SubNav,
+  Table,
+  Td,
+  TextArea,
+  Th,
+  Tr,
+  Wordmark,
+} from '@/system';
+
+const SERIES = [
+  { key: 'a', name: 'Rules', color: 'var(--tier-rules)' },
+  { key: 'b', name: 'Sender memory', color: 'var(--tier-sender)' },
+  { key: 'c', name: 'Agent', color: 'var(--tier-agent)' },
+  { key: 'd', name: 'Undecided', color: 'var(--tier-fallback)' },
+];
+const DAYS = [
+  [12, 5, 3, 1],
+  [8, 9, 2, 0],
+  [15, 4, 6, 2],
+  [0, 0, 0, 0],
+  [9, 11, 1, 0],
+  [20, 6, 4, 3],
+  [14, 7, 2, 1],
+].map(([a = 0, b = 0, c = 0, d = 0], index) => ({ key: String(index), label: `Nov ${index + 9}`, title: `Nov ${index + 9}`, values: { a, b, c, d } }));
+const CHOICES = [
+  ['keep', 'Keep in inbox'],
+  ['archive', 'Archive'],
+  ['spam', 'Mark spam'],
+] as const;
 
 const INKS = [
   ['bg-background', 'background', 'The page.'],
@@ -23,8 +73,11 @@ const VARIANTS = [
 
 /** Every part of the design system in every state, at `#system`. Add to it when the system grows. */
 export function SystemView() {
+  const [choice, setChoice] = useState<(typeof CHOICES)[number][0]>('archive');
+  const [checked, setChecked] = useState(false);
+  const [drawer, setDrawer] = useState(false);
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-8">
+    <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-8">
       <header className="flex items-baseline gap-4">
         <Wordmark />
         <p className="slug text-muted-foreground">Design system</p>
@@ -90,6 +143,125 @@ export function SystemView() {
           </Row>
         ))}
       </Sheet>
+
+      <Sheet>
+        <SheetHead title="Controls" description="Filled, never outlined. A select is for a short list; anything longer needs a different part." />
+        <Row label="select">
+          <Select label="What sift does" value={choice} options={CHOICES} onChange={setChoice} />
+          <Select label="Disabled" value={choice} options={CHOICES} onChange={setChoice} disabled />
+        </Row>
+        <Row label="input">
+          <Input aria-label="Example" placeholder="example.com" className="w-56" />
+          <Input aria-label="Disabled" placeholder="Disabled" className="w-40" disabled />
+        </Row>
+        <Row label="check">
+          <Check checked={checked} onChange={setChecked}>
+            Include mail sift would keep
+          </Check>
+        </Row>
+        <Row label="text area">
+          <div className="w-full max-w-xl">
+            <TextArea aria-label="Example" className="min-h-20" defaultValue="Anything from my accountant stays in the inbox." />
+          </div>
+        </Row>
+      </Sheet>
+
+      <Sheet>
+        <SheetHead
+          title="Navigation"
+          description="Sections are highlighted when current. Pages within a section are quieter: a stroke beside the current one."
+        />
+        <div className="row px-4">
+          <Masthead
+            current="system"
+            items={[
+              { to: 'system', label: 'Suggestions', count: 12 },
+              { to: 'system/overview', label: 'Overview' },
+              { to: 'system/rules', label: 'Rules' },
+            ]}
+            aside={<span>On a narrow screen this becomes a menu button and a panel that covers the screen.</span>}
+          />
+        </div>
+        <Row label="sections">
+          <Sections
+            current="system"
+            items={[
+              { to: 'system', label: 'Suggestions', count: 12 },
+              { to: 'system/overview', label: 'Overview' },
+              { to: 'system/rules', label: 'Rules' },
+            ]}
+          />
+        </Row>
+        <div className="row px-4 py-4">
+          <SubNav
+            label="Example pages"
+            current="system"
+            items={[
+              { to: 'system', label: 'Running' },
+              { to: 'system/accounts', label: 'Accounts' },
+              { to: 'system/kinds', label: 'Kinds of mail' },
+            ]}
+          >
+            <p className="text-muted-foreground">The current page goes here. One page shows at a time.</p>
+          </SubNav>
+        </div>
+      </Sheet>
+
+      <Figures>
+        <Figure label="No model needed" value="84%" note="1,079 of 1,284" tone="look" />
+        <Figure label="Decisions" value="1,284" note="1,301 received" />
+        <Figure label="Model cost" value="$0.42" />
+        <Figure label="Changes to check" value="2" tone="failure" />
+      </Figures>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Sheet>
+          <SheetHead title="Chart" description="Point at a column, or tab to it, and the legend reads it out." />
+          <StackedBars unit="decisions" series={SERIES} rows={DAYS} />
+        </Sheet>
+        <Sheet>
+          <SheetHead title="Table" description="A row with somewhere to go is pressable as a whole." />
+          <Table>
+            <thead>
+              <Tr>
+                <Th>Sender</Th>
+                <Th num>Messages</Th>
+                <Th>Outcome</Th>
+              </Tr>
+            </thead>
+            <tbody>
+              <Tr onOpen={() => setDrawer(true)}>
+                <Td>news@example.com</Td>
+                <Td num>16</Td>
+                <Td>
+                  <Stamp tone="tint">Archived</Stamp>
+                </Td>
+              </Tr>
+              <Tr onOpen={() => setDrawer(true)}>
+                <Td>founder@example.org</Td>
+                <Td num>3</Td>
+                <Td>
+                  <Stamp tone="look">Left for review</Stamp>
+                </Td>
+              </Tr>
+            </tbody>
+          </Table>
+        </Sheet>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Sheet>
+          <SheetHead title="Empty" description="One plain sentence." />
+          <Empty>None yet. Answering a suggestion adds one.</Empty>
+        </Sheet>
+        <Sheet>
+          <SheetHead title="Loading" description="Stands in for rows on their way." />
+          <Loading rows={3} />
+        </Sheet>
+      </div>
+      <Drawer open={drawer} onClose={() => setDrawer(false)} title="Drawer: detail about one thing">
+        <p className="text-muted-foreground">Over the page it was opened from. Escape or a press outside closes it.</p>
+      </Drawer>
 
       <Sheet>
         <SheetHead

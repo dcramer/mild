@@ -1,129 +1,69 @@
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
-import { Button, Highlight, Sheet, SheetHead } from '@/system';
-import { DispositionBadge, Empty, NUM, TD, TH, TierLabel } from '@/components/bits.tsx';
+import type { ReactNode } from 'react';
+import { DispositionBadge, TierLabel } from '@/components/bits.tsx';
 import { DecisionTable } from '@/components/decision-table.tsx';
-import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { DecisionRow, Summary } from '@/lib/api.ts';
 import { TIERS, count, longDay, money, percent, shortDay } from '@/lib/format.ts';
+import { Button, Empty, Figure, Figures, Sheet, SheetHead, StackedBars, Table, Td, Th, Tr } from '@/system';
 
-const chartConfig = Object.fromEntries(TIERS.map((t) => [t.key, { label: t.name, color: t.color }])) satisfies ChartConfig;
-
-function Stat({ label, value, note, tone }: { label: string; value: string; note?: string | null; tone?: 'highlight' | 'alert' }) {
-  return (
-    <div className="flex flex-col gap-1 bg-card px-4 py-3.5">
-      <dt className="slug truncate text-muted-foreground">{label}</dt>
-      <dd className={`figure ${tone === 'alert' ? 'text-destructive' : ''}`}>
-        {tone === 'highlight' ? <Highlight className="mx-0 inline-block px-2 py-0">{value}</Highlight> : value}
-      </dd>
-      <dd className="min-h-4 truncate text-xs text-muted-foreground tabular-nums">{note}</dd>
-    </div>
-  );
-}
-
-// Only the top of each column is rounded: the last tier with any decisions that day.
-const topTier = (row: Summary['daily'][number]) => TIERS.findLast((t) => row.counts[t.key] > 0)?.key;
-
-function PerDay({ daily }: { daily: Summary['daily'] }) {
-  const data = daily.map((d) => ({ day: d.day, ...d.counts }));
-  return (
-    <div className="flex flex-col gap-3 p-4">
-      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
-        {TIERS.map((t) => (
-          <li key={t.key}>
-            <TierLabel stage={t.key} />
-          </li>
-        ))}
-      </ul>
-      <ChartContainer config={chartConfig} className="aspect-auto h-60 w-full">
-        <BarChart data={data} accessibilityLayer margin={{ left: 0, right: 4, top: 8 }} barCategoryGap="28%">
-          <CartesianGrid vertical={false} />
-          <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={8} minTickGap={24} tickFormatter={shortDay} />
-          <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={32} tickFormatter={count} />
-          <ChartTooltip content={<ChartTooltipContent className="min-w-48" labelFormatter={(value) => longDay(String(value))} />} />
-          {TIERS.map((t) => (
-            <Bar
-              key={t.key}
-              dataKey={t.key}
-              stackId="tiers"
-              fill={`var(--color-${t.key})`}
-              maxBarSize={28}
-              isAnimationActive={false}
-              shape={(props: { x?: number; y?: number; width?: number; height?: number; index?: number }) => {
-                const { x = 0, y = 0, width = 0, height = 0, index = 0 } = props;
-                const row = daily[index];
-                const r = row && topTier(row) === t.key ? Math.min(3, width / 2, height) : 0;
-                return (
-                  <path
-                    d={`M${x},${y + height} V${y + r} Q${x},${y} ${x + r},${y} H${x + width - r} Q${x + width},${y} ${x + width},${y + r} V${y + height} Z`}
-                    fill={`var(--color-${t.key})`}
-                    stroke="var(--card)"
-                    strokeWidth={1.5}
-                  />
-                );
-              }}
-            />
-          ))}
-        </BarChart>
-      </ChartContainer>
-    </div>
-  );
-}
-
-export function Overview({ data, onOpen, onViewAll }: { data: Summary; onOpen: (row: DecisionRow) => void; onViewAll: () => void }) {
+export function Overview({ data, period, onOpen }: { data: Summary; period: ReactNode; onOpen: (row: DecisionRow) => void }) {
   const t = data.totals;
   return (
-    <div className="flex flex-col gap-4">
-      {/* One strip of figures, divided by hairlines. The first is the point of sift, so it gets the highlighter. */}
-      <dl className="sheet stats grid grid-cols-2 gap-px overflow-hidden md:grid-cols-4 xl:grid-cols-7 [&>div:last-child]:col-span-2 xl:[&>div:last-child]:col-span-1">
-        <Stat
-          label="No model needed"
-          value={percent(t.withoutInference, t.decisions)}
-          note={t.decisions ? `${count(t.withoutInference)} of ${count(t.decisions)}` : null}
-          tone={t.decisions ? 'highlight' : undefined}
-        />
-        <Stat label="Decisions" value={count(t.decisions)} />
-        <Stat label="Messages received" value={count(t.messages)} />
-        <Stat label="Model cost" value={money(t.costUsd)} note={t.decisions ? `${money(t.costUsd / t.decisions)} each` : null} />
-        <Stat label="Awaiting triage" value={count(t.awaitingTriage)} />
-        <Stat label="Questions for you" value={count(t.openQuestions)} tone={t.openQuestions > 0 ? 'highlight' : undefined} />
-        <Stat
-          label="Actions to check"
-          value={count(t.troubledActions)}
-          note={t.troubledActions ? 'see sift log' : null}
-          tone={t.troubledActions > 0 ? 'alert' : undefined}
-        />
-      </dl>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-start gap-x-10 gap-y-4">
+        <Figures>
+          {/* The first is the point of sift, so it gets the highlighter. */}
+          <Figure
+            label="No model needed"
+            value={percent(t.withoutInference, t.decisions)}
+            note={t.decisions ? `${count(t.withoutInference)} of ${count(t.decisions)}` : null}
+            tone={t.decisions ? 'look' : undefined}
+          />
+          <Figure label="Decisions" value={count(t.decisions)} note={`${count(t.messages)} received`} />
+          <Figure label="Model cost" value={money(t.costUsd)} note={t.decisions ? `${money(t.costUsd / t.decisions)} each` : null} />
+          {t.awaitingTriage > 0 ? <Figure label="Not yet sorted" value={count(t.awaitingTriage)} /> : null}
+          {t.openQuestions > 0 ? <Figure label="Questions for you" value={count(t.openQuestions)} tone="look" /> : null}
+          {t.troubledActions > 0 ? <Figure label="Changes to check" value={count(t.troubledActions)} note="under Changes" tone="failure" /> : null}
+        </Figures>
+        <div className="ml-auto">{period}</div>
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-5">
         <Sheet className="lg:col-span-3">
           <SheetHead title="Decisions per day" description="Darker ink is a cheaper tier." />
-          {t.decisions === 0 ? <Empty>No decisions in this period.</Empty> : <PerDay daily={data.daily} />}
+          {t.decisions === 0 ? (
+            <Empty>No decisions in this period.</Empty>
+          ) : (
+            <StackedBars
+              unit="decisions"
+              series={TIERS}
+              rows={data.daily.map((d) => ({ key: d.day, label: shortDay(d.day), title: longDay(d.day), values: d.counts }))}
+            />
+          )}
         </Sheet>
 
         <Sheet className="lg:col-span-2">
           <SheetHead title="By tier" />
           <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className={TH}>Tier</TableHead>
-                <TableHead className={`${TH} text-right`}>Decisions</TableHead>
-                <TableHead className={`${TH} text-right`}>Share</TableHead>
-                <TableHead className={`${TH} text-right`}>Cost</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+            <thead>
+              <Tr>
+                <Th>Tier</Th>
+                <Th num>Decisions</Th>
+                <Th num>Share</Th>
+                <Th num>Cost</Th>
+              </Tr>
+            </thead>
+            <tbody>
               {data.byStage.map((row) => (
-                <TableRow key={row.stage}>
-                  <TableCell className={TD}>
+                <Tr key={row.stage}>
+                  <Td>
                     <TierLabel stage={row.stage} />
-                  </TableCell>
-                  <TableCell className={`${TD} ${NUM}`}>{count(row.decisions)}</TableCell>
-                  <TableCell className={`${TD} ${NUM}`}>{percent(row.decisions, t.decisions)}</TableCell>
-                  <TableCell className={`${TD} ${NUM}`}>{money(row.costUsd)}</TableCell>
-                </TableRow>
+                  </Td>
+                  <Td num>{count(row.decisions)}</Td>
+                  <Td num>{percent(row.decisions, t.decisions)}</Td>
+                  <Td num>{money(row.costUsd)}</Td>
+                </Tr>
               ))}
-            </TableBody>
+            </tbody>
           </Table>
         </Sheet>
       </div>
@@ -135,28 +75,28 @@ export function Overview({ data, onOpen, onViewAll }: { data: Summary; onOpen: (
             <Empty>No mail recorded in this period.</Empty>
           ) : (
             <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className={TH}>Sender</TableHead>
-                  <TableHead className={`${TH} text-right`}>Messages</TableHead>
-                  <TableHead className={TH}>Latest outcome</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+              <thead>
+                <Tr>
+                  <Th>Sender</Th>
+                  <Th num>Messages</Th>
+                  <Th>Latest outcome</Th>
+                </Tr>
+              </thead>
+              <tbody>
                 {data.topSenders.map((row) => (
-                  <TableRow key={row.address}>
-                    <TableCell className={`${TD} max-w-64 truncate`}>{row.address}</TableCell>
-                    <TableCell className={`${TD} ${NUM}`}>{count(row.messages)}</TableCell>
-                    <TableCell className={TD}>
+                  <Tr key={row.address}>
+                    <Td className="max-w-64 truncate">{row.address}</Td>
+                    <Td num>{count(row.messages)}</Td>
+                    <Td>
                       {row.lastDisposition ? (
                         <DispositionBadge disposition={row.lastDisposition} />
                       ) : (
                         <span className="text-muted-foreground">Not decided</span>
                       )}
-                    </TableCell>
-                  </TableRow>
+                    </Td>
+                  </Tr>
                 ))}
-              </TableBody>
+              </tbody>
             </Table>
           )}
         </Sheet>
@@ -167,24 +107,24 @@ export function Overview({ data, onOpen, onViewAll }: { data: Summary; onOpen: (
             <Empty>Nothing decided in this period.</Empty>
           ) : (
             <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className={TH}>Outcome</TableHead>
-                  <TableHead className={`${TH} text-right`}>Decisions</TableHead>
-                  <TableHead className={`${TH} text-right`}>Share</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+              <thead>
+                <Tr>
+                  <Th>Outcome</Th>
+                  <Th num>Decisions</Th>
+                  <Th num>Share</Th>
+                </Tr>
+              </thead>
+              <tbody>
                 {data.byDisposition.map((row) => (
-                  <TableRow key={row.disposition}>
-                    <TableCell className={TD}>
+                  <Tr key={row.disposition}>
+                    <Td>
                       <DispositionBadge disposition={row.disposition} />
-                    </TableCell>
-                    <TableCell className={`${TD} ${NUM}`}>{count(row.decisions)}</TableCell>
-                    <TableCell className={`${TD} ${NUM}`}>{percent(row.decisions, t.decisions)}</TableCell>
-                  </TableRow>
+                    </Td>
+                    <Td num>{count(row.decisions)}</Td>
+                    <Td num>{percent(row.decisions, t.decisions)}</Td>
+                  </Tr>
                 ))}
-              </TableBody>
+              </tbody>
             </Table>
           )}
         </Sheet>
@@ -194,13 +134,13 @@ export function Overview({ data, onOpen, onViewAll }: { data: Summary; onOpen: (
         <SheetHead
           title="Latest decisions"
           action={
-            <Button variant="plain" size="sm" onClick={onViewAll}>
+            <Button size="sm" href="#decisions">
               View all
             </Button>
           }
         />
         {data.recent.length === 0 ? (
-          <Empty>No decisions yet. sift records one each time it triages a message, including when it leaves the message alone.</Empty>
+          <Empty>No decisions yet. sift records one each time it sorts a message, including when it leaves the message alone.</Empty>
         ) : (
           <DecisionTable rows={data.recent} onOpen={onOpen} />
         )}

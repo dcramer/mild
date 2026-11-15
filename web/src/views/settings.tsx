@@ -1,11 +1,8 @@
-import { useEffect, useState } from 'react';
-import { Button, Sheet, SheetHead } from '@/system';
-import { ErrorNote, Sub, TD, TH } from '@/components/bits.tsx';
-import { Picker } from '@/components/picker.tsx';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { type ReactNode, useEffect, useState } from 'react';
+import { ErrorNote, Outcome, Sub } from '@/components/bits.tsx';
 import { type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count } from '@/lib/format.ts';
+import { Button, Code, Loading, Note, Select, Sheet, SheetHead, SubNav, Table, Td, TextArea, Th, Tr } from '@/system';
 
 const INTERVALS = [
   ['30', 'Every 30 seconds'],
@@ -27,11 +24,20 @@ const DOES = [
   ['spam', 'Mark spam'],
 ] as const;
 
-function Row({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
+const PAGES = [
+  { to: 'settings/running', label: 'Running' },
+  { to: 'settings/accounts', label: 'Accounts' },
+  { to: 'settings/kinds', label: 'Kinds of mail' },
+  { to: 'settings/guidelines', label: 'Guidelines' },
+  { to: 'settings/older', label: 'Older mail' },
+] as const;
+
+/** One thing the reader can set: what it is, what follows from it, and the control. */
+function Setting({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
   return (
-    <div className="row flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
+    <div className="row flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3.5">
       <div className="min-w-0 flex-1 basis-64">
-        <div className="font-medium">{title}</div>
+        <p className="font-medium">{title}</p>
         {note ? <p className="text-[13px] text-muted-foreground">{note}</p> : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">{children}</div>
@@ -52,74 +58,87 @@ function Running({ state, reload }: { state: ManageState; reload: () => void }) 
   ];
 
   return (
-    <Sheet>
-      <SheetHead
-        title="How sift runs"
-        description={
-          !activity.sorting
-            ? 'Only the dashboard is running; nothing is sorting mail. Start `sift run`.'
-            : activity.lastPassAt
-              ? `Last checked ${ago(activity.lastPassAt)}`
-              : 'Starting'
-        }
-        action={
-          activity.sorting ? (
-            <Button variant="plain" size="sm" disabled={busy} onClick={() => run(() => api.checkNow(), reload)}>
+    <>
+      {activity.problems.length > 0 ? (
+        <Note tone="failure" title="Not working">
+          {activity.problems.map((problem) => (
+            <p key={problem}>{problem}</p>
+          ))}
+        </Note>
+      ) : null}
+      {!activity.sorting ? (
+        <Note tone="look" title="Not sorting">
+          <p>
+            Only the dashboard is running. Start <Code>sift run</Code>.
+          </p>
+        </Note>
+      ) : null}
+      <Sheet>
+        <SheetHead
+          title={settings.act ? 'Acting' : 'Observing'}
+          description={
+            settings.act ? 'sift carries out its decisions in Gmail. Each can be undone under Changes.' : 'sift only suggests. Nothing in Gmail is changed.'
+          }
+          action={
+            settings.act ? (
+              <Button size="sm" busy={busy} onClick={() => save({ act: false })}>
+                Go back to observing
+              </Button>
+            ) : confirming ? null : (
+              <Button size="sm" onClick={() => setConfirming(true)}>
+                Let sift act…
+              </Button>
+            )
+          }
+        />
+        {confirming && !settings.act ? (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 pt-1 pb-4">
+            <p className="min-w-0 flex-1 basis-72">
+              sift will start archiving, labelling and marking spam on new mail, by itself, for every kind of mail set to do so.
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="mark"
+                busy={busy}
+                onClick={() => {
+                  setConfirming(false);
+                  save({ act: true });
+                }}
+              >
+                Start acting
+              </Button>
+              <Button variant="quiet" onClick={() => setConfirming(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : null}
+        <Setting title="Model" note="Sorts mail that no rule or remembered sender covers.">
+          <Select
+            label="Model"
+            value={settings.model ?? ''}
+            options={modelOptions}
+            disabled={busy}
+            onChange={(model) => save({ model: model === '' ? null : model })}
+          />
+        </Setting>
+        <Setting title="Check for mail" note={activity.sorting ? (activity.lastPassAt ? `Last checked ${ago(activity.lastPassAt)}.` : 'Starting.') : undefined}>
+          <Select
+            label="How often"
+            value={interval}
+            disabled={busy}
+            options={interval === '' ? [['', `Every ${settings.interval} seconds`] as const, ...INTERVALS] : INTERVALS}
+            onChange={(value) => value !== '' && save({ interval: Number(value) })}
+          />
+          {activity.sorting ? (
+            <Button size="sm" disabled={busy} onClick={() => run(() => api.checkNow(), reload)}>
               Check now
             </Button>
-          ) : null
-        }
-      />
-      {activity.problems.map((problem) => (
-        <p key={problem} className="row px-4 py-2 text-[13px] text-destructive">
-          {problem}
-        </p>
-      ))}
-      <Row
-        title={settings.act ? 'Acting' : 'Observing'}
-        note={settings.act ? 'Decisions are carried out in Gmail. Each can be undone under Changes.' : 'Nothing in Gmail is changed.'}
-      >
-        {settings.act ? (
-          <Button variant="plain" size="sm" disabled={busy} onClick={() => save({ act: false })}>
-            Go back to observing
-          </Button>
-        ) : confirming ? (
-          <>
-            <span className="text-[13px] text-muted-foreground">sift will start archiving and labelling new mail.</span>
-            <Button
-              variant="ink"
-              size="sm"
-              disabled={busy}
-              onClick={() => {
-                setConfirming(false);
-                save({ act: true });
-              }}
-            >
-              Start acting
-            </Button>
-            <Button variant="quiet" size="sm" onClick={() => setConfirming(false)}>
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <Button variant="plain" size="sm" disabled={busy} onClick={() => setConfirming(true)}>
-            Let sift act…
-          </Button>
-        )}
-      </Row>
-      <Row title="Model" note="For mail no rule or sender covers.">
-        <Picker label="Model" value={settings.model ?? ''} options={modelOptions} onChange={(model) => save({ model: model === '' ? null : model })} />
-      </Row>
-      <Row title="How often to check for mail">
-        <Picker
-          label="Interval"
-          value={interval}
-          options={interval === '' ? [['', `Every ${settings.interval} seconds`] as const, ...INTERVALS] : INTERVALS}
-          onChange={(value) => value !== '' && save({ interval: Number(value) })}
-        />
-      </Row>
-      {error ? <p className="px-4 py-2 text-[13px] text-destructive">{error}</p> : null}
-    </Sheet>
+          ) : null}
+        </Setting>
+        <Outcome error={error} />
+      </Sheet>
+    </>
   );
 }
 
@@ -128,15 +147,17 @@ function Accounts({ state }: { state: ManageState }) {
     <Sheet>
       <SheetHead
         title="Accounts"
+        description="Anyone signed in as one of these sees all of them."
         action={
-          <Button variant="plain" size="sm" href="/auth/login?add=1">
+          <Button size="sm" href="/auth/login?add=1">
             Connect another
           </Button>
         }
       />
       {state.accounts.map((account) => (
-        <div key={account.id} className="row px-4 py-3">
-          {account.email}
+        <div key={account.id} className="row flex flex-wrap items-baseline gap-x-4 px-4 py-3.5">
+          <span className="name">{account.email}</span>
+          <span className="text-[13px] text-muted-foreground">{account.lastSyncedAt ? `Synced ${ago(account.lastSyncedAt)}` : 'Not synced yet'}</span>
         </div>
       ))}
     </Sheet>
@@ -149,13 +170,13 @@ function OlderMail() {
   const [result, setResult] = useState<string | null>(null);
   return (
     <Sheet>
-      <SheetHead title="Older mail" />
-      <Row title="Pull in as suggestions" note="Up to 300 messages, one model call each. They are never acted on, even while sift is acting.">
-        <Picker label="How far back" value={days} options={DAYS} onChange={setDays} />
+      <SheetHead title="Older mail" description="sift only sorts mail that arrives after it starts. Pull in older mail to have more to teach it with." />
+      <Setting title="Pull in as suggestions" note="Up to 300 messages, one model call each. They are never acted on, even while sift is acting.">
+        <Select label="How far back" value={days} options={DAYS} onChange={setDays} />
         <Button
           variant="ink"
           size="sm"
-          disabled={busy}
+          busy={busy}
           onClick={() =>
             run(async () => {
               const { added } = await api.backfill(Number(days));
@@ -165,11 +186,10 @@ function OlderMail() {
             })
           }
         >
-          {busy ? 'Pulling in…' : 'Pull in'}
+          Pull in
         </Button>
-      </Row>
-      {result ? <p className="px-4 py-2 text-[13px]">{result}</p> : null}
-      {error ? <p className="px-4 py-2 text-[13px] text-destructive">{error}</p> : null}
+      </Setting>
+      <Outcome error={error} done={result} />
     </Sheet>
   );
 }
@@ -186,12 +206,13 @@ function Guidelines({ saved }: { saved: string }) {
     <Sheet>
       <SheetHead
         title="Guidelines"
-        description="The model reads this before sorting each message."
+        description="In your own words. The model reads this before sorting each message."
         action={
           <Button
             variant="ink"
             size="sm"
-            disabled={busy || text === stored}
+            busy={busy}
+            disabled={text === stored}
             onClick={() =>
               run(
                 () => api.saveGuidelines(text),
@@ -203,76 +224,84 @@ function Guidelines({ saved }: { saved: string }) {
           </Button>
         }
       />
-      <textarea
-        aria-label="Guidelines"
-        className="block min-h-48 w-full resize-y bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed outline-none"
-        value={text}
-        maxLength={8000}
-        onChange={(event) => setText(event.target.value)}
-      />
-      {error ? <p className="px-4 py-2 text-[13px] text-destructive">{error}</p> : null}
+      <div className="px-4 pt-1 pb-4">
+        <TextArea aria-label="Guidelines" value={text} maxLength={8000} onChange={(event) => setText(event.target.value)} />
+      </div>
+      <Outcome error={error} />
     </Sheet>
   );
 }
 
-function Categories({ state, reload }: { state: ManageState; reload: () => void }) {
+function Kinds({ state, reload }: { state: ManageState; reload: () => void }) {
   const { busy, error, run } = useAction();
   return (
-    <Sheet>
-      <SheetHead title="Kinds of mail" />
+    <>
       {state.accounts.map((account) => (
-        <Table key={account.id}>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className={TH}>Kind{state.accounts.length > 1 ? ` · ${account.email}` : ''}</TableHead>
-              <TableHead className={TH}>sift will</TableHead>
-              <TableHead className={TH}>Label</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {(state.categories[account.id] ?? []).map((category) => (
-              <TableRow key={category.key} className="align-top">
-                <TableCell className={`${TD} max-w-xl whitespace-normal`}>
-                  <span className="font-medium">{category.name}</span>
-                  <Sub>{category.description}</Sub>
-                </TableCell>
-                <TableCell className={TD}>
-                  <div className="flex items-center gap-2">
-                    <Picker
+        <Sheet key={account.id}>
+          <SheetHead
+            title={state.accounts.length > 1 ? `Kinds of mail · ${account.email}` : 'Kinds of mail'}
+            description="The model only names the kind. What happens to it is set here."
+          />
+          <Table>
+            <thead>
+              <Tr>
+                <Th>Kind</Th>
+                <Th>sift will</Th>
+                <Th>Label</Th>
+              </Tr>
+            </thead>
+            <tbody>
+              {(state.categories[account.id] ?? []).map((category) => (
+                <Tr key={category.key}>
+                  <Td className="max-w-xl">
+                    <span className="font-medium">{category.name}</span>
+                    <span className="mt-0.5 block text-[13px] text-muted-foreground">{category.description}</span>
+                  </Td>
+                  <Td className="py-2">
+                    <Select
                       label={`What sift does with ${category.name}`}
                       value={category.disposition as (typeof DOES)[number][0]}
                       options={DOES}
-                      onChange={(disposition) => !busy && run(() => api.setCategory(account.id, category.key, disposition), reload)}
+                      disabled={busy}
+                      onChange={(disposition) => run(() => api.setCategory(account.id, category.key, disposition), reload)}
                     />
-                  </div>
-                </TableCell>
-                <TableCell className={`${TD} font-mono text-xs text-muted-foreground`}>{category.label}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                  </Td>
+                  <Td>{category.label ? <Sub mono>{category.label}</Sub> : null}</Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
+          <Outcome error={error} />
+        </Sheet>
       ))}
-      {error ? <p className="px-4 py-2 text-[13px] text-destructive">{error}</p> : null}
-    </Sheet>
+    </>
   );
 }
 
-/** Everything about how sift runs and what it does with mail, editable. */
-export function SettingsView() {
+/** Everything about how sift runs and what it does with mail, a page at a time. */
+export function SettingsView({ page = 'running' }: { page: string | undefined }) {
   const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
-  if (loading) return <Skeleton className="h-96 w-full" />;
+  const current = PAGES.some((p) => p.to === `settings/${page}`) ? `settings/${page}` : PAGES[0].to;
   return (
-    <div className="flex flex-col gap-4">
+    <SubNav label="Settings" items={PAGES} current={current}>
       {error ? <ErrorNote message={error} /> : null}
-      {data ? (
-        <>
-          <Running state={data} reload={reload} />
+      {loading ? (
+        <Sheet>
+          <Loading rows={6} />
+        </Sheet>
+      ) : data ? (
+        current === 'settings/accounts' ? (
           <Accounts state={data} />
-          <OlderMail />
-          <Categories state={data} reload={reload} />
+        ) : current === 'settings/kinds' ? (
+          <Kinds state={data} reload={reload} />
+        ) : current === 'settings/guidelines' ? (
           <Guidelines saved={data.guidelines} />
-        </>
+        ) : current === 'settings/older' ? (
+          <OlderMail />
+        ) : (
+          <Running state={data} reload={reload} />
+        )
       ) : null}
-    </div>
+    </SubNav>
   );
 }

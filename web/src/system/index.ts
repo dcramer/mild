@@ -1,6 +1,14 @@
 export { Button } from './button.tsx';
+export { type ChartRow, type Series, StackedBars } from './chart.tsx';
 export { Copyable } from './copyable.tsx';
 export { Disclosure } from './disclosure.tsx';
+export { Drawer } from './drawer.tsx';
+export { Check, Input, TextArea } from './field.tsx';
+export { Figure, Figures } from './figures.tsx';
+export { Masthead, type NavItem, Sections, SubNav } from './nav.tsx';
 export { Note } from './note.tsx';
+export { Select } from './select.tsx';
 export { Sheet, SheetHead } from './sheet.tsx';
+export { Empty, Loading } from './state.tsx';
+export { Table, Td, Th, Tr } from './table.tsx';
 export { Code, Highlight, Marked, Stamp, Wordmark } from './type.tsx';

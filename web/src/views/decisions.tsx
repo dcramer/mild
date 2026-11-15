@@ -1,18 +1,15 @@
-import { useEffect, useState } from 'react';
-import { Button, Sheet } from '@/system';
-import { Empty, ErrorNote } from '@/components/bits.tsx';
+import { type ReactNode, useEffect, useState } from 'react';
+import { ErrorNote } from '@/components/bits.tsx';
 import { DecisionTable } from '@/components/decision-table.tsx';
-import { Picker } from '@/components/picker.tsx';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
 import { type Days, type DecisionRow, api, useLoaded } from '@/lib/api.ts';
 import { DISPOSITION_KEYS, TIERS, count, dispositionName } from '@/lib/format.ts';
+import { Button, Empty, Input, Loading, Select, Sheet } from '@/system';
 
 const PAGE = 50;
 const TIER_OPTIONS = [['', 'Any tier'], ...TIERS.map((t) => [t.key, t.name] as const)] as const;
 const OUTCOME_OPTIONS = [['', 'Any outcome'], ...DISPOSITION_KEYS.map((k) => [k, dispositionName(k)] as const)] as const;
 
-export function Decisions({ days, onOpen }: { days: Days; onOpen: (row: DecisionRow) => void }) {
+export function Decisions({ days, period, onOpen }: { days: Days; period: ReactNode; onOpen: (row: DecisionRow) => void }) {
   const [stage, setStage] = useState('');
   const [disposition, setDisposition] = useState('');
   const [typed, setTyped] = useState('');
@@ -31,26 +28,25 @@ export function Decisions({ days, onOpen }: { days: Days; onOpen: (row: Decision
   const filtered = stage !== '' || disposition !== '' || search !== '';
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <Input
-          className="h-8 w-full bg-card sm:w-80"
+          className="w-full sm:w-80"
           type="search"
           placeholder="Search subject or sender"
           aria-label="Search subject or sender"
           value={typed}
           onChange={(event) => setTyped(event.target.value)}
         />
-        <Picker label="Tier" value={stage} options={TIER_OPTIONS} onChange={setStage} />
-        <Picker label="Outcome" value={disposition} options={OUTCOME_OPTIONS} onChange={setDisposition} />
+        <Select label="Tier" value={stage} options={TIER_OPTIONS} onChange={setStage} />
+        <Select label="Outcome" value={disposition} options={OUTCOME_OPTIONS} onChange={setDisposition} />
+        {period}
         {data ? <span className="ml-auto text-[13px] text-muted-foreground tabular-nums">{count(data.total)} decisions</span> : null}
       </div>
       {error ? <ErrorNote message={error} /> : null}
       <Sheet>
         {loading ? (
-          <div className="p-4">
-            <Skeleton className="h-64 w-full" />
-          </div>
+          <Loading rows={8} />
         ) : !data || data.rows.length === 0 ? (
           <Empty>{filtered ? 'No decisions match these filters.' : 'No decisions in this period.'}</Empty>
         ) : (
@@ -62,10 +58,10 @@ export function Decisions({ days, onOpen }: { days: Days; onOpen: (row: Decision
           <span>
             {count(offset + 1)}–{count(Math.min(offset + PAGE, data.total))} of {count(data.total)}
           </span>
-          <Button variant="plain" size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>
+          <Button size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>
             Newer
           </Button>
-          <Button variant="plain" size="sm" disabled={offset + PAGE >= data.total} onClick={() => setOffset(offset + PAGE)}>
+          <Button size="sm" disabled={offset + PAGE >= data.total} onClick={() => setOffset(offset + PAGE)}>
             Older
           </Button>
         </div>
