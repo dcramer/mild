@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { type InitDeps, type SetupState, runInit } from '../src/cli/init.ts';
+import { type InitDeps, type SetupState, recommendModel, runInit } from '../src/cli/init.ts';
 import { dashboardUrls, listenAddresses, localAddresses, machineNames, resolveHere } from '../src/cli/network.ts';
 import type { Ui } from '../src/cli/ui.ts';
 import { DEFAULT_SETTINGS, loadConfig, parseSettings, renderSettings, resolveHome, saveSettings } from '../src/config.ts';
@@ -228,6 +228,12 @@ describe('sift init', () => {
     expect(loadConfig({ SIFT_HOME: lifted.config.home }).settings.dashboardAllow).toBeUndefined();
   });
 
+  it('offers the recommended model first, so Enter takes it', async () => {
+    const w = wizard([...GOOGLE, 0, 0], { models: ['gpt-9', 'gpt-9-luna', 'gpt-10-luna'] });
+    await runInit(w.deps);
+    expect(w.config.settings.model).toBe('openai-codex/gpt-10-luna');
+  });
+
   it('asks again when what was pasted is not a client, and stops on s', async () => {
     const w = wizard(['done', 'done', 'done', '{"nonsense":{}}', CLIENT, 'done', TEST_USER, 'done', NO_MODEL]);
     await runInit(w.deps);
@@ -285,6 +291,28 @@ describe('sift init', () => {
     const typed = wizard([KEEP, 2, 'claude-test'], { client: 'web', accounts: ['me@example.org'], models: [] });
     await runInit(typed.deps);
     expect(typed.config.settings.model).toBe('anthropic/claude-test');
+  });
+});
+
+describe('recommendModel', () => {
+  it("picks the newest of the provider's small family, by version number", () => {
+    expect(recommendModel('openai', ['gpt-9', 'gpt-9-luna', 'gpt-10-luna', 'gpt-10'])).toBe('gpt-10-luna');
+    expect(recommendModel('openai-codex', ['luna-2.5', 'luna-2.10', 'sol-3'])).toBe('luna-2.10');
+    expect(recommendModel('anthropic', ['claude-3-5-haiku-20241022', 'claude-haiku-4-5-20251001', 'claude-opus-4-8'])).toBe('claude-haiku-4-5-20251001');
+    expect(recommendModel('google', ['gemini-2.5-flash', 'gemini-3-flash', 'gemini-3-pro'])).toBe('gemini-3-flash');
+  });
+
+  it('prefers the plain name over a dated or variant one of the same version', () => {
+    expect(recommendModel('anthropic', ['claude-haiku-4-5-20251001', 'claude-haiku-4-5'])).toBe('claude-haiku-4-5');
+    expect(recommendModel('google', ['gemini-3-flash-lite', 'gemini-3-flash'])).toBe('gemini-3-flash');
+    expect(recommendModel('openai', ['gpt-9-luna-2026-03-01', 'gpt-9-luna'])).toBe('gpt-9-luna');
+  });
+
+  it('recommends nothing without a family member, for an unknown provider, or for a name that only contains the word', () => {
+    expect(recommendModel('openai', ['gpt-9', 'gpt-9-mini'])).toBeNull();
+    expect(recommendModel('example', ['luna-1'])).toBeNull();
+    expect(recommendModel('openai', ['lunar-1'])).toBeNull();
+    expect(recommendModel('openai', [])).toBeNull();
   });
 });
 

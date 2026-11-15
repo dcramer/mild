@@ -17,6 +17,33 @@ export const MODEL_CHOICES: readonly ModelChoice[] = [
   { label: 'Anthropic API key', provider: 'anthropic', type: 'api_key' },
 ];
 
+/** Each provider's small, cheap family, by the word its model ids carry. */
+const SMALL_FAMILY: Record<string, string> = { openai: 'luna', 'openai-codex': 'luna', anthropic: 'haiku', google: 'flash' };
+
+/** The numbers in a model id up to the first that is a date (`3-5` in `claude-3-5-haiku-20241022`). */
+const version = (id: string) => {
+  const numbers = (id.match(/\d+/g) ?? []).map(Number);
+  const date = numbers.findIndex((n) => n >= 1000);
+  return date === -1 ? numbers : numbers.slice(0, date);
+};
+
+/**
+ * The model to offer first: the newest of the provider's small family among the ids it returned, or
+ * null when it has none. Between ids of the same version the shortest wins, which is the plain name
+ * over a dated or variant one.
+ */
+export function recommendModel(provider: string, ids: readonly string[]): string | null {
+  const family = SMALL_FAMILY[provider];
+  if (!family) return null;
+  const word = new RegExp(`(^|[^a-z])${family}([^a-z]|$)`, 'i');
+  const newer = (a: string, b: string) => {
+    const [va, vb] = [version(a), version(b)];
+    for (let i = 0; i < Math.max(va.length, vb.length); i++) if ((va[i] ?? -1) !== (vb[i] ?? -1)) return (vb[i] ?? -1) - (va[i] ?? -1);
+    return a.length - b.length;
+  };
+  return ids.filter((id) => word.test(id)).toSorted(newer)[0] ?? null;
+}
+
 /** Who may sign in to the user's Google app. Decides the last tasks of the Google setup. */
 export type Access = 'test' | 'publish';
 
@@ -401,7 +428,12 @@ async function pickModel(deps: InitDeps, choice: ModelChoice): Promise<void> {
   if (models.length === 0) id = (await ui.text('Model id (Enter to skip):')) || null;
   else {
     ui.info('A smaller, cheaper model is usually enough to sort mail.');
-    id = await ui.select<string | null>('Which model?', [...models.map((m) => ({ label: m, value: m })), { label: 'Decide later', value: null }]);
+    const recommended = recommendModel(choice.provider, models);
+    id = await ui.select<string | null>('Which model?', [
+      ...(recommended ? [{ label: recommended, hint: 'recommended', value: recommended }] : []),
+      ...models.filter((m) => m !== recommended).map((m) => ({ label: m, value: m })),
+      { label: 'Decide later', value: null },
+    ]);
   }
   if (id === null) {
     ui.skip('No model');
