@@ -36,9 +36,9 @@ export function Panel({ className, ...props }: React.ComponentProps<typeof Card>
 
 export function PanelHeader({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
   return (
-    <div className="flex items-start gap-4 border-b px-4 py-3">
+    <div className="sheet-head flex items-start gap-4 px-4 py-3">
       <div className="min-w-0 flex-1">
-        <h2 className="font-heading text-[21px] leading-tight">{title}</h2>
+        <h2 className="title">{title}</h2>
         {description ? <p className="mt-1 text-[13px] text-muted-foreground">{description}</p> : null}
       </div>
       {action}

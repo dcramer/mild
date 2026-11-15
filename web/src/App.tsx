@@ -40,15 +40,30 @@ export function App() {
 
   return (
     <Tabs value={tab} onValueChange={(value) => setTab(String(value))} className="paper min-h-svh gap-0">
-      <header className="sticky top-0 z-10 border-b border-foreground/25 bg-card">
-        <div className="mx-auto flex min-h-12 max-w-7xl flex-wrap items-center gap-x-5 px-4">
-          <h1 className="font-heading text-[26px] leading-none italic">
-            <span className="hl mx-0 px-2">sift</span>
+      {/* A masthead, not an app bar: the name, a dateline, then the sections under a double rule. */}
+      <header className="mx-auto w-full max-w-7xl px-4 pt-6">
+        <div className="flex items-end justify-between gap-4">
+          <h1 className="wordmark">
+            <span className="hl mx-0 px-3 py-1">sift</span>
           </h1>
-          <TabsList variant="line" className="h-12 gap-4 p-0">
+          <div className="flex items-center gap-3">
+            <p className="slug hidden text-muted-foreground md:block">
+              {summary.data
+                ? accounts.length === 0
+                  ? 'No account connected'
+                  : accounts.map((a) => `${a.email} · ${a.lastSyncedAt ? `synced ${ago(a.lastSyncedAt)}` : 'not synced yet'}`).join('   ')
+                : ''}
+            </p>
+            <Button variant="ghost" size="icon-sm" aria-label={THEME_NAMES[theme]} title={THEME_NAMES[theme]} onClick={cycle}>
+              <ThemeIcon />
+            </Button>
+          </div>
+        </div>
+        <div className="masthead-rule mt-4 flex flex-wrap items-center justify-between gap-x-4">
+          <TabsList variant="line" className="h-11 flex-wrap gap-x-5 p-0">
             <TabsTrigger value="suggestions">
               Suggestions
-              {waitingCount > 0 ? <span className="ml-0.5 font-mono text-[11px] text-muted-foreground tabular-nums">{waitingCount}</span> : null}
+              {waitingCount > 0 ? <span className="ml-0.5 tabular-nums opacity-60">{waitingCount}</span> : null}
             </TabsTrigger>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="decisions">Decisions</TabsTrigger>
@@ -57,26 +72,9 @@ export function App() {
             <TabsTrigger value="changes">Changes</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
-          <p className="hidden min-w-0 flex-1 truncate text-right text-[13px] text-muted-foreground md:block">
-            {summary.data
-              ? accounts.length === 0
-                ? 'No account connected. Run sift auth.'
-                : accounts.map((a) => `${a.email} · ${a.lastSyncedAt ? `synced ${ago(a.lastSyncedAt)}` : 'not synced yet'}`).join('   ')
-              : ''}
-          </p>
-          <div className="ml-auto flex items-center gap-1 py-2 md:ml-0">
-            {tab !== 'overview' && tab !== 'decisions' ? null : (
-              <Picker
-                label="Period"
-                value={String(days) as (typeof PERIODS)[number][0]}
-                options={PERIODS}
-                onChange={(value) => setDays(Number(value) as Days)}
-              />
-            )}
-            <Button variant="ghost" size="icon-sm" aria-label={THEME_NAMES[theme]} title={THEME_NAMES[theme]} onClick={cycle}>
-              <ThemeIcon />
-            </Button>
-          </div>
+          {tab !== 'overview' && tab !== 'decisions' ? null : (
+            <Picker label="Period" value={String(days) as (typeof PERIODS)[number][0]} options={PERIODS} onChange={(value) => setDays(Number(value) as Days)} />
+          )}
         </div>
       </header>
 

@@ -152,7 +152,7 @@ function Loaded({ target }: { target: MessageRef }) {
   return (
     <>
       <SheetHeader>
-        <SheetTitle className="pr-8 font-heading text-2xl leading-tight font-normal">{(data?.subject ?? target.subject) || '(no subject)'}</SheetTitle>
+        <SheetTitle className="title pr-8">{(data?.subject ?? target.subject) || '(no subject)'}</SheetTitle>
         <SheetDescription>What sift decided and did for this message.</SheetDescription>
       </SheetHeader>
       {loading ? (

@@ -22,13 +22,13 @@ export function SendersView() {
       {error ? <ErrorNote message={error} /> : null}
       {action.error ? <p className="text-[13px] text-destructive">{action.error}</p> : null}
       <Panel>
-        <PanelHeader title="Senders" description="Mail from these senders is decided without a model. Forget one to have sift decide their mail afresh." />
+        <PanelHeader title="Senders" description="Decided without a model." />
         {loading ? (
           <div className="p-4">
             <Skeleton className="h-40 w-full" />
           </div>
         ) : !data || data.senders.length === 0 ? (
-          <Empty>No senders are remembered yet. Answering a suggestion adds one.</Empty>
+          <Empty>None yet. Answering a suggestion adds one.</Empty>
         ) : (
           <Table>
             <TableHeader>

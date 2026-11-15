@@ -44,7 +44,7 @@ function AddRule({ accountId, onAdded }: { accountId: string; onAdded: () => voi
   const [then, setThen] = useState<(typeof THEN)[number][0]>('archive');
   return (
     <form
-      className="flex flex-wrap items-center gap-2 border-b px-4 py-3"
+      className="row flex flex-wrap items-center gap-2 px-4 py-3"
       onSubmit={(event) => {
         event.preventDefault();
         run(
@@ -83,7 +83,7 @@ export function Rules() {
     <div className="flex flex-col gap-3">
       {error ? <ErrorNote message={error} /> : null}
       <Panel>
-        <PanelHeader title="Rules" description="Rules decide mail without a model, in this order. A matching keep rule always wins." />
+        <PanelHeader title="Rules" description="Checked in order. A matching keep rule always wins." />
         {accountId ? <AddRule accountId={accountId} onAdded={reload} /> : null}
         {remove.error ? <p className="border-b px-4 py-2 text-[13px] text-destructive">{remove.error}</p> : null}
         {loading ? (
@@ -91,7 +91,7 @@ export function Rules() {
             <Skeleton className="h-40 w-full" />
           </div>
         ) : !data || data.rules.length === 0 ? (
-          <Empty>No rules yet. A rule decides matching mail without a model.</Empty>
+          <Empty>No rules yet.</Empty>
         ) : (
           <Table>
             <TableHeader>

@@ -29,7 +29,7 @@ const DOES = [
 
 function Row({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b px-4 py-3 last:border-b-0">
+    <div className="row flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
       <div className="min-w-0 flex-1 basis-64">
         <div className="font-medium">{title}</div>
         {note ? <p className="text-[13px] text-muted-foreground">{note}</p> : null}
@@ -71,17 +71,13 @@ function Running({ state, reload }: { state: ManageState; reload: () => void }) 
         }
       />
       {activity.problems.map((problem) => (
-        <p key={problem} className="border-b px-4 py-2 text-[13px] text-destructive">
+        <p key={problem} className="row px-4 py-2 text-[13px] text-destructive">
           {problem}
         </p>
       ))}
       <Row
         title={settings.act ? 'Acting' : 'Observing'}
-        note={
-          settings.act
-            ? 'sift carries out its decisions in Gmail. Every change is listed under Changes and can be undone.'
-            : 'sift only suggests. Nothing in Gmail is changed.'
-        }
+        note={settings.act ? 'Decisions are carried out in Gmail. Each can be undone under Changes.' : 'Nothing in Gmail is changed.'}
       >
         {settings.act ? (
           <Button variant="outline" size="sm" disabled={busy} onClick={() => save({ act: false })}>
@@ -110,7 +106,7 @@ function Running({ state, reload }: { state: ManageState; reload: () => void }) 
           </Button>
         )}
       </Row>
-      <Row title="Model" note="Decides mail that no rule or remembered sender covers. Sign in to another provider with `sift login`.">
+      <Row title="Model" note="For mail no rule or sender covers.">
         <Picker label="Model" value={settings.model ?? ''} options={modelOptions} onChange={(model) => save({ model: model === '' ? null : model })} />
       </Row>
       <Row title="How often to check for mail">
@@ -132,11 +128,8 @@ function OlderMail() {
   const [result, setResult] = useState<string | null>(null);
   return (
     <Panel>
-      <PanelHeader
-        title="Older mail"
-        description="sift only sees mail that arrives after you connect it. Pull in what is already in your inbox to have something to teach it with."
-      />
-      <Row title="Pull in as suggestions" note="At most 300 messages. Each costs one model call. Nothing is done to them in Gmail, even when sift is acting.">
+      <PanelHeader title="Older mail" />
+      <Row title="Pull in as suggestions" note="Up to 300 messages, one model call each. They are never acted on, even while sift is acting.">
         <Picker label="How far back" value={days} options={DAYS} onChange={setDays} />
         <Button
           size="sm"
@@ -171,7 +164,7 @@ function Guidelines({ saved }: { saved: string }) {
     <Panel>
       <PanelHeader
         title="Guidelines"
-        description="In your own words. The model reads this before sorting each message."
+        description="The model reads this before sorting each message."
         action={
           <Button
             size="sm"
@@ -203,7 +196,7 @@ function Categories({ state, reload }: { state: ManageState; reload: () => void 
   const { busy, error, run } = useAction();
   return (
     <Panel>
-      <PanelHeader title="Kinds of mail" description="The model says which kind a message is. What happens next is your choice here." />
+      <PanelHeader title="Kinds of mail" />
       {state.accounts.map((account) => (
         <Table key={account.id}>
           <TableHeader>

@@ -20,13 +20,13 @@ export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void 
       {action.error ? <p className="text-[13px] text-destructive">{action.error}</p> : null}
       {note ? <p className="text-[13px]">{note}</p> : null}
       <Panel>
-        <PanelHeader title="Changes" description="What sift has done in Gmail. It never deletes mail, and each change can be undone." />
+        <PanelHeader title="Changes" description="sift never deletes mail." />
         {loading ? (
           <div className="p-4">
             <Skeleton className="h-40 w-full" />
           </div>
         ) : !data || data.changes.length === 0 ? (
-          <Empty>sift has not changed anything in Gmail. It only does once you let it act, under Settings.</Empty>
+          <Empty>Nothing has been changed in Gmail.</Empty>
         ) : (
           <Table>
             <TableHeader>

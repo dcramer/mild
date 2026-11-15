@@ -13,8 +13,8 @@ function Stat({ label, value, note, tone }: { label: string; value: string; note
   return (
     <div className="flex flex-col gap-1 bg-card px-4 py-3.5">
       <dt className="slug truncate text-muted-foreground">{label}</dt>
-      <dd className={`font-heading text-[38px] leading-10 ${tone === 'alert' ? 'text-destructive' : ''}`}>
-        {tone === 'highlight' ? <Highlight className="mx-0 inline-block px-2 py-0 leading-10">{value}</Highlight> : value}
+      <dd className={`figure ${tone === 'alert' ? 'text-destructive' : ''}`}>
+        {tone === 'highlight' ? <Highlight className="mx-0 inline-block px-2 py-0">{value}</Highlight> : value}
       </dd>
       <dd className="min-h-4 truncate text-xs text-muted-foreground tabular-nums">{note}</dd>
     </div>
@@ -75,7 +75,7 @@ export function Overview({ data, onOpen, onViewAll }: { data: Summary; onOpen: (
   return (
     <div className="flex flex-col gap-4">
       {/* One strip of figures, divided by hairlines. The first is the point of sift, so it gets the highlighter. */}
-      <dl className="sheet grid grid-cols-2 gap-px overflow-hidden bg-border md:grid-cols-4 xl:grid-cols-7 [&>div:last-child]:col-span-2 xl:[&>div:last-child]:col-span-1">
+      <dl className="sheet stats grid grid-cols-2 gap-px overflow-hidden md:grid-cols-4 xl:grid-cols-7 [&>div:last-child]:col-span-2 xl:[&>div:last-child]:col-span-1">
         <Stat
           label="No model needed"
           value={percent(t.withoutInference, t.decisions)}
@@ -97,12 +97,12 @@ export function Overview({ data, onOpen, onViewAll }: { data: Summary; onOpen: (
 
       <div className="grid gap-4 lg:grid-cols-5">
         <Panel className="lg:col-span-3">
-          <PanelHeader title="Decisions per day" description="By the tier that decided. Darker ink is cheaper; highlighted mail was left for you." />
+          <PanelHeader title="Decisions per day" description="Darker ink is a cheaper tier." />
           {t.decisions === 0 ? <Empty>No decisions in this period.</Empty> : <PerDay daily={data.daily} />}
         </Panel>
 
         <Panel className="lg:col-span-2">
-          <PanelHeader title="By tier" description="The chart's numbers, with what each tier cost." />
+          <PanelHeader title="By tier" />
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -193,7 +193,6 @@ export function Overview({ data, onOpen, onViewAll }: { data: Summary; onOpen: (
       <Panel>
         <PanelHeader
           title="Latest decisions"
-          description="Choose a row to see everything sift decided and did for that message."
           action={
             <Button variant="outline" size="sm" onClick={onViewAll}>
               View all

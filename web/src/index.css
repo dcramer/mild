@@ -5,13 +5,22 @@
 @import '@fontsource/instrument-serif/400.css';
 @import '@fontsource/instrument-serif/400-italic.css';
 @import '@fontsource-variable/geist-mono';
+/* Candidate faces for the style comparison (?style=ledger|press|typewriter|signal). Remove the losers once one is chosen. */
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/bricolage-grotesque';
+@import '@fontsource-variable/hanken-grotesk';
+@import '@fontsource-variable/jetbrains-mono';
+@import '@fontsource-variable/archivo/wdth.css';
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-heading: 'Instrument Serif', ui-serif, Georgia, serif;
-  --font-sans: 'Schibsted Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --font-heading: var(--face-display);
+  --font-sans: var(--face-text);
+  --font-mono: var(--face-mono);
   --color-highlight: var(--highlight);
   --color-highlight-ink: var(--highlight-ink);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -55,6 +64,23 @@
 }
 
 :root {
+  /* Type. Each is a role, so a style can swap the face without touching components. */
+  --face-display: 'Instrument Serif', ui-serif, Georgia, serif;
+  --face-text: 'Schibsted Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+  --face-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --display-weight: 400;
+  --display-tracking: 0;
+  --display-case: none;
+  --display-stretch: 100%;
+  --title-size: 21px;
+  --figure-size: 38px;
+  --name-size: 19px;
+  --wordmark-size: 44px;
+  --wordmark-style: italic;
+  /* Rules are drawn in ink: solid to frame a sheet, dashed between its lines. No grey hairlines. */
+  --rule: color-mix(in oklab, var(--foreground) 34%, transparent);
+  --dots: color-mix(in oklab, var(--foreground) 11%, transparent);
+
   /* A proof sheet on a desk: warm paper, ink, a highlighter, and a red pencil for what went wrong. */
   --background: #f1eee6;
   --foreground: #1a1814;
@@ -153,15 +179,44 @@
   /* The desk under the sheets: a faint dot grid, like layout paper. */
   .paper {
     background-color: var(--background);
-    background-image: radial-gradient(color-mix(in oklab, var(--foreground) 11%, transparent) 1px, transparent 1.5px);
+    background-image: radial-gradient(var(--dots) 1px, transparent 1.5px);
     background-size: 20px 20px;
   }
 
-  /* A sheet of paper lying on the desk: square, ruled in ink, with the edge of the sheet beneath showing. */
+  /* A sheet of paper lying on the desk: square, framed in ink, with the edge of the sheet beneath showing. */
   .sheet {
-    border: 1px solid color-mix(in oklab, var(--foreground) 22%, var(--card));
+    border: 1.5px solid var(--foreground);
     border-radius: 2px;
-    box-shadow: 3px 3px 0 0 color-mix(in oklab, var(--foreground) 9%, transparent);
+    box-shadow: 4px 4px 0 0 color-mix(in oklab, var(--foreground) 16%, transparent);
+  }
+
+  /* Display type: titles, figures, names and the wordmark. Sizes and weight come from the style. */
+  .title,
+  .figure,
+  .name,
+  .wordmark {
+    font-family: var(--face-display);
+    font-weight: var(--display-weight);
+    font-stretch: var(--display-stretch);
+    letter-spacing: var(--display-tracking);
+  }
+  .title {
+    font-size: var(--title-size);
+    line-height: 1.15;
+    text-transform: var(--display-case);
+  }
+  .figure {
+    font-size: var(--figure-size);
+    line-height: 1.05;
+  }
+  .name {
+    font-size: var(--name-size);
+    line-height: 1.2;
+  }
+  .wordmark {
+    font-size: var(--wordmark-size);
+    font-style: var(--wordmark-style);
+    line-height: 1;
   }
 
   /* Small capitals set in the typewriter face, for labels and column heads. */
@@ -223,6 +278,38 @@
   border-radius: 2px;
 }
 
+/* Lines within a sheet are dashed ink, like the rules of a form; its heading sits over a solid one. */
+.sheet [data-slot='table-row'],
+.sheet .row {
+  border-bottom: 1px dashed var(--rule);
+}
+.sheet [data-slot='table-body'] [data-slot='table-row']:last-child,
+.sheet .row:last-child {
+  border-bottom: 0;
+}
+.sheet [data-slot='table-header'] [data-slot='table-row'],
+.sheet .sheet-head {
+  border-bottom: 1.5px solid var(--foreground);
+}
+
+/* The figures strip: cells divided by ink, not grey. */
+.stats {
+  background-color: var(--rule);
+}
+
+/* The sections sit between two rules, the way a masthead closes. */
+.masthead-rule {
+  border-top: 3px solid var(--foreground);
+  border-bottom: 1px solid var(--foreground);
+}
+[data-slot='tabs-list'][data-variant='line'] [data-slot='tabs-trigger'] {
+  font-family: var(--face-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 /* Focus is a highlighter outline, the same yellow that marks what needs you. */
 :focus-visible {
   outline: 2px solid var(--highlight);
@@ -244,4 +331,102 @@
 [data-slot='tabs-list'][data-variant='line'] [data-slot='tabs-trigger'][data-active],
 [data-slot='tabs-list'][data-variant='line'] [data-slot='tabs-trigger'][data-active] span {
   color: var(--highlight-ink);
+}
+
+/* ---- Style comparison. Chosen with ?style=<name>; the default above is "proof". ---- */
+
+/* Ledger: one neutral family, tight and quiet. Character comes from the marks, not the letters. */
+html[data-style='ledger'] {
+  --face-display: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --face-text: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --face-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --display-weight: 600;
+  --display-tracking: -0.02em;
+  --title-size: 16px;
+  --figure-size: 32px;
+  --name-size: 15px;
+  --wordmark-size: 34px;
+  --wordmark-style: normal;
+  --dots: transparent;
+}
+html[data-style='ledger']:not(.dark) {
+  --background: #f4f4f2;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --border: #e2e2de;
+  --muted: #efefec;
+  --secondary: #ecece8;
+  --accent: #ecece8;
+  --muted-foreground: #666662;
+}
+
+/* Press: a heavy grotesque with a bit of swagger for titles and figures, over a plain text face. */
+html[data-style='press'] {
+  --face-display: 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
+  --face-text: 'Hanken Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+  --face-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+  --display-weight: 700;
+  --display-tracking: -0.03em;
+  --title-size: 21px;
+  --figure-size: 42px;
+  --name-size: 18px;
+  --wordmark-size: 46px;
+  --wordmark-style: normal;
+  --dots: transparent;
+}
+html[data-style='press']:not(.dark) {
+  --background: #efeee9;
+  --card: #fffefb;
+  --popover: #fffefb;
+}
+html[data-style='press'] .sheet {
+  border-width: 2px;
+  box-shadow: 5px 5px 0 0 var(--foreground);
+}
+
+/* Typewriter: the mono face runs the chrome, like a printed ledger. Text stays a readable sans. */
+html[data-style='typewriter'] {
+  --face-display: 'JetBrains Mono Variable', ui-monospace, monospace;
+  --face-text: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --face-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+  --display-weight: 600;
+  --display-tracking: -0.01em;
+  --display-case: uppercase;
+  --title-size: 14px;
+  --figure-size: 32px;
+  --name-size: 14.5px;
+  --wordmark-size: 32px;
+  --wordmark-style: normal;
+}
+html[data-style='typewriter'] .title {
+  letter-spacing: 0.06em;
+}
+html[data-style='typewriter'] .sheet {
+  border-style: dashed;
+}
+
+/* Signal: wide, heavy capitals, like equipment labelling. */
+html[data-style='signal'] {
+  --face-display: 'Archivo Variable', ui-sans-serif, system-ui, sans-serif;
+  --face-text: 'Archivo Variable', ui-sans-serif, system-ui, sans-serif;
+  --face-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --display-weight: 800;
+  --display-stretch: 125%;
+  --display-tracking: 0;
+  --display-case: uppercase;
+  --title-size: 15px;
+  --figure-size: 38px;
+  --name-size: 15px;
+  --wordmark-size: 38px;
+  --wordmark-style: normal;
+  --dots: transparent;
+}
+html[data-style='signal']:not(.dark) {
+  --background: #e6e6e2;
+  --card: #f8f8f5;
+  --popover: #f8f8f5;
+  --border: #cfcfc9;
+}
+html[data-style='signal'] .sheet {
+  box-shadow: 4px 4px 0 0 var(--highlight);
 }
