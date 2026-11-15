@@ -23,8 +23,8 @@ Package manager is **pnpm**. Node 24 (`.nvmrc`). Node runs the `.ts` sources dir
 | `pnpm vitest run tests/foo.test.ts` | One test file. Add `-t "name"` for one test. |
 | `pnpm format` | `oxlint --fix` then `oxfmt`. |
 | `pnpm sift <command>` | Run the CLI from source. |
-| `pnpm build:web` | Build the dashboard into `web/dist`. `sift run` does this itself when the page is missing or older than its sources; restart sift to pick up a new build. |
-| `pnpm dev:web` | The dashboard with hot reload, taking data from a running `sift run` or `sift dashboard`. |
+| `pnpm build:web` | Build the dashboard into `web/dist`. `sift run` does this itself when the page is missing or older than its sources; restart sift to pick up a new build (`pnpm dev` does both for you). |
+| `pnpm dev` | For working on sift: `sift run`, restarted when server code changes, with the page rebuilt and reloaded when page code changes. Same origin and content security policy as normal. Takes `run`'s options; give it `--home <scratch>` unless you mean to use your real mail. |
 
 Lint warnings are findings to fix. Don't add `oxlint-disable` comments; fix the code or change the rule in `.oxlintrc.json` with a reason.
 
@@ -60,7 +60,7 @@ Real addresses, domains, subjects, message ids and policy never go in the reposi
 
 ## The command line
 
-The CLI exists to set sift up and start it: `init`, `run`, `status`. It does not connect Gmail accounts; the dashboard's Google sign-in does. `run` is the only process to keep online: it sorts mail and serves the dashboard. Don't add a second daemon. Everything else is managed from the dashboard: when you add something the user can change, add it there, not as a command. Looking at what sift did, and steering it, belongs in the dashboard, so think twice before adding a command.
+The CLI exists to set sift up and start it: `init`, `run`, `status`, and `dev` for working on it. It does not connect Gmail accounts; the dashboard's Google sign-in does. `run` is the only process to keep online: it sorts mail and serves the dashboard. Don't add a second daemon. Everything else is managed from the dashboard: when you add something the user can change, add it there, not as a command. Looking at what sift did, and steering it, belongs in the dashboard, so think twice before adding a command.
 
 Everything it prints goes through `src/cli/ui.ts`, never `console.log`. The look matches the dashboard: plain ink, dim secondary text, and one colour, the yellow highlighter (`paint.mark`), for the name and for what needs the reader. Red is only for failures. Symbols sit in a two-space gutter and text starts at column four. Motion is limited to a spinner while waiting on the network and finished sections folding into one line. It must still read correctly as plain text when piped (no colour, no cursor movement, numbered menus).
 

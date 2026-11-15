@@ -91,7 +91,7 @@ You manage sift from here:
 
 ![Suggestions](docs/images/suggestions.png)
 
-The page is a small React app in `web/` (Tailwind and its own design system, [docs/DESIGN.md](docs/DESIGN.md)). `pnpm dev:web` runs it with hot reload against a running sift. `sift dashboard` serves the page on its own, without sorting mail.
+The page is a small React app in `web/` (Tailwind and its own design system, [docs/DESIGN.md](docs/DESIGN.md)). `pnpm dev` runs sift from source and reloads the page as you change either the server or the page.
 
 ## Develop
 

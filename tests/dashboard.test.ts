@@ -222,6 +222,45 @@ describe('dashboard server', () => {
     expect((await fetch(`${base}/assets/app-abc123.css`)).status).toBe(200);
   });
 
+  it('in dev mode serves the page as it is on disk now, and tells it when to reload', async () => {
+    const dir = builtAssets();
+    const server = createDashboardServer(seeded(), { assetsDir: dir, dev: true, now: () => NOW });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    close = () => server.close();
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+
+    const page = await fetch(base);
+    expect(await page.text()).toContain('<script type="module" src="/dev/reload.js"></script>');
+    // Same policy as normal: the reload script is a file of the server's own, not inline.
+    expect(page.headers.get('content-security-policy')).not.toContain('unsafe');
+    expect(await (await fetch(`${base}/dev/reload.js`)).text()).toContain("EventSource('/dev/events')");
+    expect((await fetch(`${base}/assets/app-abc123.js`)).headers.get('cache-control')).toBe('no-store');
+
+    // A file written after the server started is served, and the page is told the build changed.
+    const events = await fetch(`${base}/dev/events`);
+    const reader = events.body!.getReader();
+    const next = async () => new TextDecoder().decode((await reader.read()).value);
+    let stream = await next();
+    while (!stream.includes('data: ')) stream += await next();
+    writeFileSync(join(dir, 'assets', 'later-def456.js'), 'console.log(2)');
+    writeFileSync(join(dir, 'index.html'), '<!doctype html><html><head></head><body>rebuilt</body></html>');
+    const fs = await import('node:fs');
+    fs.utimesSync(join(dir, 'index.html'), new Date(NOW + 60_000), new Date(NOW + 60_000));
+    const first = /data: (\S+)/.exec(stream)?.[1];
+    let after = '';
+    while (!/data: /.test(after)) after += await next();
+    expect(/data: (\S+)/.exec(after)?.[1]).not.toBe(first);
+    await reader.cancel();
+    expect(await (await fetch(base)).text()).toContain('rebuilt');
+    expect((await fetch(`${base}/assets/later-def456.js`)).status).toBe(200);
+  });
+
+  it('has no dev routes unless asked', async () => {
+    const base = await start();
+    expect((await fetch(`${base}/dev/reload.js`)).status).toBe(404);
+    expect(await (await fetch(base)).text()).not.toContain('/dev/reload.js');
+  });
+
   it('serves only listed asset types and never escapes the asset directory', async () => {
     const base = await start();
     expect((await fetch(`${base}/secret.env`)).status).toBe(404);

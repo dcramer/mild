@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { extname, join, relative, sep } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -51,6 +51,16 @@ function listAssets(dir: string): Map<string, { file: string; type: string }> {
   }
   return assets;
 }
+
+/** Loaded by the page in dev mode. Reloads when the page's files change or the server comes back as a new process. */
+const DEV_RELOAD_JS = `let seen = null;
+new EventSource('/dev/events').onmessage = (event) => {
+  if (seen !== null && event.data !== seen) setTimeout(() => location.reload(), 150);
+  seen = event.data;
+};
+`;
+const DEV_SCRIPT = '<script type="module" src="/dev/reload.js"></script>';
+const DEV_BUILDING = `<!doctype html><html class="dark"><head><meta charset="UTF-8" /><title>sift</title>${DEV_SCRIPT}</head><body>Building the page…</body></html>`;
 
 const json = (res: ServerResponse, status: number, body: unknown) =>
   res.writeHead(status, { ...HEADERS, 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(body));
@@ -112,6 +122,12 @@ export interface DashboardOptions {
   signInAddresses?: readonly string[];
   /** What the dashboard can ask the rest of sift to do. Without it the page can look but not manage. */
   controls?: Controls;
+  /**
+   * For working on sift (`sift dev`): the page's files are read afresh on every request, and the page is
+   * told to reload when they change or when this process restarts. Same origin and the same content
+   * security policy as normal, so a policy violation shows up while developing.
+   */
+  dev?: boolean;
   now?: () => number;
 }
 
@@ -165,7 +181,15 @@ const cookie = (req: IncomingMessage, name: string) =>
  * the few things that do (signing in, undo, pulling in older mail) are handed in and audited as usual.
  */
 export function createDashboardServer(db: DatabaseSync, options: DashboardOptions = {}): Server {
-  const assets = listAssets(options.assetsDir ?? WEB_DIST);
+  const assetsDir = options.assetsDir ?? WEB_DIST;
+  const builtAssets = listAssets(assetsDir);
+  const dev = options.dev ?? false;
+  // Changes when the page is rebuilt, and when this process is a new one.
+  const boot = Date.now();
+  const devVersion = () => {
+    const index = join(assetsDir, 'index.html');
+    return `${boot}:${existsSync(index) ? statSync(index).mtimeMs : 0}`;
+  };
   const now = options.now ?? Date.now;
   const hosts = new Set([...LOCAL_HOSTS, ...(options.allowedHosts ?? []).map((h) => h.toLowerCase())]);
   const { controls, signIn } = options;
@@ -419,8 +443,28 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       return void json(res, 404, { error: 'Not found' });
     }
 
+    if (dev && url.pathname === '/dev/reload.js') {
+      res.writeHead(200, { ...HEADERS, 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' }).end(DEV_RELOAD_JS);
+      return;
+    }
+    if (dev && url.pathname === '/dev/events') {
+      res.writeHead(200, { ...HEADERS, 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
+      res.write('retry: 500\n\n');
+      let sent = '';
+      const tick = () => {
+        const version = devVersion();
+        if (version !== sent) res.write(`data: ${(sent = version)}\n\n`);
+      };
+      tick();
+      const timer = setInterval(tick, 300);
+      req.on('close', () => clearInterval(timer));
+      return;
+    }
+
+    const assets = dev ? listAssets(assetsDir) : builtAssets;
     if (assets.size === 0) {
-      res.writeHead(503, { ...HEADERS, 'content-type': 'text/plain' }).end('The dashboard has not been built. Run: pnpm build:web');
+      if (dev) res.writeHead(200, { ...HEADERS, 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(DEV_BUILDING);
+      else res.writeHead(503, { ...HEADERS, 'content-type': 'text/plain' }).end('The dashboard has not been built. Run: pnpm build:web');
       return;
     }
     const asset = assets.get(url.pathname === '/' ? '/index.html' : url.pathname);
@@ -429,7 +473,10 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       return;
     }
     // Vite fingerprints everything under /assets, so those never change; the page itself must always be fresh.
-    const cache = url.pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-store';
-    res.writeHead(200, { ...HEADERS, 'content-type': asset.type, 'cache-control': cache }).end(readFileSync(asset.file));
+    const cache = !dev && url.pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-store';
+    const body = readFileSync(asset.file);
+    const html = dev && asset.file.endsWith('index.html') ? body.toString('utf8') : null;
+    const page = html === null ? body : html.includes('</head>') ? html.replace('</head>', `${DEV_SCRIPT}</head>`) : html + DEV_SCRIPT;
+    res.writeHead(200, { ...HEADERS, 'content-type': asset.type, 'cache-control': cache }).end(page);
   });
 }

@@ -10,9 +10,9 @@ sift is a better Gmail filter and spam filter: models work out what mail is, and
 
 In this order.
 
-1. **`sift dev`.** One command for working on sift: the server restarts when its code changes and the page reloads when the page's code does. Today it is `sift run` plus a rebuild and a restart by hand.
-2. **One side panel for a message or a decision, with the actions to change it** (under Dashboard).
-3. **Unsubscribe and other extras on labels and rules** (under Labels and rules).
+1. **One side panel for a message or a decision, with the actions to change it** (under Dashboard).
+2. **Unsubscribe and other extras on labels and rules** (under Labels and rules).
+3. **What a rule means, and what sift knows about a sender** (the first two items under Labels and rules). These decide how far automation can be trusted.
 4. **Settings designed with intent** (under Dashboard).
 
 ## Labels and rules
@@ -21,6 +21,11 @@ The model: every message gets a label (what it is); the label carries the outcom
 
 Built: labels with defaults and the user's own; outcomes keep, archive, mark spam and block, with "also mark it read"; rules that name a label, with an optional exception to its outcome; answers that choose their scope (sender, domain, sender plus words in the subject, or only the waiting mail); the most specific rule wins; sift writes a rule for a sender after three consistent model answers, and for a sender it blocks; both Gmail labels on mail sift acts on.
 
+- [ ] **What a sender rule means: two tiers of rule.** A big open question. Today "mail from this sender is Marketing" is unconditional: everything from them is archived without being looked at, which is what the auction notices ran into. Often what the user means is narrower: "mail from this sender, when it is marketing, is archived", with everything else from them still judged. Work out the tiers, probably:
+  - **Always:** everything matching is this label, never judged. For senders that only ever send one kind of mail, and for blocks.
+  - **Usually:** the sender's usual label is a strong prior handed to the model, which still looks at each message and can say "not this one". Cheaper than a cold judgement, and it cannot hide the odd important message.
+  - Which one an answer makes by default (probably "usually", promoted to "always" once it has held for long enough), how each is shown so it is clear what a rule will do, and how this fits soft rules below, which are the same idea with the condition written out.
+- [ ] **Know the sender.** Keep running facts per sender address and per sender domain (not for shared domains such as gmail.com, where the domain says nothing): when first seen, how much they have sent and how often, how much of it the user opened, replied to or left unread, what labels their mail has had and how consistently, how the user has answered about them, whether the user writes to them. Use them three ways: as evidence for the model and for rules; to decide when a sender is settled enough to propose a rule for; and shown wherever a sender appears. A real case: an investor update sift was not sure about, from someone the user had corresponded with, which this would have settled. Today sift only knows whether the user has ever written to an address.
 - [ ] **Unsubscribe, automatically.** Not a button: an extra a label or a rule can carry, "and unsubscribe, if the sender offers a safe way", so that "mail like this" can mean archive and unsubscribe. The request itself is built and tested (`unsubscribe` in `src/actions`: one-click only, message passed DMARC, public HTTPS address, no redirects, once per sender) but nothing calls it. To do:
   - Store it on labels (an extra, like mark read) and on rules (the `subscription` column is already there), and have the daemon make the request after the mailbox change succeeds, only while acting.
   - Defaults: on for labels that archive bulk mail from companies (Marketing, Cold outreach). Off for Junk and Phishing: answering a scammer's unsubscribe link confirms the address is read.
@@ -33,7 +38,6 @@ Built: labels with defaults and the user's own; outcomes keep, archive, mark spa
 - [ ] **Rethink the default labels.** They should be kinds of mail someone would treat differently, and "Newsletters" is too broad a home for bulk mail: automated notifications from a service you use (GitHub, CI, alerts) are not newsletters and want different handling, probably a digest. Go through the defaults against real mail, sharpen each description so the model can tell them apart, and say what each does by default.
 - [ ] **Hard rules as Gmail filters.** Where a rule can be written as a Gmail filter (it can match sender, recipient, subject or a search query, and archive, mark read or label; marking spam is not documented), offer to write it there too so it runs when sift is off. Track which rules really exist in Gmail: created by sift, changed or deleted there by the user, or not expressible as a filter at all.
 - [ ] **Soft rules: context for the model.** A sender (or domain) plus a condition in plain language, such as "auction notices for lots I did not bid on". It cannot be matched deterministically, so it is handed to the model whenever that sender's mail is judged, narrowing the question to one yes or no. Decide how it is written, how it is shown beside hard rules, what it costs, and when a soft rule that always goes one way becomes a hard one.
-- [ ] **Use history with the sender as a signal.** A real case: an investor update sift was not sure about, from someone the user had corresponded with. Today "has the user written to this address" only stops sift hiding mail (and is shown when a suggestion is opened). Record more (how many messages each way, when last, whether this message is in a thread the user took part in, the same for the sender's domain), give it to every tier, and let it decide: mail from someone the user writes to should be kept without asking.
 - [ ] **Propose rules instead of saving them.** When sift has given a sender (or domain, or list) the same label several times, show "12 of 12 from this sender were Newsletters. Make it a rule?" among the suggestions. Today it saves the rule silently after three.
 - [ ] **Teach from Gmail.** Notice in Gmail's history when the user moves labelled mail back to the inbox or out of spam, or changes its sift label, and treat that as a correction.
 - [ ] **Audit rules.** Flag a rule the user contradicts, one that never fires, and one a spot-check by the model disagrees with.
@@ -42,6 +46,10 @@ Built: labels with defaults and the user's own; outcomes keep, archive, mark spa
 - [ ] Remove a label, and say what becomes of its rules and of mail already labelled; reorder labels.
 - [ ] Choose which account a rule or label is for when there is more than one (the Rules screen uses the first).
 - [ ] Flag a message (star or mark important) as an extra. Forwarding would need permission to send or a verified forwarding address, which sift does not have.
+
+## Beyond triage
+
+- [ ] **Manage the inbox from sift.** With message text, sender facts and actions already here, sift is most of the way to being where mail is dealt with, not only where it is sorted: read, archive, reply-later, search, bulk actions by sender or label. Decide whether that is the direction, and what the first step would be (probably an inbox view of what sift kept, with the same row and panel as Suggestions). Replying would need permission to send.
 
 ## Teaching loop
 

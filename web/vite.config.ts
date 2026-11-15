@@ -11,6 +11,4 @@ export default defineConfig({
     modulePreload: { polyfill: false },
     assetsInlineLimit: 0,
   },
-  // `pnpm dev:web` serves the page with hot reload and takes its data from a running `sift dashboard`.
-  server: { proxy: { '/api': 'http://localhost:8787' } },
 });

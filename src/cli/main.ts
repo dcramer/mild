@@ -1,7 +1,9 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
 import { type MessageAction, type Outcome, execute, undo } from '../actions/executor.ts';
 import { type Config, loadConfig, saveSettings } from '../config.ts';
@@ -41,6 +43,7 @@ const OTHER_COMMANDS: readonly (readonly [string, string])[] = [
   ['log', 'recent changes to your mailbox'],
   ['undo <id>', 'reverse one change'],
   ['dashboard', 'serve the dashboard without sorting mail'],
+  ['dev', 'for working on sift: run, restarting and reloading as the code changes'],
   ['login <provider>', 'sign in to a model provider'],
   ['models', 'list the models you can use'],
 ];
@@ -323,7 +326,7 @@ function buildControls(config: Config, db: ReturnType<typeof openDb>, live: { wa
 async function serveDashboard(
   config: Config,
   db: ReturnType<typeof openDb>,
-  options: { port?: number; host?: string; controls: Controls },
+  options: { port?: number; host?: string; controls: Controls; dev?: boolean },
 ): Promise<() => void> {
   const { settings } = config;
   const port = options.port ?? settings.dashboardPort;
@@ -331,10 +334,12 @@ async function serveDashboard(
   const listen = options.host ? [options.host] : await listenAddresses(settings);
   // Answer to any name or address that is this machine and to nothing else.
   const allowedHosts = [...machineNames(), ...(settings.dashboardHost && settings.dashboardHost !== 'all' ? [settings.dashboardHost] : [])];
-  await ensureWebBuilt();
+  // In dev the page is rebuilt alongside, and served as it changes.
+  if (!options.dev) await ensureWebBuilt();
 
   const servers = listen.map(() =>
     createDashboardServer(db, {
+      ...(options.dev ? { dev: true } : {}),
       allowedHosts,
       controls: options.controls,
       signIn: buildSignIn(config, db),
@@ -471,6 +476,8 @@ async function run(args: string[]): Promise<void> {
       port: { type: 'string' },
       host: { type: 'string' },
       'no-dashboard': { type: 'boolean', default: false },
+      // Set by `sift dev`.
+      dev: { type: 'boolean', default: false },
     },
   });
   if (values.act && values.observe) throw new Error('Choose one of --act and --observe.');
@@ -535,6 +542,7 @@ async function run(args: string[]): Promise<void> {
       ? () => {}
       : await serveDashboard(config, db, {
           controls: buildControls(config, db, { wake, activity }),
+          ...(values.dev ? { dev: true } : {}),
           ...(port === undefined ? {} : { port }),
           ...(values.host ? { host: values.host } : {}),
         });
@@ -557,6 +565,52 @@ async function run(args: string[]): Promise<void> {
   } finally {
     db.close();
   }
+}
+
+/**
+ * For working on sift itself: `sift run`, restarted whenever the server's code changes, beside a build
+ * of the page that is redone whenever the page's code changes. The page reloads by itself on either.
+ * Arguments are passed on to `run`.
+ */
+async function dev(args: string[]): Promise<void> {
+  const root = fileURLToPath(new URL('../../', import.meta.url));
+  if (!existsSync(join(root, 'web/src'))) throw new Error('`sift dev` needs a checkout of the source. Use `sift run` here.');
+  ui.heading('dev', 'restarts on server changes, reloads on page changes');
+  ui.blank();
+
+  const server = spawn(
+    process.execPath,
+    ['--watch', '--watch-preserve-output', '--disable-warning=ExperimentalWarning', fileURLToPath(import.meta.url), 'run', '--dev', ...args],
+    { stdio: 'inherit' },
+  );
+  const page = spawn('pnpm', ['--filter', 'sift-web', 'exec', 'vite', 'build', '--watch', '--logLevel', 'warn'], {
+    cwd: root,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  // The page build is quiet unless it has something to say, which is then an error or a warning.
+  for (const stream of [page.stdout, page.stderr]) {
+    stream.setEncoding('utf8');
+    stream.on('data', (chunk: string) => {
+      for (const line of chunk.split('\n')) if (line.trim() !== '') ui.plain(`${paint.dim('page')}  ${line}`);
+    });
+  }
+
+  const stop = () => {
+    server.kill('SIGTERM');
+    page.kill('SIGTERM');
+  };
+  process.once('SIGINT', stop);
+  process.once('SIGTERM', stop);
+  // Either one ending ends both: a dev session with half of it gone is only confusing.
+  await new Promise<void>((resolve) => {
+    let left = 2;
+    const ended = () => {
+      stop();
+      if (--left === 0) resolve();
+    };
+    server.once('exit', ended);
+    page.once('exit', ended);
+  });
 }
 
 const CONDITION_NAMES: Record<string, string> = { from: 'from', fromDomain: 'from domain', to: 'to', listId: 'list', subjectContains: 'subject has' };
@@ -647,6 +701,7 @@ async function main(): Promise<void> {
   else if (command === 'undo') await undoCommand(args);
   else if (command === 'dashboard') await dashboard(args);
   else if (command === 'run') await run(args);
+  else if (command === 'dev') await dev(args);
   else if (command === 'rules') rules(args);
   else if (command === 'login') await loginCommand(args);
   else if (command === 'models') await listModels();
