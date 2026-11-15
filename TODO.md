@@ -4,7 +4,7 @@ The working list for sift. Remove an item when it lands; add what you find. Desi
 
 ## Setup
 
-- [ ] Run `sift init` for real, start to finish, on a laptop, on a headless server and inside Docker (where the dashboard address is the host's, not the container's).
+- [ ] Run `sift init` inside Docker, where the dashboard address is the host's, not the container's. (It has been run for real on a headless server.)
 - [ ] Let `init` change a step that is already done (switch model, add a second account) instead of only filling gaps.
 - [ ] Show an expired Google sign-in on the dashboard and in `sift status`, not only in the `run` log. Test users are signed out every 7 days.
 - [ ] Find out what publishing actually requires (branding fields, verification for these scopes) and make that path of `init` exact.
