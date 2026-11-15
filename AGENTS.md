@@ -1,6 +1,6 @@
 # AGENTS.md
 
-**sift** is a self-hosted daemon that triages a Gmail inbox: it labels, archives, creates filters and unsubscribes, using inference only when cheaper tiers abstain. Design, the decision cascade and what is built so far are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): follow it, and update it in the same commit when a decision changes. Open work is in [TODO.md](TODO.md): work from it, remove items when they land, and add what you find.
+**sift** is a self-hosted daemon that triages a Gmail inbox: it labels, archives, creates filters and unsubscribes, using inference only when cheaper tiers abstain. Design, the decision cascade and what is built so far are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): follow it, and update it in the same commit when a decision changes. Open work is in [TODO.md](TODO.md): work from it, remove items when they land, and add what you find. It suggests first and acts second: by default every decision is only a suggestion in the dashboard, and the user teaches it there before letting it act. Favour whatever helps the user see and correct what sift would do over whatever makes it act sooner.
 
 ## Don't state the obvious
 

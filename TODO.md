@@ -2,6 +2,22 @@
 
 The working list for sift. Remove an item when it lands; add what you find. Design and current state are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Direction
+
+sift suggests first and acts second. By default it only observes: every decision is a suggestion, shown in the dashboard. The user teaches it there (right, wrong, do this instead) until it stops making mistakes, and only then lets it act. The dashboard is where that happens; a Chrome extension that talks to it comes later.
+
+## Teaching loop
+
+This is the next real piece of work. Nothing below exists yet.
+
+- [ ] A suggestions view: what sift would do with each message, grouped by sender or kind, newest first.
+- [ ] Approve or correct a suggestion: "right", or "should have been <kept|archived|...>", for this message, this sender, or this kind of mail.
+- [ ] Turn a correction into something durable: a sender record, a rule, a category change or a line in the guidelines, and show the user which.
+- [ ] Re-decide waiting suggestions after a correction, so the effect is visible straight away.
+- [ ] Track accuracy from those answers, per tier and per category, and show when a sender or category has been right often enough to trust.
+- [ ] Let trust be granted in pieces: act on this sender or this category while everything else stays a suggestion, instead of one global `act` switch.
+- [ ] The dashboard needs to accept writes for all of this. It has no login today; design that first (a per-install token, same-origin checks, what a Chrome extension would use).
+
 ## Setup
 
 - [ ] Run `sift init` inside Docker, where the dashboard address is the host's, not the container's. (It has been run for real on a headless server.)
@@ -41,7 +57,7 @@ A React app in `web/` (shadcn/ui on Base UI, Tailwind, Recharts) served by `sift
 
 - [ ] Offer `tailscale serve` as the way to reach the dashboard from other devices: sift stays on localhost and Tailscale adds HTTPS and identity. Today it listens on the Tailscale address over plain HTTP.
 - [ ] `pnpm dev:web` proxies to localhost:8787; make it follow `dashboard.port`.
-- [ ] Let the dashboard act, not only show: undo a change, answer a question, correct a decision, edit rules and what each category does. This is where steering sift should live; the CLI commands for these are stopgaps. It needs a deliberate design for a page with no login (localhost only, a per-install token, same-origin checks).
+- [ ] Undo a change, answer a question, and edit rules and categories from the dashboard (see Teaching loop for the write path). The CLI commands for these are stopgaps.
 - [ ] Senders view: per-sender volume, what sift does with them, and a way to see their messages.
 - [ ] Rule detail: the messages a rule matched, hits over time, rules that never fire.
 - [ ] Live view of what the agent is doing once the agent exists (current run, tool calls, cost so far).
