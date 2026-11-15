@@ -546,6 +546,7 @@ async function run(args: string[]): Promise<void> {
         },
         log,
         intervalMs: (intervalFlag ?? settings.interval) * 1000,
+        ...(settings.retentionDays === undefined ? {} : { retentionDays: settings.retentionDays }),
       };
     };
 

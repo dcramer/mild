@@ -129,7 +129,7 @@ There is no shell and no filesystem here. A sandboxed agent with those is planne
 
 Everything sift keeps is in one directory, the home: `~/.config/sift` by default (`$XDG_CONFIG_HOME/sift`), or wherever `--home` or `SIFT_HOME` points (the Docker image uses `/data`). Keeping settings, guidance, the database and credentials together means it can be backed up or moved as a unit. No setting requires an environment variable, with one exception: the key that encrypts the credentials.
 
-- `sift.toml`: settings (`model`, `act`, `interval`, `dashboard.port`, `dashboard.host`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
+- `sift.toml`: settings (`model`, `act`, `interval`, `dashboard.port`, `dashboard.host`, `retention.days`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
 - `guidelines.md`: the user's broad guidance, read on every pass.
 - `sift.db`: everything structured or learned.
 - `google-client.json`, `google/`, `model-auth.json`, `dashboard-key`: credentials and the session secret, owner-only, kept out of the database.
@@ -171,6 +171,16 @@ One SQLite database, `sift.db` in the home directory (schema in `src/store/migra
 - **decisions:** an append-only log, each with its mode (observe or act) and outcome. Every triage outcome is recorded, including "keep" and "could not decide", with the tier that made it, the reason, the confidence, and what it cost (model, tokens, dollars, duration). A message can have several decisions; the latest is current.
 - **actions:** the audit log of every mailbox change, with labels before and after, linked to the decision it carried out.
 - **labels, rules, questions, accounts:** what mail can be, what sift knows without a model, questions waiting on the user, and each account's history cursor and last sync time.
+
+**Retention.** Everything is kept unless `retention.days` is set in `sift.toml` (30 at least, so sync's 7-day recovery search cannot bring back a message already forgotten). Then `sift run` deletes, on its first pass and once a day, each message that nothing has happened to for that long, with its decisions and actions (`src/daemon/retention.ts`). What it costs: a change older than the window can no longer be undone from sift, and the model is told less about how much a sender has sent. Kept however old:
+
+- a suggestion still waiting on the user, and a message not yet decided;
+- anything the user answered for (`feedback`, `examples`), and so the accuracy figures;
+- a decision not yet carried out, and a change never confirmed;
+- the record of an unsubscribe, which is how sift knows not to ask that sender again;
+- rules, labels and correspondents, which are not per message.
+
+The file does not shrink; SQLite reuses the freed space.
 
 OAuth tokens are kept in files beside the database, not in it. pi-durable keeps its own database alongside.
 

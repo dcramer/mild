@@ -18,7 +18,12 @@ export interface Settings {
    * addresses or names, or `all` for every network it is on. Unset: this machine only.
    */
   dashboardHost?: string;
+  /** Days to keep the record of a message, its decisions and changes. Unset: forever. */
+  retentionDays?: number;
 }
+
+/** Shorter, and sync's 7-day recovery search could bring back a message already forgotten and decide it twice. */
+const MIN_RETENTION_DAYS = 30;
 
 export const DEFAULT_SETTINGS: Settings = { act: false, interval: 60, dashboardPort: 8787 };
 
@@ -124,6 +129,14 @@ export function parseSettings(text: string, path = 'sift.toml'): Settings {
           settings.dashboardHost = port === '0.0.0.0' ? 'all' : port;
         } else throw new Error(`${path}: unknown setting dashboard.${sub}.`);
       }
+    } else if (key === 'retention') {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) throw bad('retention', 'a table');
+      for (const [sub, days] of Object.entries(value as Record<string, unknown>)) {
+        if (sub !== 'days') throw new Error(`${path}: unknown setting retention.${sub}.`);
+        if (typeof days !== 'number' || !Number.isInteger(days) || days < MIN_RETENTION_DAYS)
+          throw bad('retention.days', `a whole number of days, at least ${MIN_RETENTION_DAYS}`);
+        settings.retentionDays = days;
+      }
     } else {
       throw new Error(`${path}: unknown setting ${key}.`);
     }
@@ -147,6 +160,12 @@ port = ${settings.dashboardPort}
 # Where else the dashboard listens: one of this machine's addresses (a Tailscale one, say), or "all" for
 # every network it is on. It has no login: anyone who can reach it there can read it. Unset: localhost only.
 ${settings.dashboardHost ? `host = ${JSON.stringify(settings.dashboardHost)}` : '# host = "all"'}
+
+[retention]
+# Days to keep the record of a message, its decisions and changes, counted from the last thing that happened
+# to it. After that the change can no longer be undone from sift. Suggestions still waiting on you, mail you
+# answered for and what sift learned are kept regardless. Unset: keep everything.
+${settings.retentionDays ? `days = ${settings.retentionDays}` : '# days = 365'}
 `;
 }
 
