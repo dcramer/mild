@@ -67,7 +67,7 @@ export function modelStage(deps: ModelStageDeps): Stage {
       // Mail from someone the user has written to is never hidden on a model's word. Unknown counts as yes.
       if (hides && evidence.sender.userHasWritten !== false) {
         const why = evidence.sender.userHasWritten === null ? 'could not check whether you have written to this sender' : 'you have written to this sender';
-        return { ...base, ...outcome, disposition: 'review', reason: `${label.name}, but ${why}: ${verdict.reason}` };
+        return { ...base, disposition: 'review', labelId: label.id, gmailLabel: label.gmailLabel, reason: `${label.name}, but ${why}: ${verdict.reason}` };
       }
 
       return { ...base, ...outcome, reason: `${label.name}: ${verdict.reason}` };

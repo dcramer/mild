@@ -27,6 +27,15 @@ export function bulkSignals(headers: Record<string, string>): BulkSignals {
   };
 }
 
+/**
+ * Whether the message passed DMARC, as the receiving server recorded it: the sender address is who it
+ * says it is. Without this the From address proves nothing, and acting on it (blocking the sender,
+ * following their unsubscribe link) could be turned against a sender who was only impersonated.
+ */
+export function passedDmarc(headers: Record<string, string>): boolean {
+  return /\bdmarc=pass\b/i.test(headers['authentication-results'] ?? '');
+}
+
 export function parseListId(raw: string | undefined): string | null {
   if (!raw) return null;
   const bracketed = /<([^>]+)>/.exec(raw)?.[1] ?? raw;

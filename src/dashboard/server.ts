@@ -118,6 +118,10 @@ export interface DashboardOptions {
 const RULE_KEYS = new Set(['from', 'fromDomain', 'to', 'listId', 'subjectContains']);
 const str = (value: unknown, max = 200): value is string => typeof value === 'string' && value.length > 0 && value.length <= max;
 const decided = (value: unknown): value is 'keep' | 'archive' | 'spam' => value === 'keep' || value === 'archive' || value === 'spam';
+/** What a label can be set to do. `block` is spam plus blocking the sender. */
+const outcome = (value: unknown): value is 'keep' | 'archive' | 'spam' | 'block' => decided(value) || value === 'block';
+const fromOutcome = (value: 'keep' | 'archive' | 'spam' | 'block') =>
+  value === 'block' ? { disposition: 'spam' as const, block: true } : { disposition: value, block: false };
 
 const SESSION_DAYS = 30;
 const b64 = (value: string | Buffer) => Buffer.from(value).toString('base64url');
@@ -177,24 +181,32 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       return input && applyFeedback(db, input, now());
     },
     '/api/labels': (body) => {
-      const { accountId, id, name, description, disposition } = body;
+      const { accountId, id, name, description, disposition, markRead } = body;
       if (!str(accountId) || !str(id, 40)) return null;
       if (name !== undefined && !str(name, 60)) return null;
       if (description !== undefined && (typeof description !== 'string' || description.length > 600)) return null;
-      if (disposition !== undefined && !decided(disposition) && disposition !== 'review') return null;
+      if (disposition !== undefined && !outcome(disposition)) return null;
+      if (markRead !== undefined && typeof markRead !== 'boolean') return null;
       const change: Parameters<typeof updateLabel>[3] = {};
       if (name !== undefined) change.name = name;
       if (description !== undefined) change.description = description;
-      if (disposition !== undefined) change.disposition = disposition;
+      if (disposition !== undefined) Object.assign(change, fromOutcome(disposition));
+      if (markRead !== undefined) change.markRead = markRead;
       if (!updateLabel(db, accountId, id, change, now())) throw new Error(`There is no label "${id}".`);
       return { ok: true };
     },
     '/api/labels/add': (body) => {
-      const { accountId, name, description, disposition } = body;
+      const { accountId, name, description, disposition, markRead } = body;
       if (!str(accountId) || !str(name, 60) || typeof description !== 'string' || description.length > 600) return null;
-      if (!decided(disposition) && disposition !== 'review') return null;
+      if (!outcome(disposition) || (markRead !== undefined && typeof markRead !== 'boolean')) return null;
       if (!listAccounts(db).some((a) => a.id === accountId)) return null;
-      return { id: addLabel(db, accountId, { name, description, disposition }, now()).id };
+      return { id: addLabel(db, accountId, { name, description, ...fromOutcome(disposition), ...(markRead ? { markRead } : {}) }, now()).id };
+    },
+    '/api/unsubscribe': async (body) => {
+      const { accountId, messageId } = body;
+      if (!str(accountId) || !str(messageId)) return null;
+      if (!controls) throw new Error('Nothing is running that can unsubscribe.');
+      return { message: await controls.unsubscribe(accountId, messageId) };
     },
     '/api/rules': (body) => {
       const { accountId, match, label, disposition } = body;

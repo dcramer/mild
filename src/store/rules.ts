@@ -102,6 +102,16 @@ export function setRule(
   return existing.id;
 }
 
+/**
+ * Block a sender: from now on their mail is `labelId` without being judged, whatever that label does.
+ * A rule already made for exactly that sender is left alone. Returns true if a rule was written.
+ */
+export function blockSender(db: DatabaseSync, accountId: string, address: string, labelId: string, now: number = Date.now()): boolean {
+  if (ruleMatching(db, accountId, { from: address })) return false;
+  addRule(db, accountId, { match: { from: address }, labelId }, 'agent', now);
+  return true;
+}
+
 /** How many consecutive model decisions must agree before sift makes a rule of them. */
 export const LEARN_AFTER = 3;
 

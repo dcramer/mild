@@ -2,7 +2,7 @@ import { CheckIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Answer, type AnswerValue } from '@/components/answer.tsx';
 import { DispositionBadge, ErrorNote, Sub } from '@/components/bits.tsx';
-import { MessageBody, Part, SenderFacts } from '@/components/message-parts.tsx';
+import { MessageBody, Part, SenderFacts, Unsubscribe } from '@/components/message-parts.tsx';
 import { type SuggestionGroup, type Suggestions, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ACTIONS, ago, count, percent, tier, willBe } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
@@ -195,6 +195,7 @@ function SuggestionDialog({
             </Part>
             <Part title="This sender">
               <SenderFacts sender={detail.data.sender} />
+              {message.data ? <Unsubscribe detail={message.data} onDone={message.reload} /> : null}
             </Part>
             <Answer
               labels={labels}
@@ -212,7 +213,7 @@ function SuggestionDialog({
   );
 }
 
-const DOES = [['', 'Anything'] as const, ...ACTIONS.filter(([key]) => key !== 'keep')];
+const DOES = [['', 'Anything'] as const, ...ACTIONS.filter(([key]) => key !== 'keep'), ['review', 'Hold it for you'] as const];
 
 /** What sift would do, waiting for the user to say right or wrong. */
 export function SuggestionsView({ onChanged }: { onChanged: () => void }) {

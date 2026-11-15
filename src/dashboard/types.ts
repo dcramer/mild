@@ -80,6 +80,12 @@ export interface MessageDetail {
    */
   body: string | null;
   sender: SenderProfile;
+  /**
+   * Whether sift can leave the list this message came from. `available`: yes, with one request to the sender.
+   * `done`: the user already has. `manual`: the message has an unsubscribe link sift will not use (it needs an
+   * email sent or a page opened, or the message did not prove who sent it). `none`: it offers no way.
+   */
+  unsubscribe: 'available' | 'done' | 'manual' | 'none';
   /** Every decision made about this message, oldest first. */
   decisions: (DecisionRow & { ruleId: string | null; inputTokens: number; outputTokens: number; durationMs: number | null })[];
   /** Every mailbox change made to this message, oldest first. */
@@ -211,7 +217,10 @@ export interface LabelSummary {
   id: string;
   name: string;
   description: string;
+  /** What sift does with it: `keep`, `archive`, `spam`, or `block` (spam, and the sender's later mail too). */
   disposition: string;
+  /** Also mark the mail read. Only with `keep` and `archive`. */
+  markRead: boolean;
   gmailLabel: string;
   /** Rules that say mail is this label. */
   rules: number;

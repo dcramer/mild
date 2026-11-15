@@ -179,12 +179,19 @@ describe('preferences in the database', () => {
     return learnSender(db, ACCOUNT, 'news@example.com');
   };
 
-  it('seeds cautious default labels, each with a Gmail label, and lets the user change them', () => {
+  it('seeds default labels, each with a Gmail label and an outcome, and lets the user change them', () => {
     const db = seeded();
     const defaults = listLabels(db, ACCOUNT);
     expect(defaults).toEqual(DEFAULT_LABELS);
-    expect(defaults.filter((l) => l.disposition === 'spam')).toEqual([]);
-    expect(defaults.find((l) => l.id === 'cold_outreach')?.disposition).toBe('review');
+    // No label is left for the user by default: that is a matter of trust, not something a label does.
+    expect(defaults.filter((l) => l.disposition === 'review')).toEqual([]);
+    expect(Object.fromEntries(defaults.filter((l) => l.disposition !== 'keep').map((l) => [l.id, l.block ? 'block' : l.disposition]))).toEqual({
+      newsletter: 'archive',
+      marketing: 'archive',
+      cold_outreach: 'archive',
+      junk: 'spam',
+      phishing: 'block',
+    });
     expect(new Set(defaults.map((l) => l.gmailLabel)).size).toBe(defaults.length);
 
     expect(updateLabel(db, ACCOUNT, 'newsletter', { disposition: 'keep', name: 'Reading', description: 'Things I read.' })).toBe(true);
@@ -223,11 +230,15 @@ describe('preferences in the database', () => {
     expect(modelDecision(held, 'c', 'marketing', 'review')).toBe(false);
   });
 
-  it('learns a sender whose label says to leave the mail for the user, so the model is not asked again', () => {
+  it('keeps only the extras that go with what a label does', () => {
     const db = seeded();
-    modelDecision(db, 'a', 'cold_outreach', 'review');
-    modelDecision(db, 'b', 'cold_outreach', 'review');
-    expect(modelDecision(db, 'c', 'cold_outreach', 'review')).toBe(true);
+    updateLabel(db, ACCOUNT, 'junk', { block: true, markRead: true });
+    expect(listLabels(db, ACCOUNT).find((l) => l.id === 'junk')).toMatchObject({ disposition: 'spam', block: true });
+    expect(listLabels(db, ACCOUNT).find((l) => l.id === 'junk')).not.toHaveProperty('markRead');
+    // Changing what the label does drops the block, and marking read can now be asked for.
+    updateLabel(db, ACCOUNT, 'junk', { disposition: 'archive', markRead: true });
+    expect(listLabels(db, ACCOUNT).find((l) => l.id === 'junk')).toEqual(expect.objectContaining({ disposition: 'archive', markRead: true }));
+    expect(listLabels(db, ACCOUNT).find((l) => l.id === 'junk')).not.toHaveProperty('block');
   });
 
   it('leaves a rule the user made for the sender alone, and updates its own', () => {

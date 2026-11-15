@@ -23,8 +23,8 @@ export function recordDecision(
     .prepare(
       `INSERT INTO decisions
          (account_id, message_id, stage, disposition, subscription, gmail_label, rule_id, confidence, reason,
-          model, input_tokens, output_tokens, cost_usd, duration_ms, decided_at, mode, outcome, label_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          model, input_tokens, output_tokens, cost_usd, duration_ms, decided_at, mode, outcome, label_id, block, mark_read)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       accountId,
@@ -45,6 +45,8 @@ export function recordDecision(
       mode,
       mode === 'observe' ? 'observed' : null,
       decision.labelId ?? null,
+      decision.block ? 1 : 0,
+      decision.markRead ? 1 : 0,
     );
   return Number(result.lastInsertRowid);
 }
@@ -58,12 +60,19 @@ export interface UnsettledDecision {
   messageId: string;
   disposition: Disposition;
   gmailLabel?: string;
+  markRead?: boolean;
 }
 
 /** `act` decisions that were recorded but never carried out (a crash or a provider error), oldest first. */
 export function listUnsettledDecisions(db: DatabaseSync, accountId: string): UnsettledDecision[] {
   const rows = db
-    .prepare(`SELECT id, message_id, disposition, gmail_label FROM decisions WHERE account_id = ? AND outcome IS NULL AND mode = 'act' ORDER BY id`)
-    .all(accountId) as unknown as { id: number; message_id: string; disposition: Disposition; gmail_label: string | null }[];
-  return rows.map((r) => ({ id: r.id, messageId: r.message_id, disposition: r.disposition, ...(r.gmail_label ? { gmailLabel: r.gmail_label } : {}) }));
+    .prepare(`SELECT id, message_id, disposition, gmail_label, mark_read FROM decisions WHERE account_id = ? AND outcome IS NULL AND mode = 'act' ORDER BY id`)
+    .all(accountId) as unknown as { id: number; message_id: string; disposition: Disposition; gmail_label: string | null; mark_read: number }[];
+  return rows.map((r) => ({
+    id: r.id,
+    messageId: r.message_id,
+    disposition: r.disposition,
+    ...(r.gmail_label ? { gmailLabel: r.gmail_label } : {}),
+    ...(r.mark_read === 1 ? { markRead: true } : {}),
+  }));
 }

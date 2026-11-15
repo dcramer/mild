@@ -3,12 +3,38 @@ import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type LabelSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ACTIONS, type ActionKey, count, percent } from '@/lib/format.ts';
-import { Button, Card, CardFoot, CardGrid, CardHead, Code, Dialog, Empty, FilterGroup, Input, ListView, Loading, Select, Sheet, TextArea } from '@/system';
+import {
+  Button,
+  Card,
+  CardFoot,
+  CardGrid,
+  CardHead,
+  Check,
+  Code,
+  Dialog,
+  Empty,
+  FilterGroup,
+  Input,
+  ListView,
+  Loading,
+  Select,
+  Sheet,
+  TextArea,
+} from '@/system';
+
+const canMarkRead = (does: string) => does === 'keep' || does === 'archive';
+const EXPLAIN: Record<ActionKey, string> = {
+  keep: 'It stays in your inbox, with its label.',
+  archive: 'It leaves your inbox and stays findable under its label.',
+  spam: 'It goes to spam. Refused for anyone you have written to.',
+  block: 'It goes to spam, and so does everything that sender sends afterwards, without being judged again. Only when the message proves who sent it.',
+};
 
 interface Draft {
   name: string;
   description: string;
   disposition: ActionKey;
+  markRead: boolean;
 }
 
 /** Add a label, or change one. `label` is the one being changed. */
@@ -17,7 +43,8 @@ function LabelDialog({ accountId, label, onClose, onSaved }: { accountId: string
   const [draft, setDraft] = useState<Draft>({
     name: label?.name ?? '',
     description: label?.description ?? '',
-    disposition: (label?.disposition as ActionKey) ?? 'review',
+    disposition: (label?.disposition as ActionKey) ?? 'keep',
+    markRead: label?.markRead ?? false,
   });
   const save = () =>
     run(
@@ -79,6 +106,12 @@ function LabelDialog({ accountId, label, onClose, onSaved }: { accountId: string
               onChange={(disposition) => setDraft({ ...draft, disposition })}
             />
           </div>
+          <span className="text-[13px] text-muted-foreground">{EXPLAIN[draft.disposition]}</span>
+          {canMarkRead(draft.disposition) ? (
+            <Check checked={draft.markRead} onChange={(markRead) => setDraft({ ...draft, markRead })}>
+              Also mark it read
+            </Check>
+          ) : null}
         </div>
       </form>
     </Dialog>
@@ -103,6 +136,7 @@ function LabelCard({
   const facts = [
     `${count(label.messages)} ${label.messages === 1 ? 'message' : 'messages'}`,
     `${count(label.rules)} ${label.rules === 1 ? 'rule' : 'rules'}`,
+    label.markRead ? 'marked read' : null,
     label.record.reviewed > 0 ? `right ${percent(label.record.right, label.record.reviewed)} of ${count(label.record.reviewed)}` : null,
   ].filter(Boolean);
   return (

@@ -11,6 +11,8 @@ export interface Suggestion {
   messageId: string;
   stage: StageName;
   disposition: Disposition;
+  /** With `spam`: sift would also block the sender. */
+  block: boolean;
   /** The label sift gave it, or null if it could not place it. */
   labelId: string | null;
   reason: string;
@@ -28,6 +30,7 @@ interface Row {
   message_id: string;
   stage: StageName;
   disposition: Disposition;
+  block: number;
   label_id: string | null;
   reason: string;
   confidence: number | null;
@@ -60,7 +63,7 @@ export function pendingSuggestions(db: DatabaseSync, filter: { accountId?: strin
   }
   const rows = db
     .prepare(
-      `SELECT d.id, d.account_id, d.message_id, d.stage, d.disposition, d.label_id, d.reason, d.confidence, d.decided_at,
+      `SELECT d.id, d.account_id, d.message_id, d.stage, d.disposition, d.block, d.label_id, d.reason, d.confidence, d.decided_at,
               m.received_at, m.from_address, m.from_name, m.subject
        FROM decisions d
        JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
@@ -79,6 +82,7 @@ export function pendingSuggestions(db: DatabaseSync, filter: { accountId?: strin
     messageId: r.message_id,
     stage: r.stage,
     disposition: r.disposition,
+    block: r.block === 1,
     labelId: r.label_id,
     reason: r.reason,
     confidence: r.confidence,
@@ -123,6 +127,7 @@ export interface FeedbackResult {
 }
 
 const WILL: Record<Disposition, string> = { keep: 'kept in your inbox', archive: 'archived', spam: 'marked as spam', review: 'left for you' };
+const BLOCKED = 'marked as spam, and the sender blocked';
 
 /**
  * Record the user's answer to a suggestion and, unless it is for the waiting mail only, make a rule at
@@ -207,7 +212,10 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
     db.exec('ROLLBACK');
     throw error;
   }
-  return { reviewed: targets.length, taught: match ? `From now on, ${whose} is ${label.name}: ${WILL[outcome]}.` : null };
+  return {
+    reviewed: targets.length,
+    taught: match ? `From now on, ${whose} is ${label.name}: ${label.block && !input.disposition ? BLOCKED : WILL[outcome]}.` : null,
+  };
 }
 
 /** How often sift's suggestions matched what the user wanted, from their answers. */

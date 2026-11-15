@@ -78,10 +78,13 @@ export const api = {
   saveGuidelines: (text: string) => post('/api/guidelines', { text }),
   saveLabel: (accountId: string, id: string, change: { name?: string; description?: string; disposition?: string }) =>
     post('/api/labels', { accountId, id, ...change }),
-  addLabel: (label: { accountId: string; name: string; description: string; disposition: string }) => post<{ id: string }>('/api/labels/add', label),
+  addLabel: (label: { accountId: string; name: string; description: string; disposition: string; markRead?: boolean }) =>
+    post<{ id: string }>('/api/labels/add', label),
   /** `label` is what the mail is; `disposition` an exception to that label's action. */
   addRule: (rule: { accountId: string; match: Record<string, string>; label: string; disposition?: string }) => post('/api/rules', rule),
   removeRule: (id: string) => post('/api/rules/remove', { id }),
+  /** Leave the list a message came from. Resolves with what happened; rejects with why it was not done. */
+  unsubscribe: (accountId: string, messageId: string) => post<{ message: string }>('/api/unsubscribe', { accountId, messageId }),
   undo: (id: number) => post<{ message: string }>('/api/undo', { id }),
   backfill: (days: number) => post<{ added: number }>('/api/backfill', { days }),
   checkNow: () => post('/api/check', {}),

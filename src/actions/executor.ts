@@ -16,6 +16,8 @@ export interface MessageAction {
   type: 'label' | 'archive' | 'spam';
   /** Gmail labels to add, by name: what the mail is. */
   labels?: string[];
+  /** Also mark the message read. Not for spam. */
+  markRead?: boolean;
 }
 
 /**
@@ -125,7 +127,9 @@ export async function execute(deps: ActionDeps, accountId: string, messageId: st
   const names = [...(action.labels ?? []), ...(action.type === 'label' ? [] : [AUDIT_LABELS[action.type]])];
   const add: string[] = [];
   for (const name of new Set(names)) add.push(await deps.mailbox.ensureLabel(name));
-  const change: LabelChange = action.type === 'label' ? { add, remove: [] } : { add: [...add, ...(action.type === 'spam' ? ['SPAM'] : [])], remove: ['INBOX'] };
+  const read = action.markRead && action.type !== 'spam' ? ['UNREAD'] : [];
+  const change: LabelChange =
+    action.type === 'label' ? { add, remove: read } : { add: [...add, ...(action.type === 'spam' ? ['SPAM'] : [])], remove: ['INBOX', ...read] };
 
   return applyChange(deps, { accountId, messageId, type: action.type, ...(decisionId === undefined ? {} : { decisionId }) }, current, change);
 }
@@ -152,6 +156,7 @@ export async function undo(deps: ActionDeps, actionId: number): Promise<Outcome>
   const action: ActionRecord | null = getAction(deps.db, actionId);
   if (!action) throw new Error(`There is no change #${actionId}.`);
   if (action.type === 'undo') throw new Error(`Change #${actionId} is itself an undo.`);
+  if (action.type === 'unsubscribe') throw new Error('An unsubscribe cannot be undone from here. Subscribe again with the sender.');
   if (action.status !== 'done') throw new Error(`Change #${actionId} is ${action.status}; only completed changes can be undone.`);
 
   const current = await deps.mailbox.getLabelIds(action.messageId);

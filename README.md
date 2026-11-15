@@ -51,7 +51,7 @@ That one process sorts your mail and serves the dashboard; there is nothing else
 
 Rules decide mail without any model. A matching `keep` rule always wins.
 
-sift gives every message one **label** (Newsletters, Receipts, Cold outreach, and any you add), and the label says what happens: keep, archive, mark spam, or leave it for you. You manage labels in the dashboard.
+sift gives every message one **label** (Newsletters, Receipts, Cold outreach, and any you add), and the label says what happens: keep, archive, mark spam, or block the sender. You manage labels in the dashboard.
 
 A **rule** says what mail is without asking a model:
 

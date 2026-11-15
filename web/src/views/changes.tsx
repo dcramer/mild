@@ -11,7 +11,7 @@ const STATUS = [
   ['undone', 'Undone'],
   ['trouble', 'Needs a look'],
 ] as const;
-const WHAT: Record<string, string> = { archive: 'Archived', spam: 'Marked spam', label: 'Labelled', undo: 'Undid' };
+const WHAT: Record<string, string> = { archive: 'Archived', spam: 'Marked spam', label: 'Labelled', undo: 'Undid', unsubscribe: 'Unsubscribed' };
 
 /** Everything sift has done to the mailbox, each reversible. */
 export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void }) {
@@ -83,7 +83,7 @@ export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void 
                       {ago(change.createdAt)}
                     </Td>
                     <Td className="py-1 text-right">
-                      {change.status === 'done' && change.type !== 'undo' ? (
+                      {change.status === 'done' && change.type !== 'undo' && change.type !== 'unsubscribe' ? (
                         <Button
                           disabled={action.busy}
                           onClick={() =>

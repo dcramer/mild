@@ -216,6 +216,56 @@ describe('inference tier', () => {
   });
 });
 
+describe('blocking', () => {
+  const phish = (id: string, authenticated: boolean): RawMessage => {
+    const m = message(id, 'Bank <alerts@example.net>', 'Verify your account');
+    return { ...m, headers: [...m.headers, { name: 'Authentication-Results', value: `mx.example.org; dmarc=${authenticated ? 'pass' : 'fail'}` }] };
+  };
+  const phishing = { guidelines: () => '', judge: async () => ({ label: 'phishing', reason: 'asks for a password' }) };
+
+  it('marks the message spam and makes a rule for the sender, so their later mail needs no model', async () => {
+    inbox = [phish('p1', true)];
+    mailbox.labels.set('p1', ['INBOX']);
+    await runOnce(db, { ...options(true), model: phishing });
+    expect(mailbox.labels.get('p1')).toEqual(['L:sift/phishing', 'L:sift/did/spam', 'SPAM']);
+    expect(listRules(db, ACCOUNT)).toMatchObject([{ match: { from: 'alerts@example.net' }, labelId: 'phishing', source: 'agent' }]);
+    expect(logs.at(-1)).toContain('blocked 1 sender');
+
+    let asked = 0;
+    inbox = [phish('p2', true)];
+    mailbox.labels.set('p2', ['INBOX']);
+    await runOnce(db, { ...options(true), model: { guidelines: () => '', judge: async () => (asked++, null) } });
+    expect(asked).toBe(0);
+    expect(db.prepare(`SELECT stage, disposition, block FROM decisions WHERE message_id = 'p2'`).get()).toEqual({
+      stage: 'rules',
+      disposition: 'spam',
+      block: 1,
+    });
+  });
+
+  it('does not block a sender whose message did not prove who sent it, or while only observing', async () => {
+    inbox = [phish('p1', false)];
+    mailbox.labels.set('p1', ['INBOX']);
+    await runOnce(db, { ...options(true), model: phishing });
+    expect(mailbox.labels.get('p1')).toContain('SPAM');
+    expect(listRules(db, ACCOUNT)).toEqual([]);
+
+    inbox = [phish('p2', true)];
+    mailbox.labels.set('p2', ['INBOX']);
+    await runOnce(db, { ...options(false), model: phishing });
+    expect(listRules(db, ACCOUNT)).toEqual([]);
+  });
+
+  it('holds mail from someone the user has written to for review instead, and blocks nobody', async () => {
+    mailbox.sentTo.add('alerts@example.net');
+    inbox = [phish('p1', true)];
+    mailbox.labels.set('p1', ['INBOX']);
+    await runOnce(db, { ...options(true), model: phishing });
+    expect(mailbox.labels.get('p1')).toEqual(['INBOX', 'L:sift/phishing', 'L:sift/review']);
+    expect(listRules(db, ACCOUNT)).toEqual([]);
+  });
+});
+
 describe('examples', () => {
   it('stores marked messages whole on the next pass, while only observing', async () => {
     inbox = [inbox[0]!];

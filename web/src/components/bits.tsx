@@ -15,11 +15,11 @@ export function TierLabel({ stage }: { stage: string }) {
   );
 }
 
-const STAMP = { review: 'look', spam: 'ink', archive: 'tint' } as const;
+const STAMP = { review: 'look', spam: 'ink', block: 'ink', archive: 'tint' } as const;
 
 /** What sift did with a message; with `would`, what it would do or is set to do, in the present tense. */
 export function DispositionBadge({ disposition, would }: { disposition: string; would?: boolean }) {
-  const name = would ? (ACTIONS.find(([key]) => key === disposition)?.[1] ?? disposition) : dispositionName(disposition);
+  const name = would && disposition !== 'review' ? (ACTIONS.find(([key]) => key === disposition)?.[1] ?? disposition) : dispositionName(disposition);
   return <Stamp tone={STAMP[disposition as keyof typeof STAMP] ?? 'outline'}>{name}</Stamp>;
 }
 

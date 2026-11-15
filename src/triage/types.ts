@@ -40,6 +40,10 @@ export interface Decision {
   labelId?: string;
   /** That label's name in Gmail, e.g. `sift/newsletters`. */
   gmailLabel?: string;
+  /** With `spam`: also treat everything from this sender as spam from now on. */
+  block?: boolean;
+  /** With `keep` or `archive`: also mark the message read. */
+  markRead?: boolean;
   stage: StageName;
   /** Human-readable explanation, stored in the audit log. */
   reason: string;
@@ -55,14 +59,26 @@ export interface Label {
   name: string;
   /** How to recognise it. Shown to the model. */
   description: string;
-  /** What sift does with mail that carries this label. `review` leaves it in the inbox for the user. */
+  /** What sift does with mail that carries this label. */
   disposition: Disposition;
   gmailLabel: string;
+  /** With `spam`: block the sender, so their later mail is spam without being judged again. */
+  block?: boolean;
+  /** With `keep` or `archive`: mark the mail read as well. */
+  markRead?: boolean;
 }
 
 /** The part of a decision that follows from the label, with `override` in place of the label's own action if given. */
-export function labelled(label: Label, override?: DecidedDisposition): Pick<Decision, 'disposition' | 'labelId' | 'gmailLabel'> {
-  return { disposition: override ?? label.disposition, labelId: label.id, gmailLabel: label.gmailLabel };
+export function labelled(label: Label, override?: DecidedDisposition): Pick<Decision, 'disposition' | 'labelId' | 'gmailLabel' | 'block' | 'markRead'> {
+  const disposition = override ?? label.disposition;
+  return {
+    disposition,
+    labelId: label.id,
+    gmailLabel: label.gmailLabel,
+    // An exception replaces the label's action, so it does not inherit the block.
+    ...(label.block && override === undefined && disposition === 'spam' ? { block: true } : {}),
+    ...(label.markRead && (disposition === 'keep' || disposition === 'archive') ? { markRead: true } : {}),
+  };
 }
 
 export interface DecisionUsage {

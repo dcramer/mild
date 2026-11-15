@@ -7,7 +7,8 @@ sift polls Gmail for new inbox mail and decides, per message, a **disposition** 
 Two things are decided about every message, and they are kept apart.
 
 - **What it is: a label.** Each account has one list of labels (`labels`), seeded with cautious defaults and added to by the user. A label has a name, a description the model reads, a Gmail label, and an action.
-- **What happens: the label's action** (keep, archive, spam, or leave it for the user). No tier picks an action. A rule may carry the user's own exception to its label's action ("this one is a newsletter, but keep it").
+- **What happens: the label's action**, one of keep, archive, mark spam, or block. No tier picks an action. Marking read is an extra on keep and archive. "Leave it for me" is not an action: sift suggesting instead of acting is a matter of trust, and the only time mail is held for the user is when no tier could place it or a protection stopped sift.
+- **Block** is sift's own, since Gmail's block list is not in its API ([GMAIL.md](GMAIL.md)): the message is marked spam, and once that has happened a rule is written so the sender's later mail is that label without a model. Only when the message passed DMARC, so an impersonated sender is not the one blocked, and never for someone the user has written to. A rule may carry the user's own exception to its label's action ("this one is a newsletter, but keep it").
 
 A label's id and Gmail label never change after it is made, so renaming one orphans nothing.
 
@@ -192,6 +193,10 @@ Everything that manages sift: answer suggestions, switch between observing and a
 - **Look.** See [DESIGN.md](DESIGN.md). Tiers are one ink that thins as cost rises, because they are an ordered cascade.
 - **Shared types.** `src/dashboard/types.ts` defines the API's JSON and has no imports, so the web app imports it directly.
 - **Vercel's UI SDK** (`@ui-sdk/react`, announced 2026-11-12) was evaluated and not adopted yet: it is a 0.1 beta, and it injects a runtime `<style>` by default. It would do the job Base UI does now, supplying behaviour under the system's parts. Because only `web/src/system` imports the primitives, moving to it later changes those few files and no screen.
+
+## Unsubscribing
+
+Gmail has no API for it, so sift makes the request a mail client would: the sender's one-click address (RFC 8058), a single POST. It happens only when the user presses the button on a message, is recorded as an action before the request, and is never repeated for a sender. The address comes from the email, so it is used only if the message passed DMARC, the address is plain HTTPS on the standard port, and it resolves to the public internet; the connection is made to the address that was checked, and a redirect is not followed. Lists that can only be left by sending an email are refused, since sift cannot send. Code: `src/actions/unsubscribe.ts`.
 
 ## Open questions
 

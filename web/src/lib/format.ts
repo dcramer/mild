@@ -10,19 +10,26 @@ export const TIERS: { key: StageKey; name: string; color: string }[] = [
 ];
 export const tier = (key: string) => TIERS.find((t) => t.key === key) ?? { key, name: key, color: 'var(--muted-foreground)' };
 
-const DISPOSITIONS: Record<string, string> = { keep: 'Kept in inbox', archive: 'Archived', spam: 'Marked spam', review: 'Left for review' };
+const DISPOSITIONS: Record<string, string> = { keep: 'Kept in inbox', archive: 'Archived', spam: 'Marked spam', block: 'Blocked', review: 'Left for review' };
 export const dispositionName = (key: string) => DISPOSITIONS[key] ?? key;
-export const DISPOSITION_KEYS = Object.keys(DISPOSITIONS);
+/** What a decision can be filtered by: `block` is recorded as spam. */
+export const DISPOSITION_KEYS = ['keep', 'archive', 'spam', 'review'];
 
 /** What a label can be set to do, as a choice. */
 export const ACTIONS = [
   ['keep', 'Keep in inbox'],
   ['archive', 'Archive'],
   ['spam', 'Mark spam'],
-  ['review', 'Leave for me'],
+  ['block', 'Block sender'],
 ] as const;
 export type ActionKey = (typeof ACTIONS)[number][0];
-const WILL: Record<string, string> = { keep: 'kept', archive: 'archived', spam: 'marked spam', review: 'left for you' };
+const WILL: Record<string, string> = {
+  keep: 'kept',
+  archive: 'archived',
+  spam: 'marked spam',
+  block: 'marked spam and the sender blocked',
+  review: 'left for you',
+};
 /** What happens to mail with a given action, for the end of a sentence. */
 export const willBe = (key: string) => WILL[key] ?? key;
 

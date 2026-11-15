@@ -6,8 +6,9 @@ import type { Account } from '../store/accounts.ts';
 import { listLabels } from '../store/labels.ts';
 import { listUnsettledDecisions, recordDecision, settleDecision } from '../store/decisions.ts';
 import { listUndecided } from '../store/messages.ts';
-import { countRuleHit, learnSender, listRules } from '../store/rules.ts';
+import { blockSender, countRuleHit, learnSender, listRules } from '../store/rules.ts';
 import { cachedCorrespondent } from '../store/senders.ts';
+import { passedDmarc } from '../triage/features.ts';
 import { triage } from '../triage/pipeline.ts';
 import { rulesStage } from '../triage/stages/rules.ts';
 import { type Judge, modelStage } from '../triage/stages/model.ts';
@@ -42,6 +43,8 @@ export interface TriageReport {
   troubled: number;
   /** Rules sift made this pass, so that sender's future mail needs no inference. */
   learned: number;
+  /** Senders blocked this pass. */
+  blocked: number;
 }
 
 /** The cascade for one account, cheapest first. The decision-model tier would slot in before the model. */
@@ -70,19 +73,20 @@ function stagesFor(deps: TriageDeps, accountId: string): Stage[] {
 export async function triageAccount(deps: TriageDeps, account: Account, limit = 200): Promise<TriageReport> {
   const { db, mailbox } = deps;
   const now = deps.now ?? Date.now;
-  const report: TriageReport = { decided: { keep: 0, archive: 0, spam: 0, review: 0 }, acted: 0, skipped: 0, troubled: 0, learned: 0 };
+  const report: TriageReport = { decided: { keep: 0, archive: 0, spam: 0, review: 0 }, acted: 0, skipped: 0, troubled: 0, learned: 0, blocked: 0 };
 
-  const carryOut = async (decisionId: number, messageId: string, decision: Pick<Decision, 'disposition' | 'gmailLabel'>, box: Mailbox) => {
+  const carryOut = async (decisionId: number, messageId: string, decision: Pick<Decision, 'disposition' | 'gmailLabel' | 'markRead'>, box: Mailbox) => {
     const action = planAction(decision);
     if (!action) {
       settleDecision(db, decisionId, 'none');
-      return;
+      return 'none';
     }
     const outcome = await execute({ db, mailbox: box, now }, account.id, messageId, action, decisionId);
     settleDecision(db, decisionId, outcome.status, outcome.status === 'done' ? null : outcome.reason);
     if (outcome.status === 'done') report.acted++;
     else if (outcome.status === 'skipped') report.skipped++;
     else report.troubled++;
+    return outcome.status;
   };
 
   if (mailbox) {
@@ -102,7 +106,17 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     if (decision.ruleId) countRuleHit(db, decision.ruleId);
     if (decision.stage === 'agent' && learnSender(db, account.id, facts.from.address, now())) report.learned++;
     report.decided[decision.disposition]++;
-    if (act) await carryOut(decisionId, facts.messageId, decision, mailbox);
+    const status = act ? await carryOut(decisionId, facts.messageId, decision, mailbox) : null;
+    // Blocking acts on the sender's address, so the address must be proven: a message that only claims to be
+    // from someone would otherwise get that someone blocked. And only once the message itself was marked spam.
+    if (
+      status === 'done' &&
+      decision.block &&
+      decision.labelId &&
+      passedDmarc(facts.headers) &&
+      blockSender(db, account.id, facts.from.address, decision.labelId, now())
+    )
+      report.blocked++;
   }
   return report;
 }

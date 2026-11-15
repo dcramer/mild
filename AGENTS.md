@@ -50,6 +50,9 @@ Enforced by `no-restricted-imports` in `.oxlintrc.json`. They are the security m
 - When no tier is sure, the answer is `review`: leave the message alone and ask. An error is an abstention, never a guess.
 - A user correction beats anything learned.
 - Every Gmail filter passes `validateFilter` first, whoever proposed it.
+- Anything that acts on a sender's address (blocking them, using their unsubscribe link) needs the message to have passed DMARC. Without it the address proves nothing, and the action could be turned on someone who was only impersonated.
+- sift unsubscribes only when the user asks, only by the sender's one-click address (RFC 8058), and never follows a link, a redirect or a `mailto:`. The address comes from the email: it must be plain HTTPS and resolve to the public internet. See `src/actions/unsubscribe.ts` before changing any of that.
+- Before building on a Gmail feature, check [docs/GMAIL.md](docs/GMAIL.md) for whether the API has it; several things Gmail does (blocking, unsubscribing, snoozing) it does not expose.
 
 ## Privacy
 

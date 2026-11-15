@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { DispositionBadge, Result } from '@/components/bits.tsx';
-import { MessageBody, Part, SenderFacts } from '@/components/message-parts.tsx';
+import { MessageBody, Part, SenderFacts, Unsubscribe } from '@/components/message-parts.tsx';
 import { type MessageDetail, api, useLoaded } from '@/lib/api.ts';
 import { count, dateTime, money, tier } from '@/lib/format.ts';
 import { Code, Dialog, Loading, Note } from '@/system';
@@ -102,7 +102,7 @@ function ActionEntry({ a }: { a: Action }) {
   );
 }
 
-function Body({ detail }: { detail: MessageDetail }) {
+function Body({ detail, reload }: { detail: MessageDetail; reload: () => void }) {
   const history = [
     ...detail.decisions.map((d) => ({ at: d.decidedAt, order: 0, node: <DecisionEntry key={`d${d.id}`} d={d} /> })),
     ...detail.actions.map((a) => ({ at: a.createdAt, order: 1, node: <ActionEntry key={`a${a.id}`} a={a} /> })),
@@ -116,6 +116,7 @@ function Body({ detail }: { detail: MessageDetail }) {
         </Part>
         <Part title="This sender">
           <SenderFacts sender={detail.sender} />
+          <Unsubscribe detail={detail} onDone={reload} />
         </Part>
       </div>
     </div>
@@ -128,7 +129,9 @@ export function MessageDialog({ target, onClose }: { target: MessageRef | null; 
 }
 
 function Loaded({ target, onClose }: { target: MessageRef; onClose: () => void }) {
-  const { data, error, loading } = useLoaded(`${target.accountId}/${target.messageId}`, (signal) => api.message(target.accountId, target.messageId, signal));
+  const { data, error, loading, reload } = useLoaded(`${target.accountId}/${target.messageId}`, (signal) =>
+    api.message(target.accountId, target.messageId, signal),
+  );
   return (
     <Dialog open wide onClose={onClose} title={(data?.subject ?? target.subject) || '(no subject)'}>
       {loading ? (
@@ -136,7 +139,7 @@ function Loaded({ target, onClose }: { target: MessageRef; onClose: () => void }
           <Loading />
         </div>
       ) : data ? (
-        <Body detail={data} />
+        <Body detail={data} reload={reload} />
       ) : (
         <Note tone="failure" title="Could not load this message">
           <p>{error}</p>

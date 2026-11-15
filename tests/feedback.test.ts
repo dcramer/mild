@@ -146,11 +146,11 @@ describe('teaching', () => {
     expect(ruleFor('cold@example.net')).toEqual([{ labelId: 'marketing', source: 'correction' }]);
   });
 
-  it('a label set to be left for the user keeps the mail in the inbox', () => {
-    suggest('pitch@example.net', 'archive', { labelId: 'marketing' });
-    const result = applyFeedback(db, { accountId: ACCOUNT, sender: 'pitch@example.net', label: 'cold_outreach', scope: 'sender' });
-    expect(result.taught).toBe('From now on, mail from pitch@example.net is Cold outreach: left for you.');
-    expect(db.prepare('SELECT disposition, label_id FROM examples').get()).toEqual({ disposition: 'keep', label_id: 'cold_outreach' });
+  it('says so when the label blocks the sender', () => {
+    suggest('scam@example.net', 'archive', { labelId: 'marketing' });
+    const result = applyFeedback(db, { accountId: ACCOUNT, sender: 'scam@example.net', label: 'phishing', scope: 'sender' });
+    expect(result.taught).toBe('From now on, mail from scam@example.net is Phishing: marked as spam, and the sender blocked.');
+    expect(db.prepare('SELECT disposition, label_id FROM examples').get()).toEqual({ disposition: 'spam', label_id: 'phishing' });
   });
 
   it('an answer about one message is recorded but makes no rule', () => {

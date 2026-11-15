@@ -43,8 +43,22 @@ describe('rules stage', () => {
       disposition: 'archive',
       reason: 'rule: from domain example.com is Newsletters',
     });
-    const asks = await decide([{ id: 'r', match: { fromDomain: 'example.com' }, labelId: 'cold_outreach' }]);
-    expect(asks).toMatchObject({ labelId: 'cold_outreach', disposition: 'review' });
+    expect(await decide([{ id: 'r', match: { fromDomain: 'example.com' }, labelId: 'cold_outreach' }])).toMatchObject({
+      labelId: 'cold_outreach',
+      disposition: 'archive',
+    });
+  });
+
+  it("carries a label's extras: blocking with spam, marking read with keep and archive", async () => {
+    const phishing = await decide([{ id: 'r', match: { fromDomain: 'example.com' }, labelId: 'phishing' }]);
+    expect(phishing).toMatchObject({ disposition: 'spam', block: true });
+    // The user's own exception replaces the label's action, block included.
+    expect(await decide([{ id: 'r', match: { fromDomain: 'example.com' }, labelId: 'phishing', disposition: 'spam' }])).not.toHaveProperty('block');
+
+    const read = LABELS.map((l) => (l.id === 'newsletter' ? { ...l, markRead: true, block: true } : l));
+    const archived = await rulesStage([newsletters], read).decide(facts());
+    expect(archived).toMatchObject({ disposition: 'archive', markRead: true });
+    expect(archived).not.toHaveProperty('block');
   });
 
   it("lets a rule's own action beat its label's", async () => {

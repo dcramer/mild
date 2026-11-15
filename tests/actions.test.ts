@@ -106,6 +106,23 @@ describe('execute', () => {
   });
 });
 
+describe('marking read', () => {
+  it('marks read while archiving or keeping, and undo puts unread back', async () => {
+    await execute(deps, ACCOUNT, 'm1', { type: 'archive', labels: ['sift/newsletters'], markRead: true });
+    expect(mailbox.labels.get('m1')).toEqual(['L:mine', 'L:sift/newsletters', 'L:sift/did/archived']);
+    await undo(deps, 1);
+    expect(mailbox.labels.get('m1')?.toSorted()).toEqual(['INBOX', 'L:mine', 'UNREAD']);
+
+    await execute(deps, ACCOUNT, 'm1', { type: 'label', markRead: true });
+    expect(mailbox.labels.get('m1')?.toSorted()).toEqual(['INBOX', 'L:mine']);
+  });
+
+  it('never marks spam read', async () => {
+    await execute(deps, ACCOUNT, 'm1', { type: 'spam', markRead: true });
+    expect(mailbox.labels.get('m1')).toContain('UNREAD');
+  });
+});
+
 describe('undo', () => {
   it('restores the inbox and removes what was added', async () => {
     await execute(deps, ACCOUNT, 'm1', { type: 'spam' });
@@ -151,6 +168,12 @@ describe('planAction', () => {
     expect(planAction({ ...base, disposition: 'archive', gmailLabel: 'sift/news' })).toEqual({ type: 'archive', labels: ['sift/news'] });
     expect(planAction({ ...base, disposition: 'spam', gmailLabel: 'sift/junk' })).toEqual({ type: 'spam', labels: ['sift/junk'] });
     expect(planAction({ ...base, disposition: 'review' })).toEqual({ type: 'label', labels: ['sift/review'] });
+    expect(planAction({ ...base, disposition: 'keep', markRead: true })).toEqual({ type: 'label', labels: [], markRead: true });
+    expect(planAction({ ...base, disposition: 'archive', gmailLabel: 'sift/news', markRead: true })).toEqual({
+      type: 'archive',
+      labels: ['sift/news'],
+      markRead: true,
+    });
     expect(planAction({ ...base, disposition: 'review', gmailLabel: 'sift/cold-outreach' })).toEqual({
       type: 'label',
       labels: ['sift/cold-outreach', 'sift/review'],

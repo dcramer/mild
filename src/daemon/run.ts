@@ -77,6 +77,7 @@ function describe(result: PassResult, act: boolean): string | null {
     if (triage.acted > 0) parts.push(`${triage.acted} changed`);
     if (triage.skipped > 0) parts.push(`${triage.skipped} skipped`);
     if (triage.learned > 0) parts.push(`learned ${triage.learned} rule${triage.learned === 1 ? '' : 's'}`);
+    if (triage.blocked > 0) parts.push(`blocked ${triage.blocked} sender${triage.blocked === 1 ? '' : 's'}`);
     if (triage.troubled > 0) parts.push(`${triage.troubled} need attention (see sift log)`);
   }
   if (result.captured) parts.push(`stored ${result.captured} marked message${result.captured === 1 ? '' : 's'} as examples`);

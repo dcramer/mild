@@ -1,6 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { accuracy, pendingSuggestions } from '../learn/feedback.ts';
+import { unsubscribedAt } from '../store/actions.ts';
 import { listLabels } from '../store/labels.ts';
+import { bulkSignals, passedDmarc } from '../triage/features.ts';
 import {
   type DecisionRow,
   type LabelSummary,
@@ -96,6 +98,7 @@ interface DecisionSqlRow {
   decided_at: number;
   stage: StageKey;
   disposition: string;
+  block: number;
   label_id: string | null;
   label_name: string | null;
   gmail_label: string | null;
@@ -115,7 +118,7 @@ interface DecisionSqlRow {
 }
 
 const DECISION_SELECT = `
-  SELECT d.id, d.account_id, d.message_id, d.decided_at, d.stage, d.disposition, d.label_id, l.name AS label_name, d.gmail_label, d.reason, d.confidence, d.model, d.cost_usd,
+  SELECT d.id, d.account_id, d.message_id, d.decided_at, d.stage, d.disposition, d.block, d.label_id, l.name AS label_name, d.gmail_label, d.reason, d.confidence, d.model, d.cost_usd,
          m.from_address, m.from_name, m.subject, d.mode, d.outcome, d.outcome_detail,
          a.id AS action_id, a.type AS action_type, a.status AS action_status
   FROM decisions d
@@ -129,7 +132,7 @@ const toDecisionRow = (r: DecisionSqlRow): DecisionRow => ({
   messageId: r.message_id,
   decidedAt: r.decided_at,
   stage: r.stage,
-  disposition: r.disposition,
+  disposition: r.block === 1 ? 'block' : r.disposition,
   labelId: r.label_id,
   labelName: r.label_name,
   gmailLabel: r.gmail_label,
@@ -256,6 +259,7 @@ export function messageDetail(db: DatabaseSync, accountId: string, messageId: st
     syncedAt: m.synced_at,
     headers: JSON.parse(m.headers_json) as Record<string, string>,
     body: storedBody(db, accountId, messageId),
+    unsubscribe: canUnsubscribe(db, accountId, m.from_address, JSON.parse(m.headers_json) as Record<string, string>),
     sender: senderProfile(db, accountId, m.from_address),
     decisions: decisions.map((r) => ({
       ...toDecisionRow(r),
@@ -292,6 +296,14 @@ function storedBody(db: DatabaseSync, accountId: string, messageId: string): str
     )
     .get(accountId, messageId) as { body: string | null };
   return row.body;
+}
+
+/** Whether sift can leave the list a message came from. Mirrors what `unsubscribe` in src/actions will agree to. */
+function canUnsubscribe(db: DatabaseSync, accountId: string, sender: string, headers: Record<string, string>): MessageDetail['unsubscribe'] {
+  const signals = bulkSignals(headers);
+  if (!signals.hasListUnsubscribe) return 'none';
+  if (unsubscribedAt(db, accountId, sender) !== null) return 'done';
+  return signals.oneClickUnsubscribeUrl && passedDmarc(headers) ? 'available' : 'manual';
 }
 
 /** What sift knows about one sender. */
@@ -334,7 +346,7 @@ export function suggestionDetail(db: DatabaseSync, accountId: string, sender: st
       messageId: s.messageId,
       subject: s.subject,
       receivedAt: (received.get(accountId, s.messageId) as { received_at: number }).received_at,
-      disposition: s.disposition,
+      disposition: s.block ? 'block' : s.disposition,
       labelId: s.labelId,
       labelName: (s.labelId && names.get(s.labelId)) ?? null,
       stage: s.stage,
@@ -347,7 +359,7 @@ export function suggestionDetail(db: DatabaseSync, accountId: string, sender: st
 export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
   const rows = db
     .prepare(
-      `SELECT r.id, r.account_id, r.match_json, r.except_json, r.label_id, l.name AS label_name, r.disposition AS override, l.disposition AS label_does,
+      `SELECT r.id, r.account_id, r.match_json, r.except_json, r.label_id, l.name AS label_name, r.disposition AS override, CASE WHEN l.block = 1 THEN 'block' ELSE l.disposition END AS label_does,
               r.source, r.hits, r.filter_id, r.created_at,
               (SELECT max(decided_at) FROM decisions d WHERE d.rule_id = r.id) AS last_hit_at
        FROM rules r LEFT JOIN labels l ON l.account_id = r.account_id AND l.id = r.label_id
@@ -385,6 +397,9 @@ export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
   }));
 }
 
+/** What a label does, as the one word the dashboard shows and sets. */
+const outcomeOf = (label: { disposition: string; block?: boolean }) => (label.block ? 'block' : label.disposition);
+
 /** An account's labels, each with how much depends on it and how often sift has had it right. */
 export function listLabelSummaries(db: DatabaseSync, accountId: string): LabelSummary[] {
   const counts = (sql: string) =>
@@ -401,7 +416,12 @@ export function listLabelSummaries(db: DatabaseSync, accountId: string): LabelSu
      WHERE f.account_id = ? AND f.verdict IN ('right', 'wrong') AND d.label_id IS NOT NULL GROUP BY d.label_id`,
   );
   return listLabels(db, accountId).map((l) => ({
-    ...l,
+    id: l.id,
+    name: l.name,
+    description: l.description,
+    disposition: outcomeOf(l),
+    markRead: l.markRead ?? false,
+    gmailLabel: l.gmailLabel,
     rules: rules.get(l.id)?.n ?? 0,
     messages: messages.get(l.id)?.n ?? 0,
     record: { reviewed: record.get(l.id)?.n ?? 0, right: record.get(l.id)?.right ?? 0 },
@@ -434,7 +454,7 @@ export function listSuggestions(db: DatabaseSync, options: { includeKept?: boole
         accountId: s.accountId,
         sender: s.fromAddress,
         senderName: s.fromName,
-        disposition: s.disposition,
+        disposition: s.block ? 'block' : s.disposition,
         labelId: s.labelId,
         labelName: null,
         stage: s.stage,
@@ -450,7 +470,7 @@ export function listSuggestions(db: DatabaseSync, options: { includeKept?: boole
     group.messages++;
     group.latestReceivedAt = Math.max(group.latestReceivedAt, s.receivedAt);
     const tally = tallies.get(key)!;
-    const guess = `${s.labelId ?? ''}\n${s.disposition}`;
+    const guess = `${s.labelId ?? ''}\n${s.disposition}\n${s.block}`;
     const entry = tally.get(guess);
     if (entry) entry.n++;
     else tally.set(guess, { n: 1, suggestion: s });
@@ -461,7 +481,7 @@ export function listSuggestions(db: DatabaseSync, options: { includeKept?: boole
     const tally = [...tallies.get(key)!.values()];
     const top = tally.reduce((best, entry) => (entry.n > best.n ? entry : best));
     group.guesses = tally.length;
-    group.disposition = top.suggestion.disposition;
+    group.disposition = top.suggestion.block ? 'block' : top.suggestion.disposition;
     group.labelId = top.suggestion.labelId;
     group.labelName = (top.suggestion.labelId && names.get(`${group.accountId}\n${top.suggestion.labelId}`)) ?? null;
     group.stage = top.suggestion.stage;
@@ -472,7 +492,7 @@ export function listSuggestions(db: DatabaseSync, options: { includeKept?: boole
     pending: number | null;
   };
   return {
-    labels: Object.fromEntries([...labels].map(([id, list]) => [id, list.map((l) => ({ id: l.id, name: l.name, disposition: l.disposition }))])),
+    labels: Object.fromEntries([...labels].map(([id, list]) => [id, list.map((l) => ({ id: l.id, name: l.name, disposition: outcomeOf(l) }))])),
     examples: { captured: examples.captured ?? 0, pending: examples.pending ?? 0 },
     groups: [...groups.values()].toSorted((a, b) => b.messages - a.messages || b.latestAt - a.latestAt).slice(0, MAX_GROUPS),
     waiting,

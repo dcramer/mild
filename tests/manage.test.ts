@@ -43,6 +43,11 @@ const controls: Controls = {
     calls.push(`backfill ${days}`);
     return 12;
   },
+  unsubscribe: async (_account, messageId) => {
+    calls.push(`unsubscribe ${messageId}`);
+    if (messageId === 'none') throw new Error('This message offers no way to unsubscribe.');
+    return 'Unsubscribed.';
+  },
   checkNow: () => void calls.push('check'),
   activity: () => ({ sorting: true, lastPassAt: 5, problems: [] }),
 };
@@ -174,6 +179,39 @@ describe('managing sift from the dashboard', () => {
     expect((await call(port, 'POST', '/api/rules/remove', { id: added.body['id'] })).status).toBe(409);
   });
 
+  it('sets what a label does, including blocking and marking read', async () => {
+    const port = await start();
+    const does = () => listLabels(db, ACCOUNT).find((l) => l.id === 'marketing');
+    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'block' })).status).toBe(200);
+    expect(does()).toMatchObject({ disposition: 'spam', block: true });
+    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'archive', markRead: true })).status).toBe(200);
+    expect(does()).toMatchObject({ disposition: 'archive', markRead: true });
+    expect(does()).not.toHaveProperty('block');
+    const shown = ((await call(port, 'GET', '/api/manage')).body['labels'] as Record<string, { id: string; disposition: string; markRead: boolean }[]>)[
+      ACCOUNT
+    ];
+    expect(shown?.find((l) => l.id === 'marketing')).toMatchObject({ disposition: 'archive', markRead: true });
+    expect(shown?.find((l) => l.id === 'phishing')).toMatchObject({ disposition: 'block', markRead: false });
+    // "Leave it for me" is no longer something a label can be set to do.
+    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'review' })).status).toBe(400);
+    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', markRead: 'yes' })).status).toBe(400);
+    expect((await call(port, 'POST', '/api/labels/add', { accountId: ACCOUNT, name: 'Scams', description: '', disposition: 'block' })).body).toEqual({
+      id: 'scams',
+    });
+    expect(listLabels(db, ACCOUNT).at(-1)).toMatchObject({ id: 'scams', disposition: 'spam', block: true });
+  });
+
+  it('asks the running sift to unsubscribe, and passes on why it would not', async () => {
+    const port = await start();
+    expect((await call(port, 'POST', '/api/unsubscribe', { accountId: ACCOUNT, messageId: 'm1' })).body).toEqual({ message: 'Unsubscribed.' });
+    expect(await call(port, 'POST', '/api/unsubscribe', { accountId: ACCOUNT, messageId: 'none' })).toMatchObject({
+      status: 409,
+      body: { error: 'This message offers no way to unsubscribe.' },
+    });
+    expect((await call(port, 'POST', '/api/unsubscribe', { accountId: ACCOUNT })).status).toBe(400);
+    expect(calls).toEqual(['unsubscribe m1', 'unsubscribe none']);
+  });
+
   it('asks the running sift to undo, pull in older mail and check now', async () => {
     const port = await start();
     expect((await call(port, 'POST', '/api/undo', { id: 3 })).body).toEqual({ message: 'Reversed.' });
@@ -193,6 +231,7 @@ describe('managing sift from the dashboard', () => {
       '/api/labels/add',
       '/api/rules',
       '/api/rules/remove',
+      '/api/unsubscribe',
       '/api/undo',
       '/api/backfill',
       '/api/check',

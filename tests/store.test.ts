@@ -34,7 +34,8 @@ describe('store', () => {
       INSERT INTO categories (account_id, key, name, description, disposition, label, position, updated_at) VALUES
         ('a@example.org', 'personal', 'Personal', 'People.', 'keep', NULL, 0, 5),
         ('a@example.org', 'newsletter', 'Newsletters', 'Lists.', 'archive', 'sift/newsletters', 1, 5),
-        ('a@example.org', 'cold_outreach', 'Cold outreach', 'Pitches.', 'review', 'sift/cold-outreach', 2, 5);
+        ('a@example.org', 'cold_outreach', 'Cold outreach', 'Pitches.', 'review', 'sift/cold-outreach', 2, 5),
+        ('a@example.org', 'vip', 'VIP', 'Mine.', 'review', 'sift/vip', 3, 5);
       INSERT INTO rules (id, account_id, position, match_json, disposition, label, source, hits, created_at) VALUES
         ('r-news', 'a@example.org', 1, '{"fromDomain":"example.com"}', 'archive', 'sift/newsletters', 'user', 4, 1),
         ('r-keep', 'a@example.org', 2, '{"from":"boss@example.net"}', 'keep', NULL, 'user', 0, 2),
@@ -53,11 +54,15 @@ describe('store', () => {
     expect(listLabels(db, 'a@example.org')).toMatchObject([
       { id: 'personal', disposition: 'keep', gmailLabel: 'sift/personal' },
       { id: 'newsletter', disposition: 'archive', gmailLabel: 'sift/newsletters' },
-      { id: 'cold_outreach', disposition: 'review', gmailLabel: 'sift/cold-outreach' },
-      { id: 'junk', disposition: 'review', gmailLabel: 'sift/junk' },
+      // Was still at its old default, "leave it for me", which labels no longer do.
+      { id: 'cold_outreach', disposition: 'archive', gmailLabel: 'sift/cold-outreach' },
+      // The user's own label set to "leave it for me" is kept in the inbox.
+      { id: 'vip', disposition: 'keep', gmailLabel: 'sift/vip' },
+      { id: 'junk', disposition: 'spam', gmailLabel: 'sift/junk' },
+      { id: 'phishing', disposition: 'spam', block: true, gmailLabel: 'sift/phishing' },
     ]);
     // An account that had never been given its categories gets the defaults.
-    expect(db.prepare(`SELECT count(*) AS n FROM labels WHERE account_id = 'b@example.org'`).get()).toEqual({ n: 9 });
+    expect(db.prepare(`SELECT count(*) AS n FROM labels WHERE account_id = 'b@example.org'`).get()).toEqual({ n: 10 });
 
     const rules = listRules(db, 'a@example.org').map(({ id: _id, hits: _hits, subscription: _subscription, ...rule }) => rule);
     expect(rules).toEqual([
@@ -70,7 +75,7 @@ describe('store', () => {
       { match: { from: 'promo@example.com' }, labelId: 'newsletter', learned: true, source: 'agent' },
     ]);
     expect(listRules(db, 'a@example.org')[0]).toMatchObject({ id: 'r-news', hits: 4 });
-    // No default label marks spam, so the rule is Junk and keeps its own action.
+    // A spam rule that named no label is Junk, and keeps its own action from before Junk marked spam.
     expect(listRules(db, 'b@example.org')).toMatchObject([{ id: 'r-spam', labelId: 'junk', disposition: 'spam' }]);
     expect(db.prepare('SELECT label_id, gmail_label FROM decisions').get()).toEqual({ label_id: 'newsletter', gmail_label: 'sift/newsletters' });
     expect(() => db.prepare('SELECT 1 FROM senders').get()).toThrow();
