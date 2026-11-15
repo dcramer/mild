@@ -95,7 +95,7 @@ export function Answer({
         <div className="flex flex-wrap gap-1.5">
           {labels.map((l, index) => (
             <Button key={l.id} variant={chosen === l.id ? 'ink' : 'plain'} aria-pressed={chosen === l.id} onClick={() => setChosen(l.id)}>
-              {index < 9 ? <span className="hidden font-mono text-xs font-normal opacity-60 md:inline">{index + 1}</span> : null}
+              {index < 9 ? <span className="hidden font-mono text-[13px] font-normal opacity-60 md:inline">{index + 1}</span> : null}
               {l.name}
             </Button>
           ))}

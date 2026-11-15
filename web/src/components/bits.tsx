@@ -25,7 +25,7 @@ export function DispositionBadge({ disposition, would }: { disposition: string; 
 
 /** A second line under the point of a cell. */
 export function Sub({ children, mono }: { children: ReactNode; mono?: boolean }) {
-  return <span className={cn('mt-0.5 block truncate text-[13px] text-muted-foreground', mono && 'font-mono')}>{children}</span>;
+  return <span className={cn('mt-0.5 block truncate text-[14px] text-muted-foreground', mono && 'font-mono')}>{children}</span>;
 }
 
 /** What became of a decision in the mailbox. */

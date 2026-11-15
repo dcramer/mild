@@ -56,7 +56,7 @@ export function StackedBars({ series, rows, unit }: { series: readonly Series[];
       <div className="relative ml-8 h-52">
         {[1, 0.5, 0].map((share) => (
           <div key={share} className="absolute inset-x-0 border-t border-dashed border-(--rule)" style={{ bottom: `${share * 100}%` }}>
-            <span className="absolute right-full -translate-y-1/2 pr-2 text-xs text-muted-foreground tabular-nums">{Math.round(max * share)}</span>
+            <span className="absolute right-full -translate-y-1/2 pr-2 text-[13px] text-muted-foreground tabular-nums">{Math.round(max * share)}</span>
           </div>
         ))}
         <ol className="relative flex h-full items-stretch" onMouseLeave={() => setAt(null)}>
@@ -85,7 +85,7 @@ export function StackedBars({ series, rows, unit }: { series: readonly Series[];
         </ol>
       </div>
 
-      <ol aria-hidden className="ml-8 flex text-xs text-muted-foreground">
+      <ol aria-hidden className="ml-8 flex text-[13px] text-muted-foreground">
         {rows.map((row, index) => (
           <li key={row.key} className="min-w-0 flex-1 text-center whitespace-nowrap">
             {index % every === 0 ? row.label : ''}

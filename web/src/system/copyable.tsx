@@ -8,7 +8,7 @@ export function Copyable({ value, label }: { value: string; label: string }) {
   const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
   return (
     <div className="flex items-stretch bg-(--fill)">
-      <code className="min-w-0 flex-1 px-3 py-2 font-mono text-[13px] leading-relaxed break-all select-all">{value}</code>
+      <code className="min-w-0 flex-1 px-3 py-2 font-mono text-[14px] leading-relaxed break-all select-all">{value}</code>
       {clipboard ? (
         <button
           type="button"

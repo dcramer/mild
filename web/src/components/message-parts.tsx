@@ -35,7 +35,7 @@ export function MessageBody({ detail, untitled }: { detail: MessageDetail; untit
       ) : detail.body === '' ? (
         <p className="text-sm text-muted-foreground">This message has no readable text, or is no longer in Gmail.</p>
       ) : (
-        <div className="max-w-[68ch] text-[15px] leading-relaxed break-words whitespace-pre-wrap">{detail.body}</div>
+        <div className="max-w-[68ch] text-[17px] leading-relaxed break-words whitespace-pre-wrap">{detail.body}</div>
       )}
     </article>
   );

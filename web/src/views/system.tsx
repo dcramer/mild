@@ -97,7 +97,7 @@ export function SystemView() {
           {INKS.map(([swatch, name, use]) => (
             <div key={name} className="flex flex-col gap-2 bg-card p-4">
               <span aria-hidden className={`h-10 border border-(--frame) ${swatch}`} />
-              <span className="font-mono text-[13px]">{name}</span>
+              <span className="font-mono text-[14px]">{name}</span>
               <span className="text-sm text-muted-foreground">{use}</span>
             </div>
           ))}

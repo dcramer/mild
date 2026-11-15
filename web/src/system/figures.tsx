@@ -15,7 +15,7 @@ export function Figure({ label, value, note, tone }: { label: string; value: str
       <dd className={cn('figure', tone === 'failure' && 'text-destructive')}>
         {tone === 'look' ? <Highlight className="mx-0 inline-block px-2 py-0">{value}</Highlight> : value}
       </dd>
-      {note ? <dd className="text-[13px] whitespace-nowrap text-muted-foreground tabular-nums">{note}</dd> : null}
+      {note ? <dd className="text-[14px] whitespace-nowrap text-muted-foreground tabular-nums">{note}</dd> : null}
     </div>
   );
 }

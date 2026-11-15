@@ -37,7 +37,7 @@ function Entry({ what, at, children }: { what: ReactNode; at: number; children: 
     <li className="flex flex-col gap-1.5 border-t border-dashed border-(--rule) py-3.5 first:border-t-0 first:pt-0">
       <p className="flex flex-wrap items-center gap-2">
         {what}
-        <span className="ml-auto text-[13px] text-muted-foreground tabular-nums">{dateTime(at)}</span>
+        <span className="ml-auto text-[14px] text-muted-foreground tabular-nums">{dateTime(at)}</span>
       </p>
       {children}
     </li>
@@ -64,9 +64,9 @@ function DecisionEntry({ d }: { d: Decision }) {
       }
     >
       <p>{d.reason}</p>
-      <p className="text-[13px] text-muted-foreground">{facts.join(' · ')}</p>
+      <p className="text-[14px] text-muted-foreground">{facts.join(' · ')}</p>
       {d.actionId === null ? (
-        <div className="text-[13px]">
+        <div className="text-[14px]">
           <Result row={d} />
         </div>
       ) : null}
@@ -85,7 +85,7 @@ function ActionEntry({ a }: { a: Action }) {
           <span className={bad ? 'font-medium text-destructive' : 'text-muted-foreground'}>
             {a.type} {a.status}
           </span>
-          <span className="font-mono text-[13px] text-muted-foreground">#{a.id}</span>
+          <span className="font-mono text-[14px] text-muted-foreground">#{a.id}</span>
         </>
       }
     >
@@ -179,7 +179,7 @@ function Body({
                     onClick={() => onPick(m.messageId)}
                   >
                     <span className="min-w-0 flex-1 truncate">{m.subject || '(no subject)'}</span>
-                    <span className="shrink-0 text-[13px] tabular-nums">{ago(m.receivedAt)}</span>
+                    <span className="shrink-0 text-[14px] tabular-nums">{ago(m.receivedAt)}</span>
                   </button>
                 </li>
               ))}
