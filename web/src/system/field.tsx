@@ -1,16 +1,23 @@
 import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-const FILL = 'bg-(--fill) placeholder:text-muted-foreground/70 hover:bg-(--fill-strong) focus:bg-(--fill-strong) disabled:opacity-45';
+/** Somewhere to type is outlined and empty, like the search bar; something to press is filled. The outline darkens in use. */
+const FIELD =
+  'border border-(--frame) bg-transparent placeholder:text-muted-foreground/70 hover:border-foreground/30 focus:border-foreground/45 disabled:opacity-45';
 
 /** A line of text typed by the reader. Always give it an `aria-label` or a visible label. */
 export function Input({ className, ...props }: ComponentProps<'input'>) {
-  return <input className={cn('field h-(--control) min-w-0 rounded-(--cut-control) px-3 text-[13px]', FILL, className)} {...props} />;
+  return <input className={cn('field focus-within-shown h-(--control) min-w-0 rounded-(--cut-control) px-3 text-[13px]', FIELD, className)} {...props} />;
 }
 
 /** Longer text. */
 export function TextArea({ className, ...props }: ComponentProps<'textarea'>) {
-  return <textarea className={cn('block min-h-48 w-full resize-y rounded-[2px] px-3 py-2.5 text-[13px] leading-relaxed', FILL, className)} {...props} />;
+  return (
+    <textarea
+      className={cn('block min-h-48 w-full resize-y rounded-[2px] px-3 py-2.5 text-[13px] leading-relaxed', FIELD, 'focus-within-shown', className)}
+      {...props}
+    />
+  );
 }
 
 /** A switch between two states of a view, with its label. */

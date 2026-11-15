@@ -4,6 +4,9 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import { App } from './App.tsx';
 
+// Temporary, to compare typefaces.
+if (new URLSearchParams(window.location.search).get('fonts') === 'peated') document.documentElement.classList.add('fonts-peated');
+
 const root = document.getElementById('root');
 if (!root) throw new Error('index.html has no #root element');
 createRoot(root).render(
