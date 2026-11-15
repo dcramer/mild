@@ -14,8 +14,8 @@ const STATUS = [
 const WHAT: Record<string, string> = { archive: 'Archived', spam: 'Marked spam', label: 'Labelled', undo: 'Undid', unsubscribe: 'Unsubscribed' };
 
 /** Everything sift has done to the mailbox, each reversible. */
-export function ChangesView({ onOpen, epoch }: { onOpen: OpenMessages; epoch: number }) {
-  const { data, error, loading, reload } = useLoaded(`changes-${epoch}`, (signal) => api.changes(signal));
+export function ChangesView({ onOpen }: { onOpen: OpenMessages }) {
+  const { data, error, loading, reload } = useLoaded('changes', (signal) => api.changes(signal));
   const action = useAction();
   const [note, setNote] = useState<string | null>(null);
   const [search, setSearch] = useState('');

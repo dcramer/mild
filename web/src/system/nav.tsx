@@ -37,11 +37,12 @@ export function Sections({ items, current }: { items: readonly NavItem[]; curren
 }
 
 /**
- * The top of every screen: the name, the sections, and `aside` (who is signed in, the way out). No bar;
- * it sits straight on the page. On a narrow screen the sections and `aside` move into a panel that
- * covers the screen, opened from a menu button.
+ * The top of every screen: the name, the sections, `status` (a `Notice`: what is wrong with sift itself)
+ * and `aside` (who is signed in, the way out). No bar; it sits straight on the page. On a narrow screen
+ * the sections and `aside` move into a panel that covers the screen, opened from a menu button, and
+ * `status` gets a line of its own under the bar, where it cannot be missed.
  */
-export function Masthead({ items, current, aside }: { items: readonly NavItem[]; current: string; aside?: ReactNode }) {
+export function Masthead({ items, current, status, aside }: { items: readonly NavItem[]; current: string; status?: ReactNode; aside?: ReactNode }) {
   const [open, setOpen] = useState(false);
   // Going somewhere closes the panel.
   useEffect(() => setOpen(false), [current]);
@@ -49,13 +50,16 @@ export function Masthead({ items, current, aside }: { items: readonly NavItem[];
   const waiting = items.reduce((sum, item) => sum + (item.count ?? 0), 0);
 
   return (
-    <header className="flex items-center gap-x-5 pt-4 pb-6 md:pt-5 md:pb-7">
+    <header className="flex flex-wrap items-center gap-x-5 pt-4 pb-6 md:pt-5 md:pb-7">
       <a href={`#${items[0]?.to ?? ''}`} aria-label="sift">
         <Wordmark />
       </a>
       <div className="hidden min-w-0 flex-1 items-center gap-x-5 md:flex">
         <Sections items={items} current={current} />
-        <div className="ml-auto flex items-center gap-3 text-sm text-muted-foreground">{aside}</div>
+        <div className="ml-auto flex items-center gap-4 text-sm text-muted-foreground">
+          {status}
+          {aside}
+        </div>
       </div>
 
       <p className="name min-w-0 flex-1 truncate md:hidden">{here?.label}</p>
@@ -94,6 +98,7 @@ export function Masthead({ items, current, aside }: { items: readonly NavItem[];
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
+      {status ? <div className="flex basis-full flex-wrap gap-x-4 gap-y-1 pt-2 md:hidden">{status}</div> : null}
     </header>
   );
 }

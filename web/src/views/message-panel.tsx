@@ -246,14 +246,11 @@ export function MessagePanel({
   index,
   onIndex,
   onClose,
-  onChanged,
 }: {
   items: readonly MessageRef[];
   index: number;
   onIndex: (index: number) => void;
   onClose: () => void;
-  /** Something was answered: lists behind the panel are out of date. */
-  onChanged: () => void;
 }) {
   const item = items[index];
   // Another message from the same sender, looked at without leaving this place in the list.
@@ -294,7 +291,6 @@ export function MessagePanel({
             onPick={setPicked}
             onAnswered={(lines) => {
               setSaid(lines);
-              onChanged();
               if (index < items.length - 1) onIndex(index + 1);
               else onClose();
             }}

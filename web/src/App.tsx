@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
-import { type Days, api, useLoaded } from '@/lib/api.ts';
+import { type Days, api, useLoaded, useOnline } from '@/lib/api.ts';
 import { ago } from '@/lib/format.ts';
 import { useRoute } from '@/lib/route.ts';
-import { Button, Loading, Masthead, Note, Select } from '@/system';
+import { Button, Loading, Masthead, Note, Notice, Select, Wordmark } from '@/system';
 import { ChangesView } from '@/views/changes.tsx';
 import { Decisions, PERIODS } from '@/views/decisions.tsx';
 import { MessagePanel, type MessageRef } from '@/views/message-panel.tsx';
@@ -35,12 +35,21 @@ export function App() {
 
 function Gate({ route }: { route: string[] }) {
   const session = useLoaded('session', (signal) => api.session(signal), 300_000);
+  const online = useOnline();
   if (!session.data) {
-    return session.error ? (
-      <div className="p-6">
-        <Note tone="failure" title="Could not reach sift">
-          <p>{session.error}</p>
-        </Note>
+    // Nothing is kept between visits, so opened while sift is unreachable there is only this to show.
+    return session.error || !online ? (
+      <div className="flex flex-col items-start gap-6 p-6">
+        <Wordmark />
+        {session.error ? (
+          <Note tone="failure" title="sift answered with an error">
+            <p>{session.error}</p>
+          </Note>
+        ) : (
+          <Note title="Offline">
+            <p>sift cannot be reached. This page opens by itself when it can.</p>
+          </Note>
+        )}
       </div>
     ) : null;
   }
@@ -55,10 +64,9 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
   const [days, setDays] = useState<Days>(7);
   // The message panel: the list it was opened from and which item is showing.
   const [open, setOpen] = useState<{ items: MessageRef[]; index: number } | null>(null);
-  // Counts answers given in the panel, so the lists behind it load again.
-  const [epoch, setEpoch] = useState(0);
-  const summary = useLoaded(`summary-${days}-${epoch}`, (signal) => api.summary(days, signal));
-  const waiting = useLoaded(`waiting-${epoch}`, (signal) => api.suggestions(false, signal));
+  const online = useOnline();
+  const summary = useLoaded(`summary-${days}`, (signal) => api.summary(days, signal));
+  const waiting = useLoaded('suggestions-false', (signal) => api.suggestions(false, signal));
   const openMessages = (items: MessageRef[], index: number) => setOpen({ items, index });
   const accounts = summary.data?.accounts ?? [];
   const synced = accounts.map((a) => a.lastSyncedAt).filter((at) => at !== null);
@@ -71,6 +79,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
       <Masthead
         current={section}
         items={SECTIONS.map((to) => ({ to, label: NAMES[to], ...(to === 'suggestions' && waiting.data?.waiting ? { count: waiting.data.waiting } : {}) }))}
+        status={online ? null : <Notice>Offline</Notice>}
         aside={
           <>
             {summary.data ? (
@@ -90,32 +99,26 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
 
       <main className="pb-10">
         {section === 'suggestions' ? (
-          <SuggestionsView onOpen={openMessages} onChanged={waiting.reload} epoch={epoch} />
+          <SuggestionsView onOpen={openMessages} />
         ) : section === 'overview' ? (
           <div className="flex flex-col gap-4">
             {summary.error ? <ErrorNote message={summary.error} /> : null}
             {summary.data ? <Overview data={summary.data} period={period} onOpen={openMessages} /> : summary.loading ? <Loading rows={6} /> : null}
           </div>
         ) : section === 'decisions' ? (
-          <Decisions days={days} onDays={setDays} onOpen={openMessages} epoch={epoch} />
+          <Decisions days={days} onDays={setDays} onOpen={openMessages} />
         ) : section === 'labels' ? (
           <LabelsView />
         ) : section === 'rules' ? (
           <Rules />
         ) : section === 'changes' ? (
-          <ChangesView onOpen={openMessages} epoch={epoch} />
+          <ChangesView onOpen={openMessages} />
         ) : (
           <SettingsView page={route[1]} />
         )}
       </main>
       {open ? (
-        <MessagePanel
-          items={open.items}
-          index={open.index}
-          onIndex={(index) => setOpen({ items: open.items, index })}
-          onClose={() => setOpen(null)}
-          onChanged={() => setEpoch((n) => n + 1)}
-        />
+        <MessagePanel items={open.items} index={open.index} onIndex={(index) => setOpen({ items: open.items, index })} onClose={() => setOpen(null)} />
       ) : null}
     </div>
   );

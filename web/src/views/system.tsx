@@ -22,6 +22,7 @@ import {
   Marked,
   Masthead,
   Note,
+  Notice,
   Sections,
   Select,
   Sheet,
@@ -224,9 +225,16 @@ export function SystemView() {
               { to: 'system/overview', label: 'Overview' },
               { to: 'system/rules', label: 'Rules' },
             ]}
+            status={<Notice>Offline</Notice>}
             aside={<span>On a narrow screen this becomes a menu button and a panel that covers the screen.</span>}
           />
         </div>
+        <Row label="notice" note="A state of sift itself, in the masthead. Plain mends itself; highlighted needs the reader.">
+          <Notice>Offline</Notice>
+          <Notice tone="look" href="/system" action="Reconnect">
+            Google sign-in expired
+          </Notice>
+        </Row>
         <Row label="sections">
           <Sections
             current="system"

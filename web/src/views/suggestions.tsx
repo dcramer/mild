@@ -113,9 +113,9 @@ function SuggestionRow({
 const DOES = [['', 'Anything'] as const, ...ACTIONS.filter(([key]) => key !== 'keep'), ['review', 'Hold it for you'] as const];
 
 /** What sift would do, waiting for the user to say right or wrong. */
-export function SuggestionsView({ onOpen, onChanged, epoch }: { onOpen: OpenMessages; onChanged: () => void; epoch: number }) {
+export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
   const [includeKept, setIncludeKept] = useState(false);
-  const { data, error, loading, reload } = useLoaded(`suggestions-${includeKept}-${epoch}`, (signal) => api.suggestions(includeKept, signal));
+  const { data, error, loading, reload } = useLoaded(`suggestions-${includeKept}`, (signal) => api.suggestions(includeKept, signal));
   const [taught, setTaught] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [label, setLabel] = useState('');
@@ -134,7 +134,6 @@ export function SuggestionsView({ onOpen, onChanged, epoch }: { onOpen: OpenMess
   const answered = (line: string) => {
     setTaught((lines) => [line, ...lines].slice(0, 3));
     reload();
-    onChanged();
   };
   const examples = data ? data.examples.captured + data.examples.pending : 0;
   const facts = data

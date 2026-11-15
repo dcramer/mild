@@ -26,7 +26,8 @@ Tokens and the role classes are in `web/src/index.css`.
 | --- | --- |
 | `Button` | `mark`: what the screen is waiting on, one per screen at most. `ink`: the main action of a sheet or row. `plain`: everything else, filled not outlined. `quiet`: repeated down a list, and ways out. With `href` it is a link. `busy` while a press is being acted on. |
 | `Select`, `Input`, `TextArea`, `Check` | Controls. Filled, with the hand-cut corners. `Select` is for a short list. |
-| `Masthead` | The top of every screen: the name, the sections (highlighted when current) and who is signed in. No bar. |
+| `Masthead` | The top of every screen: the name, the sections (highlighted when current), a `Notice` when there is one, and who is signed in. No bar. |
+| `Notice` | A state of sift itself, true on every screen, in the masthead: sift cannot be reached (plain ink, a pulse: it mends itself), a sign-in has expired (`look`, with a link: the reader mends it). |
 | `SubNav` | The pages within a section, beside the page, the current one marked with a stroke. Like the sections, they are links to an address fragment (`#settings/accounts`), read with `useRoute`. |
 | `Sheet`, `SheetHead` | The surface everything sits on. Rows inside take the class `row`. |
 | `Table`, `Tr`, `Th`, `Td` | Rows of the same kind of thing, one row per item: the default for a list. It has no surface of its own, no background and no frame: on the page it sits flush under the list's heading, divided only by the dashes between rows. `Tr onOpen` makes the whole row pressable. |
@@ -53,6 +54,7 @@ Every part has an answer for a phone, and a new part needs one before it is adde
 | Part | On a narrow screen |
 | --- | --- |
 | `Masthead` | The sections and the signed-in line move into a panel that covers the screen, opened from a menu button. The bar shows the current section's name; a dot on the button means something is waiting in another section. |
+| `Notice` | A line of its own under the masthead's bar. |
 | `SubNav` | A select above the page. |
 | `Panel`, `Dialog` | Cover the screen. |
 | `ListView` | The filter panel opens above the list. |

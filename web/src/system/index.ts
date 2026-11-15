@@ -9,6 +9,7 @@ export { Figure, Figures } from './figures.tsx';
 export { type ActiveFilter, FilterGroup, ListView } from './list-view.tsx';
 export { Masthead, type NavItem, Sections, SubNav } from './nav.tsx';
 export { Note } from './note.tsx';
+export { Notice } from './notice.tsx';
 export { Panel } from './panel.tsx';
 export { Select } from './select.tsx';
 export { Sheet, SheetHead } from './sheet.tsx';
