@@ -127,6 +127,12 @@ Observe mode has run for real on the owner's inbox: sync, the model, suggestions
   - Whether stored message content gets a stricter key than metadata, readable only while someone is signed in.
   - Per-account keys, so one account's data cannot be read with another's sign-in. This goes with keeping people apart.
   - What a lost key costs, and how backup and key rotation work.
+- [ ] **One-click deploy to Vercel and to Cloudflare**, for people who do not want to run a machine. After model sign-in has moved to the dashboard, so the whole setup can happen in a browser. sift today is one long-running process with a SQLite file and credentials on disk, and neither platform offers that, so this needs:
+  - **Storage behind an interface.** The database on a hosted SQLite or Postgres (Cloudflare D1, Turso, Neon) instead of `node:sqlite` on a local file, and tokens and secrets in the platform's secret store instead of files in the home directory.
+  - **Passes on a schedule.** A cron trigger per pass instead of a loop, each pass fitting inside the platform's time limit, or Gmail push through Pub/Sub. One pass at a time per account must still hold.
+  - **Setup in the browser.** No `sift init`: the Google client, the model sign-in and settings all entered in the dashboard, with the first visitor claiming the install safely.
+  - **A public address.** It would no longer sit behind a tailnet, so sign-in is the only gate; review the session and write protections with that in mind, and decide on encryption at rest first.
+  - **Runtime differences.** Cloudflare Workers are not Node: check what sift uses (`node:sqlite`, `node:https`, the model library) against each platform.
 - [ ] Retention: prune old message rows and decisions on a configurable schedule.
 - [ ] Register only the model providers sift supports instead of `pi-ai/providers/all`, which pulls in the AWS and Google SDKs and makes up most of the image's dependencies.
 - [ ] Keep the core image light: measure it and trim it (base image, production dependencies only).
