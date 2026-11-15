@@ -5,6 +5,7 @@ import { ago } from '@/lib/format.ts';
 import { useRoute } from '@/lib/route.ts';
 import { Button, Loading, Masthead, Note, Select } from '@/system';
 import { ChangesView } from '@/views/changes.tsx';
+import { ConceptsView } from '@/views/concepts.tsx';
 import { Decisions } from '@/views/decisions.tsx';
 import { type MessageRef, MessageSheet } from '@/views/message-sheet.tsx';
 import { Overview } from '@/views/overview.tsx';
@@ -37,6 +38,7 @@ const NAMES: Record<(typeof SECTIONS)[number], string> = {
 export function App() {
   const route = useRoute();
   if (route[0] === 'system') return <SystemView />;
+  if (route[0] === 'concepts') return <ConceptsView which={route[1]} />;
   return <Gate route={route} />;
 }
 
