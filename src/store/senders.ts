@@ -90,3 +90,59 @@ export function rememberCorrespondent(db: DatabaseSync, accountId: string, addre
      ON CONFLICT (account_id, address) DO UPDATE SET user_has_written = excluded.user_has_written, checked_at = excluded.checked_at`,
   ).run(accountId, address, userHasWritten ? 1 : 0, now);
 }
+
+export interface KnownSender {
+  accountId: string;
+  address: string;
+  disposition: DecidedDisposition;
+  label: string | null;
+  category: string | null;
+  /** `user` and `correction`: the user said so. `agent`: sift settled on it by itself. */
+  source: string;
+  updatedAt: number;
+  /** Messages recorded from this sender. */
+  messages: number;
+}
+
+/** Every sender sift remembers, most recently changed first. */
+export function listSenders(db: DatabaseSync): KnownSender[] {
+  const rows = db
+    .prepare(
+      `SELECT s.account_id, s.address, s.disposition, s.label, s.category, s.source, s.updated_at,
+              (SELECT count(*) FROM messages m WHERE m.account_id = s.account_id AND m.from_address = s.address) AS messages
+       FROM senders s ORDER BY s.updated_at DESC, s.address`,
+    )
+    .all() as unknown as {
+    account_id: string;
+    address: string;
+    disposition: DecidedDisposition;
+    label: string | null;
+    category: string | null;
+    source: string;
+    updated_at: number;
+    messages: number;
+  }[];
+  return rows.map((r) => ({
+    accountId: r.account_id,
+    address: r.address,
+    disposition: r.disposition,
+    label: r.label,
+    category: r.category,
+    source: r.source,
+    updatedAt: r.updated_at,
+    messages: r.messages,
+  }));
+}
+
+/** Set what happens to a sender's mail, as the user's own choice. */
+export function setSender(db: DatabaseSync, accountId: string, address: string, disposition: DecidedDisposition, now: number = Date.now()): void {
+  db.prepare(
+    `INSERT INTO senders (account_id, address, disposition, source, updated_at) VALUES (?, ?, ?, 'user', ?)
+     ON CONFLICT (account_id, address) DO UPDATE SET disposition = excluded.disposition, source = 'user', updated_at = excluded.updated_at`,
+  ).run(accountId, address.toLowerCase(), disposition, now);
+}
+
+/** Forget a sender, so their mail goes back to being decided afresh. Returns false if they were not known. */
+export function forgetSender(db: DatabaseSync, accountId: string, address: string): boolean {
+  return Number(db.prepare('DELETE FROM senders WHERE account_id = ? AND address = ?').run(accountId, address).changes) > 0;
+}

@@ -11,7 +11,10 @@ import { useTheme } from '@/lib/theme.ts';
 import { Decisions } from '@/views/decisions.tsx';
 import { type MessageRef, MessageSheet } from '@/views/message-sheet.tsx';
 import { Overview } from '@/views/overview.tsx';
+import { ChangesView } from '@/views/changes.tsx';
 import { Rules } from '@/views/rules.tsx';
+import { SendersView } from '@/views/senders.tsx';
+import { SettingsView } from '@/views/settings.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
 
 const PERIODS = [
@@ -50,6 +53,9 @@ export function App() {
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="decisions">Decisions</TabsTrigger>
             <TabsTrigger value="rules">Rules</TabsTrigger>
+            <TabsTrigger value="senders">Senders</TabsTrigger>
+            <TabsTrigger value="changes">Changes</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
           <p className="hidden min-w-0 flex-1 truncate text-right text-[13px] text-muted-foreground md:block">
             {summary.data
@@ -59,7 +65,7 @@ export function App() {
               : ''}
           </p>
           <div className="ml-auto flex items-center gap-1 py-2 md:ml-0">
-            {tab === 'rules' || tab === 'suggestions' ? null : (
+            {tab !== 'overview' && tab !== 'decisions' ? null : (
               <Picker
                 label="Period"
                 value={String(days) as (typeof PERIODS)[number][0]}
@@ -91,6 +97,15 @@ export function App() {
         </TabsContent>
         <TabsContent value="rules">
           <Rules />
+        </TabsContent>
+        <TabsContent value="senders">
+          <SendersView />
+        </TabsContent>
+        <TabsContent value="changes">
+          <ChangesView onOpen={setOpen} />
+        </TabsContent>
+        <TabsContent value="settings">
+          <SettingsView />
         </TabsContent>
       </main>
       <MessageSheet target={open} onClose={() => setOpen(null)} />

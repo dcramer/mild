@@ -147,7 +147,7 @@ describe('triage queue', () => {
       connect: () => ({ api: { ...api(), listHistory: async () => ({ additions: [{ id: 'news', labelIds: ['INBOX'] }], historyId: '9' }) }, mailbox }),
     });
     db.exec('DELETE FROM decisions');
-    expect(listUndecided(db, ACCOUNT, 10)).toEqual([
+    expect(listUndecided(db, ACCOUNT, 10).map((queued) => queued.facts)).toEqual([
       {
         accountId: ACCOUNT,
         messageId: 'news',

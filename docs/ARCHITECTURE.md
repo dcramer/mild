@@ -153,10 +153,27 @@ OAuth tokens are kept in files beside the database, not in it. pi-durable keeps 
 
 ### Dashboard
 
-`sift run` serves a JSON API (`src/dashboard/`) and the static web app built from `web/`, in the same process that sorts mail. `sift dashboard` serves them alone.
+The dashboard is where the user watches sift, teaches it and manages it. `sift run` serves it (a JSON API in `src/dashboard/` and the static web app built from `web/`) from the same process that sorts mail; `sift dashboard` serves it alone.
 
-- **It never touches the mailbox.** Lint forbids it importing Gmail or action code. The one thing it can change is what sift has been taught: `POST /api/feedback`. That request must carry the page's own Origin, a JSON content type and a custom header, which another website cannot send without a preflight the server never approves. There is no token yet; a browser extension will need one.
-- **No login, so reach is the control.** It listens on localhost; on a server, `dashboard.host` adds one of the machine's addresses or `all` of them (Tailscale is the intended case). Beyond localhost it answers to any name or address that is this machine (its addresses, hostname and Tailscale name) and rejects every other Host, which blocks DNS rebinding. It is never meant for the public internet.
+**Who may use it**
+
+- **Where it listens.** localhost by default; `dashboard.host = "all"` (or one address) on a server. Beyond localhost it answers only to names and addresses that are this machine, which blocks DNS rebinding.
+- **Access key.** Whenever it listens beyond localhost, every request must carry a secret as a cookie. `sift run` and `sift status` print links containing the key; opening one sets the cookie (HttpOnly, SameSite=Strict, a year) and drops the key from the address. The key is in `dashboard-key` in the home directory.
+- **Writes** must also come from the dashboard's own page: its Origin, a JSON content type and a custom header, which another website cannot send without a preflight the server never approves.
+- Signing viewers in with Google is not possible on a plain hostname or address: Google redirects only to HTTPS on a real domain, and needs a separate "Web" OAuth client. It would work behind `tailscale serve`, where Tailscale already identifies the viewer.
+
+**What it may do**
+
+Everything that manages sift: answer suggestions, switch between observing and acting, choose the model and interval, edit the guidelines, set what happens to each kind of mail, add and remove rules, change or forget senders, undo a mailbox change, pull in older mail, and trigger a check.
+
+- It changes the database and `sift.toml` directly. A running sift re-reads its settings before every pass, and a change wakes it, so nothing needs restarting.
+- It never imports Gmail, the executor or the daemon (lint enforces this). The few things that need them (undo, pulling in older mail, check now) are passed in by the process as `Controls` (`src/dashboard/controls.ts`), so every mailbox change still goes through the executor and the audit log.
+- Connecting a Gmail account and signing in to a model provider are still done with `sift init`; both are browser sign-ins that need a terminal today.
+
+**Older mail.** Pulling in the last N days records those messages as suggest-only. They are decided on the next pass and are never acted on, even when sift is acting on new mail.
+
+**The page**
+
 - **Untrusted content.** Subjects and sender names come from email. React renders them as text, and the page is served with a content security policy that allows no inline script, no inline style and nothing from another origin.
 - **Stack.** shadcn/ui components (on Base UI) with Tailwind, and Recharts for the chart. The components live in `web/src/components/ui` as generated source. Two of them needed a change for the content security policy: `chart.tsx` no longer renders an inline `<style>`, and Base UI's style injection is turned off in `main.tsx` with its one rule moved into `index.css`. Re-check both when updating components.
 - **Look.** Monochrome with hairline borders and Geist type. The only colour is a yellow highlighter, used for the headline figure, anything waiting on the user, undecided mail and search matches. Tiers are drawn as one ink that thins as cost rises, because they are an ordered cascade.

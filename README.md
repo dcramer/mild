@@ -83,12 +83,17 @@ Using a ChatGPT subscription from a third-party tool is not something OpenAI doc
 
 `sift run` serves it and prints its addresses. The page is built automatically the first time and whenever its sources change.
 
-It has no login, so who can read it is decided by where it listens: this machine only by default. On a server, `init` sets `dashboard.host = "all"` in `sift.toml` so it listens on every network the machine is on; a single address there narrows it. It then answers to any of that machine's own names and addresses, including its Tailscale name, and to nothing else. Use Tailscale for a server; do not put it on the public internet.
+On a server, `init` sets `dashboard.host = "all"` so it listens on every network the machine is on. It then requires an access key: `sift run` prints links such as `http://yourserver:8787/?key=…`. Open one once in each browser; after that the plain address works there. `sift status` prints the link again. Use Tailscale to reach a server; do not put the dashboard on the public internet.
+
+You manage sift from here:
 
 - **Suggestions:** what sift would do, grouped by sender. Answer "Right" or say what kind of mail it is; that settles the sender from then on. Each message you answer for is stored whole, as an example to test and train sift with.
 - **Overview:** decisions per day by tier, how much was decided without a model, model cost, the backlog and the most frequent senders.
 - **Decisions:** every decision, searchable by subject or sender and filterable by tier and outcome. Choosing a row shows that message's full history: each decision, its reason and cost, and each mailbox change.
-- **Rules:** each rule, what it does, and how often and how recently it matched.
+- **Rules:** add and remove rules; see how often and how recently each matched.
+- **Senders:** every sender sift remembers. Change what happens to their mail, or forget them.
+- **Changes:** everything sift has done in Gmail, each with Undo.
+- **Settings:** switch between observing and acting, choose the model and how often to check, pull in older mail to teach with, set what happens to each kind of mail, and edit your guidelines. Changes apply to the running sift straight away.
 
 ![Suggestions](docs/images/suggestions.png)
 

@@ -11,6 +11,7 @@ import {
   type Suggestions,
   type Summary,
 } from './types.ts';
+import type { ChangeRow } from './types.ts';
 
 export type { DecisionRow, MessageDetail, RuleSummary, StageKey, Summary } from './types.ts';
 
@@ -356,4 +357,38 @@ export function listSuggestions(db: DatabaseSync, options: { includeKept?: boole
     waiting,
     accuracy: { reviewed, right },
   };
+}
+
+/** Changes sift made to the mailbox, newest first, with the message each was about. */
+export function listChanges(db: DatabaseSync, limit: number): ChangeRow[] {
+  const rows = db
+    .prepare(
+      `SELECT a.id, a.account_id, a.message_id, a.type, a.status, a.error, a.created_at, a.payload_json, m.subject, m.from_address
+       FROM actions a LEFT JOIN messages m ON m.account_id = a.account_id AND m.id = a.message_id
+       WHERE a.message_id IS NOT NULL ORDER BY a.id DESC LIMIT ?`,
+    )
+    .all(limit) as unknown as {
+    id: number;
+    account_id: string;
+    message_id: string;
+    type: string;
+    status: string;
+    error: string | null;
+    created_at: number;
+    payload_json: string;
+    subject: string | null;
+    from_address: string | null;
+  }[];
+  return rows.map((r) => ({
+    id: r.id,
+    accountId: r.account_id,
+    messageId: r.message_id,
+    type: r.type,
+    status: r.status,
+    error: r.error,
+    createdAt: r.created_at,
+    subject: r.subject,
+    fromAddress: r.from_address,
+    undoOf: (JSON.parse(r.payload_json) as { undoOf?: number }).undoOf ?? null,
+  }));
 }

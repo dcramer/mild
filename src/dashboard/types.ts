@@ -143,3 +143,39 @@ export interface FeedbackRequest {
   scope: 'sender' | 'message';
   decisionId?: number;
 }
+
+/** GET /api/manage: everything the Settings view shows. */
+export interface ManageState {
+  settings: { act: boolean; interval: number; model: string | null };
+  guidelines: string;
+  activity: { sorting: boolean; lastPassAt: number | null; problems: string[] };
+  accounts: { id: string; email: string; lastSyncedAt: number | null }[];
+  /** Per account, in order. */
+  categories: Record<string, { key: string; name: string; description: string; disposition: string; label: string | null }[]>;
+}
+
+export interface SenderRow {
+  accountId: string;
+  address: string;
+  disposition: string;
+  label: string | null;
+  category: string | null;
+  source: string;
+  updatedAt: number;
+  messages: number;
+}
+
+/** A change sift made to the mailbox. */
+export interface ChangeRow {
+  id: number;
+  accountId: string;
+  messageId: string;
+  type: string;
+  status: string;
+  error: string | null;
+  createdAt: number;
+  subject: string | null;
+  fromAddress: string | null;
+  /** For an undo, the change it reversed. */
+  undoOf: number | null;
+}

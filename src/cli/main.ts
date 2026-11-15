@@ -1,11 +1,14 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
+import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { type MessageAction, type Outcome, execute, undo } from '../actions/executor.ts';
 import { type Config, loadConfig, saveSettings } from '../config.ts';
+import { backfill } from '../daemon/backfill.ts';
+import type { Activity, Controls } from '../dashboard/controls.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
 import { ensureWebBuilt } from './web-build.ts';
-import { runLoop, runOnce } from '../daemon/run.ts';
+import { type PassResult, type Wake, createWake, runLoop, runOnce } from '../daemon/run.ts';
 import { syncAccount } from '../daemon/sync.ts';
 import { createGmailApi } from '../gmail/api.ts';
 import { authorize, clientFor, hasClientSecrets, installClient, loadClientSecrets, saveRefreshToken } from '../gmail/auth.ts';
@@ -70,7 +73,7 @@ function status(): void {
     ['Model', settings.model ?? paint.dim('none')],
     ['Mode', `${settings.act ? 'acting on decisions' : 'observing only'}${paint.dim(` · every ${settings.interval}s`)}`],
     ['Guidance', existsSync(config.guidelinesPath) ? paint.path(config.guidelinesPath) : paint.dim('none written')],
-    ['Dashboard', `${dashboardUrls(settings)[0]}${paint.dim(settings.dashboardHost ? '' : ' · this machine only')}`],
+    ['Dashboard', `${dashboardLinks(config)[0]}${paint.dim(settings.dashboardHost ? '' : ' · this machine only')}`],
   ]);
   ui.blank();
   const questions = count('questions', 'WHERE answered_at IS NULL');
@@ -273,23 +276,84 @@ async function undoCommand(args: string[]): Promise<void> {
   }
 }
 
+/** The secret in the dashboard's access link, created the first time it is needed. */
+function dashboardKey(config: Config): string {
+  if (existsSync(config.dashboardKeyPath)) return readFileSync(config.dashboardKeyPath, 'utf8').trim();
+  const key = randomBytes(24).toString('base64url');
+  writeFileSync(config.dashboardKeyPath, key, { mode: 0o600 });
+  return key;
+}
+
+/** The dashboard's addresses under the current settings, with the access key when one is needed. */
+function dashboardLinks(config: Config, port?: number): string[] {
+  const urls = dashboardUrls(config.settings, port);
+  return config.settings.dashboardHost ? urls.map((url) => `${url}/?key=${dashboardKey(config)}`) : urls;
+}
+
+/** What the dashboard may ask this process to do. See `Controls`. */
+function buildControls(config: Config, db: ReturnType<typeof openDb>, live: { wake?: Wake; activity: Activity }): Controls {
+  const current = () => loadConfig().settings;
+  return {
+    settings: () => {
+      const s = current();
+      return { act: s.act, interval: s.interval, model: s.model ?? null };
+    },
+    saveSettings: (change) => {
+      const { model: _old, ...rest } = current();
+      const model = change.model === undefined ? current().model : (change.model ?? undefined);
+      saveSettings(config, {
+        ...rest,
+        ...(change.act === undefined ? {} : { act: change.act }),
+        ...(change.interval === undefined ? {} : { interval: change.interval }),
+        ...(model ? { model } : {}),
+      });
+      live.wake?.now();
+    },
+    models: async () => (await openModels(config).getAvailable()).map((m) => `${m.provider}/${m.id}`),
+    guidelines: () => (existsSync(config.guidelinesPath) ? readFileSync(config.guidelinesPath, 'utf8') : ''),
+    saveGuidelines: (text) => writeFileSync(config.guidelinesPath, text, { mode: 0o600 }),
+    undo: async (actionId) => {
+      const action = getAction(db, actionId);
+      if (!action) throw new Error(`There is no change #${actionId}.`);
+      const outcome = await undo({ db, mailbox: mailboxFor(config, action.accountId) }, actionId);
+      if (outcome.status === 'done') return 'Reversed.';
+      if (outcome.status === 'skipped') return 'It had already been put back by hand.';
+      throw new Error(outcome.reason);
+    },
+    backfill: async (days) => {
+      const secrets = loadClientSecrets(config);
+      let added = 0;
+      for (const account of listAccounts(db)) added += await backfill(db, createGmailApi(clientFor(config, secrets, account.email)), account.id, days);
+      return added;
+    },
+    checkNow: () => live.wake?.now(),
+    activity: () => live.activity,
+  };
+}
+
 /**
  * Start serving the dashboard from this process and say where it is. Used by `run`, so one process
  * keeps sift online, and by `dashboard` on its own.
  */
-async function serveDashboard(config: Config, db: ReturnType<typeof openDb>, options: { port?: number; host?: string } = {}): Promise<() => void> {
+async function serveDashboard(
+  config: Config,
+  db: ReturnType<typeof openDb>,
+  options: { port?: number; host?: string; controls: Controls },
+): Promise<() => void> {
   const { settings } = config;
   const port = options.port ?? settings.dashboardPort;
-  // --host replaces the setting: a container listens on 0.0.0.0 and its port mapping decides who can reach it.
+  // --host replaces the setting: a container listens on every interface and its port mapping decides who can reach it.
   const listen = options.host ? [options.host] : await listenAddresses(settings);
-  // Beyond localhost, answer to any name or address that is this machine, and to nothing else.
   const beyondLocalhost = listen.some((address) => address !== '127.0.0.1');
-  await ensureWebBuilt();
+  // Beyond localhost, answer to any name or address that is this machine and to nothing else, and require the access key.
   const allowedHosts = beyondLocalhost
     ? [...machineNames(), ...(settings.dashboardHost && settings.dashboardHost !== 'all' ? [settings.dashboardHost] : [])]
     : [];
+  await ensureWebBuilt();
 
-  const servers = listen.map(() => createDashboardServer(db, { allowedHosts }));
+  const servers = listen.map(() =>
+    createDashboardServer(db, { allowedHosts, controls: options.controls, ...(beyondLocalhost ? { accessKey: dashboardKey(config) } : {}) }),
+  );
   await Promise.all(
     servers.map(
       (server, index) =>
@@ -306,9 +370,9 @@ async function serveDashboard(config: Config, db: ReturnType<typeof openDb>, opt
     ),
   );
 
-  const [first, ...others] = dashboardUrls(settings, port);
+  const [first, ...others] = beyondLocalhost ? dashboardLinks(config, port) : dashboardUrls(settings, port);
   ui.fields([['Dashboard', paint.bold(first ?? '')], ...others.map((url) => ['', url] as const)]);
-  if (beyondLocalhost) ui.info('No login: anyone on those networks can read it.');
+  if (beyondLocalhost) ui.info('Open one of these once in each browser; the key in the link is what lets it in.');
   return () => {
     for (const server of servers) {
       server.close();
@@ -330,7 +394,9 @@ async function dashboard(args: string[]): Promise<void> {
   const config = loadConfig();
   const db = openDb(config.dbPath);
   ui.heading('dashboard');
-  const stop = await serveDashboard(config, db, { ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) });
+  const controls = buildControls(config, db, { activity: { sorting: false, lastPassAt: null, problems: [] } });
+  const stop = await serveDashboard(config, db, { controls, ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) });
+  ui.info('Only the dashboard is running. `sift run` also sorts mail.');
   ui.blank();
   await new Promise<void>((resolve) => {
     process.once('SIGINT', resolve);
@@ -428,46 +494,83 @@ async function run(args: string[]): Promise<void> {
     },
   });
   if (values.act && values.observe) throw new Error('Choose one of --act and --observe.');
+  const intervalFlag = values.interval === undefined ? undefined : Number(values.interval);
+  if (intervalFlag !== undefined && (!Number.isFinite(intervalFlag) || intervalFlag < 5)) throw new Error('--interval must be at least 5 seconds.');
   const config = loadConfig();
-  const interval = values.interval === undefined ? config.settings.interval : Number(values.interval);
-  if (!Number.isFinite(interval) || interval < 5) throw new Error('--interval must be at least 5 seconds.');
-  const act = values.observe ? false : values.act || config.settings.act;
-  const modelSpec = config.settings.model;
 
   const db = openDb(config.dbPath);
   try {
     if (listAccounts(db).length === 0) throw new Error('No Gmail account is connected yet. Run `sift init`.');
     const secrets = loadClientSecrets(config);
-    const modelTier = modelSpec ? await openModelTier(config, modelSpec) : undefined;
-    const options = {
-      act,
-      ...(modelTier ? { model: modelTier } : {}),
-      connect: (account: Account) => {
-        const client = clientFor(config, secrets, account.email);
-        return { api: createGmailApi(client), mailbox: createGmailMailbox(client) };
-      },
-      log: (line: string) => ui.plain(`${paint.dim(new Date().toLocaleTimeString(undefined, { hour12: false }))}  ${line}`),
+    const log = (line: string) => ui.plain(`${paint.dim(new Date().toLocaleTimeString(undefined, { hour12: false }))}  ${line}`);
+
+    // Settings are read again before every pass, so changes made in the dashboard or sift.toml apply
+    // without a restart. A flag given here wins for as long as this process runs.
+    const tiers = new Map<string, Awaited<ReturnType<typeof openModelTier>> | null>();
+    let announced = '';
+    const next = async () => {
+      const { settings } = loadConfig();
+      const act = values.observe ? false : values.act || settings.act;
+      const spec = settings.model;
+      if (spec && !tiers.has(spec)) {
+        try {
+          tiers.set(spec, await openModelTier(config, spec));
+        } catch (error) {
+          tiers.set(spec, null);
+          ui.fail(error instanceof Error ? error.message : String(error));
+        }
+      }
+      const tier = spec ? tiers.get(spec) : null;
+      const state = `${act ? 'acting' : 'observing'} · ${spec ?? 'no model'}`;
+      if (announced !== '' && announced !== state) log(`Now ${state}`);
+      announced = state;
+      return {
+        act,
+        ...(tier ? { model: tier } : {}),
+        connect: (account: Account) => {
+          const client = clientFor(config, secrets, account.email);
+          return { api: createGmailApi(client), mailbox: createGmailMailbox(client) };
+        },
+        log,
+        intervalMs: (intervalFlag ?? settings.interval) * 1000,
+      };
     };
-    ui.heading(act ? 'acting' : 'observing', `${modelSpec ?? 'no model'} · every ${interval}s`);
-    if (!act) ui.info(`Gmail is not changed until you set act = true in ${paint.path(config.settingsPath)}`);
+
+    const first = await next();
+    ui.heading(first.act ? 'acting' : 'observing', `${config.settings.model ?? 'no model'} · every ${first.intervalMs / 1000}s`);
+    if (!first.act) ui.info('Gmail is not changed while sift is observing. Switch it in the dashboard, under Settings.');
 
     if (values.once) {
       ui.blank();
-      const results = await runOnce(db, options);
+      const results = await runOnce(db, first);
       if (results.some((r) => r.error)) process.exitCode = 1;
       return;
     }
+
     // One process keeps sift online: the same one that sorts mail serves the dashboard.
+    const wake = createWake();
+    const activity: Activity = { sorting: true, lastPassAt: null, problems: [] };
     const port = portOption(values.port);
     const stopDashboard = values['no-dashboard']
       ? () => {}
-      : await serveDashboard(config, db, { ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) });
+      : await serveDashboard(config, db, {
+          controls: buildControls(config, db, { wake, activity }),
+          ...(port === undefined ? {} : { port }),
+          ...(values.host ? { host: values.host } : {}),
+        });
     ui.blank();
     const stop = new AbortController();
     process.once('SIGINT', () => stop.abort());
     process.once('SIGTERM', () => stop.abort());
     try {
-      await runLoop(db, { ...options, intervalMs: interval * 1000, signal: stop.signal });
+      await runLoop(db, next, {
+        signal: stop.signal,
+        wake,
+        onPass: (results: PassResult[]) => {
+          activity.lastPassAt = Date.now();
+          activity.problems = results.flatMap((r) => (r.error ? [`${r.email}: ${r.error}`] : []));
+        },
+      });
     } finally {
       stopDashboard();
     }

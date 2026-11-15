@@ -13,14 +13,13 @@ Built: the Suggestions view, answers by sender ("Right" or "No, it is <category>
 - [ ] Use it on real mail and see what is awkward.
 - [ ] Answer for one message without teaching the sender (the API supports it; the view does not offer it).
 - [ ] Correct mail sift already kept, from the Decisions view and the message panel.
-- [ ] Show what has been taught and let it be undone: a Senders view over `senders`, with source and when.
 - [ ] Use examples to test sift: replay the model over `examples` and report accuracy per category (`evals/`).
 - [ ] Use examples to teach the model: pick relevant ones as few-shot examples in the prompt.
 - [ ] Turn repeated corrections into a suggested guideline or rule, shown to the user before it is saved.
 - [ ] Re-decide waiting suggestions when a category setting or the guidelines change.
 - [ ] Accuracy per tier and per category on the Overview; say when a sender or category has been right often enough to trust.
 - [ ] Trust in pieces: act on this sender or this category while everything else stays a suggestion, instead of one global `act` switch.
-- [ ] A token for writes, which a Chrome extension will need (the page itself is recognised by its Origin).
+- [ ] Let a Chrome extension call the API: it cannot use the page's cookie or Origin, so it needs its own token.
 - [ ] Decide how long examples are kept and add a way to delete them; they hold full message content.
 
 ## Setup
@@ -58,16 +57,19 @@ Later, only if an operator-facing agent is built (one you talk to: "why did you 
 
 ## Dashboard
 
-A React app in `web/` (shadcn/ui on Base UI, Tailwind, Recharts) served by `sift dashboard`.
+The dashboard manages sift: suggestions, settings, kinds of mail, guidelines, rules, senders, changes with undo, and pulling in older mail. Behind an access key when it listens beyond localhost.
 
-- [ ] Offer `tailscale serve` as the way to reach the dashboard from other devices: sift stays on localhost and Tailscale adds HTTPS and identity. Today it listens on the Tailscale address over plain HTTP.
-- [ ] `pnpm dev:web` proxies to localhost:8787; make it follow `dashboard.port`.
-- [ ] Undo a change, answer a question, and edit rules and categories from the dashboard (see Teaching loop for the write path). The CLI commands for these are stopgaps.
-- [ ] Senders view: per-sender volume, what sift does with them, and a way to see their messages.
-- [ ] Rule detail: the messages a rule matched, hits over time, rules that never fire.
-- [ ] Live view of what the agent is doing once the agent exists (current run, tool calls, cost so far).
-- [ ] Split the bundle (it is about 790 kB, mostly Recharts) if load time matters.
+- [ ] Connect a Gmail account and sign in to a model provider from the dashboard. Both are browser sign-ins that still need `sift init` in a terminal.
+- [ ] Identify the viewer instead of sharing one key: Tailscale identity behind `tailscale serve` first; Google sign-in needs HTTPS on a real domain and a separate Web OAuth client.
+- [ ] Offer `tailscale serve` as the way to reach the dashboard from other devices: sift stays on localhost and Tailscale adds HTTPS. Today it listens over plain HTTP, so the key travels in the clear on the local network.
+- [ ] Rotate the access key from the dashboard.
+- [ ] Edit a category's label, name and description; add and remove categories.
+- [ ] Reorder rules; rules with more than one condition and with exceptions.
+- [ ] Answer queued questions.
+- [ ] Per-sender and per-rule detail: the messages matched, hits over time, rules that never fire.
+- [ ] Split the bundle (about 800 kB, mostly Recharts) if load time matters.
 - [ ] Keep filters, tab and open message in the URL so a view can be bookmarked.
+- [ ] `pnpm dev:web` proxies to localhost:8787; make it follow `dashboard.port` and carry the access key.
 - [ ] Revisit Vercel's UI SDK if shadcn ships a base built on it (evaluated 2026-11-15, not adopted; see docs/ARCHITECTURE.md).
 
 ## Inference tier

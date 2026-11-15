@@ -13,28 +13,38 @@ interface Row {
   cc_json: string;
   headers_json: string;
   labels_json: string;
+  observe_only: number;
+}
+
+export interface QueuedMessage {
+  facts: MessageFacts;
+  /** Pulled in from before sift was connected: suggest, never act. */
+  observeOnly: boolean;
 }
 
 /** Recorded messages that have no decision yet, oldest first, rebuilt as triage input. This is the triage queue. */
-export function listUndecided(db: DatabaseSync, accountId: string, limit: number): MessageFacts[] {
+export function listUndecided(db: DatabaseSync, accountId: string, limit: number): QueuedMessage[] {
   const rows = db
     .prepare(
-      `SELECT id, thread_id, from_address, from_domain, from_name, received_at, subject, to_json, cc_json, headers_json, labels_json
+      `SELECT id, thread_id, from_address, from_domain, from_name, received_at, subject, to_json, cc_json, headers_json, labels_json, observe_only
        FROM messages m
        WHERE account_id = ? AND NOT EXISTS (SELECT 1 FROM decisions d WHERE d.account_id = m.account_id AND d.message_id = m.id)
        ORDER BY received_at, id LIMIT ?`,
     )
     .all(accountId, limit) as unknown as Row[];
   return rows.map((r) => ({
-    accountId,
-    messageId: r.id,
-    threadId: r.thread_id,
-    from: { address: r.from_address, domain: r.from_domain, ...(r.from_name ? { name: r.from_name } : {}) },
-    to: JSON.parse(r.to_json) as Address[],
-    cc: JSON.parse(r.cc_json) as Address[],
-    subject: r.subject,
-    labelIds: JSON.parse(r.labels_json) as string[],
-    headers: JSON.parse(r.headers_json) as Record<string, string>,
-    receivedAt: r.received_at,
+    observeOnly: r.observe_only === 1,
+    facts: {
+      accountId,
+      messageId: r.id,
+      threadId: r.thread_id,
+      from: { address: r.from_address, domain: r.from_domain, ...(r.from_name ? { name: r.from_name } : {}) },
+      to: JSON.parse(r.to_json) as Address[],
+      cc: JSON.parse(r.cc_json) as Address[],
+      subject: r.subject,
+      labelIds: JSON.parse(r.labels_json) as string[],
+      headers: JSON.parse(r.headers_json) as Record<string, string>,
+      receivedAt: r.received_at,
+    },
   }));
 }

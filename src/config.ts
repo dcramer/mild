@@ -41,6 +41,8 @@ export interface Config {
   deviceIdPath: string;
   /** How far `sift init` has got. */
   setupStatePath: string;
+  /** The secret in the dashboard's access link. */
+  dashboardKeyPath: string;
   settings: Settings;
 }
 
@@ -67,6 +69,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     modelAuthPath: join(home, 'model-auth.json'),
     deviceIdPath: join(home, 'device-id'),
     setupStatePath: join(home, 'setup.json'),
+    dashboardKeyPath: join(home, 'dashboard-key'),
     settings: existsSync(settingsPath) ? parseSettings(readFileSync(settingsPath, 'utf8'), settingsPath) : { ...DEFAULT_SETTINGS },
   };
 }

@@ -81,19 +81,45 @@ function describe(result: PassResult, act: boolean): string | null {
   return parts.length > 0 ? parts.join('; ') : null;
 }
 
-/** Run passes until `signal` aborts. Waits `intervalMs` between the end of one pass and the start of the next. */
-export async function runLoop(db: DatabaseSync, options: RunOptions & { intervalMs: number; signal: AbortSignal }): Promise<void> {
-  while (!options.signal.aborted) {
-    await runOnce(db, options);
-    await new Promise<void>((resolve) => {
-      if (options.signal.aborted) return resolve();
-      const timer = setTimeout(done, options.intervalMs);
-      function done() {
-        clearTimeout(timer);
-        options.signal.removeEventListener('abort', done);
-        resolve();
-      }
-      options.signal.addEventListener('abort', done, { once: true });
-    });
+/** Lets something outside the loop cut a wait short, for "check now". */
+export interface Wake {
+  /** Resolve after `ms`, or sooner if `now()` is called or `signal` aborts. */
+  wait: (ms: number, signal: AbortSignal) => Promise<void>;
+  now: () => void;
+}
+
+export function createWake(): Wake {
+  let wakeUp: (() => void) | null = null;
+  return {
+    now: () => wakeUp?.(),
+    wait: (ms, signal) =>
+      new Promise<void>((resolve) => {
+        if (signal.aborted) return resolve();
+        const done = () => {
+          clearTimeout(timer);
+          signal.removeEventListener('abort', done);
+          wakeUp = null;
+          resolve();
+        };
+        const timer = setTimeout(done, ms);
+        wakeUp = done;
+        signal.addEventListener('abort', done, { once: true });
+      }),
+  };
+}
+
+/**
+ * Run passes until `signal` aborts. `next` is asked before every pass, so a change to the settings
+ * (acting or observing, the model, the interval) takes effect on the following pass without a restart.
+ */
+export async function runLoop(
+  db: DatabaseSync,
+  next: () => Promise<RunOptions & { intervalMs: number }>,
+  control: { signal: AbortSignal; wake: Wake; onPass?: (results: PassResult[]) => void },
+): Promise<void> {
+  while (!control.signal.aborted) {
+    const options = await next();
+    control.onPass?.(await runOnce(db, options));
+    await control.wake.wait(options.intervalMs, control.signal);
   }
 }

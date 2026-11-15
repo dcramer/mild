@@ -89,18 +89,19 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
   }
 
   const stages = stagesFor(deps, account.id);
-  for (const facts of listUndecided(db, account.id, limit)) {
+  for (const { facts, observeOnly } of listUndecided(db, account.id, limit)) {
+    const act = mailbox !== null && !observeOnly;
     const started = performance.now();
     const decision = await triage(stages, facts);
     const decisionId = recordDecision(db, account.id, facts.messageId, decision, {
-      mode: mailbox ? 'act' : 'observe',
+      mode: act ? 'act' : 'observe',
       durationMs: Math.round(performance.now() - started),
       now: now(),
     });
     if (decision.ruleId) countRuleHit(db, decision.ruleId);
     if (decision.stage === 'agent' && learnSender(db, account.id, facts.from.address, now())) report.learned++;
     report.decided[decision.disposition]++;
-    if (mailbox) await carryOut(decisionId, facts.messageId, decision, mailbox);
+    if (act) await carryOut(decisionId, facts.messageId, decision, mailbox);
   }
   return report;
 }

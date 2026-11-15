@@ -1,16 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type {
+  ChangeRow,
   DecisionRow,
   FeedbackRequest,
+  ManageState,
   MessageDetail,
   RuleSummary,
+  SenderRow,
   StageKey,
   SuggestionGroup,
   Suggestions,
   Summary,
 } from '../../../src/dashboard/types.ts';
-import type { DecisionRow, FeedbackRequest, MessageDetail, RuleSummary, Suggestions, Summary } from '../../../src/dashboard/types.ts';
+import type {
+  ChangeRow,
+  DecisionRow,
+  FeedbackRequest,
+  ManageState,
+  MessageDetail,
+  RuleSummary,
+  SenderRow,
+  Suggestions,
+  Summary,
+} from '../../../src/dashboard/types.ts';
 
 export type Days = 1 | 7 | 30 | 90;
 
@@ -36,6 +49,14 @@ async function get<T>(path: string, params: Record<string, string | number>, sig
   return (await response.json()) as T;
 }
 
+/** A change. The headers mark it as coming from this page, which the server requires of every write. */
+async function post<T = unknown>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-sift': '1' }, body: JSON.stringify(body) });
+  const result = (await response.json()) as T & { error?: string };
+  if (!response.ok) throw new Error(result.error ?? `The server answered ${response.status}.`);
+  return result;
+}
+
 export const api = {
   summary: (days: Days, signal: AbortSignal) => get<Summary>('/api/summary', { days }, signal),
   decisions: (q: DecisionQuery, signal: AbortSignal) =>
@@ -44,16 +65,21 @@ export const api = {
   rules: (signal: AbortSignal) => get<{ rules: RuleSummary[] }>('/api/rules', {}, signal),
   suggestions: (includeKept: boolean, signal: AbortSignal) => get<Suggestions>('/api/suggestions', includeKept ? { kept: 1 } : {}, signal),
   /** Tell sift whether a suggestion was right. Resolves with what it learned. */
-  feedback: async (answer: FeedbackRequest): Promise<{ reviewed: number; taught: string | null }> => {
-    const response = await fetch('/api/feedback', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-sift': '1' },
-      body: JSON.stringify(answer),
-    });
-    const body = (await response.json()) as { reviewed: number; taught: string | null; error?: string };
-    if (!response.ok) throw new Error(body.error ?? `The server answered ${response.status}.`);
-    return body;
-  },
+  feedback: (answer: FeedbackRequest) => post<{ reviewed: number; taught: string | null }>('/api/feedback', answer),
+  manage: (signal: AbortSignal) => get<ManageState>('/api/manage', {}, signal),
+  models: (signal: AbortSignal) => get<{ models: string[]; error?: string }>('/api/models', {}, signal),
+  senders: (signal: AbortSignal) => get<{ senders: SenderRow[] }>('/api/senders', {}, signal),
+  changes: (signal: AbortSignal) => get<{ changes: ChangeRow[] }>('/api/changes', {}, signal),
+  saveSettings: (change: { act?: boolean; interval?: number; model?: string | null }) => post('/api/settings', change),
+  saveGuidelines: (text: string) => post('/api/guidelines', { text }),
+  setCategory: (accountId: string, key: string, disposition: string) => post('/api/categories', { accountId, key, disposition }),
+  addRule: (rule: { accountId: string; match: Record<string, string>; disposition: string; label?: string }) => post('/api/rules', rule),
+  removeRule: (id: string) => post('/api/rules/remove', { id }),
+  setSender: (accountId: string, address: string, disposition: string) => post('/api/senders', { accountId, address, disposition }),
+  forgetSender: (accountId: string, address: string) => post('/api/senders', { accountId, address, forget: true }),
+  undo: (id: number) => post<{ message: string }>('/api/undo', { id }),
+  backfill: (days: number) => post<{ added: number }>('/api/backfill', { days }),
+  checkNow: () => post('/api/check', {}),
 };
 
 export interface Loaded<T> {
@@ -98,4 +124,22 @@ export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Prom
   }, [key, load, refreshMs, nonce]);
 
   return { ...state, reload: () => setNonce((n) => n + 1) };
+}
+
+/** Run a change, tracking whether it is in flight and what went wrong. */
+export function useAction(): { busy: boolean; error: string | null; run: (work: () => Promise<unknown>, then?: () => void) => void } {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return {
+    busy,
+    error,
+    run: (work, then) => {
+      setBusy(true);
+      setError(null);
+      work()
+        .then(() => then?.())
+        .catch((failure: unknown) => setError(failure instanceof Error ? failure.message : String(failure)))
+        .finally(() => setBusy(false));
+    },
+  };
 }
