@@ -14,7 +14,7 @@ A proof sheet on a dark desk: ink on near-black, one highlighter pen, hard edges
 - **Lines are ink, thinned.** `--frame` for a sheet's edge, `--rule` between rows. Never a separate grey.
 - **One shadow.** `--edge`: hard, offset down and right, the edge of the sheet beneath. A `mark` button is raised by the same edge and pressing pushes it down.
 - **Things you press have hand-cut corners** (`--cut-control`); the highlighter stroke has its own (`--cut`). Surfaces are square.
-- **Type is by role, and legible first.** The text face (Geist) carries everything read: body, names, headings. The display face (Bricolage Grotesque) is only for what is large: the wordmark, a figure, a page title or the line a screen opens with (`.statement`); at reading sizes its shapes cost legibility. Mono small capitals (`.slug`) label things; mono is for anything typed or pasted. Nothing is set smaller than 11px.
+- **Type is by role.** Karla carries everything read. Hanken Grotesk, bold, is for what is named or counted: page titles, headings, names, figures. IBM Plex Mono is for anything typed or pasted, and in small capitals (`.slug`) for labels and column heads. The wordmark alone is in Bricolage Grotesque. Nothing is set smaller than 11px. (The same three faces as Peated.)
 - **One height for controls.** Everything pressed or typed into in a row or a toolbar is `--control` high (32px), so buttons, selects and inputs line up. `lg` is for the one action a screen is about. Somewhere to type or choose (an input, a text area, a select, the search bar) is outlined and empty; something to press is filled (`--fill`), and stronger on hover. So a form reads as fields with one filled action.
 - No app bar, no gradients, no pills, no icons as decoration.
 

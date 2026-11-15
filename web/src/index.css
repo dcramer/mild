@@ -1,7 +1,5 @@
 @import 'tailwindcss';
 @import '@fontsource-variable/bricolage-grotesque';
-@import '@fontsource-variable/geist';
-@import '@fontsource-variable/geist-mono';
 @import '@fontsource-variable/karla';
 @import '@fontsource-variable/hanken-grotesk';
 @import '@fontsource/ibm-plex-mono/400.css';
@@ -46,9 +44,10 @@
   color-scheme: dark;
 
   /* Type, by role. */
-  --face-display: 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
-  --face-text: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
-  --face-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --face-wordmark: 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
+  --face-display: 'Hanken Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+  --face-text: 'Karla Variable', ui-sans-serif, system-ui, sans-serif;
+  --face-mono: 'IBM Plex Mono', ui-monospace, monospace;
 
   /* The dashboard is dark only: ink-black paper, off-white ink. */
   --background: #111110;
@@ -130,28 +129,24 @@
     box-shadow: 3px 3px 0 0 var(--edge);
   }
 
-  /* Display type is for what is large: the wordmark, a figure, the line a screen opens with.
-     At reading sizes its shapes cost legibility, so headings and names are set in the text face. */
+  /* Headings, names and figures are set in the display face, bold; everything read is in the text face.
+     The wordmark has a face of its own. */
+  .title,
+  .name,
   .figure,
-  .wordmark {
+  .statement {
     font-family: var(--face-display);
-    font-weight: 600;
-    letter-spacing: -0.02em;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .statement {
+    font-size: 26px;
+    line-height: 1.15;
+    text-wrap: balance;
   }
   .figure {
     font-size: 32px;
     line-height: 1.1;
-  }
-  .wordmark {
-    font-size: 22px;
-    font-weight: 700;
-    line-height: 1;
-  }
-  .title,
-  .name {
-    font-family: var(--face-text);
-    font-weight: 600;
-    letter-spacing: -0.01em;
   }
   .title {
     font-size: 16px;
@@ -161,15 +156,12 @@
     font-size: 14px;
     line-height: 1.35;
   }
-
-  /* The one line a screen opens with. */
-  .statement {
-    font-family: var(--face-display);
-    font-size: 26px;
-    font-weight: 600;
-    line-height: 1.15;
+  .wordmark {
+    font-family: var(--face-wordmark);
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
     letter-spacing: -0.02em;
-    text-wrap: balance;
   }
 
   /* Small capitals in the mono face, for labels and column heads. */
@@ -272,7 +264,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-size: 14px;
+    font-size: 15px;
     -webkit-font-smoothing: antialiased;
   }
 }
@@ -305,21 +297,4 @@ thead .row:last-child {
 }
 .base-ui-disable-scrollbar::-webkit-scrollbar {
   display: none;
-}
-
-/* Temporary, to compare typefaces: add ?fonts=peated to the address. Karla for text, Hanken Grotesk for headings, IBM Plex Mono. */
-html.fonts-peated {
-  --face-text: 'Karla Variable', ui-sans-serif, system-ui, sans-serif;
-  --face-mono: 'IBM Plex Mono', ui-monospace, monospace;
-}
-html.fonts-peated body {
-  font-size: 15px;
-}
-html.fonts-peated .title,
-html.fonts-peated .name,
-html.fonts-peated .statement,
-html.fonts-peated .figure {
-  font-family: 'Hanken Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
-  font-weight: 700;
-  letter-spacing: -0.01em;
 }
