@@ -7,7 +7,6 @@ import { dashboardUrls, listenAddresses, localAddresses, machineNames, resolveHe
 import type { Ui } from '../src/cli/ui.ts';
 import { DEFAULT_SETTINGS, loadConfig, parseSettings, renderSettings, resolveHome, saveSettings } from '../src/config.ts';
 import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
-import { DEFAULT_LABELS } from '../src/store/labels.ts';
 
 const freshHome = () => mkdtempSync(join(tmpdir(), 'sift-home-'));
 
@@ -30,6 +29,8 @@ function wizard(
     serveFails?: boolean;
     /** Answers for the sign-in list. Without them the step is answered with Enter: no limit. */
     allow?: string[];
+    /** The step to change when setup is finished and init lists them. Without it, none. */
+    change?: number;
   } = {},
 ) {
   const config = loadConfig({ SIFT_HOME: freshHome() });
@@ -48,9 +49,10 @@ function wizard(
       ...(state.location === 'remote' ? { location: 'remote' as const } : finished && state.location !== 'ask' ? { location: 'local' as const } : {}),
     },
   };
-  // Step 1 always asks one thing first: where sift runs (new home) or whether to keep that (finished home).
-  // Unless a test is about that step, answer with the first option: this machine, or keep it.
-  if (state.location !== 'ask') answers.unshift(0);
+  // The first question is where sift runs (a home with no answer yet) or which step to change (a finished one).
+  // Unless a test is about that, answer with the first option: this machine, or none.
+  if (finished && state.client === 'web') answers.unshift(state.change ?? 0);
+  else if (state.location === undefined) answers.unshift(0);
   const next = (question: string) => {
     asked.push(question);
     const answer = answers.shift();
@@ -105,7 +107,6 @@ function wizard(
       if (state.loginFails) throw new Error('cancelled');
     },
     availableModels: async () => state.models ?? ['small', 'large'],
-    labels: () => [...DEFAULT_LABELS],
     tailscaleName: () => (state.tailscale === undefined ? 'box.example.ts.net' : state.tailscale),
     enableTailscaleServe: async (port) => {
       calls.push(`serve ${port}`);
@@ -122,9 +123,11 @@ const TEST_USER = 0;
 const PUBLISH = 1;
 /** The whole Google setup as a test user. */
 const GOOGLE = [...COMMON, TEST_USER, 'done'];
-const KEEP = 0;
-const REDO = 1;
 const NO_MODEL = 3;
+/** Positions in the list of steps a finished setup offers to change. */
+const CLIENT_STEP = 2;
+const MODEL_STEP = 3;
+const SIGN_IN_STEP = 4;
 const links = (said: string[]) => said.filter((line) => line.startsWith('link: ')).map((line) => line.slice(6).replace('https://console.cloud.google.com', ''));
 
 describe('sift init', () => {
@@ -188,25 +191,45 @@ describe('sift init', () => {
     expect(chosen.asked).not.toContain('Who signs in to this app?');
   });
 
-  it('offers each finished step with one keystroke to keep it', async () => {
-    const w = wizard([KEEP, KEEP], { client: 'web', accounts: ['me@example.org'] });
+  it('lists the steps of a finished setup with what each is set to, and changes nothing unless asked', async () => {
+    const w = wizard([], { client: 'web', accounts: ['me@example.org'] });
     saveSettings(w.config, { ...DEFAULT_SETTINGS, model: 'openai/x' });
     await runInit(w.deps);
-    expect(w.asked).toHaveLength(3);
+    expect(w.asked).toEqual(['Change a step?']);
     expect(w.calls).toEqual([]);
-    expect(w.text()).toContain('ok: Client in place');
-    expect(w.text()).toContain('ok: Using');
-    expect(w.text()).toContain('ok: Connected');
-    expect(w.text()).toContain('Newsletters');
+    expect(w.text()).toContain('Where sift runs: Dashboard at');
+    expect(w.text()).toContain('Google OAuth client: Client in place');
+    expect(w.text()).toContain('Model: openai/x');
+    expect(w.text()).toContain('Who can sign in: ');
+    expect(w.text()).toContain('Gmail account: me@example.org');
+    expect(w.config.settings).toEqual({ ...DEFAULT_SETTINGS, model: 'openai/x' });
+    expect(w.text()).toMatch(/Ready.*sift run/);
     expect(w.text()).not.toContain('sign in with Google');
   });
 
-  it('lets a finished step be redone: a new client, a different model', async () => {
-    const w = wizard([REDO, ...GOOGLE, REDO, 1, 1], { client: 'web', accounts: ['me@example.org'] });
-    saveSettings(w.config, { ...DEFAULT_SETTINGS, model: 'openai/x' });
-    await runInit(w.deps);
-    expect(w.calls).toEqual([`install ${CLIENT}`, 'login openai api_key']);
-    expect(w.config.settings.model).toBe('openai/large');
+  it('redoes the one step picked from a finished setup: a new client, a different model, no model', async () => {
+    const client = wizard([...GOOGLE], { client: 'web', accounts: ['me@example.org'], change: CLIENT_STEP });
+    saveSettings(client.config, { ...DEFAULT_SETTINGS, model: 'openai/x' });
+    await runInit(client.deps);
+    expect(client.calls).toEqual([`install ${CLIENT}`]);
+    expect(client.config.settings.model).toBe('openai/x');
+
+    const model = wizard([1, 1], { client: 'web', accounts: ['me@example.org'], change: MODEL_STEP });
+    saveSettings(model.config, { ...DEFAULT_SETTINGS, model: 'openai/x' });
+    await runInit(model.deps);
+    expect(model.calls).toEqual(['login openai api_key']);
+    expect(model.config.settings.model).toBe('openai/large');
+
+    const none = wizard([NO_MODEL], { client: 'web', accounts: ['me@example.org'], change: MODEL_STEP });
+    saveSettings(none.config, { ...DEFAULT_SETTINGS, model: 'openai/x' });
+    await runInit(none.deps);
+    expect(loadConfig({ SIFT_HOME: none.config.home }).settings.model).toBeUndefined();
+
+    // A client left half redone is no longer a finished setup: the next run carries on with it.
+    const stopped = wizard(['done', 'skip'], { client: 'web', accounts: ['me@example.org'], change: CLIENT_STEP });
+    await runInit(stopped.deps);
+    expect(stopped.world.setup).toEqual({ googleTasks: 1, location: 'local' });
+    expect(stopped.text()).toContain('warn: Still needed: the Google client');
   });
 
   it('limits sign-in to the addresses given, asking again for one that is not an address', async () => {
@@ -216,13 +239,13 @@ describe('sift init', () => {
     expect(loadConfig({ SIFT_HOME: w.config.home }).settings.dashboardAllow).toEqual(['me@example.org', 'work@example.com']);
 
     // Changing the list to one that leaves a connected account out says what that means; Enter removes the limit.
-    const narrowed = wizard([KEEP, KEEP, REDO], { client: 'web', accounts: ['me@example.org'], allow: ['work@example.com'] });
+    const narrowed = wizard([], { client: 'web', accounts: ['me@example.org'], allow: ['work@example.com'], change: SIGN_IN_STEP });
     saveSettings(narrowed.config, { ...DEFAULT_SETTINGS, model: 'openai/x', dashboardAllow: ['me@example.org'] });
     await runInit(narrowed.deps);
     expect(narrowed.config.settings.dashboardAllow).toEqual(['work@example.com']);
     expect(narrowed.text()).toContain('warn: me@example.org is connected but can no longer sign in');
 
-    const lifted = wizard([KEEP, KEEP, REDO], { client: 'web', accounts: ['me@example.org'] });
+    const lifted = wizard([], { client: 'web', accounts: ['me@example.org'], change: SIGN_IN_STEP });
     saveSettings(lifted.config, { ...DEFAULT_SETTINGS, model: 'openai/x', dashboardAllow: ['me@example.org'] });
     await runInit(lifted.deps);
     expect(loadConfig({ SIFT_HOME: lifted.config.home }).settings.dashboardAllow).toBeUndefined();
@@ -270,7 +293,7 @@ describe('sift init', () => {
   });
 
   it('replaces a Desktop client', async () => {
-    const w = wizard([CLIENT, KEEP], { client: 'desktop', accounts: ['me@example.org'], location: 'remote' });
+    const w = wizard([CLIENT], { client: 'desktop', accounts: ['me@example.org'], location: 'remote' });
     saveSettings(w.config, { ...DEFAULT_SETTINGS, model: 'openai/x' });
     w.world.setup = { googleTasks: 6, access: 'test', location: 'remote' };
     await runInit(w.deps);
@@ -282,13 +305,13 @@ describe('sift init', () => {
   });
 
   it('keeps going when model sign-in fails, and takes a typed id when no models are listed', async () => {
-    const failed = wizard([KEEP, 0], { client: 'web', accounts: ['me@example.org'], loginFails: true });
+    const failed = wizard([0], { client: 'web', accounts: ['me@example.org'], loginFails: true, change: MODEL_STEP });
     await runInit(failed.deps);
     expect(failed.text()).toContain('fail: Sign-in did not finish: cancelled');
     expect(failed.config.settings.model).toBeUndefined();
     expect(failed.text()).toContain('Ready');
 
-    const typed = wizard([KEEP, 2, 'claude-test'], { client: 'web', accounts: ['me@example.org'], models: [] });
+    const typed = wizard([2, 'claude-test'], { client: 'web', accounts: ['me@example.org'], models: [], change: MODEL_STEP });
     await runInit(typed.deps);
     expect(typed.config.settings.model).toBe('anthropic/claude-test');
   });

@@ -134,7 +134,7 @@ Everything sift keeps is in one directory, the home: `~/.config/sift` by default
 - `google-client.json`, `google/`, `model-auth.json`, `device-id`, `dashboard-key`: credentials and the session secret, owner-only, kept out of the database.
 - `setup.json`: how far `sift init` has got, so it resumes.
 
-`sift init` (`src/cli/init.ts`) sets all of this up. Each step checks the real state first, so running it again only asks about what is missing, and every step can be skipped.
+`sift init` (`src/cli/init.ts`) sets all of this up. A first run walks through every step, and one stopped part-way carries on with what is missing. Once the dashboard has an address and the Google client is finished, it instead lists the steps with what each is set to and redoes the one the user picks. The model and the sign-in list are optional, so leaving them unset does not bring the walk-through back.
 
 ## Teaching
 

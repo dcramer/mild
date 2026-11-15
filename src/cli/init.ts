@@ -1,7 +1,6 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import { type Config, GUIDELINES_TEMPLATE, type Settings, isAddress } from '../config.ts';
-import type { Label } from '../triage/types.ts';
-import { type Ui, disposition, paint } from './ui.ts';
+import { type Ui, paint } from './ui.ts';
 
 /** A way to reach a model. `provider` is a pi-ai provider id. */
 export interface ModelChoice {
@@ -72,14 +71,12 @@ export interface InitDeps {
   loginModel(choice: ModelChoice): Promise<void>;
   /** Model ids the signed-in provider offers. */
   availableModels(provider: string): Promise<string[]>;
-  labels(account: string): Label[];
   /** This machine's Tailscale name, or null without Tailscale. */
   tailscaleName(): string | null;
   /** Serve the dashboard over HTTPS on the tailnet (`tailscale serve`). Rejects with what went wrong. */
   enableTailscaleServe(port: number): Promise<void>;
 }
 
-const STEPS = 6;
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /** Where the user opens the dashboard: the Tailscale HTTPS name on a server, localhost otherwise. */
@@ -88,10 +85,59 @@ function dashboardAddress(deps: InitDeps): string {
   return name ? `https://${name}` : `http://localhost:${deps.config.settings.dashboardPort}`;
 }
 
+interface Step {
+  title: string;
+  /** Nothing has been chosen for it yet, so a first run stops here. */
+  missing(): boolean;
+  /** What is set now, for the list of steps. */
+  value(): string;
+  /** Do the step, or do it again if it is done. */
+  run(): Promise<void>;
+}
+
+const steps = (deps: InitDeps): Step[] => [
+  {
+    title: 'Where sift runs',
+    missing: () => deps.setupState().location === undefined,
+    value: () => `Dashboard at ${paint.bold(dashboardAddress(deps))}`,
+    run: () => chooseLocation(deps),
+  },
+  {
+    title: 'Google OAuth client',
+    missing: () => !googleReady(deps) || deps.googleClientKind() === 'desktop',
+    value: () => `Client in place${paint.dim(deps.setupState().access === 'test' ? ' · for test users' : ' · published')}`,
+    run: async () => {
+      if (!googleReady(deps)) return googleClient(deps);
+      if (deps.googleClientKind() === 'desktop') {
+        deps.ui.warn('Your client is a Desktop app client. Signing in from the dashboard needs a Web application one.');
+        return replaceClient(deps);
+      }
+      const { location } = deps.setupState();
+      deps.saveSetupState({ googleTasks: 0, ...(location ? { location } : {}) });
+      return googleClient(deps);
+    },
+  },
+  {
+    title: 'Model',
+    missing: () => !deps.config.settings.model,
+    value: () => deps.config.settings.model ?? paint.dim('none'),
+    run: () => chooseModel(deps),
+  },
+  {
+    title: 'Who can sign in',
+    missing: () => !deps.config.settings.dashboardAllow,
+    value: () => deps.config.settings.dashboardAllow?.join(', ') ?? paint.dim('no limit'),
+    run: () => chooseAllowed(deps),
+  },
+];
+/** The steps above, then the Gmail account, which is connected in the browser. */
+const STEPS = 5;
+
 /**
- * Walk the user through whatever is not set up yet. Each step checks the real state first, so running
- * it again only asks about what is still missing, and any step can be left and picked up later. The
- * Gmail account itself is connected in the browser, by signing in to the dashboard.
+ * Set sift up. A first run walks through every step, and one that was stopped part-way carries on with
+ * what is missing. Once the dashboard has an address and the Google client is finished, it lists the
+ * steps as they stand and redoes the one the user picks. The Gmail account itself is connected in the
+ * browser, by signing in to the dashboard.
  */
 export async function runInit(deps: InitDeps): Promise<void> {
   const { config, ui } = deps;
@@ -100,53 +146,30 @@ export async function runInit(deps: InitDeps): Promise<void> {
   if (!existsSync(config.settingsPath)) deps.saveSettings(config.settings);
   if (!existsSync(config.guidelinesPath)) writeFileSync(config.guidelinesPath, GUIDELINES_TEMPLATE, { mode: 0o600 });
 
-  ui.step(1, STEPS, 'Where sift runs');
-  if (deps.setupState().location === undefined || (await keep(ui, `Dashboard at ${paint.bold(dashboardAddress(deps))}`, 'Change it')))
-    await chooseLocation(deps);
-
-  ui.step(2, STEPS, 'Google OAuth client');
-  if (!googleReady(deps)) await googleClient(deps);
-  else if (deps.googleClientKind() === 'desktop') {
-    ui.warn('Your client is a Desktop app client. Signing in from the dashboard needs a Web application one.');
-    await replaceClient(deps);
-  } else if (await keep(ui, 'Client in place', 'Set it up again')) {
-    const { location } = deps.setupState();
-    deps.saveSetupState({ googleTasks: 0, ...(location ? { location } : {}) });
-    await googleClient(deps);
-  }
-
-  ui.step(3, STEPS, 'Model');
-  if (!config.settings.model || (await keep(ui, `Using ${paint.bold(config.settings.model)}`, 'Change it'))) {
-    ui.info('Sorts mail that no rule or learned sender covers. Without one, that mail stays in your inbox.');
-    ui.blank();
-    const choice = await ui.select<ModelChoice | null>('How should sift reach a model?', [
-      ...MODEL_CHOICES.map((c) => ({ label: c.label, ...(c.hint ? { hint: c.hint } : {}), value: c })),
-      { label: 'No model for now', value: null },
-    ]);
-    if (choice) await pickModel(deps, choice);
-    else ui.skip('No model');
-  }
-
-  ui.step(4, STEPS, 'Who can sign in');
-  const allow = config.settings.dashboardAllow;
-  if (!allow || (await keep(ui, `Only ${paint.bold(allow.join(', '))}`, 'Change it'))) await chooseAllowed(deps);
-
-  ui.step(5, STEPS, 'Gmail account');
+  const all = steps(deps);
   const accounts = deps.connectedAccounts();
-  if (accounts.length > 0) ui.ok(`Connected ${paint.bold(accounts.join(', '))}`);
-  else if (!googleReady(deps)) ui.skip('Needs step 2 finished');
-  else ui.info('Connected in the browser: signing in to the dashboard with Google is what connects the account.');
-
-  ui.step(6, STEPS, 'Preferences');
-  const [account] = accounts;
-  if (account === undefined) ui.info('Set in the dashboard, under Labels.');
-  else {
-    ui.table(
-      ['Label', 'sift will', 'In Gmail'],
-      deps.labels(account).map((l) => [l.name, disposition(l.disposition), l.gmailLabel]),
-    );
+  // The model and the sign-in list are optional, so they do not keep a finished setup in the walk-through.
+  if (all.slice(0, 2).some((step) => step.missing())) {
+    for (const [index, step] of all.entries()) {
+      ui.step(index + 1, STEPS, step.title);
+      if (step.missing()) await step.run();
+      else ui.ok(step.value());
+    }
+    ui.step(STEPS, STEPS, 'Gmail account');
+    if (accounts.length > 0) ui.ok(`Connected ${paint.bold(accounts.join(', '))}`);
+    else if (!googleReady(deps)) ui.skip('Needs step 2 finished');
+    else ui.info('Connected in the browser: signing in to the dashboard with Google is what connects the account.');
+  } else {
+    ui.fields([
+      ...all.map((step) => [step.title, step.value()] as const),
+      ['Gmail account', accounts.length > 0 ? accounts.join(', ') : paint.dim('connected by signing in to the dashboard')],
+    ]);
     ui.blank();
-    ui.info('Change these in the dashboard, under Labels.');
+    const step = await ui.select<Step | null>('Change a step?', [{ label: 'No', value: null }, ...all.map((step) => ({ label: step.title, value: step }))]);
+    if (step) {
+      ui.step(all.indexOf(step) + 1, STEPS, step.title);
+      await step.run();
+    }
   }
 
   ui.blank();
@@ -161,17 +184,18 @@ export async function runInit(deps: InitDeps): Promise<void> {
   ui.blank();
 }
 
-/**
- * A step that is already done: show it, and let the user go on with Enter or redo it. Returns true to redo.
- */
-async function keep(ui: Ui, done: string, redo: string): Promise<boolean> {
-  ui.mark();
-  const again = await ui.select(done, [
-    { label: 'Keep it', value: false },
-    { label: redo, value: true },
+async function chooseModel(deps: InitDeps): Promise<void> {
+  const { ui } = deps;
+  ui.info('Sorts mail that no rule or learned sender covers. Without one, that mail stays in your inbox.');
+  ui.blank();
+  const choice = await ui.select<ModelChoice | null>('How should sift reach a model?', [
+    ...MODEL_CHOICES.map((c) => ({ label: c.label, ...(c.hint ? { hint: c.hint } : {}), value: c })),
+    { label: 'No model for now', value: null },
   ]);
-  if (!again) ui.collapse(done);
-  return again;
+  if (choice) return pickModel(deps, choice);
+  const { model: _old, ...settings } = deps.config.settings;
+  deps.saveSettings(settings);
+  ui.skip('No model');
 }
 
 /**

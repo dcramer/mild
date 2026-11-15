@@ -125,7 +125,6 @@ async function init(): Promise<void> {
     connectedAccounts: () => withDb((db) => listAccounts(db).map((a) => a.email)),
     loginModel: (choice) => login(models, config, choice.provider, choice.type, ui),
     availableModels: async (provider) => (await models.getAvailable(provider)).map((m) => m.id),
-    labels: (account) => withDb((db) => listLabels(db, account)),
     googleClientKind: () => (hasClientSecrets(config) ? loadClientSecrets(config).kind : null),
     tailscaleName,
     enableTailscaleServe: async (servePort) => {
