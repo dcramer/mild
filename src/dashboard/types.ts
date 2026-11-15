@@ -19,7 +19,6 @@ export interface Summary {
     costUsd: number;
     /** Recorded messages with no decision yet (all time). */
     awaitingTriage: number;
-    openQuestions: number;
     /** Actions in the window that failed or whose outcome is unconfirmed. */
     troubledActions: number;
   };

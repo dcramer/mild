@@ -137,7 +137,7 @@ describe('tracking', () => {
 describe('summarize', () => {
   it('counts only the window and reports tiers, cost and backlog', () => {
     const summary = summarize(seeded(), 7, NOW);
-    expect(summary.totals).toEqual({ messages: 4, decisions: 3, withoutInference: 2, costUsd: 0.02, awaitingTriage: 1, openQuestions: 0, troubledActions: 0 });
+    expect(summary.totals).toEqual({ messages: 4, decisions: 3, withoutInference: 2, costUsd: 0.02, awaitingTriage: 1, troubledActions: 0 });
     expect(summary.byStage.map((s) => [s.stage, s.decisions])).toEqual([
       ['rules', 1],
       ['sender', 1],

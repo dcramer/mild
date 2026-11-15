@@ -170,7 +170,7 @@ One SQLite database, `sift.db` in the home directory (schema in `src/store/migra
 - **suggestion_bodies:** the readable text of mail still waiting on the user, so a suggestion can be judged by reading it. Held only for mail sift would move or could not place, and deleted when the message is answered or stops being a suggestion, and after 30 days regardless (`src/daemon/bodies.ts`). These two tables are the only places message content is stored.
 - **decisions:** an append-only log, each with its mode (observe or act) and outcome. Every triage outcome is recorded, including "keep" and "could not decide", with the tier that made it, the reason, the confidence, and what it cost (model, tokens, dollars, duration). A message can have several decisions; the latest is current.
 - **actions:** the audit log of every mailbox change, with labels before and after, linked to the decision it carried out.
-- **labels, rules, questions, accounts:** what mail can be, what sift knows without a model, questions waiting on the user, and each account's history cursor and last sync time.
+- **labels, rules, accounts:** what mail can be, what sift knows without a model, and each account's history cursor and last sync time.
 
 **Retention.** Everything is kept unless `retention.days` is set in `sift.toml` (30 at least, so sync's 7-day recovery search cannot bring back a message already forgotten). Then `sift run` deletes, on its first pass and once a day, each message that nothing has happened to for that long, with its decisions and actions (`src/daemon/retention.ts`). What it costs: a change older than the window can no longer be undone from sift, and the model is told less about how much a sender has sent. Kept however old:
 
@@ -225,4 +225,4 @@ Gmail has no API for it, so sift makes the request a mail client would: the send
 - Using a ChatGPT subscription from a third-party harness is unofficial; whether OpenAI permits it is unconfirmed. An API key works as a fallback.
 - The model tier has only run against a scripted test provider.
 - Docker egress is not yet restricted to Google and the model providers.
-- How questions reach the user beyond `sift review` (a digest would need a send path, which sift does not have).
+- How suggestions reach the user beyond the dashboard (a digest would need a send path, which sift does not have).

@@ -24,7 +24,6 @@ export function Overview({ data, period, onOpen }: { data: Summary; period: Reac
           <Figure label="Decisions" value={count(t.decisions)} note={`${count(t.messages)} received`} />
           <Figure label="Model cost" value={money(t.costUsd)} note={t.decisions ? `${money(t.costUsd / t.decisions)} each` : null} />
           {t.awaitingTriage > 0 ? <Figure label="Not yet sorted" value={count(t.awaitingTriage)} /> : null}
-          {t.openQuestions > 0 ? <Figure label="Questions for you" value={count(t.openQuestions)} tone="look" /> : null}
           {t.troubledActions > 0 ? <Figure label="Changes to check" value={count(t.troubledActions)} note="under Changes" tone="failure" /> : null}
         </Figures>
         <div className="ml-auto">{period}</div>

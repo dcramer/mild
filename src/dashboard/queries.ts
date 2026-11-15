@@ -69,7 +69,6 @@ export function summarize(db: DatabaseSync, days: number, now: number = Date.now
         `SELECT count(*) AS n FROM messages m
          WHERE NOT EXISTS (SELECT 1 FROM decisions d WHERE d.account_id = m.account_id AND d.message_id = m.id)`,
       ).n,
-      openQuestions: one<{ n: number }>('SELECT count(*) AS n FROM questions WHERE answered_at IS NULL').n,
       troubledActions: one<{ n: number }>(`SELECT count(*) AS n FROM actions WHERE created_at >= ? AND status IN ('failed', 'unknown', 'pending')`, since).n,
     },
     byStage,

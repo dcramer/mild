@@ -96,12 +96,10 @@ function status(): void {
     ['Dashboard', signInAddresses(settings.dashboardPort).join(paint.dim('  or  '))],
   ]);
   ui.blank();
-  const questions = count('questions', 'WHERE answered_at IS NULL');
   const troubled = count('actions', `WHERE status IN ('failed', 'unknown', 'pending')`);
   ui.fields([
     ['Recorded', `${plural(count('messages'), 'message')} · ${plural(count('decisions'), 'decision')} · ${plural(count('actions'), 'change')}`],
     ['Rules', plural(count('rules'), 'rule')],
-    ...(questions > 0 ? [['Waiting', paint.mark(` ${plural(questions, 'question')} for you `)] as const] : []),
     ...(troubled > 0 ? [['Check', paint.bad(`${plural(troubled, 'change')} failed or unconfirmed; see sift log`)] as const] : []),
   ]);
   ui.blank();
