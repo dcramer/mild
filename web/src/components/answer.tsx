@@ -12,9 +12,11 @@ export interface AnswerLabel {
   unsubscribe?: boolean;
 }
 
-type Scope = FeedbackRequest['scope'];
+/** `when` is a sender rule narrowed by a condition in words, which only the model can apply. */
+type Scope = FeedbackRequest['scope'] | 'when';
+type Tier = NonNullable<FeedbackRequest['tier']>;
 type Exception = '' | 'keep' | 'archive' | 'spam';
-export type AnswerValue = Pick<FeedbackRequest, 'label' | 'scope' | 'contains' | 'disposition' | 'unsubscribe'>;
+export type AnswerValue = Pick<FeedbackRequest, 'label' | 'scope' | 'contains' | 'disposition' | 'unsubscribe' | 'tier' | 'when'>;
 
 const EXCEPTIONS = [
   ['', 'as the label says'],
@@ -52,13 +54,21 @@ export function Answer({
   const [contains, setContains] = useState('');
   const [exception, setException] = useState<Exception>('');
   const [unsubscribe, setUnsubscribe] = useState(false);
+  const [tierChoice, setTier] = useState<Tier | null>(null);
+  const [condition, setCondition] = useState('');
   const label = labels.find((l) => l.id === chosen);
   const domain = sender.split('@')[1] ?? '';
-  const ready = label !== undefined && (scope !== 'subject' || contains.trim() !== '');
+  const outcome = exception || (label?.disposition ?? '');
+  // The same default the server applies: a rule that would hide everything from a sender is checked, not blind.
+  const wide = scope === 'sender' || scope === 'domain';
+  const tier: Tier = scope === 'when' ? 'usually' : (tierChoice ?? (wide && (outcome === 'archive' || outcome === 'spam') ? 'usually' : 'always'));
+  const ready = label !== undefined && (scope !== 'subject' || contains.trim() !== '') && (scope !== 'when' || condition.trim() !== '');
   const answer: AnswerValue | null = label
     ? {
         label: label.id,
-        scope,
+        scope: scope === 'when' ? 'sender' : scope,
+        ...(scope === 'when' ? { when: condition.trim() } : {}),
+        ...(scope !== 'once' && scope !== 'when' ? { tier } : {}),
         ...(scope === 'subject' ? { contains: contains.trim() } : {}),
         ...(exception ? { disposition: exception } : {}),
         ...(unsubscribe && scope !== 'once' ? { unsubscribe } : {}),
@@ -83,9 +93,11 @@ export function Answer({
       ? `mail from anyone at ${domain}`
       : scope === 'subject'
         ? `mail from ${sender} with “${contains.trim() || '…'}” in the subject`
-        : scope === 'once'
-          ? 'this message'
-          : `mail from ${sender}`;
+        : scope === 'when'
+          ? `mail from ${sender}, when it is ${condition.trim() || '…'},`
+          : scope === 'once'
+            ? 'this message'
+            : `mail from ${sender}`;
   const does = label ? willBe(exception || label.disposition) : '';
 
   return (
@@ -112,6 +124,7 @@ export function Answer({
               ['sender', 'Everything from this sender'],
               ['domain', `Anyone at ${domain}`],
               ['subject', 'This sender, when the subject contains…'],
+              ['when', 'This sender, when it is… (in your words)'],
               ['once', 'Only this message'],
             ]}
             onChange={setScope}
@@ -126,6 +139,27 @@ export function Answer({
               onChange={(event) => setContains(event.target.value)}
             />
           ) : null}
+          {scope === 'when' ? (
+            <Input
+              autoFocus
+              aria-label="What the mail must be, in your words"
+              placeholder="a notice for a lot I did not bid on"
+              className="w-72"
+              value={condition}
+              onChange={(event) => setCondition(event.target.value)}
+            />
+          ) : null}
+          {scope === 'once' || scope === 'when' ? null : (
+            <Select
+              label="Whether sift checks each message"
+              value={tier}
+              options={[
+                ['usually', 'usually: sift reads each one'],
+                ['always', 'always: without reading'],
+              ]}
+              onChange={setTier}
+            />
+          )}
           <Select label="Exception to the label's action" value={exception} options={EXCEPTIONS} onChange={setException} />
         </div>
         {/* A rule can carry this itself; for a label that already unsubscribes there is nothing to add. */}
@@ -142,13 +176,13 @@ export function Answer({
             ? 'Choose what this is.'
             : scope === 'once'
               ? `Only ${whose}: ${label.name}, ${does}. No rule is made.`
-              : `From now on, ${whose} is ${label.name}: ${does}${label.unsubscribe || unsubscribe ? ', and unsubscribed from' : ''}.`}
+              : `From now on, ${whose} is ${tier === 'usually' && scope !== 'when' ? 'usually ' : ''}${label.name}: ${does}${label.unsubscribe || unsubscribe ? ', and unsubscribed from' : ''}.${tier === 'usually' ? ' sift still reads each one and asks about any that is something else.' : ''}`}
         </p>
         {acted && label && label.id !== guess ? <p className="text-sm text-muted-foreground">This message is put right in Gmail too.</p> : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="mark" busy={busy} disabled={!ready} onClick={() => answer && onSubmit(answer)}>
-            {label && label.id === guess && scope === 'sender' && !exception ? 'Right' : 'Teach sift'}
+            {label && label.id === guess && scope === 'sender' && !exception && tierChoice === null ? 'Right' : 'Teach sift'}
             <ArrowRightIcon aria-hidden />
           </Button>
           <p className="slug hidden text-muted-foreground md:block">Enter · 1–{Math.min(labels.length, 9)} label</p>

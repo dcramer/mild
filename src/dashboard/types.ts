@@ -150,7 +150,11 @@ export interface RuleSummary {
   /** Extras for mail the rule matches, from the rule or its label. */
   markRead: boolean;
   unsubscribe: boolean;
-  /** `user`: written by the user. `correction`: made by correcting sift. `agent`: learned by sift. */
+  /** `always` decides by itself; `usually` is checked by the model on every message. */
+  tier: 'always' | 'usually';
+  /** A plain-language condition only the model can apply. */
+  when: string | null;
+  /** `user`: written by the user. `correction`: made by correcting sift. `agent`: made by sift when it blocked the sender. */
   source: string;
   hits: number;
   lastHitAt: number | null;
@@ -182,8 +186,24 @@ export interface SuggestionGroup {
   sample: { decisionId: number; messageId: string; subject: string; reason: string; decidedAt: number }[];
 }
 
+/** A rule sift thinks is worth having, for the user to accept or dismiss. */
+export interface ProposalSummary {
+  id: number;
+  accountId: string;
+  /** `rule`: make this rule. `always`: stop having the model check a rule it has always agreed with. */
+  kind: 'rule' | 'always';
+  match: Record<string, string>;
+  labelId: string;
+  labelName: string;
+  /** What the label does to mail. */
+  disposition: string;
+  /** How many decisions in a row it rests on. */
+  agreed: number;
+}
+
 export interface Suggestions {
   groups: SuggestionGroup[];
+  proposals: ProposalSummary[];
   /** Messages waiting across all groups. */
   waiting: number;
   /** From the user's answers so far. */
@@ -204,6 +224,10 @@ export interface FeedbackRequest {
   disposition?: string;
   /** Also unsubscribe, whether or not the label does. */
   unsubscribe?: boolean;
+  /** Left out, sift picks: `usually` for a rule that hides everything from a sender or domain. */
+  tier?: 'always' | 'usually';
+  /** A plain-language condition that narrows the rule. */
+  when?: string;
   /** How far the answer reaches. Everything but `once` makes a rule. */
   scope: 'sender' | 'domain' | 'subject' | 'once';
   /** For `subject`: the words the subject must contain. */

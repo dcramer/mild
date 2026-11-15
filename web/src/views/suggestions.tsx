@@ -110,6 +110,57 @@ function SuggestionRow({
   );
 }
 
+type Proposal = Suggestions['proposals'][number];
+const CONDITIONS: Record<string, string> = {
+  from: 'from',
+  fromDomain: 'anyone at',
+  to: 'to',
+  listId: 'the list',
+  subjectContains: 'with the subject containing',
+};
+
+/** A rule sift thinks is worth having. Nothing changes until it is accepted. */
+function ProposalRow({ proposal, onResolved }: { proposal: Proposal; onResolved: (line: string | null) => void }) {
+  const { busy, error, run } = useAction();
+  const whose = Object.entries(proposal.match)
+    .map(([key, value]) => `${CONDITIONS[key] ?? key} ${value}`)
+    .join(', ');
+  const resolve = (accept: boolean) =>
+    run(async () => {
+      await api.resolveProposal(proposal.id, accept);
+      onResolved(accept ? `From now on, mail ${whose} is ${proposal.labelName}: ${willBe(proposal.disposition)}, without sift reading it.` : null);
+    });
+  return (
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2">
+      <p className="min-w-0 flex-1">
+        {proposal.kind === 'rule' ? (
+          <>
+            The last {count(proposal.agreed)} messages {whose} were all <span className="font-medium">{proposal.labelName}</span>. Make it a rule?
+          </>
+        ) : (
+          <>
+            sift has agreed {count(proposal.agreed)} times running that mail {whose} is <span className="font-medium">{proposal.labelName}</span>. Stop reading
+            each one?
+          </>
+        )}
+        <Sub>
+          Mail {whose} would be {willBe(proposal.disposition)} without a model.
+        </Sub>
+        {error ? <span className="mt-1 block text-sm text-destructive">{error}</span> : null}
+      </p>
+      <span className="flex items-center gap-1.5">
+        <Button variant="ink" busy={busy} onClick={() => resolve(true)}>
+          <CheckIcon aria-hidden />
+          {proposal.kind === 'rule' ? 'Make the rule' : 'Stop reading them'}
+        </Button>
+        <Button variant="quiet" disabled={busy} onClick={() => resolve(false)}>
+          No
+        </Button>
+      </span>
+    </li>
+  );
+}
+
 const DOES = [['', 'Anything'] as const, ...ACTIONS.filter(([key]) => key !== 'keep'), ['review', 'Hold it for you'] as const];
 
 /** What sift would do, waiting for the user to say right or wrong. */
@@ -187,6 +238,22 @@ export function SuggestionsView({ onOpen, onChanged, epoch }: { onOpen: OpenMess
               <li key={index} className={index === 0 ? undefined : 'text-muted-foreground'}>
                 {line}
               </li>
+            ))}
+          </ul>
+        </Note>
+      ) : null}
+      {data && data.proposals.length > 0 ? (
+        <Note title="sift proposes">
+          <ul className="flex flex-col divide-y divide-(--rule)">
+            {data.proposals.map((proposal) => (
+              <ProposalRow
+                key={proposal.id}
+                proposal={proposal}
+                onResolved={(line) => {
+                  if (line) setTaught((lines) => [line, ...lines].slice(0, 3));
+                  reload();
+                }}
+              />
             ))}
           </ul>
         </Note>

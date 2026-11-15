@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { accuracy, pendingSuggestions } from '../learn/feedback.ts';
 import { unsubscribedAt } from '../store/actions.ts';
 import { listLabels } from '../store/labels.ts';
+import { listProposals } from '../store/proposals.ts';
 import { bulkSignals, passedDmarc } from '../triage/features.ts';
 import {
   type DecisionRow,
@@ -363,7 +364,7 @@ export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
     .prepare(
       `SELECT r.id, r.account_id, r.match_json, r.except_json, r.label_id, l.name AS label_name, r.disposition AS override, CASE WHEN l.block = 1 THEN 'block' ELSE l.disposition END AS label_does,
               (r.mark_read = 1 OR l.mark_read = 1) AS mark_read, (r.subscription = 'unsubscribe' OR l.unsubscribe = 1) AS unsubscribe,
-              r.source, r.hits, r.filter_id, r.created_at,
+              r.tier, r.condition, r.source, r.hits, r.filter_id, r.created_at,
               (SELECT max(decided_at) FROM decisions d WHERE d.rule_id = r.id) AS last_hit_at
        FROM rules r LEFT JOIN labels l ON l.account_id = r.account_id AND l.id = r.label_id
        ORDER BY r.account_id, r.position, r.id`,
@@ -379,6 +380,8 @@ export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
     label_does: string | null;
     mark_read: number | null;
     unsubscribe: number | null;
+    tier: 'always' | 'usually';
+    condition: string | null;
     source: string;
     hits: number;
     filter_id: string | null;
@@ -396,6 +399,8 @@ export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
     disposition: r.label_name === null ? null : (r.override ?? r.label_does),
     markRead: r.mark_read === 1,
     unsubscribe: r.unsubscribe === 1,
+    tier: r.tier,
+    when: r.condition,
     source: r.source,
     hits: r.hits,
     lastHitAt: r.last_hit_at,
@@ -504,6 +509,23 @@ export function listSuggestions(db: DatabaseSync, options: { includeKept?: boole
   return {
     labels: Object.fromEntries([...labels].map(([id, list]) => [id, list.map((l) => ({ id: l.id, name: l.name, disposition: outcomeOf(l) }))])),
     examples: { captured: examples.captured ?? 0, pending: examples.pending ?? 0 },
+    proposals: listProposals(db).flatMap((p) => {
+      const label = labels.get(p.accountId)?.find((l) => l.id === p.labelId);
+      // A proposal whose label has been removed has nothing to offer.
+      if (!label) return [];
+      return [
+        {
+          id: p.id,
+          accountId: p.accountId,
+          kind: p.kind,
+          match: p.match as Record<string, string>,
+          labelId: p.labelId,
+          labelName: label.name,
+          disposition: outcomeOf(label),
+          agreed: p.agreed,
+        },
+      ];
+    }),
     groups: [...groups.values()].toSorted((a, b) => b.messages - a.messages || b.latestAt - a.latestAt).slice(0, MAX_GROUPS),
     waiting,
     accuracy: { reviewed, right },

@@ -88,9 +88,18 @@ export const api = {
   addLabel: (label: { accountId: string; name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }) =>
     post<{ id: string }>('/api/labels/add', label),
   /** `label` is what the mail is; `disposition` an exception to that label's action. */
-  addRule: (rule: { accountId: string; match: Record<string, string>; label: string; disposition?: string; markRead?: boolean; unsubscribe?: boolean }) =>
-    post('/api/rules', rule),
+  addRule: (rule: {
+    accountId: string;
+    match: Record<string, string>;
+    label: string;
+    disposition?: string;
+    markRead?: boolean;
+    unsubscribe?: boolean;
+    tier?: 'always' | 'usually';
+    when?: string;
+  }) => post('/api/rules', rule),
   removeRule: (id: string) => post('/api/rules/remove', { id }),
+  resolveProposal: (id: number, accept: boolean) => post('/api/proposals', { id, accept }),
   undo: (id: number) => post<{ message: string }>('/api/undo', { id }),
   backfill: (days: number) => post<{ added: number }>('/api/backfill', { days }),
   checkNow: () => post('/api/check', {}),

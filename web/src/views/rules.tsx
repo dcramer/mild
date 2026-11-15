@@ -10,7 +10,7 @@ const SOURCES = [
   ['', 'Anyone'],
   ['user', 'You'],
   ['correction', 'You, correcting sift'],
-  ['agent', 'sift learned it'],
+  ['agent', 'sift, by blocking'],
 ] as const;
 
 function Conditions({ match }: { match: Record<string, string> }) {
@@ -60,6 +60,8 @@ function AddRuleDialog({
   const [exception, setException] = useState<(typeof EXCEPTION)[number][0]>('');
   const [markRead, setMarkRead] = useState(false);
   const [unsubscribe, setUnsubscribe] = useState(false);
+  const [tier, setTier] = useState<'always' | 'usually'>('always');
+  const [condition, setCondition] = useState('');
   const ready = value.trim() !== '' && label !== '';
   const add = () =>
     run(
@@ -71,6 +73,7 @@ function AddRuleDialog({
           ...(exception === '' ? {} : { disposition: exception }),
           ...(markRead ? { markRead } : {}),
           ...(unsubscribe ? { unsubscribe } : {}),
+          ...(condition.trim() === '' ? { tier } : { when: condition.trim() }),
         }),
       () => {
         onAdded();
@@ -117,10 +120,33 @@ function AddRuleDialog({
           </div>
         </div>
         <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium">And it is, in your words (optional)</span>
+          <Input
+            aria-label="What the mail must be, in your words"
+            placeholder="a notice for a lot I did not bid on"
+            value={condition}
+            onChange={(event) => setCondition(event.target.value)}
+          />
+          <p className="text-sm text-muted-foreground">Only a model can apply this, so sift reads each message the rule matches.</p>
+        </div>
+        <div className="flex flex-col gap-1.5">
           <span className="text-sm font-medium">It is</span>
           <div>
             <Select label="Label" value={label} options={[['', 'Choose a label'] as const, ...labels]} onChange={setLabel} />
           </div>
+          {condition.trim() === '' ? (
+            <div>
+              <Select
+                label="Whether sift checks each message"
+                value={tier}
+                options={[
+                  ['always', 'Always: without reading the message'],
+                  ['usually', 'Usually: sift reads each one, and asks about any that is something else'],
+                ]}
+                onChange={setTier}
+              />
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-medium">sift does</span>
@@ -163,7 +189,7 @@ export function Rules() {
     <ListView
       title="Rules"
       count={data ? count(data.rules.length) : null}
-      description="A rule says what mail is; its label decides what happens. Rules are checked before any model. The most specific one wins, and one that keeps mail always does."
+      description="A rule says what mail is; its label decides what happens. The most specific one wins, and one that keeps mail always does."
       actions={
         accountId ? (
           <Button variant="ink" onClick={() => setAdding(true)}>
@@ -216,10 +242,12 @@ export function Rules() {
                         unless <Conditions match={except} />
                       </span>
                     ))}
+                    {rule.when ? <span className="mt-1 block text-muted-foreground">when it is {rule.when}</span> : null}
                     {multipleAccounts ? <Sub>{rule.accountId}</Sub> : null}
                   </Td>
                   <Td className="font-medium whitespace-nowrap">
                     {rule.labelName ?? <span className="font-normal text-destructive">A label that was removed</span>}
+                    {rule.tier === 'usually' || rule.when ? <Sub>{rule.when ? 'sift reads each one' : 'usually; sift reads each one'}</Sub> : null}
                   </Td>
                   <Td className="whitespace-nowrap">
                     {rule.disposition ? <DispositionBadge would disposition={rule.disposition} /> : <span className="text-muted-foreground">Nothing</span>}

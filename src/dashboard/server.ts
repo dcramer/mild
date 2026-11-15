@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { type FeedbackInput, applyFeedback } from '../learn/feedback.ts';
 import { listAccounts } from '../store/accounts.ts';
 import { addLabel, updateLabel } from '../store/labels.ts';
+import { resolveProposal } from '../store/proposals.ts';
 import { addRule, removeRule } from '../store/rules.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { listChanges, listDecisions, listLabelSummaries, listRuleSummaries, listSuggestions, messageDetail, suggestionDetail, summarize } from './queries.ts';
@@ -87,7 +88,7 @@ const SCOPES = new Set(['sender', 'domain', 'subject', 'once']);
 
 /** Check an answer to a suggestion field by field. Null if it is not well formed. */
 function parseFeedback(body: Record<string, unknown>): FeedbackInput | null {
-  const { accountId, sender, label, disposition, scope, contains, decisionId, messageId, unsubscribe } = body;
+  const { accountId, sender, label, disposition, scope, contains, decisionId, messageId, unsubscribe, tier, when } = body;
   if (typeof accountId !== 'string' || typeof sender !== 'string') return null;
   if (typeof label !== 'string' || !LABEL_ID.test(label)) return null;
   if (typeof scope !== 'string' || !SCOPES.has(scope)) return null;
@@ -97,6 +98,8 @@ function parseFeedback(body: Record<string, unknown>): FeedbackInput | null {
   if (decisionId !== undefined && (typeof decisionId !== 'number' || !Number.isInteger(decisionId))) return null;
   if (messageId !== undefined && !str(messageId)) return null;
   if (unsubscribe !== undefined && typeof unsubscribe !== 'boolean') return null;
+  if (tier !== undefined && tier !== 'always' && tier !== 'usually') return null;
+  if (when !== undefined && (typeof when !== 'string' || when.length > 200)) return null;
   return {
     accountId,
     sender,
@@ -107,6 +110,8 @@ function parseFeedback(body: Record<string, unknown>): FeedbackInput | null {
     ...(decisionId === undefined ? {} : { decisionId }),
     ...(messageId === undefined ? {} : { messageId }),
     ...(unsubscribe ? { unsubscribe } : {}),
+    ...(tier === undefined ? {} : { tier }),
+    ...(typeof when === 'string' && when.trim() !== '' ? { when } : {}),
   };
 }
 
@@ -253,13 +258,20 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       };
     },
     '/api/rules': (body) => {
-      const { accountId, match, label, disposition, markRead, unsubscribe } = body;
+      const { accountId, match, label, disposition, markRead, unsubscribe, tier, when } = body;
+      if (tier !== undefined && tier !== 'always' && tier !== 'usually') return null;
+      if (when !== undefined && (typeof when !== 'string' || when.length > 200)) return null;
       if (!str(accountId) || typeof label !== 'string' || !LABEL_ID.test(label) || typeof match !== 'object' || match === null) return null;
       if (disposition !== undefined && !decided(disposition)) return null;
       if ((markRead !== undefined && typeof markRead !== 'boolean') || (unsubscribe !== undefined && typeof unsubscribe !== 'boolean')) return null;
       const conditions = Object.entries(match).filter(([, value]) => value !== '');
       if (conditions.length === 0 || !conditions.every(([key, value]) => RULE_KEYS.has(key) && str(value))) return null;
-      const extras = { ...(markRead ? { markRead } : {}), ...(unsubscribe ? { subscription: 'unsubscribe' as const } : {}) };
+      const extras = {
+        ...(markRead ? { markRead } : {}),
+        ...(unsubscribe ? { subscription: 'unsubscribe' as const } : {}),
+        ...(tier === 'usually' ? { tier: 'usually' as const } : {}),
+        ...(typeof when === 'string' && when.trim() !== '' ? { when } : {}),
+      };
       return {
         id: addRule(
           db,
@@ -269,6 +281,12 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
           now(),
         ),
       };
+    },
+    '/api/proposals': (body) => {
+      const { id, accept } = body;
+      if (typeof id !== 'number' || !Number.isInteger(id) || typeof accept !== 'boolean') return null;
+      if (!resolveProposal(db, id, accept, now())) throw new Error('That proposal is no longer open.');
+      return { ok: true };
     },
     '/api/rules/remove': (body) => {
       if (!str(body['id'], 40)) return null;

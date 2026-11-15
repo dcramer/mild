@@ -324,6 +324,8 @@ describe('dashboard server', () => {
         disposition: 'archive',
         markRead: false,
         unsubscribe: true,
+        tier: 'always',
+        when: null,
         source: 'user',
         hits: 0,
         lastHitAt: NOW,
