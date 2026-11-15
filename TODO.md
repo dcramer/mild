@@ -52,7 +52,7 @@ Built: Suggestions as one row per sender with a one-press answer; opening a row 
 
 - [ ] Use examples to test sift: replay the model over `examples` and report accuracy per label, how often it answers "unsure", and cost per message (`evals/`), so a change to the prompt, model or labels can be checked before it ships.
 - [ ] Use examples to teach the model: pick relevant ones as few-shot examples in the prompt.
-- [ ] Turn repeated corrections into a suggested guideline or rule, shown to the user before it is saved.
+- [ ] **Learn from mistakes, by proposing.** A regular review pass (once a day, away from triage) over what the user corrected: where the model keeps getting the same kind of mail wrong, it proposes a change (a rule for the sender, a condition on an existing rule, a line for the guidelines, a sharper label description) and the user accepts or dismisses it. Nothing changes by itself. Proposals already exist for "this sender is always X"; this widens what can be proposed and adds a model that reads the corrections to write them.
 - [ ] Re-decide waiting suggestions when a label's outcome, a rule or the guidelines change.
 - [ ] Accuracy per tier on the Overview.
 - [ ] Let a Chrome extension call the API: it cannot use the page's cookie or Origin, so it needs its own token, issued to a signed-in user.
