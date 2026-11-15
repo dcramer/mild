@@ -6,6 +6,8 @@ import {
   type LabelSummary,
   type MessageDetail,
   type RuleSummary,
+  type SenderProfile,
+  type SuggestionDetail,
   STAGES,
   type StageKey,
   type SuggestionGroup,
@@ -253,6 +255,8 @@ export function messageDetail(db: DatabaseSync, accountId: string, messageId: st
     receivedAt: m.received_at,
     syncedAt: m.synced_at,
     headers: JSON.parse(m.headers_json) as Record<string, string>,
+    body: storedBody(db, accountId, messageId),
+    sender: senderProfile(db, accountId, m.from_address),
     decisions: decisions.map((r) => ({
       ...toDecisionRow(r),
       ruleId: r.rule_id,
@@ -275,6 +279,67 @@ export function messageDetail(db: DatabaseSync, accountId: string, messageId: st
         createdAt: a.created_at,
       };
     }),
+  };
+}
+
+/** The text of a message, if sift is holding it: as a suggestion's temporary copy, or in an example the user made. */
+function storedBody(db: DatabaseSync, accountId: string, messageId: string): string | null {
+  const row = db
+    .prepare(
+      `SELECT coalesce(
+         (SELECT body_text FROM suggestion_bodies WHERE account_id = ?1 AND message_id = ?2),
+         (SELECT body_text FROM examples WHERE account_id = ?1 AND message_id = ?2 AND status = 'captured')) AS body`,
+    )
+    .get(accountId, messageId) as { body: string | null };
+  return row.body;
+}
+
+/** What sift knows about one sender. */
+export function senderProfile(db: DatabaseSync, accountId: string, address: string): SenderProfile {
+  const seen = db
+    .prepare('SELECT count(*) AS n, min(received_at) AS first FROM messages WHERE account_id = ? AND from_address = ?')
+    .get(accountId, address) as {
+    n: number;
+    first: number | null;
+  };
+  const written = db.prepare('SELECT user_has_written AS yes FROM correspondents WHERE account_id = ? AND address = ?').get(accountId, address) as
+    | { yes: number }
+    | undefined;
+  const labels = db
+    .prepare(
+      `SELECT d.label_id AS id, coalesce(l.name, d.label_id) AS name, count(*) AS messages
+       FROM decisions d
+       JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
+       LEFT JOIN labels l ON l.account_id = d.account_id AND l.id = d.label_id
+       WHERE d.account_id = ? AND m.from_address = ? AND d.label_id IS NOT NULL
+         AND d.id = (SELECT max(id) FROM decisions x WHERE x.account_id = d.account_id AND x.message_id = d.message_id)
+       GROUP BY d.label_id ORDER BY messages DESC`,
+    )
+    .all(accountId, address) as unknown as SenderProfile['labels'];
+  const domain = address.split('@')[1] ?? '';
+  const rules = listRuleSummaries(db)
+    .filter((r) => r.accountId === accountId && (r.match['from'] === address || (r.match['fromDomain'] === domain && r.match['from'] === undefined)))
+    .map((r) => ({ id: r.id, match: r.match, labelName: r.labelName, disposition: r.disposition, source: r.source }));
+  return { address, messages: seen.n, firstSeenAt: seen.first, userHasWritten: written ? written.yes === 1 : null, labels, rules };
+}
+
+/** One sender's waiting mail, newest first, with what sift knows about them. */
+export function suggestionDetail(db: DatabaseSync, accountId: string, sender: string): SuggestionDetail {
+  const names = new Map(listLabels(db, accountId).map((l) => [l.id, l.name]));
+  const received = db.prepare('SELECT received_at FROM messages WHERE account_id = ? AND id = ?');
+  return {
+    sender: senderProfile(db, accountId, sender),
+    messages: pendingSuggestions(db, { accountId, sender, limit: 200 }).map((s) => ({
+      decisionId: s.decisionId,
+      messageId: s.messageId,
+      subject: s.subject,
+      receivedAt: (received.get(accountId, s.messageId) as { received_at: number }).received_at,
+      disposition: s.disposition,
+      labelId: s.labelId,
+      labelName: (s.labelId && names.get(s.labelId)) ?? null,
+      stage: s.stage,
+      reason: s.reason,
+    })),
   };
 }
 
@@ -347,19 +412,22 @@ const SAMPLE = 4;
 const MAX_GROUPS = 100;
 
 /**
- * What is waiting on the user, grouped so one answer can settle a sender: mail from the same sender
- * that sift would treat the same way. Biggest groups first, since they teach the most.
+ * What is waiting on the user, one group per sender, since an answer is about a sender. A group shows
+ * the guess sift made for most of that sender's waiting mail. Biggest groups first: they teach the most.
  */
 export function listSuggestions(db: DatabaseSync, options: { includeKept?: boolean } = {}): Suggestions {
   const accounts = db.prepare('SELECT id FROM accounts').all() as { id: string }[];
   const labels = new Map(accounts.map(({ id }) => [id, listLabels(db, id)] as const));
   const names = new Map([...labels].flatMap(([account, list]) => list.map((l) => [`${account}\n${l.id}`, l.name] as const)));
   const groups = new Map<string, SuggestionGroup>();
+  // Per sender, how many waiting messages got each guess. The commonest is the one the group shows.
+  const tallies = new Map<string, Map<string, { n: number; suggestion: (typeof all)[number] }>>();
+  const all = pendingSuggestions(db);
   let waiting = 0;
-  for (const s of pendingSuggestions(db)) {
+  for (const s of all) {
     if (s.disposition === 'keep' && !options.includeKept) continue;
     waiting++;
-    const key = `${s.accountId}\n${s.fromAddress}\n${s.disposition}\n${s.labelId ?? ''}`;
+    const key = `${s.accountId}\n${s.fromAddress}`;
     let group = groups.get(key);
     if (!group) {
       group = {
@@ -368,17 +436,35 @@ export function listSuggestions(db: DatabaseSync, options: { includeKept?: boole
         senderName: s.fromName,
         disposition: s.disposition,
         labelId: s.labelId,
-        labelName: (s.labelId && names.get(`${s.accountId}\n${s.labelId}`)) ?? null,
+        labelName: null,
         stage: s.stage,
+        guesses: 1,
         messages: 0,
         latestAt: s.decidedAt,
+        latestReceivedAt: s.receivedAt,
         sample: [],
       };
       groups.set(key, group);
+      tallies.set(key, new Map());
     }
     group.messages++;
+    group.latestReceivedAt = Math.max(group.latestReceivedAt, s.receivedAt);
+    const tally = tallies.get(key)!;
+    const guess = `${s.labelId ?? ''}\n${s.disposition}`;
+    const entry = tally.get(guess);
+    if (entry) entry.n++;
+    else tally.set(guess, { n: 1, suggestion: s });
     if (group.sample.length < SAMPLE)
       group.sample.push({ decisionId: s.decisionId, messageId: s.messageId, subject: s.subject, reason: s.reason, decidedAt: s.decidedAt });
+  }
+  for (const [key, group] of groups) {
+    const tally = [...tallies.get(key)!.values()];
+    const top = tally.reduce((best, entry) => (entry.n > best.n ? entry : best));
+    group.guesses = tally.length;
+    group.disposition = top.suggestion.disposition;
+    group.labelId = top.suggestion.labelId;
+    group.labelName = (top.suggestion.labelId && names.get(`${group.accountId}\n${top.suggestion.labelId}`)) ?? null;
+    group.stage = top.suggestion.stage;
   }
   const { reviewed, right } = accuracy(db);
   const examples = db.prepare(`SELECT sum(status = 'captured') AS captured, sum(status = 'pending') AS pending FROM examples`).get() as {

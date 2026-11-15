@@ -77,28 +77,27 @@ export function countRuleHit(db: DatabaseSync, id: string): void {
   db.prepare('UPDATE rules SET hits = hits + 1 WHERE id = ?').run(id);
 }
 
-/** The rule that covers exactly one sender and nothing else, if there is one. */
-function senderRule(db: DatabaseSync, accountId: string, address: string): { id: string; source: RuleSource } | undefined {
+/** The rule with exactly these conditions and no exceptions, if there is one. */
+function ruleMatching(db: DatabaseSync, accountId: string, match: RuleMatch): { id: string; source: RuleSource } | undefined {
   return db
     .prepare(`SELECT id, source FROM rules WHERE account_id = ? AND match_json = ? AND except_json = '[]' ORDER BY position LIMIT 1`)
-    .get(accountId, JSON.stringify({ from: address })) as { id: string; source: RuleSource } | undefined;
+    .get(accountId, JSON.stringify(match)) as { id: string; source: RuleSource } | undefined;
 }
 
 /**
- * Say what mail from one sender is, replacing whatever was said about that sender before.
- * `disposition` is an exception to the label's action for this sender only. Returns the rule's id.
+ * Say what mail matching `match` is, replacing a rule with exactly the same conditions if there is one.
+ * `disposition` is an exception to the label's action for this rule only. Returns the rule's id.
  */
-export function setSenderRule(
+export function setRule(
   db: DatabaseSync,
   accountId: string,
-  address: string,
+  match: RuleMatch,
   rule: { labelId: string; disposition?: DecidedDisposition },
   source: RuleSource,
   now: number = Date.now(),
 ): string {
-  const sender = address.toLowerCase();
-  const existing = senderRule(db, accountId, sender);
-  if (!existing) return addRule(db, accountId, { match: { from: sender }, ...rule }, source, now);
+  const existing = ruleMatching(db, accountId, match);
+  if (!existing) return addRule(db, accountId, { match, ...rule }, source, now);
   db.prepare('UPDATE rules SET label_id = ?, disposition = ?, source = ? WHERE id = ?').run(rule.labelId, rule.disposition ?? null, source, existing.id);
   return existing.id;
 }
@@ -125,8 +124,8 @@ export function learnSender(db: DatabaseSync, accountId: string, address: string
   const label = listLabels(db, accountId, now).find((l) => l.id === first.label_id);
   // Each must have ended the way the label says. One where a protection held sift back is not settled.
   if (!label || !recent.every((r) => r.label_id === first.label_id && r.disposition === label.disposition)) return false;
-  const existing = senderRule(db, accountId, address);
+  const existing = ruleMatching(db, accountId, { from: address });
   if (existing && existing.source !== 'agent') return false;
-  setSenderRule(db, accountId, address, { labelId: first.label_id }, 'agent', now);
+  setRule(db, accountId, { from: address }, { labelId: first.label_id }, 'agent', now);
   return true;
 }

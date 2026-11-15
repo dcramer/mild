@@ -5,9 +5,8 @@ import { ago } from '@/lib/format.ts';
 import { useRoute } from '@/lib/route.ts';
 import { Button, Loading, Masthead, Note, Select } from '@/system';
 import { ChangesView } from '@/views/changes.tsx';
-import { ConceptsView } from '@/views/concepts.tsx';
-import { Decisions } from '@/views/decisions.tsx';
-import { type MessageRef, MessageSheet } from '@/views/message-sheet.tsx';
+import { Decisions, PERIODS } from '@/views/decisions.tsx';
+import { MessageDialog, type MessageRef } from '@/views/message-dialog.tsx';
 import { Overview } from '@/views/overview.tsx';
 import { LabelsView } from '@/views/labels.tsx';
 import { Rules } from '@/views/rules.tsx';
@@ -15,13 +14,6 @@ import { SettingsView } from '@/views/settings.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
 import { SystemView } from '@/views/system.tsx';
-
-const PERIODS = [
-  ['1', 'Last 24 hours'],
-  ['7', 'Last 7 days'],
-  ['30', 'Last 30 days'],
-  ['90', 'Last 90 days'],
-] as const;
 
 const SECTIONS = ['suggestions', 'overview', 'decisions', 'labels', 'rules', 'changes', 'settings'] as const;
 const NAMES: Record<(typeof SECTIONS)[number], string> = {
@@ -38,7 +30,6 @@ const NAMES: Record<(typeof SECTIONS)[number], string> = {
 export function App() {
   const route = useRoute();
   if (route[0] === 'system') return <SystemView />;
-  if (route[0] === 'concepts') return <ConceptsView which={route[1]} />;
   return <Gate route={route} />;
 }
 
@@ -85,7 +76,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
             {signedInAs ? (
               <>
                 <span>{signedInAs}</span>
-                <Button variant="quiet" size="sm" onClick={() => void api.signOut().then(() => window.location.assign('/'))}>
+                <Button variant="quiet" onClick={() => void api.signOut().then(() => window.location.assign('/'))}>
                   Sign out
                 </Button>
               </>
@@ -96,14 +87,14 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
 
       <main className="pb-10">
         {section === 'suggestions' ? (
-          <SuggestionsView onOpen={setOpen} onChanged={waiting.reload} />
+          <SuggestionsView onChanged={waiting.reload} />
         ) : section === 'overview' ? (
           <div className="flex flex-col gap-4">
             {summary.error ? <ErrorNote message={summary.error} /> : null}
             {summary.data ? <Overview data={summary.data} period={period} onOpen={openMessage} /> : summary.loading ? <Loading rows={6} /> : null}
           </div>
         ) : section === 'decisions' ? (
-          <Decisions days={days} period={period} onOpen={openMessage} />
+          <Decisions days={days} onDays={setDays} onOpen={openMessage} />
         ) : section === 'labels' ? (
           <LabelsView />
         ) : section === 'rules' ? (
@@ -114,7 +105,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
           <SettingsView page={route[1]} />
         )}
       </main>
-      <MessageSheet target={open} onClose={() => setOpen(null)} />
+      <MessageDialog target={open} onClose={() => setOpen(null)} />
     </div>
   );
 }

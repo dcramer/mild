@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { listLabels } from '../store/labels.ts';
-import { setSenderRule } from '../store/rules.ts';
+import { setRule } from '../store/rules.ts';
+import type { RuleMatch } from '../triage/stages/rules.ts';
 import type { DecidedDisposition, Disposition, StageName } from '../triage/types.ts';
 
 /** A decision sift made while only observing, that the user has not yet confirmed or corrected. */
@@ -15,6 +16,7 @@ export interface Suggestion {
   reason: string;
   confidence: number | null;
   decidedAt: number;
+  receivedAt: number;
   fromAddress: string;
   fromName: string | null;
   subject: string;
@@ -30,6 +32,7 @@ interface Row {
   reason: string;
   confidence: number | null;
   decided_at: number;
+  received_at: number;
   from_address: string;
   from_name: string | null;
   subject: string;
@@ -40,7 +43,7 @@ interface Row {
  * observing, with no answer yet. Decisions that only repeat what the user already told sift (rules they
  * wrote or made by correcting it) are not suggestions and are left out; ones from a rule sift learned are.
  */
-export function pendingSuggestions(db: DatabaseSync, filter: { accountId?: string; sender?: string; limit?: number } = {}): Suggestion[] {
+export function pendingSuggestions(db: DatabaseSync, filter: { accountId?: string; sender?: string; domain?: string; limit?: number } = {}): Suggestion[] {
   const where: string[] = [];
   const params: (string | number)[] = [];
   if (filter.accountId !== undefined) {
@@ -51,10 +54,14 @@ export function pendingSuggestions(db: DatabaseSync, filter: { accountId?: strin
     where.push('m.from_address = ?');
     params.push(filter.sender);
   }
+  if (filter.domain !== undefined) {
+    where.push('m.from_domain = ?');
+    params.push(filter.domain);
+  }
   const rows = db
     .prepare(
       `SELECT d.id, d.account_id, d.message_id, d.stage, d.disposition, d.label_id, d.reason, d.confidence, d.decided_at,
-              m.from_address, m.from_name, m.subject
+              m.received_at, m.from_address, m.from_name, m.subject
        FROM decisions d
        JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
        LEFT JOIN rules r ON r.id = d.rule_id
@@ -76,21 +83,35 @@ export function pendingSuggestions(db: DatabaseSync, filter: { accountId?: strin
     reason: r.reason,
     confidence: r.confidence,
     decidedAt: r.decided_at,
+    receivedAt: r.received_at,
     fromAddress: r.from_address,
     fromName: r.from_name,
     subject: r.subject,
   }));
 }
 
+/** How far an answer reaches. Everything but `once` makes a rule. */
+export type FeedbackScope =
+  /** Everything from the sender. */
+  | 'sender'
+  /** Everything from anyone at the sender's domain. */
+  | 'domain'
+  /** Mail from the sender whose subject contains `contains`. */
+  | 'subject'
+  /** Only the mail that is waiting (or the one decision given). Nothing lasting is learned. */
+  | 'once';
+
 export interface FeedbackInput {
   accountId: string;
   sender: string;
   /** What the mail is: a label's id. Confirming a suggestion sends the label sift gave it. */
   label: string;
-  /** An exception to the label's action, for this sender only. */
+  /** An exception to the label's action, for this rule only. */
   disposition?: DecidedDisposition;
-  /** `sender`: this is what everything from the sender is. `message`: only the one decision. */
-  scope: 'sender' | 'message';
+  scope: FeedbackScope;
+  /** For `subject`: the words the subject must contain. */
+  contains?: string;
+  /** For `once`: answer for this one decision instead of everything waiting from the sender. */
   decisionId?: number;
 }
 
@@ -104,8 +125,8 @@ export interface FeedbackResult {
 const WILL: Record<Disposition, string> = { keep: 'kept in your inbox', archive: 'archived', spam: 'marked as spam', review: 'left for you' };
 
 /**
- * Record the user's answer to a suggestion and, for a sender-wide answer, make a rule for the sender
- * so their mail gets that label from now on without a model. Throws if the label does not exist or
+ * Record the user's answer to a suggestion and, unless it is for the waiting mail only, make a rule at
+ * the scope they chose so that mail gets the label from now on without a model. Throws if the label does not exist or
  * the answer refers to nothing that is waiting.
  */
 export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: number = Date.now()): FeedbackResult {
@@ -115,9 +136,35 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
   // A label set to "leave it for me" keeps the mail in the inbox.
   const wanted: DecidedDisposition = outcome === 'review' ? 'keep' : outcome;
 
-  const waiting = pendingSuggestions(db, { accountId: input.accountId, sender: input.sender });
-  const targets = input.scope === 'sender' ? waiting : waiting.filter((s) => s.decisionId === input.decisionId);
-  if (targets.length === 0) throw new Error('That suggestion is no longer waiting.');
+  const contains = input.contains?.trim() ?? '';
+  if (input.scope === 'subject' && contains === '') throw new Error('Say which words the subject must contain.');
+  const domain = input.sender.split('@')[1] ?? '';
+  const waiting = pendingSuggestions(db, { accountId: input.accountId, ...(input.scope === 'domain' ? { domain } : { sender: input.sender }) });
+  const targets = waiting.filter((s) =>
+    input.scope === 'subject'
+      ? s.subject.toLowerCase().includes(contains.toLowerCase())
+      : input.scope === 'once' && input.decisionId !== undefined
+        ? s.decisionId === input.decisionId
+        : true,
+  );
+  if (targets.length === 0)
+    throw new Error(
+      input.scope === 'subject' ? `Nothing waiting from ${input.sender} has "${contains}" in the subject.` : 'That suggestion is no longer waiting.',
+    );
+  const match: RuleMatch | null =
+    input.scope === 'sender'
+      ? { from: input.sender }
+      : input.scope === 'domain'
+        ? { fromDomain: domain }
+        : input.scope === 'subject'
+          ? { from: input.sender, subjectContains: contains }
+          : null;
+  const whose =
+    input.scope === 'domain'
+      ? `mail from anyone at ${domain}`
+      : input.scope === 'subject'
+        ? `mail from ${input.sender} with "${contains}" in the subject`
+        : `mail from ${input.sender}`;
 
   const insert = db.prepare(
     'INSERT INTO feedback (account_id, decision_id, message_id, verdict, correct, scope, created_at, label_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -133,14 +180,23 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
   try {
     for (const target of targets) {
       const verdict = verdictFor(target);
-      insert.run(target.accountId, target.decisionId, target.messageId, verdict, verdict === 'right' ? null : wanted, input.scope, now, label.id);
+      insert.run(
+        target.accountId,
+        target.decisionId,
+        target.messageId,
+        verdict,
+        verdict === 'right' ? null : wanted,
+        match ? 'sender' : 'message',
+        now,
+        label.id,
+      );
       example.run(target.accountId, target.messageId, wanted, label.id, target.disposition, target.stage, now);
     }
-    if (input.scope === 'sender') {
-      setSenderRule(
+    if (match) {
+      setRule(
         db,
         input.accountId,
-        input.sender,
+        match,
         { labelId: label.id, ...(input.disposition ? { disposition: input.disposition } : {}) },
         targets.every((t) => verdictFor(t) === 'right') ? 'user' : 'correction',
         now,
@@ -151,7 +207,7 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
     db.exec('ROLLBACK');
     throw error;
   }
-  return { reviewed: targets.length, taught: input.scope === 'sender' ? `From now on, mail from ${input.sender} is ${label.name}: ${WILL[outcome]}.` : null };
+  return { reviewed: targets.length, taught: match ? `From now on, ${whose} is ${label.name}: ${WILL[outcome]}.` : null };
 }
 
 /** How often sift's suggestions matched what the user wanted, from their answers. */

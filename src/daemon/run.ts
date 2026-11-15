@@ -4,6 +4,7 @@ import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import type { Judge } from '../triage/stages/model.ts';
 import { type Account, listAccounts } from '../store/accounts.ts';
+import { keepSuggestionBodies } from './bodies.ts';
 import { captureExamples } from './examples.ts';
 import { type SyncReport, syncAccount } from './sync.ts';
 import { type TriageReport, triageAccount } from './triage.ts';
@@ -50,6 +51,7 @@ export async function runOnce(db: DatabaseSync, options: RunOptions): Promise<Pa
         account,
       );
       result.captured = await captureExamples(db, api, account.id, options.now);
+      await keepSuggestionBodies(db, api, account.id, options.now);
       const line = describe(result, options.act);
       if (line) options.log(`${account.email}: ${line}`);
     } catch (error) {

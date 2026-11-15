@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { DecisionRow } from '@/lib/api.ts';
-import { dispositionName, money, outcomeName, tier } from '@/lib/format.ts';
+import { ACTIONS, dispositionName, money, outcomeName, tier } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
 import { Code, Note, Stamp } from '@/system';
 
@@ -17,9 +17,10 @@ export function TierLabel({ stage }: { stage: string }) {
 
 const STAMP = { review: 'look', spam: 'ink', archive: 'tint' } as const;
 
-/** What sift did with a message. */
-export function DispositionBadge({ disposition }: { disposition: string }) {
-  return <Stamp tone={STAMP[disposition as keyof typeof STAMP] ?? 'outline'}>{dispositionName(disposition)}</Stamp>;
+/** What sift did with a message; with `would`, what it would do or is set to do, in the present tense. */
+export function DispositionBadge({ disposition, would }: { disposition: string; would?: boolean }) {
+  const name = would ? (ACTIONS.find(([key]) => key === disposition)?.[1] ?? disposition) : dispositionName(disposition);
+  return <Stamp tone={STAMP[disposition as keyof typeof STAMP] ?? 'outline'}>{name}</Stamp>;
 }
 
 /** A second line under the point of a cell. */

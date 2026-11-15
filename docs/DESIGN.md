@@ -14,7 +14,8 @@ A proof sheet on a dark desk: ink on near-black, one highlighter pen, hard edges
 - **Lines are ink, thinned.** `--frame` for a sheet's edge, `--rule` between rows. Never a separate grey.
 - **One shadow.** `--edge`: hard, offset down and right, the edge of the sheet beneath. A `mark` button is raised by the same edge and pressing pushes it down.
 - **Things you press have hand-cut corners** (`--cut-control`); the highlighter stroke has its own (`--cut`). Surfaces are square.
-- **Type is by role.** Display face (`.statement`, `.figure`, `.title`, `.name`, the wordmark) for what is named or counted; text face for reading; mono small capitals (`.slug`) for labels and column heads; mono for anything typed or pasted.
+- **Type is by role, and legible first.** The text face (Geist) carries everything read: body, names, headings. The display face (Bricolage Grotesque) is only for what is large: the wordmark, a figure, a page title or the line a screen opens with (`.statement`); at reading sizes its shapes cost legibility. Mono small capitals (`.slug`) label things; mono is for anything typed or pasted. Nothing is set smaller than 11px.
+- **One height for controls.** Everything pressed or typed into in a row or a toolbar is `--control` high (32px), so buttons, selects and inputs line up. `lg` is for the one action a screen is about. Controls are filled at a strength that reads as pressable (`--fill`), and stronger on hover.
 - No app bar, no gradients, no pills, no icons as decoration.
 
 Tokens and the role classes are in `web/src/index.css`.
@@ -31,7 +32,9 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Table`, `Tr`, `Th`, `Td` | Rows of the same kind of thing. `Tr onOpen` makes the whole row pressable. |
 | `Figures`, `Figure` | Headline numbers, straight on the page. `look` for the one to see first, `failure` for a count of things gone wrong. |
 | `StackedBars` | Counts over time, stacked by series. Its legend reads out the column pointed at or focused. |
-| `Drawer` | Detail about one thing, over the page it was opened from. |
+| `ListView`, `FilterGroup` | **How every screen shows many of one thing.** A title with the count, a search box, a filter button beside it, then the rows or cards. The filter button opens a panel on the right that pushes the list left. Filters that are on show as a count on the button and, when the panel is closed, as a line of chips that each clear one. |
+| `Card`, `CardHead`, `CardFoot`, `CardGrid` | One of the things sift is about, shown whole: a suggestion, a label. Head (what it is), body, foot (what can be done to it without opening it). Pressing the card opens it. Things compared by column go in a `Table` instead. |
+| `Dialog` | Something opened from the page and read or answered without leaving it: a message, a sender's waiting mail, a form. `wide` for two columns; a `footer` for the actions that finish it. |
 | `Note` | Said to the reader outside the flow: `plain`, `look` (needs them), `failure`. No box. |
 | `Empty`, `Loading` | What a sheet shows with nothing in it, and while rows are on their way. |
 | `Stamp` | A short verdict. Weight is meaning: `outline`, `tint`, `ink`; `look` for what is left to the reader. |
@@ -50,7 +53,9 @@ Every part has an answer for a phone, and a new part needs one before it is adde
 | --- | --- |
 | `Masthead` | The sections and the signed-in line move into a panel that covers the screen, opened from a menu button. The bar shows the current section's name; a dot on the button means something is waiting in another section. |
 | `SubNav` | A select above the page. |
-| `Drawer` | Covers the screen. |
+| `Dialog` | Covers the screen. |
+| `ListView` | The filter panel opens above the list. |
+| `CardGrid` | One column. |
 | `Table` | Scrolls sideways inside its sheet. (Not good enough for the wider tables; see TODO.md.) |
 | Rows with a control | The control wraps under the text. |
 | Anything pressed | At least 40px tall on a touch screen (`pointer: coarse`), whatever its size on a desktop. |
@@ -59,9 +64,12 @@ The page itself never scrolls sideways.
 
 ## Rules for adding to it
 
+- A screen that lists something is a `ListView`. Don't lay out a heading, a search box or filters by hand.
+- A form that adds or changes something opens in a `Dialog`; it does not unfold inside the list.
+
 - Build screens from these parts. If a screen needs something they cannot do, add or extend a part here, with its states (hover, focus, pressed, disabled, busy, empty, failed), and add it to the specimen page in the same change.
 - A part says when to use it in its doc comment; that is the line the specimen page shows.
 - No inline styles, no colours or radii written into a view. If a value is missing, it is a missing token.
 - Behaviour that is hard to get right (a list that opens, a focus trap) comes from an unstyled primitive, today Base UI. Only files in `web/src/system/` import it, so the library can change without a screen changing.
 - A part's inline `style` is only for a value computed from data (a bar's height, a series colour).
-- Motion is short (80 to 150ms): a press, the drawer sliding in, rows pulsing while they load. All off under `prefers-reduced-motion`.
+- Motion is short (80 to 150ms): a press, a dialog opening, rows pulsing while they load. All off under `prefers-reduced-motion`.

@@ -1,11 +1,17 @@
+import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { DispositionBadge, ErrorNote, Outcome, Sub } from '@/components/bits.tsx';
 import { api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count } from '@/lib/format.ts';
-import { Button, Code, Empty, Input, Loading, Select, Sheet, SheetHead, Table, Td, Th, Tr } from '@/system';
+import { Button, Code, Dialog, Empty, FilterGroup, Input, ListView, Loading, Select, Sheet, Table, Td, Th, Tr } from '@/system';
 
 const CONDITIONS: Record<string, string> = { from: 'from', fromDomain: 'from domain', to: 'to', listId: 'list', subjectContains: 'subject contains' };
-const SOURCES: Record<string, string> = { user: 'You', agent: 'sift learned it', correction: 'You, correcting sift' };
+const SOURCES = [
+  ['', 'Anyone'],
+  ['user', 'You'],
+  ['correction', 'You, correcting sift'],
+  ['agent', 'sift learned it'],
+] as const;
 
 function Conditions({ match }: { match: Record<string, string> }) {
   return (
@@ -30,50 +36,90 @@ const WHEN = [
   ['subjectContains', 'Subject contains'],
 ] as const;
 const EXCEPTION = [
-  ['', 'Do what the label does'],
-  ['keep', 'But keep in inbox'],
-  ['archive', 'But archive'],
-  ['spam', 'But mark spam'],
+  ['', 'What the label does'],
+  ['keep', 'Keep in inbox instead'],
+  ['archive', 'Archive instead'],
+  ['spam', 'Mark spam instead'],
 ] as const;
 
-function AddRule({ accountId, labels, onAdded }: { accountId: string; labels: readonly (readonly [string, string])[]; onAdded: () => void }) {
+function AddRuleDialog({
+  accountId,
+  labels,
+  onClose,
+  onAdded,
+}: {
+  accountId: string;
+  labels: readonly (readonly [string, string])[];
+  onClose: () => void;
+  onAdded: () => void;
+}) {
   const { busy, error, run } = useAction();
   const [when, setWhen] = useState<(typeof WHEN)[number][0]>('from');
   const [value, setValue] = useState('');
   const [label, setLabel] = useState('');
   const [exception, setException] = useState<(typeof EXCEPTION)[number][0]>('');
+  const ready = value.trim() !== '' && label !== '';
+  const add = () =>
+    run(
+      () => api.addRule({ accountId, match: { [when]: value.trim() }, label, ...(exception === '' ? {} : { disposition: exception }) }),
+      () => {
+        onAdded();
+        onClose();
+      },
+    );
   return (
-    <>
+    <Dialog
+      open
+      onClose={onClose}
+      title="Add a rule"
+      subtitle="A rule says what mail is, without asking a model."
+      footer={
+        <>
+          <Button variant="ink" busy={busy} disabled={!ready} onClick={add}>
+            Add rule
+          </Button>
+          <Button variant="quiet" onClick={onClose}>
+            Cancel
+          </Button>
+          {error ? <p className="text-[13px] text-destructive">{error}</p> : null}
+        </>
+      }
+    >
       <form
-        className="flex flex-wrap items-center gap-2 px-4 pt-1 pb-4"
+        className="flex flex-col gap-4"
         onSubmit={(event) => {
           event.preventDefault();
-          run(
-            () => api.addRule({ accountId, match: { [when]: value.trim() }, label, ...(exception === '' ? {} : { disposition: exception }) }),
-            () => {
-              setValue('');
-              onAdded();
-            },
-          );
+          if (ready) add();
         }}
       >
-        <Select label="Condition" value={when} options={WHEN} onChange={setWhen} />
-        <Input
-          className="w-64"
-          aria-label="Value to match"
-          placeholder={when === 'fromDomain' ? 'example.com' : when === 'from' ? 'name@example.com' : ''}
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-        />
-        <span className="text-[13px] text-muted-foreground">is</span>
-        <Select label="Label" value={label} options={[['', 'Choose a label'] as const, ...labels]} onChange={setLabel} />
-        <Select label="Exception to the label's action" value={exception} options={EXCEPTION} onChange={setException} />
-        <Button variant="ink" type="submit" size="sm" busy={busy} disabled={value.trim() === '' || label === ''}>
-          Add rule
-        </Button>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[13px] font-medium">When mail is</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select label="Condition" value={when} options={WHEN} onChange={setWhen} />
+            <Input
+              autoFocus
+              className="min-w-48 flex-1"
+              aria-label="Value to match"
+              placeholder={when === 'fromDomain' ? 'example.com' : when === 'from' ? 'name@example.com' : ''}
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+            />
+          </div>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[13px] font-medium">It is</span>
+          <div>
+            <Select label="Label" value={label} options={[['', 'Choose a label'] as const, ...labels]} onChange={setLabel} />
+          </div>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[13px] font-medium">sift does</span>
+          <div>
+            <Select label="What sift does" value={exception} options={EXCEPTION} onChange={setException} />
+          </div>
+        </div>
       </form>
-      <Outcome error={error} />
-    </>
+    </Dialog>
   );
 }
 
@@ -82,23 +128,55 @@ export function Rules() {
   const { data, error, loading, reload } = useLoaded('rules', (signal) => api.rules(signal));
   const manage = useLoaded('rule-accounts', (signal) => api.manage(signal), 60_000);
   const remove = useAction();
+  const [search, setSearch] = useState('');
+  const [label, setLabel] = useState('');
+  const [source, setSource] = useState<(typeof SOURCES)[number][0]>('');
+  const [adding, setAdding] = useState(false);
   const accountId = manage.data?.accounts[0]?.id;
   const labels = accountId ? (manage.data?.labels[accountId] ?? []).map((l) => [l.id, l.name] as const) : [];
   const multipleAccounts = new Set(data?.rules.map((r) => r.accountId)).size > 1;
+  const needle = search.trim().toLowerCase();
+  const rules = (data?.rules ?? []).filter(
+    (r) =>
+      (label === '' || r.labelId === label) &&
+      (source === '' || r.source === source) &&
+      (needle === '' || [...Object.values(r.match), r.labelName ?? ''].some((text) => text.toLowerCase().includes(needle))),
+  );
+
   return (
-    <div className="flex flex-col gap-4">
+    <ListView
+      title="Rules"
+      count={data ? count(data.rules.length) : null}
+      description="A rule says what mail is; its label decides what happens. Rules are checked before any model. The most specific one wins, and one that keeps mail always does."
+      actions={
+        accountId ? (
+          <Button variant="ink" onClick={() => setAdding(true)}>
+            <PlusIcon aria-hidden />
+            Add a rule
+          </Button>
+        ) : null
+      }
+      search={{ value: search, onChange: setSearch, placeholder: 'Search senders, domains and labels' }}
+      filters={{
+        active: [
+          ...(label === '' ? [] : [{ label: `Label: ${labels.find(([id]) => id === label)?.[1] ?? label}`, clear: () => setLabel('') }]),
+          ...(source === '' ? [] : [{ label: `From: ${SOURCES.find(([key]) => key === source)?.[1]}`, clear: () => setSource('') }]),
+        ],
+        panel: (
+          <>
+            <FilterGroup label="Label" value={label} options={[['', 'Any'] as const, ...labels]} onChange={setLabel} />
+            <FilterGroup label="Made by" value={source} options={SOURCES} onChange={setSource} />
+          </>
+        ),
+      }}
+    >
       {error ? <ErrorNote message={error} /> : null}
       <Sheet>
-        <SheetHead
-          title="Rules"
-          description="A rule says what mail is; its label decides what happens. Checked in order, before any model, and one that keeps mail always wins."
-        />
-        {accountId ? <AddRule accountId={accountId} labels={labels} onAdded={reload} /> : null}
         <Outcome error={remove.error} />
         {loading ? (
           <Loading />
-        ) : !data || data.rules.length === 0 ? (
-          <Empty>No rules yet. Answering a suggestion makes one for that sender.</Empty>
+        ) : rules.length === 0 ? (
+          <Empty>{data && data.rules.length > 0 ? 'No rule matches.' : 'No rules yet. Answering a suggestion makes one.'}</Empty>
         ) : (
           <Table>
             <thead>
@@ -106,14 +184,14 @@ export function Rules() {
                 <Th>When mail is</Th>
                 <Th>It is</Th>
                 <Th>sift does</Th>
-                <Th>From</Th>
+                <Th>Made by</Th>
                 <Th num>Matches</Th>
                 <Th>Last matched</Th>
                 <Th />
               </Tr>
             </thead>
             <tbody>
-              {data.rules.map((rule) => (
+              {rules.map((rule) => (
                 <Tr key={rule.id}>
                   <Td>
                     <Conditions match={rule.match} />
@@ -128,18 +206,18 @@ export function Rules() {
                     {rule.labelName ?? <span className="font-normal text-destructive">A label that was removed</span>}
                   </Td>
                   <Td className="whitespace-nowrap">
-                    {rule.disposition ? <DispositionBadge disposition={rule.disposition} /> : <span className="text-muted-foreground">Nothing</span>}
+                    {rule.disposition ? <DispositionBadge would disposition={rule.disposition} /> : <span className="text-muted-foreground">Nothing</span>}
                     {rule.override ? <Sub>exception to the label</Sub> : null}
                   </Td>
                   <Td quiet className="whitespace-nowrap">
-                    {SOURCES[rule.source] ?? rule.source}
+                    {SOURCES.find(([key]) => key === rule.source)?.[1] ?? rule.source}
                   </Td>
                   <Td num>{count(rule.hits)}</Td>
                   <Td quiet className="whitespace-nowrap">
                     {rule.lastHitAt ? ago(rule.lastHitAt) : 'Never'}
                   </Td>
-                  <Td className="py-1.5 text-right">
-                    <Button variant="quiet" size="sm" disabled={remove.busy} onClick={() => remove.run(() => api.removeRule(rule.id), reload)}>
+                  <Td className="py-1 text-right">
+                    <Button variant="quiet" disabled={remove.busy} onClick={() => remove.run(() => api.removeRule(rule.id), reload)}>
                       Remove
                     </Button>
                   </Td>
@@ -149,6 +227,7 @@ export function Rules() {
           </Table>
         )}
       </Sheet>
-    </div>
+      {adding && accountId ? <AddRuleDialog accountId={accountId} labels={labels} onClose={() => setAdding(false)} onAdded={reload} /> : null}
+    </ListView>
   );
 }

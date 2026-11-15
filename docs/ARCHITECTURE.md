@@ -27,7 +27,7 @@ The fallback is `review`: the message stays where it is, gets the review label, 
 
 Rules that matter across tiers:
 
-- A rule whose outcome is `keep` is a protection and beats any other rule.
+- A rule whose outcome is `keep` is a protection and beats any other rule. Otherwise the most specific rule wins (more conditions, then an exact sender over a domain), so "this sender when the subject contains X" beats "this sender" whichever was written first.
 - A rule sift learned never hides mail from someone the user has written to; the user's own rules do what they say.
 - A rule whose label has been removed does nothing.
 - Spam has a higher confidence bar than archive.
@@ -143,6 +143,8 @@ sift suggests first and acts second. While it only observes, every decision is a
 - **Suggestions are grouped by sender**, label and what sift would do, so one answer settles a sender: "Right", or "No, it is…" with another label. The answer becomes a rule for that sender; what then happens is the label's action.
 - **An answer is durable.** It writes a sender record (`source` `user` or `correction`), so that sender's later mail is decided by the sender tier, with no model and no further suggestion. It overrides anything sift learned by itself.
 - **Every answer is scored.** `feedback` records right, wrong, or "answered" (sift had no suggestion, which is not a mistake), per decision, so accuracy can be reported per tier.
+- **An answer says how far it reaches:** everything from the sender, anyone at the sender's domain, the sender when the subject contains some words, or only the mail waiting now. All but the last make a rule with those conditions.
+- **A suggestion can be read.** Opening one shows the message text (held temporarily, see below), what sift knows about the sender (how much mail, whether the user has written to them, what their mail has been, rules that name them) and the answer.
 - **Every marked message becomes an example.** The answer creates an `examples` row; the next pass of `sift run` fetches the whole message (raw RFC 822, all headers, readable text) into it. These are the evaluation and training set. A message that has since been deleted keeps its answer and is marked gone.
 
 Code: `src/learn/feedback.ts` (suggestions, answers, accuracy), `src/daemon/examples.ts` (capture).
@@ -152,7 +154,8 @@ Code: `src/learn/feedback.ts` (suggestions, answers, accuracy), `src/daemon/exam
 One SQLite database, `sift.db` in the home directory (schema in `src/store/migrations/`). It is the complete record of what sift saw and did, and everything else (the dashboard, undo, future analytics) reads from it.
 
 - **messages:** one row per message sift has seen: sender, recipients, subject, the triage headers and the labels at sync time. No body. This is enough to triage a message again without refetching it.
-- **feedback, examples:** the user's answers to suggestions, and the full content of each message they answered for. `examples` is the only place message content is stored, and only for mail the user marked.
+- **feedback, examples:** the user's answers to suggestions, and the full content of each message they answered for, kept as evaluation and training data.
+- **suggestion_bodies:** the readable text of mail still waiting on the user, so a suggestion can be judged by reading it. Held only for mail sift would move or could not place, and deleted when the message is answered or stops being a suggestion, and after 30 days regardless (`src/daemon/bodies.ts`). These two tables are the only places message content is stored.
 - **decisions:** an append-only log, each with its mode (observe or act) and outcome. Every triage outcome is recorded, including "keep" and "could not decide", with the tier that made it, the reason, the confidence, and what it cost (model, tokens, dollars, duration). A message can have several decisions; the latest is current.
 - **actions:** the audit log of every mailbox change, with labels before and after, linked to the decision it carried out.
 - **labels, rules, questions, accounts:** what mail can be, what sift knows without a model, questions waiting on the user, and each account's history cursor and last sync time.

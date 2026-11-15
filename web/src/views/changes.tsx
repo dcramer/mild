@@ -2,9 +2,15 @@ import { useState } from 'react';
 import { ErrorNote, Outcome, Sub } from '@/components/bits.tsx';
 import { api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, dateTime } from '@/lib/format.ts';
-import { Button, Empty, Loading, Sheet, SheetHead, Table, Td, Th, Tr } from '@/system';
-import type { MessageRef } from '@/views/message-sheet.tsx';
+import { Button, Empty, FilterGroup, ListView, Loading, Sheet, Table, Td, Th, Tr } from '@/system';
+import type { MessageRef } from '@/views/message-dialog.tsx';
 
+const STATUS = [
+  ['', 'Any'],
+  ['done', 'Done'],
+  ['undone', 'Undone'],
+  ['trouble', 'Needs a look'],
+] as const;
 const WHAT: Record<string, string> = { archive: 'Archived', spam: 'Marked spam', label: 'Labelled', undo: 'Undid' };
 
 /** Everything sift has done to the mailbox, each reversible. */
@@ -12,16 +18,33 @@ export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void 
   const { data, error, loading, reload } = useLoaded('changes', (signal) => api.changes(signal));
   const action = useAction();
   const [note, setNote] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<(typeof STATUS)[number][0]>('');
+  const troubled = (s: string) => s === 'failed' || s === 'unknown' || s === 'pending';
+  const needle = search.trim().toLowerCase();
+  const changes = (data?.changes ?? []).filter(
+    (c) =>
+      (status === '' || (status === 'trouble' ? troubled(c.status) : c.status === status)) &&
+      (needle === '' || `${c.subject ?? ''} ${c.fromAddress ?? ''}`.toLowerCase().includes(needle)),
+  );
   return (
-    <div className="flex flex-col gap-4">
+    <ListView
+      title="Changes"
+      count={data ? String(data.changes.length) : null}
+      description="Everything sift did in Gmail. It never deletes mail, so each can be undone."
+      search={{ value: search, onChange: setSearch, placeholder: 'Search subject or sender' }}
+      filters={{
+        active: status === '' ? [] : [{ label: `Result: ${STATUS.find(([key]) => key === status)?.[1].toLowerCase()}`, clear: () => setStatus('') }],
+        panel: <FilterGroup label="Result" value={status} options={STATUS} onChange={setStatus} />,
+      }}
+    >
       {error ? <ErrorNote message={error} /> : null}
       <Sheet>
-        <SheetHead title="Changes" description="Everything sift did in Gmail. It never deletes mail, so each can be undone." />
         <Outcome error={action.error} done={note} />
         {loading ? (
           <Loading />
-        ) : !data || data.changes.length === 0 ? (
-          <Empty>Nothing has been changed in Gmail.</Empty>
+        ) : changes.length === 0 ? (
+          <Empty>{data && data.changes.length > 0 ? 'No change matches.' : 'Nothing has been changed in Gmail.'}</Empty>
         ) : (
           <Table>
             <thead>
@@ -34,8 +57,8 @@ export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void 
               </Tr>
             </thead>
             <tbody>
-              {data.changes.map((change) => {
-                const bad = change.status === 'failed' || change.status === 'unknown' || change.status === 'pending';
+              {changes.map((change) => {
+                const bad = troubled(change.status);
                 return (
                   <Tr key={change.id}>
                     <Td className="whitespace-nowrap">
@@ -59,10 +82,9 @@ export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void 
                     <Td quiet className="text-right whitespace-nowrap" title={dateTime(change.createdAt)}>
                       {ago(change.createdAt)}
                     </Td>
-                    <Td className="py-1.5 text-right">
+                    <Td className="py-1 text-right">
                       {change.status === 'done' && change.type !== 'undo' ? (
                         <Button
-                          size="sm"
                           disabled={action.busy}
                           onClick={() =>
                             action.run(async () => {
@@ -82,6 +104,6 @@ export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void 
           </Table>
         )}
       </Sheet>
-    </div>
+    </ListView>
   );
 }

@@ -20,10 +20,12 @@ export function Select<T extends string>({
     <Base.Root items={items} value={value} disabled={disabled ?? false} onValueChange={(next) => next !== null && onChange(next)}>
       <Base.Trigger
         aria-label={label}
-        className="press inline-flex h-7 cursor-pointer items-center justify-between gap-1.5 bg-(--fill) pr-2 pl-2.5 text-[13px] whitespace-nowrap select-none hover:bg-(--fill-strong) data-disabled:pointer-events-none data-disabled:opacity-45 data-popup-open:bg-(--fill-strong)"
+        className="press inline-flex h-(--control) max-w-full cursor-pointer items-center justify-between gap-1.5 bg-(--fill) pr-2 pl-3 text-[13px] font-medium whitespace-nowrap select-none hover:bg-(--fill-strong) data-disabled:pointer-events-none data-disabled:opacity-45 data-popup-open:bg-(--fill-strong)"
       >
-        <Base.Value />
-        <Base.Icon render={<ChevronDownIcon className="size-3.5 text-muted-foreground" />} />
+        <span className="truncate">
+          <Base.Value />
+        </span>
+        <Base.Icon render={<ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />} />
       </Base.Trigger>
       <Base.Portal>
         <Base.Positioner sideOffset={4} align="start" alignItemWithTrigger={false} className="z-50">

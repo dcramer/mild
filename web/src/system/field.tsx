@@ -5,14 +5,12 @@ const FILL = 'bg-(--fill) placeholder:text-muted-foreground/70 hover:bg-(--fill-
 
 /** A line of text typed by the reader. Always give it an `aria-label` or a visible label. */
 export function Input({ className, ...props }: ComponentProps<'input'>) {
-  return <input className={cn('field h-7 min-w-0 rounded-(--cut-control) px-2.5 text-[13px]', FILL, className)} {...props} />;
+  return <input className={cn('field h-(--control) min-w-0 rounded-(--cut-control) px-3 text-[13px]', FILL, className)} {...props} />;
 }
 
-/** Longer text, set in mono because what goes in it is read by a machine. */
+/** Longer text. */
 export function TextArea({ className, ...props }: ComponentProps<'textarea'>) {
-  return (
-    <textarea className={cn('block min-h-48 w-full resize-y rounded-[2px] px-3 py-2.5 font-mono text-[13px] leading-relaxed', FILL, className)} {...props} />
-  );
+  return <textarea className={cn('block min-h-48 w-full resize-y rounded-[2px] px-3 py-2.5 text-[13px] leading-relaxed', FILL, className)} {...props} />;
 }
 
 /** A switch between two states of a view, with its label. */

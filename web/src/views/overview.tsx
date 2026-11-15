@@ -135,14 +135,7 @@ export function Overview({ data, period, onOpen }: { data: Summary; period: Reac
       </div>
 
       <Sheet>
-        <SheetHead
-          title="Latest decisions"
-          action={
-            <Button size="sm" href="#decisions">
-              View all
-            </Button>
-          }
-        />
+        <SheetHead title="Latest decisions" action={<Button href="#decisions">View all</Button>} />
         {data.recent.length === 0 ? (
           <Empty>No decisions yet. sift records one each time it sorts a message, including when it leaves the message alone.</Empty>
         ) : (

@@ -9,7 +9,7 @@ import { listAccounts } from '../store/accounts.ts';
 import { addLabel, updateLabel } from '../store/labels.ts';
 import { addRule, removeRule } from '../store/rules.ts';
 import type { Controls, SignIn } from './controls.ts';
-import { listChanges, listDecisions, listLabelSummaries, listRuleSummaries, listSuggestions, messageDetail, summarize } from './queries.ts';
+import { listChanges, listDecisions, listLabelSummaries, listRuleSummaries, listSuggestions, messageDetail, suggestionDetail, summarize } from './queries.ts';
 import type { ManageState } from './types.ts';
 
 /** Where `pnpm build:web` puts the built web app. */
@@ -73,16 +73,27 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown> |
   }
 }
 
+const SCOPES = new Set(['sender', 'domain', 'subject', 'once']);
+
 /** Check an answer to a suggestion field by field. Null if it is not well formed. */
 function parseFeedback(body: Record<string, unknown>): FeedbackInput | null {
-  const { accountId, sender, label, disposition, scope, decisionId } = body;
+  const { accountId, sender, label, disposition, scope, contains, decisionId } = body;
   if (typeof accountId !== 'string' || typeof sender !== 'string') return null;
   if (typeof label !== 'string' || !LABEL_ID.test(label)) return null;
-  if (scope !== 'sender' && scope !== 'message') return null;
+  if (typeof scope !== 'string' || !SCOPES.has(scope)) return null;
   if (disposition !== undefined && disposition !== 'keep' && disposition !== 'archive' && disposition !== 'spam') return null;
+  if (contains !== undefined && (typeof contains !== 'string' || contains.length > 200)) return null;
+  if (scope === 'subject' && (typeof contains !== 'string' || contains.trim() === '')) return null;
   if (decisionId !== undefined && (typeof decisionId !== 'number' || !Number.isInteger(decisionId))) return null;
-  if (scope === 'message' && decisionId === undefined) return null;
-  return { accountId, sender, label, scope, ...(disposition === undefined ? {} : { disposition }), ...(decisionId === undefined ? {} : { decisionId }) };
+  return {
+    accountId,
+    sender,
+    label,
+    scope: scope as FeedbackInput['scope'],
+    ...(disposition === undefined ? {} : { disposition }),
+    ...(typeof contains === 'string' ? { contains } : {}),
+    ...(decisionId === undefined ? {} : { decisionId }),
+  };
 }
 
 export interface DashboardOptions {
@@ -388,6 +399,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
         const detail = messageDetail(db, query.get('account') ?? '', query.get('id') ?? '');
         return void json(res, detail ? 200 : 404, detail ?? { error: 'No such message' });
       }
+      if (url.pathname === '/api/suggestion') return void json(res, 200, suggestionDetail(db, query.get('account') ?? '', query.get('sender') ?? ''));
       if (url.pathname === '/api/rules') return void json(res, 200, { rules: listRuleSummaries(db) });
       if (url.pathname === '/api/suggestions') return void json(res, 200, listSuggestions(db, { includeKept: query.get('kept') === '1' }));
       if (url.pathname === '/api/manage') return void json(res, 200, manageState());

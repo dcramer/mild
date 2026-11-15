@@ -1,10 +1,12 @@
 export { Button } from './button.tsx';
+export { Card, CardFoot, CardGrid, CardHead } from './card.tsx';
 export { type ChartRow, type Series, StackedBars } from './chart.tsx';
 export { Copyable } from './copyable.tsx';
+export { Dialog } from './dialog.tsx';
 export { Disclosure } from './disclosure.tsx';
-export { Drawer } from './drawer.tsx';
 export { Check, Input, TextArea } from './field.tsx';
 export { Figure, Figures } from './figures.tsx';
+export { type ActiveFilter, FilterGroup, ListView } from './list-view.tsx';
 export { Masthead, type NavItem, Sections, SubNav } from './nav.tsx';
 export { Note } from './note.tsx';
 export { Select } from './select.tsx';

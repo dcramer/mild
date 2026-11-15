@@ -81,7 +81,7 @@ Reach it at `http://localhost:8787` on the machine running sift, or at `https://
 
 You manage sift from here:
 
-- **Suggestions:** what sift would do, grouped by sender. Answer "Right" or say what kind of mail it is; that settles the sender from then on. Each message you answer for is stored whole, as an example to test and train sift with.
+- **Suggestions:** a card per sender for what sift would do. Answer in one press, or open it to read the mail, see what sift knows about the sender, and choose how far your answer reaches (the sender, their domain, only when the subject contains something, or just this mail). Each message you answer for is stored whole, as an example to test and train sift with.
 - **Overview:** decisions per day by tier, how much was decided without a model, model cost, the backlog and the most frequent senders.
 - **Decisions:** every decision, searchable by subject or sender and filterable by tier and outcome. Choosing a row shows that message's full history: each decision, its reason and cost, and each mailbox change.
 - **Rules:** add and remove rules; see how often and how recently each matched.

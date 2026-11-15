@@ -73,13 +73,11 @@ function Running({ state, reload }: { state: ManageState; reload: () => void }) 
           }
           action={
             settings.act ? (
-              <Button size="sm" busy={busy} onClick={() => save({ act: false })}>
+              <Button busy={busy} onClick={() => save({ act: false })}>
                 Go back to observing
               </Button>
             ) : confirming ? null : (
-              <Button size="sm" onClick={() => setConfirming(true)}>
-                Let sift act…
-              </Button>
+              <Button onClick={() => setConfirming(true)}>Let sift act…</Button>
             )
           }
         />
@@ -121,7 +119,7 @@ function Running({ state, reload }: { state: ManageState; reload: () => void }) 
             onChange={(value) => value !== '' && save({ interval: Number(value) })}
           />
           {activity.sorting ? (
-            <Button size="sm" disabled={busy} onClick={() => run(() => api.checkNow(), reload)}>
+            <Button disabled={busy} onClick={() => run(() => api.checkNow(), reload)}>
               Check now
             </Button>
           ) : null}
@@ -138,11 +136,7 @@ function Accounts({ state }: { state: ManageState }) {
       <SheetHead
         title="Accounts"
         description="Anyone signed in as one of these sees all of them."
-        action={
-          <Button size="sm" href="/auth/login?add=1">
-            Connect another
-          </Button>
-        }
+        action={<Button href="/auth/login?add=1">Connect another</Button>}
       />
       {state.accounts.map((account) => (
         <div key={account.id} className="row flex flex-wrap items-baseline gap-x-4 px-4 py-3.5">
@@ -165,7 +159,7 @@ function OlderMail() {
         <Select label="How far back" value={days} options={DAYS} onChange={setDays} />
         <Button
           variant="ink"
-          size="sm"
+
           busy={busy}
           onClick={() =>
             run(async () => {
@@ -200,7 +194,7 @@ function Guidelines({ saved }: { saved: string }) {
         action={
           <Button
             variant="ink"
-            size="sm"
+
             busy={busy}
             disabled={text === stored}
             onClick={() =>

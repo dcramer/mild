@@ -8,8 +8,10 @@ export type {
   ManageState,
   MessageDetail,
   RuleSummary,
+  SenderProfile,
   Session,
   StageKey,
+  SuggestionDetail,
   SuggestionGroup,
   Suggestions,
   Summary,
@@ -22,6 +24,7 @@ import type {
   MessageDetail,
   RuleSummary,
   Session,
+  SuggestionDetail,
   Suggestions,
   Summary,
 } from '../../../src/dashboard/types.ts';
@@ -65,6 +68,7 @@ export const api = {
   message: (account: string, id: string, signal: AbortSignal) => get<MessageDetail>('/api/message', { account, id }, signal),
   rules: (signal: AbortSignal) => get<{ rules: RuleSummary[] }>('/api/rules', {}, signal),
   suggestions: (includeKept: boolean, signal: AbortSignal) => get<Suggestions>('/api/suggestions', includeKept ? { kept: 1 } : {}, signal),
+  suggestion: (account: string, sender: string, signal: AbortSignal) => get<SuggestionDetail>('/api/suggestion', { account, sender }, signal),
   /** Tell sift whether a suggestion was right. Resolves with what it learned. */
   feedback: (answer: FeedbackRequest) => post<{ reviewed: number; taught: string | null }>('/api/feedback', answer),
   manage: (signal: AbortSignal) => get<ManageState>('/api/manage', {}, signal),

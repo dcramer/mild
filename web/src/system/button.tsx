@@ -2,22 +2,22 @@ import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 const BASE =
-  'press inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 border border-transparent font-semibold whitespace-nowrap select-none aria-disabled:pointer-events-none aria-disabled:opacity-45 disabled:pointer-events-none disabled:opacity-45 [&_svg]:size-[1.15em] [&_svg]:shrink-0';
+  'press inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 border border-transparent font-medium whitespace-nowrap select-none aria-disabled:pointer-events-none aria-disabled:opacity-45 disabled:pointer-events-none disabled:opacity-45 [&_svg]:size-[1.15em] [&_svg]:shrink-0';
 
 const VARIANT = {
   /** The one thing on the screen that is waiting on the reader. At most one per screen. */
-  mark: 'press-raised bg-highlight text-highlight-ink',
+  mark: 'press-raised bg-highlight font-semibold text-highlight-ink',
   /** The main action of a sheet or a row. */
-  ink: 'bg-foreground text-background hover:bg-foreground/85',
+  ink: 'bg-foreground font-semibold text-background hover:bg-foreground/85',
   /** Everything else. */
   plain: 'bg-(--fill) hover:bg-(--fill-strong)',
   /** Actions that repeat down a list, and ways out. */
-  quiet: 'text-muted-foreground hover:bg-(--fill) hover:text-foreground',
+  quiet: 'text-foreground/75 hover:bg-(--fill) hover:text-foreground',
 } as const;
 
+/** `md` everywhere a control sits in a row or a toolbar; `lg` for the one action a screen is about. */
 const SIZE = {
-  sm: 'h-7 px-2.5 text-[13px]',
-  md: 'h-[34px] px-3.5 text-sm',
+  md: 'h-(--control) px-3 text-[13px]',
   lg: 'h-12 px-5 text-base',
 } as const;
 

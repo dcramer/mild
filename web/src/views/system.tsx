@@ -6,7 +6,13 @@ import {
   Code,
   Copyable,
   Disclosure,
-  Drawer,
+  Card,
+  CardFoot,
+  CardGrid,
+  CardHead,
+  Dialog,
+  FilterGroup,
+  ListView,
   Empty,
   Figure,
   Figures,
@@ -76,6 +82,8 @@ export function SystemView() {
   const [choice, setChoice] = useState<(typeof CHOICES)[number][0]>('archive');
   const [checked, setChecked] = useState(false);
   const [drawer, setDrawer] = useState(false);
+  const [search, setSearch] = useState('');
+  const [made, setMade] = useState('');
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-8">
       <header className="flex items-baseline gap-4">
@@ -126,10 +134,7 @@ export function SystemView() {
         <SheetHead title="Button" description="Corners cut by hand. Given an address it is a link that looks the same." />
         {VARIANTS.map(([variant, use]) => (
           <Row key={variant} label={variant} note={use}>
-            <Button variant={variant} size="sm">
-              Small
-            </Button>
-            <Button variant={variant}>Medium</Button>
+            <Button variant={variant}>Standard</Button>
             <Button variant={variant} size="lg">
               Large
               <ArrowRightIcon aria-hidden />
@@ -165,6 +170,46 @@ export function SystemView() {
           </div>
         </Row>
       </Sheet>
+
+      <div className="border border-dashed border-(--rule) p-4">
+        <ListView
+          title="List view"
+          count="3 things"
+          description="How every screen shows many of one thing. The filter button opens a panel that pushes the list left; filters that are on stay listed when it is closed."
+          actions={<Button variant="ink">Add one</Button>}
+          search={{ value: search, onChange: setSearch, placeholder: 'Search' }}
+          filters={{
+            active: made === '' ? [] : [{ label: `Made by: ${made}`, clear: () => setMade('') }],
+            panel: (
+              <FilterGroup
+                label="Made by"
+                value={made}
+                options={[
+                  ['', 'Anyone'],
+                  ['you', 'You'],
+                  ['sift', 'sift'],
+                ]}
+                onChange={setMade}
+              />
+            ),
+          }}
+        >
+          <CardGrid>
+            {['Example Weekly', 'Shop', 'Ada Lovelace']
+              .filter((name) => name.toLowerCase().includes(search.toLowerCase()))
+              .map((name) => (
+                <Card key={name}>
+                  <CardHead title={name} note="A card stands for one thing" aside="12" onOpen={() => setDrawer(true)} />
+                  <p className="text-[13px] text-muted-foreground">Head, body, foot. Pressing the card opens it; the foot holds what needs no opening.</p>
+                  <CardFoot>
+                    <Button variant="ink">Right</Button>
+                    <Button>Something else</Button>
+                  </CardFoot>
+                </Card>
+              ))}
+          </CardGrid>
+        </ListView>
+      </div>
 
       <Sheet>
         <SheetHead
@@ -259,9 +304,20 @@ export function SystemView() {
           <Loading rows={3} />
         </Sheet>
       </div>
-      <Drawer open={drawer} onClose={() => setDrawer(false)} title="Drawer: detail about one thing">
-        <p className="text-muted-foreground">Over the page it was opened from. Escape or a press outside closes it.</p>
-      </Drawer>
+      <Dialog
+        open={drawer}
+        onClose={() => setDrawer(false)}
+        title="Dialog: one thing, opened from the page"
+        footer={
+          <Button variant="ink" onClick={() => setDrawer(false)}>
+            Done
+          </Button>
+        }
+      >
+        <p className="text-muted-foreground">
+          Read or answered without leaving the page. Escape or a press outside closes it; on a phone it covers the screen.
+        </p>
+      </Dialog>
 
       <Sheet>
         <SheetHead

@@ -72,8 +72,14 @@ export interface MessageDetail {
   listId: string | null;
   receivedAt: number;
   syncedAt: number | null;
-  /** Triage headers as synced. Never the body. */
+  /** Triage headers as synced. */
   headers: Record<string, string>;
+  /**
+   * The readable text, where sift holds it: while the message is waiting on the user (and sift would move it or
+   * could not place it), or for good once the user has answered for it. Null otherwise.
+   */
+  body: string | null;
+  sender: SenderProfile;
   /** Every decision made about this message, oldest first. */
   decisions: (DecisionRow & { ruleId: string | null; inputTokens: number; outputTokens: number; durationMs: number | null })[];
   /** Every mailbox change made to this message, oldest first. */
@@ -88,6 +94,36 @@ export interface MessageDetail {
     finalLabels: string[] | null;
     error: string | null;
     createdAt: number;
+  }[];
+}
+
+/** What sift knows about one sender, to judge their mail by. */
+export interface SenderProfile {
+  address: string;
+  /** Messages recorded from this address. */
+  messages: number;
+  firstSeenAt: number | null;
+  /** Whether the account owner has ever written to this address. Null if that has not been checked. */
+  userHasWritten: boolean | null;
+  /** What this sender's mail currently is, by label, most first. */
+  labels: { id: string; name: string; messages: number }[];
+  /** Rules that name this sender or their domain. */
+  rules: { id: string; match: Record<string, string>; labelName: string | null; disposition: string | null; source: string }[];
+}
+
+/** One sender's mail that is waiting on the user. GET /api/suggestion. */
+export interface SuggestionDetail {
+  sender: SenderProfile;
+  messages: {
+    decisionId: number;
+    messageId: string;
+    subject: string;
+    receivedAt: number;
+    disposition: string;
+    labelId: string | null;
+    labelName: string | null;
+    stage: StageKey;
+    reason: string;
   }[];
 }
 
@@ -112,19 +148,23 @@ export interface RuleSummary {
   createdAt: number;
 }
 
-/** Mail from one sender that sift would treat the same way, waiting for the user to confirm or correct. */
+/** One sender's mail that is waiting for the user to confirm or correct. */
 export interface SuggestionGroup {
   accountId: string;
   sender: string;
   senderName: string | null;
-  /** What sift would do. `review` means it had no suggestion. */
+  /** What sift would do with most of it. `review` without a label means it could not place the mail. */
   disposition: string;
   /** What sift says the mail is, or null if it could not place it. */
   labelId: string | null;
   labelName: string | null;
   stage: StageKey;
+  /** How many different guesses sift made across this sender's waiting mail. More than one means it is mixed. */
+  guesses: number;
   messages: number;
   latestAt: number;
+  /** When the newest of them arrived. */
+  latestReceivedAt: number;
   /** The newest few, for context. */
   sample: { decisionId: number; messageId: string; subject: string; reason: string; decidedAt: number }[];
 }
@@ -147,9 +187,12 @@ export interface FeedbackRequest {
   sender: string;
   /** What the mail is: a label's id. Agreeing with sift sends the label it gave. */
   label: string;
-  /** An exception to the label's action, for this sender only. */
+  /** An exception to the label's action, for this rule only. */
   disposition?: string;
-  scope: 'sender' | 'message';
+  /** How far the answer reaches. Everything but `once` makes a rule. */
+  scope: 'sender' | 'domain' | 'subject' | 'once';
+  /** For `subject`: the words the subject must contain. */
+  contains?: string;
   decisionId?: number;
 }
 

@@ -55,6 +55,9 @@ export function describeMatch(match: RuleMatch): string {
     .join(', ');
 }
 
+/** How narrowly a match is drawn: each condition counts, and an exact sender counts for more than a domain. */
+const specificity = (match: RuleMatch) => Object.values(match).filter((v) => v !== undefined).length * 2 + (match.from === undefined ? 0 : 1);
+
 export interface RulesOptions {
   /** Whether the owner has ever written to the sender. Undefined means not known. */
   hasWritten?: (facts: MessageFacts) => boolean | undefined;
@@ -62,8 +65,10 @@ export interface RulesOptions {
 
 /**
  * Deterministic rules, the user's and the ones sift learned. A rule whose outcome is `keep` is a
- * protection and beats every other match; otherwise the first match in order wins. A rule whose label
- * no longer exists is ignored, and a learned rule never hides mail from someone the owner has written to.
+ * protection and beats every other match. Otherwise the most specific match wins (more conditions, then
+ * an exact sender over a domain), so "this sender when the subject contains X" beats "this sender"
+ * whichever was written first; ties go to the earlier rule. A rule whose label no longer exists is
+ * ignored, and a learned rule never hides mail from someone the owner has written to.
  */
 export function rulesStage(rules: readonly Rule[], labels: readonly Label[], options: RulesOptions = {}): Stage {
   return {
@@ -77,7 +82,8 @@ export function rulesStage(rules: readonly Rule[], labels: readonly Label[], opt
         if (rule.learned && hides && options.hasWritten?.(facts) === true) return [];
         return [{ rule, label, outcome }];
       });
-      const hit = hits.find((h) => h.outcome.disposition === 'keep') ?? hits[0];
+      const ranked = hits.toSorted((a, b) => specificity(b.rule.match) - specificity(a.rule.match));
+      const hit = ranked.find((h) => h.outcome.disposition === 'keep') ?? ranked[0];
       if (!hit) return null;
       return {
         ...hit.outcome,

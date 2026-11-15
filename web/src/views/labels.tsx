@@ -1,106 +1,117 @@
+import { PencilIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
-import { ErrorNote, Outcome } from '@/components/bits.tsx';
-import { type LabelSummary, type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
+import { ErrorNote } from '@/components/bits.tsx';
+import { type LabelSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ACTIONS, type ActionKey, count, percent } from '@/lib/format.ts';
-import { Button, Code, Input, Loading, Select, Sheet, SheetHead, TextArea } from '@/system';
+import { Button, Card, CardFoot, CardGrid, CardHead, Code, Dialog, Empty, FilterGroup, Input, ListView, Loading, Select, Sheet, TextArea } from '@/system';
 
-/** The fields of a label the user writes: what it is called and how to recognise it. */
-function LabelForm({
-  start,
-  submit,
-  busy,
-  onSubmit,
-  onCancel,
-}: {
-  start: { name: string; description: string; disposition: ActionKey };
-  submit: string;
-  busy: boolean;
-  onSubmit: (label: { name: string; description: string; disposition: ActionKey }) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState(start.name);
-  const [description, setDescription] = useState(start.description);
-  const [disposition, setDisposition] = useState(start.disposition);
+interface Draft {
+  name: string;
+  description: string;
+  disposition: ActionKey;
+}
+
+/** Add a label, or change one. `label` is the one being changed. */
+function LabelDialog({ accountId, label, onClose, onSaved }: { accountId: string; label: LabelSummary | null; onClose: () => void; onSaved: () => void }) {
+  const { busy, error, run } = useAction();
+  const [draft, setDraft] = useState<Draft>({
+    name: label?.name ?? '',
+    description: label?.description ?? '',
+    disposition: (label?.disposition as ActionKey) ?? 'review',
+  });
+  const save = () =>
+    run(
+      () =>
+        label
+          ? api.saveLabel(accountId, label.id, { ...draft, name: draft.name.trim(), description: draft.description.trim() })
+          : api.addLabel({ accountId, ...draft, name: draft.name.trim(), description: draft.description.trim() }),
+      () => {
+        onSaved();
+        onClose();
+      },
+    );
   return (
-    <form
-      className="flex flex-col gap-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit({ name: name.trim(), description: description.trim(), disposition });
-      }}
+    <Dialog
+      open
+      onClose={onClose}
+      title={label ? `Edit ${label.name}` : 'Add a label'}
+      subtitle={label ? <>In Gmail it stays {label.gmailLabel}, so mail already labelled keeps its label.</> : undefined}
+      footer={
+        <>
+          <Button variant="ink" busy={busy} disabled={draft.name.trim() === ''} onClick={save}>
+            {label ? 'Save' : 'Add label'}
+          </Button>
+          <Button variant="quiet" onClick={onClose}>
+            Cancel
+          </Button>
+          {error ? <p className="text-[13px] text-destructive">{error}</p> : null}
+        </>
+      }
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <Input className="w-64" aria-label="Name" placeholder="Name" maxLength={60} value={name} onChange={(event) => setName(event.target.value)} />
-        <Select label="What sift does with it" value={disposition} options={ACTIONS} onChange={setDisposition} />
-      </div>
-      <TextArea
-        aria-label="How to recognise it"
-        placeholder="How to recognise it. The model reads this, so say what belongs and what does not."
-        className="min-h-20 font-sans"
-        maxLength={600}
-        value={description}
-        onChange={(event) => setDescription(event.target.value)}
-      />
-      <div className="flex items-center gap-2">
-        <Button variant="ink" size="sm" type="submit" busy={busy} disabled={name.trim() === ''}>
-          {submit}
-        </Button>
-        <Button variant="quiet" size="sm" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </form>
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (draft.name.trim() !== '') save();
+        }}
+      >
+        <label className="flex flex-col gap-1.5">
+          <span className="text-[13px] font-medium">Name</span>
+          <Input autoFocus maxLength={60} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-[13px] font-medium">How to recognise it</span>
+          <TextArea
+            className="min-h-28"
+            maxLength={600}
+            value={draft.description}
+            onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+          />
+          <span className="text-[13px] text-muted-foreground">The model reads this to decide. Say what belongs and what does not.</span>
+        </label>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[13px] font-medium">What sift does with it</span>
+          <div>
+            <Select
+              label="What sift does with it"
+              value={draft.disposition}
+              options={ACTIONS}
+              onChange={(disposition) => setDraft({ ...draft, disposition })}
+            />
+          </div>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 
 /** One label: what it is, what happens to its mail, and how much rests on it. */
-function LabelRow({ accountId, label, reload }: { accountId: string; label: LabelSummary; reload: () => void }) {
+function LabelCard({
+  accountId,
+  label,
+  account,
+  onEdit,
+  reload,
+}: {
+  accountId: string;
+  label: LabelSummary;
+  account: string | null;
+  onEdit: () => void;
+  reload: () => void;
+}) {
   const { busy, error, run } = useAction();
-  const [editing, setEditing] = useState(false);
   const facts = [
     `${count(label.messages)} ${label.messages === 1 ? 'message' : 'messages'}`,
-    label.record.reviewed > 0 ? `right on ${percent(label.record.right, label.record.reviewed)} of ${count(label.record.reviewed)} you checked` : null,
+    `${count(label.rules)} ${label.rules === 1 ? 'rule' : 'rules'}`,
+    label.record.reviewed > 0 ? `right ${percent(label.record.right, label.record.reviewed)} of ${count(label.record.reviewed)}` : null,
   ].filter(Boolean);
-
-  if (editing) {
-    return (
-      <li className="row px-4 py-4">
-        <LabelForm
-          start={{ name: label.name, description: label.description, disposition: label.disposition as ActionKey }}
-          submit="Save"
-          busy={busy}
-          onCancel={() => setEditing(false)}
-          onSubmit={(change) =>
-            run(
-              () => api.saveLabel(accountId, label.id, change),
-              () => {
-                setEditing(false);
-                reload();
-              },
-            )
-          }
-        />
-        {error ? <p className="mt-2 text-[13px] text-destructive">{error}</p> : null}
-      </li>
-    );
-  }
   return (
-    <li className="row grid gap-x-8 gap-y-2 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto]">
-      <div className="min-w-0">
-        <p className="name">{label.name}</p>
-        <p className="mt-0.5 text-[13px] text-muted-foreground">{label.description}</p>
-        <p className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[13px] text-muted-foreground tabular-nums">
-          <Code>{label.gmailLabel}</Code>
-          {label.rules > 0 ? (
-            <a className="underline-offset-2 hover:text-foreground hover:underline" href="#rules">
-              {count(label.rules)} {label.rules === 1 ? 'rule' : 'rules'}
-            </a>
-          ) : null}
-          <span>{facts.join(' · ')}</span>
-        </p>
-        {error ? <p className="mt-2 text-[13px] text-destructive">{error}</p> : null}
-      </div>
-      <div className="flex items-start gap-1.5">
+    <Card>
+      <CardHead title={label.name} note={account ?? undefined} aside={<Code>{label.gmailLabel}</Code>} />
+      <p className="text-[13px] text-muted-foreground">{label.description}</p>
+      <p className="text-[13px] text-muted-foreground tabular-nums">{facts.join(' · ')}</p>
+      {error ? <p className="text-[13px] text-destructive">{error}</p> : null}
+      <CardFoot>
         <Select
           label={`What sift does with ${label.name}`}
           value={label.disposition as ActionKey}
@@ -108,90 +119,75 @@ function LabelRow({ accountId, label, reload }: { accountId: string; label: Labe
           disabled={busy}
           onChange={(disposition) => run(() => api.saveLabel(accountId, label.id, { disposition }), reload)}
         />
-        <Button variant="quiet" size="sm" onClick={() => setEditing(true)}>
+        <Button variant="quiet" className="ml-auto" onClick={onEdit}>
+          <PencilIcon aria-hidden />
           Edit
         </Button>
-      </div>
-    </li>
+      </CardFoot>
+    </Card>
   );
 }
 
-function AccountLabels({
-  account,
-  labels,
-  title,
-  reload,
-}: {
-  account: ManageState['accounts'][number];
-  labels: LabelSummary[];
-  title: string;
-  reload: () => void;
-}) {
-  const { busy, error, run } = useAction();
-  const [adding, setAdding] = useState(false);
-  return (
-    <Sheet>
-      <SheetHead
-        title={title}
-        description="Every message gets one label, from a rule or from a model. The label decides what happens to it, and is added to it in Gmail."
-        action={
-          adding ? null : (
-            <Button size="sm" onClick={() => setAdding(true)}>
-              Add a label
-            </Button>
-          )
-        }
-      />
-      {adding ? (
-        <div className="px-4 pt-1 pb-4">
-          <LabelForm
-            start={{ name: '', description: '', disposition: 'review' }}
-            submit="Add label"
-            busy={busy}
-            onCancel={() => setAdding(false)}
-            onSubmit={(label) =>
-              run(
-                () => api.addLabel({ accountId: account.id, ...label }),
-                () => {
-                  setAdding(false);
-                  reload();
-                },
-              )
-            }
-          />
-        </div>
-      ) : null}
-      <Outcome error={error} />
-      <ul>
-        {labels.map((label) => (
-          <LabelRow key={label.id} accountId={account.id} label={label} reload={reload} />
-        ))}
-      </ul>
-    </Sheet>
-  );
-}
+const DOES = [['', 'Anything'] as const, ...ACTIONS];
 
 /** The labels: what mail can be, and what sift does with each. */
 export function LabelsView() {
   const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
+  const [search, setSearch] = useState('');
+  const [does, setDoes] = useState<(typeof DOES)[number][0]>('');
+  const [editing, setEditing] = useState<{ accountId: string; label: LabelSummary | null } | null>(null);
+  const accounts = data?.accounts ?? [];
+  const needle = search.trim().toLowerCase();
+  const all = accounts.flatMap((account) => (data?.labels[account.id] ?? []).map((label) => ({ account, label })));
+  const shown = all.filter(
+    ({ label }) =>
+      (does === '' || label.disposition === does) && (needle === '' || `${label.name} ${label.description} ${label.gmailLabel}`.toLowerCase().includes(needle)),
+  );
+  const first = accounts[0];
+
   return (
-    <div className="flex flex-col gap-4">
+    <ListView
+      title="Labels"
+      count={data ? count(all.length) : null}
+      description="Every message gets one label, from a rule or from a model. The label decides what happens to the message, and is added to it in Gmail."
+      actions={
+        first ? (
+          <Button variant="ink" onClick={() => setEditing({ accountId: first.id, label: null })}>
+            <PlusIcon aria-hidden />
+            Add a label
+          </Button>
+        ) : null
+      }
+      search={{ value: search, onChange: setSearch, placeholder: 'Search labels' }}
+      filters={{
+        active: does === '' ? [] : [{ label: `sift does: ${DOES.find(([key]) => key === does)?.[1].toLowerCase()}`, clear: () => setDoes('') }],
+        panel: <FilterGroup label="sift does" value={does} options={DOES} onChange={setDoes} />,
+      }}
+    >
       {error ? <ErrorNote message={error} /> : null}
       {loading ? (
         <Sheet>
           <Loading rows={6} />
         </Sheet>
+      ) : shown.length === 0 ? (
+        <Sheet>
+          <Empty>No label matches.</Empty>
+        </Sheet>
       ) : (
-        data?.accounts.map((account) => (
-          <AccountLabels
-            key={account.id}
-            account={account}
-            labels={data.labels[account.id] ?? []}
-            title={data.accounts.length > 1 ? `Labels · ${account.email}` : 'Labels'}
-            reload={reload}
-          />
-        ))
+        <CardGrid>
+          {shown.map(({ account, label }) => (
+            <LabelCard
+              key={`${account.id}/${label.id}`}
+              accountId={account.id}
+              label={label}
+              account={accounts.length > 1 ? account.email : null}
+              onEdit={() => setEditing({ accountId: account.id, label })}
+              reload={reload}
+            />
+          ))}
+        </CardGrid>
       )}
-    </div>
+      {editing ? <LabelDialog accountId={editing.accountId} label={editing.label} onClose={() => setEditing(null)} onSaved={reload} /> : null}
+    </ListView>
   );
 }

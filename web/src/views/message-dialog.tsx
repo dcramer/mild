@@ -1,22 +1,14 @@
 import type { ReactNode } from 'react';
 import { DispositionBadge, Result } from '@/components/bits.tsx';
+import { MessageBody, Part, SenderFacts } from '@/components/message-parts.tsx';
 import { type MessageDetail, api, useLoaded } from '@/lib/api.ts';
 import { count, dateTime, money, tier } from '@/lib/format.ts';
-import { Code, Drawer, Loading, Note } from '@/system';
+import { Code, Dialog, Loading, Note } from '@/system';
 
 export interface MessageRef {
   accountId: string;
   messageId: string;
   subject: string;
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 py-1">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="break-words">{children}</dd>
-    </div>
-  );
 }
 
 function Labels({ title, labels }: { title: string; labels: string[] }) {
@@ -110,65 +102,35 @@ function ActionEntry({ a }: { a: Action }) {
   );
 }
 
-const people = (list: MessageDetail['to']) => list.map((p) => p.address).join(', ');
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-3">
-      <h3 className="slug text-muted-foreground">{title}</h3>
-      {children}
-    </section>
-  );
-}
-
 function Body({ detail }: { detail: MessageDetail }) {
   const history = [
     ...detail.decisions.map((d) => ({ at: d.decidedAt, order: 0, node: <DecisionEntry key={`d${d.id}`} d={d} /> })),
     ...detail.actions.map((a) => ({ at: a.createdAt, order: 1, node: <ActionEntry key={`a${a.id}`} a={a} /> })),
   ].toSorted((x, y) => x.at - y.at || x.order - y.order);
-  const headers = Object.entries(detail.headers).filter(([name]) => !['from', 'to', 'cc', 'subject'].includes(name));
   return (
-    <div className="flex flex-col gap-7">
-      <dl>
-        <Field label="From">{detail.fromName ? `${detail.fromName} <${detail.fromAddress}>` : detail.fromAddress}</Field>
-        {detail.to.length > 0 ? <Field label="To">{people(detail.to)}</Field> : null}
-        {detail.cc.length > 0 ? <Field label="Cc">{people(detail.cc)}</Field> : null}
-        <Field label="Received">{dateTime(detail.receivedAt)}</Field>
-        {detail.listId ? <Field label="List">{detail.listId}</Field> : null}
-      </dl>
-
-      <Section title="What sift did">
-        {history.length === 0 ? <p className="text-muted-foreground">Not sorted yet.</p> : <ol>{history.map((entry) => entry.node)}</ol>}
-      </Section>
-
-      {headers.length > 0 ? (
-        <Section title="What sift kept">
-          <p className="text-[13px] text-muted-foreground">These headers and the subject. Never the body, unless you answered for this message.</p>
-          <dl className="text-xs">
-            <Field label="message id">
-              <span className="font-mono">{detail.messageId}</span>
-            </Field>
-            {headers.map(([name, value]) => (
-              <Field key={name} label={name}>
-                <span className="font-mono">{value}</span>
-              </Field>
-            ))}
-          </dl>
-        </Section>
-      ) : null}
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-x-8 gap-y-6 md:grid-cols-[minmax(0,1fr)_22rem]">
+      <MessageBody untitled detail={detail} />
+      <div className="flex min-w-0 flex-col gap-6">
+        <Part title="What sift did">
+          {history.length === 0 ? <p className="text-muted-foreground">Not sorted yet.</p> : <ol>{history.map((entry) => entry.node)}</ol>}
+        </Part>
+        <Part title="This sender">
+          <SenderFacts sender={detail.sender} />
+        </Part>
+      </div>
     </div>
   );
 }
 
-/** Everything sift knows about one message: who sent it, each decision and each mailbox change, in order. */
-export function MessageSheet({ target, onClose }: { target: MessageRef | null; onClose: () => void }) {
+/** Everything sift knows about one message: its text if held, each decision and each mailbox change, and its sender. */
+export function MessageDialog({ target, onClose }: { target: MessageRef | null; onClose: () => void }) {
   return target ? <Loaded key={`${target.accountId}/${target.messageId}`} target={target} onClose={onClose} /> : null;
 }
 
 function Loaded({ target, onClose }: { target: MessageRef; onClose: () => void }) {
   const { data, error, loading } = useLoaded(`${target.accountId}/${target.messageId}`, (signal) => api.message(target.accountId, target.messageId, signal));
   return (
-    <Drawer open onClose={onClose} title={(data?.subject ?? target.subject) || '(no subject)'}>
+    <Dialog open wide onClose={onClose} title={(data?.subject ?? target.subject) || '(no subject)'}>
       {loading ? (
         <div className="-mx-4">
           <Loading />
@@ -180,6 +142,6 @@ function Loaded({ target, onClose }: { target: MessageRef; onClose: () => void }
           <p>{error}</p>
         </Note>
       )}
-    </Drawer>
+    </Dialog>
   );
 }

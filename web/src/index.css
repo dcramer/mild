@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 @import '@fontsource-variable/bricolage-grotesque';
-@import '@fontsource-variable/hanken-grotesk';
-@import '@fontsource-variable/jetbrains-mono';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -43,8 +43,8 @@
 
   /* Type, by role. */
   --face-display: 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
-  --face-text: 'Hanken Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
-  --face-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+  --face-text: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --face-mono: 'Geist Mono Variable', ui-monospace, monospace;
 
   /* The dashboard is dark only: ink-black paper, off-white ink. */
   --background: #111110;
@@ -58,7 +58,7 @@
   --secondary: #252521;
   --secondary-foreground: #e9e7e1;
   --muted: #20201d;
-  --muted-foreground: #98968d;
+  --muted-foreground: #a6a49b;
   --accent: #252521;
   --accent-foreground: #e9e7e1;
   --destructive: #ff7a6b;
@@ -85,8 +85,11 @@
   --rule: color-mix(in oklab, var(--foreground) 8%, transparent);
   --frame: color-mix(in oklab, var(--foreground) 17%, transparent);
   /* What a control is filled with, in place of an outline. */
-  --fill: color-mix(in oklab, var(--foreground) 7%, transparent);
-  --fill-strong: color-mix(in oklab, var(--foreground) 13%, transparent);
+  --fill: color-mix(in oklab, var(--foreground) 10%, transparent);
+  --fill-strong: color-mix(in oklab, var(--foreground) 17%, transparent);
+
+  /* One height for everything pressed or typed into in a row or a toolbar, so they line up. */
+  --control: 2rem;
 
   /* Tiers are an ordered cascade, cheapest first, so they share one ink that thins as cost rises.
      Mail no tier could decide gets the highlighter. Checked as an ordinal ramp against the card. */
@@ -119,31 +122,36 @@
     box-shadow: 3px 3px 0 0 var(--edge);
   }
 
-  /* Display type: titles, figures, names and the wordmark. */
-  .title,
+  /* Display type is for what is large: the wordmark, a figure, the line a screen opens with.
+     At reading sizes its shapes cost legibility, so headings and names are set in the text face. */
   .figure,
-  .name,
   .wordmark {
     font-family: var(--face-display);
     font-weight: 600;
     letter-spacing: -0.02em;
   }
-  .title {
-    font-size: 17px;
-    line-height: 1.2;
-  }
   .figure {
     font-size: 32px;
     line-height: 1.1;
-  }
-  .name {
-    font-size: 16px;
-    line-height: 1.25;
   }
   .wordmark {
     font-size: 22px;
     font-weight: 700;
     line-height: 1;
+  }
+  .title,
+  .name {
+    font-family: var(--face-text);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .title {
+    font-size: 16px;
+    line-height: 1.3;
+  }
+  .name {
+    font-size: 14px;
+    line-height: 1.35;
   }
 
   /* The one line a screen opens with. */
@@ -152,16 +160,16 @@
     font-size: 26px;
     font-weight: 600;
     line-height: 1.15;
-    letter-spacing: -0.025em;
+    letter-spacing: -0.02em;
     text-wrap: balance;
   }
 
   /* Small capitals in the mono face, for labels and column heads. */
   .slug {
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 500;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
   }
 
@@ -173,9 +181,9 @@
     padding-inline: 0.45rem;
     border-radius: var(--cut);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 500;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     white-space: nowrap;
   }
@@ -230,7 +238,7 @@
   @media (pointer: coarse) {
     .press,
     .field {
-      min-height: 2.5rem;
+      min-height: 2.75rem;
     }
   }
 
