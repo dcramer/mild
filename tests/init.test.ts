@@ -105,9 +105,9 @@ describe('sift init', () => {
       'link: https://console.cloud.google.com/projectcreate',
       'link: https://console.cloud.google.com/apis/library/gmail.googleapis.com',
       'link: https://console.cloud.google.com/auth/overview',
+      'link: https://console.cloud.google.com/auth/clients',
       'link: https://console.cloud.google.com/auth/scopes',
       'link: https://console.cloud.google.com/auth/audience',
-      'link: https://console.cloud.google.com/auth/clients',
     ]);
     expect(w.text()).toContain('Audience: External');
     expect(w.text()).toContain('Application type: Desktop app');

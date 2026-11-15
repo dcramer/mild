@@ -147,6 +147,15 @@ const GOOGLE_TASKS: readonly Task[] = [
     ],
   },
   {
+    title: 'Create the client',
+    url: 'https://console.cloud.google.com/auth/clients',
+    todo: ['Choose "Create client", then Create.', 'In the window that appears, choose "Download JSON". Keep the file; sift asks for its contents at the end.'],
+    values: [
+      ['Application type', 'Desktop app'],
+      ['Name', 'sift'],
+    ],
+  },
+  {
     title: 'Allow access to Gmail',
     url: 'https://console.cloud.google.com/auth/scopes',
     todo: ['Choose "Add or remove scopes".', 'Paste both scopes below into "Manually add scopes", then Add to table, Update and Save.'],
@@ -162,15 +171,6 @@ const GOOGLE_TASKS: readonly Task[] = [
       'Choose "Publish app" and confirm, so the status reads "In production".',
       'Left in "Testing", Google ends your sign-in every 7 days. It needs no review for your own use;',
       'when you sign in you will see "Google hasn\'t verified this app": choose Advanced, then continue.',
-    ],
-  },
-  {
-    title: 'Create the client',
-    url: 'https://console.cloud.google.com/auth/clients',
-    todo: ['Choose "Create client", then Create.', 'In the window that appears, choose "Download JSON" and open the file.'],
-    values: [
-      ['Application type', 'Desktop app'],
-      ['Name', 'sift'],
     ],
   },
 ];
@@ -204,7 +204,7 @@ async function googleClient(deps: InitDeps): Promise<void> {
 
   ui.blank();
   for (;;) {
-    const pasted = await ui.pasteJson('Paste the contents of that JSON file here, or Enter to do this later:');
+    const pasted = await ui.pasteJson('Paste the contents of the JSON file you downloaded, or Enter to do this later:');
     if (pasted === '') {
       ui.skip('Skipped for now');
       return;
