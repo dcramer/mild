@@ -14,6 +14,7 @@ import type { RawMessage } from '../src/gmail/api.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { listLabels } from '../src/store/labels.ts';
 import { openDb } from '../src/store/db.ts';
+import { recordDecision } from '../src/store/decisions.ts';
 import { listRules } from '../src/store/rules.ts';
 import { FakeMailbox, facts } from './helpers.ts';
 
@@ -42,6 +43,11 @@ const controls: Controls = {
   backfill: async (days) => {
     calls.push(`backfill ${days}`);
     return 12;
+  },
+  putBack: async (_account, messageId) => {
+    calls.push(`putBack ${messageId}`);
+    if (messageId === 'gone') throw new Error('The message no longer exists.');
+    return true;
   },
   checkNow: () => void calls.push('check'),
   activity: () => ({ sorting: true, lastPassAt: 5, problems: [] }),
@@ -194,6 +200,23 @@ describe('managing sift from the dashboard', () => {
       id: 'scams',
     });
     expect(listLabels(db, ACCOUNT).at(-1)).toMatchObject({ id: 'scams', disposition: 'spam', block: true });
+  });
+
+  it('puts a corrected message right in Gmail, and still saves the answer if it cannot', async () => {
+    recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'done' }), facts({ accountId: ACCOUNT, messageId: 'gone' })], '2');
+    for (const id of ['done', 'gone'])
+      recordDecision(db, ACCOUNT, id, { disposition: 'archive', subscription: 'preserve', stage: 'agent', reason: 'r', labelId: 'marketing' }, { mode: 'act' });
+    const port = await start();
+    const answer = { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', scope: 'once' };
+    expect((await call(port, 'POST', '/api/feedback', { ...answer, messageId: 'done' })).body).toMatchObject({
+      corrected: 'done',
+      fixed: 'What sift did to this message in Gmail has been taken back.',
+    });
+    const failed = await call(port, 'POST', '/api/feedback', { ...answer, messageId: 'gone' });
+    expect(failed.status).toBe(200);
+    expect(failed.body['fixed']).toContain('could not be put back in Gmail: The message no longer exists.');
+    expect(db.prepare('SELECT count(*) AS n FROM feedback').get()).toEqual({ n: 2 });
+    expect(calls).toEqual(['putBack done', 'putBack gone']);
   });
 
   it('asks the running sift to undo, pull in older mail and check now', async () => {

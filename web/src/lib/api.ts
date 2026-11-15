@@ -69,8 +69,12 @@ export const api = {
   rules: (signal: AbortSignal) => get<{ rules: RuleSummary[] }>('/api/rules', {}, signal),
   suggestions: (includeKept: boolean, signal: AbortSignal) => get<Suggestions>('/api/suggestions', includeKept ? { kept: 1 } : {}, signal),
   suggestion: (account: string, sender: string, signal: AbortSignal) => get<SuggestionDetail>('/api/suggestion', { account, sender }, signal),
-  /** Tell sift whether a suggestion was right. Resolves with what it learned. */
-  feedback: (answer: FeedbackRequest) => post<{ reviewed: number; taught: string | null }>('/api/feedback', answer),
+  /**
+   * Say what a message is. Resolves with what sift learned and, when the message had already been acted on,
+   * what was done about that in Gmail.
+   */
+  feedback: (answer: FeedbackRequest) =>
+    post<{ reviewed: number; taught: string | null; corrected: string | null; fixed: string | null }>('/api/feedback', answer),
   manage: (signal: AbortSignal) => get<ManageState>('/api/manage', {}, signal),
   models: (signal: AbortSignal) => get<{ models: string[]; error?: string }>('/api/models', {}, signal),
   changes: (signal: AbortSignal) => get<{ changes: ChangeRow[] }>('/api/changes', {}, signal),

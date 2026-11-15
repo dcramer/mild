@@ -87,7 +87,7 @@ const SCOPES = new Set(['sender', 'domain', 'subject', 'once']);
 
 /** Check an answer to a suggestion field by field. Null if it is not well formed. */
 function parseFeedback(body: Record<string, unknown>): FeedbackInput | null {
-  const { accountId, sender, label, disposition, scope, contains, decisionId } = body;
+  const { accountId, sender, label, disposition, scope, contains, decisionId, messageId } = body;
   if (typeof accountId !== 'string' || typeof sender !== 'string') return null;
   if (typeof label !== 'string' || !LABEL_ID.test(label)) return null;
   if (typeof scope !== 'string' || !SCOPES.has(scope)) return null;
@@ -95,6 +95,7 @@ function parseFeedback(body: Record<string, unknown>): FeedbackInput | null {
   if (contains !== undefined && (typeof contains !== 'string' || contains.length > 200)) return null;
   if (scope === 'subject' && (typeof contains !== 'string' || contains.trim() === '')) return null;
   if (decisionId !== undefined && (typeof decisionId !== 'number' || !Number.isInteger(decisionId))) return null;
+  if (messageId !== undefined && !str(messageId)) return null;
   return {
     accountId,
     sender,
@@ -103,6 +104,7 @@ function parseFeedback(body: Record<string, unknown>): FeedbackInput | null {
     ...(disposition === undefined ? {} : { disposition }),
     ...(typeof contains === 'string' ? { contains } : {}),
     ...(decisionId === undefined ? {} : { decisionId }),
+    ...(messageId === undefined ? {} : { messageId }),
   };
 }
 
@@ -200,9 +202,21 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
 
   /** POST handlers. Each validates its own body and returns the response, or null for a malformed body. */
   const writes: Record<string, (body: Record<string, unknown>) => unknown> = {
-    '/api/feedback': (body) => {
+    '/api/feedback': async (body) => {
       const input = parseFeedback(body);
-      return input && applyFeedback(db, input, now());
+      if (!input) return null;
+      const result = applyFeedback(db, { ...input, mode: controls?.settings().act ? 'act' : 'observe' }, now());
+      if (result.corrected === null || !controls) return { ...result, fixed: null };
+      // The answer is saved whatever happens next; a mailbox that cannot be put right is reported, not hidden.
+      try {
+        const undone = await controls.putBack(input.accountId, result.corrected);
+        return { ...result, fixed: undone ? 'What sift did to this message in Gmail has been taken back.' : null };
+      } catch (error) {
+        return {
+          ...result,
+          fixed: `The answer is saved, but the message could not be put back in Gmail: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
     },
     '/api/labels': (body) => {
       const { accountId, id, name, description, disposition, markRead } = body;

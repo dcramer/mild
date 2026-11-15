@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { DecisionTable } from '@/components/decision-table.tsx';
-import { type Days, type DecisionRow, api, useLoaded } from '@/lib/api.ts';
+import { type Days, api, useLoaded } from '@/lib/api.ts';
 import { DISPOSITION_KEYS, TIERS, count, dispositionName } from '@/lib/format.ts';
 import { Button, Empty, FilterGroup, ListView, Loading } from '@/system';
+import type { OpenMessages } from '@/views/message-panel.tsx';
 
 const PAGE = 50;
 const TIER_OPTIONS = [['', 'Any'], ...TIERS.map((t) => [t.key, t.name] as const)] as const;
@@ -16,7 +17,7 @@ export const PERIODS = [
 ] as const;
 
 /** Every decision sift made, newest first. */
-export function Decisions({ days, onDays, onOpen }: { days: Days; onDays: (days: Days) => void; onOpen: (row: DecisionRow) => void }) {
+export function Decisions({ days, onDays, onOpen, epoch }: { days: Days; onDays: (days: Days) => void; onOpen: OpenMessages; epoch: number }) {
   const [stage, setStage] = useState('');
   const [disposition, setDisposition] = useState('');
   const [typed, setTyped] = useState('');
@@ -31,7 +32,7 @@ export function Decisions({ days, onDays, onOpen }: { days: Days; onDays: (days:
   useEffect(() => setOffset(0), [days, stage, disposition, search]);
 
   const query = { days, stage, disposition, search, limit: PAGE, offset };
-  const { data, error, loading } = useLoaded(JSON.stringify(query), (signal) => api.decisions(query, signal));
+  const { data, error, loading } = useLoaded(JSON.stringify([query, epoch]), (signal) => api.decisions(query, signal));
   const filtered = stage !== '' || disposition !== '' || search !== '';
   const period = PERIODS.find(([key]) => Number(key) === days)?.[1] ?? '';
 

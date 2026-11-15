@@ -1,12 +1,10 @@
 import { CheckIcon } from 'lucide-react';
 import { useState } from 'react';
-import { Answer, type AnswerValue } from '@/components/answer.tsx';
 import { DispositionBadge, ErrorNote, Sub } from '@/components/bits.tsx';
-import { MessageBody, Part, SenderFacts, Unsubscribe } from '@/components/message-parts.tsx';
 import { type SuggestionGroup, type Suggestions, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ACTIONS, ago, count, percent, tier, willBe } from '@/lib/format.ts';
-import { cn } from '@/lib/utils';
-import { Button, Check, Dialog, Empty, FilterGroup, Highlight, ListView, Loading, Note, Select, Stamp, Table, Td, Th, Tr } from '@/system';
+import { ACTIONS, ago, count, percent, willBe } from '@/lib/format.ts';
+import { Button, Check, Empty, FilterGroup, Highlight, ListView, Loading, Note, Select, Stamp, Table, Td, Th, Tr } from '@/system';
+import type { OpenMessages } from '@/views/message-panel.tsx';
 
 type Label = Suggestions['labels'][string][number];
 const groupKey = (g: SuggestionGroup) => `${g.accountId}/${g.sender}`;
@@ -111,119 +109,16 @@ function SuggestionRow({
   );
 }
 
-/** A sender's waiting mail opened up: read the messages, see what sift knows about the sender, and answer with a scope. */
-function SuggestionDialog({
-  group,
-  labels,
-  onClose,
-  onAnswered,
-}: {
-  group: SuggestionGroup;
-  labels: readonly Label[];
-  onClose: () => void;
-  onAnswered: (taught: string) => void;
-}) {
-  const detail = useLoaded(`suggestion/${group.accountId}/${group.sender}`, (signal) => api.suggestion(group.accountId, group.sender, signal), 120_000);
-  const [picked, setPicked] = useState<string | null>(null);
-  const { busy, error, run } = useAction();
-  const messages = detail.data?.messages ?? [];
-  const current = messages.find((m) => m.messageId === picked) ?? messages[0];
-  const message = useLoaded(
-    `message/${group.accountId}/${current?.messageId ?? ''}`,
-    (signal) => (current ? api.message(group.accountId, current.messageId, signal) : Promise.resolve(null)),
-    120_000,
-  );
-  const submit = (answer: AnswerValue) =>
-    run(async () => {
-      const result = await api.feedback({ accountId: group.accountId, sender: group.sender, ...answer });
-      onAnswered(result.taught ?? `Settled ${result.reviewed} ${result.reviewed === 1 ? 'message' : 'messages'}. No rule was made.`);
-      onClose();
-    });
-
-  return (
-    <Dialog open wide onClose={onClose} title={group.senderName ?? group.sender} subtitle={group.senderName ? group.sender : undefined}>
-      {detail.loading ? (
-        <div className="-mx-4">
-          <Loading rows={6} />
-        </div>
-      ) : !detail.data || !current ? (
-        <Note tone="failure" title="Could not load this">
-          <p>{detail.error ?? 'Nothing from this sender is waiting any more.'}</p>
-        </Note>
-      ) : (
-        <div className="grid grid-cols-[minmax(0,1fr)] gap-x-8 gap-y-6 md:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="flex min-w-0 flex-col gap-5">
-            {messages.length > 1 ? (
-              <ul className="-mx-2 flex max-h-44 flex-col overflow-y-auto" aria-label="Waiting from this sender">
-                {messages.map((m) => (
-                  <li key={m.messageId}>
-                    <button
-                      type="button"
-                      aria-current={m.messageId === current.messageId ? 'true' : undefined}
-                      className={cn(
-                        'flex w-full cursor-pointer items-baseline gap-3 px-2 py-1.5 text-left text-[13px] text-muted-foreground hover:bg-(--fill) hover:text-foreground',
-                        'aria-[current=true]:bg-(--fill) aria-[current=true]:font-medium aria-[current=true]:text-foreground',
-                      )}
-                      onClick={() => setPicked(m.messageId)}
-                    >
-                      <span className="min-w-0 flex-1 truncate">{m.subject || '(no subject)'}</span>
-                      <span className="shrink-0 text-xs font-normal tabular-nums">{ago(m.receivedAt)}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {message.data ? (
-              <div className="max-h-[45svh] overflow-y-auto md:max-h-none">
-                <MessageBody detail={message.data} />
-              </div>
-            ) : message.loading ? (
-              <Loading />
-            ) : (
-              <p className="text-destructive">{message.error}</p>
-            )}
-          </div>
-
-          <div className="flex min-w-0 flex-col gap-6">
-            <Part title="sift says">
-              <p className="flex flex-wrap items-center gap-2">
-                <Guess labelName={current.labelName} disposition={current.disposition} />
-              </p>
-              <p className="text-[13px] text-muted-foreground">
-                {current.reason} <span className="whitespace-nowrap">({tier(current.stage).name})</span>
-              </p>
-            </Part>
-            <Part title="This sender">
-              <SenderFacts sender={detail.data.sender} />
-              {message.data ? <Unsubscribe detail={message.data} /> : null}
-            </Part>
-            <Answer
-              labels={labels}
-              guess={group.guesses > 1 ? null : group.labelId}
-              sender={group.sender}
-              waiting={messages.length}
-              busy={busy}
-              error={error}
-              onSubmit={submit}
-            />
-          </div>
-        </div>
-      )}
-    </Dialog>
-  );
-}
-
 const DOES = [['', 'Anything'] as const, ...ACTIONS.filter(([key]) => key !== 'keep'), ['review', 'Hold it for you'] as const];
 
 /** What sift would do, waiting for the user to say right or wrong. */
-export function SuggestionsView({ onChanged }: { onChanged: () => void }) {
+export function SuggestionsView({ onOpen, onChanged, epoch }: { onOpen: OpenMessages; onChanged: () => void; epoch: number }) {
   const [includeKept, setIncludeKept] = useState(false);
-  const { data, error, loading, reload } = useLoaded(`suggestions-${includeKept}`, (signal) => api.suggestions(includeKept, signal));
+  const { data, error, loading, reload } = useLoaded(`suggestions-${includeKept}-${epoch}`, (signal) => api.suggestions(includeKept, signal));
   const [taught, setTaught] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [label, setLabel] = useState('');
   const [does, setDoes] = useState<(typeof DOES)[number][0]>('');
-  const [open, setOpen] = useState<SuggestionGroup | null>(null);
 
   const names = new Map(Object.values(data?.labels ?? {}).flatMap((list) => list.map((l) => [l.id, l.name] as const)));
   const needle = search.trim().toLowerCase();
@@ -233,6 +128,8 @@ export function SuggestionsView({ onChanged }: { onChanged: () => void }) {
       (does === '' || g.disposition === does) &&
       (needle === '' || [g.sender, g.senderName ?? '', ...g.sample.map((m) => m.subject)].some((text) => text.toLowerCase().includes(needle))),
   );
+  // A row opens on the newest message waiting from that sender.
+  const items = groups.map((g) => ({ accountId: g.accountId, messageId: g.sample[0]?.messageId ?? '', subject: g.sample[0]?.subject ?? '' }));
   const answered = (line: string) => {
     setTaught((lines) => [line, ...lines].slice(0, 3));
     reload();
@@ -310,12 +207,12 @@ export function SuggestionsView({ onChanged }: { onChanged: () => void }) {
               </Tr>
             </thead>
             <tbody>
-              {groups.map((group) => (
+              {groups.map((group, index) => (
                 <SuggestionRow
                   key={groupKey(group)}
                   group={group}
                   labels={data?.labels[group.accountId] ?? []}
-                  onOpen={() => setOpen(group)}
+                  onOpen={() => onOpen(items, index)}
                   onAnswered={answered}
                 />
               ))}
@@ -324,7 +221,6 @@ export function SuggestionsView({ onChanged }: { onChanged: () => void }) {
         )}
       </div>
       {facts.length > 0 ? <p className="text-[13px] text-muted-foreground tabular-nums">{facts.join(' · ')}</p> : null}
-      {open ? <SuggestionDialog group={open} labels={data?.labels[open.accountId] ?? []} onClose={() => setOpen(null)} onAnswered={answered} /> : null}
     </ListView>
   );
 }

@@ -200,6 +200,8 @@ export interface FeedbackRequest {
   /** For `subject`: the words the subject must contain. */
   contains?: string;
   decisionId?: number;
+  /** The message the answer was given on, which need not be waiting: this is how a decision already made is corrected. */
+  messageId?: string;
 }
 
 /** GET /api/manage: everything the Settings view shows. */

@@ -3,7 +3,7 @@ import { ErrorNote, Outcome, Sub } from '@/components/bits.tsx';
 import { api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, dateTime } from '@/lib/format.ts';
 import { Button, Empty, FilterGroup, ListView, Loading, Table, Td, Th, Tr } from '@/system';
-import type { MessageRef } from '@/views/message-dialog.tsx';
+import type { OpenMessages } from '@/views/message-panel.tsx';
 
 const STATUS = [
   ['', 'Any'],
@@ -14,8 +14,8 @@ const STATUS = [
 const WHAT: Record<string, string> = { archive: 'Archived', spam: 'Marked spam', label: 'Labelled', undo: 'Undid', unsubscribe: 'Unsubscribed' };
 
 /** Everything sift has done to the mailbox, each reversible. */
-export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void }) {
-  const { data, error, loading, reload } = useLoaded('changes', (signal) => api.changes(signal));
+export function ChangesView({ onOpen, epoch }: { onOpen: OpenMessages; epoch: number }) {
+  const { data, error, loading, reload } = useLoaded(`changes-${epoch}`, (signal) => api.changes(signal));
   const action = useAction();
   const [note, setNote] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -27,6 +27,7 @@ export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void 
       (status === '' || (status === 'trouble' ? troubled(c.status) : c.status === status)) &&
       (needle === '' || `${c.subject ?? ''} ${c.fromAddress ?? ''}`.toLowerCase().includes(needle)),
   );
+  const items = changes.map((c) => ({ accountId: c.accountId, messageId: c.messageId, subject: c.subject ?? '' }));
   return (
     <ListView
       title="Changes"
@@ -57,7 +58,7 @@ export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void 
               </Tr>
             </thead>
             <tbody>
-              {changes.map((change) => {
+              {changes.map((change, index) => {
                 const bad = troubled(change.status);
                 return (
                   <Tr key={change.id}>
@@ -69,7 +70,7 @@ export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void 
                       <button
                         type="button"
                         className="block max-w-full cursor-pointer truncate text-left font-medium underline-offset-2 hover:underline"
-                        onClick={() => onOpen({ accountId: change.accountId, messageId: change.messageId, subject: change.subject ?? '' })}
+                        onClick={() => onOpen(items, index)}
                       >
                         {change.subject || '(no subject)'}
                       </button>

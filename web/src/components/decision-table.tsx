@@ -2,9 +2,11 @@ import { DecidedBy, DispositionBadge, Result, Sub } from '@/components/bits.tsx'
 import type { DecisionRow } from '@/lib/api.ts';
 import { ago, dateTime } from '@/lib/format.ts';
 import { Marked, Table, Td, Th, Tr } from '@/system';
+import type { OpenMessages } from '@/views/message-panel.tsx';
 
 /** Decisions, newest first. Choosing a row opens that message's full history. `search` marks matching text. */
-export function DecisionTable({ rows, onOpen, search }: { rows: DecisionRow[]; onOpen: (row: DecisionRow) => void; search?: string }) {
+export function DecisionTable({ rows, onOpen, search }: { rows: DecisionRow[]; onOpen: OpenMessages; search?: string }) {
+  const items = rows.map((row) => ({ accountId: row.accountId, messageId: row.messageId, subject: row.subject }));
   return (
     <Table>
       <thead>
@@ -17,8 +19,8 @@ export function DecisionTable({ rows, onOpen, search }: { rows: DecisionRow[]; o
         </Tr>
       </thead>
       <tbody>
-        {rows.map((row) => (
-          <Tr key={row.id} onOpen={() => onOpen(row)}>
+        {rows.map((row, index) => (
+          <Tr key={row.id} onOpen={() => onOpen(items, index)}>
             <Td className="max-w-72">
               <span className="block truncate font-medium">
                 {row.subject ? <Marked text={row.subject} {...(search ? { term: search } : {})} /> : '(no subject)'}

@@ -15,6 +15,11 @@ export interface Controls {
   undo(actionId: number): Promise<string>;
   /** Pull the last `days` days of the inbox in as suggestions. Resolves with how many messages were new. */
   backfill(days: number): Promise<number>;
+  /**
+   * After the user has corrected a decision: take back what sift last did to that message, so the new
+   * decision can be carried out from where the message started. Resolves with whether anything was taken back.
+   */
+  putBack(accountId: string, messageId: string): Promise<boolean>;
   /** Start a pass now instead of waiting for the interval. */
   checkNow(): void;
   activity(): Activity;

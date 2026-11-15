@@ -109,7 +109,7 @@ describe('teaching', () => {
     suggest('other@example.com', 'archive', NEWS);
 
     const result = applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' }, 50);
-    expect(result).toEqual({ reviewed: 2, taught: 'From now on, mail from news@example.com is Newsletters: archived.' });
+    expect(result).toEqual({ reviewed: 2, corrected: null, taught: 'From now on, mail from news@example.com is Newsletters: archived.' });
     expect(ruleFor('news@example.com')).toEqual([{ labelId: 'newsletter', source: 'user' }]);
     expect(pendingSuggestions(db).map((s) => s.fromAddress)).toEqual(['other@example.com']);
     expect(accuracy(db)).toMatchObject({ reviewed: 2, right: 2 });
@@ -157,7 +157,7 @@ describe('teaching', () => {
     const decisionId = suggest('news@example.com', 'archive', NEWS);
     suggest('news@example.com', 'archive', NEWS);
     const result = applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', scope: 'once', decisionId });
-    expect(result).toEqual({ reviewed: 1, taught: null });
+    expect(result).toEqual({ reviewed: 1, corrected: null, taught: null });
     expect(listRules(db, ACCOUNT)).toEqual([]);
     expect(pendingSuggestions(db)).toHaveLength(1);
   });
@@ -195,6 +195,73 @@ describe('teaching', () => {
   });
 });
 
+describe('correcting a decision that is not waiting', () => {
+  /** A message sift already acted on. */
+  function acted(address: string, labelId: string) {
+    const id = `a${++serial}`;
+    recordSync(
+      db,
+      ACCOUNT,
+      [facts({ accountId: ACCOUNT, messageId: id, from: { address, domain: address.split('@')[1] ?? '' }, subject: `Subject ${id}` })],
+      '2',
+    );
+    recordDecision(db, ACCOUNT, id, { disposition: 'archive', subscription: 'preserve', stage: 'agent', reason: 'r', labelId }, { mode: 'act', now: serial });
+    return id;
+  }
+  const decisionsFor = (id: string) =>
+    db.prepare('SELECT stage, disposition, label_id, mode, outcome, reason FROM decisions WHERE message_id = ? ORDER BY id').all(id);
+
+  it('records what the user said as a new decision, makes the rule, and names the message to put right', () => {
+    const id = acted('bids@example.com', 'marketing');
+    expect(pendingSuggestions(db)).toEqual([]);
+    const result = applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', label: 'personal', scope: 'sender', messageId: id, mode: 'act' }, 50);
+    expect(result).toEqual({ reviewed: 1, corrected: id, taught: 'From now on, mail from bids@example.com is Personal: kept in your inbox.' });
+    expect(decisionsFor(id)).toEqual([
+      { stage: 'agent', disposition: 'archive', label_id: 'marketing', mode: 'act', outcome: null, reason: 'r' },
+      // Waiting to be carried out, which the next pass does once the earlier change has been taken back.
+      { stage: 'rules', disposition: 'keep', label_id: 'personal', mode: 'act', outcome: null, reason: 'you said this is Personal' },
+    ]);
+    expect(ruleFor('bids@example.com')).toEqual([{ labelId: 'personal', source: 'correction' }]);
+    expect(db.prepare('SELECT verdict, correct, label_id FROM feedback').get()).toEqual({ verdict: 'wrong', correct: 'keep', label_id: 'personal' });
+    expect(db.prepare('SELECT disposition, label_id FROM examples').get()).toEqual({ disposition: 'keep', label_id: 'personal' });
+    expect(accuracy(db)).toMatchObject({ reviewed: 1, right: 0 });
+  });
+
+  it('can be answered again, and for this message only', () => {
+    const id = acted('bids@example.com', 'marketing');
+    applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', label: 'personal', scope: 'once', messageId: id });
+    expect(listRules(db, ACCOUNT)).toEqual([]);
+    expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', label: 'newsletter', scope: 'once', messageId: id })).toMatchObject({
+      corrected: id,
+      taught: null,
+    });
+    expect(decisionsFor(id).map((d) => (d as { label_id: string }).label_id)).toEqual(['marketing', 'personal', 'newsletter']);
+    // While only observing, the new decision is a record, not something to carry out.
+    expect(decisionsFor(id).at(-1)).toMatchObject({ mode: 'observe', outcome: 'observed' });
+    expect(pendingSuggestions(db)).toEqual([]);
+  });
+
+  it('agreeing with a decision makes the rule and leaves the message alone', () => {
+    const id = acted('news@example.com', 'newsletter');
+    const result = applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender', messageId: id, mode: 'act' });
+    expect(result).toMatchObject({ reviewed: 1, corrected: null });
+    expect(decisionsFor(id)).toHaveLength(1);
+    expect(ruleFor('news@example.com')).toEqual([{ labelId: 'newsletter', source: 'user' }]);
+  });
+
+  it('settles what is waiting from the sender at the same time, and refuses a message from someone else', () => {
+    const id = acted('bids@example.com', 'marketing');
+    suggest('bids@example.com', 'archive', { labelId: 'marketing' });
+    expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', label: 'personal', scope: 'sender', messageId: id })).toMatchObject({
+      reviewed: 2,
+    });
+    expect(pendingSuggestions(db)).toEqual([]);
+    expect(() => applyFeedback(db, { accountId: ACCOUNT, sender: 'other@example.com', label: 'personal', scope: 'sender', messageId: id })).toThrow(
+      'not from that sender',
+    );
+  });
+});
+
 describe('how far an answer reaches', () => {
   const matches = () => listRules(db, ACCOUNT).map((r) => ({ match: r.match, labelId: r.labelId }));
 
@@ -219,6 +286,7 @@ describe('how far an answer reaches', () => {
     expect(() => applyFeedback(db, { ...answer, contains: 'refund' })).toThrow('Nothing waiting from bids@example.com has "refund"');
     expect(applyFeedback(db, { ...answer, contains: 'outbid' })).toEqual({
       reviewed: 1,
+      corrected: null,
       taught: 'From now on, mail from bids@example.com with "outbid" in the subject is Personal: kept in your inbox.',
     });
     expect(pendingSuggestions(db).map((s) => s.messageId)).toEqual(['promo']);
@@ -248,6 +316,7 @@ describe('how far an answer reaches', () => {
     suggest('c@example.com', 'archive', { labelId: 'marketing' });
     expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'a@shop.example', label: 'marketing', scope: 'domain' })).toEqual({
       reviewed: 2,
+      corrected: null,
       taught: 'From now on, mail from anyone at shop.example is Marketing: archived.',
     });
     expect(matches()).toEqual([{ match: { fromDomain: 'shop.example' }, labelId: 'marketing' }]);
@@ -257,7 +326,11 @@ describe('how far an answer reaches', () => {
   it('an answer for the waiting mail only settles it all and makes no rule', () => {
     suggest('news@example.com', 'archive', NEWS);
     suggest('news@example.com', 'archive', NEWS);
-    expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', scope: 'once' })).toEqual({ reviewed: 2, taught: null });
+    expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', scope: 'once' })).toEqual({
+      reviewed: 2,
+      corrected: null,
+      taught: null,
+    });
     expect(matches()).toEqual([]);
     expect(db.prepare('SELECT DISTINCT scope FROM feedback').all()).toEqual([{ scope: 'message' }]);
   });
@@ -420,7 +493,7 @@ describe('feedback endpoint', () => {
     const port = await start();
     expect(await post(port, answer)).toEqual({
       status: 200,
-      body: { reviewed: 1, taught: 'From now on, mail from news@example.com is Newsletters: archived.' },
+      body: { reviewed: 1, corrected: null, fixed: null, taught: 'From now on, mail from news@example.com is Newsletters: archived.' },
     });
     expect(db.prepare('SELECT created_at FROM feedback').get()).toEqual({ created_at: 77 });
     const suggestions = (await (await fetch(`http://localhost:${port}/api/suggestions`)).json()) as { waiting: number; accuracy: unknown };

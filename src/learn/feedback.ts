@@ -1,8 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { listLabels } from '../store/labels.ts';
+import { recordDecision } from '../store/decisions.ts';
 import { setRule } from '../store/rules.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
-import type { DecidedDisposition, Disposition, StageName } from '../triage/types.ts';
+import { type DecidedDisposition, type Disposition, type StageName, labelled } from '../triage/types.ts';
 
 /** A decision sift made while only observing, that the user has not yet confirmed or corrected. */
 export interface Suggestion {
@@ -41,6 +42,23 @@ interface Row {
   subject: string;
 }
 
+const toSuggestion = (r: Row): Suggestion => ({
+  decisionId: r.id,
+  accountId: r.account_id,
+  messageId: r.message_id,
+  stage: r.stage,
+  disposition: r.disposition,
+  block: r.block === 1,
+  labelId: r.label_id,
+  reason: r.reason,
+  confidence: r.confidence,
+  decidedAt: r.decided_at,
+  receivedAt: r.received_at,
+  fromAddress: r.from_address,
+  fromName: r.from_name,
+  subject: r.subject,
+});
+
 /**
  * Suggestions waiting on the user, newest first: the current decision for a message, made while
  * observing, with no answer yet. Decisions that only repeat what the user already told sift (rules they
@@ -76,22 +94,7 @@ export function pendingSuggestions(db: DatabaseSync, filter: { accountId?: strin
        ORDER BY d.decided_at DESC, d.id DESC LIMIT ?`,
     )
     .all(...params, filter.limit ?? 5000) as unknown as Row[];
-  return rows.map((r) => ({
-    decisionId: r.id,
-    accountId: r.account_id,
-    messageId: r.message_id,
-    stage: r.stage,
-    disposition: r.disposition,
-    block: r.block === 1,
-    labelId: r.label_id,
-    reason: r.reason,
-    confidence: r.confidence,
-    decidedAt: r.decided_at,
-    receivedAt: r.received_at,
-    fromAddress: r.from_address,
-    fromName: r.from_name,
-    subject: r.subject,
-  }));
+  return rows.map(toSuggestion);
 }
 
 /** How far an answer reaches. Everything but `once` makes a rule. */
@@ -105,6 +108,20 @@ export type FeedbackScope =
   /** Only the mail that is waiting (or the one decision given). Nothing lasting is learned. */
   | 'once';
 
+const SUGGESTION_COLUMNS = `d.id, d.account_id, d.message_id, d.stage, d.disposition, d.block, d.label_id, d.reason, d.confidence, d.decided_at,
+              m.received_at, m.from_address, m.from_name, m.subject`;
+
+/** The decision that currently stands for a message, in the shape of a suggestion, or null if it has none. */
+function currentDecision(db: DatabaseSync, accountId: string, messageId: string): Suggestion | null {
+  const row = db
+    .prepare(
+      `SELECT ${SUGGESTION_COLUMNS} FROM decisions d JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
+       WHERE d.account_id = ? AND d.message_id = ? ORDER BY d.id DESC LIMIT 1`,
+    )
+    .get(accountId, messageId) as unknown as Row | undefined;
+  return row ? toSuggestion(row) : null;
+}
+
 export interface FeedbackInput {
   accountId: string;
   sender: string;
@@ -117,6 +134,13 @@ export interface FeedbackInput {
   contains?: string;
   /** For `once`: answer for this one decision instead of everything waiting from the sender. */
   decisionId?: number;
+  /**
+   * The message the answer was given on. It need not be waiting: this is how a decision sift already
+   * made, or mail it kept, is corrected. A corrected message gets a new decision in `mode`.
+   */
+  messageId?: string;
+  /** Whether sift is acting, which decides whether the corrected message's new decision is to be carried out. */
+  mode?: 'act' | 'observe';
 }
 
 export interface FeedbackResult {
@@ -124,6 +148,8 @@ export interface FeedbackResult {
   reviewed: number;
   /** What sift will do differently from now on, in a sentence. Null if nothing lasting was learned. */
   taught: string | null;
+  /** The message whose earlier decision was replaced, so the caller can put it right in the mailbox. */
+  corrected: string | null;
 }
 
 const WILL: Record<Disposition, string> = { keep: 'kept in your inbox', archive: 'archived', spam: 'marked as spam', review: 'left for you' };
@@ -152,7 +178,12 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
         ? s.decisionId === input.decisionId
         : true,
   );
-  if (targets.length === 0)
+  // A message that is not waiting (sift already acted on it, a rule decided it, or it was answered before)
+  // is corrected through its current decision.
+  const given =
+    input.messageId !== undefined && !targets.some((t) => t.messageId === input.messageId) ? currentDecision(db, input.accountId, input.messageId) : null;
+  if (given && given.fromAddress !== input.sender) throw new Error('That message is not from that sender.');
+  if (targets.length === 0 && !given)
     throw new Error(
       input.scope === 'subject' ? `Nothing waiting from ${input.sender} has "${contains}" in the subject.` : 'That suggestion is no longer waiting.',
     );
@@ -171,8 +202,13 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
         ? `mail from ${input.sender} with "${contains}" in the subject`
         : `mail from ${input.sender}`;
 
+  // Agreeing with a decision that already stands changes nothing about the message itself.
+  const changes = given !== null && (given.labelId !== label.id || given.disposition !== outcome);
+
   const insert = db.prepare(
-    'INSERT INTO feedback (account_id, decision_id, message_id, verdict, correct, scope, created_at, label_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    `INSERT INTO feedback (account_id, decision_id, message_id, verdict, correct, scope, created_at, label_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (decision_id) DO UPDATE
+       SET verdict = excluded.verdict, correct = excluded.correct, scope = excluded.scope, created_at = excluded.created_at, label_id = excluded.label_id`,
   );
   // Every marked message is kept whole as an example; `sift run` fetches it on its next pass.
   const example = db.prepare(
@@ -183,7 +219,7 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
   const verdictFor = (target: Suggestion) => (target.labelId === null ? 'answered' : target.labelId === label.id ? 'right' : 'wrong');
   db.exec('BEGIN');
   try {
-    for (const target of targets) {
+    for (const target of given ? [...targets, given] : targets) {
       const verdict = verdictFor(target);
       insert.run(
         target.accountId,
@@ -197,14 +233,32 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
       );
       example.run(target.accountId, target.messageId, wanted, label.id, target.disposition, target.stage, now);
     }
-    if (match) {
-      setRule(
+    const all = given ? [...targets, given] : targets;
+    const ruleId = match
+      ? setRule(
+          db,
+          input.accountId,
+          match,
+          { labelId: label.id, ...(input.disposition ? { disposition: input.disposition } : {}) },
+          all.every((t) => verdictFor(t) === 'right') ? 'user' : 'correction',
+          now,
+        )
+      : null;
+    // The corrected message gets a decision of its own, so the log shows what the user said and, when
+    // sift is acting, the mailbox is brought into line with it.
+    if (given && changes) {
+      recordDecision(
         db,
         input.accountId,
-        match,
-        { labelId: label.id, ...(input.disposition ? { disposition: input.disposition } : {}) },
-        targets.every((t) => verdictFor(t) === 'right') ? 'user' : 'correction',
-        now,
+        given.messageId,
+        {
+          ...labelled(label, input.disposition),
+          subscription: 'preserve',
+          stage: 'rules',
+          ...(ruleId ? { ruleId } : {}),
+          reason: `you said this is ${label.name}`,
+        },
+        { mode: input.mode ?? 'observe', now },
       );
     }
     db.exec('COMMIT');
@@ -213,7 +267,8 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
     throw error;
   }
   return {
-    reviewed: targets.length,
+    reviewed: targets.length + (given ? 1 : 0),
+    corrected: given && changes ? given.messageId : null,
     taught: match ? `From now on, ${whose} is ${label.name}: ${label.block && !input.disposition ? BLOCKED : WILL[outcome]}.` : null,
   };
 }

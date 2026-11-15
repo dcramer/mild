@@ -17,6 +17,7 @@
     "check:fast": "pnpm typecheck && pnpm lint && pnpm format:check",
     "check": "pnpm check:fast && pnpm test",
     "build:web": "pnpm --filter sift-web build",
+    "start": "pnpm sift run",
     "dev": "pnpm sift dev"
   },
   "devDependencies": {

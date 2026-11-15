@@ -19,7 +19,7 @@ import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { createJudge } from '../model/judge.ts';
 import { login, openModels, resolveModel } from '../model/models.ts';
 import { type Account, connectAccount, listAccounts } from '../store/accounts.ts';
-import { getAction, listRecentActions } from '../store/actions.ts';
+import { getAction, lastStandingChange, listRecentActions } from '../store/actions.ts';
 import { listLabels, updateLabel } from '../store/labels.ts';
 import { openDb } from '../store/db.ts';
 import { type SetupState, runInit } from './init.ts';
@@ -313,6 +313,13 @@ function buildControls(config: Config, db: ReturnType<typeof openDb>, live: { wa
       let added = 0;
       for (const account of listAccounts(db)) added += await backfill(db, createGmailApi(clientFor(config, secrets, account.email)), account.id, days);
       return added;
+    },
+    putBack: async (accountId, messageId) => {
+      const last = lastStandingChange(db, accountId, messageId);
+      if (last) await undo({ db, mailbox: mailboxFor(config, accountId) }, last.id);
+      // The corrected decision is waiting to be carried out; do it now, not at the next interval.
+      live.wake?.now();
+      return last !== null;
     },
     checkNow: () => live.wake?.now(),
     activity: () => live.activity,

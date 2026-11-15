@@ -22,7 +22,7 @@ const EXCEPTIONS = [
 ] as const;
 
 /**
- * The user's answer for one sender's waiting mail: what it is, how far that reaches, and any exception.
+ * The user's answer about one message: what it is, how far that reaches beyond it, and any exception.
  * The sentence above the button is what sift will be taught, word for word. Labels can be chosen with
  * the number keys and the answer sent with Enter.
  */
@@ -30,7 +30,7 @@ export function Answer({
   labels,
   guess,
   sender,
-  waiting,
+  acted,
   busy,
   error,
   onSubmit,
@@ -39,8 +39,8 @@ export function Answer({
   /** The label sift gave, if it gave one. */
   guess: string | null;
   sender: string;
-  /** How many messages from the sender are waiting. */
-  waiting: number;
+  /** sift has already carried out a decision on this message, so a different answer also puts the message right. */
+  acted: boolean;
   busy: boolean;
   error: string | null;
   onSubmit: (answer: AnswerValue) => void;
@@ -75,7 +75,7 @@ export function Answer({
       : scope === 'subject'
         ? `mail from ${sender} with “${contains.trim() || '…'}” in the subject`
         : scope === 'once'
-          ? `the ${waiting === 1 ? 'message' : `${waiting} messages`} waiting from ${sender}`
+          ? 'this message'
           : `mail from ${sender}`;
   const does = label ? willBe(exception || label.disposition) : '';
 
@@ -103,7 +103,7 @@ export function Answer({
               ['sender', 'Everything from this sender'],
               ['domain', `Anyone at ${domain}`],
               ['subject', 'This sender, when the subject contains…'],
-              ['once', 'Only what is waiting now'],
+              ['once', 'Only this message'],
             ]}
             onChange={setScope}
           />
@@ -129,6 +129,7 @@ export function Answer({
               ? `Only ${whose}: ${label.name}, ${does}. No rule is made.`
               : `From now on, ${whose} is ${label.name}: ${does}.`}
         </p>
+        {acted && label && label.id !== guess ? <p className="text-[13px] text-muted-foreground">This message is put right in Gmail too.</p> : null}
         {error ? <p className="text-[13px] text-destructive">{error}</p> : null}
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="mark" size="lg" busy={busy} disabled={!ready} onClick={() => answer && onSubmit(answer)}>

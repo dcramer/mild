@@ -2,7 +2,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { type RunOptions, runOnce } from '../src/daemon/run.ts';
 import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
+import { undo } from '../src/actions/executor.ts';
 import { applyFeedback } from '../src/learn/feedback.ts';
+import { lastStandingChange } from '../src/store/actions.ts';
 import { connectAccount } from '../src/store/accounts.ts';
 import { openDb } from '../src/store/db.ts';
 import { listUndecided } from '../src/store/messages.ts';
@@ -213,6 +215,31 @@ describe('inference tier', () => {
     expect(judged).toEqual(['news']);
     expect(db.prepare('SELECT disposition, mode, outcome FROM decisions').get()).toEqual({ disposition: 'archive', mode: 'observe', outcome: 'observed' });
     expect(mailbox.modifyCalls).toBe(0);
+  });
+});
+
+describe('correcting what sift did', () => {
+  it('takes the change back and carries out what the user said instead', async () => {
+    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'agent');
+    inbox = [inbox[0]!];
+    await runOnce(db, options(true));
+    expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/newsletters', 'L:sift/did/archived']);
+
+    const result = applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', scope: 'sender', messageId: 'news', mode: 'act' });
+    expect(result.corrected).toBe('news');
+    // What the dashboard asks the running sift to do next.
+    const last = lastStandingChange(db, ACCOUNT, 'news');
+    await undo({ db, mailbox }, last!.id);
+    expect(mailbox.labels.get('news')?.toSorted()).toEqual(['INBOX', 'UNREAD']);
+
+    inbox = [];
+    await runOnce(db, options(true));
+    expect(mailbox.labels.get('news')?.toSorted()).toEqual(['INBOX', 'L:sift/personal', 'UNREAD']);
+    expect(db.prepare(`SELECT disposition, outcome FROM decisions WHERE message_id = 'news' ORDER BY id DESC LIMIT 1`).get()).toEqual({
+      disposition: 'keep',
+      outcome: 'done',
+    });
+    expect(lastStandingChange(db, ACCOUNT, 'news')).toMatchObject({ type: 'label' });
   });
 });
 

@@ -97,6 +97,16 @@ export function getAction(db: DatabaseSync, id: number): ActionRecord | null {
   return row ? fromRow(row) : null;
 }
 
+/** The last thing sift did to a message's labels that still stands, or null. */
+export function lastStandingChange(db: DatabaseSync, accountId: string, messageId: string): ActionRecord | null {
+  const row = db
+    .prepare(
+      `SELECT ${COLUMNS} FROM actions WHERE account_id = ? AND message_id = ? AND type NOT IN ('undo', 'unsubscribe') AND status = 'done' ORDER BY id DESC LIMIT 1`,
+    )
+    .get(accountId, messageId) as Row | undefined;
+  return row ? fromRow(row) : null;
+}
+
 /** Actions whose outcome was never confirmed, oldest first. Optionally limited to one message. */
 export function listOpenActions(db: DatabaseSync, scope?: { accountId: string; messageId: string }): ActionRecord[] {
   const open = `status IN ('pending', 'unknown') AND message_id IS NOT NULL`;

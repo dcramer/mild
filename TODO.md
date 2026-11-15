@@ -10,10 +10,10 @@ sift is a better Gmail filter and spam filter: models work out what mail is, and
 
 In this order.
 
-1. **One side panel for a message or a decision, with the actions to change it** (under Dashboard).
-2. **Unsubscribe and other extras on labels and rules** (under Labels and rules).
-3. **What a rule means, and what sift knows about a sender** (the first two items under Labels and rules). These decide how far automation can be trusted.
-4. **Settings designed with intent** (under Dashboard).
+1. **Unsubscribe and other extras on labels and rules** (under Labels and rules).
+2. **What a rule means, and what sift knows about a sender** (the first two items under Labels and rules). These decide how far automation can be trusted.
+3. **Settings designed with intent** (under Dashboard).
+4. **Figures and a chart above Suggestions** (under Dashboard).
 
 ## Labels and rules
 
@@ -67,9 +67,11 @@ Built: Suggestions as one row per sender with a one-press answer; opening a row 
 
 The dashboard manages sift, behind Google sign-in. That sign-in also connects the Gmail account.
 
-- [ ] **One way to open a message or a decision, as a side panel.** Wherever a message is opened (Suggestions, Decisions, Changes, a rule's matches) it should be the same component with the same behaviour, and a panel that slides over from the side, as wide as three quarters of the screen if it needs, not a centred modal. Today Suggestions and the message detail are two different dialogs.
-- [ ] **Change a decision from where it is shown.** Inside a decision, offer the actions that correct it: say what the mail really is, for this message or for the future (the same scoped answer as a suggestion), and undo what was done. Today only suggestions can be answered; a decision sift already acted on, or mail it kept, cannot be corrected from the dashboard.
+- [ ] **Figures above Suggestions.** Suggestions is the home page. Between the header and the list, show a few quick data points (how much was decided without a model, how often sift was right, what is waiting, cost) and a small chart of decisions over time, so the page says how sift is doing before it asks for anything.
+- [ ] **The message panel, the rest.** Built: one side panel opened from every list, with the message, what sift decided, the sender, and an answer that confirms or changes the decision for this message or for the future; a correction also takes back what sift did to that message in Gmail; answering moves to the next row. Still to do: the text of mail sift already acted on or kept is not held, so those open without it; correcting one message does not go back and fix the sender's other mail sift already moved; the panel has no address of its own to link to.
 - [ ] **Settings needs designing with intent.** What is there is a list of whatever was built, in the order it was built. Decide what a person comes to Settings to do and order it by that: whether sift is working and acting, which accounts, the model and what it costs, then the rarely touched. Each page should say what changing it will do before it is changed.
+- [ ] **A working PWA.** Installable on a phone and a desktop: a manifest, icons, a service worker that serves the shell, and sensible behaviour offline (this goes with knowing when the API is unreachable). Check each against the content security policy. Later, push notifications for mail waiting on the user.
+- [ ] **Real addresses instead of hash links.** The page is a client-rendered app whose sections are fragments (`#rules`). Consider plain paths (`/rules`, `/settings/accounts`, a message at its own address): the server would serve the page for those paths and the page would read the path. Server-rendering the pages is a separate, larger question; decide whether anything needs it.
 - [ ] **Know when the API is unreachable.** On a bad connection the page should say it is offline, keep showing what it last loaded, retry by itself, hold or refuse writes clearly, and never look broken. The page is a plain React app with a small `useLoaded` hook; replace that with a data layer built for this (TanStack Query: caching, retry with backoff, refetch on reconnect, optimistic writes) and add an offline indicator to the masthead.
 - [ ] **Sign in to ChatGPT (and other model providers) from the dashboard**, as Gmail already is, so setup in the terminal ends at the Google client. The device-code flow suits a page: show the code and the link, wait, then offer the models.
 - [ ] Show an expired Google sign-in where it will be seen: it is in Settings and the `run` log today, not in the masthead or `sift status`. Test users are signed out every 7 days.
@@ -93,7 +95,7 @@ The dashboard manages sift, behind Google sign-in. That sign-in also connects th
 
 Built: one model call per message that names a label; the label's outcome decides what happens. In use with a ChatGPT subscription model in observe mode.
 
-- [ ] **Structured facts about each message.** The reasoning model, rules and filters should all work from the same named facts instead of each re-reading headers. Today sift derives a few from headers and shows them to the model: has an unsubscribe header (and whether it is one-click), mailing list id, marked bulk or auto-generated, passed DMARC, whether the user has written to the sender. Make that a recorded set per message and grow it: sent through a bulk mail service, reply-to differs from sender, sender's domain differs from the links, has attachments, is a reply in a thread the user took part in, addressed to the user directly or by bcc, language, Gmail's own category tab. Then let rules match on them ("has an unsubscribe header and I have never written to them"), show them when a message is opened, and filter lists by them.
+- [ ] **Structured facts about each message.** The reasoning model, rules and filters should all work from the same named facts instead of each re-reading headers. Today sift derives a few from headers and shows them to the model: has an unsubscribe header (and whether it is one-click), mailing list id, marked bulk or auto-generated, passed DMARC, whether the user has written to the sender. Make that a recorded set per message and grow it: sent through a bulk mail service, reply-to differs from sender, sender's domain differs from the links, has attachments, is a reply in a thread the user took part in, addressed to the user directly or by bcc, language, Gmail's own category tab, and whether the text reads as AI-generated (work out what can be checked honestly: this is a judgement with a confidence, not a fact, and cheap heuristics will be wrong often). Then let rules match on them ("has an unsubscribe header and I have never written to them"), show them when a message is opened, and filter lists by them.
 - [ ] **Rewrite the default guidelines.** The starting `guidelines.md` is explanatory text, and its examples tell the model to delete things, which sift never does and which is poor steering. Start with a short set of real instructions in the owner's voice that fit the default labels, or start empty and let the Guidelines page explain itself outside the text the model reads.
 - [ ] Thread context for the model: earlier messages in the thread and whether the owner took part.
 - [ ] Header heuristics as a tier of its own, before any model, for mail that is obviously bulk.
@@ -103,6 +105,7 @@ Built: one model call per message that names a label; the label's outcome decide
 
 ## Setup
 
+- [ ] **Limit who can sign in.** An optional list of addresses in `sift.toml` that are allowed to sign in, offered as a step in `sift init`. Today the first Google account to sign in connects itself, and after that only connected accounts can; that is fine on a tailnet and matters much more if the dashboard is ever reachable from the internet.
 - [ ] **A clean README.** Say plainly what sift is for, then the onboarding, which is install and `sift init`. Move everything else (the CLI reference, Docker detail, how the dashboard is built) out to docs/.
 - [ ] **Recommend a default model.** When the provider is OpenAI or ChatGPT, preselect the newest version of the Luna family from the list the provider returns (highest version number whose name matches), if there is one, instead of making the user pick from the whole list. Do the same for other providers' small, cheap families.
 - [ ] Let `init` change a step that is already done (switch model) instead of only filling gaps.
@@ -121,6 +124,10 @@ Observe mode has run for real on the owner's inbox: sync, the model, suggestions
 
 ## Deployment and isolation
 
+- [ ] **Encrypt credentials and tokens with a key from the environment.** The Gmail refresh tokens, model credentials, Google client secret and session secret are plain files today. Encrypt them with a key the operator supplies, which means:
+  - **The key comes from the environment**, so sift needs `.env` support (read from the home directory or the working directory). This is a deliberate exception to "no setting may require an environment variable": a key stored beside what it protects protects nothing. Without a key sift should still run, unencrypted, and say so.
+  - **Rotation, thought through before building.** Probably: every encrypted value records which key encrypted it; sift accepts a current key and any number of old ones; values are re-encrypted with the current key as they are next written, plus a command to re-encrypt everything so an old key can be retired; and a wrong or missing key fails loudly at start, not as a sign-in that mysteriously stops working.
+  - What a lost key costs (signing in to Google and the model provider again) and how that is explained.
 - [ ] **Encrypt what is sensitive at rest.** Email is sensitive and today everything is plain files with owner-only permissions: subjects, senders and headers in `messages`, message text in `suggestion_bodies` and whole messages in `examples`, reasons in `decisions`, the Gmail refresh tokens, the model credentials, the Google client secret and the session secret. Design first; the open questions:
   - Where the key lives. sift runs unattended and must read mail metadata to work, so a key beside the database only protects a copied database or backup. The alternatives are the OS keyring or a TPM, a passphrase typed at start (no unattended restart), or a key held by the signed-in browser (then nothing sorts while nobody is signed in).
   - What is encrypted: the whole database (SQLCipher or similar; `node:sqlite` has none built in), or only the sensitive columns, which keeps counts and charts queryable but not search over subjects and senders.

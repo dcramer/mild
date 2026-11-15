@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import { DispositionBadge, TierLabel } from '@/components/bits.tsx';
 import { DecisionTable } from '@/components/decision-table.tsx';
-import type { DecisionRow, Summary } from '@/lib/api.ts';
+import type { Summary } from '@/lib/api.ts';
 import { TIERS, count, longDay, money, percent, shortDay } from '@/lib/format.ts';
 import { Button, Empty, Figure, Figures, Sheet, SheetHead, StackedBars, Table, Td, Th, Tr } from '@/system';
+import type { OpenMessages } from '@/views/message-panel.tsx';
 
-export function Overview({ data, period, onOpen }: { data: Summary; period: ReactNode; onOpen: (row: DecisionRow) => void }) {
+export function Overview({ data, period, onOpen }: { data: Summary; period: ReactNode; onOpen: OpenMessages }) {
   const t = data.totals;
   // Before senders were folded into rules they were a tier of their own. It is shown only where that history exists.
   const used = (stage: string) => stage !== 'sender' || data.byStage.some((row) => row.stage === 'sender' && row.decisions > 0);

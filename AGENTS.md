@@ -22,7 +22,7 @@ Package manager is **pnpm**. Node 24 (`.nvmrc`). Node runs the `.ts` sources dir
 | `pnpm check:fast` | Typecheck + lint + format check. |
 | `pnpm vitest run tests/foo.test.ts` | One test file. Add `-t "name"` for one test. |
 | `pnpm format` | `oxlint --fix` then `oxfmt`. |
-| `pnpm sift <command>` | Run the CLI from source. |
+| `pnpm sift <command>` | Run the CLI from source. `pnpm start` is `pnpm sift run`. |
 | `pnpm build:web` | Build the dashboard into `web/dist`. `sift run` does this itself when the page is missing or older than its sources; restart sift to pick up a new build (`pnpm dev` does both for you). |
 | `pnpm dev` | For working on sift: `sift run`, restarted when server code changes, with the page rebuilt and reloaded when page code changes. Same origin and content security policy as normal. Takes `run`'s options; give it `--home <scratch>` unless you mean to use your real mail. |
 

@@ -34,7 +34,8 @@ Tokens and the role classes are in `web/src/index.css`.
 | `StackedBars` | Counts over time, stacked by series. Its legend reads out the column pointed at or focused. |
 | `ListView`, `FilterGroup` | **How every screen shows many of one thing.** A title with the count, then one outlined bar holding the search and the Filters button (not filled: the list has no surface, so its search has none either), then the rows or cards. The filter button opens a panel on the right that pushes the list left. Filters that are on show as a count on the button and, when the panel is closed, as a line of chips that each clear one. |
 | `Card`, `CardHead`, `CardFoot`, `CardGrid` | A thing shown whole, where each one is read on its own rather than compared down a column: a label. Head (what it is), body, foot (what can be done to it). Lists of mail, rules and decisions are tables, not cards. |
-| `Dialog` | Something opened from the page and read or answered without leaving it: a message, a sender's waiting mail, a form. `wide` for two columns; a `footer` for the actions that finish it. |
+| `Panel` | One item from a list, opened beside the list: it slides over from the right, up to three quarters of the screen, with previous and next to step through the list. Every list opens a message in the same panel (`views/message-panel.tsx`). |
+| `Dialog` | A form or a question: adding a label or a rule. Centred. `footer` for the actions that finish it. Looking at one of many things is a `Panel`, not a `Dialog`. |
 | `Note` | Said to the reader outside the flow: `plain`, `look` (needs them), `failure`. No box. |
 | `Empty`, `Loading` | What a sheet shows with nothing in it, and while rows are on their way. |
 | `Stamp` | A short verdict. Weight is meaning: `outline`, `tint`, `ink`; `look` for what is left to the reader. |
@@ -53,7 +54,7 @@ Every part has an answer for a phone, and a new part needs one before it is adde
 | --- | --- |
 | `Masthead` | The sections and the signed-in line move into a panel that covers the screen, opened from a menu button. The bar shows the current section's name; a dot on the button means something is waiting in another section. |
 | `SubNav` | A select above the page. |
-| `Dialog` | Covers the screen. |
+| `Panel`, `Dialog` | Cover the screen. |
 | `ListView` | The filter panel opens above the list. |
 | `CardGrid` | One column. |
 | `Table` | A table says which columns a phone keeps; what the dropped ones said moves under the first column, and the row opens for the rest (Suggestions does this). Tables that have not been given this still scroll sideways. |
@@ -66,6 +67,7 @@ The page itself never scrolls sideways.
 
 - A screen that lists something is a `ListView`. Don't lay out a heading, a search box or filters by hand.
 - A form that adds or changes something opens in a `Dialog`; it does not unfold inside the list.
+- Opening an item of a list opens the `Panel`, and the same panel wherever that kind of item appears, so it behaves the same everywhere.
 
 - Build screens from these parts. If a screen needs something they cannot do, add or extend a part here, with its states (hover, focus, pressed, disabled, busy, empty, failed), and add it to the specimen page in the same change.
 - A part says when to use it in its doc comment; that is the line the specimen page shows.
