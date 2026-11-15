@@ -7,7 +7,7 @@ import { fileCredentialStore } from './credentials.ts';
 
 /** pi-ai's providers, with credentials kept in the data directory. Environment API keys still work when nothing is stored. */
 export function openModels(config: Config): Models {
-  return builtinModels({ credentials: fileCredentialStore(config.modelAuthPath) });
+  return builtinModels({ credentials: fileCredentialStore(config.modelAuthPath, config.keys) });
 }
 
 /** Look up a `provider/model-id` spec. Throws a message the user can act on. */

@@ -48,6 +48,7 @@ Decisions flow back down so the same mail is cheaper next time.
 src/
   cli/        entry point: sift status | auth | run | review | undo | rules
   config.ts   data directory and paths
+  secrets.ts  encrypts the credential files with a key from the environment
   store/      SQLite (node:sqlite) and numbered SQL migrations
   triage/     pure pipeline: types, header features, stages
   actions/    the only mutation path: executor, undo, decision-to-action planning, Mailbox port, filter validation
@@ -67,7 +68,7 @@ Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 ## Gmail
 
 - **Scopes:** `gmail.modify` and `gmail.settings.basic` (`src/gmail/scopes.ts`). Both are restricted scopes, so each user brings their own Google Cloud project with a Web application OAuth client; sign-in is the authorisation-code flow with PKCE, started from the dashboard. Left in "Testing", Google limits sign-in to listed test users and ends it every 7 days.
-- **Tokens:** the refresh token is stored per account in `google/` in the home directory, owner-only, outside the database.
+- **Tokens:** the refresh token is stored per account in `google/` in the home directory, owner-only, outside the database, encrypted when a key is set ([SECRETS.md](SECRETS.md)).
 - **First connect:** sift records the current history id and handles mail from then on. It never sweeps the existing inbox unasked.
 - **Sync is separate from triage:** a sync pass records message metadata and advances the cursor in one transaction; triage will work from recorded messages that have no decision yet. A failed fetch leaves the cursor in place.
 - **Change detection:** poll `users.history.list` from the stored `historyId` (2 quota units per call, against 6,000 per user per minute). A 404 means the cursor expired: read the new cursor, then search the last 7 days of the inbox. Pub/Sub push is a possible opt-in; it still needs the polling fallback.
@@ -126,12 +127,22 @@ There is no shell and no filesystem here. A sandboxed agent with those is planne
 
 ## Home directory
 
-Everything sift keeps is in one directory, the home: `~/.config/sift` by default (`$XDG_CONFIG_HOME/sift`), or wherever `--home` or `SIFT_HOME` points (the Docker image uses `/data`). Keeping settings, guidance, the database and credentials together means it can be backed up or moved as a unit. No setting requires an environment variable.
+Everything sift keeps is in one directory, the home: `~/.config/sift` by default (`$XDG_CONFIG_HOME/sift`), or wherever `--home` or `SIFT_HOME` points (the Docker image uses `/data`). Keeping settings, guidance, the database and credentials together means it can be backed up or moved as a unit. No setting requires an environment variable, with one exception: the key that encrypts the credentials.
 
 - `sift.toml`: settings (`model`, `act`, `interval`, `dashboard.port`, `dashboard.host`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
 - `guidelines.md`: the user's broad guidance, read on every pass.
 - `sift.db`: everything structured or learned.
-- `google-client.json`, `google/`, `model-auth.json`, `device-id`, `dashboard-key`: credentials and the session secret, owner-only, kept out of the database.
+- `google-client.json`, `google/`, `model-auth.json`, `dashboard-key`: credentials and the session secret, owner-only, kept out of the database.
+- `device-id`: names this installation to a subscription sign-in. Not a secret.
+- `.env`: optional. Read at start, before the one in the working directory; neither replaces a variable already set.
+
+**Credentials are encrypted with a key from the environment** (`SIFT_KEY`), because a key stored beside them would protect nothing. See [SECRETS.md](SECRETS.md).
+
+- Every reader and writer of those four goes through `src/secrets.ts`, which knows ciphertext and nothing about what is inside. `src/gmail/` and `src/model/` still own their contents.
+- Each file records the id of the key that encrypted it. `SIFT_OLD_KEYS` are accepted for reading; a value is re-encrypted with the current key whenever it is written, and `sift run` re-encrypts all of them at start, and encrypts any still plain, so an old key can be retired.
+- A file whose key is missing stops `run`, `dashboard` and `status` at start, naming it. The alternative is a sign-in that stops working for no visible reason.
+- Without a key sift runs as before, plain files, and says so at start.
+- The database is not encrypted; see TODO.md.
 - `setup.json`: how far `sift init` has got, so it resumes.
 
 `sift init` (`src/cli/init.ts`) sets all of this up. Each step checks the real state first, so running it again only asks about what is missing, and every step can be skipped.

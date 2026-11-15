@@ -33,7 +33,7 @@ Nothing needs an environment variable. Everything sift keeps is in one directory
 | `sift.toml` | Settings: the model, whether to act or only observe, how often to check, the dashboard's port and address. |
 | `guidelines.md` | Your own words about how to sort your mail. |
 | `sift.db` | Labels, rules, the record of every message, decision and change, and the full content of mail you have marked. |
-| `google-client.json`, `google/`, `model-auth.json` | Credentials. Owner-only. |
+| `google-client.json`, `google/`, `model-auth.json` | Credentials. Owner-only, and encrypted if you set `SIFT_KEY` ([docs/SECRETS.md](docs/SECRETS.md)). |
 
 Back the directory up or move it as a unit. To keep it somewhere else, pass `--home <dir>` or set `SIFT_HOME`.
 

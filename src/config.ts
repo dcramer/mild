@@ -1,9 +1,10 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parse } from 'smol-toml';
+import { type Keyring, loadKeyring } from './secrets.ts';
 
-/** What the user chooses, kept in `sift.toml`. Nothing here is required to be set through the environment. */
+/** What the user chooses, kept in `sift.toml`. None of it is set through the environment; only the encryption key is. */
 export interface Settings {
   /** `provider/model-id` for mail no rule or learned sender covers. Unset keeps the model tier off. */
   model?: string;
@@ -43,6 +44,8 @@ export interface Config {
   setupStatePath: string;
   /** The secret in the dashboard's access link. */
   dashboardKeyPath: string;
+  /** From `SIFT_KEY` and `SIFT_OLD_KEYS`: what the credentials above are encrypted with. */
+  keys: Keyring;
   settings: Settings;
 }
 
@@ -70,8 +73,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     deviceIdPath: join(home, 'device-id'),
     setupStatePath: join(home, 'setup.json'),
     dashboardKeyPath: join(home, 'dashboard-key'),
+    keys: loadKeyring(env),
     settings: existsSync(settingsPath) ? parseSettings(readFileSync(settingsPath, 'utf8'), settingsPath) : { ...DEFAULT_SETTINGS },
   };
+}
+
+/**
+ * Read `.env` from the home directory, then from the working directory. A variable already set is never
+ * replaced, so the real environment wins, then the home's file.
+ */
+export function loadEnvFiles(home: string, cwd: string = process.cwd()): void {
+  for (const path of new Set([join(home, '.env'), join(cwd, '.env')])) if (existsSync(path)) process.loadEnvFile(path);
+}
+
+/** Every file that holds a credential, for checking and re-encrypting them together. */
+export function secretPaths(config: Config): string[] {
+  const tokens = existsSync(config.googleTokenDir) ? readdirSync(config.googleTokenDir).filter((f) => f.endsWith('.json')) : [];
+  return [config.googleClientPath, ...tokens.map((f) => join(config.googleTokenDir, f)), config.modelAuthPath, config.dashboardKeyPath];
 }
 
 /** Parse `sift.toml`. Unknown keys and wrong types are errors, so a typo is not silently ignored. */
