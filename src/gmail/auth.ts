@@ -8,10 +8,7 @@ import { GMAIL_SCOPES } from './scopes.ts';
 export interface ClientSecrets {
   clientId: string;
   clientSecret: string;
-  /**
-   * `web`: can sign in from the dashboard at any address registered on the client, including an HTTPS one.
-   * `desktop`: only from an address on this machine (localhost).
-   */
+  /** `desktop` is a client from before sign-in moved to the dashboard: its tokens still work, but it cannot sign anyone in and `sift init` replaces it. */
   kind: 'web' | 'desktop';
 }
 
@@ -25,12 +22,13 @@ export function hasClientSecrets(config: Config, env: NodeJS.ProcessEnv = proces
 /**
  * Save the user's Google OAuth client into the home directory. `input` is the JSON itself, as pasted
  * from the downloaded file or the console; a path to that file is accepted too. Throws if it is not a
- * Desktop client.
+ * Web application client.
  */
 export function installClient(config: Config, input: string): void {
   const trimmed = input.trim();
   const text = trimmed.startsWith('{') ? trimmed : readFileSync(trimmed.replace(/^~(?=\/)/, process.env['HOME'] ?? '~'), 'utf8');
-  parseClientFile(text, trimmed.startsWith('{') ? 'What you pasted' : trimmed);
+  const { kind } = parseClientFile(text, trimmed.startsWith('{') ? 'What you pasted' : trimmed);
+  if (kind === 'desktop') throw new Error('That is a Desktop app client. sift needs a Web application one.');
   writeFileSync(config.googleClientPath, text, { mode: 0o600 });
   chmodSync(config.googleClientPath, 0o600);
 }
@@ -48,7 +46,7 @@ function parseClientFile(text: string, path: string): ClientSecrets {
 }
 
 /**
- * The user's own Desktop OAuth client: `google-client.json` in the home directory (the file Google
+ * The user's own OAuth client: `google-client.json` in the home directory (the file Google
  * Cloud Console downloads; `sift init` puts it there). SIFT_GOOGLE_CLIENT_ID and
  * SIFT_GOOGLE_CLIENT_SECRET override it when both are set.
  */

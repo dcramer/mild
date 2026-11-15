@@ -30,8 +30,8 @@ export function SignInScreen({ session, error }: { session: Session; error: stri
         </p>
       ) : session.reason === 'desktop-client' ? (
         <p className="text-sm">
-          Your Google client is a Desktop app client, which Google only allows at localhost. Run <code className="font-mono">sift init</code> and create a Web
-          application client with this redirect URI:
+          Your Google client is a Desktop app client. Run <code className="font-mono">sift init</code> to replace it with a Web application client that has this
+          redirect URI:
           <code className="mt-1 block font-mono text-xs break-all">{session.redirectUri}</code>
         </p>
       ) : (

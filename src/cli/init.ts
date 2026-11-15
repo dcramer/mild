@@ -34,7 +34,7 @@ export interface InitDeps {
   ui: Ui;
   saveSettings(settings: Settings): void;
   hasGoogleClient(): boolean;
-  /** `web` clients can sign in at an HTTPS address; `desktop` ones only at localhost. */
+  /** `desktop` is a client from an older setup, which has to be replaced. */
   googleClientKind(): 'web' | 'desktop' | null;
   /** How far setup has got, so a later run resumes where this one stopped. */
   setupState(): SetupState;
@@ -79,10 +79,8 @@ export async function runInit(deps: InitDeps): Promise<void> {
 
   ui.step(2, STEPS, 'Google OAuth client');
   if (!googleReady(deps)) await googleClient(deps);
-  else if (deps.googleClientKind() === 'desktop' && deps.setupState().location === 'remote') {
-    ui.warn(
-      'Your client is a Desktop app client. Google only lets those sign in at localhost, so signing in from another machine needs a Web application one.',
-    );
+  else if (deps.googleClientKind() === 'desktop') {
+    ui.warn('Your client is a Desktop app client. Signing in from the dashboard needs a Web application one.');
     await replaceClient(deps);
   } else if (await keep(ui, 'Client in place', 'Set it up again')) {
     const { location } = deps.setupState();

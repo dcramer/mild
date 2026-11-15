@@ -272,7 +272,7 @@ describe('signing in with Google', () => {
     expect(String(back.headers['set-cookie'])).toMatch(/; Secure$/);
   });
 
-  it('explains why sign-in is not possible at a plain address, without a client, or with a Desktop client over HTTPS', async () => {
+  it('explains why sign-in is not possible at a plain address, without a client, or with a Desktop client', async () => {
     const port = await startWithSignIn();
     const plain = await call(port, 'GET', '/api/session', undefined, { host: `maximus:${port}` });
     expect(plain.body).toMatchObject({ canSignIn: false, reason: 'address', addresses: ['http://localhost:1', 'https://box.example.ts.net'] });
@@ -283,7 +283,7 @@ describe('signing in with Google', () => {
       canSignIn: false,
       reason: 'desktop-client',
     });
-    expect((await call(port, 'GET', '/api/session')).body).toMatchObject({ canSignIn: true });
+    expect((await call(port, 'GET', '/api/session')).body).toMatchObject({ canSignIn: false, reason: 'desktop-client' });
 
     kind = null;
     expect((await call(port, 'GET', '/api/session')).body).toMatchObject({ canSignIn: false, reason: 'no-client' });

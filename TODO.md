@@ -36,7 +36,6 @@ Built: the Suggestions view, answers by sender ("Right" or "No, it is <category>
 
 Everything Gmail-facing has only run against fakes.
 
-- [ ] `sift auth` end to end with a real Desktop OAuth client, including the paste-the-URL fallback.
 - [ ] `sift sync` and `sift run` (observe) against a real inbox; check history paging and the expired-cursor recovery.
 - [ ] `sift apply` / `sift undo` on real messages; confirm unread state and other labels are untouched.
 - [ ] `sift run --act` for a day with a handful of rules.

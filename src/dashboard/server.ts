@@ -295,7 +295,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
 
     if (signIn && req.method === 'GET' && url.pathname === '/api/session') {
       const kind = signIn.client();
-      const reason = kind === null ? 'no-client' : !googleCanReturnHere ? 'address' : kind === 'desktop' && https ? 'desktop-client' : null;
+      const reason = kind === null ? 'no-client' : !googleCanReturnHere ? 'address' : kind === 'desktop' ? 'desktop-client' : null;
       return void json(res, 200, {
         required: true,
         email: session,

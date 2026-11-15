@@ -187,7 +187,7 @@ export interface Session {
   /** The signed-in account, or null. */
   email: string | null;
   canSignIn: boolean;
-  /** Why not: no Google client is set up; Google cannot return to this address; or the client is a Desktop one, which only works at localhost. */
+  /** Why not: no Google client is set up; Google cannot return to this address; or the client is a Desktop one, which sift no longer signs in with. */
   reason: 'no-client' | 'address' | 'desktop-client' | null;
   /** Addresses sign-in works at. */
   addresses: string[];

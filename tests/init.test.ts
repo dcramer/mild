@@ -242,7 +242,7 @@ describe('sift init', () => {
     expect(bare.text()).toContain('warn: Google only signs people in at localhost or an HTTPS address');
   });
 
-  it('replaces a Desktop client when the dashboard is opened from another machine', async () => {
+  it('replaces a Desktop client', async () => {
     const w = wizard([CLIENT, KEEP], { client: 'desktop', accounts: ['me@example.org'], location: 'remote' });
     saveSettings(w.config, { ...DEFAULT_SETTINGS, model: 'openai/x' });
     w.world.setup = { googleTasks: 6, access: 'test', location: 'remote' };
@@ -308,7 +308,7 @@ describe('settings', () => {
     expect(() => parseSettings('act = ')).toThrow('not valid TOML');
   });
 
-  it('installs a pasted Google client, or one given as a path, and knows which kind it is', () => {
+  it('installs a pasted Web application client, or one given as a path, and refuses a Desktop one', () => {
     const config = loadConfig({ SIFT_HOME: freshHome() });
     const web = JSON.stringify({ web: { client_id: 'id', client_secret: 'secret' } }, null, 2);
     const desktop = JSON.stringify({ installed: { client_id: 'id', client_secret: 'secret' } });
@@ -322,9 +322,13 @@ describe('settings', () => {
 
     const other = loadConfig({ SIFT_HOME: freshHome() });
     const file = join(freshHome(), 'client.json');
-    writeFileSync(file, desktop);
+    writeFileSync(file, web);
     installClient(other, file);
-    expect(loadClientSecrets(other, {})).toEqual({ clientId: 'id', clientSecret: 'secret', kind: 'desktop' });
+    expect(loadClientSecrets(other, {}).kind).toBe('web');
+
+    expect(() => installClient(other, desktop)).toThrow('Desktop app client');
+    writeFileSync(other.googleClientPath, desktop);
+    expect(loadClientSecrets(other, {}).kind).toBe('desktop');
   });
 });
 
