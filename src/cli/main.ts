@@ -24,6 +24,7 @@ import { getAction, lastStandingChange, listRecentActions } from '../store/actio
 import { listLabels, updateLabel } from '../store/labels.ts';
 import { openDb } from '../store/db.ts';
 import { type SetupState, runInit } from './init.ts';
+import { signInRefusal } from './sign-in.ts';
 import { listenAddresses, machineNames, tailscaleName } from './network.ts';
 import { closeTerminal } from './terminal.ts';
 import { disposition, paint, spin, ui } from './ui.ts';
@@ -263,17 +264,20 @@ function signInAddresses(port: number): string[] {
 
 /** Google sign-in from the dashboard: the same step connects the Gmail account and signs the viewer in. */
 function buildSignIn(config: Config, db: ReturnType<typeof openDb>): SignIn {
+  // Read each time, so a change to sift.toml applies without a restart.
+  const allowed = () => loadConfig().settings.dashboardAllow;
   return {
     client: () => (hasClientSecrets(config) ? loadClientSecrets(config).kind : null),
     url: (redirectUri, state, challenge) => browserSignInUrl(loadClientSecrets(config), { redirectUri, state, challenge }),
+    allowed: (email) => signInRefusal(email, { connected: [email], allowNew: false, allowed: allowed() }) === null,
     complete: async (redirectUri, code, verifier, allowNew) => {
       const { email, historyId, refreshToken } = await completeBrowserSignIn(loadClientSecrets(config), { redirectUri, code, verifier });
-      const accounts = listAccounts(db);
-      const known = accounts.some((a) => a.email === email);
-      if (!known && accounts.length > 0 && !allowNew) throw new Error(`${email} is not the account sift is connected to.`);
+      const connected = listAccounts(db).map((a) => a.email);
+      const refused = signInRefusal(email, { connected, allowNew, allowed: allowed() });
+      if (refused) throw new Error(refused);
       saveRefreshToken(config, email, refreshToken);
       // A new account starts from now; a known one keeps its place.
-      if (!known) connectAccount(db, email, historyId);
+      if (!connected.includes(email)) connectAccount(db, email, historyId);
       return email;
     },
   };

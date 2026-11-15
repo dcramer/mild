@@ -1,5 +1,5 @@
 import { existsSync, writeFileSync } from 'node:fs';
-import { type Config, GUIDELINES_TEMPLATE, type Settings } from '../config.ts';
+import { type Config, GUIDELINES_TEMPLATE, type Settings, isAddress } from '../config.ts';
 import type { Label } from '../triage/types.ts';
 import { type Ui, disposition, paint } from './ui.ts';
 
@@ -52,7 +52,7 @@ export interface InitDeps {
   enableTailscaleServe(port: number): Promise<void>;
 }
 
-const STEPS = 5;
+const STEPS = 6;
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /** Where the user opens the dashboard: the Tailscale HTTPS name on a server, localhost otherwise. */
@@ -100,13 +100,17 @@ export async function runInit(deps: InitDeps): Promise<void> {
     else ui.skip('No model');
   }
 
-  ui.step(4, STEPS, 'Gmail account');
+  ui.step(4, STEPS, 'Who can sign in');
+  const allow = config.settings.dashboardAllow;
+  if (!allow || (await keep(ui, `Only ${paint.bold(allow.join(', '))}`, 'Change it'))) await chooseAllowed(deps);
+
+  ui.step(5, STEPS, 'Gmail account');
   const accounts = deps.connectedAccounts();
   if (accounts.length > 0) ui.ok(`Connected ${paint.bold(accounts.join(', '))}`);
   else if (!googleReady(deps)) ui.skip('Needs step 2 finished');
   else ui.info('Connected in the browser: signing in to the dashboard with Google is what connects the account.');
 
-  ui.step(5, STEPS, 'Preferences');
+  ui.step(6, STEPS, 'Preferences');
   const [account] = accounts;
   if (account === undefined) ui.info('Set in the dashboard, under Labels.');
   else {
@@ -180,6 +184,30 @@ async function chooseLocation(deps: InitDeps): Promise<void> {
     }
   }
   ui.ok(`Dashboard at ${paint.bold(dashboardAddress(deps))}`);
+}
+
+/** Limit sign-in to listed Google accounts, or leave it to whoever signs in first. */
+async function chooseAllowed(deps: InitDeps): Promise<void> {
+  const { ui, config } = deps;
+  ui.info('Signing in to the dashboard with Google connects that account. Without a list, the first account to sign in connects itself.');
+  for (;;) {
+    const entered = (await ui.text('Addresses allowed to sign in, separated by commas (Enter for no limit):'))
+      .split(',')
+      .map((address) => address.trim().toLowerCase())
+      .filter((address) => address !== '');
+    const wrong = entered.find((address) => !isAddress(address));
+    if (wrong !== undefined) {
+      ui.fail(`${wrong} is not an email address.`);
+      continue;
+    }
+    const { dashboardAllow: _old, ...settings } = config.settings;
+    deps.saveSettings({ ...settings, ...(entered.length > 0 ? { dashboardAllow: entered } : {}) });
+    if (entered.length === 0) return ui.skip('No limit');
+    ui.ok(`Only ${paint.bold(entered.join(', '))}`);
+    const shut = deps.connectedAccounts().filter((account) => !entered.includes(account.toLowerCase()));
+    if (shut.length > 0) ui.warn(`${shut.join(', ')} ${shut.length === 1 ? 'is' : 'are'} connected but can no longer sign in. sift still sorts that mail.`);
+    return;
+  }
 }
 
 interface Task {

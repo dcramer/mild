@@ -344,7 +344,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
     // Google only returns a browser to localhost or to an HTTPS address.
     const googleCanReturnHere = https || LOCAL_HOSTS.has(host);
     const signedInAs = signIn ? readSession(cookie(req, 'sift_session'), secret, now()) : null;
-    const session = signedInAs !== null && listAccounts(db).some((a) => a.email === signedInAs) ? signedInAs : null;
+    const session = signedInAs !== null && signIn?.allowed(signedInAs) && listAccounts(db).some((a) => a.email === signedInAs) ? signedInAs : null;
     const sessionCookie = (value: string, maxAge: number) =>
       `sift_session=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
 

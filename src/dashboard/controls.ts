@@ -51,9 +51,11 @@ export interface SignIn {
   client(): 'web' | 'desktop' | null;
   /** Google's sign-in address for a browser that should come back to `redirectUri`. */
   url(redirectUri: string, state: string, challenge: string): string;
+  /** False for an address the user's allow list leaves out. Asked on every request, so a session ends when its address is taken off the list. */
+  allowed(email: string): boolean;
   /**
-   * Finish a sign-in. The account must already be connected, unless none is yet or `allowNew` is set, in
-   * which case it is connected. Resolves with the account's address; rejects with a message for the user.
+   * Finish a sign-in. The account must be `allowed`, and already connected unless none is yet or `allowNew`
+   * is set, in which case it is connected. Resolves with the account's address; rejects with a message for the user.
    */
   complete(redirectUri: string, code: string, verifier: string, allowNew: boolean): Promise<string>;
 }

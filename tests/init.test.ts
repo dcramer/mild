@@ -28,6 +28,8 @@ function wizard(
     location?: 'ask' | 'remote';
     tailscale?: string | null;
     serveFails?: boolean;
+    /** Answers for the sign-in list. Without them the step is answered with Enter: no limit. */
+    allow?: string[];
   } = {},
 ) {
   const config = loadConfig({ SIFT_HOME: freshHome() });
@@ -75,7 +77,7 @@ function wizard(
       if (typeof index !== 'number' || !option) throw new Error(`bad scripted choice for: ${question}`);
       return option.value;
     },
-    text: async (question) => String(next(question)),
+    text: async (question) => (question.startsWith('Addresses allowed') ? (state.allow?.shift() ?? '') : String(next(question))),
     pasteJson: async (question) => String(next(question)),
     pause: async () => next('pause') !== 'skip',
     mark: () => {},
@@ -207,6 +209,25 @@ describe('sift init', () => {
     expect(w.config.settings.model).toBe('openai/large');
   });
 
+  it('limits sign-in to the addresses given, asking again for one that is not an address', async () => {
+    const w = wizard([...GOOGLE, NO_MODEL], { allow: ['me@example.org, nonsense', 'Me@Example.org, work@example.com'] });
+    await runInit(w.deps);
+    expect(w.text()).toContain('fail: nonsense is not an email address.');
+    expect(loadConfig({ SIFT_HOME: w.config.home }).settings.dashboardAllow).toEqual(['me@example.org', 'work@example.com']);
+
+    // Changing the list to one that leaves a connected account out says what that means; Enter removes the limit.
+    const narrowed = wizard([KEEP, KEEP, REDO], { client: 'web', accounts: ['me@example.org'], allow: ['work@example.com'] });
+    saveSettings(narrowed.config, { ...DEFAULT_SETTINGS, model: 'openai/x', dashboardAllow: ['me@example.org'] });
+    await runInit(narrowed.deps);
+    expect(narrowed.config.settings.dashboardAllow).toEqual(['work@example.com']);
+    expect(narrowed.text()).toContain('warn: me@example.org is connected but can no longer sign in');
+
+    const lifted = wizard([KEEP, KEEP, REDO], { client: 'web', accounts: ['me@example.org'] });
+    saveSettings(lifted.config, { ...DEFAULT_SETTINGS, model: 'openai/x', dashboardAllow: ['me@example.org'] });
+    await runInit(lifted.deps);
+    expect(loadConfig({ SIFT_HOME: lifted.config.home }).settings.dashboardAllow).toBeUndefined();
+  });
+
   it('asks again when what was pasted is not a client, and stops on s', async () => {
     const w = wizard(['done', 'done', 'done', '{"nonsense":{}}', CLIENT, 'done', TEST_USER, 'done', NO_MODEL]);
     await runInit(w.deps);
@@ -292,7 +313,14 @@ describe('settings', () => {
   });
 
   it('round-trips through sift.toml', () => {
-    const settings = { model: 'openai-codex/some-model', act: true, interval: 120, dashboardPort: 9000, dashboardHost: 'box.example.ts.net' };
+    const settings = {
+      model: 'openai-codex/some-model',
+      act: true,
+      interval: 120,
+      dashboardPort: 9000,
+      dashboardHost: 'box.example.ts.net',
+      dashboardAllow: ['me@example.org', 'work@example.com'],
+    };
     expect(parseSettings(renderSettings(settings))).toEqual(settings);
     expect(parseSettings(renderSettings(DEFAULT_SETTINGS))).toEqual(DEFAULT_SETTINGS);
     expect(parseSettings('')).toEqual(DEFAULT_SETTINGS);
@@ -305,6 +333,10 @@ describe('settings', () => {
     expect(() => parseSettings('interval = 1')).toThrow('at least 5');
     expect(() => parseSettings('[dashboard]\nbind = "x"')).toThrow('unknown setting dashboard.bind');
     expect(() => parseSettings('[dashboard]\nhost = "http://x/"')).toThrow('dashboard.host must be a hostname or IP address');
+    expect(() => parseSettings('[dashboard]\nallow = "me@example.org"')).toThrow('dashboard.allow must be a list of email addresses');
+    expect(() => parseSettings('[dashboard]\nallow = ["me"]')).toThrow('dashboard.allow');
+    expect(() => parseSettings('[dashboard]\nallow = []')).toThrow('dashboard.allow');
+    expect(parseSettings('[dashboard]\nallow = ["Me@Example.org"]').dashboardAllow).toEqual(['me@example.org']);
     expect(() => parseSettings('act = ')).toThrow('not valid TOML');
   });
 
