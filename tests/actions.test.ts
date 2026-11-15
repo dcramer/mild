@@ -135,7 +135,7 @@ describe('undo', () => {
     await undo(deps, 1);
     await expect(undo(deps, 1)).rejects.toThrow(/is undone/);
     await expect(undo(deps, 2)).rejects.toThrow(/itself an undo/);
-    await expect(undo(deps, 99)).rejects.toThrow(/No action 99/);
+    await expect(undo(deps, 99)).rejects.toThrow(/no change #99/);
 
     await execute(deps, ACCOUNT, 'm1', { type: 'archive' });
     mailbox.labels.set('m1', ['TRASH']);

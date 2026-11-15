@@ -19,10 +19,15 @@ export function hasClientSecrets(config: Config, env: NodeJS.ProcessEnv = proces
   return Boolean(env['SIFT_GOOGLE_CLIENT_ID'] && env['SIFT_GOOGLE_CLIENT_SECRET']) || existsSync(config.googleClientPath);
 }
 
-/** Copy a client file downloaded from Google Cloud Console into the home directory, after checking it is the right kind. */
-export function installClientFile(config: Config, sourcePath: string): void {
-  const text = readFileSync(sourcePath, 'utf8');
-  parseClientFile(text, sourcePath);
+/**
+ * Save the user's Google OAuth client into the home directory. `input` is the JSON itself, as pasted
+ * from the downloaded file or the console; a path to that file is accepted too. Throws if it is not a
+ * Desktop client.
+ */
+export function installClient(config: Config, input: string): void {
+  const trimmed = input.trim();
+  const text = trimmed.startsWith('{') ? trimmed : readFileSync(trimmed.replace(/^~(?=\/)/, process.env['HOME'] ?? '~'), 'utf8');
+  parseClientFile(text, trimmed.startsWith('{') ? 'What you pasted' : trimmed);
   writeFileSync(config.googleClientPath, text, { mode: 0o600 });
   chmodSync(config.googleClientPath, 0o600);
 }
@@ -32,11 +37,11 @@ function parseClientFile(text: string, path: string): ClientSecrets {
   try {
     parsed = JSON.parse(text) as typeof parsed;
   } catch {
-    throw new Error(`${path} is not a JSON file.`);
+    throw new Error(`${path} is not valid JSON.`);
   }
   const installed = parsed.installed;
   if (!installed?.client_id || !installed.client_secret) {
-    throw new Error(`${path} is not a Desktop OAuth client file (expected an "installed" entry with client_id and client_secret).`);
+    throw new Error(`${path} is not a Desktop app client (it has no "installed" entry). Create the client with application type "Desktop app".`);
   }
   return { clientId: installed.client_id, clientSecret: installed.client_secret };
 }

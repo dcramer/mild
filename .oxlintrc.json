@@ -24,6 +24,8 @@
     "typescript/consistent-return": "off",
     "oxc/no-map-spread": "off",
     "import/no-unassigned-import": "off",
+    "no-shadow": "off",
+    "unicorn/consistent-function-scoping": "off",
     "no-await-in-loop": "off"
   },
   "overrides": [
@@ -43,10 +45,6 @@
           }
         ]
       }
-    },
-    {
-      "files": ["tests/**/*.ts"],
-      "rules": { "unicorn/consistent-function-scoping": "off" }
     },
     {
       "files": ["src/model/**/*.ts"],

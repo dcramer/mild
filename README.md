@@ -18,10 +18,12 @@ pnpm sift init
 
 `init` walks you through whatever is not done yet and can be run again at any time:
 
-1. **Google OAuth client.** sift reads your mail through a client you own, so no third party sits in between. `init` tells you how to create one in Google Cloud Console and asks for the downloaded file.
+1. **Google OAuth client.** sift reads your mail through a client you own, so no third party sits in between. `init` takes you through creating one, a page at a time: it gives the link and the values to enter, waits while you do it, then asks you to paste the client's JSON.
 2. **Gmail account.** It opens Google's sign-in. If the browser is on another machine and ends on a page that will not load, paste that page's URL back into the terminal.
 3. **Model.** Optional. Choose a ChatGPT Plus or Pro subscription, or an API key, then pick a model. Without one, mail that no rule covers is left in your inbox.
 4. **Preferences.** It shows what sift does with each kind of mail and where to change it.
+
+![sift init](docs/images/cli.png)
 
 Nothing needs an environment variable. Everything sift keeps is in one directory, `~/.config/sift`:
 

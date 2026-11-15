@@ -57,6 +57,14 @@ export async function ask(question: string, signal?: AbortSignal): Promise<strin
   return line.trim();
 }
 
+/** Let go of the input so something else (a key-by-key menu) can read it. The next question starts a new reader. */
+export function suspendReader(): void {
+  const current = reader;
+  reader = undefined;
+  current?.removeAllListeners('close');
+  current?.close();
+}
+
 /** Stop reading input so the process can exit. */
 export function closeTerminal(): void {
   reader?.close();

@@ -149,9 +149,9 @@ async function spamRefusal(deps: ActionDeps, accountId: string, messageId: strin
  */
 export async function undo(deps: ActionDeps, actionId: number): Promise<Outcome> {
   const action: ActionRecord | null = getAction(deps.db, actionId);
-  if (!action) throw new Error(`No action ${actionId}.`);
-  if (action.type === 'undo') throw new Error(`Action ${actionId} is itself an undo.`);
-  if (action.status !== 'done') throw new Error(`Action ${actionId} is ${action.status}; only completed actions can be undone.`);
+  if (!action) throw new Error(`There is no change #${actionId}.`);
+  if (action.type === 'undo') throw new Error(`Change #${actionId} is itself an undo.`);
+  if (action.status !== 'done') throw new Error(`Change #${actionId} is ${action.status}; only completed changes can be undone.`);
 
   const current = await deps.mailbox.getLabelIds(action.messageId);
   if (current === null) throw new Error('The message no longer exists.');

@@ -45,6 +45,12 @@ Enforced by `no-restricted-imports` in `.oxlintrc.json`. They are the security m
 
 Real addresses, domains, subjects, message ids and policy never go in the repository. Tests and fixtures use synthetic mail on `example.com` / `example.org`. Runtime state lives in the home directory (`~/.config/sift`), outside the repository. When developing, pass `--home <dir>` with a scratch directory; never point tests or experiments at a real home.
 
+## The command line
+
+The CLI exists to set sift up and start it: `init`, `run`, `dashboard`, `status`. Looking at what sift did, and steering it, belongs in the dashboard, so think twice before adding a command.
+
+Everything it prints goes through `src/cli/ui.ts`, never `console.log`. The look matches the dashboard: plain ink, dim secondary text, and one colour, the yellow highlighter (`paint.mark`), for the name and for what needs the reader. Red is only for failures. Symbols sit in a two-space gutter and text starts at column four. Motion is limited to a spinner while waiting on the network and finished sections folding into one line. It must still read correctly as plain text when piped (no colour, no cursor movement, numbered menus).
+
 ## Configuration
 
 No setting may require an environment variable. Settings go in `sift.toml` (`Settings` in `src/config.ts`, parsed strictly) and get a step in `sift init` if the user must choose them. Everything sift stores lives under the one home directory; add new paths to `Config`, never beside the working directory.

@@ -7,76 +7,81 @@ import { createDashboardServer } from '../dashboard/server.ts';
 import { runLoop, runOnce } from '../daemon/run.ts';
 import { syncAccount } from '../daemon/sync.ts';
 import { createGmailApi } from '../gmail/api.ts';
-import { authorize, clientFor, hasClientSecrets, installClientFile, loadClientSecrets, saveRefreshToken } from '../gmail/auth.ts';
+import { authorize, clientFor, hasClientSecrets, installClient, loadClientSecrets, saveRefreshToken } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { createJudge } from '../model/judge.ts';
 import { login, openModels, resolveModel } from '../model/models.ts';
 import { type Account, connectAccount, listAccounts } from '../store/accounts.ts';
 import { getAction, listRecentActions } from '../store/actions.ts';
 import { listCategories, updateCategory } from '../store/categories.ts';
-import { openDb, schemaVersion } from '../store/db.ts';
+import { openDb } from '../store/db.ts';
 import { runInit } from './init.ts';
-import { ask, closeTerminal, readLine } from './terminal.ts';
+import { closeTerminal, readLine } from './terminal.ts';
+import { disposition, paint, spin, ui } from './ui.ts';
 import { addRule, listRules, removeRule } from '../store/rules.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
 
 const PLANNED = ['review'] as const;
 
-const USAGE = `Usage: sift [--home <dir>] <command>
+/** sift is set up and started from here; looking at and steering it happens in the dashboard. */
+const MAIN_COMMANDS: readonly (readonly [string, string])[] = [
+  ['init', 'Set sift up, or finish setting it up'],
+  ['run', 'Sync and sort your mail, continuously'],
+  ['dashboard', 'See what sift decided and why, in your browser'],
+  ['status', 'What is set up and how much sift has recorded'],
+];
+const OTHER_COMMANDS: readonly (readonly [string, string])[] = [
+  ['rules', 'list | add --do <keep|archive|spam> --from-domain <d> | remove <id>'],
+  ['categories', 'list | set <key> --do <keep|archive|review|spam>'],
+  ['log', 'recent changes to your mailbox'],
+  ['undo <id>', 'reverse one change'],
+  ['auth', 'connect a Gmail account'],
+  ['login <provider>', 'sign in to a model provider'],
+  ['models', 'list the models you can use'],
+];
 
-Everything sift keeps (settings, guidance, database, credentials) is in one directory:
-~/.config/sift by default, or the directory given with --home or SIFT_HOME.
+function help(): void {
+  ui.heading('sorts your Gmail inbox for you');
+  const width = Math.max(...[...MAIN_COMMANDS, ...OTHER_COMMANDS].map(([name]) => name.length));
+  for (const [name, what] of MAIN_COMMANDS) ui.plain(`${paint.cmd(`sift ${name.padEnd(width)}`)}  ${what}`);
+  ui.blank();
+  ui.info('Less often');
+  for (const [name, what] of OTHER_COMMANDS) ui.plain(paint.dim(`sift ${name.padEnd(width)}  ${what}`));
+  ui.blank();
+  ui.info(`Everything is kept in ${paint.path(loadConfig().home)}`);
+  ui.blank();
+}
 
-  init     Set sift up, or finish setting it up: Google client, Gmail account, model, preferences
-  status   Show what is set up, where it lives, and how much sift has recorded
-  auth     Connect a Gmail account (init does this for you)
-             --port <n>   loopback port (default: a free one)
-             --host <ip>  interface to listen on (default 127.0.0.1; use 0.0.0.0 in a container)
-  sync     Fetch new inbox mail once and record it; changes nothing in Gmail
-             --verbose    list each new message with its id
-  apply    Apply one action to one inbox message by hand: sift apply <archive|label|spam> <message-id>
-             --label <name>    label to add (required for label; the reason label for archive)
-             --account <email> which account, if more than one is connected
-  log      Show recent actions from the audit log
-             --limit <n>       how many (default 20)
-  undo     Reverse a completed action: sift undo <action-id>
-  dashboard  Serve a read-only web page of what sift has decided and done
-             --port <n>   port (default: dashboard.port in sift.toml)
-             --host <ip>  interface to listen on (default 127.0.0.1; use 0.0.0.0 in a container)
-  run      Sync and triage continuously, using the settings in sift.toml
-             --act / --observe  override "act" for this run
-             --once             do a single pass and exit
-             --interval <s>     override "interval" for this run
-  rules    Manage local rules
-             rules list
-             rules add --do <keep|archive|spam> [--from <addr>] [--from-domain <domain>] [--to <addr>]
-                       [--list-id <id>] [--subject-contains <text>] [--label <name>]
-             rules remove <rule-id>
-           (rules take --account <email> if more than one account is connected)
-  login    Sign in to a model provider for the inference tier: sift login <provider> [--api-key]
-             e.g. sift login openai-codex   (ChatGPT Plus/Pro subscription)
-  models   List the models you can use; set one as "model" in sift.toml
-  categories  Show the kinds of mail and what sift does with each
-             categories set <key> --do <keep|archive|review|spam> [--label <name> | --no-label]
-  review   Answer questions sift has queued         (not implemented yet)
-`;
+const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 
 function status(): void {
   const config = loadConfig();
   const db = openDb(config.dbPath);
   const accounts = listAccounts(db);
-  console.log(`home:      ${config.home}`);
-  console.log(`settings:  ${existsSync(config.settingsPath) ? config.settingsPath : 'not written yet (run `sift init`)'}`);
-  console.log(
-    `Google client: ${hasClientSecrets(config) ? 'yes' : 'no '}   Gmail: ${accounts.length > 0 ? accounts.map((a) => a.email).join(', ') : 'not connected'}`,
-  );
-  console.log(`model:     ${config.settings.model ?? 'none (mail no rule covers is left for you)'}`);
-  console.log(`mode:      ${config.settings.act ? 'acting on decisions' : 'observing only'}, every ${config.settings.interval}s`);
-  console.log(`guidelines: ${existsSync(config.guidelinesPath) ? config.guidelinesPath : 'none'}`);
-  console.log(`database:  schema v${schemaVersion(db)}`);
-  for (const table of ['messages', 'decisions', 'actions', 'rules', 'senders', 'questions']) {
-    const row = db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number };
-    console.log(`  ${table.padEnd(10)} ${row.n}`);
+  const count = (table: string, where = '') => (db.prepare(`SELECT count(*) AS n FROM ${table} ${where}`).get() as { n: number }).n;
+  const { settings } = config;
+  const ready = hasClientSecrets(config) && accounts.length > 0;
+
+  ui.heading('status', paint.path(config.home));
+  ui.fields([
+    ['Gmail', accounts.length > 0 ? accounts.map((a) => a.email).join(', ') : paint.dim(hasClientSecrets(config) ? 'not connected' : 'not set up')],
+    ['Model', settings.model ?? paint.dim('none; mail no rule covers is left for you')],
+    ['Mode', `${settings.act ? 'acting on decisions' : 'observing only'}${paint.dim(` · every ${settings.interval}s`)}`],
+    ['Guidance', existsSync(config.guidelinesPath) ? paint.path(config.guidelinesPath) : paint.dim('none written')],
+  ]);
+  ui.blank();
+  const questions = count('questions', 'WHERE answered_at IS NULL');
+  const troubled = count('actions', `WHERE status IN ('failed', 'unknown', 'pending')`);
+  ui.fields([
+    ['Recorded', `${plural(count('messages'), 'message')} · ${plural(count('decisions'), 'decision')} · ${plural(count('actions'), 'change')}`],
+    ['Learned', `${plural(count('rules'), 'rule')} · ${plural(count('senders'), 'sender')}`],
+    ...(questions > 0 ? [['Waiting', paint.mark(` ${plural(questions, 'question')} for you `)] as const] : []),
+    ...(troubled > 0 ? [['Check', paint.bad(`${plural(troubled, 'change')} failed or unconfirmed; see sift log`)] as const] : []),
+  ]);
+  ui.blank();
+  if (!ready) {
+    ui.warn(`Setup is not finished. Run ${paint.cmd('sift init')}.`);
+    ui.blank();
   }
   db.close();
 }
@@ -93,11 +98,13 @@ async function connectGmail(config: Config, options: { port?: number; host?: str
       ...(options.host ? { host: options.host } : {}),
       pasted,
       onUrl: (url) => {
-        console.log(`Open this URL in a browser and approve access:\n\n${url}\n`);
-        console.log("If the browser ends on a page that will not load, paste that page's full URL here and press Enter.");
+        ui.info('Open this in a browser and approve access:');
+        ui.link(url);
+        ui.info('Waiting for you to approve. If the browser ends on a page that will not load,');
+        ui.info("paste that page's address here and press Enter.");
       },
     });
-    const profile = await createGmailApi(client).getProfile();
+    const profile = await spin('Checking the account', () => createGmailApi(client).getProfile());
     saveRefreshToken(config, profile.emailAddress, refreshToken);
     const db = openDb(config.dbPath);
     connectAccount(db, profile.emailAddress, profile.historyId);
@@ -113,7 +120,8 @@ async function auth(args: string[]): Promise<void> {
   const port = values.port === undefined ? 0 : Number(values.port);
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`Invalid --port: ${values.port}`);
   const email = await connectGmail(loadConfig(), { port, ...(values.host ? { host: values.host } : {}) });
-  console.log(`Connected ${email}. sift will handle mail that arrives from now on.`);
+  ui.ok(`Connected ${paint.bold(email)}`);
+  ui.info('sift handles mail that arrives from now on.');
 }
 
 async function init(args: string[]): Promise<void> {
@@ -122,7 +130,6 @@ async function init(args: string[]): Promise<void> {
   if (port !== undefined && (!Number.isInteger(port) || port < 0 || port > 65535)) throw new Error(`Invalid --port: ${values.port}`);
   const config = loadConfig();
   const models = openModels(config);
-  const terminal = { ask: (question: string) => ask(question), say: (line: string) => console.log(line) };
   const withDb = <T>(work: (db: ReturnType<typeof openDb>) => T): T => {
     const db = openDb(config.dbPath);
     try {
@@ -133,13 +140,13 @@ async function init(args: string[]): Promise<void> {
   };
   await runInit({
     config,
-    terminal,
+    ui,
     saveSettings: (settings) => saveSettings(config, settings),
     hasGoogleClient: () => hasClientSecrets(config),
-    installGoogleClient: (path) => installClientFile(config, path),
+    installGoogleClient: (json) => installClient(config, json),
     connectedAccounts: () => withDb((db) => listAccounts(db).map((a) => a.email)),
     connectGmail: () => connectGmail(config, { ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) }),
-    loginModel: (choice) => login(models, config, choice.provider, choice.type, { ask, say: terminal.say }),
+    loginModel: (choice) => login(models, config, choice.provider, choice.type, ui),
     availableModels: async (provider) => (await models.getAvailable(provider)).map((m) => m.id),
     categories: (account) => withDb((db) => listCategories(db, account)),
   });
@@ -154,10 +161,16 @@ async function sync(args: string[]): Promise<void> {
     if (accounts.length === 0) throw new Error('No Gmail account is connected yet. Run `sift init`.');
     const secrets = loadClientSecrets(config);
     for (const account of accounts) {
-      const report = await syncAccount(db, createGmailApi(clientFor(config, secrets, account.email)), account);
-      const recovery = report.mode === 'recovery' ? ' (history cursor had expired; searched the last 7 days)' : '';
-      console.log(`${account.email}: ${report.added.length} new, ${report.skipped} skipped${recovery}`);
-      if (values.verbose) for (const m of report.added) console.log(`  ${m.messageId}  ${m.from.address}  ${m.subject}`);
+      const report = await spin(`Checking ${account.email}`, () => syncAccount(db, createGmailApi(clientFor(config, secrets, account.email)), account));
+      const recovery = report.mode === 'recovery' ? paint.dim(' · history had expired, searched the last 7 days') : '';
+      ui.ok(`${paint.bold(account.email)}  ${plural(report.added.length, 'new message')}${paint.dim(` · ${report.skipped} skipped`)}${recovery}`);
+      if (values.verbose && report.added.length > 0) {
+        ui.blank();
+        ui.table(
+          ['Message id', 'From', 'Subject'],
+          report.added.map((m) => [paint.dim(m.messageId), m.from.address, m.subject.slice(0, 60)]),
+        );
+      }
     }
   } finally {
     db.close();
@@ -167,10 +180,12 @@ async function sync(args: string[]): Promise<void> {
 const mailboxFor = (config: Config, email: string) => createGmailMailbox(clientFor(config, loadClientSecrets(config), email));
 
 function printOutcome(outcome: Outcome): void {
-  if (outcome.status === 'done') console.log(`Done (action ${outcome.actionId}). Reverse it with: sift undo ${outcome.actionId}`);
-  else if (outcome.status === 'skipped') console.log(`Nothing changed: ${outcome.reason}.`);
+  if (outcome.status === 'done') {
+    ui.ok(`Done ${paint.dim(`· change #${outcome.actionId}`)}`);
+    ui.info(`Reverse it with ${paint.cmd(`sift undo ${outcome.actionId}`)}`);
+  } else if (outcome.status === 'skipped') ui.skip(`Nothing changed: ${outcome.reason}`);
   else {
-    console.error(`Action ${outcome.actionId} ${outcome.status}: ${outcome.reason}`);
+    ui.fail(`Change #${outcome.actionId} ${outcome.status === 'unknown' ? 'could not be confirmed' : 'failed'}: ${outcome.reason}`);
     process.exitCode = 1;
   }
 }
@@ -206,14 +221,23 @@ function log(args: string[]): void {
   const db = openDb(config.dbPath);
   const actions = listRecentActions(db, limit);
   db.close();
-  if (actions.length === 0) console.log('No actions yet.');
-  for (const a of actions) {
-    const when = new Date(a.createdAt).toISOString().slice(0, 16).replace('T', ' ');
-    const target = a.payload.undoOf === undefined ? '' : ` of ${a.payload.undoOf}`;
-    console.log(
-      `${String(a.id).padStart(5)}  ${when}  ${a.status.padEnd(7)}  ${(a.type + target).padEnd(12)}  ${a.messageId}${a.error ? `  (${a.error})` : ''}`,
-    );
+  if (actions.length === 0) {
+    ui.skip('No changes yet');
+    return;
   }
+  const state = (status: string) => (status === 'done' ? status : status === 'undone' ? paint.dim(status) : paint.bad(status));
+  ui.blank();
+  ui.table(
+    ['#', 'When', 'Change', 'Result', 'Message'],
+    actions.map((a) => [
+      String(a.id),
+      paint.dim(new Date(a.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })),
+      a.payload.undoOf === undefined ? a.type : `undo of #${a.payload.undoOf}`,
+      state(a.status),
+      `${paint.dim(a.messageId)}${a.error ? `  ${paint.bad(a.error)}` : ''}`,
+    ]),
+  );
+  ui.blank();
 }
 
 async function undoCommand(args: string[]): Promise<void> {
@@ -223,10 +247,10 @@ async function undoCommand(args: string[]): Promise<void> {
   const db = openDb(config.dbPath);
   try {
     const action = getAction(db, id);
-    if (!action) throw new Error(`No action ${id}.`);
+    if (!action) throw new Error(`There is no change #${id}.`);
     const outcome = await undo({ db, mailbox: mailboxFor(config, action.accountId) }, id);
-    if (outcome.status === 'done') console.log(`Undid action ${id} (recorded as action ${outcome.actionId}).`);
-    else if (outcome.status === 'skipped') console.log(`Action ${id} had already been reversed by hand; marked as undone.`);
+    if (outcome.status === 'done') ui.ok(`Reversed change #${id} ${paint.dim(`· recorded as #${outcome.actionId}`)}`);
+    else if (outcome.status === 'skipped') ui.ok(`Change #${id} had already been put back by hand; marked as undone`);
     else printOutcome(outcome);
   } finally {
     db.close();
@@ -244,7 +268,10 @@ async function dashboard(args: string[]): Promise<void> {
     server.once('error', reject);
     server.listen(port, values.host, resolve);
   });
-  console.log(`sift dashboard: http://localhost:${port}  (Ctrl+C to stop)`);
+  ui.heading('dashboard');
+  ui.plain(`Open ${paint.bold(`http://localhost:${port}`)}`);
+  ui.info('Read-only, and only reachable from this machine. Ctrl+C to stop.');
+  ui.blank();
   await new Promise<void>((resolve) => {
     const stop = () => server.close(() => resolve());
     process.once('SIGINT', stop);
@@ -266,7 +293,7 @@ async function openModelTier(config: Config, spec: string) {
   if (!(await models.getAuth(model)))
     throw new Error(`Not signed in to ${model.provider}. Run \`sift login ${model.provider}\` or set its API key in the environment.`);
   return {
-    judge: createJudge(models, model, (message) => console.error(`model: ${message}`)),
+    judge: createJudge(models, model, (message) => ui.fail(`Model call failed: ${message}`)),
     // Read on every pass, so edits to the file take effect without a restart.
     guidelines: () => (existsSync(config.guidelinesPath) ? readFileSync(config.guidelinesPath, 'utf8') : ''),
   };
@@ -277,14 +304,24 @@ async function loginCommand(args: string[]): Promise<void> {
   const [provider] = positionals;
   if (!provider) throw new Error('Usage: sift login <provider> [--api-key]   e.g. sift login openai-codex');
   const config = loadConfig();
-  await login(openModels(config), config, provider, values['api-key'] ? 'api_key' : 'oauth', { ask, say: (line) => console.log(line) });
-  console.log(`Signed in to ${provider}. Run \`sift models\`, then set \`model\` in ${config.settingsPath}.`);
+  await login(openModels(config), config, provider, values['api-key'] ? 'api_key' : 'oauth', ui);
+  ui.ok(`Signed in to ${paint.bold(provider)}`);
+  ui.info(`List its models with ${paint.cmd('sift models')}, then set model in ${paint.path(config.settingsPath)}`);
 }
 
 async function listModels(): Promise<void> {
-  const available = await openModels(loadConfig()).getAvailable();
-  if (available.length === 0) console.log('No models available. Sign in with `sift login <provider>` or set a provider API key in the environment.');
-  for (const model of available) console.log(`${model.provider}/${model.id}`);
+  const config = loadConfig();
+  const available = await spin('Listing models', () => openModels(config).getAvailable());
+  if (available.length === 0) {
+    ui.skip(`No models yet. Sign in with ${paint.cmd('sift init')} or ${paint.cmd('sift login <provider>')}`);
+    return;
+  }
+  const current = config.settings.model;
+  for (const model of available) {
+    const spec = `${model.provider}/${model.id}`;
+    if (spec === current) ui.plain(`${paint.mark(` ${spec} `)} ${paint.dim('in use')}`);
+    else ui.plain(spec);
+  }
 }
 
 function categories(args: string[]): void {
@@ -308,7 +345,13 @@ function categories(args: string[]): void {
       if (!updateCategory(db, account.id, key, { ...(disposition ? { disposition } : {}), ...(label === undefined ? {} : { label }) }))
         throw new Error(`No category "${key}". Run \`sift categories\` to list them.`);
     } else if (verb !== undefined && verb !== 'list') throw new Error('Usage: sift categories [list | set <key> ...]');
-    for (const c of listCategories(db, account.id)) console.log(`${c.key.padEnd(14)} ${c.disposition.padEnd(8)} ${(c.label ?? '').padEnd(20)} ${c.name}`);
+    ui.blank();
+    ui.table(
+      ['Key', 'Kind', 'sift will', 'Label'],
+      listCategories(db, account.id).map((c) => [paint.bold(c.key), c.name, disposition(c.disposition), c.label ? paint.dim(c.label) : '']),
+    );
+    ui.blank();
+    if (verb !== 'set') ui.info(`Change one with ${paint.cmd('sift categories set <key> --do <keep|archive|review|spam>')}`);
   } finally {
     db.close();
   }
@@ -343,14 +386,13 @@ async function run(args: string[]): Promise<void> {
         const client = clientFor(config, secrets, account.email);
         return { api: createGmailApi(client), mailbox: createGmailMailbox(client) };
       },
-      log: (line: string) => console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')}  ${line}`),
+      log: (line: string) => ui.plain(`${paint.dim(new Date().toLocaleTimeString(undefined, { hour12: false }))}  ${line}`),
     };
-    console.log(modelSpec ? `Model: ${modelSpec}` : 'No model is set: mail no rule covers is left for you. `sift init` sets one up.');
-    console.log(
-      act
-        ? 'sift is acting: decisions are carried out in Gmail.'
-        : `sift is observing: decisions are recorded, Gmail is not changed. Set act = true in ${config.settingsPath} to carry them out.`,
-    );
+    ui.heading(act ? 'acting' : 'observing', `${modelSpec ?? 'no model'} · every ${interval}s`);
+    if (act) ui.info('Decisions are carried out in Gmail. Every change can be reversed with sift undo.');
+    else ui.info(`Decisions are recorded and Gmail is not changed. Set act = true in ${paint.path(config.settingsPath)} to carry them out.`);
+    if (!modelSpec) ui.info(`No model is set, so mail no rule covers is left for you. ${paint.cmd('sift init')} sets one up.`);
+    ui.blank();
 
     if (values.once) {
       const results = await runOnce(db, options);
@@ -365,6 +407,8 @@ async function run(args: string[]): Promise<void> {
     db.close();
   }
 }
+
+const CONDITION_NAMES: Record<string, string> = { from: 'from', fromDomain: 'from domain', to: 'to', listId: 'list', subjectContains: 'subject has' };
 
 function rules(args: string[]): void {
   const { values, positionals } = parseArgs({
@@ -388,7 +432,7 @@ function rules(args: string[]): void {
     if (verb === 'remove') {
       if (!id) throw new Error('Usage: sift rules remove <rule-id>');
       if (!removeRule(db, id)) throw new Error(`No rule ${id}.`);
-      console.log(`Removed ${id}.`);
+      ui.ok(`Removed ${paint.bold(id)}`);
       return;
     }
     const account = pickAccount(listAccounts(db), values.account);
@@ -404,18 +448,30 @@ function rules(args: string[]): void {
         ...(values['subject-contains'] ? { subjectContains: values['subject-contains'] } : {}),
       };
       const ruleId = addRule(db, account.id, { match, disposition, ...(values.label ? { label: values.label } : {}) }, 'user');
-      console.log(`Added ${ruleId}. It applies to mail triaged from now on.`);
+      ui.ok(`Added ${paint.bold(ruleId)}`);
+      ui.info('It applies to mail sorted from now on.');
       return;
     }
     if (verb !== undefined && verb !== 'list') throw new Error('Usage: sift rules <list|add|remove>');
     const all = listRules(db, account.id);
-    if (all.length === 0) console.log('No rules yet. Add one with: sift rules add --do archive --from-domain example.com');
-    for (const rule of all) {
-      const conditions = Object.entries(rule.match)
-        .map(([key, value]) => `${key}=${value}`)
-        .join(' ');
-      console.log(`${rule.id}  ${rule.disposition.padEnd(7)}  ${conditions}${rule.label ? `  label=${rule.label}` : ''}  (${rule.source}, ${rule.hits} hits)`);
+    if (all.length === 0) {
+      ui.skip(`No rules yet. Add one with ${paint.cmd('sift rules add --do archive --from-domain example.com')}`);
+      return;
     }
+    ui.blank();
+    ui.table(
+      ['Id', 'When mail matches', 'sift will', 'Label', 'Matches'],
+      all.map((rule) => [
+        paint.bold(rule.id),
+        Object.entries(rule.match)
+          .map(([key, value]) => `${paint.dim(CONDITION_NAMES[key] ?? key)} ${value}`)
+          .join('  '),
+        disposition(rule.disposition),
+        rule.label ? paint.dim(rule.label) : '',
+        String(rule.hits),
+      ]),
+    );
+    ui.blank();
   } finally {
     db.close();
   }
@@ -444,12 +500,12 @@ async function main(): Promise<void> {
   else if (command === 'login') await loginCommand(args);
   else if (command === 'models') await listModels();
   else if (command === 'categories') categories(args);
-  else if (command === undefined || command === 'help' || command === '--help' || command === '-h') console.log(USAGE);
+  else if (command === undefined || command === 'help' || command === '--help' || command === '-h') help();
   else if ((PLANNED as readonly string[]).includes(command)) {
-    console.error(`sift ${command} is not implemented yet.`);
+    ui.fail(`${paint.cmd(`sift ${command}`)} is not built yet.`);
     process.exitCode = 1;
   } else {
-    console.error(`Unknown command: ${command}\n\n${USAGE}`);
+    ui.fail(`There is no ${paint.cmd(`sift ${command}`)} command. ${paint.cmd('sift help')} lists them.`);
     process.exitCode = 2;
   }
 }
@@ -457,7 +513,7 @@ async function main(): Promise<void> {
 try {
   await main();
 } catch (error) {
-  console.error(`sift: ${error instanceof Error ? error.message : String(error)}`);
+  ui.fail(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 } finally {
   closeTerminal();

@@ -29,33 +29,36 @@ function deviceId(config: Config): string {
 }
 
 export interface LoginTerminal {
-  /** Ask for one line. Resolves early with an empty string if `signal` aborts (the browser callback won the race). */
-  ask(question: string, signal?: AbortSignal): Promise<string>;
-  say(line: string): void;
+  /** Ask for one line. Resolves with an empty string if `signal` aborts first (the browser callback won the race). */
+  text: (question: string, signal?: AbortSignal) => Promise<string>;
+  select: (question: string, options: readonly { label: string; hint?: string; value: string }[]) => Promise<string>;
+  /** A URL the user must open. */
+  link: (url: string) => void;
+  info: (line: string) => void;
 }
 
 /**
  * Sign in to a provider and store the credential. `oauth` covers subscription sign-in (for example
- * ChatGPT through `openai` or `openai-codex`); `api_key` stores a key.
+ * ChatGPT through `openai-codex`); `api_key` stores a key.
  */
 export async function login(models: Models, config: Config, provider: string, type: 'oauth' | 'api_key', terminal: LoginTerminal): Promise<void> {
   const prompt = async (p: AuthPrompt): Promise<string> => {
-    if (p.type !== 'select') return terminal.ask(p.message, p.signal);
-    terminal.say(p.message);
-    p.options.forEach((option, index) => terminal.say(`  ${index + 1}. ${option.label}${option.description ? ` (${option.description})` : ''}`));
-    for (;;) {
-      const answer = await terminal.ask(`Choose 1-${p.options.length}:`, p.signal);
-      const chosen = p.options[Number(answer) - 1] ?? p.options.find((option) => option.id === answer);
-      if (chosen) return chosen.id;
-      if (p.signal?.aborted) throw new Error('Sign-in was cancelled.');
-    }
+    if (p.type !== 'select') return terminal.text(p.message, p.signal);
+    return terminal.select(
+      p.message,
+      p.options.map((option) => ({ label: option.label, ...(option.description ? { hint: option.description } : {}), value: option.id })),
+    );
   };
   const notify = (event: AuthEvent) => {
-    if (event.type === 'auth_url') terminal.say(`Open this URL in a browser:\n\n${event.url}\n${event.instructions ? `\n${event.instructions}\n` : ''}`);
-    else if (event.type === 'device_code') terminal.say(`Go to ${event.verificationUri} and enter the code: ${event.userCode}`);
-    else {
-      terminal.say(event.message);
-      if (event.type === 'info') for (const link of event.links ?? []) terminal.say(`${link.label ?? 'More information'}: ${link.url}`);
+    if (event.type === 'auth_url') {
+      terminal.info('Open this in a browser to sign in:');
+      terminal.link(event.url);
+    } else if (event.type === 'device_code') {
+      terminal.info(`Enter the code ${event.userCode} at:`);
+      terminal.link(event.verificationUri);
+    } else {
+      terminal.info(event.message);
+      if (event.type === 'info') for (const link of event.links ?? []) terminal.link(link.url);
     }
   };
   await models.login(provider, type, { prompt, notify }, { getDeviceId: () => deviceId(config) });

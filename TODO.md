@@ -6,6 +6,7 @@ The working list for sift. Remove an item when it lands; add what you find. Desi
 
 - [ ] Run `sift init` for real, start to finish, on a laptop and inside Docker.
 - [ ] Let `init` change a step that is already done (switch model, add a second account) instead of only filling gaps.
+- [ ] Check the Google Cloud Console links and field names in `init` against the live console; they were written from memory of its current layout.
 - [ ] Let `init` set category preferences interactively, not just show them.
 - [ ] `sift config`: show and set single settings without editing `sift.toml`.
 
@@ -36,6 +37,7 @@ Later, only if an operator-facing agent is built (one you talk to: "why did you 
 
 A React app in `web/` (shadcn/ui on Base UI, Tailwind, Recharts) served by `sift dashboard`.
 
+- [ ] Let the dashboard act, not only show: undo a change, answer a question, correct a decision, edit rules and what each category does. This is where steering sift should live; the CLI commands for these are stopgaps. It needs a deliberate design for a page with no login (localhost only, a per-install token, same-origin checks).
 - [ ] Senders view: per-sender volume, what sift does with them, and a way to see their messages.
 - [ ] Rule detail: the messages a rule matched, hits over time, rules that never fire.
 - [ ] Live view of what the agent is doing once the agent exists (current run, tool calls, cost so far).
