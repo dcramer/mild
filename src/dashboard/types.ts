@@ -179,3 +179,18 @@ export interface ChangeRow {
   /** For an undo, the change it reversed. */
   undoOf: number | null;
 }
+
+/** GET /api/session. */
+export interface Session {
+  /** False when this dashboard does not ask for sign-in. */
+  required: boolean;
+  /** The signed-in account, or null. */
+  email: string | null;
+  canSignIn: boolean;
+  /** Why not: no Google client is set up; Google cannot return to this address; or the client is a Desktop one, which only works at localhost. */
+  reason: 'no-client' | 'address' | 'desktop-client' | null;
+  /** Addresses sign-in works at. */
+  addresses: string[];
+  /** What the Google client must list as an authorised redirect URI for sign-in at this address. */
+  redirectUri: string;
+}

@@ -1,17 +1,18 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
+import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { parseArgs } from 'node:util';
+import { parseArgs, promisify } from 'node:util';
 import { type MessageAction, type Outcome, execute, undo } from '../actions/executor.ts';
 import { type Config, loadConfig, saveSettings } from '../config.ts';
 import { backfill } from '../daemon/backfill.ts';
-import type { Activity, Controls } from '../dashboard/controls.ts';
+import type { Activity, Controls, SignIn } from '../dashboard/controls.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
 import { ensureWebBuilt } from './web-build.ts';
 import { type PassResult, type Wake, createWake, runLoop, runOnce } from '../daemon/run.ts';
 import { syncAccount } from '../daemon/sync.ts';
 import { createGmailApi } from '../gmail/api.ts';
-import { authorize, clientFor, hasClientSecrets, installClient, loadClientSecrets, saveRefreshToken } from '../gmail/auth.ts';
+import { browserSignInUrl, clientFor, completeBrowserSignIn, hasClientSecrets, installClient, loadClientSecrets, saveRefreshToken } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { createJudge } from '../model/judge.ts';
 import { login, openModels, resolveModel } from '../model/models.ts';
@@ -20,8 +21,8 @@ import { getAction, listRecentActions } from '../store/actions.ts';
 import { listCategories, updateCategory } from '../store/categories.ts';
 import { openDb } from '../store/db.ts';
 import { type SetupState, runInit } from './init.ts';
-import { dashboardUrls, listenAddresses, machineNames } from './network.ts';
-import { closeTerminal, readLine } from './terminal.ts';
+import { listenAddresses, machineNames, tailscaleName } from './network.ts';
+import { closeTerminal } from './terminal.ts';
 import { disposition, paint, spin, ui } from './ui.ts';
 import { addRule, listRules, removeRule } from '../store/rules.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
@@ -40,7 +41,6 @@ const OTHER_COMMANDS: readonly (readonly [string, string])[] = [
   ['log', 'recent changes to your mailbox'],
   ['undo <id>', 'reverse one change'],
   ['dashboard', 'serve the dashboard without sorting mail'],
-  ['auth', 'connect a Gmail account'],
   ['login <provider>', 'sign in to a model provider'],
   ['models', 'list the models you can use'],
 ];
@@ -73,7 +73,7 @@ function status(): void {
     ['Model', settings.model ?? paint.dim('none')],
     ['Mode', `${settings.act ? 'acting on decisions' : 'observing only'}${paint.dim(` · every ${settings.interval}s`)}`],
     ['Guidance', existsSync(config.guidelinesPath) ? paint.path(config.guidelinesPath) : paint.dim('none written')],
-    ['Dashboard', `${dashboardLinks(config)[0]}${paint.dim(settings.dashboardHost ? '' : ' · this machine only')}`],
+    ['Dashboard', signInAddresses(settings.dashboardPort).join(paint.dim('  or  '))],
   ]);
   ui.blank();
   const questions = count('questions', 'WHERE answered_at IS NULL');
@@ -92,53 +92,7 @@ function status(): void {
   db.close();
 }
 
-/** Run the Gmail sign-in and record the account. Returns the connected address. */
-async function connectGmail(config: Config, options: { port?: number; host?: string } = {}): Promise<string> {
-  const secrets = loadClientSecrets(config);
-  // Stop waiting for a pasted URL once the browser callback has finished the sign-in.
-  const paste = new AbortController();
-  const pasted = readLine(paste.signal).then((line) => line ?? new Promise<string>(() => {}));
-  try {
-    const { refreshToken, client } = await authorize(secrets, {
-      port: options.port ?? 0,
-      ...(options.host ? { host: options.host } : {}),
-      pasted,
-      onUrl: (url) => {
-        ui.info('Open this in a browser and approve access:');
-        ui.link(url);
-        if (config.settings.dashboardHost)
-          ui.info('The page the browser ends on will not load, because it points back at this server: paste its address here.');
-        else ui.info('If the browser is on another machine, the page it ends on will not load: paste its address here.');
-        ui.info('"Access blocked" means this account is not a test user and the app is not published:');
-        ui.info('https://console.cloud.google.com/auth/audience');
-        ui.blank();
-        ui.waiting(config.settings.dashboardHost ? 'Paste the address:' : 'Waiting for the browser, or paste the address:');
-      },
-    });
-    const profile = await spin('Checking the account', () => createGmailApi(client).getProfile());
-    saveRefreshToken(config, profile.emailAddress, refreshToken);
-    const db = openDb(config.dbPath);
-    connectAccount(db, profile.emailAddress, profile.historyId);
-    db.close();
-    return profile.emailAddress;
-  } finally {
-    paste.abort();
-    ui.blank();
-  }
-}
-
-async function auth(args: string[]): Promise<void> {
-  const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string' } } });
-  const port = values.port === undefined ? 0 : Number(values.port);
-  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`Invalid --port: ${values.port}`);
-  const email = await connectGmail(loadConfig(), { port, ...(values.host ? { host: values.host } : {}) });
-  ui.ok(`Connected ${paint.bold(email)}`);
-}
-
-async function init(args: string[]): Promise<void> {
-  const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string' } } });
-  const port = values.port === undefined ? undefined : Number(values.port);
-  if (port !== undefined && (!Number.isInteger(port) || port < 0 || port > 65535)) throw new Error(`Invalid --port: ${values.port}`);
+async function init(): Promise<void> {
   const config = loadConfig();
   const models = openModels(config);
   const withDb = <T>(work: (db: ReturnType<typeof openDb>) => T): T => {
@@ -164,11 +118,19 @@ async function init(args: string[]): Promise<void> {
     saveSetupState: (state) => writeFileSync(config.setupStatePath, JSON.stringify(state), { mode: 0o600 }),
     installGoogleClient: (json) => installClient(config, json),
     connectedAccounts: () => withDb((db) => listAccounts(db).map((a) => a.email)),
-    connectGmail: () => connectGmail(config, { ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) }),
     loginModel: (choice) => login(models, config, choice.provider, choice.type, ui),
     availableModels: async (provider) => (await models.getAvailable(provider)).map((m) => m.id),
     categories: (account) => withDb((db) => listCategories(db, account)),
-    dashboardUrls: () => dashboardUrls(config.settings),
+    googleClientKind: () => (hasClientSecrets(config) ? loadClientSecrets(config).kind : null),
+    tailscaleName,
+    enableTailscaleServe: async (servePort) => {
+      try {
+        await promisify(execFile)('tailscale', ['serve', '--bg', String(servePort)], { timeout: 20_000 });
+      } catch (error) {
+        const detail = (error as { stderr?: string }).stderr?.trim().split('\n').at(-1);
+        throw new Error(detail || 'tailscale serve did not start.', { cause: error });
+      }
+    },
   });
 }
 
@@ -277,17 +239,35 @@ async function undoCommand(args: string[]): Promise<void> {
 }
 
 /** The secret in the dashboard's access link, created the first time it is needed. */
-function dashboardKey(config: Config): string {
+function sessionSecret(config: Config): string {
   if (existsSync(config.dashboardKeyPath)) return readFileSync(config.dashboardKeyPath, 'utf8').trim();
-  const key = randomBytes(24).toString('base64url');
+  const key = randomBytes(32).toString('base64url');
   writeFileSync(config.dashboardKeyPath, key, { mode: 0o600 });
   return key;
 }
 
-/** The dashboard's addresses under the current settings, with the access key when one is needed. */
-function dashboardLinks(config: Config, port?: number): string[] {
-  const urls = dashboardUrls(config.settings, port);
-  return config.settings.dashboardHost ? urls.map((url) => `${url}/?key=${dashboardKey(config)}`) : urls;
+/** Addresses Google can sign someone in at: this machine, and its Tailscale name over HTTPS. */
+function signInAddresses(port: number): string[] {
+  const name = tailscaleName();
+  return [`http://localhost:${port}`, ...(name ? [`https://${name}`] : [])];
+}
+
+/** Google sign-in from the dashboard: the same step connects the Gmail account and signs the viewer in. */
+function buildSignIn(config: Config, db: ReturnType<typeof openDb>): SignIn {
+  return {
+    client: () => (hasClientSecrets(config) ? loadClientSecrets(config).kind : null),
+    url: (redirectUri, state, challenge) => browserSignInUrl(loadClientSecrets(config), { redirectUri, state, challenge }),
+    complete: async (redirectUri, code, verifier, allowNew) => {
+      const { email, historyId, refreshToken } = await completeBrowserSignIn(loadClientSecrets(config), { redirectUri, code, verifier });
+      const accounts = listAccounts(db);
+      const known = accounts.some((a) => a.email === email);
+      if (!known && accounts.length > 0 && !allowNew) throw new Error(`${email} is not the account sift is connected to.`);
+      saveRefreshToken(config, email, refreshToken);
+      // A new account starts from now; a known one keeps its place.
+      if (!known) connectAccount(db, email, historyId);
+      return email;
+    },
+  };
 }
 
 /** What the dashboard may ask this process to do. See `Controls`. */
@@ -344,15 +324,18 @@ async function serveDashboard(
   const port = options.port ?? settings.dashboardPort;
   // --host replaces the setting: a container listens on every interface and its port mapping decides who can reach it.
   const listen = options.host ? [options.host] : await listenAddresses(settings);
-  const beyondLocalhost = listen.some((address) => address !== '127.0.0.1');
-  // Beyond localhost, answer to any name or address that is this machine and to nothing else, and require the access key.
-  const allowedHosts = beyondLocalhost
-    ? [...machineNames(), ...(settings.dashboardHost && settings.dashboardHost !== 'all' ? [settings.dashboardHost] : [])]
-    : [];
+  // Answer to any name or address that is this machine and to nothing else.
+  const allowedHosts = [...machineNames(), ...(settings.dashboardHost && settings.dashboardHost !== 'all' ? [settings.dashboardHost] : [])];
   await ensureWebBuilt();
 
   const servers = listen.map(() =>
-    createDashboardServer(db, { allowedHosts, controls: options.controls, ...(beyondLocalhost ? { accessKey: dashboardKey(config) } : {}) }),
+    createDashboardServer(db, {
+      allowedHosts,
+      controls: options.controls,
+      signIn: buildSignIn(config, db),
+      sessionSecret: sessionSecret(config),
+      signInAddresses: signInAddresses(port),
+    }),
   );
   await Promise.all(
     servers.map(
@@ -370,9 +353,9 @@ async function serveDashboard(
     ),
   );
 
-  const [first, ...others] = beyondLocalhost ? dashboardLinks(config, port) : dashboardUrls(settings, port);
-  ui.fields([['Dashboard', paint.bold(first ?? '')], ...others.map((url) => ['', url] as const)]);
-  if (beyondLocalhost) ui.info('Open one of these once in each browser; the key in the link is what lets it in.');
+  const [first, ...others] = signInAddresses(port);
+  ui.fields([['Dashboard', paint.bold(first ?? '')], ...others.map((url) => ['', paint.bold(url)] as const)]);
+  if (others.length > 0) ui.info(`The second needs ${paint.cmd(`tailscale serve --bg ${port}`)} once. Sign in there with Google.`);
   return () => {
     for (const server of servers) {
       server.close();
@@ -500,8 +483,6 @@ async function run(args: string[]): Promise<void> {
 
   const db = openDb(config.dbPath);
   try {
-    if (listAccounts(db).length === 0) throw new Error('No Gmail account is connected yet. Run `sift init`.');
-    const secrets = loadClientSecrets(config);
     const log = (line: string) => ui.plain(`${paint.dim(new Date().toLocaleTimeString(undefined, { hour12: false }))}  ${line}`);
 
     // Settings are read again before every pass, so changes made in the dashboard or sift.toml apply
@@ -528,7 +509,7 @@ async function run(args: string[]): Promise<void> {
         act,
         ...(tier ? { model: tier } : {}),
         connect: (account: Account) => {
-          const client = clientFor(config, secrets, account.email);
+          const client = clientFor(config, loadClientSecrets(config), account.email);
           return { api: createGmailApi(client), mailbox: createGmailMailbox(client) };
         },
         log,
@@ -538,7 +519,9 @@ async function run(args: string[]): Promise<void> {
 
     const first = await next();
     ui.heading(first.act ? 'acting' : 'observing', `${config.settings.model ?? 'no model'} · every ${first.intervalMs / 1000}s`);
-    if (!first.act) ui.info('Gmail is not changed while sift is observing. Switch it in the dashboard, under Settings.');
+    if (!hasClientSecrets(config)) ui.warn(`No Google client yet. Run ${paint.cmd('sift init')}.`);
+    else if (listAccounts(db).length === 0) ui.warn('No Gmail account yet. Open the dashboard and sign in with Google.');
+    else if (!first.act) ui.info('Gmail is not changed while sift is observing. Switch it in the dashboard, under Settings.');
 
     if (values.once) {
       ui.blank();
@@ -658,8 +641,7 @@ async function main(): Promise<void> {
   }
   const [command, ...args] = argv;
   if (command === 'status') status();
-  else if (command === 'init') await init(args);
-  else if (command === 'auth') await auth(args);
+  else if (command === 'init') await init();
   else if (command === 'sync') await sync(args);
   else if (command === 'apply') await apply(args);
   else if (command === 'log') log(args);

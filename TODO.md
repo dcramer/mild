@@ -19,7 +19,7 @@ Built: the Suggestions view, answers by sender ("Right" or "No, it is <category>
 - [ ] Re-decide waiting suggestions when a category setting or the guidelines change.
 - [ ] Accuracy per tier and per category on the Overview; say when a sender or category has been right often enough to trust.
 - [ ] Trust in pieces: act on this sender or this category while everything else stays a suggestion, instead of one global `act` switch.
-- [ ] Let a Chrome extension call the API: it cannot use the page's cookie or Origin, so it needs its own token.
+- [ ] Let a Chrome extension call the API: it cannot use the page's cookie or Origin, so it needs its own token, issued to a signed-in user.
 - [ ] Decide how long examples are kept and add a way to delete them; they hold full message content.
 
 ## Setup
@@ -57,19 +57,22 @@ Later, only if an operator-facing agent is built (one you talk to: "why did you 
 
 ## Dashboard
 
-The dashboard manages sift: suggestions, settings, kinds of mail, guidelines, rules, senders, changes with undo, and pulling in older mail. Behind an access key when it listens beyond localhost.
+The dashboard manages sift, behind Google sign-in. That sign-in also connects the Gmail account.
 
-- [ ] Connect a Gmail account and sign in to a model provider from the dashboard. Both are browser sign-ins that still need `sift init` in a terminal.
-- [ ] Identify the viewer instead of sharing one key: Tailscale identity behind `tailscale serve` first; Google sign-in needs HTTPS on a real domain and a separate Web OAuth client.
-- [ ] Offer `tailscale serve` as the way to reach the dashboard from other devices: sift stays on localhost and Tailscale adds HTTPS. Today it listens over plain HTTP, so the key travels in the clear on the local network.
-- [ ] Rotate the access key from the dashboard.
+- [ ] **Design the components.** The page has a settled style but its parts were never designed: suggestion rows, the figures strip, tables, selects and buttons, the message panel, settings rows, the chart, empty and loading states. Take each in turn.
+- [ ] Try the sign-in for real: a Web application client, `tailscale serve`, the redirect URIs, and a second account.
+- [ ] Keep people apart: today everyone signed in sees every connected account. Scope each session to its own account before more than one person uses an install.
+- [ ] Filter every view by account once there is more than one.
+- [ ] Sign in to a model provider from the dashboard; it still needs `sift init`.
+- [ ] Use Tailscale's identity headers to skip the Google round trip for viewers on the tailnet.
+- [ ] Remove an account, and its token and data, from the dashboard.
 - [ ] Edit a category's label, name and description; add and remove categories.
 - [ ] Reorder rules; rules with more than one condition and with exceptions.
 - [ ] Answer queued questions.
 - [ ] Per-sender and per-rule detail: the messages matched, hits over time, rules that never fire.
 - [ ] Split the bundle (about 800 kB, mostly Recharts) if load time matters.
 - [ ] Keep filters, tab and open message in the URL so a view can be bookmarked.
-- [ ] `pnpm dev:web` proxies to localhost:8787; make it follow `dashboard.port` and carry the access key.
+- [ ] `pnpm dev:web` proxies to localhost:8787; make it follow `dashboard.port`.
 - [ ] Revisit Vercel's UI SDK if shadcn ships a base built on it (evaluated 2026-11-15, not adopted; see docs/ARCHITECTURE.md).
 
 ## Inference tier

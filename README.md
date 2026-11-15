@@ -18,11 +18,11 @@ pnpm sift init
 
 `init` walks you through whatever is not done yet and can be run again at any time:
 
-1. **Where sift runs.** On this machine, or on a server you reach from another one. On a server the dashboard listens on every network the machine is on, so its hostname, LAN address and Tailscale name all work.
-2. **Google OAuth client.** sift reads your mail through a client you own, so no third party sits in between. `init` takes you through creating one a page at a time: the link, the values to enter, then it waits. You paste the client's JSON when you create it. At the end you choose between adding yourself as a test user (works straight away; Google signs you out every 7 days) and publishing the app.
-3. **Gmail account.** Google's sign-in. If the browser is not on the machine running sift, the page it ends on will not load: paste that page's address back into the terminal.
-4. **Model.** Optional. A ChatGPT Plus or Pro subscription or an API key, then a model. Without one, mail that no rule covers stays in your inbox.
-5. **Preferences.** What sift does with each kind of mail, and where to change it.
+1. **Where sift runs.** On this machine, or on a server you reach from another one. Google only signs people in at `localhost` or an HTTPS address, so on a server `init` turns on `tailscale serve`, which gives the dashboard an HTTPS address on your tailnet.
+2. **Google OAuth client.** sift reads your mail through a client you own, so no third party sits in between. `init` takes you through creating one a page at a time: the link, the values to enter (including the redirect addresses), then it waits. You paste the client's JSON when you create it. At the end you choose between adding yourself as a test user (works straight away; Google signs you out every 7 days) and publishing the app.
+3. **Model.** Optional. A ChatGPT Plus or Pro subscription or an API key, then a model. Without one, mail that no rule covers stays in your inbox.
+
+Then start sift and open the dashboard. **Signing in there with Google is what connects your Gmail account**, and it is also what lets you into the dashboard: only someone signed in as a connected account can see or change anything. Connect a second account from Settings.
 
 ![sift init](docs/images/cli.png)
 
@@ -83,7 +83,7 @@ Using a ChatGPT subscription from a third-party tool is not something OpenAI doc
 
 `sift run` serves it and prints its addresses. The page is built automatically the first time and whenever its sources change.
 
-On a server, `init` sets `dashboard.host = "all"` so it listens on every network the machine is on. It then requires an access key: `sift run` prints links such as `http://yourserver:8787/?key=…`. Open one once in each browser; after that the plain address works there. `sift status` prints the link again. Use Tailscale to reach a server; do not put the dashboard on the public internet.
+Reach it at `http://localhost:8787` on the machine running sift, or at `https://<machine>.<tailnet>.ts.net` from your other devices once `tailscale serve --bg 8787` is on. A plain `http://hostname:8787` address shows the page but cannot sign you in.
 
 You manage sift from here:
 
@@ -115,13 +115,11 @@ The image keeps its home directory in the `sift-data` volume.
 docker compose -f docker/compose.yaml build
 ```
 
-Run the same setup inside the container. The published port lets Google's sign-in call back; for the model step choose the device-code login.
+Run the same setup inside the container; for the model step choose the device-code login.
 
 ```bash
-docker compose -f docker/compose.yaml run --rm -it -p 127.0.0.1:8765:8765 sift init --port 8765 --host 0.0.0.0
+docker compose -f docker/compose.yaml run --rm -it sift init
 ```
-
-When `init` asks for the Google client file, give a path inside the container; mount the downloaded file with `-v /path/to/client.json:/client.json:ro` and answer `/client.json`.
 
 ```bash
 docker compose -f docker/compose.yaml up

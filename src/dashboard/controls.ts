@@ -36,3 +36,19 @@ export interface Activity {
   /** What went wrong on the last pass, per account. Empty when it went well. */
   problems: string[];
 }
+
+/**
+ * Signing in with Google from the browser. One sign-in does two things: it gives sift its access to the
+ * Gmail account, and it proves the viewer owns that account, which is what lets them use the dashboard.
+ */
+export interface SignIn {
+  /** The kind of Google client that is set up, or null if none is. */
+  client(): 'web' | 'desktop' | null;
+  /** Google's sign-in address for a browser that should come back to `redirectUri`. */
+  url(redirectUri: string, state: string, challenge: string): string;
+  /**
+   * Finish a sign-in. The account must already be connected, unless none is yet or `allowNew` is set, in
+   * which case it is connected. Resolves with the account's address; rejects with a message for the user.
+   */
+  complete(redirectUri: string, code: string, verifier: string, allowNew: boolean): Promise<string>;
+}

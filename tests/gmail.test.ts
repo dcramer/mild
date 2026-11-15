@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { syncAccount } from '../src/daemon/sync.ts';
 import { type GmailApi, HistoryExpiredError, type HistoryPage, type RawMessage } from '../src/gmail/api.ts';
-import { parseCallback } from '../src/gmail/auth.ts';
 import { pullChanges, toFacts } from '../src/gmail/sync.ts';
 import { connectAccount, listAccounts } from '../src/store/accounts.ts';
 import { openDb } from '../src/store/db.ts';
@@ -181,18 +180,5 @@ describe('syncAccount', () => {
     };
     await expect(syncAccount(db, api, listAccounts(db)[0]!)).rejects.toThrow('network');
     expect(listAccounts(db)[0]?.historyId).toBe('500');
-  });
-});
-
-describe('parseCallback', () => {
-  it('returns the code when state matches', () => {
-    expect(parseCallback('http://127.0.0.1:8765/?state=s1&code=abc&scope=x', 's1')).toBe('abc');
-    expect(parseCallback('/?code=abc&state=s1', 's1')).toBe('abc');
-  });
-
-  it('rejects a wrong state, a denial and a missing code', () => {
-    expect(() => parseCallback('/?code=abc&state=other', 's1')).toThrow(/different sign-in attempt/);
-    expect(() => parseCallback('/?error=access_denied&state=s1', 's1')).toThrow(/access_denied/);
-    expect(() => parseCallback('/?state=s1', 's1')).toThrow(/no authorization code/);
   });
 });

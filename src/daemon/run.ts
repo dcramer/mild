@@ -55,7 +55,7 @@ export async function runOnce(db: DatabaseSync, options: RunOptions): Promise<Pa
     } catch (error) {
       result.error = error instanceof Error ? error.message : String(error);
       // Google's answer when a refresh token is no longer good; an app left in Testing does this every 7 days.
-      if (result.error.includes('invalid_grant')) options.log(`${account.email}: Google sign-in has expired. Run \`sift auth\` to sign in again.`);
+      if (result.error.includes('invalid_grant')) options.log(`${account.email}: Google sign-in has expired. Sign in to the dashboard again.`);
       else options.log(`${account.email}: pass failed, will retry: ${result.error}`);
     }
     results.push(result);

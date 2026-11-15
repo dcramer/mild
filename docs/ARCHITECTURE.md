@@ -56,7 +56,7 @@ Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 
 ## Gmail
 
-- **Scopes:** `gmail.modify` and `gmail.settings.basic` (`src/gmail/scopes.ts`). Both are restricted scopes, so each user brings their own Google Cloud project with a Desktop OAuth client, using a loopback redirect with PKCE. The project must be published "In production"; in "Testing", refresh tokens expire after 7 days.
+- **Scopes:** `gmail.modify` and `gmail.settings.basic` (`src/gmail/scopes.ts`). Both are restricted scopes, so each user brings their own Google Cloud project with a Web application OAuth client; sign-in is the authorisation-code flow with PKCE, started from the dashboard. Left in "Testing", Google limits sign-in to listed test users and ends it every 7 days.
 - **Tokens:** the refresh token is stored per account in `google/` in the home directory, owner-only, outside the database.
 - **First connect:** sift records the current history id and handles mail from then on. It never sweeps the existing inbox unasked.
 - **Sync is separate from triage:** a sync pass records message metadata and advances the cursor in one transaction; triage will work from recorded messages that have no decision yet. A failed fetch leaves the cursor in place.
@@ -122,7 +122,7 @@ Everything sift keeps is in one directory, the home: `~/.config/sift` by default
 - `sift.toml`: settings (`model`, `act`, `interval`, `dashboard.port`, `dashboard.host`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
 - `guidelines.md`: the user's broad guidance, read on every pass.
 - `sift.db`: everything structured or learned.
-- `google-client.json`, `google/`, `model-auth.json`, `device-id`: credentials, owner-only, kept out of the database.
+- `google-client.json`, `google/`, `model-auth.json`, `device-id`, `dashboard-key`: credentials and the session secret, owner-only, kept out of the database.
 - `setup.json`: how far `sift init` has got, so it resumes.
 
 `sift init` (`src/cli/init.ts`) sets all of this up. Each step checks the real state first, so running it again only asks about what is missing, and every step can be skipped.
@@ -157,18 +157,20 @@ The dashboard is where the user watches sift, teaches it and manages it. `sift r
 
 **Who may use it**
 
-- **Where it listens.** localhost by default; `dashboard.host = "all"` (or one address) on a server. Beyond localhost it answers only to names and addresses that are this machine, which blocks DNS rebinding.
-- **Access key.** Whenever it listens beyond localhost, every request must carry a secret as a cookie. `sift run` and `sift status` print links containing the key; opening one sets the cookie (HttpOnly, SameSite=Strict, a year) and drops the key from the address. The key is in `dashboard-key` in the home directory.
-- **Writes** must also come from the dashboard's own page: its Origin, a JSON content type and a custom header, which another website cannot send without a preflight the server never approves.
-- Signing viewers in with Google is not possible on a plain hostname or address: Google redirects only to HTTPS on a real domain, and needs a separate "Web" OAuth client. It would work behind `tailscale serve`, where Tailscale already identifies the viewer.
+- **Someone signed in with Google as a connected account.** One sign-in does both jobs: it gives sift its access to the account (the Gmail scopes and a refresh token) and it proves the viewer owns that account. There is no separate login and no terminal step. The page's static files are public; every `/api/` route needs the session.
+- **The first sign-in connects the first account.** After that, a sign-in must be for a connected account. Someone already signed in can connect another (Settings).
+- **Sessions** are a signed cookie (HMAC with a per-install secret in `dashboard-key`), HttpOnly, SameSite=Lax, 30 days, and stop working if the account is removed.
+- **Google's constraint.** It returns a browser only to `localhost` or an HTTPS address on a real domain. So the dashboard is used at `http://localhost:8787`, or over Tailscale at `https://<machine>.<tailnet>.ts.net` (`tailscale serve` proxies to localhost and passes the original scheme in a header, which is believed only from this machine). At a plain hostname or address the page says where to go. The Google client must be a "Web application" one listing `<origin>/auth/callback` for each address; a Desktop client works at localhost only.
+- **Host and origin checks.** It answers only to names and addresses that are this machine (blocking DNS rebinding), and every write must come from the dashboard's own page: its Origin, a JSON content type and a custom header.
+- **Not tenants.** Everyone signed in sees every connected account. That suits one person with several addresses, not several people.
 
 **What it may do**
 
 Everything that manages sift: answer suggestions, switch between observing and acting, choose the model and interval, edit the guidelines, set what happens to each kind of mail, add and remove rules, change or forget senders, undo a mailbox change, pull in older mail, and trigger a check.
 
 - It changes the database and `sift.toml` directly. A running sift re-reads its settings before every pass, and a change wakes it, so nothing needs restarting.
-- It never imports Gmail, the executor or the daemon (lint enforces this). The few things that need them (undo, pulling in older mail, check now) are passed in by the process as `Controls` (`src/dashboard/controls.ts`), so every mailbox change still goes through the executor and the audit log.
-- Connecting a Gmail account and signing in to a model provider are still done with `sift init`; both are browser sign-ins that need a terminal today.
+- It never imports Gmail, the executor or the daemon (lint enforces this). The few things that need them (signing in, undo, pulling in older mail, check now) are passed in by the process as `SignIn` and `Controls` (`src/dashboard/controls.ts`), so every mailbox change still goes through the executor and the audit log.
+- Signing in to a model provider is still done with `sift init`.
 
 **Older mail.** Pulling in the last N days records those messages as suggest-only. They are decided on the next pass and are never acted on, even when sift is acting on new mail.
 

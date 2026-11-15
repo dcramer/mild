@@ -34,29 +34,37 @@ export interface InitDeps {
   ui: Ui;
   saveSettings(settings: Settings): void;
   hasGoogleClient(): boolean;
-  /** How far the Google setup has got, so a later run resumes where this one stopped. */
+  /** `web` clients can sign in at an HTTPS address; `desktop` ones only at localhost. */
+  googleClientKind(): 'web' | 'desktop' | null;
+  /** How far setup has got, so a later run resumes where this one stopped. */
   setupState(): SetupState;
   saveSetupState(state: SetupState): void;
   /** Save the pasted client JSON into the home directory. Throws a readable message if it is the wrong kind. */
   installGoogleClient(json: string): void;
   connectedAccounts(): string[];
-  /** Run the Gmail sign-in. Resolves with the connected address. */
-  connectGmail(): Promise<string>;
   loginModel(choice: ModelChoice): Promise<void>;
   /** Model ids the signed-in provider offers. */
   availableModels(provider: string): Promise<string[]>;
   categories(account: string): Category[];
-  /** Where a browser finds the dashboard under the current settings, best first. */
-  dashboardUrls(): string[];
+  /** This machine's Tailscale name, or null without Tailscale. */
+  tailscaleName(): string | null;
+  /** Serve the dashboard over HTTPS on the tailnet (`tailscale serve`). Rejects with what went wrong. */
+  enableTailscaleServe(port: number): Promise<void>;
 }
 
 const STEPS = 5;
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+/** Where the user opens the dashboard: the Tailscale HTTPS name on a server, localhost otherwise. */
+function dashboardAddress(deps: InitDeps): string {
+  const name = deps.setupState().location === 'remote' ? deps.tailscaleName() : null;
+  return name ? `https://${name}` : `http://localhost:${deps.config.settings.dashboardPort}`;
+}
+
 /**
- * Walk the user through whatever is not set up yet, in order: Google client, Gmail account, model,
- * preferences. Each step checks the real state first, so running it again only asks about what is
- * still missing, and any step can be skipped and done later.
+ * Walk the user through whatever is not set up yet. Each step checks the real state first, so running
+ * it again only asks about what is still missing, and any step can be left and picked up later. The
+ * Gmail account itself is connected in the browser, by signing in to the dashboard.
  */
 export async function runInit(deps: InitDeps): Promise<void> {
   const { config, ui } = deps;
@@ -66,32 +74,23 @@ export async function runInit(deps: InitDeps): Promise<void> {
   if (!existsSync(config.guidelinesPath)) writeFileSync(config.guidelinesPath, GUIDELINES_TEMPLATE, { mode: 0o600 });
 
   ui.step(1, STEPS, 'Where sift runs');
-  if (deps.setupState().location === undefined || (await keep(ui, whereDashboard(deps), 'Change it'))) await chooseLocation(deps);
+  if (deps.setupState().location === undefined || (await keep(ui, `Dashboard at ${paint.bold(dashboardAddress(deps))}`, 'Change it')))
+    await chooseLocation(deps);
 
   ui.step(2, STEPS, 'Google OAuth client');
-  if (googleReady(deps)) {
-    if (await keep(ui, 'Client in place', 'Set it up again')) {
-      const { location } = deps.setupState();
-      deps.saveSetupState({ googleTasks: 0, ...(location ? { location } : {}) });
-      await googleClient(deps);
-    }
-  } else await googleClient(deps);
-
-  ui.step(3, STEPS, 'Gmail account');
-  let accounts = deps.connectedAccounts();
-  if (!googleReady(deps)) ui.skip('Needs step 2 finished');
-  else if (accounts.length === 0 || (await keep(ui, `Connected ${paint.bold(accounts.join(', '))}`, 'Connect another account'))) {
-    try {
-      const email = await deps.connectGmail();
-      accounts = deps.connectedAccounts();
-      ui.ok(`Connected ${paint.bold(email)}`);
-      ui.info('Only mail that arrives from now on is sorted.');
-    } catch (error) {
-      ui.fail(`Sign-in did not finish: ${reason(error)}`);
-    }
+  if (!googleReady(deps)) await googleClient(deps);
+  else if (deps.googleClientKind() === 'desktop' && deps.setupState().location === 'remote') {
+    ui.warn(
+      'Your client is a Desktop app client. Google only lets those sign in at localhost, so signing in from another machine needs a Web application one.',
+    );
+    await replaceClient(deps);
+  } else if (await keep(ui, 'Client in place', 'Set it up again')) {
+    const { location } = deps.setupState();
+    deps.saveSetupState({ googleTasks: 0, ...(location ? { location } : {}) });
+    await googleClient(deps);
   }
 
-  ui.step(4, STEPS, 'Model');
+  ui.step(3, STEPS, 'Model');
   if (!config.settings.model || (await keep(ui, `Using ${paint.bold(config.settings.model)}`, 'Change it'))) {
     ui.info('Sorts mail that no rule or learned sender covers. Without one, that mail stays in your inbox.');
     ui.blank();
@@ -103,29 +102,33 @@ export async function runInit(deps: InitDeps): Promise<void> {
     else ui.skip('No model');
   }
 
+  ui.step(4, STEPS, 'Gmail account');
+  const accounts = deps.connectedAccounts();
+  if (accounts.length > 0) ui.ok(`Connected ${paint.bold(accounts.join(', '))}`);
+  else if (!googleReady(deps)) ui.skip('Needs step 2 finished');
+  else ui.info('Connected in the browser: signing in to the dashboard with Google is what connects the account.');
+
   ui.step(5, STEPS, 'Preferences');
   const [account] = accounts;
-  if (account === undefined) ui.skip('Needs a connected account');
+  if (account === undefined) ui.info('Set in the dashboard, under Settings.');
   else {
     ui.table(
       ['Kind', 'sift will', 'Label'],
       deps.categories(account).map((c) => [c.name, disposition(c.disposition), c.label ?? '']),
     );
     ui.blank();
-    ui.info(`Change one with ${paint.cmd('sift categories set <key> --do <keep|archive|review|spam>')}`);
-    ui.info(`Anything else goes in ${paint.path(config.guidelinesPath)}, in your own words`);
+    ui.info('Change these in the dashboard, under Settings.');
   }
 
   ui.blank();
-  const missing = [googleReady(deps) ? null : 'the Google client', accounts.length > 0 ? null : 'a Gmail account'].filter((item) => item !== null);
-  if (missing.length > 0) {
-    ui.warn(`Still needed: ${missing.join(' and ')}. Run ${paint.cmd('sift init')} again.`);
+  if (!googleReady(deps)) {
+    ui.warn(`Still needed: the Google client. Run ${paint.cmd('sift init')} again.`);
     ui.blank();
     return;
   }
-  ui.plain(`${paint.mark(' Ready ')} Start it with ${paint.cmd('sift run')}. The dashboard is at ${paint.bold(deps.dashboardUrls()[0] ?? '')}`);
-  ui.blank();
-  ui.info(`sift only observes until you set act = true in ${paint.path(config.settingsPath)}`);
+  ui.plain(
+    `${paint.mark(' Ready ')} Start it with ${paint.cmd('sift run')}, then open ${paint.bold(dashboardAddress(deps))}${accounts.length === 0 ? ' and sign in with Google' : ''}.`,
+  );
   ui.blank();
 }
 
@@ -142,27 +145,43 @@ async function keep(ui: Ui, done: string, redo: string): Promise<boolean> {
   return again;
 }
 
-const whereDashboard = (deps: InitDeps) =>
-  deps.config.settings.dashboardHost ? `Dashboard at ${paint.bold(deps.dashboardUrls()[0] ?? '')}` : 'Dashboard on this machine only';
-
-/** Ask whether the dashboard is opened here or from another machine, and if so where it should listen. */
+/**
+ * Ask whether the dashboard is opened here or from another machine. From another machine it has to be
+ * HTTPS, because Google will not sign anyone in over plain HTTP except at localhost; Tailscale provides that.
+ */
 async function chooseLocation(deps: InitDeps): Promise<void> {
   const { ui, config } = deps;
   const remote = await ui.select('Where will you open the dashboard?', [
     { label: 'On this machine', value: false },
     { label: 'From another machine', hint: 'sift runs on a server', value: true },
   ]);
+  const { dashboardHost: _unused, ...settings } = config.settings;
+  deps.saveSettings(settings);
+  deps.saveSetupState({ ...deps.setupState(), location: remote ? 'remote' : 'local' });
+  if (!remote) return ui.ok(`Dashboard at ${paint.bold(dashboardAddress(deps))}`);
 
-  // On a server it listens on every network the machine is on, so whichever name or address you use works.
-  // `dashboard.host` in sift.toml can narrow that to one address.
-  const host = remote ? 'all' : undefined;
-  if (remote) ui.info('The dashboard has no login: anyone on a network this machine is on can read it.');
-
-  const { dashboardHost: _previous, ...rest } = config.settings;
-  deps.saveSettings(host ? { ...rest, dashboardHost: host } : rest);
-  deps.saveSetupState({ ...deps.setupState(), location: host ? 'remote' : 'local' });
-  ui.ok(whereDashboard(deps));
-  for (const url of deps.dashboardUrls().slice(1)) ui.info(`also ${url}`);
+  const name = deps.tailscaleName();
+  if (!name) {
+    ui.warn('Google only signs people in at localhost or an HTTPS address, and this machine has no Tailscale name to provide one.');
+    ui.info('Install Tailscale here and run sift init again, or reach localhost through an SSH tunnel.');
+    return;
+  }
+  ui.info('Google only signs people in over HTTPS, which Tailscale provides for your own devices.');
+  const serve = `tailscale serve --bg ${config.settings.dashboardPort}`;
+  if (
+    await ui.select(`Run ${paint.cmd(serve)} now?`, [
+      { label: 'Yes', value: true },
+      { label: 'I will do it myself', value: false },
+    ])
+  ) {
+    try {
+      await ui.spin('Turning on Tailscale serve', () => deps.enableTailscaleServe(config.settings.dashboardPort));
+    } catch (error) {
+      ui.fail(reason(error));
+      ui.info(`Run it yourself, with sudo if it asks: ${paint.cmd(serve)}`);
+    }
+  }
+  ui.ok(`Dashboard at ${paint.bold(dashboardAddress(deps))}`);
 }
 
 interface Task {
@@ -176,8 +195,26 @@ interface Task {
   collectsClient?: boolean;
 }
 
+/** The addresses Google must be told it may send a signed-in browser back to. */
+function redirectUris(deps: InitDeps): string[] {
+  const name = deps.tailscaleName();
+  return [`http://localhost:${deps.config.settings.dashboardPort}/auth/callback`, ...(name ? [`https://${name}/auth/callback`] : [])];
+}
+
+const clientTask = (deps: InitDeps): Task => ({
+  title: 'Create the client',
+  url: 'https://console.cloud.google.com/auth/clients',
+  todo: ['Create the client with the redirect URIs below, then choose "Download JSON".'],
+  collectsClient: true,
+  values: [
+    ['Application type', 'Web application'],
+    ['Name', 'sift'],
+    ...redirectUris(deps).map((uri, index) => [index === 0 ? 'Authorised redirect URIs' : '', uri] as const),
+  ],
+});
+
 /** Creating the Google client, one page at a time. Google renames these screens now and then; the links go straight to each. */
-const GOOGLE_TASKS: readonly Task[] = [
+const googleTasks = (deps: InitDeps): Task[] => [
   {
     title: 'Create a project',
     url: 'https://console.cloud.google.com/projectcreate',
@@ -199,16 +236,7 @@ const GOOGLE_TASKS: readonly Task[] = [
       ['Contact information', 'your own address'],
     ],
   },
-  {
-    title: 'Create the client',
-    url: 'https://console.cloud.google.com/auth/clients',
-    todo: ['Create the client, then choose "Download JSON".'],
-    collectsClient: true,
-    values: [
-      ['Application type', 'Desktop app'],
-      ['Name', 'sift'],
-    ],
-  },
+  clientTask(deps),
   {
     title: 'Allow access to Gmail',
     url: 'https://console.cloud.google.com/auth/scopes',
@@ -222,6 +250,7 @@ const GOOGLE_TASKS: readonly Task[] = [
     ],
   },
 ];
+const COMMON_TASKS = 5;
 
 /** The last tasks, after choosing who may sign in. */
 const ACCESS_TASKS: Record<Access, readonly Task[]> = {
@@ -229,7 +258,7 @@ const ACCESS_TASKS: Record<Access, readonly Task[]> = {
     {
       title: 'Add yourself as a test user',
       url: 'https://console.cloud.google.com/auth/audience',
-      todo: ['Under "Test users", choose "Add users" and enter the Gmail address sift will read.'],
+      todo: ['Under "Test users", choose "Add users" and enter each Gmail address sift will read.'],
     },
   ],
   publish: [
@@ -249,12 +278,31 @@ const ACCESS_TASKS: Record<Access, readonly Task[]> = {
   ],
 };
 
-const tasksFor = (access: Access | undefined) => [...GOOGLE_TASKS, ...(access ? ACCESS_TASKS[access] : [])];
+const tasksFor = (deps: InitDeps, access: Access | undefined) => [...googleTasks(deps), ...(access ? ACCESS_TASKS[access] : [])];
 
 /** True once the client is saved and every task on the chosen path is done. */
 function googleReady(deps: InitDeps): boolean {
   const state = deps.setupState();
-  return deps.hasGoogleClient() && state.access !== undefined && state.googleTasks >= tasksFor(state.access).length;
+  return deps.hasGoogleClient() && state.access !== undefined && state.googleTasks >= tasksFor(deps, state.access).length;
+}
+
+/** Show one task and wait until it is done. False if the user stops. */
+async function doTask(deps: InitDeps, task: Task, position: string): Promise<boolean> {
+  const { ui } = deps;
+  ui.mark();
+  ui.plain(`${paint.bold(task.title)}  ${paint.dim(position)}`);
+  ui.link(task.url);
+  ui.blank();
+  for (const item of task.todo) ui.info(item);
+  if (task.values) {
+    ui.blank();
+    ui.fields(task.values);
+  }
+  ui.blank();
+  const finished = task.collectsClient ? await pasteClient(deps) : await ui.pause();
+  if (finished) ui.collapse(task.title);
+  else ui.skip('Stopped here');
+  return finished;
 }
 
 /**
@@ -271,38 +319,26 @@ async function googleClient(deps: InitDeps): Promise<void> {
 
   // One task on screen at a time: each folds into a single done line when the user comes back.
   for (;;) {
-    if (state.googleTasks >= GOOGLE_TASKS.length && state.access === undefined) {
+    if (state.googleTasks >= COMMON_TASKS && state.access === undefined) {
       // Google only lets an app's test users or, once it is published, everyone sign in.
-      const access = await ui.select<Access>('Who signs in to this app?', [
+      state.access = await ui.select<Access>('Who signs in to this app?', [
         { label: 'Just me, as a test user', hint: 'works straight away; Google signs you out every 7 days', value: 'test' },
         { label: 'Publish the app', hint: 'no weekly sign-out; Google may require verification first', value: 'publish' },
       ]);
-      state.access = access;
       deps.saveSetupState({ ...state });
     }
-    const tasks = tasksFor(state.access);
+    const tasks = tasksFor(deps, state.access);
     const task = tasks[state.googleTasks];
     if (!task) return;
-
-    ui.mark();
-    ui.plain(`${paint.bold(task.title)}  ${paint.dim(`${state.googleTasks + 1} of ${state.access ? tasks.length : `${tasks.length}+`}`)}`);
-    ui.link(task.url);
-    ui.blank();
-    for (const item of task.todo) ui.info(item);
-    if (task.values) {
-      ui.blank();
-      ui.fields(task.values);
-    }
-    ui.blank();
-    const finished = task.collectsClient ? await pasteClient(deps) : await ui.pause();
-    if (!finished) {
-      ui.skip('Stopped here');
-      return;
-    }
+    if (!(await doTask(deps, task, `${state.googleTasks + 1} of ${state.access ? tasks.length : `${tasks.length}+`}`))) return;
     state.googleTasks += 1;
     deps.saveSetupState({ ...state });
-    ui.collapse(task.title);
   }
+}
+
+/** Swap the client for a new one in the same project. The project's other settings carry over. */
+async function replaceClient(deps: InitDeps): Promise<void> {
+  await doTask(deps, clientTask(deps), 'replacing the client');
 }
 
 /** Ask for the client JSON until it is accepted. False if the user stops. */

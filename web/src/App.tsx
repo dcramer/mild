@@ -12,6 +12,7 @@ import { ChangesView } from '@/views/changes.tsx';
 import { Rules } from '@/views/rules.tsx';
 import { SendersView } from '@/views/senders.tsx';
 import { SettingsView } from '@/views/settings.tsx';
+import { SignInScreen } from '@/views/sign-in.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
 
 const PERIODS = [
@@ -21,7 +22,17 @@ const PERIODS = [
   ['90', 'Last 90 days'],
 ] as const;
 
+/** Shows the sign-in screen until the viewer is signed in, then the dashboard. */
 export function App() {
+  const session = useLoaded('session', (signal) => api.session(signal), 300_000);
+  if (!session.data) return session.error ? <p className="p-6 text-sm text-destructive">{session.error}</p> : null;
+  if (session.data.required && session.data.email === null) {
+    return <SignInScreen session={session.data} error={new URLSearchParams(window.location.search).get('signin')} />;
+  }
+  return <Dashboard signedInAs={session.data.email} />;
+}
+
+function Dashboard({ signedInAs }: { signedInAs: string | null }) {
   const [days, setDays] = useState<Days>(7);
   const [tab, setTab] = useState('suggestions');
   const [open, setOpen] = useState<MessageRef | null>(null);
@@ -54,6 +65,15 @@ export function App() {
           {tab !== 'overview' && tab !== 'decisions' ? null : (
             <Picker label="Period" value={String(days) as (typeof PERIODS)[number][0]} options={PERIODS} onChange={(value) => setDays(Number(value) as Days)} />
           )}
+          {signedInAs ? (
+            <button
+              type="button"
+              className="slug text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              onClick={() => void api.signOut().then(() => window.location.assign('/'))}
+            >
+              Sign out
+            </button>
+          ) : null}
           <p className="slug hidden text-muted-foreground md:block">
             {summary.data
               ? accounts.length === 0

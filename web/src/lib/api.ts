@@ -8,6 +8,7 @@ export type {
   MessageDetail,
   RuleSummary,
   SenderRow,
+  Session,
   StageKey,
   SuggestionGroup,
   Suggestions,
@@ -21,6 +22,7 @@ import type {
   MessageDetail,
   RuleSummary,
   SenderRow,
+  Session,
   Suggestions,
   Summary,
 } from '../../../src/dashboard/types.ts';
@@ -80,6 +82,8 @@ export const api = {
   undo: (id: number) => post<{ message: string }>('/api/undo', { id }),
   backfill: (days: number) => post<{ added: number }>('/api/backfill', { days }),
   checkNow: () => post('/api/check', {}),
+  session: (signal: AbortSignal) => get<Session>('/api/session', {}, signal),
+  signOut: () => post('/api/signout', {}),
 };
 
 export interface Loaded<T> {

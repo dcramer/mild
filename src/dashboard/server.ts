@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { extname, join, relative, sep } from 'node:path';
@@ -9,7 +9,7 @@ import { listAccounts } from '../store/accounts.ts';
 import { listCategories, updateCategory } from '../store/categories.ts';
 import { addRule, removeRule } from '../store/rules.ts';
 import { forgetSender, listSenders, setSender } from '../store/senders.ts';
-import type { Controls } from './controls.ts';
+import type { Controls, SignIn } from './controls.ts';
 import { listChanges, listDecisions, listRuleSummaries, listSuggestions, messageDetail, summarize } from './queries.ts';
 import type { ManageState } from './types.ts';
 
@@ -103,10 +103,14 @@ export interface DashboardOptions {
   /** Names and addresses, besides localhost, that the dashboard answers to. */
   allowedHosts?: readonly string[];
   /**
-   * A secret every request must present, as the `sift_key` cookie. Opening `/?key=<it>` sets the cookie.
-   * Required whenever the dashboard is reachable from another machine. Without it there is no check.
+   * Google sign-in. When given, the dashboard's data and controls are only for someone signed in as a
+   * connected account. Without it (tests, tools) there is no check.
    */
-  accessKey?: string;
+  signIn?: SignIn;
+  /** Signs session cookies. Required with `signIn`. */
+  sessionSecret?: string;
+  /** Addresses Google can sign the user in at, to suggest when they opened the dashboard at one it cannot. */
+  signInAddresses?: readonly string[];
   /** What the dashboard can ask the rest of sift to do. Without it the page can look but not manage. */
   controls?: Controls;
   now?: () => number;
@@ -116,11 +120,28 @@ const RULE_KEYS = new Set(['from', 'fromDomain', 'to', 'listId', 'subjectContain
 const str = (value: unknown, max = 200): value is string => typeof value === 'string' && value.length > 0 && value.length <= max;
 const decided = (value: unknown): value is 'keep' | 'archive' | 'spam' => value === 'keep' || value === 'archive' || value === 'spam';
 
-function sameKey(given: string | undefined, key: string): boolean {
-  if (given === undefined) return false;
-  const a = Buffer.from(given);
-  const b = Buffer.from(key);
-  return a.length === b.length && timingSafeEqual(a, b);
+const SESSION_DAYS = 30;
+const b64 = (value: string | Buffer) => Buffer.from(value).toString('base64url');
+
+/** A session cookie value: who, until when, signed so it cannot be forged or altered. */
+function signSession(email: string, secret: string, now: number): string {
+  const body = b64(JSON.stringify({ e: email, x: now + SESSION_DAYS * 86_400_000 }));
+  return `${body}.${createHmac('sha256', secret).update(body).digest('base64url')}`;
+}
+
+/** The address a session cookie was issued to, or null if it is missing, forged or expired. */
+function readSession(value: string | undefined, secret: string, now: number): string | null {
+  const [body, signature] = (value ?? '').split('.');
+  if (!body || !signature) return null;
+  const expected = Buffer.from(createHmac('sha256', secret).update(body).digest('base64url'));
+  const given = Buffer.from(signature);
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
+  try {
+    const { e, x } = JSON.parse(Buffer.from(body, 'base64url').toString()) as { e?: unknown; x?: unknown };
+    return typeof e === 'string' && typeof x === 'number' && x > now ? e : null;
+  } catch {
+    return null;
+  }
 }
 
 const cookie = (req: IncomingMessage, name: string) =>
@@ -132,18 +153,23 @@ const cookie = (req: IncomingMessage, name: string) =>
 /**
  * The dashboard: where the user watches sift, teaches it and manages it.
  *
- * Who may use it: requests must be addressed to localhost or one of this machine's own names (which stops
- * another website reaching it through DNS rebinding), and, when an access key is set, must carry it.
- * Every write must also come from the dashboard's own page.
+ * Who may use it: someone signed in with Google as a connected account. That one sign-in is also what
+ * gives sift its access to the account. Requests must be addressed to localhost or one of this
+ * machine's own names (which stops another website reaching it through DNS rebinding), and every write
+ * must come from the dashboard's own page. The page's static files are public; the data is not.
  *
  * What it may do: change what sift has been taught and how it is set up. It never reaches Gmail itself;
- * the few things that do (undo, pulling in older mail) are handed in as `controls` and audited as usual.
+ * the few things that do (signing in, undo, pulling in older mail) are handed in and audited as usual.
  */
 export function createDashboardServer(db: DatabaseSync, options: DashboardOptions = {}): Server {
   const assets = listAssets(options.assetsDir ?? WEB_DIST);
   const now = options.now ?? Date.now;
   const hosts = new Set([...LOCAL_HOSTS, ...(options.allowedHosts ?? []).map((h) => h.toLowerCase())]);
-  const { accessKey, controls } = options;
+  const { controls, signIn } = options;
+  const secret = options.sessionSecret ?? '';
+  if (signIn && secret === '') throw new Error('signIn needs a sessionSecret');
+  // Sign-ins in flight: the state Google echoes back, with the PKCE verifier and where to return to.
+  const pending = new Map<string, { verifier: string; redirectUri: string; allowNew: boolean; expires: number }>();
 
   /** POST handlers. Each validates its own body and returns the response, or null for a malformed body. */
   const writes: Record<string, (body: Record<string, unknown>) => unknown> = {
@@ -255,25 +281,76 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
     const url = new URL(req.url ?? '/', 'http://localhost');
     const query = url.searchParams;
 
-    if (accessKey) {
-      // The link sift prints carries the key once; it becomes a cookie and is dropped from the address.
-      if (req.method === 'GET' && sameKey(query.get('key') ?? undefined, accessKey)) {
-        res
-          .writeHead(303, {
-            location: '/',
-            'set-cookie': `sift_key=${accessKey}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Strict`,
-            'cache-control': 'no-store',
-          })
-          .end();
-        return;
-      }
-      if (!sameKey(cookie(req, 'sift_key'), accessKey)) {
-        res
-          .writeHead(401, { ...HEADERS, 'content-type': 'text/plain', 'cache-control': 'no-store' })
-          .end('This dashboard needs its access link. Run `sift status` on the machine running sift and open the link it prints.');
-        return;
-      }
+    // The address the browser used. Behind `tailscale serve` the request arrives from this machine over
+    // plain HTTP with the original scheme in a header, which is only believed from this machine.
+    const local = req.socket.remoteAddress === '127.0.0.1' || req.socket.remoteAddress === '::1' || req.socket.remoteAddress === '::ffff:127.0.0.1';
+    const https = local && req.headers['x-forwarded-proto'] === 'https';
+    const origin = `${https ? 'https' : 'http'}://${req.headers.host ?? ''}`;
+    // Google only returns a browser to localhost or to an HTTPS address.
+    const googleCanReturnHere = https || LOCAL_HOSTS.has(host);
+    const signedInAs = signIn ? readSession(cookie(req, 'sift_session'), secret, now()) : null;
+    const session = signedInAs !== null && listAccounts(db).some((a) => a.email === signedInAs) ? signedInAs : null;
+    const sessionCookie = (value: string, maxAge: number) =>
+      `sift_session=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
+
+    if (signIn && req.method === 'GET' && url.pathname === '/api/session') {
+      const kind = signIn.client();
+      const reason = kind === null ? 'no-client' : !googleCanReturnHere ? 'address' : kind === 'desktop' && https ? 'desktop-client' : null;
+      return void json(res, 200, {
+        required: true,
+        email: session,
+        canSignIn: reason === null,
+        reason,
+        addresses: options.signInAddresses ?? [],
+        redirectUri: `${origin}/auth/callback`,
+      });
     }
+    if (signIn && req.method === 'GET' && url.pathname === '/auth/login') {
+      if (signIn.client() === null || !googleCanReturnHere) {
+        res.writeHead(303, { location: '/', 'cache-control': 'no-store' }).end();
+        return;
+      }
+      for (const [key, entry] of pending) if (entry.expires < now()) pending.delete(key);
+      const state = randomBytes(16).toString('hex');
+      const verifier = randomBytes(32).toString('base64url');
+      const redirectUri = `${origin}/auth/callback`;
+      // Adding a second account is only for someone already signed in.
+      pending.set(state, { verifier, redirectUri, allowNew: query.get('add') === '1' && session !== null, expires: now() + 600_000 });
+      res
+        .writeHead(303, { location: signIn.url(redirectUri, state, createHash('sha256').update(verifier).digest('base64url')), 'cache-control': 'no-store' })
+        .end();
+      return;
+    }
+    if (signIn && req.method === 'GET' && url.pathname === '/auth/callback') {
+      const entry = pending.get(query.get('state') ?? '');
+      pending.delete(query.get('state') ?? '');
+      const fail = (message: string) => res.writeHead(303, { location: `/?signin=${encodeURIComponent(message)}`, 'cache-control': 'no-store' }).end();
+      const code = query.get('code');
+      if (!entry || entry.expires < now()) return void fail('That sign-in expired. Try again.');
+      if (!code) return void fail(query.get('error') === 'access_denied' ? 'Google did not grant access.' : 'Google did not complete the sign-in.');
+      signIn
+        .complete(entry.redirectUri, code, entry.verifier, entry.allowNew)
+        .then((email) =>
+          res
+            .writeHead(303, {
+              location: '/',
+              'set-cookie': sessionCookie(signSession(email, secret, now()), SESSION_DAYS * 86_400),
+              'cache-control': 'no-store',
+            })
+            .end(),
+        )
+        .catch((error: unknown) => fail(error instanceof Error ? error.message : String(error)));
+      return;
+    }
+    if (signIn && session === null && url.pathname.startsWith('/api/')) return void json(res, 401, { error: 'Sign in to use the dashboard.' });
+    if (signIn && req.method === 'POST' && url.pathname === '/api/signout') {
+      res
+        .writeHead(200, { ...HEADERS, 'content-type': 'application/json', 'set-cookie': sessionCookie('', 0), 'cache-control': 'no-store' })
+        .end('{"ok":true}');
+      return;
+    }
+    if (!signIn && req.method === 'GET' && url.pathname === '/api/session')
+      return void json(res, 200, { required: false, email: null, canSignIn: false, reason: null, addresses: [], redirectUri: '' });
 
     if (req.method === 'POST') {
       const handler = writes[url.pathname];

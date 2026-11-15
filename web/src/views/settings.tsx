@@ -122,6 +122,26 @@ function Running({ state, reload }: { state: ManageState; reload: () => void }) 
   );
 }
 
+function Accounts({ state }: { state: ManageState }) {
+  return (
+    <Panel>
+      <PanelHeader
+        title="Accounts"
+        action={
+          <Button variant="outline" size="sm" render={<a href="/auth/login?add=1" />}>
+            Connect another
+          </Button>
+        }
+      />
+      {state.accounts.map((account) => (
+        <div key={account.id} className="row px-4 py-3">
+          {account.email}
+        </div>
+      ))}
+    </Panel>
+  );
+}
+
 function OlderMail() {
   const { busy, error, run } = useAction();
   const [days, setDays] = useState<(typeof DAYS)[number][0]>('7');
@@ -244,6 +264,7 @@ export function SettingsView() {
       {data ? (
         <>
           <Running state={data} reload={reload} />
+          <Accounts state={data} />
           <OlderMail />
           <Categories state={data} reload={reload} />
           <Guidelines saved={data.guidelines} />

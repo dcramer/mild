@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MAX_BACKFILL, backfill } from '../src/daemon/backfill.ts';
 import { type RunOptions, createWake, runLoop } from '../src/daemon/run.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
-import type { Controls, ManagedSettings } from '../src/dashboard/controls.ts';
+import type { Controls, ManagedSettings, SignIn } from '../src/dashboard/controls.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
 import type { RawMessage } from '../src/gmail/api.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
@@ -57,14 +57,13 @@ beforeEach(() => {
 });
 afterEach(() => close?.());
 
-async function start(options: { accessKey?: string; withControls?: boolean } = {}) {
+async function start(options: { withControls?: boolean } = {}) {
   const assets = mkdtempSync(join(tmpdir(), 'sift-web-'));
   mkdirSync(join(assets, 'assets'));
   writeFileSync(join(assets, 'index.html'), '<!doctype html>page');
   const server = createDashboardServer(db, {
     assetsDir: assets,
     ...(options.withControls === false ? {} : { controls }),
-    ...(options.accessKey ? { accessKey: options.accessKey } : {}),
     now: () => 77,
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -187,28 +186,143 @@ describe('managing sift from the dashboard', () => {
   });
 });
 
-describe('access key', () => {
-  const KEY = 'correct-horse-battery';
+describe('signing in with Google', () => {
+  const SECRET = 'session-secret';
+  let completed: string[];
+  let kind: 'web' | 'desktop' | null;
+  const signIn: SignIn = {
+    client: () => kind,
+    url: (redirectUri, state, challenge) => `https://accounts.example/auth?redirect=${encodeURIComponent(redirectUri)}&state=${state}&challenge=${challenge}`,
+    complete: async (redirectUri, code, _verifier, allowNew) => {
+      completed.push(`${redirectUri} ${code} new=${allowNew}`);
+      if (code === 'stranger') throw new Error('stranger@example.net is not the account sift is connected to.');
+      if (code === 'second') {
+        connectAccount(db, 'work@example.com', '1', 0);
+        return 'work@example.com';
+      }
+      return ACCOUNT;
+    },
+  };
 
-  it('turns away everything without the key, and lets the link in once', async () => {
-    const port = await start({ accessKey: KEY });
-    for (const path of ['/', '/api/summary', '/api/manage', '/assets/x.js']) expect((await call(port, 'GET', path)).status).toBe(401);
-    expect((await call(port, 'POST', '/api/settings', { act: true })).status).toBe(401);
-    expect((await call(port, 'GET', '/?key=wrong')).status).toBe(401);
-    expect((await call(port, 'GET', '/api/summary', undefined, { cookie: 'sift_key=wrong' })).status).toBe(401);
+  async function startWithSignIn() {
+    const assets = mkdtempSync(join(tmpdir(), 'sift-web-'));
+    mkdirSync(join(assets, 'assets'));
+    writeFileSync(join(assets, 'index.html'), '<!doctype html>page');
+    writeFileSync(join(assets, 'assets', 'app.js'), '1');
+    const server = createDashboardServer(db, {
+      assetsDir: assets,
+      controls,
+      signIn,
+      sessionSecret: SECRET,
+      signInAddresses: ['http://localhost:1', 'https://box.example.ts.net'],
+      allowedHosts: ['box.example.ts.net', 'maximus'],
+      now: () => 1000,
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    close = () => server.close();
+    return (server.address() as AddressInfo).port;
+  }
+  const cookieFrom = (headers: Record<string, string | string[] | undefined>) => String(headers['set-cookie']).split(';')[0] ?? '';
+  const stateFrom = (headers: Record<string, string | string[] | undefined>) => new URL(String(headers['location'])).searchParams.get('state') ?? '';
 
-    const link = await call(port, 'GET', `/?key=${KEY}`);
-    expect(link.status).toBe(303);
-    expect(link.headers['location']).toBe('/');
-    expect(String(link.headers['set-cookie'])).toMatch(/^sift_key=correct-horse-battery; .*HttpOnly; SameSite=Strict$/);
-
-    const cookie = { cookie: `other=1; sift_key=${KEY}` };
-    expect((await call(port, 'GET', '/', undefined, cookie)).body).toEqual({ text: '<!doctype html>page' });
-    expect((await call(port, 'POST', '/api/settings', { act: true }, cookie)).status).toBe(200);
+  beforeEach(() => {
+    completed = [];
+    kind = 'web';
   });
 
-  it('is not asked for when none is set', async () => {
-    expect((await call(await start(), 'GET', '/api/summary')).status).toBe(200);
+  it('serves the page to anyone but the data only to someone signed in', async () => {
+    const port = await startWithSignIn();
+    expect((await call(port, 'GET', '/')).status).toBe(200);
+    expect((await call(port, 'GET', '/assets/app.js')).status).toBe(200);
+    for (const path of ['/api/summary', '/api/manage', '/api/suggestions', '/api/senders']) expect((await call(port, 'GET', path)).status).toBe(401);
+    expect((await call(port, 'POST', '/api/settings', { act: true })).status).toBe(401);
+    expect((await call(port, 'GET', '/api/summary', undefined, { cookie: 'sift_session=forged.signature' })).status).toBe(401);
+    expect((await call(port, 'GET', '/api/session')).body).toMatchObject({ required: true, email: null, canSignIn: true, reason: null });
+    expect(settings.act).toBe(false);
+  });
+
+  it('signs in through Google and returns to the address the browser used', async () => {
+    const port = await startWithSignIn();
+    const login = await call(port, 'GET', '/auth/login');
+    expect(login.status).toBe(303);
+    expect(String(login.headers['location'])).toContain(encodeURIComponent(`http://localhost:${port}/auth/callback`));
+
+    const back = await call(port, 'GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`);
+    expect(back.status).toBe(303);
+    expect(back.headers['location']).toBe('/');
+    expect(String(back.headers['set-cookie'])).toMatch(/^sift_session=[^;]+; Path=\/; Max-Age=2592000; HttpOnly; SameSite=Lax$/);
+    expect(completed).toEqual([`http://localhost:${port}/auth/callback abc new=false`]);
+
+    const cookie = { cookie: cookieFrom(back.headers) };
+    expect((await call(port, 'GET', '/api/session', undefined, cookie)).body).toMatchObject({ email: ACCOUNT });
+    expect((await call(port, 'GET', '/api/manage', undefined, cookie)).status).toBe(200);
+    expect((await call(port, 'POST', '/api/settings', { act: true }, cookie)).status).toBe(200);
+
+    // The same state cannot be used twice, and an unknown one is refused.
+    expect(String((await call(port, 'GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`)).headers['location'])).toContain('expired');
+    expect(completed).toHaveLength(1);
+  });
+
+  it('uses HTTPS for the return address and the cookie behind Tailscale serve', async () => {
+    const port = await startWithSignIn();
+    const proxied = { host: 'box.example.ts.net', 'x-forwarded-proto': 'https' };
+    const login = await call(port, 'GET', '/auth/login', undefined, proxied);
+    expect(String(login.headers['location'])).toContain(encodeURIComponent('https://box.example.ts.net/auth/callback'));
+    const back = await call(port, 'GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`, undefined, proxied);
+    expect(String(back.headers['set-cookie'])).toMatch(/; Secure$/);
+  });
+
+  it('explains why sign-in is not possible at a plain address, without a client, or with a Desktop client over HTTPS', async () => {
+    const port = await startWithSignIn();
+    const plain = await call(port, 'GET', '/api/session', undefined, { host: `maximus:${port}` });
+    expect(plain.body).toMatchObject({ canSignIn: false, reason: 'address', addresses: ['http://localhost:1', 'https://box.example.ts.net'] });
+    expect((await call(port, 'GET', '/auth/login', undefined, { host: `maximus:${port}` })).headers['location']).toBe('/');
+
+    kind = 'desktop';
+    expect((await call(port, 'GET', '/api/session', undefined, { host: 'box.example.ts.net', 'x-forwarded-proto': 'https' })).body).toMatchObject({
+      canSignIn: false,
+      reason: 'desktop-client',
+    });
+    expect((await call(port, 'GET', '/api/session')).body).toMatchObject({ canSignIn: true });
+
+    kind = null;
+    expect((await call(port, 'GET', '/api/session')).body).toMatchObject({ canSignIn: false, reason: 'no-client' });
+  });
+
+  it('turns away an account sift is not connected to, and adds a second one only for someone signed in', async () => {
+    const port = await startWithSignIn();
+    const login = await call(port, 'GET', '/auth/login?add=1');
+    const refused = await call(port, 'GET', `/auth/callback?state=${stateFrom(login.headers)}&code=stranger`);
+    expect(decodeURIComponent(String(refused.headers['location']))).toBe('/?signin=stranger@example.net is not the account sift is connected to.');
+    expect(refused.headers['set-cookie']).toBeUndefined();
+    expect(completed.at(-1)).toContain('new=false');
+
+    const first = await call(port, 'GET', '/auth/login');
+    const cookie = { cookie: cookieFrom((await call(port, 'GET', `/auth/callback?state=${stateFrom(first.headers)}&code=abc`)).headers) };
+    const add = await call(port, 'GET', '/auth/login?add=1', undefined, cookie);
+    const added = await call(port, 'GET', `/auth/callback?state=${stateFrom(add.headers)}&code=second`, undefined, cookie);
+    expect(completed.at(-1)).toContain('new=true');
+    expect((await call(port, 'GET', '/api/session', undefined, { cookie: cookieFrom(added.headers) })).body).toMatchObject({ email: 'work@example.com' });
+  });
+
+  it('ends a session on sign-out, when it expires, and when its account is removed', async () => {
+    const port = await startWithSignIn();
+    const login = await call(port, 'GET', '/auth/login');
+    const cookie = { cookie: cookieFrom((await call(port, 'GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`)).headers) };
+    const out = await call(port, 'POST', '/api/signout', {}, cookie);
+    expect(String(out.headers['set-cookie'])).toContain('Max-Age=0');
+
+    db.exec('DELETE FROM accounts');
+    expect((await call(port, 'GET', '/api/summary', undefined, cookie)).status).toBe(401);
+  });
+
+  it('does not believe a forwarded scheme from another machine', async () => {
+    // Every test request comes from this machine, so this checks the header alone is not enough to be
+    // offered sign-in at a name that is not localhost.
+    const port = await startWithSignIn();
+    expect((await call(port, 'GET', '/api/session', undefined, { host: `maximus:${port}`, 'x-forwarded-proto': 'http' })).body).toMatchObject({
+      canSignIn: false,
+    });
   });
 });
 
