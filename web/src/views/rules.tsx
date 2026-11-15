@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { DispositionBadge, ErrorNote, Outcome, Sub } from '@/components/bits.tsx';
 import { api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count } from '@/lib/format.ts';
-import { Button, Code, Dialog, Empty, FilterGroup, Input, ListView, Loading, Select, Sheet, Table, Td, Th, Tr } from '@/system';
+import { Button, Code, Dialog, Empty, FilterGroup, Input, ListView, Loading, Select, Table, Td, Th, Tr } from '@/system';
 
 const CONDITIONS: Record<string, string> = { from: 'from', fromDomain: 'from domain', to: 'to', listId: 'list', subjectContains: 'subject contains' };
 const SOURCES = [
@@ -171,7 +171,7 @@ export function Rules() {
       }}
     >
       {error ? <ErrorNote message={error} /> : null}
-      <Sheet>
+      <div>
         <Outcome error={remove.error} />
         {loading ? (
           <Loading />
@@ -226,7 +226,7 @@ export function Rules() {
             </tbody>
           </Table>
         )}
-      </Sheet>
+      </div>
       {adding && accountId ? <AddRuleDialog accountId={accountId} labels={labels} onClose={() => setAdding(false)} onAdded={reload} /> : null}
     </ListView>
   );

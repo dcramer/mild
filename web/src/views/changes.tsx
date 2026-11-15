@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ErrorNote, Outcome, Sub } from '@/components/bits.tsx';
 import { api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, dateTime } from '@/lib/format.ts';
-import { Button, Empty, FilterGroup, ListView, Loading, Sheet, Table, Td, Th, Tr } from '@/system';
+import { Button, Empty, FilterGroup, ListView, Loading, Table, Td, Th, Tr } from '@/system';
 import type { MessageRef } from '@/views/message-dialog.tsx';
 
 const STATUS = [
@@ -39,7 +39,7 @@ export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void 
       }}
     >
       {error ? <ErrorNote message={error} /> : null}
-      <Sheet>
+      <div>
         <Outcome error={action.error} done={note} />
         {loading ? (
           <Loading />
@@ -103,7 +103,7 @@ export function ChangesView({ onOpen }: { onOpen: (message: MessageRef) => void 
             </tbody>
           </Table>
         )}
-      </Sheet>
+      </div>
     </ListView>
   );
 }

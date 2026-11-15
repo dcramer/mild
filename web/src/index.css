@@ -88,6 +88,9 @@
   --fill: color-mix(in oklab, var(--foreground) 10%, transparent);
   --fill-strong: color-mix(in oklab, var(--foreground) 17%, transparent);
 
+  /* How far a table, an empty state or a loading state stands in from its container: nothing on the page, a sheet's padding inside one. */
+  --gutter: 0px;
+
   /* One height for everything pressed or typed into in a row or a toolbar, so they line up. */
   --control: 2rem;
 
@@ -117,6 +120,7 @@
 
   /* A sheet: square, framed in faint ink, with the edge of the sheet beneath showing. */
   .sheet {
+    --gutter: 1rem;
     border: 1px solid var(--frame);
     border-radius: 2px;
     box-shadow: 3px 3px 0 0 var(--edge);
@@ -269,14 +273,14 @@
   }
 }
 
-/* The only lines within a sheet are faint dashes between rows. A heading is set apart by space. */
-.sheet .row {
+/* Rows are divided by faint dashes, on the page or in a sheet. A heading is set apart by space. */
+.row {
   border-bottom: 1px dashed var(--rule);
 }
-.sheet .row:last-child {
+.row:last-child {
   border-bottom: 0;
 }
-.sheet thead .row:last-child {
+thead .row:last-child {
   border-bottom: 1px dashed var(--rule);
 }
 

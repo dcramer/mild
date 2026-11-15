@@ -1,29 +1,12 @@
 import { CheckIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Answer, type AnswerValue } from '@/components/answer.tsx';
-import { DispositionBadge, ErrorNote } from '@/components/bits.tsx';
+import { DispositionBadge, ErrorNote, Sub } from '@/components/bits.tsx';
 import { MessageBody, Part, SenderFacts } from '@/components/message-parts.tsx';
 import { type SuggestionGroup, type Suggestions, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ACTIONS, ago, count, percent, tier, willBe } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
-import {
-  Button,
-  Card,
-  CardFoot,
-  CardGrid,
-  CardHead,
-  Check,
-  Dialog,
-  Empty,
-  FilterGroup,
-  Highlight,
-  ListView,
-  Loading,
-  Note,
-  Select,
-  Sheet,
-  Stamp,
-} from '@/system';
+import { Button, Check, Dialog, Empty, FilterGroup, Highlight, ListView, Loading, Note, Select, Stamp, Table, Td, Th, Tr } from '@/system';
 
 type Label = Suggestions['labels'][string][number];
 const groupKey = (g: SuggestionGroup) => `${g.accountId}/${g.sender}`;
@@ -51,8 +34,8 @@ function Guess({ labelName, disposition }: { labelName: string | null; dispositi
   );
 }
 
-/** One sender's waiting mail, as a card: who, what sift says, and the answers that need no reading. */
-function SuggestionCard({
+/** One sender's waiting mail, as a row: who, what it is about, what sift says, and the answers that need no reading. Pressing the row opens it. */
+function SuggestionRow({
   group,
   labels,
   onOpen,
@@ -64,7 +47,8 @@ function SuggestionCard({
   onAnswered: (taught: string) => void;
 }) {
   const { busy, error, run } = useAction();
-  const shown = subjects(group.sample).slice(0, 2);
+  const [first, ...rest] = subjects(group.sample);
+  const mixed = group.guesses > 1;
   const answer = (label: string) =>
     run(async () => {
       const result = await api.feedback({ accountId: group.accountId, sender: group.sender, scope: 'sender', label });
@@ -72,50 +56,58 @@ function SuggestionCard({
     });
 
   return (
-    <Card>
-      <CardHead
-        title={group.senderName ?? group.sender}
-        note={group.senderName ? group.sender : undefined}
-        aside={
-          <>
-            {count(group.messages)} · {ago(group.latestReceivedAt)}
-          </>
-        }
-        onOpen={onOpen}
-      />
-      <p className="flex flex-wrap items-center gap-2">
-        <Guess labelName={group.labelName} disposition={group.disposition} />
-        {group.guesses > 1 ? <span className="text-[13px] text-muted-foreground">for most; mixed</span> : null}
-      </p>
-      <ul className="flex flex-col gap-0.5 text-[13px] text-muted-foreground">
-        {shown.map((m) => (
-          <li key={m.subject} className="flex items-baseline gap-2">
-            <span className="truncate">{m.subject || '(no subject)'}</span>
-            {m.times > 1 ? <span className="shrink-0 tabular-nums">×{m.times}</span> : null}
-          </li>
-        ))}
-      </ul>
-      {error ? <p className="text-[13px] text-destructive">{error}</p> : null}
-      <CardFoot>
-        {/* A sender sift guessed more than one way is worth opening before agreeing. */}
-        {group.labelId === null || group.guesses > 1 ? null : (
-          <Button variant="ink" busy={busy} onClick={() => answer(group.labelId ?? '')}>
-            <CheckIcon aria-hidden />
-            Right
-          </Button>
-        )}
-        <Select
-          label={`What mail from ${group.sender} is`}
-          value=""
-          disabled={busy}
-          options={[
-            ['', group.labelId === null || group.guesses > 1 ? 'It is…' : 'No, it is…'] as const,
-            ...labels.filter((l) => group.guesses > 1 || l.id !== group.labelId).map((l) => [l.id, `${l.name} (${willBe(l.disposition)})`] as const),
-          ]}
-          onChange={(key) => key !== '' && answer(key)}
-        />
-      </CardFoot>
-    </Card>
+    <Tr onOpen={onOpen}>
+      <Td className="max-w-0 w-full md:w-64 md:max-w-64">
+        <span className="name block truncate">{group.senderName ?? group.sender}</span>
+        {group.senderName ? <Sub>{group.sender}</Sub> : null}
+        {/* On a phone the mail and the answers have no column: the subject sits here and the row opens to answer. */}
+        <span className="mt-1 block truncate text-[13px] text-muted-foreground md:hidden">
+          {count(group.messages)} · {first?.subject || '(no subject)'}
+        </span>
+      </Td>
+      <Td className="hidden max-w-0 md:table-cell md:w-full">
+        <span className="flex items-baseline gap-2">
+          <span className="truncate">{first?.subject || '(no subject)'}</span>
+          {first && first.times > 1 ? <span className="shrink-0 text-[13px] text-muted-foreground tabular-nums">×{first.times}</span> : null}
+        </span>
+        <Sub>
+          {count(group.messages)} {group.messages === 1 ? 'message' : 'messages'}
+          {rest.length > 0 ? ` · also “${rest[0]?.subject}”` : ''}
+        </Sub>
+      </Td>
+      <Td className="whitespace-nowrap">
+        <span className="flex items-center gap-2">
+          <Guess labelName={group.labelName} disposition={group.disposition} />
+        </span>
+        {mixed ? <Sub>for most of them; mixed</Sub> : null}
+        {error ? <span className="mt-1 block text-[13px] text-destructive">{error}</span> : null}
+      </Td>
+      <Td quiet className="hidden text-right whitespace-nowrap tabular-nums md:table-cell">
+        {ago(group.latestReceivedAt)}
+      </Td>
+      {/* Presses here answer; they do not open the row. */}
+      <Td className="hidden py-1.5 md:table-cell" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+        <span className="flex items-center justify-end gap-1.5">
+          {/* A sender sift guessed more than one way is worth opening before agreeing. */}
+          {group.labelId === null || mixed ? null : (
+            <Button variant="ink" busy={busy} onClick={() => answer(group.labelId ?? '')}>
+              <CheckIcon aria-hidden />
+              Right
+            </Button>
+          )}
+          <Select
+            label={`What mail from ${group.sender} is`}
+            value=""
+            disabled={busy}
+            options={[
+              ['', group.labelId === null || mixed ? 'It is…' : 'No, it is…'] as const,
+              ...labels.filter((l) => mixed || l.id !== group.labelId).map((l) => [l.id, `${l.name} (${willBe(l.disposition)})`] as const),
+            ]}
+            onChange={(key) => key !== '' && answer(key)}
+          />
+        </span>
+      </Td>
+    </Tr>
   );
 }
 
@@ -269,7 +261,7 @@ export function SuggestionsView({ onChanged }: { onChanged: () => void }) {
           )
         ) : null
       }
-      description="An answer makes a rule, so it covers what arrives later too. Open one to read the mail and choose how far the answer reaches."
+      description="An answer makes a rule, so it covers what arrives later too. Open a row to read the mail and choose how far the answer reaches."
       search={{ value: search, onChange: setSearch, placeholder: 'Search senders and subjects' }}
       filters={{
         active: [
@@ -300,27 +292,36 @@ export function SuggestionsView({ onChanged }: { onChanged: () => void }) {
           </ul>
         </Note>
       ) : null}
-      {loading ? (
-        <Sheet>
+      <div>
+        {loading ? (
           <Loading rows={6} />
-        </Sheet>
-      ) : groups.length === 0 ? (
-        <Sheet>
+        ) : groups.length === 0 ? (
           <Empty>{data && data.groups.length > 0 ? 'Nothing waiting matches.' : 'Nothing is waiting on you. New mail shows up here as sift decides it.'}</Empty>
-        </Sheet>
-      ) : (
-        <CardGrid>
-          {groups.map((group) => (
-            <SuggestionCard
-              key={groupKey(group)}
-              group={group}
-              labels={data?.labels[group.accountId] ?? []}
-              onOpen={() => setOpen(group)}
-              onAnswered={answered}
-            />
-          ))}
-        </CardGrid>
-      )}
+        ) : (
+          <Table>
+            <thead>
+              <Tr>
+                <Th>Sender</Th>
+                <Th className="hidden md:table-cell">Mail</Th>
+                <Th>sift says</Th>
+                <Th className="hidden text-right md:table-cell">Latest</Th>
+                <Th className="hidden md:table-cell" />
+              </Tr>
+            </thead>
+            <tbody>
+              {groups.map((group) => (
+                <SuggestionRow
+                  key={groupKey(group)}
+                  group={group}
+                  labels={data?.labels[group.accountId] ?? []}
+                  onOpen={() => setOpen(group)}
+                  onAnswered={answered}
+                />
+              ))}
+            </tbody>
+          </Table>
+        )}
+      </div>
       {facts.length > 0 ? <p className="text-[13px] text-muted-foreground tabular-nums">{facts.join(' · ')}</p> : null}
       {open ? <SuggestionDialog group={open} labels={data?.labels[open.accountId] ?? []} onClose={() => setOpen(null)} onAnswered={answered} /> : null}
     </ListView>

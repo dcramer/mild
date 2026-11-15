@@ -70,6 +70,6 @@ export function ErrorNote({ message }: { message: string }) {
 
 /** Something a change just did or failed to do, under the control that caused it. */
 export function Outcome({ error, done }: { error?: string | null; done?: string | null }) {
-  if (error) return <p className="px-4 pb-3 text-[13px] text-destructive">{error}</p>;
-  return done ? <p className="px-4 pb-3 text-[13px] text-muted-foreground">{done}</p> : null;
+  if (error) return <p className="px-(--gutter) pb-3 text-[13px] text-destructive">{error}</p>;
+  return done ? <p className="px-(--gutter) pb-3 text-[13px] text-muted-foreground">{done}</p> : null;
 }

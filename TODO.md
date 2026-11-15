@@ -10,6 +10,11 @@ sift suggests first and acts second. By default it only observes: every decision
 
 The model: every message gets a label (what it is); the label carries the action (what happens); a rule says what mail is without a model. Built: labels with defaults and the user's own, rules that name a label with an optional exception, senders folded into rules, both Gmail labels on mail sift acts on, a Labels screen. Next, in order:
 
+- [ ] **Outcomes.** What a label can do to mail should be one of: block, mark spam, archive, mark unread (the user's list), with a sensible default per label: sales pitches archived, phishing blocked. Today the choices are keep in inbox, archive, mark spam, leave for me. Before changing it:
+  - What "block" is in Gmail through the API (the blocked-senders list is not exposed; the nearest is marking spam plus a filter for the sender) and whether it can be undone like everything else.
+  - Whether "mark unread" means leave it in the inbox untouched (today's "keep"), and where "leave for me" (sift asks) goes: it is a state, not an outcome.
+  - A default label for phishing, separate from Junk, and its protections: blocking is the costliest mistake.
+  - Later, not now: flag a message (star or mark important), and forward it. Forwarding sends mail, which sift does not do today and has no permission for.
 - [ ] **Two kinds of rule.** Built: hard rules (conditions on sender, domain, list, recipient, subject), and an answer that chooses its scope (sender, domain, sender plus words in the subject, or only the waiting mail). Still to do:
   - **Hard rules as Gmail filters.** Where a rule can be written as a Gmail filter, write it there too, and track which rules really exist in Gmail (created, changed or deleted there by the user, or not expressible as a filter at all).
   - **Soft rules: context for the model.** A sender (or domain) plus a condition in plain language, such as "auction notices for lots I did not bid on". It cannot be matched deterministically, so it is handed to the model whenever that sender's mail is judged, narrowing the question to one yes or no. Decide how it is written, shown beside hard rules, what it costs, and when a soft rule that always goes one way is turned into a hard one.
@@ -43,6 +48,7 @@ Built: the Suggestions view, answers by sender ("Right" or "No, it is <label>") 
 
 ## Setup
 
+- [ ] **A clean README.** Say plainly what sift is for (a better Gmail filter and spam filter that learns from you and turns what it learns into rules), then the onboarding, which is install and `sift init`. Move everything else (the CLI reference, Docker detail, how the dashboard is built) out to docs/.
 - [ ] Run `sift init` inside Docker, where the dashboard address is the host's, not the container's. (It has been run for real on a headless server.)
 - [ ] Let `init` change a step that is already done (switch model, add a second account) instead of only filling gaps.
 - [ ] Show an expired Google sign-in on the dashboard and in `sift status`, not only in the `run` log. Test users are signed out every 7 days.
@@ -90,7 +96,7 @@ The dashboard manages sift, behind Google sign-in. That sign-in also connects th
 - [ ] Keyboard for the Suggestions grid: move between cards, open, answer.
 - [ ] Design system (docs/DESIGN.md), parts still missing: a confirmation for a destructive press (Remove, Forget and Undo act at once), a toast or other place for "done" that survives a reload of the list, a text link, a multi-line form layout, and a part for a long list (the model select has no search).
 - [ ] The specimen page (`/#system`) is reachable without signing in. It holds no data; decide whether to keep it in the production build.
-- [ ] Narrow screens: tables scroll sideways. Decide which become stacked rows on a phone.
+- [ ] Narrow screens: Suggestions has a phone layout; Rules, Decisions, Changes and the Overview tables still scroll sideways.
 - [ ] Try the sign-in for real: a Web application client, `tailscale serve`, the redirect URIs, and a second account.
 - [ ] Keep people apart: today everyone signed in sees every connected account. Scope each session to its own account before more than one person uses an install.
 - [ ] Filter every view by account once there is more than one.

@@ -10,7 +10,7 @@ A proof sheet on a dark desk: ink on near-black, one highlighter pen, hard edges
 
 - **Dark only.**
 - **Two colours mean something.** Yellow (`highlight`) means "look here": the name, the current section, the headline figure, what is waiting on the reader, a search match. Red (`destructive`) means a failure. Nothing else is coloured; everything else is the ink colour at some strength.
-- **As little chrome as it takes.** A sheet has a frame; inside it, space and type separate things before any line does. Controls are filled (`--fill`), not outlined. Notes and headings have no box and no rule. The only lines inside a sheet are faint dashes between rows (`--rule`).
+- **As little chrome as it takes.** A list sits straight on the page with no surface behind it. A sheet has a frame, and is for a group of settings or a figure, not for a table. Inside either, space and type separate things before any line does. Controls are filled (`--fill`), not outlined. Notes and headings have no box and no rule. The only lines inside a sheet are faint dashes between rows (`--rule`).
 - **Lines are ink, thinned.** `--frame` for a sheet's edge, `--rule` between rows. Never a separate grey.
 - **One shadow.** `--edge`: hard, offset down and right, the edge of the sheet beneath. A `mark` button is raised by the same edge and pressing pushes it down.
 - **Things you press have hand-cut corners** (`--cut-control`); the highlighter stroke has its own (`--cut`). Surfaces are square.
@@ -29,11 +29,11 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Masthead` | The top of every screen: the name, the sections (highlighted when current) and who is signed in. No bar. |
 | `SubNav` | The pages within a section, beside the page, the current one marked with a stroke. Like the sections, they are links to an address fragment (`#settings/accounts`), read with `useRoute`. |
 | `Sheet`, `SheetHead` | The surface everything sits on. Rows inside take the class `row`. |
-| `Table`, `Tr`, `Th`, `Td` | Rows of the same kind of thing. `Tr onOpen` makes the whole row pressable. |
+| `Table`, `Tr`, `Th`, `Td` | Rows of the same kind of thing, one row per item: the default for a list. It has no surface of its own, no background and no frame: on the page it sits flush under the list's heading, divided only by the dashes between rows. `Tr onOpen` makes the whole row pressable. |
 | `Figures`, `Figure` | Headline numbers, straight on the page. `look` for the one to see first, `failure` for a count of things gone wrong. |
 | `StackedBars` | Counts over time, stacked by series. Its legend reads out the column pointed at or focused. |
 | `ListView`, `FilterGroup` | **How every screen shows many of one thing.** A title with the count, a search box, a filter button beside it, then the rows or cards. The filter button opens a panel on the right that pushes the list left. Filters that are on show as a count on the button and, when the panel is closed, as a line of chips that each clear one. |
-| `Card`, `CardHead`, `CardFoot`, `CardGrid` | One of the things sift is about, shown whole: a suggestion, a label. Head (what it is), body, foot (what can be done to it without opening it). Pressing the card opens it. Things compared by column go in a `Table` instead. |
+| `Card`, `CardHead`, `CardFoot`, `CardGrid` | A thing shown whole, where each one is read on its own rather than compared down a column: a label. Head (what it is), body, foot (what can be done to it). Lists of mail, rules and decisions are tables, not cards. |
 | `Dialog` | Something opened from the page and read or answered without leaving it: a message, a sender's waiting mail, a form. `wide` for two columns; a `footer` for the actions that finish it. |
 | `Note` | Said to the reader outside the flow: `plain`, `look` (needs them), `failure`. No box. |
 | `Empty`, `Loading` | What a sheet shows with nothing in it, and while rows are on their way. |
@@ -56,7 +56,7 @@ Every part has an answer for a phone, and a new part needs one before it is adde
 | `Dialog` | Covers the screen. |
 | `ListView` | The filter panel opens above the list. |
 | `CardGrid` | One column. |
-| `Table` | Scrolls sideways inside its sheet. (Not good enough for the wider tables; see TODO.md.) |
+| `Table` | A table says which columns a phone keeps; what the dropped ones said moves under the first column, and the row opens for the rest (Suggestions does this). Tables that have not been given this still scroll sideways. |
 | Rows with a control | The control wraps under the text. |
 | Anything pressed | At least 40px tall on a touch screen (`pointer: coarse`), whatever its size on a desktop. |
 

@@ -3,7 +3,7 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { DecisionTable } from '@/components/decision-table.tsx';
 import { type Days, type DecisionRow, api, useLoaded } from '@/lib/api.ts';
 import { DISPOSITION_KEYS, TIERS, count, dispositionName } from '@/lib/format.ts';
-import { Button, Empty, FilterGroup, ListView, Loading, Sheet } from '@/system';
+import { Button, Empty, FilterGroup, ListView, Loading } from '@/system';
 
 const PAGE = 50;
 const TIER_OPTIONS = [['', 'Any'], ...TIERS.map((t) => [t.key, t.name] as const)] as const;
@@ -61,7 +61,7 @@ export function Decisions({ days, onDays, onOpen }: { days: Days; onDays: (days:
       }}
     >
       {error ? <ErrorNote message={error} /> : null}
-      <Sheet>
+      <div>
         {loading ? (
           <Loading rows={8} />
         ) : !data || data.rows.length === 0 ? (
@@ -69,7 +69,7 @@ export function Decisions({ days, onDays, onOpen }: { days: Days; onDays: (days:
         ) : (
           <DecisionTable rows={data.rows} onOpen={onOpen} search={search} />
         )}
-      </Sheet>
+      </div>
       {data && data.total > PAGE ? (
         <div className="flex items-center justify-end gap-2 text-[13px] text-muted-foreground tabular-nums">
           <span>
