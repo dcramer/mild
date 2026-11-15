@@ -2,7 +2,6 @@ import { CheckIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from 'lucide-reac
 import { type ReactNode, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from './button.tsx';
-import { Input } from './field.tsx';
 
 export interface ActiveFilter {
   /** What is being narrowed and to what: "Label: Newsletters". */
@@ -11,8 +10,8 @@ export interface ActiveFilter {
 }
 
 /**
- * The standard way to show many of one thing: a heading with how many there are, a search box, a
- * filter button beside it, then the rows or cards. Every screen that lists something uses it.
+ * The standard way to show many of one thing: a heading with how many there are, then one outlined
+ * bar holding the search and the filter button, then the rows or cards. Every screen that lists something uses it.
  *
  * The filter button opens a panel on the right that pushes the list left; closing it puts the list
  * back. While closed, the button shows how many filters are on and each is listed under the search
@@ -54,32 +53,36 @@ export function ListView({
 
       {search || filters ? (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
+          {/* One bar: the search and the filters share an outline, and nothing is filled until it is used. */}
+          <div className="flex h-9 items-stretch rounded-(--cut-control) border border-(--frame) transition-colors focus-within:border-foreground/45">
             {search ? (
-              <label className="relative flex min-w-0 flex-1 items-center md:max-w-md">
-                <SearchIcon aria-hidden className="pointer-events-none absolute left-3 size-3.5 text-muted-foreground" />
-                <Input
+              <label className="flex min-w-0 flex-1 items-center gap-2.5 px-3">
+                <SearchIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                <input
                   type="search"
-                  className="w-full pl-8"
+                  className="focus-within-shown min-w-0 flex-1 bg-transparent text-sm placeholder:text-muted-foreground"
                   aria-label={search.placeholder}
                   placeholder={search.placeholder}
                   value={search.value}
                   onChange={(event) => search.onChange(event.target.value)}
                 />
               </label>
-            ) : null}
+            ) : (
+              <span className="flex-1" />
+            )}
             {filters ? (
               <button
                 type="button"
                 aria-label={on > 0 ? `Filters, ${on} on` : 'Filters'}
                 aria-expanded={open}
                 className={cn(
-                  'press relative flex h-(--control) shrink-0 cursor-pointer items-center justify-center gap-1.5 px-2.5 text-[13px] font-medium',
-                  open ? 'bg-foreground text-background' : 'bg-(--fill) hover:bg-(--fill-strong)',
+                  'flex shrink-0 cursor-pointer items-center gap-2 border-l border-(--frame) px-3 text-[13px] font-medium',
+                  open ? 'bg-(--fill-strong)' : 'text-muted-foreground hover:bg-(--fill) hover:text-foreground',
                 )}
                 onClick={() => setOpen(!open)}
               >
-                <SlidersHorizontalIcon className="size-4" />
+                <SlidersHorizontalIcon aria-hidden className="size-4" />
+                Filters
                 {on > 0 ? <span className="hl mx-0 px-1.5 py-0 text-xs tabular-nums">{on}</span> : null}
               </button>
             ) : null}
