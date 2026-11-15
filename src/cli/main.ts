@@ -124,11 +124,17 @@ async function init(): Promise<void> {
     googleClientKind: () => (hasClientSecrets(config) ? loadClientSecrets(config).kind : null),
     tailscaleName,
     enableTailscaleServe: async (servePort) => {
+      let out: string;
       try {
-        await promisify(execFile)('tailscale', ['serve', '--bg', String(servePort)], { timeout: 20_000 });
+        out = (await promisify(execFile)('tailscale', ['serve', '--bg', String(servePort)], { timeout: 20_000 })).stdout;
       } catch (error) {
         const detail = (error as { stderr?: string }).stderr?.trim().split('\n').at(-1);
         throw new Error(detail || 'tailscale serve did not start.', { cause: error });
+      }
+      // Tailscale exits 0 when serve is switched off for the tailnet, printing where to switch it on.
+      if (/not enabled/i.test(out)) {
+        const link = /https:\/\/\S+/.exec(out)?.[0];
+        throw new Error(`Serve is off for your tailnet.${link ? ` Turn it on at ${link}` : ''}`);
       }
     },
   });
