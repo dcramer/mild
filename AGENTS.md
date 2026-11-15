@@ -43,7 +43,11 @@ Enforced by `no-restricted-imports` in `.oxlintrc.json`. They are the security m
 
 ## Privacy
 
-Real addresses, domains, subjects, message ids and policy never go in the repository. Tests and fixtures use synthetic mail on `example.com` / `example.org`. Runtime state lives in `data/` (gitignored).
+Real addresses, domains, subjects, message ids and policy never go in the repository. Tests and fixtures use synthetic mail on `example.com` / `example.org`. Runtime state lives in the home directory (`~/.config/sift`), outside the repository. When developing, pass `--home <dir>` with a scratch directory; never point tests or experiments at a real home.
+
+## Configuration
+
+No setting may require an environment variable. Settings go in `sift.toml` (`Settings` in `src/config.ts`, parsed strictly) and get a step in `sift init` if the user must choose them. Everything sift stores lives under the one home directory; add new paths to `Config`, never beside the working directory.
 
 ## Record everything
 

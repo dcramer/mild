@@ -1,14 +1,13 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
 import { existsSync, readFileSync } from 'node:fs';
-import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { type MessageAction, type Outcome, execute, undo } from '../actions/executor.ts';
-import { type Config, loadConfig } from '../config.ts';
+import { type Config, loadConfig, saveSettings } from '../config.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
 import { runLoop, runOnce } from '../daemon/run.ts';
 import { syncAccount } from '../daemon/sync.ts';
 import { createGmailApi } from '../gmail/api.ts';
-import { authorize, clientFor, loadClientSecrets, saveRefreshToken } from '../gmail/auth.ts';
+import { authorize, clientFor, hasClientSecrets, installClientFile, loadClientSecrets, saveRefreshToken } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { createJudge } from '../model/judge.ts';
 import { login, openModels, resolveModel } from '../model/models.ts';
@@ -16,15 +15,21 @@ import { type Account, connectAccount, listAccounts } from '../store/accounts.ts
 import { getAction, listRecentActions } from '../store/actions.ts';
 import { listCategories, updateCategory } from '../store/categories.ts';
 import { openDb, schemaVersion } from '../store/db.ts';
+import { runInit } from './init.ts';
+import { ask, closeTerminal, readLine } from './terminal.ts';
 import { addRule, listRules, removeRule } from '../store/rules.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
 
 const PLANNED = ['review'] as const;
 
-const USAGE = `Usage: sift <command>
+const USAGE = `Usage: sift [--home <dir>] <command>
 
-  status   Show database location, schema version and row counts
-  auth     Connect a Gmail account
+Everything sift keeps (settings, guidance, database, credentials) is in one directory:
+~/.config/sift by default, or the directory given with --home or SIFT_HOME.
+
+  init     Set sift up, or finish setting it up: Google client, Gmail account, model, preferences
+  status   Show what is set up, where it lives, and how much sift has recorded
+  auth     Connect a Gmail account (init does this for you)
              --port <n>   loopback port (default: a free one)
              --host <ip>  interface to listen on (default 127.0.0.1; use 0.0.0.0 in a container)
   sync     Fetch new inbox mail once and record it; changes nothing in Gmail
@@ -36,12 +41,12 @@ const USAGE = `Usage: sift <command>
              --limit <n>       how many (default 20)
   undo     Reverse a completed action: sift undo <action-id>
   dashboard  Serve a read-only web page of what sift has decided and done
-             --port <n>   port (default 8787)
+             --port <n>   port (default: dashboard.port in sift.toml)
              --host <ip>  interface to listen on (default 127.0.0.1; use 0.0.0.0 in a container)
-  run      Sync and triage continuously. Observes by default: decisions are recorded, Gmail is not changed
-             --act            carry decisions out in Gmail (archive, label, spam)
-             --once           do a single pass and exit
-             --interval <s>   seconds between passes (default 60)
+  run      Sync and triage continuously, using the settings in sift.toml
+             --act / --observe  override "act" for this run
+             --once             do a single pass and exit
+             --interval <s>     override "interval" for this run
   rules    Manage local rules
              rules list
              rules add --do <keep|archive|spam> [--from <addr>] [--from-domain <domain>] [--to <addr>]
@@ -50,7 +55,7 @@ const USAGE = `Usage: sift <command>
            (rules take --account <email> if more than one account is connected)
   login    Sign in to a model provider for the inference tier: sift login <provider> [--api-key]
              e.g. sift login openai-codex   (ChatGPT Plus/Pro subscription)
-  models   List the models you can use, to set SIFT_MODEL=provider/model-id
+  models   List the models you can use; set one as "model" in sift.toml
   categories  Show the kinds of mail and what sift does with each
              categories set <key> --do <keep|archive|review|spam> [--label <name> | --no-label]
   review   Answer questions sift has queued         (not implemented yet)
@@ -59,29 +64,33 @@ const USAGE = `Usage: sift <command>
 function status(): void {
   const config = loadConfig();
   const db = openDb(config.dbPath);
-  console.log(`database: ${config.dbPath}`);
-  console.log(`schema:   v${schemaVersion(db)}`);
-  for (const table of ['accounts', 'messages', 'rules', 'senders', 'decisions', 'actions', 'questions']) {
+  const accounts = listAccounts(db);
+  console.log(`home:      ${config.home}`);
+  console.log(`settings:  ${existsSync(config.settingsPath) ? config.settingsPath : 'not written yet (run `sift init`)'}`);
+  console.log(
+    `Google client: ${hasClientSecrets(config) ? 'yes' : 'no '}   Gmail: ${accounts.length > 0 ? accounts.map((a) => a.email).join(', ') : 'not connected'}`,
+  );
+  console.log(`model:     ${config.settings.model ?? 'none (mail no rule covers is left for you)'}`);
+  console.log(`mode:      ${config.settings.act ? 'acting on decisions' : 'observing only'}, every ${config.settings.interval}s`);
+  console.log(`guidelines: ${existsSync(config.guidelinesPath) ? config.guidelinesPath : 'none'}`);
+  console.log(`database:  schema v${schemaVersion(db)}`);
+  for (const table of ['messages', 'decisions', 'actions', 'rules', 'senders', 'questions']) {
     const row = db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number };
-    console.log(`${table.padEnd(9)} ${row.n}`);
+    console.log(`  ${table.padEnd(10)} ${row.n}`);
   }
   db.close();
 }
 
-async function auth(args: string[]): Promise<void> {
-  const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string' } } });
-  const port = values.port === undefined ? 0 : Number(values.port);
-  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`Invalid --port: ${values.port}`);
-
-  const config = loadConfig();
+/** Run the Gmail sign-in and record the account. Returns the connected address. */
+async function connectGmail(config: Config, options: { port?: number; host?: string } = {}): Promise<string> {
   const secrets = loadClientSecrets(config);
-
-  const rl = createInterface({ input: process.stdin });
-  const pasted = new Promise<string>((resolve) => rl.once('line', resolve));
+  // Stop waiting for a pasted URL once the browser callback has finished the sign-in.
+  const paste = new AbortController();
+  const pasted = readLine(paste.signal).then((line) => line ?? new Promise<string>(() => {}));
   try {
     const { refreshToken, client } = await authorize(secrets, {
-      port,
-      ...(values.host ? { host: values.host } : {}),
+      port: options.port ?? 0,
+      ...(options.host ? { host: options.host } : {}),
       pasted,
       onUrl: (url) => {
         console.log(`Open this URL in a browser and approve access:\n\n${url}\n`);
@@ -93,10 +102,47 @@ async function auth(args: string[]): Promise<void> {
     const db = openDb(config.dbPath);
     connectAccount(db, profile.emailAddress, profile.historyId);
     db.close();
-    console.log(`Connected ${profile.emailAddress}. sift will handle mail that arrives from now on.`);
+    return profile.emailAddress;
   } finally {
-    rl.close();
+    paste.abort();
   }
+}
+
+async function auth(args: string[]): Promise<void> {
+  const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string' } } });
+  const port = values.port === undefined ? 0 : Number(values.port);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`Invalid --port: ${values.port}`);
+  const email = await connectGmail(loadConfig(), { port, ...(values.host ? { host: values.host } : {}) });
+  console.log(`Connected ${email}. sift will handle mail that arrives from now on.`);
+}
+
+async function init(args: string[]): Promise<void> {
+  const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string' } } });
+  const port = values.port === undefined ? undefined : Number(values.port);
+  if (port !== undefined && (!Number.isInteger(port) || port < 0 || port > 65535)) throw new Error(`Invalid --port: ${values.port}`);
+  const config = loadConfig();
+  const models = openModels(config);
+  const terminal = { ask: (question: string) => ask(question), say: (line: string) => console.log(line) };
+  const withDb = <T>(work: (db: ReturnType<typeof openDb>) => T): T => {
+    const db = openDb(config.dbPath);
+    try {
+      return work(db);
+    } finally {
+      db.close();
+    }
+  };
+  await runInit({
+    config,
+    terminal,
+    saveSettings: (settings) => saveSettings(config, settings),
+    hasGoogleClient: () => hasClientSecrets(config),
+    installGoogleClient: (path) => installClientFile(config, path),
+    connectedAccounts: () => withDb((db) => listAccounts(db).map((a) => a.email)),
+    connectGmail: () => connectGmail(config, { ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) }),
+    loginModel: (choice) => login(models, config, choice.provider, choice.type, { ask, say: terminal.say }),
+    availableModels: async (provider) => (await models.getAvailable(provider)).map((m) => m.id),
+    categories: (account) => withDb((db) => listCategories(db, account)),
+  });
 }
 
 async function sync(args: string[]): Promise<void> {
@@ -105,7 +151,7 @@ async function sync(args: string[]): Promise<void> {
   const db = openDb(config.dbPath);
   try {
     const accounts = listAccounts(db);
-    if (accounts.length === 0) throw new Error('No accounts connected. Run `sift auth` first.');
+    if (accounts.length === 0) throw new Error('No Gmail account is connected yet. Run `sift init`.');
     const secrets = loadClientSecrets(config);
     for (const account of accounts) {
       const report = await syncAccount(db, createGmailApi(clientFor(config, secrets, account.email)), account);
@@ -188,10 +234,10 @@ async function undoCommand(args: string[]): Promise<void> {
 }
 
 async function dashboard(args: string[]): Promise<void> {
-  const { values } = parseArgs({ args, options: { port: { type: 'string', default: '8787' }, host: { type: 'string', default: '127.0.0.1' } } });
-  const port = Number(values.port);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Invalid --port: ${values.port}`);
+  const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string', default: '127.0.0.1' } } });
   const config = loadConfig();
+  const port = values.port === undefined ? config.settings.dashboardPort : Number(values.port);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Invalid --port: ${values.port}`);
   const db = openDb(config.dbPath);
   const server = createDashboardServer(db);
   await new Promise<void>((resolve, reject) => {
@@ -210,7 +256,7 @@ async function dashboard(args: string[]): Promise<void> {
 
 function pickAccount(accounts: Account[], email: string | undefined): Account {
   const account = email ? accounts.find((a) => a.email === email.toLowerCase()) : accounts.length === 1 ? accounts[0] : undefined;
-  if (!account) throw new Error(accounts.length === 0 ? 'No accounts connected. Run `sift auth` first.' : 'Choose an account with --account <email>.');
+  if (!account) throw new Error(accounts.length === 0 ? 'No Gmail account is connected yet. Run `sift init`.' : 'Choose an account with --account <email>.');
   return account;
 }
 
@@ -226,28 +272,13 @@ async function openModelTier(config: Config, spec: string) {
   };
 }
 
-/** Ask one line on the terminal. If `signal` aborts first, stops waiting and answers with an empty string. */
-function ask(question: string, signal?: AbortSignal): Promise<string> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => {
-    const finish = (answer: string) => {
-      signal?.removeEventListener('abort', onAbort);
-      rl.close();
-      resolve(answer.trim());
-    };
-    const onAbort = () => finish('');
-    signal?.addEventListener('abort', onAbort, { once: true });
-    rl.question(`${question} `, finish);
-  });
-}
-
 async function loginCommand(args: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { 'api-key': { type: 'boolean', default: false } } });
   const [provider] = positionals;
   if (!provider) throw new Error('Usage: sift login <provider> [--api-key]   e.g. sift login openai-codex');
   const config = loadConfig();
   await login(openModels(config), config, provider, values['api-key'] ? 'api_key' : 'oauth', { ask, say: (line) => console.log(line) });
-  console.log(`Signed in to ${provider}. Run \`sift models\` and set SIFT_MODEL to turn the inference tier on.`);
+  console.log(`Signed in to ${provider}. Run \`sift models\`, then set \`model\` in ${config.settingsPath}.`);
 }
 
 async function listModels(): Promise<void> {
@@ -286,19 +317,27 @@ function categories(args: string[]): void {
 async function run(args: string[]): Promise<void> {
   const { values } = parseArgs({
     args,
-    options: { act: { type: 'boolean', default: false }, once: { type: 'boolean', default: false }, interval: { type: 'string', default: '60' } },
+    options: {
+      act: { type: 'boolean', default: false },
+      observe: { type: 'boolean', default: false },
+      once: { type: 'boolean', default: false },
+      interval: { type: 'string' },
+    },
   });
-  const interval = Number(values.interval);
-  if (!Number.isFinite(interval) || interval < 5) throw new Error('--interval must be at least 5 seconds.');
-
+  if (values.act && values.observe) throw new Error('Choose one of --act and --observe.');
   const config = loadConfig();
+  const interval = values.interval === undefined ? config.settings.interval : Number(values.interval);
+  if (!Number.isFinite(interval) || interval < 5) throw new Error('--interval must be at least 5 seconds.');
+  const act = values.observe ? false : values.act || config.settings.act;
+  const modelSpec = config.settings.model;
+
   const db = openDb(config.dbPath);
   try {
-    if (listAccounts(db).length === 0) throw new Error('No accounts connected. Run `sift auth` first.');
+    if (listAccounts(db).length === 0) throw new Error('No Gmail account is connected yet. Run `sift init`.');
     const secrets = loadClientSecrets(config);
-    const modelTier = config.model ? await openModelTier(config, config.model) : undefined;
+    const modelTier = modelSpec ? await openModelTier(config, modelSpec) : undefined;
     const options = {
-      act: values.act,
+      act,
       ...(modelTier ? { model: modelTier } : {}),
       connect: (account: Account) => {
         const client = clientFor(config, secrets, account.email);
@@ -306,15 +345,11 @@ async function run(args: string[]): Promise<void> {
       },
       log: (line: string) => console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')}  ${line}`),
     };
+    console.log(modelSpec ? `Model: ${modelSpec}` : 'No model is set: mail no rule covers is left for you. `sift init` sets one up.');
     console.log(
-      config.model
-        ? `Inference tier: ${config.model}${existsSync(config.guidelinesPath) ? '' : ` (no guidelines yet; write them in ${config.guidelinesPath})`}`
-        : 'Inference tier is off: mail no rule covers is left for review. Set SIFT_MODEL to turn it on (see `sift models`).',
-    );
-    console.log(
-      values.act
+      act
         ? 'sift is acting: decisions are carried out in Gmail.'
-        : 'sift is observing: decisions are recorded, Gmail is not changed. Use --act to carry them out.',
+        : `sift is observing: decisions are recorded, Gmail is not changed. Set act = true in ${config.settingsPath} to carry them out.`,
     );
 
     if (values.once) {
@@ -387,8 +422,17 @@ function rules(args: string[]): void {
 }
 
 async function main(): Promise<void> {
-  const [command, ...args] = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  // --home works before or after the command; it is the same as setting SIFT_HOME.
+  const homeAt = argv.indexOf('--home');
+  if (homeAt !== -1) {
+    const [, home] = argv.splice(homeAt, 2);
+    if (!home) throw new Error('--home needs a directory.');
+    process.env['SIFT_HOME'] = home;
+  }
+  const [command, ...args] = argv;
   if (command === 'status') status();
+  else if (command === 'init') await init(args);
   else if (command === 'auth') await auth(args);
   else if (command === 'sync') await sync(args);
   else if (command === 'apply') await apply(args);
@@ -415,4 +459,6 @@ try {
 } catch (error) {
   console.error(`sift: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
+} finally {
+  closeTerminal();
 }

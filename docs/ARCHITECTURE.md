@@ -57,7 +57,7 @@ Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 ## Gmail
 
 - **Scopes:** `gmail.modify` and `gmail.settings.basic` (`src/gmail/scopes.ts`). Both are restricted scopes, so each user brings their own Google Cloud project with a Desktop OAuth client, using a loopback redirect with PKCE. The project must be published "In production"; in "Testing", refresh tokens expire after 7 days.
-- **Tokens:** the refresh token is stored per account in `data/google/`, owner-only, outside the database.
+- **Tokens:** the refresh token is stored per account in `google/` in the home directory, owner-only, outside the database.
 - **First connect:** sift records the current history id and handles mail from then on. It never sweeps the existing inbox unasked.
 - **Sync is separate from triage:** a sync pass records message metadata and advances the cursor in one transaction; triage will work from recorded messages that have no decision yet. A failed fetch leaves the cursor in place.
 - **Change detection:** poll `users.history.list` from the stored `historyId` (2 quota units per call, against 6,000 per user per minute). A 404 means the cursor expired: read the new cursor, then search the last 7 days of the inbox. Pub/Sub push is a possible opt-in; it still needs the polling fallback.
@@ -93,7 +93,7 @@ Undo reverses exactly what the action changed, keeps anything the user changed a
 
 Preferences live in two places, by kind.
 
-- **Broad guidance is a Markdown file**, `data/guidelines.md`, in the user's own words ("recruiters count as cold outreach", "anything from my accountant is personal"). It is read on every pass and given to the model.
+- **Broad guidance is a Markdown file**, `guidelines.md` in the home directory, in the user's own words ("recruiters count as cold outreach", "anything from my accountant is personal"). It is read on every pass and given to the model.
 - **Everything structured or learned is in the database:**
   - `categories`: the kinds of mail and what to do with each (keep, archive, review, spam, and a label). Seeded with cautious defaults; changed with `sift categories set`.
   - `rules`: explicit matches the user adds.
@@ -111,13 +111,24 @@ When no rule or sender record decides a message, one model call does. It is deli
 - **The prompt marks the email as untrusted** and keeps it apart from the guidelines and the header facts. The worst an injected email can do is get itself put in the wrong category, which the audit log can undo.
 - **Learning:** after three consecutive model decisions for a sender agree on category and outcome, the sender is written to `senders` and later mail from them is decided without inference. Senders who send mixed mail never settle and are never learned. Changing a category forgets the senders learned under it.
 
-Models are reached through pi-ai (`src/model/`, the only module that imports it). `sift login <provider>` signs in, including with a ChatGPT subscription, and stores the credential in `data/model-auth.json`. `SIFT_MODEL=provider/model-id` turns the tier on; without it, mail no rule covers is left for review. pi-durable is not used: a triage run is one call, and the message queue in SQLite already gives retry and decide-once.
+Models are reached through pi-ai (`src/model/`, the only module that imports it). `sift login <provider>` signs in, including with a ChatGPT subscription, and stores the credential in `model-auth.json`. The `model` setting in `sift.toml` turns the tier on; without it, mail no rule covers is left for review. pi-durable is not used: a triage run is one call, and the message queue in SQLite already gives retry and decide-once.
 
 There is no shell and no filesystem here. A sandboxed agent with those is planned only for a possible operator-facing assistant that does open-ended analysis.
 
+## Home directory
+
+Everything sift keeps is in one directory, the home: `~/.config/sift` by default (`$XDG_CONFIG_HOME/sift`), or wherever `--home` or `SIFT_HOME` points (the Docker image uses `/data`). Keeping settings, guidance, the database and credentials together means it can be backed up or moved as a unit. No setting requires an environment variable.
+
+- `sift.toml`: settings (`model`, `act`, `interval`, `dashboard.port`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
+- `guidelines.md`: the user's broad guidance, read on every pass.
+- `sift.db`: everything structured or learned.
+- `google-client.json`, `google/`, `model-auth.json`, `device-id`: credentials, owner-only, kept out of the database.
+
+`sift init` (`src/cli/init.ts`) sets all of this up. Each step checks the real state first, so running it again only asks about what is missing, and every step can be skipped.
+
 ## State
 
-One SQLite database, `data/sift.db` (schema in `src/store/migrations/`). It is the complete record of what sift saw and did, and everything else (the dashboard, undo, future analytics) reads from it.
+One SQLite database, `sift.db` in the home directory (schema in `src/store/migrations/`). It is the complete record of what sift saw and did, and everything else (the dashboard, undo, future analytics) reads from it.
 
 - **messages:** one row per message sift has seen: sender, recipients, subject, the triage headers and the labels at sync time. Never the body or a snippet. This is enough to triage a message again without refetching it.
 - **decisions:** an append-only log, each with its mode (observe or act) and outcome. Every triage outcome is recorded, including "keep" and "could not decide", with the tier that made it, the reason, the confidence, and what it cost (model, tokens, dollars, duration). A message can have several decisions; the latest is current.

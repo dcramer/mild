@@ -2,6 +2,13 @@
 
 The working list for sift. Remove an item when it lands; add what you find. Design and current state are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Setup
+
+- [ ] Run `sift init` for real, start to finish, on a laptop and inside Docker.
+- [ ] Let `init` change a step that is already done (switch model, add a second account) instead of only filling gaps.
+- [ ] Let `init` set category preferences interactively, not just show them.
+- [ ] `sift config`: show and set single settings without editing `sift.toml`.
+
 ## Verify against real Gmail
 
 Everything Gmail-facing has only run against fakes.
@@ -41,7 +48,7 @@ A React app in `web/` (shadcn/ui on Base UI, Tailwind, Recharts) served by `sift
 Built: one model call per message that names a category; the category's setting in the database decides what happens. Not yet run against a real model or a real mailbox.
 
 - [ ] Finish a ChatGPT subscription sign-in (`sift login openai-codex`; both it and `sift login openai` reach OpenAI's sign-in page) and run a real classification end to end. Confirm the token refreshes and survives a restart, and try the device-code login inside Docker.
-- [ ] Pick a default model and document it; today `SIFT_MODEL` must be set by hand.
+- [ ] Recommend a model in `sift init` (it lists what the provider offers but gives no guidance beyond "smaller is usually enough").
 - [ ] Measure it: a labelled synthetic set in `evals/`, accuracy per category, how often it answers "unsure", cost per message.
 - [ ] Show the category, the guidelines in force and learned senders on the dashboard.
 - [ ] `sift senders`: list, correct and forget what has been learned about a sender.

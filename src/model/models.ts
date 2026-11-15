@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { Api, AuthEvent, AuthPrompt, Model, Models } from '@earendil-works/pi-ai';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
 import type { Config } from '../config.ts';
@@ -14,7 +13,7 @@ export function openModels(config: Config): Models {
 /** Look up a `provider/model-id` spec. Throws a message the user can act on. */
 export function resolveModel(models: Models, spec: string): Model<Api> {
   const slash = spec.indexOf('/');
-  if (slash <= 0 || slash === spec.length - 1) throw new Error(`SIFT_MODEL must look like provider/model-id, not "${spec}".`);
+  if (slash <= 0 || slash === spec.length - 1) throw new Error(`The model must look like provider/model-id, not "${spec}".`);
   const model = models.getModel(spec.slice(0, slash), spec.slice(slash + 1));
   if (!model) throw new Error(`Unknown model "${spec}". Run \`sift models\` to list the models you can use.`);
   return model;
@@ -22,7 +21,7 @@ export function resolveModel(models: Models, spec: string): Model<Api> {
 
 /** A stable id for this installation, created on first use. Subscription sign-in flows register the device under it. */
 function deviceId(config: Config): string {
-  const path = join(config.dataDir, 'device-id');
+  const path = config.deviceIdPath;
   if (existsSync(path)) return readFileSync(path, 'utf8').trim();
   const id = randomUUID();
   writeFileSync(path, id, { mode: 0o600 });

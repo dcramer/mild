@@ -13,7 +13,7 @@ RUN pnpm --filter sift-web build
 
 # Stage 2: the runtime. Node runs the TypeScript sources directly (type stripping); there is no build step for them.
 FROM node:24-slim
-ENV NODE_ENV=production SIFT_DATA_DIR=/data
+ENV NODE_ENV=production SIFT_HOME=/data
 RUN corepack enable
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./

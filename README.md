@@ -4,24 +4,39 @@ Self-hosted inbox triage for Gmail. sift labels, archives, filters and unsubscri
 
 **Status: early.** sift can connect a Gmail account, sync new inbox mail, decide it with local rules, learned senders and (optionally) one model call per message, and carry the decision out (archive, label, spam) with a full audit log and undo. A local dashboard shows what it decided and did. It has not yet been run against a real mailbox or a real model. Open work is in [TODO.md](TODO.md); the design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Connect Gmail
+## Set up
 
-sift uses your own Google Cloud project, so no third party sits between you and your mail.
-
-1. In [Google Cloud Console](https://console.cloud.google.com/), create a project and enable the **Gmail API**.
-2. Configure the OAuth consent screen as **External**, add the scopes `gmail.modify` and `gmail.settings.basic`, and set the publishing status to **In production**. Left in "Testing", Google expires the token every 7 days. You will see an "unverified app" warning when you approve; that is expected for a personal project.
-3. Create an OAuth client of type **Desktop app**, download its JSON and save it as `data/google-client.json`.
-4. Connect and fetch:
+Requires Node 24 and pnpm.
 
 ```bash
-pnpm sift auth
+pnpm install
 ```
 
 ```bash
-pnpm sift sync --verbose
+pnpm sift init
 ```
 
-`auth` prints a URL to approve in a browser. If the browser is on another machine and ends on a page that will not load, paste that page's URL back into the terminal. sift starts from the moment you connect; it does not sweep mail already in the inbox.
+`init` walks you through whatever is not done yet and can be run again at any time:
+
+1. **Google OAuth client.** sift reads your mail through a client you own, so no third party sits in between. `init` tells you how to create one in Google Cloud Console and asks for the downloaded file.
+2. **Gmail account.** It opens Google's sign-in. If the browser is on another machine and ends on a page that will not load, paste that page's URL back into the terminal.
+3. **Model.** Optional. Choose a ChatGPT Plus or Pro subscription, or an API key, then pick a model. Without one, mail that no rule covers is left in your inbox.
+4. **Preferences.** It shows what sift does with each kind of mail and where to change it.
+
+Nothing needs an environment variable. Everything sift keeps is in one directory, `~/.config/sift`:
+
+| File | What it is |
+| --- | --- |
+| `sift.toml` | Settings: the model, whether to act or only observe, how often to check, the dashboard port. |
+| `guidelines.md` | Your own words about how to sort your mail. |
+| `sift.db` | Rules, categories, learned senders, and the record of every message, decision and change. |
+| `google-client.json`, `google/`, `model-auth.json` | Credentials. Owner-only. |
+
+Back the directory up or move it as a unit. To keep it somewhere else, pass `--home <dir>` or set `SIFT_HOME`.
+
+```bash
+pnpm sift status
+```
 
 ## Run
 
@@ -29,11 +44,7 @@ pnpm sift sync --verbose
 pnpm sift run
 ```
 
-By default sift **observes**: it syncs new mail every 60 seconds, records what it would do, and changes nothing in Gmail. Watch the dashboard for a while, then let it act:
-
-```bash
-pnpm sift run --act
-```
+sift starts by **observing**: it syncs new mail every 60 seconds, records what it would do, and changes nothing in Gmail. It handles mail that arrives after you connect; it never sweeps what is already in your inbox. Watch the dashboard for a while, then set `act = true` in `sift.toml` (or run `sift run --act` to try it once).
 
 Rules decide mail without any model. A matching `keep` rule always wins.
 
@@ -41,43 +52,7 @@ Rules decide mail without any model. A matching `keep` rule always wins.
 pnpm sift rules add --do archive --from-domain example.com --label sift/newsletters
 ```
 
-```bash
-pnpm sift rules list
-```
-
-Mail that no rule covers gets the label `sift/review` and stays in the inbox. Archived mail gets `sift/archived` (or the rule's label) and spam gets `sift/spam`, so everything sift moved can be found in Gmail itself. sift never deletes mail.
-
-Every change is in the audit log and can be reversed:
-
-```bash
-pnpm sift log
-```
-
-```bash
-pnpm sift undo <action-id>
-```
-
-`sift apply <archive|label|spam> <message-id>` applies one action by hand; message ids come from `sift sync --verbose`.
-
-## Let a model decide what rules don't cover
-
-Without a model, mail that no rule covers is left for review. To turn the model tier on, sign in to a provider, pick a model and set `SIFT_MODEL`:
-
-```bash
-pnpm sift login openai-codex
-```
-
-```bash
-pnpm sift models
-```
-
-```bash
-SIFT_MODEL=openai-codex/<model-id> pnpm sift run
-```
-
-`sift login openai-codex` signs in with a ChatGPT Plus or Pro subscription, the same way the Codex CLI does. It offers a browser login (which calls back on `localhost:1455`) or a device code, which is the one to pick in Docker or over SSH. `sift login openai` is OpenAI's newer "Sign in with ChatGPT"; `sift login <provider> --api-key` stores an API key instead. Using a subscription from a third-party tool is not something OpenAI documents as supported, so keep an API key as a fallback.
-
-The model only names a category for each message. What happens to that category is your setting:
+What the model does with mail no rule covers is your setting, per category:
 
 ```bash
 pnpm sift categories
@@ -87,7 +62,19 @@ pnpm sift categories
 pnpm sift categories set newsletter --do keep
 ```
 
-Write broad guidance in your own words in `data/guidelines.md` ("recruiters are cold outreach", "anything from my accountant is personal"). After a sender's mail has been put in the same category three times, sift remembers the sender and stops asking the model about them.
+After a sender's mail has been put in the same category three times, sift remembers the sender and stops asking the model about them.
+
+Archived mail gets a label such as `sift/newsletters`, mail left for you gets `sift/review`, and spam gets `sift/spam`, so everything sift touched can be found in Gmail itself. sift never deletes mail. Every change is in the audit log and can be reversed:
+
+```bash
+pnpm sift log
+```
+
+```bash
+pnpm sift undo <action-id>
+```
+
+Using a ChatGPT subscription from a third-party tool is not something OpenAI documents as supported, so keep an API key as a fallback (`sift login openai --api-key`).
 
 ## Dashboard
 
@@ -111,36 +98,30 @@ The page is a small React app in `web/` (shadcn/ui on Base UI, Tailwind, Rechart
 
 ## Develop
 
-Requires Node 24 and pnpm.
-
-```bash
-pnpm install
-```
-
 ```bash
 pnpm check
 ```
 
-```bash
-pnpm sift status
-```
-
-State lives in `./data` (override with `SIFT_DATA_DIR`). It holds mail metadata and tokens and is gitignored.
+`pnpm sift <command>` runs the CLI from source. Use `--home ./tmp-home` to keep a development copy apart from your real one.
 
 ## Run in Docker
+
+The image keeps its home directory in the `sift-data` volume.
 
 ```bash
 docker compose -f docker/compose.yaml build
 ```
 
-Copy `google-client.json` into the `sift-data` volume, then connect with a published loopback port:
+Run the same setup inside the container. The published port lets Google's sign-in call back; for the model step choose the device-code login.
 
 ```bash
-docker compose -f docker/compose.yaml run --rm -p 127.0.0.1:8765:8765 sift auth --port 8765 --host 0.0.0.0
+docker compose -f docker/compose.yaml run --rm -it -p 127.0.0.1:8765:8765 sift init --port 8765 --host 0.0.0.0
 ```
+
+When `init` asks for the Google client file, give a path inside the container; mount the downloaded file with `-v /path/to/client.json:/client.json:ro` and answer `/client.json`.
 
 ```bash
 docker compose -f docker/compose.yaml up
 ```
 
-This starts sift in observe mode and the dashboard at http://localhost:8787.
+This starts sift and the dashboard at http://localhost:8787.
