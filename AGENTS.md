@@ -106,6 +106,7 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | sift runs on a headless server reached by hostname or Tailscale, not at localhost: check every URL, listener and sign-in step from another machine | Nothing: judgment |
 | Nothing unused: no export, file or dependency nothing imports, no parameter nothing reads. An `_` prefix does not excuse one; remove it from the callers too | `knip` and `no-unused-vars` (no `_` exception), both in `pnpm check` |
 | One way to do each thing: use the mechanism David named, and remove the old path when a new one replaces it | Nothing: judgment |
+| Nothing serves an install older than this one: a removed setting is an unknown one, not a message saying where it went, and an old link, client or database layout gets no path of its own | Nothing: judgment. Unused code fails `knip`; a path still in use does not |
 | One answer about one message does not become a rule about its sender, and a weak signal (having written to someone) is not trust | Nothing: judgment |
 | sift classifies mail and helps the user sift through it, never "sorts" it. Whether it changes Gmail is whether it is on (Settings: Active, On/Off), not "acting" or "observing" | `tests/vocabulary.test.ts` ("sort" and "observe" in any tracked file); "acting" as a mode is judgment, since the verb is plain English elsewhere |
 | What sift does is shown as the action alone ("Archive"), never with its extras ("+ unsubscribe") | `Does` takes no extras and there is no helper that formats them |
