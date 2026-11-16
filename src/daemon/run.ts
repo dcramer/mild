@@ -19,19 +19,11 @@ import { continueEval, goingEvals } from '../learn/evals.ts';
 import { backfill } from './backfill.ts';
 import { checkFiltersWhenDue } from './filters.ts';
 import { recordPassStatus } from './status.ts';
-import type { Job, Jobs } from './jobs.ts';
 import { type SyncReport, syncAccount } from './sync.ts';
 import { type TriageReport, triageAccount } from './triage.ts';
 
 export interface RunOptions {
   ephemeral: Ephemeral;
-  /** Where follow-ups go: a pass that stops at its time limit sends itself again. */
-  jobs: Jobs;
-  /**
-   * Ask once whether a person waiting on a ChatGPT device code has entered it: how long until asking
-   * again, `done`, or null when there is nothing to ask.
-   */
-  checkChatGPT?: (db: Sql) => Promise<number | 'done' | null>;
   /** Opens a provider connection for an account, with the sign-in kept in `db`, its person's database. */
   connect: (db: Sql, account: Account) => { api: GmailApi; mailbox: Mailbox } | Promise<{ api: GmailApi; mailbox: Mailbox }>;
   /** The inference tier of the person whose database `db` is: null when they have no model, or it cannot be reached. */
@@ -47,8 +39,16 @@ const DAY_MS = 86_400_000;
 const PASS_INTERVAL_MS = 60_000;
 /** How long a pass holds its mailbox: longer than a pass should take, and how long one that dies keeps it. */
 const PASS_HOLD_MS = 15 * 60_000;
-/** The same for a slice of a test run. */
-const EVAL_HOLD_MS = 15 * 60_000;
+/** The same for a slice of a test run, or of pulling in older mail. */
+const WORK_HOLD_MS = 15 * 60_000;
+/**
+ * How many pieces of work one tick does at once: enough that one mailbox's backlog (a minute-long model
+ * call, a sync waiting on Gmail's quota) does not hold up everyone's new mail.
+ */
+const AT_ONCE = 4;
+/** Older mail asked for and not yet all pulled in, by mailbox; given up after a day. */
+const backfillKey = (account: string) => `backfill:${account}`;
+const BACKFILL_MS = 86_400_000;
 
 export interface PassResult {
   email: string;
@@ -91,56 +91,105 @@ export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[
   return results;
 }
 
+/** A piece of work a tick found due. */
+type Work =
+  | { kind: 'pass'; person: number; account: Account }
+  | { kind: 'upkeep'; person: number }
+  | { kind: 'backfill'; person: number; account: Account; days: number }
+  | { kind: 'eval'; person: number; run: number };
+
 /**
- * Run one job, starting nothing new after `until`: a hosted queue's function has a time limit, and the
- * local queue sets one too so this path is the same everywhere. One for a person or mailbox that is gone does nothing.
+ * What is due, for these people or everyone: found in the record and the ephemeral store, so a tick needs
+ * nothing remembered from the last, and work a tick left unfinished is simply due again.
  */
-export async function runJob(store: Store, job: Job, options: RunOptions, until: number): Promise<PassResult | null> {
-  if (!(await stillThere(store, job.person))) return null;
-  const db = await store.user(job.person);
-  switch (job.kind) {
-    case 'upkeep':
-      await upkeep(db, options);
-      return null;
-    case 'eval':
-      await carryOnEval(db, job, options, until);
-      return null;
-    case 'chatgpt-sign-in': {
-      const next = options.checkChatGPT ? await options.checkChatGPT(db) : null;
-      // Signed in: their mail has a model to go to now.
-      if (next === 'done') for (const account of await listAccounts(db)) options.jobs.send({ kind: 'pass', person: job.person, account: account.id });
-      else if (next !== null) options.jobs.send(job, next);
-      return null;
+async function dueWork(store: Store, options: RunOptions, people?: readonly number[]): Promise<Work[]> {
+  const day = Math.floor((options.now ?? Date.now)() / DAY_MS);
+  const due: Work[] = [];
+  for (const { id: person } of await listUsers(store.central)) {
+    if (people && !people.includes(person)) continue;
+    const db = await store.user(person);
+    if (await options.ephemeral.claim(`upkeep:${person}:${day}`, 2 * DAY_MS)) due.push({ kind: 'upkeep', person });
+    for (const account of await listAccounts(db)) {
+      due.push({ kind: 'pass', person, account });
+      const days = await options.ephemeral.get<number>(backfillKey(account.id));
+      if (days !== null) due.push({ kind: 'backfill', person, account, days });
     }
-    case 'backfill': {
-      const account = (await listAccounts(db)).find((a) => a.id === job.account);
-      if (!account) return null;
-      const { api } = await options.connect(db, account);
-      // Done: the next pass decides what came in, now rather than at the next tick.
-      options.jobs.send((await backfill(db, api, account.id, job.days, until, options.now)) ? { kind: 'pass', person: job.person, account: account.id } : job);
-      return null;
+    for (const run of await goingEvals(db)) due.push({ kind: 'eval', person, run });
+  }
+  return due;
+}
+
+/**
+ * Do what is due, `AT_ONCE` at a time, starting nothing after `until`: a host's function has a time limit,
+ * and `sift run` sets one too so the same path runs everywhere. Ticks may overlap; each piece of work holds
+ * a lock, so one already under way is skipped.
+ */
+export async function tick(store: Store, options: RunOptions, until: number, people?: readonly number[]): Promise<PassResult[]> {
+  const due = await dueWork(store, options, people);
+  const results: PassResult[] = [];
+  const now = options.now ?? Date.now;
+  const worker = async () => {
+    for (let work = due.shift(); work && now() < until; work = due.shift()) {
+      try {
+        const result = await runWork(store, work, options, until);
+        if (result) results.push(result);
+      } catch (error) {
+        // A person deleted meanwhile has nothing left to report.
+        if (await stillThere(store, work.person))
+          options.log(`${describeWork(work)} failed, will retry: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
-    case 'pass': {
-      const account = (await listAccounts(db)).find((a) => a.id === job.account);
-      const result = account ? await passMailbox(db, account, options, until) : null;
-      if (result?.unfinished) options.jobs.send(job);
-      return result;
-    }
+  };
+  await Promise.all(Array.from({ length: AT_ONCE }, worker));
+  return results;
+}
+
+const describeWork = (work: Work) =>
+  work.kind === 'pass'
+    ? `${work.account.email}: pass`
+    : work.kind === 'backfill'
+      ? `${work.account.email}: pulling in older mail`
+      : work.kind === 'eval'
+        ? 'A test run'
+        : 'Deleting old records';
+
+/** Ask for the last `days` days of a mailbox's inbox to be pulled in, by the ticks that follow. */
+export async function askForBackfill(ephemeral: Ephemeral, account: string, days: number): Promise<void> {
+  await ephemeral.set(backfillKey(account), days, BACKFILL_MS);
+}
+
+/** Run `work` unless another tick is doing it now. */
+async function unlessUnderWay(ephemeral: Ephemeral, lock: string, work: () => Promise<void>): Promise<void> {
+  const token = await ephemeral.claim(lock, WORK_HOLD_MS);
+  if (token === null) return;
+  try {
+    await work();
+  } finally {
+    await ephemeral.release(lock, token);
   }
 }
 
-/** One slice of a test run, by whichever job holds it; sent again while there is more. */
-async function carryOnEval(db: Sql, job: Extract<Job, { kind: 'eval' }>, options: RunOptions, until: number): Promise<void> {
-  const lock = `lock:eval:${job.person}:${job.run}`;
-  const token = await options.ephemeral.claim(lock, EVAL_HOLD_MS);
-  if (token === null) return;
-  try {
-    const tier = options.model ? await options.model(db) : null;
-    if (!tier) return;
-    const over = await continueEval({ db, judge: tier.judge, model: tier.model, ...(options.now ? { now: options.now } : {}) }, job.run, until);
-    if (!over) options.jobs.send(job);
-  } finally {
-    await options.ephemeral.release(lock, token);
+async function runWork(store: Store, work: Work, options: RunOptions, until: number): Promise<PassResult | null> {
+  if (!(await stillThere(store, work.person))) return null;
+  const db = await store.user(work.person);
+  switch (work.kind) {
+    case 'upkeep':
+      await upkeep(db, options);
+      return null;
+    case 'pass':
+      return await passMailbox(db, work.account, options, until);
+    case 'backfill':
+      await unlessUnderWay(options.ephemeral, `lock:backfill:${work.account.id}`, async () => {
+        const { api } = await options.connect(db, work.account);
+        if (await backfill(db, api, work.account.id, work.days, until, options.now)) await options.ephemeral.take(backfillKey(work.account.id));
+      });
+      return null;
+    case 'eval':
+      await unlessUnderWay(options.ephemeral, `lock:eval:${work.person}:${work.run}`, async () => {
+        const tier = options.model ? await options.model(db) : null;
+        if (tier) await continueEval({ db, judge: tier.judge, model: tier.model, ...(options.now ? { now: options.now } : {}) }, work.run, until);
+      });
+      return null;
   }
 }
 
@@ -263,27 +312,20 @@ export async function upkeep(db: Sql, options: Pick<RunOptions, 'log' | 'now'>):
   } while (pruned >= PRUNE_PER_RUN);
 }
 
-/** Send what is due: a pass for every mailbox, each person's upkeep on the first tick of a day, and test runs still going. */
-async function tick(store: Store, options: Pick<RunOptions, 'ephemeral' | 'jobs' | 'now'>): Promise<void> {
-  const day = Math.floor((options.now ?? Date.now)() / DAY_MS);
-  for (const user of await listUsers(store.central)) {
-    const db = await store.user(user.id);
-    if (await options.ephemeral.claim(`upkeep:${user.id}:${day}`, 2 * DAY_MS)) options.jobs.send({ kind: 'upkeep', person: user.id });
-    for (const account of await listAccounts(db)) options.jobs.send({ kind: 'pass', person: user.id, account: account.id });
-    // Each is carried on by its own job; this resends one a restart or a lost delivery dropped.
-    for (const run of await goingEvals(db)) options.jobs.send({ kind: 'eval', person: user.id, run });
-  }
-}
+/** How long a tick in `sift run` may start work: as a host's function would be cut off, so the same path runs. */
+export const LOCAL_TICK_MS = 5 * 60_000;
 
-/** Tick every interval until `signal` aborts: what a scheduler does on a host. `wait` is for tests. */
-export async function runLoop(
-  store: Store,
-  options: Pick<RunOptions, 'ephemeral' | 'jobs' | 'now'>,
-  control: { signal: AbortSignal; wait?: (ms: number) => Promise<void> },
-): Promise<void> {
+/**
+ * Tick every interval until `signal` aborts, without waiting for the last tick to end, then wait for those
+ * still running. What a host's scheduler does; `wait` is for tests.
+ */
+export async function runLoop(store: Store, options: RunOptions, control: { signal: AbortSignal; wait?: (ms: number) => Promise<void> }): Promise<void> {
   const wait = control.wait ?? (async (ms: number) => await sleep(ms, undefined, { signal: control.signal }).catch(() => {}));
+  const running = new Set<Promise<unknown>>();
   while (!control.signal.aborted) {
-    await tick(store, options);
+    const ticking: Promise<unknown> = tick(store, options, (options.now ?? Date.now)() + LOCAL_TICK_MS).finally(() => running.delete(ticking));
+    running.add(ticking);
     await wait(PASS_INTERVAL_MS);
   }
+  await Promise.all(running);
 }

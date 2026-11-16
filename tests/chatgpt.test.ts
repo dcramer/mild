@@ -21,7 +21,7 @@ function memorySignIns(): SignIns & { stored: Map<string, string> } {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('a ChatGPT sign-in between requests', () => {
-  it('is kept in the ephemeral store, so whichever request or job comes next carries it on', async () => {
+  it('is kept in the ephemeral store, and asked about once per interval by whichever request comes next', async () => {
     let entered = false;
     vi.stubGlobal('fetch', async (input: string) => {
       if (input.endsWith('/deviceauth/usercode')) return Response.json({ device_auth_id: 'da', user_code: 'ABCD-1234', interval: 5 });
@@ -31,18 +31,26 @@ describe('a ChatGPT sign-in between requests', () => {
     });
     const ephemeral = memoryEphemeral();
     const signIns = memorySignIns();
-    const { shown, checkIn } = await startChatGPT(ephemeral, 1, 'device-code', DEVICE);
-    expect(shown).toMatchObject({ code: 'ABCD-1234' });
-    expect(checkIn).toBe(5000);
+    const asked = () => polls;
+    let polls = 0;
+    const counting = fetch;
+    vi.stubGlobal('fetch', async (input: string) => (input.endsWith('/deviceauth/token') && polls++, counting(input)));
+    expect(await startChatGPT(ephemeral, 1, 'device-code', DEVICE)).toMatchObject({ code: 'ABCD-1234' });
     expect(await chatgptPending(ephemeral, 1)).toMatchObject({ code: 'ABCD-1234' });
     expect(await chatgptPending(ephemeral, 2)).toBeNull();
 
-    expect(await checkChatGPT(ephemeral, 1, signIns)).toBe(5000);
+    // Not before OpenAI's interval, then once per interval.
+    const start = Date.now();
+    expect(await checkChatGPT(ephemeral, 1, signIns, start)).toBeNull();
+    expect(asked()).toBe(0);
+    expect(await checkChatGPT(ephemeral, 1, signIns, start + 6000)).toBeNull();
+    expect(await checkChatGPT(ephemeral, 1, signIns, start + 7000)).toBeNull();
+    expect(asked()).toBe(1);
     entered = true;
-    expect(await checkChatGPT(ephemeral, 1, signIns)).toBe('done');
+    expect(await checkChatGPT(ephemeral, 1, signIns, start + 12_000)).toBe('done');
     expect(signIns.stored.has('openai-codex')).toBe(true);
     expect(await chatgptPending(ephemeral, 1)).toBeNull();
-    expect(await checkChatGPT(ephemeral, 1, signIns)).toBeNull();
+    expect(await checkChatGPT(ephemeral, 1, signIns, start + 20_000)).toBeNull();
   });
 
   it('shows why it failed, and an expired one as expired', async () => {
@@ -52,7 +60,7 @@ describe('a ChatGPT sign-in between requests', () => {
     const ephemeral = memoryEphemeral();
     await startChatGPT(ephemeral, 1, 'device-code', DEVICE);
     expect(await chatgptPending(ephemeral, 1, Date.now() + 16 * 60_000)).toEqual({ error: 'That code expired. Start again.' });
-    expect(await checkChatGPT(ephemeral, 1, memorySignIns())).toBeNull();
+    expect(await checkChatGPT(ephemeral, 1, memorySignIns(), Date.now() + 6000)).toBeNull();
     expect(await chatgptPending(ephemeral, 1)).toEqual({ error: 'OpenAI refused the sign-in (500). Start again.' });
     await forgetChatGPT(ephemeral, 1);
     expect(await chatgptPending(ephemeral, 1)).toBeNull();
@@ -65,8 +73,7 @@ describe('a ChatGPT sign-in between requests', () => {
     const ephemeral = memoryEphemeral();
     const signIns = memorySignIns();
     await expect(finishChatGPT(ephemeral, 1, signIns, 'http://127.0.0.1:1455/auth/callback?code=c')).rejects.toThrow('No ChatGPT sign-in is waiting');
-    const { shown, checkIn } = await startChatGPT(ephemeral, 1, 'redirect', DEVICE);
-    expect(checkIn).toBeNull();
+    const shown = await startChatGPT(ephemeral, 1, 'redirect', DEVICE);
     const state = new URL(shown.url).searchParams.get('state');
     await finishChatGPT(ephemeral, 1, signIns, `http://127.0.0.1:1455/auth/callback?code=c&state=${state}&client_id=oaiapp_x`);
     expect(signIns.stored.has('chatgpt')).toBe(true);

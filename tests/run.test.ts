@@ -1,7 +1,7 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { localJobs, type Job } from '../src/daemon/jobs.ts';
-import { type RunOptions, runEveryone, runJob, runOnce } from '../src/daemon/run.ts';
+import { type RunOptions, askForBackfill, runEveryone, runOnce, tick } from '../src/daemon/run.ts';
+import type { Store } from '../src/store/store.ts';
 import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
 import { undo } from '../src/actions/executor.ts';
 import { writeRuleFilter } from '../src/actions/rule-filters.ts';
@@ -69,7 +69,6 @@ const unsure = async () => ({ model: 'test/model', judge: async () => ({ label: 
 
 const options = (): RunOptions => ({
   ephemeral: memoryEphemeral(),
-  jobs: { send: () => {} },
   connect: () => ({ api: api(), mailbox }),
   log: (line) => logs.push(line),
   now: () => 5000,
@@ -197,47 +196,53 @@ describe('runOnce', () => {
   });
 });
 
-describe('one pass at a time per mailbox', () => {
-  it('a pass for a mailbox another pass holds does nothing, and a finished pass lets go', async () => {
+describe('a tick', () => {
+  const person = async (store: Store) => (await raw(store.central).get<{ id: number }>('SELECT id FROM users'))!.id;
+
+  it('skips a mailbox another pass holds, and a finished pass lets go', async () => {
     const { store } = await onePerson(ACCOUNT);
-    const person = (await raw(store.central).get<{ id: number }>('SELECT id FROM users'))!.id;
-    const pass: Job = { kind: 'pass', person, account: ACCOUNT };
     let connected = 0;
     const counting: RunOptions = { ...options(), connect: () => (connected++, { api: api(), mailbox }) };
     const token = await counting.ephemeral.claim(`lock:pass:${ACCOUNT}`, 10_000);
-    expect(await runJob(store, pass, counting, Infinity)).toBeNull();
+    expect(await tick(store, counting, Infinity)).toEqual([]);
     expect(connected).toBe(0);
     await counting.ephemeral.release(`lock:pass:${ACCOUNT}`, token!);
-    expect(await runJob(store, pass, counting, Infinity)).toMatchObject({ email: ACCOUNT });
-    expect(await runJob(store, pass, counting, Infinity)).toMatchObject({ email: ACCOUNT });
+    expect(await tick(store, counting, Infinity)).toMatchObject([{ email: ACCOUNT }]);
+    expect(await tick(store, counting, Infinity, [await person(store)])).toMatchObject([{ email: ACCOUNT }]);
+    expect(await tick(store, counting, Infinity, [999])).toEqual([]);
     expect(connected).toBe(2);
   });
-});
 
-describe('a pass with a time limit', () => {
-  it('stops starting work at its limit, keeps what it did, and sends itself again', async () => {
+  it('starts nothing after its limit, keeps what it did, and leaves the rest due for the next', async () => {
     const { store, db: own } = await onePerson(ACCOUNT);
-    const person = (await raw(store.central).get<{ id: number }>('SELECT id FROM users'))!.id;
-    const pass: Job = { kind: 'pass', person, account: ACCOUNT };
-    const sent: Job[] = [];
     inbox.push(message('third', 'Third <third@example.net>'));
     mailbox.labels.set('third', ['INBOX', 'UNREAD']);
     let clock = 0;
     // Each message the model is asked about takes a second.
     const slow = async () => ({ model: 'test/model', judge: async () => ((clock += 1000), { label: 'unsure', reason: 'r', confidence: 0.2 }) });
-    const limited: RunOptions = { ...options(), jobs: { send: (job) => void sent.push(job) }, now: () => clock, model: slow };
-    const first = await runJob(store, pass, limited, 1500);
-    expect(first).toMatchObject({ unfinished: true });
-    expect(sent).toEqual([pass]);
-    // Two were asked about by 2000; the third waits for the follow-up.
+    const limited: RunOptions = { ...options(), now: () => clock, model: slow };
+    expect(await tick(store, limited, 1500)).toMatchObject([{ unfinished: true }]);
+    // Two were asked about by 2000; the third is still due.
     expect(await raw(own).all('SELECT message_id FROM decisions')).toHaveLength(2);
     expect(logs.at(-1)).toContain('out of time, carrying on');
-
-    sent.length = 0;
-    const second = await runJob(store, pass, limited, Infinity);
-    expect(second?.unfinished).toBeUndefined();
-    expect(sent).toEqual([]);
+    const [next] = await tick(store, limited, Infinity);
+    expect(next?.unfinished).toBeUndefined();
     expect(await raw(own).all('SELECT message_id FROM decisions')).toHaveLength(3);
+  });
+
+  it('pulls in older mail that was asked for, until it is all in', async () => {
+    const { store } = await onePerson(ACCOUNT);
+    const ephemeral = memoryEphemeral();
+    await askForBackfill(ephemeral, ACCOUNT, 7);
+    const searched: string[] = [];
+    const reading: RunOptions = {
+      ...options(),
+      ephemeral,
+      connect: () => ({ api: { ...api(), searchInbox: async (query) => (searched.push(query), { ids: [] }) }, mailbox }),
+    };
+    await tick(store, reading, Infinity);
+    await tick(store, reading, Infinity);
+    expect(searched).toEqual(['newer_than:7d']);
   });
 });
 
@@ -255,51 +260,6 @@ describe('pass status', () => {
       },
     });
     expect(await passStatus(ephemeral, [ACCOUNT])).toEqual({ lastPassAt: 6000, problems: [`${ACCOUNT}: invalid_grant`], expired: [ACCOUNT] });
-  });
-});
-
-describe('local jobs', () => {
-  const pass = (account: string): Job => ({ kind: 'pass', person: 1, account });
-
-  it('queues a job once while it waits, and never runs two alike at once', async () => {
-    const log: string[] = [];
-    const gates = new Map<string, () => void>();
-    const jobs = localJobs(async (job) => {
-      const name = job.kind === 'pass' ? job.account : 'upkeep';
-      log.push(`start ${name}`);
-      await new Promise<void>((resolve) => gates.set(name, resolve));
-      log.push(`end ${name}`);
-    });
-    jobs.send(pass('a'));
-    // Running: one more may wait behind it, and no third.
-    jobs.send(pass('a'));
-    jobs.send(pass('a'));
-    jobs.send(pass('b'));
-    await Promise.resolve();
-    expect(log).toEqual(['start a', 'start b']);
-    gates.get('a')!();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(log).toEqual(['start a', 'start b', 'end a', 'start a']);
-    gates.get('a')!();
-    gates.get('b')!();
-    await jobs.stop();
-    expect(log.filter((line) => line === 'start a')).toHaveLength(2);
-  });
-
-  it('stops: drops what waits and waits for what runs', async () => {
-    const ran: string[] = [];
-    let open!: () => void;
-    const jobs = localJobs(async (job) => {
-      if (job.kind === 'pass' && job.account === 'slow') await new Promise<void>((resolve) => (open = resolve));
-      ran.push(job.kind === 'pass' ? job.account : 'upkeep');
-    });
-    for (const account of ['slow', 'b', 'c', 'd']) jobs.send(pass(account));
-    jobs.send(pass('e'));
-    const stopped = jobs.stop();
-    open();
-    await stopped;
-    jobs.send(pass('f'));
-    expect(ran.toSorted()).toEqual(['b', 'c', 'd', 'slow']);
   });
 });
 

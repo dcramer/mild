@@ -1,8 +1,7 @@
 import { parseArgs } from 'node:util';
 import { unsubscribe } from '../../actions/unsubscribe.ts';
 import { loadConfig } from '../../config.ts';
-import { localJobs } from '../../daemon/jobs.ts';
-import { type RunOptions, runEveryone, runJob, runLoop } from '../../daemon/run.ts';
+import { LOCAL_TICK_MS, type RunOptions, runEveryone, runLoop, tick } from '../../daemon/run.ts';
 import { hasClientSecrets } from '../../gmail/auth.ts';
 import { type Account, connectedAddresses, listAccounts, listUsers, personOf } from '../../store/accounts.ts';
 import { preferences } from '../../store/preferences.ts';
@@ -10,8 +9,7 @@ import { openStore } from '../../store/store.ts';
 import { openEphemeral } from '../../ephemeral/open.ts';
 import type { Sql } from '../../store/sql.ts';
 import { paint, ui } from '../ui.ts';
-import { buildControls, gmailFor, modelSignIns, openModelTier } from '../controls.ts';
-import { checkChatGPT } from '../chatgpt.ts';
+import { buildControls, gmailFor, openModelTier } from '../controls.ts';
 import { checkSecrets } from '../secrets-check.ts';
 import { serveDashboard, portOption } from '../serve.ts';
 
@@ -37,20 +35,6 @@ export async function run(args: string[]): Promise<void> {
 
     // Why each person's model could not be reached, so it is said once and not on every pass.
     const unreachable = new Map<number, string>();
-    // Whether each person had sift on at their last pass, to say when they switch.
-    const active = new Map<number, boolean>();
-    const announce = async (person: number) => {
-      const accounts = await listAccounts(await store.user(person));
-      // Deleted since.
-      if (accounts.length === 0) {
-        unreachable.delete(person);
-        active.delete(person);
-        return;
-      }
-      const on = (await preferences(await store.user(person))).active;
-      if (active.has(person) && active.get(person) !== on) log(`${accounts.map((a) => a.email).join(', ')}: now ${on ? 'on' : 'off'}`);
-      active.set(person, on);
-    };
     // Each person's own model, from their choice and sign-in, read on every pass.
     const model = async (db: Sql) => {
       const person = await personOf(db);
@@ -65,31 +49,21 @@ export async function run(args: string[]): Promise<void> {
         return null;
       }
     };
-    const jobs = localJobs(async (job, until) => {
-      try {
-        await runJob(store, job, options, until);
-        if (job.kind === 'pass') await announce(job.person);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        log(job.kind === 'pass' ? `${job.account}: pass failed, will retry: ${message}` : `Could not delete old records, will retry tomorrow: ${message}`);
-      }
-    });
     const options: RunOptions = {
       ephemeral,
-      jobs,
       model,
       unsubscribe: (db: Sql, accountId: string, messageId: string) => unsubscribe({ db }, accountId, messageId),
       connect: async (db: Sql, account: Account) => {
         const { api, mailbox } = await gmailFor(config, ephemeral, db, account.email);
         return { api, mailbox };
       },
-      checkChatGPT: async (db: Sql) => await checkChatGPT(ephemeral, await personOf(db), await modelSignIns(config, ephemeral, db)),
       log,
     };
 
-    for (const user of await listUsers(store.central)) await announce(user.id);
-    const people = active.size;
-    const on = [...active.values()].filter(Boolean).length;
+    const users = await listUsers(store.central);
+    const people = users.length;
+    let on = 0;
+    for (const user of users) if ((await preferences(await store.user(user.id))).active) on++;
     ui.heading(on === 0 ? 'off' : on === people ? 'on' : `on for ${on} of ${people}`);
     secrets();
     if (!hasClientSecrets(config)) ui.warn(`No Google client yet. Run ${paint.cmd('sift init')}.`);
@@ -104,11 +78,19 @@ export async function run(args: string[]): Promise<void> {
     }
 
     // One process keeps sift online: the same one that classifies mail serves the dashboard.
+    const kicked = new Set<Promise<unknown>>();
+    // What the dashboard starts (check now, a test run, older mail) runs now rather than at the next tick.
+    const kick = (person?: number) => {
+      const ticking: Promise<unknown> = tick(store, options, Date.now() + LOCAL_TICK_MS, person === undefined ? undefined : [person])
+        .catch((error: unknown) => log(`Could not start: ${error instanceof Error ? error.message : String(error)}`))
+        .finally(() => kicked.delete(ticking));
+      kicked.add(ticking);
+    };
     const port = portOption(values.port);
     const stopDashboard = values['no-dashboard']
       ? () => {}
       : await serveDashboard(config, store, {
-          controls: await buildControls(config, store, { ephemeral, jobs, running: true }),
+          controls: await buildControls(config, store, { ephemeral, kick, running: true }),
           ...(values.dev ? { dev: true } : {}),
           ...(port === undefined ? {} : { port }),
           ...(values.host ? { host: values.host } : {}),
@@ -120,8 +102,8 @@ export async function run(args: string[]): Promise<void> {
     try {
       await runLoop(store, options, { signal: stop.signal });
     } finally {
-      await jobs.stop();
       stopDashboard();
+      await Promise.all(kicked);
     }
   } finally {
     await ephemeral.close();

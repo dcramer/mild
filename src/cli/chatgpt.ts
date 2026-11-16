@@ -9,8 +9,11 @@ import {
 } from '../model/models.ts';
 import type { SignIns } from '../model/credentials.ts';
 
-/** A ChatGPT sign-in waiting on a person, or how their last one failed. Kept briefly, where every request and job can read it. */
-type Waiting = { device: DeviceCode } | { redirect: PendingRedirect } | { error: string };
+/**
+ * A ChatGPT sign-in waiting on a person, or how their last one failed. Kept briefly, where every request
+ * can read it. A device code is next asked about after `checkAfter`.
+ */
+type Waiting = { device: DeviceCode; checkAfter: number } | { redirect: PendingRedirect } | { error: string };
 
 const key = (person: number) => `signin:chatgpt:${person}`;
 /** A failure is shown until they start again, or this long. */
@@ -26,16 +29,16 @@ export async function chatgptPending(ephemeral: Ephemeral, person: number, now =
   return 'device' in waiting ? { code: waiting.device.code, url, expiresAt } : { url, expiresAt };
 }
 
-/** Start a sign-in the install's way. A device code is then checked by `checkChatGPT`, starting after the interval it returns. */
+/** Start a sign-in the install's way. A device code is then asked about by `checkChatGPT` as the page reloads. */
 export async function startChatGPT(ephemeral: Ephemeral, person: number, how: 'device-code' | 'redirect', deviceId: string) {
   if (how === 'redirect') {
     const redirect = await startChatGPTRedirect(deviceId);
     await ephemeral.set(key(person), { redirect } satisfies Waiting, redirect.expiresAt - Date.now());
-    return { shown: { url: redirect.url, expiresAt: redirect.expiresAt }, checkIn: null };
+    return { url: redirect.url, expiresAt: redirect.expiresAt };
   }
   const device = await startChatGPTDeviceCode();
-  await ephemeral.set(key(person), { device } satisfies Waiting, device.expiresAt - Date.now());
-  return { shown: { code: device.code, url: device.url, expiresAt: device.expiresAt }, checkIn: device.intervalMs };
+  await ephemeral.set(key(person), { device, checkAfter: Date.now() + device.intervalMs } satisfies Waiting, device.expiresAt - Date.now());
+  return { code: device.code, url: device.url, expiresAt: device.expiresAt };
 }
 
 export async function finishChatGPT(ephemeral: Ephemeral, person: number, signIns: SignIns, address: string): Promise<void> {
@@ -46,13 +49,16 @@ export async function finishChatGPT(ephemeral: Ephemeral, person: number, signIn
 }
 
 /**
- * Ask OpenAI once whether the person has entered their device code. Returns how long to wait before asking
- * again, `done` when they are signed in, or null when there is nothing to ask about (or it failed, which
- * the page then shows).
+ * Ask OpenAI whether the person has entered their device code, at most once per the interval OpenAI asked
+ * for, and by one request at a time: the page reloads every few seconds while they do. `done` once they
+ * are signed in; a failure is kept for the page to show.
  */
-export async function checkChatGPT(ephemeral: Ephemeral, person: number, signIns: SignIns): Promise<number | 'done' | null> {
+export async function checkChatGPT(ephemeral: Ephemeral, person: number, signIns: SignIns, now = Date.now()): Promise<'done' | null> {
   const waiting = await ephemeral.get<Waiting>(key(person));
-  if (!waiting || !('device' in waiting)) return null;
+  if (!waiting || !('device' in waiting) || waiting.checkAfter > now || waiting.device.expiresAt < now) return null;
+  const lock = `lock:chatgpt:${person}`;
+  const token = await ephemeral.claim(lock, 30_000);
+  if (token === null) return null;
   try {
     const answer = await pollChatGPTDeviceCode(signIns, waiting.device);
     if (answer === 'done') {
@@ -61,12 +67,13 @@ export async function checkChatGPT(ephemeral: Ephemeral, person: number, signIns
     }
     // OpenAI's way of asking for five more seconds between questions.
     if (answer === 'slow down') waiting.device.intervalMs += 5000;
-    await ephemeral.set(key(person), waiting, waiting.device.expiresAt - Date.now());
-    return waiting.device.intervalMs;
+    await ephemeral.set(key(person), { ...waiting, checkAfter: now + waiting.device.intervalMs }, waiting.device.expiresAt - now);
   } catch (error) {
     await ephemeral.set(key(person), { error: error instanceof Error ? error.message : String(error) } satisfies Waiting, ERROR_MS);
-    return null;
+  } finally {
+    await ephemeral.release(lock, token);
   }
+  return null;
 }
 
 export async function forgetChatGPT(ephemeral: Ephemeral, person: number): Promise<void> {

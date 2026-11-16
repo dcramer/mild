@@ -6,13 +6,13 @@ import type { Config } from '../config.ts';
 import { type Ephemeral, holding } from '../ephemeral/ephemeral.ts';
 import type { Controls } from '../dashboard/controls.ts';
 import { forgetPassStatus, passStatus } from '../daemon/status.ts';
-import type { Jobs } from '../daemon/jobs.ts';
+import { askForBackfill } from '../daemon/run.ts';
 import { createGmailApi, getMessageHtml } from '../gmail/api.ts';
 import { startEval } from '../learn/evals.ts';
 import { clientFor, loadClientSecrets, revokeGrant } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { pacer } from '../gmail/quota.ts';
-import { chatgptPending, finishChatGPT, forgetChatGPT, startChatGPT } from './chatgpt.ts';
+import { chatgptPending, checkChatGPT, finishChatGPT, forgetChatGPT, startChatGPT } from './chatgpt.ts';
 import type { SignIns } from '../model/credentials.ts';
 import { createJudge } from '../model/judge.ts';
 import { modelChoices, offerModel, openModels, recommendModel, resolveModel, saveApiKey } from '../model/models.ts';
@@ -39,7 +39,7 @@ export async function gmailFor(config: Config, ephemeral: Ephemeral, db: Sql, em
 }
 
 /** One person's model sign-ins, kept in their database and changed by one process at a time. */
-export async function modelSignIns(config: Config, ephemeral: Ephemeral, db: Sql): Promise<SignIns> {
+async function modelSignIns(config: Config, ephemeral: Ephemeral, db: Sql): Promise<SignIns> {
   const person = await personOf(db);
   return { ...(await credentials(db, 'model', config.keys)), exclusive: (work) => holding(ephemeral, `lock:signin:${person}`, work) };
 }
@@ -70,14 +70,14 @@ function deviceId(config: Config): string {
 }
 
 /** What the dashboard may ask this process to do. See `Controls`. */
-export async function buildControls(config: Config, store: Store, live: { ephemeral: Ephemeral; jobs?: Jobs; running: boolean }): Promise<Controls> {
+export async function buildControls(
+  config: Config,
+  store: Store,
+  live: { ephemeral: Ephemeral; kick?: (person?: number) => void; running: boolean },
+): Promise<Controls> {
   const choices = modelChoices(config.settings.chatgptSignIn ?? 'device-code');
   /** Pass the person's mailboxes now, not at the next tick. Nothing does while only the dashboard runs. */
-  const passNow = async (db: Sql) => {
-    if (!live.jobs) return;
-    const person = await personOf(db);
-    for (const account of await listAccounts(db)) live.jobs.send({ kind: 'pass', person, account: account.id });
-  };
+  const passNow = async (db: Sql) => live.kick?.(await personOf(db));
   return {
     models: async (db) => {
       const available = (await (await modelsFor(config, live.ephemeral, db)).getAvailable())
@@ -93,17 +93,17 @@ export async function buildControls(config: Config, store: Store, live: { epheme
       }
       return { models: available.map((m) => `${m.provider}/${m.id}`), recommended };
     },
-    modelSignIns: async (db) => ({
-      choices: choices.map((c) => ({ ...c })),
-      signedIn: await (await modelSignIns(config, live.ephemeral, db)).keys(),
-      pending: await chatgptPending(live.ephemeral, await personOf(db)),
-    }),
+    modelSignIns: async (db) => {
+      const person = await personOf(db);
+      const signIns = await modelSignIns(config, live.ephemeral, db);
+      // Signed in just now: their mail has a model to go to.
+      if ((await checkChatGPT(live.ephemeral, person, signIns)) === 'done') await passNow(db);
+      return { choices: choices.map((c) => ({ ...c })), signedIn: await signIns.keys(), pending: await chatgptPending(live.ephemeral, person) };
+    },
     signInChatGPT: async (db) => {
       const person = await personOf(db);
       const how = choices[0]!.how === 'redirect' ? 'redirect' : 'device-code';
-      const { shown, checkIn } = await startChatGPT(live.ephemeral, person, how, deviceId(config));
-      if (checkIn !== null) live.jobs?.send({ kind: 'chatgpt-sign-in', person }, checkIn);
-      return shown;
+      return await startChatGPT(live.ephemeral, person, how, deviceId(config));
     },
     finishChatGPT: async (db, address) => {
       await finishChatGPT(live.ephemeral, await personOf(db), await modelSignIns(config, live.ephemeral, db), address);
@@ -127,9 +127,10 @@ export async function buildControls(config: Config, store: Store, live: { epheme
       throw new Error(outcome.reason);
     },
     backfill: async (days) => {
-      if (!live.jobs) throw new Error('Only the dashboard is running here, so nothing can pull in mail.');
+      if (!live.kick) throw new Error('Only the dashboard is running here, so nothing can pull in mail.');
       for (const user of await listUsers(store.central))
-        for (const account of await listAccounts(await store.user(user.id))) live.jobs.send({ kind: 'backfill', person: user.id, account: account.id, days });
+        for (const account of await listAccounts(await store.user(user.id))) await askForBackfill(live.ephemeral, account.id, days);
+      live.kick();
     },
     putBack: async (db, accountId, messageId) => {
       const last = await lastStandingChange(db, accountId, messageId);
@@ -142,7 +143,7 @@ export async function buildControls(config: Config, store: Store, live: { epheme
       const tier = await openModelTier(config, live.ephemeral, db);
       if (!tier) throw new Error('Choose a model first.');
       const run = await startEval({ db, model: tier.spec }, request);
-      live.jobs?.send({ kind: 'eval', person: await personOf(db), run });
+      live.kick?.(await personOf(db));
       return run;
     },
     ruleFilter: async (db, ruleId, on) => {

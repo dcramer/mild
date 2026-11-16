@@ -1,9 +1,8 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MAX_BACKFILL, backfill } from '../src/daemon/backfill.ts';
-import type { Job } from '../src/daemon/jobs.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { type RunOptions, runJob, runLoop } from '../src/daemon/run.ts';
+import { type RunOptions, runLoop, tick } from '../src/daemon/run.ts';
 import { signInRefusal } from '../src/cli/sign-in.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
@@ -695,16 +694,22 @@ describe('older mail', () => {
 });
 
 describe('run loop', () => {
-  it('each tick sends a pass for every mailbox, and upkeep on the first tick of a day', async () => {
+  it('ticks every interval without waiting for the last, and returns once those still running end', async () => {
     const stop = new AbortController();
-    const sent: Job[] = [];
+    let passes = 0;
     let ticks = 0;
-    await runLoop(
-      store,
-      { ephemeral: memoryEphemeral(), jobs: { send: (job) => void sent.push(job) }, now: () => 5000 },
-      { signal: stop.signal, wait: async () => void (++ticks === 3 && stop.abort()) },
-    );
-    expect(sent.map((job) => (job.kind === 'pass' ? job.account : job.kind))).toEqual(['upkeep', ACCOUNT, ACCOUNT, ACCOUNT]);
+    const options: RunOptions = {
+      ephemeral: memoryEphemeral(),
+      connect: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        passes++;
+        throw new Error('offline');
+      },
+      log: () => {},
+    };
+    await runLoop(store, options, { signal: stop.signal, wait: async () => void (++ticks === 3 && stop.abort()) });
+    // The three overlapped: the first held the mailbox, and the others skipped it.
+    expect(passes).toBe(1);
   });
 
   it('deletes examples a year after their answer, when it starts and once a day after', async () => {
@@ -716,25 +721,22 @@ describe('run loop', () => {
     const held = async () => (await raw(db).all<{ message_id: string }>('SELECT message_id FROM examples ORDER BY marked_at')).map((r) => r.message_id);
     const logs: string[] = [];
 
-    /** Run the loop once at each of the given times. */
+    /** Tick once at each of the given times. */
     const ticksAt = async (times: number[]) => {
-      const stop = new AbortController();
-      const running: Promise<unknown>[] = [];
-      let tick = 0;
-      const options: RunOptions = {
-        ephemeral: memoryEphemeral(),
-        jobs: { send: (job) => void running.push(runJob(store, job, options, Infinity)) },
-        connect: () => {
-          throw new Error('offline');
-        },
-        log: (line) => logs.push(line),
-        now: () => times[tick]!,
-      };
-      const wait = async () => {
-        await Promise.all(running.splice(0));
-        if (++tick === times.length) stop.abort();
-      };
-      await runLoop(store, options, { signal: stop.signal, wait });
+      const ephemeral = memoryEphemeral();
+      for (const at of times)
+        await tick(
+          store,
+          {
+            ephemeral,
+            connect: () => {
+              throw new Error('offline');
+            },
+            log: (line) => logs.push(line),
+            now: () => at,
+          },
+          Infinity,
+        );
     };
 
     await ticksAt([12 * DAY]);
