@@ -74,7 +74,7 @@ export function SplitButton({
                         key={choice.id}
                         onClick={choice.onSelect}
                         className={cn(
-                          'flex cursor-default items-center gap-2.5 px-2 py-1.5 outline-none select-none data-highlighted:bg-(--fill-strong) pointer-coarse:min-h-11',
+                          'flex cursor-pointer data-disabled:cursor-default items-center gap-2.5 px-2 py-1.5 outline-none select-none data-highlighted:bg-(--fill-strong) pointer-coarse:min-h-11',
                           choice.quiet && 'text-muted-foreground data-highlighted:text-foreground',
                         )}
                       >

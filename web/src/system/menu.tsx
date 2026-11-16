@@ -56,7 +56,7 @@ export function Menu({
                 key={item.label}
                 disabled={item.disabled ?? false}
                 onClick={item.onSelect}
-                className="flex cursor-default flex-col justify-center px-2 py-1.5 outline-none select-none data-disabled:text-muted-foreground data-highlighted:bg-(--fill-strong) pointer-coarse:min-h-11"
+                className="flex cursor-pointer data-disabled:cursor-default flex-col justify-center px-2 py-1.5 outline-none select-none data-disabled:text-muted-foreground data-highlighted:bg-(--fill-strong) pointer-coarse:min-h-11"
               >
                 <span className="font-medium">{item.label}</span>
                 {item.note ? <span className="text-muted-foreground">{item.note}</span> : null}

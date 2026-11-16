@@ -82,6 +82,10 @@ Every part has an answer for a phone, and a new part needs one before it is adde
 
 The page itself never scrolls sideways.
 
+## Whatever can be pressed shows the pointer
+
+A button, a link, a row that opens, a choice in a menu or a select, a checkbox with its label: each takes `cursor-pointer`, and loses it only while disabled. Nothing that cannot be pressed takes it.
+
 ## Keys
 
 A control asks for its key and draws the keycap itself (`shortcut` on a `Button`, `keys` on a `ChoiceGroup`, `useShortcut` anywhere else), so a key that is shown always works and a key that works is always shown. Never bind a key with a listener of your own.

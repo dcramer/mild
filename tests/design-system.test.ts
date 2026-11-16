@@ -145,6 +145,13 @@ describe('yellow means look here', () => {
   });
 });
 
+test('whatever can be pressed shows the pointer', () => {
+  // A choice in a menu or a select is pressed like a button. Only a disabled one keeps the arrow, through a variant.
+  const bare = [...SYSTEM].flatMap((path) => words(path)).filter(({ word }) => word === 'cursor-default');
+  const failures = bare.map(({ file, line }) => `web/src/${file}:${line} cursor-default: an interactive element takes cursor-pointer (docs/DESIGN.md).`);
+  expect(failures, failures.join('\n')).toEqual([]);
+});
+
 test('every part is on the specimen page', () => {
   const index = readFileSync(join(WEB, 'system/index.ts'), 'utf8');
   const parts = [...index.matchAll(/export \{([^}]*)\}/g)]

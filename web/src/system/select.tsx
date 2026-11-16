@@ -35,7 +35,7 @@ export function Select<T extends string>({
                 <Base.Item
                   key={item.value}
                   value={item.value}
-                  className="relative flex cursor-default items-center py-1.5 pr-8 pl-2 whitespace-nowrap outline-none select-none data-highlighted:bg-(--fill-strong)"
+                  className="relative flex cursor-pointer data-disabled:cursor-default items-center py-1.5 pr-8 pl-2 whitespace-nowrap outline-none select-none data-highlighted:bg-(--fill-strong)"
                 >
                   <Base.ItemText>{item.label}</Base.ItemText>
                   <Base.ItemIndicator className="absolute right-2 flex items-center">
