@@ -18,7 +18,7 @@ interface Own {
  * "Rule added". A new one replaces the last, so Undo (and Z, Gmail's key for it) always takes back the
  * latest. It floats as a menu does, framed with the one shadow, and Undo is in the highlighter: it is the
  * one thing on it waiting on the reader. It sits clear of the bottom edge so a panel's footer stays
- * pressable. A failure has a red frame and title, and stays until dismissed. Wrap the app in `Toaster`
+ * pressable. A failure is set on red, with dark words as on the highlighter, and stays until dismissed. Wrap the app in `Toaster`
  * once; call `useToast()` where something is done.
  */
 export function Toaster({ children }: { children: ReactNode }) {
@@ -43,6 +43,8 @@ function Receipts() {
 
 const PRESS = 'press inline-flex h-(--control) shrink-0 cursor-pointer items-center gap-1.5 px-2.5 text-sm font-semibold whitespace-nowrap hover:bg-(--fill)';
 const QUIET = 'text-foreground/75 hover:text-foreground';
+/** On red, as on the highlighter, words are dark, and so is the focus ring: the yellow one would not show. */
+const ON_RED = 'text-background/75 hover:bg-background/10 hover:text-background focus-visible:outline-background!';
 
 function Receipt({ toast, front }: { toast: Base.Root.ToastObject<Own>; front: boolean }) {
   const { undo, action } = toast.data ?? {};
@@ -57,13 +59,13 @@ function Receipt({ toast, front }: { toast: Base.Root.ToastObject<Own>; front: b
         // A press brings its own padding to the right edge; words alone need the same room as on the left.
         undo || action || failed ? 'pr-1' : 'pr-3.5',
         'transition-[opacity,translate] duration-150 ease-out data-ending-style:opacity-0 data-limited:hidden data-starting-style:translate-y-2 data-starting-style:opacity-0 motion-reduce:transition-none',
-        failed && 'border-destructive',
+        failed && 'border-destructive bg-destructive text-background',
       )}
     >
       {/* Title and description run on as one sentence, wrapping rather than cut short; on a phone the presses take the next row only when they do not fit. */}
       <div className="min-w-[min(13rem,100%)] grow py-1 md:min-w-0">
-        <Base.Title render={<span />} className={cn(failed && 'font-semibold text-destructive')} />
-        <Base.Description render={<span />} className="ml-2 text-muted-foreground" />
+        <Base.Title render={<span />} className={cn(failed && 'font-semibold')} />
+        <Base.Description render={<span />} className={cn('ml-2', failed ? 'text-background/75' : 'text-muted-foreground')} />
       </div>
       {action ? (
         <button type="button" className={cn(PRESS, QUIET)} onClick={action.onPress}>
@@ -77,7 +79,7 @@ function Receipt({ toast, front }: { toast: Base.Root.ToastObject<Own>; front: b
         </button>
       ) : null}
       {failed ? (
-        <Base.Close aria-label="Dismiss" className={cn(PRESS, QUIET, 'w-(--control) justify-center px-0')}>
+        <Base.Close aria-label="Dismiss" className={cn(PRESS, ON_RED, 'w-(--control) justify-center px-0')}>
           <XIcon className="size-4" />
         </Base.Close>
       ) : null}
