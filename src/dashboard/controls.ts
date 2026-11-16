@@ -53,6 +53,11 @@ export interface Controls {
    * open. Nothing keeps or logs it. Null when it has no HTML part or is no longer in Gmail.
    */
   messageHtml(db: Sql, accountId: string, messageId: string): Promise<string | null>;
+  /**
+   * Read one of this person's recorded messages whole from Gmail and record what parts it has, as a pass
+   * that reads it would. Nothing of its content is kept. Does nothing when Gmail no longer has it.
+   */
+  readMessage(db: Sql, accountId: string, messageId: string): Promise<void>;
   /** Pass this person's mailboxes now instead of at the next tick. */
   checkNow(db: Sql): Promise<void>;
   /** How the last passes over these mailboxes went. */

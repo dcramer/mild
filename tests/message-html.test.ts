@@ -96,6 +96,13 @@ describe('the frame route', () => {
   let asked: string[];
   const controls = {
     messageHtml: async (_db: Sql, account: string, id: string) => (asked.push(`${account} ${id}`), id === 'plain' ? null : HTML),
+    // What reading it whole records: HTML facts only for a message with an HTML part.
+    readMessage: async (target: Sql, account: string, id: string) => {
+      asked.push(`read ${id}`);
+      const base = facts({ accountId: account, messageId: id });
+      const html = { trackingPixel: false, linkHosts: 1, trackedLinks: false, linksOffDomain: false };
+      await recordFacts(target, account, id, deriveFacts(base, { hasAttachments: false, ...(id === 'plain' ? {} : html) }));
+    },
   } as unknown as Controls;
 
   beforeEach(async () => {
@@ -155,16 +162,24 @@ describe('the frame route', () => {
     expect(after.join('\n')).not.toContain(MARKER);
   });
 
-  it('tells the page whether a message has HTML, once sift has read it', async () => {
+  it('reads a message whole the first time it is opened, to tell the page whether it has HTML', async () => {
     const { call } = await startDashboard(people(store), { controls });
     const hasHtml = async (id: string) => (await call('GET', `/api/message?account=${encodeURIComponent(ACCOUNT)}&id=${id}`)).body['hasHtml'];
-    expect(await hasHtml('m1')).toBeNull();
-    const base = facts({ accountId: ACCOUNT, messageId: 'm1' });
-    await recordFacts(db, ACCOUNT, 'm1', { ...deriveFacts(base, { hasAttachments: false }) });
-    expect(await hasHtml('m1')).toBe(false);
-    await recordFacts(db, ACCOUNT, 'm1', {
-      ...deriveFacts(base, { hasAttachments: false, trackingPixel: false, linkHosts: 1, trackedLinks: false, linksOffDomain: false }),
-    });
     expect(await hasHtml('m1')).toBe(true);
+    expect(await hasHtml('plain')).toBe(false);
+    expect(await hasHtml('m1')).toBe(true);
+    expect(asked).toEqual(['read m1', 'read plain']);
+  });
+
+  it('shows a message as text when Gmail cannot be asked, and asks again the next time', async () => {
+    const unreachable = {
+      ...controls,
+      readMessage: async (_db: Sql, _account: string, id: string) => (asked.push(`read ${id}`), Promise.reject(new Error('offline'))),
+    };
+    const { call } = await startDashboard(people(store), { controls: unreachable });
+    const open = () => call('GET', `/api/message?account=${encodeURIComponent(ACCOUNT)}&id=m1`);
+    expect((await open()).body).toMatchObject({ hasHtml: null });
+    expect((await open()).status).toBe(200);
+    expect(asked).toEqual(['read m1', 'read m1']);
   });
 });

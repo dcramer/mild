@@ -57,7 +57,7 @@ const sift = {
     createDashboard(people(store), {
       allowedHosts: host.allowedHosts,
       signInAddresses: host.signInAddresses,
-      controls: { ...built, messageHtml: async (_db, _account, id) => HTML[id] ?? null },
+      controls: { ...built, messageHtml: async (_db, _account, id) => HTML[id] ?? null, readMessage: async () => {} },
       signIn: buildSignIn(config, store),
       sessionSecret: host.sessionSecret,
       ephemeral,

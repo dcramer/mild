@@ -29,8 +29,8 @@ function storedView(): View {
  */
 export function MessageBody({ detail }: { detail: MessageDetail }) {
   const [view, setView] = useState(storedView);
-  // Null: sift has not read the whole message, so it may have HTML. The frame says so if it has none.
-  const html = detail.hasHtml !== false && view === 'html';
+  // Null: Gmail could not be asked what parts it has; its text is all there is to show.
+  const html = detail.hasHtml === true && view === 'html';
   // Mail to the account alone says nothing by saying who it went to.
   const addressed = detail.cc.length > 0 || detail.to.some((p) => p.address !== detail.accountId);
   const choose = (next: View | null) => {
@@ -51,7 +51,7 @@ export function MessageBody({ detail }: { detail: MessageDetail }) {
             {detail.cc.length > 0 ? `${detail.to.length > 0 ? ', cc ' : 'Cc '}${people(detail.cc)}` : ''}
           </p>
         ) : null}
-        {detail.hasHtml === false ? null : (
+        {detail.hasHtml !== true ? null : (
           <div className="ml-auto">
             <ChoiceGroup label="Read it as" value={html ? 'html' : 'text'} options={VIEWS} onChange={choose} />
           </div>

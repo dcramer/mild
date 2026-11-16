@@ -51,6 +51,7 @@ const controls: Controls = {
   },
   revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), true),
   messageHtml: async () => null,
+  readMessage: async () => {},
   checkNow: async () => void calls.push('check'),
   activity: async () => ({ running: true, lastPassAt: 5, problems: [], expired: [ACCOUNT] }),
 };

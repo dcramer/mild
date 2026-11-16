@@ -5,6 +5,8 @@ import { type Ephemeral, holding } from '../ephemeral/ephemeral.ts';
 import type { Controls } from '../dashboard/controls.ts';
 import { forgetPassStatus, passStatus } from '../work/status.ts';
 import { askForBackfill } from '../work/run.ts';
+import { readWhole } from '../work/evidence.ts';
+import { getFacts } from '../store/messages.ts';
 import { createGmailApi, getMessageHtml } from '../gmail/api.ts';
 import { startEval } from '../learn/evals.ts';
 import { clientFor, loadClientSecrets, revokeGrant } from '../gmail/auth.ts';
@@ -155,6 +157,12 @@ export async function buildControls(
     messageHtml: async (db, accountId, messageId) => {
       const { client, pace } = await gmailFor(config, live.ephemeral, db, accountId);
       return await getMessageHtml(client, pace, messageId);
+    },
+    readMessage: async (db, accountId, messageId) => {
+      const facts = await getFacts(db, accountId, messageId);
+      if (!facts) return;
+      const { client, pace } = await gmailFor(config, live.ephemeral, db, accountId);
+      await readWhole(db, createGmailApi(client, pace), facts);
     },
     checkNow: passNow,
     activity: async (mailboxes) => ({ running: live.running, ...(await passStatus(live.ephemeral, mailboxes)) }),

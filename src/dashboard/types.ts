@@ -241,7 +241,7 @@ export const MessageDetail = z.object({
    * could not place it), or for good once the user has answered for it. Null otherwise.
    */
   body: z.string().nullable(),
-  /** Whether it has an HTML part to show. Null until sift has read the whole message, as for mail a rule placed. */
+  /** Whether it has an HTML part to show. Null when sift has not read the whole message and Gmail could not be asked when it was opened. */
   hasHtml: z.boolean().nullable(),
   facts: MessageFactSet,
   sender: SenderProfile,

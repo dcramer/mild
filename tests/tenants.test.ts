@@ -102,6 +102,7 @@ beforeEach(async () => {
     revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), !unreachable.includes(email)),
     // Whatever is asked for, it would answer with that person's mail: only the route's own check keeps it from the wrong person.
     messageHtml: async (_db, account, id) => `<p>${id} of ${account} ${MARK[account] ?? ''}</p>`,
+    readMessage: async () => {},
     checkNow: async () => void calls.push('check'),
     activity: async () => ({
       running: true,
