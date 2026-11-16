@@ -41,6 +41,7 @@ Every tier, the prompt and the dashboard read one named set of facts about a mes
 - **From headers and labels, at sync:** unsubscribe header and whether it is one-click, mailing list id, marked bulk, marked auto-generated, the DMARC, SPF and DKIM results, the bulk mail service it went through (from who signed it, its envelope sender and the services' own headers), whether replies go elsewhere, whether the owner is in To, in Cc or in neither, whether it is a reply, and Gmail's category tab.
 - **From the whole message, when a model is about to judge it:** whether it has attachments and, from the HTML part (`src/triage/html.ts`), whether it carries a tracking pixel (a remote image drawn 1×1 or hidden), how many sites it links to, whether most links pass through a click-tracking redirect, and whether any link goes to the sender's own domain. These mark campaign mail even when the headers do not. The HTML is read and dropped, never stored, and nothing in it is fetched. Mail decided by a rule is never read whole, so it has none of these.
 - **Recorded** as JSON in `messages.facts_json`, rewritten when the whole message adds to them, and returned with a message's detail.
+- **Rules can match on them** once wired: `matchesFacts` takes conditions on facts ("has an unsubscribe header and is not a reply"). `RuleMatch` does not carry them yet.
 - **Only what can be checked.** Whether mail reads as AI-generated, and its language, are judgements for a model, not facts.
 
 ## Learning loop

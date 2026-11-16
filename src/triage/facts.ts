@@ -162,3 +162,26 @@ export function describeFacts(facts: Facts): string[] {
       : [`Links go to the sender's own domain: ${facts.linkHosts === 0 ? '(no links)' : yesNo(!facts.linksOffDomain)}`]),
   ];
 }
+
+/**
+ * Conditions on facts, for a rule ("has an unsubscribe header and is not a reply"). A value must equal
+ * the fact, a list must contain it, and `true` or `false` against a fact that is a name or null
+ * (`listId`, `bulkService`, `category`) asks whether there is one.
+ */
+export type FactConditions = {
+  [K in keyof Facts]?: NonNullable<Facts[K]> | readonly NonNullable<Facts[K]>[] | (null extends Facts[K] ? boolean : never);
+};
+
+/** Every condition present must hold. No conditions never match, and a fact not known for the message fails its condition. */
+export function matchesFacts(conditions: FactConditions, facts: Facts): boolean {
+  const wanted = Object.entries(conditions).filter(([, want]) => want !== undefined);
+  return (
+    wanted.length > 0 &&
+    wanted.every(([key, want]) => {
+      const have: unknown = (facts as unknown as Record<string, unknown>)[key];
+      if (have === undefined) return false;
+      if (typeof want === 'boolean' && typeof have !== 'boolean') return (have !== null) === want;
+      return Array.isArray(want) ? want.includes(have) : have === want;
+    })
+  );
+}

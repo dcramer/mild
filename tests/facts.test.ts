@@ -3,7 +3,7 @@ import { messageDetail } from '../src/dashboard/queries.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { openDb } from '../src/store/db.ts';
 import { storedFacts } from '../src/store/messages.ts';
-import { deriveFacts } from '../src/triage/facts.ts';
+import { deriveFacts, matchesFacts } from '../src/triage/facts.ts';
 import { facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -99,5 +99,28 @@ describe('recorded facts', () => {
     db.exec('UPDATE messages SET facts_json = NULL');
     expect(storedFacts(db, ACCOUNT, campaign.messageId)).toEqual(deriveFacts(campaign));
     expect(storedFacts(db, ACCOUNT, 'missing')).toBeNull();
+  });
+});
+
+describe('matchesFacts', () => {
+  const known = deriveFacts(campaign);
+
+  it('needs every condition to hold, by value or by any of a list', () => {
+    expect(matchesFacts({ unsubscribe: ['header', 'one-click'], dmarc: 'pass', isReply: false }, known)).toBe(true);
+    expect(matchesFacts({ unsubscribe: ['header', 'one-click'], isReply: true }, known)).toBe(false);
+    expect(matchesFacts({ listId: 'news.example.com' }, known)).toBe(true);
+    expect(matchesFacts({ listId: 'other.example.com' }, known)).toBe(false);
+  });
+
+  it('asks whether a named fact is there at all', () => {
+    expect(matchesFacts({ bulkService: true, listId: true }, known)).toBe(true);
+    expect(matchesFacts({ bulkService: false }, known)).toBe(false);
+    expect(matchesFacts({ category: false }, deriveFacts(facts()))).toBe(true);
+  });
+
+  it('never matches with no conditions, or on a fact that is not known for the message', () => {
+    expect(matchesFacts({}, known)).toBe(false);
+    expect(matchesFacts({ trackingPixel: false }, known)).toBe(false);
+    expect(matchesFacts({ trackingPixel: true }, { ...known, trackingPixel: true })).toBe(true);
   });
 });
