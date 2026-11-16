@@ -31,7 +31,7 @@ describe('store', () => {
     expect((db.prepare('SELECT name FROM schema_migrations ORDER BY name').all() as { name: string }[]).map((row) => row.name)).toEqual(files);
 
     // A database that was migrated while a lower-numbered file did not exist yet: it must still get that file.
-    const [late] = files.filter((f) => f.startsWith('050_'));
+    const late = files.find((f) => f.startsWith('050_'));
     const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
     openDb(path).close();
     const behind = new DatabaseSync(path);
