@@ -148,11 +148,17 @@ export function saveSettings(config: Config, settings: Settings): void {
   config.settings = settings;
 }
 
+/**
+ * What `guidelines.md` starts as. The model reads all of it as the owner's instructions, so it holds only
+ * instructions: they name the default labels (src/store/labels.ts) and lean towards leaving mail in the inbox.
+ */
 export const GUIDELINES_TEMPLATE = `# Guidelines for sift
 
-The model reads this before sorting each message. Replace these examples with your own:
-
-- Mail from recruiters is cold outreach, even when it sounds personal.
-- Anything from my accountant or my bank is personal, not a notification.
-- I read the Example Weekly newsletter; treat it as personal.
+- When in doubt, keep it in my inbox. If you are not sure what a message is, say you are unsure. I would rather read one message too many than miss one that mattered.
+- Anything a person wrote to me, or to a small group I am part of, is Personal, however short or oddly written. So is a reply in a conversation I took part in.
+- Anything about my money, my accounts or something I have to do by a date stays in my inbox: bills, renewals, failed payments, deliveries, bookings, tax, legal and security notices. A company's receipts are not Marketing because its promotions are.
+- Marketing and Newsletters are only for mail sent to a whole list. Mail from a company about me in particular (my order, my account, my support request) is neither.
+- Cold outreach is a pitch from someone I have no history with. If I have written to them, or they are answering me, it is Personal.
+- A real notice about my own account is Security and account, however alarming. It is Phishing only when the sender is not who they claim to be.
+- Junk is for mail that is deceptive or that I could never have signed up for. Unwanted mail from a real company is Marketing.
 `;

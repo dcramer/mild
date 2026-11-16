@@ -117,7 +117,7 @@ Undo reverses exactly what the action changed, keeps anything the user changed a
 
 Preferences live in two places, by kind.
 
-- **Broad guidance is a Markdown file**, `guidelines.md` in the home directory, in the user's own words ("recruiters count as cold outreach", "anything from my accountant is personal"). It is read on every pass and given to the model.
+- **Broad guidance is a Markdown file**, `guidelines.md` in the home directory, in the user's own words ("recruiters count as cold outreach", "anything from my accountant is personal"). It is read on every pass and given to the model. It starts as a few instructions that fit the default labels and lean towards keeping mail in the inbox (`GUIDELINES_TEMPLATE`, `src/config.ts`).
 - **Everything structured or learned is in the database:**
   - `labels`: what mail can be and what to do with each. Seeded with cautious defaults (nothing is marked spam); changed and added to in the dashboard, under Labels.
   - `rules`: what sift knows without a model, the user's and the ones it learned.

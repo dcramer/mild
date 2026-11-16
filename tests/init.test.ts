@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { type InitDeps, type SetupState, runInit } from '../src/cli/init.ts';
 import { dashboardUrls, listenAddresses, localAddresses, machineNames, resolveHere } from '../src/cli/network.ts';
 import type { Ui } from '../src/cli/ui.ts';
-import { DEFAULT_SETTINGS, loadConfig, parseSettings, renderSettings, resolveHome, saveSettings } from '../src/config.ts';
+import { DEFAULT_SETTINGS, GUIDELINES_TEMPLATE, loadConfig, parseSettings, renderSettings, resolveHome, saveSettings } from '../src/config.ts';
 import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
 import { DEFAULT_LABELS } from '../src/store/labels.ts';
 
@@ -132,7 +132,7 @@ describe('sift init', () => {
 
     expect(w.calls).toEqual([`install ${CLIENT}`, 'login openai-codex oauth']);
     expect(loadConfig({ SIFT_HOME: w.config.home }).settings).toEqual({ ...DEFAULT_SETTINGS, model: 'openai-codex/small' });
-    expect(readFileSync(w.config.guidelinesPath, 'utf8')).toContain('Guidelines for sift');
+    expect(readFileSync(w.config.guidelinesPath, 'utf8')).toBe(GUIDELINES_TEMPLATE);
     expect(w.text()).toContain('signing in to the dashboard with Google is what connects the account');
     expect(w.text()).toMatch(/Ready.*sift run.*http:\/\/localhost:8787.*sign in with Google/);
   });
@@ -289,6 +289,13 @@ describe('settings', () => {
       expect(path.startsWith(`${home}/`)).toBe(true);
     }
     expect(config.settings).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it('starts the guidelines as instructions that keep mail when unsure and never ask for deletion', () => {
+    expect(GUIDELINES_TEMPLATE).toContain('When in doubt, keep it in my inbox.');
+    expect(GUIDELINES_TEMPLATE).not.toMatch(/delet|trash|replace these/i);
+    const named = DEFAULT_LABELS.filter((l) => GUIDELINES_TEMPLATE.includes(l.name)).map((l) => l.id);
+    expect(named).toEqual(['personal', 'security', 'newsletter', 'marketing', 'cold_outreach', 'junk', 'phishing']);
   });
 
   it('round-trips through sift.toml', () => {
