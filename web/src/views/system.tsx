@@ -43,6 +43,7 @@ import {
   Select,
   SettingRow,
   Sheet,
+  SplitButton,
   StackedBars,
   Stamp,
   Sub,
@@ -345,7 +346,6 @@ export function SystemView() {
         <Sheet className="gap-8 p-5">
           <PageHeader
             title="Rules"
-            meta="12 · the most specific one wins"
             actions={
               <Button>
                 <PlusIcon aria-hidden />
@@ -363,11 +363,7 @@ export function SystemView() {
         <Sheet className="p-5">
           <ListView
             title="Suggestions"
-            meta={
-              <span>
-                <Highlight className="mx-0 font-medium">3 waiting</Highlight> from 3 senders
-              </span>
-            }
+            actions={<span className="text-muted-foreground">This week 84% without a model</span>}
             search={{ value: search, onChange: setSearch, placeholder: 'Search' }}
             filters={{
               active: made === '' ? [] : [{ label: `Then: ${outcomeName(made)}`, clear: () => setMade('') }],
@@ -375,12 +371,11 @@ export function SystemView() {
             }}
           >
             <Table>
-              <thead>
+              <thead className="sr-only">
                 <Tr>
                   <Th>Sender</Th>
-                  <Th phone="hide">Mail</Th>
-                  <Th phone="hide">sift says</Th>
-                  <Th phone="hide" />
+                  <Th phone="hide">Subject</Th>
+                  <Th>Label</Th>
                 </Tr>
               </thead>
               <tbody>
@@ -392,23 +387,35 @@ export function SystemView() {
                         <Sub>{row.address}</Sub>
                         <OnPhone>
                           <span className="w-full truncate">{row.subject}</span>
-                          <Verdict labelName={row.label} disposition={row.does} />
                         </OnPhone>
                       </Td>
-                      <Td phone="hide" className="max-w-0">
+                      <Td phone="hide" className="max-w-0 md:w-full">
                         <span className="block truncate">
                           <Marked text={row.subject} term={search} />
                         </span>
                       </Td>
-                      <Td phone="hide" className="whitespace-nowrap">
-                        <Verdict labelName={row.label} disposition={row.does} />
-                      </Td>
-                      <RowActions>
-                        {row.label ? (
-                          <Button variant="quiet" onClick={() => toast(`From now on, mail from ${row.address} is ${row.label}.`)}>
-                            Right
-                          </Button>
-                        ) : null}
+                      <RowActions phone="keep">
+                        <SplitButton
+                          className="w-52"
+                          label={row.label ? `Agree: ${row.label}` : 'Not sure: open the message'}
+                          menuLabel="Something else"
+                          confirm={row.label !== null}
+                          onPress={() => (row.label ? toast(`${row.does === 'keep' ? 'Kept' : 'Archived'} as ${row.label}`) : setPanel(true))}
+                          groups={[
+                            [{ id: 'marketing', label: 'Marketing', lead: <Meter level={1} />, onSelect: () => toast('Archived as Marketing') }],
+                            LABELS.filter(([id]) => id !== 'marketing').map(([id, name]) => ({ id, label: name, onSelect: () => toast(`Answered: ${name}`) })),
+                            [{ id: 'open', label: 'Open the message…', quiet: true, onSelect: () => setPanel(true) }],
+                          ]}
+                        >
+                          {row.label ? (
+                            <>
+                              <Meter level={row.does === 'keep' ? 3 : 2} />
+                              <span className="truncate">{row.label}</span>
+                            </>
+                          ) : (
+                            <Look>{outcomeName('review')}…</Look>
+                          )}
+                        </SplitButton>
                       </RowActions>
                     </Tr>
                   ),

@@ -288,6 +288,11 @@ export interface SuggestionItem {
   /** Which tier decided, and how sure a model was (0 to 1); null when no model was asked. */
   stage: StageKey;
   confidence: number | null;
+  /**
+   * What else it might be, most likely first: the labels the sender's other mail has had, with the share
+   * of it each had. Until the model ranks its own guesses, this is the best second opinion sift holds.
+   */
+  alternatives: { id: string; name: string; share: number }[];
 }
 
 /** A rule sift thinks is worth having, for the user to accept or dismiss. */

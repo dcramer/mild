@@ -239,8 +239,12 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
     '/api/feedback': async (body) => {
       const input = parseFeedback(body);
       if (!input) return null;
-      const result = applyFeedback(db, { ...input, mode: controls?.settings().act ? 'act' : 'observe' }, now());
-      if (result.corrected === null || !controls) return { ...result, fixed: null };
+      // An answer pressed here is carried out on its message whether or not sift is acting.
+      const result = applyFeedback(db, { ...input, act: true }, now());
+      if (result.corrected === null || !controls) {
+        if (result.carrying > 0) controls?.checkNow();
+        return { ...result, fixed: null };
+      }
       // The answer is saved whatever happens next; a mailbox that cannot be put right is reported, not hidden.
       try {
         const undone = await controls.putBack(input.accountId, result.corrected);

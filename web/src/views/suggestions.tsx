@@ -1,3 +1,4 @@
+import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
 import { SenderLink } from '@/components/sender.tsx';
 import { useParam } from '@/lib/route.ts';
@@ -15,6 +16,7 @@ import {
   Meter,
   OnPhone,
   RowActions,
+  SplitButton,
   Reserve,
   Table,
   TextLink,
@@ -78,22 +80,26 @@ function ProposalRow({ proposal, onResolved }: { proposal: Proposal; onResolved:
 }
 
 /**
- * One suggestion: who, what, when, and the label sift gave it as the button that agrees, with how sure it
- * is. The label decides what happens. Agreeing settles that sender's other waiting mail of the same label
- * too, and makes the rule. Change… opens the message to say otherwise.
+ * One suggestion: who, what, when, and what sift says it is, as the button that agrees, with how sure it
+ * is. The caret beside it lists what else it might be. Pressing the row opens the message.
  */
-function SuggestionRow({ item, onOpen, onAnswered }: { item: SuggestionItem; onOpen: () => void; onAnswered: (taught: string) => void }) {
-  const { busy, error, run } = useAction();
-  const placed = !(item.labelId === null && item.disposition === 'review');
-  const agree = () =>
-    run(async () => {
-      const result = await api.feedback(
-        item.labelId === null
-          ? { accountId: item.accountId, sender: item.sender, messageId: item.messageId, scope: 'sender', disposition: item.disposition }
-          : { accountId: item.accountId, sender: item.sender, messageId: item.messageId, scope: 'label', label: item.labelId },
-      );
-      onAnswered(result.taught ?? 'Noted.');
-    });
+function SuggestionRow({
+  item,
+  labels,
+  waiting,
+  onOpen,
+  onAnswered,
+}: {
+  item: SuggestionItem;
+  labels: readonly AnswerLabel[];
+  waiting: readonly Answerable[];
+  onOpen: () => void;
+  onAnswered: () => void;
+}) {
+  const target = { accountId: item.accountId, sender: item.sender, messageId: item.messageId, decisionId: item.decisionId, labelId: item.labelId };
+  const { answer, choices, busy, error } = useAnswer(labels, waiting, onAnswered);
+  const groups = [...choices(target, item.alternatives), [{ id: 'open', label: 'Open the message…', quiet: true, onSelect: onOpen }]];
+  const name = item.labelName ?? outcomeName(item.disposition);
 
   return (
     <Tr onOpen={onOpen}>
@@ -115,23 +121,24 @@ function SuggestionRow({ item, onOpen, onAnswered }: { item: SuggestionItem; onO
         {ago(item.receivedAt)}
       </Td>
       <RowActions phone="keep">
-        {placed ? (
-          <Button className="w-44 justify-start" busy={busy} onClick={agree} shortcut={{ key: 'a', label: 'Agree with sift' }}>
+        {item.labelId !== null ? (
+          <SplitButton
+            className="w-60"
+            label={`Agree: ${name}`}
+            menuLabel="Something else"
+            busy={busy}
+            onPress={() => answer(target, item.labelId ?? '')}
+            groups={groups}
+            shortcut={{ key: 'a', label: 'Agree with sift' }}
+          >
             <Meter level={sureness(item.stage, item.confidence)} />
-            <span className="truncate">{item.labelName ?? outcomeName(item.disposition)}</span>
-          </Button>
+            <span className="truncate">{name}</span>
+          </SplitButton>
         ) : (
-          <Button className="w-44 justify-start" onClick={onOpen}>
+          <SplitButton className="w-60" label="Not sure: open the message" menuLabel="Say what it is" confirm={false} onPress={onOpen} groups={groups}>
             <Look>{outcomeName('review')}…</Look>
-          </Button>
+          </SplitButton>
         )}
-        <span className="hidden w-24 justify-end md:flex">
-          {placed ? (
-            <Button variant="quiet" onClick={onOpen}>
-              Change…
-            </Button>
-          ) : null}
-        </span>
       </RowActions>
     </Tr>
   );
@@ -160,15 +167,17 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
       (needle === '' || [i.sender, i.senderName ?? '', i.subject].some((text) => text.toLowerCase().includes(needle))),
   );
   const refs = shown.map((i) => ({ accountId: i.accountId, messageId: i.messageId, subject: i.subject }));
-  const learned = (line: string) => {
-    toast(line);
-    reload();
-  };
+  const answerable = (data?.items ?? []).map((i) => ({
+    accountId: i.accountId,
+    sender: i.sender,
+    messageId: i.messageId,
+    decisionId: i.decisionId,
+    labelId: i.labelId,
+  }));
 
   return (
     <ListView
       title="Suggestions"
-      count={data ? count(data.waiting) : null}
       actions={summary.data ? <Week summary={summary.data} /> : null}
       intro={
         // Proposals arrive after the list is drawn, and would push it down.
@@ -224,7 +233,14 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
           </thead>
           <tbody>
             {shown.map((item, index) => (
-              <SuggestionRow key={`${item.accountId}/${item.messageId}`} item={item} onOpen={() => onOpen(refs, index)} onAnswered={learned} />
+              <SuggestionRow
+                key={`${item.accountId}/${item.messageId}`}
+                item={item}
+                labels={data?.labels[item.accountId] ?? []}
+                waiting={answerable}
+                onOpen={() => onOpen(refs, index)}
+                onAnswered={reload}
+              />
             ))}
           </tbody>
         </Table>

@@ -21,6 +21,7 @@ export { Panel } from './panel.tsx';
 export { Reserve } from './reserve.tsx';
 export { Select } from './select.tsx';
 export { SettingRow, Sheet } from './sheet.tsx';
+export { type Choice, SplitButton } from './split-button.tsx';
 export { Empty, Loading } from './state.tsx';
 export { OnPhone, RowActions, Sub, Table, Td, Th, Tr } from './table.tsx';
 export { Timeline, TimelineEvent } from './timeline.tsx';

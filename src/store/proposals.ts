@@ -101,6 +101,29 @@ export function proposeForSender(db: DatabaseSync, accountId: string, address: s
   return propose(db, { accountId, kind: 'rule', match: { from: address }, labelId: first.label_id, ruleId: null, agreed: recent.length }, now);
 }
 
+/** How many answers in a row about a sender, all the same label, before sift offers to make it a rule. */
+export const PROPOSE_AFTER_ANSWERS = 3;
+
+/**
+ * Propose a rule for a sender whose last few answers all said the same label. Answering one message makes
+ * no rule; this is how answers turn into one, with the user's say-so.
+ */
+export function proposeFromAnswers(db: DatabaseSync, accountId: string, address: string, now: number = Date.now()): boolean {
+  if (hasRuleFor(db, accountId, { from: address })) return false;
+  const recent = db
+    .prepare(
+      `SELECT f.label_id FROM feedback f
+       JOIN messages m ON m.account_id = f.account_id AND m.id = f.message_id
+       WHERE f.account_id = ? AND m.from_address = ?
+       ORDER BY f.created_at DESC, f.decision_id DESC LIMIT ?`,
+    )
+    .all(accountId, address, PROPOSE_AFTER_ANSWERS) as unknown as { label_id: string | null }[];
+  const [first] = recent;
+  if (!first || recent.length < PROPOSE_AFTER_ANSWERS || first.label_id === null || !recent.every((r) => r.label_id === first.label_id)) return false;
+  if (!listLabels(db, accountId, now).some((l) => l.id === first.label_id)) return false;
+  return propose(db, { accountId, kind: 'rule', match: { from: address }, labelId: first.label_id, ruleId: null, agreed: recent.length }, now);
+}
+
 /** Propose dropping the "when it is L" from a rule once every message it was checked against turned out to be L, for long enough. */
 export function proposeSettled(db: DatabaseSync, accountId: string, ruleId: string, now: number = Date.now()): boolean {
   const rule = listRules(db, accountId).find((r) => r.id === ruleId);

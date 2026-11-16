@@ -159,7 +159,6 @@ export function LabelsView() {
   return (
     <ListView
       title="Labels"
-      meta={data ? `${count(all.length)} kinds of mail` : null}
       actions={
         <Button disabled={!first} onClick={() => first && setEditing({ accountId: first.id, label: null })}>
           <PlusIcon aria-hidden />
