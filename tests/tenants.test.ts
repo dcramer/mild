@@ -100,6 +100,8 @@ beforeEach(async () => {
     backfill: async () => (calls.push('backfill'), 0),
     startEval: async (_db, { accountId }) => (calls.push(`eval ${accountId}`), 1),
     revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), !unreachable.includes(email)),
+    // Whatever is asked for, it would answer with that person's mail: only the route's own check keeps it from the wrong person.
+    messageHtml: async (_db, account, id) => `<p>${id} of ${account} ${MARK[account] ?? ''}</p>`,
     checkNow: () => void calls.push('check'),
     activity: () => ({
       running: true,
@@ -137,6 +139,7 @@ const READS = (account: string, mark: string) => [
   `/api/sender?account=${encodeURIComponent(account)}&address=sender@${mark}.example.com`,
   `/api/domain?account=${encodeURIComponent(account)}&domain=${mark}.example.com`,
   `/api/examples?account=${encodeURIComponent(account)}`,
+  `/api/message/html?account=${encodeURIComponent(account)}&id=m-${mark}`,
 ];
 
 describe('users and their mailboxes', () => {
@@ -215,6 +218,10 @@ describe("nobody sees or changes another person's mail", () => {
       expect(work).toContain(MARK[ALPHA_WORK]);
       expect(work).not.toContain(MARK[ALPHA]);
     }
+    // A message's HTML, from any of their own mailboxes.
+    const html = await call('GET', `/api/message/html?account=${encodeURIComponent(ALPHA_WORK)}&id=m-${MARK[ALPHA_WORK]}`, ALPHA);
+    expect(html.status).toBe(200);
+    expect(html.text).toContain(MARK[ALPHA_WORK]);
     // Someone else's mailbox is not one that can be asked for.
     expect((await call('GET', `/api/rules?mailbox=${encodeURIComponent(BRAVO)}`, ALPHA)).status).toBe(404);
     expect((await call('GET', '/api/rules', null)).status).toBe(401);

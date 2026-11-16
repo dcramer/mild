@@ -62,6 +62,7 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Look` | A word in yellow ink for what is left to the reader, inside a line: "Not sure" in a list. |
 | `TextLink`, `Code`, `Kbd`, `Copyable` | A link in text; something typed; a key, as a small keycap (see Keys); a value carried somewhere else whole. |
 | `Disclosure` | What most readers never need, folded under the question that leads to it. |
+| `MailFrame` | A message as its own HTML, in the message panel, on white paper because email is written for it. It runs nothing and loads nothing from elsewhere; links open in a new tab. It cannot measure what it holds, so it is 70% of the screen tall, scrolls inside, and drags taller by its corner on a desktop. The one white surface. |
 | `Document`, `Clause` | A page read from top to bottom, outside the dashboard: the terms and the privacy policy. The name linking home, the title, when it last changed, then clauses at the reading size. |
 | `Wordmark` | The name. |
 
@@ -80,6 +81,7 @@ On a phone a row keeps only what identifies it and what it is; figures, dates an
 | `Menu` | Opens under its button, kept inside the screen, with rows 44px tall on a touch screen. The masthead's own is not shown on a narrow screen: its panel lists the same things. |
 | `Field inline` | The label goes above the controls. |
 | `Facts` | Each term goes above its value. |
+| `MailFrame` | Full width of the panel; a message wider than that (most are 600px) scrolls sideways inside the frame, never the page. |
 | `Panel`, `Dialog` | Cover the screen. |
 | `ListView` | The filter panel opens above the list. The view segments take a row of their own under the search, so the search keeps its width. |
 | `Table` | Columns marked `phone="hide"` drop; what they said moves under the first column in an `OnPhone`, and the row opens for the rest. `RowActions` drop too, unless the row does not open (`phone="keep"`). |

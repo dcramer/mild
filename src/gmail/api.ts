@@ -1,6 +1,6 @@
 import { gmail, type gmail_v1 } from '@googleapis/gmail';
 import type { OAuth2Client } from 'google-auth-library';
-import { type MessageContent, readContent } from './body.ts';
+import { type MessageContent, findHtml, readContent } from './body.ts';
 
 /** Headers fetched for triage. Bodies are never requested here. */
 export const METADATA_HEADERS = [
@@ -97,6 +97,20 @@ export const isNotFound = (error: unknown) => {
   const e = error as { status?: unknown; code?: unknown };
   return e?.status === 404 || e?.code === 404 || e?.code === '404';
 };
+
+/**
+ * One message's HTML part, for the dashboard to show while it is open. Nothing keeps it. Null when the
+ * message has no HTML part or is no longer in Gmail. Does not mark it read.
+ */
+export async function getMessageHtml(auth: OAuth2Client, messageId: string): Promise<string | null> {
+  try {
+    const { data } = await gmail({ version: 'v1', auth }).users.messages.get({ userId: 'me', id: messageId, format: 'full' });
+    return findHtml(data.payload);
+  } catch (error) {
+    if (isNotFound(error)) return null;
+    throw error;
+  }
+}
 
 export function createGmailApi(auth: OAuth2Client): GmailApi {
   const client: gmail_v1.Gmail = gmail({ version: 'v1', auth });

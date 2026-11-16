@@ -2,12 +2,13 @@ import { z } from 'zod';
 import { actions, decisions } from '../../store/query.ts';
 import { getAction } from '../../store/actions.ts';
 import { listChanges, listDecisions, retryDecision } from '../queries/decisions.ts';
-import { messageDetail } from '../queries/messages.ts';
+import { messageDetail, recordedMessage } from '../queries/messages.ts';
+import { frameNote, mailDocument } from '../mail-html.ts';
 import { listUnjudged } from '../queries/runs.ts';
 import { putAllBackInQueue, putBackInQueue } from '../../store/runs.ts';
 import { summarize } from '../queries/summary.ts';
 import { ChangeRow, DecisionPage, MessageDetail, Summary, UnjudgedRow } from '../types.ts';
-import { type Read, type Write, accountId, days, id, missing, named, ok, ownerOf, read, text, write } from './route.ts';
+import { type Frame, type Read, type Write, accountId, days, frame, id, missing, named, ok, ownerOf, read, text, write } from './route.ts';
 
 /** A filter left empty is no filter. */
 const filter = z.string().optional();
@@ -71,6 +72,21 @@ export const reads: Read[] = [
     query: z.object({}),
     reply: z.object({ rows: z.array(UnjudgedRow) }),
     run: async ({ db }, scope) => ok({ rows: await listUnjudged(db, scope, 200) }),
+  }),
+];
+
+export const frames: Frame[] = [
+  frame({
+    path: '/api/message/html',
+    query: z.object({ account: z.string().default(''), id: z.string().default('') }),
+    run: async ({ db, controls }, scope, { account, id }) => {
+      if (!(await recordedMessage(db, scope, account, id))) return { status: 404, html: frameNote('There is no such message here.') };
+      if (!controls) return { status: 404, html: frameNote('This dashboard cannot reach Gmail.') };
+      const html = await controls.messageHtml(db, account, id);
+      return html === null
+        ? { status: 404, html: frameNote('This message has no HTML, or is no longer in Gmail.') }
+        : { status: 200, html: mailDocument(html) };
+    },
   }),
 ];
 

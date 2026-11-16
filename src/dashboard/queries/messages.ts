@@ -74,12 +74,24 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
     receivedAt: m.receivedAt,
     headers: m.headers,
     body: await storedBody(db, accountId, messageId),
+    // HTML facts are recorded for every message with an HTML part whose content was read, and only then.
+    hasHtml: facts.hasAttachments === undefined ? null : facts.linkHosts !== undefined,
     facts,
     unsubscribe: await canUnsubscribe(db, accountId, m.fromAddress, m.headers),
     sender: (await senderProfile(db, scope, accountId, m.fromAddress))!,
     decisions: shown.map((r) => ({ ...toDecisionRow(r), ...costs.get(r.id)! })),
     actions: changes.map(({ payload, ...a }) => ({ ...a, added: payload.add, removed: payload.remove })),
   };
+}
+
+/** Whether sift has recorded this message in one of the scope's mailboxes. */
+export async function recordedMessage(db: Sql, scope: Scope, accountId: string, messageId: string): Promise<boolean> {
+  if (!sees(scope, accountId)) return false;
+  const [row] = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
+  return row !== undefined;
 }
 
 /** The text of a message, if sift is holding it: as a suggestion's temporary copy, or in an example the user made. */

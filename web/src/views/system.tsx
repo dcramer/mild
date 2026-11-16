@@ -34,6 +34,7 @@ import {
   ListView,
   Look,
   Loading,
+  MailFrame,
   Marked,
   Masthead,
   Menu,
@@ -688,6 +689,10 @@ export function SystemView() {
             </Button>
           </Entry>
         </div>
+      </Section>
+
+      <Section title="Mail frame" meta="a message as its own HTML, in the message panel; this one has nothing to load">
+        <MailFrame title="An empty message" />
       </Section>
 
       <Section title="Dialog and panel" meta="a form or a question; one item of a list">

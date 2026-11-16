@@ -53,6 +53,9 @@ export function extractText(payload: BodyPart | null | undefined): string {
   return tidy.length > MAX_BODY_CHARS ? `${tidy.slice(0, MAX_BODY_CHARS)}\n[truncated]` : tidy;
 }
 
+/** A message's HTML part, decoded, to be shown and then forgotten. Null when it has none. */
+export const findHtml = (payload: BodyPart | null | undefined): string | null => (payload ? find(payload, 'text/html') : null);
+
 const header = (part: BodyPart, name: string) => part.headers?.find((h) => h.name?.toLowerCase() === name)?.value ?? '';
 
 function hasAttachment(part: BodyPart): boolean {

@@ -6,7 +6,7 @@ import type { Config } from '../config.ts';
 import { backfill } from '../daemon/backfill.ts';
 import type { Activity, Controls, ModelSignIns } from '../dashboard/controls.ts';
 import type { Wake } from '../daemon/run.ts';
-import { createGmailApi } from '../gmail/api.ts';
+import { createGmailApi, getMessageHtml } from '../gmail/api.ts';
 import { interruptEvals, startEval } from '../learn/evals.ts';
 import { clientFor, loadClientSecrets, revokeGrant } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
@@ -183,6 +183,7 @@ export async function buildControls(config: Config, store: Store, live: { wake?:
       const token = await (await credentials(db, 'gmail', config.keys)).read(email).catch(() => undefined);
       return token === null || (token !== undefined && (await revokeGrant(token)));
     },
+    messageHtml: async (db, accountId, messageId) => getMessageHtml(await gmailClient(config, db, accountId), messageId),
     checkNow: () => live.wake?.now(),
     activity: () => live.activity,
   };

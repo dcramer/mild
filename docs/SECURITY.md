@@ -8,7 +8,7 @@ Everything stored or sent anywhere (a column, a log line, telemetry, what the mo
 
 ## What is stored, and how
 
-This is about storage at rest. Plaintext passes through the server at the moment something is made or changed (a message fetched from Gmail, an address the browser sends for a new rule), and is hashed or sealed before it is written.
+This is about storage at rest. Plaintext passes through the server at the moment something is made or changed (a message fetched from Gmail, an address the browser sends for a new rule), and is hashed or sealed before it is written. A message's HTML is never written at all: the dashboard fetches it from Gmail while the person has the message open, cleans it and sends it to their browser, and nothing of it is stored, cached or logged (`GET /api/message/html`).
 
 | What | Stored as | Who can read it |
 | --- | --- | --- |
@@ -35,6 +35,7 @@ This is about storage at rest. Plaintext passes through the server at the moment
 ## What it does not cover
 
 - **Mail while it is being classified.** sift reads it from Gmail, and the model provider is sent what the model needs.
+- **Mail being read in the dashboard.** A message shown as its HTML passes through the server in plaintext on its way to the browser, like the rest of the page's data. The browser shows it in a sandboxed frame that runs no script and loads nothing from anywhere, so opening it tells no sender it was read.
 - **A server under someone else's control.** It holds the credentials, and a Gmail token reads the whole mailbox. It also serves the page that unlocks the person's key, and could serve one that takes it.
 - **What the person writes.** Rules' conditions other than addresses, and labels, are plain.
 

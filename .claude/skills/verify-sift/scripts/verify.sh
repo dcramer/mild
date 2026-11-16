@@ -40,9 +40,10 @@ case "$cmd" in
     node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/seed.ts" "$dir/home" > "$dir/cookie"
     port="$(node -e 'const s=require("node:net").createServer().listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')"
     echo "$port" > "$dir/port"
-    # `dashboard`, not `run`: there is no Gmail behind this home, so a pass would only fail. It rebuilds web/dist if sources are newer.
+    # `sift dashboard`, not `run`: there is no Gmail behind this home, so a pass would only fail. serve.ts is that
+    # command with a message's HTML answered by the fake (see it). It rebuilds web/dist if sources are newer.
     cd "$ROOT"
-    nohup node --disable-warning=ExperimentalWarning src/cli/main.ts --home "$dir/home" dashboard --port "$port" > "$dir/dashboard.log" 2>&1 &
+    nohup node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/serve.ts" "$dir/home" "$port" > "$dir/dashboard.log" 2>&1 &
     echo $! > "$dir/pid"
     for _ in $(seq 1 240); do
       grep -q 'Only the dashboard is running' "$dir/dashboard.log" 2>/dev/null && break

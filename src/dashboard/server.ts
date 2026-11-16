@@ -5,8 +5,9 @@ import { extname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { People } from '../store/people.ts';
 import type { z } from 'zod';
-import { READS, WRITES } from './api/index.ts';
+import { FRAMES, READS, WRITES } from './api/index.ts';
 import type { Context, Write } from './api/route.ts';
+import { frameNote } from './mail-html.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { type Scope, narrow, scopeFor, sees } from './scope.ts';
 
@@ -31,10 +32,29 @@ const HEADERS = {
   // no inline script, no inline style element, nothing loaded from another origin. `manifest-src` and
   // `worker-src` let the page be installed as an app with its own service worker; both are files of this
   // server's. (`worker-src` would fall back to `script-src` in most browsers, but not in older Safari.)
+  // `frame-src` is for a message shown as its HTML, which comes from this server's own frame route.
   'content-security-policy':
-    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'no-referrer',
+};
+
+/**
+ * A message's own HTML, in a frame on the page (`FRAMES`). Nothing in it runs (`sandbox` without
+ * `allow-scripts`), it has no origin of its own to reach the dashboard's data from (no `allow-same-origin`),
+ * and it loads nothing from anywhere, this server included: no image, font, stylesheet or tracking pixel.
+ * Its own inline styles are all it may have. Links open in a new tab, which is not sandboxed so the site
+ * linked to works, and learns nothing of where it was opened from.
+ */
+export const FRAME_HEADERS = {
+  'content-security-policy':
+    "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox allow-popups allow-popups-to-escape-sandbox",
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'no-referrer',
+  // A link's host would otherwise be looked up ahead of a click, which tells its DNS the message was opened.
+  'x-dns-prefetch-control': 'off',
+  'content-type': 'text/html; charset=utf-8',
+  'cache-control': 'no-store',
 };
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -200,6 +220,7 @@ export function createDashboardServer(people: People, options: DashboardOptions 
     throw new Error(`Nobody is signed in to open person ${id}'s database.`);
   };
   const reads = new Map(READS.map((route) => [route.path, route]));
+  const frames = new Map(FRAMES.map((route) => [route.path, route]));
   const writes = new Map(WRITES.map((route) => [route.path, route]));
   /** Why this person may not make this write, or null if they may. Someone else's data is reported as not there. */
   const refusal = async (route: Write, ctx: Context, body: unknown, scope: Scope, someone: boolean): Promise<{ status: number; error: string } | null> => {
@@ -359,6 +380,22 @@ export function createDashboardServer(people: People, options: DashboardOptions 
       return;
     }
 
+    const shown = frames.get(url.pathname);
+    if (shown) {
+      const mailbox = query.get('mailbox');
+      const scope = mailbox ? narrow(whole, mailbox) : whole;
+      const params = shown.query.safeParse(Object.fromEntries(query));
+      const reply = !scope
+        ? { status: 404, html: frameNote('There is no such message here.') }
+        : !params.success
+          ? { status: 400, html: frameNote(refusedBy(params.error)) }
+          : await shown.run(ctx, scope, params.data).catch((error: unknown) => ({
+              status: 500,
+              html: frameNote(error instanceof Error ? error.message : String(error)),
+            }));
+      res.writeHead(reply.status, FRAME_HEADERS).end(reply.html);
+      return;
+    }
     if (url.pathname.startsWith('/api/')) {
       const route = reads.get(url.pathname);
       if (!route) return void json(res, 404, { error: 'Not found' });

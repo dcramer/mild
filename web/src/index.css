@@ -60,6 +60,8 @@
 
   /* The one colour: a highlighter pen, for what the reader should look at. Text on it is always dark. */
   --highlight: #ffe033;
+  /* What an email's own HTML is drawn on: it is written for white, whatever the page is. */
+  --paper: #ffffff;
   --highlight-ink: #111110;
 
   /* Corners cut by hand, not by a compass: the highlighter's shape, and only the highlighter's. */

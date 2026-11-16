@@ -304,6 +304,8 @@ describe('dashboard server', () => {
     expect(csp).toContain("script-src 'self'");
     expect(csp).toContain("style-src 'self'");
     expect(csp).not.toContain('unsafe');
+    // The one frame the page may hold is a message from this server's own frame route.
+    expect(csp.split('; ').filter((d) => d.startsWith('frame'))).toEqual(["frame-src 'self'", "frame-ancestors 'none'"]);
     expect(page.headers.get('cache-control')).toBe('no-store');
 
     const script = await fetch(`${base}/assets/app-abc123.js`);

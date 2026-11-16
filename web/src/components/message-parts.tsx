@@ -1,20 +1,60 @@
-import type { MessageDetail } from '@/lib/api.ts';
+import { useState } from 'react';
+import { type MessageDetail, api } from '@/lib/api.ts';
 import { FACTS, type FactAnswer, capitalised, factParam, factWords } from '@/lib/format.ts';
-import { Button, RowActions, Section, Sub, Table, Td, Tr } from '@/system';
+import { Button, ChoiceGroup, MailFrame, RowActions, Section, Sub, Table, Td, Tr } from '@/system';
 
 const people = (list: MessageDetail['to']) => list.map((p) => p.address).join(', ');
 
-/** A message's text as far as sift holds it, under who it went to. Who sent it and when are in the panel's header. */
+type View = 'text' | 'html';
+const VIEWS = [
+  ['text', 'Text'],
+  ['html', 'HTML'],
+] as const;
+/** How this reader last chose to read a message, kept in their browser. */
+const VIEW_KEY = 'sift:message-view';
+
+function storedView(): View {
+  try {
+    return window.localStorage.getItem(VIEW_KEY) === 'html' ? 'html' : 'text';
+  } catch {
+    return 'text';
+  }
+}
+
+/**
+ * A message's text as far as sift holds it, under who it went to; or, when it has HTML, that instead,
+ * fetched from Gmail while it is shown. Who sent it and when are in the panel's header.
+ */
 export function MessageBody({ detail }: { detail: MessageDetail }) {
+  const [view, setView] = useState(storedView);
+  // Null: sift has not read the whole message, so it may have HTML. The frame says so if it has none.
+  const html = detail.hasHtml !== false && view === 'html';
+  const choose = (next: View | null) => {
+    if (!next) return;
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      // Not remembered; this message still shows it.
+    }
+  };
   return (
     <article className="flex min-w-0 flex-col gap-5">
-      {detail.to.length > 0 || detail.cc.length > 0 ? (
-        <p className="text-muted-foreground">
-          {detail.to.length > 0 ? `To ${people(detail.to)}` : ''}
-          {detail.cc.length > 0 ? `${detail.to.length > 0 ? ', cc ' : 'Cc '}${people(detail.cc)}` : ''}
-        </p>
-      ) : null}
-      {detail.body === null ? (
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        {detail.to.length > 0 || detail.cc.length > 0 ? (
+          <p className="min-w-0 text-muted-foreground">
+            {detail.to.length > 0 ? `To ${people(detail.to)}` : ''}
+            {detail.cc.length > 0 ? `${detail.to.length > 0 ? ', cc ' : 'Cc '}${people(detail.cc)}` : ''}
+          </p>
+        ) : null}
+        {detail.hasHtml === false ? null : <ChoiceGroup label="Read it as" value={html ? 'html' : 'text'} options={VIEWS} onChange={choose} />}
+      </div>
+      {html ? (
+        <div className="flex flex-col gap-2">
+          <MailFrame src={api.messageHtml(detail.accountId, detail.messageId)} title={detail.subject || '(no subject)'} />
+          <p className="text-sm text-muted-foreground">Remote images are blocked.</p>
+        </div>
+      ) : detail.body === null ? (
         <p className="text-muted-foreground">
           sift does not hold this message’s text. It keeps it only while the message waits on you, and for good once you have answered for it.
         </p>

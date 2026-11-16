@@ -42,6 +42,17 @@ export interface Read<Q extends z.ZodType = z.ZodType, R extends z.ZodType = z.Z
 }
 
 /**
+ * A GET answered with a document for a frame on the page instead of JSON: a message as its HTML. It is
+ * given the scope as a read is, and sent under the frame's own policy, never the page's (`FRAME_HEADERS`
+ * in server.ts). `html` is the whole document, a sentence in place of the message when it cannot be shown.
+ */
+export interface Frame<Q extends z.ZodType = z.ZodType> {
+  path: string;
+  query: Q;
+  run(ctx: Context, scope: Scope, query: z.output<Q>): Promise<{ status: 200 | 404; html: string }>;
+}
+
+/**
  * Whose data a write touches. An account: only someone who has that mailbox may make it. `self`: the
  * signed-in person's own (their model and its sign-in), so anyone signed in may. `install`: it applies
  * to everyone, so only the install's owner may. `anyone`: nothing of anybody's. Null: the body names
@@ -67,6 +78,8 @@ export interface Write<B extends z.ZodType = z.ZodType, R extends z.ZodType = z.
 
 /** A read, with its query and reply typed from its schemas. */
 export const read = <Q extends z.ZodType, R extends z.ZodType>(route: Read<Q, R>): Read => route;
+/** A frame, with its query typed from its schema. */
+export const frame = <Q extends z.ZodType>(route: Frame<Q>): Frame => route;
 /** A write, with its body and reply typed from its schemas. */
 export const write = <B extends z.ZodType, R extends z.ZodType>(route: Write<B, R>): Write => route;
 

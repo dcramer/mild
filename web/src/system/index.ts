@@ -13,6 +13,7 @@ export { Figure, Figures } from './figures.tsx';
 export { HoverCard } from './hover-card.tsx';
 export { setShortcutsOn, useShortcutsOn } from './keys.tsx';
 export { FilterGroup, ListView } from './list-view.tsx';
+export { MailFrame } from './mail-frame.tsx';
 export { Avatar, Menu } from './menu.tsx';
 export { Meter } from './meter.tsx';
 export { Masthead } from './nav.tsx';
