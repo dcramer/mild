@@ -1,7 +1,7 @@
 import { Component, type ReactNode, Suspense, useEffect, useState } from 'react';
 import { api, useLoaded, useOnline } from '@/lib/api.ts';
 import { ago } from '@/lib/format.ts';
-import { navigate, setParams, useParam, useRoute } from '@/lib/route.ts';
+import { setParams, useParam, useRoute } from '@/lib/route.ts';
 import { lazyView } from '@/lib/lazy.tsx';
 import { Loading, Masthead, Note, Notice, PageHeader, Wordmark } from '@/system';
 import type { MessageRef } from '@/views/message-panel.tsx';
@@ -89,15 +89,6 @@ const NAMES: Record<(typeof SECTIONS)[number], string> = {
   labels: 'Labels',
   rules: 'Rules',
 };
-/** Sections that were folded into others, so links to them still land somewhere. Settings was a page; it is a panel over any. */
-const MOVED: Record<string, string> = {
-  overview: '/suggestions',
-  decisions: '/activity',
-  changes: '/activity',
-  settings: '/suggestions?settings=1',
-  'settings/running': '/suggestions?settings=1',
-};
-
 /** Settings opens over whatever is showing, the model wall included, so nothing has to be finished to reach it. */
 const openSettings = () => setParams({ settings: '1' }, { state: { panel: true } });
 const closeSettings = () => ((window.history.state as { panel?: boolean } | null)?.panel ? window.history.back() : setParams({ settings: '' }));
@@ -118,10 +109,6 @@ export function App() {
 }
 
 function Gate({ route }: { route: string[] }) {
-  const moved = MOVED[route.join('/')] ?? MOVED[route[0] ?? ''];
-  useEffect(() => {
-    if (moved) navigate(moved.includes('?') ? moved : moved + window.location.search, { replace: true });
-  }, [moved]);
   const [settings] = useParam('settings');
   const session = useLoaded('session', (signal) => api.session(signal), 300_000);
   const online = useOnline();

@@ -439,7 +439,7 @@ export function createDashboardServer(people: People, options: DashboardOptions 
       else res.writeHead(503, { ...HEADERS, 'content-type': 'text/plain' }).end('The dashboard has not been built. Run: pnpm build:web');
       return;
     }
-    // The page is one document that reads the path (`/rules`, `/settings/accounts`), so a path that names
+    // The page is one document that reads the path (`/rules`, `/sender/…`), so a path that names
     // no file gets the page. A name with an extension is a file that is not there.
     // A sender's or a domain's page ends in an address, which has a dot in it and is still a page.
     const isPage = (extname(url.pathname) === '' || /^\/(sender|domain)\//.test(url.pathname)) && !/^\/(auth|dev|assets)\//.test(url.pathname);

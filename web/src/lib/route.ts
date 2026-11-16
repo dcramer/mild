@@ -29,7 +29,7 @@ const queryOf = (address: string) => new URLSearchParams(address.split('?')[1] ?
  * Go to `to`, a path with its query, without loading the page again. `replace` rewrites the current
  * history entry and keeps its state; otherwise a new entry is added, carrying `state`.
  */
-export function navigate(to: string, { replace = false, state = null }: { replace?: boolean; state?: unknown } = {}) {
+function navigate(to: string, { replace = false, state = null }: { replace?: boolean; state?: unknown } = {}) {
   try {
     if (replace) window.history.replaceState(window.history.state, '', to);
     else window.history.pushState(state, '', to);
