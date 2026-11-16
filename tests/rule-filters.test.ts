@@ -56,6 +56,14 @@ describe('whether a rule can be a Gmail filter', () => {
     expect(reason(rule({ match: { listId: 'news.example.com' } }))).toMatch(/mailing list/);
     expect(reason(rule({ except: [{ subjectContains: 'invoice' }] }))).toMatch(/exceptions/);
     expect(reason(rule({ labelId: 'no-such-label' }))).toMatch(/label has been removed/);
+    expect(reason(rule({ match: { from: 'news@example.com', facts: { unsubscribe: 'one-click' } } }))).toBe(
+      'It asks what sift found in the message, which Gmail filters cannot see.',
+    );
+  });
+
+  it('holds back a filter that would get to mail a narrower rule on a fact keeps', () => {
+    const replies: FilterableRule = { id: 'r2', match: { from: 'news@example.com', facts: { isReply: true } }, labelId: 'personal' };
+    expect(reason(rule(), [replies])).toMatch(/Another rule \(from news@example.com, is a reply\)/);
   });
 
   it('refuses a rule that is judged, not matched', () => {
@@ -146,6 +154,8 @@ describe("a rule's Gmail filter", () => {
     const id = await addRule(db, ACCOUNT, { match: { from: 'junk@example.com' }, labelId: 'junk' }, 'user');
     await expect(writeRuleFilter(deps(), id)).rejects.toThrow('Gmail filters cannot mark mail as spam.');
     await expect(writeRuleFilter(deps(), 'r-missing')).rejects.toThrow(/no longer exists/);
+    const replies = await addRule(db, ACCOUNT, { match: { from: 'news@example.com', facts: { isReply: false } }, labelId: 'newsletter' }, 'user');
+    await expect(writeRuleFilter(deps(), replies)).rejects.toThrow('It asks what sift found in the message, which Gmail filters cannot see.');
     expect(mailbox.filters).toEqual([]);
     expect(await actions()).toEqual([]);
   });

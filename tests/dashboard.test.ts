@@ -427,6 +427,21 @@ describe('dashboard server', () => {
     expect(paged.rows.map((r) => r.id)).toEqual([2]);
   });
 
+  it('narrows decisions by what sift recorded about each message', async () => {
+    const { store, db } = await seededStore();
+    await raw(db).run(`UPDATE messages SET facts = facts || '{"isReply": true, "listId": "dev.example.com", "dmarc": "pass"}'::jsonb WHERE id = 'a'`);
+    await raw(db).run(`UPDATE messages SET facts = facts || '{"dmarc": "fail"}'::jsonb WHERE id = 'c'`);
+    const base = await start({}, store);
+    type Page = { total: number; rows: { messageId: string }[] };
+    const ids = async (fact: string) => (await get<Page>(`${base}/api/decisions?days=7&fact=${fact}`)).rows.map((r) => r.messageId);
+    expect(await ids('reply')).toEqual(['a']);
+    expect(await ids('list')).toEqual(['a']);
+    expect(await ids('unproven')).toEqual(['c', 'b']);
+    // Not known until a model reads the message, so nothing matches yet.
+    expect(await ids('attachments')).toEqual([]);
+    expect(await ids(encodeURIComponent("reply' OR 1=1 --"))).toEqual([]);
+  });
+
   it('returns one message with its decisions and actions', async () => {
     const base = await start();
     const detail = await get<{ subject: string; decisions: { stage: string; inputTokens: number; durationMs: number }[]; actions: unknown[] }>(

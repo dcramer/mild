@@ -1,10 +1,10 @@
 import { ArrowRightIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
-import { type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
-import { useParam } from '@/lib/route.ts';
+import { type RuleMatch, type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
+import { setParams, useParam } from '@/lib/route.ts';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
-import { ago, count, outcomeName, plural, shortDate } from '@/lib/format.ts';
+import { ago, count, factAnswers, factWords, outcomeName, parseFactParam, plural, shortDate } from '@/lib/format.ts';
 import {
   Button,
   ConfirmButton,
@@ -36,25 +36,34 @@ const SOURCES = [
 const MADE_BY: Record<string, string> = { user: 'You', correction: 'Your answers', learned: 'sift, when it blocked them' };
 const QUIET: Record<string, string> = { fromDomain: 'anyone at', to: 'sent to', listId: 'the list', subjectContains: 'subject has' };
 
-/** What a rule matches: an address alone, or a quiet word and the value. */
-function Who({ match }: { match: Record<string, string> }) {
+/** What a rule matches: an address alone, or a quiet word and the value; then what the mail must be, in words. */
+function Who({ match: { facts, ...match } }: { match: RuleMatch }) {
+  const named = Object.entries(match);
+  const asked = factAnswers(facts).map(factWords);
   return (
     <span className="name">
-      {Object.entries(match).map(([key, value], index) => (
+      {named.map(([key, value], index) => (
         <span key={key}>
           {index > 0 ? <span className="font-normal text-muted-foreground">, </span> : null}
           {QUIET[key] ? <span className="font-normal text-muted-foreground">{QUIET[key]} </span> : null}
           {key === 'subjectContains' ? `“${value}”` : value}
         </span>
       ))}
+      {asked.length > 0 ? (
+        <span className="font-normal">
+          <span className="text-muted-foreground">{named.length > 0 ? ', that ' : 'mail that '}</span>
+          {asked.join(' and ')}
+        </span>
+      ) : null}
     </span>
   );
 }
 
-const whoText = (match: Record<string, string>) =>
-  Object.entries(match)
-    .map(([key, value]) => `${QUIET[key] ? `${QUIET[key]} ` : ''}${key === 'subjectContains' ? `“${value}”` : value}`)
-    .join(', ');
+function whoText({ facts, ...match }: RuleMatch): string {
+  const named = Object.entries(match).map(([key, value]) => `${QUIET[key] ? `${QUIET[key]} ` : ''}${key === 'subjectContains' ? `“${value}”` : value}`);
+  const asked = factAnswers(facts).map(factWords);
+  return [...named, ...(asked.length > 0 ? [`${named.length > 0 ? 'that' : 'mail that'} ${asked.join(' and ')}`] : [])].join(', ');
+}
 
 /** The rule's own action: an action rule's, or an exception to its label's. */
 const own = (rule: RuleSummary) => (rule.kind === 'label' ? rule.override : rule.disposition);
@@ -137,8 +146,14 @@ export function Rules() {
   const [source, setSource] = useParam('by', SOURCES);
   const [open, setOpen] = useParam('rule');
   const [adding, setAdding] = useState(false);
-  // Opened from a message ("Make a rule…"): the dialog starts on its sender.
-  const [from, setFrom] = useParam('from');
+  // Opened from a message ("Make a rule…"): the dialog starts on its sender, or its list, and what sift saw in it.
+  const [from] = useParam('from');
+  const [list] = useParam('list');
+  const [fact] = useParam('fact');
+  const start =
+    from !== '' || list !== '' || fact !== ''
+      ? { by: list !== '' ? ('listId' as const) : ('from' as const), value: list || from, facts: fact.split(',').flatMap((one) => parseFactParam(one) ?? []) }
+      : undefined;
   const accountId = manage.data?.accounts[0]?.id;
   const labels = accountId ? (manage.data?.labels[accountId] ?? []).map((l) => [l.id, l.name] as const) : [];
   const needle = search.trim().toLowerCase();
@@ -147,7 +162,7 @@ export function Rules() {
       (r) =>
         (label === '' || r.labelId === label || r.whenLabel === label) &&
         (source === '' || r.source === source) &&
-        (needle === '' || [...Object.values(r.match), r.labelName ?? ''].some((text) => text.toLowerCase().includes(needle))),
+        (needle === '' || [whoText(r.match), r.labelName ?? ''].some((text) => text.toLowerCase().includes(needle))),
     )
     .toSorted((a, b) => b.hits - a.hits);
   const at = rules.findIndex((r) => r.id === open);
@@ -250,14 +265,14 @@ export function Rules() {
           remove={removeButton(rules[at], true)}
         />
       ) : null}
-      {(adding || from !== '') && accountId ? (
+      {(adding || start) && accountId ? (
         <AddRuleDialog
           accountId={accountId}
           labels={manage.data?.labels[accountId] ?? []}
-          {...(from === '' ? {} : { from })}
+          {...(start ? { start } : {})}
           onClose={() => {
             setAdding(false);
-            setFrom('');
+            setParams({ from: '', list: '', fact: '' });
           }}
           onAdded={reload}
         />

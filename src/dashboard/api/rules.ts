@@ -4,13 +4,17 @@ import { preferences } from '../../store/preferences.ts';
 import { addRule, removeRule } from '../../store/rules.ts';
 import { listRuleSummaries } from '../queries/rules.ts';
 import { rules } from '../../store/query.ts';
-import { RuleFilter, RuleSummary } from '../types.ts';
-import { RULE_KEYS, type Read, type Write, accountId, decided, labelId, named, ok, ownerOf, read, redecide, text, write } from './route.ts';
+import { RuleFacts, RuleFilter, type RuleMatch, RuleSummary } from '../types.ts';
+import { type Read, type Write, accountId, decided, labelId, named, ok, ownerOf, read, redecide, text, write } from './route.ts';
 
+const value = z.string().max(200).optional();
 /** A condition left empty is not one. */
 const conditions = z
-  .partialRecord(z.enum(RULE_KEYS), z.string().max(200))
-  .transform((match) => Object.fromEntries(Object.entries(match).filter(([, value]) => value !== '')) as typeof match)
+  .strictObject({ from: value, fromDomain: value, to: value, listId: value, subjectContains: value, facts: RuleFacts.optional() })
+  .transform(({ facts, ...rest }): RuleMatch => {
+    const given = Object.fromEntries(Object.entries(rest).filter(([, value]) => value !== undefined && value !== ''));
+    return facts && Object.keys(facts).length > 0 ? { ...given, facts } : given;
+  })
   .refine((match) => Object.keys(match).length > 0, 'A rule needs at least one condition.');
 
 const ruleId = text(40);

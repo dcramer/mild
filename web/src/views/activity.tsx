@@ -4,8 +4,8 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { MailLog } from '@/components/mail-log.tsx';
 import { type Days, type DecisionRow, type UnjudgedRow, api, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/route.ts';
-import { HANDLED, PERIODS, count, longDay, money, moneyTick, plural, shortDay } from '@/lib/format.ts';
-import { Button, Empty, Failure, ListView, Loading, Select, StackedBars, TextLink, useToast } from '@/system';
+import { FACT_FILTER_OPTIONS, HANDLED, PERIODS, count, factFilterName, longDay, money, moneyTick, plural, shortDay } from '@/lib/format.ts';
+import { Button, Empty, Failure, FilterGroup, ListView, Loading, Select, StackedBars, TextLink, useToast } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 const PAGE = 50;
@@ -22,6 +22,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
   const days = (PERIODS.some(([key]) => key === chosen) ? Number(chosen) : 7) as Days;
   const [view, setView] = useParam('show', [...VIEWS, ...FAILED]);
   const [search, setSearch] = useParam('q');
+  const [fact, setFact] = useParam('fact', FACT_FILTER_OPTIONS);
   const [typed, setTyped] = useState(search);
   const [offset, setOffset] = useState(0);
   const client = useQueryClient();
@@ -32,13 +33,15 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
     const timer = setTimeout(() => setSearch(typed.trim()), 250);
     return () => clearTimeout(timer);
   }, [typed]);
-  useEffect(() => setOffset(0), [days, view, search]);
+  useEffect(() => setOffset(0), [days, view, search, fact]);
 
   const status = view === '' ? 'changed' : view === 'trouble' ? 'trouble' : '';
-  const query = { days, stage: '', disposition: '', status, search, limit: PAGE, offset };
+  // What the model could not judge has no decision to narrow, so Failed is never narrowed.
+  const narrowed = view === 'trouble' ? '' : fact;
+  const query = { days, stage: '', disposition: '', status, search, fact: narrowed, limit: PAGE, offset };
   const { data, error, loading } = useLoaded(`decisions-${JSON.stringify(query)}`, (signal) => api.decisions(query, signal));
   const failures = useLoaded(`decisions-trouble-${days}`, (signal) =>
-    api.decisions({ days, stage: '', disposition: '', status: 'trouble', search: '', limit: 1, offset: 0 }, signal),
+    api.decisions({ days, stage: '', disposition: '', status: 'trouble', search: '', fact: '', limit: 1, offset: 0 }, signal),
   );
   const failed = failures.data?.total ?? 0;
   // Not period-bound: such mail waits on the user however long ago it came.
@@ -90,6 +93,14 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
         options: view === 'trouble' || troubles !== '' ? [...VIEWS, ...FAILED] : VIEWS,
         onChange: (next) => setView(next as typeof view),
       }}
+      {...(view === 'trouble'
+        ? {}
+        : {
+            filters: {
+              active: fact === '' ? [] : [{ label: factFilterName(fact), clear: () => setFact('') }],
+              panel: <FilterGroup label="What sift saw" value={fact} options={FACT_FILTER_OPTIONS} onChange={setFact} />,
+            },
+          })}
       intro={
         <>
           {charted ? (
@@ -121,7 +132,13 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
       {loading ? (
         <Loading rows={8} />
       ) : !data || data.rows.length + shown.length === 0 ? (
-        <Empty>{search !== '' ? 'Nothing matches.' : view === '' ? 'sift has changed nothing in Gmail in this period.' : 'Nothing in this period.'}</Empty>
+        <Empty>
+          {search !== '' || narrowed !== ''
+            ? 'Nothing matches.'
+            : view === ''
+              ? 'sift has changed nothing in Gmail in this period.'
+              : 'Nothing in this period.'}
+        </Empty>
       ) : (
         <MailLog rows={data.rows} unjudged={shown} onOpen={onOpen} onUndo={undo} onRetry={retry} onRequeue={requeue} search={search} />
       )}

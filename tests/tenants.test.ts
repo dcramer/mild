@@ -125,6 +125,8 @@ const READS = (account: string, mark: string) => [
   '/api/rules',
   '/api/suggestions',
   '/api/suggestions?kept=1',
+  '/api/suggestions?kept=1&fact=not-to-you',
+  '/api/decisions?days=90&fact=not-to-you',
   '/api/changes',
   '/api/unjudged',
   '/api/manage',
@@ -203,6 +205,16 @@ describe("nobody sees or changes another person's mail", () => {
     expect(one.text).not.toContain(MARK[ALPHA]);
     const summary = JSON.parse((await call('GET', `/api/summary?mailbox=${encodeURIComponent(ALPHA_WORK)}`, ALPHA)).text) as { totals: { decided: number } };
     expect(summary.totals.decided).toBe(1);
+    // Narrowed by a fact, a list is still only theirs.
+    for (const path of ['/api/decisions?days=90&fact=not-to-you', '/api/suggestions?kept=1&fact=not-to-you']) {
+      const narrowed = (await call('GET', path, ALPHA)).text;
+      expect(narrowed).toContain(MARK[ALPHA]);
+      expect(narrowed).toContain(MARK[ALPHA_WORK]);
+      expect(narrowed).not.toContain(MARK[BRAVO]);
+      const work = (await call('GET', `${path}&mailbox=${encodeURIComponent(ALPHA_WORK)}`, ALPHA)).text;
+      expect(work).toContain(MARK[ALPHA_WORK]);
+      expect(work).not.toContain(MARK[ALPHA]);
+    }
     // Someone else's mailbox is not one that can be asked for.
     expect((await call('GET', `/api/rules?mailbox=${encodeURIComponent(BRAVO)}`, ALPHA)).status).toBe(404);
     expect((await call('GET', '/api/rules', null)).status).toBe(401);

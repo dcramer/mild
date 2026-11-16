@@ -1,3 +1,4 @@
+import { CONTENT_FACTS, type RuleFacts, deriveFacts, factCondition, matchesFacts } from '../facts.ts';
 import { parseListId } from '../features.ts';
 import { type DecidedDisposition, type Decision, type Label, type MessageFacts, type Stage, type SubscriptionAction, labelled } from '../types.ts';
 
@@ -12,7 +13,19 @@ export interface RuleMatch {
   listId?: string;
   /** Case-insensitive substring of the subject. */
   subjectContains?: string;
+  /** What sift recorded about the message (`Facts`): each one named must have the answer given. */
+  facts?: RuleFacts;
 }
+
+/** The match's conditions on facts, or null if it has none. */
+const factsOf = (match: Pick<RuleMatch, 'facts'>): RuleFacts | null =>
+  match.facts && Object.values(match.facts).some((v) => v !== undefined) ? match.facts : null;
+
+/** Whether a match has any condition on facts. */
+export const asksFacts = (match: Pick<RuleMatch, 'facts'>) => factsOf(match) !== null;
+
+/** Whether a rule asks about something only the whole message shows, which needs it read before the rule can apply. */
+export const readsMessage = (rule: Rule) => [rule.match, ...(rule.except ?? [])].some((m) => CONTENT_FACTS.some((key) => m.facts?.[key] !== undefined));
 
 /**
  * What the user wants for mail matching `match`. A rule says what the mail is (`labelId`), what happens
@@ -53,6 +66,8 @@ export function matches(match: RuleMatch, facts: MessageFacts): boolean {
   }
   if (match.listId !== undefined) checks.push(parseListId(facts.headers['list-id']) === match.listId.toLowerCase());
   if (match.subjectContains !== undefined) checks.push(facts.subject.toLowerCase().includes(match.subjectContains.toLowerCase()));
+  const asked = factsOf(match);
+  if (asked) checks.push(matchesFacts(asked, facts.known ?? deriveFacts(facts)));
   return checks.length > 0 && checks.every(Boolean);
 }
 
@@ -60,18 +75,24 @@ function applies(rule: Rule, facts: MessageFacts): boolean {
   return matches(rule.match, facts) && !(rule.except ?? []).some((e) => matches(e, facts));
 }
 
-const CONDITION: Record<keyof RuleMatch, string> = { from: 'from', fromDomain: 'from domain', to: 'to', listId: 'list', subjectContains: 'subject contains' };
+type Named = Exclude<keyof RuleMatch, 'facts'>;
+const CONDITION: Record<Named, string> = { from: 'from', fromDomain: 'from domain', to: 'to', listId: 'list', subjectContains: 'subject contains' };
 
-/** A rule's conditions in words, for the audit log and the dashboard. */
+/** A rule's conditions in words, for the audit log and the dashboard: "from domain example.com, is a reply". */
 export function describeMatch(match: RuleMatch): string {
-  return (Object.keys(CONDITION) as (keyof RuleMatch)[])
-    .filter((key) => match[key] !== undefined)
-    .map((key) => `${CONDITION[key]} ${match[key]}`)
-    .join(', ');
+  const named = (Object.keys(CONDITION) as Named[]).filter((key) => match[key] !== undefined).map((key) => `${CONDITION[key]} ${match[key]}`);
+  const facts = Object.entries(factsOf(match) ?? {}).flatMap(([key, want]) => factCondition(key, want) ?? []);
+  return [...named, ...facts].join(', ');
 }
 
-/** How narrowly a match is drawn: each condition counts, and an exact sender counts for more than a domain. */
-export const specificity = (match: RuleMatch) => Object.values(match).filter((v) => v !== undefined).length * 2 + (match.from === undefined ? 0 : 1);
+/**
+ * How narrowly a match is drawn. A condition on who sent it, to whom, the list or the subject counts 2, and
+ * an exact sender 1 more than a domain; a fact counts 1, since one fact ("is a reply") takes in mail from anyone.
+ */
+export const specificity = (match: RuleMatch) =>
+  (Object.keys(CONDITION) as Named[]).filter((key) => match[key] !== undefined).length * 2 +
+  (match.from === undefined ? 0 : 1) +
+  Object.values(factsOf(match) ?? {}).filter((v) => v !== undefined).length;
 
 interface RulesOptions {
   /** Whether the owner has ever written to the sender. Undefined means not known. */

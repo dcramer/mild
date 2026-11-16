@@ -1,6 +1,7 @@
 import { type FILTER_STATES, and, asc, eq, isNotNull, mailboxes, rules as ruleRows } from './query.ts';
 import type { Sql } from './sql.ts';
 import { type FilterVerdict, filterFor } from '../triage/filter.ts';
+import type { RuleMatch } from '../triage/stages/rules.ts';
 import { listAccounts } from './accounts.ts';
 import { listLabels } from './labels.ts';
 import { listRules } from './rules.ts';
@@ -11,6 +12,7 @@ type FilterState = (typeof FILTER_STATES)[number];
 interface RuleFilterRow {
   ruleId: string;
   accountId: string;
+  match: RuleMatch;
   /** The filter in Gmail, while there is one. */
   filterId: string | null;
   state: FilterState | null;
@@ -22,6 +24,7 @@ interface RuleFilterRow {
 const COLUMNS = {
   ruleId: ruleRows.id,
   accountId: ruleRows.accountId,
+  match: ruleRows.match,
   filterId: ruleRows.filterId,
   state: ruleRows.filterState,
   written: ruleRows.filterWritten,

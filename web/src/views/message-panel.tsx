@@ -2,7 +2,7 @@ import { PlusIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAnswer } from '@/components/answer.tsx';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
-import { MessageBody, SignalFacts } from '@/components/message-parts.tsx';
+import { MessageBody, SeenFacts } from '@/components/message-parts.tsx';
 import { AddLabelDialog } from '@/views/label-panel.tsx';
 import { SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { type MessageDetail, api, useAction, useLoaded } from '@/lib/api.ts';
@@ -221,6 +221,7 @@ function Body({
           <Section title="Sender" action={<TextLink href={senderHref(detail.accountId, detail.fromAddress)}>All their mail</TextLink>}>
             <SenderFacts accountId={detail.accountId} profile={detail.sender} />
           </Section>
+          <SeenFacts detail={detail} />
           {others.length > 0 ? (
             <Section title="Also waiting" meta={count(others.length)}>
               <div className="max-h-56 overflow-y-auto">
@@ -240,9 +241,6 @@ function Body({
             </Section>
           ) : null}
           <div className="flex flex-col gap-3">
-            <Disclosure summary="What sift saw in it">
-              <SignalFacts detail={detail} />
-            </Disclosure>
             {history.length > 0 ? (
               <Disclosure summary={`History · ${history.length}`}>
                 <Failure>{undo.error}</Failure>

@@ -3,15 +3,15 @@ import { type FeedbackInput, applyFeedback } from '../../learn/feedback.ts';
 import { resolveProposal } from '../../store/proposals.ts';
 import { proposals } from '../../store/query.ts';
 import { listSuggestions, suggestionDetail } from '../queries/suggestions.ts';
-import { FeedbackReply, FeedbackRequest, SuggestionDetail, Suggestions } from '../types.ts';
+import { FACT_FILTER_KEYS, FeedbackReply, FeedbackRequest, SuggestionDetail, Suggestions } from '../types.ts';
 import { type Read, type Write, done, flag, id, missing, named, ok, ownerOf, read, write } from './route.ts';
 
 export const reads: Read[] = [
   read({
     path: '/api/suggestions',
-    query: z.object({ kept: flag }),
+    query: z.object({ kept: flag, fact: z.enum(FACT_FILTER_KEYS).optional() }),
     reply: Suggestions,
-    run: async ({ db }, scope, { kept }) => ok(await listSuggestions(db, scope, { includeKept: kept !== undefined })),
+    run: async ({ db }, scope, { kept, fact }) => ok(await listSuggestions(db, scope, { includeKept: kept !== undefined, ...(fact ? { fact } : {}) })),
   }),
   read({
     path: '/api/suggestion',

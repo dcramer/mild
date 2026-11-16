@@ -63,12 +63,18 @@ const inbox = [
   mail('Weekly Digest <digest@news.example.com>', 'This week in widgets', 'Five stories about widgets.', list('news.example.com')),
   mail('Weekly Digest <digest@news.example.com>', 'Widgets, part two', 'More stories about widgets.', list('news.example.com')),
   mail('Shop <orders@shop.example.com>', 'Your order has shipped', 'Order 1042 is on its way.'),
-  mail('Deals <deals@promo.example.com>', '48 hours only: 30% off', 'Everything must go.', list('promo.example.com')),
+  mail(
+    'Deals <deals@promo.example.com>',
+    '48 hours only: 30% off',
+    'Everything must go.',
+    [...list('promo.example.com'), { name: 'X-Mailer', value: 'Mailchimp Mailer' }, { name: 'Reply-To', value: 'Promo Team <team@promo.example.com>' }],
+    ['CATEGORY_PROMOTIONS'],
+  ),
   mail('CI <builds@ci.example.org>', 'Build failed on main', 'The build failed at step 3.'),
-  mail('Ada Lovelace <ada@example.org>', 'Lunch on Thursday?', 'Are you free for lunch on Thursday?'),
+  mail('Ada Lovelace <ada@example.org>', 'Lunch on Thursday?', 'Are you free for lunch on Thursday?', [{ name: 'In-Reply-To', value: '<lunch@example.org>' }]),
   mail('Grace Hopper <grace@example.net>', 'Notes from the review', 'Attached are my notes.'),
   // The one the stand-in model places, as Marketing.
-  mail('Store <sale@store.example.com>', 'Winter sale starts now', 'Up to half off.', list('store.example.com')),
+  mail('Store <sale@store.example.com>', 'Winter sale starts now', 'Up to half off.', list('store.example.com'), ['CATEGORY_PROMOTIONS']),
   // The stand-in model fails on these every time, so after three passes they are out of the queue and not judged.
   mail('Ops <alerts@ops.example.com>', 'Disk 91% full on db-2', 'Free space is running low.'),
   mail('Ops <alerts@ops.example.com>', 'Replica lag on db-3', 'The replica is 40 seconds behind.'),
@@ -94,9 +100,12 @@ const api: GmailApi = {
   getLabelIds: async (id) => mailbox.labels.get(id) ?? null,
   listLabels: async () => [],
   getBodyText: async (id) => find(id)?.body ?? null,
+  // What a model's read of the whole message adds: Grace's notes come with a file, and the Deals mail is tracked.
   getContent: async (id) => {
     const m = find(id);
-    return m ? { text: m.body, facts: { hasAttachments: false } } : null;
+    if (!m) return null;
+    const html = id === 'm4' ? { trackingPixel: true, trackedLinks: true, linkHosts: 2, linksOffDomain: true } : {};
+    return { text: m.body, facts: { hasAttachments: id === 'm7', ...html } };
   },
   getThread: async () => null,
 };

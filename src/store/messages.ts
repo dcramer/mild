@@ -1,7 +1,7 @@
-import { and, asc, decisions, desc, eq, lt, messages, not, notExists, suggestionBodies } from './query.ts';
+import { type SQL, and, asc, decisions, desc, eq, lt, messages, not, notExists, or, sql, suggestionBodies } from './query.ts';
 import { outOfTries } from './runs.ts';
 import type { Sql } from './sql.ts';
-import type { Facts } from '../triage/facts.ts';
+import type { Facts, RuleFacts } from '../triage/facts.ts';
 import type { Address, MessageFacts } from '../triage/types.ts';
 
 const COLUMNS = {
@@ -17,6 +17,7 @@ const COLUMNS = {
   headers: messages.headers,
   labelIds: messages.labelIds,
   suggestOnly: messages.suggestOnly,
+  facts: messages.facts,
 };
 
 interface Row {
@@ -32,6 +33,7 @@ interface Row {
   headers: Record<string, string>;
   labelIds: string[];
   suggestOnly: boolean;
+  facts: Facts;
 }
 
 const toMessage = (accountId: string, r: Row): MessageFacts => ({
@@ -45,6 +47,7 @@ const toMessage = (accountId: string, r: Row): MessageFacts => ({
   labelIds: r.labelIds,
   headers: r.headers,
   receivedAt: r.receivedAt,
+  known: r.facts,
 });
 
 interface QueuedMessage {
@@ -108,4 +111,21 @@ export async function getFacts(db: Sql, accountId: string, messageId: string): P
 /** Delete the text of waiting mail fetched before `cutoff`, every mailbox's. Returns how many went. */
 export async function purgeSuggestionBodies(db: Sql, cutoff: number): Promise<number> {
   return (await db.delete(suggestionBodies).where(lt(suggestionBodies.fetchedAt, cutoff)).returning({ id: suggestionBodies.messageId })).length;
+}
+
+/** Facts that hold a name or null: `true` or `false` against one asks whether there is a name. */
+const NAMED = new Set(['listId', 'bulkService', 'category']);
+
+/**
+ * Conditions on a message's recorded facts, held as `matchesFacts` holds them, for a query on `messages`.
+ * A fact not recorded for the message fails its condition. Equality is containment, which the facts' index serves.
+ */
+export function factsWhere(conditions: RuleFacts): SQL {
+  const has = (key: string, value: unknown) => sql`${messages.facts} @> ${JSON.stringify({ [key]: value })}::jsonb`;
+  return and(
+    ...Object.entries(conditions).map(([key, want]) => {
+      if (typeof want === 'boolean' && NAMED.has(key)) return sql`jsonb_typeof(${messages.facts} -> ${key}::text) ${want ? sql`= 'string'` : sql`= 'null'`}`;
+      return Array.isArray(want) ? or(...want.map((value: unknown) => has(key, value))) : has(key, want);
+    }),
+  )!;
 }

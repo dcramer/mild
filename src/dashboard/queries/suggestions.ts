@@ -17,7 +17,7 @@ import { listLabels } from '../../store/labels.ts';
 import type { Label } from '../../triage/types.ts';
 import { listProposals } from '../../store/proposals.ts';
 import { type Scope, sees, within } from '../scope.ts';
-import type { SuggestionDetail, SuggestionItem, Suggestions } from '../types.ts';
+import { FACT_FILTERS, type FactFilter, type SuggestionDetail, type SuggestionItem, type Suggestions } from '../types.ts';
 import { outcomeOf } from './labels.ts';
 import { senderProfile } from './senders.ts';
 
@@ -52,12 +52,14 @@ const MAX_ITEMS = 500;
  * What is waiting on the user, one group per sender, since an answer is about a sender. A group shows
  * the guess sift made for most of that sender's waiting mail. Biggest groups first: they teach the most.
  */
-export async function listSuggestions(db: Sql, scope: Scope, options: { includeKept?: boolean } = {}): Promise<Suggestions> {
+export async function listSuggestions(db: Sql, scope: Scope, options: { includeKept?: boolean; fact?: FactFilter } = {}): Promise<Suggestions> {
   const accounts = scope.accounts.map((id) => ({ id }));
   const labels = new Map<string, Label[]>();
   for (const { id } of accounts) labels.set(id, await listLabels(db, id));
   const names = new Map([...labels].flatMap(([account, list]) => list.map((l) => [`${account}\n${l.id}`, l.name] as const)));
-  const waitingNow = (await pendingSuggestions(db, { accounts: scope.accounts })).filter((s) => options.includeKept || s.disposition !== 'keep');
+  const waitingNow = (await pendingSuggestions(db, { accounts: scope.accounts, ...(options.fact ? { facts: FACT_FILTERS[options.fact] } : {}) })).filter(
+    (s) => options.includeKept || s.disposition !== 'keep',
+  );
   const shown = waitingNow.slice(0, MAX_ITEMS);
   // What each sender's mail has been labelled, by its current decision, to offer as other likely labels.
   const history = new Map<string, Map<string, number>>();
@@ -150,7 +152,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
             id: p.id,
             accountId: p.accountId,
             kind: p.kind,
-            match: p.match as Record<string, string>,
+            match: p.match,
             labelId: p.labelId,
             labelName: label.name,
             disposition: outcomeOf(label),

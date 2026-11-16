@@ -11,6 +11,12 @@ describe('validateFilter', () => {
     expect(problems).toContain('forwarding filters are never allowed');
   });
 
+  it('rejects a filter for a rule with conditions on what sift found in the message, which Gmail cannot match', () => {
+    const filter = { criteria: { from: 'news@example.com' }, action: { removeLabelIds: ['INBOX'] } };
+    expect(validateFilter({ ...filter, facts: { isReply: false } })).toEqual(['Gmail cannot match what sift found in a message']);
+    expect(validateFilter({ ...filter, facts: {} })).toEqual([]);
+  });
+
   it('rejects filters with no positive criteria', () => {
     expect(validateFilter({ criteria: { negatedQuery: 'foo' }, action: { removeLabelIds: ['INBOX'] } })).toHaveLength(1);
     expect(validateFilter({ criteria: { from: '  ' }, action: { removeLabelIds: ['INBOX'] } })).toHaveLength(1);

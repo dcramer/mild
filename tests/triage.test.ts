@@ -3,7 +3,8 @@ import { DEFAULT_LABELS } from '../src/store/labels.ts';
 import { bulkSignals, parseAddress } from '../src/triage/features.ts';
 import { triage } from '../src/triage/pipeline.ts';
 import { classifierStage } from '../src/triage/stages/classifier.ts';
-import { type Rule, rulesStage, settle } from '../src/triage/stages/rules.ts';
+import { deriveFacts } from '../src/triage/facts.ts';
+import { type Rule, describeMatch, readsMessage, rulesStage, settle, specificity } from '../src/triage/stages/rules.ts';
 import { labelled } from '../src/triage/types.ts';
 import { facts } from './helpers.ts';
 
@@ -114,6 +115,70 @@ describe('rules stage', () => {
       disposition: 'keep',
     });
     expect(await decide([newsletters], facts(), written)).toMatchObject({ disposition: 'archive' });
+  });
+});
+
+describe('rules on facts', () => {
+  const decide = (rules: Rule[], input = facts()) => rulesStage(rules, LABELS).decide(input);
+  const campaign = facts({
+    headers: {
+      'list-id': '<news.example.com>',
+      'list-unsubscribe': '<https://example.com/u>',
+      'list-unsubscribe-post': 'List-Unsubscribe=One-Click',
+      'authentication-results': 'mx.google.com; dmarc=pass header.from=example.com',
+    },
+  });
+  const reply = facts({ headers: { 'in-reply-to': '<a@example.com>' } });
+
+  it('reads the facts recorded for the message, or its headers when none are', async () => {
+    const rule: Rule = { id: 'r', match: { facts: { unsubscribe: 'one-click', dmarc: 'pass' } }, labelId: 'newsletter' };
+    expect(await decide([rule], campaign)).toMatchObject({ ruleId: 'r', reason: 'rule: has a one-click unsubscribe, passed DMARC is Newsletters' });
+    expect(await decide([rule], reply)).toBeNull();
+    // What was recorded stands, though the headers alone would not show it.
+    const known = { ...deriveFacts(reply), unsubscribe: 'one-click' as const, dmarc: 'pass' as const };
+    expect(await decide([rule], { ...reply, known })).toMatchObject({ ruleId: 'r' });
+  });
+
+  it('takes a list of answers, and whether a named fact is there at all', async () => {
+    const unproven: Rule = { id: 'u', match: { facts: { dmarc: ['fail', 'none'] } }, labelId: 'cold_outreach' };
+    expect(await decide([unproven], reply)).toMatchObject({ ruleId: 'u' });
+    expect(await decide([unproven], campaign)).toBeNull();
+    const listed: Rule = { id: 'l', match: { facts: { listId: true } }, disposition: 'archive' };
+    expect(await decide([listed], campaign)).toMatchObject({ ruleId: 'l' });
+    expect(await decide([listed], reply)).toBeNull();
+  });
+
+  it('never matches on what is not known yet, such as an attachment before the message is read', async () => {
+    const rule: Rule = { id: 'a', match: { facts: { hasAttachments: true } }, labelId: 'transactional' };
+    expect(await decide([rule])).toBeNull();
+    expect(await decide([rule], facts({ known: { ...deriveFacts(facts()), hasAttachments: true } }))).toMatchObject({ ruleId: 'a' });
+    expect(readsMessage(rule)).toBe(true);
+    expect(readsMessage({ id: 'b', match: { facts: { isReply: true } }, disposition: 'keep' })).toBe(false);
+  });
+
+  it('needs the facts and every other condition to hold together, with exceptions on facts', async () => {
+    const rule: Rule = { id: 'r', match: { fromDomain: 'example.com', facts: { isReply: false } }, disposition: 'archive' };
+    expect(await decide([rule], campaign)).toMatchObject({ ruleId: 'r' });
+    expect(await decide([rule], reply)).toBeNull();
+    expect(await decide([{ id: 'x', match: { fromDomain: 'example.com' }, except: [{ facts: { isReply: true } }], disposition: 'archive' }], reply)).toBeNull();
+    expect(await decide([{ id: 'e', match: { facts: {} }, disposition: 'archive' }])).toBeNull();
+  });
+
+  it('ranks a fact below who sent it, and a sender with a fact above the sender alone', async () => {
+    const domain: Rule = { id: 'domain', match: { fromDomain: 'example.com' }, disposition: 'archive' };
+    const replies: Rule = { id: 'replies', match: { facts: { isReply: true } }, labelId: 'newsletter' };
+    const domainReplies: Rule = { id: 'both', match: { fromDomain: 'example.com', facts: { isReply: true } }, labelId: 'cold_outreach' };
+    expect(specificity(replies.match)).toBeLessThan(specificity(domain.match));
+    expect(specificity(domainReplies.match)).toBeGreaterThan(specificity(domain.match));
+    expect(await decide([replies, domain], reply)).toMatchObject({ ruleId: 'domain' });
+    expect(await decide([domain, domainReplies], reply)).toMatchObject({ ruleId: 'both' });
+  });
+
+  it('says every fact in plain words', () => {
+    expect(describeMatch({ from: 'a@example.com', facts: { isReply: false, addressed: 'neither', category: 'promotions', listId: true } })).toBe(
+      'from a@example.com, is not a reply, does not name you, is in Promotions, came through a mailing list',
+    );
+    expect(describeMatch({ facts: { unsubscribe: ['header', 'none'], hasAttachments: true } })).toBe('has no one-click unsubscribe, has attachments');
   });
 });
 

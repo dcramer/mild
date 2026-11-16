@@ -180,7 +180,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
   const open = messageId === '' ? null : listed === -1 ? { items: [{ accountId, messageId, subject: '' }], index: 0 } : { items: list, index: listed };
   const show = (item: MessageRef | undefined, push?: { state: unknown }) => setParams({ message: item?.messageId ?? '', account: item?.accountId ?? '' }, push);
   const online = useOnline();
-  const waiting = useLoaded('suggestions-false', (signal) => api.suggestions(false, signal));
+  const waiting = useLoaded('suggestions-false', (signal) => api.suggestions(false, '', signal));
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const expired = manage.data?.activity.expired ?? [];
   const openMessages = (items: MessageRef[], index: number) => {

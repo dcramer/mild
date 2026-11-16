@@ -5,11 +5,14 @@ export type {
   ChangeRow,
   DecisionPage,
   DecisionRow,
+  FactFilter,
   FeedbackRequest,
   LabelSummary,
   ManageState,
   MessageDetail,
   Removed,
+  RuleFacts,
+  RuleMatch,
   RuleSummary,
   SenderPage,
   SenderProfile,
@@ -25,12 +28,14 @@ export type {
 import type {
   ChangeRow,
   DecisionPage,
+  FactFilter,
   FeedbackReply,
   FeedbackRequest,
   ManageState,
   MessageDetail,
   Models,
   Removed,
+  RuleMatch,
   RuleSummary,
   SenderPage,
   Session,
@@ -49,6 +54,8 @@ interface DecisionQuery {
   disposition: string;
   status: string;
   search: string;
+  /** Empty for none. */
+  fact: FactFilter | '';
   limit: number;
   offset: number;
 }
@@ -129,7 +136,7 @@ export const api = {
   decisions: (q: DecisionQuery, signal: AbortSignal) =>
     get<DecisionPage>(
       '/api/decisions',
-      { days: q.days, stage: q.stage, disposition: q.disposition, status: q.status, q: q.search, limit: q.limit, offset: q.offset },
+      { days: q.days, stage: q.stage, disposition: q.disposition, status: q.status, q: q.search, fact: q.fact, limit: q.limit, offset: q.offset },
       signal,
     ),
   message: (account: string, id: string, signal: AbortSignal) => get<MessageDetail>('/api/message', { account, id }, signal),
@@ -139,7 +146,8 @@ export const api = {
   setStanding: (accountId: string, who: { address: string } | { domain: string }, standing: 'trusted' | 'unwanted' | 'blocked' | 'none') =>
     post('/api/standing', { accountId, ...who, standing }),
   rules: (signal: AbortSignal) => get<{ rules: RuleSummary[] }>('/api/rules', {}, signal),
-  suggestions: (includeKept: boolean, signal: AbortSignal) => get<Suggestions>('/api/suggestions', includeKept ? { kept: 1 } : {}, signal),
+  suggestions: (includeKept: boolean, fact: FactFilter | '', signal: AbortSignal) =>
+    get<Suggestions>('/api/suggestions', { ...(includeKept ? { kept: 1 } : {}), ...(fact ? { fact } : {}) }, signal),
   suggestion: (account: string, sender: string, signal: AbortSignal) => get<SuggestionDetail>('/api/suggestion', { account, sender }, signal),
   /**
    * Say what a message is. Resolves with what sift learned and, when the message had already been acted on,
@@ -171,7 +179,7 @@ export const api = {
   /** A rule carries a label, an action (`disposition`), or both; or an action for mail that turns out to be `whenLabel`. */
   addRule: (rule: {
     accountId: string;
-    match: Record<string, string>;
+    match: RuleMatch;
     /** What the mail is. */
     label?: string;
     /** Apply only once sift has said the mail is this label. */

@@ -30,6 +30,8 @@ import { recordDecision } from '../store/decisions.ts';
 import { proposeFromAnswers } from '../store/proposals.ts';
 import { type RuleSays, setRule } from '../store/rules.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
+import type { RuleFacts } from '../triage/facts.ts';
+import { factsWhere } from '../store/messages.ts';
 import { type DecidedDisposition, type Decision, type Disposition, type StageName, type SubscriptionAction, labelled } from '../triage/types.ts';
 
 /** A decision sift only suggested, that the user has not yet confirmed or corrected. */
@@ -87,7 +89,7 @@ const toSuggestion = ({ subscription, ...r }: Omit<Suggestion, 'unsubscribe'> & 
  */
 export async function pendingSuggestions(
   db: Sql,
-  filter: { accountId?: string; accounts?: readonly string[]; sender?: string; domain?: string; limit?: number } = {},
+  filter: { accountId?: string; accounts?: readonly string[]; sender?: string; domain?: string; facts?: RuleFacts; limit?: number } = {},
 ): Promise<Suggestion[]> {
   const rows = await db
     .select(SUGGESTION)
@@ -116,6 +118,7 @@ export async function pendingSuggestions(
         filter.accountId === undefined ? undefined : eq(decisions.accountId, filter.accountId),
         filter.sender === undefined ? undefined : eq(messages.fromAddress, filter.sender),
         filter.domain === undefined ? undefined : eq(messages.fromDomain, filter.domain),
+        filter.facts === undefined ? undefined : factsWhere(filter.facts),
       ),
     )
     .orderBy(desc(decisions.decidedAt), desc(decisions.id))

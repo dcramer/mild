@@ -90,11 +90,10 @@ The dashboard manages sift, behind Google sign-in. That sign-in also connects th
 
 Built: one model call per message that names a label; the label's outcome decides what happens. In use with a ChatGPT subscription model, with sift off.
 
-- [ ] **Message facts, the rest.** Built: one named set of facts per message (unsubscribe header and whether one-click, list id, bulk or auto-generated, DMARC, SPF and DKIM, bulk mail service, reply-to differs, addressed to the owner or not, a reply, Gmail's category; and, once a model reads the message, attachments, tracking pixel, tracked links, links off the sender's domain, and whether the owner took part in the thread), recorded with the message, given to the model, and returned with a message's detail; a reply in a thread the owner wrote in is never hidden on a model's word. Still to do:
-  - Show the facts when a message is opened, and filter lists by them.
-  - Let rules match on facts: `matchesFacts` exists and is not wired into rules or the rule editor.
+- [ ] **Message facts, the rest.** Built: one named set of facts per message, recorded, given to the model, shown when a message is opened, conditions a rule can have, and filters on Suggestions and Activity. Still to do:
   - Check the bulk-service list and tracker patterns against real mail; senders with their own DKIM and Return-Path are recognised only by their links.
   - "Reads as AI-generated" and language were left out as judgements, not facts. Mail to a dot-variant or alias of the owner's address is not counted as addressed to them.
+  - With no model, nothing reads a message, so a rule on attachments or a tracking pixel never holds.
 - [ ] **Several labels with a confidence each.** Have the model (and the decision model in front of it) score every plausible label instead of naming one, then take the highest if it clears a threshold and ask the user if none does. It gives a real "how sure", shows the runner-up when sift was wrong ("it was nearly Receipts"), lets thresholds differ by what the label does (higher for spam and block), and makes "these two labels are hard to tell apart" measurable. To settle: whether a message still gets exactly one label; what the threshold is and whether it is per label; and how the scores are recorded so they can be tested against examples.
 - [ ] Decision model tier (Jev or Clef through pi-ai `classify`) in front of the reasoning model, once there are enough examples to set thresholds. The stage exists and is not wired.
 - [ ] Confirm a ChatGPT subscription token refreshes by itself over weeks and survives a restart; try the device-code login inside Docker.

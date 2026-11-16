@@ -4,6 +4,7 @@
  * zod and the pure triage types.
  */
 import { z } from 'zod';
+import { RULE_FACTS, type RuleFacts as Conditions, factCondition } from '../triage/facts.ts';
 import { DECIDED } from '../triage/types.ts';
 
 export const STAGES = ['rules', 'classifier', 'model', 'fallback'] as const;
@@ -16,7 +17,41 @@ export const text = (max = 200) => z.string().min(1).max(max);
 export const labelId = z.string().regex(LABEL_ID);
 export const decided = z.enum(DECIDED);
 const ruleKind = z.enum(['label', 'action', 'when-label']);
-const match = z.record(z.string(), z.string());
+/** A rule's conditions on facts: each fact named once, with one of the answers `RULE_FACTS` gives it. */
+export const RuleFacts = z.strictObject(
+  Object.fromEntries(
+    Object.keys(RULE_FACTS).map((key) => [
+      key,
+      z
+        .unknown()
+        .refine((want) => factCondition(key, want) !== null, { error: `is not an answer sift has for ${key}` })
+        .optional(),
+    ]),
+  ),
+) as unknown as z.ZodType<Conditions>;
+export type RuleFacts = Conditions;
+const match = z.object({
+  from: z.string().optional(),
+  fromDomain: z.string().optional(),
+  to: z.string().optional(),
+  listId: z.string().optional(),
+  subjectContains: z.string().optional(),
+  facts: RuleFacts.optional(),
+});
+export type RuleMatch = z.infer<typeof match>;
+
+/** The facts Suggestions and Activity can be narrowed by (`?fact=`), each a condition on what sift recorded about the message. */
+export const FACT_FILTERS = {
+  reply: { isReply: true },
+  list: { listId: true },
+  'one-click': { unsubscribe: 'one-click' },
+  'bulk-service': { bulkService: true },
+  'not-to-you': { addressed: 'neither' },
+  unproven: { dmarc: ['fail', 'none'] },
+  attachments: { hasAttachments: true },
+} as const satisfies Record<string, Conditions>;
+export type FactFilter = keyof typeof FACT_FILTERS;
+export const FACT_FILTER_KEYS = Object.keys(FACT_FILTERS) as FactFilter[];
 const answered = z.object({ reviewed: z.number(), right: z.number() });
 
 /** What was done in Gmail on a day: changes that stand, by what they did, and changes that failed. */

@@ -490,6 +490,7 @@ describe('triage queue', () => {
         labelIds: ['INBOX', 'UNREAD'],
         headers: { from: 'News <news@example.com>', to: 'Me <me@example.org>', subject: 'Subject news', 'list-id': '<news.example.com>' },
         receivedAt: 1000,
+        known: expect.objectContaining({ listId: 'news.example.com', addressed: 'to' }),
       },
     ]);
   });
@@ -545,6 +546,25 @@ describe('inference tier', () => {
       label_id: 'newsletter',
       reason: 'rule: from news@example.com is Newsletters',
     });
+  });
+
+  it('reads a message before the rules when one asks what only the whole message shows, and once in all', async () => {
+    judged.length = 0;
+    await addRule(db, ACCOUNT, { match: { facts: { hasAttachments: true } }, labelId: 'transactional' }, 'user');
+    const read: string[] = [];
+    const reading = (): GmailApi => ({
+      ...api(),
+      getContent: async (id) => (read.push(id), { text: `Body ${id}`, facts: { hasAttachments: id === 'news' } }),
+    });
+    await runOnce(await active(false), { ...options(), connect: () => ({ api: reading(), mailbox }), model: model('newsletter') });
+    expect(judged).toEqual(['ada']);
+    expect(read.toSorted()).toEqual(['ada', 'news']);
+    expect(await raw(db).get(`SELECT stage, label_id, reason FROM decisions WHERE message_id = 'news'`)).toEqual({
+      stage: 'rules',
+      label_id: 'transactional',
+      reason: 'rule: has attachments is Receipts and transactions',
+    });
+    expect(await raw(db).get(`SELECT facts->>'hasAttachments' AS has FROM messages WHERE id = 'news'`)).toEqual({ has: 'true' });
   });
 
   it('archives what an action rule covers without asking the model or naming a label', async () => {

@@ -34,4 +34,5 @@ An H1 and one paragraph of what the user gets, then four H2s in order: `Sub-feat
 - [Answer a suggestion](./answer-suggestion.md): teach sift what a waiting message is, and the rule that makes.
 - [Add a rule](./add-rule.md): a rule made on the Rules screen, and its effect on what is waiting.
 - [Edit a label](./edit-label.md): change what a label does.
+- [What sift saw in a message](./message-facts.md): the facts shown on an opened message, rules on them, and lists narrowed by them.
 - [Remove a mailbox, delete the account](./remove-mailbox.md): what sift holds about a mailbox, or a whole person, goes.

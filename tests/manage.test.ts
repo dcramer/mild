@@ -192,6 +192,20 @@ describe('managing sift from the dashboard', () => {
     expect((await call('POST', '/api/rules/remove', { id: rule.body['id'] })).body).toEqual({ ok: true, redecided: 2 });
     expect(await latest('w2')).toEqual({ stage: 'model', disposition: 'keep', label_id: 'marketing' });
     expect(((await call('GET', '/api/suggestions?kept=1')).body as { waiting: number }).waiting).toBe(2);
+
+    // A rule on a fact, and Suggestions narrowed by one.
+    await raw(db).run(`UPDATE messages SET facts = facts || '{"isReply": true}'::jsonb WHERE id = 'w1'`);
+    const replies = async () => ((await call('GET', '/api/suggestions?kept=1&fact=reply')).body as { items: { messageId: string }[] }).items;
+    expect((await replies()).map((i) => i.messageId)).toEqual(['w1']);
+    expect((await call('GET', '/api/suggestions?fact=nonsense')).status).toBe(400);
+    const keepReplies = await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: from.address, facts: { isReply: true } }, disposition: 'keep' });
+    expect(keepReplies.body).toMatchObject({ redecided: 1 });
+    expect(await raw(db).get(`SELECT stage, disposition, reason FROM decisions WHERE message_id = 'w1' ORDER BY id DESC LIMIT 1`)).toEqual({
+      stage: 'rules',
+      disposition: 'keep',
+      reason: 'rule: from sales@example.com, is a reply: keep it',
+    });
+    expect(await latest('w2')).toEqual({ stage: 'model', disposition: 'keep', label_id: 'marketing' });
   });
 
   it('edits labels and rules', async () => {
@@ -246,6 +260,26 @@ describe('managing sift from the dashboard', () => {
       { labelName: 'Marketing', override: 'keep', disposition: 'keep' },
     ]);
     expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: {}, label: 'marketing' })).status).toBe(400);
+    const onFacts = await call('POST', '/api/rules', {
+      accountId: ACCOUNT,
+      match: { fromDomain: 'example.org', facts: { isReply: false, unsubscribe: ['header', 'none'], category: 'promotions' } },
+      disposition: 'archive',
+    });
+    expect(onFacts.status).toBe(200);
+    expect((await listRules(db, ACCOUNT)).find((r) => r.id === onFacts.body['id'])).toMatchObject({
+      match: { fromDomain: 'example.org', facts: { isReply: false, unsubscribe: ['header', 'none'], category: 'promotions' } },
+    });
+    for (const facts of [
+      {},
+      { isReply: 'yes' },
+      { dmarc: 'fail' },
+      { trackingPixel: false },
+      { category: 'spam' },
+      { spf: 'pass' },
+      { unsubscribe: ['one-click', 'header'] },
+      { listId: 'news.example.com' },
+    ])
+      expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: { facts }, disposition: 'archive' })).status, JSON.stringify(facts)).toBe(400);
     expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: { body: 'x' }, label: 'marketing' })).status).toBe(400);
     expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: 'a@example.com' }, label: 'no-such-label' })).status).toBe(409);
     expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: 'a@example.com' }, label: 'marketing', disposition: 'review' })).status).toBe(

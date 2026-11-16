@@ -37,8 +37,8 @@ export async function listRuleSummaries(db: Sql, scope: Scope): Promise<RuleSumm
   return rows.map((r) => ({
     id: r.id,
     accountId: r.accountId,
-    match: r.match as Record<string, string>,
-    except: r.except as Record<string, string>[],
+    match: r.match,
+    except: r.except,
     kind: r.labelId !== null ? 'label' : r.whenLabel !== null ? 'when-label' : 'action',
     labelId: r.labelId,
     whenLabel: r.whenLabel,

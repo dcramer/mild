@@ -23,7 +23,8 @@ import {
 import type { Sql } from '../../store/sql.ts';
 import { DISPOSITIONS } from '../../triage/types.ts';
 import { type Scope, within } from '../scope.ts';
-import { type DecisionRow, STAGES, type ChangeRow } from '../types.ts';
+import { type DecisionRow, FACT_FILTERS, FACT_FILTER_KEYS, STAGES, type ChangeRow } from '../types.ts';
+import { factsWhere } from '../../store/messages.ts';
 
 export const DAY_MS = 86_400_000;
 
@@ -133,6 +134,8 @@ interface DecisionFilter {
   sender?: string;
   /** Exact sender domain. */
   domain?: string;
+  /** One of `FACT_FILTERS`. */
+  fact?: string;
   limit?: number;
   offset?: number;
 }
@@ -156,6 +159,10 @@ export async function listDecisions(db: Sql, scope: Scope, filter: DecisionFilte
   if (filter.accountId !== undefined) where.push(eq(decisions.accountId, filter.accountId));
   if (filter.sender !== undefined) where.push(eq(messages.fromAddress, filter.sender));
   if (filter.domain !== undefined) where.push(eq(messages.fromDomain, filter.domain));
+  if (filter.fact !== undefined) {
+    if (!isOneOf(FACT_FILTER_KEYS, filter.fact)) return { total: 0, rows: [] };
+    where.push(factsWhere(FACT_FILTERS[filter.fact]));
+  }
   const search = filter.search?.trim();
   if (search) {
     // Backslash is ILIKE's escape character unless told otherwise.

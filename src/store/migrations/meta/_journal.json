@@ -15,6 +15,13 @@
       "when": 1794817759513,
       "tag": "0001_sift_app",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794819312952,
+      "tag": "0002_message_facts",
+      "breakpoints": true
     }
   ]
 }

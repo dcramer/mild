@@ -5,7 +5,20 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { SenderLink } from '@/components/sender.tsx';
 import { useParam } from '@/lib/route.ts';
 import { type SuggestionItem, type Suggestions, type Summary, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ACTIONS, ago, count, describeMatch, money, outcomeName, percent, plural, sureness, willBe } from '@/lib/format.ts';
+import {
+  ACTIONS,
+  FACT_FILTER_OPTIONS,
+  ago,
+  count,
+  describeMatch,
+  factFilterName,
+  money,
+  outcomeName,
+  percent,
+  plural,
+  sureness,
+  willBe,
+} from '@/lib/format.ts';
 import {
   AnswerPicker,
   Button,
@@ -168,7 +181,11 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
   const [kept, setKept] = useParam('kept');
   const includeKept = kept === '1';
   const setIncludeKept = (on: boolean) => setKept(on ? '1' : '');
-  const { data, error, loading, reload } = useLoaded(`suggestions-${includeKept}`, (signal) => api.suggestions(includeKept, signal));
+  const [fact, setFact] = useParam('fact', FACT_FILTER_OPTIONS);
+  // Unnarrowed, the same list the masthead counts.
+  const { data, error, loading, reload } = useLoaded(`suggestions-${includeKept}${fact ? `-${fact}` : ''}`, (signal) =>
+    api.suggestions(includeKept, fact, signal),
+  );
   const summary = useLoaded('summary-7', (signal) => api.summary(7, signal));
   const toast = useToast();
   const [search, setSearch] = useParam('q');
@@ -222,12 +239,14 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
         active: [
           ...(label === '' ? [] : [{ label: `Label: ${label === UNSURE ? outcomeName('review') : (names.get(label) ?? label)}`, clear: () => setLabel('') }]),
           ...(does === '' ? [] : [{ label: `Then: ${DOES.find(([key]) => key === does)?.[1]}`, clear: () => setDoes('') }]),
+          ...(fact === '' ? [] : [{ label: factFilterName(fact), clear: () => setFact('') }]),
           ...(includeKept ? [{ label: 'With mail sift would keep', clear: () => setIncludeKept(false) }] : []),
         ],
         panel: (
           <>
             <FilterGroup label="Label" value={label} options={[['', 'Any'] as const, [UNSURE, outcomeName('review')] as const, ...names]} onChange={setLabel} />
             <FilterGroup label="Then" value={does} options={DOES} onChange={setDoes} />
+            <FilterGroup label="What sift saw" value={fact} options={FACT_FILTER_OPTIONS} onChange={setFact} />
             <Check checked={includeKept} onChange={setIncludeKept}>
               With mail sift would keep
             </Check>
@@ -239,7 +258,7 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
       {loading ? (
         <Loading rows={6} />
       ) : shown.length === 0 ? (
-        <Empty>{data && data.items.length > 0 ? 'Nothing waiting matches.' : 'Nothing is waiting on you.'}</Empty>
+        <Empty>{(data && data.items.length > 0) || fact !== '' ? 'Nothing waiting matches.' : 'Nothing is waiting on you.'}</Empty>
       ) : (
         <Table keys>
           <thead className="sr-only">

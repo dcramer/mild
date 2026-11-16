@@ -52,10 +52,10 @@ export function ListView({
       <div className="flex flex-col gap-3">
         {search || filters || view ? (
           <div className="flex flex-col gap-2">
-            {/* One bar: the search and the filters share an outline, and nothing is filled until it is used. */}
-            <div className="flex h-9 items-stretch rounded-(--corner) border border-(--frame) transition-colors focus-within:border-foreground/45">
+            {/* One bar: the search and the filters share an outline, and nothing is filled until it is used. On a phone the view takes a row of its own under the search. */}
+            <div className="flex flex-wrap items-stretch rounded-(--corner) border border-(--frame) transition-colors focus-within:border-foreground/45 md:flex-nowrap">
               {search ? (
-                <label className="flex min-w-0 flex-1 items-center gap-2.5 px-3">
+                <label className="flex h-9 min-w-0 flex-1 items-center gap-2.5 px-3">
                   <SearchIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
                   <input
                     ref={searchBox}
@@ -72,17 +72,21 @@ export function ListView({
                   {slash}
                 </label>
               ) : (
-                <span className="flex-1" />
+                <span className="h-9 flex-1" />
               )}
               {view ? (
-                <div role="radiogroup" aria-label={view.label} className="flex shrink-0 border-l border-(--frame)">
+                <div
+                  role="radiogroup"
+                  aria-label={view.label}
+                  className="order-last flex h-9 w-full border-t border-(--frame) md:order-none md:w-auto md:shrink-0 md:border-t-0 md:border-l"
+                >
                   {view.options.map(([key, text]) => (
                     <button
                       key={key}
                       type="button"
                       role="radio"
                       aria-checked={key === view.value}
-                      className="cursor-pointer px-3 text-sm font-medium text-muted-foreground hover:bg-(--fill) hover:text-foreground aria-checked:bg-(--fill-strong) aria-checked:text-foreground"
+                      className="flex-1 cursor-pointer px-3 text-sm font-medium text-muted-foreground hover:bg-(--fill) hover:text-foreground aria-checked:bg-(--fill-strong) aria-checked:text-foreground md:flex-none"
                       onClick={() => view.onChange(key)}
                     >
                       {text}
@@ -96,7 +100,7 @@ export function ListView({
                   aria-label={on > 0 ? `Filters, ${on} on` : 'Filters'}
                   aria-expanded={open}
                   className={cn(
-                    'flex shrink-0 cursor-pointer items-center gap-2 border-l border-(--frame) px-3 text-sm font-semibold',
+                    'flex h-9 shrink-0 cursor-pointer items-center gap-2 border-l border-(--frame) px-3 text-sm font-semibold',
                     open ? 'bg-(--fill-strong)' : 'text-muted-foreground hover:bg-(--fill) hover:text-foreground',
                   )}
                   onClick={() => setOpen(!open)}

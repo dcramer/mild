@@ -188,6 +188,8 @@ export const messages = pgTable(
     index('messages_sender').on(t.accountId, t.fromAddress),
     index('messages_domain').on(t.accountId, t.fromDomain),
     index('messages_received').on(t.accountId, t.receivedAt),
+    // Lists narrowed by a fact ask `facts @> {…}`.
+    index('messages_facts').using('gin', t.facts),
     own(),
   ],
 ).enableRLS();

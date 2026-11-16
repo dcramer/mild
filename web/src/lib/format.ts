@@ -1,4 +1,4 @@
-import type { StageKey } from './api.ts';
+import type { FactFilter, RuleFacts, RuleMatch, StageKey } from './api.ts';
 
 /**
  * The dashboard's words. Each thing sift says about mail has exactly one name, used in every stamp,
@@ -110,6 +110,101 @@ export function ago(ms: number): string {
   return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+export const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/**
+ * What a rule can ask of what sift recorded about a message, each answer with its words after "mail that".
+ * The same answers and words as `RULE_FACTS` (src/triage/facts.ts); tests/facts.test.ts holds them together.
+ */
+export const FACTS = {
+  unsubscribe: [
+    ['one-click', 'has a one-click unsubscribe'],
+    [['header', 'none'], 'has no one-click unsubscribe'],
+  ],
+  listId: [
+    [true, 'came through a mailing list'],
+    [false, 'did not come through a mailing list'],
+  ],
+  markedBulk: [
+    [true, 'is marked bulk'],
+    [false, 'is not marked bulk'],
+  ],
+  bulkService: [
+    [true, 'was sent through a bulk mail service'],
+    [false, 'was sent through no bulk mail service sift knows'],
+  ],
+  dmarc: [
+    ['pass', 'passed DMARC'],
+    [['fail', 'none'], 'did not pass DMARC'],
+  ],
+  replyToDiffers: [
+    [true, 'has replies going elsewhere'],
+    [false, 'has replies going to the sender'],
+  ],
+  addressed: [
+    ['to', 'is addressed to you'],
+    ['cc', 'copies you'],
+    ['neither', 'does not name you'],
+  ],
+  isReply: [
+    [true, 'is a reply'],
+    [false, 'is not a reply'],
+  ],
+  category: [
+    ['personal', 'is in Primary'],
+    ['promotions', 'is in Promotions'],
+    ['social', 'is in Social'],
+    ['updates', 'is in Updates'],
+    ['forums', 'is in Forums'],
+  ],
+  hasAttachments: [
+    [true, 'has attachments'],
+    [false, 'has no attachments'],
+  ],
+  trackingPixel: [[true, 'has a tracking pixel']],
+} as const satisfies { [K in keyof RuleFacts]-?: readonly (readonly [NonNullable<RuleFacts[K]>, string])[] };
+export type FactKey = keyof typeof FACTS;
+
+/** One condition on a fact: which fact, and which of its answers in `FACTS`. */
+export interface FactAnswer {
+  key: FactKey;
+  index: number;
+}
+const answerOf = ({ key, index }: FactAnswer) => (FACTS[key] as readonly (readonly [unknown, string])[])[index];
+export const factWords = (answer: FactAnswer) => answerOf(answer)?.[1] ?? '';
+/** The same answer: a list holds the same values in any order. */
+const same = (a: unknown, b: unknown) => (Array.isArray(a) && Array.isArray(b) ? a.length === b.length && a.every((v) => b.includes(v)) : a === b);
+/** A rule's conditions on facts, as answers. */
+export const factAnswers = (facts: RuleFacts = {}): FactAnswer[] =>
+  Object.entries(facts).flatMap(([key, want]) => {
+    const index = (FACTS[key as FactKey] as readonly (readonly [unknown, string])[] | undefined)?.findIndex(([value]) => same(value, want)) ?? -1;
+    return index === -1 ? [] : [{ key: key as FactKey, index }];
+  });
+/** Answers as the conditions a rule carries. */
+export const factConditions = (answers: readonly FactAnswer[]): RuleFacts =>
+  Object.fromEntries(answers.map((answer) => [answer.key, answerOf(answer)?.[0]])) as RuleFacts;
+/** An answer in an address (`?fact=isReply:0`), and back. */
+export const factParam = ({ key, index }: FactAnswer) => `${key}:${index}`;
+export function parseFactParam(text: string): FactAnswer | null {
+  const [key = '', index = ''] = text.split(':');
+  return key in FACTS && answerOf({ key: key as FactKey, index: Number(index) }) ? { key: key as FactKey, index: Number(index) } : null;
+}
+
+/** The facts Suggestions and Activity can be narrowed by (`FACT_FILTERS`, src/dashboard/types.ts), in the words of the conditions they are. */
+export const FACT_FILTER_WORDS = [
+  ['reply', 'is a reply'],
+  ['list', 'came through a mailing list'],
+  ['one-click', 'has a one-click unsubscribe'],
+  ['bulk-service', 'was sent through a bulk mail service'],
+  ['not-to-you', 'does not name you'],
+  ['unproven', 'did not pass DMARC'],
+  ['attachments', 'has attachments'],
+] as const satisfies readonly (readonly [FactFilter, string])[];
+/** For a filter panel, with "any" first. */
+export const FACT_FILTER_OPTIONS = [['', 'Any'] as const, ...FACT_FILTER_WORDS.map(([key, words]) => [key, capitalised(words)] as const)];
+/** A fact filter that is on, as its chip says it. */
+export const factFilterName = (key: FactFilter) => `Mail that ${FACT_FILTER_WORDS.find(([k]) => k === key)?.[1] ?? key}`;
+
 const MATCH: Record<string, string> = {
   from: 'from',
   fromDomain: 'from anyone at',
@@ -117,11 +212,12 @@ const MATCH: Record<string, string> = {
   listId: 'on the list',
   subjectContains: 'with a subject containing',
 };
-/** A rule's conditions as words to follow "mail": "from news@example.com, with a subject containing …". */
-export const describeMatch = (match: Record<string, string>) =>
-  Object.entries(match)
-    .map(([key, value]) => `${MATCH[key] ?? key} ${key === 'subjectContains' ? `“${value}”` : value}`)
-    .join(', ');
+/** A rule's conditions as words to follow "mail": "from news@example.com, with a subject containing …, that is a reply". */
+export function describeMatch({ facts, ...match }: RuleMatch): string {
+  const named = Object.entries(match).map(([key, value]) => `${MATCH[key] ?? key} ${key === 'subjectContains' ? `“${value}”` : value}`);
+  const asked = factAnswers(facts).map(factWords);
+  return [...named, ...(asked.length > 0 ? [`that ${asked.join(' and ')}`] : [])].join(', ');
+}
 
 /** Where a sender stands, in a word. */
 export const STANDINGS = { trusted: 'Trusted', known: 'Known', new: 'New', unwanted: 'Unwanted', blocked: 'Blocked' } as const;
@@ -146,7 +242,6 @@ export function happened(d: { carryOut: boolean; outcome: string | null; actionS
   if (s === 'skipped') return { text: 'Skipped', tone: 'quiet' };
   return { text: DID[d.disposition] ?? d.disposition, tone: 'plain' };
 }
-const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 /** A day in the log: "Today", "Yesterday", else "Thu, Nov 12". */
 export function dayName(ms: number, now: number = Date.now()): string {

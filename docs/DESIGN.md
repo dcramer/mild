@@ -39,7 +39,7 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Table`, `Tr`, `Th`, `Td`, `TrGroup`, `Sub`, `OnPhone`, `RowActions` | Rows of the same kind of thing, one row per item: the only way to show a list. No surface of its own; on the page a row reaches a little past its text on both sides (`--bleed`), so the hover has room around what it holds. `Tr onOpen` makes the whole row pressable. `Sub` is a quieter second line in a cell; cells sit in the middle of their row, so a one-line cell beside a two-line one lines up with the pair. `RowActions` is the last cell: quiet presses that act without opening the row, always visible. A list that reads as plain rows can drop its column heads (keep them for screen readers). `TrGroup` heads the rows after it, such as a day, inside the one table, so J and K and the columns run through every group. |
 | `AnswerPicker` | Saying what a message is: a dropdown that starts on sift's label, with what else it might be first (each with a `Meter`) and every other label after, and a check that commits. Choosing only chooses, so agreeing is one press and a change is two. Once the choice differs from sift's, the check is inked: the one ink allowed down a list, because a press is now waiting. The answer on every Suggestions row and in the message panel. |
 | `Meter` | How sure sift is of a label, in three steps of ink, before the label it qualifies. Its name (Unsure, Fairly sure, Sure) is read out; the steps come from `sureness` in `lib/format.ts`. |
-| `Facts`, `Fact` | What is known about one thing, as terms and values: a sender, a message's signals. Leave a fact out rather than give it no value. |
+| `Facts`, `Fact` | What is known about one thing, as terms and values: a sender. Leave a fact out rather than give it no value. |
 | `Timeline`, `TimelineEvent` | What happened to one thing, oldest first, each with at most one press (Undo). |
 | `Entry` | The page in place of the dashboard until it can be used: sign-in, then connecting a model. One sheet, centred, the name across its top edge; under it who is signed in, Settings, Sign out, and the terms and privacy links. A statement says what is needed, one line says why, and one `mark` button moves on. |
 | `Sheet`, `SettingRow`, `SettingsGroup` | A group of settings, framed. Each row says what it is, what follows from changing it, and holds its control. Not for a list. A settings page is `SettingsGroup`s: the group's name and what it governs on the left, its sheets on the right, a rule between groups; on a phone they stack. |
@@ -81,7 +81,7 @@ On a phone a row keeps only what identifies it and what it is; figures, dates an
 | `Field inline` | The label goes above the controls. |
 | `Facts` | Each term goes above its value. |
 | `Panel`, `Dialog` | Cover the screen. |
-| `ListView` | The filter panel opens above the list. |
+| `ListView` | The filter panel opens above the list. The view segments take a row of their own under the search, so the search keeps its width. |
 | `Table` | Columns marked `phone="hide"` drop; what they said moves under the first column in an `OnPhone`, and the row opens for the rest. `RowActions` drop too, unless the row does not open (`phone="keep"`). |
 | Rows with a control | The control wraps under the text. |
 | Anything pressed | At least 40px tall on a touch screen (`pointer: coarse`), whatever its size on a desktop. |

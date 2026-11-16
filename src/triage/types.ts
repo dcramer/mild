@@ -1,3 +1,5 @@
+import type { Facts } from './facts.ts';
+
 /** What happens to the message in the mailbox. `review` means no stage was sure: leave it in place and ask. */
 export const DISPOSITIONS = ['keep', 'archive', 'spam', 'review'] as const;
 export type Disposition = (typeof DISPOSITIONS)[number];
@@ -35,6 +37,8 @@ export interface MessageFacts {
   headers: Record<string, string>;
   /** Epoch milliseconds. */
   receivedAt: number;
+  /** What sift has recorded about it. Absent for mail not yet recorded, whose headers say the same. */
+  known?: Facts;
 }
 
 export interface Decision {

@@ -192,6 +192,76 @@ type FactConditions = {
   [K in keyof Facts]?: NonNullable<Facts[K]> | readonly NonNullable<Facts[K]>[] | (null extends Facts[K] ? boolean : never);
 };
 
+/**
+ * The facts a rule can ask about, each with the answers it can want and how they read after "mail that".
+ * An answer is a `matchesFacts` condition. Left out: counts, the list's own id (a rule matches that by
+ * name), SPF and DKIM (DMARC is the one that proves the sender), and what only reads as a judgement.
+ * "No tracking pixel" is not offered: mail with no HTML has no answer, and would never match it.
+ */
+export const RULE_FACTS = {
+  unsubscribe: [
+    ['one-click', 'has a one-click unsubscribe'],
+    [['header', 'none'], 'has no one-click unsubscribe'],
+  ],
+  listId: [
+    [true, 'came through a mailing list'],
+    [false, 'did not come through a mailing list'],
+  ],
+  markedBulk: [
+    [true, 'is marked bulk'],
+    [false, 'is not marked bulk'],
+  ],
+  bulkService: [
+    [true, 'was sent through a bulk mail service'],
+    [false, 'was sent through no bulk mail service sift knows'],
+  ],
+  dmarc: [
+    ['pass', 'passed DMARC'],
+    [['fail', 'none'], 'did not pass DMARC'],
+  ],
+  replyToDiffers: [
+    [true, 'has replies going elsewhere'],
+    [false, 'has replies going to the sender'],
+  ],
+  addressed: [
+    ['to', 'is addressed to you'],
+    ['cc', 'copies you'],
+    ['neither', 'does not name you'],
+  ],
+  isReply: [
+    [true, 'is a reply'],
+    [false, 'is not a reply'],
+  ],
+  category: [
+    ['personal', 'is in Primary'],
+    ['promotions', 'is in Promotions'],
+    ['social', 'is in Social'],
+    ['updates', 'is in Updates'],
+    ['forums', 'is in Forums'],
+  ],
+  hasAttachments: [
+    [true, 'has attachments'],
+    [false, 'has no attachments'],
+  ],
+  trackingPixel: [[true, 'has a tracking pixel']],
+} as const satisfies { [K in keyof Facts]?: readonly (readonly [FactConditions[K], string])[] };
+
+type RuleFactKey = keyof typeof RULE_FACTS;
+/** What a rule asks of a message's facts: for each fact it names, one of the answers in `RULE_FACTS`. */
+export type RuleFacts = { [K in RuleFactKey]?: (typeof RULE_FACTS)[K][number][0] };
+
+/** Only the whole message shows these, so a rule that asks about one needs it read first. */
+export const CONTENT_FACTS = ['hasAttachments', 'trackingPixel'] as const satisfies readonly RuleFactKey[];
+
+/** The same answer: a list holds the same values in any order. */
+const same = (a: unknown, b: unknown) => (Array.isArray(a) && Array.isArray(b) ? a.length === b.length && a.every((v) => b.includes(v)) : a === b);
+
+/** The words for one answer in `RULE_FACTS`, or null if the fact has no such answer. */
+export function factCondition(key: string, want: unknown): string | null {
+  const answers: readonly (readonly [unknown, string])[] | undefined = (RULE_FACTS as Record<string, readonly (readonly [unknown, string])[]>)[key];
+  return answers?.find(([value]) => same(value, want))?.[1] ?? null;
+}
+
 /** Every condition present must hold. No conditions never match, and a fact not known for the message fails its condition. */
 export function matchesFacts(conditions: FactConditions, facts: Facts): boolean {
   const wanted = Object.entries(conditions).filter(([, want]) => want !== undefined);

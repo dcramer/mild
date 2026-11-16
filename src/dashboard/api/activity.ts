@@ -27,11 +27,12 @@ export const reads: Read[] = [
       disposition: filter,
       status: filter,
       q: filter,
+      fact: filter,
       limit: z.coerce.number().int().positive().catch(50),
       offset: z.coerce.number().int().nonnegative().catch(0),
     }),
     reply: DecisionPage,
-    run: async ({ db, now }, scope, { days, stage, disposition, status, q, limit, offset }) =>
+    run: async ({ db, now }, scope, { days, stage, disposition, status, q, fact, limit, offset }) =>
       ok(
         await listDecisions(
           db,
@@ -42,6 +43,7 @@ export const reads: Read[] = [
             ...(disposition ? { disposition } : {}),
             ...(status ? { status } : {}),
             ...(q ? { search: q } : {}),
+            ...(fact ? { fact } : {}),
             limit,
             offset,
           },

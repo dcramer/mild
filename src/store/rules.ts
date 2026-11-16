@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { type RULE_SOURCES, and, asc, eq, proposals, rules, sql } from './query.ts';
 import type { Sql } from './sql.ts';
-import type { Rule, RuleMatch } from '../triage/stages/rules.ts';
+import { type Rule, type RuleMatch, asksFacts } from '../triage/stages/rules.ts';
 import { listLabels } from './labels.ts';
 
 /** `user`: the user wrote it. `correction`: it came from the user correcting sift. `learned`: sift made it when it blocked the sender. */
@@ -62,7 +62,8 @@ async function check(db: Sql, accountId: string, rule: RuleSays): Promise<void> 
 
 /** Append a rule after the account's existing ones. Returns its id. Throws if it has no condition, says nothing, or names no label of the account's. */
 export async function addRule(db: Sql, accountId: string, rule: Omit<Rule, 'id' | 'learned'>, source: RuleSource, now: number = Date.now()): Promise<string> {
-  if (Object.values(rule.match).every((v) => v === undefined || v === '')) throw new Error('A rule needs at least one condition.');
+  const { facts: _facts, ...named } = rule.match;
+  if (Object.values(named).every((v) => v === undefined || v === '') && !asksFacts(rule.match)) throw new Error('A rule needs at least one condition.');
   await check(db, accountId, rule);
   const id = `r-${randomBytes(4).toString('hex')}`;
   const [{ next }] = (await db

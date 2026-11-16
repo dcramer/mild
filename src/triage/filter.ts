@@ -1,4 +1,4 @@
-import { type Rule, type RuleMatch, describeMatch, specificity } from './stages/rules.ts';
+import { type Rule, type RuleMatch, asksFacts, describeMatch, specificity } from './stages/rules.ts';
 import { type Label, labelled } from './types.ts';
 
 /** A rule as Gmail could run it by itself. The label is named, not given by id: the id is Gmail's to assign. */
@@ -60,6 +60,7 @@ export function filterFor(rule: FilterableRule, labels: readonly Label[], rules:
 
   const { from, fromDomain, to, listId, subjectContains } = rule.match;
   if (listId !== undefined) return no('Gmail filters cannot match a mailing list.');
+  if (asksFacts(rule.match)) return no('It asks what sift found in the message, which Gmail filters cannot see.');
   if ((rule.except ?? []).length > 0) return no('It has exceptions.');
 
   const criteria: FilterPlan['criteria'] = {};

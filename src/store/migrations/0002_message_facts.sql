@@ -1,0 +1,1 @@
+CREATE INDEX "messages_facts" ON "messages" USING gin ("facts");

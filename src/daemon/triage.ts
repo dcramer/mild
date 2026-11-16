@@ -14,8 +14,8 @@ import { blockSender, countRuleHit, listRules } from '../store/rules.ts';
 import { cachedCorrespondent } from '../store/senders.ts';
 import { passedDmarc } from '../triage/features.ts';
 import { triage } from '../triage/pipeline.ts';
-import { priorRule, rulesStage, settle } from '../triage/stages/rules.ts';
-import { type Judge, type JudgeFailure, describeFailure, modelStage } from '../triage/stages/model.ts';
+import { priorRule, readsMessage, rulesStage, settle } from '../triage/stages/rules.ts';
+import { type Evidence, type Judge, type JudgeFailure, describeFailure, modelStage } from '../triage/stages/model.ts';
 import type { Decision, Disposition, MessageFacts, Stage, Unfinished } from '../triage/types.ts';
 import { type EvidenceSources, gatherEvidence } from './evidence.ts';
 
@@ -70,7 +70,9 @@ const FAILURES_IN_A_ROW = 3;
 /**
  * The cascade for one account, as a function that decides one message: the tiers cheapest first, then
  * the rules that wait for a label. Once `asking` turns false, mail that needs the model is left unfinished
- * without asking, rather than given to a rule that would have deferred to it.
+ * without asking, rather than given to a rule that would have deferred to it. When a rule asks what only
+ * the whole message shows (an attachment), each message is read before the rules, through the model's
+ * sources: with no model, nothing is read and such a condition never holds.
  */
 async function cascadeFor(
   deps: TriageDeps,
@@ -86,11 +88,15 @@ async function cascadeFor(
   const options = { hasWritten: () => written };
   const read = async (facts: MessageFacts) => (written = await cachedCorrespondent(db, facts.accountId, facts.from.address));
   const stages: Stage<Decision | Unfinished>[] = [rulesStage(rules, labels, { ...options, judged: model !== undefined })];
-  if (model) {
+  // Gathered at most once per message, whether the rules or the model needed it first.
+  let evidence: Promise<Evidence> | undefined;
+  const gather = model && ((facts: MessageFacts) => (evidence ??= gatherEvidence({ db, ...model.sources, ...(deps.now ? { now: deps.now } : {}) }, facts)));
+  const reading = rules.some(readsMessage);
+  if (model && gather) {
     const stage = modelStage({
       judge: model.judge,
       labels,
-      gather: async (facts) => await gatherEvidence({ db, ...model.sources, ...(deps.now ? { now: deps.now } : {}) }, facts),
+      gather,
       prior: (facts) => {
         const hit = priorRule(rules, labels, facts, options);
         return hit?.label ? { rule: hit.rule, label: hit.label } : null;
@@ -100,8 +106,12 @@ async function cascadeFor(
     stages.push({ name: stage.name, decide: async (facts) => (asking() ? await stage.decide(facts) : { unfinished: 'the model was not asked' }) });
   }
   return async (facts) => {
+    evidence = undefined;
     await read(facts);
-    return await triage(stages, facts, async (decision) => (await read(facts), settle(rules, labels, facts, decision, options)));
+    const message = gather && reading && facts.known?.hasAttachments === undefined ? { ...facts, known: (await gather(facts)).known } : facts;
+    // Reading the message for the model may have added to what is known about it.
+    const settled = async () => (evidence ? { ...facts, known: (await evidence).known } : message);
+    return await triage(stages, message, async (decision) => (await read(facts), settle(rules, labels, await settled(), decision, options)));
   };
 }
 

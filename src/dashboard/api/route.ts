@@ -86,7 +86,6 @@ export const ownerOf =
 
 // Parts of bodies and queries. Those the page's own bodies use are in ../types.ts.
 export { decided, labelId, text } from '../types.ts';
-export const RULE_KEYS = ['from', 'fromDomain', 'to', 'listId', 'subjectContains'] as const;
 export const accountId = text();
 export const id = z.int().positive();
 /** What a label can be set to do. `block` is spam plus blocking the sender. */

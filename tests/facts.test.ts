@@ -4,7 +4,9 @@ import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { openUserDb, raw } from './fixtures.ts';
 import { storedFacts } from '../src/store/messages.ts';
 import { gatherEvidence } from '../src/daemon/evidence.ts';
-import { deriveFacts, describeFacts, matchesFacts, threadFacts } from '../src/triage/facts.ts';
+import { FACT_FILTERS as FACT_FILTER_CONDITIONS } from '../src/dashboard/types.ts';
+import { RULE_FACTS, deriveFacts, describeFacts, factCondition, matchesFacts, threadFacts } from '../src/triage/facts.ts';
+import { FACTS, FACT_FILTER_WORDS } from '../web/src/lib/format.ts';
 import { everything, facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -128,6 +130,23 @@ describe('matchesFacts', () => {
     expect(matchesFacts({}, known)).toBe(false);
     expect(matchesFacts({ trackingPixel: false }, known)).toBe(false);
     expect(matchesFacts({ trackingPixel: true }, { ...known, trackingPixel: true })).toBe(true);
+  });
+});
+
+describe('what a rule can ask of the facts', () => {
+  it('is said the same on the dashboard as in what sift records, answer for answer', () => {
+    expect(FACTS).toEqual(RULE_FACTS);
+    for (const [key, words] of FACT_FILTER_WORDS) {
+      const [[fact, want]] = Object.entries(FACT_FILTER_CONDITIONS[key]) as [[string, unknown]];
+      expect(factCondition(fact, want), key).toBe(words);
+    }
+    expect(FACT_FILTER_WORDS.map(([key]) => key)).toEqual(Object.keys(FACT_FILTER_CONDITIONS));
+  });
+
+  it('knows an answer by its value, a list in any order, and nothing else', () => {
+    expect(factCondition('dmarc', ['none', 'fail'])).toBe('did not pass DMARC');
+    expect(factCondition('dmarc', 'fail')).toBeNull();
+    expect(factCondition('spf', 'pass')).toBeNull();
   });
 });
 

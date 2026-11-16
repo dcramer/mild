@@ -40,7 +40,7 @@ export async function writeRuleFilter(deps: ActionDeps, ruleId: string): Promise
 
   const { plan } = verdict;
   const filter = await proposal(deps, plan);
-  const problems = validateFilter(filter);
+  const problems = validateFilter({ ...filter, ...(row.match.facts ? { facts: row.match.facts } : {}) });
   if (problems.length > 0) throw new Error(`Refusing to create filter: ${problems.join('; ')}`);
   const before = await deps.mailbox.listFilters();
   const twin = before.find((f) => sameFilter(f, filter));
