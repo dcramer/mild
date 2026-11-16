@@ -1,11 +1,14 @@
 import { Dialog } from '@base-ui/react/dialog';
 import { MenuIcon, XIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
+import { navigate } from '@/lib/route.ts';
+import { Button } from './button.tsx';
+import { Avatar, Menu, type MenuItem } from './menu.tsx';
 import { Select } from './select.tsx';
 import { Wordmark } from './type.tsx';
 
 export interface NavItem {
-  /** The address fragment, without the `#`. */
+  /** The path, without the leading `/`. */
   to: string;
   label: string;
   /** Something waiting there, shown beside the label. */
@@ -22,7 +25,7 @@ export function Sections({ items, current }: { items: readonly NavItem[]; curren
         {items.map((item) => (
           <li key={item.to}>
             <a
-              href={`#${item.to}`}
+              href={`/${item.to}`}
               aria-current={item.to === current ? 'page' : undefined}
               className="flex items-baseline gap-1.5 rounded-(--cut) px-2.5 py-1 text-sm font-medium text-muted-foreground hover:text-foreground aria-[current=page]:bg-highlight aria-[current=page]:text-highlight-ink"
             >
@@ -37,11 +40,25 @@ export function Sections({ items, current }: { items: readonly NavItem[]; curren
 }
 
 /**
- * The top of every screen: the name, the sections, and `aside` (who is signed in, the way out). No bar;
- * it sits straight on the page. On a narrow screen the sections and `aside` move into a panel that
- * covers the screen, opened from a menu button.
+ * The top of every screen: the name, the sections, `status` (a `Notice`: what is wrong with sift itself),
+ * `aside` (a line about sift, such as when it last synced) and `account` (who is signed in and what they
+ * can do about it, behind their `Avatar`). No bar; it sits straight on the page. On a narrow screen the
+ * sections, `aside` and the account move into a panel that covers the screen, opened from a menu button,
+ * and `status` gets a line of its own under the bar, where it cannot be missed.
  */
-export function Masthead({ items, current, aside }: { items: readonly NavItem[]; current: string; aside?: ReactNode }) {
+export function Masthead({
+  items,
+  current,
+  status,
+  aside,
+  account,
+}: {
+  items: readonly NavItem[];
+  current: string;
+  status?: ReactNode;
+  aside?: ReactNode;
+  account?: { name: string; items: readonly MenuItem[] } | undefined;
+}) {
   const [open, setOpen] = useState(false);
   // Going somewhere closes the panel.
   useEffect(() => setOpen(false), [current]);
@@ -49,13 +66,30 @@ export function Masthead({ items, current, aside }: { items: readonly NavItem[];
   const waiting = items.reduce((sum, item) => sum + (item.count ?? 0), 0);
 
   return (
-    <header className="flex items-center gap-x-5 pt-4 pb-6 md:pt-5 md:pb-7">
-      <a href={`#${items[0]?.to ?? ''}`} aria-label="sift">
+    <header className="flex flex-wrap items-center gap-x-5 pt-4 pb-6 md:pt-5 md:pb-7">
+      <a href={`/${items[0]?.to ?? ''}`} aria-label="sift">
         <Wordmark />
       </a>
       <div className="hidden min-w-0 flex-1 items-center gap-x-5 md:flex">
         <Sections items={items} current={current} />
-        <div className="ml-auto flex items-center gap-3 text-sm text-muted-foreground">{aside}</div>
+        <div className="ml-auto flex items-center gap-4 text-sm text-muted-foreground">
+          {status}
+          {aside}
+          {account ? (
+            <Menu
+              label={`Account, ${account.name}`}
+              align="end"
+              trigger={<Avatar name={account.name} />}
+              heading={
+                <>
+                  <p className="slug text-muted-foreground">Signed in</p>
+                  <p className="mt-1 font-medium break-all">{account.name}</p>
+                </>
+              }
+              items={account.items}
+            />
+          ) : null}
+        </div>
       </div>
 
       <p className="name min-w-0 flex-1 truncate md:hidden">{here?.label}</p>
@@ -78,7 +112,7 @@ export function Masthead({ items, current, aside }: { items: readonly NavItem[];
                 {items.map((item) => (
                   <li key={item.to}>
                     <a
-                      href={`#${item.to}`}
+                      href={`/${item.to}`}
                       aria-current={item.to === current ? 'page' : undefined}
                       className="statement flex min-h-12 items-center gap-3 text-muted-foreground"
                       onClick={() => setOpen(false)}
@@ -90,10 +124,25 @@ export function Masthead({ items, current, aside }: { items: readonly NavItem[];
                 ))}
               </ul>
             </nav>
-            {aside ? <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 pt-10 text-sm text-muted-foreground">{aside}</div> : null}
+            {aside || account ? (
+              <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 pt-10 text-sm text-muted-foreground">
+                {aside}
+                {account ? (
+                  <>
+                    <span className="break-all">{account.name}</span>
+                    {account.items.map((item) => (
+                      <Button key={item.label} variant="quiet" disabled={item.disabled} title={item.note} onClick={item.onSelect}>
+                        {item.label}
+                      </Button>
+                    ))}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
+      {status ? <div className="flex basis-full flex-wrap gap-x-4 gap-y-1 pt-2 md:hidden">{status}</div> : null}
     </header>
   );
 }
@@ -106,21 +155,14 @@ export function SubNav({ label, items, current, children }: { label: string; ite
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-x-8 gap-y-4 md:grid-cols-[10rem_minmax(0,1fr)]">
       <div className="md:hidden">
-        <Select
-          label={label}
-          value={current}
-          options={items.map((item) => [item.to, item.label] as const)}
-          onChange={(to) => {
-            window.location.hash = to;
-          }}
-        />
+        <Select label={label} value={current} options={items.map((item) => [item.to, item.label] as const)} onChange={(to) => navigate(`/${to}`)} />
       </div>
       <nav aria-label={label} className="hidden md:block">
         <ul className="sticky top-5 flex flex-col gap-y-0.5">
           {items.map((item) => (
             <li key={item.to}>
               <a
-                href={`#${item.to}`}
+                href={`/${item.to}`}
                 aria-current={item.to === current ? 'page' : undefined}
                 className="block border-l-2 border-transparent px-2.5 py-1.5 text-sm whitespace-nowrap text-muted-foreground hover:text-foreground aria-[current=page]:border-highlight aria-[current=page]:font-semibold aria-[current=page]:text-foreground"
               >

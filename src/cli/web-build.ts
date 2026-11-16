@@ -22,7 +22,7 @@ function newest(path: string): number {
  * its sources, and this does nothing there.
  */
 export async function ensureWebBuilt(): Promise<void> {
-  const sources = [join(WEB, 'src'), join(WEB, 'index.html'), join(WEB, 'package.json'), join(ROOT, 'src/dashboard/types.ts')];
+  const sources = ['src', 'public', 'index.html', 'vite.config.ts', 'package.json'].map((name) => join(WEB, name)).concat(join(ROOT, 'src/dashboard/types.ts'));
   if (!existsSync(join(WEB, 'src'))) return;
   const built = newest(join(WEB_DIST, 'index.html'));
   if (built > 0 && built >= Math.max(...sources.map(newest))) return;

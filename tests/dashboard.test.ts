@@ -224,6 +224,47 @@ describe('dashboard server', () => {
     expect((await fetch(`${base}/assets/app-abc123.css`)).status).toBe(200);
   });
 
+  it('serves the app manifest and the service worker, which the policy allows from this server only', async () => {
+    const dir = builtAssets();
+    writeFileSync(join(dir, 'manifest.webmanifest'), '{}');
+    writeFileSync(join(dir, 'sw.js'), 'self');
+    const base = await start(dir);
+    const csp = (await fetch(base)).headers.get('content-security-policy') ?? '';
+    expect(csp).toContain("manifest-src 'self'");
+    expect(csp).toContain("worker-src 'self'");
+    expect((await fetch(`${base}/manifest.webmanifest`)).headers.get('content-type')).toBe('application/manifest+json');
+    const worker = await fetch(`${base}/sw.js`);
+    expect(worker.headers.get('content-type')).toContain('javascript');
+    // Never from a cache: a browser must see a new build's worker to replace the old one.
+    expect(worker.headers.get('cache-control')).toBe('no-store');
+  });
+
+  it('serves the page for the paths it reads itself, and nothing else in place of a missing file', async () => {
+    const base = await start();
+    const home = await (await fetch(base)).text();
+    for (const path of [
+      '/rules',
+      '/settings/accounts',
+      '/system',
+      '/decisions?q=digest&message=a',
+      '/sender/me%40example.org/news%40example.com',
+      '/domain/me%40example.org/example.com',
+    ]) {
+      const page = await fetch(`${base}${path}`);
+      expect(page.status).toBe(200);
+      expect(page.headers.get('content-type')).toContain('text/html');
+      expect(page.headers.get('content-security-policy')).toContain("default-src 'none'");
+      expect(page.headers.get('cache-control')).toBe('no-store');
+      expect(await page.text()).toBe(home);
+    }
+    expect((await fetch(`${base}/assets/missing.js`)).status).toBe(404);
+    expect((await fetch(`${base}/assets/missing`)).status).toBe(404);
+    expect((await fetch(`${base}/rules.json`)).status).toBe(404);
+    // Sign-in is not set up here, so its paths are not the page either.
+    expect((await fetch(`${base}/auth/login`, { redirect: 'manual' })).status).toBe(404);
+    expect((await fetch(`${base}/api/rules/nope`)).status).toBe(404);
+  });
+
   it('in dev mode serves the page as it is on disk now, and tells it when to reload', async () => {
     const dir = builtAssets();
     const server = createDashboardServer(seeded(), { assetsDir: dir, dev: true, now: () => NOW });

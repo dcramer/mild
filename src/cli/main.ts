@@ -301,7 +301,7 @@ async function dashboard(args: string[]): Promise<void> {
   const db = openDb(config.dbPath);
   ui.heading('dashboard');
   secrets();
-  const controls = buildControls(config, db, { activity: { sorting: false, lastPassAt: null, problems: [] } });
+  const controls = buildControls(config, db, { activity: { sorting: false, lastPassAt: null, problems: [], expired: [] } });
   const stop = await serveDashboard(config, db, { controls, ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) });
   ui.info('Only the dashboard is running. `sift run` also sorts mail.');
   ui.blank();
@@ -401,7 +401,7 @@ async function run(args: string[]): Promise<void> {
 
     // One process keeps sift online: the same one that sorts mail serves the dashboard.
     const wake = createWake();
-    const activity: Activity = { sorting: true, lastPassAt: null, problems: [] };
+    const activity: Activity = { sorting: true, lastPassAt: null, problems: [], expired: [] };
     const port = portOption(values.port);
     const stopDashboard = values['no-dashboard']
       ? () => {}
@@ -422,6 +422,7 @@ async function run(args: string[]): Promise<void> {
         onPass: (results: PassResult[]) => {
           activity.lastPassAt = Date.now();
           activity.problems = results.flatMap((r) => (r.error ? [`${r.email}: ${r.error}`] : []));
+          activity.expired = results.filter((r) => r.expired).map((r) => r.email);
         },
       });
     } finally {

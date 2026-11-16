@@ -1,6 +1,6 @@
 # Design system
 
-The dashboard is built from one small set of parts, in `web/src/system/`. Every part, in every state, is on the specimen page: open the dashboard at `/#system`.
+The dashboard is built from one small set of parts, in `web/src/system/`. Every part, in every state, is on the specimen page: open the dashboard at `/system`. It needs no sign-in: it shows only made-up examples and asks the server for no data.
 
 ![The specimen page](images/design-system.png)
 
@@ -26,13 +26,15 @@ Tokens and the role classes are in `web/src/index.css`.
 | --- | --- |
 | `Button` | `mark`: what the screen is waiting on, one per screen at most. `ink`: the main action of a sheet or row. `plain`: everything else, filled not outlined. `quiet`: repeated down a list, and ways out. With `href` it is a link. `busy` while a press is being acted on. |
 | `Select`, `Input`, `TextArea`, `Check` | Controls. Filled, with the hand-cut corners. `Select` is for a short list. |
-| `Masthead` | The top of every screen: the name, the sections (highlighted when current) and who is signed in. No bar. |
-| `SubNav` | The pages within a section, beside the page, the current one marked with a stroke. Like the sections, they are links to an address fragment (`#settings/accounts`), read with `useRoute`. |
+| `Masthead` | The top of every screen: the name, the sections (highlighted when current), a `Notice` when there is one, when sift last synced, and who is signed in, as an `Avatar` that opens a `Menu`. No bar. |
+| `Notice` | A state of sift itself, true on every screen, in the masthead: sift cannot be reached (plain ink, a pulse: it mends itself), a sign-in has expired (`look`, with a link: the reader mends it). |
+| `SubNav` | The pages within a section, beside the page, the current one marked with a stroke. Like the sections, they are links to a path (`/settings/accounts`), read with `useRoute`. |
+| `Menu`, `Avatar` | A few things to do, behind one button: under the avatar, who is signed in and Sign out. An item that cannot be pressed says why under its label. An avatar is the initial of an address, never a picture: the page loads nothing from another origin. Choosing one value is a `Select`, not a menu. |
 | `Sheet`, `SheetHead` | The surface everything sits on. Rows inside take the class `row`. |
 | `Table`, `Tr`, `Th`, `Td` | Rows of the same kind of thing, one row per item: the default for a list. On the page a row reaches a little past its text on both sides (`--bleed`), so the hover has room around what it holds while the text stays in line with the heading above. It has no surface of its own, no background and no frame: on the page it sits flush under the list's heading, divided only by the dashes between rows. `Tr onOpen` makes the whole row pressable. |
 | `Figures`, `Figure` | Headline numbers, straight on the page. `look` for the one to see first, `failure` for a count of things gone wrong. |
 | `StackedBars` | Counts over time, stacked by series. Its legend reads out the column pointed at or focused. |
-| `ListView`, `FilterGroup` | **How every screen shows many of one thing.** A title with the count, then one outlined bar holding the search and the Filters button (not filled: the list has no surface, so its search has none either), then the rows or cards. The filter button opens a panel on the right that pushes the list left. Filters that are on show as a count on the button and, when the panel is closed, as a line of chips that each clear one. |
+| `ListView`, `FilterGroup` | **How every screen shows many of one thing.** Its search and filters are kept in the address (`useParam`), so a narrowed list can be bookmarked. A title with the count, then one outlined bar holding the search and the Filters button (not filled: the list has no surface, so its search has none either), then the rows or cards. The filter button opens a panel on the right that pushes the list left. Filters that are on show as a count on the button and, when the panel is closed, as a line of chips that each clear one. |
 | `Card`, `CardHead`, `CardFoot`, `CardGrid` | A thing shown whole, where each one is read on its own rather than compared down a column: a label. Head (what it is), body, foot (what can be done to it). Lists of mail, rules and decisions are tables, not cards. |
 | `Panel` | One item from a list, opened beside the list: it slides over from the right, up to three quarters of the screen, with previous and next to step through the list. Every list opens a message in the same panel (`views/message-panel.tsx`). |
 | `Dialog` | A form or a question: adding a label or a rule. Centred. `footer` for the actions that finish it. Looking at one of many things is a `Panel`, not a `Dialog`. |
@@ -53,8 +55,10 @@ Every part has an answer for a phone, and a new part needs one before it is adde
 
 | Part | On a narrow screen |
 | --- | --- |
-| `Masthead` | The sections and the signed-in line move into a panel that covers the screen, opened from a menu button. The bar shows the current section's name; a dot on the button means something is waiting in another section. |
+| `Masthead` | The sections, the synced line and the account (its address and what its menu holds, as buttons) move into a panel that covers the screen, opened from a menu button. The bar shows the current section's name; a dot on the button means something is waiting in another section. |
+| `Notice` | A line of its own under the masthead's bar. |
 | `SubNav` | A select above the page. |
+| `Menu` | Opens under its button, kept inside the screen, with rows 44px tall on a touch screen. The masthead's own is not shown on a narrow screen: its panel lists the same things. |
 | `Panel`, `Dialog` | Cover the screen. |
 | `ListView` | The filter panel opens above the list. |
 | `CardGrid` | One column. |

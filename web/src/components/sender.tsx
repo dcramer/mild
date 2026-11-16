@@ -3,8 +3,8 @@ import { type SenderProfile, type Standing, api, useLoaded } from '@/lib/api.ts'
 import { count, shortDate } from '@/lib/format.ts';
 import { HoverCard, Stamp } from '@/system';
 
-export const senderHref = (accountId: string, address: string) => `#sender/${encodeURIComponent(accountId)}/${encodeURIComponent(address)}`;
-export const domainHref = (accountId: string, domain: string) => `#domain/${encodeURIComponent(accountId)}/${encodeURIComponent(domain)}`;
+export const senderHref = (accountId: string, address: string) => `/sender/${encodeURIComponent(accountId)}/${encodeURIComponent(address)}`;
+export const domainHref = (accountId: string, domain: string) => `/domain/${encodeURIComponent(accountId)}/${encodeURIComponent(domain)}`;
 
 const NAMES: Record<Standing, string> = { trusted: 'Trusted', known: 'Known', new: 'New', unwanted: 'Unwanted', blocked: 'Blocked' };
 

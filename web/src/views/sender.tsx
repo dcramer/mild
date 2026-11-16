@@ -17,19 +17,9 @@ const GIVE = [
  * Everything about one sender, or one domain: where they stand and why, what they send, what sift does
  * with it, and the one place to change that.
  */
-export function SenderView({
-  accountId,
-  who,
-  onOpen,
-  epoch,
-}: {
-  accountId: string;
-  who: { address: string } | { domain: string };
-  onOpen: OpenMessages;
-  epoch: number;
-}) {
+export function SenderView({ accountId, who, onOpen }: { accountId: string; who: { address: string } | { domain: string }; onOpen: OpenMessages }) {
   const key = 'address' in who ? who.address : who.domain;
-  const { data, error, loading, reload } = useLoaded(`${'address' in who ? 'sender' : 'domain'}-page-${accountId}-${key}-${epoch}`, (signal) =>
+  const { data, error, loading, reload } = useLoaded(`${'address' in who ? 'sender' : 'domain'}-page-${accountId}-${key}`, (signal) =>
     'address' in who ? api.sender(accountId, who.address, signal) : api.domain(accountId, who.domain, signal),
   );
   const give = useAction();

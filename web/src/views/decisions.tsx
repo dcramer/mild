@@ -3,6 +3,7 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { DecisionTable } from '@/components/decision-table.tsx';
 import { type Days, api, useLoaded } from '@/lib/api.ts';
 import { DISPOSITION_KEYS, TIERS, count, dispositionName } from '@/lib/format.ts';
+import { useParam } from '@/lib/route.ts';
 import { Button, Empty, FilterGroup, ListView, Loading } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
@@ -17,11 +18,11 @@ export const PERIODS = [
 ] as const;
 
 /** Every decision sift made, newest first. */
-export function Decisions({ days, onDays, onOpen, epoch }: { days: Days; onDays: (days: Days) => void; onOpen: OpenMessages; epoch: number }) {
-  const [stage, setStage] = useState('');
-  const [disposition, setDisposition] = useState('');
-  const [typed, setTyped] = useState('');
-  const [search, setSearch] = useState('');
+export function Decisions({ days, onDays, onOpen }: { days: Days; onDays: (days: Days) => void; onOpen: OpenMessages }) {
+  const [stage, setStage] = useParam('by', TIER_OPTIONS);
+  const [disposition, setDisposition] = useParam('outcome', OUTCOME_OPTIONS);
+  const [search, setSearch] = useParam('q');
+  const [typed, setTyped] = useState(search);
   const [offset, setOffset] = useState(0);
 
   // Search as the viewer types, but not on every keystroke.
@@ -32,7 +33,7 @@ export function Decisions({ days, onDays, onOpen, epoch }: { days: Days; onDays:
   useEffect(() => setOffset(0), [days, stage, disposition, search]);
 
   const query = { days, stage, disposition, search, limit: PAGE, offset };
-  const { data, error, loading } = useLoaded(JSON.stringify([query, epoch]), (signal) => api.decisions(query, signal));
+  const { data, error, loading } = useLoaded(`decisions-${JSON.stringify(query)}`, (signal) => api.decisions(query, signal));
   const filtered = stage !== '' || disposition !== '' || search !== '';
   const period = PERIODS.find(([key]) => Number(key) === days)?.[1] ?? '';
 

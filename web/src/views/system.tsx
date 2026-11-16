@@ -1,6 +1,7 @@
 import { ArrowRightIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import {
+  Avatar,
   Button,
   Check,
   Code,
@@ -22,7 +23,9 @@ import {
   Loading,
   Marked,
   Masthead,
+  Menu,
   Note,
+  Notice,
   Sections,
   Select,
   Sheet,
@@ -78,7 +81,7 @@ const VARIANTS = [
   ['quiet', 'Repeated down a list, and ways out.'],
 ] as const;
 
-/** Every part of the design system in every state, at `#system`. Add to it when the system grows. */
+/** Every part of the design system in every state, at `/system`. Add to it when the system grows. */
 export function SystemView() {
   const [choice, setChoice] = useState<(typeof CHOICES)[number][0]>('archive');
   const [checked, setChecked] = useState(false);
@@ -225,9 +228,37 @@ export function SystemView() {
               { to: 'system/overview', label: 'Overview' },
               { to: 'system/rules', label: 'Rules' },
             ]}
-            aside={<span>On a narrow screen this becomes a menu button and a panel that covers the screen.</span>}
+            status={<Notice>Offline</Notice>}
+            aside={<span>Synced 2 min ago</span>}
+            account={{ name: 'ada@example.org', items: [{ label: 'Sign out', onSelect: () => {} }] }}
           />
         </div>
+        <Row
+          label="menu"
+          note="A few things to do behind one button. Under an avatar it is who is signed in; on a narrow screen the masthead lists the same things in its panel instead."
+        >
+          <Menu
+            label="Account, ada@example.org"
+            trigger={<Avatar name="ada@example.org" />}
+            heading={
+              <>
+                <p className="slug text-muted-foreground">Signed in</p>
+                <p className="mt-1 font-medium">ada@example.org</p>
+              </>
+            }
+            items={[
+              { label: 'Sign out', onSelect: () => {} },
+              { label: 'Disabled', note: 'With the reason under it.', disabled: true, onSelect: () => {} },
+            ]}
+          />
+          <Avatar name="grace@example.com" />
+        </Row>
+        <Row label="notice" note="A state of sift itself, in the masthead. Plain mends itself; highlighted needs the reader.">
+          <Notice>Offline</Notice>
+          <Notice tone="look" href="/system" action="Reconnect">
+            Google sign-in expired
+          </Notice>
+        </Row>
         <Row label="sections">
           <Sections
             current="system"
@@ -351,7 +382,7 @@ export function SystemView() {
         <p className="px-4 pb-4">
           Mail from{' '}
           <HoverCard
-            href="#system"
+            href="/system"
             className="font-medium"
             card={
               <div className="flex flex-col gap-2">

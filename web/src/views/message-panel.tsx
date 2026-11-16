@@ -97,7 +97,7 @@ function ActionEntry({ a }: { a: Action }) {
         {a.status === 'done' ? (
           <p className="text-muted-foreground">
             Undo it under{' '}
-            <a className="text-foreground underline underline-offset-2" href="#changes">
+            <a className="text-foreground underline underline-offset-2" href="/changes">
               Changes
             </a>
             .
@@ -253,14 +253,11 @@ export function MessagePanel({
   index,
   onIndex,
   onClose,
-  onChanged,
 }: {
   items: readonly MessageRef[];
   index: number;
   onIndex: (index: number) => void;
   onClose: () => void;
-  /** Something was answered: lists behind the panel are out of date. */
-  onChanged: () => void;
 }) {
   const item = items[index];
   // Another message from the same sender, looked at without leaving this place in the list.
@@ -301,7 +298,6 @@ export function MessagePanel({
             onPick={setPicked}
             onAnswered={(lines) => {
               setSaid(lines);
-              onChanged();
               if (index < items.length - 1) onIndex(index + 1);
               else onClose();
             }}

@@ -36,14 +36,17 @@ const TYPES: Record<string, string> = {
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
   '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
   '.map': 'application/json',
 };
 
 const HEADERS = {
   // Subjects and sender names are untrusted. The page only ever renders them as text, and this is the backstop:
-  // no inline script, no inline style element, nothing loaded from another origin.
+  // no inline script, no inline style element, nothing loaded from another origin. `manifest-src` and
+  // `worker-src` let the page be installed as an app with its own service worker; both are files of this
+  // server's. (`worker-src` would fall back to `script-src` in most browsers, but not in older Safari.)
   'content-security-policy':
-    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'no-referrer',
 };
@@ -195,7 +198,8 @@ const cookie = (req: IncomingMessage, name: string) =>
  * Who may use it: someone signed in with Google as a connected account. That one sign-in is also what
  * gives sift its access to the account. Requests must be addressed to localhost or one of this
  * machine's own names (which stops another website reaching it through DNS rebinding), and every write
- * must come from the dashboard's own page. The page's static files are public; the data is not.
+ * must come from the dashboard's own page. The page's static files, its app manifest and service worker
+ * among them, are public and hold no data; everything under `/api/` needs the session.
  *
  * What it may do: change what sift has been taught and how it is set up. It never reaches Gmail itself;
  * the few things that do (signing in, undo, pulling in older mail) are handed in and audited as usual.
@@ -362,7 +366,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
     return {
       settings: controls?.settings() ?? { act: false, interval: 60, model: null },
       guidelines: controls?.guidelines() ?? '',
-      activity: controls?.activity() ?? { sorting: false, lastPassAt: null, problems: [] },
+      activity: controls?.activity() ?? { sorting: false, lastPassAt: null, problems: [], expired: [] },
       accounts: accounts.map((a) => ({ id: a.id, email: a.email, lastSyncedAt: (synced.get(a.id) as { at: number | null } | undefined)?.at ?? null })),
       labels: Object.fromEntries(accounts.map((a) => [a.id, listLabelSummaries(db, a.id)])),
     };
@@ -553,7 +557,11 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       else res.writeHead(503, { ...HEADERS, 'content-type': 'text/plain' }).end('The dashboard has not been built. Run: pnpm build:web');
       return;
     }
-    const asset = assets.get(url.pathname === '/' ? '/index.html' : url.pathname);
+    // The page is one document that reads the path (`/rules`, `/settings/accounts`), so a path that names
+    // no file gets the page. A name with an extension is a file that is not there.
+    // A sender's or a domain's page ends in an address, which has a dot in it and is still a page.
+    const isPage = (extname(url.pathname) === '' || /^\/(sender|domain)\//.test(url.pathname)) && !/^\/(auth|dev|assets)\//.test(url.pathname);
+    const asset = assets.get(url.pathname) ?? (isPage ? assets.get('/index.html') : undefined);
     if (!asset) {
       res.writeHead(404, { ...HEADERS, 'content-type': 'text/plain' }).end('Not found');
       return;

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ErrorNote, Outcome, Sub } from '@/components/bits.tsx';
 import { api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, dateTime } from '@/lib/format.ts';
+import { useParam } from '@/lib/route.ts';
 import { Button, Empty, FilterGroup, ListView, Loading, Table, Td, Th, Tr } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
@@ -14,12 +15,12 @@ const STATUS = [
 const WHAT: Record<string, string> = { archive: 'Archived', spam: 'Marked spam', label: 'Labelled', undo: 'Undid', unsubscribe: 'Unsubscribed' };
 
 /** Everything sift has done to the mailbox, each reversible. */
-export function ChangesView({ onOpen, epoch }: { onOpen: OpenMessages; epoch: number }) {
-  const { data, error, loading, reload } = useLoaded(`changes-${epoch}`, (signal) => api.changes(signal));
+export function ChangesView({ onOpen }: { onOpen: OpenMessages }) {
+  const { data, error, loading, reload } = useLoaded('changes', (signal) => api.changes(signal));
   const action = useAction();
   const [note, setNote] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<(typeof STATUS)[number][0]>('');
+  const [search, setSearch] = useParam('q');
+  const [status, setStatus] = useParam('result', STATUS);
   const troubled = (s: string) => s === 'failed' || s === 'unknown' || s === 'pending';
   const needle = search.trim().toLowerCase();
   const changes = (data?.changes ?? []).filter(
