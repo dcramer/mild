@@ -17,7 +17,7 @@ export async function dashboard(args: string[]): Promise<void> {
   ui.heading('dashboard');
   secrets();
   const ephemeral = await openEphemeral(config.settings.redisUrl);
-  const controls = await buildControls(config, store, { ephemeral, activity: { running: false, lastPassAt: null, problems: [], expired: [] } });
+  const controls = await buildControls(config, store, { ephemeral, running: false });
   const stop = await serveDashboard(config, store, { controls, ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) });
   ui.info('Only the dashboard is running. `sift run` also reads and classifies mail.');
   ui.blank();

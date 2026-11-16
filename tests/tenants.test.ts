@@ -103,7 +103,7 @@ beforeEach(async () => {
     // Whatever is asked for, it would answer with that person's mail: only the route's own check keeps it from the wrong person.
     messageHtml: async (_db, account, id) => `<p>${id} of ${account} ${MARK[account] ?? ''}</p>`,
     checkNow: () => void calls.push('check'),
-    activity: () => ({
+    activity: async () => ({
       running: true,
       lastPassAt: 5,
       problems: [`${ALPHA}: pass failed alpha-home-secret`, `${BRAVO}: pass failed bravo-secret`],

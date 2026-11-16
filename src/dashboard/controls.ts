@@ -55,14 +55,15 @@ export interface Controls {
   messageHtml(db: Sql, accountId: string, messageId: string): Promise<string | null>;
   /** Start a pass now instead of waiting for the interval. */
   checkNow(): void;
-  activity(): Activity;
+  /** How the last passes over these mailboxes went. */
+  activity(mailboxes: string[]): Promise<Activity>;
 }
 
-export interface Activity {
+interface Activity {
   /** False when only the dashboard is running, with nothing classifying mail. */
   running: boolean;
   lastPassAt: number | null;
-  /** What went wrong on the last pass, per account. Empty when it went well. */
+  /** What went wrong on each mailbox's last pass, starting with its address. Empty when it went well. */
   problems: string[];
   /** Addresses of accounts whose Google sign-in expired, as of the last pass. Each must sign in again. */
   expired: string[];

@@ -11,14 +11,14 @@ import { type Context, type Read, type Write, done, ok, read, text, write } from
 async function manageState({ db, controls }: Context, scope: Scope): Promise<ManageState> {
   const accounts = (await listAccounts(db)).filter((a) => sees(scope, a.id));
   const own = await preferences(db);
-  const activity = controls?.activity() ?? { running: false, lastPassAt: null, problems: [], expired: [] };
+  const activity = controls ? await controls.activity(accounts.map((a) => a.id)) : { running: false, lastPassAt: null, problems: [], expired: [] };
   return {
     owner: scope.owner,
     active: own.active,
     model: { chosen: own.model, ...(controls ? await controls.modelSignIns(db) : { choices: [], signedIn: [], pending: null }) },
     activity: {
       ...activity,
-      // Each problem starts with the address it is about.
+      // Only these mailboxes were asked about; checked again here, since a leak would be someone else's mail.
       problems: activity.problems.filter((line) => accounts.some((a) => line.startsWith(`${a.email}: `))),
       expired: activity.expired.filter((email) => accounts.some((a) => a.email === email)),
     },

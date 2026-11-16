@@ -1,9 +1,8 @@
 import { parseArgs } from 'node:util';
 import { unsubscribe } from '../../actions/unsubscribe.ts';
 import { loadConfig } from '../../config.ts';
-import type { Activity } from '../../dashboard/controls.ts';
 import { localJobs } from '../../daemon/jobs.ts';
-import { type PassResult, type RunOptions, createWake, runEveryone, runJob, runLoop } from '../../daemon/run.ts';
+import { type RunOptions, createWake, runEveryone, runJob, runLoop } from '../../daemon/run.ts';
 import { hasClientSecrets } from '../../gmail/auth.ts';
 import { type Account, connectedAddresses, listAccounts, listUsers, personOf } from '../../store/accounts.ts';
 import { preferences } from '../../store/preferences.ts';
@@ -94,12 +93,11 @@ export async function run(args: string[]): Promise<void> {
 
     // One process keeps sift online: the same one that classifies mail serves the dashboard.
     const wake = createWake();
-    const activity: Activity = { running: true, lastPassAt: null, problems: [], expired: [] };
     const port = portOption(values.port);
     const stopDashboard = values['no-dashboard']
       ? () => {}
       : await serveDashboard(config, store, {
-          controls: await buildControls(config, store, { ephemeral, wake, activity }),
+          controls: await buildControls(config, store, { ephemeral, wake, running: true }),
           ...(values.dev ? { dev: true } : {}),
           ...(port === undefined ? {} : { port }),
           ...(values.host ? { host: values.host } : {}),
@@ -108,18 +106,9 @@ export async function run(args: string[]): Promise<void> {
     const stop = new AbortController();
     process.once('SIGINT', () => stop.abort());
     process.once('SIGTERM', () => stop.abort());
-    const report = (result: PassResult) => {
-      activity.lastPassAt = Date.now();
-      activity.problems = [
-        ...activity.problems.filter((line) => !line.startsWith(`${result.email}: `)),
-        ...(result.error ? [`${result.email}: ${result.error}`] : []),
-      ];
-      activity.expired = [...activity.expired.filter((email) => email !== result.email), ...(result.expired ? [result.email] : [])];
-    };
     const jobs = localJobs(async (job) => {
       try {
-        const result = await runJob(store, job, options);
-        if (result) report(result);
+        await runJob(store, job, options);
         if (job.kind === 'pass') await announce(job.person);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

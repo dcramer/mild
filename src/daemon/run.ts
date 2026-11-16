@@ -15,6 +15,7 @@ import { KEEP_BODY_DAYS, keepSuggestionBodies } from './bodies.ts';
 import { captureExamples } from './examples.ts';
 import { PRUNE_PER_RUN, RETENTION_DAYS, pruneOld } from './retention.ts';
 import { checkFiltersWhenDue } from './filters.ts';
+import { recordPassStatus } from './status.ts';
 import type { Job, Jobs } from './jobs.ts';
 import { type SyncReport, syncAccount } from './sync.ts';
 import { type TriageReport, triageAccount } from './triage.ts';
@@ -94,7 +95,14 @@ async function passMailbox(db: Sql, account: Account, options: RunOptions): Prom
   const token = await options.ephemeral.claim(lock, PASS_HOLD_MS);
   if (token === null) return null;
   try {
-    return await runMailbox(db, account, options);
+    const result = await runMailbox(db, account, options);
+    if (result)
+      await recordPassStatus(options.ephemeral, account.id, {
+        at: (options.now ?? Date.now)(),
+        ...(result.error ? { error: result.error } : {}),
+        ...(result.expired ? { expired: true } : {}),
+      });
+    return result;
   } finally {
     await options.ephemeral.release(lock, token);
   }

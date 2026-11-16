@@ -9,6 +9,7 @@ import { applyFeedback } from '../src/learn/feedback.ts';
 import { userChanges } from '../src/learn/gmail.ts';
 import { lastStandingChange } from '../src/store/actions.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
+import { passStatus } from '../src/daemon/status.ts';
 import { addMailbox, connectAccount, deleteUser, recordSync, removeMailbox } from '../src/store/accounts.ts';
 import { onePerson, openUserDb, raw } from './fixtures.ts';
 import { updateLabel } from '../src/store/labels.ts';
@@ -204,6 +205,23 @@ describe('one pass at a time per mailbox', () => {
     expect(await runJob(store, pass, counting)).toMatchObject({ email: ACCOUNT });
     expect(await runJob(store, pass, counting)).toMatchObject({ email: ACCOUNT });
     expect(connected).toBe(2);
+  });
+});
+
+describe('pass status', () => {
+  it('is what the last pass over each mailbox found, kept where every instance can read it', async () => {
+    const ephemeral = memoryEphemeral();
+    await runOnce(db, { ...options(), ephemeral });
+    expect(await passStatus(ephemeral, [ACCOUNT])).toEqual({ lastPassAt: 5000, problems: [], expired: [] });
+    await runOnce(db, {
+      ...options(),
+      ephemeral,
+      now: () => 6000,
+      connect: () => {
+        throw new Error('invalid_grant');
+      },
+    });
+    expect(await passStatus(ephemeral, [ACCOUNT])).toEqual({ lastPassAt: 6000, problems: [`${ACCOUNT}: invalid_grant`], expired: [ACCOUNT] });
   });
 });
 
