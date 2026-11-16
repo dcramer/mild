@@ -1,4 +1,4 @@
-import type { BulkSignals } from '../features.ts';
+import type { Facts } from '../facts.ts';
 import type { Standing } from '../standing.ts';
 import { type RuleHit, describeRule, ruleOutcome } from './rules.ts';
 import { type DecisionUsage, type Disposition, type Label, type MessageFacts, type Stage, labelled } from '../types.ts';
@@ -6,7 +6,7 @@ import { type DecisionUsage, type Disposition, type Label, type MessageFacts, ty
 /** Everything the model is shown about one message. Gathered by deterministic code, never by the model. */
 export interface Evidence {
   facts: MessageFacts;
-  signals: BulkSignals;
+  known: Facts;
   /** Plain text of the message, truncated. Null if it could not be fetched. Untrusted. */
   body: string | null;
   sender: {
@@ -103,6 +103,16 @@ export function modelStage(deps: ModelStageDeps): Stage {
           reason: `${unusual}${label.name}, but ${why}: ${verdict.reason}`,
         };
       }
+
+      // Nor is a reply in a conversation the owner has taken part in, whoever sent it.
+      if (hides && evidence.known.ownerInThread)
+        return {
+          ...base,
+          disposition: 'review',
+          labelId: label.id,
+          gmailLabel: label.gmailLabel,
+          reason: `${unusual}${label.name}, but you have written in this thread: ${verdict.reason}`,
+        };
 
       return { ...base, ...outcome, reason: `${unusual}${label.name}: ${verdict.reason}` };
     },

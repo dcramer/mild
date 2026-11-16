@@ -1,6 +1,12 @@
+import type { ContentFacts } from '../triage/facts.ts';
+import { parseAddress } from '../triage/features.ts';
+import { htmlFacts } from '../triage/html.ts';
+
 /** The shape of a Gmail message payload that body extraction needs. */
 export interface BodyPart {
   mimeType?: string | null;
+  filename?: string | null;
+  headers?: { name?: string | null; value?: string | null }[] | null;
   body?: { data?: string | null } | null;
   parts?: BodyPart[] | null;
 }
@@ -45,4 +51,26 @@ export function extractText(payload: BodyPart | null | undefined): string {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   return tidy.length > MAX_BODY_CHARS ? `${tidy.slice(0, MAX_BODY_CHARS)}\n[truncated]` : tidy;
+}
+
+const header = (part: BodyPart, name: string) => part.headers?.find((h) => h.name?.toLowerCase() === name)?.value ?? '';
+
+function hasAttachment(part: BodyPart): boolean {
+  if (part.filename && !/^\s*inline/i.test(header(part, 'content-disposition'))) return true;
+  return (part.parts ?? []).some(hasAttachment);
+}
+
+/** What sift takes from a whole message: its readable text, and facts about the rest. The HTML itself is not kept. */
+export interface MessageContent {
+  text: string;
+  facts: ContentFacts;
+}
+
+export function readContent(payload: BodyPart | null | undefined): MessageContent {
+  const html = payload ? find(payload, 'text/html') : null;
+  const sender = payload ? parseAddress(header(payload, 'from')) : null;
+  return {
+    text: extractText(payload),
+    facts: { hasAttachments: payload ? hasAttachment(payload) : false, ...(html !== null && sender ? htmlFacts(html, sender.domain) : {}) },
+  };
 }

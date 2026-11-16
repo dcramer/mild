@@ -1,3 +1,4 @@
+import { describeFacts } from './facts.ts';
 import { type Evidence, UNSURE } from './stages/model.ts';
 import type { Label } from './types.ts';
 
@@ -31,7 +32,7 @@ const tally = (labels: { id: string; messages: number }[]) => labels.map((l) => 
 /** The user message for one classification. Pure: the same evidence always produces the same text. */
 export function buildPrompt(input: { evidence: Evidence; labels: readonly Label[]; guidelines: string }): string {
   const { evidence, labels } = input;
-  const { facts, signals, sender } = evidence;
+  const { facts, sender } = evidence;
   const guidelines = input.guidelines.trim().slice(0, MAX_GUIDELINES);
   const people = (list: typeof facts.to) => (list.length === 0 ? '(none)' : list.map((a) => a.address).join(', '));
   const written = sender.userHasWritten === null ? 'unknown' : sender.userHasWritten ? 'yes' : 'no';
@@ -52,10 +53,7 @@ export function buildPrompt(input: { evidence: Evidence; labels: readonly Label[
     `From address: ${facts.from.address}`,
     `To: ${people(facts.to)}`,
     `Cc: ${people(facts.cc)}`,
-    `Mailing list id: ${signals.listId ?? '(none)'}`,
-    `Has unsubscribe header: ${signals.hasListUnsubscribe ? 'yes' : 'no'}`,
-    `Marked bulk or auto-generated: ${signals.precedenceBulk || signals.autoSubmitted ? 'yes' : 'no'}`,
-    `Authentication results: ${facts.headers['authentication-results'] ?? '(none)'}`,
+    ...describeFacts(evidence.known),
     `Messages seen from this sender: ${sender.messagesSeen}`,
     `Owner has written to this sender: ${written}`,
     `Earlier mail from this sender was: ${past === '' ? '(no history)' : past}`,

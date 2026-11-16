@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { deriveFacts } from '../triage/facts.ts';
 import { parseListId } from '../triage/features.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
@@ -22,8 +23,8 @@ export function listAccounts(db: DatabaseSync): Account[] {
 }
 
 const INSERT_MESSAGE = `INSERT OR IGNORE INTO messages
-       (account_id, id, thread_id, from_address, from_domain, from_name, list_id, received_at, subject, to_json, cc_json, headers_json, labels_json, synced_at, observe_only)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+       (account_id, id, thread_id, from_address, from_domain, from_name, list_id, received_at, subject, to_json, cc_json, headers_json, labels_json, synced_at, observe_only, facts_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 function insertMessages(db: DatabaseSync, accountId: string, messages: readonly MessageFacts[], now: number, observeOnly: boolean): number {
   const insert = db.prepare(INSERT_MESSAGE);
@@ -45,6 +46,7 @@ function insertMessages(db: DatabaseSync, accountId: string, messages: readonly 
       JSON.stringify(m.labelIds),
       now,
       observeOnly ? 1 : 0,
+      JSON.stringify(deriveFacts(m)),
     );
     added += Number(result.changes);
   }

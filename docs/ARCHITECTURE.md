@@ -18,13 +18,16 @@ Tiers run cheapest first. A tier either names a label or abstains; the first ans
 | --- | --- | --- | --- |
 | 1. Gmail filters | Gmail itself; runs even when sift is down | none | not built |
 | 2. Rules | `src/triage/stages/rules.ts` | none | built and wired |
-| 3. Decision model (Jev / Clef via pi-ai `classify`) | `src/triage/stages/classifier.ts` | ~$0.0001 per message | stage built, provider not wired |
-| 4. Model | `src/triage/stages/model.ts`, `src/model/` | one model call | built; not yet run against a real model |
+| 3. Header heuristics | `src/triage/stages/heuristics.ts` | none (one search of sent mail per new sender) | built and wired; off unless `heuristics = true` |
+| 4. Decision model (Jev / Clef via pi-ai `classify`) | `src/triage/stages/classifier.ts` | ~$0.0001 per message | stage built, provider not wired |
+| 5. Model | `src/triage/stages/model.ts`, `src/model/` | one model call | built; not yet run against a real model |
 | Fallback | `src/triage/pipeline.ts` | none | built |
 
 The fallback is `review`: the message stays where it is, gets the review label, and is shown to the user.
 
 **A rule** says that mail matching some conditions is a label. It is the only deterministic thing sift knows, and there is one kind: what used to be a separate memory of senders is a rule with a single "from" condition. Rules come from the user (`user`), from the user correcting a suggestion (`correction`), or from sift itself (`agent`) once a model has given a sender's last three messages the same label.
+
+**The heuristics tier** labels mail that is plainly bulk from its facts alone. Every sign has to agree: a mailing list id, a one-click unsubscribe, a recognised bulk mail service, a DMARC pass, not a reply, not marked auto-generated, and the owner known never to have written to the sender ("could not check" abstains). It names only two labels, and only when it can tell them apart: Marketing when Gmail filed the message under Promotions, Newsletters when it came through a newsletter platform and Gmail did not file it under Promotions or Primary. Everything else, notifications included, goes on to the model. Its decisions are suggestions like any other, and three of them do not make a learned rule.
 
 Rules that matter across tiers:
 
@@ -33,6 +36,17 @@ Rules that matter across tiers:
 - A rule whose label has been removed does nothing.
 - Spam has a higher confidence bar than archive.
 - Errors abstain. Nothing fails toward a mutation.
+
+## Message facts
+
+Every tier, the prompt and the dashboard read one named set of facts about a message (`Facts`, `src/triage/facts.ts`) instead of each re-reading headers.
+
+- **From headers and labels, at sync:** unsubscribe header and whether it is one-click, mailing list id, marked bulk, marked auto-generated, the DMARC, SPF and DKIM results, the bulk mail service it went through (from who signed it, its envelope sender and the services' own headers), whether replies go elsewhere, whether the owner is in To, in Cc or in neither, whether it is a reply, and Gmail's category tab.
+- **From the whole message, when a model is about to judge it:** whether it has attachments and, from the HTML part (`src/triage/html.ts`), whether it carries a tracking pixel (a remote image drawn 1×1 or hidden), how many sites it links to, whether most links pass through a click-tracking redirect, and whether any link goes to the sender's own domain. These mark campaign mail even when the headers do not. The HTML is read and dropped, never stored, and nothing in it is fetched. Mail decided by a rule is never read whole, so it has none of these.
+- **From the thread, for a reply a model is about to judge:** how many messages came before it and whether the owner sent one of them (`users.threads.get`, labels only: a message the owner sent carries `SENT`). No other message's content is read or stored.
+- **Recorded** as JSON in `messages.facts_json`, rewritten when the whole message or its thread adds to them, and returned with a message's detail.
+- **Rules can match on them** once wired: `matchesFacts` takes conditions on facts ("has an unsubscribe header and is not a reply"). `RuleMatch` does not carry them yet.
+- **Only what can be checked.** Whether mail reads as AI-generated, and its language, are judgements for a model, not facts.
 
 ## Learning loop
 
@@ -104,7 +118,7 @@ Undo reverses exactly what the action changed, keeps anything the user changed a
 
 Preferences live in two places, by kind.
 
-- **Broad guidance is a Markdown file**, `guidelines.md` in the home directory, in the user's own words ("recruiters count as cold outreach", "anything from my accountant is personal"). It is read on every pass and given to the model.
+- **Broad guidance is a Markdown file**, `guidelines.md` in the home directory, in the user's own words ("recruiters count as cold outreach", "anything from my accountant is personal"). It is read on every pass and given to the model. It starts as a few instructions that fit the default labels and lean towards keeping mail in the inbox (`GUIDELINES_TEMPLATE`, `src/config.ts`).
 - **Everything structured or learned is in the database:**
   - `labels`: what mail can be and what to do with each. Seeded with cautious defaults (nothing is marked spam); changed and added to in the dashboard, under Labels.
   - `rules`: what sift knows without a model, the user's and the ones it learned.
@@ -114,10 +128,10 @@ Preferences live in two places, by kind.
 
 When no rule or sender record decides a message, one model call does. It is deliberately not an agent.
 
-- **The model has no tools and takes no action.** Deterministic code gathers the evidence first: the stored headers, the body (fetched on demand, truncated, never stored), how much mail this sender has sent, what was done with it, and whether the user has ever written to them.
+- **The model has no tools and takes no action.** Deterministic code gathers the evidence first: the message's facts, the body (fetched on demand, truncated, never stored), how much mail this sender has sent, what was done with it, and whether the user has ever written to them.
 - **Its only output is a label** from the user's list, or `unsure`, with a one-line reason. The reply is validated; anything else abstains.
 - **The label's action decides the outcome**, so the user's choice, not the model, determines what happens to the message.
-- **Two protections apply whatever the model says:** mail from someone the user has written to is never archived or marked spam on the model's word (and "could not check" counts as yes), and `unsure` or an unknown category leaves the message for review.
+- **Three protections apply whatever the model says:** mail from someone the user has written to is never archived or marked spam on the model's word (and "could not check" counts as yes), nor is a reply in a thread the user has written in, and `unsure` or an unknown category leaves the message for review.
 - **The prompt marks the email as untrusted** and keeps it apart from the guidelines and the header facts. The worst an injected email can do is get itself given the wrong label, which the audit log can undo.
 - **Learning:** after three consecutive model decisions give a sender the same label, and each ended the way that label says, sift writes a rule for the sender and later mail from them is decided without inference. A rule the user made for that sender is left alone. (Next: propose the rule to the user instead of saving it; see TODO.md.)
 
@@ -133,7 +147,7 @@ Four commands: `init` sets sift up, `run` sorts mail and serves the dashboard, `
 
 Everything sift keeps is in one directory, the home: `~/.config/sift` by default (`$XDG_CONFIG_HOME/sift`), or wherever `--home` or `SIFT_HOME` points (the Docker image uses `/data`). Keeping settings, guidance, the database and credentials together means it can be backed up or moved as a unit. No setting requires an environment variable, with one exception: the key that encrypts the credentials.
 
-- `sift.toml`: settings (`model`, `act`, `interval`, `dashboard.port`, `dashboard.host`, `dashboard.allow`, `retention.days`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
+- `sift.toml`: settings (`model`, `act`, `heuristics`, `interval`, `dashboard.port`, `dashboard.host`, `dashboard.allow`, `retention.days`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
 - `guidelines.md`: the user's broad guidance, read on every pass.
 - `sift.db`: everything structured or learned.
 - `google-client.json`, `google/`, `model-auth.json`, `dashboard-key`: credentials and the session secret, owner-only, kept out of the database.
@@ -169,7 +183,7 @@ Code: `src/learn/feedback.ts` (suggestions, answers, accuracy), `src/daemon/exam
 
 One SQLite database, `sift.db` in the home directory (schema in `src/store/migrations/`). It is the complete record of what sift saw and did, and everything else (the dashboard, undo, future analytics) reads from it.
 
-- **messages:** one row per message sift has seen: sender, recipients, subject, the triage headers and the labels at sync time. No body. This is enough to triage a message again without refetching it.
+- **messages:** one row per message sift has seen: sender, recipients, subject, the triage headers, the labels at sync time and the facts derived from them. No body. This is enough to triage a message again without refetching it.
 - **feedback, examples:** the user's answers to suggestions, and the full content of each message they answered for, kept as evaluation and training data.
 - **suggestion_bodies:** the readable text of mail still waiting on the user, so a suggestion can be judged by reading it. Held only for mail sift would move or could not place, and deleted when the message is answered or stops being a suggestion, and after 30 days regardless (`src/daemon/bodies.ts`). These two tables are the only places message content is stored.
 - **decisions:** an append-only log, each with its mode (observe or act) and outcome. Every triage outcome is recorded, including "keep" and "could not decide", with the tier that made it, the reason, the confidence, and what it cost (model, tokens, dollars, duration). A message can have several decisions; the latest is current.

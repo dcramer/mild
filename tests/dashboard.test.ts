@@ -142,6 +142,7 @@ describe('summarize', () => {
     expect(summary.byStage.map((s) => [s.stage, s.decisions])).toEqual([
       ['rules', 1],
       ['sender', 1],
+      ['heuristics', 0],
       ['classifier', 0],
       ['agent', 1],
       ['fallback', 0],
@@ -158,7 +159,7 @@ describe('summarize', () => {
     const { daily } = summarize(seeded(), 7, NOW);
     expect(daily).toHaveLength(7);
     expect(daily.reduce((sum, d) => sum + Object.values(d.counts).reduce((a, b) => a + b, 0), 0)).toBe(3);
-    expect(daily.at(-1)?.counts).toEqual({ rules: 0, sender: 0, classifier: 0, agent: 0, fallback: 0 });
+    expect(daily.at(-1)?.counts).toEqual({ rules: 0, sender: 0, heuristics: 0, classifier: 0, agent: 0, fallback: 0 });
   });
 
   it('lists senders and recent decisions with their message', () => {

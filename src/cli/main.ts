@@ -372,6 +372,7 @@ async function run(args: string[]): Promise<void> {
       announced = state;
       return {
         act,
+        heuristics: settings.heuristics,
         ...(tier ? { model: tier } : {}),
         unsubscribe: (accountId: string, messageId: string) => unsubscribe({ db }, accountId, messageId),
         connect: (account: Account) => {

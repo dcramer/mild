@@ -3,6 +3,7 @@ import type { StageKey } from './api.ts';
 /** Tiers in cascade order, cheapest first. Each has a fixed ink (see index.css); mail no tier decided is highlighted. */
 export const TIERS: { key: StageKey; name: string; color: string }[] = [
   { key: 'rules', name: 'Rules', color: 'var(--tier-rules)' },
+  { key: 'heuristics', name: 'Header checks', color: 'var(--tier-sender)' },
   { key: 'sender', name: 'Senders (before rules)', color: 'var(--tier-sender)' },
   { key: 'classifier', name: 'Decision model', color: 'var(--tier-classifier)' },
   { key: 'agent', name: 'Agent', color: 'var(--tier-agent)' },

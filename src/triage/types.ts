@@ -7,7 +7,7 @@ export type DecidedDisposition = Exclude<Disposition, 'review'>;
 /** Chosen independently of the disposition: a kept sender can still be unsubscribed from. */
 export type SubscriptionAction = 'preserve' | 'unsubscribe';
 
-export type StageName = 'rules' | 'sender' | 'classifier' | 'agent' | 'fallback';
+export type StageName = 'rules' | 'sender' | 'heuristics' | 'classifier' | 'agent' | 'fallback';
 
 export interface Address {
   /** Lowercased `local@domain`. */

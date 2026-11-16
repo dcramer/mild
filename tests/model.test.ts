@@ -17,7 +17,7 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { PROPOSE_AFTER, listProposals, proposeForSender, proposeSettled, resolveProposal } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { domainFacts, rememberCorrespondent, senderFacts } from '../src/store/senders.ts';
-import { bulkSignals } from '../src/triage/features.ts';
+import { deriveFacts } from '../src/triage/facts.ts';
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../src/triage/prompt.ts';
 import { type Evidence, type Verdict, modelStage } from '../src/triage/stages/model.ts';
 import { facts } from './helpers.ts';
@@ -27,7 +27,7 @@ const b64 = (text: string) => Buffer.from(text).toString('base64url');
 
 function evidence(overrides: Partial<Evidence['sender']> = {}, body: string | null = 'Our autumn sale starts today.'): Evidence {
   const f = facts({ accountId: ACCOUNT, headers: { 'list-unsubscribe': '<https://example.com/u>' } });
-  return { facts: f, signals: bulkSignals(f.headers), body, sender: { messagesSeen: 1, userHasWritten: false, pastDispositions: {}, ...overrides } };
+  return { facts: f, known: deriveFacts(f), body, sender: { messagesSeen: 1, userHasWritten: false, pastDispositions: {}, ...overrides } };
 }
 
 const stage = (verdict: Verdict | null, ev: Evidence = evidence()) =>
@@ -67,6 +67,19 @@ describe('model stage', () => {
     expect(unknown).toMatchObject({ disposition: 'review', reason: expect.stringContaining('could not check') });
 
     expect(await stage({ label: 'transactional', reason: 'r' }, evidence({ userHasWritten: true })).decide(facts())).toMatchObject({ disposition: 'keep' });
+  });
+
+  it('never hides a reply in a thread the owner has written in', async () => {
+    const ev = evidence();
+    const inThread = { ...ev, known: { ...ev.known, earlierInThread: 2, ownerInThread: true } };
+    expect(await stage({ label: 'marketing', reason: 'r' }, inThread).decide(facts())).toMatchObject({
+      disposition: 'review',
+      labelId: 'marketing',
+      reason: expect.stringContaining('you have written in this thread'),
+    });
+    expect(await stage({ label: 'personal', reason: 'r' }, inThread).decide(facts())).toMatchObject({ disposition: 'keep' });
+    const strangers = { ...ev, known: { ...ev.known, earlierInThread: 2, ownerInThread: false } };
+    expect(await stage({ label: 'marketing', reason: 'r' }, strangers).decide(facts())).toMatchObject({ disposition: 'archive' });
   });
 
   it('abstains when the model call fails', async () => {
@@ -369,7 +382,15 @@ describe('gatherEvidence', () => {
     const f = facts({ accountId: ACCOUNT });
     recordSync(db, ACCOUNT, [f], '2');
     let lookups = 0;
-    const sources = { db, api: { getBodyText: async () => 'hello' }, mailbox: { hasSentTo: async () => (lookups++, false) }, now: () => 1000 };
+    const fail = async () => {
+      throw new Error('not a reply, so the thread is not read');
+    };
+    const sources = {
+      db,
+      api: { getContent: async () => ({ text: 'hello', facts: { hasAttachments: false } }), getThread: fail },
+      mailbox: { hasSentTo: async () => (lookups++, false) },
+      now: () => 1000,
+    };
 
     const first = await gatherEvidence(sources, f);
     await gatherEvidence(sources, f);
@@ -383,7 +404,7 @@ describe('gatherEvidence', () => {
     const fail = async () => {
       throw new Error('network');
     };
-    const result = await gatherEvidence({ db, api: { getBodyText: fail }, mailbox: { hasSentTo: fail } }, facts({ accountId: ACCOUNT }));
+    const result = await gatherEvidence({ db, api: { getContent: fail, getThread: fail }, mailbox: { hasSentTo: fail } }, facts({ accountId: ACCOUNT }));
     expect(result).toMatchObject({ body: null, sender: { userHasWritten: null } });
   });
 });

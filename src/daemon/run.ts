@@ -18,6 +18,8 @@ export interface RunOptions {
   connect: (account: Account) => { api: GmailApi; mailbox: Mailbox };
   /** The inference tier, if a model is configured. */
   model?: { judge: Judge; guidelines: () => string };
+  /** Label plainly bulk mail by its headers before the model. Off unless set. */
+  heuristics?: boolean;
   /** Leaves a mailing list, for decisions that say to. Without it sift never unsubscribes. */
   unsubscribe?: (accountId: string, messageId: string) => Promise<UnsubscribeOutcome>;
   log: (line: string) => void;
@@ -53,6 +55,7 @@ export async function runOnce(db: DatabaseSync, options: RunOptions): Promise<Pa
           ...deps,
           mailbox: options.act ? mailbox : null,
           ...(options.unsubscribe ? { unsubscribe: options.unsubscribe } : {}),
+          ...(options.heuristics ? { heuristics: { mailbox } } : {}),
           ...(options.model ? { model: { judge: options.model.judge, guidelines: options.model.guidelines(), sources: { api, mailbox } } } : {}),
         },
         account,
