@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS, parseSettings } from '../src/config.ts';
 import { type RunOptions, runOnce } from '../src/daemon/run.ts';
 import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
 import { addMailbox } from '../src/store/accounts.ts';
-import { openUserDb } from './fixtures.ts';
+import { openUserDb, raw } from './fixtures.ts';
 import { DEFAULT_LABELS } from '../src/store/labels.ts';
 import { heuristicsStage } from '../src/triage/stages/heuristics.ts';
 import type { MessageFacts } from '../src/triage/types.ts';
@@ -82,7 +82,7 @@ describe('heuristics stage', () => {
 });
 
 describe('heuristics in the cascade', () => {
-  const raw: RawMessage = {
+  const gmailMessage: RawMessage = {
     id: 'promo',
     threadId: 't-promo',
     labelIds: ['INBOX', 'CATEGORY_PROMOTIONS'],
@@ -99,12 +99,12 @@ describe('heuristics in the cascade', () => {
     const db = await openUserDb();
     await addMailbox(db, ACCOUNT, '1', 0);
     const mailbox = new FakeMailbox();
-    mailbox.labels.set(raw.id, [...raw.labelIds]);
+    mailbox.labels.set(gmailMessage.id, [...gmailMessage.labelIds]);
     const api: GmailApi = {
       getProfile: async () => ({ emailAddress: ACCOUNT, historyId: '2' }),
-      listHistory: async () => ({ additions: [{ id: raw.id, labelIds: raw.labelIds }], historyId: '2' }),
+      listHistory: async () => ({ additions: [{ id: gmailMessage.id, labelIds: gmailMessage.labelIds }], historyId: '2' }),
       searchInbox: async () => ({ ids: [] }),
-      getMetadata: async () => raw,
+      getMetadata: async () => gmailMessage,
       getBodyText: async () => null,
       getContent: async () => null,
       getThread: async () => null,
@@ -113,7 +113,7 @@ describe('heuristics in the cascade', () => {
       listLabels: async () => [],
     };
     const options = (heuristics: boolean): RunOptions => ({ act: false, heuristics, connect: () => ({ api, mailbox }), log: () => {} });
-    const decisions = async () => await db.all('SELECT stage, disposition, label_id FROM decisions');
+    const decisions = async () => await raw(db).all('SELECT stage, disposition, label_id FROM decisions');
     return { db, mailbox, options, decisions };
   }
 

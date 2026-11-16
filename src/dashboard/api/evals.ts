@@ -1,5 +1,6 @@
 import { DEFAULT_EVAL_EXAMPLES, MAX_EVAL_EXAMPLES, getEvalRun, listEvalRuns } from '../../learn/evals.ts';
 import { listAccounts } from '../../store/accounts.ts';
+import { and, count, eq, examples, isNotNull } from '../../store/query.ts';
 import { sees } from '../scope.ts';
 import type { Evals } from '../types.ts';
 import { type Read, type Write, missing, named, ok, str } from './route.ts';
@@ -13,7 +14,12 @@ export const reads: Read[] = [
           async (id) =>
             [
               id,
-              (await db.get<{ n: number }>(`SELECT count(*) AS n FROM examples WHERE account_id = ? AND status = 'captured' AND label_id IS NOT NULL`, id))!.n,
+              (
+                await db
+                  .select({ n: count() })
+                  .from(examples)
+                  .where(and(eq(examples.accountId, id), eq(examples.status, 'captured'), isNotNull(examples.labelId)))
+              )[0]!.n,
             ] as const,
         ),
       );

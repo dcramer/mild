@@ -14,10 +14,10 @@ import { people } from '../src/store/people.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
-import { builtAssets, openUserDb, startDashboard } from './fixtures.ts';
+import { builtAssets, openUserDb, raw, startDashboard, onePerson } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 import { addRule } from '../src/store/rules.ts';
-import { everything, facts, onePerson } from './helpers.ts';
+import { everything, facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
 const DAY = 86_400_000;
@@ -80,7 +80,7 @@ describe('tracking', () => {
       '2',
       NOW,
     );
-    const row = (await db.get<Record<string, unknown>>('SELECT * FROM messages'))!;
+    const row = (await raw(db).get('SELECT * FROM messages'))!;
     expect(row).toMatchObject({ subject: 'Weekly digest', list_id: 'dev.lists.example.com', synced_at: NOW, labels_json: '["INBOX","UNREAD"]' });
     expect(JSON.parse(row['headers_json'] as string)).toEqual({ 'list-id': '<dev.lists.example.com>' });
     expect(JSON.parse(row['cc_json'] as string)).toEqual([{ address: 'c@example.org', domain: 'example.org' }]);
@@ -90,7 +90,7 @@ describe('tracking', () => {
   it('keeps every decision for a message, with its cost', async () => {
     const db = await seeded();
     await recordDecision(db, ACCOUNT, 'c', { disposition: 'keep', subscription: 'preserve', stage: 'rules', reason: 'user correction' }, { now: NOW });
-    const rows = await db.all(`SELECT stage, disposition, model, cost_usd, input_tokens, duration_ms FROM decisions WHERE message_id = 'c' ORDER BY id`);
+    const rows = await raw(db).all(`SELECT stage, disposition, model, cost_usd, input_tokens, duration_ms FROM decisions WHERE message_id = 'c' ORDER BY id`);
     expect(rows).toEqual([
       { stage: 'agent', disposition: 'review', model: 'test-model', cost_usd: 0.02, input_tokens: 900, duration_ms: 1500 },
       { stage: 'rules', disposition: 'keep', model: null, cost_usd: 0, input_tokens: 0, duration_ms: null },
@@ -112,7 +112,7 @@ describe('tracking', () => {
       listFilters: async () => [],
     };
     await execute({ db, mailbox, now: () => NOW }, ACCOUNT, 'a', { type: 'archive' }, 1);
-    expect(await db.get('SELECT decision_id, status FROM actions')).toEqual({ decision_id: 1, status: 'done' });
+    expect(await raw(db).get('SELECT decision_id, status FROM actions')).toEqual({ decision_id: 1, status: 'done' });
     expect((await summarize(db, await everything(db), 7, NOW)).recent.find((r) => r.id === 1)).toMatchObject({
       actionId: 1,
       actionType: 'archive',
@@ -160,7 +160,7 @@ describe('tracking', () => {
     // A failed change goes back to waiting; sift's own waits for sift to act, and only a failure can be retried.
     expect(await retryDecision(db, scopeFor(['someone@example.net'], false), failed)).toEqual({ retried: false, waiting: false });
     expect(await retryDecision(db, await everything(db), failed)).toEqual({ retried: true, waiting: true });
-    expect(await db.get('SELECT outcome FROM decisions WHERE id = ?', failed)).toEqual({ outcome: null });
+    expect(await raw(db).get('SELECT outcome FROM decisions WHERE id = ?', failed)).toEqual({ outcome: null });
     expect(await retryDecision(db, await everything(db), done)).toEqual({ retried: false, waiting: false });
   });
 

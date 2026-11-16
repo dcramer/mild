@@ -5,7 +5,7 @@ import { people } from '../src/store/people.ts';
 import { connectAccount, connectedAddresses, personOf, recordSync, userOf } from '../src/store/accounts.ts';
 import { preferences, setGuidelines } from '../src/store/preferences.ts';
 import type { Store } from '../src/store/store.ts';
-import { freshStore, startDashboard } from './fixtures.ts';
+import { freshStore, raw, startDashboard } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { facts } from './helpers.ts';
@@ -37,18 +37,18 @@ async function seed(account: string): Promise<void> {
     { now: 1000 },
   );
   const rule = await addRule(db, account, { match: { from: sender.address }, disposition: 'archive' }, 'user', 1000);
-  const { id: action } = (await db.get<{ id: number }>(
+  const { id: action } = (await raw(db).get<{ id: number }>(
     `INSERT INTO actions (account_id, message_id, type, payload_json, status, created_at, decision_id) VALUES (?, ?, 'archive', '{}', 'done', 1000, ?) RETURNING id`,
     account,
     `m-${mark}`,
     decision,
   ))!;
-  const { id: proposal } = (await db.get<{ id: number }>(
+  const { id: proposal } = (await raw(db).get<{ id: number }>(
     `INSERT INTO proposals (account_id, kind, match_json, label_id, agreed, created_at) VALUES (?, 'rule', ?, 'newsletter', 5, 1000) RETURNING id`,
     account,
     JSON.stringify({ from: `proposed@${mark}.example.com` }),
   ))!;
-  await db.run(
+  await raw(db).run(
     `INSERT INTO examples (account_id, message_id, disposition, label_id, suggested, suggested_by, marked_at, status, body_text) VALUES (?, ?, 'archive', 'newsletter', 'archive', 'agent', 1000, 'captured', ?)`,
     account,
     `m-${mark}`,
@@ -151,9 +151,9 @@ describe('users and their mailboxes', () => {
     const alpha = await dbOf(ALPHA);
     const bravo = await dbOf(BRAVO);
     expect(alpha).not.toBe(bravo);
-    expect((await alpha.all<{ id: string }>('SELECT id FROM mailboxes ORDER BY id')).map((m) => m.id)).toEqual([ALPHA, ALPHA_WORK]);
+    expect((await raw(alpha).all<{ id: string }>('SELECT id FROM mailboxes ORDER BY id')).map((m) => m.id)).toEqual([ALPHA, ALPHA_WORK]);
     for (const table of ['mailboxes', 'messages', 'decisions', 'actions', 'rules', 'proposals', 'examples'])
-      expect(await bravo.all(`SELECT DISTINCT ${table === 'mailboxes' ? 'id' : 'account_id'} AS id FROM ${table}`), table).toEqual([{ id: BRAVO }]);
+      expect(await raw(bravo).all(`SELECT DISTINCT ${table === 'mailboxes' ? 'id' : 'account_id'} AS id FROM ${table}`), table).toEqual([{ id: BRAVO }]);
   });
 });
 
@@ -201,7 +201,8 @@ describe("nobody sees or changes another person's mail", () => {
     const theirs = ids[ALPHA_WORK]!;
     expect(theirs.action).not.toBe(ids[BRAVO]!.action);
     const db = await dbOf(ALPHA);
-    const state = async () => JSON.stringify([await listRules(db, ALPHA), await db.all('SELECT * FROM labels'), await db.all('SELECT * FROM proposals')]);
+    const state = async () =>
+      JSON.stringify([await listRules(db, ALPHA), await raw(db).all('SELECT * FROM labels'), await raw(db).all('SELECT * FROM proposals')]);
     const before = await state();
     const NOBODY = 'nobody@example.com';
     // Each write, and the same write naming something nobody has: the answers must not tell them apart.
@@ -243,7 +244,7 @@ describe("nobody sees or changes another person's mail", () => {
       expect(answer.status, `${path}: someone else's is told apart from nobody's`).toBe((await call('POST', path, BRAVO, nobody)).status);
     }
     expect(await state()).toBe(before);
-    expect(await db.get('SELECT count(*) AS n FROM examples WHERE account_id = ?', ALPHA)).toEqual({ n: 1 });
+    expect(await raw(db).get('SELECT count(*) AS n FROM examples WHERE account_id = ?', ALPHA)).toEqual({ n: 1 });
     expect(calls).toEqual([]);
 
     // The same writes are the owner's to make on their own mail.

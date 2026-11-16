@@ -1,3 +1,4 @@
+import { and, asc, eq, labels } from './query.ts';
 import type { Sql } from './sql.ts';
 import type { Disposition, Label } from '../triage/types.ts';
 
@@ -85,54 +86,50 @@ export const DEFAULT_LABELS: readonly Label[] = [
   },
 ];
 
-interface Row {
-  id: string;
-  name: string;
-  description: string;
-  disposition: Disposition;
-  gmail_label: string;
-  block: number;
-  mark_read: number;
-  unsubscribe: number;
-}
-
-const INSERT =
-  'INSERT INTO labels (account_id, id, name, description, disposition, gmail_label, position, updated_at, block, mark_read, unsubscribe) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+const toRow = (accountId: string, l: Label, position: number, now: number) => ({
+  accountId,
+  id: l.id,
+  name: l.name,
+  description: l.description,
+  disposition: l.disposition,
+  gmailLabel: l.gmailLabel,
+  position,
+  updatedAt: now,
+  block: l.block ? 1 : 0,
+  markRead: l.markRead ? 1 : 0,
+  unsubscribe: l.unsubscribe ? 1 : 0,
+});
 
 /** An account's labels in order, seeding the defaults the first time. */
 export async function listLabels(db: Sql, accountId: string, now: number = Date.now()): Promise<Label[]> {
   const select = () =>
-    db.all<Row>(
-      'SELECT id, name, description, disposition, gmail_label, block, mark_read, unsubscribe FROM labels WHERE account_id = ? ORDER BY position, id',
-      accountId,
-    );
+    db
+      .select({
+        id: labels.id,
+        name: labels.name,
+        description: labels.description,
+        disposition: labels.disposition,
+        gmailLabel: labels.gmailLabel,
+        block: labels.block,
+        markRead: labels.markRead,
+        unsubscribe: labels.unsubscribe,
+      })
+      .from(labels)
+      .where(eq(labels.accountId, accountId))
+      .orderBy(asc(labels.position), asc(labels.id));
   let rows = await select();
   if (rows.length === 0) {
-    for (const [index, l] of DEFAULT_LABELS.entries())
-      await db.run(
-        INSERT,
-        accountId,
-        l.id,
-        l.name,
-        l.description,
-        l.disposition,
-        l.gmailLabel,
-        index,
-        now,
-        l.block ? 1 : 0,
-        l.markRead ? 1 : 0,
-        l.unsubscribe ? 1 : 0,
-      );
+    await db.insert(labels).values(DEFAULT_LABELS.map((l, index) => toRow(accountId, l, index, now)));
     rows = await select();
   }
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
     description: r.description,
-    disposition: r.disposition,
-    gmailLabel: r.gmail_label,
+    disposition: r.disposition as Disposition,
+    gmailLabel: r.gmailLabel,
     ...(r.block === 1 ? { block: true } : {}),
-    ...(r.mark_read === 1 ? { markRead: true } : {}),
+    ...(r.markRead === 1 ? { markRead: true } : {}),
     ...(r.unsubscribe === 1 ? { unsubscribe: true } : {}),
   }));
 }
@@ -185,20 +182,7 @@ export async function addLabel(
     ...extras,
     ...(label.unsubscribe ? { unsubscribe: true } : {}),
   };
-  await db.run(
-    INSERT,
-    accountId,
-    created.id,
-    created.name,
-    created.description,
-    created.disposition,
-    created.gmailLabel,
-    existing.length,
-    now,
-    created.block ? 1 : 0,
-    created.markRead ? 1 : 0,
-    created.unsubscribe ? 1 : 0,
-  );
+  await db.insert(labels).values(toRow(accountId, created, existing.length, now));
   return created;
 }
 
@@ -222,17 +206,17 @@ export async function updateLabel(
     change.block ?? (change.disposition === undefined && (current.block ?? false)),
     change.markRead ?? current.markRead ?? false,
   );
-  await db.run(
-    'UPDATE labels SET name = ?, description = ?, disposition = ?, block = ?, mark_read = ?, unsubscribe = ?, updated_at = ? WHERE account_id = ? AND id = ?',
-    change.name?.trim() || current.name,
-    change.description?.trim() ?? current.description,
-    disposition,
-    extras.block ? 1 : 0,
-    extras.markRead ? 1 : 0,
-    (change.unsubscribe ?? current.unsubscribe ?? false) ? 1 : 0,
-    now,
-    accountId,
-    id,
-  );
+  await db
+    .update(labels)
+    .set({
+      name: change.name?.trim() || current.name,
+      description: change.description?.trim() ?? current.description,
+      disposition,
+      block: extras.block ? 1 : 0,
+      markRead: extras.markRead ? 1 : 0,
+      unsubscribe: (change.unsubscribe ?? current.unsubscribe ?? false) ? 1 : 0,
+      updatedAt: now,
+    })
+    .where(and(eq(labels.accountId, accountId), eq(labels.id, id)));
   return true;
 }

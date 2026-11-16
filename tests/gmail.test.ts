@@ -3,10 +3,10 @@ import { syncAccount } from '../src/daemon/sync.ts';
 import { type GmailApi, HistoryExpiredError, type HistoryPage, type RawMessage } from '../src/gmail/api.ts';
 import { pullChanges, toFacts } from '../src/gmail/sync.ts';
 import { addMailbox, listAccounts } from '../src/store/accounts.ts';
-import { openUserDb } from './fixtures.ts';
+import { openUserDb, raw } from './fixtures.ts';
 import { parseAddressList } from '../src/triage/features.ts';
 
-function raw(id: string, overrides: Partial<RawMessage> = {}): RawMessage {
+function gmailMessage(id: string, overrides: Partial<RawMessage> = {}): RawMessage {
   return {
     id,
     threadId: `t-${id}`,
@@ -152,7 +152,7 @@ describe('toFacts', () => {
   it('lowercases header names and keeps the first of repeated headers', () => {
     const facts = toFacts(
       'acct',
-      raw('m', {
+      gmailMessage('m', {
         headers: [
           { name: 'FROM', value: '"Ada, L" <Ada@Example.com>' },
           { name: 'To', value: '"Doe, J" <j@example.org>, k@example.org' },
@@ -175,7 +175,7 @@ describe('toFacts', () => {
   });
 
   it('returns null without a usable sender', () => {
-    expect(toFacts('acct', raw('m', { headers: [{ name: 'Subject', value: 'x' }] }))).toBeNull();
+    expect(toFacts('acct', gmailMessage('m', { headers: [{ name: 'Subject', value: 'x' }] }))).toBeNull();
   });
 });
 
@@ -196,24 +196,24 @@ describe('syncAccount', () => {
     await addMailbox(db, 'me@example.org', '500', 0);
     const api = fakeApi({
       pages: page(['a', 'archived', 'gone', 'nosender'], '520'),
-      messages: { a: raw('a'), archived: raw('archived', { labelIds: ['UNREAD'] }), nosender: raw('nosender', { headers: [] }) },
+      messages: { a: gmailMessage('a'), archived: gmailMessage('archived', { labelIds: ['UNREAD'] }), nosender: gmailMessage('nosender', { headers: [] }) },
     });
 
     const report = await syncAccount(db, api, (await listAccounts(db))[0]!);
     expect(report.added.map((m) => m.messageId)).toEqual(['a']);
     expect(report.skipped).toBe(3);
     expect((await listAccounts(db))[0]?.historyId).toBe('520');
-    expect(await db.all('SELECT id, from_domain FROM messages')).toEqual([{ id: 'a', from_domain: 'example.com' }]);
+    expect(await raw(db).all('SELECT id, from_domain FROM messages')).toEqual([{ id: 'a', from_domain: 'example.com' }]);
   });
 
   it('does not report a redelivered message as new', async () => {
     const db = await openUserDb();
     await addMailbox(db, 'me@example.org', '500', 0);
-    const fake = { pages: page(['a'], '520'), messages: { a: raw('a') } };
+    const fake = { pages: page(['a'], '520'), messages: { a: gmailMessage('a') } };
     await syncAccount(db, fakeApi(fake), (await listAccounts(db))[0]!);
     const again = await syncAccount(db, fakeApi(fake), (await listAccounts(db))[0]!);
     expect(again.added).toEqual([]);
-    expect(await db.get('SELECT count(*) AS n FROM messages')).toEqual({ n: 1 });
+    expect(await raw(db).get('SELECT count(*) AS n FROM messages')).toEqual({ n: 1 });
   });
 
   it('records every page of a busy day in one pass and leaves the cursor alone if a later page fails', async () => {
@@ -223,10 +223,10 @@ describe('syncAccount', () => {
       '': { additions: [{ id: 'a', labelIds: ['INBOX'] }], historyId: '510', nextPageToken: 'p2' },
       p2: { additions: [{ id: 'b', labelIds: ['INBOX'] }], historyId: '520', nextPageToken: 'p3' },
     };
-    const messages = { a: raw('a'), b: raw('b'), c: raw('c') };
+    const messages = { a: gmailMessage('a'), b: gmailMessage('b'), c: gmailMessage('c') };
     await expect(syncAccount(db, fakeApi({ pages, messages }), (await listAccounts(db))[0]!)).rejects.toThrow('unexpected page');
     expect((await listAccounts(db))[0]?.historyId).toBe('500');
-    expect(await db.get('SELECT count(*) AS n FROM messages')).toEqual({ n: 0 });
+    expect(await raw(db).get('SELECT count(*) AS n FROM messages')).toEqual({ n: 0 });
 
     pages['p3'] = { additions: [{ id: 'c', labelIds: ['INBOX'] }], historyId: '530' };
     const report = await syncAccount(db, fakeApi({ pages, messages }), (await listAccounts(db))[0]!);
@@ -237,7 +237,7 @@ describe('syncAccount', () => {
   it('after an expired cursor, records what the search finds, skips what it already had, and carries on from the new cursor', async () => {
     const db = await openUserDb();
     await addMailbox(db, 'me@example.org', '500', 0);
-    const messages = { a: raw('a'), b: raw('b'), c: raw('c') };
+    const messages = { a: gmailMessage('a'), b: gmailMessage('b'), c: gmailMessage('c') };
     await syncAccount(db, fakeApi({ pages: page(['a'], '520'), messages }), (await listAccounts(db))[0]!);
 
     const recovering = fakeApi({ expired: true, historyId: '900', search: ['b', 'a'], messages });
@@ -268,7 +268,7 @@ describe('syncAccount', () => {
   it('records that the user opened a message, once, whichever page or pass says so', async () => {
     const db = await openUserDb();
     await addMailbox(db, 'me@example.org', '500', 0);
-    const messages = { a: raw('a'), b: raw('b', { labelIds: ['INBOX'] }) };
+    const messages = { a: gmailMessage('a'), b: gmailMessage('b', { labelIds: ['INBOX'] }) };
     await syncAccount(db, fakeApi({ pages: page(['a'], '510'), messages }), (await listAccounts(db))[0]!, () => 1000);
 
     // `a` is opened, `b` arrives and is opened before sift has seen it, and a message sift never recorded is opened.
@@ -284,7 +284,7 @@ describe('syncAccount', () => {
         historyId: '530',
       },
     };
-    const reads = async () => await db.all('SELECT id, read_at FROM messages ORDER BY id');
+    const reads = async () => await raw(db).all('SELECT id, read_at FROM messages ORDER BY id');
     await syncAccount(db, fakeApi({ pages, messages }), (await listAccounts(db))[0]!, () => 2000);
     expect(await reads()).toEqual([
       { id: 'a', read_at: 2000 },
@@ -302,9 +302,9 @@ describe('syncAccount', () => {
   it('learns nothing about reading from a search after an expired cursor', async () => {
     const db = await openUserDb();
     await addMailbox(db, 'me@example.org', '500', 0);
-    const api = fakeApi({ expired: true, search: ['a'], messages: { a: raw('a', { labelIds: ['INBOX'] }) } });
+    const api = fakeApi({ expired: true, search: ['a'], messages: { a: gmailMessage('a', { labelIds: ['INBOX'] }) } });
     await syncAccount(db, api, (await listAccounts(db))[0]!);
-    expect(await db.get('SELECT read_at FROM messages')).toEqual({ read_at: null });
+    expect(await raw(db).get('SELECT read_at FROM messages')).toEqual({ read_at: null });
   });
 
   it('leaves the cursor alone when a fetch fails', async () => {

@@ -1,3 +1,4 @@
+import { and, asc, decisions, eq, isNull } from './query.ts';
 import type { Sql } from './sql.ts';
 import type { Decision, Disposition } from '../triage/types.ts';
 
@@ -19,39 +20,38 @@ export async function recordDecision(
   options: { mode?: DecisionMode; durationMs?: number; now?: number; byUser?: boolean } = {},
 ): Promise<number> {
   const mode = options.mode ?? 'observe';
-  const result = await db.get<{ id: number }>(
-    `INSERT INTO decisions
-         (account_id, message_id, stage, disposition, subscription, gmail_label, rule_id, confidence, reason,
-          model, input_tokens, output_tokens, cost_usd, duration_ms, decided_at, mode, outcome, label_id, block, mark_read, prior_rule_id, by_user)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-    accountId,
-    messageId,
-    decision.stage,
-    decision.disposition,
-    decision.subscription,
-    decision.gmailLabel ?? null,
-    decision.ruleId ?? null,
-    decision.confidence ?? null,
-    decision.reason,
-    decision.usage?.model ?? null,
-    decision.usage?.inputTokens ?? 0,
-    decision.usage?.outputTokens ?? 0,
-    decision.usage?.costUsd ?? 0,
-    options.durationMs ?? null,
-    options.now ?? Date.now(),
-    mode,
-    mode === 'observe' ? 'observed' : null,
-    decision.labelId ?? null,
-    decision.block ? 1 : 0,
-    decision.markRead ? 1 : 0,
-    decision.priorRuleId ?? null,
-    options.byUser ? 1 : 0,
-  );
-  return result!.id;
+  const [row] = await db
+    .insert(decisions)
+    .values({
+      accountId,
+      messageId,
+      stage: decision.stage,
+      disposition: decision.disposition,
+      subscription: decision.subscription,
+      gmailLabel: decision.gmailLabel ?? null,
+      ruleId: decision.ruleId ?? null,
+      confidence: decision.confidence ?? null,
+      reason: decision.reason,
+      model: decision.usage?.model ?? null,
+      inputTokens: decision.usage?.inputTokens ?? 0,
+      outputTokens: decision.usage?.outputTokens ?? 0,
+      costUsd: decision.usage?.costUsd ?? 0,
+      durationMs: options.durationMs ?? null,
+      decidedAt: options.now ?? Date.now(),
+      mode,
+      outcome: mode === 'observe' ? 'observed' : null,
+      labelId: decision.labelId ?? null,
+      block: decision.block ? 1 : 0,
+      markRead: decision.markRead ? 1 : 0,
+      priorRuleId: decision.priorRuleId ?? null,
+      byUser: options.byUser ? 1 : 0,
+    })
+    .returning({ id: decisions.id });
+  return row!.id;
 }
 
 export async function settleDecision(db: Sql, id: number, outcome: DecisionOutcome, detail: string | null = null): Promise<void> {
-  await db.run('UPDATE decisions SET outcome = ?, outcome_detail = ? WHERE id = ?', outcome, detail, id);
+  await db.update(decisions).set({ outcome, outcomeDetail: detail }).where(eq(decisions.id, id));
 }
 
 export interface UnsettledDecision {
@@ -68,16 +68,24 @@ export interface UnsettledDecision {
  * even while sift only observes.
  */
 export async function listUnsettledDecisions(db: Sql, accountId: string, options: { byUserOnly?: boolean } = {}): Promise<UnsettledDecision[]> {
-  const rows = await db.all<{ id: number; message_id: string; disposition: Disposition; gmail_label: string | null; mark_read: number }>(
-    `SELECT id, message_id, disposition, gmail_label, mark_read FROM decisions
-       WHERE account_id = ? AND outcome IS NULL AND mode = 'act' ${options.byUserOnly ? 'AND by_user = 1' : ''} ORDER BY id`,
-    accountId,
-  );
+  const rows = await db
+    .select({
+      id: decisions.id,
+      messageId: decisions.messageId,
+      disposition: decisions.disposition,
+      gmailLabel: decisions.gmailLabel,
+      markRead: decisions.markRead,
+    })
+    .from(decisions)
+    .where(
+      and(eq(decisions.accountId, accountId), isNull(decisions.outcome), eq(decisions.mode, 'act'), options.byUserOnly ? eq(decisions.byUser, 1) : undefined),
+    )
+    .orderBy(asc(decisions.id));
   return rows.map((r) => ({
     id: r.id,
-    messageId: r.message_id,
-    disposition: r.disposition,
-    ...(r.gmail_label ? { gmailLabel: r.gmail_label } : {}),
-    ...(r.mark_read === 1 ? { markRead: true } : {}),
+    messageId: r.messageId,
+    disposition: r.disposition as Disposition,
+    ...(r.gmailLabel ? { gmailLabel: r.gmailLabel } : {}),
+    ...(r.markRead === 1 ? { markRead: true } : {}),
   }));
 }

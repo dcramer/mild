@@ -1,3 +1,4 @@
+import { and, decisions, desc, eq, feedback, messages, proposals } from './query.ts';
 import type { Sql } from './sql.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
 import { listLabels } from './labels.ts';
@@ -18,61 +19,61 @@ export interface Proposal {
   createdAt: number;
 }
 
-interface Row {
-  id: number;
-  account_id: string;
-  kind: ProposalKind;
-  match_json: string;
-  label_id: string;
-  rule_id: string | null;
-  agreed: number;
-  created_at: number;
-}
+const COLUMNS = {
+  id: proposals.id,
+  accountId: proposals.accountId,
+  kind: proposals.kind,
+  matchJson: proposals.matchJson,
+  labelId: proposals.labelId,
+  ruleId: proposals.ruleId,
+  agreed: proposals.agreed,
+  createdAt: proposals.createdAt,
+};
 
-const toProposal = (r: Row): Proposal => ({
+const toProposal = (r: {
+  id: number;
+  accountId: string;
+  kind: string;
+  matchJson: string;
+  labelId: string;
+  ruleId: string | null;
+  agreed: number;
+  createdAt: number;
+}): Proposal => ({
   id: r.id,
-  accountId: r.account_id,
-  kind: r.kind,
-  match: JSON.parse(r.match_json) as RuleMatch,
-  labelId: r.label_id,
-  ruleId: r.rule_id,
+  accountId: r.accountId,
+  kind: r.kind as ProposalKind,
+  match: JSON.parse(r.matchJson) as RuleMatch,
+  labelId: r.labelId,
+  ruleId: r.ruleId,
   agreed: r.agreed,
-  createdAt: r.created_at,
+  createdAt: r.createdAt,
 });
 
 export async function listProposals(db: Sql, accountId?: string): Promise<Proposal[]> {
-  const rows = await db.all<Row>(
-    `SELECT id, account_id, kind, match_json, label_id, rule_id, agreed, created_at FROM proposals
-       WHERE status = 'open' ${accountId === undefined ? '' : 'AND account_id = ?'} ORDER BY created_at DESC, id DESC`,
-    ...(accountId === undefined ? [] : [accountId]),
-  );
+  const rows = await db
+    .select(COLUMNS)
+    .from(proposals)
+    .where(and(eq(proposals.status, 'open'), accountId === undefined ? undefined : eq(proposals.accountId, accountId)))
+    .orderBy(desc(proposals.createdAt), desc(proposals.id));
   return rows.map(toProposal);
 }
 
 /** Open a proposal, or refresh the count on one already open. One the user dismissed stays dismissed. Returns true if it is new. */
 async function propose(db: Sql, p: Omit<Proposal, 'id' | 'createdAt'>, now: number): Promise<boolean> {
   const match = JSON.stringify(p.match);
-  const existing = await db.get<{ id: number; status: string }>(
-    'SELECT id, status FROM proposals WHERE account_id = ? AND kind = ? AND match_json = ?',
-    p.accountId,
-    p.kind,
-    match,
-  );
+  const [existing] = await db
+    .select({ id: proposals.id, status: proposals.status })
+    .from(proposals)
+    .where(and(eq(proposals.accountId, p.accountId), eq(proposals.kind, p.kind), eq(proposals.matchJson, match)));
   if (existing) {
     if (existing.status === 'open')
-      await db.run('UPDATE proposals SET agreed = ?, label_id = ?, rule_id = ? WHERE id = ?', p.agreed, p.labelId, p.ruleId, existing.id);
+      await db.update(proposals).set({ agreed: p.agreed, labelId: p.labelId, ruleId: p.ruleId }).where(eq(proposals.id, existing.id));
     return false;
   }
-  await db.run(
-    'INSERT INTO proposals (account_id, kind, match_json, label_id, rule_id, agreed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    p.accountId,
-    p.kind,
-    match,
-    p.labelId,
-    p.ruleId,
-    p.agreed,
-    now,
-  );
+  await db
+    .insert(proposals)
+    .values({ accountId: p.accountId, kind: p.kind, matchJson: match, labelId: p.labelId, ruleId: p.ruleId, agreed: p.agreed, createdAt: now });
   return true;
 }
 
@@ -88,21 +89,19 @@ export const SETTLED_AFTER = 10;
  */
 export async function proposeForSender(db: Sql, accountId: string, address: string, now: number = Date.now()): Promise<boolean> {
   if (await hasRuleFor(db, accountId, { from: address })) return false;
-  const recent = await db.all<{ label_id: string | null; disposition: string; prior_rule_id: string | null }>(
-    `SELECT d.label_id, d.disposition, d.prior_rule_id FROM decisions d
-       JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
-       WHERE d.account_id = ? AND m.from_address = ? AND d.stage = 'agent'
-       ORDER BY d.id DESC LIMIT ?`,
-    accountId,
-    address,
-    PROPOSE_AFTER,
-  );
+  const recent = await db
+    .select({ labelId: decisions.labelId, disposition: decisions.disposition, priorRuleId: decisions.priorRuleId })
+    .from(decisions)
+    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .where(and(eq(decisions.accountId, accountId), eq(messages.fromAddress, address), eq(decisions.stage, 'agent')))
+    .orderBy(desc(decisions.id))
+    .limit(PROPOSE_AFTER);
   const [first] = recent;
-  if (!first || recent.length < PROPOSE_AFTER || first.label_id === null) return false;
-  const label = (await listLabels(db, accountId, now)).find((l) => l.id === first.label_id);
+  if (!first || recent.length < PROPOSE_AFTER || first.labelId === null) return false;
+  const label = (await listLabels(db, accountId, now)).find((l) => l.id === first.labelId);
   // One where a protection held sift back, or a wider rule already spoke, is not settled.
-  if (!label || !recent.every((r) => r.label_id === first.label_id && r.disposition === label.disposition && r.prior_rule_id === null)) return false;
-  return await propose(db, { accountId, kind: 'rule', match: { from: address }, labelId: first.label_id, ruleId: null, agreed: recent.length }, now);
+  if (!label || !recent.every((r) => r.labelId === first.labelId && r.disposition === label.disposition && r.priorRuleId === null)) return false;
+  return await propose(db, { accountId, kind: 'rule', match: { from: address }, labelId: first.labelId, ruleId: null, agreed: recent.length }, now);
 }
 
 /** How many answers in a row about a sender, all the same label, before sift offers to make it a rule. */
@@ -114,29 +113,30 @@ export const PROPOSE_AFTER_ANSWERS = 3;
  */
 export async function proposeFromAnswers(db: Sql, accountId: string, address: string, now: number = Date.now()): Promise<boolean> {
   if (await hasRuleFor(db, accountId, { from: address })) return false;
-  const recent = await db.all<{ label_id: string | null }>(
-    `SELECT f.label_id FROM feedback f
-       JOIN messages m ON m.account_id = f.account_id AND m.id = f.message_id
-       WHERE f.account_id = ? AND m.from_address = ?
-       ORDER BY f.created_at DESC, f.decision_id DESC LIMIT ?`,
-    accountId,
-    address,
-    PROPOSE_AFTER_ANSWERS,
-  );
+  const recent = await db
+    .select({ labelId: feedback.labelId })
+    .from(feedback)
+    .innerJoin(messages, and(eq(messages.accountId, feedback.accountId), eq(messages.id, feedback.messageId)))
+    .where(and(eq(feedback.accountId, accountId), eq(messages.fromAddress, address)))
+    .orderBy(desc(feedback.createdAt), desc(feedback.decisionId))
+    .limit(PROPOSE_AFTER_ANSWERS);
   const [first] = recent;
-  if (!first || recent.length < PROPOSE_AFTER_ANSWERS || first.label_id === null || !recent.every((r) => r.label_id === first.label_id)) return false;
-  if (!(await listLabels(db, accountId, now)).some((l) => l.id === first.label_id)) return false;
-  return await propose(db, { accountId, kind: 'rule', match: { from: address }, labelId: first.label_id, ruleId: null, agreed: recent.length }, now);
+  if (!first || recent.length < PROPOSE_AFTER_ANSWERS || first.labelId === null || !recent.every((r) => r.labelId === first.labelId)) return false;
+  if (!(await listLabels(db, accountId, now)).some((l) => l.id === first.labelId)) return false;
+  return await propose(db, { accountId, kind: 'rule', match: { from: address }, labelId: first.labelId, ruleId: null, agreed: recent.length }, now);
 }
 
 /** Propose dropping the "when it is L" from a rule once every message it was checked against turned out to be L, for long enough. */
 export async function proposeSettled(db: Sql, accountId: string, ruleId: string, now: number = Date.now()): Promise<boolean> {
   const rule = (await listRules(db, accountId)).find((r) => r.id === ruleId);
   if (!rule || rule.whenLabel === undefined) return false;
-  const recent = await db.all<{
-    rule_id: string | null;
-  }>('SELECT rule_id FROM decisions WHERE prior_rule_id = ? ORDER BY id DESC LIMIT ?', ruleId, SETTLED_AFTER);
-  if (recent.length < SETTLED_AFTER || !recent.every((r) => r.rule_id === ruleId)) return false;
+  const recent = await db
+    .select({ ruleId: decisions.ruleId })
+    .from(decisions)
+    .where(eq(decisions.priorRuleId, ruleId))
+    .orderBy(desc(decisions.id))
+    .limit(SETTLED_AFTER);
+  if (recent.length < SETTLED_AFTER || !recent.every((r) => r.ruleId === ruleId)) return false;
   return await propose(db, { accountId, kind: 'always', match: rule.match, labelId: rule.whenLabel, ruleId, agreed: recent.length }, now);
 }
 
@@ -145,10 +145,10 @@ export async function proposeSettled(db: Sql, accountId: string, ruleId: string,
  * for a label into one that acts on everything it matches. Returns false if it was not open.
  */
 export async function resolveProposal(db: Sql, id: number, accept: boolean, now: number = Date.now()): Promise<boolean> {
-  const row = await db.get<Row>(
-    `SELECT id, account_id, kind, match_json, label_id, rule_id, agreed, created_at FROM proposals WHERE id = ? AND status = 'open'`,
-    id,
-  );
+  const [row] = await db
+    .select(COLUMNS)
+    .from(proposals)
+    .where(and(eq(proposals.id, id), eq(proposals.status, 'open')));
   if (!row) return false;
   const p = toProposal(row);
   if (accept) {
@@ -171,6 +171,9 @@ export async function resolveProposal(db: Sql, id: number, accept: boolean, now:
       );
     } else await setRule(db, p.accountId, p.match, { labelId: p.labelId }, 'user', now);
   }
-  await db.run('UPDATE proposals SET status = ?, resolved_at = ? WHERE id = ?', accept ? 'accepted' : 'dismissed', now, id);
+  await db
+    .update(proposals)
+    .set({ status: accept ? 'accepted' : 'dismissed', resolvedAt: now })
+    .where(eq(proposals.id, id));
   return true;
 }

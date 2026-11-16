@@ -5,7 +5,7 @@ import { RETRY_AFTER_MS, isPublicAddress, unsubscribe } from '../src/actions/uns
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { getAction } from '../src/store/actions.ts';
-import { openUserDb } from './fixtures.ts';
+import { openUserDb, raw } from './fixtures.ts';
 import { everything, facts, FakeMailbox } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -106,7 +106,7 @@ describe('unsubscribe', () => {
       expect(await unsubscribe(deps(), ACCOUNT, `m${index}`), target).toMatchObject({ status: 'refused' });
     }
     expect(posts).toEqual([]);
-    expect(await db.get('SELECT count(*) AS n FROM actions')).toEqual({ n: 0 });
+    expect(await raw(db).get('SELECT count(*) AS n FROM actions')).toEqual({ n: 0 });
   });
 
   it('records a redirect it did not follow, a refusal and a failed request, and leaves the sender alone for a week after each', async () => {
@@ -124,7 +124,7 @@ describe('unsubscribe', () => {
     later();
     status = new Error('socket hang up');
     expect(await unsubscribe(deps(), ACCOUNT, 'm')).toMatchObject({ status: 'failed', reason: expect.stringContaining('not known whether it took') });
-    expect(await db.all('SELECT status, count(*) AS n FROM actions GROUP BY status')).toEqual([{ status: 'failed', n: 3 }]);
+    expect(await raw(db).all('SELECT status, count(*) AS n FROM actions GROUP BY status')).toEqual([{ status: 'failed', n: 3 }]);
     later();
     status = 204;
     expect(await unsubscribe(deps(), ACCOUNT, 'm')).toMatchObject({ status: 'done' });

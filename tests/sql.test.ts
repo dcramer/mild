@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { toPostgres } from '../src/store/sql.ts';
-import { freshStore } from './fixtures.ts';
+import { users } from '../src/store/query.ts';
+import { freshStore, toPostgres } from './fixtures.ts';
 
 describe('the database handle', () => {
   it('sends ? and :name as $n, leaving quoted text and casts alone', () => {
@@ -20,32 +20,30 @@ describe('the database handle', () => {
     let release = () => {};
     const gate = new Promise<void>((resolve) => (release = resolve));
     const tx = central.transaction(async (t) => {
-      await t.run('INSERT INTO users (owner, created_at) VALUES (0, 1)');
+      await t.insert(users).values({ owner: 0, createdAt: 1 });
       await gate;
       throw new Error('changed my mind');
     });
-    const outside = central.run('INSERT INTO users (owner, created_at) VALUES (0, 2)');
+    const outside = central.insert(users).values({ owner: 0, createdAt: 2 }).execute();
     release();
     await expect(tx).rejects.toThrow('changed my mind');
     await outside;
-    expect(await central.all('SELECT created_at FROM users')).toEqual([{ created_at: 2 }]);
+    expect(await central.select({ createdAt: users.createdAt }).from(users)).toEqual([{ createdAt: 2 }]);
     await store.close();
   });
 
   it('refuses the outer handle inside a transaction instead of waiting on itself', async () => {
     const { central } = await freshStore();
-    await expect(central.transaction(async () => await central.run('INSERT INTO users (owner, created_at) VALUES (0, 1)'))).rejects.toThrow(
-      'transaction’s handle',
-    );
-    expect(await central.all('SELECT id FROM users')).toEqual([]);
+    await expect(central.transaction(async () => await central.insert(users).values({ owner: 0, createdAt: 1 }))).rejects.toThrow('transaction’s handle');
+    expect(await central.select({ id: users.id }).from(users)).toEqual([]);
   });
 
   it('runs a transaction opened inside one as part of it', async () => {
     const { central } = await freshStore();
     await central.transaction(async (t) => {
-      await t.run('INSERT INTO users (owner, created_at) VALUES (0, 1)');
-      await t.transaction(async (inner) => await inner.run('INSERT INTO users (owner, created_at) VALUES (0, 2)'));
+      await t.insert(users).values({ owner: 0, createdAt: 1 });
+      await t.transaction(async (inner) => await inner.insert(users).values({ owner: 0, createdAt: 2 }));
     });
-    expect(await central.all('SELECT created_at FROM users ORDER BY created_at')).toEqual([{ created_at: 1 }, { created_at: 2 }]);
+    expect(await central.select({ createdAt: users.createdAt }).from(users).orderBy(users.createdAt)).toEqual([{ createdAt: 1 }, { createdAt: 2 }]);
   });
 });

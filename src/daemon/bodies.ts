@@ -1,3 +1,4 @@
+import { and, eq, suggestionBodies } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { pendingSuggestions } from '../learn/feedback.ts';
@@ -16,14 +17,14 @@ export async function keepSuggestionBodies(db: Sql, api: Pick<GmailApi, 'getBody
   const waiting = (await pendingSuggestions(db, { accountId })).filter((s) => s.disposition !== 'keep' && s.decidedAt >= cutoff);
   const wanted = new Set(waiting.map((s) => s.messageId));
 
-  const stored = await db.all<{
-    message_id: string;
-    fetched_at: number;
-  }>('SELECT message_id, fetched_at FROM suggestion_bodies WHERE account_id = ?', accountId);
+  const stored = await db
+    .select({ messageId: suggestionBodies.messageId, fetchedAt: suggestionBodies.fetchedAt })
+    .from(suggestionBodies)
+    .where(eq(suggestionBodies.accountId, accountId));
   const have = new Set<string>();
   for (const row of stored) {
-    if (wanted.has(row.message_id) && row.fetched_at >= cutoff) have.add(row.message_id);
-    else await db.run('DELETE FROM suggestion_bodies WHERE account_id = ? AND message_id = ?', accountId, row.message_id);
+    if (wanted.has(row.messageId) && row.fetchedAt >= cutoff) have.add(row.messageId);
+    else await db.delete(suggestionBodies).where(and(eq(suggestionBodies.accountId, accountId), eq(suggestionBodies.messageId, row.messageId)));
   }
 
   let fetched = 0;
@@ -32,14 +33,11 @@ export async function keepSuggestionBodies(db: Sql, api: Pick<GmailApi, 'getBody
     if (have.has(suggestion.messageId)) continue;
     // A message that has gone is stored empty, so it is not asked for again on every pass.
     const text = (await api.getBodyText(suggestion.messageId)) ?? '';
-    await db.run(
-      `INSERT INTO suggestion_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, ?, ?, ?)
-       ON CONFLICT (account_id, message_id) DO UPDATE SET body_text = excluded.body_text, fetched_at = excluded.fetched_at`,
-      accountId,
-      suggestion.messageId,
-      text,
-      now(),
-    );
+    const body = { bodyText: text, fetchedAt: now() };
+    await db
+      .insert(suggestionBodies)
+      .values({ accountId, messageId: suggestion.messageId, ...body })
+      .onConflictDoUpdate({ target: [suggestionBodies.accountId, suggestionBodies.messageId], set: body });
     fetched++;
   }
   return fetched;

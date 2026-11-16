@@ -1,5 +1,6 @@
 import { type Keyring, openSecret, sealSecret, staleSecret } from '../secrets.ts';
 import { personOf } from './accounts.ts';
+import { and, asc, credentials as credentialRows, eq, sql } from './query.ts';
 import type { Sql } from './sql.ts';
 
 export type CredentialKind = 'gmail' | 'model';
@@ -25,23 +26,28 @@ export async function credentials(db: Sql, kind: CredentialKind, keys: Keyring):
   const name = await nameFor(db);
   return {
     read: async (key) => {
-      const row = await db.get<{ value: string }>('SELECT value FROM credentials WHERE kind = ? AND key = ?', kind, key);
+      const [row] = await db
+        .select({ value: credentialRows.value })
+        .from(credentialRows)
+        .where(and(eq(credentialRows.kind, kind), eq(credentialRows.key, key)));
       return row ? openSecret(name(kind, key), row.value, keys) : null;
     },
     write: async (key, text) => {
-      await db.run(
-        `INSERT INTO credentials (kind, key, value, updated_at) VALUES (?, ?, ?, ?)
-         ON CONFLICT (user_id, kind, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-        kind,
-        key,
-        sealSecret(name(kind, key), text, keys),
-        Date.now(),
-      );
+      await db
+        .insert(credentialRows)
+        .values({ kind, key, value: sealSecret(name(kind, key), text, keys), updatedAt: Date.now() })
+        .onConflictDoUpdate({
+          target: [credentialRows.userId, credentialRows.kind, credentialRows.key],
+          set: { value: sql`excluded.value`, updatedAt: sql`excluded.updated_at` },
+        });
     },
     remove: async (key) => {
-      await db.run('DELETE FROM credentials WHERE kind = ? AND key = ?', kind, key);
+      await db.delete(credentialRows).where(and(eq(credentialRows.kind, kind), eq(credentialRows.key, key)));
     },
-    keys: async () => (await db.all<{ key: string }>('SELECT key FROM credentials WHERE kind = ? ORDER BY key', kind)).map((r) => r.key),
+    keys: async () =>
+      (await db.select({ key: credentialRows.key }).from(credentialRows).where(eq(credentialRows.kind, kind)).orderBy(asc(credentialRows.key))).map(
+        (r) => r.key,
+      ),
   };
 }
 
@@ -52,13 +58,20 @@ export async function credentials(db: Sql, kind: CredentialKind, keys: Keyring):
  */
 export async function rekeyCredentials(db: Sql, keys: Keyring, write = true): Promise<string[]> {
   const name = await nameFor(db);
-  const rows = await db.all<{ kind: CredentialKind; key: string; value: string }>('SELECT kind, key, value FROM credentials');
+  const rows = (await db.select({ kind: credentialRows.kind, key: credentialRows.key, value: credentialRows.value }).from(credentialRows)) as {
+    kind: CredentialKind;
+    key: string;
+    value: string;
+  }[];
   const opened = rows.map((row) => ({ ...row, text: openSecret(name(row.kind, row.key), row.value, keys) }));
   const stale = opened.filter((row) => staleSecret(row.value, keys));
   if (write)
     await db.transaction(async (tx) => {
       for (const row of stale)
-        await tx.run('UPDATE credentials SET value = ? WHERE kind = ? AND key = ?', sealSecret(name(row.kind, row.key), row.text, keys), row.kind, row.key);
+        await tx
+          .update(credentialRows)
+          .set({ value: sealSecret(name(row.kind, row.key), row.text, keys) })
+          .where(and(eq(credentialRows.kind, row.kind), eq(credentialRows.key, row.key)));
     });
   return stale.map((row) => `${row.kind === 'gmail' ? 'Gmail access for' : 'Model sign-in for'} ${row.key}`);
 }

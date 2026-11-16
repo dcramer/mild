@@ -4,7 +4,7 @@ import { type ActionDeps, execute, reconcile, undo } from '../src/actions/execut
 import { planAction } from '../src/actions/plan.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { getAction } from '../src/store/actions.ts';
-import { openUserDb } from './fixtures.ts';
+import { openUserDb, raw } from './fixtures.ts';
 import { FakeMailbox, facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -50,7 +50,7 @@ describe('execute', () => {
     expect(await execute(deps, ACCOUNT, 'm1', { type: 'archive' })).toEqual({ status: 'skipped', reason: 'message is not in the inbox' });
     expect(await execute(deps, ACCOUNT, 'gone', { type: 'archive' })).toEqual({ status: 'skipped', reason: 'message no longer exists' });
     expect(mailbox.modifyCalls).toBe(0);
-    expect(await db.get('SELECT count(*) AS n FROM actions')).toEqual({ n: 0 });
+    expect(await raw(db).get('SELECT count(*) AS n FROM actions')).toEqual({ n: 0 });
   });
 
   it('skips when the message already has the label', async () => {
@@ -98,7 +98,7 @@ describe('execute', () => {
   });
 
   it('settles a crash that left an action pending', async () => {
-    await db.run(
+    await raw(db).run(
       `INSERT INTO actions (account_id, message_id, type, payload_json, original_labels, status, created_at) VALUES (?, 'm1', 'archive', ?, '["INBOX"]', 'pending', 0)`,
       ACCOUNT,
       JSON.stringify({ add: ['L:sift/did/archived'], remove: ['INBOX'] }),

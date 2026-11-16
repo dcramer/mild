@@ -1,3 +1,4 @@
+import { preferences as preferenceRows } from './query.ts';
 import type { Sql } from './sql.ts';
 
 /**
@@ -25,18 +26,18 @@ export interface Preferences {
 }
 
 export async function preferences(db: Sql): Promise<Preferences> {
-  const row = (await db.get<{ model: string | null; guidelines: string | null; guidelines_changed_at: number | null }>(
-    'SELECT model, guidelines, guidelines_changed_at FROM preferences',
-  ))!;
-  return { model: row.model, guidelines: row.guidelines ?? DEFAULT_GUIDELINES, guidelinesChangedAt: row.guidelines_changed_at };
+  const [row] = await db
+    .select({ model: preferenceRows.model, guidelines: preferenceRows.guidelines, guidelinesChangedAt: preferenceRows.guidelinesChangedAt })
+    .from(preferenceRows);
+  return { model: row!.model, guidelines: row!.guidelines ?? DEFAULT_GUIDELINES, guidelinesChangedAt: row!.guidelinesChangedAt };
 }
 
 export async function setModel(db: Sql, model: string | null): Promise<void> {
-  await db.run('UPDATE preferences SET model = ?', model);
+  await db.update(preferenceRows).set({ model });
 }
 
 /** Saving the same text again changes nothing, so it does not make every waiting suggestion look out of date. */
 export async function setGuidelines(db: Sql, text: string, now: number = Date.now()): Promise<void> {
   if ((await preferences(db)).guidelines === text) return;
-  await db.run('UPDATE preferences SET guidelines = ?, guidelines_changed_at = ?', text, now);
+  await db.update(preferenceRows).set({ guidelines: text, guidelinesChangedAt: now });
 }

@@ -1,3 +1,4 @@
+import { actions, decisions } from '../../store/query.ts';
 import { getAction } from '../../store/actions.ts';
 import { listChanges, listDecisions, retryDecision } from '../queries/decisions.ts';
 import { messageDetail } from '../queries/messages.ts';
@@ -53,7 +54,7 @@ export const reads: Read[] = [
 export const writes: Write[] = [
   {
     path: '/api/undo',
-    touches: ownerOf('actions'),
+    touches: ownerOf(actions),
     run: async ({ db, controls }, body) => {
       if (typeof body['id'] !== 'number' || !Number.isInteger(body['id'])) return null;
       if (!controls) throw new Error('This dashboard cannot undo changes.');
@@ -63,7 +64,7 @@ export const writes: Write[] = [
   },
   {
     path: '/api/decisions/retry',
-    touches: ownerOf('decisions'),
+    touches: ownerOf(decisions),
     run: async ({ db, controls }, body, scope) => {
       if (typeof body['id'] !== 'number' || !Number.isInteger(body['id'])) return null;
       const result = await retryDecision(db, scope, body['id']);

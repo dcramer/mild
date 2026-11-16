@@ -1,8 +1,23 @@
+import { alias, and, asc, correspondents, count, countDistinct, decisions, desc, eq, feedback, ilike, isNotNull, max, messages, min, sql } from './query.ts';
 import type { Sql } from './sql.ts';
 import { type Standing, isSharedDomain, standingOf } from '../triage/standing.ts';
 import type { Disposition } from '../triage/types.ts';
 import { listLabels } from './labels.ts';
 import { listRules } from './rules.ts';
+
+const later = alias(decisions, 'later');
+
+/** `decisions` is the current one for its message: the highest id. */
+const current = (db: Sql) =>
+  eq(
+    decisions.id,
+    db
+      .select({ id: max(later.id) })
+      .from(later)
+      .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
+  );
+
+const ofMessage = (t: typeof decisions | typeof feedback) => and(eq(messages.accountId, t.accountId), eq(messages.id, t.messageId));
 
 /** What sift has recorded about mail from an address: how much, and what was done with it. */
 export async function senderHistory(
@@ -10,17 +25,17 @@ export async function senderHistory(
   accountId: string,
   address: string,
 ): Promise<{ messagesSeen: number; pastDispositions: Partial<Record<Disposition, number>> }> {
-  const { n } = (await db.get<{ n: number }>('SELECT count(*) AS n FROM messages WHERE account_id = ? AND from_address = ?', accountId, address))!;
+  const [{ n }] = (await db
+    .select({ n: count() })
+    .from(messages)
+    .where(and(eq(messages.accountId, accountId), eq(messages.fromAddress, address)))) as [{ n: number }];
   // The current decision for each earlier message from this sender.
-  const rows = await db.all<{ disposition: Disposition; n: number }>(
-    `SELECT d.disposition, count(*) AS n FROM decisions d
-       JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
-       WHERE d.account_id = ? AND m.from_address = ?
-         AND d.id = (SELECT max(id) FROM decisions WHERE account_id = d.account_id AND message_id = d.message_id)
-       GROUP BY d.disposition`,
-    accountId,
-    address,
-  );
+  const rows = await db
+    .select({ disposition: decisions.disposition, n: count() })
+    .from(decisions)
+    .innerJoin(messages, ofMessage(decisions))
+    .where(and(eq(decisions.accountId, accountId), eq(messages.fromAddress, address), current(db)))
+    .groupBy(decisions.disposition);
   return { messagesSeen: n, pastDispositions: Object.fromEntries(rows.map((r) => [r.disposition, r.n])) };
 }
 
@@ -28,25 +43,23 @@ const CORRESPONDENT_TTL_MS = 7 * 86_400_000;
 
 /** The cached answer to "has the owner written to this address", or undefined if unknown or stale. A yes never goes stale. */
 export async function cachedCorrespondent(db: Sql, accountId: string, address: string, now: number = Date.now()): Promise<boolean | undefined> {
-  const row = await db.get<{ user_has_written: number; checked_at: number }>(
-    'SELECT user_has_written, checked_at FROM correspondents WHERE account_id = ? AND address = ?',
-    accountId,
-    address,
-  );
+  const [row] = await db
+    .select({ userHasWritten: correspondents.userHasWritten, checkedAt: correspondents.checkedAt })
+    .from(correspondents)
+    .where(and(eq(correspondents.accountId, accountId), eq(correspondents.address, address)));
   if (!row) return undefined;
-  if (row.user_has_written === 1) return true;
-  return now - row.checked_at < CORRESPONDENT_TTL_MS ? false : undefined;
+  if (row.userHasWritten === 1) return true;
+  return now - row.checkedAt < CORRESPONDENT_TTL_MS ? false : undefined;
 }
 
 export async function rememberCorrespondent(db: Sql, accountId: string, address: string, userHasWritten: boolean, now: number = Date.now()): Promise<void> {
-  await db.run(
-    `INSERT INTO correspondents (account_id, address, user_has_written, checked_at) VALUES (?, ?, ?, ?)
-     ON CONFLICT (account_id, address) DO UPDATE SET user_has_written = excluded.user_has_written, checked_at = excluded.checked_at`,
-    accountId,
-    address,
-    userHasWritten ? 1 : 0,
-    now,
-  );
+  await db
+    .insert(correspondents)
+    .values({ accountId, address, userHasWritten: userHasWritten ? 1 : 0, checkedAt: now })
+    .onConflictDoUpdate({
+      target: [correspondents.accountId, correspondents.address],
+      set: { userHasWritten: sql`excluded.user_has_written`, checkedAt: sql`excluded.checked_at` },
+    });
 }
 
 /** What sift knows about a sender, or about everyone at a domain. */
@@ -73,39 +86,45 @@ export interface SenderFacts {
 const MONTH_MS = 30 * 86_400_000;
 
 async function facts(db: Sql, accountId: string, who: { address: string } | { domain: string }, now: number): Promise<SenderFacts> {
-  const column = 'address' in who ? 'from_address' : 'from_domain';
+  const column = 'address' in who ? messages.fromAddress : messages.fromDomain;
   const value = 'address' in who ? who.address : who.domain;
-  const seen = (await db.get<{ n: number; first: number | null; last: number | null; recent: number; senders: number }>(
-    `SELECT count(*) AS n, min(received_at) AS first, max(received_at) AS last, count(*) FILTER (WHERE received_at >= ?) AS recent, count(DISTINCT from_address) AS senders
-       FROM messages WHERE account_id = ? AND ${column} = ?`,
-    now - MONTH_MS,
-    accountId,
-    value,
-  ))!;
-  const labels = await db.all<SenderFacts['labels'][number]>(
-    `SELECT d.label_id AS id, count(*) AS messages FROM decisions d
-       JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
-       WHERE d.account_id = ? AND m.${column} = ? AND d.label_id IS NOT NULL
-         AND d.id = (SELECT max(id) FROM decisions x WHERE x.account_id = d.account_id AND x.message_id = d.message_id)
-       GROUP BY d.label_id ORDER BY messages DESC, d.label_id`,
-    accountId,
-    value,
-  );
-  const answers = (await db.get<{ right: number; wrong: number }>(
-    `SELECT count(*) FILTER (WHERE f.verdict = 'right') AS right, count(*) FILTER (WHERE f.verdict = 'wrong') AS wrong FROM feedback f
-       JOIN messages m ON m.account_id = f.account_id AND m.id = f.message_id
-       WHERE f.account_id = ? AND m.${column} = ?`,
-    accountId,
-    value,
-  ))!;
-  const written =
+  const [seen] = (await db
+    .select({
+      n: count(),
+      first: min(messages.receivedAt),
+      last: max(messages.receivedAt),
+      recent: sql<number>`count(*) FILTER (WHERE ${messages.receivedAt} >= ${now - MONTH_MS})`.mapWith(Number),
+      senders: countDistinct(messages.fromAddress),
+    })
+    .from(messages)
+    .where(and(eq(messages.accountId, accountId), eq(column, value)))) as [
+    { n: number; first: number | null; last: number | null; recent: number; senders: number },
+  ];
+  const labels = (await db
+    .select({ id: decisions.labelId, messages: count() })
+    .from(decisions)
+    .innerJoin(messages, ofMessage(decisions))
+    .where(and(eq(decisions.accountId, accountId), eq(column, value), isNotNull(decisions.labelId), current(db)))
+    .groupBy(decisions.labelId)
+    .orderBy(desc(count()), asc(decisions.labelId))) as SenderFacts['labels'];
+  const [answers] = (await db
+    .select({
+      right: sql<number>`count(*) FILTER (WHERE ${feedback.verdict} = 'right')`.mapWith(Number),
+      wrong: sql<number>`count(*) FILTER (WHERE ${feedback.verdict} = 'wrong')`.mapWith(Number),
+    })
+    .from(feedback)
+    .innerJoin(messages, ofMessage(feedback))
+    .where(and(eq(feedback.accountId, accountId), eq(column, value)))) as [{ right: number; wrong: number }];
+  const [written] =
     'address' in who
-      ? await db.get<{ yes: number }>('SELECT user_has_written AS yes FROM correspondents WHERE account_id = ? AND address = ?', accountId, value)
-      : await db.get<{ yes: number | null }>(
-          `SELECT max(user_has_written) AS yes FROM correspondents WHERE account_id = ? AND address ILIKE '%@' || ?`,
-          accountId,
-          value,
-        );
+      ? await db
+          .select({ yes: correspondents.userHasWritten })
+          .from(correspondents)
+          .where(and(eq(correspondents.accountId, accountId), eq(correspondents.address, value)))
+      : await db
+          .select({ yes: max(correspondents.userHasWritten) })
+          .from(correspondents)
+          .where(and(eq(correspondents.accountId, accountId), ilike(correspondents.address, `%@${value}`)));
   const userHasWritten = written?.yes === undefined || written.yes === null ? null : written.yes === 1;
 
   // Only a rule for exactly this sender or domain that decides by itself says how the owner regards them.

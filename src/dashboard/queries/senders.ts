@@ -1,3 +1,4 @@
+import { and, asc, count, desc, eq, isNotNull, max, messages } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import { pendingSuggestions } from '../../learn/feedback.ts';
 import { domainFacts, senderFacts } from '../../store/senders.ts';
@@ -62,24 +63,26 @@ export async function senderPage(
   const name =
     'address' in who
       ? ((
-          await db.get<{ from_name: string }>(
-            'SELECT from_name FROM messages WHERE account_id = ? AND from_address = ? AND from_name IS NOT NULL ORDER BY received_at DESC LIMIT 1',
-            accountId,
-            who.address,
-          )
-        )?.from_name ?? null)
+          await db
+            .select({ fromName: messages.fromName })
+            .from(messages)
+            .where(and(eq(messages.accountId, accountId), eq(messages.fromAddress, who.address), isNotNull(messages.fromName)))
+            .orderBy(desc(messages.receivedAt))
+            .limit(1)
+        )[0]?.fromName ?? null)
       : null;
   const senders =
     'domain' in who
       ? await Promise.all(
           (
-            await db.all<{ address: string; name: string | null; messages: number; lastSeenAt: number }>(
-              `SELECT from_address AS address, max(from_name) AS name, count(*) AS messages, max(received_at) AS "lastSeenAt"
-               FROM messages WHERE account_id = ? AND from_domain = ? GROUP BY from_address ORDER BY messages DESC, address LIMIT 100`,
-              accountId,
-              who.domain,
-            )
-          ).map(async (s) => ({ ...s, standing: (await senderFacts(db, accountId, s.address, now)).standing })),
+            await db
+              .select({ address: messages.fromAddress, name: max(messages.fromName), messages: count(), lastSeenAt: max(messages.receivedAt) })
+              .from(messages)
+              .where(and(eq(messages.accountId, accountId), eq(messages.fromDomain, who.domain)))
+              .groupBy(messages.fromAddress)
+              .orderBy(desc(count()), asc(messages.fromAddress))
+              .limit(100)
+          ).map(async (s) => ({ ...s, lastSeenAt: s.lastSeenAt!, standing: (await senderFacts(db, accountId, s.address, now)).standing })),
         )
       : [];
   return {

@@ -1,4 +1,5 @@
 import { openDatabase } from './db.ts';
+import { accounts, eq, mailboxes, preferences } from './query.ts';
 import { type Driver, type Sql, handle } from './sql.ts';
 
 /**
@@ -29,10 +30,10 @@ export function storeOn(driver: Driver): Store {
   const open = async (id: number) => {
     const db = handle(driver, id);
     // A mailbox is added to `accounts` first, so one can be missing here after a crash in between.
-    const theirs = await central.all<{ id: string; created_at: number }>('SELECT id, created_at FROM accounts WHERE user_id = ?', id);
+    const theirs = await central.select({ id: accounts.id, createdAt: accounts.createdAt }).from(accounts).where(eq(accounts.userId, id));
     await db.transaction(async (tx) => {
-      await tx.run('INSERT INTO preferences DEFAULT VALUES ON CONFLICT DO NOTHING');
-      for (const mailbox of theirs) await tx.run('INSERT INTO mailboxes (id, created_at) VALUES (?, ?) ON CONFLICT DO NOTHING', mailbox.id, mailbox.created_at);
+      await tx.insert(preferences).values({}).onConflictDoNothing();
+      if (theirs.length > 0) await tx.insert(mailboxes).values(theirs).onConflictDoNothing();
     });
     return db;
   };

@@ -2,7 +2,7 @@ import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MAX_EVAL_EXAMPLES, getEvalRun, interruptEvals, listEvalRuns, startEval } from '../src/learn/evals.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
-import { openUserDb } from './fixtures.ts';
+import { openUserDb, raw } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
@@ -126,7 +126,7 @@ describe('replaying the model over stored examples', () => {
     // After the user answered: the earlier message was corrected and a later one arrived.
     await recordDecision(db, ACCOUNT, 'old', { ...agent, stage: 'rules', disposition: 'keep' });
     await recordDecision(db, ACCOUNT, 'later', { ...agent, stage: 'rules', disposition: 'keep' });
-    await db.run(
+    await raw(db).run(
       `INSERT INTO examples (account_id, message_id, disposition, label_id, suggested, suggested_by, marked_at, status, body_text)
        VALUES (?, 'judged', 'keep', 'personal', 'review', 'agent', 9, 'captured', 'Hello.')`,
       ACCOUNT,
@@ -180,12 +180,12 @@ describe('replaying the model over stored examples', () => {
     ).done;
     expect((await listEvalRuns(db)).map((r) => r.status)).toEqual(['done', 'done']);
 
-    await db.exec('DELETE FROM examples');
+    await raw(db).run('DELETE FROM examples');
     await expect(startEval(deps({}), { accountId: ACCOUNT, fewShot: false })).rejects.toThrow('no stored examples');
   });
 
   it('leaves out an example whose label has gone, and counts a judge that throws as a failed call', async () => {
-    await db.run(`UPDATE examples SET label_id = 'removed' WHERE message_id = 'e4'`);
+    await raw(db).run(`UPDATE examples SET label_id = 'removed' WHERE message_id = 'e4'`);
     const throwing = async () => {
       throw new Error('provider down');
     };

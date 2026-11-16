@@ -13,8 +13,8 @@ import { MAX_LABELS, listLabels } from '../src/store/labels.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { preferences, setGuidelines } from '../src/store/preferences.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
-import { FakeMailbox, facts, onePerson, storeExample } from './helpers.ts';
-import { builtAssets, startDashboard } from './fixtures.ts';
+import { FakeMailbox, facts, storeExample } from './helpers.ts';
+import { builtAssets, raw, startDashboard, onePerson } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -56,7 +56,7 @@ const controls: Controls = {
   },
   ruleFilter: async (target, ruleId, on) => {
     calls.push(`filter ${ruleId} ${on ? 'on' : 'off'}`);
-    await target.run(`UPDATE rules SET filter_id = ?, filter_state = ? WHERE id = ?`, on ? 'f1' : null, on ? 'active' : null, ruleId);
+    await raw(target).run(`UPDATE rules SET filter_id = ?, filter_state = ? WHERE id = ?`, on ? 'f1' : null, on ? 'active' : null, ruleId);
   },
   checkNow: () => void calls.push('check'),
   activity: () => ({ sorting: true, lastPassAt: 5, problems: [], expired: [ACCOUNT] }),
@@ -67,7 +67,7 @@ beforeEach(async () => {
   calls = [];
   settings = { act: false, interval: 60, fewShot: true, examplesKeepDays: null };
   await setGuidelines(db, 'Be careful.', 1);
-  await db.run('UPDATE preferences SET guidelines_changed_at = NULL');
+  await raw(db).run('UPDATE preferences SET guidelines_changed_at = NULL');
 });
 
 async function start(options: { withControls?: boolean } = {}) {
@@ -178,9 +178,9 @@ describe('managing sift from the dashboard', () => {
     expect((await call('POST', '/api/examples/delete', { accountId: ACCOUNT })).status).toBe(400);
     expect((await call('POST', '/api/examples/delete-all', { accountId: 'nobody@example.org' })).status).toBe(404);
     expect((await call('POST', '/api/examples/delete-all', { accountId: ACCOUNT })).body).toEqual({ deleted: 2 });
-    expect(await db.all('SELECT account_id, message_id FROM examples')).toEqual([{ account_id: 'other@example.org', message_id: 'o1' }]);
+    expect(await raw(db).all('SELECT account_id, message_id FROM examples')).toEqual([{ account_id: 'other@example.org', message_id: 'o1' }]);
     // The message row and its decision are sift's record of what it saw and did; only the stored content goes.
-    expect(await db.get(`SELECT count(*) AS n FROM messages WHERE id = 'e1'`)).toEqual({ n: 1 });
+    expect(await raw(db).get(`SELECT count(*) AS n FROM messages WHERE id = 'e1'`)).toEqual({ n: 1 });
   });
 
   it('sets how long examples are kept', async () => {
@@ -197,7 +197,8 @@ describe('managing sift from the dashboard', () => {
     const marketing = { disposition: 'archive', subscription: 'unsubscribe', stage: 'agent', reason: 'Marketing: a sale', labelId: 'marketing' } as const;
     await recordDecision(db, ACCOUNT, 'w1', marketing, { now: 10 });
     await recordDecision(db, ACCOUNT, 'w2', marketing, { now: 20 });
-    const latest = async (id: string) => await db.get('SELECT stage, disposition, label_id FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1', id);
+    const latest = async (id: string) =>
+      await raw(db).get('SELECT stage, disposition, label_id FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1', id);
 
     const label = await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'keep' });
     expect(label.body).toEqual({ ok: true, redecided: 2 });
@@ -221,7 +222,7 @@ describe('managing sift from the dashboard', () => {
     await recordDecision(db, ACCOUNT, 'w2', agent, { now: 30 });
 
     expect((await call('GET', '/api/manage')).body['predateGuidelines']).toEqual({ [ACCOUNT]: 0 });
-    await db.run('UPDATE preferences SET guidelines_changed_at = 20');
+    await raw(db).run('UPDATE preferences SET guidelines_changed_at = 20');
     expect((await call('GET', '/api/manage')).body['predateGuidelines']).toEqual({ [ACCOUNT]: 1 });
     await call('POST', '/api/guidelines', { text: 'Recruiters are cold outreach.' });
     expect(calls).toEqual([]);
@@ -346,13 +347,13 @@ describe('managing sift from the dashboard', () => {
     const failed = await call('POST', '/api/feedback', { ...answer, messageId: 'gone' });
     expect(failed.status).toBe(200);
     expect(failed.body['fixed']).toContain('could not be put back in Gmail: The message no longer exists.');
-    expect(await db.get('SELECT count(*) AS n FROM feedback')).toEqual({ n: 2 });
+    expect(await raw(db).get('SELECT count(*) AS n FROM feedback')).toEqual({ n: 2 });
     expect(calls).toEqual(['putBack done', 'putBack gone']);
   });
 
   it('asks the running sift to undo, pull in older mail and check now', async () => {
     const { call } = await start();
-    await db.run(`INSERT INTO actions (id, account_id, type, payload_json, status, created_at) VALUES (3, ?, 'archive', '{}', 'done', 1)`, ACCOUNT);
+    await raw(db).run(`INSERT INTO actions (id, account_id, type, payload_json, status, created_at) VALUES (3, ?, 'archive', '{}', 'done', 1)`, ACCOUNT);
     expect((await call('POST', '/api/undo', { id: 3 })).body).toEqual({ message: 'Reversed.' });
     // A change that is not in this person's database is not passed on.
     expect(await call('POST', '/api/undo', { id: 404 })).toMatchObject({ status: 409, body: { error: 'There is no change #404.' } });
@@ -570,7 +571,7 @@ describe('signing in with Google', () => {
     const out = await call('POST', '/api/signout', {}, cookie);
     expect(String(out.headers['set-cookie'])).toContain('Max-Age=0');
 
-    await store.central.exec('DELETE FROM accounts');
+    await raw(store.central).run('DELETE FROM accounts');
     expect((await call('GET', '/api/summary', undefined, cookie)).status).toBe(401);
   });
 
@@ -585,7 +586,7 @@ describe('signing in with Google', () => {
 });
 
 describe('older mail', () => {
-  const raw = (id: string): RawMessage => ({
+  const gmailMessage = (id: string): RawMessage => ({
     id,
     threadId: `t${id}`,
     labelIds: ['INBOX'],
@@ -599,13 +600,13 @@ describe('older mail', () => {
   it('is pulled in without moving the sync cursor, and only once', async () => {
     const api = {
       searchInbox: async (query: string) => (calls.push(query), { ids: ['a', 'b', 'gone'] }),
-      getMetadata: async (id: string) => (id === 'gone' ? null : raw(id)),
+      getMetadata: async (id: string) => (id === 'gone' ? null : gmailMessage(id)),
     };
     expect(await backfill(db, api, ACCOUNT, 7)).toBe(2);
     expect(await backfill(db, api, ACCOUNT, 7)).toBe(0);
     expect(calls).toEqual(['newer_than:7d', 'newer_than:7d']);
     expect((await listAccounts(db))[0]?.historyId).toBe('1');
-    expect(await db.all('SELECT id, observe_only FROM messages ORDER BY id')).toEqual([
+    expect(await raw(db).all('SELECT id, observe_only FROM messages ORDER BY id')).toEqual([
       { id: 'a', observe_only: 1 },
       { id: 'b', observe_only: 1 },
     ]);
@@ -615,14 +616,14 @@ describe('older mail', () => {
     let page = 0;
     const api = {
       searchInbox: async () => ({ ids: Array.from({ length: 200 }, (_, i) => `p${page}-${i}`), nextPageToken: `t${++page}` }),
-      getMetadata: async (id: string) => raw(id),
+      getMetadata: async (id: string) => gmailMessage(id),
     };
     expect(await backfill(db, api, ACCOUNT, 30)).toBe(MAX_BACKFILL);
     expect(page).toBe(2);
   });
 
   it('is only ever suggested about, even while sift acts on new mail', async () => {
-    await backfill(db, { searchInbox: async () => ({ ids: ['old'] }), getMetadata: async (id) => raw(id) }, ACCOUNT, 7);
+    await backfill(db, { searchInbox: async () => ({ ids: ['old'] }), getMetadata: async (id) => gmailMessage(id) }, ACCOUNT, 7);
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'new' })], '2');
     const mailbox = new FakeMailbox();
     mailbox.labels.set('old', ['INBOX']);
@@ -634,7 +635,7 @@ describe('older mail', () => {
       sources: { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } },
     };
     await triageAccount({ db, mailbox, model }, (await listAccounts(db))[0]!);
-    expect(await db.all('SELECT message_id, mode, outcome FROM decisions ORDER BY message_id')).toEqual([
+    expect(await raw(db).all('SELECT message_id, mode, outcome FROM decisions ORDER BY message_id')).toEqual([
       { message_id: 'new', mode: 'act', outcome: 'done' },
       { message_id: 'old', mode: 'observe', outcome: 'observed' },
     ]);
@@ -644,8 +645,8 @@ describe('older mail', () => {
 
 describe('run loop', () => {
   it('asks for its settings before every pass and can be woken early', async () => {
-    await store.central.exec('DELETE FROM accounts');
-    await db.exec('DELETE FROM mailboxes');
+    await raw(store.central).run('DELETE FROM accounts');
+    await raw(db).run('DELETE FROM mailboxes');
     const stop = new AbortController();
     const wake = createWake();
     const seen: number[] = [];
@@ -681,7 +682,7 @@ describe('run loop', () => {
     await storeExample(db, ACCOUNT, { id: 'soon', from: 'd@example.org', label: 'personal', markedAt: 2 * DAY + DAY / 5 });
     await storeExample(db, ACCOUNT, { id: 'mid', from: 'b@example.org', label: 'personal', markedAt: 5 * DAY });
     await storeExample(db, ACCOUNT, { id: 'new', from: 'c@example.org', label: 'personal', markedAt: 12 * DAY });
-    const held = async () => (await db.all<{ message_id: string }>('SELECT message_id FROM examples ORDER BY marked_at')).map((r) => r.message_id);
+    const held = async () => (await raw(db).all<{ message_id: string }>('SELECT message_id FROM examples ORDER BY marked_at')).map((r) => r.message_id);
     const logs: string[] = [];
 
     /** Run passes at the given times, with the given keep time. */

@@ -1,6 +1,7 @@
 import { getRuleFilter, ruleFilterStatus } from '../../store/filters.ts';
 import { addRule, removeRule } from '../../store/rules.ts';
 import { listRuleSummaries } from '../queries/rules.ts';
+import { rules } from '../../store/query.ts';
 import { LABEL_ID, RULE_KEYS, type Read, type Write, decided, named, ok, ownerOf, redecide, str } from './route.ts';
 
 export const reads: Read[] = [{ path: '/api/rules', run: async ({ db }, scope) => ok({ rules: await listRuleSummaries(db, scope) }) }];
@@ -41,7 +42,7 @@ export const writes: Write[] = [
   },
   {
     path: '/api/rules/filter',
-    touches: ownerOf('rules'),
+    touches: ownerOf(rules),
     run: async ({ db, controls, now }, body) => {
       const { id, on } = body;
       if (!str(id, 40) || typeof on !== 'boolean') return null;
@@ -54,7 +55,7 @@ export const writes: Write[] = [
   },
   {
     path: '/api/rules/remove',
-    touches: ownerOf('rules'),
+    touches: ownerOf(rules),
     run: async ({ db, controls, now }, body) => {
       if (!str(body['id'], 40)) return null;
       const owner = (await getRuleFilter(db, body['id']))?.accountId ?? null;

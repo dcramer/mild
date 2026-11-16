@@ -1,6 +1,7 @@
 import { type FeedbackInput, applyFeedback } from '../../learn/feedback.ts';
 import { listAccounts } from '../../store/accounts.ts';
 import { resolveProposal } from '../../store/proposals.ts';
+import { proposals } from '../../store/query.ts';
 import { listSuggestions, suggestionDetail } from '../queries/suggestions.ts';
 import { LABEL_ID, type Read, type Write, missing, named, ok, ownerOf, str } from './route.ts';
 
@@ -84,7 +85,7 @@ export const writes: Write[] = [
   },
   {
     path: '/api/proposals',
-    touches: ownerOf('proposals'),
+    touches: ownerOf(proposals),
     run: async ({ db, now }, body) => {
       const { id, accept } = body;
       if (typeof id !== 'number' || !Number.isInteger(id) || typeof accept !== 'boolean') return null;

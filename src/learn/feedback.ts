@@ -1,3 +1,27 @@
+import {
+  type SQL,
+  alias,
+  and,
+  asc,
+  count,
+  decisions,
+  desc,
+  eq,
+  examples,
+  feedback,
+  gte,
+  inArray,
+  isNotNull,
+  labels,
+  max,
+  messages,
+  ne,
+  not,
+  notExists,
+  or,
+  rules,
+  sql,
+} from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import { listLabels } from '../store/labels.ts';
 import { recordDecision } from '../store/decisions.ts';
@@ -28,40 +52,41 @@ export interface Suggestion {
   subject: string;
 }
 
-interface Row {
-  id: number;
-  account_id: string;
-  message_id: string;
-  stage: StageName;
-  disposition: Disposition;
+const x = alias(decisions, 'x');
+
+const SUGGESTION = {
+  decisionId: decisions.id,
+  accountId: decisions.accountId,
+  messageId: decisions.messageId,
+  stage: decisions.stage,
+  disposition: decisions.disposition,
+  block: decisions.block,
+  subscription: decisions.subscription,
+  labelId: decisions.labelId,
+  reason: decisions.reason,
+  confidence: decisions.confidence,
+  decidedAt: decisions.decidedAt,
+  receivedAt: messages.receivedAt,
+  fromAddress: messages.fromAddress,
+  fromName: messages.fromName,
+  subject: messages.subject,
+};
+
+const toSuggestion = ({
+  block,
+  subscription,
+  ...r
+}: Omit<Suggestion, 'stage' | 'disposition' | 'block' | 'unsubscribe'> & {
+  stage: string;
+  disposition: string;
   block: number;
   subscription: string;
-  label_id: string | null;
-  reason: string;
-  confidence: number | null;
-  decided_at: number;
-  received_at: number;
-  from_address: string;
-  from_name: string | null;
-  subject: string;
-}
-
-const toSuggestion = (r: Row): Suggestion => ({
-  decisionId: r.id,
-  accountId: r.account_id,
-  messageId: r.message_id,
-  stage: r.stage,
-  disposition: r.disposition,
-  block: r.block === 1,
-  unsubscribe: r.subscription === 'unsubscribe',
-  labelId: r.label_id,
-  reason: r.reason,
-  confidence: r.confidence,
-  decidedAt: r.decided_at,
-  receivedAt: r.received_at,
-  fromAddress: r.from_address,
-  fromName: r.from_name,
-  subject: r.subject,
+}): Suggestion => ({
+  ...r,
+  stage: r.stage as StageName,
+  disposition: r.disposition as Disposition,
+  block: block === 1,
+  unsubscribe: subscription === 'unsubscribe',
 });
 
 /**
@@ -73,39 +98,36 @@ export async function pendingSuggestions(
   db: Sql,
   filter: { accountId?: string; accounts?: readonly string[]; sender?: string; domain?: string; limit?: number } = {},
 ): Promise<Suggestion[]> {
-  const where: string[] = [];
-  const params: (string | number)[] = [];
-  if (filter.accounts !== undefined) {
-    where.push(`d.account_id IN (${filter.accounts.map(() => '?').join(', ') || 'NULL'})`);
-    params.push(...filter.accounts);
-  }
-  if (filter.accountId !== undefined) {
-    where.push('d.account_id = ?');
-    params.push(filter.accountId);
-  }
-  if (filter.sender !== undefined) {
-    where.push('m.from_address = ?');
-    params.push(filter.sender);
-  }
-  if (filter.domain !== undefined) {
-    where.push('m.from_domain = ?');
-    params.push(filter.domain);
-  }
-  const rows = await db.all<Row>(
-    `SELECT d.id, d.account_id, d.message_id, d.stage, d.disposition, d.block, d.subscription, d.label_id, d.reason, d.confidence, d.decided_at,
-              m.received_at, m.from_address, m.from_name, m.subject
-       FROM decisions d
-       JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
-       LEFT JOIN rules r ON r.id = d.rule_id
-       WHERE d.id = (SELECT max(id) FROM decisions x WHERE x.account_id = d.account_id AND x.message_id = d.message_id)
-         AND d.mode = 'observe'
-         AND NOT EXISTS (SELECT 1 FROM feedback f WHERE f.decision_id = d.id)
-         AND NOT ((d.stage = 'rules' OR d.rule_id IS NOT NULL) AND coalesce(r.source, 'user') != 'agent')
-         ${where.map((clause) => `AND ${clause}`).join(' ')}
-       ORDER BY d.decided_at DESC, d.id DESC LIMIT ?`,
-    ...params,
-    filter.limit ?? 5000,
-  );
+  const rows = await db
+    .select(SUGGESTION)
+    .from(decisions)
+    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .leftJoin(rules, eq(rules.id, decisions.ruleId))
+    .where(
+      and(
+        eq(
+          decisions.id,
+          db
+            .select({ id: max(x.id) })
+            .from(x)
+            .where(and(eq(x.accountId, decisions.accountId), eq(x.messageId, decisions.messageId))),
+        ),
+        eq(decisions.mode, 'observe'),
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(feedback)
+            .where(eq(feedback.decisionId, decisions.id)),
+        ),
+        not(and(or(eq(decisions.stage, 'rules'), isNotNull(decisions.ruleId)), ne(sql`coalesce(${rules.source}, 'user')`, 'agent'))!),
+        filter.accounts === undefined ? undefined : inArray(decisions.accountId, filter.accounts),
+        filter.accountId === undefined ? undefined : eq(decisions.accountId, filter.accountId),
+        filter.sender === undefined ? undefined : eq(messages.fromAddress, filter.sender),
+        filter.domain === undefined ? undefined : eq(messages.fromDomain, filter.domain),
+      ),
+    )
+    .orderBy(desc(decisions.decidedAt), desc(decisions.id))
+    .limit(filter.limit ?? 5000);
   return rows.map(toSuggestion);
 }
 
@@ -122,17 +144,15 @@ export type FeedbackScope =
   /** Only the mail that is waiting (or the one decision given). No rule: the answer is kept as an example for the model. */
   | 'once';
 
-const SUGGESTION_COLUMNS = `d.id, d.account_id, d.message_id, d.stage, d.disposition, d.block, d.subscription, d.label_id, d.reason, d.confidence, d.decided_at,
-              m.received_at, m.from_address, m.from_name, m.subject`;
-
 /** The decision that currently stands for a message, in the shape of a suggestion, or null if it has none. */
 async function currentDecision(db: Sql, accountId: string, messageId: string): Promise<Suggestion | null> {
-  const row = await db.get<Row>(
-    `SELECT ${SUGGESTION_COLUMNS} FROM decisions d JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
-       WHERE d.account_id = ? AND d.message_id = ? ORDER BY d.id DESC LIMIT 1`,
-    accountId,
-    messageId,
-  );
+  const [row] = await db
+    .select(SUGGESTION)
+    .from(decisions)
+    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .where(and(eq(decisions.accountId, accountId), eq(decisions.messageId, messageId)))
+    .orderBy(desc(decisions.id))
+    .limit(1);
   return row ? toSuggestion(row) : null;
 }
 
@@ -255,12 +275,6 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
   // Agreeing with a decision that already stands changes nothing about the message itself.
   const changes = given !== null && ((label !== undefined && given.labelId !== label.id) || given.disposition !== outcome);
 
-  const INSERT_FEEDBACK = `INSERT INTO feedback (account_id, decision_id, message_id, verdict, correct, scope, created_at, label_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (decision_id) DO UPDATE
-       SET verdict = excluded.verdict, correct = excluded.correct, scope = excluded.scope, created_at = excluded.created_at, label_id = excluded.label_id`;
-  // Every marked message is kept whole as an example; `sift run` fetches it on its next pass.
-  const KEEP_EXAMPLE = `INSERT INTO examples (account_id, message_id, disposition, label_id, suggested, suggested_by, marked_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (account_id, message_id) DO UPDATE SET disposition = excluded.disposition, label_id = excluded.label_id, marked_at = excluded.marked_at`;
   // sift having no suggestion is not sift being wrong. Otherwise it was right if it gave the same label,
   // or, when the user said only what should happen, if it would have done the same.
   const verdictFor = (target: Suggestion) =>
@@ -270,18 +284,24 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
     for (const target of all) {
       const verdict = verdictFor(target);
       const is = standing(target)?.id ?? null;
-      await tx.run(
-        INSERT_FEEDBACK,
-        target.accountId,
-        target.decisionId,
-        target.messageId,
-        verdict,
-        verdict === 'right' ? null : wanted,
-        match ? 'sender' : 'message',
-        now,
-        is,
-      );
-      await tx.run(KEEP_EXAMPLE, target.accountId, target.messageId, wanted, is, target.disposition, target.stage, now);
+      const answered = { verdict, correct: verdict === 'right' ? null : wanted, scope: match ? 'sender' : 'message', createdAt: now, labelId: is };
+      await tx
+        .insert(feedback)
+        .values({ accountId: target.accountId, decisionId: target.decisionId, messageId: target.messageId, ...answered })
+        .onConflictDoUpdate({ target: feedback.decisionId, set: answered });
+      // Every marked message is kept whole as an example; `sift run` fetches it on its next pass.
+      await tx
+        .insert(examples)
+        .values({
+          accountId: target.accountId,
+          messageId: target.messageId,
+          disposition: wanted,
+          labelId: is,
+          suggested: target.disposition,
+          suggestedBy: target.stage,
+          markedAt: now,
+        })
+        .onConflictDoUpdate({ target: [examples.accountId, examples.messageId], set: { disposition: wanted, labelId: is, markedAt: now } });
     }
     const ruleId =
       match && says ? await setRule(tx, input.accountId, match, says, all.every((t) => verdictFor(t) === 'right') ? 'user' : 'correction', now) : null;
@@ -343,28 +363,44 @@ export interface Accuracy {
  * An answer to mail sift could not place is not counted: having no suggestion is not being wrong.
  */
 export async function accuracy(db: Sql, since = 0, accounts?: readonly string[]): Promise<Accuracy> {
-  const all = async <T>(sql: string) => await db.all<T>(sql, since, ...(accounts ?? []));
-  // Given, only these accounts' answers count; none given means none count.
-  const whose = accounts === undefined ? '' : `AND f.account_id IN (${accounts.map(() => '?').join(', ') || 'NULL'})`;
-  const scored = `FROM feedback f JOIN decisions d ON d.id = f.decision_id WHERE f.verdict IN ('right', 'wrong') AND f.created_at >= ? ${whose}`;
-  const byStage = await all<{ stage: StageName; reviewed: number; right: number }>(
-    `SELECT d.stage, count(*) AS reviewed, count(*) FILTER (WHERE f.verdict = 'right') AS right ${scored} GROUP BY d.stage ORDER BY d.stage`,
-  );
-  const byLabel = await all<{ label_id: string; name: string | null; reviewed: number; right: number }>(
-    `SELECT d.label_id, (SELECT l.name FROM labels l WHERE l.id = d.label_id ORDER BY l.account_id LIMIT 1) AS name,
-            count(*) AS reviewed, count(*) FILTER (WHERE f.verdict = 'right') AS right
-     ${scored} AND d.label_id IS NOT NULL GROUP BY d.label_id ORDER BY reviewed DESC, d.label_id`,
-  );
-  const confusion = await all<{ suggested: string; correct: string; count: number }>(
-    `SELECT d.label_id AS suggested, f.label_id AS correct, count(*) AS count
-     ${scored} AND f.verdict = 'wrong' AND d.label_id IS NOT NULL AND f.label_id IS NOT NULL
-     GROUP BY d.label_id, f.label_id ORDER BY count DESC, suggested, correct`,
-  );
+  const right = sql<number>`count(*) FILTER (WHERE ${feedback.verdict} = 'right')`.mapWith(Number);
+  const scored = (...also: SQL[]) =>
+    and(
+      inArray(feedback.verdict, ['right', 'wrong']),
+      gte(feedback.createdAt, since),
+      // Given, only these accounts' answers count; none given means none count.
+      accounts === undefined ? undefined : inArray(feedback.accountId, accounts),
+      ...also,
+    );
+  const byStage = (
+    await db
+      .select({ stage: decisions.stage, reviewed: count(), right })
+      .from(feedback)
+      .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
+      .where(scored())
+      .groupBy(decisions.stage)
+      .orderBy(asc(decisions.stage))
+  ).map((r) => ({ ...r, stage: r.stage as StageName }));
+  const name = db.select({ name: labels.name }).from(labels).where(eq(labels.id, decisions.labelId)).orderBy(asc(labels.accountId)).limit(1);
+  const byLabel = (await db
+    .select({ labelId: decisions.labelId, labelName: sql<string | null>`${name}`, reviewed: count(), right })
+    .from(feedback)
+    .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
+    .where(scored(isNotNull(decisions.labelId)))
+    .groupBy(decisions.labelId)
+    .orderBy(desc(count()), asc(decisions.labelId))) as { labelId: string; labelName: string | null; reviewed: number; right: number }[];
+  const confusion = (await db
+    .select({ suggested: decisions.labelId, correct: feedback.labelId, count: count() })
+    .from(feedback)
+    .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
+    .where(scored(eq(feedback.verdict, 'wrong'), isNotNull(decisions.labelId), isNotNull(feedback.labelId)))
+    .groupBy(decisions.labelId, feedback.labelId)
+    .orderBy(desc(count()), asc(decisions.labelId), asc(feedback.labelId))) as { suggested: string; correct: string; count: number }[];
   return {
     reviewed: byStage.reduce((sum, r) => sum + r.reviewed, 0),
     right: byStage.reduce((sum, r) => sum + r.right, 0),
     byStage,
-    byLabel: byLabel.map((r) => ({ labelId: r.label_id, labelName: r.name, reviewed: r.reviewed, right: r.right })),
+    byLabel,
     confusion,
   };
 }

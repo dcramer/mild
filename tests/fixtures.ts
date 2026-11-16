@@ -10,6 +10,7 @@ import type { People } from '../src/store/people.ts';
 import { PARSERS, pglite } from '../src/store/db.ts';
 import type { Sql } from '../src/store/sql.ts';
 import { type Store, storeOn } from '../src/store/store.ts';
+import { connectAccount } from '../src/store/accounts.ts';
 
 /*
  * One database per test file, loaded from the image global-setup.ts migrated once for the whole run,
@@ -30,16 +31,75 @@ beforeEach(async () => {
   await (await database).exec(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
 });
 
+/** This test's database, as the superuser: for reading what a handle wrote, past row-level security. */
+export const superuser = loaded;
+
 /** The store over this test's database. Every call in one test shares the same rows. */
 export async function freshStore(): Promise<Store> {
   const store = storeOn(pglite(await loaded()));
   return { ...store, close: async () => {} };
 }
 
+type Value = string | number | bigint | boolean | null | Uint8Array;
+/** A value for a `?`, or an object of them for `:name` parameters. */
+export type Bind = Value | Record<string, Value>;
+
+/** `?`, `?N` and `:name` placeholders as `$n`, outside quoted text and `::` casts. */
+export function toPostgres(sql: string): { text: string; names: string[] } {
+  let text = '';
+  const names: string[] = [];
+  let n = 0;
+  for (let i = 0; i < sql.length; i++) {
+    const c = sql[i]!;
+    if (c === "'" || c === '"') {
+      const end = sql.indexOf(c, i + 1);
+      text += sql.slice(i, end + 1);
+      i = end;
+    } else if (c === '?') {
+      const numbered = /^\d+/.exec(sql.slice(i + 1))?.[0];
+      text += `$${numbered ?? ++n}`;
+      i += numbered?.length ?? 0;
+    } else if (c === ':' && sql[i + 1] === ':') {
+      text += '::';
+      i++;
+    } else if (c === ':' && /[a-z_]/i.test(sql[i + 1] ?? '')) {
+      const name = /^[a-z_]\w*/i.exec(sql.slice(i + 1))![0];
+      let at = names.indexOf(name);
+      if (at === -1) at = names.push(name) - 1;
+      text += `$${at + 1}`;
+      i += name.length;
+    } else text += c;
+  }
+  return { text, names };
+}
+
+/**
+ * SQL text run as `db`'s person, held to row-level security as sift's own queries are: for a test to set
+ * up rows or read back what was stored. `?` placeholders, or `:name` ones given one object.
+ */
+export function raw(db: Sql) {
+  const query = async (text: string, params: Bind[]) => {
+    const { text: statement, names } = toPostgres(text);
+    const args = names.length === 0 ? params : names.map((name) => (params[0] as Record<string, Bind>)[name]);
+    return await (
+      await loaded()
+    ).transaction(async (tx) => {
+      await tx.query('SET LOCAL ROLE sift_app');
+      if (db.person !== null) await tx.query(`SELECT set_config('sift.user', $1, true)`, [String(db.person)]);
+      return await tx.query<Record<string, unknown>>(statement, args);
+    });
+  };
+  return {
+    get: async <T = Record<string, unknown>>(text: string, ...params: Bind[]) => (await query(text, params)).rows[0] as T | undefined,
+    all: async <T = Record<string, unknown>>(text: string, ...params: Bind[]) => (await query(text, params)).rows as T[],
+    run: async (text: string, ...params: Bind[]) => ({ changes: (await query(text, params)).affectedRows ?? 0 }),
+  };
+}
+
 /** A new person's own database, with no mailbox yet. */
 export async function openUserDb(store?: Store): Promise<Sql> {
   const on = store ?? (await freshStore());
-  const created = await on.central.get<{ id: number }>('INSERT INTO users (owner, created_at) VALUES (0, 0) RETURNING id');
+  const created = await raw(on.central).get<{ id: number }>('INSERT INTO users (owner, created_at) VALUES (0, 0) RETURNING id');
   return await on.user(created!.id);
 }
 
@@ -83,4 +143,12 @@ export async function startDashboard(people: People, options: DashboardOptions =
       req.end(body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body));
     });
   return { port, base: `http://127.0.0.1:${port}`, call };
+}
+
+/** A store whose one person, the owner, has `accounts`; and that person's own database. */
+export async function onePerson(...accounts: string[]): Promise<{ store: Store; db: Sql }> {
+  const store = await freshStore();
+  let user: number | undefined;
+  for (const account of accounts) user = await connectAccount(store, account, '1', 0, user);
+  return { store, db: await store.user(user ?? 1) };
 }

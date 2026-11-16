@@ -2,9 +2,8 @@ import { type Scope, scopeFor } from '../src/dashboard/scope.ts';
 import type { Sql } from '../src/store/sql.ts';
 import type { ExistingFilter, FilterProposal } from '../src/actions/filters.ts';
 import type { Mailbox } from '../src/actions/mailbox.ts';
-import { connectAccount, recordSync, listAccounts } from '../src/store/accounts.ts';
-import type { Store } from '../src/store/store.ts';
-import { freshStore } from './fixtures.ts';
+import { recordSync, listAccounts } from '../src/store/accounts.ts';
+import { examples } from '../src/store/query.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import type { MessageFacts } from '../src/triage/types.ts';
 
@@ -39,16 +38,19 @@ export async function storeExample(
     stage: 'fallback',
     reason: 'no stage reached a decision',
   });
-  await db.run(
-    `INSERT INTO examples (account_id, message_id, disposition, label_id, suggested, suggested_by, marked_at, status, body_text, headers_json, captured_at)
-     VALUES (?, ?, 'keep', ?, 'review', 'fallback', ?, 'captured', ?, '[]', ?)`,
+  await db.insert(examples).values({
     accountId,
-    example.id,
-    example.label,
-    example.markedAt ?? 0,
-    example.body ?? `Body of ${example.id}`,
-    example.markedAt ?? 0,
-  );
+    messageId: example.id,
+    disposition: 'keep',
+    labelId: example.label,
+    suggested: 'review',
+    suggestedBy: 'fallback',
+    markedAt: example.markedAt ?? 0,
+    status: 'captured',
+    bodyText: example.body ?? `Body of ${example.id}`,
+    headersJson: '[]',
+    capturedAt: example.markedAt ?? 0,
+  });
 }
 
 /** An in-memory mailbox. Label ids are `L:<name>`. */
@@ -131,11 +133,3 @@ export const everything = async (db: Sql): Promise<Scope> =>
     (await listAccounts(db)).map((a) => a.id),
     true,
   );
-
-/** A store whose one person, the owner, has `accounts`; and that person's own database. */
-export async function onePerson(...accounts: string[]): Promise<{ store: Store; db: Sql }> {
-  const store = await freshStore();
-  let user: number | undefined;
-  for (const account of accounts) user = await connectAccount(store, account, '1', 0, user);
-  return { store, db: await store.user(user ?? 1) };
-}

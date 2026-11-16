@@ -1,3 +1,4 @@
+import { alias, and, decisions, desc, eq, exists, feedback, lt, max, ne, notExists, isNotNull, rules as ruleRows, sql } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import { recordDecision } from '../store/decisions.ts';
 import { listLabels } from '../store/labels.ts';
@@ -8,28 +9,29 @@ import { rulesStage } from '../triage/stages/rules.ts';
 import { type Decision, type Disposition, type StageName, labelled } from '../triage/types.ts';
 import { type Suggestion, pendingSuggestions } from './feedback.ts';
 
-interface Standing {
-  id: number;
-  stage: StageName;
-  disposition: Disposition;
-  subscription: Decision['subscription'];
-  label_id: string | null;
-  block: number;
-  mark_read: number;
-  confidence: number | null;
-  reason: string;
-}
+const STANDING = {
+  id: decisions.id,
+  stage: sql<StageName>`${decisions.stage}`,
+  disposition: sql<Disposition>`${decisions.disposition}`,
+  subscription: sql<Decision['subscription']>`${decisions.subscription}`,
+  labelId: decisions.labelId,
+  block: decisions.block,
+  markRead: decisions.markRead,
+  confidence: decisions.confidence,
+  reason: decisions.reason,
+};
 
-const COLUMNS = 'id, stage, disposition, subscription, label_id, block, mark_read, confidence, reason';
+const x = alias(decisions, 'x');
+const p = alias(decisions, 'p');
 const WILL: Record<Disposition, string> = { keep: 'kept', archive: 'archived', spam: 'marked as spam', review: 'left for you' };
 const hides = (disposition: Disposition) => disposition === 'archive' || disposition === 'spam';
 
-const same = (standing: Standing, next: Decision) =>
+const same = (standing: { disposition: Disposition; labelId: string | null; subscription: string; block: number; markRead: number }, next: Decision) =>
   standing.disposition === next.disposition &&
-  standing.label_id === (next.labelId ?? null) &&
+  standing.labelId === (next.labelId ?? null) &&
   standing.subscription === next.subscription &&
   (standing.block === 1) === (next.block ?? false) &&
-  (standing.mark_read === 1) === (next.markRead ?? false);
+  (standing.markRead === 1) === (next.markRead ?? false);
 
 /**
  * Bring an account's waiting suggestions into line with its rules and labels as they are now, without
@@ -50,21 +52,48 @@ export async function redecideWaiting(db: Sql, accountId: string, now: number = 
   let known: boolean | undefined;
   const rules = rulesStage(stored, labels, { hasWritten: () => known });
   // Decided by a rule that no longer exists, after another tier had already decided it, and never answered.
-  const orphaned = await db.all<Pick<Suggestion, 'decisionId' | 'messageId'>>(
-    `SELECT d.id AS "decisionId", d.message_id AS "messageId" FROM decisions d
-       WHERE d.account_id = ? AND d.mode = 'observe' AND d.stage = 'rules' AND d.rule_id IS NOT NULL
-         AND d.id = (SELECT max(id) FROM decisions x WHERE x.account_id = d.account_id AND x.message_id = d.message_id)
-         AND NOT EXISTS (SELECT 1 FROM rules r WHERE r.id = d.rule_id)
-         AND NOT EXISTS (SELECT 1 FROM feedback f WHERE f.account_id = d.account_id AND f.message_id = d.message_id)
-         AND EXISTS (SELECT 1 FROM decisions p WHERE p.account_id = d.account_id AND p.message_id = d.message_id AND p.id < d.id)`,
-    accountId,
-  );
+  const orphaned: Pick<Suggestion, 'decisionId' | 'messageId'>[] = await db
+    .select({ decisionId: decisions.id, messageId: decisions.messageId })
+    .from(decisions)
+    .where(
+      and(
+        eq(decisions.accountId, accountId),
+        eq(decisions.mode, 'observe'),
+        eq(decisions.stage, 'rules'),
+        isNotNull(decisions.ruleId),
+        eq(
+          decisions.id,
+          db
+            .select({ id: max(x.id) })
+            .from(x)
+            .where(and(eq(x.accountId, decisions.accountId), eq(x.messageId, decisions.messageId))),
+        ),
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(ruleRows)
+            .where(eq(ruleRows.id, decisions.ruleId)),
+        ),
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(feedback)
+            .where(and(eq(feedback.accountId, decisions.accountId), eq(feedback.messageId, decisions.messageId))),
+        ),
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(p)
+            .where(and(eq(p.accountId, decisions.accountId), eq(p.messageId, decisions.messageId), lt(p.id, decisions.id))),
+        ),
+      ),
+    );
   const waiting = new Map([...(await pendingSuggestions(db, { accountId })), ...orphaned].map((s) => [s.messageId, s.decisionId] as const));
 
   let recorded = 0;
   for (const [messageId, decisionId] of waiting) {
     const facts = await getFacts(db, accountId, messageId);
-    const current = await db.get<Standing>(`SELECT ${COLUMNS} FROM decisions WHERE id = ?`, decisionId);
+    const [current] = await db.select(STANDING).from(decisions).where(eq(decisions.id, decisionId));
     if (!facts || !current) continue;
     known = await cachedCorrespondent(db, accountId, facts.from.address, now);
 
@@ -76,13 +105,16 @@ export async function redecideWaiting(db: Sql, accountId: string, now: number = 
     } else {
       const base =
         current.stage === 'rules'
-          ? await db.get<Standing>(
-              `SELECT ${COLUMNS} FROM decisions WHERE account_id = ? AND message_id = ? AND stage != 'rules' ORDER BY id DESC LIMIT 1`,
-              accountId,
-              messageId,
-            )
+          ? (
+              await db
+                .select(STANDING)
+                .from(decisions)
+                .where(and(eq(decisions.accountId, accountId), eq(decisions.messageId, messageId), ne(decisions.stage, 'rules')))
+                .orderBy(desc(decisions.id))
+                .limit(1)
+            )[0]
           : current;
-      const label = labels.find((l) => l.id === base?.label_id);
+      const label = labels.find((l) => l.id === base?.labelId);
       if (base && label) {
         const outcome = labelled(label);
         // Unknown counts as written to, unless the earlier decision hid the mail: the sender was checked then.

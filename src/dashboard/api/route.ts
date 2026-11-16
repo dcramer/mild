@@ -1,3 +1,4 @@
+import { type actions, type decisions, eq, type proposals, type rules } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import { redecideWaiting } from '../../learn/redecide.ts';
 import { listAccounts } from '../../store/accounts.ts';
@@ -53,12 +54,15 @@ export const named = (_ctx: Context, body: Record<string, unknown>): Touches => 
 
 /** The mailbox that owns the row a write names by `id`. */
 export const ownerOf =
-  (table: 'rules' | 'proposals' | 'actions' | 'decisions') =>
+  (table: typeof rules | typeof proposals | typeof actions | typeof decisions) =>
   async ({ db }: Context, body: Record<string, unknown>): Promise<Touches> => {
     const id = body['id'];
     if (typeof id !== 'string' && typeof id !== 'number') return null;
-    const row = await db.get<{ account_id: string }>(`SELECT account_id FROM ${table} WHERE id = ?`, id);
-    return row ? { account: row.account_id } : null;
+    const [row] = await db
+      .select({ accountId: table.accountId })
+      .from(table)
+      .where(eq(table.id, id as never));
+    return row ? { account: row.accountId } : null;
   };
 
 export const LABEL_ID = /^[a-z0-9_-]{1,40}$/;

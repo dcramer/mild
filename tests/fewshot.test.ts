@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { parseSettings, renderSettings } from '../src/config.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
 import { addMailbox, listAccounts, recordSync } from '../src/store/accounts.ts';
-import { openUserDb } from './fixtures.ts';
+import { openUserDb, raw } from './fixtures.ts';
 import { shotCandidates } from '../src/store/examples.ts';
 import { DEFAULT_LABELS } from '../src/store/labels.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
@@ -153,7 +153,7 @@ describe('stored examples', () => {
     await storeExample(db, ACCOUNT, { id: 'e3', from: 'ada@example.org', label: 'personal', markedAt: 3 });
     await storeExample(db, ACCOUNT, { id: 'e4', from: 'bob@example.org', label: 'personal', markedAt: 4 });
     await storeExample(db, ACCOUNT, { id: 'e5', from: 'cy@example.org', label: 'personal', markedAt: 5 });
-    await db.run(`UPDATE examples SET status = 'pending', body_text = NULL WHERE message_id = 'e2'`);
+    await raw(db).run(`UPDATE examples SET status = 'pending', body_text = NULL WHERE message_id = 'e2'`);
   });
 
   it('offers captured examples from the sender, the domain and each label, with an excerpt and never the whole text', async () => {

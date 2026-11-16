@@ -1,46 +1,60 @@
+import { type SQL, and, asc, desc, eq, examples, isNotNull, lt, lte, messages, sql } from './query.ts';
 import type { Sql } from './sql.ts';
 import { MAX_SHOTS, type Shot, excerptOf } from '../triage/fewshot.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
-interface ShotRow {
-  message_id: string;
-  from_address: string;
-  from_domain: string;
-  from_name: string | null;
-  subject: string;
-  start: string | null;
-  label_id: string;
-  marked_at: number;
-}
+const SHOT = {
+  messageId: examples.messageId,
+  fromAddress: messages.fromAddress,
+  fromDomain: messages.fromDomain,
+  fromName: messages.fromName,
+  subject: messages.subject,
+  start: sql<string | null>`substr(${examples.bodyText}, 1, 2000)`.as('start'),
+  labelId: examples.labelId,
+  markedAt: examples.markedAt,
+};
+
+const withMessage = and(eq(messages.accountId, examples.accountId), eq(messages.id, examples.messageId));
 
 /**
  * Stored examples that might help judge `facts`: the newest from its sender, from its sender's domain,
  * and of each label. More than the prompt takes; `pickShots` chooses among them.
  */
 export async function shotCandidates(db: Sql, facts: Pick<MessageFacts, 'accountId' | 'from'>): Promise<Shot[]> {
-  const select = `SELECT e.message_id, m.from_address, m.from_domain, m.from_name, m.subject, substr(e.body_text, 1, 2000) AS start, e.label_id, e.marked_at
-     FROM examples e JOIN messages m ON m.account_id = e.account_id AND m.id = e.message_id
-     WHERE e.account_id = ? AND e.status = 'captured' AND e.label_id IS NOT NULL`;
-  const newest = 'ORDER BY e.marked_at DESC, e.message_id LIMIT ?';
   // One more than the prompt takes, so leaving out the message under judgement still fills it.
   const limit = MAX_SHOTS + 1;
+  const captured = (also?: SQL) => and(eq(examples.accountId, facts.accountId), eq(examples.status, 'captured'), isNotNull(examples.labelId), also);
+  const newest = (also: SQL) =>
+    db
+      .select(SHOT)
+      .from(examples)
+      .innerJoin(messages, withMessage)
+      .where(captured(also))
+      .orderBy(desc(examples.markedAt), asc(examples.messageId))
+      .limit(limit);
+  const ranked = db
+    .select({
+      ...SHOT,
+      nth: sql<number>`row_number() OVER (PARTITION BY ${examples.labelId} ORDER BY ${examples.markedAt} DESC, ${examples.messageId})`.as('nth'),
+    })
+    .from(examples)
+    .innerJoin(messages, withMessage)
+    .where(captured())
+    .as('ranked');
   const rows = [
-    ...(await db.all(`${select} AND m.from_address = ? ${newest}`, facts.accountId, facts.from.address, limit)),
-    ...(await db.all(`${select} AND m.from_domain = ? ${newest}`, facts.accountId, facts.from.domain, limit)),
-    ...(await db.all(
-      `SELECT * FROM (SELECT x.*, row_number() OVER (PARTITION BY label_id ORDER BY marked_at DESC, message_id) AS nth FROM (${select}) x) WHERE nth <= 2`,
-      facts.accountId,
-    )),
-  ] as unknown as ShotRow[];
-  return [...new Map(rows.map((r) => [r.message_id, r] as const)).values()].map((r) => ({
-    messageId: r.message_id,
-    fromAddress: r.from_address,
-    fromDomain: r.from_domain,
-    ...(r.from_name ? { fromName: r.from_name } : {}),
+    ...(await newest(eq(messages.fromAddress, facts.from.address))),
+    ...(await newest(eq(messages.fromDomain, facts.from.domain))),
+    ...(await db.select().from(ranked).where(lte(ranked.nth, 2))),
+  ];
+  return [...new Map(rows.map((r) => [r.messageId, r] as const)).values()].map((r) => ({
+    messageId: r.messageId,
+    fromAddress: r.fromAddress,
+    fromDomain: r.fromDomain,
+    ...(r.fromName ? { fromName: r.fromName } : {}),
     subject: r.subject,
     excerpt: excerptOf(r.start ?? ''),
-    labelId: r.label_id,
-    markedAt: r.marked_at,
+    labelId: r.labelId!,
+    markedAt: r.markedAt,
   }));
 }
 
@@ -58,33 +72,22 @@ export interface StoredExample {
 
 /** What is held as examples, newest answers first, without the content. */
 export async function listExamples(db: Sql, accountId?: string, limit = 500): Promise<StoredExample[]> {
-  const rows = await db.all<{
-    account_id: string;
-    message_id: string;
-    from_address: string;
-    from_name: string | null;
-    subject: string;
-    label_id: string | null;
-    marked_at: number;
-    status: StoredExample['status'];
-  }>(
-    `SELECT e.account_id, e.message_id, m.from_address, m.from_name, m.subject, e.label_id, e.marked_at, e.status
-       FROM examples e JOIN messages m ON m.account_id = e.account_id AND m.id = e.message_id
-       WHERE (?::text IS NULL OR e.account_id = ?) ORDER BY e.marked_at DESC, e.message_id LIMIT ?`,
-    accountId ?? null,
-    accountId ?? null,
-    limit,
-  );
-  return rows.map((r) => ({
-    accountId: r.account_id,
-    messageId: r.message_id,
-    fromAddress: r.from_address,
-    fromName: r.from_name,
-    subject: r.subject,
-    labelId: r.label_id,
-    markedAt: r.marked_at,
-    status: r.status,
-  }));
+  return (await db
+    .select({
+      accountId: examples.accountId,
+      messageId: examples.messageId,
+      fromAddress: messages.fromAddress,
+      fromName: messages.fromName,
+      subject: messages.subject,
+      labelId: examples.labelId,
+      markedAt: examples.markedAt,
+      status: examples.status,
+    })
+    .from(examples)
+    .innerJoin(messages, withMessage)
+    .where(accountId === undefined ? undefined : eq(examples.accountId, accountId))
+    .orderBy(desc(examples.markedAt), asc(examples.messageId))
+    .limit(limit)) as StoredExample[];
 }
 
 /**
@@ -92,14 +95,19 @@ export async function listExamples(db: Sql, accountId?: string, limit = 500): Pr
  * answer stays in `feedback`, and so does any rule it made. Returns how many were deleted.
  */
 export async function deleteExamples(db: Sql, accountId: string, messageId?: string): Promise<number> {
-  const result =
-    messageId === undefined
-      ? await db.run('DELETE FROM examples WHERE account_id = ?', accountId)
-      : await db.run('DELETE FROM examples WHERE account_id = ? AND message_id = ?', accountId, messageId);
-  return result.changes;
+  const deleted = await db
+    .delete(examples)
+    .where(and(eq(examples.accountId, accountId), messageId === undefined ? undefined : eq(examples.messageId, messageId)))
+    .returning({ messageId: examples.messageId });
+  return deleted.length;
 }
 
 /** Delete examples the user answered for more than `keepDays` days ago. Returns how many were deleted. */
 export async function pruneExamples(db: Sql, keepDays: number, now: number = Date.now()): Promise<number> {
-  return (await db.run('DELETE FROM examples WHERE marked_at < ?', now - keepDays * 86_400_000)).changes;
+  return (
+    await db
+      .delete(examples)
+      .where(lt(examples.markedAt, now - keepDays * 86_400_000))
+      .returning({ messageId: examples.messageId })
+  ).length;
 }

@@ -1,3 +1,24 @@
+import {
+  type SQL,
+  actions,
+  alias,
+  and,
+  decisions,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  labels,
+  max,
+  messages,
+  ne,
+  or,
+  sql,
+  count,
+  gte,
+} from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import { type Scope, within } from '../scope.ts';
 import { type DecisionRow, STAGES, type StageKey, type ChangeRow } from '../types.ts';
@@ -6,51 +27,66 @@ export const DAY_MS = 86_400_000;
 
 const DISPOSITIONS = ['keep', 'archive', 'spam', 'review'] as const;
 
-export interface DecisionSqlRow {
-  id: number;
-  account_id: string;
-  message_id: string;
-  decided_at: number;
-  stage: StageKey;
-  disposition: string;
-  block: number;
-  subscription: string;
-  label_id: string | null;
-  label_name: string | null;
-  gmail_label: string | null;
-  reason: string;
-  confidence: number | null;
-  model: string | null;
-  cost_usd: number;
-  from_address: string;
-  from_name: string | null;
-  subject: string;
-  mode: string;
-  outcome: string | null;
-  outcome_detail: string | null;
-  by_user: number;
-  action_id: number | null;
-  action_type: string | null;
-  action_status: string | null;
-}
+const latest = alias(actions, 'latest');
 
-export const DECISION_SELECT = `
-  SELECT d.id, d.account_id, d.message_id, d.decided_at, d.stage, d.disposition, d.block, d.subscription, d.label_id, l.name AS label_name, d.gmail_label, d.reason, d.confidence, d.model, d.cost_usd,
-         m.from_address, m.from_name, m.subject, d.mode, d.outcome, d.outcome_detail, d.by_user,
-         a.id AS action_id, a.type AS action_type, a.status AS action_status
-  FROM decisions d
-  JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
-  LEFT JOIN labels l ON l.account_id = d.account_id AND l.id = d.label_id
-  LEFT JOIN actions a ON a.id = (SELECT max(id) FROM actions WHERE decision_id = d.id AND type != 'unsubscribe')`;
+/** The columns a decision is shown with. */
+const DECISION_FIELDS = {
+  id: decisions.id,
+  accountId: decisions.accountId,
+  messageId: decisions.messageId,
+  decidedAt: decisions.decidedAt,
+  stage: decisions.stage,
+  disposition: decisions.disposition,
+  block: decisions.block,
+  subscription: decisions.subscription,
+  labelId: decisions.labelId,
+  labelName: labels.name,
+  gmailLabel: decisions.gmailLabel,
+  reason: decisions.reason,
+  confidence: decisions.confidence,
+  model: decisions.model,
+  costUsd: decisions.costUsd,
+  fromAddress: messages.fromAddress,
+  fromName: messages.fromName,
+  subject: messages.subject,
+  mode: decisions.mode,
+  outcome: decisions.outcome,
+  outcomeDetail: decisions.outcomeDetail,
+  byUser: decisions.byUser,
+  actionId: actions.id,
+  actionType: actions.type,
+  actionStatus: actions.status,
+};
+
+/** Decisions with their message, their label, and the last change made for each other than unsubscribing. */
+export const decisionsJoined = (db: Sql) =>
+  db
+    .select(DECISION_FIELDS)
+    .from(decisions)
+    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .leftJoin(labels, and(eq(labels.accountId, decisions.accountId), eq(labels.id, decisions.labelId)))
+    .leftJoin(
+      actions,
+      eq(
+        actions.id,
+        db
+          .select({ id: max(latest.id) })
+          .from(latest)
+          .where(and(eq(latest.decisionId, decisions.id), ne(latest.type, 'unsubscribe'))),
+      ),
+    );
 
 /** Where a decision has got to, as the dashboard groups it. `trouble`: not carried out, failed, or not confirmed. */
-const STATUS_WHERE: Record<string, string> = {
-  suggested: "d.mode = 'observe'",
-  done: "d.mode = 'act' AND d.outcome IN ('done', 'none') AND coalesce(a.status, 'done') = 'done'",
-  undone: "a.status = 'undone'",
-  trouble: "d.mode = 'act' AND (d.outcome IS NULL OR d.outcome IN ('failed', 'unknown') OR a.status IN ('failed', 'unknown', 'pending'))",
+const STATUS_WHERE: Record<string, SQL | undefined> = {
+  suggested: eq(decisions.mode, 'observe'),
+  done: and(eq(decisions.mode, 'act'), inArray(decisions.outcome, ['done', 'none']), sql`coalesce(${actions.status}, 'done') = 'done'`),
+  undone: eq(actions.status, 'undone'),
+  trouble: and(
+    eq(decisions.mode, 'act'),
+    or(isNull(decisions.outcome), inArray(decisions.outcome, ['failed', 'unknown']), inArray(actions.status, ['failed', 'unknown', 'pending'])),
+  ),
   // What was done to mail in Gmail, or tried: a change was made or failed. Suggestions and mail left alone are not.
-  changed: "d.mode = 'act' AND (a.id IS NOT NULL OR d.outcome IN ('failed', 'unknown'))",
+  changed: and(eq(decisions.mode, 'act'), or(isNotNull(actions.id), inArray(decisions.outcome, ['failed', 'unknown']))),
 };
 
 /**
@@ -59,40 +95,23 @@ const STATUS_WHERE: Record<string, string> = {
  * observes; anything else waits for sift to be acting. False if there was nothing to retry.
  */
 export async function retryDecision(db: Sql, scope: Scope, id: number): Promise<{ retried: boolean; waiting: boolean }> {
-  const row = await db.get<{ by_user: number }>(
-    `SELECT by_user FROM decisions WHERE id = ? AND mode = 'act' AND outcome IN ('failed', 'unknown') AND ${within(scope, 'account_id')}`,
-    id,
-  );
+  const [row] = await db
+    .select({ byUser: decisions.byUser })
+    .from(decisions)
+    .where(and(eq(decisions.id, id), eq(decisions.mode, 'act'), inArray(decisions.outcome, ['failed', 'unknown']), within(scope, decisions.accountId)));
   if (!row) return { retried: false, waiting: false };
-  await db.run('UPDATE decisions SET outcome = NULL, outcome_detail = NULL WHERE id = ?', id);
-  return { retried: true, waiting: row.by_user === 0 };
+  await db.update(decisions).set({ outcome: null, outcomeDetail: null }).where(eq(decisions.id, id));
+  return { retried: true, waiting: row.byUser === 0 };
 }
 
-export const toDecisionRow = (r: DecisionSqlRow): DecisionRow => ({
-  id: r.id,
-  accountId: r.account_id,
-  messageId: r.message_id,
-  decidedAt: r.decided_at,
-  stage: r.stage,
-  disposition: r.block === 1 ? 'block' : r.disposition,
-  labelId: r.label_id,
-  labelName: r.label_name,
-  gmailLabel: r.gmail_label,
-  unsubscribe: r.subscription === 'unsubscribe',
-  reason: r.reason,
-  confidence: r.confidence,
-  model: r.model,
-  costUsd: r.cost_usd,
-  fromAddress: r.from_address,
-  fromName: r.from_name,
-  subject: r.subject,
-  mode: r.mode,
-  outcome: r.outcome,
-  outcomeDetail: r.outcome_detail,
-  actionId: r.action_id,
-  actionType: r.action_type,
-  actionStatus: r.action_status,
-  byUser: r.by_user === 1,
+type DecisionFields = Awaited<ReturnType<typeof decisionsJoined>>[number];
+
+export const toDecisionRow = ({ block, subscription, byUser, ...r }: DecisionFields): DecisionRow => ({
+  ...r,
+  stage: r.stage as StageKey,
+  disposition: block === 1 ? 'block' : r.disposition,
+  unsubscribe: subscription === 'unsubscribe',
+  byUser: byUser === 1,
 });
 
 export interface DecisionFilter {
@@ -114,76 +133,61 @@ export interface DecisionFilter {
 
 /** Decisions in the window, newest first, with the total number that match the filter. Unknown filter values match nothing. */
 export async function listDecisions(db: Sql, scope: Scope, filter: DecisionFilter, now: number = Date.now()): Promise<{ total: number; rows: DecisionRow[] }> {
-  const where = [within(scope, 'd.account_id'), 'd.decided_at >= ?'];
-  const params: (string | number)[] = [now - filter.days * DAY_MS];
+  const where: (SQL | undefined)[] = [within(scope, decisions.accountId), gte(decisions.decidedAt, now - filter.days * DAY_MS)];
   if (filter.stage !== undefined) {
     if (!(STAGES as readonly string[]).includes(filter.stage)) return { total: 0, rows: [] };
-    where.push('d.stage = ?');
-    params.push(filter.stage);
+    where.push(eq(decisions.stage, filter.stage));
   }
   if (filter.disposition !== undefined) {
     if (!(DISPOSITIONS as readonly string[]).includes(filter.disposition)) return { total: 0, rows: [] };
-    where.push('d.disposition = ?');
-    params.push(filter.disposition);
+    where.push(eq(decisions.disposition, filter.disposition));
   }
   if (filter.status !== undefined) {
     const clause = STATUS_WHERE[filter.status];
     if (clause === undefined) return { total: 0, rows: [] };
     where.push(clause);
   }
-  for (const [column, value] of [
-    ['d.account_id', filter.accountId],
-    ['m.from_address', filter.sender],
-    ['m.from_domain', filter.domain],
-  ] as const) {
-    if (value === undefined) continue;
-    where.push(`${column} = ?`);
-    params.push(value);
-  }
+  if (filter.accountId !== undefined) where.push(eq(decisions.accountId, filter.accountId));
+  if (filter.sender !== undefined) where.push(eq(messages.fromAddress, filter.sender));
+  if (filter.domain !== undefined) where.push(eq(messages.fromDomain, filter.domain));
   const search = filter.search?.trim();
   if (search) {
+    // Backslash is ILIKE's escape character unless told otherwise.
     const pattern = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
-    where.push(`(m.subject ILIKE ? ESCAPE '\\' OR m.from_address ILIKE ? ESCAPE '\\' OR coalesce(m.from_name, '') ILIKE ? ESCAPE '\\')`);
-    params.push(pattern, pattern, pattern);
+    where.push(or(ilike(messages.subject, pattern), ilike(messages.fromAddress, pattern), ilike(sql`coalesce(${messages.fromName}, '')`, pattern)));
   }
-  const clause = where.join(' AND ');
+  const clause = and(...where);
   const limit = Math.min(Math.max(Math.trunc(filter.limit ?? 50), 1), 200);
   const offset = Math.max(Math.trunc(filter.offset ?? 0), 0);
 
-  const { total } = (await db.get<{ total: number }>(`SELECT count(*) AS total FROM (${DECISION_SELECT} WHERE ${clause})`, ...params))!;
-  const rows = await db.all<DecisionSqlRow>(`${DECISION_SELECT} WHERE ${clause} ORDER BY d.id DESC LIMIT ? OFFSET ?`, ...params, limit, offset);
+  const [{ total }] = (await db.select({ total: count() }).from(decisionsJoined(db).where(clause).as('matching'))) as [{ total: number }];
+  const rows = await decisionsJoined(db).where(clause).orderBy(desc(decisions.id)).limit(limit).offset(offset);
   return { total, rows: rows.map(toDecisionRow) };
 }
 
 /** Changes sift made to the mailbox, newest first, with the message each was about. */
 export async function listChanges(db: Sql, scope: Scope, limit: number): Promise<ChangeRow[]> {
-  const rows = await db.all<{
-    id: number;
-    account_id: string;
-    message_id: string;
-    type: string;
-    status: string;
-    error: string | null;
-    created_at: number;
-    payload_json: string;
-    subject: string | null;
-    from_address: string | null;
-  }>(
-    `SELECT a.id, a.account_id, a.message_id, a.type, a.status, a.error, a.created_at, a.payload_json, m.subject, m.from_address
-       FROM actions a LEFT JOIN messages m ON m.account_id = a.account_id AND m.id = a.message_id
-       WHERE a.message_id IS NOT NULL AND ${within(scope, 'a.account_id')} ORDER BY a.id DESC LIMIT ?`,
-    limit,
-  );
-  return rows.map((r) => ({
-    id: r.id,
-    accountId: r.account_id,
-    messageId: r.message_id,
-    type: r.type,
-    status: r.status,
-    error: r.error,
-    createdAt: r.created_at,
-    subject: r.subject,
-    fromAddress: r.from_address,
-    undoOf: (JSON.parse(r.payload_json) as { undoOf?: number }).undoOf ?? null,
+  const rows = await db
+    .select({
+      id: actions.id,
+      accountId: actions.accountId,
+      messageId: actions.messageId,
+      type: actions.type,
+      status: actions.status,
+      error: actions.error,
+      createdAt: actions.createdAt,
+      payloadJson: actions.payloadJson,
+      subject: messages.subject,
+      fromAddress: messages.fromAddress,
+    })
+    .from(actions)
+    .leftJoin(messages, and(eq(messages.accountId, actions.accountId), eq(messages.id, actions.messageId)))
+    .where(and(isNotNull(actions.messageId), within(scope, actions.accountId)))
+    .orderBy(desc(actions.id))
+    .limit(limit);
+  return rows.map(({ payloadJson, ...r }) => ({
+    ...r,
+    messageId: r.messageId!,
+    undoOf: (JSON.parse(payloadJson) as { undoOf?: number }).undoOf ?? null,
   }));
 }

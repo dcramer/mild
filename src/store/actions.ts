@@ -1,3 +1,4 @@
+import { actions, and, asc, desc, eq, inArray, isNotNull, max, messages, min, notInArray } from './query.ts';
 import type { Sql } from './sql.ts';
 
 export type ActionStatus = 'pending' | 'done' | 'failed' | 'unknown' | 'undone';
@@ -30,32 +31,41 @@ export interface ActionRecord {
   createdAt: number;
 }
 
-interface Row {
+const COLUMNS = {
+  id: actions.id,
+  accountId: actions.accountId,
+  messageId: actions.messageId,
+  type: actions.type,
+  payloadJson: actions.payloadJson,
+  originalLabels: actions.originalLabels,
+  finalLabels: actions.finalLabels,
+  status: actions.status,
+  error: actions.error,
+  createdAt: actions.createdAt,
+};
+
+const fromRow = (r: {
   id: number;
-  account_id: string;
-  message_id: string;
+  accountId: string;
+  messageId: string | null;
   type: string;
-  payload_json: string;
-  original_labels: string;
-  final_labels: string | null;
-  status: ActionStatus;
+  payloadJson: string;
+  originalLabels: string | null;
+  finalLabels: string | null;
+  status: string;
   error: string | null;
-  created_at: number;
-}
-
-const COLUMNS = 'id, account_id, message_id, type, payload_json, original_labels, final_labels, status, error, created_at';
-
-const fromRow = (r: Row): ActionRecord => ({
+  createdAt: number;
+}): ActionRecord => ({
   id: r.id,
-  accountId: r.account_id,
-  messageId: r.message_id,
+  accountId: r.accountId,
+  messageId: r.messageId!,
   type: r.type,
-  payload: JSON.parse(r.payload_json) as ActionPayload,
-  originalLabels: JSON.parse(r.original_labels) as string[],
-  finalLabels: r.final_labels === null ? null : (JSON.parse(r.final_labels) as string[]),
-  status: r.status,
+  payload: JSON.parse(r.payloadJson) as ActionPayload,
+  originalLabels: JSON.parse(r.originalLabels!) as string[],
+  finalLabels: r.finalLabels === null ? null : (JSON.parse(r.finalLabels) as string[]),
+  status: r.status as ActionStatus,
   error: r.error,
-  createdAt: r.created_at,
+  createdAt: r.createdAt,
 });
 
 /** Write the intent before touching the provider. Returns the action id. */
@@ -64,76 +74,83 @@ export async function insertPendingAction(
   action: { accountId: string; messageId: string | null; type: string; payload: ActionPayload; originalLabels: string[]; decisionId?: number },
   now: number,
 ): Promise<number> {
-  const result = await db.get<{ id: number }>(
-    `INSERT INTO actions (account_id, message_id, type, payload_json, original_labels, decision_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?) RETURNING id`,
-    action.accountId,
-    action.messageId,
-    action.type,
-    JSON.stringify(action.payload),
-    JSON.stringify(action.originalLabels),
-    action.decisionId ?? null,
-    now,
-  );
-  return result!.id;
+  const [row] = await db
+    .insert(actions)
+    .values({
+      accountId: action.accountId,
+      messageId: action.messageId,
+      type: action.type,
+      payloadJson: JSON.stringify(action.payload),
+      originalLabels: JSON.stringify(action.originalLabels),
+      decisionId: action.decisionId ?? null,
+      status: 'pending',
+      createdAt: now,
+    })
+    .returning({ id: actions.id });
+  return row!.id;
 }
 
 export async function finishAction(db: Sql, id: number, status: ActionStatus, finalLabels: string[] | null, error: string | null, now: number): Promise<void> {
-  await db.run(
-    'UPDATE actions SET status = ?, final_labels = ?, error = ?, completed_at = ? WHERE id = ?',
-    status,
-    finalLabels === null ? null : JSON.stringify(finalLabels),
-    error,
-    now,
-    id,
-  );
+  await db
+    .update(actions)
+    .set({ status, finalLabels: finalLabels === null ? null : JSON.stringify(finalLabels), error, completedAt: now })
+    .where(eq(actions.id, id));
 }
 
 export async function setActionStatus(db: Sql, id: number, status: ActionStatus): Promise<void> {
-  await db.run('UPDATE actions SET status = ? WHERE id = ?', status, id);
+  await db.update(actions).set({ status }).where(eq(actions.id, id));
 }
 
 export async function getAction(db: Sql, id: number): Promise<ActionRecord | null> {
-  const row = await db.get<Row>(`SELECT ${COLUMNS} FROM actions WHERE id = ?`, id);
+  const [row] = await db.select(COLUMNS).from(actions).where(eq(actions.id, id));
   return row ? fromRow(row) : null;
 }
 
 /** The last thing sift did to a message's labels that still stands, or null. */
 export async function lastStandingChange(db: Sql, accountId: string, messageId: string): Promise<ActionRecord | null> {
-  const row = await db.get<Row>(
-    `SELECT ${COLUMNS} FROM actions WHERE account_id = ? AND message_id = ? AND type NOT IN ('undo', 'unsubscribe') AND status = 'done' ORDER BY id DESC LIMIT 1`,
-    accountId,
-    messageId,
-  );
+  const [row] = await db
+    .select(COLUMNS)
+    .from(actions)
+    .where(
+      and(eq(actions.accountId, accountId), eq(actions.messageId, messageId), notInArray(actions.type, ['undo', 'unsubscribe']), eq(actions.status, 'done')),
+    )
+    .orderBy(desc(actions.id))
+    .limit(1);
   return row ? fromRow(row) : null;
 }
 
 /** Actions whose outcome was never confirmed, oldest first. Optionally limited to one message. */
 export async function listOpenActions(db: Sql, scope?: { accountId: string; messageId: string }): Promise<ActionRecord[]> {
-  const open = `status IN ('pending', 'unknown') AND message_id IS NOT NULL`;
-  const rows = scope
-    ? await db.all(`SELECT ${COLUMNS} FROM actions WHERE ${open} AND account_id = ? AND message_id = ? ORDER BY id`, scope.accountId, scope.messageId)
-    : await db.all(`SELECT ${COLUMNS} FROM actions WHERE ${open} ORDER BY id`);
-  return (rows as unknown as Row[]).map(fromRow);
+  const rows = await db
+    .select(COLUMNS)
+    .from(actions)
+    .where(
+      and(
+        inArray(actions.status, ['pending', 'unknown']),
+        isNotNull(actions.messageId),
+        scope ? and(eq(actions.accountId, scope.accountId), eq(actions.messageId, scope.messageId)) : undefined,
+      ),
+    )
+    .orderBy(asc(actions.id));
+  return rows.map(fromRow);
 }
 
 /** When the user unsubscribed from this sender through sift, or null. */
 export async function unsubscribedAt(db: Sql, accountId: string, sender: string): Promise<number | null> {
-  const row = (await db.get<{ at: number | null }>(
-    `SELECT min(a.created_at) AS at FROM actions a JOIN messages m ON m.account_id = a.account_id AND m.id = a.message_id
-       WHERE a.account_id = ? AND a.type = 'unsubscribe' AND a.status = 'done' AND m.from_address = ?`,
-    accountId,
-    sender,
-  ))!;
-  return row.at;
+  const [row] = await db
+    .select({ at: min(actions.createdAt) })
+    .from(actions)
+    .innerJoin(messages, and(eq(messages.accountId, actions.accountId), eq(messages.id, actions.messageId)))
+    .where(and(eq(actions.accountId, accountId), eq(actions.type, 'unsubscribe'), eq(actions.status, 'done'), eq(messages.fromAddress, sender)));
+  return row!.at;
 }
 
 /** When an unsubscribe request to this sender last failed, or null. */
 export async function lastUnsubscribeFailure(db: Sql, accountId: string, sender: string): Promise<number | null> {
-  const row = (await db.get<{ at: number | null }>(
-    `SELECT max(a.created_at) AS at FROM actions a JOIN messages m ON m.account_id = a.account_id AND m.id = a.message_id
-       WHERE a.account_id = ? AND a.type = 'unsubscribe' AND a.status = 'failed' AND m.from_address = ?`,
-    accountId,
-    sender,
-  ))!;
-  return row.at;
+  const [row] = await db
+    .select({ at: max(actions.createdAt) })
+    .from(actions)
+    .innerJoin(messages, and(eq(messages.accountId, actions.accountId), eq(messages.id, actions.messageId)))
+    .where(and(eq(actions.accountId, accountId), eq(actions.type, 'unsubscribe'), eq(actions.status, 'failed'), eq(messages.fromAddress, sender)));
+  return row!.at;
 }

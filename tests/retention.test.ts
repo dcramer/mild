@@ -10,7 +10,8 @@ import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { addRule } from '../src/store/rules.ts';
 import type { Decision } from '../src/triage/types.ts';
-import { facts, onePerson } from './helpers.ts';
+import { raw, onePerson } from './fixtures.ts';
+import { facts } from './helpers.ts';
 import type { Store } from '../src/store/store.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -42,7 +43,8 @@ async function acted(id: string, type = 'archive'): Promise<{ decisionId: number
   return { decisionId, actionId };
 }
 
-const left = async (table: string, column = 'message_id') => (await db.all<{ id: string }>(`SELECT ${column} AS id FROM ${table} ORDER BY 1`)).map((r) => r.id);
+const left = async (table: string, column = 'message_id') =>
+  (await raw(db).all<{ id: string }>(`SELECT ${column} AS id FROM ${table} ORDER BY 1`)).map((r) => r.id);
 
 beforeEach(async () => {
   ({ store, db } = await onePerson(ACCOUNT));
@@ -54,7 +56,7 @@ describe('pruneOld', () => {
     await acted('fresh');
     await message('new', RECENT);
     await recordDecision(db, ACCOUNT, 'new', archive, { mode: 'act', now: RECENT });
-    await db.run(`UPDATE actions SET created_at = ? WHERE message_id = 'fresh'`, RECENT);
+    await raw(db).run(`UPDATE actions SET created_at = ? WHERE message_id = 'fresh'`, RECENT);
 
     expect(await pruneOld(db, 30, NOW)).toBe(1);
     expect(await left('messages', 'id')).toEqual(['fresh', 'new']);

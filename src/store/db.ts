@@ -94,11 +94,10 @@ export function pglite(db: PGliteInterface): Driver {
     transaction: (work) =>
       db.transaction((tx) =>
         work({
-          query: async (text, params) => {
-            const result = await tx.query<Record<string, unknown>>(text, params);
-            return { rows: result.rows, count: result.affectedRows ?? 0 };
+          query: async (text, params, array) => {
+            const result = await tx.query<Record<string, unknown>>(text, params, array ? { rowMode: 'array' } : {});
+            return { rows: result.rows };
           },
-          exec: async (text) => void (await tx.exec(text)),
         }),
       ),
     close: () => db.close(),
@@ -112,11 +111,10 @@ function server(pool: Pool): Driver {
       try {
         await client.query('BEGIN');
         const result = await work({
-          query: async (text, params) => {
-            const result = await client.query<Record<string, unknown>>(text, params);
-            return { rows: result.rows, count: result.rowCount ?? 0 };
+          query: async (text, params, array) => {
+            const result = array ? await client.query({ text, values: params, rowMode: 'array' }) : await client.query<Record<string, unknown>>(text, params);
+            return { rows: result.rows };
           },
-          exec: async (text) => void (await client.query(text)),
         });
         await client.query('COMMIT');
         return result;

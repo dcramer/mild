@@ -2,6 +2,7 @@ import { loadConfig } from '../../config.ts';
 import { hasClientSecrets } from '../../gmail/auth.ts';
 import { connectedAddresses, listUsers } from '../../store/accounts.ts';
 import { DatabaseInUse } from '../../store/db.ts';
+import { type SQL, actions, count, decisions, inArray, messages, rules } from '../../store/query.ts';
 import { openStore } from '../../store/store.ts';
 import { paint, ui } from '../ui.ts';
 import { checkSecrets } from '../secrets-check.ts';
@@ -25,9 +26,9 @@ export async function status(): Promise<void> {
   const secrets = await checkSecrets(config, store, false);
   const accounts = await connectedAddresses(store.central);
   const people = await Promise.all((await listUsers(store.central)).map((u) => store.user(u.id)));
-  const count = async (table: string, where = '') => {
+  const total = async (table: typeof messages | typeof decisions | typeof actions | typeof rules, where?: SQL) => {
     let n = 0;
-    for (const db of people) n += (await db.get<{ n: number }>(`SELECT count(*) AS n FROM ${table} ${where}`))!.n;
+    for (const db of people) n += (await db.select({ n: count() }).from(table).where(where))[0]!.n;
     return n;
   };
   const { settings } = config;
@@ -40,13 +41,10 @@ export async function status(): Promise<void> {
     ['Dashboard', signInAddresses(settings.dashboardPort).join(paint.dim('  or  '))],
   ]);
   ui.blank();
-  const troubled = await count('actions', `WHERE status IN ('failed', 'unknown', 'pending')`);
+  const troubled = await total(actions, inArray(actions.status, ['failed', 'unknown', 'pending']));
   ui.fields([
-    [
-      'Recorded',
-      `${plural(await count('messages'), 'message')} · ${plural(await count('decisions'), 'decision')} · ${plural(await count('actions'), 'change')}`,
-    ],
-    ['Rules', plural(await count('rules'), 'rule')],
+    ['Recorded', `${plural(await total(messages), 'message')} · ${plural(await total(decisions), 'decision')} · ${plural(await total(actions), 'change')}`],
+    ['Rules', plural(await total(rules), 'rule')],
     ...(troubled > 0 ? [['Check', paint.bad(`${plural(troubled, 'change')} failed or unconfirmed; see Changes in the dashboard`)] as const] : []),
   ]);
   ui.blank();

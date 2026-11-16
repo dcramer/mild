@@ -1,3 +1,4 @@
+import { and, asc, eq, examples } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import type { GmailApi } from '../gmail/api.ts';
 
@@ -27,28 +28,25 @@ export async function captureExamples(
   accountId: string,
   now: () => number = Date.now,
 ): Promise<number> {
-  const pending = await db.all<{ message_id: string }>(
-    `SELECT message_id FROM examples WHERE account_id = ? AND status = 'pending' ORDER BY marked_at, message_id LIMIT ?`,
-    accountId,
-    PER_PASS,
-  );
+  const pending = await db
+    .select({ messageId: examples.messageId })
+    .from(examples)
+    .where(and(eq(examples.accountId, accountId), eq(examples.status, 'pending')))
+    .orderBy(asc(examples.markedAt), asc(examples.messageId))
+    .limit(PER_PASS);
   let captured = 0;
-  for (const { message_id: messageId } of pending) {
+  for (const { messageId } of pending) {
+    const example = and(eq(examples.accountId, accountId), eq(examples.messageId, messageId));
     const raw = await api.getRaw(messageId);
     if (raw === null) {
-      await db.run(`UPDATE examples SET status = 'gone', captured_at = ? WHERE account_id = ? AND message_id = ?`, now(), accountId, messageId);
+      await db.update(examples).set({ status: 'gone', capturedAt: now() }).where(example);
       continue;
     }
     const body = await api.getBodyText(messageId);
-    await db.run(
-      `UPDATE examples SET status = 'captured', raw = ?, headers_json = ?, body_text = ?, captured_at = ? WHERE account_id = ? AND message_id = ?`,
-      raw,
-      JSON.stringify(parseHeaders(raw)),
-      body ?? '',
-      now(),
-      accountId,
-      messageId,
-    );
+    await db
+      .update(examples)
+      .set({ status: 'captured', raw, headersJson: JSON.stringify(parseHeaders(raw)), bodyText: body ?? '', capturedAt: now() })
+      .where(example);
     captured++;
   }
   return captured;

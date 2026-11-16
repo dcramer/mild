@@ -1,6 +1,7 @@
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { request } from 'node:https';
 import { isIP } from 'node:net';
+import { and, eq, messages } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import { finishAction, insertPendingAction, lastUnsubscribeFailure, unsubscribedAt } from '../store/actions.ts';
 import { bulkSignals, passedDmarc } from '../triage/features.ts';
@@ -86,13 +87,12 @@ const postOneClick: PostOneClick = (url, address) =>
  */
 export async function unsubscribe(deps: UnsubscribeDeps, accountId: string, messageId: string): Promise<UnsubscribeOutcome> {
   const now = deps.now ?? Date.now;
-  const message = await deps.db.get<{ from_address: string; headers_json: string }>(
-    'SELECT from_address, headers_json FROM messages WHERE account_id = ? AND id = ?',
-    accountId,
-    messageId,
-  );
+  const [message] = await deps.db
+    .select({ fromAddress: messages.fromAddress, headersJson: messages.headersJson })
+    .from(messages)
+    .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
   if (!message) return { status: 'refused', reason: 'There is no such message.' };
-  const headers = JSON.parse(message.headers_json) as Record<string, string>;
+  const headers = JSON.parse(message.headersJson) as Record<string, string>;
   const signals = bulkSignals(headers);
   if (!signals.oneClickUnsubscribeUrl) {
     return {
@@ -103,10 +103,10 @@ export async function unsubscribe(deps: UnsubscribeDeps, accountId: string, mess
     };
   }
   if (!passedDmarc(headers)) return { status: 'refused', reason: 'The message did not prove who sent it, so its unsubscribe address is not trusted.' };
-  if ((await unsubscribedAt(deps.db, accountId, message.from_address)) !== null)
+  if ((await unsubscribedAt(deps.db, accountId, message.fromAddress)) !== null)
     return { status: 'refused', reason: 'You have already unsubscribed from this sender.' };
   // sift runs this for every message a label says to unsubscribe from: a sender whose address fails is left alone for a while.
-  const failed = await lastUnsubscribeFailure(deps.db, accountId, message.from_address);
+  const failed = await lastUnsubscribeFailure(deps.db, accountId, message.fromAddress);
   if (failed !== null && now() - failed < RETRY_AFTER_MS)
     return { status: 'refused', reason: 'Unsubscribing from this sender failed recently; it will be tried again later.' };
 

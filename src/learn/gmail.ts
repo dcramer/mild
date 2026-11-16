@@ -1,3 +1,4 @@
+import { actions, and, decisions, desc, eq, examples, feedback, gte, isNotNull, messages, ne, sql } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import type { LabelChange } from '../store/actions.ts';
 import { listLabels } from '../store/labels.ts';
@@ -32,16 +33,16 @@ export async function userChanges(db: Sql, accountId: string, history: readonly 
     for (const label of change.removed) count(change.messageId, `-${label}`, 1);
   }
   // A change whose outcome was never confirmed may have landed, so it counts; one that failed did not.
-  const own = await db.all<{ message_id: string; payload_json: string }>(
-    `SELECT message_id, payload_json FROM actions WHERE account_id = ? AND message_id IS NOT NULL AND created_at >= ? AND status != 'failed'`,
-    accountId,
-    since,
-  );
+  const own = await db
+    .select({ messageId: actions.messageId, payloadJson: actions.payloadJson })
+    .from(actions)
+    .where(and(eq(actions.accountId, accountId), isNotNull(actions.messageId), gte(actions.createdAt, since), ne(actions.status, 'failed')));
   for (const action of own) {
-    if (!tally.has(action.message_id)) continue;
-    const payload = JSON.parse(action.payload_json) as LabelChange;
-    for (const label of payload.add) count(action.message_id, `+${label}`, -1);
-    for (const label of payload.remove) count(action.message_id, `-${label}`, -1);
+    const messageId = action.messageId!;
+    if (!tally.has(messageId)) continue;
+    const payload = JSON.parse(action.payloadJson) as LabelChange;
+    for (const label of payload.add) count(messageId, `+${label}`, -1);
+    for (const label of payload.remove) count(messageId, `-${label}`, -1);
   }
 
   const changes: MessageChange[] = [];
@@ -64,16 +65,6 @@ const SYSTEM = new Set(['INBOX', 'SPAM', 'TRASH', 'UNREAD', 'STARRED', 'IMPORTAN
 const isUserLabel = (id: string) => !SYSTEM.has(id) && !id.startsWith('CATEGORY_');
 const moves = (labels: string[]) => labels.includes('INBOX') || labels.includes('SPAM');
 
-interface Standing {
-  id: number;
-  label_id: string | null;
-  disposition: Disposition;
-  mode: 'act' | 'observe';
-  stage: string;
-  rule_id: string | null;
-  from_address: string;
-}
-
 /**
  * Treat what the user did to a message in Gmail as their answer about that one message: moving it back
  * to the inbox or out of spam, archiving it or marking it spam, or giving it a different `sift/…` label.
@@ -90,13 +81,21 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
   let learned = 0;
 
   for (const change of changes) {
-    const decision = await db.get<Standing>(
-      `SELECT d.id, d.label_id, d.disposition, d.mode, d.stage, d.rule_id, m.from_address
-       FROM decisions d JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
-       WHERE d.account_id = ? AND d.message_id = ? ORDER BY d.id DESC LIMIT 1`,
-      accountId,
-      change.messageId,
-    );
+    const [decision] = await db
+      .select({
+        id: decisions.id,
+        labelId: decisions.labelId,
+        disposition: sql<Disposition>`${decisions.disposition}`,
+        mode: decisions.mode,
+        stage: decisions.stage,
+        ruleId: decisions.ruleId,
+        fromAddress: messages.fromAddress,
+      })
+      .from(decisions)
+      .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+      .where(and(eq(decisions.accountId, accountId), eq(decisions.messageId, change.messageId)))
+      .orderBy(desc(decisions.id))
+      .limit(1);
     if (!decision) continue;
     const touched = [...change.added, ...change.removed];
     const moved = moves(touched);
@@ -110,22 +109,29 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
     const place: DecidedDisposition = current.includes('SPAM') ? 'spam' : current.includes('INBOX') ? 'keep' : 'archive';
     const on = current.flatMap((id) => siftLabel(id) ?? []);
     const given = change.added.flatMap((id) => siftLabel(id) ?? []).filter((l) => on.includes(l));
-    const label = given.length === 1 ? given[0] : on.length === 1 ? on[0] : labels.find((l) => l.id === decision.label_id);
+    const label = given.length === 1 ? given[0] : on.length === 1 ? on[0] : labels.find((l) => l.id === decision.labelId);
     if (!label) continue;
 
-    const agrees = decision.label_id === label.id && (decision.disposition === 'review' ? 'keep' : decision.disposition) === place;
+    const agrees = decision.labelId === label.id && (decision.disposition === 'review' ? 'keep' : decision.disposition) === place;
     if (agrees) {
       // Doing what sift only suggested confirms it, once. Anything else here is sift's own work or the user's earlier answer, seen again.
-      const saidByUser = decision.stage === 'rules' && decision.rule_id === null;
-      if (!moved || decision.mode !== 'observe' || saidByUser || (await db.get('SELECT 1 FROM feedback WHERE decision_id = ?', decision.id))) continue;
-    } else if (
-      await db.get(
-        `SELECT 1 FROM feedback f JOIN examples e ON e.account_id = f.account_id AND e.message_id = f.message_id
-         WHERE f.decision_id = ? AND f.label_id = ? AND e.disposition = ?`,
-        decision.id,
-        label.id,
-        place,
+      const saidByUser = decision.stage === 'rules' && decision.ruleId === null;
+      if (
+        !moved ||
+        decision.mode !== 'observe' ||
+        saidByUser ||
+        (await db.select({ id: feedback.id }).from(feedback).where(eq(feedback.decisionId, decision.id)).limit(1)).length > 0
       )
+        continue;
+    } else if (
+      (
+        await db
+          .select({ id: feedback.id })
+          .from(feedback)
+          .innerJoin(examples, and(eq(examples.accountId, feedback.accountId), eq(examples.messageId, feedback.messageId)))
+          .where(and(eq(feedback.decisionId, decision.id), eq(feedback.labelId, label.id), eq(examples.disposition, place)))
+          .limit(1)
+      ).length > 0
     )
       continue;
 
@@ -133,7 +139,7 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
       db,
       {
         accountId,
-        sender: decision.from_address,
+        sender: decision.fromAddress,
         label: label.id,
         ...(place === label.disposition ? {} : { disposition: place }),
         scope: 'once',
@@ -143,7 +149,10 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
       },
       now,
     );
-    await db.run(`UPDATE feedback SET via = 'gmail' WHERE account_id = ? AND message_id = ? AND created_at = ?`, accountId, change.messageId, now);
+    await db
+      .update(feedback)
+      .set({ via: 'gmail' })
+      .where(and(eq(feedback.accountId, accountId), eq(feedback.messageId, change.messageId), eq(feedback.createdAt, now)));
     learned++;
   }
   return learned;

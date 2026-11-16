@@ -9,7 +9,7 @@ import { credentialStore } from '../src/model/credentials.ts';
 import { loadKeyring, readSecret, rekeySecrets, writeSecret } from '../src/secrets.ts';
 import { connectAccount } from '../src/store/accounts.ts';
 import { credentials, rekeyCredentials } from '../src/store/credentials.ts';
-import { freshStore } from './fixtures.ts';
+import { freshStore, raw } from './fixtures.ts';
 
 const dir = () => mkdtempSync(join(tmpdir(), 'sift-secrets-'));
 const NONE = loadKeyring({});
@@ -104,9 +104,9 @@ describe('credentials', () => {
     const store = await freshStore();
     await connectAccount(store, 'alpha@example.org', '1', 0);
     await connectAccount(store, 'beta@example.net', '1', 0);
-    const raw = async (id: number) =>
-      await (await store.user(id)).all<{ kind: string; key: string; value: string }>('SELECT kind, key, value FROM credentials');
-    return { store, raw };
+    const stored = async (id: number) =>
+      await raw(await store.user(id)).all<{ kind: string; key: string; value: string }>('SELECT kind, key, value FROM credentials');
+    return { store, stored };
   }
 
   it("keeps the Google client in a file, and sign-ins in their person's database, encrypted", async () => {
@@ -116,24 +116,24 @@ describe('credentials', () => {
     expect(readFileSync(config.googleClientPath, 'utf8')).toMatch(/^sift-secret:v1:[0-9a-f]{8}:[\w-]+:[\w-]+\n$/);
     expect(loadClientSecrets(config, {}).clientSecret).toBe('client-secret-value');
 
-    const { store, raw } = await people();
+    const { store, stored } = await people();
     const alpha = await store.user(1);
     await (await credentials(alpha, 'gmail', A)).write('alpha@example.org', 'refresh-token-value');
     await credentialStore(await credentials(alpha, 'model', A)).modify('openai', async () => ({ type: 'api_key', key: 'api-key-value' }));
-    for (const row of await raw(1)) expect(row.value).toMatch(/^sift-secret:v1:/);
+    for (const row of await stored(1)) expect(row.value).toMatch(/^sift-secret:v1:/);
     expect(await (await credentials(alpha, 'gmail', A)).read('alpha@example.org')).toBe('refresh-token-value');
     expect(await credentialStore(await credentials(alpha, 'model', A)).read('openai')).toEqual({ type: 'api_key', key: 'api-key-value' });
     await expect((await credentials(alpha, 'gmail', B)).read('alpha@example.org')).rejects.toThrow('SIFT_KEY');
   });
 
   it("does not open one copied into another row or another person's database", async () => {
-    const { store, raw } = await people();
+    const { store, stored } = await people();
     const [alpha, beta] = [await store.user(1), await store.user(2)];
     await (await credentials(alpha, 'gmail', A)).write('alpha@example.org', 'alpha-token');
-    const [stolen] = await raw(1);
-    await beta.run('INSERT INTO credentials (kind, key, value, updated_at) VALUES (?, ?, ?, 0)', 'gmail', 'alpha@example.org', stolen!.value);
+    const [stolen] = await stored(1);
+    await raw(beta).run('INSERT INTO credentials (kind, key, value, updated_at) VALUES (?, ?, ?, 0)', 'gmail', 'alpha@example.org', stolen!.value);
     await expect((await credentials(beta, 'gmail', A)).read('alpha@example.org')).rejects.toThrow('person 2 gmail alpha@example.org');
-    await alpha.run(`INSERT INTO credentials (kind, key, value, updated_at) VALUES ('model', 'openai', ?, 0)`, stolen!.value);
+    await raw(alpha).run(`INSERT INTO credentials (kind, key, value, updated_at) VALUES ('model', 'openai', ?, 0)`, stolen!.value);
     await expect((await credentials(alpha, 'model', A)).read('openai')).rejects.toThrow('person 1 model openai');
   });
 

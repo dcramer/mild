@@ -40,7 +40,7 @@ Enforced by `no-restricted-imports` in `.oxlintrc.json`. They are the security m
 - The dashboard is the management surface. Its data and controls are only for someone signed in with Google as a connected account; that same sign-in is how an account is connected. Keep every `/api/` route behind the session, keep rejecting requests whose Host is not one of this machine's own names, and require every write to come from its own page. Routes live under `src/dashboard/api/`, one module per resource; `server.ts` applies the session and these checks to all of them. A new write is a `Write` there: it says whose data it touches and validates its body field by field.
 - A signed-in person sees and changes only their own mailboxes. Each person's mail is in a database of their own, and a request, a pass or a test run holds only the one it is for. Only `src/cli/` and the daemon's loop (`src/daemon/run.ts`) hold the `Store` that opens them; everything else takes the `Sql` it is given, and the dashboard finds a person only by the address they signed in as and opens a database only through that person's `open(id)`, which refuses an id the session may not read (`People`, `src/store/people.ts`; `ctx.open` in a route). Every query under `src/dashboard/queries/` also takes a `Scope` (`src/dashboard/scope.ts`) and filters by it; every write declares `touches`, and is refused before it runs when that is someone else's. What applies to the whole install is the owner's alone. `tests/tenants.test.ts` runs every route as two people: add each new route to it.
 - `src/dashboard/` never imports Gmail, action or daemon code. Anything it needs from them is passed in as `Controls` (`src/dashboard/controls.ts`) by the process that starts it, so mailbox changes still go through the executor.
-- `src/store/` is the only module that opens a database. Everything else takes an `Sql` (`src/store/sql.ts`) and awaits it; a transaction awaits nothing but the database. Every person's table is held to row-level security, and every query runs as the person it is for.
+- `src/store/` is the only module that opens a database. Everything else takes an `Sql` (`src/store/sql.ts`) and builds its queries on it with `src/store/query.ts`; a transaction awaits nothing but the database. The handle holds every query to its person (`src/store/own.ts`), and row-level security holds them again underneath. Never name a table in SQL text.
 - `src/model/` is the only module that imports pi-ai. It turns evidence into a verdict and nothing else: it never imports Gmail, the store, actions or the daemon. The model gets no tools. Never give it one that sends, forwards, fetches a URL, runs a command or changes the mailbox; if a future agent needs tools, it gets its own sandbox (see TODO.md).
 
 ## Safety rules
@@ -77,7 +77,7 @@ The database is the full account of what sift saw and did. Every message synced 
 ## Definition of done
 
 1. `pnpm check` passes. Never skip, delete or weaken a test to get there.
-2. Behavior change: a test covers it. A test that needs the database takes it from `tests/fixtures.ts` (`openUserDb`, `freshStore`, and `onePerson` in `tests/helpers.ts`), and one that needs the server takes `startDashboard`; never open either of its own.
+2. Behavior change: a test covers it. A test that needs the database takes it from `tests/fixtures.ts` (`openUserDb`, `onePerson`, `freshStore`), and one that needs the server takes `startDashboard`; never open either of its own.
 3. Dashboard change: `pnpm build:web` passes and you looked at the page in a browser with the console open (a content security policy violation shows up there, not in the build).
 4. Schema change: change `src/store/schema.ts`, then `pnpm db:generate` writes the migration. Never write or edit schema SQL by hand; what Drizzle cannot express goes in a custom migration (`pnpm db:generate --custom --name …`). Never edit an applied migration. A new table of a person's data carries `user_id` (`userId()`) and the `own()` policy, and goes in the custom migration's `FORCE ROW LEVEL SECURITY` list; a test fails otherwise.
 
@@ -89,7 +89,8 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | --- | --- |
 | Module boundaries (`triage/` pure, Google only in `gmail/`, pi-ai only in `model/`, `dashboard/` never reaches Gmail or actions) | `no-restricted-imports`, `.oxlintrc.json` |
 | Only `web/src/system/` imports Base UI | `no-restricted-imports`, `.oxlintrc.json` |
-| Only `src/store/` imports a database driver (`pg`, PGlite, Drizzle) | `no-restricted-imports`, `.oxlintrc.json` |
+| Only `src/store/` imports a database driver (`pg`, PGlite, Drizzle), and inside it only the handle, its builder and the schema | `no-restricted-imports`, `.oxlintrc.json` |
+| Queries are built on the handle, never SQL text naming a table | `sql` refuses a person's table; `tests/own.test.ts` reads `src/` for one written |
 | Only `src/cli/` and `src/daemon/run.ts` open the store; the dashboard gets `People` | `no-restricted-imports`, `.oxlintrc.json` |
 | The CLI prints only through `src/cli/ui.ts` | `no-console`, `.oxlintrc.json` |
 | Screens write no fills, frames, corners, shadows, colours or inline styles; red is `Failure`, yellow a part's tone | `tests/design-system.test.ts` |

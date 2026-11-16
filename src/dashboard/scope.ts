@@ -1,3 +1,5 @@
+import { type eq, inArray } from '../store/query.ts';
+
 /**
  * What one request may see and change: the mailboxes of the person signed in, and whether that person
  * owns the install. Every query the dashboard runs takes one, so there is no way to ask for data without
@@ -19,12 +21,5 @@ export function narrow(scope: Scope, mailbox: string): Scope | null {
 
 export const sees = (scope: Scope, accountId: string) => scope.accounts.includes(accountId);
 
-/**
- * SQL that holds for rows of the scope's accounts: `d.account_id IN ('a@example.org', ...)`. Account ids
- * come from the database, never from the request, and are quoted here, so the fragment can be placed in
- * a query as it is. A scope with no accounts matches nothing.
- */
-export function within(scope: Scope, column: string): string {
-  if (scope.accounts.length === 0) return 'FALSE';
-  return `${column} IN (${scope.accounts.map((id) => `'${id.replaceAll("'", "''")}'`).join(', ')})`;
-}
+/** Holds for rows of the scope's accounts. A scope with no accounts matches nothing. */
+export const within = (scope: Scope, column: Parameters<typeof eq>[0]) => inArray(column, scope.accounts);

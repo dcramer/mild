@@ -1,4 +1,5 @@
 import { listAccounts } from '../../store/accounts.ts';
+import { count, eq, examples as exampleRows } from '../../store/query.ts';
 import { deleteExamples, listExamples } from '../../store/examples.ts';
 import { sees } from '../scope.ts';
 import type { Examples } from '../types.ts';
@@ -11,7 +12,7 @@ export const reads: Read[] = [
       const one = query.get('account');
       if (one && !sees(scope, one)) return missing('No such mailbox');
       const held = await Promise.all(
-        scope.accounts.map(async (id) => [id, (await db.get<{ n: number }>('SELECT count(*) AS n FROM examples WHERE account_id = ?', id))!.n] as const),
+        scope.accounts.map(async (id) => [id, (await db.select({ n: count() }).from(exampleRows).where(eq(exampleRows.accountId, id)))[0]!.n] as const),
       );
       const examples: Examples = {
         examples: (await Promise.all((one ? [one] : scope.accounts).map(async (id) => await listExamples(db, id)))).flat(),

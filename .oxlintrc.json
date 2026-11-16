@@ -117,11 +117,20 @@
           {
             "patterns": [
               { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." },
-              { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." }
+              { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
+              {
+                "group": ["node:sqlite", "pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"],
+                "message": "Write queries with ./query.ts on the Sql you are given: the handle holds its builder to one person, and its sql refuses a person's table. Only db.ts opens a database."
+              }
             ]
           }
         ]
       }
+    },
+    {
+      // The database, the handle and the builder's hold on each person (own.ts), and the schema.
+      "files": ["src/store/db.ts", "src/store/sql.ts", "src/store/own.ts", "src/store/query.ts", "src/store/schema.ts"],
+      "rules": { "no-restricted-imports": ["error", { "patterns": [{ "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." }, { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." }] }] }
     },
     {
       "files": ["src/actions/**/*.ts", "src/daemon/**/*.ts", "src/learn/**/*.ts"],

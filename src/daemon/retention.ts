@@ -1,5 +1,24 @@
 import type { Sql } from '../store/sql.ts';
 import { pendingSuggestions } from '../learn/feedback.ts';
+import {
+  actions,
+  and,
+  asc,
+  decisions,
+  eq,
+  examples,
+  exists,
+  feedback,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  messages,
+  not,
+  or,
+  sql,
+  suggestionBodies,
+} from '../store/query.ts';
 
 /** Deleting is synchronous and the dashboard is served from the same process, so a backlog goes in pieces. */
 export const PRUNE_PER_RUN = 5000;
@@ -18,31 +37,77 @@ export const PRUNE_PER_RUN = 5000;
  */
 export async function pruneOld(db: Sql, days: number, now: number = Date.now()): Promise<number> {
   const cutoff = now - days * 86_400_000;
-  const old = await db.all<{ account_id: string; id: string }>(
-    `SELECT m.account_id, m.id FROM messages m
-       WHERE m.received_at < :cutoff AND coalesce(m.synced_at, 0) < :cutoff
-         AND EXISTS (SELECT 1 FROM decisions d WHERE d.account_id = m.account_id AND d.message_id = m.id)
-         AND NOT EXISTS (SELECT 1 FROM decisions d WHERE d.account_id = m.account_id AND d.message_id = m.id AND (d.decided_at >= :cutoff OR d.outcome IS NULL))
-         AND NOT EXISTS (
-           SELECT 1 FROM actions a WHERE a.account_id = m.account_id AND a.message_id = m.id
-             AND (a.created_at >= :cutoff OR a.status IN ('pending', 'unknown') OR (a.type = 'unsubscribe' AND a.status = 'done')))
-         AND NOT EXISTS (SELECT 1 FROM examples e WHERE e.account_id = m.account_id AND e.message_id = m.id)
-         AND NOT EXISTS (SELECT 1 FROM feedback f WHERE f.account_id = m.account_id AND f.message_id = m.id)
-       ORDER BY m.received_at`,
-    { cutoff },
-  );
+  const decided = and(eq(decisions.accountId, messages.accountId), eq(decisions.messageId, messages.id));
+  const old = await db
+    .select({ accountId: messages.accountId, id: messages.id })
+    .from(messages)
+    .where(
+      and(
+        lt(messages.receivedAt, cutoff),
+        lt(sql`coalesce(${messages.syncedAt}, 0)`, cutoff),
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(decisions)
+            .where(decided),
+        ),
+        not(
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(decisions)
+              .where(and(decided, or(gte(decisions.decidedAt, cutoff), isNull(decisions.outcome)))),
+          ),
+        ),
+        not(
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(actions)
+              .where(
+                and(
+                  eq(actions.accountId, messages.accountId),
+                  eq(actions.messageId, messages.id),
+                  or(
+                    gte(actions.createdAt, cutoff),
+                    inArray(actions.status, ['pending', 'unknown']),
+                    and(eq(actions.type, 'unsubscribe'), eq(actions.status, 'done')),
+                  ),
+                ),
+              ),
+          ),
+        ),
+        not(
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(examples)
+              .where(and(eq(examples.accountId, messages.accountId), eq(examples.messageId, messages.id))),
+          ),
+        ),
+        not(
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(feedback)
+              .where(and(eq(feedback.accountId, messages.accountId), eq(feedback.messageId, messages.id))),
+          ),
+        ),
+      ),
+    )
+    .orderBy(asc(messages.receivedAt));
   if (old.length === 0) return 0;
 
   const key = (accountId: string, messageId: string) => `${accountId}\n${messageId}`;
   const waiting = new Set((await pendingSuggestions(db, { limit: Number.MAX_SAFE_INTEGER })).map((s) => key(s.accountId, s.messageId)));
-  const going = old.filter((m) => !waiting.has(key(m.account_id, m.id))).slice(0, PRUNE_PER_RUN);
+  const going = old.filter((m) => !waiting.has(key(m.accountId, m.id))).slice(0, PRUNE_PER_RUN);
 
-  const statements = [
-    ...['suggestion_bodies', 'actions', 'decisions'].map((table) => `DELETE FROM ${table} WHERE account_id = ? AND message_id = ?`),
-    'DELETE FROM messages WHERE account_id = ? AND id = ?',
-  ];
   await db.transaction(async (tx) => {
-    for (const m of going) for (const statement of statements) await tx.run(statement, m.account_id, m.id);
+    for (const m of going) {
+      for (const table of [suggestionBodies, actions, decisions])
+        await tx.delete(table).where(and(eq(table.accountId, m.accountId), eq(table.messageId, m.id)));
+      await tx.delete(messages).where(and(eq(messages.accountId, m.accountId), eq(messages.id, m.id)));
+    }
   });
   return going.length;
 }

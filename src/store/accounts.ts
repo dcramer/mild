@@ -1,3 +1,4 @@
+import { and, asc, eq, isNull, accounts, mailboxes, messages as messageRows, users } from './query.ts';
 import type { Sql } from './sql.ts';
 import type { Store } from './store.ts';
 import { deriveFacts } from '../triage/facts.ts';
@@ -25,14 +26,17 @@ export interface User {
  */
 export async function connectAccount(store: Store, email: string, historyId: string, now: number = Date.now(), userId?: number): Promise<number> {
   const user = await store.central.transaction(async (tx) => {
-    const known = await tx.get<{ user_id: number }>('SELECT user_id FROM accounts WHERE id = ?', email);
-    if (known) return known.user_id;
+    const [known] = await tx.select({ userId: accounts.userId }).from(accounts).where(eq(accounts.id, email));
+    if (known) return known.userId;
     let person = userId;
     if (person === undefined) {
-      const first = (await tx.get('SELECT 1 FROM users LIMIT 1')) === undefined;
-      person = (await tx.get<{ id: number }>('INSERT INTO users (owner, created_at) VALUES (?, ?) RETURNING id', first ? 1 : 0, now))!.id;
+      const first = (await tx.select({ id: users.id }).from(users).limit(1)).length === 0;
+      [{ id: person }] = (await tx
+        .insert(users)
+        .values({ owner: first ? 1 : 0, createdAt: now })
+        .returning({ id: users.id })) as [{ id: number }];
     }
-    await tx.run('INSERT INTO accounts (id, email, user_id, created_at) VALUES (?, ?, ?, ?)', email, email, person, now);
+    await tx.insert(accounts).values({ id: email, email, userId: person, createdAt: now });
     return person;
   });
   await addMailbox(await store.user(user), email, historyId, now);
@@ -41,88 +45,87 @@ export async function connectAccount(store: Store, email: string, historyId: str
 
 /** A mailbox in one person's own database, or its cursor reset if it is there already. */
 export async function addMailbox(db: Sql, id: string, historyId: string, now: number = Date.now()): Promise<void> {
-  await db.run(
-    'INSERT INTO mailboxes (id, history_id, created_at) VALUES (?, ?, ?) ON CONFLICT (user_id, id) DO UPDATE SET history_id = excluded.history_id',
-    id,
-    historyId,
-    now,
-  );
+  await db
+    .insert(mailboxes)
+    .values({ id, historyId, createdAt: now })
+    .onConflictDoUpdate({ target: [mailboxes.userId, mailboxes.id], set: { historyId } });
 }
 
 /** The person an account belongs to, or null if it is not connected. */
 export async function userOf(central: Sql, email: string): Promise<User | null> {
-  const row = await central.get<{ id: number; owner: number }>(
-    'SELECT u.id, u.owner FROM accounts a JOIN users u ON u.id = a.user_id WHERE a.email = ?',
-    email,
-  );
+  const [row] = await central
+    .select({ id: users.id, owner: users.owner })
+    .from(accounts)
+    .innerJoin(users, eq(users.id, accounts.userId))
+    .where(eq(accounts.email, email));
   return row ? { id: row.id, owner: row.owner === 1 } : null;
 }
 
 /** The person who owns the install, once someone has signed in. */
 export async function owner(central: Sql): Promise<User | null> {
-  const row = await central.get<{ id: number }>('SELECT id FROM users WHERE owner = 1 ORDER BY id LIMIT 1');
+  const [row] = await central.select({ id: users.id }).from(users).where(eq(users.owner, 1)).orderBy(asc(users.id)).limit(1);
   return row ? { id: row.id, owner: true } : null;
 }
 
 export async function listUsers(central: Sql): Promise<User[]> {
-  return (await central.all<{ id: number; owner: number }>('SELECT id, owner FROM users ORDER BY id')).map((r) => ({ id: r.id, owner: r.owner === 1 }));
+  return (await central.select({ id: users.id, owner: users.owner }).from(users).orderBy(asc(users.id))).map((r) => ({ id: r.id, owner: r.owner === 1 }));
 }
 
 /** Every connected address, everyone's; or one person's, given `userId`. */
 export async function connectedAddresses(central: Sql, userId?: number): Promise<string[]> {
-  const rows =
-    userId === undefined
-      ? await central.all<{ email: string }>('SELECT email FROM accounts ORDER BY email')
-      : await central.all<{ email: string }>('SELECT email FROM accounts WHERE user_id = ? ORDER BY email', userId);
+  const rows = await central
+    .select({ email: accounts.email })
+    .from(accounts)
+    .where(userId === undefined ? undefined : eq(accounts.userId, userId))
+    .orderBy(asc(accounts.email));
   return rows.map((r) => r.email);
 }
 
-/** Whose database `db` is. */
+/** Whose rows `db` reads and writes. */
 export async function personOf(db: Sql): Promise<number> {
-  return (await db.get<{ id: number }>(`SELECT current_setting('sift.user')::integer AS id`))!.id;
+  if (db.person === null) throw new Error('The central handle is no one’s.');
+  return db.person;
 }
 
 /** When the account's last sync began, or null before its first. */
 export async function lastSyncedAt(db: Sql, accountId: string): Promise<number | null> {
-  return (await db.get<{ at: number | null }>('SELECT last_synced_at AS at FROM mailboxes WHERE id = ?', accountId))?.at ?? null;
+  const [row] = await db.select({ at: mailboxes.lastSyncedAt }).from(mailboxes).where(eq(mailboxes.id, accountId));
+  return row?.at ?? null;
 }
 
 /** The mailboxes in one person's database. */
 export async function listAccounts(db: Sql): Promise<Account[]> {
-  const rows = await db.all<{ id: string; history_id: string | null }>('SELECT id, history_id FROM mailboxes ORDER BY id');
-  return rows.map((r) => ({ id: r.id, email: r.id, historyId: r.history_id }));
+  const rows = await db.select({ id: mailboxes.id, historyId: mailboxes.historyId }).from(mailboxes).orderBy(asc(mailboxes.id));
+  return rows.map((r) => ({ id: r.id, email: r.id, historyId: r.historyId }));
 }
 
-const INSERT_MESSAGE = `INSERT INTO messages
-       (account_id, id, thread_id, from_address, from_domain, from_name, list_id, received_at, subject, to_json, cc_json, headers_json, labels_json, synced_at, observe_only, facts_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT DO NOTHING`;
-
 async function insertMessages(db: Sql, accountId: string, messages: readonly MessageFacts[], now: number, observeOnly: boolean): Promise<number> {
-  let added = 0;
-  for (const m of messages) {
-    const result = await db.run(
-      INSERT_MESSAGE,
-      accountId,
-      m.messageId,
-      m.threadId,
-      m.from.address,
-      m.from.domain,
-      m.from.name ?? null,
-      parseListId(m.headers['list-id']),
-      m.receivedAt,
-      m.subject,
-      JSON.stringify(m.to),
-      JSON.stringify(m.cc),
-      JSON.stringify(m.headers),
-      JSON.stringify(m.labelIds),
-      now,
-      observeOnly ? 1 : 0,
-      JSON.stringify(deriveFacts(m)),
-    );
-    added += result.changes;
-  }
-  return added;
+  if (messages.length === 0) return 0;
+  const added = await db
+    .insert(messageRows)
+    .values(
+      messages.map((m) => ({
+        accountId,
+        id: m.messageId,
+        threadId: m.threadId,
+        fromAddress: m.from.address,
+        fromDomain: m.from.domain,
+        fromName: m.from.name ?? null,
+        listId: parseListId(m.headers['list-id']),
+        receivedAt: m.receivedAt,
+        subject: m.subject,
+        toJson: JSON.stringify(m.to),
+        ccJson: JSON.stringify(m.cc),
+        headersJson: JSON.stringify(m.headers),
+        labelsJson: JSON.stringify(m.labelIds),
+        syncedAt: now,
+        observeOnly: observeOnly ? 1 : 0,
+        factsJson: JSON.stringify(deriveFacts(m)),
+      })),
+    )
+    .onConflictDoNothing()
+    .returning({ id: messageRows.id });
+  return added.length;
 }
 
 /**
@@ -141,8 +144,12 @@ export async function recordSync(
 ): Promise<number> {
   return await db.transaction(async (tx) => {
     const added = await insertMessages(tx, accountId, messages, now, false);
-    for (const id of read) await tx.run('UPDATE messages SET read_at = ? WHERE account_id = ? AND id = ? AND read_at IS NULL', now, accountId, id);
-    await tx.run('UPDATE mailboxes SET history_id = ?, last_synced_at = ? WHERE id = ?', historyId, now, accountId);
+    for (const id of read)
+      await tx
+        .update(messageRows)
+        .set({ readAt: now })
+        .where(and(eq(messageRows.accountId, accountId), eq(messageRows.id, id), isNull(messageRows.readAt)));
+    await tx.update(mailboxes).set({ historyId, lastSyncedAt: now }).where(eq(mailboxes.id, accountId));
     return added;
   });
 }

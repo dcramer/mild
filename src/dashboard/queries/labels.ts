@@ -1,3 +1,4 @@
+import { alias, and, count, decisions, eq, feedback, inArray, isNotNull, max, rules as ruleRows, sql } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import { listLabels } from '../../store/labels.ts';
 import { type Scope, sees } from '../scope.ts';
@@ -9,19 +10,42 @@ export const outcomeOf = (label: { disposition: string; block?: boolean }) => (l
 /** An account's labels, each with how much depends on it and how often sift has had it right. */
 export async function listLabelSummaries(db: Sql, scope: Scope, accountId: string): Promise<LabelSummary[]> {
   if (!sees(scope, accountId)) return [];
-  const counts = async (sql: string) => new Map((await db.all<{ id: string; n: number; right?: number }>(sql, accountId)).map((r) => [r.id, r] as const));
-  const rules = await counts(
-    'SELECT coalesce(label_id, when_label) AS id, count(*) AS n FROM rules WHERE account_id = ? AND coalesce(label_id, when_label) IS NOT NULL GROUP BY 1',
+  const byLabel = <T extends { id: string | null }>(rows: T[]) => new Map(rows.map((r) => [r.id, r] as const));
+  const labelOfRule = sql<string | null>`coalesce(${ruleRows.labelId}, ${ruleRows.whenLabel})`;
+  const rules = byLabel(
+    await db
+      .select({ id: labelOfRule, n: count() })
+      .from(ruleRows)
+      .where(and(eq(ruleRows.accountId, accountId), isNotNull(labelOfRule)))
+      .groupBy(labelOfRule),
   );
-  const messages = await counts(
-    `SELECT d.label_id AS id, count(*) AS n FROM decisions d
-     WHERE d.account_id = ? AND d.label_id IS NOT NULL
-       AND d.id = (SELECT max(id) FROM decisions x WHERE x.account_id = d.account_id AND x.message_id = d.message_id)
-     GROUP BY d.label_id`,
+  const later = alias(decisions, 'later');
+  const messages = byLabel(
+    await db
+      .select({ id: decisions.labelId, n: count() })
+      .from(decisions)
+      .where(
+        and(
+          eq(decisions.accountId, accountId),
+          isNotNull(decisions.labelId),
+          eq(
+            decisions.id,
+            db
+              .select({ id: max(later.id) })
+              .from(later)
+              .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
+          ),
+        ),
+      )
+      .groupBy(decisions.labelId),
   );
-  const record = await counts(
-    `SELECT d.label_id AS id, count(*) AS n, count(*) FILTER (WHERE f.verdict = 'right') AS right FROM feedback f JOIN decisions d ON d.id = f.decision_id
-     WHERE f.account_id = ? AND f.verdict IN ('right', 'wrong') AND d.label_id IS NOT NULL GROUP BY d.label_id`,
+  const record = byLabel(
+    await db
+      .select({ id: decisions.labelId, n: count(), right: sql<number>`count(*) FILTER (WHERE ${feedback.verdict} = 'right')`.mapWith(Number) })
+      .from(feedback)
+      .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
+      .where(and(eq(feedback.accountId, accountId), inArray(feedback.verdict, ['right', 'wrong']), isNotNull(decisions.labelId)))
+      .groupBy(decisions.labelId),
   );
   return (await listLabels(db, accountId)).map((l) => ({
     id: l.id,

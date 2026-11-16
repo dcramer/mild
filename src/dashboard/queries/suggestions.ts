@@ -1,3 +1,16 @@
+import {
+  alias,
+  and,
+  count,
+  decisions,
+  eq,
+  examples as exampleRows,
+  isNotNull,
+  max,
+  messages as messageRows,
+  sql,
+  suggestionBodies,
+} from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import { accuracy, pendingSuggestions } from '../../learn/feedback.ts';
 import { listLabels } from '../../store/labels.ts';
@@ -14,12 +27,15 @@ export async function suggestionDetail(db: Sql, scope: Scope, accountId: string,
   const names = new Map((await listLabels(db, accountId)).map((l) => [l.id, l.name]));
   const messages = [];
   for (const s of await pendingSuggestions(db, { accountId, sender, limit: 200 })) {
-    const received = (await db.get<{ received_at: number }>('SELECT received_at FROM messages WHERE account_id = ? AND id = ?', accountId, s.messageId))!;
+    const [received] = (await db
+      .select({ receivedAt: messageRows.receivedAt })
+      .from(messageRows)
+      .where(and(eq(messageRows.accountId, accountId), eq(messageRows.id, s.messageId)))) as [{ receivedAt: number }];
     messages.push({
       decisionId: s.decisionId,
       messageId: s.messageId,
       subject: s.subject,
-      receivedAt: received.received_at,
+      receivedAt: received.receivedAt,
       disposition: s.block ? 'block' : s.disposition,
       labelId: s.labelId,
       labelName: (s.labelId && names.get(s.labelId)) ?? null,
@@ -46,17 +62,29 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
   // What each sender's mail has been labelled, by its current decision, to offer as other likely labels.
   const history = new Map<string, Map<string, number>>();
   const senders = [...new Set(shown.map((s) => `${s.accountId}\n${s.fromAddress}`))];
+  const later = alias(decisions, 'later');
   for (const key of senders) {
     const [accountId = '', address = ''] = key.split('\n');
-    const rows = await db.all<{ label_id: string; n: number }>(
-      `SELECT d.label_id, count(*) AS n FROM decisions d JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
-       WHERE d.account_id = ? AND m.from_address = ? AND d.label_id IS NOT NULL
-         AND d.id = (SELECT max(id) FROM decisions x WHERE x.account_id = d.account_id AND x.message_id = d.message_id)
-       GROUP BY d.label_id`,
-      accountId,
-      address,
-    );
-    history.set(key, new Map(rows.map((r) => [r.label_id, r.n])));
+    const rows = await db
+      .select({ labelId: decisions.labelId, n: count() })
+      .from(decisions)
+      .innerJoin(messageRows, and(eq(messageRows.accountId, decisions.accountId), eq(messageRows.id, decisions.messageId)))
+      .where(
+        and(
+          eq(decisions.accountId, accountId),
+          eq(messageRows.fromAddress, address),
+          isNotNull(decisions.labelId),
+          eq(
+            decisions.id,
+            db
+              .select({ id: max(later.id) })
+              .from(later)
+              .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
+          ),
+        ),
+      )
+      .groupBy(decisions.labelId);
+    history.set(key, new Map(rows.map((r) => [r.labelId!, r.n])));
   }
   const alternatives = (s: (typeof shown)[number]) => {
     const counts = history.get(`${s.accountId}\n${s.fromAddress}`) ?? new Map<string, number>();
@@ -73,10 +101,15 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
   // The text is held only while a message waits on the user, which every one shown here does.
   const previews = new Map(
     (
-      await db.all<{ account_id: string; message_id: string; text: string }>(
-        `SELECT account_id, message_id, substr(body_text, 1, 400) AS text FROM suggestion_bodies WHERE ${within(scope, 'account_id')}`,
-      )
-    ).map((r) => [`${r.account_id}\n${r.message_id}`, r.text.replace(/\s+/g, ' ').trim()] as const),
+      await db
+        .select({
+          accountId: suggestionBodies.accountId,
+          messageId: suggestionBodies.messageId,
+          text: sql<string>`substr(${suggestionBodies.bodyText}, 1, 400)`,
+        })
+        .from(suggestionBodies)
+        .where(within(scope, suggestionBodies.accountId))
+    ).map((r) => [`${r.accountId}\n${r.messageId}`, r.text.replace(/\s+/g, ' ').trim()] as const),
   );
   const items = shown.map((s): SuggestionItem => ({
     accountId: s.accountId,
@@ -96,12 +129,13 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
     preview: previews.get(`${s.accountId}\n${s.messageId}`) || null,
   }));
   const { reviewed, right } = await accuracy(db, 0, scope.accounts);
-  const examples = (await db.get<{
-    captured: number | null;
-    pending: number | null;
-  }>(
-    `SELECT count(*) FILTER (WHERE status = 'captured') AS captured, count(*) FILTER (WHERE status = 'pending') AS pending FROM examples WHERE ${within(scope, 'account_id')}`,
-  ))!;
+  const [examples] = (await db
+    .select({
+      captured: sql<number>`count(*) FILTER (WHERE ${exampleRows.status} = 'captured')`.mapWith(Number),
+      pending: sql<number>`count(*) FILTER (WHERE ${exampleRows.status} = 'pending')`.mapWith(Number),
+    })
+    .from(exampleRows)
+    .where(within(scope, exampleRows.accountId))) as [{ captured: number | null; pending: number | null }];
   return {
     labels: Object.fromEntries([...labels].map(([id, list]) => [id, list.map((l) => ({ id: l.id, name: l.name, disposition: outcomeOf(l) }))])),
     examples: { captured: examples.captured ?? 0, pending: examples.pending ?? 0 },

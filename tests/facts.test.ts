@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
-import { openUserDb } from './fixtures.ts';
+import { openUserDb, raw } from './fixtures.ts';
 import { storedFacts } from '../src/store/messages.ts';
 import { gatherEvidence } from '../src/daemon/evidence.ts';
 import { deriveFacts, describeFacts, matchesFacts, threadFacts } from '../src/triage/facts.ts';
@@ -89,7 +89,7 @@ describe('recorded facts', () => {
     const db = await openUserDb();
     await addMailbox(db, ACCOUNT, '1', 0);
     await recordSync(db, ACCOUNT, [campaign], '2');
-    expect(JSON.parse((await db.get<{ facts_json: string }>('SELECT facts_json FROM messages'))!.facts_json)).toEqual(deriveFacts(campaign));
+    expect(JSON.parse((await raw(db).get<{ facts_json: string }>('SELECT facts_json FROM messages'))!.facts_json)).toEqual(deriveFacts(campaign));
     expect((await messageDetail(db, await everything(db), ACCOUNT, campaign.messageId))?.facts).toMatchObject({
       bulkService: 'Mailchimp',
       category: 'promotions',
@@ -100,7 +100,7 @@ describe('recorded facts', () => {
     const db = await openUserDb();
     await addMailbox(db, ACCOUNT, '1', 0);
     await recordSync(db, ACCOUNT, [campaign], '2');
-    await db.exec('UPDATE messages SET facts_json = NULL');
+    await raw(db).run('UPDATE messages SET facts_json = NULL');
     expect(await storedFacts(db, ACCOUNT, campaign.messageId)).toEqual(deriveFacts(campaign));
     expect(await storedFacts(db, ACCOUNT, 'missing')).toBeNull();
   });
