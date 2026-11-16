@@ -45,6 +45,7 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Figures`, `Figure` | Headline numbers, straight on the page. `look` for the one to see first, `failure` for a count of things gone wrong; `href` links to the list it counts. |
 | `StackedBars` | Counts over time, stacked by series, on the left axis. `line` adds a second measure (model cost) on its own right axis; both start at zero and share their gridlines. No legend: pointing at or focusing a column opens a tooltip with that day's figures, the segment under the pointer in bold. `compact` beside figures. |
 | `Swatch` | A series' or a tier's colour, always beside its name. |
+| `Share` | How much of a whole one row is, as a thin bar along it (a label's share of the mail), with the figure beside it in words. For comparing rows at a glance, not for reading a value off. |
 | `Panel` | One item from a list, opened beside the list: it slides over from the right, up to three quarters of the screen, with previous and next in its footer to step through the list. Every list opens a message in the same panel (`views/message-panel.tsx`). |
 | `Dialog` | A form or a question: adding or changing a label or a rule. Centred. `footer` for the actions that finish it. |
 | `Toaster`, `useToast` | What a press did, said once in the corner after the list has moved on: what sift learned, what was undone. A failure stays until dismissed and is the only one in red. Never for something the page already shows. |

@@ -1,5 +1,5 @@
 import { ArrowRightIcon, PlusIcon, Trash2Icon } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { Fragment, type ReactNode, useState } from 'react';
 import { StatusWord, TierLabel, Verdict } from '@/components/bits.tsx';
 import { ACTIONS, STANDINGS, STATUS_NAMES, TIERS, money, moneyTick, outcomeName } from '@/lib/format.ts';
 import {
@@ -45,6 +45,7 @@ import {
   RowActions,
   Section,
   Select,
+  Share,
   SettingRow,
   Sheet,
   StackedBars,
@@ -505,7 +506,7 @@ export function SystemView() {
         </Section>
       </div>
 
-      <Section title="Figures and chart">
+      <Section title="Figures, chart and share">
         <div className="grid items-start gap-x-12 gap-y-8 lg:grid-cols-[auto_minmax(0,1fr)]">
           <Figures className="gap-x-8">
             <Figure label="No model needed" value="84%" note="1,079 of 1,284" />
@@ -519,6 +520,21 @@ export function SystemView() {
             line={{ name: 'Model cost', values: [0.04, 0.02, 0.06, 0, 0.03, 0.08, 0.05], format: money, tick: moneyTick }}
           />
         </div>
+        <dl className="grid max-w-xl grid-cols-[8rem_minmax(0,1fr)_3rem] items-center gap-x-4 gap-y-2 text-sm">
+          {[
+            ['Notifications', 1067],
+            ['Marketing', 593],
+            ['Phishing', 8],
+          ].map(([name, part]) => (
+            <Fragment key={name}>
+              <dt>{name}</dt>
+              <dd>
+                <Share part={Number(part)} whole={3255} />
+              </dd>
+              <dd className="text-right text-muted-foreground tabular-nums">{part}</dd>
+            </Fragment>
+          ))}
+        </dl>
       </Section>
 
       <div className="grid gap-14 lg:grid-cols-2">

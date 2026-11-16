@@ -22,6 +22,7 @@ export { PageHeader, Section } from './page.tsx';
 export { Panel } from './panel.tsx';
 export { Reserve } from './reserve.tsx';
 export { Select } from './select.tsx';
+export { Share } from './share.tsx';
 export { SettingRow, Sheet } from './sheet.tsx';
 export { Does } from './does.tsx';
 export { Empty, Loading } from './state.tsx';

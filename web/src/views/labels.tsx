@@ -2,10 +2,8 @@ import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type LabelSummary, api, useAction, useLoaded } from '@/lib/api.ts';
-import { useParam } from '@/lib/route.ts';
-import { ACTIONS, type ActionKey, EXPLAIN, count, outcomeName, percent } from '@/lib/format.ts';
+import { ACTIONS, type ActionKey, EXPLAIN, count, percent } from '@/lib/format.ts';
 import {
-  Does,
   Button,
   Check,
   Code,
@@ -13,19 +11,21 @@ import {
   Empty,
   Failure,
   Field,
-  FilterGroup,
   Form,
   Input,
   ListView,
+  Look,
   Loading,
   OnPhone,
   Select,
+  Share,
   Sub,
   Table,
   Td,
   TextArea,
   Th,
   Tr,
+  TrGroup,
 } from '@/system';
 
 const canMarkRead = (does: string) => does === 'keep' || does === 'archive';
@@ -139,21 +139,31 @@ function LabelDialog({ accountId, label, onClose, onSaved }: { accountId: string
   );
 }
 
-const DOES = [['', 'Anything'] as const, ...ACTIONS];
+/** What happens to the mail, as the groups the list is in. Blocking is spam that also turns the sender away. */
+const GROUPS = [
+  ['keep', 'Stay in the inbox'],
+  ['archive', 'Archived'],
+  ['spam', 'Spam'],
+] as const;
+const groupOf = (disposition: string) => (disposition === 'block' ? 'spam' : disposition);
 
-/** The labels: what mail can be, and what sift does with each. */
+/** Wrong often enough to look at: under 85% right, over at least ten answers. */
+const weak = (label: LabelSummary) => label.record.reviewed >= 10 && label.record.right / label.record.reviewed < 0.85;
+
+/** How often sift had the label right when the reader checked, in yellow when it is often wrong. */
+function Right({ label }: { label: LabelSummary }) {
+  if (label.record.reviewed === 0) return <span className="text-muted-foreground">Not checked</span>;
+  const text = `${percent(label.record.right, label.record.reviewed)} right`;
+  return weak(label) ? <Look>{text}</Look> : <span className="text-muted-foreground">{text}</span>;
+}
+
+/** The labels: what mail can be, grouped by what happens to it, with how much of the mail each is and how often sift has it right. */
 export function LabelsView() {
   const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
-  const [search, setSearch] = useParam('q');
-  const [does, setDoes] = useParam('does', DOES);
   const [editing, setEditing] = useState<{ accountId: string; label: LabelSummary | null } | null>(null);
   const accounts = data?.accounts ?? [];
-  const needle = search.trim().toLowerCase();
   const all = accounts.flatMap((account) => (data?.labels[account.id] ?? []).map((label) => ({ account, label })));
-  const shown = all.filter(
-    ({ label }) =>
-      (does === '' || label.disposition === does) && (needle === '' || `${label.name} ${label.description} ${label.gmailLabel}`.toLowerCase().includes(needle)),
-  );
+  const mail = all.reduce((sum, { label }) => sum + label.messages, 0);
   const first = accounts[0];
 
   return (
@@ -165,64 +175,56 @@ export function LabelsView() {
           Add a label
         </Button>
       }
-      search={{ value: search, onChange: setSearch, placeholder: 'Search labels' }}
-      filters={{
-        active: does === '' ? [] : [{ label: `Then: ${outcomeName(does)}`, clear: () => setDoes('') }],
-        panel: <FilterGroup label="Then" value={does} options={DOES} onChange={setDoes} />,
-      }}
     >
       {error ? <ErrorNote message={error} /> : null}
       {loading ? (
         <Loading rows={6} />
-      ) : shown.length === 0 ? (
-        <Empty>{all.length === 0 ? 'No labels yet.' : 'No label matches.'}</Empty>
+      ) : all.length === 0 ? (
+        <Empty>No labels yet.</Empty>
       ) : (
         <Table>
-          <thead>
+          <thead className="sr-only">
             <Tr>
               <Th>Label</Th>
-              <Th phone="hide">Then</Th>
-              <Th phone="hide" num>
-                Messages
-              </Th>
-              <Th phone="hide" num>
-                Rules
-              </Th>
-              <Th phone="hide" num>
-                Right
-              </Th>
+              <Th phone="hide">Share of mail</Th>
+              <Th phone="hide">Messages</Th>
+              <Th phone="hide">Right</Th>
             </Tr>
           </thead>
-          <tbody>
-            {shown.map(({ account, label }) => (
-              <Tr key={`${account.id}/${label.id}`} onOpen={() => setEditing({ accountId: account.id, label })}>
-                <Td className="max-w-0 md:w-[55%]">
-                  <span className="name">{label.name}</span>
-                  <Sub>{accounts.length > 1 ? `${account.email} · ${label.description}` : label.description}</Sub>
-                  <OnPhone>
-                    <Does action={label.disposition}>{outcomeName(label.disposition)}</Does>
-                  </OnPhone>
-                </Td>
-                <Td phone="hide" className="whitespace-nowrap">
-                  <Does action={label.disposition}>{outcomeName(label.disposition)}</Does>
-                </Td>
-                <Td phone="hide" num quiet={label.messages === 0}>
-                  {count(label.messages)}
-                </Td>
-                <Td phone="hide" num quiet={label.rules === 0}>
-                  {count(label.rules)}
-                </Td>
-                <Td
-                  phone="hide"
-                  num
-                  quiet
-                  title={label.record.reviewed > 0 ? `${count(label.record.right)} of ${count(label.record.reviewed)} you checked` : undefined}
-                >
-                  {label.record.reviewed > 0 ? percent(label.record.right, label.record.reviewed) : '–'}
-                </Td>
-              </Tr>
-            ))}
-          </tbody>
+          {GROUPS.map(([key, title]) => {
+            const group = all.filter(({ label }) => groupOf(label.disposition) === key);
+            return group.length === 0 ? null : (
+              <tbody key={key}>
+                <TrGroup title={title} span={4} />
+                {group.map(({ account, label }) => (
+                  <Tr key={`${account.id}/${label.id}`} onOpen={() => setEditing({ accountId: account.id, label })}>
+                    <Td className="max-w-0 md:w-[28%]">
+                      <span className="name">{label.name}</span>
+                      {label.disposition === 'block' ? <span className="text-muted-foreground"> · blocks the sender</span> : null}
+                      {accounts.length > 1 ? <Sub>{account.email}</Sub> : null}
+                      <OnPhone>
+                        <Right label={label} />
+                      </OnPhone>
+                    </Td>
+                    <Td phone="hide" className="align-middle md:w-full">
+                      <Share part={label.messages} whole={mail} />
+                    </Td>
+                    <Td phone="hide" num quiet className="md:w-36" title={`${percent(label.messages, mail)} of the mail`}>
+                      {count(label.messages)}
+                    </Td>
+                    <Td
+                      phone="hide"
+                      num
+                      className="md:w-32"
+                      title={label.record.reviewed > 0 ? `${count(label.record.right)} of ${count(label.record.reviewed)} you checked` : undefined}
+                    >
+                      <Right label={label} />
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            );
+          })}
         </Table>
       )}
       {editing ? <LabelDialog accountId={editing.accountId} label={editing.label} onClose={() => setEditing(null)} onSaved={reload} /> : null}
