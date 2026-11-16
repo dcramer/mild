@@ -10,8 +10,8 @@ export async function dashboard(args: string[]): Promise<void> {
   const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string' } } });
   const port = portOption(values.port);
   const config = loadConfig();
-  const secrets = checkSecrets(config, true);
   const store = await openStore(config);
+  const secrets = await checkSecrets(config, store, true);
   ui.heading('dashboard');
   secrets();
   const controls = await buildControls(config, store, { activity: { sorting: false, lastPassAt: null, problems: [], expired: [] } });

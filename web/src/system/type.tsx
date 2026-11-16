@@ -45,10 +45,17 @@ export function Stamp({ children }: { children: ReactNode }) {
   return <span className="stamp border border-foreground/30">{children}</span>;
 }
 
-/** A link inside text or a cell: underlined, so it reads as one without colour. */
-export function TextLink({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
+/**
+ * A link inside text or a cell: underlined, so it reads as one without colour. `away` opens another
+ * site in a new tab, so the reader comes back to where they were.
+ */
+export function TextLink({ href, away, children, className }: { href: string; away?: boolean; children: ReactNode; className?: string }) {
   return (
-    <a href={href} className={cn('underline decoration-foreground/35 underline-offset-[0.2em] hover:decoration-foreground', className)}>
+    <a
+      href={href}
+      {...(away ? { target: '_blank', rel: 'noreferrer' } : {})}
+      className={cn('underline decoration-foreground/35 underline-offset-[0.2em] hover:decoration-foreground', className)}
+    >
       {children}
     </a>
   );

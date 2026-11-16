@@ -77,6 +77,13 @@ export async function connectedAddresses(central: Sql, userId?: number): Promise
   return rows.map((r) => r.email);
 }
 
+/** Whose database `db` is. */
+export async function personOf(db: Sql): Promise<number> {
+  const person = await db.get<{ id: number }>('SELECT id FROM person');
+  if (!person) throw new Error('This database is not yet anyone’s; open it through the store.');
+  return person.id;
+}
+
 /** When the account's last sync began, or null before its first. */
 export async function lastSyncedAt(db: Sql, accountId: string): Promise<number | null> {
   return (await db.get<{ at: number | null }>('SELECT last_synced_at AS at FROM mailboxes WHERE id = ?', accountId))?.at ?? null;

@@ -3,12 +3,12 @@ import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from '
 import { basename } from 'node:path';
 
 /**
- * Credentials at rest. A file holding one is either plain text or one line:
+ * Credentials at rest, in a file or a database row. Each is either plain text or one line:
  *
  *   sift-secret:v1:<key id>:<nonce>:<ciphertext and tag>
  *
- * AES-256-GCM, with the file's name as associated data so one account's token cannot be put in
- * another's place. See docs/SECRETS.md.
+ * AES-256-GCM, with a name as associated data (a file's name, or the person and slot a row is for) so
+ * one credential cannot be put in another's place. See docs/SECRETS.md.
  */
 const PREFIX = 'sift-secret:v1:';
 
@@ -53,11 +53,11 @@ function keyIdOf(stored: string): string | null {
   return stored.startsWith(PREFIX) ? (stored.slice(PREFIX.length).split(':')[0] ?? '') : null;
 }
 
-const lost = (files: string[]) =>
+const lost = (names: string[]) =>
   new Error(
-    `${files.join(', ')} ${files.length === 1 ? 'was' : 'were'} encrypted with a key that is not in SIFT_KEY or SIFT_OLD_KEYS. ` +
-      `Set the key ${files.length === 1 ? 'it was' : 'they were'} written with. If that key is lost, delete ${files.length === 1 ? 'that file' : 'those files'} ` +
-      'and sign in to Google and the model provider again.',
+    `${names.join(', ')} ${names.length === 1 ? 'was' : 'were'} encrypted with a key that is not in SIFT_KEY or SIFT_OLD_KEYS. ` +
+      `Set the key ${names.length === 1 ? 'it was' : 'they were'} written with. If that key is lost, ` +
+      'sign in to Google and the model provider again to replace what it held.',
   );
 
 function encrypt(key: Key, name: string, text: string): string {
@@ -84,6 +84,22 @@ function decrypt(keys: Keyring, name: string, stored: string): string | null {
   }
 }
 
+/** A secret as stored: encrypted for `name` when there is a key, plain otherwise. */
+export function sealSecret(name: string, text: string, keys: Keyring): string {
+  return keys.current ? encrypt(keys.current, name, text) : text;
+}
+
+/** A stored secret, decrypted if it was encrypted. Throws, naming `name`, if its key is not on the ring or it was stored for another name. */
+export function openSecret(name: string, stored: string, keys: Keyring): string {
+  if (keyIdOf(stored) === null) return stored;
+  const text = decrypt(keys, name, stored);
+  if (text === null) throw lost([name]);
+  return text;
+}
+
+/** Whether a stored secret is not yet under the current key: plain, or encrypted with an old one. */
+export const staleSecret = (stored: string, keys: Keyring): boolean => keys.current !== null && keyIdOf(stored) !== keys.current.id;
+
 /** A stored secret, decrypted if it was encrypted. Null if there is no such file. Throws if its key is not on the ring. */
 export function readSecret(path: string, keys: Keyring): string | null {
   if (!existsSync(path)) return null;
@@ -97,7 +113,7 @@ export function readSecret(path: string, keys: Keyring): string | null {
 /** Store a secret owner-only, encrypted when there is a key. The file is replaced whole, never left half-written. */
 export function writeSecret(path: string, text: string, keys: Keyring): void {
   const tmp = `${path}.tmp`;
-  writeFileSync(tmp, keys.current ? encrypt(keys.current, basename(path), text) : text, { mode: 0o600 });
+  writeFileSync(tmp, sealSecret(basename(path), text, keys), { mode: 0o600 });
   chmodSync(tmp, 0o600);
   renameSync(tmp, path);
 }

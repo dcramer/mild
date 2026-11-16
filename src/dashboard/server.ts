@@ -172,8 +172,15 @@ export function createDashboardServer(people: People, options: DashboardOptions 
   const reads = new Map(READS.map((route) => [route.path, route]));
   const writes = new Map(WRITES.map((route) => [route.path, route]));
   /** Why this person may not make this write, or null if they may. Someone else's data is reported as not there. */
-  const refusal = async (route: Write, ctx: Context, body: Record<string, unknown>, scope: Scope): Promise<{ status: number; error: string } | null> => {
+  const refusal = async (
+    route: Write,
+    ctx: Context,
+    body: Record<string, unknown>,
+    scope: Scope,
+    someone: boolean,
+  ): Promise<{ status: number; error: string } | null> => {
     const whose = await route.touches(ctx, body);
+    if (whose === 'self') return someone ? null : { status: 401, error: 'Sign in to use the dashboard.' };
     if (whose === 'install') return scope.owner ? null : { status: 403, error: 'Only the person who set sift up can change this.' };
     if (whose === null || whose === 'anyone' || sees(scope, whose.account)) return null;
     return { status: 404, error: 'There is no such thing here.' };
@@ -284,7 +291,7 @@ export function createDashboardServer(people: People, options: DashboardOptions 
       }
       void readJson(req)
         .then(async (body) => {
-          const refused = body && (await refusal(handler, ctx, body, whole));
+          const refused = body && (await refusal(handler, ctx, body, whole, person !== null));
           if (refused) return void json(res, refused.status, { error: refused.error });
           const result = body && (await handler.run(ctx, body, whole));
           if (result === null) json(res, 400, { error: 'That request is not well formed.' });

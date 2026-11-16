@@ -4,9 +4,12 @@ import { join } from 'node:path';
 import { parseEnv } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { loadConfig, loadEnvFiles, saveKeyFile, secretPaths } from '../src/config.ts';
-import { clientFor, installClient, loadClientSecrets, saveRefreshToken } from '../src/gmail/auth.ts';
-import { fileCredentialStore } from '../src/model/credentials.ts';
+import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
+import { credentialStore } from '../src/model/credentials.ts';
 import { loadKeyring, readSecret, rekeySecrets, writeSecret } from '../src/secrets.ts';
+import { connectAccount } from '../src/store/accounts.ts';
+import { credentials, rekeyCredentials } from '../src/store/credentials.ts';
+import { openStore } from '../src/store/store.ts';
 
 const dir = () => mkdtempSync(join(tmpdir(), 'sift-secrets-'));
 const NONE = loadKeyring({});
@@ -58,13 +61,6 @@ describe('secrets', () => {
     expect(rekeySecrets([token, key], B)).toEqual({ encrypted: [], rotated: [] });
   });
 
-  it('re-encrypts a value under an old key when it is next written', async () => {
-    const path = join(dir(), 'model-auth.json');
-    await fileCredentialStore(path, A).modify('openai', async () => ({ type: 'api_key', key: 'k1' }));
-    await fileCredentialStore(path, B_AFTER_A).modify('other', async () => ({ type: 'api_key', key: 'k2' }));
-    expect(await fileCredentialStore(path, B).read('openai')).toEqual({ type: 'api_key', key: 'k1' });
-  });
-
   it('encrypts plain values once a key is set', () => {
     const path = join(dir(), 'model-auth.json');
     writeFileSync(path, '{"openai":{}}');
@@ -83,7 +79,7 @@ describe('secrets', () => {
     for (const keys of [B, NONE]) {
       expect(() => readSecret(locked, keys)).toThrow(locked);
       expect(() => rekeySecrets([plain, locked], keys)).toThrow(
-        /token\.json was encrypted with a key that is not in SIFT_KEY.*delete that file and sign in to Google and the model provider again/,
+        /token\.json was encrypted with a key that is not in SIFT_KEY.*sign in to Google and the model provider again/,
       );
     }
     expect(readFileSync(plain, 'utf8')).toBe('two');
@@ -102,25 +98,55 @@ describe('secrets', () => {
   });
 });
 
-describe('credentials on disk', () => {
-  it('encrypts the Google client, refresh tokens and model credentials, and reads them back', async () => {
+describe('credentials', () => {
+  /** A store with two people, Alpha (1) and Beta (2), and the raw value of each stored credential. */
+  async function people() {
+    const store = await openStore(':memory:');
+    await connectAccount(store, 'alpha@example.org', '1', 0);
+    await connectAccount(store, 'beta@example.net', '1', 0);
+    const raw = async (id: number) =>
+      await (await store.user(id)).all<{ kind: string; key: string; value: string }>('SELECT kind, key, value FROM credentials');
+    return { store, raw };
+  }
+
+  it("keeps the Google client in a file, and sign-ins in their person's database, encrypted", async () => {
     const config = loadConfig({ SIFT_HOME: dir(), SIFT_KEY: 'key-a' });
     installClient(config, JSON.stringify({ web: { client_id: 'id', client_secret: 'client-secret-value' } }));
-    saveRefreshToken(config, 'me@example.com', 'refresh-token-value');
-    await fileCredentialStore(config.modelAuthPath, config.keys).modify('openai', async () => ({ type: 'api_key', key: 'api-key-value' }));
+    expect(secretPaths(config).filter((p) => p !== config.dashboardKeyPath)).toEqual([config.googleClientPath]);
+    expect(readFileSync(config.googleClientPath, 'utf8')).toMatch(/^sift-secret:v1:[0-9a-f]{8}:[\w-]+:[\w-]+\n$/);
+    expect(loadClientSecrets(config, {}).clientSecret).toBe('client-secret-value');
 
-    const paths = secretPaths(config).filter((p) => p !== config.dashboardKeyPath);
-    expect(paths).toHaveLength(3);
-    for (const path of paths) expect(readFileSync(path, 'utf8')).toMatch(/^sift-secret:v1:[0-9a-f]{8}:[\w-]+:[\w-]+\n$/);
+    const { store, raw } = await people();
+    const alpha = await store.user(1);
+    await (await credentials(alpha, 'gmail', A)).write('alpha@example.org', 'refresh-token-value');
+    await credentialStore(await credentials(alpha, 'model', A)).modify('openai', async () => ({ type: 'api_key', key: 'api-key-value' }));
+    for (const row of await raw(1)) expect(row.value).toMatch(/^sift-secret:v1:/);
+    expect(await (await credentials(alpha, 'gmail', A)).read('alpha@example.org')).toBe('refresh-token-value');
+    expect(await credentialStore(await credentials(alpha, 'model', A)).read('openai')).toEqual({ type: 'api_key', key: 'api-key-value' });
+    await expect((await credentials(alpha, 'gmail', B)).read('alpha@example.org')).rejects.toThrow('SIFT_KEY');
+  });
 
-    const secrets = loadClientSecrets(config, {});
-    expect(secrets.clientSecret).toBe('client-secret-value');
-    expect(clientFor(config, secrets, 'me@example.com').credentials.refresh_token).toBe('refresh-token-value');
-    expect(await fileCredentialStore(config.modelAuthPath, config.keys).read('openai')).toEqual({ type: 'api_key', key: 'api-key-value' });
+  it("does not open one copied into another row or another person's database", async () => {
+    const { store, raw } = await people();
+    const [alpha, beta] = [await store.user(1), await store.user(2)];
+    await (await credentials(alpha, 'gmail', A)).write('alpha@example.org', 'alpha-token');
+    const [stolen] = await raw(1);
+    await beta.run('INSERT INTO credentials (kind, key, value, updated_at) VALUES (?, ?, ?, 0)', 'gmail', 'alpha@example.org', stolen!.value);
+    await expect((await credentials(beta, 'gmail', A)).read('alpha@example.org')).rejects.toThrow('person 2 gmail alpha@example.org');
+    await alpha.run(`INSERT INTO credentials (kind, key, value, updated_at) VALUES ('model', 'openai', ?, 0)`, stolen!.value);
+    await expect((await credentials(alpha, 'model', A)).read('openai')).rejects.toThrow('person 1 model openai');
+  });
 
-    const wrong = loadConfig({ SIFT_HOME: config.home, SIFT_KEY: 'key-b' });
-    expect(() => clientFor(wrong, secrets, 'me@example.com')).toThrow('SIFT_KEY');
-    await expect(fileCredentialStore(wrong.modelAuthPath, wrong.keys).read('openai')).rejects.toThrow('SIFT_KEY');
+  it('brings plain and old-key values under the current key, and refuses ones no key opens', async () => {
+    const { store } = await people();
+    const alpha = await store.user(1);
+    await (await credentials(alpha, 'gmail', NONE)).write('alpha@example.org', 'plain-token');
+    await (await credentials(alpha, 'model', A)).write('openai', '{"type":"api_key","key":"k"}');
+    expect(await rekeyCredentials(alpha, B_AFTER_A, false)).toHaveLength(2);
+    expect(await rekeyCredentials(alpha, B_AFTER_A)).toEqual(['Gmail access for alpha@example.org', 'Model sign-in for openai']);
+    expect(await (await credentials(alpha, 'gmail', B)).read('alpha@example.org')).toBe('plain-token');
+    expect(await rekeyCredentials(alpha, B)).toEqual([]);
+    await expect(rekeyCredentials(alpha, A)).rejects.toThrow('SIFT_KEY');
   });
 });
 

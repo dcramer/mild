@@ -1,19 +1,59 @@
-import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { type Api, type AuthEvent, type AuthPrompt, type Model, type Models, createModels } from '@earendil-works/pi-ai';
+import { type Api, type AuthContext, type Model, type Models, createModels } from '@earendil-works/pi-ai';
 import { anthropicProvider } from '@earendil-works/pi-ai/providers/anthropic';
 import { openaiProvider } from '@earendil-works/pi-ai/providers/openai';
 import { openaiCodexProvider } from '@earendil-works/pi-ai/providers/openai-codex';
-import type { Config } from '../config.ts';
-import { fileCredentialStore } from './credentials.ts';
+import { type SignIns, credentialStore } from './credentials.ts';
+
+/** A way to reach a model. `provider` is a pi-ai provider id; `chatgpt` signs in by device code, `key` takes an API key. */
+export interface ModelChoice {
+  provider: string;
+  label: string;
+  how: 'chatgpt' | 'key';
+}
+
+export const MODEL_CHOICES: readonly ModelChoice[] = [
+  { provider: 'openai-codex', label: 'ChatGPT', how: 'chatgpt' },
+  { provider: 'openai', label: 'OpenAI API key', how: 'key' },
+  { provider: 'anthropic', label: 'Anthropic API key', how: 'key' },
+];
+
+/** Each provider's small, cheap family, by the word its model ids carry. */
+const SMALL_FAMILY: Record<string, string> = { openai: 'luna', 'openai-codex': 'luna', anthropic: 'haiku', google: 'flash' };
+
+/** The numbers in a model id up to the first that is a date (`3-5` in `claude-3-5-haiku-20241022`). */
+const version = (id: string) => {
+  const numbers = (id.match(/\d+/g) ?? []).map(Number);
+  const date = numbers.findIndex((n) => n >= 1000);
+  return date === -1 ? numbers : numbers.slice(0, date);
+};
 
 /**
- * The providers `sift init` offers, with credentials kept in the data directory. Environment API keys
- * still work when nothing is stored. Each is registered by name: pi-ai's `providers/all` loads every
- * provider's catalog, and a provider nobody can sign in to from sift is only more to load and to trust.
+ * The model to offer first: the newest of the provider's small family among the ids it returned, or
+ * null when it has none. Between ids of the same version the shortest wins, which is the plain name
+ * over a dated or variant one.
  */
-export function openModels(config: Config): Models {
-  const models = createModels({ credentials: fileCredentialStore(config.modelAuthPath, config.keys) });
+export function recommendModel(provider: string, ids: readonly string[]): string | null {
+  const family = SMALL_FAMILY[provider];
+  if (!family) return null;
+  const word = new RegExp(`(^|[^a-z])${family}([^a-z]|$)`, 'i');
+  const newer = (a: string, b: string) => {
+    const [va, vb] = [version(a), version(b)];
+    for (let i = 0; i < Math.max(va.length, vb.length); i++) if ((va[i] ?? -1) !== (vb[i] ?? -1)) return (vb[i] ?? -1) - (va[i] ?? -1);
+    return a.length - b.length;
+  };
+  return ids.filter((id) => word.test(id)).toSorted(newer)[0] ?? null;
+}
+
+/** Keys in the environment and files on disk would speak for everyone; each person's sign-in is their own. */
+const NOTHING_AMBIENT: AuthContext = { env: async () => undefined, fileExists: async () => false };
+
+/**
+ * One person's providers, signed in with what they stored. Each is registered by name: pi-ai's
+ * `providers/all` loads every provider's catalog, and a provider nobody can sign in to from sift is only
+ * more to load and to trust.
+ */
+export function openModels(signIns: SignIns): Models {
+  const models = createModels({ credentials: credentialStore(signIns), authContext: NOTHING_AMBIENT });
   for (const provider of [openaiCodexProvider(), openaiProvider(), anthropicProvider()]) models.setProvider(provider);
   return models;
 }
@@ -27,47 +67,44 @@ export function resolveModel(models: Models, spec: string): Model<Api> {
   return model;
 }
 
-/** A stable id for this installation, created on first use. Subscription sign-in flows register the device under it. */
-function deviceId(config: Config): string {
-  const path = config.deviceIdPath;
-  if (existsSync(path)) return readFileSync(path, 'utf8').trim();
-  const id = randomUUID();
-  writeFileSync(path, id, { mode: 0o600 });
-  return id;
-}
-
-export interface LoginTerminal {
-  /** Ask for one line. Resolves with an empty string if `signal` aborts first (the browser callback won the race). */
-  text: (question: string, signal?: AbortSignal) => Promise<string>;
-  select: (question: string, options: readonly { label: string; hint?: string; value: string }[]) => Promise<string>;
-  /** A URL the user must open. */
-  link: (url: string) => void;
-  info: (line: string) => void;
+/** A ChatGPT sign-in waiting on the person: the code to enter, and where. */
+export interface PendingSignIn {
+  code: string;
+  url: string;
+  expiresAt: number;
+  /** Settles when they have entered it and the credential is stored, or rejects when it expired or was refused. */
+  done: Promise<void>;
 }
 
 /**
- * Sign in to a provider and store the credential. `oauth` covers subscription sign-in (for example
- * ChatGPT through `openai-codex`); `api_key` stores a key.
+ * Start signing in to ChatGPT by device code. Nothing has to come back to this server, so it works
+ * wherever the dashboard is opened. Resolves once OpenAI has issued the code.
  */
-export async function login(models: Models, config: Config, provider: string, type: 'oauth' | 'api_key', terminal: LoginTerminal): Promise<void> {
-  const prompt = async (p: AuthPrompt): Promise<string> => {
-    if (p.type !== 'select') return terminal.text(p.message, p.signal);
-    return terminal.select(
-      p.message,
-      p.options.map((option) => ({ label: option.label, ...(option.description ? { hint: option.description } : {}), value: option.id })),
-    );
-  };
-  const notify = (event: AuthEvent) => {
-    if (event.type === 'auth_url') {
-      terminal.info('Open this in a browser to sign in:');
-      terminal.link(event.url);
-    } else if (event.type === 'device_code') {
-      terminal.info(`Enter the code ${event.userCode} at:`);
-      terminal.link(event.verificationUri);
-    } else {
-      terminal.info(event.message);
-      if (event.type === 'info') for (const link of event.links ?? []) terminal.link(link.url);
-    }
-  };
-  await models.login(provider, type, { prompt, notify }, { getDeviceId: () => deviceId(config) });
+export async function startChatGPTSignIn(models: Models, deviceId: string, now: () => number = Date.now): Promise<PendingSignIn> {
+  let issued = (_: { code: string; url: string; expiresAt: number }) => {};
+  const code = new Promise<{ code: string; url: string; expiresAt: number }>((resolve) => (issued = resolve));
+  const done = models
+    .login(
+      'openai-codex',
+      'oauth',
+      {
+        // The browser login needs a callback on this machine; the device code does not.
+        prompt: async (prompt) => {
+          if (prompt.type === 'select') return 'device_code';
+          throw new Error('ChatGPT asked for something sift cannot answer from the dashboard.');
+        },
+        notify: (event) => {
+          if (event.type === 'device_code')
+            issued({ code: event.userCode, url: event.verificationUri, expiresAt: now() + (event.expiresInSeconds ?? 900) * 1000 });
+        },
+      },
+      { getDeviceId: () => deviceId },
+    )
+    .then(() => undefined);
+  return { ...(await Promise.race([code, done.then(() => Promise.reject(new Error('ChatGPT finished signing in before giving a code.')))])), done };
+}
+
+/** Store an API key for `provider`. */
+export async function saveApiKey(signIns: SignIns, provider: string, key: string): Promise<void> {
+  await credentialStore(signIns).modify(provider, async () => ({ type: 'api_key', key }));
 }

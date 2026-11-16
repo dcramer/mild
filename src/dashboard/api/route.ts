@@ -30,11 +30,12 @@ export interface Read {
 }
 
 /**
- * Whose data a write touches. An account: only someone who has that mailbox may make it. `install`: it
- * applies to everyone, so only the install's owner may. `anyone`: nothing of anybody's. Null: the body
- * names nothing that exists, which the route itself reports.
+ * Whose data a write touches. An account: only someone who has that mailbox may make it. `self`: the
+ * signed-in person's own (their model, their guidelines), so anyone signed in may. `install`: it applies
+ * to everyone, so only the install's owner may. `anyone`: nothing of anybody's. Null: the body names
+ * nothing that exists, which the route itself reports.
  */
-export type Touches = { account: string } | 'install' | 'anyone' | null;
+export type Touches = { account: string } | 'self' | 'install' | 'anyone' | null;
 
 /**
  * A POST. `touches` is asked first, and the write is refused before `run` when the data is someone

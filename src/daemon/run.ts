@@ -18,10 +18,10 @@ import { type TriageReport, triageAccount } from './triage.ts';
 export interface RunOptions {
   /** False observes: mail is synced and decisions recorded, but the mailbox is never changed. */
   act: boolean;
-  /** Opens a provider connection for an account. */
-  connect: (account: Account) => { api: GmailApi; mailbox: Mailbox };
-  /** The inference tier, if a model is configured. */
-  model?: { judge: Judge; guidelines: () => string; fewShot?: boolean };
+  /** Opens a provider connection for an account, with the sign-in kept in `db`, its person's database. */
+  connect: (db: Sql, account: Account) => { api: GmailApi; mailbox: Mailbox } | Promise<{ api: GmailApi; mailbox: Mailbox }>;
+  /** The inference tier of the person whose database `db` is: null when they have no model, or it cannot be reached. */
+  model?: (db: Sql) => Promise<{ judge: Judge; guidelines: string; fewShot?: boolean } | null>;
   /** Label plainly bulk mail by its headers before the model. Off unless set. */
   heuristics?: boolean;
   /** Leaves a mailing list, for decisions that say to. Without it sift never unsubscribes. */
@@ -61,10 +61,11 @@ export async function runEveryone(store: Store, options: RunOptions): Promise<Pa
 export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[]> {
   const results: PassResult[] = [];
   const leave = options.unsubscribe;
+  const tier = options.model ? await options.model(db) : null;
   for (const account of await listAccounts(db)) {
     const result: PassResult = { email: account.email };
     try {
-      const { api, mailbox } = options.connect(account);
+      const { api, mailbox } = await options.connect(db, account);
       const deps = { db, mailbox, ...(options.now ? { now: options.now } : {}) };
       if (options.act) await reconcile(deps);
       result.sync = await syncAccount(db, api, account, options.now);
@@ -75,13 +76,13 @@ export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[
           answers: mailbox,
           ...(leave ? { unsubscribe: (accountId: string, messageId: string) => leave(db, accountId, messageId) } : {}),
           ...(options.heuristics ? { heuristics: { mailbox } } : {}),
-          ...(options.model
+          ...(tier
             ? {
                 model: {
-                  judge: options.model.judge,
-                  guidelines: options.model.guidelines(),
+                  judge: tier.judge,
+                  guidelines: tier.guidelines,
                   sources: { api, mailbox },
-                  ...(options.model.fewShot === undefined ? {} : { fewShot: options.model.fewShot }),
+                  ...(tier.fewShot === undefined ? {} : { fewShot: tier.fewShot }),
                 },
               }
             : {}),

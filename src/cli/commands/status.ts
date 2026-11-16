@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import { loadConfig } from '../../config.ts';
 import { hasClientSecrets } from '../../gmail/auth.ts';
 import { connectedAddresses, listUsers } from '../../store/accounts.ts';
@@ -11,8 +10,8 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
 
 export async function status(): Promise<void> {
   const config = loadConfig();
-  const secrets = checkSecrets(config, false);
   const store = await openStore(config);
+  const secrets = await checkSecrets(config, store, false);
   const accounts = await connectedAddresses(store.central);
   const people = await Promise.all((await listUsers(store.central)).map((u) => store.user(u.id)));
   const count = async (table: string, where = '') => {
@@ -26,9 +25,7 @@ export async function status(): Promise<void> {
   ui.heading('status', paint.path(config.home));
   ui.fields([
     ['Gmail', accounts.length > 0 ? accounts.join(', ') : paint.dim(hasClientSecrets(config) ? 'not connected' : 'not set up')],
-    ['Model', settings.model ?? paint.dim('none')],
     ['Mode', `${settings.act ? 'acting on decisions' : 'observing only'}${paint.dim(` · every ${settings.interval}s`)}`],
-    ['Guidance', existsSync(config.guidelinesPath) ? paint.path(config.guidelinesPath) : paint.dim('none written')],
     ['Dashboard', signInAddresses(settings.dashboardPort).join(paint.dim('  or  '))],
   ]);
   ui.blank();

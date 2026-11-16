@@ -1,48 +1,7 @@
 import { randomBytes } from 'node:crypto';
-import { existsSync, writeFileSync } from 'node:fs';
-import { type Config, GUIDELINES_TEMPLATE, type Settings, isAddress } from '../config.ts';
+import { existsSync } from 'node:fs';
+import { type Config, type Settings, isAddress } from '../config.ts';
 import { type Ui, paint } from './ui.ts';
-
-/** A way to reach a model. `provider` is a pi-ai provider id. */
-export interface ModelChoice {
-  label: string;
-  hint?: string;
-  provider: string;
-  type: 'oauth' | 'api_key';
-}
-
-export const MODEL_CHOICES: readonly ModelChoice[] = [
-  { label: 'ChatGPT subscription', hint: 'Plus or Pro, signs in like Codex', provider: 'openai-codex', type: 'oauth' },
-  { label: 'OpenAI API key', provider: 'openai', type: 'api_key' },
-  { label: 'Anthropic API key', provider: 'anthropic', type: 'api_key' },
-];
-
-/** Each provider's small, cheap family, by the word its model ids carry. */
-const SMALL_FAMILY: Record<string, string> = { openai: 'luna', 'openai-codex': 'luna', anthropic: 'haiku', google: 'flash' };
-
-/** The numbers in a model id up to the first that is a date (`3-5` in `claude-3-5-haiku-20241022`). */
-const version = (id: string) => {
-  const numbers = (id.match(/\d+/g) ?? []).map(Number);
-  const date = numbers.findIndex((n) => n >= 1000);
-  return date === -1 ? numbers : numbers.slice(0, date);
-};
-
-/**
- * The model to offer first: the newest of the provider's small family among the ids it returned, or
- * null when it has none. Between ids of the same version the shortest wins, which is the plain name
- * over a dated or variant one.
- */
-export function recommendModel(provider: string, ids: readonly string[]): string | null {
-  const family = SMALL_FAMILY[provider];
-  if (!family) return null;
-  const word = new RegExp(`(^|[^a-z])${family}([^a-z]|$)`, 'i');
-  const newer = (a: string, b: string) => {
-    const [va, vb] = [version(a), version(b)];
-    for (let i = 0; i < Math.max(va.length, vb.length); i++) if ((va[i] ?? -1) !== (vb[i] ?? -1)) return (vb[i] ?? -1) - (va[i] ?? -1);
-    return a.length - b.length;
-  };
-  return ids.filter((id) => word.test(id)).toSorted(newer)[0] ?? null;
-}
 
 /** Who may sign in to the user's Google app. Decides the last tasks of the Google setup. */
 export type Access = 'test' | 'publish';
@@ -71,9 +30,6 @@ export interface InitDeps {
   /** Save the pasted client JSON into the home directory. Throws a readable message if it is the wrong kind. */
   installGoogleClient(json: string): void;
   connectedAccounts(): Promise<string[]>;
-  loginModel(choice: ModelChoice): Promise<void>;
-  /** Model ids the signed-in provider offers. */
-  availableModels(provider: string): Promise<string[]>;
   /** This machine's Tailscale name, or null without Tailscale. */
   tailscaleName(): string | null;
   /** Serve the dashboard over HTTPS on the tailnet (`tailscale serve`). Rejects with what went wrong. */
@@ -128,12 +84,6 @@ const steps = (deps: InitDeps): Step[] => [
     },
   },
   {
-    title: 'Model',
-    missing: () => !deps.config.settings.model,
-    value: () => deps.config.settings.model ?? paint.dim('none'),
-    run: () => chooseModel(deps),
-  },
-  {
     title: 'Who can sign in',
     missing: () => !deps.config.settings.dashboardAllow,
     value: () => deps.config.settings.dashboardAllow?.join(', ') ?? paint.dim('no limit'),
@@ -141,7 +91,7 @@ const steps = (deps: InitDeps): Step[] => [
   },
 ];
 /** The steps above, then the Gmail account, which is connected in the browser. */
-const STEPS = 6;
+const STEPS = 5;
 
 /**
  * Set sift up. A first run walks through every step, and one that was stopped part-way carries on with
@@ -154,11 +104,10 @@ export async function runInit(deps: InitDeps): Promise<void> {
 
   ui.heading('setup', paint.path(config.home));
   if (!existsSync(config.settingsPath)) deps.saveSettings(config.settings);
-  if (!existsSync(config.guidelinesPath)) writeFileSync(config.guidelinesPath, GUIDELINES_TEMPLATE, { mode: 0o600 });
 
   const all = steps(deps);
   const accounts = await deps.connectedAccounts();
-  // The key, the model and the sign-in list are optional, so they do not keep a finished setup in the walk-through.
+  // The key and the sign-in list are optional, so they do not keep a finished setup in the walk-through.
   if (all.slice(1, 3).some((step) => step.missing())) {
     for (const [index, step] of all.entries()) {
       ui.step(index + 1, STEPS, step.title);
@@ -218,20 +167,6 @@ async function createKey(deps: InitDeps): Promise<void> {
   }
   ui.ok(`Saved as ${paint.cmd('SIFT_KEY')} in ${paint.path(path)}`);
   ui.info('sift reads it only when started from this directory, and cannot open your credentials without it. Keep a copy somewhere else.');
-}
-
-async function chooseModel(deps: InitDeps): Promise<void> {
-  const { ui } = deps;
-  ui.info('Sorts mail that no rule or learned sender covers. Without one, that mail stays in your inbox.');
-  ui.blank();
-  const choice = await ui.select<ModelChoice | null>('How should sift reach a model?', [
-    ...MODEL_CHOICES.map((c) => ({ label: c.label, ...(c.hint ? { hint: c.hint } : {}), value: c })),
-    { label: 'No model for now', value: null },
-  ]);
-  if (choice) return pickModel(deps, choice);
-  const { model: _old, ...settings } = deps.config.settings;
-  deps.saveSettings(settings);
-  ui.skip('No model');
 }
 
 /**
@@ -466,39 +401,4 @@ async function pasteClient(deps: InitDeps): Promise<boolean> {
       deps.ui.fail(reason(error));
     }
   }
-}
-
-async function pickModel(deps: InitDeps, choice: ModelChoice): Promise<void> {
-  const { ui, config } = deps;
-  try {
-    await deps.loginModel(choice);
-  } catch (error) {
-    ui.fail(`Sign-in did not finish: ${reason(error)}`);
-    return;
-  }
-
-  let models: string[] = [];
-  try {
-    models = await ui.spin('Listing models', () => deps.availableModels(choice.provider));
-  } catch {
-    models = [];
-  }
-
-  let id: string | null;
-  if (models.length === 0) id = (await ui.text('Model id (Enter to skip):')) || null;
-  else {
-    ui.info('A smaller, cheaper model is usually enough to sort mail.');
-    const recommended = recommendModel(choice.provider, models);
-    id = await ui.select<string | null>('Which model?', [
-      ...(recommended ? [{ label: recommended, hint: 'recommended', value: recommended }] : []),
-      ...models.filter((m) => m !== recommended).map((m) => ({ label: m, value: m })),
-      { label: 'Decide later', value: null },
-    ]);
-  }
-  if (id === null) {
-    ui.skip('No model');
-    return;
-  }
-  deps.saveSettings({ ...config.settings, model: `${choice.provider}/${id}` });
-  ui.ok(`Using ${paint.bold(`${choice.provider}/${id}`)}`);
 }

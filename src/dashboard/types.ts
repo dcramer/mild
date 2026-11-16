@@ -360,9 +360,17 @@ export interface FeedbackRequest {
 
 /** GET /api/manage: everything the Settings view shows. */
 export interface ManageState {
-  /** Whether the viewer owns the install, and so may change the settings and guidelines that apply to all of it. */
+  /** Whether the viewer owns the install, and so may change the settings that apply to all of it. */
   owner: boolean;
-  settings: { act: boolean; interval: number; model: string | null; fewShot: boolean; examplesKeepDays: number | null };
+  settings: { act: boolean; interval: number; fewShot: boolean; examplesKeepDays: number | null };
+  /** The viewer's own model: which one they chose, how they can reach one, and a ChatGPT sign-in under way. */
+  model: {
+    chosen: string | null;
+    choices: { provider: string; label: string; how: 'chatgpt' | 'key' }[];
+    signedIn: string[];
+    pending: { code: string; url: string; expiresAt: number } | { error: string } | null;
+  };
+  /** The viewer's own words about their mail, which the model reads. */
   guidelines: string;
   activity: { sorting: boolean; lastPassAt: number | null; problems: string[]; expired: string[] };
   accounts: { id: string; email: string; lastSyncedAt: number | null }[];
@@ -371,8 +379,8 @@ export interface ManageState {
   /** How many labels an account may have. */
   labelLimit: number;
   /**
-   * Per account, waiting suggestions a model judged (or no tier could place) before the guidelines last
-   * changed. POST /api/suggestions/rejudge judges a batch of them again, at a model call each.
+   * Per account, waiting suggestions a model judged (or no tier could place) before the viewer's
+   * guidelines last changed. POST /api/suggestions/rejudge judges a batch of them again, at a model call each.
    */
   predateGuidelines: Record<string, number>;
 }

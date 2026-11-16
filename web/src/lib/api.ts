@@ -145,10 +145,17 @@ export const api = {
   feedback: (answer: FeedbackRequest) =>
     post<{ reviewed: number; taught: string | null; corrected: string | null; fixed: string | null }>('/api/feedback', answer),
   manage: (signal: AbortSignal) => get<ManageState>('/api/manage', {}, signal),
-  models: (signal: AbortSignal) => get<{ models: string[]; error?: string }>('/api/models', {}, signal),
+  /** The models the reader's own sign-ins offer, and the one to suggest first. */
+  models: (signal: AbortSignal) => get<{ models: string[]; recommended: string | null; error?: string }>('/api/models', {}, signal),
   changes: (signal: AbortSignal) => get<{ changes: ChangeRow[] }>('/api/changes', {}, signal),
-  saveSettings: (change: { act?: boolean; interval?: number; model?: string | null }) => post('/api/settings', change),
+  saveSettings: (change: { act?: boolean; interval?: number }) => post('/api/settings', change),
   saveGuidelines: (text: string) => post('/api/guidelines', { text }),
+  /** The reader's own model, `provider/model-id`, or null for none. */
+  setModel: (model: string | null) => post('/api/model', { model }),
+  /** Start a ChatGPT sign-in: resolves with the code to enter at OpenAI. It finishes in the background. */
+  signInChatGPT: () => post<{ code: string; url: string; expiresAt: number }>('/api/model/chatgpt', {}),
+  saveModelKey: (provider: string, key: string) => post('/api/model/key', { provider, key }),
+  signOutModel: (provider: string) => post('/api/model/signout', { provider }),
   saveLabel: (
     accountId: string,
     id: string,
@@ -241,8 +248,8 @@ export function useAction(): { busy: boolean; error: string | null; run: (work: 
       setError(null);
       work()
         .then(() => {
-          // Not the model list: it comes from the provider, and no change here alters it.
-          void client.invalidateQueries({ predicate: (query) => query.queryKey[0] !== 'models' });
+          // Not the model list: it comes from the provider, and is asked for again when a sign-in changes (its key names them).
+          void client.invalidateQueries({ predicate: (query) => !String(query.queryKey[0]).startsWith('models ') });
           then?.();
         })
         .catch((failure: unknown) => setError(failure instanceof Error ? failure.message : String(failure)))

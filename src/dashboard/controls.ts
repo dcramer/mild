@@ -10,15 +10,18 @@ export interface Controls {
   settings(): ManagedSettings;
   /** Save a change to `sift.toml`. A running sift picks it up on its next pass. */
   saveSettings(change: Partial<ManagedSettings>): void;
-  /** `provider/model-id` for every model the signed-in providers offer. */
-  models(): Promise<string[]>;
-  guidelines(): string;
-  saveGuidelines(text: string): void;
-  /** When the guidelines last changed, or null if there are none. */
-  guidelinesChangedAt(): number | null;
+  /** `provider/model-id` for every model this person's sign-ins offer, and the one to suggest first. */
+  models(db: Sql): Promise<{ models: string[]; recommended: string | null }>;
+  /** The ways to reach a model, which of them this person has signed in to, and a ChatGPT sign-in under way. */
+  modelSignIns(db: Sql): Promise<ModelSignIns>;
+  /** Start signing this person in to ChatGPT. Resolves with the code they enter at OpenAI; it completes in the background. */
+  signInChatGPT(db: Sql): Promise<{ code: string; url: string; expiresAt: number }>;
+  /** Store an API key for one of the providers that takes one. */
+  saveModelKey(db: Sql, provider: string, key: string): Promise<void>;
+  signOutModel(db: Sql, provider: string): Promise<void>;
   /**
    * Judge again, in the background, an account's waiting suggestions that were judged before the
-   * guidelines last changed. A model call each, so only when the user asks, and at most a batch at a
+   * person's guidelines last changed. A model call each, so only when the user asks, and at most a batch at a
    * time. Resolves with how many were started and how many are left for another press.
    */
   rejudge(db: Sql, accountId: string): Promise<{ started: number; remaining: number }>;
@@ -51,8 +54,6 @@ export interface ManagedSettings {
   act: boolean;
   /** Seconds between passes. */
   interval: number;
-  /** `provider/model-id`, or null for no model. */
-  model: string | null;
   /** Whether the model is shown messages the user labelled before as examples. */
   fewShot: boolean;
   /** Days an example is kept after the user answered for it, or null to keep them. */
@@ -86,4 +87,12 @@ export interface SignIn {
    * person's, where that is permitted. Resolves with the account's address; rejects with a message for the user.
    */
   complete(redirectUri: string, code: string, verifier: string, addTo: string | null): Promise<string>;
+}
+
+export interface ModelSignIns {
+  choices: { provider: string; label: string; how: 'chatgpt' | 'key' }[];
+  /** Providers this person has a sign-in for. */
+  signedIn: string[];
+  /** A ChatGPT sign-in waiting on them, or how the last one failed. */
+  pending: { code: string; url: string; expiresAt: number } | { error: string } | null;
 }

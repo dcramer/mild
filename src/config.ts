@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parse } from 'smol-toml';
@@ -6,8 +6,6 @@ import { type Keyring, loadKeyring } from './secrets.ts';
 
 /** What the user chooses, kept in `sift.toml`. None of it is set through the environment; only the encryption key is. */
 export interface Settings {
-  /** `provider/model-id` for mail no rule or learned sender covers. Unset keeps the model tier off. */
-  model?: string;
   /** false: record what sift would do. true: carry decisions out in Gmail. */
   act: boolean;
   /** true: mail that is plainly bulk by its headers is labelled before any model is asked. */
@@ -47,18 +45,12 @@ export interface Config {
   home: string;
   /** `sift.toml`. */
   settingsPath: string;
-  /** The user's broad guidance for triage, in plain language. */
-  guidelinesPath: string;
   /** Who the people are and which mailboxes are whose. */
   dbPath: string;
   /** One database per person, `<user id>.db`. */
   usersDir: string;
   /** The user's own Google OAuth client, as downloaded from Google Cloud Console. */
   googleClientPath: string;
-  /** One refresh token per connected account. */
-  googleTokenDir: string;
-  /** Model provider credentials (API keys, OAuth tokens). */
-  modelAuthPath: string;
   deviceIdPath: string;
   /** How far `sift init` has got. */
   setupStatePath: string;
@@ -85,12 +77,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     home,
     settingsPath,
-    guidelinesPath: join(home, 'guidelines.md'),
     dbPath: join(home, 'sift.db'),
     usersDir: join(home, 'users'),
     googleClientPath: join(home, 'google-client.json'),
-    googleTokenDir: join(home, 'google'),
-    modelAuthPath: join(home, 'model-auth.json'),
     deviceIdPath: join(home, 'device-id'),
     setupStatePath: join(home, 'setup.json'),
     dashboardKeyPath: join(home, 'dashboard-key'),
@@ -117,10 +106,9 @@ export function saveKeyFile(dir: string, key: string): string {
   return path;
 }
 
-/** Every file that holds a credential, for checking and re-encrypting them together. */
+/** Every file that holds a credential, for checking and re-encrypting them together. People's sign-ins are in their databases. */
 export function secretPaths(config: Config): string[] {
-  const tokens = existsSync(config.googleTokenDir) ? readdirSync(config.googleTokenDir).filter((f) => f.endsWith('.json')) : [];
-  return [config.googleClientPath, ...tokens.map((f) => join(config.googleTokenDir, f)), config.modelAuthPath, config.dashboardKeyPath];
+  return [config.googleClientPath, config.dashboardKeyPath];
 }
 
 /** Parse `sift.toml`. Unknown keys and wrong types are errors, so a typo is not silently ignored. */
@@ -135,10 +123,8 @@ export function parseSettings(text: string, path = 'sift.toml'): Settings {
   const settings: Settings = { ...DEFAULT_SETTINGS };
 
   for (const [key, value] of Object.entries(raw)) {
-    if (key === 'model') {
-      if (typeof value !== 'string' || !/^[^/\s]+\/\S+$/.test(value)) throw bad('model', 'a string like "provider/model-id"');
-      settings.model = value;
-    } else if (key === 'act') {
+    if (key === 'model') throw new Error(`${path}: the model is now each person's own, chosen in the dashboard under Settings. Remove model from here.`);
+    else if (key === 'act') {
       if (typeof value !== 'boolean') throw bad('act', 'true or false');
       settings.act = value;
     } else if (key === 'heuristics') {
@@ -191,10 +177,7 @@ export function parseSettings(text: string, path = 'sift.toml'): Settings {
 
 /** `sift.toml` with every setting and what it does. The comments are sift's; hand edits to values are kept. */
 export function renderSettings(settings: Settings): string {
-  return `# Chosen in the dashboard, under Settings, or with \`sift init\`. Unset: mail no rule or learned sender covers stays in your inbox.
-${settings.model ? `model = ${JSON.stringify(settings.model)}` : '# model = "provider/model-id"'}
-
-# false: record what sift would do. true: carry it out in Gmail (each change can be undone in the dashboard).
+  return `# false: record what sift would do. true: carry it out in Gmail (each change can be undone in the dashboard).
 act = ${settings.act}
 
 # true: mail that is plainly bulk by its headers (a mailing list with a one-click unsubscribe, sent through
@@ -237,18 +220,3 @@ export function saveSettings(config: Config, settings: Settings): void {
   chmodSync(config.settingsPath, 0o600);
   config.settings = settings;
 }
-
-/**
- * What `guidelines.md` starts as. The model reads all of it as the owner's instructions, so it holds only
- * instructions: they name the default labels (src/store/labels.ts) and lean towards leaving mail in the inbox.
- */
-export const GUIDELINES_TEMPLATE = `# Guidelines for sift
-
-- When in doubt, keep it in my inbox. If you are not sure what a message is, say you are unsure. I would rather read one message too many than miss one that mattered.
-- Anything a person wrote to me, or to a small group I am part of, is Personal, however short or oddly written. So is a reply in a conversation I took part in.
-- Anything about my money, my accounts or something I have to do by a date stays in my inbox: bills, renewals, failed payments, deliveries, bookings, tax, legal and security notices. A company's receipts are not Marketing because its promotions are.
-- Marketing and Newsletters are only for mail sent to a whole list. Mail from a company about me in particular (my order, my account, my support request) is neither.
-- Cold outreach is a pitch from someone I have no history with. If I have written to them, or they are answering me, it is Personal.
-- A real notice about my own account is Security and account, however alarming. It is Phishing only when the sender is not who they claim to be.
-- Junk is for mail that is deceptive or that I could never have signed up for. Unwanted mail from a real company is Marketing.
-`;

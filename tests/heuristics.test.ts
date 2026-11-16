@@ -129,7 +129,7 @@ describe('heuristics in the cascade', () => {
   it('decides before the model and is recorded under its own name', async () => {
     const { db, options, decisions } = await setup();
     let judged = 0;
-    const model = { judge: async () => (judged++, null), guidelines: () => '' };
+    const model = async () => ({ judge: async () => (judged++, null), guidelines: '' });
     await runOnce(db, { ...options(true), model });
     expect(await decisions()).toMatchObject([{ stage: 'heuristics', disposition: 'archive', label_id: 'marketing' }]);
     expect(judged).toBe(0);

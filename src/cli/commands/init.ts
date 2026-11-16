@@ -3,7 +3,6 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { loadConfig, saveKeyFile, saveSettings } from '../../config.ts';
 import { hasClientSecrets, installClient, loadClientSecrets } from '../../gmail/auth.ts';
-import { login, openModels } from '../../model/models.ts';
 import { connectedAddresses } from '../../store/accounts.ts';
 import { loadKeyring } from '../../secrets.ts';
 import { type Store, openStore } from '../../store/store.ts';
@@ -14,9 +13,6 @@ import { checkSecrets } from '../secrets-check.ts';
 
 export async function init(): Promise<void> {
   const config = loadConfig();
-  // Started away from the .env that holds the key, init would otherwise make a second one.
-  checkSecrets(config, false);
-  const models = openModels(config);
   const withStore = async <T>(work: (store: Store) => Promise<T>): Promise<T> => {
     const store = await openStore(config);
     try {
@@ -25,6 +21,8 @@ export async function init(): Promise<void> {
       await store.close();
     }
   };
+  // Started away from the .env that holds the key, init would otherwise make a second one.
+  await withStore((store) => checkSecrets(config, store, false));
   await runInit({
     config,
     ui,
@@ -47,8 +45,6 @@ export async function init(): Promise<void> {
     saveSetupState: (state) => writeFileSync(config.setupStatePath, JSON.stringify(state), { mode: 0o600 }),
     installGoogleClient: (json) => installClient(config, json),
     connectedAccounts: () => withStore((store) => connectedAddresses(store.central)),
-    loginModel: (choice) => login(models, config, choice.provider, choice.type, ui),
-    availableModels: async (provider) => (await models.getAvailable(provider)).map((m) => m.id),
     googleClientKind: () => (hasClientSecrets(config) ? loadClientSecrets(config).kind : null),
     tailscaleName,
     enableTailscaleServe: async (servePort) => {

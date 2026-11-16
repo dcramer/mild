@@ -1,5 +1,4 @@
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
 import { CodeChallengeMethod, OAuth2Client } from 'google-auth-library';
 import type { Config } from '../config.ts';
 import { readSecret, writeSecret } from '../secrets.ts';
@@ -12,8 +11,6 @@ export interface ClientSecrets {
   /** `desktop` is a client from before sign-in moved to the dashboard: its tokens still work, but it cannot sign anyone in and `sift init` replaces it. */
   kind: 'web' | 'desktop';
 }
-
-const tokenFile = (config: Config, email: string) => join(config.googleTokenDir, `${encodeURIComponent(email)}.json`);
 
 /** True if the user's Google OAuth client is available, from the home directory or the environment. */
 export function hasClientSecrets(config: Config, env: NodeJS.ProcessEnv = process.env): boolean {
@@ -59,21 +56,10 @@ export function loadClientSecrets(config: Config, env: NodeJS.ProcessEnv = proce
   return parseClientFile(text, config.googleClientPath);
 }
 
-/** Tokens live in files, not the database, so the database can be copied or inspected without exposing them. */
-export function saveRefreshToken(config: Config, email: string, refreshToken: string): void {
-  const path = tokenFile(config, email);
-  mkdirSync(config.googleTokenDir, { recursive: true, mode: 0o700 });
-  writeSecret(path, JSON.stringify({ refresh_token: refreshToken }), config.keys);
-}
-
-/** An authenticated client for a connected account. Access tokens are refreshed automatically. */
-export function clientFor(config: Config, secrets: ClientSecrets, email: string): OAuth2Client {
-  const stored = readSecret(tokenFile(config, email), config.keys);
-  if (stored === null) throw new Error(`sift has no access to ${email}. Sign in to the dashboard with that account.`);
-  const { refresh_token } = JSON.parse(stored) as { refresh_token?: string };
-  if (!refresh_token) throw new Error(`The stored access for ${email} is unreadable. Sign in to the dashboard with that account again.`);
+/** An authenticated client for a connected account, from its refresh token. Access tokens are refreshed automatically. */
+export function clientFor(secrets: ClientSecrets, refreshToken: string): OAuth2Client {
   const client = new OAuth2Client({ clientId: secrets.clientId, clientSecret: secrets.clientSecret });
-  client.setCredentials({ refresh_token });
+  client.setCredentials({ refresh_token: refreshToken });
   return client;
 }
 

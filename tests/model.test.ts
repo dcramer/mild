@@ -1,15 +1,10 @@
-import { mkdtempSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
 import { describe, expect, it } from 'vitest';
 import { gatherEvidence } from '../src/daemon/evidence.ts';
 import { MAX_BODY_CHARS, extractText } from '../src/gmail/body.ts';
-import { MODEL_CHOICES } from '../src/cli/init.ts';
-import { loadConfig } from '../src/config.ts';
-import { fileCredentialStore } from '../src/model/credentials.ts';
+import { type SignIns, credentialStore } from '../src/model/credentials.ts';
 import { createJudge } from '../src/model/judge.ts';
-import { openModels, resolveModel } from '../src/model/models.ts';
+import { MODEL_CHOICES, openModels, recommendModel, resolveModel, saveApiKey } from '../src/model/models.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts';
 import { openUserDb } from '../src/store/db.ts';
@@ -412,10 +407,22 @@ describe('gatherEvidence', () => {
   });
 });
 
+/** Sign-ins kept in memory, as a person's database keeps them. */
+function memorySignIns(): SignIns & { stored: Map<string, string> } {
+  const stored = new Map<string, string>();
+  return {
+    stored,
+    read: async (provider) => stored.get(provider) ?? null,
+    write: async (provider, text) => void stored.set(provider, text),
+    remove: async (provider) => void stored.delete(provider),
+    keys: async () => [...stored.keys()].toSorted(),
+  };
+}
+
 describe('model credentials', () => {
-  it('persists rotated credentials to an owner-only file', async () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'sift-auth-')), 'model-auth.json');
-    const store = fileCredentialStore(path);
+  it('keeps the newest of rotated credentials, one change at a time', async () => {
+    const signIns = memorySignIns();
+    const store = credentialStore(signIns);
     expect(await store.read('openai')).toBeUndefined();
     await store.modify('openai', async () => ({ type: 'oauth', access: 'a1', refresh: 'r1', expires: 1 }));
     await Promise.all([
@@ -423,30 +430,40 @@ describe('model credentials', () => {
       store.modify('other', async () => ({ type: 'api_key', key: 'k' })),
     ]);
 
-    const reopened = fileCredentialStore(path);
+    const reopened = credentialStore(signIns);
     expect(await reopened.read('openai')).toMatchObject({ type: 'oauth', refresh: 'r2', access: 'a1' });
     expect(await reopened.list()).toEqual([
       { providerId: 'openai', type: 'oauth' },
       { providerId: 'other', type: 'api_key' },
     ]);
-    expect(statSync(path).mode & 0o777).toBe(0o600);
     await reopened.delete('other');
     expect(await store.read('other')).toBeUndefined();
   });
 });
 
 describe('providers', () => {
-  it('registers the ones sift init offers and no others', async () => {
-    const config = loadConfig({ SIFT_HOME: mkdtempSync(join(tmpdir(), 'sift-models-')) });
-    const models = openModels(config);
+  it('registers the ones a person can sign in to and no others', async () => {
+    const signIns = memorySignIns();
+    const models = openModels(signIns);
     expect(models.getProviders().map((p) => p.id)).toEqual(MODEL_CHOICES.map((c) => c.provider));
     expect(() => resolveModel(models, 'google/anything')).toThrow('Unknown model');
 
-    await fileCredentialStore(config.modelAuthPath).modify('anthropic', async () => ({ type: 'api_key', key: 'k' }));
+    await saveApiKey(signIns, 'anthropic', 'k');
     const listed = (await models.getAvailable('anthropic')).map((m) => `${m.provider}/${m.id}`);
     expect(listed.length).toBeGreaterThan(0);
     const model = resolveModel(models, listed[0]!);
     expect(await models.getAuth(model)).toMatchObject({ auth: { apiKey: 'k' } });
+  });
+
+  it("never uses a key from the environment: a person's sign-in is their own", async () => {
+    const before = process.env['ANTHROPIC_API_KEY'];
+    process.env['ANTHROPIC_API_KEY'] = 'someone-elses-key';
+    try {
+      expect(await openModels(memorySignIns()).getAuth('anthropic')).toBeUndefined();
+    } finally {
+      if (before === undefined) delete process.env['ANTHROPIC_API_KEY'];
+      else process.env['ANTHROPIC_API_KEY'] = before;
+    }
   });
 
   // pnpm-workspace.yaml leaves the other providers' SDKs out of the install; these must not need them.
@@ -460,5 +477,27 @@ describe('providers', () => {
         import('@earendil-works/pi-ai/oauth'),
       ]),
     ).resolves.toHaveLength(5);
+  });
+});
+
+describe('recommendModel', () => {
+  it("picks the newest of the provider's small family, by version number", () => {
+    expect(recommendModel('openai', ['gpt-9', 'gpt-9-luna', 'gpt-10-luna', 'gpt-10'])).toBe('gpt-10-luna');
+    expect(recommendModel('openai-codex', ['luna-2.5', 'luna-2.10', 'sol-3'])).toBe('luna-2.10');
+    expect(recommendModel('anthropic', ['claude-3-5-haiku-20241022', 'claude-haiku-4-5-20251001', 'claude-opus-4-8'])).toBe('claude-haiku-4-5-20251001');
+    expect(recommendModel('google', ['gemini-2.5-flash', 'gemini-3-flash', 'gemini-3-pro'])).toBe('gemini-3-flash');
+  });
+
+  it('prefers the plain name over a dated or variant one of the same version', () => {
+    expect(recommendModel('anthropic', ['claude-haiku-4-5-20251001', 'claude-haiku-4-5'])).toBe('claude-haiku-4-5');
+    expect(recommendModel('google', ['gemini-3-flash-lite', 'gemini-3-flash'])).toBe('gemini-3-flash');
+    expect(recommendModel('openai', ['gpt-9-luna-2026-03-01', 'gpt-9-luna'])).toBe('gpt-9-luna');
+  });
+
+  it('recommends nothing without a family member, for an unknown provider, or for a name that only contains the word', () => {
+    expect(recommendModel('openai', ['gpt-9', 'gpt-9-mini'])).toBeNull();
+    expect(recommendModel('example', ['luna-1'])).toBeNull();
+    expect(recommendModel('openai', ['lunar-1'])).toBeNull();
+    expect(recommendModel('openai', [])).toBeNull();
   });
 });

@@ -4,13 +4,13 @@ import { loadConfig } from '../../config.ts';
 import type { Activity } from '../../dashboard/controls.ts';
 import { type PassResult, createWake, runEveryone, runLoop } from '../../daemon/run.ts';
 import { createGmailApi } from '../../gmail/api.ts';
-import { clientFor, hasClientSecrets, loadClientSecrets } from '../../gmail/auth.ts';
+import { hasClientSecrets } from '../../gmail/auth.ts';
 import { createGmailMailbox } from '../../gmail/mailbox.ts';
-import { type Account, connectedAddresses } from '../../store/accounts.ts';
+import { type Account, connectedAddresses, listAccounts, personOf } from '../../store/accounts.ts';
 import { openStore } from '../../store/store.ts';
 import type { Sql } from '../../store/sql.ts';
 import { paint, ui } from '../ui.ts';
-import { openModelTier, buildControls } from '../controls.ts';
+import { buildControls, gmailClient, openModelTier } from '../controls.ts';
 import { checkSecrets } from '../secrets-check.ts';
 import { serveDashboard, portOption } from '../serve.ts';
 
@@ -33,40 +33,44 @@ export async function run(args: string[]): Promise<void> {
   const intervalFlag = values.interval === undefined ? undefined : Number(values.interval);
   if (intervalFlag !== undefined && (!Number.isFinite(intervalFlag) || intervalFlag < 5)) throw new Error('--interval must be at least 5 seconds.');
   const config = loadConfig();
-  const secrets = checkSecrets(config, true);
-
   const store = await openStore(config);
   try {
+    const secrets = await checkSecrets(config, store, true);
     const log = (line: string) => ui.plain(`${paint.dim(new Date().toLocaleTimeString(undefined, { hour12: false }))}  ${line}`);
 
     // Settings are read again before every pass, so changes made in the dashboard or sift.toml apply
     // without a restart. A flag given here wins for as long as this process runs.
-    const tiers = new Map<string, Awaited<ReturnType<typeof openModelTier>> | null>();
+    // Why each person's model could not be reached, so it is said once and not on every pass.
+    const unreachable = new Map<number, string>();
     let announced = '';
     const next = async () => {
       const { settings } = loadConfig();
       const act = values.observe ? false : values.act || settings.act;
-      const spec = settings.model;
-      if (spec && !tiers.has(spec)) {
+      // Each person's own model, from their choice and sign-in, read on every pass.
+      const model = async (db: Sql) => {
+        const person = await personOf(db);
         try {
-          tiers.set(spec, await openModelTier(config, spec));
+          const tier = await openModelTier(config, db);
+          unreachable.delete(person);
+          return tier && { judge: tier.judge, guidelines: tier.guidelines, fewShot: settings.fewShot };
         } catch (error) {
-          tiers.set(spec, null);
-          ui.fail(error instanceof Error ? error.message : String(error));
+          const message = error instanceof Error ? error.message : String(error);
+          if (unreachable.get(person) !== message) ui.fail(`${(await listAccounts(db)).map((a) => a.email).join(', ')}: ${message}`);
+          unreachable.set(person, message);
+          return null;
         }
-      }
-      const tier = spec ? tiers.get(spec) : null;
-      const state = `${act ? 'acting' : 'observing'} · ${spec ?? 'no model'}`;
+      };
+      const state = act ? 'acting' : 'observing';
       if (announced !== '' && announced !== state) log(`Now ${state}`);
       announced = state;
       return {
         act,
         heuristics: settings.heuristics,
-        ...(tier ? { model: { ...tier, fewShot: settings.fewShot } } : {}),
+        model,
         unsubscribe: (db: Sql, accountId: string, messageId: string) => unsubscribe({ db }, accountId, messageId),
         ...(settings.examplesKeepDays ? { examplesKeepDays: settings.examplesKeepDays } : {}),
-        connect: (account: Account) => {
-          const client = clientFor(config, loadClientSecrets(config), account.email);
+        connect: async (db: Sql, account: Account) => {
+          const client = await gmailClient(config, db, account.email);
           return { api: createGmailApi(client), mailbox: createGmailMailbox(client) };
         },
         log,
@@ -76,7 +80,7 @@ export async function run(args: string[]): Promise<void> {
     };
 
     const first = await next();
-    ui.heading(first.act ? 'acting' : 'observing', `${config.settings.model ?? 'no model'} · every ${first.intervalMs / 1000}s`);
+    ui.heading(first.act ? 'acting' : 'observing', `every ${first.intervalMs / 1000}s`);
     secrets();
     if (!hasClientSecrets(config)) ui.warn(`No Google client yet. Run ${paint.cmd('sift init')}.`);
     else if ((await connectedAddresses(store.central)).length === 0) ui.warn('No Gmail account yet. Open the dashboard and sign in with Google.');

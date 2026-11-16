@@ -170,7 +170,11 @@ export function SystemView() {
           <Row label="body">
             <p>
               Text, 16px; 15px beside it. <span className="text-muted-foreground">Secondary text is lighter, not smaller.</span> A <Code>command</Code> inline,
-              a <TextLink href="/system">link</TextLink>, a key <Kbd>Enter</Kbd>.
+              a <TextLink href="/system">link</TextLink>, a link to{' '}
+              <TextLink href="https://example.com" away>
+                another site
+              </TextLink>
+              , a key <Kbd>Enter</Kbd>.
             </p>
           </Row>
           <Row label="slug" note="Column heads and a figure’s label. Not headings.">

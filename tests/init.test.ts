@@ -1,11 +1,12 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { type InitDeps, type SetupState, recommendModel, runInit } from '../src/cli/init.ts';
+import { type InitDeps, type SetupState, runInit } from '../src/cli/init.ts';
 import { dashboardUrls, listenAddresses, localAddresses, machineNames, resolveHere } from '../src/cli/network.ts';
 import type { Ui } from '../src/cli/ui.ts';
-import { DEFAULT_SETTINGS, GUIDELINES_TEMPLATE, loadConfig, parseSettings, renderSettings, resolveHome, saveSettings } from '../src/config.ts';
+import { DEFAULT_SETTINGS, loadConfig, parseSettings, renderSettings, resolveHome, saveSettings } from '../src/config.ts';
+import { DEFAULT_GUIDELINES } from '../src/store/preferences.ts';
 import { DEFAULT_LABELS } from '../src/store/labels.ts';
 import { loadKeyring } from '../src/secrets.ts';
 import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
@@ -22,8 +23,6 @@ function wizard(
   state: {
     client?: 'web' | 'desktop';
     accounts?: string[];
-    models?: string[];
-    loginFails?: boolean;
     progress?: number;
     access?: 'test' | 'publish';
     location?: 'ask' | 'remote';
@@ -113,11 +112,6 @@ function wizard(
       world.client = json.includes('web') ? 'web' : 'desktop';
     },
     connectedAccounts: async () => world.accounts,
-    loginModel: async (choice) => {
-      calls.push(`login ${choice.provider} ${choice.type}`);
-      if (state.loginFails) throw new Error('cancelled');
-    },
-    availableModels: async () => state.models ?? ['small', 'large'],
     tailscaleName: () => (state.tailscale === undefined ? 'box.example.ts.net' : state.tailscale),
     enableTailscaleServe: async (port) => {
       calls.push(`serve ${port}`);
@@ -134,30 +128,27 @@ const TEST_USER = 0;
 const PUBLISH = 1;
 /** The whole Google setup as a test user. */
 const GOOGLE = [...COMMON, TEST_USER, 'done'];
-const NO_MODEL = 3;
 /** Positions in the list of steps a finished setup offers to change. */
 const KEY_STEP = 1;
 const CLIENT_STEP = 3;
-const MODEL_STEP = 4;
-const SIGN_IN_STEP = 5;
+const SIGN_IN_STEP = 4;
 const links = (said: string[]) => said.filter((line) => line.startsWith('link: ')).map((line) => line.slice(6).replace('https://console.cloud.google.com', ''));
 
 describe('sift init', () => {
   it('walks a new user through setup, and leaves connecting Gmail to the browser', async () => {
-    const w = wizard([...GOOGLE, 0, 0]);
+    const w = wizard([...GOOGLE]);
     await runInit(w.deps);
 
-    expect(w.calls).toEqual(['save key', `install ${CLIENT}`, 'login openai-codex oauth']);
+    expect(w.calls).toEqual(['save key', `install ${CLIENT}`]);
     expect(w.config.keys.current).not.toBeNull();
     expect(w.text()).toContain('ok: Saved as SIFT_KEY in /work/sift/.env');
-    expect(loadConfig({ SIFT_HOME: w.config.home }).settings).toEqual({ ...DEFAULT_SETTINGS, model: 'openai-codex/small' });
-    expect(readFileSync(w.config.guidelinesPath, 'utf8')).toBe(GUIDELINES_TEMPLATE);
+    expect(loadConfig({ SIFT_HOME: w.config.home }).settings).toEqual(DEFAULT_SETTINGS);
     expect(w.text()).toContain('signing in to the dashboard with Google is what connects the account');
     expect(w.text()).toMatch(/Ready.*sift run.*http:\/\/localhost:8787.*sign in with Google/);
   });
 
   it('gives each Google task its link and values, with the redirect URIs the client needs', async () => {
-    const w = wizard([...GOOGLE, NO_MODEL]);
+    const w = wizard([...GOOGLE]);
     await runInit(w.deps);
     expect(links(w.said)).toEqual([
       '/projectcreate',
@@ -179,27 +170,27 @@ describe('sift init', () => {
   });
 
   it('branches to branding and publishing when the user chooses to publish', async () => {
-    const w = wizard([...COMMON, PUBLISH, 'done', 'done', NO_MODEL]);
+    const w = wizard([...COMMON, PUBLISH, 'done', 'done']);
     await runInit(w.deps);
     expect(links(w.said).slice(5)).toEqual(['/auth/branding', '/auth/audience']);
     expect(w.world.setup).toEqual({ googleTasks: 7, access: 'publish', location: 'local' });
   });
 
   it('resumes the Google tasks where an earlier run stopped', async () => {
-    const first = wizard(['done', 'done', 'skip', NO_MODEL]);
+    const first = wizard(['done', 'done', 'skip']);
     await runInit(first.deps);
     expect(first.world.setup).toEqual({ googleTasks: 2, location: 'local' });
     expect(first.text()).toContain('skip: Stopped here');
     expect(first.text()).toContain('skip: Needs step 3 finished');
     expect(first.text()).toContain('warn: Still needed: the Google client');
 
-    const later = wizard(['done', TEST_USER, 'done', NO_MODEL], { client: 'web', progress: 4 });
+    const later = wizard(['done', TEST_USER, 'done'], { client: 'web', progress: 4 });
     await runInit(later.deps);
     expect(links(later.said)).toEqual(['/auth/scopes', '/auth/audience']);
     expect(later.text()).toContain('Ready');
 
     // Stopped after choosing to publish: the choice is remembered.
-    const chosen = wizard(['done', 'done', NO_MODEL], { client: 'web', progress: 5, access: 'publish' });
+    const chosen = wizard(['done', 'done'], { client: 'web', progress: 5, access: 'publish' });
     await runInit(chosen.deps);
     expect(links(chosen.said)).toEqual(['/auth/branding', '/auth/audience']);
     expect(chosen.asked).not.toContain('Who signs in to this app?');
@@ -207,37 +198,24 @@ describe('sift init', () => {
 
   it('lists the steps of a finished setup with what each is set to, and changes nothing unless asked', async () => {
     const w = wizard([], { client: 'web', accounts: ['me@example.org'] });
-    saveSettings(w.config, { ...DEFAULT_SETTINGS, model: 'openai/x' });
+    saveSettings(w.config, DEFAULT_SETTINGS);
     await runInit(w.deps);
     expect(w.asked).toEqual(['Change a step?']);
     expect(w.calls).toEqual([]);
     expect(w.text()).toContain('Where sift runs: Dashboard at');
     expect(w.text()).toContain('Google OAuth client: Client in place');
-    expect(w.text()).toContain('Model: openai/x');
     expect(w.text()).toContain('Who can sign in: ');
     expect(w.text()).toContain('Gmail account: me@example.org');
-    expect(w.config.settings).toEqual({ ...DEFAULT_SETTINGS, model: 'openai/x' });
+    expect(w.config.settings).toEqual(DEFAULT_SETTINGS);
     expect(w.text()).toMatch(/Ready.*sift run/);
     expect(w.text()).not.toContain('sign in with Google');
   });
 
-  it('redoes the one step picked from a finished setup: a new client, a different model, no model', async () => {
+  it('redoes the one step picked from a finished setup', async () => {
     const client = wizard([...GOOGLE], { client: 'web', accounts: ['me@example.org'], change: CLIENT_STEP });
-    saveSettings(client.config, { ...DEFAULT_SETTINGS, model: 'openai/x' });
+    saveSettings(client.config, DEFAULT_SETTINGS);
     await runInit(client.deps);
     expect(client.calls).toEqual([`install ${CLIENT}`]);
-    expect(client.config.settings.model).toBe('openai/x');
-
-    const model = wizard([1, 1], { client: 'web', accounts: ['me@example.org'], change: MODEL_STEP });
-    saveSettings(model.config, { ...DEFAULT_SETTINGS, model: 'openai/x' });
-    await runInit(model.deps);
-    expect(model.calls).toEqual(['login openai api_key']);
-    expect(model.config.settings.model).toBe('openai/large');
-
-    const none = wizard([NO_MODEL], { client: 'web', accounts: ['me@example.org'], change: MODEL_STEP });
-    saveSettings(none.config, { ...DEFAULT_SETTINGS, model: 'openai/x' });
-    await runInit(none.deps);
-    expect(loadConfig({ SIFT_HOME: none.config.home }).settings.model).toBeUndefined();
 
     // A client left half redone is no longer a finished setup: the next run carries on with it.
     const stopped = wizard(['done', 'skip'], { client: 'web', accounts: ['me@example.org'], change: CLIENT_STEP });
@@ -247,12 +225,12 @@ describe('sift init', () => {
   });
 
   it('generates the encryption key before any credential is stored, and shows it when it cannot be saved', async () => {
-    const saved = wizard([...GOOGLE, NO_MODEL]);
+    const saved = wizard([...GOOGLE]);
     await runInit(saved.deps);
     expect(saved.said.indexOf('ok: Saved as SIFT_KEY in /work/sift/.env')).toBeLessThan(saved.said.findIndex((line) => line.startsWith('link: ')));
     expect(saved.text()).toContain('sift reads it only when started from this directory');
 
-    const failed = wizard([...GOOGLE, NO_MODEL], { keyFails: true });
+    const failed = wizard([...GOOGLE], { keyFails: true });
     await runInit(failed.deps);
     expect(failed.config.keys.current).toBeNull();
     expect(failed.text()).toContain('fail: Could not save the key: read-only file system');
@@ -272,44 +250,38 @@ describe('sift init', () => {
   });
 
   it('limits sign-in to the addresses given, asking again for one that is not an address', async () => {
-    const w = wizard([...GOOGLE, NO_MODEL], { allow: ['me@example.org, nonsense', 'Me@Example.org, work@example.com'] });
+    const w = wizard([...GOOGLE], { allow: ['me@example.org, nonsense', 'Me@Example.org, work@example.com'] });
     await runInit(w.deps);
     expect(w.text()).toContain('fail: nonsense is not an email address.');
     expect(loadConfig({ SIFT_HOME: w.config.home }).settings.dashboardAllow).toEqual(['me@example.org', 'work@example.com']);
 
     // Changing the list to one that leaves a connected account out says what that means; Enter removes the limit.
     const narrowed = wizard([], { client: 'web', accounts: ['me@example.org'], allow: ['work@example.com'], change: SIGN_IN_STEP });
-    saveSettings(narrowed.config, { ...DEFAULT_SETTINGS, model: 'openai/x', dashboardAllow: ['me@example.org'] });
+    saveSettings(narrowed.config, { ...DEFAULT_SETTINGS, dashboardAllow: ['me@example.org'] });
     await runInit(narrowed.deps);
     expect(narrowed.config.settings.dashboardAllow).toEqual(['work@example.com']);
     expect(narrowed.text()).toContain('warn: me@example.org is connected but can no longer sign in');
 
     const lifted = wizard([], { client: 'web', accounts: ['me@example.org'], change: SIGN_IN_STEP });
-    saveSettings(lifted.config, { ...DEFAULT_SETTINGS, model: 'openai/x', dashboardAllow: ['me@example.org'] });
+    saveSettings(lifted.config, { ...DEFAULT_SETTINGS, dashboardAllow: ['me@example.org'] });
     await runInit(lifted.deps);
     expect(loadConfig({ SIFT_HOME: lifted.config.home }).settings.dashboardAllow).toBeUndefined();
   });
 
-  it('offers the recommended model first, so Enter takes it', async () => {
-    const w = wizard([...GOOGLE, 0, 0], { models: ['gpt-9', 'gpt-9-luna', 'gpt-10-luna'] });
-    await runInit(w.deps);
-    expect(w.config.settings.model).toBe('openai-codex/gpt-10-luna');
-  });
-
   it('asks again when what was pasted is not a client, and stops on s', async () => {
-    const w = wizard(['done', 'done', 'done', '{"nonsense":{}}', CLIENT, 'done', TEST_USER, 'done', NO_MODEL]);
+    const w = wizard(['done', 'done', 'done', '{"nonsense":{}}', CLIENT, 'done', TEST_USER, 'done']);
     await runInit(w.deps);
     expect(w.calls).toEqual(['save key', 'install {"nonsense":{}}', `install ${CLIENT}`]);
     expect(w.text()).toContain('fail: What you pasted is not a Google OAuth client');
 
-    const stopped = wizard(['done', 'done', 'done', 's', NO_MODEL]);
+    const stopped = wizard(['done', 'done', 'done', 's']);
     await runInit(stopped.deps);
     expect(stopped.world.setup.googleTasks).toBe(3);
     expect(stopped.calls).toEqual(['save key']);
   });
 
   it('on a server, serves the dashboard over Tailscale HTTPS so Google can sign people in', async () => {
-    const server = wizard([1, 0, 'skip', NO_MODEL], { location: 'ask' });
+    const server = wizard([1, 0, 'skip'], { location: 'ask' });
     await runInit(server.deps);
     expect(server.asked.slice(0, 2)).toEqual(['Where will you open the dashboard?', expect.stringContaining('tailscale serve --bg 8787')]);
     expect(server.calls).toEqual(['save key', 'serve 8787']);
@@ -319,13 +291,13 @@ describe('sift init', () => {
     expect(server.text()).toContain('https://box.example.ts.net');
 
     // When serve cannot be started, the command is shown to run by hand.
-    const denied = wizard([1, 0, 'skip', NO_MODEL], { location: 'ask', serveFails: true });
+    const denied = wizard([1, 0, 'skip'], { location: 'ask', serveFails: true });
     await runInit(denied.deps);
     expect(denied.text()).toContain('fail: Access denied: serve config denied');
     expect(denied.text()).toContain('with sudo if it asks');
 
     // Without Tailscale there is no HTTPS address to offer.
-    const bare = wizard([1, 'skip', NO_MODEL], { location: 'ask', tailscale: null });
+    const bare = wizard([1, 'skip'], { location: 'ask', tailscale: null });
     await runInit(bare.deps);
     expect(bare.calls).toEqual(['save key']);
     expect(bare.text()).toContain('warn: Google only signs people in at localhost or an HTTPS address');
@@ -333,7 +305,7 @@ describe('sift init', () => {
 
   it('replaces a Desktop client', async () => {
     const w = wizard([CLIENT], { client: 'desktop', accounts: ['me@example.org'], location: 'remote' });
-    saveSettings(w.config, { ...DEFAULT_SETTINGS, model: 'openai/x' });
+    saveSettings(w.config, DEFAULT_SETTINGS);
     w.world.setup = { googleTasks: 6, access: 'test', location: 'remote' };
     await runInit(w.deps);
     expect(w.text()).toContain('warn: Your client is a Desktop app client');
@@ -341,40 +313,6 @@ describe('sift init', () => {
     expect(w.world.client).toBe('web');
     expect(w.world.setup.googleTasks).toBe(6);
     expect(w.text()).toMatch(/Ready.*https:\/\/box\.example\.ts\.net/);
-  });
-
-  it('keeps going when model sign-in fails, and takes a typed id when no models are listed', async () => {
-    const failed = wizard([0], { client: 'web', accounts: ['me@example.org'], loginFails: true, change: MODEL_STEP });
-    await runInit(failed.deps);
-    expect(failed.text()).toContain('fail: Sign-in did not finish: cancelled');
-    expect(failed.config.settings.model).toBeUndefined();
-    expect(failed.text()).toContain('Ready');
-
-    const typed = wizard([2, 'claude-test'], { client: 'web', accounts: ['me@example.org'], models: [], change: MODEL_STEP });
-    await runInit(typed.deps);
-    expect(typed.config.settings.model).toBe('anthropic/claude-test');
-  });
-});
-
-describe('recommendModel', () => {
-  it("picks the newest of the provider's small family, by version number", () => {
-    expect(recommendModel('openai', ['gpt-9', 'gpt-9-luna', 'gpt-10-luna', 'gpt-10'])).toBe('gpt-10-luna');
-    expect(recommendModel('openai-codex', ['luna-2.5', 'luna-2.10', 'sol-3'])).toBe('luna-2.10');
-    expect(recommendModel('anthropic', ['claude-3-5-haiku-20241022', 'claude-haiku-4-5-20251001', 'claude-opus-4-8'])).toBe('claude-haiku-4-5-20251001');
-    expect(recommendModel('google', ['gemini-2.5-flash', 'gemini-3-flash', 'gemini-3-pro'])).toBe('gemini-3-flash');
-  });
-
-  it('prefers the plain name over a dated or variant one of the same version', () => {
-    expect(recommendModel('anthropic', ['claude-haiku-4-5-20251001', 'claude-haiku-4-5'])).toBe('claude-haiku-4-5');
-    expect(recommendModel('google', ['gemini-3-flash-lite', 'gemini-3-flash'])).toBe('gemini-3-flash');
-    expect(recommendModel('openai', ['gpt-9-luna-2026-03-01', 'gpt-9-luna'])).toBe('gpt-9-luna');
-  });
-
-  it('recommends nothing without a family member, for an unknown provider, or for a name that only contains the word', () => {
-    expect(recommendModel('openai', ['gpt-9', 'gpt-9-mini'])).toBeNull();
-    expect(recommendModel('example', ['luna-1'])).toBeNull();
-    expect(recommendModel('openai', ['lunar-1'])).toBeNull();
-    expect(recommendModel('openai', [])).toBeNull();
   });
 });
 
@@ -388,30 +326,21 @@ describe('settings', () => {
   it('keeps everything in the home directory and needs no environment variables', () => {
     const home = freshHome();
     const config = loadConfig({ SIFT_HOME: home });
-    for (const path of [
-      config.settingsPath,
-      config.guidelinesPath,
-      config.dbPath,
-      config.googleClientPath,
-      config.googleTokenDir,
-      config.modelAuthPath,
-      config.deviceIdPath,
-    ]) {
+    for (const path of [config.settingsPath, config.dbPath, config.usersDir, config.googleClientPath, config.deviceIdPath]) {
       expect(path.startsWith(`${home}/`)).toBe(true);
     }
     expect(config.settings).toEqual(DEFAULT_SETTINGS);
   });
 
   it('starts the guidelines as instructions that keep mail when unsure and never ask for deletion', () => {
-    expect(GUIDELINES_TEMPLATE).toContain('When in doubt, keep it in my inbox.');
-    expect(GUIDELINES_TEMPLATE).not.toMatch(/delet|trash|replace these/i);
-    const named = DEFAULT_LABELS.filter((l) => GUIDELINES_TEMPLATE.includes(l.name)).map((l) => l.id);
+    expect(DEFAULT_GUIDELINES).toContain('When in doubt, keep it in my inbox.');
+    expect(DEFAULT_GUIDELINES).not.toMatch(/delet|trash|replace these/i);
+    const named = DEFAULT_LABELS.filter((l) => DEFAULT_GUIDELINES.includes(l.name)).map((l) => l.id);
     expect(named).toEqual(['personal', 'security', 'newsletter', 'marketing', 'cold_outreach', 'junk', 'phishing']);
   });
 
   it('round-trips through sift.toml', () => {
     const settings = {
-      model: 'openai-codex/some-model',
       act: true,
       heuristics: true,
       interval: 120,
@@ -430,7 +359,7 @@ describe('settings', () => {
     expect(() => parseSettings('modle = "a/b"')).toThrow('unknown setting modle');
     expect(() => parseSettings('[examples]\nkeep_days = 0')).toThrow('examples.keep_days must be a whole number of days, at least 1');
     expect(() => parseSettings('act = "yes"')).toThrow('act must be true or false');
-    expect(() => parseSettings('model = "no-slash"')).toThrow('provider/model-id');
+    expect(() => parseSettings('model = "openai/x"')).toThrow("the model is now each person's own");
     expect(() => parseSettings('interval = 1')).toThrow('at least 5');
     expect(() => parseSettings('[dashboard]\nbind = "x"')).toThrow('unknown setting dashboard.bind');
     expect(() => parseSettings('[dashboard]\nhost = "http://x/"')).toThrow('dashboard.host must be a hostname or IP address');

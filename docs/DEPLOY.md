@@ -61,7 +61,7 @@ What an old backup does not know:
 
 - **Mail since.** sift resumes from the history cursor in the backup. Gmail keeps history for about a week; past that sift searches the last 7 days of the inbox and anything older that arrived in between is not seen. Pull it in from the dashboard.
 - **Changes since.** Anything sift did to the mailbox after the backup is not in its log, so it cannot be undone from sift. The `sift/did/…` labels in Gmail still show what was moved.
-- **A model subscription sign-in.** Its refresh token changes every time it is used, so the one in the backup has usually been replaced: run `sift init` and redo the model step. API keys and the Gmail sign-in are unaffected.
+- **A model subscription sign-in.** Its refresh token changes every time it is used, so the one in the backup has usually been replaced: sign in to it again under Settings in the dashboard. API keys and the Gmail sign-in are unaffected.
 
 ## Restricting egress
 

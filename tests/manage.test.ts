@@ -17,6 +17,7 @@ import { startEval } from '../src/learn/evals.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { MAX_LABELS, listLabels } from '../src/store/labels.ts';
 import { recordDecision } from '../src/store/decisions.ts';
+import { preferences, setGuidelines } from '../src/store/preferences.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { FakeMailbox, facts, onePerson, storeExample } from './helpers.ts';
 import type { Store } from '../src/store/store.ts';
@@ -27,20 +28,17 @@ let store: Store;
 let close: (() => void) | undefined;
 let calls: string[];
 let settings: ManagedSettings;
-let guidelines: string;
-let guidelinesChangedAt: number | null;
 
 const controls: Controls = {
   settings: () => settings,
   saveSettings: (change) => {
     settings = { ...settings, ...change };
   },
-  models: async () => ['p/small', 'p/large'],
-  guidelines: () => guidelines,
-  saveGuidelines: (text) => {
-    guidelines = text;
-  },
-  guidelinesChangedAt: () => guidelinesChangedAt,
+  models: async () => ({ models: ['p/small', 'p/large'], recommended: 'p/small' }),
+  modelSignIns: async () => ({ choices: [{ provider: 'openai-codex', label: 'ChatGPT', how: 'chatgpt' }], signedIn: ['openai-codex'], pending: null }),
+  signInChatGPT: async () => (calls.push('chatgpt'), { code: 'ABCD-1234', url: 'https://auth.example/device', expiresAt: 900 }),
+  saveModelKey: async (_db, provider, key) => void calls.push(`key ${provider} ${key}`),
+  signOutModel: async (_db, provider) => void calls.push(`signout ${provider}`),
   rejudge: async (_db, accountId) => {
     calls.push(`rejudge ${accountId}`);
     return { started: 2, remaining: 0 };
@@ -73,9 +71,9 @@ const controls: Controls = {
 beforeEach(async () => {
   ({ store, db } = await onePerson(ACCOUNT));
   calls = [];
-  settings = { act: false, interval: 60, model: null, fewShot: true, examplesKeepDays: null };
-  guidelines = 'Be careful.';
-  guidelinesChangedAt = null;
+  settings = { act: false, interval: 60, fewShot: true, examplesKeepDays: null };
+  await setGuidelines(db, 'Be careful.', 1);
+  await db.run('UPDATE preferences SET guidelines_changed_at = NULL');
 });
 afterEach(() => close?.());
 
@@ -119,7 +117,8 @@ describe('managing sift from the dashboard', () => {
     const port = await start();
     const { body } = await call(port, 'GET', '/api/manage');
     expect(body).toMatchObject({
-      settings: { act: false, interval: 60, model: null },
+      settings: { act: false, interval: 60 },
+      model: { chosen: null, signedIn: ['openai-codex'], pending: null },
       guidelines: 'Be careful.',
       activity: { sorting: true, expired: [ACCOUNT] },
       accounts: [{ id: ACCOUNT }],
@@ -127,21 +126,36 @@ describe('managing sift from the dashboard', () => {
     expect((body['labels'] as Record<string, { id: string; gmailLabel: string; rules: number }[]>)[ACCOUNT]).toContainEqual(
       expect.objectContaining({ id: 'newsletter', gmailLabel: 'sift/newsletters', rules: 0, messages: 0, record: { reviewed: 0, right: 0 } }),
     );
-    expect((await call(port, 'GET', '/api/models')).body).toEqual({ models: ['p/small', 'p/large'] });
+    expect((await call(port, 'GET', '/api/models')).body).toEqual({ models: ['p/small', 'p/large'], recommended: 'p/small' });
   });
 
   it('changes settings, and refuses values that make no sense', async () => {
     const port = await start();
-    expect((await call(port, 'POST', '/api/settings', { act: true, model: 'p/small' })).body).toEqual({
-      settings: { act: true, interval: 60, model: 'p/small', fewShot: true, examplesKeepDays: null },
+    expect((await call(port, 'POST', '/api/settings', { act: true })).body).toEqual({
+      settings: { act: true, interval: 60, fewShot: true, examplesKeepDays: null },
     });
-    expect((await call(port, 'POST', '/api/settings', { model: null, interval: 300 })).body).toEqual({
-      settings: { act: true, interval: 300, model: null, fewShot: true, examplesKeepDays: null },
+    expect((await call(port, 'POST', '/api/settings', { interval: 300 })).body).toEqual({
+      settings: { act: true, interval: 300, fewShot: true, examplesKeepDays: null },
     });
     expect((await call(port, 'POST', '/api/settings', { fewShot: false })).body).toMatchObject({ settings: { fewShot: false } });
-    for (const bad of [{ act: 'yes' }, { interval: 1 }, { interval: '60' }, { model: 'no-slash' }, { fewShot: 'no' }])
+    for (const bad of [{ act: 'yes' }, { interval: 1 }, { interval: '60' }, { fewShot: 'no' }])
       expect((await call(port, 'POST', '/api/settings', bad)).status).toBe(400);
-    expect(settings).toEqual({ act: true, interval: 300, model: null, fewShot: false, examplesKeepDays: null });
+    expect(settings).toEqual({ act: true, interval: 300, fewShot: false, examplesKeepDays: null });
+  });
+
+  it("keeps the model and its sign-in the person's own", async () => {
+    const port = await start();
+    expect((await call(port, 'POST', '/api/model', { model: 'p/small' })).status).toBe(200);
+    expect((await preferences(db)).model).toBe('p/small');
+    expect((await call(port, 'POST', '/api/model', { model: 'no-slash' })).status).toBe(400);
+    expect((await call(port, 'POST', '/api/model', { model: null })).status).toBe(200);
+    expect((await preferences(db)).model).toBeNull();
+
+    expect((await call(port, 'POST', '/api/model/chatgpt', {})).body).toEqual({ code: 'ABCD-1234', url: 'https://auth.example/device', expiresAt: 900 });
+    expect((await call(port, 'POST', '/api/model/key', { provider: 'openai', key: ' sk-test ' })).status).toBe(200);
+    expect((await call(port, 'POST', '/api/model/key', { provider: 'openai' })).status).toBe(400);
+    expect((await call(port, 'POST', '/api/model/signout', { provider: 'openai' })).status).toBe(200);
+    expect(calls).toEqual(['check', 'check', 'chatgpt', 'key openai sk-test', 'signout openai']);
   });
 
   it('starts a test run of the model only when asked, through the process that holds the model', async () => {
@@ -246,7 +260,7 @@ describe('managing sift from the dashboard', () => {
     await recordDecision(db, ACCOUNT, 'w2', agent, { now: 30 });
 
     expect((await call(port, 'GET', '/api/manage')).body['predateGuidelines']).toEqual({ [ACCOUNT]: 0 });
-    guidelinesChangedAt = 20;
+    await db.run('UPDATE preferences SET guidelines_changed_at = 20');
     expect((await call(port, 'GET', '/api/manage')).body['predateGuidelines']).toEqual({ [ACCOUNT]: 1 });
     await call(port, 'POST', '/api/guidelines', { text: 'Recruiters are cold outreach.' });
     expect(calls).toEqual([]);
@@ -260,7 +274,7 @@ describe('managing sift from the dashboard', () => {
   it('edits the guidelines, labels and rules', async () => {
     const port = await start();
     expect((await call(port, 'POST', '/api/guidelines', { text: 'Recruiters are cold outreach.' })).status).toBe(200);
-    expect(guidelines).toBe('Recruiters are cold outreach.');
+    expect((await preferences(db)).guidelines).toBe('Recruiters are cold outreach.');
     expect((await call(port, 'POST', '/api/guidelines', { text: 'x'.repeat(9000) })).status).toBe(400);
 
     expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'newsletter', disposition: 'keep', name: 'Reading' })).status).toBe(200);

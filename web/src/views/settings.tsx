@@ -6,7 +6,9 @@ import {
   Button,
   Code,
   ConfirmButton,
+  Copyable,
   Failure,
+  Input,
   Kbd,
   Loading,
   Note,
@@ -16,6 +18,7 @@ import {
   SettingRow,
   Sheet,
   TextArea,
+  TextLink,
   setShortcutsOn,
   useShortcutsOn,
   useToast,
@@ -35,19 +38,12 @@ const DAYS = [
   ['30', 'The last month'],
 ] as const;
 
-/** Whether sift is running and acting, and how it decides: what a person comes to Settings for first. */
+/** Whether sift is running and acting, and how often: what the owner comes to Settings for first. */
 function Sorting({ state, reload }: { state: ManageState; reload: () => void }) {
   const { busy, error, run } = useAction();
-  const models = useLoaded('models', (signal) => api.models(signal), 300_000);
-  const month = useLoaded('summary-30', (signal) => api.summary(30, signal), 300_000);
   const { settings, activity } = state;
   const save = (change: Parameters<typeof api.saveSettings>[0]) => run(() => api.saveSettings(change), reload);
   const interval = INTERVALS.some(([value]) => Number(value) === settings.interval) ? String(settings.interval) : '';
-  const modelOptions = [
-    ['', 'No model'] as const,
-    ...[...new Set([...(settings.model ? [settings.model] : []), ...(models.data?.models ?? [])])].map((m) => [m, m] as const),
-  ];
-  const spent = month.data?.totals;
 
   return (
     <Section title="Sorting">
@@ -85,22 +81,6 @@ function Sorting({ state, reload }: { state: ManageState; reload: () => void }) 
           )}
         </SettingRow>
         <SettingRow
-          title="Model"
-          note={
-            spent && spent.decisions > 0
-              ? `Sorts what no rule covers. ${money(spent.costUsd)} in the last 30 days, for ${plural(spent.decisions - spent.withoutInference, 'message')}.`
-              : 'Sorts what no rule covers.'
-          }
-        >
-          <Select
-            label="Model"
-            value={settings.model ?? ''}
-            options={modelOptions}
-            disabled={busy}
-            onChange={(model) => save({ model: model === '' ? null : model })}
-          />
-        </SettingRow>
-        <SettingRow
           title="Check for mail"
           note={activity.sorting ? (activity.lastPassAt ? `Last checked ${ago(activity.lastPassAt)}.` : 'Starting.') : undefined}
         >
@@ -119,6 +99,131 @@ function Sorting({ state, reload }: { state: ManageState; reload: () => void }) 
         </SettingRow>
       </Sheet>
       <Failure>{error}</Failure>
+    </Section>
+  );
+}
+
+type Choice = ManageState['model']['choices'][number];
+
+/** ChatGPT, signed in by a code entered at OpenAI: nothing has to come back to this server, so it works wherever sift runs. */
+function ChatGPT({ choice, state, reload }: { choice: Choice; state: ManageState['model']; reload: () => void }) {
+  const { busy, error, run } = useAction();
+  const pending = state.pending;
+  if (state.signedIn.includes(choice.provider))
+    return (
+      <SettingRow title={choice.label} note="Signed in. What it sorts is judged on your plan.">
+        <Button busy={busy} onClick={() => run(() => api.signOutModel(choice.provider), reload)}>
+          Sign out
+        </Button>
+      </SettingRow>
+    );
+  if (pending && 'code' in pending)
+    return (
+      <SettingRow
+        title={choice.label}
+        note={
+          <>
+            Enter this code at{' '}
+            <TextLink href={pending.url} away>
+              {new URL(pending.url).host}
+            </TextLink>
+            . This finishes by itself once you have.
+          </>
+        }
+      >
+        <Copyable value={pending.code} label="the code" />
+      </SettingRow>
+    );
+  return (
+    <SettingRow
+      title={choice.label}
+      note={
+        <>
+          With a ChatGPT Plus or Pro plan.
+          <Failure>{error ?? (pending && 'error' in pending ? pending.error : null)}</Failure>
+        </>
+      }
+    >
+      <Button busy={busy} onClick={() => run(() => api.signInChatGPT(), reload)}>
+        Sign in
+      </Button>
+    </SettingRow>
+  );
+}
+
+/** A provider that takes an API key. The key is kept encrypted with the reader's own data and never shown again. */
+function ApiKey({ choice, state, reload }: { choice: Choice; state: ManageState['model']; reload: () => void }) {
+  const { busy, error, run } = useAction();
+  const [key, setKey] = useState('');
+  if (state.signedIn.includes(choice.provider))
+    return (
+      <SettingRow title={choice.label} note="Saved.">
+        <Button busy={busy} onClick={() => run(() => api.signOutModel(choice.provider), reload)}>
+          Remove
+        </Button>
+      </SettingRow>
+    );
+  return (
+    <SettingRow title={choice.label} note={<Failure>{error}</Failure>}>
+      <Input type="password" aria-label={choice.label} autoComplete="off" value={key} className="font-mono" onChange={(event) => setKey(event.target.value)} />
+      <Button
+        busy={busy}
+        disabled={key.trim() === ''}
+        onClick={() =>
+          run(
+            () => api.saveModelKey(choice.provider, key),
+            () => (setKey(''), reload()),
+          )
+        }
+      >
+        Save
+      </Button>
+    </SettingRow>
+  );
+}
+
+/** The reader's own way to a model and which one sorts their mail: each person signs in for themselves. */
+function Model({ state, reload }: { state: ManageState; reload: () => void }) {
+  const { busy, error, run } = useAction();
+  const { chosen, signedIn } = state.model;
+  // Keyed by the sign-ins, so one added or removed (a ChatGPT one finishes in the background) asks again.
+  const models = useLoaded(`models ${signedIn.join(' ')}`, (signal) => api.models(signal), 300_000);
+  const month = useLoaded('summary-30', (signal) => api.summary(30, signal), 300_000);
+  const recommended = models.data?.recommended ?? null;
+  const offered = [...new Set([...(chosen ? [chosen] : []), ...(recommended ? [recommended] : []), ...(models.data?.models ?? [])])];
+  const spent = month.data?.totals;
+  const provider = chosen?.split('/')[0];
+  const unreachable = provider && !signedIn.includes(provider) ? provider : null;
+  return (
+    <Section title="Model">
+      <Sheet>
+        {state.model.choices.map((choice) =>
+          choice.how === 'chatgpt' ? (
+            <ChatGPT key={choice.provider} choice={choice} state={state.model} reload={reload} />
+          ) : (
+            <ApiKey key={choice.provider} choice={choice} state={state.model} reload={reload} />
+          ),
+        )}
+        <SettingRow
+          title="Model"
+          note={
+            signedIn.length === 0
+              ? 'Sorts what no rule covers, once you have signed in above. Without one, that mail waits for you.'
+              : spent && spent.decisions > 0
+                ? `Sorts what no rule covers. ${money(spent.costUsd)} in the last 30 days, for ${plural(spent.decisions - spent.withoutInference, 'message')}.`
+                : 'Sorts what no rule covers.'
+          }
+        >
+          <Select
+            label="Model"
+            value={chosen ?? ''}
+            options={[['', 'No model'] as const, ...offered.map((m) => [m, m === recommended ? `${m} (recommended)` : m] as const)]}
+            disabled={busy || (signedIn.length === 0 && chosen === null)}
+            onChange={(model) => run(() => api.setModel(model === '' ? null : model), reload)}
+          />
+        </SettingRow>
+      </Sheet>
+      <Failure>{error ?? (unreachable ? `${chosen} needs a sign-in to ${unreachable}. Sign in above, or choose another.` : null)}</Failure>
     </Section>
   );
 }
@@ -238,8 +343,10 @@ export function SettingsView() {
         <>
           {/* How sift runs applies to everyone it sorts for, so it is the owner's to change. The server refuses anyone else. */}
           {data.owner ? <Sorting state={data} reload={reload} /> : null}
+          {/* The model, its sign-in and the guidelines are each person's own. */}
+          <Model state={data} reload={reload} />
+          <Guidelines saved={data.guidelines} />
           <Accounts state={data} />
-          {data.owner ? <Guidelines saved={data.guidelines} /> : null}
           {data.owner ? <OlderMail /> : null}
           <Keys />
         </>

@@ -32,7 +32,7 @@ Settings are read again before every pass, so a change made in the dashboard or 
 
 ## Models
 
-The model step of `init` signs in to a provider and offers its models, the newest small one first. The dashboard's Settings switches between the models you are signed in to. Using a ChatGPT subscription from a third-party tool is not something OpenAI documents as supported; an API key is the fallback.
+Each person signs in to a model and chooses one under Settings in the dashboard: ChatGPT, by a code entered at OpenAI, or an OpenAI or Anthropic API key. The newest small model is offered first. Using a ChatGPT subscription from a third-party tool is not something OpenAI documents as supported; an API key is the fallback.
 
 ## Files
 
@@ -40,9 +40,8 @@ Nothing needs an environment variable. Everything sift keeps is in one directory
 
 | File | What it is |
 | --- | --- |
-| `sift.toml` | Settings: the model, whether to act or only suggest, how often to check, the dashboard's port and address, and who can sign in. Unknown keys are errors. |
-| `guidelines.md` | Your own words about how to sort your mail. The model reads it before each message. |
+| `sift.toml` | Settings: whether to act or only suggest, how often to check, the dashboard's port and address, and who can sign in. Unknown keys are errors. |
 | `sift.db` | Who has which mailbox. |
-| `users/` | One database per person: labels, rules, the record of every message, decision and change, and the full content of mail they answered for. |
-| `google-client.json`, `google/`, `model-auth.json`, `dashboard-key` | Credentials and the session secret. Owner-only. |
+| `users/` | One database per person: their sign-ins (encrypted), model and guidelines, labels, rules, the record of every message, decision and change, and the full content of mail they answered for. |
+| `google-client.json`, `dashboard-key` | The Google client and the session secret. Owner-only. |
 | `setup.json` | How far `init` has got. |

@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
 import { people } from '../src/store/people.ts';
-import { connectAccount, connectedAddresses, recordSync, userOf } from '../src/store/accounts.ts';
+import { connectAccount, connectedAddresses, personOf, recordSync, userOf } from '../src/store/accounts.ts';
+import { preferences, setGuidelines } from '../src/store/preferences.ts';
 import { type Store, openStore } from '../src/store/store.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
@@ -93,17 +94,19 @@ beforeEach(async () => {
   await connectAccount(store, ALPHA_WORK, '1', 1, alpha);
   await connectAccount(store, BRAVO, '1', 2);
   for (const account of [ALPHA, ALPHA_WORK, BRAVO]) await seed(account);
+  await setGuidelines(await dbOf(ALPHA), 'guidelines alpha-own-words');
 
   const assets = mkdtempSync(join(tmpdir(), 'sift-web-'));
   mkdirSync(join(assets, 'assets'));
   writeFileSync(join(assets, 'index.html'), '<!doctype html>page');
   const controls: Controls = {
-    settings: () => ({ act: false, interval: 60, model: null, fewShot: true, examplesKeepDays: null }),
+    settings: () => ({ act: false, interval: 60, fewShot: true, examplesKeepDays: null }),
     saveSettings: () => void calls.push('settings'),
-    guidelines: () => 'guidelines alpha-owner-words',
-    saveGuidelines: () => void calls.push('guidelines'),
-    guidelinesChangedAt: () => null,
-    models: async () => [],
+    models: async () => ({ models: [], recommended: null }),
+    modelSignIns: async (db) => ({ choices: [], signedIn: [`signed-in-${await personOf(db)}`], pending: null }),
+    signInChatGPT: async (db) => (calls.push(`chatgpt ${await personOf(db)}`), { code: 'C', url: 'https://auth.example/device', expiresAt: 1 }),
+    saveModelKey: async (db, provider) => void calls.push(`key ${provider} ${await personOf(db)}`),
+    signOutModel: async (db, provider) => void calls.push(`signout ${provider} ${await personOf(db)}`),
     undo: async (_db, id) => (calls.push(`undo ${id}`), 'undone'),
     putBack: async () => false,
     ruleFilter: async (_db, id) => void calls.push(`filter ${id}`),
@@ -208,9 +211,10 @@ describe("nobody sees or changes another person's mail", () => {
         }
       }
     }
-    // The owner's guidelines are theirs.
-    expect((await call('GET', '/api/manage', BRAVO)).text).not.toContain('alpha-owner-words');
-    expect((await call('GET', '/api/manage', ALPHA)).text).toContain('alpha-owner-words');
+    // Guidelines and a model sign-in are each person's own.
+    expect((await call('GET', '/api/manage', BRAVO)).text).not.toContain('alpha-own-words');
+    expect((await call('GET', '/api/manage', ALPHA)).text).toContain('alpha-own-words');
+    expect((await call('GET', '/api/manage', BRAVO)).text).not.toContain('signed-in-1');
   });
 
   it('shows a person all of their own mailboxes, signed in as any of them, or one when asked', async () => {
@@ -284,16 +288,31 @@ describe("nobody sees or changes another person's mail", () => {
     expect((await call('POST', '/api/undo', ALPHA_WORK, { id: theirs.action })).status).toBe(200);
   });
 
+  it('lets each person change their own guidelines, model and sign-ins, and only their own', async () => {
+    const bravo = (await userOf(store.central, BRAVO))!.id;
+    for (const [path, body] of [
+      ['/api/guidelines', { text: 'bravo words' }],
+      ['/api/model', { model: 'openai/small' }],
+      ['/api/model/chatgpt', {}],
+      ['/api/model/key', { provider: 'openai', key: 'k' }],
+      ['/api/model/signout', { provider: 'openai' }],
+    ] as const)
+      expect((await call('POST', path, BRAVO, body)).status, path).toBe(200);
+    expect(calls.filter((c) => c !== 'check')).toEqual([`chatgpt ${bravo}`, `key openai ${bravo}`, `signout openai ${bravo}`]);
+    expect(await preferences(await dbOf(BRAVO))).toMatchObject({ guidelines: 'bravo words', model: 'openai/small' });
+    expect(await preferences(await dbOf(ALPHA))).toMatchObject({ guidelines: 'guidelines alpha-own-words', model: null });
+    expect((await call('POST', '/api/guidelines', null, { text: 'nobody' })).status).toBe(401);
+  });
+
   it('lets only the person who set sift up change what applies to everyone', async () => {
     for (const [path, body] of [
       ['/api/settings', { act: true }],
-      ['/api/guidelines', { text: 'mine' }],
       ['/api/backfill', { days: 1 }],
     ] as const) {
       expect((await call('POST', path, BRAVO, body)).status, `${path} as a guest`).toBe(403);
       expect((await call('POST', path, ALPHA_WORK, body)).status, `${path} as the owner`).toBe(200);
     }
-    expect(calls.filter((c) => c !== 'check')).toEqual(['settings', 'guidelines', 'backfill']);
+    expect(calls.filter((c) => c !== 'check')).toEqual(['settings', 'backfill']);
     // Asking sift to look now is nobody's secret.
     expect((await call('POST', '/api/check', BRAVO, {})).status).toBe(200);
   });
