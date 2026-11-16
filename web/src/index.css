@@ -265,15 +265,32 @@
   }
 }
 
-/* Rows are divided by faint dashes, on the page or in a sheet. A heading is set apart by space. */
+/* Rows are divided by faint dashes, on the page or in a sheet. A heading is set apart by space.
+   Drawn as a background rather than a border so that a row reaching past its text for its hover
+   (inside `.bleed`) keeps its rule to the text, in line with the search bar and the headings. */
+.row,
+.rule-above {
+  --dashes: repeating-linear-gradient(to right, var(--rule) 0 3px, transparent 3px 6px);
+  background-repeat: no-repeat;
+  background-size: calc(100% - 2 * var(--inset, 0px)) 1px;
+}
 .row {
-  border-bottom: 1px dashed var(--rule);
+  background-image: var(--dashes);
+  background-position: center bottom;
 }
 .row:last-child {
-  border-bottom: 0;
+  background-image: none;
 }
 thead .row:last-child {
-  border-bottom: 1px dashed var(--rule);
+  background-image: var(--dashes);
+}
+.rule-above {
+  background-image: linear-gradient(var(--rule), var(--rule));
+  background-position: center top;
+}
+.bleed {
+  margin-inline: calc(-1 * var(--bleed));
+  --inset: var(--bleed);
 }
 
 /* Focus is a highlighter outline, the same yellow that marks what needs you. */

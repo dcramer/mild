@@ -34,7 +34,7 @@ export function ChoiceGroup<T extends string>({
 }) {
   if (notes)
     return (
-      <div role="radiogroup" aria-label={label} className="-mx-(--bleed)">
+      <div role="radiogroup" aria-label={label} className="bleed">
         {options.map(([key, text]) => (
           <button
             key={key}

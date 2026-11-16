@@ -6,7 +6,8 @@ import { Control, ControlBar } from './controls.tsx';
 /**
  * Rows of the same kind of thing. It has no surface of its own: on the page it sits flush with the
  * heading above it, and inside a sheet it takes the sheet's gutter. On the page its rows reach a little
- * past the text on both sides, so a row's hover has room around what it holds.
+ * past the text on both sides, so a row's hover has room around what it holds; the rules between rows
+ * stay with the text.
  *
  * `keys`: J and K move through it, with the page's controls bar under it. Only for a list someone works
  * through one item after another (Suggestions, Activity); every other list is pressed or tabbed through.
@@ -38,14 +39,14 @@ export function Table({ keys = false, children }: { keys?: boolean; children: Re
   const down = useShortcut('j', 'Next row', () => step(1), live);
   const up = useShortcut('k', 'Previous row', () => step(-1), live);
   return (
-    <div ref={element} className="-mx-(--bleed)">
+    <div ref={element} className="bleed">
       {/* The bar below sits outside the sideways scroll, which would otherwise hold it in place instead of the screen. */}
       <div className="overflow-x-auto">
         <table className="w-full text-left">{children}</table>
       </div>
       {onPage && (down || up) ? (
         // The page's controls, held at the bottom of the screen while the table is on it.
-        <ControlBar className="sticky bottom-0 z-10 mt-3 hidden border-t border-(--rule) bg-background px-(--bleed) py-1.5 md:flex">
+        <ControlBar className="rule-above sticky bottom-0 z-10 mt-3 hidden bg-background px-(--bleed) py-1.5 md:flex">
           <Control keys={['j', 'k']} label="Move" />
           <Control keys={['Enter']} label="Open" />
           <Control keys={['?']} label="Every key" />
@@ -122,7 +123,7 @@ export function Td({ num, quiet, phone, className, ...props }: ComponentProps<'t
 export function TrGroup({ title, span }: { title: string; span: number }) {
   return (
     <tr>
-      <th colSpan={span} scope="colgroup" className={cn('heading pt-8 pb-1 text-left [tbody:first-of-type_&]:pt-0', EDGES)}>
+      <th colSpan={span} scope="colgroup" className={cn('heading pt-8 pb-1 text-left [tbody:first-of-type_&]:pt-4', EDGES)}>
         {title}
       </th>
     </tr>
