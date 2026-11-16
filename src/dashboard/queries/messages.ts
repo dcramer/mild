@@ -61,6 +61,7 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
     .where(and(eq(actions.accountId, accountId), eq(actions.messageId, messageId)))
     .orderBy(asc(actions.id));
 
+  const body = await storedBody(db, accountId, messageId);
   return {
     accountId,
     messageId,
@@ -73,9 +74,8 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
     listId: m.listId,
     receivedAt: m.receivedAt,
     headers: m.headers,
-    body: await storedBody(db, accountId, messageId),
-    // HTML facts are recorded for every message with an HTML part whose content was read, and only then.
-    hasHtml: facts.hasAttachments === undefined ? null : facts.linkHosts !== undefined,
+    body: body?.text ?? null,
+    hasHtml: body?.html != null,
     facts,
     unsubscribe: await canUnsubscribe(db, accountId, m.fromAddress, m.headers),
     sender: (await senderProfile(db, scope, accountId, m.fromAddress))!,
@@ -84,28 +84,24 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
   };
 }
 
-/** Whether sift has recorded this message in one of the scope's mailboxes. */
-export async function recordedMessage(db: Sql, scope: Scope, accountId: string, messageId: string): Promise<boolean> {
-  if (!sees(scope, accountId)) return false;
-  const [row] = await db
-    .select({ id: messages.id })
-    .from(messages)
-    .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
-  return row !== undefined;
-}
-
-/** The text of a message, if sift is holding it: as a suggestion's temporary copy, or in an example the user made. */
-async function storedBody(db: Sql, accountId: string, messageId: string): Promise<string | null> {
+/** A message as sift holds it, as text and HTML: a suggestion's temporary copy, or an example the user made. */
+async function storedBody(db: Sql, accountId: string, messageId: string): Promise<{ text: string; html: string | null } | null> {
   const [held] = await db
-    .select({ body: suggestionBodies.bodyText })
+    .select({ text: suggestionBodies.bodyText, html: suggestionBodies.bodyHtml })
     .from(suggestionBodies)
     .where(and(eq(suggestionBodies.accountId, accountId), eq(suggestionBodies.messageId, messageId)));
-  if (held) return held.body;
+  if (held) return held;
   const [kept] = await db
-    .select({ body: examples.bodyText })
+    .select({ text: examples.bodyText, html: examples.bodyHtml })
     .from(examples)
     .where(and(eq(examples.accountId, accountId), eq(examples.messageId, messageId), eq(examples.status, 'captured')));
-  return kept?.body ?? null;
+  return kept?.text == null ? null : { text: kept.text, html: kept.html };
+}
+
+/** The HTML of one of the scope's messages, as sift holds it; null when it holds none. */
+export async function storedHtml(db: Sql, scope: Scope, accountId: string, messageId: string): Promise<string | null> {
+  if (!sees(scope, accountId)) return null;
+  return (await storedBody(db, accountId, messageId))?.html ?? null;
 }
 
 /** Whether sift can leave the list a message came from. Mirrors what `unsubscribe` in src/actions will agree to. */

@@ -238,11 +238,11 @@ export const MessageDetail = z.object({
   headers: z.record(z.string(), z.string()),
   /**
    * The readable text, where sift holds it: while the message is waiting on the user (and sift would move it or
-   * could not place it), or for good once the user has answered for it. Null otherwise.
+   * could not place it), or for good once the user has answered for it. Null otherwise. Its HTML is held with it.
    */
   body: z.string().nullable(),
-  /** Whether it has an HTML part to show. Null when sift has not read the whole message and Gmail could not be asked when it was opened. */
-  hasHtml: z.boolean().nullable(),
+  /** Whether sift holds its HTML, beside the text, to show in a frame (`/api/message/html`). */
+  hasHtml: z.boolean(),
   facts: MessageFactSet,
   sender: SenderProfile,
   /**

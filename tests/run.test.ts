@@ -57,10 +57,9 @@ function api(): GmailApi {
     getMetadata: async (id) => inbox.find((m) => m.id === id) ?? null,
     getLabelIds: async (id) => mailbox.labels.get(id) ?? null,
     listLabels: async () => [...new Set([...mailbox.labels.values()].flat())].filter((id) => id.startsWith('L:')).map((id) => ({ id, name: id.slice(2) })),
-    getBodyText: async (id) => bodies.get(id) ?? null,
     getThread: async () => null,
     listSendAs: async () => [ACCOUNT],
-    getContent: async (id) => (bodies.has(id) ? { text: bodies.get(id)!, facts: { hasAttachments: false } } : null),
+    getContent: async (id) => (bodies.has(id) ? { text: bodies.get(id)!, html: null, facts: { hasAttachments: false } } : null),
   };
 }
 
@@ -638,7 +637,7 @@ describe('inference tier', () => {
     const read: string[] = [];
     const reading = (): GmailApi => ({
       ...api(),
-      getContent: async (id) => (read.push(id), { text: `Body ${id}`, facts: { hasAttachments: id === 'news' } }),
+      getContent: async (id) => (read.push(id), { text: `Body ${id}`, html: null, facts: { hasAttachments: id === 'news' } }),
     });
     await runOnce(await active(false), { ...options(), connect: () => ({ api: reading(), mailbox }), model: model('newsletter') });
     expect(judged).toEqual(['ada']);
@@ -656,7 +655,7 @@ describe('inference tier', () => {
     const read: string[] = [];
     const reading = (): GmailApi => ({
       ...api(),
-      getContent: async (id) => (read.push(id), { text: `Body ${id}`, facts: { hasAttachments: id === 'news' } }),
+      getContent: async (id) => (read.push(id), { text: `Body ${id}`, html: null, facts: { hasAttachments: id === 'news' } }),
     });
     await runOnce(await active(false), { ...options(), connect: () => ({ api: reading(), mailbox }) });
     expect(read.toSorted()).toEqual(['ada', 'news']);

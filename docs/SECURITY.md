@@ -4,16 +4,16 @@ How Sift keeps one person's mail from anyone else, including the people running 
 
 ## Hold as little as possible
 
-Everything stored or sent anywhere (a column, a log line, telemetry, what the model provider is sent) has a reason, a lifetime and a form from the table below; anything without a reason goes. Message text is kept in two places only: mail the person answered for, until they delete it or for a year, and the text of mail waiting on them, until they answer it and for at most 30 days.
+Everything stored or sent anywhere (a column, a log line, telemetry, what the model provider is sent) has a reason, a lifetime and a form from the table below; anything without a reason goes. Message text and HTML are kept in two places only: mail the person answered for, until they delete it or for a year, and the text of mail waiting on them, until they answer it and for at most 30 days.
 
 ## What is stored, and how
 
-This is about storage at rest. Plaintext passes through the server at the moment something is made or changed (a message fetched from Gmail, an address the browser sends for a new rule), and is hashed or sealed before it is written. A message's HTML is never written at all: the dashboard fetches it from Gmail while the person has the message open, cleans it and sends it to their browser, and nothing of it is stored, cached or logged (`GET /api/message/html`).
+This is about storage at rest. Plaintext passes through the server at the moment something is made or changed (a message fetched from Gmail, an address the browser sends for a new rule), and is hashed or sealed before it is written. A message's HTML is kept only beside its text, under the same limits, and is cleaned each time it is sent to the browser (`GET /api/message/html`); nothing of it is logged.
 
 | What | Stored as | Who can read it |
 | --- | --- | --- |
 | Sender addresses and domains, wherever they are kept (mail records, rules, cached correspondents) | A keyed hash per person, for exact lookups and grouping, and a sealed copy for showing | The hash: nobody. The copy: only the person's browser |
-| Message text, subjects, sender names, recipients, stored headers | Sealed | Only the person's browser |
+| Message text and HTML, subjects, sender names, recipients, stored headers | Sealed | Only the person's browser |
 | Credentials: Gmail refresh tokens, model sign-ins | Encrypted with the server's key, bound to the person and what each is for | The server, which uses them while the person is away |
 | What the person writes or Sift decides: rules (apart from their addresses), labels, actions, conditions in their own words, decisions and outcomes, times, costs | Plain | The server. Conditions and label descriptions are read on every pass, to be given to the model |
 

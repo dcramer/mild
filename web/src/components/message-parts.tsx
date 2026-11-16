@@ -23,14 +23,12 @@ function storedView(): View {
 }
 
 /**
- * A message under who it went to, unless that was the account alone: its HTML, fetched from Gmail while it
- * is shown, or its text as far as sift holds it when it has no HTML or the reader chose text. Who sent it and
- * when are in the panel's header.
+ * A message as sift holds it, under who it went to unless that was the account alone: its HTML when it has
+ * one, or its text when it has none or the reader chose text. Who sent it and when are in the panel's header.
  */
 export function MessageBody({ detail }: { detail: MessageDetail }) {
   const [view, setView] = useState(storedView);
-  // Null: Gmail could not be asked what parts it has; its text is all there is to show.
-  const html = detail.hasHtml === true && view === 'html';
+  const html = detail.hasHtml && view === 'html';
   // Mail to the account alone says nothing by saying who it went to.
   const addressed = detail.cc.length > 0 || detail.to.some((p) => p.address !== detail.accountId);
   const choose = (next: View | null) => {
@@ -51,11 +49,11 @@ export function MessageBody({ detail }: { detail: MessageDetail }) {
             {detail.cc.length > 0 ? `${detail.to.length > 0 ? ', cc ' : 'Cc '}${people(detail.cc)}` : ''}
           </p>
         ) : null}
-        {detail.hasHtml !== true ? null : (
+        {detail.hasHtml ? (
           <div className="ml-auto">
             <ChoiceGroup label="Read it as" value={html ? 'html' : 'text'} options={VIEWS} onChange={choose} />
           </div>
-        )}
+        ) : null}
       </div>
       {html ? (
         <div className="flex flex-col gap-2">

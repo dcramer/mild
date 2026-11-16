@@ -52,10 +52,11 @@ async function seed(account: string): Promise<void> {
     JSON.stringify({ from: `proposed@${mark}.example.com` }),
   ))!;
   await raw(db).run(
-    `INSERT INTO examples (account_id, message_id, disposition, label_id, marked_at, status, body_text) VALUES (?, ?, 'archive', 'newsletter', 1000, 'captured', ?)`,
+    `INSERT INTO examples (account_id, message_id, disposition, label_id, marked_at, status, body_text, body_html) VALUES (?, ?, 'archive', 'newsletter', 1000, 'captured', ?, ?)`,
     account,
     `m-${mark}`,
     `Body ${mark}`,
+    `<p>Html ${mark}</p>`,
   );
   // Mail the model failed on every time, waiting to be put back in the queue.
   await recordSync(db, account, [facts({ accountId: account, messageId: `u-${mark}`, subject: `Unjudged ${mark}`, from: sender })], '3', 1000);
@@ -101,8 +102,6 @@ beforeEach(async () => {
     startEval: async (_db, { accountId }) => (calls.push(`eval ${accountId}`), 1),
     revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), !unreachable.includes(email)),
     // Whatever is asked for, it would answer with that person's mail: only the route's own check keeps it from the wrong person.
-    messageHtml: async (_db, account, id) => `<p>${id} of ${account} ${MARK[account] ?? ''}</p>`,
-    readMessage: async () => {},
     checkNow: async () => void calls.push('check'),
     activity: async () => ({
       running: true,

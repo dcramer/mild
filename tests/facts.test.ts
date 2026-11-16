@@ -3,7 +3,7 @@ import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { openUserDb, raw } from './fixtures.ts';
 import { storedFacts } from '../src/store/messages.ts';
-import { gatherEvidence, readWhole } from '../src/work/evidence.ts';
+import { gatherEvidence } from '../src/work/evidence.ts';
 import { FACT_FILTERS as FACT_FILTER_CONDITIONS } from '../src/dashboard/types.ts';
 import { RULE_FACTS, deriveFacts, describeFacts, factCondition, matchesFacts, threadFacts } from '../src/triage/facts.ts';
 import { FACTS, FACT_FILTER_WORDS } from '../web/src/lib/format.ts';
@@ -209,23 +209,6 @@ describe('thread context', () => {
     });
     return { db, message, asked, sources };
   };
-
-  it('reading a message whole when it is opened records its parts and keeps what was known of its thread', async () => {
-    const reply = await setup({ 'in-reply-to': '<mine@example.org>' });
-    await gatherEvidence(
-      reply.sources(async () => thread),
-      reply.message,
-    );
-    const content = { text: 'never kept', facts: { hasAttachments: true, trackingPixel: false, linkHosts: 2, trackedLinks: false, linksOffDomain: true } };
-    await readWhole(reply.db, { getContent: async () => content }, reply.message);
-    const known = await storedFacts(reply.db, ACCOUNT, 'reply');
-    expect(known).toMatchObject({ hasAttachments: true, linkHosts: 2, earlierInThread: 2, ownerInThread: true });
-    expect(JSON.stringify(known)).not.toContain('never kept');
-
-    // No longer in Gmail: nothing is learned, and nothing recorded is lost.
-    await readWhole(reply.db, { getContent: async () => null }, reply.message);
-    expect(await storedFacts(reply.db, ACCOUNT, 'reply')).toEqual(known);
-  });
 
   it("reads a reply's thread for the model, records it, and reads nothing for mail that is not a reply", async () => {
     const reply = await setup({ 'in-reply-to': '<mine@example.org>' });

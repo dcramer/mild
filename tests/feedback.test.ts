@@ -610,19 +610,21 @@ describe('reading a suggestion', () => {
     await suggest('kept@example.com', 'keep', { labelId: 'personal' }); // m3
     await suggest('gone@example.com', 'archive', NEWS); // m4
     const fetched: string[] = [];
-    const api = { getBodyText: async (id: string) => (fetched.push(id), id === 'm4' ? null : `Text of ${id}`) };
-    const stored = async () => await raw(db).all('SELECT message_id, body_text FROM suggestion_bodies ORDER BY message_id');
+    const content = (id: string) => ({ text: `Text of ${id}`, html: id === 'm1' ? `<p>Text of ${id}</p>` : null, facts: { hasAttachments: false } });
+    const api = { getContent: async (id: string) => (fetched.push(id), id === 'm4' ? null : content(id)) };
+    const stored = async () => await raw(db).all('SELECT message_id, body_text, body_html FROM suggestion_bodies ORDER BY message_id');
 
     expect(await keepSuggestionBodies(db, api, ACCOUNT, () => 1000)).toBe(3);
     expect(await stored()).toEqual([
-      { message_id: 'm1', body_text: 'Text of m1' },
-      { message_id: 'm2', body_text: 'Text of m2' },
-      { message_id: 'm4', body_text: '' },
+      { message_id: 'm1', body_text: 'Text of m1', body_html: '<p>Text of m1</p>' },
+      { message_id: 'm2', body_text: 'Text of m2', body_html: null },
+      { message_id: 'm4', body_text: '', body_html: null },
     ]);
     expect(await keepSuggestionBodies(db, api, ACCOUNT, () => 1000)).toBe(0);
     expect(fetched.toSorted()).toEqual(['m1', 'm2', 'm4']);
-    expect((await messageDetail(db, await everything(db), ACCOUNT, 'm1'))?.body).toBe('Text of m1');
-    expect((await messageDetail(db, await everything(db), ACCOUNT, 'm3'))?.body).toBeNull();
+    expect(await messageDetail(db, await everything(db), ACCOUNT, 'm1')).toMatchObject({ body: 'Text of m1', hasHtml: true });
+    expect(await messageDetail(db, await everything(db), ACCOUNT, 'm2')).toMatchObject({ body: 'Text of m2', hasHtml: false });
+    expect(await messageDetail(db, await everything(db), ACCOUNT, 'm3')).toMatchObject({ body: null, hasHtml: false });
 
     // Answered: the temporary copy goes at once. (The example keeps the message's text once it is captured.)
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' });
@@ -680,17 +682,17 @@ describe('examples', () => {
 
     let failing = true;
     const api = {
-      getBodyText: async (id: string) => {
+      getContent: async (id: string) => {
         if (id === 'm3' && failing) throw new Error('network');
-        return id === 'm2' ? null : 'Hello there.';
+        return id === 'm2' ? null : { text: 'Hello there.', html: '<p>Hello there.</p>', facts: { hasAttachments: false } };
       },
     };
     await expect(captureExamples(db, api, ACCOUNT, () => 99)).rejects.toThrow('network');
-    const stored = await raw(db).all('SELECT message_id, status, body_text, captured_at FROM examples ORDER BY message_id');
+    const stored = await raw(db).all('SELECT message_id, status, body_text, body_html, captured_at FROM examples ORDER BY message_id');
     expect(stored).toEqual([
-      { message_id: 'm1', status: 'captured', body_text: 'Hello there.', captured_at: 99 },
-      { message_id: 'm2', status: 'gone', body_text: null, captured_at: 99 },
-      { message_id: 'm3', status: 'pending', body_text: null, captured_at: null },
+      { message_id: 'm1', status: 'captured', body_text: 'Hello there.', body_html: '<p>Hello there.</p>', captured_at: 99 },
+      { message_id: 'm2', status: 'gone', body_text: null, body_html: null, captured_at: 99 },
+      { message_id: 'm3', status: 'pending', body_text: null, body_html: null, captured_at: null },
     ]);
 
     failing = false;

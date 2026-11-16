@@ -2,6 +2,7 @@ import type { Sql } from '../store/sql.ts';
 import { reconcile } from '../actions/executor.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
+import type { MessageContent } from '../gmail/body.ts';
 import type { FilterCheck } from '../actions/rule-filters.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
@@ -191,6 +192,22 @@ export async function runWork(store: Store, work: Work, options: RunOptions, unt
   }
 }
 
+/**
+ * Gmail for one pass, reading each message whole at most once: the model, the examples and the bodies kept
+ * for waiting mail share the read. Held only for the pass.
+ */
+function readingOnce(api: GmailApi): GmailApi {
+  const reads = new Map<string, Promise<MessageContent | null>>();
+  return {
+    ...api,
+    getContent: (messageId) => {
+      const read = reads.get(messageId) ?? api.getContent(messageId);
+      reads.set(messageId, read);
+      return read;
+    },
+  };
+}
+
 /** One pass, its outcome kept for the dashboard. Null when the mailbox was removed while it ran. */
 async function passMailbox(db: Sql, account: Account, options: RunOptions, until: number): Promise<PassResult | null> {
   const result = await runMailbox(db, account, options, until);
@@ -214,7 +231,8 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
   const tier = options.model ? await options.model(db) : null;
   const result: PassResult = { email: account.email };
   try {
-    const { api, mailbox } = await options.connect(db, account);
+    const { api: gmail, mailbox } = await options.connect(db, account);
+    const api = readingOnce(gmail);
     const deps = { db, mailbox, ...(options.now ? { now: options.now } : {}) };
     if (active) await reconcile(deps);
     result.sync = await syncAccount(db, api, account, options.now, until);

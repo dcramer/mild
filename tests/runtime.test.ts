@@ -78,7 +78,6 @@ describe('a flow whose steps reach different instances', () => {
           getMetadata: async () => null,
           getLabelIds: async () => null,
           listLabels: async () => [],
-          getBodyText: async () => null,
           getContent: async () => null,
           getThread: async () => null,
           listSendAs: async () => [ACCOUNT],

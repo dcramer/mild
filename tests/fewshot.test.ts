@@ -178,7 +178,7 @@ describe('stored examples', () => {
       },
     };
     const sources = {
-      api: { getContent: async () => ({ text: 'text', facts: { hasAttachments: false } }), getThread: async () => null },
+      api: { getContent: async () => ({ text: 'text', html: null, facts: { hasAttachments: false } }), getThread: async () => null },
       mailbox: new FakeMailbox(),
     };
     const [account] = await listAccounts(db);

@@ -95,6 +95,29 @@ await addRule(db, ACCOUNT, { match: { fromDomain: 'news.example.com' }, labelId:
 await addRule(db, ACCOUNT, { match: { from: 'orders@shop.example.com' }, labelId: 'transactional' }, 'user');
 await addRule(db, ACCOUNT, { match: { fromDomain: 'ci.example.org' }, disposition: 'archive' }, 'user');
 
+/**
+ * The Deals mail (m4) as its HTML part, stored by the pass as it would be from Gmail: a remote image, a background from elsewhere, inline styles,
+ * a link, and the things the frame must never run or follow. The hosts are on example.com, which resolves,
+ * so a request that got out would be seen.
+ */
+const HTML: Record<string, string> = {
+  m4: `<!DOCTYPE html><html><head><title>Deals</title><meta http-equiv="refresh" content="5;url=https://track.example.com/refresh"></head>
+<body style="margin:0;background:#f4efe6;font-family:Georgia,serif">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px">
+<table width="600" style="max-width:100%;background:#ffffff;border:1px solid #ddd">
+<tr><td style="padding:0"><img src="https://images.example.com/hero.png" width="600" height="200" alt="48 hours only" style="display:block;width:100%;height:auto"></td></tr>
+<tr><td style="padding:24px;color:#222;background-image:url(https://images.example.com/paper.png)">
+<h1 style="margin:0 0 12px;font-size:28px;color:#b3261e">30% off everything</h1>
+<p style="font-size:16px;line-height:1.5">Everything must go. The sale ends in 48 hours.</p>
+<p><a href="https://shop.example.com/sale" style="display:inline-block;padding:12px 20px;background:#222;color:#fff;text-decoration:none">Shop the sale</a></p>
+<p style="font-size:12px;color:#777"><a href="javascript:alert('clicked')" onclick="alert('clicked')">Preferences</a> · <a href="https://promo.example.com/unsubscribe">Unsubscribe</a></p>
+</td></tr></table>
+<img src="https://track.example.com/open.gif?u=me" width="1" height="1" alt="">
+</td></tr></table>
+<script>document.body.dataset.ran = 'yes'</script>
+</body></html>`,
+};
+
 const mailbox = new FakeMailbox();
 for (const { raw } of inbox) mailbox.labels.set(raw.id, [...raw.labelIds]);
 // Ada's mail is a reply: the owner has written to her.
@@ -108,13 +131,12 @@ const api: GmailApi = {
   getMetadata: async (id) => find(id)?.raw ?? null,
   getLabelIds: async (id) => mailbox.labels.get(id) ?? null,
   listLabels: async () => [],
-  getBodyText: async (id) => find(id)?.body ?? null,
   // What a model's read of the whole message adds: Grace's notes come with a file, and the Deals mail is tracked.
   getContent: async (id) => {
     const m = find(id);
     if (!m) return null;
     const html = id === 'm4' ? { trackingPixel: true, trackedLinks: true, linkHosts: 2, linksOffDomain: true } : {};
-    return { text: m.body, facts: { hasAttachments: id === 'm7', ...html } };
+    return { text: m.body, html: HTML[id] ?? null, facts: { hasAttachments: id === 'm7', ...html } };
   },
   getThread: async () => null,
   listSendAs: async () => [ACCOUNT],

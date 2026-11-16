@@ -48,16 +48,6 @@ export interface Controls {
    * reporting on it. Resolves false when Google could not be reached; the mailbox is removed anyway.
    */
   revokeGmail(db: Sql, email: string): Promise<boolean>;
-  /**
-   * One of this person's messages as Gmail holds its HTML part, raw, to be cleaned and shown while it is
-   * open. Nothing keeps or logs it. Null when it has no HTML part or is no longer in Gmail.
-   */
-  messageHtml(db: Sql, accountId: string, messageId: string): Promise<string | null>;
-  /**
-   * Read one of this person's recorded messages whole from Gmail and record what parts it has, as a pass
-   * that reads it would. Nothing of its content is kept. Does nothing when Gmail no longer has it.
-   */
-  readMessage(db: Sql, accountId: string, messageId: string): Promise<void>;
   /** Pass this person's mailboxes now instead of at the next tick. */
   checkNow(db: Sql): Promise<void>;
   /** How the last passes over these mailboxes went. */

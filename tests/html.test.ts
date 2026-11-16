@@ -79,10 +79,11 @@ describe('readContent', () => {
     ],
   };
 
-  it('reads the text and the facts from one message, and keeps no HTML', () => {
+  it('reads the text, the HTML part and the facts from one message', () => {
     const content = readContent(payload);
     expect(content).toEqual({
       text: 'Shop the sale',
+      html: CAMPAIGN,
       facts: { hasAttachments: false, trackingPixel: true, linkHosts: 2, trackedLinks: true, linksOffDomain: true },
     });
   });
@@ -93,7 +94,7 @@ describe('readContent', () => {
   });
 
   it('leaves the HTML facts out for mail with no HTML part', () => {
-    expect(readContent({ mimeType: 'text/plain', body: { data: b64('hi') } })).toEqual({ text: 'hi', facts: { hasAttachments: false } });
+    expect(readContent({ mimeType: 'text/plain', body: { data: b64('hi') } })).toEqual({ text: 'hi', html: null, facts: { hasAttachments: false } });
   });
 });
 
@@ -106,7 +107,7 @@ describe('content facts', () => {
     await recordSync(db, ACCOUNT, [f], '2');
     expect(await storedFacts(db, ACCOUNT, f.messageId)).not.toHaveProperty('trackingPixel');
 
-    const content = { text: 'Shop the sale', facts: { hasAttachments: false, ...htmlFacts(CAMPAIGN, 'example.com') } };
+    const content = { text: 'Shop the sale', html: CAMPAIGN, facts: { hasAttachments: false, ...htmlFacts(CAMPAIGN, 'example.com') } };
     const evidence = await gatherEvidence(
       { db, api: { getContent: async () => content, getThread: async () => null }, mailbox: { hasSentTo: async () => false } },
       f,

@@ -7,12 +7,12 @@ const PER_PASS = 50;
 export const KEEP_BODY_DAYS = 30;
 
 /**
- * Keep the text of mail waiting on the user, and only that. Fetches it for suggestions that would move
+ * Keep the text and HTML of mail waiting on the user, and only that. Fetches it for suggestions that would move
  * the mail or that sift could not place (mail it would simply keep is not fetched), and drops the text
  * of anything answered, no longer a suggestion, or older than `KEEP_BODY_DAYS`. A failed fetch is tried
  * again on the next pass. Returns how many were fetched.
  */
-export async function keepSuggestionBodies(db: Sql, api: Pick<GmailApi, 'getBodyText'>, accountId: string, now: () => number = Date.now): Promise<number> {
+export async function keepSuggestionBodies(db: Sql, api: Pick<GmailApi, 'getContent'>, accountId: string, now: () => number = Date.now): Promise<number> {
   const cutoff = now() - KEEP_BODY_DAYS * 86_400_000;
   const waiting = (await pendingSuggestions(db, { accountId })).filter((s) => s.disposition !== 'keep' && s.decidedAt >= cutoff);
   const wanted = new Set(waiting.map((s) => s.messageId));
@@ -32,8 +32,8 @@ export async function keepSuggestionBodies(db: Sql, api: Pick<GmailApi, 'getBody
     if (fetched >= PER_PASS) break;
     if (have.has(suggestion.messageId)) continue;
     // A message that has gone is stored empty, so it is not asked for again on every pass.
-    const text = (await api.getBodyText(suggestion.messageId)) ?? '';
-    const body = { bodyText: text, fetchedAt: now() };
+    const content = await api.getContent(suggestion.messageId);
+    const body = { bodyText: content?.text ?? '', bodyHtml: content?.html ?? null, fetchedAt: now() };
     await db
       .insert(suggestionBodies)
       .values({ accountId, messageId: suggestion.messageId, ...body })

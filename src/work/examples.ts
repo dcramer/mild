@@ -5,11 +5,11 @@ import type { GmailApi } from '../gmail/api.ts';
 const PER_PASS = 50;
 
 /**
- * Fetch the text of messages the user has marked and store it with their answer, as evaluation and
+ * Fetch the text and HTML of messages the user has marked and store it with their answer, as evaluation and
  * training data. A message that no longer exists is recorded as gone, keeping the answer. A failed
  * fetch leaves the example pending for the next pass. Returns how many were captured.
  */
-export async function captureExamples(db: Sql, api: Pick<GmailApi, 'getBodyText'>, accountId: string, now: () => number = Date.now): Promise<number> {
+export async function captureExamples(db: Sql, api: Pick<GmailApi, 'getContent'>, accountId: string, now: () => number = Date.now): Promise<number> {
   const pending = await db
     .select({ messageId: examples.messageId })
     .from(examples)
@@ -19,12 +19,12 @@ export async function captureExamples(db: Sql, api: Pick<GmailApi, 'getBodyText'
   let captured = 0;
   for (const { messageId } of pending) {
     const example = and(eq(examples.accountId, accountId), eq(examples.messageId, messageId));
-    const body = await api.getBodyText(messageId);
-    if (body === null) {
+    const content = await api.getContent(messageId);
+    if (content === null) {
       await db.update(examples).set({ status: 'gone', capturedAt: now() }).where(example);
       continue;
     }
-    await db.update(examples).set({ status: 'captured', bodyText: body, capturedAt: now() }).where(example);
+    await db.update(examples).set({ status: 'captured', bodyText: content.text, bodyHtml: content.html, capturedAt: now() }).where(example);
     captured++;
   }
   return captured;

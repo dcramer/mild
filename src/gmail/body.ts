@@ -53,9 +53,6 @@ export function extractText(payload: BodyPart | null | undefined): string {
   return tidy.length > MAX_BODY_CHARS ? `${tidy.slice(0, MAX_BODY_CHARS)}\n[truncated]` : tidy;
 }
 
-/** A message's HTML part, decoded, to be shown and then forgotten. Null when it has none. */
-export const findHtml = (payload: BodyPart | null | undefined): string | null => (payload ? find(payload, 'text/html') : null);
-
 const header = (part: BodyPart, name: string) => part.headers?.find((h) => h.name?.toLowerCase() === name)?.value ?? '';
 
 function hasAttachment(part: BodyPart): boolean {
@@ -63,9 +60,11 @@ function hasAttachment(part: BodyPart): boolean {
   return (part.parts ?? []).some(hasAttachment);
 }
 
-/** What sift takes from a whole message: its readable text, and facts about the rest. The HTML itself is not kept. */
+/** What sift takes from a whole message: its readable text, its HTML part, and facts about the rest. */
 export interface MessageContent {
   text: string;
+  /** The HTML part as the message carries it, uncleaned. Null when it has none. */
+  html: string | null;
   facts: ContentFacts;
 }
 
@@ -74,6 +73,7 @@ export function readContent(payload: BodyPart | null | undefined): MessageConten
   const sender = payload ? parseAddress(header(payload, 'from')) : null;
   return {
     text: extractText(payload),
+    html,
     facts: { hasAttachments: payload ? hasAttachment(payload) : false, ...(html !== null && sender ? htmlFacts(html, sender.domain) : {}) },
   };
 }

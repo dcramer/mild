@@ -1,6 +1,6 @@
 import { gmail, type gmail_v1 } from '@googleapis/gmail';
 import type { OAuth2Client } from 'google-auth-library';
-import { type MessageContent, findHtml, readContent } from './body.ts';
+import { type MessageContent, readContent } from './body.ts';
 import type { Pace } from './quota.ts';
 
 /** Headers fetched for triage. Bodies are never requested here. */
@@ -84,9 +84,7 @@ export interface GmailApi {
   getLabelIds(messageId: string): Promise<string[] | null>;
   /** Every label in the account with its name, to tell which label an id in history is. */
   listLabels(): Promise<{ id: string; name: string }[]>;
-  /** The message's readable text, truncated; null when the message no longer exists. Does not mark it read. */
-  getBodyText(messageId: string): Promise<string | null>;
-  /** The same text with the facts only the whole message shows (attachments, tracking); null when the message no longer exists. Does not mark it read. */
+  /** The message's readable text (truncated), its HTML part, and the facts only the whole message shows (attachments, tracking); null when the message no longer exists. Does not mark it read. */
   getContent(messageId: string): Promise<MessageContent | null>;
   /** A thread's messages, oldest first, with their labels and nothing else. Null when the thread no longer exists. */
   getThread(threadId: string): Promise<{ id: string; labelIds: string[] }[] | null>;
@@ -98,21 +96,6 @@ export const isNotFound = (error: unknown) => {
   const e = error as { status?: unknown; code?: unknown };
   return e?.status === 404 || e?.code === 404 || e?.code === '404';
 };
-
-/**
- * One message's HTML part, for the dashboard to show while it is open. Nothing keeps it. Null when the
- * message has no HTML part or is no longer in Gmail. Does not mark it read.
- */
-export async function getMessageHtml(auth: OAuth2Client, pace: Pace, messageId: string): Promise<string | null> {
-  try {
-    await pace(60);
-    const { data } = await gmail({ version: 'v1', auth }).users.messages.get({ userId: 'me', id: messageId, format: 'full' });
-    return findHtml(data.payload);
-  } catch (error) {
-    if (isNotFound(error)) return null;
-    throw error;
-  }
-}
 
 /** The account's address and current history id. */
 export async function readProfile(auth: OAuth2Client) {
@@ -192,10 +175,6 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
       const { data } = await client.users.settings.sendAs.list({ userId });
       // An address added but never confirmed from its own inbox is not shown to be the owner's.
       return (data.sendAs ?? []).flatMap((a) => (a.sendAsEmail && a.verificationStatus !== 'pending' ? [a.sendAsEmail.toLowerCase()] : []));
-    },
-
-    async getBodyText(messageId) {
-      return (await this.getContent(messageId))?.text ?? null;
     },
 
     async getContent(messageId) {

@@ -495,7 +495,7 @@ describe('gatherEvidence', () => {
     };
     const sources = {
       db,
-      api: { getContent: async () => ({ text: 'hello', facts: { hasAttachments: false } }), getThread: fail },
+      api: { getContent: async () => ({ text: 'hello', html: null, facts: { hasAttachments: false } }), getThread: fail },
       mailbox: { hasSentTo: async () => (lookups++, false) },
       now: () => 1000,
     };

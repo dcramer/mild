@@ -473,6 +473,7 @@ export const examples = pgTable(
     markedAt: time('marked_at').notNull(),
     status: text('status', { enum: EXAMPLE_STATUSES }).notNull().default('pending'),
     bodyText: text('body_text'), // the readable text, as the model would be shown it
+    bodyHtml: text('body_html'), // its HTML part as Gmail holds it, cleaned only when shown; null when it has none
     capturedAt: time('captured_at'),
   },
   (t) => [
@@ -497,6 +498,7 @@ export const suggestionBodies = pgTable(
     accountId: text('account_id').notNull(),
     messageId: text('message_id').notNull(),
     bodyText: text('body_text').notNull(), // as the model is shown it: plain text, truncated
+    bodyHtml: text('body_html'), // its HTML part as Gmail holds it, cleaned only when shown; null when it has none
     fetchedAt: time('fetched_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.accountId, t.messageId] }), mailbox(t), message(t), own()],

@@ -1,14 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { Controls } from '../src/dashboard/controls.ts';
 import { cleanHtml, mailDocument } from '../src/dashboard/mail-html.ts';
-import { findHtml } from '../src/gmail/body.ts';
+import { readContent } from '../src/gmail/body.ts';
 import { recordSync } from '../src/store/accounts.ts';
-import { recordFacts } from '../src/store/messages.ts';
-import { deriveFacts } from '../src/triage/facts.ts';
+import { suggestionBodies } from '../src/store/query.ts';
 import { people } from '../src/store/people.ts';
 import type { Sql } from '../src/store/sql.ts';
 import type { Store } from '../src/store/store.ts';
-import { onePerson, startDashboard, superuser } from './fixtures.ts';
+import { onePerson, startDashboard } from './fixtures.ts';
 import { facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -76,7 +74,7 @@ describe('cleaning a message for the frame', () => {
     expect(document).toContain('background:url(https://cdn.example.com/bg.png)');
   });
 
-  it("picks a message's HTML part out of its parts", () => {
+  it("reads a message's text and its HTML part, each as it is", () => {
     const b64 = (text: string) => Buffer.from(text).toString('base64url');
     const payload = {
       mimeType: 'multipart/alternative',
@@ -85,40 +83,32 @@ describe('cleaning a message for the frame', () => {
         { mimeType: 'text/html', body: { data: b64('<p>café</p>') } },
       ],
     };
-    expect(findHtml(payload)).toBe('<p>café</p>');
-    expect(findHtml({ mimeType: 'text/plain', body: { data: b64('plain') } })).toBeNull();
+    expect(readContent(payload)).toMatchObject({ text: 'plain', html: '<p>café</p>' });
+    expect(readContent({ mimeType: 'text/plain', body: { data: b64('plain') } }).html).toBeNull();
   });
 });
 
 describe('the frame route', () => {
   let store: Store;
   let db: Sql;
-  let asked: string[];
-  const controls = {
-    messageHtml: async (_db: Sql, account: string, id: string) => (asked.push(`${account} ${id}`), id === 'plain' ? null : HTML),
-    // What reading it whole records: HTML facts only for a message with an HTML part.
-    readMessage: async (target: Sql, account: string, id: string) => {
-      asked.push(`read ${id}`);
-      const base = facts({ accountId: account, messageId: id });
-      const html = { trackingPixel: false, linkHosts: 1, trackedLinks: false, linksOffDomain: false };
-      await recordFacts(target, account, id, deriveFacts(base, { hasAttachments: false, ...(id === 'plain' ? {} : html) }));
-    },
-  } as unknown as Controls;
 
   beforeEach(async () => {
     ({ store, db } = await onePerson(ACCOUNT));
-    asked = [];
     await recordSync(
       db,
       ACCOUNT,
-      ['m1', 'plain'].map((messageId) => facts({ accountId: ACCOUNT, messageId })),
+      ['m1', 'plain', 'unheld'].map((messageId) => facts({ accountId: ACCOUNT, messageId })),
       '2',
       1000,
     );
+    await db.insert(suggestionBodies).values([
+      { accountId: ACCOUNT, messageId: 'm1', bodyText: 'Sale', bodyHtml: HTML, fetchedAt: 1000 },
+      { accountId: ACCOUNT, messageId: 'plain', bodyText: 'Plain', bodyHtml: null, fetchedAt: 1000 },
+    ]);
   });
 
-  it('sends the message under a strict policy of its own, in a sandbox, loading nothing', async () => {
-    const { call } = await startDashboard(people(store), { controls });
+  it('sends the HTML Sift holds, cleaned, under a strict policy of its own, in a sandbox, loading nothing', async () => {
+    const { call } = await startDashboard(people(store));
     const reply = await call('GET', `/api/message/html?account=${encodeURIComponent(ACCOUNT)}&id=m1`);
     expect(reply.status).toBe(200);
     expect(reply.text).toContain(MARKER);
@@ -135,51 +125,21 @@ describe('the frame route', () => {
     expect(policy).not.toMatch(/allow-scripts|allow-same-origin|script-src|connect-src|https?:/);
   });
 
-  it('says so, in the frame, when there is no HTML or no such message', async () => {
-    const { call } = await startDashboard(people(store), { controls });
-    const plain = await call('GET', `/api/message/html?account=${encodeURIComponent(ACCOUNT)}&id=plain`);
-    expect(plain.status).toBe(404);
-    expect(plain.text).toContain('This message has no HTML');
-    expect(plain.headers['content-security-policy']).toContain('sandbox');
-    // Not one sift has recorded: Gmail is not asked.
-    expect((await call('GET', `/api/message/html?account=${encodeURIComponent(ACCOUNT)}&id=unknown`)).status).toBe(404);
+  it('says so, in the frame, when Sift holds no HTML for it', async () => {
+    const { call } = await startDashboard(people(store));
+    for (const id of ['plain', 'unheld', 'unknown']) {
+      const reply = await call('GET', `/api/message/html?account=${encodeURIComponent(ACCOUNT)}&id=${id}`);
+      expect(reply.status, id).toBe(404);
+      expect(reply.headers['content-security-policy']).toContain('sandbox');
+    }
     expect((await call('GET', '/api/message/html?account=other%40example.com&id=m1')).status).toBe(404);
-    expect(asked).toEqual([`${ACCOUNT} plain`]);
   });
 
-  it('stores nothing of what it fetched', async () => {
-    const { call } = await startDashboard(people(store), { controls });
-    const pg = await superuser();
-    const { rows: tables } = await pg.query<{ name: string }>(
-      `SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r'`,
-    );
-    const everything = async () =>
-      (await Promise.all(tables.map(async ({ name }) => (await pg.query(`SELECT t::text AS row FROM "${name}" t`)).rows))).flat().map((r) => JSON.stringify(r));
-    const before = await everything();
-    expect((await call('GET', `/api/message/html?account=${encodeURIComponent(ACCOUNT)}&id=m1`)).status).toBe(200);
-    const after = await everything();
-    expect(after).toEqual(before);
-    expect(after.join('\n')).not.toContain(MARKER);
-  });
-
-  it('reads a message whole the first time it is opened, to tell the page whether it has HTML', async () => {
-    const { call } = await startDashboard(people(store), { controls });
-    const hasHtml = async (id: string) => (await call('GET', `/api/message?account=${encodeURIComponent(ACCOUNT)}&id=${id}`)).body['hasHtml'];
-    expect(await hasHtml('m1')).toBe(true);
-    expect(await hasHtml('plain')).toBe(false);
-    expect(await hasHtml('m1')).toBe(true);
-    expect(asked).toEqual(['read m1', 'read plain']);
-  });
-
-  it('shows a message as text when Gmail cannot be asked, and asks again the next time', async () => {
-    const unreachable = {
-      ...controls,
-      readMessage: async (_db: Sql, _account: string, id: string) => (asked.push(`read ${id}`), Promise.reject(new Error('offline'))),
-    };
-    const { call } = await startDashboard(people(store), { controls: unreachable });
-    const open = () => call('GET', `/api/message?account=${encodeURIComponent(ACCOUNT)}&id=m1`);
-    expect((await open()).body).toMatchObject({ hasHtml: null });
-    expect((await open()).status).toBe(200);
-    expect(asked).toEqual(['read m1', 'read m1']);
+  it('tells the page whether Sift holds the HTML, so it never offers a frame with nothing in it', async () => {
+    const { call } = await startDashboard(people(store));
+    const open = async (id: string) => (await call('GET', `/api/message?account=${encodeURIComponent(ACCOUNT)}&id=${id}`)).body;
+    expect(await open('m1')).toMatchObject({ body: 'Sale', hasHtml: true });
+    expect(await open('plain')).toMatchObject({ body: 'Plain', hasHtml: false });
+    expect(await open('unheld')).toMatchObject({ body: null, hasHtml: false });
   });
 });

@@ -3,7 +3,7 @@ import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import type { MessageContent } from '../gmail/body.ts';
 import { mailboxAliases } from '../store/accounts.ts';
-import { recordFacts, storedFacts } from '../store/messages.ts';
+import { recordFacts } from '../store/messages.ts';
 import { cachedCorrespondent, domainFacts, rememberCorrespondent, senderFacts, senderHistory } from '../store/senders.ts';
 import { type ThreadFacts, deriveFacts, threadFacts } from '../triage/facts.ts';
 import type { Evidence } from '../triage/stages/model.ts';
@@ -62,22 +62,6 @@ export async function gatherEvidence(sources: EvidenceSources, facts: MessageFac
       ? { domain: { messages: domain.messages, senders: domain.senders, standing: domain.standing, why: domain.why, pastLabels: domain.labels } }
       : {}),
   };
-}
-
-/**
- * Read one message whole and record what that shows about it (attachments, what its HTML holds), keeping
- * what is known of its thread. For a message no pass read whole, such as one a rule placed, opened in the
- * dashboard. Nothing of its content is kept.
- */
-export async function readWhole(db: Sql, api: Pick<GmailApi, 'getContent'>, facts: MessageFacts): Promise<void> {
-  const content = await api.getContent(facts.messageId);
-  if (!content) return;
-  const known = await storedFacts(db, facts.accountId, facts.messageId);
-  const thread =
-    known?.earlierInThread === undefined || known.ownerInThread === undefined
-      ? {}
-      : { earlierInThread: known.earlierInThread, ownerInThread: known.ownerInThread };
-  await recordFacts(db, facts.accountId, facts.messageId, deriveFacts(facts, { ...content.facts, ...thread }, await mailboxAliases(db, facts.accountId)));
 }
 
 /** Whether the owner has ever written to the sender: the cached answer, or one search of sent mail, remembered. Null if that failed. */
