@@ -3,9 +3,11 @@ import { actions, decisions } from '../../store/query.ts';
 import { getAction } from '../../store/actions.ts';
 import { listChanges, listDecisions, retryDecision } from '../queries/decisions.ts';
 import { messageDetail } from '../queries/messages.ts';
+import { listUnjudged } from '../queries/runs.ts';
+import { putBackInQueue } from '../../store/runs.ts';
 import { summarize } from '../queries/summary.ts';
-import { ChangeRow, DecisionPage, MessageDetail, Summary } from '../types.ts';
-import { type Read, type Write, days, id, missing, ok, ownerOf, read, write } from './route.ts';
+import { ChangeRow, DecisionPage, MessageDetail, Summary, UnjudgedRow } from '../types.ts';
+import { type Read, type Write, accountId, days, id, missing, named, ok, ownerOf, read, text, write } from './route.ts';
 
 /** A filter left empty is no filter. */
 const filter = z.string().optional();
@@ -62,6 +64,12 @@ export const reads: Read[] = [
     reply: z.object({ changes: z.array(ChangeRow) }),
     run: async ({ db }, scope) => ok({ changes: await listChanges(db, scope, 200) }),
   }),
+  read({
+    path: '/api/unjudged',
+    query: z.object({}),
+    reply: z.object({ rows: z.array(UnjudgedRow) }),
+    run: async ({ db }, scope) => ok({ rows: await listUnjudged(db, scope, 200) }),
+  }),
 ];
 
 export const writes: Write[] = [
@@ -86,6 +94,17 @@ export const writes: Write[] = [
       if (!result.retried) throw new Error('That change did not fail, so there is nothing to try again.');
       controls?.checkNow();
       return result;
+    },
+  }),
+  write({
+    path: '/api/unjudged/retry',
+    body: z.strictObject({ accountId, messageId: text() }),
+    reply: z.object({ ok: z.literal(true) }),
+    touches: named,
+    run: async ({ db, controls, now }, { accountId, messageId }) => {
+      if (!(await putBackInQueue(db, accountId, messageId, now()))) throw new Error('That message is already waiting to be judged.');
+      controls?.checkNow();
+      return { ok: true as const };
     },
   }),
 ];

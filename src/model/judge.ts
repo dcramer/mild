@@ -7,9 +7,9 @@ const MAX_REASON = 300;
 /**
  * A Judge backed by a pi-ai model. One request per message, no conversation and no tools the model can
  * act with: its only output is a single structured verdict, which is validated here before use.
- * Any failure (provider error, no verdict, malformed verdict) returns null, which abstains.
+ * Any failure (provider error, no verdict, malformed verdict) is returned as one, never as `unsure`.
  */
-export function createJudge(models: Models, model: Model<Api>, onError: (message: string) => void = () => {}): Judge {
+export function createJudge(models: Models, model: Model<Api>): Judge {
   return async (input) => {
     const ids = [...input.labels.map((l) => l.id), UNSURE];
     const tool: Tool = {
@@ -37,34 +37,29 @@ export function createJudge(models: Models, model: Model<Api>, onError: (message
     try {
       message = await models.complete(model, context);
     } catch (error) {
-      onError(error instanceof Error ? error.message : String(error));
-      return null;
+      return { failed: error instanceof Error ? error.message : String(error) };
     }
-    if (message.stopReason === 'error' || message.stopReason === 'aborted') {
-      onError(message.errorMessage ?? `model stopped: ${message.stopReason}`);
-      return null;
-    }
+    const usage = {
+      model: `${model.provider}/${model.id}`,
+      inputTokens: message.usage.input + message.usage.cacheRead + message.usage.cacheWrite,
+      outputTokens: message.usage.output,
+      costUsd: message.usage.cost.total,
+    };
+    if (message.stopReason === 'error' || message.stopReason === 'aborted')
+      return { failed: message.errorMessage ?? `model stopped: ${message.stopReason}`, usage };
 
     const call = message.content.find((block) => block.type === 'toolCall' && block.name === VERDICT_TOOL);
     const args = call?.type === 'toolCall' ? call.arguments : undefined;
     const label = args?.['label'];
     const reason = args?.['reason'];
     const confidence = args?.['confidence'];
-    if (typeof label !== 'string' || !ids.includes(label) || typeof reason !== 'string') {
-      onError('model did not return a usable verdict');
-      return null;
-    }
+    if (typeof label !== 'string' || !ids.includes(label) || typeof reason !== 'string') return { failed: 'the model did not return a usable verdict', usage };
 
     return {
       label,
       reason: reason.replace(/\s+/g, ' ').trim().slice(0, MAX_REASON),
       ...(typeof confidence === 'number' && confidence >= 0 && confidence <= 1 ? { confidence } : {}),
-      usage: {
-        model: `${model.provider}/${model.id}`,
-        inputTokens: message.usage.input + message.usage.cacheRead + message.usage.cacheWrite,
-        outputTokens: message.usage.output,
-        costUsd: message.usage.cost.total,
-      },
+      usage,
     };
   };
 }

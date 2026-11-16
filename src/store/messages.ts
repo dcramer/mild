@@ -1,4 +1,5 @@
-import { and, asc, decisions, desc, eq, messages, notExists } from './query.ts';
+import { and, asc, decisions, desc, eq, messages, not, notExists } from './query.ts';
+import { outOfTries } from './runs.ts';
 import type { Sql } from './sql.ts';
 import { type Facts, deriveFacts } from '../triage/facts.ts';
 import type { Address, MessageFacts } from '../triage/types.ts';
@@ -57,7 +58,7 @@ export interface QueuedMessage {
 /**
  * Recorded messages that have no decision yet, newest first, rebuilt as triage input. This is the triage queue.
  * Newest first because mail can wait in it (with no model, what no rule covers is left there), and what waits
- * must never keep new mail from being sorted.
+ * must never keep new mail from being sorted. Mail the model has failed on `MAX_ATTEMPTS` times is left out until the user puts it back.
  */
 export async function listUndecided(db: Sql, accountId: string, limit: number): Promise<QueuedMessage[]> {
   const rows = await db
@@ -72,6 +73,7 @@ export async function listUndecided(db: Sql, accountId: string, limit: number): 
             .from(decisions)
             .where(and(eq(decisions.accountId, messages.accountId), eq(decisions.messageId, messages.id))),
         ),
+        not(outOfTries(db, messages.accountId, messages.id)),
       ),
     )
     .orderBy(desc(messages.receivedAt), asc(messages.id))

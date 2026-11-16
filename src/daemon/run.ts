@@ -20,7 +20,7 @@ export interface RunOptions {
   /** Opens a provider connection for an account, with the sign-in kept in `db`, its person's database. */
   connect: (db: Sql, account: Account) => { api: GmailApi; mailbox: Mailbox } | Promise<{ api: GmailApi; mailbox: Mailbox }>;
   /** The inference tier of the person whose database `db` is: null when they have no model, or it cannot be reached. */
-  model?: (db: Sql) => Promise<{ judge: Judge } | null>;
+  model?: (db: Sql) => Promise<{ judge: Judge; model: string } | null>;
   /** Leaves a mailing list, for decisions that say to. Without it sift never unsubscribes. */
   unsubscribe?: (db: Sql, accountId: string, messageId: string) => Promise<UnsubscribeOutcome>;
   log: (line: string) => void;
@@ -74,7 +74,7 @@ export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[
           mailbox: act ? mailbox : null,
           answers: mailbox,
           ...(leave ? { unsubscribe: (accountId: string, messageId: string) => leave(db, accountId, messageId) } : {}),
-          ...(tier ? { model: { judge: tier.judge, sources: { api, mailbox } } } : {}),
+          ...(tier ? { model: { judge: tier.judge, model: tier.model, sources: { api, mailbox } } } : {}),
         },
         account,
       );
@@ -117,6 +117,7 @@ function describe(result: PassResult, act: boolean): string | null {
     if (triage.proposed > 0) parts.push(`proposed ${triage.proposed} rule${triage.proposed === 1 ? '' : 's'}`);
     if (triage.unsubscribed > 0) parts.push(`unsubscribed from ${triage.unsubscribed} sender${triage.unsubscribed === 1 ? '' : 's'}`);
     if (triage.blocked > 0) parts.push(`blocked ${triage.blocked} sender${triage.blocked === 1 ? '' : 's'}`);
+    if (triage.unjudged > 0) parts.push(`the model failed on ${triage.unjudged}: ${triage.failure}`);
     if (triage.troubled > 0) parts.push(`${triage.troubled} need attention (see Changes in the dashboard)`);
   }
   if (result.captured) parts.push(`stored ${result.captured} marked message${result.captured === 1 ? '' : 's'} as examples`);

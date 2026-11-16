@@ -4,6 +4,7 @@ import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { openUserDb, raw } from './fixtures.ts';
+import { startRun } from '../src/store/runs.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { addRule, listRules, removeRule } from '../src/store/rules.ts';
@@ -38,7 +39,7 @@ async function decided(address: string, decision: Partial<Decision> = {}, at = +
 
 const current = async (messageId: string) =>
   await raw(db).get(
-    'SELECT stage, disposition, label_id, rule_id, subscription, reason, model, cost_usd, mode FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1',
+    'SELECT stage, disposition, label_id, rule_id, subscription, reason, run_id, mode FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1',
     messageId,
   );
 const count = async () => (await raw(db).get<{ n: number }>('SELECT count(*) AS n FROM decisions'))!.n;
@@ -62,8 +63,7 @@ describe('when a rule changes', () => {
       disposition: 'archive',
       label_id: 'newsletter',
       rule_id: ruleId,
-      model: null,
-      cost_usd: 0,
+      run_id: null,
       mode: 'observe',
     });
     expect(await waiting()).toEqual([other]);
@@ -89,7 +89,6 @@ describe('when a rule changes', () => {
       label_id: 'marketing',
       rule_id: null,
       reason: 'Marketing: a sale',
-      cost_usd: 0,
     });
     expect(await waiting()).toEqual([sale]);
     // Mail the rule decided when it arrived is history, not a suggestion to bring back.
@@ -141,11 +140,9 @@ describe('when a rule changes', () => {
 
 describe("when a label's outcome changes", () => {
   it('waiting mail with that label gets the new outcome under the same label, without a model', async () => {
-    const sale = await decided('sales@example.com', {
-      ...MARKETING,
-      confidence: 0.7,
-      usage: { model: 'p/m', inputTokens: 900, outputTokens: 10, costUsd: 0.002 },
-    });
+    const sale = await decided('sales@example.com', { ...MARKETING, confidence: 0.7 });
+    const run = await startRun(db, { accountId: ACCOUNT, messageId: sale, model: 'p/m', now: 0 });
+    await raw(db).run('UPDATE decisions SET run_id = ? WHERE message_id = ?', run, sale);
     const other = await decided('news@example.com', { disposition: 'archive', labelId: 'newsletter', subscription: 'unsubscribe' });
     await updateLabel(db, ACCOUNT, 'marketing', { disposition: 'keep', unsubscribe: false });
 
@@ -157,8 +154,7 @@ describe("when a label's outcome changes", () => {
       rule_id: null,
       subscription: 'preserve',
       reason: 'Marketing is now kept. Before: Marketing: a sale',
-      model: null,
-      cost_usd: 0,
+      run_id: null,
       mode: 'observe',
     });
     expect(await current(other)).toMatchObject({ disposition: 'archive', reason: 'Marketing: a sale' });

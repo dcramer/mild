@@ -8,6 +8,7 @@ import { type ActionType, finishAction, insertPendingAction, unsubscribedAt } fr
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { addRule } from '../src/store/rules.ts';
+import { finishRun, startRun } from '../src/store/runs.ts';
 import type { Decision } from '../src/triage/types.ts';
 import { raw, onePerson } from './fixtures.ts';
 import { facts } from './helpers.ts';
@@ -50,8 +51,9 @@ beforeEach(async () => {
 });
 
 describe('pruneOld', () => {
-  it('forgets an old message with its decisions and changes', async () => {
+  it('forgets an old message with its decisions, changes and model runs', async () => {
     await acted('gone');
+    await finishRun(db, await startRun(db, { accountId: ACCOUNT, messageId: 'gone', model: 'p/m', now: OLD }), { outcome: 'judged', now: OLD });
     await acted('fresh');
     await message('new', RECENT);
     await recordDecision(db, ACCOUNT, 'new', archive, { mode: 'act', now: RECENT });
@@ -61,6 +63,7 @@ describe('pruneOld', () => {
     expect(await left('messages', 'id')).toEqual(['fresh', 'new']);
     expect(await left('decisions')).toEqual(['fresh', 'new']);
     expect(await left('actions')).toEqual(['fresh']);
+    expect(await left('model_runs')).toEqual([]);
     expect(await pruneOld(db, NOW)).toBe(0);
   });
 

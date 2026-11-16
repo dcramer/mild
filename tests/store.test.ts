@@ -139,6 +139,7 @@ describe("a person's data", () => {
           account,
         ],
         [`INSERT INTO suggestion_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, 'm1', 'Hello.', 0)`, account],
+        [`INSERT INTO model_runs (account_id, message_id, model, started_at, outcome, error) VALUES (?, 'm1', 'p/m', 0, 'failed', 'e')`, account],
         [
           `INSERT INTO eval_results (run_id, message_id, expected, got, duration_ms, shots, sender_shots) VALUES (?, 'm1', 'newsletter', 'newsletter', 1, 0, 0)`,
           run,

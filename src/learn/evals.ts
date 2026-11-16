@@ -158,6 +158,7 @@ export async function startEval(deps: EvalDeps, request: EvalRequest): Promise<{
         labels,
         ...(shots.length > 0 ? { examples: shots } : {}),
       })
+      .then((v) => ('failed' in v ? null : v))
       .catch(() => null);
     await db.insert(evalResults).values({
       runId: id,

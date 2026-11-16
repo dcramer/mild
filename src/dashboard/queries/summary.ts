@@ -1,5 +1,25 @@
-import { actions, alias, and, asc, count, decisions, desc, eq, gte, inArray, mailboxes, max, messages, ne, notExists, sql } from '../../store/query.ts';
+import {
+  actions,
+  alias,
+  and,
+  asc,
+  count,
+  decisions,
+  desc,
+  eq,
+  gte,
+  inArray,
+  mailboxes,
+  max,
+  messages,
+  modelRuns,
+  ne,
+  not,
+  notExists,
+  sql,
+} from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
+import { outOfTries } from '../../store/runs.ts';
 import { accuracy } from '../../learn/feedback.ts';
 import { type Scope, within } from '../scope.ts';
 import { type DayChanges, STAGES, type StageKey, type Summary } from '../types.ts';
@@ -25,20 +45,23 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
   const [decisionTotals] = (await db
     .select({
       n: count(),
-      free: sql<number>`count(*) FILTER (WHERE ${decisions.model} IS NULL)`.mapWith(Number),
-      cost: sql<number | null>`sum(${decisions.costUsd})`.mapWith(Number),
+      free: sql<number>`count(*) FILTER (WHERE ${decisions.runId} IS NULL)`.mapWith(Number),
     })
     .from(decisions)
-    .where(decidedSince)) as [{ n: number; free: number | null; cost: number | null }];
+    .where(decidedSince)) as [{ n: number; free: number | null }];
+  // Every call costs, the ones that failed included, so cost is summed over runs rather than decisions.
+  const ranSince = and(gte(modelRuns.startedAt, since), within(scope, modelRuns.accountId));
+  const runs = await db.select({ startedAt: modelRuns.startedAt, costUsd: modelRuns.costUsd }).from(modelRuns).where(ranSince);
 
   const stageRows = await db
     .select({
       stage: decisions.stage,
       n: count(),
-      cost: sql<number>`sum(${decisions.costUsd})`.mapWith(Number),
-      tokens: sql<number>`sum(${decisions.inputTokens} + ${decisions.outputTokens})`.mapWith(Number),
+      cost: sql<number>`coalesce(sum(${modelRuns.costUsd}), 0)`.mapWith(Number),
+      tokens: sql<number>`coalesce(sum(${modelRuns.inputTokens} + ${modelRuns.outputTokens}), 0)`.mapWith(Number),
     })
     .from(decisions)
+    .leftJoin(modelRuns, eq(modelRuns.id, decisions.runId))
     .where(decidedSince)
     .groupBy(decisions.stage);
   const byStage = STAGES.map((stage) => {
@@ -49,14 +72,13 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
   const dailyByDay = new Map<string, { counts: Record<StageKey, number>; changes: DayChanges; costUsd: number }>();
   for (let i = days - 1; i >= 0; i--)
     dailyByDay.set(localDay(now - i * DAY_MS), { counts: emptyCounts(), changes: { archive: 0, spam: 0, keep: 0, failed: 0 }, costUsd: 0 });
-  for (const row of await db
-    .select({ decidedAt: decisions.decidedAt, stage: decisions.stage, costUsd: decisions.costUsd })
-    .from(decisions)
-    .where(decidedSince)) {
+  for (const row of await db.select({ decidedAt: decisions.decidedAt, stage: decisions.stage }).from(decisions).where(decidedSince)) {
     const day = dailyByDay.get(localDay(row.decidedAt));
-    if (!day) continue;
-    day.counts[row.stage]++;
-    day.costUsd += row.costUsd;
+    if (day) day.counts[row.stage]++;
+  }
+  for (const run of runs) {
+    const day = dailyByDay.get(localDay(run.startedAt));
+    if (day) day.costUsd += run.costUsd;
   }
   // What was done in Gmail each day: a change that stands, by what it did, or one that failed. Undone ones are not counted.
   const latest = alias(actions, 'latest');
@@ -99,7 +121,7 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
       )[0]!.n,
       decisions: decisionTotals.n,
       withoutInference: decisionTotals.free ?? 0,
-      costUsd: decisionTotals.cost ?? 0,
+      costUsd: runs.reduce((sum, run) => sum + run.costUsd, 0),
       awaitingTriage: (
         await db
           .select({ n: count() })
@@ -113,6 +135,7 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
                   .from(decisions)
                   .where(and(eq(decisions.accountId, messages.accountId), eq(decisions.messageId, messages.id))),
               ),
+              not(outOfTries(db, messages.accountId, messages.id)),
             ),
           )
       )[0]!.n,

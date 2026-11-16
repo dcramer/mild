@@ -7,7 +7,7 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import { score } from '../src/triage/score.ts';
-import type { JudgeInput, Verdict } from '../src/triage/stages/model.ts';
+import type { JudgeFailure, JudgeInput, Verdict } from '../src/triage/stages/model.ts';
 import { facts, storeExample } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -49,10 +49,10 @@ describe('replaying the model over stored examples', () => {
   /** A judge that answers from a table of message id to label; a missing entry is a failed call. */
   const judge =
     (answers: Record<string, string>) =>
-    async (input: JudgeInput): Promise<Verdict | null> => {
+    async (input: JudgeInput): Promise<Verdict | JudgeFailure> => {
       seen.push(input);
       const label = answers[input.evidence.facts.messageId];
-      return label === undefined ? null : { label, reason: 'r', confidence: 0.8, usage };
+      return label === undefined ? { failed: 'provider error' } : { label, reason: 'r', confidence: 0.8, usage };
     };
   const deps = (answers: Record<string, string>) => ({
     db,

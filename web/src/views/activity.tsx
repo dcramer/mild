@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { MailLog } from '@/components/mail-log.tsx';
-import { type Days, type DecisionRow, api, useLoaded } from '@/lib/api.ts';
+import { type Days, type DecisionRow, type UnjudgedRow, api, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/route.ts';
 import { HANDLED, PERIODS, count, longDay, money, moneyTick, plural, shortDay } from '@/lib/format.ts';
 import { Button, Empty, Failure, ListView, Loading, Select, StackedBars, TextLink, useToast } from '@/system';
@@ -41,6 +41,8 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
     api.decisions({ days, stage: '', disposition: '', status: 'trouble', search: '', limit: 1, offset: 0 }, signal),
   );
   const failed = failures.data?.total ?? 0;
+  // Not period-bound: such mail waits on the user however long ago it came.
+  const unjudged = useLoaded('unjudged', (signal) => api.unjudged(signal)).data?.rows ?? [];
   const summary = useLoaded(`summary-${days}`, (signal) => api.summary(days, signal));
   const daily = summary.data?.daily ?? [];
   // A day's column is worth drawing only beside others, and only once something happened.
@@ -56,6 +58,15 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
     );
   const undo = (row: DecisionRow) => report(api.undo(row.actionId ?? 0), ({ message }) => message);
   const retry = (row: DecisionRow) => report(api.retry(row.id), ({ waiting }) => (waiting ? 'It will be tried again once sift is on.' : 'Trying again now.'));
+  const requeue = (row: UnjudgedRow) => report(api.requeue(row.accountId, row.messageId), () => 'Asking the model again now.');
+  const troubles = [
+    failed > 0 ? `${plural(failed, 'change')} failed` : '',
+    unjudged.length > 0 ? `the model could not judge ${plural(unjudged.length, 'message')}` : '',
+  ]
+    .filter(Boolean)
+    .join(', and ');
+  const needle = search.toLowerCase();
+  const shown = view === 'trouble' ? unjudged.filter((r) => [r.subject, r.fromAddress, r.fromName ?? ''].some((t) => t.toLowerCase().includes(needle))) : [];
 
   return (
     <ListView
@@ -72,7 +83,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
       view={{
         label: 'Show',
         value: view,
-        options: view === 'trouble' || failed > 0 ? [...VIEWS, ...FAILED] : VIEWS,
+        options: view === 'trouble' || troubles !== '' ? [...VIEWS, ...FAILED] : VIEWS,
         onChange: (next) => setView(next as typeof view),
       }}
       intro={
@@ -93,9 +104,10 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
               line={{ name: 'Model cost', values: daily.map((day) => day.costUsd), format: money, tick: moneyTick }}
             />
           ) : null}
-          {failed > 0 && view !== 'trouble' ? (
+          {troubles !== '' && view !== 'trouble' ? (
             <Failure>
-              {plural(failed, 'change')} failed. <TextLink href="/activity?show=trouble">See {failed === 1 ? 'it' : 'them'}</TextLink>
+              {troubles[0].toUpperCase() + troubles.slice(1)}.{' '}
+              <TextLink href="/activity?show=trouble">See {failed + unjudged.length === 1 ? 'it' : 'them'}</TextLink>
             </Failure>
           ) : null}
         </>
@@ -104,10 +116,10 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
       {error ? <ErrorNote message={error} /> : null}
       {loading ? (
         <Loading rows={8} />
-      ) : !data || data.rows.length === 0 ? (
+      ) : !data || data.rows.length + shown.length === 0 ? (
         <Empty>{search !== '' ? 'Nothing matches.' : view === '' ? 'sift has changed nothing in Gmail in this period.' : 'Nothing in this period.'}</Empty>
       ) : (
-        <MailLog rows={data.rows} onOpen={onOpen} onUndo={undo} onRetry={retry} search={search} />
+        <MailLog rows={data.rows} unjudged={shown} onOpen={onOpen} onUndo={undo} onRetry={retry} onRequeue={requeue} search={search} />
       )}
       {data && data.total > PAGE ? (
         <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground tabular-nums">

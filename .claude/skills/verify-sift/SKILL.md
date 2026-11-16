@@ -21,7 +21,7 @@ $V up "$RUN"
 
 `up` seeds `$RUN/home`, picks a free port, starts `sift dashboard` on it (rebuilding `web/dist` first if the page sources are newer, which can take a minute), runs the doctor, and signs the browser session in. It is ready when it prints `ok  pid …` and `browser session … signed in`. It refuses a directory that already has a `home/`.
 
-What the seed leaves (through a real observing pass, `runEveryone`, with a stand-in model that is sure `m8` is Marketing and can place nothing else):
+What the seed leaves (through three real observing passes, `runEveryone`, with a stand-in model that is sure `m8` is Marketing and can place nothing else):
 
 | Id | Sender | What places it | Shows as |
 | --- | --- | --- | --- |
@@ -32,6 +32,7 @@ What the seed leaves (through a real observing pass, `runEveryone`, with a stand
 | `m6` | `ada@example.org` | nothing | Suggestions, `Which label?` |
 | `m7` | `grace@example.net` | nothing | Suggestions, `Which label?` |
 | `m8` | `sale@store.example.com` | stand-in model → Marketing, confidence 0.95 | Suggestions, `Marketing` (sure), the only row with a label to agree with |
+| `m9` | `alerts@ops.example.com` | the stand-in model fails on it, three passes running | Activity › Failed, under `Not judged`, with Retry |
 
 The connected account is `me@example.org`, observing (`preferences.act` false), default labels, 3 user rules. Its model is Anthropic, `claude-haiku-4-5`, with a made-up key, so the dashboard is not behind the connect-a-model wall; nothing calls Anthropic, since no pass runs. To see the wall, sign it out from the page: `ab eval "fetch('/api/model/signout',{method:'POST',headers:{'content-type':'application/json','x-sift':'1'},body:JSON.stringify({provider:'anthropic'})})"`. Every message carries `dmarc=pass`; the three lists (news, promo, store) carry one-click unsubscribe headers.
 

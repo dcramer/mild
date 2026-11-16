@@ -17,7 +17,7 @@ export async function recordDecision(
   accountId: string,
   messageId: string,
   decision: Decision,
-  options: { mode?: DecisionMode; durationMs?: number; now?: number; byUser?: boolean } = {},
+  options: { mode?: DecisionMode; durationMs?: number; now?: number; byUser?: boolean; runId?: number } = {},
 ): Promise<number> {
   const mode = options.mode ?? 'observe';
   const [row] = await db
@@ -32,10 +32,7 @@ export async function recordDecision(
       ruleId: decision.ruleId ?? null,
       confidence: decision.confidence ?? null,
       reason: decision.reason,
-      model: decision.usage?.model ?? null,
-      inputTokens: decision.usage?.inputTokens ?? 0,
-      outputTokens: decision.usage?.outputTokens ?? 0,
-      costUsd: decision.usage?.costUsd ?? 0,
+      runId: options.runId ?? null,
       durationMs: options.durationMs ?? null,
       decidedAt: options.now ?? Date.now(),
       mode,

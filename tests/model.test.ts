@@ -14,7 +14,7 @@ import { addRule, listRules } from '../src/store/rules.ts';
 import { domainFacts, rememberCorrespondent, senderFacts } from '../src/store/senders.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../src/triage/prompt.ts';
-import { type Evidence, type Verdict, modelStage } from '../src/triage/stages/model.ts';
+import { type Evidence, type JudgeFailure, type Verdict, modelStage } from '../src/triage/stages/model.ts';
 import { facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -25,7 +25,7 @@ function evidence(overrides: Partial<Evidence['sender']> = {}, body: string | nu
   return { facts: f, known: deriveFacts(f), body, sender: { messagesSeen: 1, userHasWritten: false, pastDispositions: {}, ...overrides } };
 }
 
-const stage = (verdict: Verdict | null, ev: Evidence = evidence()) =>
+const stage = (verdict: Verdict | JudgeFailure, ev: Evidence = evidence()) =>
   modelStage({ gather: async () => ev, judge: async () => verdict, labels: DEFAULT_LABELS });
 
 describe('model stage', () => {
@@ -40,11 +40,6 @@ describe('model stage', () => {
       confidence: 0.9,
       reason: 'Marketing: a sale announcement',
     });
-  });
-
-  it('records what the call cost', async () => {
-    const usage = { model: 'p/m', inputTokens: 900, outputTokens: 20, costUsd: 0.001 };
-    expect(await stage({ label: 'personal', reason: 'r', usage }).decide(facts())).toMatchObject({ disposition: 'keep', usage });
   });
 
   it('leaves mail for review when the model is unsure or names a label that does not exist', async () => {
@@ -77,8 +72,8 @@ describe('model stage', () => {
     expect(await stage({ label: 'marketing', reason: 'r' }, strangers).decide(facts())).toMatchObject({ disposition: 'archive' });
   });
 
-  it('abstains when the model call fails', async () => {
-    expect(await stage(null).decide(facts())).toBeNull();
+  it('leaves the message unfinished when the model call fails, rather than asking about it', async () => {
+    expect(await stage({ failed: 'provider error' }).decide(facts())).toEqual({ unfinished: 'provider error' });
   });
 });
 
@@ -140,10 +135,9 @@ describe('judge', () => {
     const faux = fauxProvider();
     const models = createModels();
     models.setProvider(faux.provider);
-    const errors: string[] = [];
-    const judge = createJudge(models, faux.getModel(), (message) => errors.push(message));
+    const judge = createJudge(models, faux.getModel());
     const ask = () => judge({ evidence: evidence(), labels: DEFAULT_LABELS });
-    return { faux, errors, ask };
+    return { faux, ask };
   }
 
   it('returns the model verdict with its usage', async () => {
@@ -155,26 +149,26 @@ describe('judge', () => {
     ]);
     const verdict = await ask();
     expect(verdict).toMatchObject({ label: 'marketing', confidence: 0.92, reason: 'A seasonal sale.' });
-    expect(verdict?.usage?.model).toContain('/');
-    expect(verdict?.usage?.inputTokens).toBeGreaterThan(0);
+    expect(verdict).toHaveProperty('usage.model', expect.stringContaining('/'));
+    expect(verdict).toHaveProperty('usage.inputTokens', expect.any(Number));
   });
 
   it('rejects a label outside the list, a missing verdict and out-of-range confidence', async () => {
-    const { faux, errors, ask } = setup();
+    const { faux, ask } = setup();
+    // Still billed, so what it cost comes back with it.
+    const unusable = { failed: 'the model did not return a usable verdict', usage: expect.objectContaining({ model: expect.stringContaining('/') }) };
     faux.setResponses([fauxAssistantMessage([fauxToolCall(VERDICT_TOOL, { label: 'trash_it', confidence: 1, reason: 'r' })], { stopReason: 'toolUse' })]);
-    expect(await ask()).toBeNull();
+    expect(await ask()).toEqual(unusable);
     faux.setResponses([fauxAssistantMessage([fauxText('I think this is marketing.')])]);
-    expect(await ask()).toBeNull();
-    expect(errors).toEqual(['model did not return a usable verdict', 'model did not return a usable verdict']);
+    expect(await ask()).toEqual(unusable);
 
     faux.setResponses([fauxAssistantMessage([fauxToolCall(VERDICT_TOOL, { label: 'unsure', confidence: 7, reason: 'r' })], { stopReason: 'toolUse' })]);
     expect(await ask()).not.toHaveProperty('confidence');
   });
 
-  it('abstains when the provider fails', async () => {
-    const { errors, ask } = setup();
-    expect(await ask()).toBeNull();
-    expect(errors).toHaveLength(1);
+  it('reports a provider failure as one', async () => {
+    const { ask } = setup();
+    expect(await ask()).toMatchObject({ failed: expect.any(String) });
   });
 });
 

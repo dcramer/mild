@@ -55,8 +55,6 @@ export interface Decision {
   /** The judged rule the model was shown as a prior, whether or not it agreed. */
   priorRuleId?: string;
   confidence?: number;
-  /** Set by a stage that used a model, so the cost of every decision is on record. */
-  usage?: DecisionUsage;
 }
 
 /** A kind of mail, and what the user wants done with it. Every tier names one of these; none picks an action. */
@@ -93,15 +91,13 @@ export function labelled(
   };
 }
 
-export interface DecisionUsage {
-  model: string;
-  inputTokens: number;
-  outputTokens: number;
-  costUsd: number;
+/** A tier that could not finish (its model call failed). Nothing is decided, and the message is tried again on a later pass. */
+export interface Unfinished {
+  unfinished: string;
 }
 
 /** One tier of the cascade. Returning null abstains and passes the message to the next tier. */
-export interface Stage {
+export interface Stage<R extends Decision | Unfinished = Decision> {
   name: StageName;
-  decide(facts: MessageFacts): Decision | null | Promise<Decision | null>;
+  decide(facts: MessageFacts): R | null | Promise<R | null>;
 }

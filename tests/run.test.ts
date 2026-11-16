@@ -12,6 +12,7 @@ import { openUserDb, raw } from './fixtures.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { setAct } from '../src/store/preferences.ts';
+import { MAX_ATTEMPTS, putBackInQueue, startRun } from '../src/store/runs.ts';
 import { listProposals, resolveProposal } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
@@ -61,7 +62,7 @@ function api(): GmailApi {
 }
 
 /** A model that can place nothing. Mail sift asks about comes from a model's "unsure"; with no model, nothing is asked. */
-const unsure = async () => ({ judge: async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 }) });
+const unsure = async () => ({ model: 'test/model', judge: async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 }) });
 
 const options = (): RunOptions => ({ connect: () => ({ api: api(), mailbox }), log: (line) => logs.push(line), now: () => 5000 });
 /** The person's database, with sift acting for them or only observing. */
@@ -465,6 +466,7 @@ describe('triage queue', () => {
 describe('inference tier', () => {
   const judged: string[] = [];
   const model = (label: string) => async () => ({
+    model: 'test/model',
     judge: async ({ evidence }: { evidence: { facts: { messageId: string } } }) => {
       judged.push(evidence.facts.messageId);
       return { label, reason: 'looks like a mailing', confidence: 0.9, usage: { model: 'test/model', inputTokens: 800, outputTokens: 20, costUsd: 0.002 } };
@@ -476,7 +478,9 @@ describe('inference tier', () => {
     inbox = [inbox[0]!];
     await runOnce(await acting(true), { ...options(), model: model('newsletter') });
 
-    expect(await raw(db).get('SELECT stage, disposition, label_id, gmail_label, model, cost_usd, outcome FROM decisions')).toEqual({
+    expect(
+      await raw(db).get('SELECT stage, disposition, label_id, gmail_label, model, cost_usd, d.outcome FROM decisions d JOIN model_runs r ON r.id = d.run_id'),
+    ).toEqual({
       stage: 'agent',
       disposition: 'archive',
       label_id: 'newsletter',
@@ -565,6 +569,65 @@ describe('inference tier', () => {
     expect(judged).toEqual(['news']);
     expect(await raw(db).get('SELECT disposition, mode, outcome FROM decisions')).toEqual({ disposition: 'archive', mode: 'observe', outcome: 'observed' });
     expect(mailbox.modifyCalls).toBe(0);
+  });
+});
+
+describe('a failed model call', () => {
+  const runs = async () => await raw(db).all('SELECT message_id, model, outcome, error, cost_usd FROM model_runs ORDER BY id');
+  const failing =
+    (asked: string[] = []) =>
+    async () => ({
+      model: 'test/model',
+      judge: async ({ evidence }: { evidence: { facts: { messageId: string } } }) => (
+        asked.push(evidence.facts.messageId),
+        { failed: 'rate limited', usage: { model: 'test/model', inputTokens: 900, outputTokens: 5, costUsd: 0.001 } }
+      ),
+    });
+
+  it('decides nothing and is tried again on later passes, until it has failed three times', async () => {
+    inbox = [inbox[0]!];
+    for (let pass = 1; pass <= 3; pass++) {
+      await runOnce(db, { ...options(), model: failing() });
+      expect(await decisions()).toEqual([]);
+      expect(await listUndecided(db, ACCOUNT, 10)).toHaveLength(pass < 3 ? 1 : 0);
+    }
+    // A failed call was still billed.
+    expect(await runs()).toEqual(
+      Array.from({ length: 3 }, () => ({ message_id: 'news', model: 'test/model', outcome: 'failed', error: 'rate limited', cost_usd: 0.001 })),
+    );
+    expect(logs.at(-1)).toContain('the model failed on 1: rate limited');
+
+    const asked: string[] = [];
+    await runOnce(db, { ...options(), model: failing(asked) });
+    expect(asked).toEqual([]);
+  });
+
+  it('counts a run the pass never finished as failed', async () => {
+    inbox = [inbox[0]!];
+    await runOnce(db, options());
+    for (let i = 0; i < MAX_ATTEMPTS; i++) await startRun(db, { accountId: ACCOUNT, messageId: 'news', model: 'test/model', now: 0 });
+    expect(await listUndecided(db, ACCOUNT, 10)).toEqual([]);
+  });
+
+  it('stops asking after three failures in a row, and still decides what a rule covers', async () => {
+    await addRule(db, ACCOUNT, { match: { from: 'ruled@example.com' }, disposition: 'archive' }, 'user');
+    inbox = [1, 2, 3, 4].map((n) => ({ ...message(`m${n}`, `S${n} <s${n}@example.com>`), internalDate: 9000 - n }));
+    inbox.push({ ...message('ruled', 'Ruled <ruled@example.com>'), internalDate: 1 });
+    const asked: string[] = [];
+    await runOnce(db, { ...options(), model: failing(asked) });
+    expect(asked).toEqual(['m1', 'm2', 'm3']);
+    expect(await decisions()).toMatchObject([{ message_id: 'ruled', stage: 'rules' }]);
+    expect((await listUndecided(db, ACCOUNT, 10)).map((m) => m.facts.messageId)).toEqual(['m1', 'm2', 'm3', 'm4']);
+  });
+
+  it('can be put back in the queue, and is decided once the model answers', async () => {
+    inbox = [inbox[0]!];
+    for (let pass = 0; pass < MAX_ATTEMPTS; pass++) await runOnce(db, { ...options(), model: failing() });
+    expect(await putBackInQueue(db, ACCOUNT, 'news', 6000)).toBe(true);
+    expect(await putBackInQueue(db, ACCOUNT, 'news', 6000)).toBe(false);
+    await runOnce(db, { ...options(), model: async () => ({ model: 'test/model', judge: async () => ({ label: 'newsletter', reason: 'r' }) }) });
+    expect(await decisions()).toMatchObject([{ message_id: 'news', stage: 'agent' }]);
+    expect((await runs()).at(-1)).toEqual({ message_id: 'news', model: 'test/model', outcome: 'judged', error: null, cost_usd: 0 });
   });
 });
 
@@ -660,7 +723,7 @@ describe('blocking', () => {
     const m = message(id, 'Bank <alerts@example.net>', 'Verify your account');
     return { ...m, headers: [...m.headers, { name: 'Authentication-Results', value: `mx.example.org; dmarc=${authenticated ? 'pass' : 'fail'}` }] };
   };
-  const phishing = async () => ({ judge: async () => ({ label: 'phishing', reason: 'asks for a password' }) });
+  const phishing = async () => ({ model: 'test/model', judge: async () => ({ label: 'phishing', reason: 'asks for a password' }) });
 
   it('marks the message spam and makes a rule for the sender, so their later mail needs no model', async () => {
     inbox = [phish('p1', true)];
@@ -673,7 +736,7 @@ describe('blocking', () => {
     let asked = 0;
     inbox = [phish('p2', true)];
     mailbox.labels.set('p2', ['INBOX']);
-    await runOnce(await acting(true), { ...options(), model: async () => ({ judge: async () => (asked++, null) }) });
+    await runOnce(await acting(true), { ...options(), model: async () => ({ model: 'test/model', judge: async () => (asked++, { failed: 'not expected' }) }) });
     expect(asked).toBe(0);
     expect(await raw(db).get(`SELECT stage, disposition, block FROM decisions WHERE message_id = 'p2'`)).toEqual({
       stage: 'rules',
@@ -709,7 +772,10 @@ describe('examples', () => {
   it('stores marked messages whole on the next pass, while only observing', async () => {
     inbox = [inbox[0]!];
     bodies.set('news', 'The full text of the newsletter.');
-    await runOnce(await acting(false), { ...options(), model: async () => ({ judge: async () => ({ label: 'newsletter', reason: 'r' }) }) });
+    await runOnce(await acting(false), {
+      ...options(),
+      model: async () => ({ model: 'test/model', judge: async () => ({ label: 'newsletter', reason: 'r' }) }),
+    });
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' });
 
     inbox = [];

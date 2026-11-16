@@ -53,6 +53,7 @@ export const FEEDBACK_VIA = ['dashboard', 'gmail'] as const;
 export const EXAMPLE_STATUSES = ['pending', 'captured', 'gone'] as const;
 /** interrupted: sift stopped while it ran. */
 export const EVAL_STATUSES = ['running', 'done', 'failed', 'interrupted'] as const;
+export const RUN_OUTCOMES = ['judged', 'failed'] as const;
 
 /** What sift's own queries run as: it owns nothing and cannot bypass row-level security. */
 export const siftApp = pgRole('sift_app', { createRole: false });
@@ -182,6 +183,34 @@ export const messages = pgTable(
 const message = (t: { userId: AnyPgColumn; accountId: AnyPgColumn; messageId: AnyPgColumn }) =>
   foreignKey({ columns: [t.userId, t.accountId, t.messageId], foreignColumns: [messages.userId, messages.accountId, messages.id] });
 
+/** Every call to the model about a message, with what it cost. One that failed reached no decision, so the message is asked about again on a later pass. */
+export const modelRuns = pgTable(
+  'model_runs',
+  {
+    id: id(),
+    userId: userId(),
+    accountId: text('account_id').notNull(),
+    messageId: text('message_id').notNull(),
+    model: text('model').notNull(),
+    startedAt: time('started_at').notNull(),
+    finishedAt: time('finished_at'),
+    outcome: text('outcome', { enum: RUN_OUTCOMES }), // null: the pass stopped part-way, which counts as failed
+    error: text('error'),
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    costUsd: doublePrecision('cost_usd').notNull().default(0),
+    retriedAt: time('retried_at'), // the user put the message back in the queue: this failure no longer counts
+  },
+  (t) => [
+    unique('model_runs_own').on(t.userId, t.id),
+    message(t),
+    oneOf('model_runs_outcome', t.outcome, RUN_OUTCOMES),
+    index('model_runs_message').on(t.accountId, t.messageId),
+    index('model_runs_time').on(t.startedAt),
+    own(),
+  ],
+).enableRLS();
+
 /** An append-only log: a message can be decided more than once, and the highest id is current. */
 export const decisions = pgTable(
   'decisions',
@@ -201,11 +230,7 @@ export const decisions = pgTable(
     priorRuleId: text('prior_rule_id'), // the judged rule the model was shown, whether or not it agreed
     confidence: doublePrecision('confidence'),
     reason: text('reason').notNull(),
-    // What reaching it cost. Null model means no inference was used.
-    model: text('model'),
-    inputTokens: integer('input_tokens').notNull().default(0),
-    outputTokens: integer('output_tokens').notNull().default(0),
-    costUsd: doublePrecision('cost_usd').notNull().default(0),
+    runId: integer('run_id'), // the model call that reached it; null when no model was asked
     durationMs: integer('duration_ms'),
     decidedAt: time('decided_at').notNull(),
     mode: text('mode', { enum: DECISION_MODES }).notNull().default('observe'),
@@ -216,6 +241,7 @@ export const decisions = pgTable(
   (t) => [
     unique('decisions_own').on(t.userId, t.id),
     message(t),
+    foreignKey({ columns: [t.userId, t.runId], foreignColumns: [modelRuns.userId, modelRuns.id] }),
     oneOf('decisions_stage', t.stage, STAGE_NAMES),
     oneOf('decisions_disposition', t.disposition, DISPOSITIONS),
     oneOf('decisions_subscription', t.subscription, SUBSCRIPTION_ACTIONS),

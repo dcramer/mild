@@ -14,6 +14,7 @@ import { people } from '../src/store/people.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
+import { finishRun, startRun } from '../src/store/runs.ts';
 import { builtAssets, openUserDb, raw, startDashboard, onePerson } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 import { addRule } from '../src/store/rules.ts';
@@ -49,6 +50,11 @@ async function seededStore(): Promise<{ store: Store; db: Sql }> {
     NOW,
   );
   const base = { subscription: 'preserve', reason: 'test' } as const;
+  const judged = async (messageId: string, costUsd: number, outcome: 'judged' | 'failed' = 'judged') => {
+    const run = await startRun(db, { accountId: ACCOUNT, messageId, model: 'test-model', now: NOW - 2 * DAY });
+    await finishRun(db, run, { outcome, usage: { model: 'test-model', inputTokens: 900, outputTokens: 100, costUsd }, now: NOW - 2 * DAY });
+    return run;
+  };
   await recordDecision(
     db,
     ACCOUNT,
@@ -61,9 +67,11 @@ async function seededStore(): Promise<{ store: Store; db: Sql }> {
     db,
     ACCOUNT,
     'c',
-    { ...base, disposition: 'review', stage: 'agent', confidence: 0.4, usage: { model: 'test-model', inputTokens: 900, outputTokens: 100, costUsd: 0.02 } },
-    { now: NOW - 2 * DAY, durationMs: 1500 },
+    { ...base, disposition: 'review', stage: 'agent', confidence: 0.4 },
+    { now: NOW - 2 * DAY, durationMs: 1500, runId: await judged('c', 0.02) },
   );
+  // A call that failed costs too, and decided nothing.
+  await judged('b', 0.01, 'failed');
   await recordDecision(db, ACCOUNT, 'old', { ...base, disposition: 'keep', stage: 'rules' }, { now: NOW - 40 * DAY });
   return { store, db };
 }
@@ -95,10 +103,12 @@ describe('tracking', () => {
   it('keeps every decision for a message, with its cost', async () => {
     const db = await seeded();
     await recordDecision(db, ACCOUNT, 'c', { disposition: 'keep', subscription: 'preserve', stage: 'rules', reason: 'user correction' }, { now: NOW });
-    const rows = await raw(db).all(`SELECT stage, disposition, model, cost_usd, input_tokens, duration_ms FROM decisions WHERE message_id = 'c' ORDER BY id`);
+    const rows = await raw(db).all(
+      `SELECT d.stage, d.disposition, r.model, r.cost_usd, r.input_tokens, d.duration_ms FROM decisions d LEFT JOIN model_runs r ON r.id = d.run_id WHERE d.message_id = 'c' ORDER BY d.id`,
+    );
     expect(rows).toEqual([
       { stage: 'agent', disposition: 'review', model: 'test-model', cost_usd: 0.02, input_tokens: 900, duration_ms: 1500 },
-      { stage: 'rules', disposition: 'keep', model: null, cost_usd: 0, input_tokens: 0, duration_ms: null },
+      { stage: 'rules', disposition: 'keep', model: null, cost_usd: null, input_tokens: null, duration_ms: null },
     ]);
   });
 
@@ -172,7 +182,7 @@ describe('tracking', () => {
   it('counts only the window and reports tiers, cost and backlog', async () => {
     const db = await seeded();
     const summary = await summarize(db, await everything(db), 7, NOW);
-    expect(summary.totals).toEqual({ messages: 4, decisions: 3, withoutInference: 2, costUsd: 0.02, awaitingTriage: 1, troubledActions: 0 });
+    expect(summary.totals).toEqual({ messages: 4, decisions: 3, withoutInference: 2, costUsd: 0.03, awaitingTriage: 1, troubledActions: 0 });
     expect(summary.byStage.map((s) => [s.stage, s.decisions])).toEqual([
       ['rules', 1],
       ['sender', 1],
@@ -217,7 +227,7 @@ describe('tracking', () => {
     expect(daily.at(-1)?.changes).toEqual({ archive: 1, spam: 0, keep: 0, failed: 1 });
     // Suggestions changed nothing, so the other days have no changes; the model's cost is on the day it was asked.
     expect(daily.slice(0, -1).every((d) => d.changes.archive + d.changes.spam + d.changes.keep + d.changes.failed === 0)).toBe(true);
-    expect(daily.reduce((sum, d) => sum + d.costUsd, 0)).toBeCloseTo(0.02);
+    expect(daily.reduce((sum, d) => sum + d.costUsd, 0)).toBeCloseTo(0.03);
   });
 
   it('lists senders and recent decisions with their message', async () => {

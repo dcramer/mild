@@ -8,6 +8,7 @@ import type { Store } from '../src/store/store.ts';
 import { freshStore, raw, startDashboard } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
+import { MAX_ATTEMPTS, finishRun, startRun } from '../src/store/runs.ts';
 import { facts } from './helpers.ts';
 
 // Two people. Alpha set sift up and has two mailboxes; Bravo arrived later with one.
@@ -54,6 +55,12 @@ async function seed(account: string): Promise<void> {
     `m-${mark}`,
     `Body ${mark}`,
   );
+  // Mail the model failed on every time, waiting to be put back in the queue.
+  await recordSync(db, account, [facts({ accountId: account, messageId: `u-${mark}`, subject: `Unjudged ${mark}`, from: sender })], '3', 1000);
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    const run = await startRun(db, { accountId: account, messageId: `u-${mark}`, model: 'p/m', now: 1000 });
+    await finishRun(db, run, { outcome: 'failed', error: `failed for ${mark}`, now: 1000 });
+  }
   ids[account] = { rule, action, proposal };
 }
 
@@ -112,6 +119,7 @@ const READS = (account: string, mark: string) => [
   '/api/suggestions',
   '/api/suggestions?kept=1',
   '/api/changes',
+  '/api/unjudged',
   '/api/manage',
   '/api/examples',
   '/api/evals',
@@ -199,7 +207,12 @@ describe("nobody sees or changes another person's mail", () => {
     expect(theirs.action).not.toBe(ids[BRAVO]!.action);
     const db = await dbOf(ALPHA);
     const state = async () =>
-      JSON.stringify([await listRules(db, ALPHA), await raw(db).all('SELECT * FROM labels'), await raw(db).all('SELECT * FROM proposals')]);
+      JSON.stringify([
+        await listRules(db, ALPHA),
+        await raw(db).all('SELECT * FROM labels'),
+        await raw(db).all('SELECT * FROM proposals'),
+        await raw(db).all('SELECT * FROM model_runs'),
+      ]);
     const before = await state();
     const NOBODY = 'nobody@example.com';
     // Each write, and the same write naming something nobody has: the answers must not tell them apart.
@@ -229,6 +242,7 @@ describe("nobody sees or changes another person's mail", () => {
       ['/api/rules/filter', { id: theirs.rule, on: true }, { id: 'r-nobody', on: true }],
       ['/api/proposals', { id: theirs.proposal, accept: true }, { id: 9999, accept: true }],
       ['/api/undo', { id: theirs.action }, { id: 9999 }],
+      ['/api/unjudged/retry', { accountId: ALPHA, messageId: `u-${MARK[ALPHA]}` }, { accountId: NOBODY, messageId: `u-${MARK[ALPHA]}` }],
       ['/api/examples/delete', { accountId: ALPHA, messageId: `m-${MARK[ALPHA]}` }, { accountId: NOBODY, messageId: `m-${MARK[ALPHA]}` }],
       ['/api/examples/delete-all', { accountId: ALPHA }, { accountId: NOBODY }],
       ['/api/evals/run', { accountId: ALPHA }, { accountId: NOBODY }],
@@ -246,6 +260,11 @@ describe("nobody sees or changes another person's mail", () => {
     // The same writes are the owner's to make on their own mail.
     expect((await call('POST', '/api/rules/remove', ALPHA, { id: theirs.rule })).status).toBe(200);
     expect((await call('POST', '/api/undo', ALPHA_WORK, { id: theirs.action })).status).toBe(200);
+    const unjudged = async () => (JSON.parse((await call('GET', '/api/unjudged', ALPHA)).text) as { rows: { messageId: string }[] }).rows;
+    expect((await unjudged()).map((r) => r.messageId).toSorted()).toEqual([`u-${MARK[ALPHA]}`, `u-${MARK[ALPHA_WORK]}`]);
+    expect((await call('POST', '/api/unjudged/retry', ALPHA_WORK, { accountId: ALPHA, messageId: `u-${MARK[ALPHA]}` })).status).toBe(200);
+    expect((await unjudged()).map((r) => r.messageId)).toEqual([`u-${MARK[ALPHA_WORK]}`]);
+    expect((await call('POST', '/api/unjudged/retry', ALPHA, { accountId: ALPHA, messageId: `u-${MARK[ALPHA]}` })).status).toBe(409);
   });
 
   it('lets each person change their own mode, model and sign-ins, and only their own', async () => {

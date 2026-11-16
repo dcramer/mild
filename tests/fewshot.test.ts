@@ -171,6 +171,7 @@ describe('stored examples', () => {
   it('reach the judge during every pass', async () => {
     const seen: JudgeInput[] = [];
     const model = {
+      model: 'test/model',
       judge: async (input: JudgeInput) => {
         seen.push(input);
         return { label: 'newsletter', reason: 'r' };

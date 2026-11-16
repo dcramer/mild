@@ -2,7 +2,7 @@ import type { Facts } from '../facts.ts';
 import type { Standing } from '../standing.ts';
 import { type RuleHit, describeRule, ruleOutcome } from './rules.ts';
 import { type Shot, pickShots } from '../fewshot.ts';
-import { type DecisionUsage, type Disposition, type Label, type MessageFacts, type Stage, labelled } from '../types.ts';
+import { type Decision, type Disposition, type Label, type MessageFacts, type Stage, type Unfinished, labelled } from '../types.ts';
 
 /** Everything the model is shown about one message. Gathered by deterministic code, never by the model. */
 export interface Evidence {
@@ -31,17 +31,32 @@ export interface Evidence {
 
 export const UNSURE = 'unsure';
 
+/** What a call cost, as the provider reported it. */
+export interface Usage {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
 export interface Verdict {
   /** A label's id, or `unsure`. */
   label: string;
   reason: string;
   /** 0 to 1, as reported by the model. Not calibrated. */
   confidence?: number;
-  usage?: DecisionUsage;
+  usage?: Usage;
 }
 
-/** Port for the model. Returns null when the call failed or the answer was unusable: that abstains. */
-export type Judge = (input: JudgeInput) => Promise<Verdict | null>;
+/** The call failed or its answer was unusable. Not the model's `unsure`: the message is asked about again later. */
+export interface JudgeFailure {
+  failed: string;
+  /** A call that answered unusably was still billed. */
+  usage?: Usage;
+}
+
+/** Port for the model. */
+export type Judge = (input: JudgeInput) => Promise<Verdict | JudgeFailure>;
 
 export interface JudgeInput {
   evidence: Evidence;
@@ -64,7 +79,7 @@ export interface ModelStageDeps {
  * The inference tier. The model has no tools and takes no action: it reads the evidence and names a
  * label. What happens next is that label's action, and two protections apply whatever the model says.
  */
-export function modelStage(deps: ModelStageDeps): Stage {
+export function modelStage(deps: ModelStageDeps): Stage<Decision | Unfinished> {
   return {
     name: 'agent',
     async decide(facts) {
@@ -75,14 +90,13 @@ export function modelStage(deps: ModelStageDeps): Stage {
         : gathered;
       const examples = deps.examples ? pickShots(await deps.examples(facts), facts, deps.labels) : [];
       const verdict = await deps.judge({ evidence, labels: deps.labels, ...(examples.length > 0 ? { examples } : {}) });
-      if (!verdict) return null;
+      if ('failed' in verdict) return { unfinished: verdict.failed };
 
       const base = {
         subscription: 'preserve' as const,
         stage: 'agent' as const,
         ...(prior ? { priorRuleId: prior.rule.id } : {}),
         ...(verdict.confidence === undefined ? {} : { confidence: verdict.confidence }),
-        ...(verdict.usage ? { usage: verdict.usage } : {}),
       };
       // The model found the owner's condition met: the rule's outcome applies. A rule that waits for a label
       // is only a hint here; it is applied once the label is settled, by `settle`.

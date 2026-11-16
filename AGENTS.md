@@ -49,7 +49,7 @@ Enforced by `no-restricted-imports` in `.oxlintrc.json`. They are the security m
 - Never delete or trash mail, send, reply or forward. sift does not request `gmail.send`.
 - Only messages currently in `INBOX` are changed. Re-read labels immediately before acting.
 - A model only says which label mail is. What happens is the user's to say: through the label's action, or through a rule, which may name an action directly ("from this address: archive") with or without a label. Don't let model output choose a disposition, a Gmail label or an action directly.
-- When no tier is sure, the answer is `review`: leave the message alone and ask. An error is an abstention, never a guess.
+- When no tier is sure, the answer is `review`: leave the message alone and ask. An error is an abstention, never a guess, and a failed model call is not "unsure": it decides nothing and is tried again.
 - A user correction beats anything learned.
 - Every Gmail filter passes `validateFilter` first, whoever proposed it.
 - Anything that acts on a sender's address (blocking them, using their unsubscribe link) needs the message to have passed DMARC. Without it the address proves nothing, and the action could be turned on someone who was only impersonated.
@@ -72,7 +72,7 @@ Every setting can be given in the environment, which is how Vercel and Cloudflar
 
 ## Record everything
 
-The database is the full account of what sift saw and did. Every message synced gets a row (metadata and subject, no body). Message content is stored in two places only: `examples`, for mail the user answered for, kept; and `suggestion_bodies`, the text of mail still waiting on the user, which is deleted when it is answered or stops being a suggestion and after 30 days regardless. Don't store message content anywhere else, and don't lengthen that. Every triage outcome gets a `decisions` row through `recordDecision`, including "keep" and "could not decide", with its cost; mail nothing looked at because no model is connected is not an outcome, and stays in the queue. Every mailbox change goes through the executor and gets an `actions` row linked to its decision. Don't add a code path that decides or acts without recording.
+The database is the full account of what sift saw and did. Every message synced gets a row (metadata and subject, no body). Message content is stored in two places only: `examples`, for mail the user answered for, kept; and `suggestion_bodies`, the text of mail still waiting on the user, which is deleted when it is answered or stops being a suggestion and after 30 days regardless. Don't store message content anywhere else, and don't lengthen that. Every triage outcome gets a `decisions` row through `recordDecision`, including "keep" and "could not decide"; mail nothing looked at because no model is connected is not an outcome, and stays in the queue. Every model call gets a `model_runs` row, started before the call, with its cost, whether it judged or failed; a decision reached by one points at it. A failed call is not an outcome either: it records no decision, and the message is tried again. Every mailbox change goes through the executor and gets an `actions` row linked to its decision. Don't add a code path that decides or acts without recording.
 
 ## Definition of done
 

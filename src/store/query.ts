@@ -4,6 +4,7 @@
  * (`Sql`), whose builder holds them to its person. Nothing else imports Drizzle.
  */
 export {
+  type AnyColumn,
   type SQL,
   and,
   asc,

@@ -8,14 +8,15 @@ import { shotCandidates } from '../store/examples.ts';
 import { listLabels } from '../store/labels.ts';
 import { listUnsettledDecisions, recordDecision, settleDecision } from '../store/decisions.ts';
 import { listUndecided } from '../store/messages.ts';
+import { finishRun, startRun } from '../store/runs.ts';
 import { proposeForSender, proposeSettled } from '../store/proposals.ts';
 import { blockSender, countRuleHit, listRules } from '../store/rules.ts';
 import { cachedCorrespondent } from '../store/senders.ts';
 import { passedDmarc } from '../triage/features.ts';
 import { triage } from '../triage/pipeline.ts';
 import { priorRule, rulesStage, settle } from '../triage/stages/rules.ts';
-import { type Judge, modelStage } from '../triage/stages/model.ts';
-import type { Decision, Disposition, MessageFacts, Stage } from '../triage/types.ts';
+import { type Judge, type JudgeFailure, modelStage } from '../triage/stages/model.ts';
+import type { Decision, Disposition, MessageFacts, Stage, Unfinished } from '../triage/types.ts';
 import { type EvidenceSources, gatherEvidence } from './evidence.ts';
 
 export interface TriageDeps {
@@ -36,6 +37,8 @@ export interface TriageDeps {
 
 export interface ModelTier {
   judge: Judge;
+  /** As each run records it. */
+  model: string;
   /** Read access for evidence. Used in observe mode too; it never changes the mailbox. */
   sources: Omit<EvidenceSources, 'db' | 'now'>;
 }
@@ -55,13 +58,20 @@ export interface TriageReport {
   blocked: number;
   /** Mailing lists left this pass. */
   unsubscribed: number;
+  /** Messages the model failed on this pass. Each stays in the queue until it has failed `MAX_ATTEMPTS` times. */
+  unjudged: number;
+  /** What went wrong the last time. */
+  failure?: string;
 }
+
+/** After this many failed calls in a row a pass stops asking the model: the provider is likely down, and the rest of the queue keeps its tries. */
+export const FAILURES_IN_A_ROW = 3;
 
 /**
  * The cascade for one account, as a function that decides one message: the tiers cheapest first, then
  * the rules that wait for a label.
  */
-export async function cascadeFor(deps: TriageDeps, accountId: string): Promise<(facts: MessageFacts) => Promise<Decision>> {
+export async function cascadeFor(deps: TriageDeps, accountId: string): Promise<(facts: MessageFacts) => Promise<Decision | Unfinished>> {
   const { db, model } = deps;
   const labels = await listLabels(db, accountId);
   const rules = await listRules(db, accountId);
@@ -70,7 +80,7 @@ export async function cascadeFor(deps: TriageDeps, accountId: string): Promise<(
   let written: boolean | undefined;
   const options = { hasWritten: () => written };
   const read = async (facts: MessageFacts) => (written = await cachedCorrespondent(db, facts.accountId, facts.from.address));
-  const stages: Stage[] = [rulesStage(rules, labels, { ...options, judged: model !== undefined })];
+  const stages: Stage<Decision | Unfinished>[] = [rulesStage(rules, labels, { ...options, judged: model !== undefined })];
   if (model) {
     stages.push(
       modelStage({
@@ -94,7 +104,8 @@ export async function cascadeFor(deps: TriageDeps, accountId: string): Promise<(
 /**
  * Decide every recorded message that has no decision yet and, when a mailbox is given, carry the
  * decisions out. Each decision is recorded before anything is changed; if the change cannot be
- * attempted (a provider error), the decision stays unsettled and the next pass retries it.
+ * attempted (a provider error), the decision stays unsettled and the next pass retries it. Every model
+ * call is recorded as a run; one that fails decides nothing, so the message is asked about again next pass.
  */
 export async function triageAccount(deps: TriageDeps, account: Account, limit = 200): Promise<TriageReport> {
   const { db, mailbox } = deps;
@@ -107,7 +118,27 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     proposed: 0,
     blocked: 0,
     unsubscribed: 0,
+    unjudged: 0,
   };
+
+  let inARow = 0;
+  // The run that reached the message being decided, if the model was asked.
+  let runId: number | undefined;
+  const judged = (tier: ModelTier): ModelTier => ({
+    ...tier,
+    judge: async (input) => {
+      const { accountId, messageId } = input.evidence.facts;
+      const run = await startRun(db, { accountId, messageId, model: tier.model, now: now() });
+      const verdict = await tier.judge(input).catch((error: unknown): JudgeFailure => ({ failed: error instanceof Error ? error.message : String(error) }));
+      const usage = verdict.usage ? { usage: verdict.usage } : {};
+      if ('failed' in verdict) await finishRun(db, run, { outcome: 'failed', error: verdict.failed, ...usage, now: now() });
+      else await finishRun(db, run, { outcome: 'judged', ...usage, now: now() });
+      inARow = 'failed' in verdict ? inARow + 1 : 0;
+      runId = run;
+      return verdict;
+    },
+  });
+  let model = deps.model && judged(deps.model);
 
   const carryOut = async (decisionId: number, messageId: string, decision: Pick<Decision, 'disposition' | 'gmailLabel' | 'markRead'>, box: Mailbox) => {
     const action = planAction(decision);
@@ -130,18 +161,30 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
       await carryOut(pending.id, pending.messageId, pending, deps.answers);
   }
 
-  const decide = await cascadeFor(deps, account.id);
+  const { model: _given, ...modelless } = deps;
+  let decide = await cascadeFor(model ? { ...deps, model } : modelless, account.id);
   for (const { facts, observeOnly } of await listUndecided(db, account.id, limit)) {
     const act = mailbox !== null && !observeOnly;
     const started = performance.now();
+    runId = undefined;
     const decision = await decide(facts);
+    if ('unfinished' in decision) {
+      report.unjudged++;
+      report.failure = decision.unfinished;
+      if (model && inARow >= FAILURES_IN_A_ROW) {
+        model = undefined;
+        decide = await cascadeFor(modelless, account.id);
+      }
+      continue;
+    }
     // With no model, mail no rule covers is not anyone's to answer yet: it stays in the queue, unrecorded, for a
     // model once one is connected, or a rule added meanwhile. A model's own "unsure" is recorded and asked about.
-    if (decision.stage === 'fallback' && !deps.model) continue;
+    if (decision.stage === 'fallback' && !model) continue;
     const decisionId = await recordDecision(db, account.id, facts.messageId, decision, {
       mode: act ? 'act' : 'observe',
       durationMs: Math.round(performance.now() - started),
       now: now(),
+      ...(runId === undefined ? {} : { runId }),
     });
     if (decision.ruleId) await countRuleHit(db, decision.ruleId);
     if (decision.stage === 'agent') {

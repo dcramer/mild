@@ -14,6 +14,7 @@ import {
   isNull,
   lt,
   messages,
+  modelRuns,
   not,
   or,
   sql,
@@ -110,7 +111,7 @@ export async function pruneOld(db: Sql, now: number = Date.now()): Promise<numbe
 
   await db.transaction(async (tx) => {
     for (const m of going) {
-      for (const table of [suggestionBodies, actions, decisions])
+      for (const table of [suggestionBodies, actions, decisions, modelRuns])
         await tx.delete(table).where(and(eq(table.accountId, m.accountId), eq(table.messageId, m.id)));
       await tx.delete(messages).where(and(eq(messages.accountId, m.accountId), eq(messages.id, m.id)));
     }

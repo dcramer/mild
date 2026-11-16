@@ -1,4 +1,4 @@
-import { actions, and, asc, decisions, eq, examples, messages, suggestionBodies } from '../../store/query.ts';
+import { actions, and, asc, decisions, eq, examples, messages, modelRuns, sql, suggestionBodies } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import { unsubscribedAt } from '../../store/actions.ts';
 import { storedFacts } from '../../store/messages.ts';
@@ -37,11 +37,12 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
         .select({
           id: decisions.id,
           ruleId: decisions.ruleId,
-          inputTokens: decisions.inputTokens,
-          outputTokens: decisions.outputTokens,
+          inputTokens: sql<number>`coalesce(${modelRuns.inputTokens}, 0)`.mapWith(Number),
+          outputTokens: sql<number>`coalesce(${modelRuns.outputTokens}, 0)`.mapWith(Number),
           durationMs: decisions.durationMs,
         })
         .from(decisions)
+        .leftJoin(modelRuns, eq(modelRuns.id, decisions.runId))
         .where(ofMessage)
     ).map(({ id, ...rest }) => [id, rest] as const),
   );

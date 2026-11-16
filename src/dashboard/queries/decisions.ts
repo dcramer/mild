@@ -13,6 +13,7 @@ import {
   labels,
   max,
   messages,
+  modelRuns,
   ne,
   or,
   sql,
@@ -45,8 +46,8 @@ const DECISION_FIELDS = {
   gmailLabel: decisions.gmailLabel,
   reason: decisions.reason,
   confidence: decisions.confidence,
-  model: decisions.model,
-  costUsd: decisions.costUsd,
+  model: modelRuns.model,
+  costUsd: sql<number>`coalesce(${modelRuns.costUsd}, 0)`.mapWith(Number),
   fromAddress: messages.fromAddress,
   fromName: messages.fromName,
   subject: messages.subject,
@@ -66,6 +67,7 @@ export const decisionsJoined = (db: Sql) =>
     .from(decisions)
     .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
     .leftJoin(labels, and(eq(labels.accountId, decisions.accountId), eq(labels.id, decisions.labelId)))
+    .leftJoin(modelRuns, eq(modelRuns.id, decisions.runId))
     .leftJoin(
       actions,
       eq(

@@ -22,7 +22,7 @@ Tiers run cheapest first. A tier either names a label or abstains; the first ans
 | 4. Model | `src/triage/stages/model.ts`, `src/model/` | one model call | built; in use while observing, with a ChatGPT subscription model |
 | Fallback | `src/triage/pipeline.ts` | none | built |
 
-Every message is meant to be one of the labels. When the model cannot tell which (its "unsure"), or its call fails, the answer is `review`: the message stays where it is, gets the review label, and the user is asked which label it is, or adds one. With no model connected, mail no rule covers is not decided at all: it stays in the triage queue (newest first, so it never holds up new mail) and is neither a suggestion nor changed, until a model is connected or a rule comes to cover it.
+Every message is meant to be one of the labels. When the model cannot tell which (its "unsure"), the answer is `review`: the message stays where it is, gets the review label, and the user is asked which label it is, or adds one. A model call that fails (a provider error, or an answer that is not a usable verdict) is not "unsure" and decides nothing: the message stays in the triage queue and is asked about again on the next pass. After three failed calls it leaves the queue (`MAX_ATTEMPTS`, `src/store/runs.ts`) and shows in Activity's Failed view as not judged, with the last error, until the user puts it back; it never becomes a suggestion. Three failures in a row within one pass stop that pass asking the model, since the provider is likely down: the rest of the queue keeps its tries, and mail a rule covers is still decided. A call is recorded as started before it is made, so one a stopped pass never finished counts as failed. With no model connected, mail no rule covers is not decided at all: it stays in the triage queue (newest first, so it never holds up new mail) and is neither a suggestion nor changed, until a model is connected or a rule comes to cover it.
 
 **A rule** is conditions, then a label, an action, or both. There are three kinds, and a sender or domain can have one of the first two and any number of the third:
 
@@ -41,7 +41,7 @@ Rules that matter across tiers:
 - A rule whose label has been removed does nothing.
 - Mail an action rule decides may carry no label at all: decisions, lists and Gmail (which then gets only the mark of what sift did) all allow for that.
 - Spam has a higher confidence bar than archive.
-- Errors abstain. Nothing fails toward a mutation.
+- Errors abstain, and a failed model call decides nothing. Nothing fails toward a mutation.
 
 ## Message facts
 
@@ -145,7 +145,7 @@ Everything a person prefers is in their own database.
 When no rule decides a message, one model call does. It is deliberately not an agent.
 
 - **The model has no tools and takes no action.** Deterministic code gathers the evidence first: the message's facts, the body (fetched on demand, truncated, never stored), how much mail this sender has sent, what was done with it, and whether the user has ever written to them.
-- **Its only output is a label** from the user's list, or `unsure`, with a one-line reason. The reply is validated; anything else abstains.
+- **Its only output is a label** from the user's list, or `unsure`, with a one-line reason. The reply is validated; anything else is a failed call, which is tried again on a later pass.
 - **The label's action decides the outcome**, so the user's choice, not the model, determines what happens to the message.
 - **Three protections apply whatever the model says:** mail from someone the user has written to is never archived or marked spam on the model's word (and "could not check" counts as yes), nor is a reply in a thread the user has written in, and `unsure` or an unknown category leaves the message for review.
 - **It is shown a few of the user's own answers.** Beside each message go up to six stored examples, chosen for it: from the same sender first, then the same domain, then the newest of each label, within a budget of about 1,200 tokens (`src/triage/fewshot.ts`). Each is only sender, subject, the first 300 characters and the owner's label, fenced as untrusted like the email itself, with every field JSON on one line so an example's text cannot close its fence or forge a label. It is always on; a test run can leave examples out, to measure what they add.
@@ -220,14 +220,15 @@ Defaults (the starting labels, a person's preferences) are written by code when 
 - **messages:** one row per message sift has seen: sender, recipients, subject, the triage headers, the labels at sync time and the facts derived from them. No body. This is enough to triage a message again without refetching it.
 - **feedback, examples:** the user's answers to suggestions, and the full content of each message they answered for, kept as evaluation and training data until deleted (see Teaching).
 - **suggestion_bodies:** the readable text of mail still waiting on the user, so a suggestion can be judged by reading it: its start is shown under the subject in the Suggestions list, read from here and not stored again. Held only for mail sift would move or could not place, and deleted when the message is answered or stops being a suggestion, and after 30 days regardless (`src/daemon/bodies.ts`). These two tables are the only places message content is stored.
-- **decisions:** an append-only log, each with its mode (observe or act) and outcome. Every triage outcome is recorded, including "keep" and "could not decide" (a model unsure, or failing), but not mail no tier looked at for want of a model, which stays queued, with the tier that made it, the reason, the confidence, and what it cost (model, tokens, dollars, duration). A message can have several decisions; the latest is current.
+- **model_runs:** every call to the model about a message, judged or failed, with the model, tokens, dollars, when it started and finished, and the error when it failed. Cost is summed from here, so a call that failed (an unusable answer is still billed) counts. Failed runs are how a message's tries are counted; putting it back in the queue marks them `retried_at` rather than deleting them.
+- **decisions:** an append-only log, each with its mode (observe or act) and outcome. Every triage outcome is recorded, including "keep" and "could not decide" (a model unsure), but not a failed model call, and not mail no tier looked at for want of a model, both of which stay queued. Each has the tier that made it, the reason, the confidence, how long deciding took, and the run that reached it when a model was asked. A message can have several decisions; the latest is current.
 - **actions:** the audit log of every mailbox change, with labels before and after, linked to the decision it carried out. Creating and removing a Gmail filter is logged here too, with no message.
 - **eval_runs, eval_results:** each test run of the model over the examples, with its settings, and what the model said for each example. Labels and costs only, no message content.
 - **labels, rules, mailboxes:** what mail can be, what sift knows without a model, and each mailbox's history cursor and last sync time.
 
-**Retention.** `sift run` deletes, on its first pass and once a day, each message that nothing has happened to for 365 days, with its decisions and actions (`RETENTION_DAYS`, `src/daemon/retention.ts`; well past sync's 7-day recovery search, which could otherwise bring back a message already forgotten). `pruneOld` lists the tables it deletes from, so a new table that references `messages` or `decisions` must be added there or the prune fails. What it costs: a change older than the window can no longer be undone from sift, and the model is told less about how much a sender has sent. Kept however old:
+**Retention.** `sift run` deletes, on its first pass and once a day, each message that nothing has happened to for 365 days, with its decisions, actions and model runs (`RETENTION_DAYS`, `src/daemon/retention.ts`; well past sync's 7-day recovery search, which could otherwise bring back a message already forgotten). `pruneOld` lists the tables it deletes from, so a new table that references `messages` or `decisions` must be added there or the prune fails. What it costs: a change older than the window can no longer be undone from sift, and the model is told less about how much a sender has sent. Kept however old:
 
-- a suggestion still waiting on the user, and a message not yet decided;
+- a suggestion still waiting on the user, and a message not yet decided (one the model could not judge included);
 - anything the user answered for (`feedback`, `examples`), and so the accuracy figures;
 - a decision not yet carried out, and a change never confirmed;
 - the record of an unsubscribe, which is how sift knows not to ask that sender again;
@@ -253,7 +254,7 @@ The dashboard is where the user watches sift, teaches it and manages it. `sift r
 
 **What it may do**
 
-Everything that manages sift: answer suggestions, switch the viewer's own mail between observing and acting, choose the model, add and edit labels and what happens to each, add and remove rules, write a rule to Gmail as a filter or take it out, undo a mailbox change, try a failed change again (the decision's outcome is cleared and the next pass acts on it, `POST /api/decisions/retry`), pull in older mail, and trigger a check.
+Everything that manages sift: answer suggestions, switch the viewer's own mail between observing and acting, choose the model, add and edit labels and what happens to each, add and remove rules, write a rule to Gmail as a filter or take it out, undo a mailbox change, try a failed change again (the decision's outcome is cleared and the next pass acts on it, `POST /api/decisions/retry`), put mail the model could not judge back in the queue (`POST /api/unjudged/retry`), pull in older mail, and trigger a check.
 
 - It changes the database directly, never `sift.toml`. A pass reads each person's choices as it reaches their mail, and a change wakes it, so nothing needs restarting.
 - It never imports Gmail, the executor or the daemon (lint enforces this). The few things that need them (signing in, undo, Gmail filters, pulling in older mail, check now, a test run of the model, judging suggestions again) are passed in by the process as `SignIn` and `Controls` (`src/dashboard/controls.ts`), so every mailbox change still goes through the executor and the audit log.

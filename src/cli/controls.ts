@@ -19,7 +19,6 @@ import { getRuleFilter } from '../store/filters.ts';
 import { preferences } from '../store/preferences.ts';
 import type { Sql } from '../store/sql.ts';
 import type { Store } from '../store/store.ts';
-import { ui } from './ui.ts';
 
 /** A Gmail client for one of the person's mailboxes, with the sign-in kept in their database. */
 export async function gmailClient(config: Config, db: Sql, email: string) {
@@ -43,7 +42,7 @@ export async function openModelTier(config: Config, db: Sql) {
   const models = await modelsFor(config, db);
   const model = resolveModel(models, spec);
   if (!(await models.getAuth(model))) throw new Error(`Not signed in to ${model.provider}. Sign in under Settings in the dashboard.`);
-  return { spec, judge: createJudge(models, model, (message) => ui.fail(`Model call failed: ${message}`)) };
+  return { spec, judge: createJudge(models, model) };
 }
 
 /** A stable id for this installation, created on first use. ChatGPT registers the device under it. */

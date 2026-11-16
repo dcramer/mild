@@ -497,6 +497,18 @@ export const ChangeRow = z.object({
 });
 export type ChangeRow = z.infer<typeof ChangeRow>;
 
+/** Mail the model failed on every time it was tried. `error` is what went wrong the last time. */
+export const UnjudgedRow = z.object({
+  accountId: z.string(),
+  messageId: z.string(),
+  fromAddress: z.string(),
+  fromName: z.string().nullable(),
+  subject: z.string(),
+  error: z.string().nullable(),
+  triedAt: z.number(),
+});
+export type UnjudgedRow = z.infer<typeof UnjudgedRow>;
+
 /** GET /api/session. */
 export const Session = z.object({
   /** False when this dashboard does not ask for sign-in. */

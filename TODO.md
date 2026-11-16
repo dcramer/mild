@@ -89,7 +89,6 @@ The dashboard manages sift, behind Google sign-in. That sign-in also connects th
 - [ ] Try a second account end to end.
 - [ ] Use Tailscale's identity headers to skip the Google round trip for viewers on the tailnet.
 - [ ] Try a label's description, or a rule's "only when", on recent mail before saving it: what the model would now say about a few messages, beside what it said. (Trying a model when changing provider was built and taken out, 2026-11-15: it told the reader nothing they could act on there.)
-- [ ] A failed model call becomes a question for the user ("Which label?"). It should be tried again on a later pass instead, with a limit so one message that always fails cannot hold up the rest or call a failing provider every pass.
 - [ ] Revisit Vercel's UI SDK as the behaviour layer under `web/src/system` once it is past beta and works under the content security policy (evaluated 2026-11-15; see docs/ARCHITECTURE.md).
 
 ## Inference tier

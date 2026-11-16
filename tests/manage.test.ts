@@ -583,6 +583,7 @@ describe('older mail', () => {
     mailbox.labels.set('new', ['INBOX']);
     // A model that can place neither, so each gets a decision: what is being tested is which may be acted on.
     const model = {
+      model: 'test/model',
       judge: async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 }),
       sources: { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } },
     };
