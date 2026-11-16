@@ -1,6 +1,7 @@
 import { and, asc, eq, examples } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import type { GmailApi } from '../gmail/api.ts';
+import { sealBody } from '../store/bodies.ts';
 
 const PER_PASS = 50;
 
@@ -24,7 +25,15 @@ export async function captureExamples(db: Sql, api: Pick<GmailApi, 'getContent'>
       await db.update(examples).set({ status: 'gone', capturedAt: now() }).where(example);
       continue;
     }
-    await db.update(examples).set({ status: 'captured', bodyText: content.text, bodyHtml: content.html, capturedAt: now() }).where(example);
+    await db
+      .update(examples)
+      .set({
+        status: 'captured',
+        bodyText: sealBody(db, accountId, messageId, 'text', content.text),
+        bodyHtml: sealBody(db, accountId, messageId, 'html', content.html),
+        capturedAt: now(),
+      })
+      .where(example);
     captured++;
   }
   return captured;

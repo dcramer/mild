@@ -1,11 +1,12 @@
 # Secrets
 
-Four kinds of thing would let someone else act as you, and Sift encrypts each when you give it a key:
+Four kinds of thing would let someone else act as you, and Sift encrypts each when you give it a key. It encrypts the mail it holds the same way:
 
 - in the home directory, the install's own: `google-client.json` (your Google OAuth client) and `dashboard-key` (signs dashboard sessions, unless `SIFT_SESSION_SECRET` gives the key: a host that keeps no files between starts needs that);
-- in the database, as each person's own rows (`credentials`), theirs: a Gmail refresh token per mailbox, and their model sign-ins (API keys, a ChatGPT sign-in).
+- in the database, as each person's own rows (`credentials`), theirs: a Gmail refresh token per mailbox, and their model sign-ins (API keys, a ChatGPT sign-in);
+- in the database, the text and HTML of the mail Sift holds for them (`suggestion_bodies`, `examples`). A message with no HTML has none stored, not an empty one.
 
-A person's sign-ins are their own rows, which row-level security keeps from everyone else. The rest of the database is not encrypted.
+A person's sign-ins and mail are their own rows, which row-level security keeps from everyone else. The rest of the database (addresses, subjects, decisions) is not encrypted yet.
 
 A key beside what it protects protects nothing, so the key belongs in the environment, not in the home's `.env`. It guards a copied home directory or backup. It does not guard against someone who can read the running process's environment.
 
@@ -36,7 +37,7 @@ Rotating the key (above) is enough only if nobody who had the key could also hav
 | Model keys and sign-ins | Revoke the API key, or sign out other sessions, at the provider. Then sign in again under Settings in the dashboard. |
 | Dashboard sessions (`dashboard-key`) | Delete the file. Sift makes a new one and everyone is signed out. |
 
-Then rotate the key itself. The key does not encrypt the rest of the databases, so a copied home also carries its mail records.
+Then rotate the key itself. The key does not encrypt the rest of the databases, so a copied home also carries its mail records. Bodies stored plain before there was a key are read as they are until the next start seals them.
 
 ## Losing the key
 
@@ -53,4 +54,4 @@ A person's sign-ins are rows in their database: until there is a way to clear th
 
 ## How
 
-AES-256-GCM from `node:crypto`. The key is derived from `SIFT_KEY` with scrypt, so a passphrase works, but a random value is better. Each value is authenticated with what it is for, a file's name or the person, kind and key of a row, so one account's token cannot be moved into another's place, or into another person's database. Code: `src/secrets.ts`, and `src/store/credentials.ts` for the rows.
+AES-256-GCM from `node:crypto`. The key is derived from `SIFT_KEY` with scrypt, so a passphrase works, but a random value is better. Each value is authenticated with what it is for, a file's name or the person, kind and key of a row, so one account's token cannot be moved into another's place, or into another person's database. Code: `src/secrets.ts`, `src/store/credentials.ts` for sign-ins and `src/store/bodies.ts` for mail; a message's text and HTML are each bound to the person, the message and which part they are.

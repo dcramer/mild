@@ -25,6 +25,7 @@ import { mailboxAliases } from '../store/accounts.ts';
 import { shotCandidates } from '../store/examples.ts';
 import { listLabels } from '../store/labels.ts';
 import { getFacts } from '../store/messages.ts';
+import { openBody } from '../store/bodies.ts';
 import { deriveFacts } from '../triage/facts.ts';
 import { pickShots } from '../triage/fewshot.ts';
 import { PROMPT_TEMPLATE } from '../triage/prompt.ts';
@@ -181,7 +182,7 @@ export async function continueEval(deps: EvalDeps, runId: number, until: number)
     const started = performance.now();
     const answer = await deps
       .judge({
-        evidence: await storedEvidence(db, facts, example.bodyText),
+        evidence: await storedEvidence(db, facts, openBody(db, run.accountId, messageId, 'text', example.bodyText)),
         labels,
         ...(shots.length > 0 ? { examples: shots } : {}),
       })

@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { drizzle } from 'drizzle-orm/pg-proxy';
+import type { Keyring } from '../secrets.ts';
 import { type Builder, owned } from './own.ts';
 
 /**
@@ -9,6 +10,8 @@ import { type Builder, owned } from './own.ts';
 export interface Sql extends Builder {
   /** Whose rows this handle reads and writes; null for the central handle, which reads no one's. */
   readonly person: number | null;
+  /** The install's keys, for what is stored encrypted: sign-ins (src/store/credentials.ts), message bodies (src/store/bodies.ts). */
+  readonly keys: Keyring;
   /**
    * All of `work` or none of it. `work` awaits nothing but `tx`: a Gmail or model call inside it would
    * hold the connection. A transaction opened inside one is part of it.
@@ -38,7 +41,7 @@ const inside = new AsyncLocalStorage<true>();
  * nothing and is held to row-level security, and, for a person, sets `sift.user` to them: the policies
  * then show and accept only their rows. With `person` null nobody's rows are visible.
  */
-export function handle(driver: Driver, person: number | null): Sql {
+export function handle(driver: Driver, person: number | null, keys: Keyring): Sql {
   const begin = async ({ query }: Connection) => {
     await query('SET LOCAL ROLE sift_app', []);
     if (person !== null) await query(`SELECT set_config('sift.user', $1, true)`, [String(person)]);
@@ -56,11 +59,12 @@ export function handle(driver: Driver, person: number | null): Sql {
       person,
     );
   const over = (connection: Connection): Sql => {
-    const tx: Sql = { person, ...builder(connection.query), transaction: (work) => work(tx) };
+    const tx: Sql = { person, keys, ...builder(connection.query), transaction: (work) => work(tx) };
     return tx;
   };
   return {
     person,
+    keys,
     ...builder((text, params, array) => once((connection) => connection.query(text, params, array))),
     transaction: (work) => once((c) => work(over(c))),
   };

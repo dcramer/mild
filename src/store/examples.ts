@@ -1,5 +1,6 @@
 import { type EXAMPLE_STATUSES, type SQL, and, asc, desc, eq, examples, isNotNull, lt, lte, messages, sql } from './query.ts';
 import type { Sql } from './sql.ts';
+import { openBody } from './bodies.ts';
 import { MAX_SHOTS, type Shot, excerptOf } from '../triage/fewshot.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
@@ -9,7 +10,7 @@ const SHOT = {
   fromDomain: messages.fromDomain,
   fromName: messages.fromName,
   subject: messages.subject,
-  start: sql<string | null>`substr(${examples.bodyText}, 1, 2000)`.as('start'),
+  body: examples.bodyText,
   labelId: examples.labelId,
   markedAt: examples.markedAt,
 };
@@ -52,7 +53,7 @@ export async function shotCandidates(db: Sql, facts: Pick<MessageFacts, 'account
     fromDomain: r.fromDomain,
     ...(r.fromName ? { fromName: r.fromName } : {}),
     subject: r.subject,
-    excerpt: excerptOf(r.start ?? ''),
+    excerpt: excerptOf(openBody(db, facts.accountId, r.messageId, 'text', r.body)?.slice(0, 2000) ?? ''),
     labelId: r.labelId!,
     markedAt: r.markedAt,
   }));

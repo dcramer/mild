@@ -6,9 +6,14 @@ import { describe, expect, it } from 'vitest';
 import { loadConfig, loadEnvFiles, saveKeyFile, secretPaths } from '../src/config.ts';
 import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
 import { credentialStore } from '../src/model/credentials.ts';
-import { loadKeyring, openSecret, openToRekey, readSecret, rekeySecrets, writeSecret } from '../src/secrets.ts';
-import { connectAccount } from '../src/store/accounts.ts';
+import { type Keyring, loadKeyring, openSecret, openToRekey, readSecret, rekeySecrets, writeSecret } from '../src/secrets.ts';
 import { credentials, rekeyCredentials } from '../src/store/credentials.ts';
+import { openBody, rekeyBodies, sealBody } from '../src/store/bodies.ts';
+import { connectAccount, recordSync } from '../src/store/accounts.ts';
+import { suggestionBodies } from '../src/store/query.ts';
+import type { Sql } from '../src/store/sql.ts';
+import { messageDetail } from '../src/dashboard/queries/messages.ts';
+import { everything, facts } from './helpers.ts';
 import { freshStore, raw } from './fixtures.ts';
 
 const dir = () => mkdtempSync(join(tmpdir(), 'sift-secrets-'));
@@ -106,7 +111,9 @@ describe('credentials', () => {
     await connectAccount(store, 'beta@example.net', '1', 0);
     const stored = async (id: number) =>
       await raw(await store.user(id)).all<{ kind: string; key: string; value: string }>('SELECT kind, key, value FROM credentials');
-    return { store, stored };
+    /** A person's database as Sift opens it with these keys. */
+    const as = async (id: number, keys: Keyring) => await (await freshStore(keys)).user(id);
+    return { store, stored, as };
   }
 
   it("keeps the Google client in a file, and sign-ins in their person's database, encrypted", async () => {
@@ -116,53 +123,108 @@ describe('credentials', () => {
     expect(readFileSync(config.googleClientPath, 'utf8')).toMatch(/^sift-secret:v1:[0-9a-f]{8}:[\w-]+:[\w-]+\n$/);
     expect(loadClientSecrets(config, {}).clientSecret).toBe('client-secret-value');
 
-    const { store, stored } = await people();
-    const alpha = await store.user(1);
-    await (await credentials(alpha, 'gmail', A)).write('alpha@example.org', 'refresh-token-value');
-    await credentialStore({ ...(await credentials(alpha, 'model', A)), exclusive: (work) => work() }).modify('openai', async () => ({
+    const { stored, as } = await people();
+    const alpha = await as(1, A);
+    await (await credentials(alpha, 'gmail')).write('alpha@example.org', 'refresh-token-value');
+    await credentialStore({ ...(await credentials(alpha, 'model')), exclusive: (work) => work() }).modify('openai', async () => ({
       type: 'api_key',
       key: 'api-key-value',
     }));
     for (const row of await stored(1)) expect(row.value).toMatch(/^sift-secret:v1:/);
-    expect(await (await credentials(alpha, 'gmail', A)).read('alpha@example.org')).toBe('refresh-token-value');
-    expect(await credentialStore({ ...(await credentials(alpha, 'model', A)), exclusive: (work) => work() }).read('openai')).toEqual({
+    expect(await (await credentials(alpha, 'gmail')).read('alpha@example.org')).toBe('refresh-token-value');
+    expect(await credentialStore({ ...(await credentials(alpha, 'model')), exclusive: (work) => work() }).read('openai')).toEqual({
       type: 'api_key',
       key: 'api-key-value',
     });
-    await expect((await credentials(alpha, 'gmail', B)).read('alpha@example.org')).rejects.toThrow('SIFT_KEY');
+    await expect((await credentials(await as(1, B), 'gmail')).read('alpha@example.org')).rejects.toThrow('SIFT_KEY');
   });
 
   it("does not open one copied into another row or another person's database", async () => {
-    const { store, stored } = await people();
-    const [alpha, beta] = [await store.user(1), await store.user(2)];
-    await (await credentials(alpha, 'gmail', A)).write('alpha@example.org', 'alpha-token');
+    const { stored, as } = await people();
+    const [alpha, beta] = [await as(1, A), await as(2, A)];
+    await (await credentials(alpha, 'gmail')).write('alpha@example.org', 'alpha-token');
     const [stolen] = await stored(1);
     await raw(beta).run('INSERT INTO credentials (kind, key, value, updated_at) VALUES (?, ?, ?, 0)', 'gmail', 'alpha@example.org', stolen!.value);
-    await expect((await credentials(beta, 'gmail', A)).read('alpha@example.org')).rejects.toThrow('person 2 gmail alpha@example.org');
+    await expect((await credentials(beta, 'gmail')).read('alpha@example.org')).rejects.toThrow('person 2 gmail alpha@example.org');
     await raw(alpha).run(`INSERT INTO credentials (kind, key, value, updated_at) VALUES ('model', 'openai', ?, 0)`, stolen!.value);
-    await expect((await credentials(alpha, 'model', A)).read('openai')).rejects.toThrow('person 1 model openai');
+    await expect((await credentials(alpha, 'model')).read('openai')).rejects.toThrow('person 1 model openai');
   });
 
   it('refuses a plain value once there is a key, so none can be put in place of a sealed one', async () => {
-    const { store } = await people();
-    const alpha = await store.user(1);
+    const { as } = await people();
+    const alpha = await as(1, A);
     await raw(alpha).run(`INSERT INTO credentials (kind, key, value, updated_at) VALUES ('model', 'openai', ?, 0)`, '{"type":"api_key","key":"planted"}');
-    await expect((await credentials(alpha, 'model', A)).read('openai')).rejects.toThrow('person 1 model openai is stored unencrypted');
-    expect(await (await credentials(alpha, 'model', NONE)).read('openai')).toBe('{"type":"api_key","key":"planted"}');
+    await expect((await credentials(alpha, 'model')).read('openai')).rejects.toThrow('person 1 model openai is stored unencrypted');
+    expect(await (await credentials(await as(1, NONE), 'model')).read('openai')).toBe('{"type":"api_key","key":"planted"}');
     expect(openToRekey('x', 'plain', A)).toBe('plain');
     expect(() => openSecret('x', 'plain', A)).toThrow('SIFT_KEY is set');
   });
 
   it('brings plain and old-key values under the current key, and refuses ones no key opens', async () => {
-    const { store } = await people();
-    const alpha = await store.user(1);
-    await (await credentials(alpha, 'gmail', NONE)).write('alpha@example.org', 'plain-token');
-    await (await credentials(alpha, 'model', A)).write('openai', '{"type":"api_key","key":"k"}');
-    expect(await rekeyCredentials(alpha, B_AFTER_A, false)).toHaveLength(2);
-    expect(await rekeyCredentials(alpha, B_AFTER_A)).toEqual(['Gmail access for alpha@example.org', 'Model sign-in for openai']);
-    expect(await (await credentials(alpha, 'gmail', B)).read('alpha@example.org')).toBe('plain-token');
-    expect(await rekeyCredentials(alpha, B)).toEqual([]);
-    await expect(rekeyCredentials(alpha, A)).rejects.toThrow('SIFT_KEY');
+    const { as } = await people();
+    await (await credentials(await as(1, NONE), 'gmail')).write('alpha@example.org', 'plain-token');
+    await (await credentials(await as(1, A), 'model')).write('openai', '{"type":"api_key","key":"k"}');
+    const rotating = await as(1, B_AFTER_A);
+    expect(await rekeyCredentials(rotating, false)).toHaveLength(2);
+    expect(await rekeyCredentials(rotating)).toEqual(['Gmail access for alpha@example.org', 'Model sign-in for openai']);
+    expect(await (await credentials(await as(1, B), 'gmail')).read('alpha@example.org')).toBe('plain-token');
+    expect(await rekeyCredentials(await as(1, B))).toEqual([]);
+    await expect(rekeyCredentials(await as(1, A))).rejects.toThrow('SIFT_KEY');
+  });
+});
+
+describe('message bodies', () => {
+  async function alpha() {
+    const store = await freshStore();
+    await connectAccount(store, 'alpha@example.org', '1', 0);
+    const as = async (keys: Keyring) => await (await freshStore(keys)).user(1);
+    const plain = await as(NONE);
+    await recordSync(
+      plain,
+      'alpha@example.org',
+      ['m1', 'm2'].map((messageId) => facts({ accountId: 'alpha@example.org', messageId })),
+      '2',
+      0,
+    );
+    const hold = async (db: Sql, messageId: string, text: string, html: string | null) =>
+      await db.insert(suggestionBodies).values({
+        accountId: 'alpha@example.org',
+        messageId,
+        bodyText: sealBody(db, 'alpha@example.org', messageId, 'text', text)!,
+        bodyHtml: sealBody(db, 'alpha@example.org', messageId, 'html', html),
+        fetchedAt: 0,
+      });
+    const stored = async () =>
+      await raw(plain).all<{ message_id: string; body_text: string; body_html: string | null }>(
+        'SELECT message_id, body_text, body_html FROM suggestion_bodies ORDER BY message_id',
+      );
+    return { as, hold, stored };
+  }
+
+  it('keeps the text and HTML encrypted, with no HTML as null, and opens them only for their own message', async () => {
+    const { as, hold, stored } = await alpha();
+    const db = await as(A);
+    await hold(db, 'm1', 'Hello', '<p>Hello</p>');
+    await hold(db, 'm2', 'Plain', null);
+    const [m1, m2] = await stored();
+    expect(m1).toMatchObject({ body_text: expect.stringMatching(/^sift-secret:v1:/), body_html: expect.stringMatching(/^sift-secret:v1:/) });
+    expect(JSON.stringify(m1)).not.toContain('Hello');
+    expect(m2!.body_html).toBeNull();
+    expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm1')).toMatchObject({ body: 'Hello', hasHtml: true });
+    expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm2')).toMatchObject({ body: 'Plain', hasHtml: false });
+    expect(() => openBody(db, 'alpha@example.org', 'm2', 'text', m1!.body_text)).toThrow('SIFT_KEY');
+    await expect(messageDetail(await as(B), await everything(db), 'alpha@example.org', 'm1')).rejects.toThrow('SIFT_KEY');
+  });
+
+  it('brings bodies stored plain or under an old key under the current one', async () => {
+    const { as, hold, stored } = await alpha();
+    await hold(await as(NONE), 'm1', 'Hello', '<p>Hello</p>');
+    await hold(await as(A), 'm2', 'Plain', null);
+    expect(await rekeyBodies(await as(B_AFTER_A), false)).toBe(2);
+    expect(await rekeyBodies(await as(B_AFTER_A))).toBe(2);
+    expect(await rekeyBodies(await as(B))).toBe(0);
+    for (const row of await stored()) expect(row.body_text).toMatch(/^sift-secret:v1:/);
+    expect(await messageDetail(await as(B), await everything(await as(B)), 'alpha@example.org', 'm1')).toMatchObject({ body: 'Hello', hasHtml: true });
   });
 });
 

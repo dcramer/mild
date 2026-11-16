@@ -24,7 +24,7 @@ import type { Store } from '../store/store.ts';
 
 /** A Gmail client for one of the person's mailboxes, with the sign-in kept in their database. */
 async function gmailClient(config: Config, db: Sql, email: string) {
-  const token = await (await credentials(db, 'gmail', config.keys)).read(email);
+  const token = await (await credentials(db, 'gmail')).read(email);
   if (token === null) throw new Error(`Sift has no access to ${email}. Sign in to the dashboard with that account.`);
   return clientFor(loadClientSecrets(config), token);
 }
@@ -37,14 +37,14 @@ export async function gmailFor(config: Config, ephemeral: Ephemeral, db: Sql, em
 }
 
 /** One person's model sign-ins, kept in their database and changed by one process at a time. */
-async function modelSignIns(config: Config, ephemeral: Ephemeral, db: Sql): Promise<SignIns> {
+async function modelSignIns(ephemeral: Ephemeral, db: Sql): Promise<SignIns> {
   const person = await personOf(db);
-  return { ...(await credentials(db, 'model', config.keys)), exclusive: (work) => holding(ephemeral, `lock:signin:${person}`, work) };
+  return { ...(await credentials(db, 'model')), exclusive: (work) => holding(ephemeral, `lock:signin:${person}`, work) };
 }
 
 /** One person's model providers, signed in with what is kept in their database. */
 const modelsFor = async (config: Config, ephemeral: Ephemeral, db: Sql) =>
-  openModels(await modelSignIns(config, ephemeral, db), config.settings.chatgptSignIn ?? 'device-code');
+  openModels(await modelSignIns(ephemeral, db), config.settings.chatgptSignIn ?? 'device-code');
 
 /**
  * The model tier of the person whose database `db` is, from their own choice and sign-in.
@@ -88,7 +88,7 @@ export async function buildControls(
     },
     modelSignIns: async (db) => {
       const person = await personOf(db);
-      const signIns = await modelSignIns(config, live.ephemeral, db);
+      const signIns = await modelSignIns(live.ephemeral, db);
       // Signed in just now: their mail has a model to go to.
       if ((await checkChatGPT(live.ephemeral, person, signIns)) === 'done') await passNow(db);
       return { choices: choices.map((c) => ({ ...c })), signedIn: await signIns.keys(), pending: await chatgptPending(live.ephemeral, person) };
@@ -99,16 +99,16 @@ export async function buildControls(
       return await startChatGPT(live.ephemeral, person, how, live.deviceId);
     },
     finishChatGPT: async (db, address) => {
-      await finishChatGPT(live.ephemeral, await personOf(db), await modelSignIns(config, live.ephemeral, db), address);
+      await finishChatGPT(live.ephemeral, await personOf(db), await modelSignIns(live.ephemeral, db), address);
       await passNow(db);
     },
     saveModelKey: async (db, provider, key) => {
       if (!choices.some((c) => c.provider === provider && c.how === 'key')) throw new Error('That provider does not take an API key.');
-      await saveApiKey(await modelSignIns(config, live.ephemeral, db), provider, key);
+      await saveApiKey(await modelSignIns(live.ephemeral, db), provider, key);
       await passNow(db);
     },
     signOutModel: async (db, provider) => {
-      await (await modelSignIns(config, live.ephemeral, db)).remove(provider);
+      await (await modelSignIns(live.ephemeral, db)).remove(provider);
       await forgetChatGPT(live.ephemeral, await personOf(db));
     },
     undo: async (db, actionId) => {
@@ -149,7 +149,7 @@ export async function buildControls(
     revokeGmail: async (db, email) => {
       await forgetPassStatus(live.ephemeral, email);
       // A token that no longer opens (the key changed) cannot be revoked from here, and must not stop the removal.
-      const token = await (await credentials(db, 'gmail', config.keys)).read(email).catch(() => undefined);
+      const token = await (await credentials(db, 'gmail')).read(email).catch(() => undefined);
       return token === null || (token !== undefined && (await revokeGrant(token)));
     },
     checkNow: passNow,

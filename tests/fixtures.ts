@@ -13,6 +13,7 @@ import type { People } from '../src/store/people.ts';
 import { PARSERS, pglite } from '../src/store/db.ts';
 import type { Sql } from '../src/store/sql.ts';
 import { type Store, storeOn } from '../src/store/store.ts';
+import { type Keyring, loadKeyring } from '../src/secrets.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule } from '../src/store/rules.ts';
@@ -41,8 +42,8 @@ beforeEach(async () => {
 export const superuser = loaded;
 
 /** The store over this test's database. Every call in one test shares the same rows. */
-export async function freshStore(): Promise<Store> {
-  const store = storeOn(pglite(await loaded()));
+export async function freshStore(keys: Keyring = loadKeyring({})): Promise<Store> {
+  const store = storeOn(pglite(await loaded()), keys);
   return { ...store, close: async () => {} };
 }
 

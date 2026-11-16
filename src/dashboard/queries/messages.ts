@@ -2,6 +2,7 @@ import { actions, and, asc, decisions, eq, examples, messages, modelRuns, sql, s
 import type { Sql } from '../../store/sql.ts';
 import { unsubscribedAt } from '../../store/actions.ts';
 import { storedFacts } from '../../store/messages.ts';
+import { openBody } from '../../store/bodies.ts';
 import { bulkSignals, passedDmarc } from '../../triage/features.ts';
 import { type Scope, sees } from '../scope.ts';
 import type { MessageDetail } from '../types.ts';
@@ -90,12 +91,14 @@ async function storedBody(db: Sql, accountId: string, messageId: string): Promis
     .select({ text: suggestionBodies.bodyText, html: suggestionBodies.bodyHtml })
     .from(suggestionBodies)
     .where(and(eq(suggestionBodies.accountId, accountId), eq(suggestionBodies.messageId, messageId)));
-  if (held) return held;
+  if (held) return { text: openBody(db, accountId, messageId, 'text', held.text)!, html: openBody(db, accountId, messageId, 'html', held.html) };
   const [kept] = await db
     .select({ text: examples.bodyText, html: examples.bodyHtml })
     .from(examples)
     .where(and(eq(examples.accountId, accountId), eq(examples.messageId, messageId), eq(examples.status, 'captured')));
-  return kept?.text == null ? null : { text: kept.text, html: kept.html };
+  return kept?.text == null
+    ? null
+    : { text: openBody(db, accountId, messageId, 'text', kept.text)!, html: openBody(db, accountId, messageId, 'html', kept.html) };
 }
 
 /** The HTML of one of the scope's messages, as sift holds it; null when it holds none. */

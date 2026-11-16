@@ -1,4 +1,4 @@
-import { type Keyring, openSecret, openToRekey, sealSecret, staleSecret } from '../secrets.ts';
+import { openSecret, openToRekey, sealSecret, staleSecret } from '../secrets.ts';
 import { personOf } from './accounts.ts';
 import { type CREDENTIAL_KINDS, and, asc, credentials as credentialRows, eq, sql } from './query.ts';
 import type { Sql } from './sql.ts';
@@ -22,7 +22,8 @@ async function nameFor(db: Sql): Promise<(kind: CredentialKind, key: string) => 
   return (kind, key) => `person ${person} ${kind} ${key}`;
 }
 
-export async function credentials(db: Sql, kind: CredentialKind, keys: Keyring): Promise<Credentials> {
+export async function credentials(db: Sql, kind: CredentialKind): Promise<Credentials> {
+  const { keys } = db;
   const name = await nameFor(db);
   return {
     read: async (key) => {
@@ -53,10 +54,11 @@ export async function credentials(db: Sql, kind: CredentialKind, keys: Keyring):
 
 /**
  * Bring every credential in `db` under the current key, as `rekeySecrets` does for files. Throws if one
- * does not open with the keys given; nothing is rewritten then. `write: false` only checks. Returns what
+ * does not open with the handle's keys; nothing is rewritten then. `write: false` only checks. Returns what
  * was brought under the key, by name.
  */
-export async function rekeyCredentials(db: Sql, keys: Keyring, write = true): Promise<string[]> {
+export async function rekeyCredentials(db: Sql, write = true): Promise<string[]> {
+  const { keys } = db;
   const name = await nameFor(db);
   const rows = await db.select({ kind: credentialRows.kind, key: credentialRows.key, value: credentialRows.value }).from(credentialRows);
   const opened = rows.map((row) => ({ ...row, text: openToRekey(name(row.kind, row.key), row.value, keys) }));

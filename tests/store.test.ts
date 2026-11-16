@@ -12,6 +12,7 @@ import { addRule, removeRule } from '../src/store/rules.ts';
 import { accounts, labels } from '../src/store/query.ts';
 import { DatabaseInUse, moveAside, pglite, roleBypass } from '../src/store/db.ts';
 import { openStore, storeOn } from '../src/store/store.ts';
+import { loadKeyring } from '../src/secrets.ts';
 import type { Disposition } from '../src/triage/types.ts';
 import { freshStore, onePerson, openUserDb, raw, recordEverything, rowsBy, superuser } from './fixtures.ts';
 import { facts } from './helpers.ts';
@@ -38,7 +39,7 @@ describe('migrations', () => {
   });
 
   it('keep the database where they were applied, and refuse one a newer sift has migrated', async () => {
-    const paths = { databaseDir: scratch() };
+    const paths = { databaseDir: scratch(), keys: loadKeyring({}) };
     const first = await openStore(paths);
     await connectAccount(first, 'me@example.org', '1', 0);
     await first.close();
@@ -53,7 +54,7 @@ describe('migrations', () => {
   });
 
   it('start over in a new database once the old one is moved aside, which is refused while it is open', async () => {
-    const paths = { databaseDir: scratch() };
+    const paths = { databaseDir: scratch(), keys: loadKeyring({}) };
     const first = await openStore(paths);
     await connectAccount(first, 'me@example.org', '1', 0);
     expect(() => moveAside(paths.databaseDir)).toThrow(DatabaseInUse);
@@ -66,7 +67,7 @@ describe('migrations', () => {
   });
 
   it('refuse a database made by migrations since replaced, rather than run them again over it', async () => {
-    const paths = { databaseDir: scratch() };
+    const paths = { databaseDir: scratch(), keys: loadKeyring({}) };
     await (await openStore(paths)).close();
     const raw = new PGlite(paths.databaseDir);
     await raw.query(`UPDATE drizzle.__drizzle_migrations SET hash = 'replaced' WHERE id = 1`);
@@ -206,7 +207,7 @@ describe('a new mailbox', () => {
     // A store opened afresh puts back a mailbox missing from a person's database, labels and all.
     await raw(db).run('DELETE FROM mailboxes');
     expect(await listLabels(db, 'alpha@example.org')).toEqual([]);
-    const reopened = await storeOn(pglite(await superuser())).user(1);
+    const reopened = await storeOn(pglite(await superuser()), loadKeyring({})).user(1);
     expect((await listLabels(reopened, 'alpha@example.org')).map((l) => l.id)).toEqual(ids);
   });
 
@@ -226,7 +227,7 @@ describe('a new mailbox', () => {
 
 describe('the database in the home directory', () => {
   it('is refused to a second opener while the first has it, and free again once closed', async () => {
-    const paths = { databaseDir: scratch() };
+    const paths = { databaseDir: scratch(), keys: loadKeyring({}) };
     const first = await openStore(paths);
     await expect(openStore(paths)).rejects.toThrow(`Another Sift (process ${process.pid}) has the database open`);
     await first.close();
@@ -257,7 +258,7 @@ describe('the role sift connects to a server as', () => {
 
   it('is warned about by the store, for whoever starts sift to be told', async () => {
     const driver = pglite(await superuser());
-    expect(storeOn(driver).warning).toBeUndefined();
-    expect(storeOn({ ...driver, warning: 'The database role x is a superuser' }).warning).toBe('The database role x is a superuser');
+    expect(storeOn(driver, loadKeyring({})).warning).toBeUndefined();
+    expect(storeOn({ ...driver, warning: 'The database role x is a superuser' }, loadKeyring({})).warning).toBe('The database role x is a superuser');
   });
 });

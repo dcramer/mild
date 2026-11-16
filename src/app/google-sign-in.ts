@@ -24,7 +24,7 @@ export function buildSignIn(config: Config, store: Store): SignIn {
         ? (await userOf(store.central, email))!.id
         : await connectAccount(store, email, historyId, Date.now(), person?.id);
       // Its token goes in its person's own database, which is the only place it is read from.
-      await (await credentials(await store.user(owner), 'gmail', config.keys)).write(email, refreshToken);
+      await (await credentials(await store.user(owner), 'gmail')).write(email, refreshToken);
       return email;
     },
   };

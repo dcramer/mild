@@ -13,6 +13,7 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { freshStore, raw, superuser } from './fixtures.ts';
 import { facts } from './helpers.ts';
 import type { Disposition } from '../src/triage/types.ts';
+import { loadKeyring } from '../src/secrets.ts';
 
 /*
  * The builder's own hold on each person, with row-level security out of the way: these handles never
@@ -53,7 +54,7 @@ beforeEach(async () => {
     );
   }
   const driver = await unguarded();
-  [alpha, bravo, central] = [handle(driver, 1), handle(driver, 2), handle(driver, null)];
+  [alpha, bravo, central] = [handle(driver, 1, loadKeyring({})), handle(driver, 2, loadKeyring({})), handle(driver, null, loadKeyring({}))];
 });
 
 describe("a person's handle, without row-level security", () => {

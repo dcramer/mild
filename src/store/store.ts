@@ -1,3 +1,4 @@
+import type { Keyring } from '../secrets.ts';
 import { ensureMailbox } from './accounts.ts';
 import { openDatabase } from './db.ts';
 import { accounts, eq, preferences } from './query.ts';
@@ -21,20 +22,20 @@ export interface Store {
 }
 
 /** Where the database is: a Postgres server's address, or else PGlite in `databaseDir`. */
-type StorePaths = { databaseUrl?: string | undefined; databaseMigrationUrl?: string | undefined; databaseDir: string };
+type StorePaths = { databaseUrl?: string | undefined; databaseMigrationUrl?: string | undefined; databaseDir: string; keys: Keyring };
 
 /** Open the database, migrating it first. */
 export async function openStore(paths: StorePaths): Promise<Store> {
   const { databaseUrl: url, databaseMigrationUrl: migrateWith, databaseDir: dir } = paths;
-  return storeOn(await openDatabase(url ? { url, ...(migrateWith ? { migrateWith } : {}) } : { dir }));
+  return storeOn(await openDatabase(url ? { url, ...(migrateWith ? { migrateWith } : {}) } : { dir }), paths.keys);
 }
 
 /** The store over a database that is open and migrated. */
-export function storeOn(driver: Driver): Store {
-  const central = handle(driver, null);
+export function storeOn(driver: Driver, keys: Keyring): Store {
+  const central = handle(driver, null, keys);
   const opened = new Map<number, Promise<Sql>>();
   const open = async (id: number) => {
-    const db = handle(driver, id);
+    const db = handle(driver, id, keys);
     // A mailbox is added to `accounts` first, so one can be missing here after a crash in between.
     const theirs = await central.select({ id: accounts.id, createdAt: accounts.createdAt }).from(accounts).where(eq(accounts.userId, id));
     await db.transaction(async (tx) => {
@@ -55,7 +56,7 @@ export function storeOn(driver: Driver): Store {
       return db;
     },
     forget: (id) => void opened.delete(id),
-    nobody: handle(driver, 0),
+    nobody: handle(driver, 0, keys),
     ...(driver.warning ? { warning: driver.warning } : {}),
     close: () => driver.close(),
   };

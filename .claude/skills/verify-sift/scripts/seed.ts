@@ -183,7 +183,7 @@ await connectAccount(store, WORK, '1', now - 23 * HOUR, user);
 await connectAccount(store, OTHER, '1', now - 22 * HOUR);
 // A model in use, so the dashboard is not behind its connect-a-model wall. The key is made up, and this
 // instance runs no passes, so nothing ever calls Anthropic with it.
-await saveApiKey({ ...(await credentials(db, 'model', config.keys)), exclusive: (work) => work() }, 'anthropic', 'sk-ant-synthetic-seed');
+await saveApiKey({ ...(await credentials(db, 'model')), exclusive: (work) => work() }, 'anthropic', 'sk-ant-synthetic-seed');
 await setModel(db, 'anthropic/claude-haiku-4-5');
 await store.close();
 
