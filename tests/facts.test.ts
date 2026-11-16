@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
-import { openUserDb } from '../src/store/store.ts';
+import { openUserDb } from './fixtures.ts';
 import { storedFacts } from '../src/store/messages.ts';
 import { gatherEvidence } from '../src/daemon/evidence.ts';
 import { deriveFacts, describeFacts, matchesFacts, threadFacts } from '../src/triage/facts.ts';

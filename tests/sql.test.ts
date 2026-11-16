@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toPostgres } from '../src/store/sql.ts';
-import { openStore } from '../src/store/store.ts';
+import { freshStore } from './fixtures.ts';
 
 describe('the database handle', () => {
   it('sends ? and :name as $n, leaving quoted text and casts alone', () => {
@@ -15,7 +15,7 @@ describe('the database handle', () => {
   });
 
   it('keeps everything else out while a transaction is open, and takes back all of it on failure', async () => {
-    const store = await openStore(':memory:');
+    const store = await freshStore();
     const { central } = store;
     let release = () => {};
     const gate = new Promise<void>((resolve) => (release = resolve));
@@ -33,7 +33,7 @@ describe('the database handle', () => {
   });
 
   it('refuses the outer handle inside a transaction instead of waiting on itself', async () => {
-    const { central } = await openStore(':memory:');
+    const { central } = await freshStore();
     await expect(central.transaction(async () => await central.run('INSERT INTO users (owner, created_at) VALUES (0, 1)'))).rejects.toThrow(
       'transaction’s handle',
     );
@@ -41,7 +41,7 @@ describe('the database handle', () => {
   });
 
   it('runs a transaction opened inside one as part of it', async () => {
-    const { central } = await openStore(':memory:');
+    const { central } = await freshStore();
     await central.transaction(async (t) => {
       await t.run('INSERT INTO users (owner, created_at) VALUES (0, 1)');
       await t.transaction(async (inner) => await inner.run('INSERT INTO users (owner, created_at) VALUES (0, 2)'));

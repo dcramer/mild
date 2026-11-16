@@ -8,7 +8,7 @@ import { applyFeedback } from '../src/learn/feedback.ts';
 import { userChanges } from '../src/learn/gmail.ts';
 import { lastStandingChange } from '../src/store/actions.ts';
 import { addMailbox } from '../src/store/accounts.ts';
-import { openUserDb } from '../src/store/store.ts';
+import { openUserDb } from './fixtures.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { listProposals, resolveProposal } from '../src/store/proposals.ts';

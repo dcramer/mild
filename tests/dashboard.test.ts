@@ -1,21 +1,20 @@
 import { scopeFor } from '../src/dashboard/scope.ts';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
-import type { AddressInfo } from 'node:net';
+import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Sql } from '../src/store/sql.ts';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { execute } from '../src/actions/executor.ts';
 import { listDecisions, retryDecision } from '../src/dashboard/queries/decisions.ts';
 import { listRuleSummaries } from '../src/dashboard/queries/rules.ts';
 import { summarize } from '../src/dashboard/queries/summary.ts';
 import type { SenderPage } from '../src/dashboard/types.ts';
-import { createDashboardServer } from '../src/dashboard/server.ts';
+import type { DashboardOptions } from '../src/dashboard/server.ts';
 import { people } from '../src/store/people.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
-import { openUserDb } from '../src/store/store.ts';
+import { builtAssets, openUserDb, startDashboard } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 import { addRule } from '../src/store/rules.ts';
 import { everything, facts, onePerson } from './helpers.ts';
@@ -241,28 +240,21 @@ describe('tracking', () => {
   });
 });
 
-/** A stand-in for the built web app. */
-function builtAssets(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'sift-web-'));
-  mkdirSync(join(dir, 'assets'));
-  writeFileSync(join(dir, 'index.html'), '<!doctype html><script type="module" src="/assets/app-abc123.js"></script>');
-  writeFileSync(join(dir, 'assets', 'app-abc123.js'), 'console.log(1)');
-  writeFileSync(join(dir, 'assets', 'app-abc123.css'), 'body{}');
-  writeFileSync(join(dir, 'secret.env'), 'TOKEN=x');
-  return dir;
-}
+const assets = () =>
+  builtAssets({
+    'index.html': '<!doctype html><script type="module" src="/assets/app-abc123.js"></script>',
+    'assets/app-abc123.js': 'console.log(1)',
+    'assets/app-abc123.css': 'body{}',
+    'secret.env': 'TOKEN=x',
+  });
 
 const get = async <T>(url: string) => (await (await fetch(url)).json()) as T;
 
 describe('dashboard server', () => {
-  let close: (() => void) | undefined;
-  afterEach(() => close?.());
-
-  async function start(assetsDir: string = builtAssets()) {
-    const server = createDashboardServer(people((await seededStore()).store), { assetsDir, now: () => NOW });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    close = () => server.close();
-    return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  /** The dashboard's address, over `store` or else a newly seeded one. */
+  async function start(options: DashboardOptions = {}, store?: Store) {
+    const over = store ?? (await seededStore()).store;
+    return (await startDashboard(people(over), { assetsDir: assets(), now: () => NOW, ...options })).base;
   }
 
   it('serves the built app with a strict content security policy', async () => {
@@ -282,10 +274,10 @@ describe('dashboard server', () => {
   });
 
   it('serves the app manifest and the service worker, which the policy allows from this server only', async () => {
-    const dir = builtAssets();
+    const dir = assets();
     writeFileSync(join(dir, 'manifest.webmanifest'), '{}');
     writeFileSync(join(dir, 'sw.js'), 'self');
-    const base = await start(dir);
+    const base = await start({ assetsDir: dir });
     const csp = (await fetch(base)).headers.get('content-security-policy') ?? '';
     expect(csp).toContain("manifest-src 'self'");
     expect(csp).toContain("worker-src 'self'");
@@ -325,11 +317,8 @@ describe('dashboard server', () => {
   });
 
   it('in dev mode serves the page as it is on disk now, and tells it when to reload', async () => {
-    const dir = builtAssets();
-    const server = createDashboardServer(people((await seededStore()).store), { assetsDir: dir, dev: true, now: () => NOW });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    close = () => server.close();
-    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const dir = assets();
+    const base = await start({ assetsDir: dir, dev: true });
 
     const page = await fetch(base);
     expect(await page.text()).toContain('<script type="module" src="/dev/reload.js"></script>');
@@ -371,7 +360,7 @@ describe('dashboard server', () => {
   });
 
   it('says how to build when the app has not been built, and still serves the API', async () => {
-    const base = await start(join(tmpdir(), 'sift-web-missing'));
+    const base = await start({ assetsDir: join(tmpdir(), 'sift-web-missing') });
     const page = await fetch(base);
     expect(page.status).toBe(503);
     expect(await page.text()).toContain('pnpm build:web');
@@ -448,10 +437,7 @@ describe('dashboard server', () => {
 
   it('serves a sender and a domain, and gives them a standing with one write', async () => {
     const { store, db } = await seededStore();
-    const server = createDashboardServer(people(store), { assetsDir: builtAssets(), now: () => NOW });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    close = () => server.close();
-    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const base = await start({}, store);
     const sender = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
     expect(sender).toMatchObject({ kind: 'sender', name: 'Example News', profile: { address: 'news@example.com', messages: 4, standing: 'new' } });
     expect(sender.profile.domain).toMatchObject({ name: 'example.com', senders: 1 });
@@ -500,19 +486,12 @@ describe('dashboard server', () => {
         req.end();
       });
 
-    const base = await start();
+    const { store } = await seededStore();
+    const base = await start({}, store);
     expect(await statusFor(base, 'evil.example')).toBe(403);
     expect(await statusFor(base, '100.64.0.7:8787')).toBe(403);
-    close?.();
 
-    const server = createDashboardServer(people((await seededStore()).store), {
-      assetsDir: builtAssets(),
-      allowedHosts: ['Box.example.ts.net', '100.64.0.7'],
-      now: () => NOW,
-    });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    close = () => server.close();
-    const configured = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const configured = await start({ allowedHosts: ['Box.example.ts.net', '100.64.0.7'] }, store);
     expect(await statusFor(configured, 'box.example.ts.net:8787')).toBe(200);
     expect(await statusFor(configured, '100.64.0.7')).toBe(200);
     expect(await statusFor(configured, 'localhost:1')).toBe(200);

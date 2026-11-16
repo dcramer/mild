@@ -9,7 +9,7 @@ import { credentialStore } from '../src/model/credentials.ts';
 import { loadKeyring, readSecret, rekeySecrets, writeSecret } from '../src/secrets.ts';
 import { connectAccount } from '../src/store/accounts.ts';
 import { credentials, rekeyCredentials } from '../src/store/credentials.ts';
-import { openStore } from '../src/store/store.ts';
+import { freshStore } from './fixtures.ts';
 
 const dir = () => mkdtempSync(join(tmpdir(), 'sift-secrets-'));
 const NONE = loadKeyring({});
@@ -101,7 +101,7 @@ describe('secrets', () => {
 describe('credentials', () => {
   /** A store with two people, Alpha (1) and Beta (2), and the raw value of each stored credential. */
   async function people() {
-    const store = await openStore(':memory:');
+    const store = await freshStore();
     await connectAccount(store, 'alpha@example.org', '1', 0);
     await connectAccount(store, 'beta@example.net', '1', 0);
     const raw = async (id: number) =>

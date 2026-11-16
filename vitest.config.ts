@@ -5,7 +5,8 @@ export default defineConfig({
   test: {
     exclude: [...configDefaults.exclude, '.claude/**'],
     env: { NO_COLOR: '1' },
-    // Each test file starts PGlite and migrates it once, and with every file starting at the same time that can take a while.
+    globalSetup: ['tests/global-setup.ts'],
+    // Each test file that uses the database starts its own PGlite, and with every file starting at once that can take a while.
     testTimeout: 30_000,
   },
 });

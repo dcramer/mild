@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { gatherEvidence } from '../src/daemon/evidence.ts';
 import { readContent } from '../src/gmail/body.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
-import { openUserDb } from '../src/store/store.ts';
+import { openUserDb } from './fixtures.ts';
 import { storedFacts } from '../src/store/messages.ts';
 import { describeFacts } from '../src/triage/facts.ts';
 import { htmlFacts } from '../src/triage/html.ts';

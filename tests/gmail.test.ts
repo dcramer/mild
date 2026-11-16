@@ -3,7 +3,7 @@ import { syncAccount } from '../src/daemon/sync.ts';
 import { type GmailApi, HistoryExpiredError, type HistoryPage, type RawMessage } from '../src/gmail/api.ts';
 import { pullChanges, toFacts } from '../src/gmail/sync.ts';
 import { addMailbox, listAccounts } from '../src/store/accounts.ts';
-import { openUserDb } from '../src/store/store.ts';
+import { openUserDb } from './fixtures.ts';
 import { parseAddressList } from '../src/triage/features.ts';
 
 function raw(id: string, overrides: Partial<RawMessage> = {}): RawMessage {

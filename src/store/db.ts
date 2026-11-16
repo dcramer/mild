@@ -8,19 +8,18 @@ import { migrate as migratePglite } from 'drizzle-orm/pglite/migrator';
 import { Pool, types } from 'pg';
 import type { Driver } from './sql.ts';
 
-const MIGRATIONS = fileURLToPath(new URL('./migrations/', import.meta.url));
+export const MIGRATIONS = fileURLToPath(new URL('./migrations/', import.meta.url));
 
 /** Postgres sends 64-bit integers and `numeric` (what `sum()` of one gives) as text; sift's are small enough for a number. */
 const { INT8, NUMERIC } = types.builtins;
 types.setTypeParser(INT8, Number);
 types.setTypeParser(NUMERIC, Number);
-const PARSERS = { [INT8]: Number, [NUMERIC]: Number };
+export const PARSERS = { [INT8]: Number, [NUMERIC]: Number };
 
-/** Where the database is: a Postgres server, PGlite in a folder of the home directory, or PGlite in memory (tests). */
-export type Where = { url: string } | { dir: string } | ':memory:';
+/** Where the database is: a Postgres server, or PGlite in a folder of the home directory. */
+export type Where = { url: string } | { dir: string };
 
 export async function openDatabase(where: Where): Promise<Driver> {
-  if (where === ':memory:') return pglite(await (await memoryTemplate()).clone());
   if ('url' in where) {
     const pool = new Pool({ connectionString: where.url });
     try {
@@ -90,16 +89,7 @@ function lock(dir: string): () => void {
   return release;
 }
 
-let template: Promise<PGlite> | undefined;
-/** A migrated database in memory, cloned for each store a test opens: starting one is slow, a clone is not. */
-const memoryTemplate = () =>
-  (template ??= (async () => {
-    const db = new PGlite({ parsers: PARSERS });
-    await migratePglite(overPglite(db), { migrationsFolder: MIGRATIONS });
-    return db;
-  })());
-
-function pglite(db: PGliteInterface): Driver {
+export function pglite(db: PGliteInterface): Driver {
   return {
     transaction: (work) =>
       db.transaction((tx) =>

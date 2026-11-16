@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { parseSettings, renderSettings } from '../src/config.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
 import { addMailbox, listAccounts, recordSync } from '../src/store/accounts.ts';
-import { openUserDb } from '../src/store/store.ts';
+import { openUserDb } from './fixtures.ts';
 import { shotCandidates } from '../src/store/examples.ts';
 import { DEFAULT_LABELS } from '../src/store/labels.ts';
 import { deriveFacts } from '../src/triage/facts.ts';

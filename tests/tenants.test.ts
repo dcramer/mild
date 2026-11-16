@@ -1,15 +1,11 @@
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { request } from 'node:http';
-import type { AddressInfo } from 'node:net';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
-import { createDashboardServer } from '../src/dashboard/server.ts';
 import { people } from '../src/store/people.ts';
 import { connectAccount, connectedAddresses, personOf, recordSync, userOf } from '../src/store/accounts.ts';
 import { preferences, setGuidelines } from '../src/store/preferences.ts';
-import { type Store, openStore } from '../src/store/store.ts';
+import type { Store } from '../src/store/store.ts';
+import { freshStore, startDashboard } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { facts } from './helpers.ts';
@@ -23,8 +19,7 @@ const MARK: Record<string, string> = { [ALPHA]: 'alpha-home-secret', [ALPHA_WORK
 let store: Store;
 /** The database of whoever has `account`. */
 const dbOf = async (account: string) => await store.user((await userOf(store.central, account))!.id);
-let close: (() => void) | undefined;
-let port: number;
+let dashboard: Awaited<ReturnType<typeof startDashboard>>;
 let calls: string[];
 const cookies: Record<string, string> = {};
 const ids: Record<string, { rule: string; action: number; proposal: number }> = {};
@@ -62,18 +57,8 @@ async function seed(account: string): Promise<void> {
   ids[account] = { rule, action, proposal };
 }
 
-function call(method: 'GET' | 'POST', path: string, who: string | null, body?: unknown) {
-  return new Promise<{ status: number; text: string }>((resolve, reject) => {
-    const own = method === 'POST' ? { origin: `http://localhost:${port}`, 'content-type': 'application/json', 'x-sift': '1' } : {};
-    const req = request({ port, path, method, headers: { host: `localhost:${port}`, ...own, ...(who ? { cookie: cookies[who] } : {}) } }, (res) => {
-      let text = '';
-      res.on('data', (chunk) => (text += String(chunk)));
-      res.on('end', () => resolve({ status: res.statusCode ?? 0, text }));
-    });
-    req.on('error', reject);
-    req.end(body === undefined ? undefined : JSON.stringify(body));
-  });
-}
+const call = (method: 'GET' | 'POST', path: string, who: string | null, body?: unknown) =>
+  dashboard.call(method, path, body, who ? { cookie: cookies[who]! } : {});
 
 const signIn: SignIn = {
   client: () => 'web',
@@ -84,7 +69,7 @@ const signIn: SignIn = {
 };
 
 beforeEach(async () => {
-  store = await openStore(':memory:');
+  store = await freshStore();
   calls = [];
   const alpha = await connectAccount(store, ALPHA, '1', 0);
   await connectAccount(store, ALPHA_WORK, '1', 1, alpha);
@@ -92,9 +77,6 @@ beforeEach(async () => {
   for (const account of [ALPHA, ALPHA_WORK, BRAVO]) await seed(account);
   await setGuidelines(await dbOf(ALPHA), 'guidelines alpha-own-words');
 
-  const assets = mkdtempSync(join(tmpdir(), 'sift-web-'));
-  mkdirSync(join(assets, 'assets'));
-  writeFileSync(join(assets, 'index.html'), '<!doctype html>page');
   const controls: Controls = {
     settings: () => ({ act: false, interval: 60, fewShot: true, examplesKeepDays: null }),
     saveSettings: () => void calls.push('settings'),
@@ -117,28 +99,13 @@ beforeEach(async () => {
       expired: [ALPHA_WORK, BRAVO],
     }),
   };
-  const server = createDashboardServer(people(store), { assetsDir: assets, controls, signIn, sessionSecret: 'secret', now: () => 2000 });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  close = () => server.close();
-  port = (server.address() as AddressInfo).port;
-
+  dashboard = await startDashboard(people(store), { controls, signIn, sessionSecret: 'secret', now: () => 2000 });
   for (const who of [ALPHA, ALPHA_WORK, BRAVO]) {
-    const login = await new Promise<string>((resolve, reject) => {
-      const req = request({ port, path: '/auth/login', headers: { host: `localhost:${port}` } }, (res) => resolve(String(res.headers.location)));
-      req.on('error', reject);
-      req.end();
-    });
-    const state = new URL(login).searchParams.get('state');
-    cookies[who] = await new Promise<string>((resolve, reject) => {
-      const req = request({ port, path: `/auth/callback?state=${state}&code=${encodeURIComponent(who)}`, headers: { host: `localhost:${port}` } }, (res) =>
-        resolve(String(res.headers['set-cookie']).split(';')[0] ?? ''),
-      );
-      req.on('error', reject);
-      req.end();
-    });
+    const state = new URL(String((await dashboard.call('GET', '/auth/login')).headers['location'])).searchParams.get('state');
+    const back = await dashboard.call('GET', `/auth/callback?state=${state}&code=${encodeURIComponent(who)}`);
+    cookies[who] = String(back.headers['set-cookie']).split(';')[0] ?? '';
   }
 });
-afterEach(() => close?.());
 
 const READS = (account: string, mark: string) => [
   '/api/summary',

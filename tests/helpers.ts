@@ -3,7 +3,8 @@ import type { Sql } from '../src/store/sql.ts';
 import type { ExistingFilter, FilterProposal } from '../src/actions/filters.ts';
 import type { Mailbox } from '../src/actions/mailbox.ts';
 import { connectAccount, recordSync, listAccounts } from '../src/store/accounts.ts';
-import { type Store, openStore } from '../src/store/store.ts';
+import type { Store } from '../src/store/store.ts';
+import { freshStore } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import type { MessageFacts } from '../src/triage/types.ts';
 
@@ -133,7 +134,7 @@ export const everything = async (db: Sql): Promise<Scope> =>
 
 /** A store whose one person, the owner, has `accounts`; and that person's own database. */
 export async function onePerson(...accounts: string[]): Promise<{ store: Store; db: Sql }> {
-  const store = await openStore(':memory:');
+  const store = await freshStore();
   let user: number | undefined;
   for (const account of accounts) user = await connectAccount(store, account, '1', 0, user);
   return { store, db: await store.user(user ?? 1) };

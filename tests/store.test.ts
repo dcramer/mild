@@ -6,7 +6,8 @@ import { generateDrizzleJson, generateMigration } from 'drizzle-kit/api';
 import { describe, expect, it } from 'vitest';
 import * as schema from '../src/store/schema.ts';
 import { connectAccount } from '../src/store/accounts.ts';
-import { openStore, openUserDb } from '../src/store/store.ts';
+import { openStore } from '../src/store/store.ts';
+import { freshStore, openUserDb } from './fixtures.ts';
 
 const MIGRATIONS = new URL('../src/store/migrations/', import.meta.url);
 const scratch = () => mkdtempSync(join(tmpdir(), 'sift-db-'));
@@ -53,7 +54,7 @@ describe('migrations', () => {
 
 describe("a person's data", () => {
   it('is in tables that hold every query to row-level security, the owner included', async () => {
-    const { central } = await openStore(':memory:');
+    const { central } = await freshStore();
     const tables = await central.all<{ name: string; enabled: boolean; forced: boolean; policies: number; person: boolean }>(
       `SELECT c.relname AS name, c.relrowsecurity AS enabled, c.relforcerowsecurity AS forced,
               (SELECT count(*) FROM pg_policies p WHERE p.tablename = c.relname) AS policies,
@@ -66,7 +67,7 @@ describe("a person's data", () => {
   });
 
   it('is seen and written only through that person, never through anyone else or nobody', async () => {
-    const store = await openStore(':memory:');
+    const store = await freshStore();
     const alphaId = await connectAccount(store, 'alpha@example.org', '1', 0);
     const alpha = await store.user(alphaId);
     const bravo = await store.user(await connectAccount(store, 'bravo@example.net', '1', 0));

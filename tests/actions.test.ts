@@ -4,7 +4,7 @@ import { type ActionDeps, execute, reconcile, undo } from '../src/actions/execut
 import { planAction } from '../src/actions/plan.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { getAction } from '../src/store/actions.ts';
-import { openUserDb } from '../src/store/store.ts';
+import { openUserDb } from './fixtures.ts';
 import { FakeMailbox, facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';

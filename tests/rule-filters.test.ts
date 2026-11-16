@@ -4,7 +4,7 @@ import { undo } from '../src/actions/executor.ts';
 import { checkRuleFilters, removeRuleFilter, writeRuleFilter } from '../src/actions/rule-filters.ts';
 import { FILTER_CHECK_MINUTES, checkFiltersWhenDue } from '../src/daemon/filters.ts';
 import { addMailbox } from '../src/store/accounts.ts';
-import { openUserDb } from '../src/store/store.ts';
+import { openUserDb } from './fixtures.ts';
 import { getRuleFilter, ruleFilterStatus } from '../src/store/filters.ts';
 import { DEFAULT_LABELS, updateLabel } from '../src/store/labels.ts';
 import { addRule, setRule } from '../src/store/rules.ts';

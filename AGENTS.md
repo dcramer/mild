@@ -77,7 +77,7 @@ The database is the full account of what sift saw and did. Every message synced 
 ## Definition of done
 
 1. `pnpm check` passes. Never skip, delete or weaken a test to get there.
-2. Behavior change: a test covers it.
+2. Behavior change: a test covers it. A test that needs the database takes it from `tests/fixtures.ts` (`openUserDb`, `freshStore`, and `onePerson` in `tests/helpers.ts`), and one that needs the server takes `startDashboard`; never open either of its own.
 3. Dashboard change: `pnpm build:web` passes and you looked at the page in a browser with the console open (a content security policy violation shows up there, not in the build).
 4. Schema change: change `src/store/schema.ts`, then `pnpm db:generate` writes the migration. Never write or edit schema SQL by hand; what Drizzle cannot express goes in a custom migration (`pnpm db:generate --custom --name …`). Never edit an applied migration. A new table of a person's data carries `user_id` (`userId()`) and the `own()` policy, and goes in the custom migration's `FORCE ROW LEVEL SECURITY` list; a test fails otherwise.
 

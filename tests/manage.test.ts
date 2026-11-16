@@ -1,16 +1,10 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { request } from 'node:http';
-import type { AddressInfo } from 'node:net';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import type { Sql } from '../src/store/sql.ts';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { MAX_BACKFILL, backfill } from '../src/daemon/backfill.ts';
 import { type RunOptions, createWake, runLoop } from '../src/daemon/run.ts';
 import { signInRefusal } from '../src/cli/sign-in.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
 import type { Controls, ManagedSettings, SignIn } from '../src/dashboard/controls.ts';
-import { createDashboardServer } from '../src/dashboard/server.ts';
 import { people } from '../src/store/people.ts';
 import type { RawMessage } from '../src/gmail/api.ts';
 import { startEval } from '../src/learn/evals.ts';
@@ -20,12 +14,12 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { preferences, setGuidelines } from '../src/store/preferences.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { FakeMailbox, facts, onePerson, storeExample } from './helpers.ts';
+import { builtAssets, startDashboard } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 
 const ACCOUNT = 'me@example.org';
 let db: Sql;
 let store: Store;
-let close: (() => void) | undefined;
 let calls: string[];
 let settings: ManagedSettings;
 
@@ -75,47 +69,15 @@ beforeEach(async () => {
   await setGuidelines(db, 'Be careful.', 1);
   await db.run('UPDATE preferences SET guidelines_changed_at = NULL');
 });
-afterEach(() => close?.());
 
 async function start(options: { withControls?: boolean } = {}) {
-  const assets = mkdtempSync(join(tmpdir(), 'sift-web-'));
-  mkdirSync(join(assets, 'assets'));
-  writeFileSync(join(assets, 'index.html'), '<!doctype html>page');
-  const server = createDashboardServer(people(store), {
-    assetsDir: assets,
-    ...(options.withControls === false ? {} : { controls }),
-    now: () => 77,
-  });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  close = () => server.close();
-  return (server.address() as AddressInfo).port;
-}
-
-function call(port: number, method: 'GET' | 'POST', path: string, body?: unknown, headers: Record<string, string> = {}) {
-  return new Promise<{ status: number; body: Record<string, unknown>; headers: Record<string, string | string[] | undefined> }>((resolve, reject) => {
-    const own = method === 'POST' ? { origin: `http://localhost:${port}`, 'content-type': 'application/json', 'x-sift': '1' } : {};
-    const req = request({ port, path, method, headers: { host: `localhost:${port}`, ...own, ...headers } }, (res) => {
-      let data = '';
-      res.on('data', (chunk) => (data += String(chunk)));
-      res.on('end', () => {
-        let parsed: Record<string, unknown>;
-        try {
-          parsed = JSON.parse(data) as Record<string, unknown>;
-        } catch {
-          parsed = { text: data };
-        }
-        resolve({ status: res.statusCode ?? 0, body: parsed, headers: res.headers });
-      });
-    });
-    req.on('error', reject);
-    req.end(body === undefined ? undefined : JSON.stringify(body));
-  });
+  return await startDashboard(people(store), options.withControls === false ? {} : { controls });
 }
 
 describe('managing sift from the dashboard', () => {
   it('shows how sift is set up', async () => {
-    const port = await start();
-    const { body } = await call(port, 'GET', '/api/manage');
+    const { call } = await start();
+    const { body } = await call('GET', '/api/manage');
     expect(body).toMatchObject({
       settings: { act: false, interval: 60 },
       model: { chosen: null, signedIn: ['openai-codex'], pending: null },
@@ -126,70 +88,69 @@ describe('managing sift from the dashboard', () => {
     expect((body['labels'] as Record<string, { id: string; gmailLabel: string; rules: number }[]>)[ACCOUNT]).toContainEqual(
       expect.objectContaining({ id: 'newsletter', gmailLabel: 'sift/newsletters', rules: 0, messages: 0, record: { reviewed: 0, right: 0 } }),
     );
-    expect((await call(port, 'GET', '/api/models')).body).toEqual({ models: ['p/small', 'p/large'], recommended: { p: 'p/small' } });
+    expect((await call('GET', '/api/models')).body).toEqual({ models: ['p/small', 'p/large'], recommended: { p: 'p/small' } });
   });
 
   it('changes settings, and refuses values that make no sense', async () => {
-    const port = await start();
-    expect((await call(port, 'POST', '/api/settings', { act: true })).body).toEqual({
+    const { call } = await start();
+    expect((await call('POST', '/api/settings', { act: true })).body).toEqual({
       settings: { act: true, interval: 60, fewShot: true, examplesKeepDays: null },
     });
-    expect((await call(port, 'POST', '/api/settings', { interval: 300 })).body).toEqual({
+    expect((await call('POST', '/api/settings', { interval: 300 })).body).toEqual({
       settings: { act: true, interval: 300, fewShot: true, examplesKeepDays: null },
     });
-    expect((await call(port, 'POST', '/api/settings', { fewShot: false })).body).toMatchObject({ settings: { fewShot: false } });
+    expect((await call('POST', '/api/settings', { fewShot: false })).body).toMatchObject({ settings: { fewShot: false } });
     for (const bad of [{ act: 'yes' }, { interval: 1 }, { interval: '60' }, { fewShot: 'no' }])
-      expect((await call(port, 'POST', '/api/settings', bad)).status).toBe(400);
+      expect((await call('POST', '/api/settings', bad)).status).toBe(400);
     expect(settings).toEqual({ act: true, interval: 300, fewShot: false, examplesKeepDays: null });
   });
 
   it("keeps the model and its sign-in the person's own", async () => {
-    const port = await start();
-    expect((await call(port, 'POST', '/api/model', { model: 'p/small' })).status).toBe(200);
+    const { call } = await start();
+    expect((await call('POST', '/api/model', { model: 'p/small' })).status).toBe(200);
     expect((await preferences(db)).model).toBe('p/small');
-    expect((await call(port, 'POST', '/api/model', { model: 'no-slash' })).status).toBe(400);
-    expect((await call(port, 'POST', '/api/model', { model: null })).status).toBe(200);
+    expect((await call('POST', '/api/model', { model: 'no-slash' })).status).toBe(400);
+    expect((await call('POST', '/api/model', { model: null })).status).toBe(200);
     expect((await preferences(db)).model).toBeNull();
 
-    expect((await call(port, 'POST', '/api/model/chatgpt', {})).body).toEqual({ code: 'ABCD-1234', url: 'https://auth.example/device', expiresAt: 900 });
-    expect((await call(port, 'POST', '/api/model/key', { provider: 'openai', key: ' sk-test ' })).status).toBe(200);
-    expect((await call(port, 'POST', '/api/model/key', { provider: 'openai' })).status).toBe(400);
-    expect((await call(port, 'POST', '/api/model/signout', { provider: 'openai' })).status).toBe(200);
+    expect((await call('POST', '/api/model/chatgpt', {})).body).toEqual({ code: 'ABCD-1234', url: 'https://auth.example/device', expiresAt: 900 });
+    expect((await call('POST', '/api/model/key', { provider: 'openai', key: ' sk-test ' })).status).toBe(200);
+    expect((await call('POST', '/api/model/key', { provider: 'openai' })).status).toBe(400);
+    expect((await call('POST', '/api/model/signout', { provider: 'openai' })).status).toBe(200);
     expect(calls).toEqual(['check', 'check', 'chatgpt', 'key openai sk-test', 'signout openai']);
   });
 
   it('starts a test run of the model only when asked, through the process that holds the model', async () => {
-    const port = await start();
+    const { call } = await start();
     await storeExample(db, ACCOUNT, { id: 'e1', from: 'news@example.com', label: 'newsletter' });
-    expect((await call(port, 'GET', '/api/evals')).body).toEqual({ runs: [], examples: { [ACCOUNT]: 1 }, defaultLimit: 50, maxLimit: 200 });
+    expect((await call('GET', '/api/evals')).body).toEqual({ runs: [], examples: { [ACCOUNT]: 1 }, defaultLimit: 50, maxLimit: 200 });
     expect(calls).toEqual([]);
 
-    expect((await call(port, 'POST', '/api/evals/run', { accountId: ACCOUNT })).body).toEqual({ id: 7 });
-    expect((await call(port, 'POST', '/api/evals/run', { accountId: ACCOUNT, fewShot: false, limit: 20 })).status).toBe(200);
+    expect((await call('POST', '/api/evals/run', { accountId: ACCOUNT })).body).toEqual({ id: 7 });
+    expect((await call('POST', '/api/evals/run', { accountId: ACCOUNT, fewShot: false, limit: 20 })).status).toBe(200);
     expect(calls).toEqual([`eval ${ACCOUNT} true 50`, `eval ${ACCOUNT} false 20`]);
     for (const bad of [{}, { accountId: ACCOUNT, limit: 201 }, { accountId: ACCOUNT, limit: 0 }, { accountId: ACCOUNT, fewShot: 1 }])
-      expect((await call(port, 'POST', '/api/evals/run', bad)).status).toBe(400);
+      expect((await call('POST', '/api/evals/run', bad)).status).toBe(400);
     // A mailbox that is not the viewer's is not there at all.
-    expect((await call(port, 'POST', '/api/evals/run', { accountId: 'nobody@example.org' })).status).toBe(404);
+    expect((await call('POST', '/api/evals/run', { accountId: 'nobody@example.org' })).status).toBe(404);
 
     const { id, done } = await startEval(
       { db, judge: async () => ({ label: 'marketing', reason: 'r' }), model: 'p/small', guidelines: '' },
       { accountId: ACCOUNT, fewShot: false },
     );
     await done;
-    const listed = (await call(port, 'GET', '/api/evals')).body['runs'] as { id: number; model: string; score: { wrong: number } }[];
+    const listed = (await call('GET', '/api/evals')).body['runs'] as { id: number; model: string; score: { wrong: number } }[];
     expect(listed).toMatchObject([{ id, model: 'p/small', status: 'done', fewShot: false, score: { total: 1, wrong: 1 } }]);
-    const detail = await call(port, 'GET', `/api/eval?id=${id}`);
+    const detail = await call('GET', `/api/eval?id=${id}`);
     expect(detail.body).toMatchObject({ run: { id }, results: [{ messageId: 'e1', expected: 'newsletter', got: 'marketing', subject: 'Subject e1' }] });
-    expect((await call(port, 'GET', '/api/eval?id=99')).status).toBe(404);
+    expect((await call('GET', '/api/eval?id=99')).status).toBe(404);
 
-    close?.();
-    const bare = await start({ withControls: false });
-    expect((await call(bare, 'POST', '/api/evals/run', { accountId: ACCOUNT })).status).toBe(409);
+    const { call: bare } = await start({ withControls: false });
+    expect((await bare('POST', '/api/evals/run', { accountId: ACCOUNT })).status).toBe(409);
   });
 
   it("lists the examples it holds without their content, and deletes one or all of an account's", async () => {
-    const port = await start();
+    const { call } = await start();
     await storeExample(db, ACCOUNT, { id: 'e1', from: 'news@example.com', label: 'newsletter', body: 'Private words.', markedAt: 1, name: 'News' });
     await storeExample(db, ACCOUNT, { id: 'e2', from: 'ada@example.org', label: 'personal', markedAt: 2 });
     await storeExample(db, ACCOUNT, { id: 'e3', from: 'bob@example.org', label: 'personal', markedAt: 3 });
@@ -197,7 +158,7 @@ describe('managing sift from the dashboard', () => {
     await storeExample(db, 'other@example.org', { id: 'o1', from: 'cy@example.org', label: 'personal', markedAt: 4 });
     settings.examplesKeepDays = 90;
 
-    const listed = await call(port, 'GET', `/api/examples?account=${encodeURIComponent(ACCOUNT)}`);
+    const listed = await call('GET', `/api/examples?account=${encodeURIComponent(ACCOUNT)}`);
     expect(listed.body).toMatchObject({ held: { [ACCOUNT]: 3, 'other@example.org': 1 }, keepDays: 90 });
     expect((listed.body['examples'] as { messageId: string }[]).map((e) => e.messageId)).toEqual(['e3', 'e2', 'e1']);
     expect((listed.body['examples'] as unknown[])[2]).toEqual({
@@ -212,25 +173,25 @@ describe('managing sift from the dashboard', () => {
     });
     expect(JSON.stringify(listed.body)).not.toContain('Private words.');
 
-    expect((await call(port, 'POST', '/api/examples/delete', { accountId: ACCOUNT, messageId: 'e1' })).body).toEqual({ deleted: 1 });
-    expect((await call(port, 'POST', '/api/examples/delete', { accountId: ACCOUNT, messageId: 'e1' })).body).toEqual({ deleted: 0 });
-    expect((await call(port, 'POST', '/api/examples/delete', { accountId: ACCOUNT })).status).toBe(400);
-    expect((await call(port, 'POST', '/api/examples/delete-all', { accountId: 'nobody@example.org' })).status).toBe(404);
-    expect((await call(port, 'POST', '/api/examples/delete-all', { accountId: ACCOUNT })).body).toEqual({ deleted: 2 });
+    expect((await call('POST', '/api/examples/delete', { accountId: ACCOUNT, messageId: 'e1' })).body).toEqual({ deleted: 1 });
+    expect((await call('POST', '/api/examples/delete', { accountId: ACCOUNT, messageId: 'e1' })).body).toEqual({ deleted: 0 });
+    expect((await call('POST', '/api/examples/delete', { accountId: ACCOUNT })).status).toBe(400);
+    expect((await call('POST', '/api/examples/delete-all', { accountId: 'nobody@example.org' })).status).toBe(404);
+    expect((await call('POST', '/api/examples/delete-all', { accountId: ACCOUNT })).body).toEqual({ deleted: 2 });
     expect(await db.all('SELECT account_id, message_id FROM examples')).toEqual([{ account_id: 'other@example.org', message_id: 'o1' }]);
     // The message row and its decision are sift's record of what it saw and did; only the stored content goes.
     expect(await db.get(`SELECT count(*) AS n FROM messages WHERE id = 'e1'`)).toEqual({ n: 1 });
   });
 
   it('sets how long examples are kept', async () => {
-    const port = await start();
-    expect((await call(port, 'POST', '/api/settings', { examplesKeepDays: 30 })).body).toMatchObject({ settings: { examplesKeepDays: 30 } });
-    expect((await call(port, 'POST', '/api/settings', { examplesKeepDays: null })).body).toMatchObject({ settings: { examplesKeepDays: null } });
-    for (const bad of [0, 1.5, '30', 40_000]) expect((await call(port, 'POST', '/api/settings', { examplesKeepDays: bad })).status).toBe(400);
+    const { call } = await start();
+    expect((await call('POST', '/api/settings', { examplesKeepDays: 30 })).body).toMatchObject({ settings: { examplesKeepDays: 30 } });
+    expect((await call('POST', '/api/settings', { examplesKeepDays: null })).body).toMatchObject({ settings: { examplesKeepDays: null } });
+    for (const bad of [0, 1.5, '30', 40_000]) expect((await call('POST', '/api/settings', { examplesKeepDays: bad })).status).toBe(400);
   });
 
   it('decides waiting suggestions again when a rule or a label changes, and says how many', async () => {
-    const port = await start();
+    const { call } = await start();
     const from = { address: 'sales@example.com', domain: 'example.com' };
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'w1', from }), facts({ accountId: ACCOUNT, messageId: 'w2', from })], '2');
     const marketing = { disposition: 'archive', subscription: 'unsubscribe', stage: 'agent', reason: 'Marketing: a sale', labelId: 'marketing' } as const;
@@ -238,55 +199,55 @@ describe('managing sift from the dashboard', () => {
     await recordDecision(db, ACCOUNT, 'w2', marketing, { now: 20 });
     const latest = async (id: string) => await db.get('SELECT stage, disposition, label_id FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1', id);
 
-    const label = await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'keep' });
+    const label = await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'keep' });
     expect(label.body).toEqual({ ok: true, redecided: 2 });
     expect(await latest('w1')).toEqual({ stage: 'agent', disposition: 'keep', label_id: 'marketing' });
 
-    const rule = await call(port, 'POST', '/api/rules', { accountId: ACCOUNT, match: { from: from.address }, label: 'newsletter' });
+    const rule = await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: from.address }, label: 'newsletter' });
     expect(rule.body).toMatchObject({ redecided: 2 });
     expect(await latest('w2')).toEqual({ stage: 'rules', disposition: 'archive', label_id: 'newsletter' });
-    expect(((await call(port, 'GET', '/api/suggestions')).body as { waiting: number }).waiting).toBe(0);
+    expect(((await call('GET', '/api/suggestions')).body as { waiting: number }).waiting).toBe(0);
 
-    expect((await call(port, 'POST', '/api/rules/remove', { id: rule.body['id'] })).body).toEqual({ ok: true, redecided: 2 });
+    expect((await call('POST', '/api/rules/remove', { id: rule.body['id'] })).body).toEqual({ ok: true, redecided: 2 });
     expect(await latest('w2')).toEqual({ stage: 'agent', disposition: 'keep', label_id: 'marketing' });
-    expect(((await call(port, 'GET', '/api/suggestions?kept=1')).body as { waiting: number }).waiting).toBe(2);
+    expect(((await call('GET', '/api/suggestions?kept=1')).body as { waiting: number }).waiting).toBe(2);
   });
 
   it('says how many waiting suggestions predate the guidelines, and judges them again only when asked', async () => {
-    const port = await start();
+    const { call } = await start();
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'w1' }), facts({ accountId: ACCOUNT, messageId: 'w2' })], '2');
     const agent = { disposition: 'archive', subscription: 'preserve', stage: 'agent', reason: 'r', labelId: 'marketing' } as const;
     await recordDecision(db, ACCOUNT, 'w1', agent, { now: 10 });
     await recordDecision(db, ACCOUNT, 'w2', agent, { now: 30 });
 
-    expect((await call(port, 'GET', '/api/manage')).body['predateGuidelines']).toEqual({ [ACCOUNT]: 0 });
+    expect((await call('GET', '/api/manage')).body['predateGuidelines']).toEqual({ [ACCOUNT]: 0 });
     await db.run('UPDATE preferences SET guidelines_changed_at = 20');
-    expect((await call(port, 'GET', '/api/manage')).body['predateGuidelines']).toEqual({ [ACCOUNT]: 1 });
-    await call(port, 'POST', '/api/guidelines', { text: 'Recruiters are cold outreach.' });
+    expect((await call('GET', '/api/manage')).body['predateGuidelines']).toEqual({ [ACCOUNT]: 1 });
+    await call('POST', '/api/guidelines', { text: 'Recruiters are cold outreach.' });
     expect(calls).toEqual([]);
 
-    expect((await call(port, 'POST', '/api/suggestions/rejudge', { accountId: ACCOUNT })).body).toEqual({ started: 2, remaining: 0 });
+    expect((await call('POST', '/api/suggestions/rejudge', { accountId: ACCOUNT })).body).toEqual({ started: 2, remaining: 0 });
     expect(calls).toEqual([`rejudge ${ACCOUNT}`]);
-    expect((await call(port, 'POST', '/api/suggestions/rejudge', { accountId: 'nobody@example.org' })).status).toBe(404);
-    expect((await call(port, 'POST', '/api/suggestions/rejudge', {})).status).toBe(400);
+    expect((await call('POST', '/api/suggestions/rejudge', { accountId: 'nobody@example.org' })).status).toBe(404);
+    expect((await call('POST', '/api/suggestions/rejudge', {})).status).toBe(400);
   });
 
   it('edits the guidelines, labels and rules', async () => {
-    const port = await start();
-    expect((await call(port, 'POST', '/api/guidelines', { text: 'Recruiters are cold outreach.' })).status).toBe(200);
+    const { call } = await start();
+    expect((await call('POST', '/api/guidelines', { text: 'Recruiters are cold outreach.' })).status).toBe(200);
     expect((await preferences(db)).guidelines).toBe('Recruiters are cold outreach.');
-    expect((await call(port, 'POST', '/api/guidelines', { text: 'x'.repeat(9000) })).status).toBe(400);
+    expect((await call('POST', '/api/guidelines', { text: 'x'.repeat(9000) })).status).toBe(400);
 
-    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'newsletter', disposition: 'keep', name: 'Reading' })).status).toBe(200);
+    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'newsletter', disposition: 'keep', name: 'Reading' })).status).toBe(200);
     expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'newsletter')).toMatchObject({
       disposition: 'keep',
       name: 'Reading',
       gmailLabel: 'sift/newsletters',
     });
-    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'nonsense', disposition: 'keep' })).status).toBe(409);
-    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'newsletter', disposition: 'delete' })).status).toBe(400);
+    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'nonsense', disposition: 'keep' })).status).toBe(409);
+    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'newsletter', disposition: 'delete' })).status).toBe(400);
 
-    const mine = await call(port, 'POST', '/api/labels/add', {
+    const mine = await call('POST', '/api/labels/add', {
       accountId: ACCOUNT,
       name: 'Investor updates',
       description: 'Updates from companies I invested in.',
@@ -301,59 +262,55 @@ describe('managing sift from the dashboard', () => {
       gmailLabel: 'sift/investor-updates',
     });
     for (const taken of ['investor updates', 'Review', 'Did', 'Cold outreach', '!!!'])
-      expect((await call(port, 'POST', '/api/labels/add', { accountId: ACCOUNT, name: taken, description: '', disposition: 'keep' })).status).toBe(409);
-    expect((await call(port, 'POST', '/api/labels/add', { accountId: 'nobody@example.org', name: 'X', description: '', disposition: 'keep' })).status).toBe(
-      404,
-    );
+      expect((await call('POST', '/api/labels/add', { accountId: ACCOUNT, name: taken, description: '', disposition: 'keep' })).status).toBe(409);
+    expect((await call('POST', '/api/labels/add', { accountId: 'nobody@example.org', name: 'X', description: '', disposition: 'keep' })).status).toBe(404);
     // Up to the limit, and no further.
     for (let n = (await listLabels(db, ACCOUNT)).length; n < MAX_LABELS; n++)
-      expect((await call(port, 'POST', '/api/labels/add', { accountId: ACCOUNT, name: `Extra ${n}`, description: '', disposition: 'keep' })).status).toBe(200);
-    const full = await call(port, 'POST', '/api/labels/add', { accountId: ACCOUNT, name: 'One too many', description: '', disposition: 'keep' });
+      expect((await call('POST', '/api/labels/add', { accountId: ACCOUNT, name: `Extra ${n}`, description: '', disposition: 'keep' })).status).toBe(200);
+    const full = await call('POST', '/api/labels/add', { accountId: ACCOUNT, name: 'One too many', description: '', disposition: 'keep' });
     expect(full.status).toBe(409);
     expect((await listLabels(db, ACCOUNT)).length).toBe(MAX_LABELS);
 
-    const added = await call(port, 'POST', '/api/rules', {
+    const added = await call('POST', '/api/rules', {
       accountId: ACCOUNT,
       match: { fromDomain: 'example.com', subjectContains: '' },
       label: 'investor-updates',
     });
-    const excepted = await call(port, 'POST', '/api/rules', { accountId: ACCOUNT, match: { from: 'a@example.com' }, label: 'marketing', disposition: 'keep' });
+    const excepted = await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: 'a@example.com' }, label: 'marketing', disposition: 'keep' });
     expect(await listRules(db, ACCOUNT)).toMatchObject([
       { id: added.body['id'], match: { fromDomain: 'example.com' }, labelId: 'investor-updates', source: 'user' },
       { id: excepted.body['id'], labelId: 'marketing', disposition: 'keep' },
     ]);
     expect((await listRules(db, ACCOUNT))[0]).not.toHaveProperty('disposition');
-    expect((await call(port, 'GET', '/api/rules')).body['rules']).toMatchObject([
+    expect((await call('GET', '/api/rules')).body['rules']).toMatchObject([
       { labelName: 'Investor updates', override: null, disposition: 'keep' },
       { labelName: 'Marketing', override: 'keep', disposition: 'keep' },
     ]);
-    expect((await call(port, 'POST', '/api/rules', { accountId: ACCOUNT, match: {}, label: 'marketing' })).status).toBe(400);
-    expect((await call(port, 'POST', '/api/rules', { accountId: ACCOUNT, match: { body: 'x' }, label: 'marketing' })).status).toBe(400);
-    expect((await call(port, 'POST', '/api/rules', { accountId: ACCOUNT, match: { from: 'a@example.com' }, label: 'no-such-label' })).status).toBe(409);
-    expect(
-      (await call(port, 'POST', '/api/rules', { accountId: ACCOUNT, match: { from: 'a@example.com' }, label: 'marketing', disposition: 'review' })).status,
-    ).toBe(400);
-    expect((await call(port, 'POST', '/api/rules/remove', { id: added.body['id'] })).status).toBe(200);
-    expect((await call(port, 'POST', '/api/rules/remove', { id: added.body['id'] })).status).toBe(409);
+    expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: {}, label: 'marketing' })).status).toBe(400);
+    expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: { body: 'x' }, label: 'marketing' })).status).toBe(400);
+    expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: 'a@example.com' }, label: 'no-such-label' })).status).toBe(409);
+    expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: 'a@example.com' }, label: 'marketing', disposition: 'review' })).status).toBe(
+      400,
+    );
+    expect((await call('POST', '/api/rules/remove', { id: added.body['id'] })).status).toBe(200);
+    expect((await call('POST', '/api/rules/remove', { id: added.body['id'] })).status).toBe(409);
   });
 
   it('sets what a label does, including blocking and marking read', async () => {
-    const port = await start();
+    const { call } = await start();
     const does = async () => (await listLabels(db, ACCOUNT)).find((l) => l.id === 'marketing');
-    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'block' })).status).toBe(200);
+    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'block' })).status).toBe(200);
     expect(await does()).toMatchObject({ disposition: 'spam', block: true });
-    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'archive', markRead: true })).status).toBe(200);
+    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'archive', markRead: true })).status).toBe(200);
     expect(await does()).toMatchObject({ disposition: 'archive', markRead: true });
     expect(await does()).not.toHaveProperty('block');
-    const shown = ((await call(port, 'GET', '/api/manage')).body['labels'] as Record<string, { id: string; disposition: string; markRead: boolean }[]>)[
-      ACCOUNT
-    ];
+    const shown = ((await call('GET', '/api/manage')).body['labels'] as Record<string, { id: string; disposition: string; markRead: boolean }[]>)[ACCOUNT];
     expect(shown?.find((l) => l.id === 'marketing')).toMatchObject({ disposition: 'archive', markRead: true });
     expect(shown?.find((l) => l.id === 'phishing')).toMatchObject({ disposition: 'block', markRead: false });
-    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'personal', unsubscribe: true })).status).toBe(200);
+    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'personal', unsubscribe: true })).status).toBe(200);
     expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'personal')).toMatchObject({ disposition: 'keep', unsubscribe: true });
-    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'personal', unsubscribe: 'yes' })).status).toBe(400);
-    const extra = await call(port, 'POST', '/api/rules', {
+    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'personal', unsubscribe: 'yes' })).status).toBe(400);
+    const extra = await call('POST', '/api/rules', {
       accountId: ACCOUNT,
       match: { from: 'x@example.com' },
       label: 'security',
@@ -362,9 +319,9 @@ describe('managing sift from the dashboard', () => {
     });
     expect((await listRules(db, ACCOUNT)).find((r) => r.id === extra.body['id'])).toMatchObject({ subscription: 'unsubscribe', markRead: true });
     // "Leave it for me" is no longer something a label can be set to do.
-    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'review' })).status).toBe(400);
-    expect((await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', markRead: 'yes' })).status).toBe(400);
-    expect((await call(port, 'POST', '/api/labels/add', { accountId: ACCOUNT, name: 'Scams', description: '', disposition: 'block' })).body).toEqual({
+    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'review' })).status).toBe(400);
+    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', markRead: 'yes' })).status).toBe(400);
+    expect((await call('POST', '/api/labels/add', { accountId: ACCOUNT, name: 'Scams', description: '', disposition: 'block' })).body).toEqual({
       id: 'scams',
     });
     expect((await listLabels(db, ACCOUNT)).at(-1)).toMatchObject({ id: 'scams', disposition: 'spam', block: true });
@@ -380,13 +337,13 @@ describe('managing sift from the dashboard', () => {
         { disposition: 'archive', subscription: 'preserve', stage: 'agent', reason: 'r', labelId: 'marketing' },
         { mode: 'act' },
       );
-    const port = await start();
+    const { call } = await start();
     const answer = { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', scope: 'once' };
-    expect((await call(port, 'POST', '/api/feedback', { ...answer, messageId: 'done' })).body).toMatchObject({
+    expect((await call('POST', '/api/feedback', { ...answer, messageId: 'done' })).body).toMatchObject({
       corrected: 'done',
       fixed: 'What sift did to this message in Gmail has been taken back.',
     });
-    const failed = await call(port, 'POST', '/api/feedback', { ...answer, messageId: 'gone' });
+    const failed = await call('POST', '/api/feedback', { ...answer, messageId: 'gone' });
     expect(failed.status).toBe(200);
     expect(failed.body['fixed']).toContain('could not be put back in Gmail: The message no longer exists.');
     expect(await db.get('SELECT count(*) AS n FROM feedback')).toEqual({ n: 2 });
@@ -394,19 +351,19 @@ describe('managing sift from the dashboard', () => {
   });
 
   it('asks the running sift to undo, pull in older mail and check now', async () => {
-    const port = await start();
+    const { call } = await start();
     await db.run(`INSERT INTO actions (id, account_id, type, payload_json, status, created_at) VALUES (3, ?, 'archive', '{}', 'done', 1)`, ACCOUNT);
-    expect((await call(port, 'POST', '/api/undo', { id: 3 })).body).toEqual({ message: 'Reversed.' });
+    expect((await call('POST', '/api/undo', { id: 3 })).body).toEqual({ message: 'Reversed.' });
     // A change that is not in this person's database is not passed on.
-    expect(await call(port, 'POST', '/api/undo', { id: 404 })).toMatchObject({ status: 409, body: { error: 'There is no change #404.' } });
-    expect((await call(port, 'POST', '/api/backfill', { days: 7 })).body).toEqual({ added: 12 });
-    expect((await call(port, 'POST', '/api/backfill', { days: 400 })).status).toBe(400);
-    expect((await call(port, 'POST', '/api/check', {})).status).toBe(200);
+    expect(await call('POST', '/api/undo', { id: 404 })).toMatchObject({ status: 409, body: { error: 'There is no change #404.' } });
+    expect((await call('POST', '/api/backfill', { days: 7 })).body).toEqual({ added: 12 });
+    expect((await call('POST', '/api/backfill', { days: 400 })).status).toBe(400);
+    expect((await call('POST', '/api/check', {})).status).toBe(200);
     expect(calls).toEqual(['undo 3', 'backfill 7', 'check', 'check']);
   });
 
   it('refuses every write that did not come from its own page', async () => {
-    const port = await start();
+    const { call } = await start();
     for (const path of [
       '/api/settings',
       '/api/guidelines',
@@ -420,45 +377,45 @@ describe('managing sift from the dashboard', () => {
       '/api/check',
       '/api/feedback',
     ]) {
-      expect((await call(port, 'POST', path, { act: true }, { origin: 'https://evil.example' })).status).toBe(403);
-      expect((await call(port, 'POST', path, { act: true }, { 'x-sift': '' })).status).toBe(403);
+      expect((await call('POST', path, { act: true }, { origin: 'https://evil.example' })).status).toBe(403);
+      expect((await call('POST', path, { act: true }, { 'x-sift': '' })).status).toBe(403);
     }
-    expect((await call(port, 'POST', '/api/nope', {})).status).toBe(405);
+    expect((await call('POST', '/api/nope', {})).status).toBe(405);
     expect(settings.act).toBe(false);
     expect(calls).toEqual([]);
   });
 
   it('writes a rule to Gmail as a filter only while acting, and removes the filter with the rule', async () => {
-    const port = await start();
+    const { call } = await start();
     const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
     const spam = await addRule(db, ACCOUNT, { match: { from: 'junk@example.com' }, labelId: 'junk' }, 'user');
-    const listed = (await call(port, 'GET', '/api/rules')).body['rules'] as { id: string; filter: Record<string, unknown> }[];
+    const listed = (await call('GET', '/api/rules')).body['rules'] as { id: string; filter: Record<string, unknown> }[];
     expect(listed.find((r) => r.id === id)?.filter).toMatchObject({ state: 'none', possible: true, reason: null });
     expect(listed.find((r) => r.id === spam)?.filter).toMatchObject({ state: 'none', possible: false, reason: 'Gmail filters cannot mark mail as spam.' });
 
-    const observing = await call(port, 'POST', '/api/rules/filter', { id, on: true });
+    const observing = await call('POST', '/api/rules/filter', { id, on: true });
     expect(observing.status).toBe(409);
     expect(observing.body['error']).toMatch(/only observing/);
     expect(calls).toEqual([]);
 
     settings.act = true;
-    const written = await call(port, 'POST', '/api/rules/filter', { id, on: true });
+    const written = await call('POST', '/api/rules/filter', { id, on: true });
     expect(written.body).toMatchObject({ filterId: 'f1', filter: { state: 'active', possible: true } });
-    expect((await call(port, 'POST', '/api/rules/filter', { id })).status).toBe(400);
-    expect((await call(port, 'POST', '/api/rules/filter', { id: 7, on: true })).status).toBe(400);
+    expect((await call('POST', '/api/rules/filter', { id })).status).toBe(400);
+    expect((await call('POST', '/api/rules/filter', { id: 7, on: true })).status).toBe(400);
 
     // Taking the filter out does not need sift to be acting.
     settings.act = false;
-    expect((await call(port, 'POST', '/api/rules/remove', { id })).status).toBe(200);
+    expect((await call('POST', '/api/rules/remove', { id })).status).toBe(200);
     expect(calls).toEqual([`filter ${id} on`, `filter ${id} off`]);
     expect((await listRules(db, ACCOUNT)).map((r) => r.id)).toEqual([spam]);
   });
 
   it('can only look, not manage, when no controls are given', async () => {
-    const port = await start({ withControls: false });
-    expect((await call(port, 'POST', '/api/settings', { act: true })).status).toBe(409);
-    expect((await call(port, 'POST', '/api/undo', { id: 1 })).status).toBe(409);
-    expect((await call(port, 'GET', '/api/manage')).body).toMatchObject({ activity: { sorting: false } });
+    const { call } = await start({ withControls: false });
+    expect((await call('POST', '/api/settings', { act: true })).status).toBe(409);
+    expect((await call('POST', '/api/undo', { id: 1 })).status).toBe(409);
+    expect((await call('GET', '/api/manage')).body).toMatchObject({ activity: { sorting: false } });
   });
 });
 
@@ -483,14 +440,8 @@ describe('signing in with Google', () => {
   };
 
   async function startWithSignIn() {
-    const assets = mkdtempSync(join(tmpdir(), 'sift-web-'));
-    mkdirSync(join(assets, 'assets'));
-    writeFileSync(join(assets, 'index.html'), '<!doctype html>page');
-    writeFileSync(join(assets, 'assets', 'app.js'), '1');
-    writeFileSync(join(assets, 'sw.js'), '1');
-    writeFileSync(join(assets, 'manifest.webmanifest'), '{}');
-    const server = createDashboardServer(people(store), {
-      assetsDir: assets,
+    return await startDashboard(people(store), {
+      assetsDir: builtAssets({ 'assets/app.js': '1', 'sw.js': '1', 'manifest.webmanifest': '{}' }),
       controls,
       signIn,
       sessionSecret: SECRET,
@@ -498,9 +449,6 @@ describe('signing in with Google', () => {
       allowedHosts: ['box.example.ts.net', 'homebox'],
       now: () => 1000,
     });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    close = () => server.close();
-    return (server.address() as AddressInfo).port;
   }
   const cookieFrom = (headers: Record<string, string | string[] | undefined>) => String(headers['set-cookie']).split(';')[0] ?? '';
   const stateFrom = (headers: Record<string, string | string[] | undefined>) => new URL(String(headers['location'])).searchParams.get('state') ?? '';
@@ -512,81 +460,81 @@ describe('signing in with Google', () => {
   });
 
   it('serves the page to anyone but the data only to someone signed in', async () => {
-    const port = await startWithSignIn();
-    expect((await call(port, 'GET', '/')).status).toBe(200);
-    expect((await call(port, 'GET', '/assets/app.js')).status).toBe(200);
+    const { call } = await startWithSignIn();
+    expect((await call('GET', '/')).status).toBe(200);
+    expect((await call('GET', '/assets/app.js')).status).toBe(200);
     // What installs the page as an app holds no data, and a browser fetches the manifest without cookies.
-    for (const path of ['/sw.js', '/manifest.webmanifest', '/rules', '/system']) expect((await call(port, 'GET', path)).status).toBe(200);
-    for (const path of ['/api/summary', '/api/manage', '/api/suggestions', '/api/senders']) expect((await call(port, 'GET', path)).status).toBe(401);
-    expect((await call(port, 'POST', '/api/settings', { act: true })).status).toBe(401);
-    expect((await call(port, 'GET', '/api/summary', undefined, { cookie: 'sift_session=forged.signature' })).status).toBe(401);
-    expect((await call(port, 'GET', '/api/session')).body).toMatchObject({ required: true, email: null, canSignIn: true, reason: null });
+    for (const path of ['/sw.js', '/manifest.webmanifest', '/rules', '/system']) expect((await call('GET', path)).status).toBe(200);
+    for (const path of ['/api/summary', '/api/manage', '/api/suggestions', '/api/senders']) expect((await call('GET', path)).status).toBe(401);
+    expect((await call('POST', '/api/settings', { act: true })).status).toBe(401);
+    expect((await call('GET', '/api/summary', undefined, { cookie: 'sift_session=forged.signature' })).status).toBe(401);
+    expect((await call('GET', '/api/session')).body).toMatchObject({ required: true, email: null, canSignIn: true, reason: null });
     expect(settings.act).toBe(false);
   });
 
   it('signs in through Google and returns to the address the browser used', async () => {
-    const port = await startWithSignIn();
-    const login = await call(port, 'GET', '/auth/login');
+    const { call, port } = await startWithSignIn();
+    const login = await call('GET', '/auth/login');
     expect(login.status).toBe(303);
     expect(String(login.headers['location'])).toContain(encodeURIComponent(`http://localhost:${port}/auth/callback`));
 
-    const back = await call(port, 'GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`);
+    const back = await call('GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`);
     expect(back.status).toBe(303);
     expect(back.headers['location']).toBe('/');
     expect(String(back.headers['set-cookie'])).toMatch(/^sift_session=[^;]+; Path=\/; Max-Age=2592000; HttpOnly; SameSite=Lax$/);
     expect(completed).toEqual([`http://localhost:${port}/auth/callback abc addTo=null`]);
 
     const cookie = { cookie: cookieFrom(back.headers) };
-    expect((await call(port, 'GET', '/api/session', undefined, cookie)).body).toMatchObject({ email: ACCOUNT });
-    expect((await call(port, 'GET', '/api/manage', undefined, cookie)).status).toBe(200);
-    expect((await call(port, 'POST', '/api/settings', { act: true }, cookie)).status).toBe(200);
+    expect((await call('GET', '/api/session', undefined, cookie)).body).toMatchObject({ email: ACCOUNT });
+    expect((await call('GET', '/api/manage', undefined, cookie)).status).toBe(200);
+    expect((await call('POST', '/api/settings', { act: true }, cookie)).status).toBe(200);
 
     // The same state cannot be used twice, and an unknown one is refused.
-    expect(String((await call(port, 'GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`)).headers['location'])).toContain('expired');
+    expect(String((await call('GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`)).headers['location'])).toContain('expired');
     expect(completed).toHaveLength(1);
   });
 
   it('uses HTTPS for the return address and the cookie behind Tailscale serve', async () => {
-    const port = await startWithSignIn();
+    const { call } = await startWithSignIn();
     const proxied = { host: 'box.example.ts.net', 'x-forwarded-proto': 'https' };
-    const login = await call(port, 'GET', '/auth/login', undefined, proxied);
+    const login = await call('GET', '/auth/login', undefined, proxied);
     expect(String(login.headers['location'])).toContain(encodeURIComponent('https://box.example.ts.net/auth/callback'));
-    const back = await call(port, 'GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`, undefined, proxied);
+    const back = await call('GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`, undefined, proxied);
     expect(String(back.headers['set-cookie'])).toMatch(/; Secure$/);
   });
 
   it('explains why sign-in is not possible at a plain address, without a client, or with a Desktop client', async () => {
-    const port = await startWithSignIn();
-    const plain = await call(port, 'GET', '/api/session', undefined, { host: `homebox:${port}` });
+    const { call, port } = await startWithSignIn();
+    const plain = await call('GET', '/api/session', undefined, { host: `homebox:${port}` });
     expect(plain.body).toMatchObject({ canSignIn: false, reason: 'address', addresses: ['http://localhost:1', 'https://box.example.ts.net'] });
-    expect((await call(port, 'GET', '/auth/login', undefined, { host: `homebox:${port}` })).headers['location']).toBe('/');
+    expect((await call('GET', '/auth/login', undefined, { host: `homebox:${port}` })).headers['location']).toBe('/');
 
     kind = 'desktop';
-    expect((await call(port, 'GET', '/api/session', undefined, { host: 'box.example.ts.net', 'x-forwarded-proto': 'https' })).body).toMatchObject({
+    expect((await call('GET', '/api/session', undefined, { host: 'box.example.ts.net', 'x-forwarded-proto': 'https' })).body).toMatchObject({
       canSignIn: false,
       reason: 'desktop-client',
     });
-    expect((await call(port, 'GET', '/api/session')).body).toMatchObject({ canSignIn: false, reason: 'desktop-client' });
+    expect((await call('GET', '/api/session')).body).toMatchObject({ canSignIn: false, reason: 'desktop-client' });
 
     kind = null;
-    expect((await call(port, 'GET', '/api/session')).body).toMatchObject({ canSignIn: false, reason: 'no-client' });
+    expect((await call('GET', '/api/session')).body).toMatchObject({ canSignIn: false, reason: 'no-client' });
   });
 
   it('turns away an account sift is not connected to, and adds a second one only for someone signed in', async () => {
-    const port = await startWithSignIn();
-    const login = await call(port, 'GET', '/auth/login?add=1');
-    const refused = await call(port, 'GET', `/auth/callback?state=${stateFrom(login.headers)}&code=stranger`);
+    const { call } = await startWithSignIn();
+    const login = await call('GET', '/auth/login?add=1');
+    const refused = await call('GET', `/auth/callback?state=${stateFrom(login.headers)}&code=stranger`);
     expect(decodeURIComponent(String(refused.headers['location']))).toBe('/?signin=stranger@example.net is not the account sift is connected to.');
     expect(refused.headers['set-cookie']).toBeUndefined();
     expect(completed.at(-1)).toContain('addTo=null');
 
-    const first = await call(port, 'GET', '/auth/login');
-    const cookie = { cookie: cookieFrom((await call(port, 'GET', `/auth/callback?state=${stateFrom(first.headers)}&code=abc`)).headers) };
-    const add = await call(port, 'GET', '/auth/login?add=1', undefined, cookie);
-    const added = await call(port, 'GET', `/auth/callback?state=${stateFrom(add.headers)}&code=second`, undefined, cookie);
+    const first = await call('GET', '/auth/login');
+    const cookie = { cookie: cookieFrom((await call('GET', `/auth/callback?state=${stateFrom(first.headers)}&code=abc`)).headers) };
+    const add = await call('GET', '/auth/login?add=1', undefined, cookie);
+    const added = await call('GET', `/auth/callback?state=${stateFrom(add.headers)}&code=second`, undefined, cookie);
     // The account being added joins the mailboxes of whoever is signed in.
     expect(completed.at(-1)).toContain(`addTo=${ACCOUNT}`);
-    expect((await call(port, 'GET', '/api/session', undefined, { cookie: cookieFrom(added.headers) })).body).toMatchObject({ email: 'work@example.com' });
+    expect((await call('GET', '/api/session', undefined, { cookie: cookieFrom(added.headers) })).body).toMatchObject({ email: 'work@example.com' });
   });
 
   it('with a list of allowed accounts, refuses everyone else, the first account included', () => {
@@ -606,31 +554,31 @@ describe('signing in with Google', () => {
   });
 
   it('ends a session when its account is taken off the list', async () => {
-    const port = await startWithSignIn();
-    const login = await call(port, 'GET', '/auth/login');
-    const cookie = { cookie: cookieFrom((await call(port, 'GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`)).headers) };
-    expect((await call(port, 'GET', '/api/summary', undefined, cookie)).status).toBe(200);
+    const { call } = await startWithSignIn();
+    const login = await call('GET', '/auth/login');
+    const cookie = { cookie: cookieFrom((await call('GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`)).headers) };
+    expect((await call('GET', '/api/summary', undefined, cookie)).status).toBe(200);
     allow = ['work@example.com'];
-    expect((await call(port, 'GET', '/api/summary', undefined, cookie)).status).toBe(401);
-    expect((await call(port, 'GET', '/api/session', undefined, cookie)).body).toMatchObject({ email: null });
+    expect((await call('GET', '/api/summary', undefined, cookie)).status).toBe(401);
+    expect((await call('GET', '/api/session', undefined, cookie)).body).toMatchObject({ email: null });
   });
 
   it('ends a session on sign-out, when it expires, and when its account is removed', async () => {
-    const port = await startWithSignIn();
-    const login = await call(port, 'GET', '/auth/login');
-    const cookie = { cookie: cookieFrom((await call(port, 'GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`)).headers) };
-    const out = await call(port, 'POST', '/api/signout', {}, cookie);
+    const { call } = await startWithSignIn();
+    const login = await call('GET', '/auth/login');
+    const cookie = { cookie: cookieFrom((await call('GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`)).headers) };
+    const out = await call('POST', '/api/signout', {}, cookie);
     expect(String(out.headers['set-cookie'])).toContain('Max-Age=0');
 
     await store.central.exec('DELETE FROM accounts');
-    expect((await call(port, 'GET', '/api/summary', undefined, cookie)).status).toBe(401);
+    expect((await call('GET', '/api/summary', undefined, cookie)).status).toBe(401);
   });
 
   it('does not believe a forwarded scheme from another machine', async () => {
     // Every test request comes from this machine, so this checks the header alone is not enough to be
     // offered sign-in at a name that is not localhost.
-    const port = await startWithSignIn();
-    expect((await call(port, 'GET', '/api/session', undefined, { host: `homebox:${port}`, 'x-forwarded-proto': 'http' })).body).toMatchObject({
+    const { call, port } = await startWithSignIn();
+    expect((await call('GET', '/api/session', undefined, { host: `homebox:${port}`, 'x-forwarded-proto': 'http' })).body).toMatchObject({
       canSignIn: false,
     });
   });

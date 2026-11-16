@@ -1,17 +1,11 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { request } from 'node:http';
-import type { AddressInfo } from 'node:net';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import type { Sql } from '../src/store/sql.ts';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { KEEP_BODY_DAYS, keepSuggestionBodies } from '../src/daemon/bodies.ts';
 import { captureExamples, parseHeaders } from '../src/daemon/examples.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
 import { listSuggestions, suggestionDetail } from '../src/dashboard/queries/suggestions.ts';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { summarize } from '../src/dashboard/queries/summary.ts';
-import { createDashboardServer } from '../src/dashboard/server.ts';
 import { people } from '../src/store/people.ts';
 import { accuracy, applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { listAccounts, recordSync } from '../src/store/accounts.ts';
@@ -21,6 +15,7 @@ import { addRule, listRules } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import type { Decision, Disposition } from '../src/triage/types.ts';
 import { everything, facts, FakeMailbox, onePerson } from './helpers.ts';
+import { startDashboard } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -611,54 +606,21 @@ describe('examples', () => {
 });
 
 describe('feedback endpoint', () => {
-  let close: (() => void) | undefined;
-  afterEach(() => close?.());
-
   async function start() {
-    const assets = mkdtempSync(join(tmpdir(), 'sift-web-'));
-    mkdirSync(join(assets, 'assets'));
-    writeFileSync(join(assets, 'index.html'), '<!doctype html>');
-    const server = createDashboardServer(people(store), { assetsDir: assets, allowedHosts: ['homebox'], now: () => 77 });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    close = () => server.close();
-    return (server.address() as AddressInfo).port;
-  }
-
-  function post(port: number, body: unknown, headers: Record<string, string> = {}) {
-    const text = typeof body === 'string' ? body : JSON.stringify(body);
-    return new Promise<{ status: number; body: Record<string, unknown> }>((resolve, reject) => {
-      const req = request(
-        {
-          port,
-          path: '/api/feedback',
-          method: 'POST',
-          headers: { host: `localhost:${port}`, origin: `http://localhost:${port}`, 'content-type': 'application/json', 'x-sift': '1', ...headers },
-        },
-        (res) => {
-          let data = '';
-          res.on('data', (chunk) => (data += String(chunk)));
-          res.on('end', () => {
-            let body: Record<string, unknown> = {};
-            try {
-              body = JSON.parse(data) as Record<string, unknown>;
-            } catch {
-              body = { text: data };
-            }
-            resolve({ status: res.statusCode ?? 0, body });
-          });
-        },
-      );
-      req.on('error', reject);
-      req.end(text);
-    });
+    const { call, port } = await startDashboard(people(store), { allowedHosts: ['homebox'] });
+    const post = async (body: unknown, headers?: Record<string, string>) => {
+      const { status, body: reply } = await call('POST', '/api/feedback', body, headers);
+      return { status, body: reply };
+    };
+    return { post, port };
   }
 
   const answer = { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'label' };
 
   it('records an answer sent by the dashboard page and reports what was learned', async () => {
     await suggest('news@example.com', 'archive', NEWS);
-    const port = await start();
-    expect(await post(port, answer)).toEqual({
+    const { post, port } = await start();
+    expect(await post(answer)).toEqual({
       status: 200,
       body: {
         reviewed: 1,
@@ -678,39 +640,39 @@ describe('feedback endpoint', () => {
 
   it("accepts the page when it is opened by one of the machine's own names", async () => {
     await suggest('news@example.com', 'archive', NEWS);
-    const port = await start();
-    expect((await post(port, answer, { host: `homebox:${port}`, origin: `http://homebox:${port}` })).status).toBe(200);
+    const { post, port } = await start();
+    expect((await post(answer, { host: `homebox:${port}`, origin: `http://homebox:${port}` })).status).toBe(200);
   });
 
   it('refuses a write that did not come from the dashboard page', async () => {
     await suggest('news@example.com', 'archive', NEWS);
-    const port = await start();
-    expect((await post(port, answer, { origin: 'https://evil.example' })).status).toBe(403);
-    expect((await post(port, answer, { origin: '' })).status).toBe(403);
-    expect((await post(port, answer, { 'x-sift': '' })).status).toBe(403);
-    expect((await post(port, answer, { 'content-type': 'text/plain' })).status).toBe(403);
-    expect((await post(port, answer, { host: 'evil.example' })).status).toBe(403);
+    const { post } = await start();
+    expect((await post(answer, { origin: 'https://evil.example' })).status).toBe(403);
+    expect((await post(answer, { origin: '' })).status).toBe(403);
+    expect((await post(answer, { 'x-sift': '' })).status).toBe(403);
+    expect((await post(answer, { 'content-type': 'text/plain' })).status).toBe(403);
+    expect((await post(answer, { host: 'evil.example' })).status).toBe(403);
     expect(await db.get('SELECT count(*) AS n FROM feedback')).toEqual({ n: 0 });
   });
 
   it('refuses malformed answers and ones about nothing waiting', async () => {
     await suggest('news@example.com', 'archive', NEWS);
-    const port = await start();
-    expect((await post(port, '{not json')).status).toBe(400);
-    expect((await post(port, { ...answer, label: undefined })).status).toBe(400);
-    expect((await post(port, { ...answer, disposition: 'delete' })).status).toBe(400);
-    expect((await post(port, { ...answer, disposition: 'review' })).status).toBe(400);
-    expect((await post(port, { ...answer, label: 'DROP TABLE' })).status).toBe(400);
-    expect((await post(port, { ...answer, label: 'nonsense' })).status).toBe(409);
-    expect((await post(port, { ...answer, scope: 'everyone' })).status).toBe(400);
-    expect((await post(port, { ...answer, scope: 'subject' })).status).toBe(400);
+    const { post, port } = await start();
+    expect((await post('{not json')).status).toBe(400);
+    expect((await post({ ...answer, label: undefined })).status).toBe(400);
+    expect((await post({ ...answer, disposition: 'delete' })).status).toBe(400);
+    expect((await post({ ...answer, disposition: 'review' })).status).toBe(400);
+    expect((await post({ ...answer, label: 'DROP TABLE' })).status).toBe(400);
+    expect((await post({ ...answer, label: 'nonsense' })).status).toBe(409);
+    expect((await post({ ...answer, scope: 'everyone' })).status).toBe(400);
+    expect((await post({ ...answer, scope: 'subject' })).status).toBe(400);
     // An answer says what the mail is, what should happen, or both; a rule for a kind of mail needs the kind.
     const { label: _label, ...unlabelled } = answer;
-    expect((await post(port, { ...unlabelled, scope: 'sender' })).status).toBe(400);
-    expect((await post(port, { ...unlabelled, disposition: 'archive' })).status).toBe(400);
-    expect((await post(port, { ...unlabelled, scope: 'sender', disposition: 'archive' })).status).toBe(200);
-    expect((await post(port, { ...answer, filler: 'x'.repeat(20_000) })).status).toBe(400);
-    expect((await post(port, { ...answer, sender: 'nobody@example.com' })).status).toBe(409);
+    expect((await post({ ...unlabelled, scope: 'sender' })).status).toBe(400);
+    expect((await post({ ...unlabelled, disposition: 'archive' })).status).toBe(400);
+    expect((await post({ ...unlabelled, scope: 'sender', disposition: 'archive' })).status).toBe(200);
+    expect((await post({ ...answer, filler: 'x'.repeat(20_000) })).status).toBe(400);
+    expect((await post({ ...answer, sender: 'nobody@example.com' })).status).toBe(409);
     expect((await fetch(`http://localhost:${port}/api/summary`, { method: 'POST' })).status).toBe(405);
   });
 });

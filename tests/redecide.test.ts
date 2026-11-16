@@ -4,7 +4,7 @@ import { MAX_REJUDGE, rejudgeWaiting } from '../src/daemon/rejudge.ts';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { predatingGuidelines, redecideWaiting } from '../src/learn/redecide.ts';
 import { addMailbox, listAccounts, recordSync } from '../src/store/accounts.ts';
-import { openUserDb } from '../src/store/store.ts';
+import { openUserDb } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { addRule, listRules, removeRule } from '../src/store/rules.ts';

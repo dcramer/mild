@@ -1,5 +1,5 @@
 import { openDatabase } from './db.ts';
-import { type Sql, handle } from './sql.ts';
+import { type Driver, type Sql, handle } from './sql.ts';
 
 /**
  * The database. `central` says who the people are and which mailboxes are whose, and sees no one's
@@ -14,12 +14,16 @@ export interface Store {
   close(): Promise<void>;
 }
 
-/** Where the database is: a Postgres server's address, or else PGlite in `databaseDir`. `:memory:` for tests. */
-export type StorePaths = { databaseUrl?: string | undefined; databaseDir: string } | ':memory:';
+/** Where the database is: a Postgres server's address, or else PGlite in `databaseDir`. */
+export type StorePaths = { databaseUrl?: string | undefined; databaseDir: string };
 
 /** Open the database, migrating it first. */
 export async function openStore(paths: StorePaths): Promise<Store> {
-  const driver = await openDatabase(paths === ':memory:' ? ':memory:' : paths.databaseUrl ? { url: paths.databaseUrl } : { dir: paths.databaseDir });
+  return storeOn(await openDatabase(paths.databaseUrl ? { url: paths.databaseUrl } : { dir: paths.databaseDir }));
+}
+
+/** The store over a database that is open and migrated. */
+export function storeOn(driver: Driver): Store {
   const central = handle(driver, null);
   const opened = new Map<number, Promise<Sql>>();
   const open = async (id: number) => {
@@ -42,11 +46,4 @@ export async function openStore(paths: StorePaths): Promise<Store> {
     nobody: handle(driver, 0),
     close: () => driver.close(),
   };
-}
-
-/** For tests: a database in memory with one person in it, who owns the install, and their handle. */
-export async function openUserDb(): Promise<Sql> {
-  const store = await openStore(':memory:');
-  const { id } = (await store.central.get<{ id: number }>('INSERT INTO users (owner, created_at) VALUES (1, 0) RETURNING id'))!;
-  return await store.user(id);
 }

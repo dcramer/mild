@@ -5,7 +5,7 @@ import { RETRY_AFTER_MS, isPublicAddress, unsubscribe } from '../src/actions/uns
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { getAction } from '../src/store/actions.ts';
-import { openUserDb } from '../src/store/store.ts';
+import { openUserDb } from './fixtures.ts';
 import { everything, facts, FakeMailbox } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';

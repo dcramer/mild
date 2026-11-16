@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS, parseSettings } from '../src/config.ts';
 import { type RunOptions, runOnce } from '../src/daemon/run.ts';
 import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
 import { addMailbox } from '../src/store/accounts.ts';
-import { openUserDb } from '../src/store/store.ts';
+import { openUserDb } from './fixtures.ts';
 import { DEFAULT_LABELS } from '../src/store/labels.ts';
 import { heuristicsStage } from '../src/triage/stages/heuristics.ts';
 import type { MessageFacts } from '../src/triage/types.ts';

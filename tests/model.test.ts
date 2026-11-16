@@ -7,7 +7,7 @@ import { createJudge } from '../src/model/judge.ts';
 import { MODEL_CHOICES, offerModel, openModels, recommendModel, resolveModel, saveApiKey } from '../src/model/models.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts';
-import { openUserDb } from '../src/store/store.ts';
+import { openUserDb } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { PROPOSE_AFTER, listProposals, proposeForSender, proposeSettled, resolveProposal } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
