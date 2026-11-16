@@ -1,0 +1,20 @@
+import { cn } from '@/lib/utils';
+
+const NAMES = ['', 'Unsure', 'Fairly sure', 'Sure'] as const;
+
+/**
+ * How sure sift is, in three steps of ink: one, two or three bars lit. Sits before what it qualifies,
+ * inside a row's answer. Its name is read out, so the bars need no legend.
+ */
+export function Meter({ level }: { level: 1 | 2 | 3 }) {
+  return (
+    <span role="img" aria-label={NAMES[level]} title={NAMES[level]} className="inline-flex shrink-0 items-end gap-[2px]">
+      {[1, 2, 3].map((step) => (
+        <span
+          key={step}
+          className={cn('w-[3px]', step === 1 ? 'h-[6px]' : step === 2 ? 'h-[9px]' : 'h-3', step <= level ? 'bg-muted-foreground' : 'bg-foreground/20')}
+        />
+      ))}
+    </span>
+  );
+}

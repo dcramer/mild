@@ -2,7 +2,7 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { SenderLink } from '@/components/sender.tsx';
 import { useParam } from '@/lib/route.ts';
 import { type SuggestionItem, type Suggestions, type Summary, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ACTIONS, ago, count, describeMatch, money, outcomeName, percent, plural, willBe } from '@/lib/format.ts';
+import { ACTIONS, ago, count, describeMatch, money, outcomeName, percent, plural, sureness, willBe } from '@/lib/format.ts';
 import {
   Button,
   Check,
@@ -12,6 +12,7 @@ import {
   ListView,
   Look,
   Loading,
+  Meter,
   OnPhone,
   RowActions,
   Reserve,
@@ -77,9 +78,9 @@ function ProposalRow({ proposal, onResolved }: { proposal: Proposal; onResolved:
 }
 
 /**
- * One suggestion: who, what, the label sift gave it, and what sift would do, as the button that agrees.
- * Agreeing settles that sender's other waiting mail of the same label too, and makes the rule. Change…
- * opens the message to say otherwise.
+ * One suggestion: who, what, when, and the label sift gave it as the button that agrees, with how sure it
+ * is. The label decides what happens. Agreeing settles that sender's other waiting mail of the same label
+ * too, and makes the rule. Change… opens the message to say otherwise.
  */
 function SuggestionRow({ item, onOpen, onAnswered }: { item: SuggestionItem; onOpen: () => void; onAnswered: (taught: string) => void }) {
   const { busy, error, run } = useAction();
@@ -93,14 +94,6 @@ function SuggestionRow({ item, onOpen, onAnswered }: { item: SuggestionItem; onO
       );
       onAnswered(result.taught ?? 'Noted.');
     });
-  const label = placed ? (
-    <span className="text-muted-foreground">
-      {item.labelName ?? '—'}
-      {item.unsubscribe ? <span className="text-muted-foreground/70"> · unsubscribe</span> : null}
-    </span>
-  ) : (
-    <Look>{outcomeName('review')}</Look>
-  );
 
   return (
     <Tr onOpen={onOpen}>
@@ -112,27 +105,24 @@ function SuggestionRow({ item, onOpen, onAnswered }: { item: SuggestionItem; onO
         </span>
         <OnPhone>
           <span className="w-full truncate text-foreground">{item.subject || '(no subject)'}</span>
-          {label}
         </OnPhone>
       </Td>
       <Td phone="hide" className="max-w-0 md:w-full">
         <span className="block truncate">{item.subject || '(no subject)'}</span>
         <Failure className="mt-1">{error}</Failure>
       </Td>
-      <Td phone="hide" className="max-w-0 md:min-w-64">
-        <span className="block truncate">{label}</span>
-      </Td>
       <Td phone="hide" num quiet>
         {ago(item.receivedAt)}
       </Td>
       <RowActions phone="keep">
         {placed ? (
-          <Button className="w-24" busy={busy} onClick={agree}>
-            {outcomeName(item.disposition)}
+          <Button className="w-44 justify-start" busy={busy} onClick={agree}>
+            <Meter level={sureness(item.stage, item.confidence)} />
+            <span className="truncate">{item.labelName ?? outcomeName(item.disposition)}</span>
           </Button>
         ) : (
-          <Button className="w-24" onClick={onOpen}>
-            Choose…
+          <Button className="w-44 justify-start" onClick={onOpen}>
+            <Look>{outcomeName('review')}…</Look>
           </Button>
         )}
         <span className="hidden w-24 justify-end md:flex">
@@ -228,9 +218,8 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
             <Tr>
               <Th>Sender</Th>
               <Th phone="hide">Subject</Th>
-              <Th phone="hide">Label</Th>
               <Th phone="hide">Received</Th>
-              <Th>What sift would do</Th>
+              <Th>Label</Th>
             </Tr>
           </thead>
           <tbody>

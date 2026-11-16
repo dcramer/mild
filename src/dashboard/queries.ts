@@ -550,6 +550,8 @@ export function listSuggestions(db: DatabaseSync, options: { includeKept?: boole
     labelId: s.labelId,
     labelName: (s.labelId && names.get(`${s.accountId}\n${s.labelId}`)) ?? null,
     unsubscribe: s.unsubscribe,
+    stage: s.stage,
+    confidence: s.confidence,
   }));
   const { reviewed, right } = accuracy(db);
   const examples = db.prepare(`SELECT sum(status = 'captured') AS captured, sum(status = 'pending') AS pending FROM examples`).get() as {

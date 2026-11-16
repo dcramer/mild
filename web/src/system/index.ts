@@ -11,6 +11,7 @@ export { Figure, Figures } from './figures.tsx';
 export { HoverCard } from './hover-card.tsx';
 export { type ActiveFilter, FilterGroup, ListView } from './list-view.tsx';
 export { Avatar, Menu, type MenuItem } from './menu.tsx';
+export { Meter } from './meter.tsx';
 export { Masthead, type NavItem } from './nav.tsx';
 export { Failure, Note } from './note.tsx';
 export { Notice } from './notice.tsx';

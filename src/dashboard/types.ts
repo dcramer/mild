@@ -285,6 +285,9 @@ export interface SuggestionItem {
   labelName: string | null;
   /** sift would also unsubscribe. */
   unsubscribe: boolean;
+  /** Which tier decided, and how sure a model was (0 to 1); null when no model was asked. */
+  stage: StageKey;
+  confidence: number | null;
 }
 
 /** A rule sift thinks is worth having, for the user to accept or dismiss. */
