@@ -38,7 +38,7 @@ export function Figure({
           shown
         )}
       </dd>
-      {note ? <dd className="text-[15px] whitespace-nowrap text-muted-foreground tabular-nums">{note}</dd> : null}
+      {note ? <dd className="text-sm whitespace-nowrap text-muted-foreground tabular-nums">{note}</dd> : null}
     </div>
   );
 }

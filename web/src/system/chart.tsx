@@ -22,7 +22,8 @@ function ceiling(n: number): number {
   return ([1, 2, 5, 10].find((step) => step * power >= n) ?? 10) * power;
 }
 
-function Swatch({ color }: { color: string }) {
+/** A series' or a tier's colour, always beside its name. */
+export function Swatch({ color }: { color: string }) {
   return <span aria-hidden className="size-2.5 shrink-0 rounded-[1px] ring-1 ring-foreground/20" style={{ background: color }} />;
 }
 
@@ -56,7 +57,7 @@ export function StackedBars({ series, rows, unit, compact }: { series: readonly 
       <div className={`relative ml-8 ${compact ? 'h-28' : 'h-52'}`}>
         {[1, 0.5, 0].map((share) => (
           <div key={share} className="absolute inset-x-0 border-t border-dashed border-(--rule)" style={{ bottom: `${share * 100}%` }}>
-            <span className="absolute right-full -translate-y-1/2 pr-2 text-[13px] text-muted-foreground tabular-nums">{Math.round(max * share)}</span>
+            <span className="absolute right-full -translate-y-1/2 pr-2 text-label text-muted-foreground tabular-nums">{Math.round(max * share)}</span>
           </div>
         ))}
         <ol className="relative flex h-full items-stretch" onMouseLeave={() => setAt(null)}>
@@ -85,7 +86,7 @@ export function StackedBars({ series, rows, unit, compact }: { series: readonly 
         </ol>
       </div>
 
-      <ol aria-hidden className="ml-8 flex text-[13px] text-muted-foreground">
+      <ol aria-hidden className="ml-8 flex text-label text-muted-foreground">
         {rows.map((row, index) => (
           <li key={row.key} className="min-w-0 flex-1 text-center whitespace-nowrap">
             {index % every === 0 ? row.label : ''}

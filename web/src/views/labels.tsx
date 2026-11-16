@@ -10,6 +10,7 @@ import {
   Code,
   Dialog,
   Empty,
+  Failure,
   Field,
   FilterGroup,
   Form,
@@ -72,7 +73,7 @@ function LabelDialog({ accountId, label, onClose, onSaved }: { accountId: string
           <Button variant="quiet" onClick={onClose}>
             Cancel
           </Button>
-          {error ? <p className="text-destructive">{error}</p> : null}
+          <Failure>{error}</Failure>
         </>
       }
     >

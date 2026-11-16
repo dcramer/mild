@@ -79,6 +79,10 @@ $V down "$RUN"
 
 Closes this run's browser session, stops the process by the pid `up` recorded, deletes `home/`, and keeps `$RUN/evidence/`. Run it after a failed attempt too. Never `pkill -f` a pattern: it matches the shell running it, and other sessions' instances.
 
+## Upkeep
+
+`scripts/maintain-daily.sh` runs from cron on the machine that installed it, in its own clone (`~/.cache/sift-verify-maint/repo`). When `web/src`, `src/dashboard`, `src/cli`, `src/store`, `src/daemon` or this skill changed on `origin/main` since the last audit, it has a headless Claude run pstack's `maintain-verification-skill` against this skill. Fixes arrive as a PR from `verify-sift/maintain-<date>`; product gaps, a blocked pass or a failed run go to the open `verify-sift maintenance` issue. `--check` prints what it would audit, `--force` runs without churn. The cron entry lives in the user's crontab between `# BEGIN sift verify-sift maintenance` markers, not in this repository.
+
 ## What this cannot show
 
 - Anything that talks to Google: sign-in itself, connecting another account, Pull in (older mail), Gmail filters, undo of a real change. They fail here; that failure is not the change's fault.

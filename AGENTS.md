@@ -78,3 +78,25 @@ The database is the full account of what sift saw and did. Every message synced 
 2. Behavior change: a test covers it.
 3. Dashboard change: `pnpm build:web` passes and you looked at the page in a browser with the console open (a content security policy violation shows up there, not in the build).
 4. Schema change: a new numbered file in `src/store/migrations/`; never edit an applied migration.
+
+## Rules and what enforces them
+
+When David corrects you, fix the mistake and add its rule here. If the rule is already here with nothing enforcing it, that is a repeat: enforce it (architecture, then types, then a lint rule or test) in the same change. Drop a row once its mistake can no longer be made.
+
+| Rule | Enforced by |
+| --- | --- |
+| Module boundaries (`triage/` pure, Google only in `gmail/`, pi-ai only in `model/`, `dashboard/` never reaches Gmail or actions) | `no-restricted-imports`, `.oxlintrc.json` |
+| Only `web/src/system/` imports Base UI | `no-restricted-imports`, `.oxlintrc.json` |
+| The CLI prints only through `src/cli/ui.ts` | `no-console`, `.oxlintrc.json` |
+| Screens write no fills, frames, corners, shadows, colours or inline styles; red is `Failure`, yellow a part's tone | `tests/design-system.test.ts` |
+| Type sizes come from the scale in `web/src/index.css`; nothing under 12px | `tests/design-system.test.ts` |
+| Only what floats has a surface; one shadow, the `--edge` | `tests/design-system.test.ts`, and the theme has no grey tokens to reach for |
+| `mark` and `ink` buttons are never down a list; one `mark` per screen | `tests/design-system.test.ts` (inside `Tr` / `RowActions` in the same file) |
+| Every part is on the specimen page | `tests/design-system.test.ts` |
+| Every Gmail filter passes `validateFilter` | `tests/filters.test.ts` |
+| Before visual work, load the `design` skill. Consistency with the system is not the same as a page that reads well. | Nothing: judgment |
+| Redesign one page at a time, offering a few directions built from the real parts in `web/src/system` (not redrawn in a mock), and get David's pick before the next page. Don't carry over a part he has not approved. | Nothing: judgment |
+| Every line on a screen says something the reader can use; a page needs intent, not a heading over every field it has | Nothing: judgment (see "Don't state the obvious") |
+| sift runs on a headless server reached by hostname or Tailscale, not at localhost: check every URL, listener and sign-in step from another machine | Nothing: judgment |
+| One way to do each thing: use the mechanism David named, and remove the old path when a new one replaces it | Nothing: judgment |
+| One answer about one message does not become a rule about its sender, and a weak signal (having written to someone) is not trust | Nothing: judgment |

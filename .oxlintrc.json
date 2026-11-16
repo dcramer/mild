@@ -30,6 +30,15 @@
   },
   "overrides": [
     {
+      "files": ["src/**/*.ts"],
+      "rules": { "no-console": "error" }
+    },
+    {
+      // Everything the CLI prints goes through its ui, which handles colour, the gutter and piped output.
+      "files": ["src/cli/ui.ts"],
+      "rules": { "no-console": "off" }
+    },
+    {
       "files": ["src/triage/**/*.ts"],
       "rules": {
         "no-restricted-imports": [
@@ -83,6 +92,19 @@
       "plugins": ["typescript", "unicorn", "oxc", "import", "react"],
       "env": { "browser": true },
       "rules": { "react/react-in-jsx-scope": "off" }
+    },
+    {
+      "files": ["web/src/views/**/*.tsx", "web/src/components/**/*.tsx", "web/src/lib/**/*.ts", "web/src/lib/**/*.tsx", "web/src/App.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "group": ["@base-ui/**"], "message": "Only web/src/system imports Base UI. Use or extend a part from '@/system' (docs/DESIGN.md)." }
+            ]
+          }
+        ]
+      }
     },
     {
       "files": ["src/store/**/*.ts", "src/actions/**/*.ts", "src/cli/**/*.ts", "src/daemon/**/*.ts", "src/learn/**/*.ts"],

@@ -3,7 +3,25 @@ import { SenderLink } from '@/components/sender.tsx';
 import { useParam } from '@/lib/route.ts';
 import { type SuggestionGroup, type Suggestions, type Summary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ACTIONS, ago, count, describeMatch, money, outcomeName, percent, plural, willBe } from '@/lib/format.ts';
-import { Button, Check, Empty, FilterGroup, ListView, Loading, OnPhone, RowActions, Reserve, Sub, Table, TextLink, Td, Th, Tr, useToast } from '@/system';
+import {
+  Button,
+  Check,
+  Empty,
+  Failure,
+  FilterGroup,
+  ListView,
+  Loading,
+  OnPhone,
+  RowActions,
+  Reserve,
+  Sub,
+  Table,
+  TextLink,
+  Td,
+  Th,
+  Tr,
+  useToast,
+} from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 const groupKey = (g: SuggestionGroup) => `${g.accountId}/${g.sender}`;
@@ -27,9 +45,9 @@ function Week({ summary }: { summary: Summary }) {
     <p className="text-right text-sm text-muted-foreground tabular-nums">
       {t.troubledActions > 0 ? (
         <>
-          <TextLink href="/activity?status=trouble&days=30" className="font-medium text-destructive">
-            {plural(t.troubledActions, 'change')} went wrong
-          </TextLink>
+          <Failure inline>
+            <TextLink href="/activity?status=trouble&days=30">{plural(t.troubledActions, 'change')} went wrong</TextLink>
+          </Failure>
           <br />
         </>
       ) : null}
@@ -56,7 +74,7 @@ function ProposalRow({ proposal, onResolved }: { proposal: Proposal; onResolved:
         <span className="text-muted-foreground">
           The last {count(proposal.agreed)} from {whose.replace(/^from /, '')} were {proposal.labelName}.
         </span>
-        {error ? <span className="block text-destructive">{error}</span> : null}
+        <Failure>{error}</Failure>
       </p>
       <span className="flex items-center gap-1.5">
         <Button busy={busy} onClick={() => resolve(true)}>
@@ -109,7 +127,7 @@ function SuggestionRow({ group, onOpen, onAnswered }: { group: SuggestionGroup; 
       <Td phone="hide" className="whitespace-nowrap">
         {verdict}
         {mixed ? <span className="text-muted-foreground/70"> · for most</span> : null}
-        {error ? <span className="mt-1 block text-destructive">{error}</span> : null}
+        <Failure className="mt-1">{error}</Failure>
       </Td>
       <Td phone="hide" num quiet>
         {ago(group.latestReceivedAt)}

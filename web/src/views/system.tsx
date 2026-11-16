@@ -15,6 +15,7 @@ import {
   Empty,
   Fact,
   Facts,
+  Failure,
   Field,
   Figure,
   Figures,
@@ -25,6 +26,7 @@ import {
   Input,
   Kbd,
   ListView,
+  Look,
   Loading,
   Marked,
   Masthead,
@@ -34,15 +36,16 @@ import {
   OnPhone,
   PageHeader,
   Panel,
+  Reserve,
   RowActions,
   Section,
-  Reserve,
   Select,
   SettingRow,
   Sheet,
   StackedBars,
   Stamp,
   Sub,
+  Swatch,
   Table,
   Td,
   TextArea,
@@ -52,6 +55,7 @@ import {
   TimelineEvent,
   Tr,
   useToast,
+  Wordmark,
 } from '@/system';
 
 const SERIES = TIERS.filter((t) => t.key !== 'sender' && t.key !== 'heuristics').map((t, index) => ({ key: String(index), name: t.name, color: t.color }));
@@ -121,7 +125,7 @@ export function SystemView() {
             {INKS.map(([swatch, name, use]) => (
               <div key={name} className="flex flex-col gap-2 bg-background p-4">
                 <span aria-hidden className={`h-10 border border-(--frame) ${swatch}`} />
-                <span className="font-mono text-[14px]">{name}</span>
+                <span className="font-mono text-sm">{name}</span>
                 <span className="text-muted-foreground">{use}</span>
               </div>
             ))}
@@ -131,6 +135,12 @@ export function SystemView() {
 
       <Section title="Type">
         <Sheet>
+          <Row label="wordmark" note="The name, and only the name. large on the sign-in screen.">
+            <p className="flex items-baseline gap-6">
+              <Wordmark />
+              <Wordmark size="lg" />
+            </p>
+          </Row>
           <Row label="statement" note="A page’s title, and nothing else.">
             <p className="statement">Suggestions</p>
           </Row>
@@ -156,6 +166,17 @@ export function SystemView() {
           </Row>
           <Row label="slug" note="Column heads and a figure’s label. Not headings.">
             <p className="slug text-muted-foreground">Sender · Messages</p>
+          </Row>
+          <Row label="look" note="What is left to the reader, in a line of text.">
+            <p>
+              <Look>Not sure</Look> <span className="text-muted-foreground">· 3 messages</span>
+            </p>
+          </Row>
+          <Row label="swatch" note="A series’ or a tier’s colour, beside its name.">
+            <p className="inline-flex items-center gap-2">
+              <Swatch color="var(--tier-sender)" />
+              Sender
+            </p>
           </Row>
         </Sheet>
       </Section>
@@ -531,6 +552,15 @@ export function SystemView() {
         </div>
       </Section>
 
+      <Section title="Failure" meta="under what failed, or the word for a step that failed">
+        <div className="flex flex-col gap-3">
+          <Failure>Gmail refused the change. Nothing was moved.</Failure>
+          <p>
+            Archive in Gmail <Failure inline>Failed</Failure>
+          </p>
+        </div>
+      </Section>
+
       <Section title="Copyable and disclosure">
         <div className="grid gap-6 sm:grid-cols-2">
           <Copyable value="sudo tailscale serve --bg 8787" label="command" />
@@ -569,7 +599,7 @@ export function SystemView() {
         position="1 of 3"
         onNext={() => {}}
       >
-        <p className="max-w-[68ch] text-[17px] leading-relaxed">
+        <p className="max-w-[68ch] text-reading leading-relaxed">
           The message on the left; on the right what sift said, the answer, the sender and the history.
         </p>
       </Panel>

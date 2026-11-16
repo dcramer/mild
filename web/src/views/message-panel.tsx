@@ -5,7 +5,7 @@ import { MessageBody, SignalFacts } from '@/components/message-parts.tsx';
 import { SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { type MessageDetail, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, dateTime, money, tier } from '@/lib/format.ts';
-import { Button, Code, Disclosure, Loading, Note, Panel, Section, TextLink, Timeline, TimelineEvent, useToast } from '@/system';
+import { Button, Code, Disclosure, Failure, Loading, Note, Panel, Section, Table, Td, TextLink, Timeline, TimelineEvent, Tr, useToast } from '@/system';
 
 /** Open the message panel on one item of a list, so it can step through the rest. */
 export type OpenMessages = (items: MessageRef[], index: number) => void;
@@ -64,8 +64,10 @@ function ActionEvent({ a, onUndo, busy }: { a: Action; onUndo: (id: number) => v
       title={
         <>
           <span className="font-medium">{CHANGE[a.type] ?? a.type} in Gmail</span>
-          {a.status === 'done' ? null : (
-            <span className={bad ? 'font-medium text-destructive' : 'text-muted-foreground'}>{a.status === 'undone' ? 'Undone' : a.status}</span>
+          {a.status === 'done' ? null : bad ? (
+            <Failure inline>{a.status}</Failure>
+          ) : (
+            <span className="text-muted-foreground">{a.status === 'undone' ? 'Undone' : a.status}</span>
           )}
         </>
       }
@@ -81,7 +83,7 @@ function ActionEvent({ a, onUndo, busy }: { a: Action; onUndo: (id: number) => v
     >
       {labels('Added', a.added)}
       {labels('Removed', a.removed)}
-      {a.error ? <p className="text-destructive">{a.error}</p> : null}
+      <Failure>{a.error}</Failure>
     </TimelineEvent>
   );
 }
@@ -158,20 +160,20 @@ function Body({
         <MessageBody detail={detail} />
         {others.length > 0 ? (
           <Section title="Also waiting from them" meta={count(others.length)}>
-            <ul className="-mx-2 flex max-h-56 flex-col overflow-y-auto">
-              {others.map((m) => (
-                <li key={m.messageId}>
-                  <button
-                    type="button"
-                    className="flex w-full cursor-pointer items-baseline gap-3 px-2 py-1.5 text-left text-muted-foreground hover:bg-(--fill) hover:text-foreground"
-                    onClick={() => onPick(m.messageId)}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{m.subject || '(no subject)'}</span>
-                    <span className="shrink-0 tabular-nums">{ago(m.receivedAt)}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="max-h-56 overflow-y-auto">
+              <Table>
+                <tbody>
+                  {others.map((m) => (
+                    <Tr key={m.messageId} onOpen={() => onPick(m.messageId)}>
+                      <Td className="max-w-0 truncate">{m.subject || '(no subject)'}</Td>
+                      <Td num quiet>
+                        {ago(m.receivedAt)}
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
           </Section>
         ) : null}
       </div>
@@ -217,7 +219,7 @@ function Body({
           </Disclosure>
           {history.length > 0 ? (
             <Disclosure summary={`Everything sift did with it · ${history.length}`}>
-              {undo.error ? <p className="text-destructive">{undo.error}</p> : null}
+              <Failure>{undo.error}</Failure>
               <Timeline>{history.map((entry) => entry.node)}</Timeline>
             </Disclosure>
           ) : null}

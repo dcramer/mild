@@ -16,7 +16,7 @@ export interface NavItem {
 const ICON_PRESS = 'press flex size-11 shrink-0 cursor-pointer items-center justify-center hover:bg-(--fill)';
 
 /** The sections of the app, in a line. The current one is highlighted, like the name. */
-export function Sections({ items, current }: { items: readonly NavItem[]; current: string }) {
+function Sections({ items, current }: { items: readonly NavItem[]; current: string }) {
   return (
     <nav aria-label="Sections">
       <ul className="flex flex-wrap gap-x-6 gap-y-1">
@@ -25,7 +25,7 @@ export function Sections({ items, current }: { items: readonly NavItem[]; curren
             <a
               href={`/${item.to}`}
               aria-current={item.to === current ? 'page' : undefined}
-              className="flex items-baseline gap-1.5 py-1 text-[15px] font-medium text-muted-foreground hover:text-foreground aria-[current=page]:text-foreground aria-[current=page]:shadow-[inset_0_-3px_0_var(--highlight)]"
+              className="relative flex items-baseline gap-1.5 py-1 text-sm leading-normal font-medium text-muted-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] hover:text-foreground aria-[current=page]:text-foreground aria-[current=page]:after:bg-highlight"
             >
               {item.label}
               {item.count ? <span className="text-sm tabular-nums opacity-70">{item.count}</span> : null}

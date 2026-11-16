@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, money, plural } from '@/lib/format.ts';
-import { Button, Code, ConfirmButton, Loading, Note, PageHeader, Section, Select, SettingRow, Sheet, TextArea, useToast } from '@/system';
+import { Button, Code, ConfirmButton, Failure, Loading, Note, PageHeader, Section, Select, SettingRow, Sheet, TextArea, useToast } from '@/system';
 
 const INTERVALS = [
   ['30', 'Every 30 seconds'],
@@ -101,7 +101,7 @@ function Sorting({ state, reload }: { state: ManageState; reload: () => void }) 
           ) : null}
         </SettingRow>
       </Sheet>
-      {error ? <p className="text-destructive">{error}</p> : null}
+      <Failure>{error}</Failure>
     </Section>
   );
 }
@@ -148,7 +148,7 @@ function Guidelines({ saved }: { saved: string }) {
       }
     >
       <TextArea aria-label="Guidelines" value={text} maxLength={8000} onChange={(event) => setText(event.target.value)} />
-      {error ? <p className="text-destructive">{error}</p> : null}
+      <Failure>{error}</Failure>
     </Section>
   );
 }
@@ -181,7 +181,7 @@ function OlderMail() {
           </Button>
         </SettingRow>
       </Sheet>
-      {error ? <p className="text-destructive">{error}</p> : null}
+      <Failure>{error}</Failure>
     </Section>
   );
 }
