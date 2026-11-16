@@ -15,6 +15,17 @@ export const METADATA_HEADERS = [
   'Precedence',
   'Auto-Submitted',
   'Authentication-Results',
+  'In-Reply-To',
+  'References',
+  // Which service sent it (see `bulkService` in src/triage/facts.ts).
+  'Return-Path',
+  'X-Mailer',
+  'Feedback-ID',
+  'X-MC-User',
+  'X-SG-EID',
+  'X-Mailgun-Sid',
+  'X-SES-Outgoing',
+  'X-PM-Message-Id',
 ] as const;
 
 export interface RawMessage {

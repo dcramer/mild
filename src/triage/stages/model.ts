@@ -1,10 +1,10 @@
-import type { BulkSignals } from '../features.ts';
+import type { Facts } from '../facts.ts';
 import { type DecisionUsage, type Disposition, type Label, type MessageFacts, type Stage, labelled } from '../types.ts';
 
 /** Everything the model is shown about one message. Gathered by deterministic code, never by the model. */
 export interface Evidence {
   facts: MessageFacts;
-  signals: BulkSignals;
+  known: Facts;
   /** Plain text of the message, truncated. Null if it could not be fetched. Untrusted. */
   body: string | null;
   sender: {

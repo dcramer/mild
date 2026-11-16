@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { accuracy, pendingSuggestions } from '../learn/feedback.ts';
 import { unsubscribedAt } from '../store/actions.ts';
 import { listLabels } from '../store/labels.ts';
+import { storedFacts } from '../store/messages.ts';
 import { bulkSignals, passedDmarc } from '../triage/features.ts';
 import {
   type DecisionRow,
@@ -217,7 +218,8 @@ export function messageDetail(db: DatabaseSync, accountId: string, messageId: st
         headers_json: string;
       }
     | undefined;
-  if (!m) return null;
+  const facts = storedFacts(db, accountId, messageId);
+  if (!m || !facts) return null;
 
   const decisions = db
     .prepare(
@@ -261,6 +263,7 @@ export function messageDetail(db: DatabaseSync, accountId: string, messageId: st
     syncedAt: m.synced_at,
     headers: JSON.parse(m.headers_json) as Record<string, string>,
     body: storedBody(db, accountId, messageId),
+    facts,
     unsubscribe: canUnsubscribe(db, accountId, m.from_address, JSON.parse(m.headers_json) as Record<string, string>),
     sender: senderProfile(db, accountId, m.from_address),
     decisions: decisions.map((r) => ({

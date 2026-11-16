@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { type Facts, deriveFacts } from '../triage/facts.ts';
 import type { Address, MessageFacts } from '../triage/types.ts';
 
 interface Row {
@@ -14,7 +15,24 @@ interface Row {
   headers_json: string;
   labels_json: string;
   observe_only: number;
+  facts_json: string | null;
 }
+
+const COLUMNS =
+  'id, thread_id, from_address, from_domain, from_name, received_at, subject, to_json, cc_json, headers_json, labels_json, observe_only, facts_json';
+
+const toMessage = (accountId: string, r: Row): MessageFacts => ({
+  accountId,
+  messageId: r.id,
+  threadId: r.thread_id,
+  from: { address: r.from_address, domain: r.from_domain, ...(r.from_name ? { name: r.from_name } : {}) },
+  to: JSON.parse(r.to_json) as Address[],
+  cc: JSON.parse(r.cc_json) as Address[],
+  subject: r.subject,
+  labelIds: JSON.parse(r.labels_json) as string[],
+  headers: JSON.parse(r.headers_json) as Record<string, string>,
+  receivedAt: r.received_at,
+});
 
 export interface QueuedMessage {
   facts: MessageFacts;
@@ -26,25 +44,18 @@ export interface QueuedMessage {
 export function listUndecided(db: DatabaseSync, accountId: string, limit: number): QueuedMessage[] {
   const rows = db
     .prepare(
-      `SELECT id, thread_id, from_address, from_domain, from_name, received_at, subject, to_json, cc_json, headers_json, labels_json, observe_only
+      `SELECT ${COLUMNS}
        FROM messages m
        WHERE account_id = ? AND NOT EXISTS (SELECT 1 FROM decisions d WHERE d.account_id = m.account_id AND d.message_id = m.id)
        ORDER BY received_at, id LIMIT ?`,
     )
     .all(accountId, limit) as unknown as Row[];
-  return rows.map((r) => ({
-    observeOnly: r.observe_only === 1,
-    facts: {
-      accountId,
-      messageId: r.id,
-      threadId: r.thread_id,
-      from: { address: r.from_address, domain: r.from_domain, ...(r.from_name ? { name: r.from_name } : {}) },
-      to: JSON.parse(r.to_json) as Address[],
-      cc: JSON.parse(r.cc_json) as Address[],
-      subject: r.subject,
-      labelIds: JSON.parse(r.labels_json) as string[],
-      headers: JSON.parse(r.headers_json) as Record<string, string>,
-      receivedAt: r.received_at,
-    },
-  }));
+  return rows.map((r) => ({ observeOnly: r.observe_only === 1, facts: toMessage(accountId, r) }));
+}
+
+/** The facts recorded for a message, or null if sift has not seen it. Rows synced before facts were recorded get them from their stored headers. */
+export function storedFacts(db: DatabaseSync, accountId: string, messageId: string): Facts | null {
+  const row = db.prepare(`SELECT ${COLUMNS} FROM messages WHERE account_id = ? AND id = ?`).get(accountId, messageId) as unknown as Row | undefined;
+  if (!row) return null;
+  return row.facts_json ? (JSON.parse(row.facts_json) as Facts) : deriveFacts(toMessage(accountId, row));
 }

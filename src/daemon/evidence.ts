@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { cachedCorrespondent, rememberCorrespondent, senderHistory } from '../store/senders.ts';
-import { bulkSignals } from '../triage/features.ts';
+import { deriveFacts } from '../triage/facts.ts';
 import type { Evidence } from '../triage/stages/model.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
@@ -40,5 +40,5 @@ export async function gatherEvidence(sources: EvidenceSources, facts: MessageFac
     }
   }
 
-  return { facts, signals: bulkSignals(facts.headers), body, sender: { ...senderHistory(db, facts.accountId, facts.from.address), userHasWritten } };
+  return { facts, known: deriveFacts(facts), body, sender: { ...senderHistory(db, facts.accountId, facts.from.address), userHasWritten } };
 }

@@ -34,6 +34,14 @@ Rules that matter across tiers:
 - Spam has a higher confidence bar than archive.
 - Errors abstain. Nothing fails toward a mutation.
 
+## Message facts
+
+Every tier, the prompt and the dashboard read one named set of facts about a message (`Facts`, `src/triage/facts.ts`) instead of each re-reading headers.
+
+- **From headers and labels, at sync:** unsubscribe header and whether it is one-click, mailing list id, marked bulk, marked auto-generated, the DMARC, SPF and DKIM results, the bulk mail service it went through (from who signed it, its envelope sender and the services' own headers), whether replies go elsewhere, whether the owner is in To, in Cc or in neither, whether it is a reply, and Gmail's category tab.
+- **Recorded** as JSON in `messages.facts_json` and returned with a message's detail.
+- **Only what can be checked.** Whether mail reads as AI-generated, and its language, are judgements for a model, not facts.
+
 ## Learning loop
 
 Decisions flow back down so the same mail is cheaper next time.
@@ -113,7 +121,7 @@ Preferences live in two places, by kind.
 
 When no rule or sender record decides a message, one model call does. It is deliberately not an agent.
 
-- **The model has no tools and takes no action.** Deterministic code gathers the evidence first: the stored headers, the body (fetched on demand, truncated, never stored), how much mail this sender has sent, what was done with it, and whether the user has ever written to them.
+- **The model has no tools and takes no action.** Deterministic code gathers the evidence first: the message's facts, the body (fetched on demand, truncated, never stored), how much mail this sender has sent, what was done with it, and whether the user has ever written to them.
 - **Its only output is a label** from the user's list, or `unsure`, with a one-line reason. The reply is validated; anything else abstains.
 - **The label's action decides the outcome**, so the user's choice, not the model, determines what happens to the message.
 - **Two protections apply whatever the model says:** mail from someone the user has written to is never archived or marked spam on the model's word (and "could not check" counts as yes), and `unsure` or an unknown category leaves the message for review.
@@ -154,7 +162,7 @@ Code: `src/learn/feedback.ts` (suggestions, answers, accuracy), `src/daemon/exam
 
 One SQLite database, `sift.db` in the home directory (schema in `src/store/migrations/`). It is the complete record of what sift saw and did, and everything else (the dashboard, undo, future analytics) reads from it.
 
-- **messages:** one row per message sift has seen: sender, recipients, subject, the triage headers and the labels at sync time. No body. This is enough to triage a message again without refetching it.
+- **messages:** one row per message sift has seen: sender, recipients, subject, the triage headers, the labels at sync time and the facts derived from them. No body. This is enough to triage a message again without refetching it.
 - **feedback, examples:** the user's answers to suggestions, and the full content of each message they answered for, kept as evaluation and training data.
 - **suggestion_bodies:** the readable text of mail still waiting on the user, so a suggestion can be judged by reading it. Held only for mail sift would move or could not place, and deleted when the message is answered or stops being a suggestion, and after 30 days regardless (`src/daemon/bodies.ts`). These two tables are the only places message content is stored.
 - **decisions:** an append-only log, each with its mode (observe or act) and outcome. Every triage outcome is recorded, including "keep" and "could not decide", with the tier that made it, the reason, the confidence, and what it cost (model, tokens, dollars, duration). A message can have several decisions; the latest is current.

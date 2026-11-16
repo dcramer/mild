@@ -12,7 +12,7 @@ import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts'
 import { openDb } from '../src/store/db.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { LEARN_AFTER, addRule, learnSender, listRules } from '../src/store/rules.ts';
-import { bulkSignals } from '../src/triage/features.ts';
+import { deriveFacts } from '../src/triage/facts.ts';
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../src/triage/prompt.ts';
 import { type Evidence, type Verdict, modelStage } from '../src/triage/stages/model.ts';
 import { facts } from './helpers.ts';
@@ -22,7 +22,7 @@ const b64 = (text: string) => Buffer.from(text).toString('base64url');
 
 function evidence(overrides: Partial<Evidence['sender']> = {}, body: string | null = 'Our autumn sale starts today.'): Evidence {
   const f = facts({ accountId: ACCOUNT, headers: { 'list-unsubscribe': '<https://example.com/u>' } });
-  return { facts: f, signals: bulkSignals(f.headers), body, sender: { messagesSeen: 1, userHasWritten: false, pastDispositions: {}, ...overrides } };
+  return { facts: f, known: deriveFacts(f), body, sender: { messagesSeen: 1, userHasWritten: false, pastDispositions: {}, ...overrides } };
 }
 
 const stage = (verdict: Verdict | null, ev: Evidence = evidence()) =>
