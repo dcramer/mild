@@ -345,6 +345,8 @@ export interface FeedbackRequest {
 
 /** GET /api/manage: everything the Settings view shows. */
 export interface ManageState {
+  /** Whether the viewer owns the install, and so may change the settings and guidelines that apply to all of it. */
+  owner: boolean;
   settings: { act: boolean; interval: number; model: string | null; fewShot: boolean; examplesKeepDays: number | null };
   guidelines: string;
   activity: { sorting: boolean; lastPassAt: number | null; problems: string[]; expired: string[] };

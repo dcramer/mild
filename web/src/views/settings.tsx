@@ -203,7 +203,6 @@ function OlderMail() {
   );
 }
 
-/** How sift runs, most used first. What it does with mail is under Labels and Rules. */
 /** Kept in this browser, not in sift: it is about how this reader works, not how mail is sorted. */
 function Keys() {
   const on = useShortcutsOn();
@@ -226,6 +225,7 @@ function Keys() {
   );
 }
 
+/** How sift runs, most used first. What it does with mail is under Labels and Rules. */
 export function SettingsView() {
   const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
   return (
@@ -236,10 +236,11 @@ export function SettingsView() {
         <Loading rows={6} />
       ) : data ? (
         <>
-          <Sorting state={data} reload={reload} />
+          {/* How sift runs applies to everyone it sorts for, so it is the owner's to change. The server refuses anyone else. */}
+          {data.owner ? <Sorting state={data} reload={reload} /> : null}
           <Accounts state={data} />
-          <Guidelines saved={data.guidelines} />
-          <OlderMail />
+          {data.owner ? <Guidelines saved={data.guidelines} /> : null}
+          {data.owner ? <OlderMail /> : null}
           <Keys />
         </>
       ) : null}

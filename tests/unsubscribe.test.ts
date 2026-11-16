@@ -6,7 +6,7 @@ import { messageDetail } from '../src/dashboard/queries.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { getAction } from '../src/store/actions.ts';
 import { openDb } from '../src/store/db.ts';
-import { FakeMailbox, facts } from './helpers.ts';
+import { everything, facts, FakeMailbox } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
 const ONE_CLICK = {
@@ -52,12 +52,12 @@ beforeEach(() => {
 describe('unsubscribe', () => {
   it('makes one request to the address that was checked, records it, and says so afterwards', async () => {
     message('m', { ...ONE_CLICK, ...PROVEN });
-    expect(messageDetail(db, ACCOUNT, 'm')?.unsubscribe).toBe('available');
+    expect(messageDetail(db, everything(db), ACCOUNT, 'm')?.unsubscribe).toBe('available');
     expect(await unsubscribe(deps(), ACCOUNT, 'm')).toEqual({ status: 'done', actionId: 1 });
     expect(posts).toEqual([{ url: 'https://lists.example.com/u/token123', address: '203.0.113.7' }]);
     // The host is recorded, not the token that identifies the subscriber.
     expect(getAction(db, 1)).toMatchObject({ type: 'unsubscribe', status: 'done', payload: { unsubscribe: 'lists.example.com' } });
-    expect(messageDetail(db, ACCOUNT, 'm')?.unsubscribe).toBe('done');
+    expect(messageDetail(db, everything(db), ACCOUNT, 'm')?.unsubscribe).toBe('done');
   });
 
   it('is never repeated for a sender, and cannot be undone', async () => {
@@ -77,15 +77,15 @@ describe('unsubscribe', () => {
     expect(await unsubscribe(deps(), ACCOUNT, 'link')).toMatchObject({ status: 'refused' });
     expect(await unsubscribe(deps(), ACCOUNT, 'none')).toEqual({ status: 'refused', reason: 'This message offers no way to unsubscribe.' });
     expect(await unsubscribe(deps(), ACCOUNT, 'missing')).toMatchObject({ status: 'refused' });
-    expect(messageDetail(db, ACCOUNT, 'mailto')?.unsubscribe).toBe('manual');
-    expect(messageDetail(db, ACCOUNT, 'none')?.unsubscribe).toBe('none');
+    expect(messageDetail(db, everything(db), ACCOUNT, 'mailto')?.unsubscribe).toBe('manual');
+    expect(messageDetail(db, everything(db), ACCOUNT, 'none')?.unsubscribe).toBe('none');
     expect(posts).toEqual([]);
   });
 
   it('does not trust the address in a message that did not prove who sent it', async () => {
     message('m', { ...ONE_CLICK, 'authentication-results': 'mx.example.org; dkim=pass; dmarc=fail' });
     expect(await unsubscribe(deps(), ACCOUNT, 'm')).toMatchObject({ status: 'refused', reason: expect.stringContaining('did not prove who sent it') });
-    expect(messageDetail(db, ACCOUNT, 'm')?.unsubscribe).toBe('manual');
+    expect(messageDetail(db, everything(db), ACCOUNT, 'm')?.unsubscribe).toBe('manual');
     expect(posts).toEqual([]);
   });
 

@@ -21,6 +21,7 @@ import {
   type Suggestions,
   type Summary,
 } from './types.ts';
+import { type Scope, narrow, sees, within } from './scope.ts';
 import type { ChangeRow } from './types.ts';
 
 export type { DecisionRow, MessageDetail, RuleSummary, StageKey, Summary } from './types.ts';
@@ -33,20 +34,21 @@ const localDay = (ms: number) => {
 };
 
 /** Everything the dashboard shows, for the last `days` days. Read-only. */
-export function summarize(db: DatabaseSync, days: number, now: number = Date.now()): Summary {
+export function summarize(db: DatabaseSync, scope: Scope, days: number, now: number = Date.now()): Summary {
   const since = now - days * DAY_MS;
+  const mine = (column: string) => within(scope, column);
   const one = <T>(sql: string, ...params: (string | number)[]) => db.prepare(sql).get(...params) as T;
   const all = <T>(sql: string, ...params: (string | number)[]) => db.prepare(sql).all(...params) as T[];
 
-  const accounts = all<{ email: string; last_synced_at: number | null }>('SELECT email, last_synced_at FROM accounts ORDER BY email');
+  const accounts = all<{ email: string; last_synced_at: number | null }>(`SELECT email, last_synced_at FROM accounts WHERE ${mine('id')} ORDER BY email`);
   const decisionTotals = one<{ n: number; free: number | null; cost: number | null }>(
-    'SELECT count(*) AS n, sum(model IS NULL) AS free, sum(cost_usd) AS cost FROM decisions WHERE decided_at >= ?',
+    `SELECT count(*) AS n, sum(model IS NULL) AS free, sum(cost_usd) AS cost FROM decisions WHERE decided_at >= ? AND ${mine('account_id')}`,
     since,
   );
 
   const stageRows = all<{ stage: StageKey; n: number; cost: number; tokens: number }>(
     `SELECT stage, count(*) AS n, sum(cost_usd) AS cost, sum(input_tokens + output_tokens) AS tokens
-     FROM decisions WHERE decided_at >= ? GROUP BY stage`,
+     FROM decisions WHERE decided_at >= ? AND ${mine('account_id')} GROUP BY stage`,
     since,
   );
   const byStage = STAGES.map((stage) => {
@@ -56,42 +58,48 @@ export function summarize(db: DatabaseSync, days: number, now: number = Date.now
 
   const dailyByDay = new Map<string, Record<StageKey, number>>();
   for (let i = days - 1; i >= 0; i--) dailyByDay.set(localDay(now - i * DAY_MS), emptyCounts());
-  for (const row of all<{ decided_at: number; stage: StageKey }>('SELECT decided_at, stage FROM decisions WHERE decided_at >= ?', since)) {
+  for (const row of all<{ decided_at: number; stage: StageKey }>(
+    `SELECT decided_at, stage FROM decisions WHERE decided_at >= ? AND ${mine('account_id')}`,
+    since,
+  )) {
     const counts = dailyByDay.get(localDay(row.decided_at));
     if (counts && row.stage in counts) counts[row.stage]++;
   }
 
-  const answered = accuracy(db, since);
+  const answered = accuracy(db, since, scope.accounts);
 
   return {
     days,
     generatedAt: now,
     accounts: accounts.map((a) => ({ email: a.email, lastSyncedAt: a.last_synced_at })),
     totals: {
-      messages: one<{ n: number }>('SELECT count(*) AS n FROM messages WHERE received_at >= ?', since).n,
+      messages: one<{ n: number }>(`SELECT count(*) AS n FROM messages WHERE received_at >= ? AND ${mine('account_id')}`, since).n,
       decisions: decisionTotals.n,
       withoutInference: decisionTotals.free ?? 0,
       costUsd: decisionTotals.cost ?? 0,
       awaitingTriage: one<{ n: number }>(
         `SELECT count(*) AS n FROM messages m
-         WHERE NOT EXISTS (SELECT 1 FROM decisions d WHERE d.account_id = m.account_id AND d.message_id = m.id)`,
+         WHERE ${mine('m.account_id')} AND NOT EXISTS (SELECT 1 FROM decisions d WHERE d.account_id = m.account_id AND d.message_id = m.id)`,
       ).n,
-      troubledActions: one<{ n: number }>(`SELECT count(*) AS n FROM actions WHERE created_at >= ? AND status IN ('failed', 'unknown', 'pending')`, since).n,
+      troubledActions: one<{ n: number }>(
+        `SELECT count(*) AS n FROM actions WHERE created_at >= ? AND status IN ('failed', 'unknown', 'pending') AND ${mine('account_id')}`,
+        since,
+      ).n,
     },
     byStage,
     byDisposition: all<{ disposition: string; n: number }>(
-      'SELECT disposition, count(*) AS n FROM decisions WHERE decided_at >= ? GROUP BY disposition ORDER BY n DESC',
+      `SELECT disposition, count(*) AS n FROM decisions WHERE decided_at >= ? AND ${mine('account_id')} GROUP BY disposition ORDER BY n DESC`,
       since,
     ).map((r) => ({ disposition: r.disposition, decisions: r.n })),
     daily: [...dailyByDay].map(([day, counts]) => ({ day, counts })),
     topSenders: all<{ address: string; n: number; last: string | null }>(
       `SELECT m.from_address AS address, count(*) AS n,
               (SELECT d.disposition FROM decisions d JOIN messages m2 ON m2.account_id = d.account_id AND m2.id = d.message_id
-               WHERE m2.from_address = m.from_address ORDER BY d.id DESC LIMIT 1) AS last
-       FROM messages m WHERE m.received_at >= ? GROUP BY m.from_address ORDER BY n DESC, address LIMIT 10`,
+               WHERE m2.from_address = m.from_address AND ${mine('d.account_id')} ORDER BY d.id DESC LIMIT 1) AS last
+       FROM messages m WHERE m.received_at >= ? AND ${mine('m.account_id')} GROUP BY m.from_address ORDER BY n DESC, address LIMIT 10`,
       since,
     ).map((r) => ({ address: r.address, messages: r.n, lastDisposition: r.last })),
-    recent: listDecisions(db, { days, limit: 10 }, now).rows,
+    recent: listDecisions(db, scope, { days, limit: 10 }, now).rows,
     accuracy: { ...answered, byStage: STAGES.map((stage) => answered.byStage.find((r) => r.stage === stage) ?? { stage, reviewed: 0, right: 0 }) },
   };
 }
@@ -186,8 +194,8 @@ export interface DecisionFilter {
 }
 
 /** Decisions in the window, newest first, with the total number that match the filter. Unknown filter values match nothing. */
-export function listDecisions(db: DatabaseSync, filter: DecisionFilter, now: number = Date.now()): { total: number; rows: DecisionRow[] } {
-  const where = ['d.decided_at >= ?'];
+export function listDecisions(db: DatabaseSync, scope: Scope, filter: DecisionFilter, now: number = Date.now()): { total: number; rows: DecisionRow[] } {
+  const where = [within(scope, 'd.account_id'), 'd.decided_at >= ?'];
   const params: (string | number)[] = [now - filter.days * DAY_MS];
   if (filter.stage !== undefined) {
     if (!(STAGES as readonly string[]).includes(filter.stage)) return { total: 0, rows: [] };
@@ -231,7 +239,8 @@ export function listDecisions(db: DatabaseSync, filter: DecisionFilter, now: num
 }
 
 /** One message with its full history, or null if sift has not seen it. */
-export function messageDetail(db: DatabaseSync, accountId: string, messageId: string): MessageDetail | null {
+export function messageDetail(db: DatabaseSync, scope: Scope, accountId: string, messageId: string): MessageDetail | null {
+  if (!sees(scope, accountId)) return null;
   const m = db
     .prepare(
       `SELECT thread_id, from_address, from_name, to_json, cc_json, subject, list_id, received_at, synced_at, headers_json
@@ -298,7 +307,7 @@ export function messageDetail(db: DatabaseSync, accountId: string, messageId: st
     body: storedBody(db, accountId, messageId),
     facts,
     unsubscribe: canUnsubscribe(db, accountId, m.from_address, JSON.parse(m.headers_json) as Record<string, string>),
-    sender: senderProfile(db, accountId, m.from_address),
+    sender: senderProfile(db, scope, accountId, m.from_address)!,
     decisions: decisions.map((r) => ({
       ...toDecisionRow(r),
       ruleId: r.rule_id,
@@ -345,13 +354,15 @@ function canUnsubscribe(db: DatabaseSync, accountId: string, sender: string, hea
 }
 
 /** What sift knows about one sender. */
-function profileOf(db: DatabaseSync, accountId: string, who: { address: string } | { domain: string }, now: number): SenderProfile | null {
+function profileOf(db: DatabaseSync, scope: Scope, accountId: string, who: { address: string } | { domain: string }, now: number): SenderProfile | null {
+  const here = narrow(scope, accountId);
+  if (!here) return null;
   const known = 'address' in who ? senderFacts(db, accountId, who.address, now) : domainFacts(db, accountId, who.domain, now);
   if (!known) return null;
   const names = new Map(listLabels(db, accountId, now).map((l) => [l.id, l.name]));
   const domainName = 'address' in who ? (who.address.split('@')[1] ?? '') : who.domain;
   const ofDomain = 'address' in who ? domainFacts(db, accountId, domainName, now) : null;
-  const rules = listRuleSummaries(db)
+  const rules = listRuleSummaries(db, here)
     .filter(
       (r) =>
         r.accountId === accountId &&
@@ -379,13 +390,19 @@ function profileOf(db: DatabaseSync, accountId: string, who: { address: string }
 }
 
 /** What sift knows about a sender, the rules that apply to them and where they stand. */
-export function senderProfile(db: DatabaseSync, accountId: string, address: string, now: number = Date.now()): SenderProfile {
-  return profileOf(db, accountId, { address }, now)!;
+export function senderProfile(db: DatabaseSync, scope: Scope, accountId: string, address: string, now: number = Date.now()): SenderProfile | null {
+  return profileOf(db, scope, accountId, { address }, now);
 }
 
 /** A sender's page, or a domain's. Null for a domain anyone can get an address at. */
-export function senderPage(db: DatabaseSync, accountId: string, who: { address: string } | { domain: string }, now: number = Date.now()): SenderPage | null {
-  const profile = profileOf(db, accountId, who, now);
+export function senderPage(
+  db: DatabaseSync,
+  scope: Scope,
+  accountId: string,
+  who: { address: string } | { domain: string },
+  now: number = Date.now(),
+): SenderPage | null {
+  const profile = profileOf(db, scope, accountId, who, now);
   if (!profile) return null;
   const filter = 'address' in who ? { sender: who.address } : { domain: who.domain };
   const name =
@@ -413,17 +430,18 @@ export function senderPage(db: DatabaseSync, accountId: string, who: { address: 
     name,
     profile,
     senders,
-    decisions: listDecisions(db, { days: 36_500, limit: 50, accountId, ...filter }, now).rows,
+    decisions: listDecisions(db, scope, { days: 36_500, limit: 50, accountId, ...filter }, now).rows,
     waiting: pendingSuggestions(db, { accountId, ...filter }).length,
   };
 }
 
 /** One sender's waiting mail, newest first, with what sift knows about them. */
-export function suggestionDetail(db: DatabaseSync, accountId: string, sender: string): SuggestionDetail {
+export function suggestionDetail(db: DatabaseSync, scope: Scope, accountId: string, sender: string): SuggestionDetail | null {
+  if (!sees(scope, accountId)) return null;
   const names = new Map(listLabels(db, accountId).map((l) => [l.id, l.name]));
   const received = db.prepare('SELECT received_at FROM messages WHERE account_id = ? AND id = ?');
   return {
-    sender: senderProfile(db, accountId, sender),
+    sender: senderProfile(db, scope, accountId, sender)!,
     messages: pendingSuggestions(db, { accountId, sender, limit: 200 }).map((s) => ({
       decisionId: s.decisionId,
       messageId: s.messageId,
@@ -439,7 +457,7 @@ export function suggestionDetail(db: DatabaseSync, accountId: string, sender: st
 }
 
 /** Every rule in evaluation order, with its label, what it does, and how often and how recently it decided a message. */
-export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
+export function listRuleSummaries(db: DatabaseSync, scope: Scope): RuleSummary[] {
   const filters = ruleFilterStatus(db);
   const rows = db
     .prepare(
@@ -448,6 +466,7 @@ export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
               r.condition, r.source, r.hits, r.filter_id, r.created_at,
               (SELECT max(decided_at) FROM decisions d WHERE d.rule_id = r.id) AS last_hit_at
        FROM rules r LEFT JOIN labels l ON l.account_id = r.account_id AND l.id = coalesce(r.label_id, r.when_label)
+       WHERE ${within(scope, 'r.account_id')}
        ORDER BY r.account_id, r.position, r.id`,
     )
     .all() as unknown as {
@@ -497,7 +516,8 @@ export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
 const outcomeOf = (label: { disposition: string; block?: boolean }) => (label.block ? 'block' : label.disposition);
 
 /** An account's labels, each with how much depends on it and how often sift has had it right. */
-export function listLabelSummaries(db: DatabaseSync, accountId: string): LabelSummary[] {
+export function listLabelSummaries(db: DatabaseSync, scope: Scope, accountId: string): LabelSummary[] {
+  if (!sees(scope, accountId)) return [];
   const counts = (sql: string) =>
     new Map((db.prepare(sql).all(accountId) as unknown as { id: string; n: number; right?: number }[]).map((r) => [r.id, r] as const));
   const rules = counts(
@@ -533,11 +553,11 @@ const MAX_ITEMS = 500;
  * What is waiting on the user, one group per sender, since an answer is about a sender. A group shows
  * the guess sift made for most of that sender's waiting mail. Biggest groups first: they teach the most.
  */
-export function listSuggestions(db: DatabaseSync, options: { includeKept?: boolean } = {}): Suggestions {
-  const accounts = db.prepare('SELECT id FROM accounts').all() as { id: string }[];
+export function listSuggestions(db: DatabaseSync, scope: Scope, options: { includeKept?: boolean } = {}): Suggestions {
+  const accounts = scope.accounts.map((id) => ({ id }));
   const labels = new Map(accounts.map(({ id }) => [id, listLabels(db, id)] as const));
   const names = new Map([...labels].flatMap(([account, list]) => list.map((l) => [`${account}\n${l.id}`, l.name] as const)));
-  const waitingNow = pendingSuggestions(db).filter((s) => options.includeKept || s.disposition !== 'keep');
+  const waitingNow = pendingSuggestions(db, { accounts: scope.accounts }).filter((s) => options.includeKept || s.disposition !== 'keep');
   const items = waitingNow.slice(0, MAX_ITEMS).map((s): SuggestionItem => ({
     accountId: s.accountId,
     messageId: s.messageId,
@@ -553,31 +573,35 @@ export function listSuggestions(db: DatabaseSync, options: { includeKept?: boole
     stage: s.stage,
     confidence: s.confidence,
   }));
-  const { reviewed, right } = accuracy(db);
-  const examples = db.prepare(`SELECT sum(status = 'captured') AS captured, sum(status = 'pending') AS pending FROM examples`).get() as {
+  const { reviewed, right } = accuracy(db, 0, scope.accounts);
+  const examples = db
+    .prepare(`SELECT sum(status = 'captured') AS captured, sum(status = 'pending') AS pending FROM examples WHERE ${within(scope, 'account_id')}`)
+    .get() as {
     captured: number | null;
     pending: number | null;
   };
   return {
     labels: Object.fromEntries([...labels].map(([id, list]) => [id, list.map((l) => ({ id: l.id, name: l.name, disposition: outcomeOf(l) }))])),
     examples: { captured: examples.captured ?? 0, pending: examples.pending ?? 0 },
-    proposals: listProposals(db).flatMap((p) => {
-      const label = labels.get(p.accountId)?.find((l) => l.id === p.labelId);
-      // A proposal whose label has been removed has nothing to offer.
-      if (!label) return [];
-      return [
-        {
-          id: p.id,
-          accountId: p.accountId,
-          kind: p.kind,
-          match: p.match as Record<string, string>,
-          labelId: p.labelId,
-          labelName: label.name,
-          disposition: outcomeOf(label),
-          agreed: p.agreed,
-        },
-      ];
-    }),
+    proposals: listProposals(db)
+      .filter((p) => sees(scope, p.accountId))
+      .flatMap((p) => {
+        const label = labels.get(p.accountId)?.find((l) => l.id === p.labelId);
+        // A proposal whose label has been removed has nothing to offer.
+        if (!label) return [];
+        return [
+          {
+            id: p.id,
+            accountId: p.accountId,
+            kind: p.kind,
+            match: p.match as Record<string, string>,
+            labelId: p.labelId,
+            labelName: label.name,
+            disposition: outcomeOf(label),
+            agreed: p.agreed,
+          },
+        ];
+      }),
     items,
     waiting: waitingNow.length,
     accuracy: { reviewed, right },
@@ -585,12 +609,12 @@ export function listSuggestions(db: DatabaseSync, options: { includeKept?: boole
 }
 
 /** Changes sift made to the mailbox, newest first, with the message each was about. */
-export function listChanges(db: DatabaseSync, limit: number): ChangeRow[] {
+export function listChanges(db: DatabaseSync, scope: Scope, limit: number): ChangeRow[] {
   const rows = db
     .prepare(
       `SELECT a.id, a.account_id, a.message_id, a.type, a.status, a.error, a.created_at, a.payload_json, m.subject, m.from_address
        FROM actions a LEFT JOIN messages m ON m.account_id = a.account_id AND m.id = a.message_id
-       WHERE a.message_id IS NOT NULL ORDER BY a.id DESC LIMIT ?`,
+       WHERE a.message_id IS NOT NULL AND ${within(scope, 'a.account_id')} ORDER BY a.id DESC LIMIT ?`,
     )
     .all(limit) as unknown as {
     id: number;

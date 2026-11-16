@@ -7,13 +7,14 @@ import { fileURLToPath } from 'node:url';
 import { DEFAULT_EVAL_EXAMPLES, MAX_EVAL_EXAMPLES, getEvalRun, listEvalRuns } from '../learn/evals.ts';
 import { type FeedbackInput, applyFeedback } from '../learn/feedback.ts';
 import { predatingGuidelines, redecideWaiting } from '../learn/redecide.ts';
-import { listAccounts } from '../store/accounts.ts';
+import { accountsOf, listAccounts, userOf } from '../store/accounts.ts';
 import { deleteExamples, listExamples } from '../store/examples.ts';
 import { addLabel, updateLabel } from '../store/labels.ts';
 import { resolveProposal } from '../store/proposals.ts';
 import { addRule, removeRule, setStanding } from '../store/rules.ts';
 import { getRuleFilter, ruleFilterStatus } from '../store/filters.ts';
 import type { Controls, SignIn } from './controls.ts';
+import { type Scope, narrow, scopeFor, sees } from './scope.ts';
 import {
   listChanges,
   listDecisions,
@@ -224,7 +225,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
   const secret = options.sessionSecret ?? '';
   if (signIn && secret === '') throw new Error('signIn needs a sessionSecret');
   // Sign-ins in flight: the state Google echoes back, with the PKCE verifier and where to return to.
-  const pending = new Map<string, { verifier: string; redirectUri: string; allowNew: boolean; expires: number }>();
+  const pending = new Map<string, { verifier: string; redirectUri: string; addTo: string | null; expires: number }>();
 
   /** After a rule or label changed: waiting suggestions they now decide differently get a new decision. No model is called. */
   const redecide = async (accountId?: string) => {
@@ -234,7 +235,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
   };
 
   /** POST handlers. Each validates its own body and returns the response, or null for a malformed body. */
-  const writes: Record<string, (body: Record<string, unknown>) => unknown> = {
+  const writes: Record<string, (body: Record<string, unknown>, scope: Scope) => unknown> = {
     '/api/feedback': async (body) => {
       const input = parseFeedback(body);
       if (!input) return null;
@@ -341,13 +342,14 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
     },
     '/api/rules/remove': async (body) => {
       if (!str(body['id'], 40)) return null;
+      const owner = getRuleFilter(db, body['id'])?.accountId ?? null;
       // A filter left behind would keep acting on mail with no rule to explain or remove it.
       if (getRuleFilter(db, body['id'])?.filterId) {
         if (!controls) throw new Error('This rule is also a Gmail filter, which this dashboard cannot remove.');
         await controls.ruleFilter(body['id'], false);
       }
       if (!removeRule(db, body['id'])) throw new Error('That rule no longer exists.');
-      return { ok: true, redecided: await redecide() };
+      return { ok: true, redecided: await redecide(owner ?? undefined) };
     },
     '/api/settings': (body) => {
       const { act, interval, model, fewShot, examplesKeepDays: keep } = body;
@@ -416,16 +418,65 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
     },
   };
 
-  const manageState = (): ManageState => {
-    const accounts = listAccounts(db);
+  type Touches = { account: string } | 'install' | 'anyone' | null;
+  const accountOf = (table: 'rules' | 'proposals' | 'actions', id: unknown): Touches => {
+    if (typeof id !== 'string' && typeof id !== 'number') return null;
+    const row = db.prepare(`SELECT account_id FROM ${table} WHERE id = ?`).get(id) as { account_id: string } | undefined;
+    return row ? { account: row.account_id } : null;
+  };
+  const named = (body: Record<string, unknown>): Touches => (typeof body['accountId'] === 'string' ? { account: body['accountId'] } : null);
+  /**
+   * Whose data each write touches, so that it can be refused before its handler runs. An account: only
+   * someone who has that mailbox. `install`: what applies to everyone, so only the install's owner.
+   * `anyone`: nothing of anybody's. Null: the body names nothing that exists, which the handler reports.
+   * Every write must be listed: the server refuses to start with one that is not.
+   */
+  const touches: Record<string, (body: Record<string, unknown>) => Touches> = {
+    '/api/feedback': named,
+    '/api/labels': named,
+    '/api/labels/add': named,
+    '/api/rules': named,
+    '/api/standing': named,
+    '/api/suggestions/rejudge': named,
+    '/api/examples/delete': named,
+    '/api/examples/delete-all': named,
+    '/api/evals/run': named,
+    '/api/rules/filter': (body) => accountOf('rules', body['id']),
+    '/api/rules/remove': (body) => accountOf('rules', body['id']),
+    '/api/proposals': (body) => accountOf('proposals', body['id']),
+    '/api/undo': (body) => accountOf('actions', body['id']),
+    '/api/settings': () => 'install',
+    '/api/guidelines': () => 'install',
+    '/api/backfill': () => 'install',
+    '/api/check': () => 'anyone',
+  };
+  for (const path of Object.keys(writes)) if (!touches[path]) throw new Error(`${path} does not say whose data it touches.`);
+  /** Why this person may not make this write, or null if they may. Someone else's data is reported as not there. */
+  const refusal = (path: string, body: Record<string, unknown>, scope: Scope): { status: number; error: string } | null => {
+    const whose = touches[path]?.(body) ?? null;
+    if (whose === 'install') return scope.owner ? null : { status: 403, error: 'Only the person who set sift up can change this.' };
+    if (whose === null || whose === 'anyone' || sees(scope, whose.account)) return null;
+    return { status: 404, error: 'There is no such thing here.' };
+  };
+
+  const manageState = (scope: Scope): ManageState => {
+    const accounts = listAccounts(db).filter((a) => sees(scope, a.id));
     const synced = db.prepare('SELECT last_synced_at AS at FROM accounts WHERE id = ?');
     const changedAt = controls?.guidelinesChangedAt() ?? null;
+    const activity = controls?.activity() ?? { sorting: false, lastPassAt: null, problems: [], expired: [] };
     return {
+      owner: scope.owner,
       settings: controls?.settings() ?? { act: false, interval: 60, model: null, fewShot: true, examplesKeepDays: null },
-      guidelines: controls?.guidelines() ?? '',
-      activity: controls?.activity() ?? { sorting: false, lastPassAt: null, problems: [], expired: [] },
+      // The guidelines are the owner's own words about their mail.
+      guidelines: scope.owner ? (controls?.guidelines() ?? '') : '',
+      activity: {
+        ...activity,
+        // Each problem starts with the address it is about.
+        problems: activity.problems.filter((line) => accounts.some((a) => line.startsWith(`${a.email}: `))),
+        expired: activity.expired.filter((email) => accounts.some((a) => a.email === email)),
+      },
       accounts: accounts.map((a) => ({ id: a.id, email: a.email, lastSyncedAt: (synced.get(a.id) as { at: number | null } | undefined)?.at ?? null })),
-      labels: Object.fromEntries(accounts.map((a) => [a.id, listLabelSummaries(db, a.id)])),
+      labels: Object.fromEntries(accounts.map((a) => [a.id, listLabelSummaries(db, scope, a.id)])),
       predateGuidelines: Object.fromEntries(accounts.map((a) => [a.id, changedAt === null ? 0 : predatingGuidelines(db, changedAt, a.id).length])),
     };
   };
@@ -449,6 +500,19 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
     const googleCanReturnHere = https || LOCAL_HOSTS.has(host);
     const signedInAs = signIn ? readSession(cookie(req, 'sift_session'), secret, now()) : null;
     const session = signedInAs !== null && signIn?.allowed(signedInAs) && listAccounts(db).some((a) => a.email === signedInAs) ? signedInAs : null;
+    // What this request may see: the mailboxes of whoever is signed in. With no sign-in set up there is one person, who has them all.
+    const person = session === null ? null : userOf(db, session);
+    const whole: Scope = !signIn
+      ? scopeFor(
+          listAccounts(db).map((a) => a.id),
+          true,
+        )
+      : person
+        ? scopeFor(
+            accountsOf(db, person.id).map((a) => a.id),
+            person.owner,
+          )
+        : scopeFor([], false);
     const sessionCookie = (value: string, maxAge: number) =>
       `sift_session=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
 
@@ -474,7 +538,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       const verifier = randomBytes(32).toString('base64url');
       const redirectUri = `${origin}/auth/callback`;
       // Adding a second account is only for someone already signed in.
-      pending.set(state, { verifier, redirectUri, allowNew: query.get('add') === '1' && session !== null, expires: now() + 600_000 });
+      pending.set(state, { verifier, redirectUri, addTo: query.get('add') === '1' ? session : null, expires: now() + 600_000 });
       res
         .writeHead(303, { location: signIn.url(redirectUri, state, createHash('sha256').update(verifier).digest('base64url')), 'cache-control': 'no-store' })
         .end();
@@ -488,7 +552,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       if (!entry || entry.expires < now()) return void fail('That sign-in expired. Try again.');
       if (!code) return void fail(query.get('error') === 'access_denied' ? 'Google did not grant access.' : 'Google did not complete the sign-in.');
       signIn
-        .complete(entry.redirectUri, code, entry.verifier, entry.allowNew)
+        .complete(entry.redirectUri, code, entry.verifier, entry.addTo)
         .then((email) =>
           res
             .writeHead(303, {
@@ -529,7 +593,9 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       }
       void readJson(req)
         .then(async (body) => {
-          const result = body && (await handler(body));
+          const refused = body && refusal(url.pathname, body, whole);
+          if (refused) return void json(res, refused.status, { error: refused.error });
+          const result = body && (await handler(body, whole));
           if (result === null) json(res, 400, { error: 'That request is not well formed.' });
           else json(res, 200, result);
         })
@@ -544,8 +610,12 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
     if (url.pathname.startsWith('/api/')) {
       const days = Number(query.get('days') ?? 7);
       if (!ALLOWED_DAYS.has(days)) return void json(res, 400, { error: 'days must be 1, 7, 30 or 90' });
+      // `mailbox` narrows any read to one of the person's own mailboxes.
+      const mailbox = query.get('mailbox');
+      const scope = mailbox ? narrow(whole, mailbox) : whole;
+      if (!scope) return void json(res, 404, { error: 'No such mailbox' });
 
-      if (url.pathname === '/api/summary') return void json(res, 200, summarize(db, days, now()));
+      if (url.pathname === '/api/summary') return void json(res, 200, summarize(db, scope, days, now()));
       if (url.pathname === '/api/decisions') {
         const text = (name: string) => query.get(name) || undefined;
         const stage = text('stage');
@@ -554,6 +624,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
         const search = text('q');
         const result = listDecisions(
           db,
+          scope,
           {
             days,
             ...(stage ? { stage } : {}),
@@ -568,43 +639,49 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
         return void json(res, 200, result);
       }
       if (url.pathname === '/api/message') {
-        const detail = messageDetail(db, query.get('account') ?? '', query.get('id') ?? '');
+        const detail = messageDetail(db, scope, query.get('account') ?? '', query.get('id') ?? '');
         return void json(res, detail ? 200 : 404, detail ?? { error: 'No such message' });
       }
-      if (url.pathname === '/api/suggestion') return void json(res, 200, suggestionDetail(db, query.get('account') ?? '', query.get('sender') ?? ''));
+      if (url.pathname === '/api/suggestion') {
+        const detail = suggestionDetail(db, scope, query.get('account') ?? '', query.get('sender') ?? '');
+        return void json(res, detail ? 200 : 404, detail ?? { error: 'No such mailbox' });
+      }
       if (url.pathname === '/api/sender' || url.pathname === '/api/domain') {
         const account = query.get('account') ?? '';
         const page =
           url.pathname === '/api/sender'
-            ? senderPage(db, account, { address: (query.get('address') ?? '').toLowerCase() }, now())
-            : senderPage(db, account, { domain: (query.get('domain') ?? '').toLowerCase() }, now());
+            ? senderPage(db, scope, account, { address: (query.get('address') ?? '').toLowerCase() }, now())
+            : senderPage(db, scope, account, { domain: (query.get('domain') ?? '').toLowerCase() }, now());
         return void json(res, page ? 200 : 404, page ?? { error: 'Anyone can get an address at that domain, so it has no standing of its own.' });
       }
-      if (url.pathname === '/api/rules') return void json(res, 200, { rules: listRuleSummaries(db) });
-      if (url.pathname === '/api/suggestions') return void json(res, 200, listSuggestions(db, { includeKept: query.get('kept') === '1' }));
-      if (url.pathname === '/api/manage') return void json(res, 200, manageState());
-      if (url.pathname === '/api/changes') return void json(res, 200, { changes: listChanges(db, 200) });
+      if (url.pathname === '/api/rules') return void json(res, 200, { rules: listRuleSummaries(db, scope) });
+      if (url.pathname === '/api/suggestions') return void json(res, 200, listSuggestions(db, scope, { includeKept: query.get('kept') === '1' }));
+      if (url.pathname === '/api/manage') return void json(res, 200, manageState(scope));
+      if (url.pathname === '/api/changes') return void json(res, 200, { changes: listChanges(db, scope, 200) });
       if (url.pathname === '/api/examples') {
-        const held = db.prepare('SELECT account_id, count(*) AS n FROM examples GROUP BY account_id').all() as { account_id: string; n: number }[];
+        const one = query.get('account');
+        if (one && !sees(scope, one)) return void json(res, 404, { error: 'No such mailbox' });
+        const held = db.prepare('SELECT count(*) AS n FROM examples WHERE account_id = ?');
         const examples: Examples = {
-          examples: listExamples(db, query.get('account') || undefined),
-          held: Object.fromEntries(held.map((r) => [r.account_id, r.n])),
+          examples: (one ? [one] : scope.accounts).flatMap((id) => listExamples(db, id)),
+          held: Object.fromEntries(scope.accounts.map((id) => [id, (held.get(id) as { n: number }).n] as const).filter(([, n]) => n > 0)),
           keepDays: controls?.settings().examplesKeepDays ?? null,
         };
         return void json(res, 200, examples);
       }
       if (url.pathname === '/api/evals') {
-        const counts = db.prepare(`SELECT account_id, count(*) AS n FROM examples WHERE status = 'captured' AND label_id IS NOT NULL GROUP BY account_id`);
+        const counts = db.prepare(`SELECT count(*) AS n FROM examples WHERE account_id = ? AND status = 'captured' AND label_id IS NOT NULL`);
         const evals: Evals = {
-          runs: listEvalRuns(db),
-          examples: Object.fromEntries((counts.all() as { account_id: string; n: number }[]).map((r) => [r.account_id, r.n])),
+          runs: listEvalRuns(db).filter((run) => sees(scope, run.accountId)),
+          examples: Object.fromEntries(scope.accounts.map((id) => [id, (counts.get(id) as { n: number }).n] as const).filter(([, n]) => n > 0)),
           defaultLimit: DEFAULT_EVAL_EXAMPLES,
           maxLimit: MAX_EVAL_EXAMPLES,
         };
         return void json(res, 200, evals);
       }
       if (url.pathname === '/api/eval') {
-        const detail: EvalDetail | null = getEvalRun(db, Number(query.get('id')));
+        const found: EvalDetail | null = getEvalRun(db, Number(query.get('id')));
+        const detail = found && sees(scope, found.run.accountId) ? found : null;
         return void json(res, detail ? 200 : 404, detail ?? { error: 'No such run' });
       }
       if (url.pathname === '/api/models') {

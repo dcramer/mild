@@ -17,7 +17,7 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import type { Decision, Disposition } from '../src/triage/types.ts';
-import { facts } from './helpers.ts';
+import { everything, facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
 let db: DatabaseSync;
@@ -95,7 +95,7 @@ describe('suggestions', () => {
     suggest('b@example.com', 'review');
     suggest('c@example.com', 'keep', { labelId: 'personal' });
 
-    const { items, waiting, labels } = listSuggestions(db);
+    const { items, waiting, labels } = listSuggestions(db, everything(db));
     expect(waiting).toBe(5);
     expect(items.map((i) => [i.sender, i.subject, i.labelName, i.disposition])).toEqual([
       ['b@example.com', 'Subject m5', null, 'review'],
@@ -105,7 +105,7 @@ describe('suggestions', () => {
       ['a@example.com', 'Subject m1', 'Newsletters', 'archive'],
     ]);
     expect(labels[ACCOUNT]).toContainEqual({ id: 'newsletter', name: 'Newsletters', disposition: 'archive' });
-    expect(listSuggestions(db, { includeKept: true }).waiting).toBe(6);
+    expect(listSuggestions(db, everything(db), { includeKept: true }).waiting).toBe(6);
   });
 });
 
@@ -253,7 +253,7 @@ describe('accuracy', () => {
     });
     expect(accuracy(db, 150)).toMatchObject({ reviewed: 2, right: 1, byLabel: [{ labelId: 'marketing' }, { labelId: 'newsletter', reviewed: 1, right: 0 }] });
 
-    const summary = summarize(db, 7, 200);
+    const summary = summarize(db, everything(db), 7, 200);
     expect(summary.accuracy).toMatchObject({ reviewed: 4, right: 3, confusion: [{ suggested: 'newsletter', correct: 'marketing', count: 1 }] });
     expect(summary.accuracy.byStage).toEqual([
       { stage: 'rules', reviewed: 1, right: 1 },
@@ -263,7 +263,7 @@ describe('accuracy', () => {
       { stage: 'agent', reviewed: 3, right: 2 },
       { stage: 'fallback', reviewed: 0, right: 0 },
     ]);
-    expect(summarize(db, 7, 200 + 30 * 86_400_000).accuracy).toMatchObject({ reviewed: 0, right: 0, byLabel: [] });
+    expect(summarize(db, everything(db), 7, 200 + 30 * 86_400_000).accuracy).toMatchObject({ reviewed: 0, right: 0, byLabel: [] });
   });
 });
 
@@ -436,8 +436,8 @@ describe('reading a suggestion', () => {
     ]);
     expect(await keepSuggestionBodies(db, api, ACCOUNT, () => 1000)).toBe(0);
     expect(fetched.toSorted()).toEqual(['m1', 'm2', 'm4']);
-    expect(messageDetail(db, ACCOUNT, 'm1')?.body).toBe('Text of m1');
-    expect(messageDetail(db, ACCOUNT, 'm3')?.body).toBeNull();
+    expect(messageDetail(db, everything(db), ACCOUNT, 'm1')?.body).toBe('Text of m1');
+    expect(messageDetail(db, everything(db), ACCOUNT, 'm3')?.body).toBeNull();
 
     // Answered: the temporary copy goes. (The example keeps the message for good once it is captured.)
     applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' });
@@ -456,7 +456,7 @@ describe('reading a suggestion', () => {
     addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'marketing' }, 'user', 5);
     rememberCorrespondent(db, ACCOUNT, 'news@example.com', true);
 
-    const detail = suggestionDetail(db, ACCOUNT, 'news@example.com');
+    const detail = suggestionDetail(db, everything(db), ACCOUNT, 'news@example.com')!;
     expect(detail.messages.map((m) => [m.messageId, m.labelName, m.disposition])).toEqual([
       ['m2', 'Newsletters', 'archive'],
       ['m1', 'Newsletters', 'archive'],
@@ -468,7 +468,7 @@ describe('reading a suggestion', () => {
       labels: [{ id: 'newsletter', name: 'Newsletters', messages: 2 }],
       rules: [{ match: { fromDomain: 'example.com' }, labelName: 'Marketing', disposition: 'archive', source: 'user' }],
     });
-    expect(suggestionDetail(db, ACCOUNT, 'stranger@example.net')).toMatchObject({
+    expect(suggestionDetail(db, everything(db), ACCOUNT, 'stranger@example.net')).toMatchObject({
       messages: [],
       sender: { messages: 0, userHasWritten: null, labels: [], rules: [] },
     });
@@ -521,7 +521,7 @@ describe('examples', () => {
     failing = false;
     expect(await captureExamples(db, api, ACCOUNT)).toBe(1);
     expect(await captureExamples(db, api, ACCOUNT)).toBe(0);
-    expect(listSuggestions(db).examples).toEqual({ captured: 2, pending: 0 });
+    expect(listSuggestions(db, everything(db)).examples).toEqual({ captured: 2, pending: 0 });
   });
 });
 

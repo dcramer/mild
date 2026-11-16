@@ -153,14 +153,10 @@ describe('managing sift from the dashboard', () => {
     expect((await call(port, 'POST', '/api/evals/run', { accountId: ACCOUNT })).body).toEqual({ id: 7 });
     expect((await call(port, 'POST', '/api/evals/run', { accountId: ACCOUNT, fewShot: false, limit: 20 })).status).toBe(200);
     expect(calls).toEqual([`eval ${ACCOUNT} true 50`, `eval ${ACCOUNT} false 20`]);
-    for (const bad of [
-      {},
-      { accountId: 'nobody@example.org' },
-      { accountId: ACCOUNT, limit: 201 },
-      { accountId: ACCOUNT, limit: 0 },
-      { accountId: ACCOUNT, fewShot: 1 },
-    ])
+    for (const bad of [{}, { accountId: ACCOUNT, limit: 201 }, { accountId: ACCOUNT, limit: 0 }, { accountId: ACCOUNT, fewShot: 1 }])
       expect((await call(port, 'POST', '/api/evals/run', bad)).status).toBe(400);
+    // A mailbox that is not the viewer's is not there at all.
+    expect((await call(port, 'POST', '/api/evals/run', { accountId: 'nobody@example.org' })).status).toBe(404);
 
     const { id, done } = startEval(
       { db, judge: async () => ({ label: 'marketing', reason: 'r' }), model: 'p/small', guidelines: '' },
@@ -205,7 +201,7 @@ describe('managing sift from the dashboard', () => {
     expect((await call(port, 'POST', '/api/examples/delete', { accountId: ACCOUNT, messageId: 'e1' })).body).toEqual({ deleted: 1 });
     expect((await call(port, 'POST', '/api/examples/delete', { accountId: ACCOUNT, messageId: 'e1' })).body).toEqual({ deleted: 0 });
     expect((await call(port, 'POST', '/api/examples/delete', { accountId: ACCOUNT })).status).toBe(400);
-    expect((await call(port, 'POST', '/api/examples/delete-all', { accountId: 'nobody@example.org' })).status).toBe(400);
+    expect((await call(port, 'POST', '/api/examples/delete-all', { accountId: 'nobody@example.org' })).status).toBe(404);
     expect((await call(port, 'POST', '/api/examples/delete-all', { accountId: ACCOUNT })).body).toEqual({ deleted: 2 });
     expect(db.prepare('SELECT account_id, message_id FROM examples').all()).toEqual([{ account_id: 'other@example.org', message_id: 'o1' }]);
     // The message row and its decision are sift's record of what it saw and did; only the stored content goes.
@@ -257,7 +253,7 @@ describe('managing sift from the dashboard', () => {
 
     expect((await call(port, 'POST', '/api/suggestions/rejudge', { accountId: ACCOUNT })).body).toEqual({ started: 2, remaining: 0 });
     expect(calls).toEqual([`rejudge ${ACCOUNT}`]);
-    expect((await call(port, 'POST', '/api/suggestions/rejudge', { accountId: 'nobody@example.org' })).status).toBe(400);
+    expect((await call(port, 'POST', '/api/suggestions/rejudge', { accountId: 'nobody@example.org' })).status).toBe(404);
     expect((await call(port, 'POST', '/api/suggestions/rejudge', {})).status).toBe(400);
   });
 
@@ -289,7 +285,7 @@ describe('managing sift from the dashboard', () => {
     for (const taken of ['investor updates', 'Review', 'Did', 'Cold outreach', '!!!'])
       expect((await call(port, 'POST', '/api/labels/add', { accountId: ACCOUNT, name: taken, description: '', disposition: 'keep' })).status).toBe(409);
     expect((await call(port, 'POST', '/api/labels/add', { accountId: 'nobody@example.org', name: 'X', description: '', disposition: 'keep' })).status).toBe(
-      400,
+      404,
     );
 
     const added = await call(port, 'POST', '/api/rules', {
@@ -443,8 +439,8 @@ describe('signing in with Google', () => {
     client: () => kind,
     allowed: (email) => allow?.includes(email) ?? true,
     url: (redirectUri, state, challenge) => `https://accounts.example/auth?redirect=${encodeURIComponent(redirectUri)}&state=${state}&challenge=${challenge}`,
-    complete: async (redirectUri, code, _verifier, allowNew) => {
-      completed.push(`${redirectUri} ${code} new=${allowNew}`);
+    complete: async (redirectUri, code, _verifier, addTo) => {
+      completed.push(`${redirectUri} ${code} addTo=${addTo}`);
       if (code === 'stranger') throw new Error('stranger@example.net is not the account sift is connected to.');
       if (code === 'second') {
         connectAccount(db, 'work@example.com', '1', 0);
@@ -506,7 +502,7 @@ describe('signing in with Google', () => {
     expect(back.status).toBe(303);
     expect(back.headers['location']).toBe('/');
     expect(String(back.headers['set-cookie'])).toMatch(/^sift_session=[^;]+; Path=\/; Max-Age=2592000; HttpOnly; SameSite=Lax$/);
-    expect(completed).toEqual([`http://localhost:${port}/auth/callback abc new=false`]);
+    expect(completed).toEqual([`http://localhost:${port}/auth/callback abc addTo=null`]);
 
     const cookie = { cookie: cookieFrom(back.headers) };
     expect((await call(port, 'GET', '/api/session', undefined, cookie)).body).toMatchObject({ email: ACCOUNT });
@@ -550,13 +546,14 @@ describe('signing in with Google', () => {
     const refused = await call(port, 'GET', `/auth/callback?state=${stateFrom(login.headers)}&code=stranger`);
     expect(decodeURIComponent(String(refused.headers['location']))).toBe('/?signin=stranger@example.net is not the account sift is connected to.');
     expect(refused.headers['set-cookie']).toBeUndefined();
-    expect(completed.at(-1)).toContain('new=false');
+    expect(completed.at(-1)).toContain('addTo=null');
 
     const first = await call(port, 'GET', '/auth/login');
     const cookie = { cookie: cookieFrom((await call(port, 'GET', `/auth/callback?state=${stateFrom(first.headers)}&code=abc`)).headers) };
     const add = await call(port, 'GET', '/auth/login?add=1', undefined, cookie);
     const added = await call(port, 'GET', `/auth/callback?state=${stateFrom(add.headers)}&code=second`, undefined, cookie);
-    expect(completed.at(-1)).toContain('new=true');
+    // The account being added joins the mailboxes of whoever is signed in.
+    expect(completed.at(-1)).toContain(`addTo=${ACCOUNT}`);
     expect((await call(port, 'GET', '/api/session', undefined, { cookie: cookieFrom(added.headers) })).body).toMatchObject({ email: 'work@example.com' });
   });
 
@@ -567,8 +564,8 @@ describe('signing in with Google', () => {
     // Being connected already is not enough once the list leaves the account out.
     expect(signInRefusal('work@example.com', { connected: ['work@example.com'], allowNew: false, allowed })).toContain('not on the list');
     expect(signInRefusal('Me@Example.org', { connected: [], allowNew: false, allowed })).toBeNull();
-    // On the list but not connected: still needs someone signed in to add it.
-    expect(signInRefusal('me@example.org', { connected: ['work@example.com'], allowNew: false, allowed })).toContain('not the account sift is connected to');
+    // On the list and not connected: the list is who this install is for, so they may arrive by themselves.
+    expect(signInRefusal('me@example.org', { connected: ['work@example.com'], allowNew: false, allowed })).toBeNull();
 
     const open = { allowed: undefined };
     expect(signInRefusal('first@example.com', { connected: [], allowNew: false, ...open })).toBeNull();

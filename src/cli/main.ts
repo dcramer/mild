@@ -21,7 +21,7 @@ import { browserSignInUrl, clientFor, completeBrowserSignIn, hasClientSecrets, i
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { createJudge } from '../model/judge.ts';
 import { login, openModels, resolveModel } from '../model/models.ts';
-import { type Account, connectAccount, listAccounts } from '../store/accounts.ts';
+import { type Account, connectAccount, listAccounts, userOf } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
 import { loadKeyring, readSecret, rekeySecrets, writeSecret } from '../secrets.ts';
 import { openDb } from '../store/db.ts';
@@ -183,14 +183,15 @@ function buildSignIn(config: Config, db: ReturnType<typeof openDb>): SignIn {
     client: () => (hasClientSecrets(config) ? loadClientSecrets(config).kind : null),
     url: (redirectUri, state, challenge) => browserSignInUrl(loadClientSecrets(config), { redirectUri, state, challenge }),
     allowed: (email) => signInRefusal(email, { connected: [email], allowNew: false, allowed: allowed() }) === null,
-    complete: async (redirectUri, code, verifier, allowNew) => {
+    complete: async (redirectUri, code, verifier, addTo) => {
       const { email, historyId, refreshToken } = await completeBrowserSignIn(loadClientSecrets(config), { redirectUri, code, verifier });
       const connected = listAccounts(db).map((a) => a.email);
-      const refused = signInRefusal(email, { connected, allowNew, allowed: allowed() });
+      const person = addTo === null ? null : userOf(db, addTo);
+      const refused = signInRefusal(email, { connected, allowNew: person !== null, allowed: allowed() });
       if (refused) throw new Error(refused);
       saveRefreshToken(config, email, refreshToken);
       // A new account starts from now; a known one keeps its place.
-      if (!connected.includes(email)) connectAccount(db, email, historyId);
+      if (!connected.includes(email)) connectAccount(db, email, historyId, Date.now(), person?.id);
       return email;
     },
   };

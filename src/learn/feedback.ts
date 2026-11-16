@@ -68,9 +68,16 @@ const toSuggestion = (r: Row): Suggestion => ({
  * observing, with no answer yet. Decisions that only repeat what the user already told sift (rules they
  * wrote or made by correcting it) are not suggestions and are left out; ones from a rule sift learned are.
  */
-export function pendingSuggestions(db: DatabaseSync, filter: { accountId?: string; sender?: string; domain?: string; limit?: number } = {}): Suggestion[] {
+export function pendingSuggestions(
+  db: DatabaseSync,
+  filter: { accountId?: string; accounts?: readonly string[]; sender?: string; domain?: string; limit?: number } = {},
+): Suggestion[] {
   const where: string[] = [];
   const params: (string | number)[] = [];
+  if (filter.accounts !== undefined) {
+    where.push(`d.account_id IN (${filter.accounts.map(() => '?').join(', ') || 'NULL'})`);
+    params.push(...filter.accounts);
+  }
   if (filter.accountId !== undefined) {
     where.push('d.account_id = ?');
     params.push(filter.accountId);
@@ -314,9 +321,11 @@ export interface Accuracy {
  * How often sift's suggestions matched what the user wanted, from the answers given since `since`.
  * An answer to mail sift could not place is not counted: having no suggestion is not being wrong.
  */
-export function accuracy(db: DatabaseSync, since = 0): Accuracy {
-  const all = <T>(sql: string) => db.prepare(sql).all(since) as unknown as T[];
-  const scored = `FROM feedback f JOIN decisions d ON d.id = f.decision_id WHERE f.verdict IN ('right', 'wrong') AND f.created_at >= ?`;
+export function accuracy(db: DatabaseSync, since = 0, accounts?: readonly string[]): Accuracy {
+  const all = <T>(sql: string) => db.prepare(sql).all(since, ...(accounts ?? [])) as unknown as T[];
+  // Given, only these accounts' answers count; none given means none count.
+  const whose = accounts === undefined ? '' : `AND f.account_id IN (${accounts.map(() => '?').join(', ') || 'NULL'})`;
+  const scored = `FROM feedback f JOIN decisions d ON d.id = f.decision_id WHERE f.verdict IN ('right', 'wrong') AND f.created_at >= ? ${whose}`;
   const byStage = all<{ stage: StageName; reviewed: number; right: number }>(
     `SELECT d.stage, count(*) AS reviewed, sum(f.verdict = 'right') AS right ${scored} GROUP BY d.stage ORDER BY d.stage`,
   );

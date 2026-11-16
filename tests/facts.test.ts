@@ -5,7 +5,7 @@ import { openDb } from '../src/store/db.ts';
 import { storedFacts } from '../src/store/messages.ts';
 import { gatherEvidence } from '../src/daemon/evidence.ts';
 import { deriveFacts, describeFacts, matchesFacts, threadFacts } from '../src/triage/facts.ts';
-import { facts } from './helpers.ts';
+import { everything, facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
 const me = { address: ACCOUNT, domain: 'example.org' };
@@ -90,7 +90,7 @@ describe('recorded facts', () => {
     connectAccount(db, ACCOUNT, '1', 0);
     recordSync(db, ACCOUNT, [campaign], '2');
     expect(JSON.parse((db.prepare('SELECT facts_json FROM messages').get() as { facts_json: string }).facts_json)).toEqual(deriveFacts(campaign));
-    expect(messageDetail(db, ACCOUNT, campaign.messageId)?.facts).toMatchObject({ bulkService: 'Mailchimp', category: 'promotions' });
+    expect(messageDetail(db, everything(db), ACCOUNT, campaign.messageId)?.facts).toMatchObject({ bulkService: 'Mailchimp', category: 'promotions' });
   });
 
   it('derives them for a message synced before they were recorded', () => {

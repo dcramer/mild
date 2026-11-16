@@ -1,7 +1,8 @@
+import { type Scope, scopeFor } from '../src/dashboard/scope.ts';
 import type { DatabaseSync } from 'node:sqlite';
 import type { ExistingFilter, FilterProposal } from '../src/actions/filters.ts';
 import type { Mailbox } from '../src/actions/mailbox.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { recordSync, listAccounts } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import type { MessageFacts } from '../src/triage/types.ts';
 
@@ -110,3 +111,10 @@ export class FakeMailbox implements Mailbox {
     return structuredClone(this.filters);
   }
 }
+
+/** A scope that sees every connected account, as the dashboard has when no sign-in is set up. */
+export const everything = (db: DatabaseSync): Scope =>
+  scopeFor(
+    listAccounts(db).map((a) => a.id),
+    true,
+  );

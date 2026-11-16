@@ -23,6 +23,7 @@ export interface Settings {
   /**
    * The only Google accounts that may sign in to the dashboard, and so the only ones that can be connected.
    * Unset: the first account to sign in connects itself, and after that only connected accounts can.
+   * A listed account that signs in by itself is a person of their own, and sees only their own mail.
    */
   dashboardAllow?: string[];
   /** Days to keep the record of a message, its decisions and changes. Unset: forever. */
@@ -205,7 +206,8 @@ port = ${settings.dashboardPort}
 # Where else the dashboard listens: one of this machine's addresses (a Tailscale one, say), or "all" for
 # every network it is on. Unset: localhost only.
 ${settings.dashboardHost ? `host = ${JSON.stringify(settings.dashboardHost)}` : '# host = "all"'}
-# The only Google accounts that may sign in. Unset: the first to sign in connects itself, and after that
+# The only Google accounts that may sign in. Each who signs in by themselves sees only their own mail;
+# add a second mailbox of your own from Settings while signed in. Unset: the first to sign in connects itself, and after that
 # only connected accounts can.
 ${settings.dashboardAllow ? `allow = ${JSON.stringify(settings.dashboardAllow)}` : '# allow = ["you@example.com"]'}
 

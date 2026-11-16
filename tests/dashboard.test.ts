@@ -13,7 +13,7 @@ import { finishAction, insertPendingAction, setActionStatus } from '../src/store
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { openDb, schemaVersion } from '../src/store/db.ts';
 import { addRule } from '../src/store/rules.ts';
-import { facts } from './helpers.ts';
+import { everything, facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
 const DAY = 86_400_000;
@@ -109,7 +109,7 @@ describe('tracking', () => {
     };
     await execute({ db, mailbox, now: () => NOW }, ACCOUNT, 'a', { type: 'archive' }, 1);
     expect(db.prepare('SELECT decision_id, status FROM actions').get()).toEqual({ decision_id: 1, status: 'done' });
-    expect(summarize(db, 7, NOW).recent.find((r) => r.id === 1)).toMatchObject({ actionId: 1, actionType: 'archive', actionStatus: 'done' });
+    expect(summarize(db, everything(db), 7, NOW).recent.find((r) => r.id === 1)).toMatchObject({ actionId: 1, actionType: 'archive', actionStatus: 'done' });
   });
 
   it('groups decisions by where they got to, and shows the mailbox change rather than an unsubscribe', () => {
@@ -131,18 +131,18 @@ describe('tracking', () => {
     settleDecision(db, done, 'done');
     const failed = recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'archive' }, { mode: 'act', now: NOW });
     settleDecision(db, failed, 'failed', 'Gmail answered 503');
-    const ids = (status: string) => listDecisions(db, { days: 7, status }, NOW).rows.map((r) => r.id);
+    const ids = (status: string) => listDecisions(db, everything(db), { days: 7, status }, NOW).rows.map((r) => r.id);
 
     expect(ids('suggested')).toEqual([3, 2, 1]);
     expect(ids('done')).toEqual([done]);
     expect(ids('trouble')).toEqual([failed]);
     expect(ids('nonsense')).toEqual([]);
-    expect(listDecisions(db, { days: 7, status: 'done' }, NOW).rows[0]).toMatchObject({ actionId: archived, actionType: 'archive' });
+    expect(listDecisions(db, everything(db), { days: 7, status: 'done' }, NOW).rows[0]).toMatchObject({ actionId: archived, actionType: 'archive' });
 
     setActionStatus(db, archived, 'undone');
     expect(ids('undone')).toEqual([done]);
     expect(ids('done')).toEqual([]);
-    expect(listDecisions(db, { days: 7, status: 'trouble' }, NOW).total).toBe(1);
+    expect(listDecisions(db, everything(db), { days: 7, status: 'trouble' }, NOW).total).toBe(1);
   });
 
   it('upgrades a version 1 database in place, keeping its messages', () => {
@@ -172,7 +172,8 @@ describe('tracking', () => {
 
 describe('summarize', () => {
   it('counts only the window and reports tiers, cost and backlog', () => {
-    const summary = summarize(seeded(), 7, NOW);
+    const db = seeded();
+    const summary = summarize(db, everything(db), 7, NOW);
     expect(summary.totals).toEqual({ messages: 4, decisions: 3, withoutInference: 2, costUsd: 0.02, awaitingTriage: 1, troubledActions: 0 });
     expect(summary.byStage.map((s) => [s.stage, s.decisions])).toEqual([
       ['rules', 1],
@@ -191,14 +192,16 @@ describe('summarize', () => {
   });
 
   it('returns one entry per day, including empty days', () => {
-    const { daily } = summarize(seeded(), 7, NOW);
+    const db = seeded();
+    const { daily } = summarize(db, everything(db), 7, NOW);
     expect(daily).toHaveLength(7);
     expect(daily.reduce((sum, d) => sum + Object.values(d.counts).reduce((a, b) => a + b, 0), 0)).toBe(3);
     expect(daily.at(-1)?.counts).toEqual({ rules: 0, sender: 0, heuristics: 0, classifier: 0, agent: 0, fallback: 0 });
   });
 
   it('lists senders and recent decisions with their message', () => {
-    const summary = summarize(seeded(), 7, NOW);
+    const db = seeded();
+    const summary = summarize(db, everything(db), 7, NOW);
     expect(summary.topSenders[0]).toEqual({ address: 'news@example.com', messages: 3, lastDisposition: 'keep' });
     expect(summary.recent.map((r) => r.id)).toEqual([3, 2, 1]);
     expect(summary.recent[2]).toMatchObject({
@@ -212,7 +215,8 @@ describe('summarize', () => {
   });
 
   it('handles an empty database', () => {
-    const summary = summarize(openDb(':memory:'), 30, NOW);
+    const empty = openDb(':memory:');
+    const summary = summarize(empty, everything(empty), 30, NOW);
     expect(summary.totals.decisions).toBe(0);
     expect(summary.daily).toHaveLength(30);
     expect(summary.recent).toEqual([]);
@@ -390,7 +394,7 @@ describe('dashboard server', () => {
     const db = seeded();
     const id = addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user', NOW);
     recordDecision(db, ACCOUNT, 'waiting', { disposition: 'archive', subscription: 'preserve', stage: 'rules', ruleId: id, reason: 'r' }, { now: NOW });
-    expect(listRuleSummaries(db)).toEqual([
+    expect(listRuleSummaries(db, everything(db))).toEqual([
       {
         id,
         accountId: ACCOUNT,
@@ -442,7 +446,7 @@ describe('dashboard server', () => {
       });
     expect((await write({ accountId: ACCOUNT, address: 'news@example.com', standing: 'trusted' })).status).toBe(200);
     // Trust is a rule for exactly them that only says what happens: keep it, whatever it is.
-    expect(listRuleSummaries(db).filter((r) => r.match['from'] === 'news@example.com')).toMatchObject([
+    expect(listRuleSummaries(db, everything(db)).filter((r) => r.match['from'] === 'news@example.com')).toMatchObject([
       { kind: 'action', labelId: null, override: 'keep', disposition: 'keep', source: 'user' },
     ]);
     const trusted = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
@@ -453,7 +457,7 @@ describe('dashboard server', () => {
     expect(domain).toMatchObject({ kind: 'domain', profile: { standing: 'blocked' }, senders: [{ address: 'cold@example.net', standing: 'new' }] });
 
     expect((await write({ accountId: ACCOUNT, address: 'news@example.com', standing: 'none' })).status).toBe(200);
-    expect(listRuleSummaries(db).filter((r) => r.match['from'] === 'news@example.com')).toEqual([]);
+    expect(listRuleSummaries(db, everything(db)).filter((r) => r.match['from'] === 'news@example.com')).toEqual([]);
 
     expect((await write({ accountId: ACCOUNT, address: 'news@example.com', domain: 'example.com', standing: 'trusted' })).status).toBe(400);
     expect((await write({ accountId: ACCOUNT, address: 'not an address', standing: 'trusted' })).status).toBe(400);

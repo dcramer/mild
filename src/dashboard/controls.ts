@@ -78,8 +78,9 @@ export interface SignIn {
   /** False for an address the user's allow list leaves out. Asked on every request, so a session ends when its address is taken off the list. */
   allowed(email: string): boolean;
   /**
-   * Finish a sign-in. The account must be `allowed`, and already connected unless none is yet or `allowNew`
-   * is set, in which case it is connected. Resolves with the account's address; rejects with a message for the user.
+   * Finish a sign-in. The account must be `allowed`. One sift does not know is connected: as another
+   * mailbox of `addTo` (the address of whoever is signed in and asked to add it), or else as a new
+   * person's, where that is permitted. Resolves with the account's address; rejects with a message for the user.
    */
-  complete(redirectUri: string, code: string, verifier: string, allowNew: boolean): Promise<string>;
+  complete(redirectUri: string, code: string, verifier: string, addTo: string | null): Promise<string>;
 }
