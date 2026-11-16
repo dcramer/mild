@@ -286,15 +286,15 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
           ...(label === '' ? [] : [{ label: `Label: ${label === UNSURE ? outcomeName('review') : (names.get(label) ?? label)}`, clear: () => setLabel('') }]),
           ...(does === '' ? [] : [{ label: `Then: ${DOES.find(([key]) => key === does)?.[1]}`, clear: () => setDoes('') }]),
           ...(fact === '' ? [] : [{ label: factFilterName(fact), clear: () => setFact('') }]),
-          ...(includeKept ? [{ label: 'With mail sift would keep', clear: () => setIncludeKept(false) }] : []),
+          ...(includeKept ? [{ label: 'With mail Sift would keep', clear: () => setIncludeKept(false) }] : []),
         ],
         panel: (
           <>
             <FilterGroup label="Label" value={label} options={[['', 'Any'] as const, [UNSURE, outcomeName('review')] as const, ...names]} onChange={setLabel} />
             <FilterGroup label="Then" value={does} options={DOES} onChange={setDoes} />
-            <FilterGroup label="What sift saw" value={fact} options={FACT_FILTER_OPTIONS} onChange={setFact} />
+            <FilterGroup label="What Sift saw" value={fact} options={FACT_FILTER_OPTIONS} onChange={setFact} />
             <Check checked={includeKept} onChange={setIncludeKept}>
-              With mail sift would keep
+              With mail Sift would keep
             </Check>
           </>
         ),

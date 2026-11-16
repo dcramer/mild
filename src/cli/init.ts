@@ -61,7 +61,7 @@ const steps = (deps: InitDeps): Step[] => [
     run: () => createKey(deps),
   },
   {
-    title: 'Where sift runs',
+    title: 'Where Sift runs',
     missing: () => deps.setupState().location === undefined,
     value: () => `Dashboard at ${paint.bold(dashboardAddress(deps))}`,
     run: () => chooseLocation(deps),
@@ -154,12 +154,12 @@ async function createKey(deps: InitDeps): Promise<void> {
     path = deps.saveKey(key);
   } catch (error) {
     ui.fail(`Could not save the key: ${reason(error)}`);
-    ui.info(`Set this as ${paint.cmd('SIFT_KEY')} wherever sift runs, then run sift init again:`);
+    ui.info(`Set this as ${paint.cmd('SIFT_KEY')} wherever Sift runs, then run sift init again:`);
     ui.plain(key);
     return;
   }
   ui.ok(`Saved as ${paint.cmd('SIFT_KEY')} in ${paint.path(path)}`);
-  ui.info('sift reads it only when started from this directory, and cannot open your credentials without it. Keep a copy somewhere else.');
+  ui.info('Sift reads it only when started from this directory, and cannot open your credentials without it. Keep a copy somewhere else.');
 }
 
 /**
@@ -170,7 +170,7 @@ async function chooseLocation(deps: InitDeps): Promise<void> {
   const { ui, config } = deps;
   const remote = await ui.select('Where will you open the dashboard?', [
     { label: 'On this machine', value: false },
-    { label: 'From another machine', hint: 'sift runs on a server', value: true },
+    { label: 'From another machine', hint: 'Sift runs on a server', value: true },
   ]);
   // Tailscale serves the dashboard from localhost, so it listens nowhere else.
   deps.saveSetting('SIFT_DASHBOARD_HOST', undefined);
@@ -219,7 +219,7 @@ async function chooseAllowed(deps: InitDeps): Promise<void> {
     if (entered.length === 0) return ui.skip('No limit');
     ui.ok(`Only ${paint.bold(entered.join(', '))}`);
     const shut = (await deps.connectedAccounts()).filter((account) => !entered.includes(account.toLowerCase()));
-    if (shut.length > 0) ui.warn(`${shut.join(', ')} ${shut.length === 1 ? 'is' : 'are'} connected but can no longer sign in. sift still reads that mail.`);
+    if (shut.length > 0) ui.warn(`${shut.join(', ')} ${shut.length === 1 ? 'is' : 'are'} connected but can no longer sign in. Sift still reads that mail.`);
     return;
   }
 }
@@ -258,7 +258,7 @@ const googleTasks = (deps: InitDeps): Task[] => [
     url: 'https://console.cloud.google.com/auth/overview',
     todo: ['Choose Get started and fill in the form, then Create.'],
     values: [
-      ['App name', 'sift'],
+      ['App name', 'Sift'],
       ['User support email', 'your own address'],
       ['Audience', 'External'],
       ['Contact information', 'your own address'],
@@ -271,7 +271,7 @@ const googleTasks = (deps: InitDeps): Task[] => [
     collectsClient: true,
     values: [
       ['Application type', 'Web application'],
-      ['Name', 'sift'],
+      ['Name', 'Sift'],
       ...redirectUris(deps).map((uri, index) => [index === 0 ? 'Authorised redirect URIs' : '', uri] as const),
     ],
   },
@@ -296,7 +296,7 @@ const ACCESS_TASKS: Record<Access, readonly Task[]> = {
     {
       title: 'Add yourself as a test user',
       url: 'https://console.cloud.google.com/auth/audience',
-      todo: ['Under "Test users", choose "Add users" and enter each Gmail address sift will read.'],
+      todo: ['Under "Test users", choose "Add users" and enter each Gmail address Sift will read.'],
     },
   ],
   publish: [
@@ -351,7 +351,7 @@ async function googleClient(deps: InitDeps): Promise<void> {
   const { ui } = deps;
   const state = { ...deps.setupState() };
   if (state.googleTasks === 0) {
-    ui.info('sift reads your mail through a Google client that you own, so nobody sits in between.');
+    ui.info('Sift reads your mail through a Google client that you own, so nobody sits in between.');
     ui.blank();
   }
 

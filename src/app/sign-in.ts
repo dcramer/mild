@@ -12,6 +12,6 @@ export function signInRefusal(
 ): string | null {
   if (state.allowed && !state.allowed.includes(email.toLowerCase())) return `${email} is not on the list of accounts allowed to sign in here.`;
   const listed = state.allowed?.includes(email.toLowerCase()) ?? false;
-  if (!state.connected.includes(email) && state.connected.length > 0 && !state.allowNew && !listed) return `${email} is not the account sift is connected to.`;
+  if (!state.connected.includes(email) && state.connected.length > 0 && !state.allowNew && !listed) return `${email} is not the account Sift is connected to.`;
   return null;
 }

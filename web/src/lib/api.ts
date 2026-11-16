@@ -110,7 +110,7 @@ async function send(path: string, init: RequestInit, unreachable: string): Promi
 async function get<T>(path: string, params: Record<string, string | number>, signal: AbortSignal): Promise<T> {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) if (value !== '') query.set(key, String(value));
-  const response = await send(`${path}?${query}`, { signal }, 'sift cannot be reached.');
+  const response = await send(`${path}?${query}`, { signal }, 'Sift cannot be reached.');
   if (!response.ok) throw new Refused(response.status);
   return (await response.json()) as T;
 }
@@ -120,11 +120,11 @@ async function get<T>(path: string, params: Record<string, string | number>, sig
  * Refused outright while sift is unreachable: a change is never queued to happen later, unseen.
  */
 async function post<T = unknown>(path: string, body: unknown): Promise<T> {
-  if (!onlineManager.isOnline()) throw new Unreachable('sift cannot be reached, so nothing was changed. Try again when it is back.');
+  if (!onlineManager.isOnline()) throw new Unreachable('Sift cannot be reached, so nothing was changed. Try again when it is back.');
   const response = await send(
     path,
     { method: 'POST', headers: { 'content-type': 'application/json', 'x-sift': '1' }, body: JSON.stringify(body) },
-    'sift stopped answering, so this may not have been saved. Check when it is back.',
+    'Sift stopped answering, so this may not have been saved. Check when it is back.',
   );
   const result = (await response.json()) as T & { error?: string };
   if (!response.ok) throw new Refused(response.status, result.error);

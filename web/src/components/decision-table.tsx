@@ -25,7 +25,7 @@ export function DecisionTable({
       <thead>
         <Tr>
           <Th>Message</Th>
-          <Th phone="hide">sift said</Th>
+          <Th phone="hide">Sift said</Th>
           <Th phone="hide">Why</Th>
           <Th phone="hide">Status</Th>
           <Th phone="hide" num>

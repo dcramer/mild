@@ -199,7 +199,7 @@ describe('sift init', () => {
     await runInit(w.deps);
     expect(w.asked).toEqual(['Change a step?']);
     expect(w.calls).toEqual([]);
-    expect(w.text()).toContain('Where sift runs: Dashboard at');
+    expect(w.text()).toContain('Where Sift runs: Dashboard at');
     expect(w.text()).toContain('Google OAuth client: Client in place');
     expect(w.text()).toContain('Who can sign in: ');
     expect(w.text()).toContain('Gmail account: me@example.org');
@@ -224,7 +224,7 @@ describe('sift init', () => {
     const saved = wizard([...GOOGLE]);
     await runInit(saved.deps);
     expect(saved.said.indexOf('ok: Saved as SIFT_KEY in /work/sift/.env')).toBeLessThan(saved.said.findIndex((line) => line.startsWith('link: ')));
-    expect(saved.text()).toContain('sift reads it only when started from this directory');
+    expect(saved.text()).toContain('Sift reads it only when started from this directory');
 
     const failed = wizard([...GOOGLE], { keyFails: true });
     await runInit(failed.deps);

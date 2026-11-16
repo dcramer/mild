@@ -19,7 +19,7 @@ Postgres holds nothing brief; `Ephemeral` holds nothing that cannot be lost. The
 
 | | Does |
 | --- | --- |
-| `respond(Request)` | The page (where sift serves it), the API, sign-ins |
+| `respond(Request)` | The page (where Sift serves it), the API, sign-ins |
 | `due(people?)` | What is due, as pieces of ids only |
 | `work(piece)` | One piece, opening everything it touches from its ids, starting nothing after the host's limit |
 | `tick(people?)` | `due`, then `work` on each here, four at a time |
@@ -42,7 +42,7 @@ Each host builds a `Host` and calls `createSift`. What differs is who calls `res
 | | `sift run` (`src/cli/`) | Vercel (`src/vercel/`, `api/`, `vercel.json`) |
 | --- | --- | --- |
 | Requests | `node:http` turned into a `Request`; a forwarded scheme believed only from this machine | `api/site.ts`, for `/api/*` and `/auth/*` |
-| The page | served by sift (`site`, `src/app/site.ts`) | Vercel's CDN, with the same headers (`vercel.json`, held equal by `tests/vercel.test.ts`) |
+| The page | served by Sift (`site`, `src/app/site.ts`) | Vercel's CDN, with the same headers (`vercel.json`, held equal by `tests/vercel.test.ts`) |
 | Each minute | `tick()` in this process, not waiting for the last | `api/cron.ts` (Vercel Cron) posts each piece of `due()` to `api/work.ts` |
 | A piece of work | in this process, 5-minute limit | a call of its own: replies at once and works under `waitUntil`, with the function's limit less a minute |
 | Started by a person | `tick(person)` in this process | the same fan-out, for that person |
@@ -56,7 +56,7 @@ Memory is right for one `sift run` process only. Two processes, or any host with
 
 Setting it up, and every variable it needs: [VERCEL.md](VERCEL.md). It refuses to start without an allow list (`SIFT_DASHBOARD_ALLOW`): at a public address, whoever signed in first would otherwise own it. Vercel compiles `api/*.ts` with the project's own TypeScript, extending `tsconfig.json` and rewriting the `.ts` in imports (`@vercel/node` 31), and keeps each file's place, so `src/store/migrations` (in `includeFiles`) is where `src/store/db.ts` looks.
 
-A piece handed to `api/work` names a person and their mailbox by id; sift opens that person's database and finds the mailbox among their own, so even a forged piece cannot reach across people. `api/site` keeps the dashboard's own checks: a session for every `/api/` route, the Host one of the deployment's names, writes only from the page.
+A piece handed to `api/work` names a person and their mailbox by id; Sift opens that person's database and finds the mailbox among their own, so even a forged piece cannot reach across people. `api/site` keeps the dashboard's own checks: a session for every `/api/` route, the Host one of the deployment's names, writes only from the page.
 
 Not yet tried on Vercel itself: that a rewrite keeps the address the browser asked for in `request.url` (Vercel's guide for Express relies on it), and `waitUntil` keeping a piece going past the reply.
 

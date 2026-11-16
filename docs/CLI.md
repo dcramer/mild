@@ -1,19 +1,19 @@
 # Command line
 
-The CLI sets sift up and starts it. Rules, labels, the record of changes, undo and the choice of model are in the [dashboard](DASHBOARD.md) and have no command.
+The CLI sets Sift up and starts it. Rules, labels, the record of changes, undo and the choice of model are in the [dashboard](DASHBOARD.md) and have no command.
 
 From a checkout, `pnpm sift <command>` runs it from source.
 
 | Command | What it does |
 | --- | --- |
-| `sift init` | Set sift up. A first run walks through every step; one stopped part-way carries on from where it stopped. Once setup is finished it lists the steps with what each is set to and redoes the one you pick. |
+| `sift init` | Set Sift up. A first run walks through every step; one stopped part-way carries on from where it stopped. Once setup is finished it lists the steps with what each is set to and redoes the one you pick. |
 | `sift run` | Read and classify mail, and serve the dashboard. The one process to keep running. |
-| `sift status` | What is set up, and how much sift has recorded. |
-| `sift dev` | `run` for working on sift: restarts when server code changes, rebuilds and reloads the page when page code changes. Takes `run`'s options. |
-| `sift reset-db` | Renames the local database folder to `database.<time>`, so sift starts a new, empty one. For a database an earlier sift made with migrations since replaced. Refused while sift has it open; not for a Postgres server. `pnpm db:reset` runs it. |
+| `sift status` | What is set up, and how much Sift has recorded. |
+| `sift dev` | `run` for working on Sift: restarts when server code changes, rebuilds and reloads the page when page code changes. Takes `run`'s options. |
+| `sift reset-db` | Renames the local database folder to `database.<time>`, so Sift starts a new, empty one. For a database an earlier Sift made with migrations since replaced. Refused while Sift has it open; not for a Postgres server. `pnpm db:reset` runs it. |
 | `sift dashboard` | Serve the dashboard without reading mail. Takes `--port` and `--host`. |
 
-`--home <dir>` works with every command and says where sift keeps its files. When working on sift, give it a scratch directory so your real mail is left alone.
+`--home <dir>` works with every command and says where Sift keeps its files. When working on Sift, give it a scratch directory so your real mail is left alone.
 
 ![sift init](images/cli.png)
 
@@ -26,7 +26,7 @@ From a checkout, `pnpm sift <command>` runs it from source.
 | `--host <address>` | Listen on this address instead of `SIFT_DASHBOARD_HOST`. A container uses `0.0.0.0` and lets its port mapping decide who can reach it. |
 | `--no-dashboard` | Read and classify mail without serving the dashboard. |
 
-A pass runs every minute, each person's mailboxes changed in Gmail only if that person turned sift on under Settings in the dashboard. A change there applies from the next pass, without a restart; a change to a setting needs one.
+A pass runs every minute, each person's mailboxes changed in Gmail only if that person turned Sift on under Settings in the dashboard. A change there applies from the next pass, without a restart; a change to a setting needs one.
 
 ## Models
 
@@ -41,11 +41,11 @@ Changing it signs everyone out of ChatGPT.
 
 ## Files
 
-Nothing needs an environment variable. Everything sift keeps is in one directory, `~/.config/sift` (`$XDG_CONFIG_HOME/sift`) unless `--home` or `SIFT_HOME` says otherwise. Back it up or move it as a unit.
+Nothing needs an environment variable. Everything Sift keeps is in one directory, `~/.config/sift` (`$XDG_CONFIG_HOME/sift`) unless `--home` or `SIFT_HOME` says otherwise. Back it up or move it as a unit.
 
 | File | What it is |
 | --- | --- |
-| `.env` | Settings, as variables: the dashboard's port and address (`SIFT_DASHBOARD_PORT`, `SIFT_DASHBOARD_HOST`), who can sign in (`SIFT_DASHBOARD_ALLOW`), a Postgres or Redis server (`DATABASE_URL`, `REDIS_URL`), and `SIFT_CHATGPT_SIGN_IN`. The environment wins over it. Whether sift is on is each person's, under Settings in the dashboard. |
+| `.env` | Settings, as variables: the dashboard's port and address (`SIFT_DASHBOARD_PORT`, `SIFT_DASHBOARD_HOST`), who can sign in (`SIFT_DASHBOARD_ALLOW`), a Postgres or Redis server (`DATABASE_URL`, `REDIS_URL`), and `SIFT_CHATGPT_SIGN_IN`. The environment wins over it. Whether Sift is on is each person's, under Settings in the dashboard. |
 | `database/` | The database (PGlite), unless `DATABASE_URL` names a Postgres server: who has which mailbox, and for each person their sign-ins (encrypted), model, labels, rules, the record of every message, decision and change, and the full content of mail they answered for. |
 | `database.lock` | Which process has the database open. |
 | `google-client.json`, `dashboard-key` | The Google client and the session secret. Owner-only. |

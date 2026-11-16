@@ -107,7 +107,7 @@ export async function reconcile(deps: ActionDeps, scope?: { accountId: string; m
   for (const action of await listOpenActions(deps.db, scope)) {
     if (action.type === 'unsubscribe') {
       if (action.status === 'unknown') continue;
-      await finishAction(deps.db, action.id, 'unknown', null, 'sift stopped before the answer was recorded', clock(deps));
+      await finishAction(deps.db, action.id, 'unknown', null, 'Sift stopped before the answer was recorded', clock(deps));
       settled++;
       continue;
     }

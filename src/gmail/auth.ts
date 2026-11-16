@@ -34,7 +34,7 @@ function parseClientFile(text: string, path: string): ClientSecrets {
   } catch {
     throw new Error(`${path} is not valid JSON.`);
   }
-  if (parsed.installed) throw new Error(`${path} is a Desktop app client. sift needs a Web application one.`);
+  if (parsed.installed) throw new Error(`${path} is a Desktop app client. Sift needs a Web application one.`);
   const entry = parsed.web;
   if (!entry?.client_id || !entry.client_secret) throw new Error(`${path} is not a Google OAuth client (it has no "web" entry).`);
   return { clientId: entry.client_id, clientSecret: entry.client_secret };

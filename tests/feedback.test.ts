@@ -143,7 +143,7 @@ describe('teaching', () => {
       reviewed: 2,
       corrected: null,
       taught:
-        'From now on, mail from news@example.com that is Newsletters is archived, and unsubscribed from. sift still reads each message, and asks about anything else from them.',
+        'From now on, mail from news@example.com that is Newsletters is archived, and unsubscribed from. Sift still reads each message, and asks about anything else from them.',
     });
     // The rule waits for each message to be that label; it is not a blanket over the sender.
     expect(await ruleFor('news@example.com')).toEqual([{ whenLabel: 'newsletter', source: 'user' }]);
@@ -169,7 +169,7 @@ describe('teaching', () => {
   it("saying only what should happen to a sender's mail makes a rule that names no label", async () => {
     await suggest('digest@example.com', 'archive', NEWS);
     const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'digest@example.com', disposition: 'keep', scope: 'sender' });
-    expect(result.taught).toBe('From now on, mail from digest@example.com is kept in your inbox, whatever it is. sift will not ask about it again.');
+    expect(result.taught).toBe('From now on, mail from digest@example.com is kept in your inbox, whatever it is. Sift will not ask about it again.');
     expect(await ruleFor('digest@example.com')).toEqual([{ disposition: 'keep', source: 'correction' }]);
     // sift would have archived it, so this counts against it; what it said the mail is stands.
     expect(await raw(db).get('SELECT verdict, disposition, label_id FROM feedback')).toEqual({ verdict: 'wrong', disposition: 'keep', label_id: 'newsletter' });
@@ -409,7 +409,7 @@ describe('correcting a decision that is not waiting', () => {
       proposed: false,
       reviewed: 1,
       corrected: id,
-      taught: 'From now on, mail from bids@example.com is kept in your inbox, whatever it is. sift will not ask about it again.',
+      taught: 'From now on, mail from bids@example.com is kept in your inbox, whatever it is. Sift will not ask about it again.',
     });
     expect(await decisionsFor(id)).toEqual([
       { stage: 'model', disposition: 'archive', label_id: 'marketing', carry_out: true, outcome: null, reason: 'r' },
@@ -498,7 +498,7 @@ describe('how far an answer reaches', () => {
       proposed: false,
       reviewed: 1,
       corrected: null,
-      taught: 'From now on, mail from bids@example.com with "outbid" in the subject is kept in your inbox, whatever it is. sift will not ask about it again.',
+      taught: 'From now on, mail from bids@example.com with "outbid" in the subject is kept in your inbox, whatever it is. Sift will not ask about it again.',
     });
     expect((await pendingSuggestions(db)).map((s) => s.messageId)).toEqual(['promo']);
 
@@ -529,7 +529,7 @@ describe('how far an answer reaches', () => {
       proposed: false,
       reviewed: 2,
       corrected: null,
-      taught: 'From now on, mail from anyone at shop.example is archived, whatever it is. sift will not ask about it again.',
+      taught: 'From now on, mail from anyone at shop.example is archived, whatever it is. Sift will not ask about it again.',
     });
     expect(await matches()).toEqual([{ match: { fromDomain: 'shop.example' }, disposition: 'archive' }]);
     expect((await pendingSuggestions(db)).map((s) => s.fromAddress)).toEqual(['c@example.com']);
@@ -675,7 +675,7 @@ describe('feedback endpoint', () => {
         fixed: null,
         notFixed: null,
         taught:
-          'From now on, mail from news@example.com that is Newsletters is archived, and unsubscribed from. sift still reads each message, and asks about anything else from them.',
+          'From now on, mail from news@example.com that is Newsletters is archived, and unsubscribed from. Sift still reads each message, and asks about anything else from them.',
       },
     });
     expect(await raw(db).get('SELECT created_at FROM feedback')).toEqual({ created_at: 77 });

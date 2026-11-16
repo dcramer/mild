@@ -41,7 +41,7 @@ function Active({ state, reload }: { state: ManageState; reload: () => void }) {
   const save = (active: boolean) => run(() => api.setActive(active), reload);
 
   return (
-    <SettingsGroup title="Active" note="Whether sift changes your Gmail.">
+    <SettingsGroup title="Active" note="Whether Sift changes your Gmail.">
       {activity.problems.length > 0 ? (
         <Note tone="failure" title="Not working">
           {activity.problems.map((problem) => (
@@ -55,10 +55,10 @@ function Active({ state, reload }: { state: ManageState; reload: () => void }) {
           note={
             active ? (
               <>
-                sift carries out its decisions in Gmail as each label says. Each change can be undone from <TextLink href="/activity">Activity</TextLink>.
+                Sift carries out its decisions in Gmail as each label says. Each change can be undone from <TextLink href="/activity">Activity</TextLink>.
               </>
             ) : (
-              'Nothing in Gmail changes. sift suggests, and learns from your answers.'
+              'Nothing in Gmail changes. Sift suggests, and learns from your answers.'
             )
           }
         >
@@ -259,7 +259,7 @@ function RemoveMailbox({
           onDone={onRemoved}
           onClose={() => setRemoving(false)}
         >
-          sift stops reading it, revokes its access at Google, and deletes everything it recorded about its mail: decisions, answers, rules and labels.
+          Sift stops reading it, revokes its access at Google, and deletes everything it recorded about its mail: decisions, answers, rules and labels.
           {signedIn ? ' You are signed in as it, so you will be signed out.' : ''}
         </ConfirmRemoval>
       ) : null}
@@ -295,7 +295,7 @@ function Mailboxes({ state, signedInAs, reload }: { state: ManageState; signedIn
         </SettingRow>
       </Sheet>
       {notRevoked ? (
-        <Note tone="failure" title="sift still has access at Google">
+        <Note tone="failure" title="Sift still has access at Google">
           <p>{notRevoked}</p>
         </Note>
       ) : null}
@@ -308,7 +308,7 @@ function Mailboxes({ state, signedInAs, reload }: { state: ManageState; signedIn
 const notRevoked = (reply: Removed) =>
   reply.notRevoked.length === 0
     ? null
-    : `Google could not be reached, so ${reply.notRevoked.join(' and ')} still lists sift as having access. Remove it under Third-party connections in your Google Account.`;
+    : `Google could not be reached, so ${reply.notRevoked.join(' and ')} still lists Sift as having access. Remove it under Third-party connections in your Google Account.`;
 
 /** Typing the address is the confirmation, since nothing brings it back. */
 function ConfirmRemoval({
@@ -357,7 +357,7 @@ function ConfirmRemoval({
     >
       <Form onSubmit={() => typed.trim() === confirm && submit()}>
         <p className="text-base">
-          {children} The filters sift made in Gmail stay there, as do its labels on your mail; delete the filters in Gmail’s settings if you no longer want
+          {children} The filters Sift made in Gmail stay there, as do its labels on your mail; delete the filters in Gmail’s settings if you no longer want
           them. This cannot be undone.
         </p>
         <Field label={`Type ${confirm} to confirm`}>
@@ -372,7 +372,7 @@ function ConfirmRemoval({
 function DeleteAccount({ email, onClose }: { email: string; onClose: () => void }) {
   return (
     <ConfirmRemoval title="Delete your account" confirm={email} action="Delete everything" send={() => api.deleteAccount(email)} onClose={onClose}>
-      sift stops reading every mailbox, revokes its access at Google, and deletes everything it recorded: decisions, answers, rules, labels and your model
+      Sift stops reading every mailbox, revokes its access at Google, and deletes everything it recorded: decisions, answers, rules, labels and your model
       sign-in.
     </ConfirmRemoval>
   );
@@ -386,7 +386,7 @@ function Account({ state, signedInAs }: { state: ManageState; signedInAs: string
       <Sheet>
         <SettingRow
           title="Delete your account"
-          note={`sift stops reading every mailbox, and everything it recorded is deleted.${state.owner ? ' Others signed in to this sift keep theirs.' : ''}`}
+          note={`Sift stops reading every mailbox, and everything it recorded is deleted.${state.owner ? ' Others signed in to this Sift keep theirs.' : ''}`}
         >
           <Button onClick={() => setDeleting(true)}>Delete account…</Button>
         </SettingRow>
@@ -406,7 +406,7 @@ function OlderMail() {
         title="Pull in older mail"
         note={
           <>
-            Up to 300 messages from before sift started, as suggestions to teach it with, one model call each. Never acted on.
+            Up to 300 messages from before Sift started, as suggestions to teach it with, one model call each. Never acted on.
             <Failure>{error}</Failure>
           </>
         }
@@ -432,7 +432,7 @@ function OlderMail() {
 function Keys() {
   const on = useShortcutsOn();
   return (
-    <SettingsGroup title="This browser" note="Kept here, not in sift.">
+    <SettingsGroup title="This browser" note="Kept here, not in Sift.">
       <Sheet>
         <SettingRow
           title="Keyboard shortcuts"

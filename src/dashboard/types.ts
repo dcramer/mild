@@ -24,7 +24,7 @@ export const RuleFacts = z.strictObject(
       key,
       z
         .unknown()
-        .refine((want) => factCondition(key, want) !== null, { error: `is not an answer sift has for ${key}` })
+        .refine((want) => factCondition(key, want) !== null, { error: `is not an answer Sift has for ${key}` })
         .optional(),
     ]),
   ),

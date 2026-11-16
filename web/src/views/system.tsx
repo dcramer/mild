@@ -204,7 +204,7 @@ export function SystemView() {
 
       <Section title="Words" meta="lib/format.ts: one name for each thing, everywhere">
         <Sheet>
-          <Row label="sift does" note="Its icon and its word, the same whether suggested, done or a setting. Never what comes with it.">
+          <Row label="Sift does" note="Its icon and its word, the same whether suggested, done or a setting. Never what comes with it.">
             {ACTIONS.map(([key]) => (
               <Does key={key} action={key}>
                 {outcomeName(key)}
@@ -212,11 +212,11 @@ export function SystemView() {
             ))}
             <Does action="review">{outcomeName('review')}</Does>
           </Row>
-          <Row label="verdict" note="What sift says mail is and does: the action, then the label.">
+          <Row label="verdict" note="What Sift says mail is and does: the action, then the label.">
             <Verdict labelName="Newsletters" disposition="archive" />
             <Verdict labelName={null} disposition="review" />
           </Row>
-          <Row label="meter" note="How sure sift is about a label, in three steps. A suggestion's label is its answer button, meter first.">
+          <Row label="meter" note="How sure Sift is about a label, in three steps. A suggestion's label is its answer button, meter first.">
             <Meter level={1} />
             <Meter level={2} />
             <Meter level={3} />
@@ -286,7 +286,7 @@ export function SystemView() {
       <Section title="Controls">
         <Sheet>
           <Row label="select" note="A short list.">
-            <Select label="What sift does" value={choice} options={ACTIONS} onChange={setChoice} />
+            <Select label="What Sift does" value={choice} options={ACTIONS} onChange={setChoice} />
             <Select
               label="With icons"
               value={choice}
@@ -565,9 +565,9 @@ export function SystemView() {
 
       <div className="grid gap-14 lg:grid-cols-2">
         <Section title="Settings in a sheet" meta="a settings page is groups: what each governs on the left, its sheet on the right">
-          <SettingsGroup title="Active" note="Whether sift changes your Gmail.">
+          <SettingsGroup title="Active" note="Whether Sift changes your Gmail.">
             <Sheet>
-              <SettingRow title="Off" note="Nothing in Gmail changes. sift suggests, and learns from your answers.">
+              <SettingRow title="Off" note="Nothing in Gmail changes. Sift suggests, and learns from your answers.">
                 <Button>Turn on</Button>
               </SettingRow>
               <SettingRow title="Check for mail" note="Last checked 1 min ago.">
@@ -599,7 +599,7 @@ export function SystemView() {
       <div className="grid gap-14 lg:grid-cols-2">
         <Section title="Toast" meta="what a press did, after the list moved on: one line, the newest replacing the last">
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => toast('12 messages pulled in', { description: 'They show under Suggestions as sift decides them.' })}>A result</Button>
+            <Button onClick={() => toast('12 messages pulled in', { description: 'They show under Suggestions as Sift decides them.' })}>A result</Button>
             <Button onClick={answer}>With Undo</Button>
             <Button onClick={() => toast('Could not undo', { tone: 'failure', description: 'Gmail answered 503.' })}>Failure</Button>
             <Button
@@ -676,11 +676,11 @@ export function SystemView() {
       <Section title="Document" meta="a page read from top to bottom: /terms, /privacy">
         <Sheet>
           <Document title="Terms of service" updated="November 15, 2026">
-            <p>These terms are between you and whoever runs this copy of sift.</p>
+            <p>These terms are between you and whoever runs this copy of Sift.</p>
             <Clause title="Your part">
               <ul>
                 <li>Sign in only with a Gmail account that is yours.</li>
-                <li>Check what sift suggests before turning it on.</li>
+                <li>Check what Sift suggests before turning it on.</li>
               </ul>
             </Clause>
           </Document>
@@ -740,7 +740,7 @@ export function SystemView() {
       <Section title="Copyable and disclosure">
         <div className="grid gap-6 sm:grid-cols-2">
           <Copyable value="sudo tailscale serve --bg 8787" label="command" />
-          <Disclosure summary="What sift saw in it">
+          <Disclosure summary="What Sift saw in it">
             <p>Shown only to the reader who went looking.</p>
           </Disclosure>
         </div>
@@ -776,7 +776,7 @@ export function SystemView() {
         onNext={() => {}}
       >
         <p className="max-w-[68ch] text-reading leading-relaxed">
-          The message on the left; on the right what sift said, the answer, the sender and the history.
+          The message on the left; on the right what Sift said, the answer, the sender and the history.
         </p>
       </Panel>
     </main>

@@ -109,7 +109,7 @@ function Teach({ state, onDone }: { state: ManageState; onDone: () => void }) {
     <>
       <p className="statement">Teach it.</p>
       <p className="text-muted-foreground">
-        sift learns from your answers. Pull in recent mail from {state.accounts.map((a) => a.email).join(' and ')} and say what each message is.
+        Sift learns from your answers. Pull in recent mail from {state.accounts.map((a) => a.email).join(' and ')} and say what each message is.
       </p>
       <Form onSubmit={() => {}}>
         <Field label="How far back" hint="Up to 300 messages, one model call each.">

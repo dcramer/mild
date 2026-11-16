@@ -604,7 +604,7 @@ describe('Sign in with ChatGPT', () => {
     const url = new URL(started.url);
     expect(url.origin + url.pathname).toBe('https://auth.openai.com/api/accounts/authorize');
     expect(url.searchParams.get('redirect_uri')).toBe('http://127.0.0.1:1455/auth/callback');
-    expect(url.searchParams.get('agent_name_hint')).toBe('sift');
+    expect(url.searchParams.get('agent_name_hint')).toBe('Sift');
     expect(url.searchParams.get('ext_agent_host_id')).toBe(`urn:uuid:${DEVICE}`);
     expect(asked).toEqual([]);
     await finishChatGPTRedirect(signIns, started, `http://127.0.0.1:1455/auth/callback?code=c1&state=${url.searchParams.get('state')}&client_id=oaiapp_x`);
@@ -674,7 +674,7 @@ describe('Sign in with ChatGPT', () => {
     const back = `http://127.0.0.1:1455/auth/callback?code=c&state=${new URL(started.url).searchParams.get('state')}&client_id=oaiapp_x`;
     await expect(finishChatGPTRedirect(signIns, started, back)).rejects.toThrow('OpenAI refused the sign-in (400)');
     answer = Response.json({ ...TOKENS, scope: 'openid profile email' });
-    await expect(finishChatGPTRedirect(signIns, started, back)).rejects.toThrow('did not allow sift to use your plan');
+    await expect(finishChatGPTRedirect(signIns, started, back)).rejects.toThrow('did not allow Sift to use your plan');
     expect(signIns.stored.has('chatgpt')).toBe(false);
   });
 });

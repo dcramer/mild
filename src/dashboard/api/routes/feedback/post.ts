@@ -22,7 +22,7 @@ export default write({
     // The answer is saved whatever happens next; a mailbox that cannot be put right is reported, not hidden.
     try {
       const undone = await controls.putBack(db, input.accountId, result.corrected);
-      return { ...result, fixed: undone ? 'What sift did to this message in Gmail has been taken back.' : null, notFixed: null };
+      return { ...result, fixed: undone ? 'What Sift did to this message in Gmail has been taken back.' : null, notFixed: null };
     } catch (error) {
       return { ...result, fixed: null, notFixed: error instanceof Error ? error.message : String(error) };
     }

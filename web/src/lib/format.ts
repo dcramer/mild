@@ -131,7 +131,7 @@ export const FACTS = {
   ],
   bulkService: [
     [true, 'was sent through a bulk mail service'],
-    [false, 'was sent through no bulk mail service sift knows'],
+    [false, 'was sent through no bulk mail service Sift knows'],
   ],
   dmarc: [
     ['pass', 'passed DMARC'],

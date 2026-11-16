@@ -14,7 +14,7 @@ export default write({
   run: async ({ db, controls }, { id, on }) => {
     if (!controls) throw new Error('This dashboard cannot change Gmail filters.');
     // Taking a filter out is always allowed: it only reduces what runs unattended.
-    if (on && !(await preferences(db)).active) throw new Error('sift is off, so it writes nothing to Gmail. Turn it on first, in Settings.');
+    if (on && !(await preferences(db)).active) throw new Error('Sift is off, so it writes nothing to Gmail. Turn it on first, in Settings.');
     await controls.ruleFilter(db, id, on);
     return { filterId: (await getRuleFilter(db, id))?.filterId ?? null, filter: (await ruleFilterStatus(db)).get(id) ?? null };
   },

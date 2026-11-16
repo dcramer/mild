@@ -481,7 +481,7 @@ describe('dashboard server', () => {
           state: 'none',
           possible: true,
           reason: null,
-          differs: ['Mail the filter archives never reaches sift: it is not recorded, counted or unsubscribed from.'],
+          differs: ['Mail the filter archives never reaches Sift: it is not recorded, counted or unsubscribed from.'],
           checkedAt: null,
         },
         createdAt: NOW,

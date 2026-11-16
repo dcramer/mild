@@ -130,7 +130,7 @@ export function AddRuleDialog({
             onChange={(event) => setValue(event.target.value)}
           />
         </Field>
-        <Field inline label="That" hint={facts.some((f) => READ.has(f.key)) ? 'sift reads each message to check this.' : undefined}>
+        <Field inline label="That" hint={facts.some((f) => READ.has(f.key)) ? 'Sift reads each message to check this.' : undefined}>
           <div className="flex w-full flex-col items-start gap-2">
             {facts.map((fact, at) => (
               <span key={fact.key} className="flex max-w-full items-center gap-1">

@@ -195,7 +195,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
   const refusal = async (route: Write, ctx: Context, body: unknown, scope: Scope, someone: boolean): Promise<{ status: number; error: string } | null> => {
     const whose = await route.touches(ctx, body);
     if (whose === 'self') return someone ? null : { status: 401, error: 'Sign in to use the dashboard.' };
-    if (whose === 'install') return scope.owner ? null : { status: 403, error: 'Only the person who set sift up can change this.' };
+    if (whose === 'install') return scope.owner ? null : { status: 403, error: 'Only the person who set Sift up can change this.' };
     if (whose === null || whose === 'anyone' || sees(scope, whose.account)) return null;
     return { status: 404, error: 'There is no such thing here.' };
   };
@@ -204,7 +204,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     // The Host header, not the URL: a `node:http` adapter cannot always build a URL from it.
     const hostHeader = request.headers.get('host');
     if (!answers(hostHeader)) {
-      return new Response('The sift dashboard does not answer to this address. Set SIFT_DASHBOARD_HOST to it.', {
+      return new Response('The Sift dashboard does not answer to this address. Set SIFT_DASHBOARD_HOST to it.', {
         status: 403,
         headers: { 'content-type': 'text/plain' },
       });

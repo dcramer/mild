@@ -54,7 +54,7 @@ export async function run(args: string[]): Promise<void> {
     secrets();
     if (!hasClientSecrets(config)) ui.warn(`No Google client yet. Run ${paint.cmd('sift init')}.`);
     else if ((await connectedAddresses(store.central)).length === 0) ui.warn('No Gmail account yet. Open the dashboard and sign in with Google.');
-    else if (on === 0) ui.info('Gmail is not changed while sift is off. Each person turns it on in the dashboard, under Settings.');
+    else if (on === 0) ui.info('Gmail is not changed while Sift is off. Each person turns it on in the dashboard, under Settings.');
 
     if (values.once) {
       ui.blank();

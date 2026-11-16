@@ -156,7 +156,7 @@ export async function startChatGPTDeviceCode(now: () => number = Date.now): Prom
   const body = (await response.json()) as Record<string, unknown>;
   const interval = Number(body['interval']);
   if (typeof body['device_auth_id'] !== 'string' || typeof body['user_code'] !== 'string' || !Number.isFinite(interval) || interval < 0)
-    throw new Error('OpenAI answered with a sign-in code sift cannot use.');
+    throw new Error('OpenAI answered with a sign-in code Sift cannot use.');
   return { code: body['user_code'], url: DEVICE.verify, expiresAt: now() + DEVICE_CODE_MS, intervalMs: interval * 1000, deviceAuthId: body['device_auth_id'] };
 }
 
@@ -181,7 +181,7 @@ export async function pollChatGPTDeviceCode(signIns: SignIns, device: DeviceCode
   }
   const granted = (await response.json()) as Record<string, unknown>;
   if (typeof granted['authorization_code'] !== 'string' || typeof granted['code_verifier'] !== 'string')
-    throw new Error('OpenAI answered the sign-in with something sift cannot use.');
+    throw new Error('OpenAI answered the sign-in with something Sift cannot use.');
   const exchanged = await fetch(DEVICE.token, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -198,7 +198,7 @@ export async function pollChatGPTDeviceCode(signIns: SignIns, device: DeviceCode
   const { access_token: access, refresh_token: refresh, expires_in: expiresIn } = token;
   const accountId = typeof access === 'string' ? chatgptAccount(access) : null;
   if (typeof access !== 'string' || typeof refresh !== 'string' || typeof expiresIn !== 'number' || !accountId)
-    throw new Error('OpenAI answered the sign-in with something sift cannot use.');
+    throw new Error('OpenAI answered the sign-in with something Sift cannot use.');
   await credentialStore(signIns).modify('openai-codex', async () => ({ type: 'oauth', access, refresh, expires: now() + expiresIn * 1000, accountId }));
   return 'done';
 }
@@ -250,7 +250,7 @@ export async function startChatGPTRedirect(deviceId: string, now: () => number =
   const url = new URL(SIGN_IN.authorize);
   url.search = new URLSearchParams({
     client_id: 'dynamic_agent_client',
-    agent_name_hint: 'sift',
+    agent_name_hint: 'Sift',
     ext_agent_host_id: `urn:uuid:${deviceId.toLowerCase()}`,
     response_type: 'code',
     redirect_uri: SIGN_IN.redirect,
@@ -302,8 +302,8 @@ export async function finishChatGPTRedirect(signIns: SignIns, pending: PendingRe
   const scopes = typeof token['scope'] === 'string' ? token['scope'].split(/\s+/).filter(Boolean) : [];
   const { access_token: access, refresh_token: refresh, expires_in: expiresIn } = token;
   if (typeof access !== 'string' || typeof refresh !== 'string' || typeof expiresIn !== 'number')
-    throw new Error('OpenAI answered the sign-in with something sift cannot use.');
-  if (!scopes.includes('chatgpt.tokens.use.direct')) throw new Error('ChatGPT did not allow sift to use your plan. Open ChatGPT again and allow it.');
+    throw new Error('OpenAI answered the sign-in with something Sift cannot use.');
+  if (!scopes.includes('chatgpt.tokens.use.direct')) throw new Error('ChatGPT did not allow Sift to use your plan. Open ChatGPT again and allow it.');
   await credentialStore(signIns).modify(CHATGPT, async () => ({
     type: 'oauth',
     access,

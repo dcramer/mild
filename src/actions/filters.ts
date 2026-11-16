@@ -59,7 +59,7 @@ export function validateFilter(filter: FilterProposal): string[] {
   const { criteria, action } = filter;
 
   if (action.forward !== undefined) problems.push('forwarding filters are never allowed');
-  if (filter.facts && Object.values(filter.facts).some((v) => v !== undefined)) problems.push('Gmail cannot match what sift found in a message');
+  if (filter.facts && Object.values(filter.facts).some((v) => v !== undefined)) problems.push('Gmail cannot match what Sift found in a message');
 
   const positive = [criteria.from, criteria.to, criteria.subject, criteria.query].filter((v) => v !== undefined && v.trim() !== '');
   if (positive.length === 0) problems.push('criteria must include at least one of from, to, subject or query');

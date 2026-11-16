@@ -63,7 +63,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
     );
   const undo = (row: DecisionRow) => report(api.undo(row.actionId ?? 0), ({ message }) => message, 'Could not undo');
   const retry = (row: DecisionRow) =>
-    report(api.retry(row.id), ({ waiting }) => (waiting ? 'It will be tried again once sift is on' : 'Trying again now'), 'Could not retry');
+    report(api.retry(row.id), ({ waiting }) => (waiting ? 'It will be tried again once Sift is on' : 'Trying again now'), 'Could not retry');
   const requeue = (row: UnjudgedRow) => report(api.requeue(row.accountId, row.messageId), () => 'Asking the model again now', 'Could not ask the model again');
   const requeueAll = () =>
     report(api.requeueAll(), ({ retried }) => `Asking the model again about ${plural(retried, 'message')}`, 'Could not ask the model again');
@@ -102,7 +102,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
         : {
             filters: {
               active: fact === '' ? [] : [{ label: factFilterName(fact), clear: () => setFact('') }],
-              panel: <FilterGroup label="What sift saw" value={fact} options={FACT_FILTER_OPTIONS} onChange={setFact} />,
+              panel: <FilterGroup label="What Sift saw" value={fact} options={FACT_FILTER_OPTIONS} onChange={setFact} />,
             },
           })}
       intro={
@@ -140,7 +140,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
           {search !== '' || narrowed !== ''
             ? 'Nothing matches.'
             : view === ''
-              ? 'sift has changed nothing in Gmail in this period.'
+              ? 'Sift has changed nothing in Gmail in this period.'
               : 'Nothing in this period.'}
         </Empty>
       ) : (

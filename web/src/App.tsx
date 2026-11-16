@@ -75,7 +75,7 @@ class ScreenBoundary extends Component<{ at: string; children: ReactNode }, { fa
     if (this.state.failedAt !== null && (this.state.failedAt === '' || this.state.failedAt === this.props.at))
       return (
         <Note tone="failure" title="This screen could not be loaded">
-          <p>sift may be unreachable, or it was updated while this page was open. Reload the page.</p>
+          <p>Sift may be unreachable, or it was updated while this page was open. Reload the page.</p>
         </Note>
       );
     return this.props.children;
@@ -118,12 +118,12 @@ function Gate({ route }: { route: string[] }) {
       <div className="flex flex-col items-start gap-6 p-6">
         <Wordmark />
         {session.error ? (
-          <Note tone="failure" title="sift answered with an error">
+          <Note tone="failure" title="Sift answered with an error">
             <p>{session.error}</p>
           </Note>
         ) : (
           <Note title="Offline">
-            <p>sift cannot be reached. This page opens by itself when it can.</p>
+            <p>Sift cannot be reached. This page opens by itself when it can.</p>
           </Note>
         )}
       </div>
@@ -208,7 +208,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
                   {
                     label: 'Sign out',
                     onSelect: () => void api.signOut().then(() => window.location.assign('/')),
-                    ...(online ? {} : { disabled: true, note: 'Not while sift is unreachable.' }),
+                    ...(online ? {} : { disabled: true, note: 'Not while Sift is unreachable.' }),
                   },
                 ],
               }

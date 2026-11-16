@@ -13,7 +13,7 @@ describe('validateFilter', () => {
 
   it('rejects a filter for a rule with conditions on what sift found in the message, which Gmail cannot match', () => {
     const filter = { criteria: { from: 'news@example.com' }, action: { removeLabelIds: ['INBOX'] } };
-    expect(validateFilter({ ...filter, facts: { isReply: false } })).toEqual(['Gmail cannot match what sift found in a message']);
+    expect(validateFilter({ ...filter, facts: { isReply: false } })).toEqual(['Gmail cannot match what Sift found in a message']);
     expect(validateFilter({ ...filter, facts: {} })).toEqual([]);
   });
 

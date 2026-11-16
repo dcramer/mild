@@ -11,15 +11,15 @@ import { status } from './commands/status.ts';
 
 /** sift is set up and started from here; looking at and steering it happens in the dashboard. */
 const MAIN_COMMANDS: readonly (readonly [string, string])[] = [
-  ['init', 'Set sift up, or finish setting it up'],
+  ['init', 'Set Sift up, or finish setting it up'],
   ['run', 'Read and classify your mail continuously, and serve the dashboard'],
-  ['status', 'What is set up and how much sift has recorded'],
+  ['status', 'What is set up and how much Sift has recorded'],
 ];
 
 const OTHER_COMMANDS: readonly (readonly [string, string])[] = [
   ['dashboard', 'serve the dashboard without reading mail'],
-  ['dev', 'for working on sift: run, restarting and reloading as the code changes'],
-  ['reset-db', 'move the database aside, so sift starts a new one'],
+  ['dev', 'for working on Sift: run, restarting and reloading as the code changes'],
+  ['reset-db', 'move the database aside, so Sift starts a new one'],
 ];
 
 function help(): void {

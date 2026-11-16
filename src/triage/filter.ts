@@ -45,7 +45,7 @@ function mayOverlap(a: RuleMatch, b: RuleMatch): boolean {
  * `rules` is every rule of the account, for finding one that could decide the same mail differently.
  */
 export function filterFor(rule: FilterableRule, labels: readonly Label[], rules: readonly FilterableRule[]): FilterVerdict {
-  if (rule.whenLabel !== undefined) return no('It applies only once sift has said what the mail is.');
+  if (rule.whenLabel !== undefined) return no('It applies only once Sift has said what the mail is.');
   const label = rule.labelId === undefined ? undefined : labels.find((l) => l.id === rule.labelId);
   if (rule.labelId !== undefined && !label) return no('Its label has been removed.');
   if (rule.when !== undefined) return no('It has a condition in plain language, which Gmail cannot match.');
@@ -55,12 +55,12 @@ export function filterFor(rule: FilterableRule, labels: readonly Label[], rules:
   if (outcome.disposition === 'spam') return no('Gmail filters cannot mark mail as spam.');
   if (outcome.disposition !== 'keep' && outcome.disposition !== 'archive') return no('Its label leaves mail for you.');
   const archive = outcome.disposition === 'archive';
-  if (rule.markRead || outcome.markRead) return no('It marks mail read, which sift does not let a filter do.');
-  if (rule.learned && archive) return no('sift learned this rule and holds it back for people you have written to. A filter cannot.');
+  if (rule.markRead || outcome.markRead) return no('It marks mail read, which Sift does not let a filter do.');
+  if (rule.learned && archive) return no('Sift learned this rule and holds it back for people you have written to. A filter cannot.');
 
   const { from, fromDomain, to, listId, subjectContains } = rule.match;
   if (listId !== undefined) return no('Gmail filters cannot match a mailing list.');
-  if (asksFacts(rule.match)) return no('It asks what sift found in the message, which Gmail filters cannot see.');
+  if (asksFacts(rule.match)) return no('It asks what Sift found in the message, which Gmail filters cannot see.');
   if ((rule.except ?? []).length > 0) return no('It has exceptions.');
 
   const criteria: FilterPlan['criteria'] = {};
@@ -81,7 +81,7 @@ export function filterFor(rule: FilterableRule, labels: readonly Label[], rules:
   if (subjectContains !== undefined) {
     if (subjectContains.includes('"') || subjectContains.trim() === '') return unsafe;
     criteria.subject = `"${subjectContains.trim()}"`;
-    differs.push('Gmail matches whole words in the subject, so it can miss mail the rule catches. sift still handles that mail.');
+    differs.push('Gmail matches whole words in the subject, so it can miss mail the rule catches. Sift still handles that mail.');
   }
   if (Object.keys(criteria).length === 0) return no('It has no condition Gmail can match.');
 
@@ -99,6 +99,6 @@ export function filterFor(rule: FilterableRule, labels: readonly Label[], rules:
   });
   if (rival) return no(`Another rule (${describeMatch(rival.match)}) can decide the same mail, and a filter would get to it first.`);
 
-  if (archive) differs.push('Mail the filter archives never reaches sift: it is not recorded, counted or unsubscribed from.');
+  if (archive) differs.push('Mail the filter archives never reaches Sift: it is not recorded, counted or unsubscribed from.');
   return { possible: true, plan: { criteria, ...(label ? { gmailLabel: label.gmailLabel } : {}), archive }, differs };
 }

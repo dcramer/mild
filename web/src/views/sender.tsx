@@ -55,12 +55,12 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
       <Figures>
         <Figure label="Last 30 days" value={count(profile.recent)} note={profile.lastSeenAt ? `latest ${ago(profile.lastSeenAt)}` : null} />
         {top ? <Figure label="Mostly" value={top.name} note={labelled > 0 ? `${percent(top.messages, labelled)} of their mail` : null} /> : null}
-        {answered > 0 ? <Figure label="sift was right" value={percent(profile.answers.right, answered)} note={`of ${count(answered)} you checked`} /> : null}
+        {answered > 0 ? <Figure label="Sift was right" value={percent(profile.answers.right, answered)} note={`of ${count(answered)} you checked`} /> : null}
         {data.waiting > 0 ? <Figure label="Waiting on you" value={count(data.waiting)} tone="look" /> : null}
       </Figures>
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 lg:grid-cols-2">
-        <Section title="What sift knows">
+        <Section title="What Sift knows">
           <SenderFacts accountId={accountId} profile={profile} />
         </Section>
         <Section title="Your say">
@@ -82,7 +82,7 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
             />
           ) : null}
           <p className="text-muted-foreground">
-            {given ? `${FOLLOWS[given]} Press it again to take it back.` : 'None given: sift judges each message as it comes.'}
+            {given ? `${FOLLOWS[given]} Press it again to take it back.` : 'None given: Sift judges each message as it comes.'}
           </p>
           <Failure>{give.error}</Failure>
         </Section>

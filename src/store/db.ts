@@ -35,7 +35,7 @@ export async function openDatabase(where: Where): Promise<Driver> {
     const owner = new Pool({ connectionString: where.migrateWith ?? where.url });
     let bypass: string | null = null;
     try {
-      await refuseForeign(async (text) => (await owner.query<Record<string, unknown>>(text)).rows, 'Give sift an empty database.');
+      await refuseForeign(async (text) => (await owner.query<Record<string, unknown>>(text)).rows, 'Give Sift an empty database.');
       await migratePg(overPg(owner), { migrationsFolder: MIGRATIONS });
       if (where.migrateWith) {
         const role = decodeURIComponent(new URL(where.url).username);
@@ -46,14 +46,14 @@ export async function openDatabase(where: Where): Promise<Driver> {
       throw error;
     }
     if (!where.migrateWith) {
-      const warning = `${bypass}, so row-level security does not hold sift. Set DATABASE_MIGRATION_URL to that role, and DATABASE_URL to one that owns nothing.`;
+      const warning = `${bypass}, so row-level security does not hold Sift. Set DATABASE_MIGRATION_URL to that role, and DATABASE_URL to one that owns nothing.`;
       return bypass ? { ...server(owner), warning } : server(owner);
     }
     await owner.end();
     const pool = new Pool({ connectionString: where.url });
     try {
       bypass = await roleBypass(async (text) => (await pool.query<Record<string, unknown>>(text)).rows);
-      if (bypass) throw new Error(`${bypass}, so row-level security would not hold sift. Give DATABASE_URL a role that owns nothing and cannot bypass it.`);
+      if (bypass) throw new Error(`${bypass}, so row-level security would not hold Sift. Give DATABASE_URL a role that owns nothing and cannot bypass it.`);
     } catch (error) {
       await pool.end();
       throw error;
@@ -92,7 +92,7 @@ export async function roleBypass(query: (text: string) => Promise<Record<string,
 export class DatabaseInUse extends Error {
   readonly pid: number;
   constructor(pid: number) {
-    super(`Another sift (process ${pid}) has the database open. Stop it first, or use the dashboard it serves.`);
+    super(`Another Sift (process ${pid}) has the database open. Stop it first, or use the dashboard it serves.`);
     this.pid = pid;
   }
 }
@@ -199,8 +199,8 @@ async function refuseForeign(query: (text: string) => Promise<Record<string, unk
   const foreign = (await query('SELECT hash, created_at FROM drizzle.__drizzle_migrations')).filter((row) => !known.has(String(row['hash'])));
   if (foreign.some((row) => Number(row['created_at']) > latest))
     throw new Error(
-      'This database was last opened by a newer sift, with migrations this version does not have. Upgrade sift, or restore a backup from before the upgrade.',
+      'This database was last opened by a newer Sift, with migrations this version does not have. Upgrade Sift, or restore a backup from before the upgrade.',
     );
   if (foreign.length)
-    throw new Error(`This database was made by an earlier sift whose migrations have since been replaced, so it cannot be brought up to date. ${fresh}`);
+    throw new Error(`This database was made by an earlier Sift whose migrations have since been replaced, so it cannot be brought up to date. ${fresh}`);
 }

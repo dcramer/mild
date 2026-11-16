@@ -171,7 +171,7 @@ export async function addLabel(
   const id = slug(name);
   if (id === '' || RESERVED.has(id)) throw new Error(`"${name}" cannot be used as a label name.`);
   const existing = await listLabels(db, accountId);
-  if (existing.length >= MAX_LABELS) throw new Error(`sift keeps at most ${MAX_LABELS} labels. Change one that is no longer used instead.`);
+  if (existing.length >= MAX_LABELS) throw new Error(`Sift keeps at most ${MAX_LABELS} labels. Change one that is no longer used instead.`);
   if (existing.some((l) => l.id === id || l.id.replace(/_/g, '-') === id || l.gmailLabel === `sift/${id}` || l.name.toLowerCase() === name.toLowerCase()))
     throw new Error(`There is already a label "${name}".`);
   const extras = normalise(label.disposition, label.block ?? false, label.markRead ?? false);

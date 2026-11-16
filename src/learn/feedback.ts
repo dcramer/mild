@@ -355,10 +355,10 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
     taught: !says
       ? null
       : says.when && label
-        ? `From now on, ${whose}, when it is ${when}, is ${label.name}: ${WILL[outcome]}${unsubscribed(true)}. sift reads each one to tell.`
+        ? `From now on, ${whose}, when it is ${when}, is ${label.name}: ${WILL[outcome]}${unsubscribed(true)}. Sift reads each one to tell.`
         : says.whenLabel && label
-          ? `From now on, mail from ${input.sender} that is ${label.name} is ${WILL[outcome]}${unsubscribed(true)}. sift still reads each message, and asks about anything else from them.`
-          : `From now on, ${whose} is ${WILL[wanted]}${unsubscribed(false)}, whatever it is. sift will not ask about it again.`,
+          ? `From now on, mail from ${input.sender} that is ${label.name} is ${WILL[outcome]}${unsubscribed(true)}. Sift still reads each message, and asks about anything else from them.`
+          : `From now on, ${whose} is ${WILL[wanted]}${unsubscribed(false)}, whatever it is. Sift will not ask about it again.`,
   };
 }
 

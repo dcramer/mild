@@ -333,7 +333,7 @@ describe('managing sift from the dashboard', () => {
     const answer = { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', scope: 'once' };
     expect((await call('POST', '/api/feedback', { ...answer, messageId: 'done' })).body).toMatchObject({
       corrected: 'done',
-      fixed: 'What sift did to this message in Gmail has been taken back.',
+      fixed: 'What Sift did to this message in Gmail has been taken back.',
       notFixed: null,
     });
     const failed = await call('POST', '/api/feedback', { ...answer, messageId: 'gone' });
@@ -390,7 +390,7 @@ describe('managing sift from the dashboard', () => {
 
     const off = await call('POST', '/api/rules/filter', { id, on: true });
     expect(off.status).toBe(409);
-    expect(off.body['error']).toMatch(/sift is off/);
+    expect(off.body['error']).toMatch(/Sift is off/);
     expect(calls).toEqual([]);
 
     await setActive(db, true);
@@ -434,7 +434,7 @@ describe('signing in with Google', () => {
     url: (redirectUri, state, challenge) => `https://accounts.example/auth?redirect=${encodeURIComponent(redirectUri)}&state=${state}&challenge=${challenge}`,
     complete: async (redirectUri, code, _verifier, addTo) => {
       completed.push(`${redirectUri} ${code} addTo=${addTo}`);
-      if (code === 'stranger') throw new Error('stranger@example.net is not the account sift is connected to.');
+      if (code === 'stranger') throw new Error('stranger@example.net is not the account Sift is connected to.');
       if (code === 'second') {
         await connectAccount(store, 'work@example.com', '1', 0, 1);
         return 'work@example.com';
@@ -529,7 +529,7 @@ describe('signing in with Google', () => {
     const { call } = await startWithSignIn();
     const login = await call('GET', '/auth/login?add=1');
     const refused = await callback(call, login, 'stranger');
-    expect(decodeURIComponent(String(refused.headers['location']))).toBe('/?signin=stranger@example.net is not the account sift is connected to.');
+    expect(decodeURIComponent(String(refused.headers['location']))).toBe('/?signin=stranger@example.net is not the account Sift is connected to.');
     expect(String(refused.headers['set-cookie'])).not.toContain('sift_session');
     expect(completed.at(-1)).toContain('addTo=null');
 

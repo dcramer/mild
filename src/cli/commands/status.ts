@@ -20,7 +20,7 @@ export async function status(): Promise<void> {
   // PGlite is one process's alone: while sift runs, what it has recorded is in its dashboard.
   if (store instanceof DatabaseInUse) {
     ui.heading('status', paint.path(config.home));
-    ui.info(`sift is running (process ${store.pid}) with the database open. See the dashboard.`);
+    ui.info(`Sift is running (process ${store.pid}) with the database open. See the dashboard.`);
     ui.blank();
     return;
   }

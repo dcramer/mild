@@ -49,7 +49,7 @@ describe('migrations', () => {
     const raw = new PGlite(paths.databaseDir);
     await raw.query(`INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ('from-the-future', $1)`, [Date.UTC(2999, 0)]);
     await raw.close();
-    await expect(openStore(paths)).rejects.toThrow('last opened by a newer sift');
+    await expect(openStore(paths)).rejects.toThrow('last opened by a newer Sift');
   });
 
   it('start over in a new database once the old one is moved aside, which is refused while it is open', async () => {
@@ -228,7 +228,7 @@ describe('the database in the home directory', () => {
   it('is refused to a second opener while the first has it, and free again once closed', async () => {
     const paths = { databaseDir: scratch() };
     const first = await openStore(paths);
-    await expect(openStore(paths)).rejects.toThrow(`Another sift (process ${process.pid}) has the database open`);
+    await expect(openStore(paths)).rejects.toThrow(`Another Sift (process ${process.pid}) has the database open`);
     await first.close();
     await (await openStore(paths)).close();
   });

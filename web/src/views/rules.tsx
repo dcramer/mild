@@ -29,11 +29,11 @@ import {
 const SOURCES = [
   ['', 'Anyone'],
   ['user', 'You'],
-  ['correction', 'You, correcting sift'],
-  ['learned', 'sift, by blocking'],
+  ['correction', 'You, correcting Sift'],
+  ['learned', 'Sift, by blocking'],
 ] as const;
 
-const MADE_BY: Record<string, string> = { user: 'You', correction: 'Your answers', learned: 'sift, when it blocked them' };
+const MADE_BY: Record<string, string> = { user: 'You', correction: 'Your answers', learned: 'Sift, when it blocked them' };
 const QUIET: Record<string, string> = { fromDomain: 'anyone at', to: 'sent to', listId: 'the list', subjectContains: 'subject has' };
 
 /** What a rule matches: an address alone, or a quiet word and the value; then what the mail must be, in words. */
@@ -122,7 +122,7 @@ function RulePanel({
               ))}
             </Fact>
           ) : null}
-          {rule.kind === 'when-label' || rule.when ? <Fact term="Reading">sift reads each message it matches.</Fact> : null}
+          {rule.kind === 'when-label' || rule.when ? <Fact term="Reading">Sift reads each message it matches.</Fact> : null}
           <Fact term="Used">{rule.hits === 0 ? 'Never' : `${plural(rule.hits, 'time')}${rule.lastHitAt ? `, last ${ago(rule.lastHitAt)}` : ''}`}</Fact>
           <Fact term="Made by">
             {MADE_BY[rule.source] ?? rule.source}, {shortDate(rule.createdAt)}

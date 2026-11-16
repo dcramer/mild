@@ -20,8 +20,8 @@ export function SignInScreen({ session, error }: { session: Session; error: stri
 function Ready() {
   return (
     <>
-      <p className="statement">Sign in with the Gmail account you want sift to manage.</p>
-      <p className="text-muted-foreground">Google will ask you to let sift read, label and archive that account's mail. sift cannot send, and never deletes.</p>
+      <p className="statement">Sign in with the Gmail account you want Sift to manage.</p>
+      <p className="text-muted-foreground">Google will ask you to let Sift read, label and archive that account's mail. Sift cannot send, and never deletes.</p>
       <Button variant="mark" size="lg" href="/auth/login" className="mt-1 justify-between">
         Sign in with Google
         <ArrowRightIcon aria-hidden />
@@ -37,7 +37,7 @@ function Blocked({ session }: { session: Session }) {
     return (
       <>
         <p className="statement">Google won't sign you in at this address.</p>
-        <p className="text-muted-foreground">It only returns to localhost or to HTTPS. Open sift at one of these instead:</p>
+        <p className="text-muted-foreground">It only returns to localhost or to HTTPS. Open Sift at one of these instead:</p>
         <div className="flex flex-col gap-2">
           {session.addresses.map((address) => (
             <Button key={address} href={address} className="justify-between font-mono text-sm font-medium">
@@ -48,7 +48,7 @@ function Blocked({ session }: { session: Session }) {
         </div>
         {session.addresses.some((a) => a.startsWith('https://')) ? (
           <Step>
-            <p>The HTTPS address needs this run once, on the machine running sift:</p>
+            <p>The HTTPS address needs this run once, on the machine running Sift:</p>
             <Copyable value={`sudo tailscale serve --bg ${port}`} label="command" />
           </Step>
         ) : null}
@@ -59,7 +59,7 @@ function Blocked({ session }: { session: Session }) {
     <>
       <p className="statement">No Google client yet.</p>
       <p className="text-muted-foreground">
-        sift signs you in through a Google client you own. Create one with <Code>sift init</Code>, on the machine running sift:
+        Sift signs you in through a Google client you own. Create one with <Code>sift init</Code>, on the machine running Sift:
       </p>
       <Copyable value="sift init" label="command" />
     </>

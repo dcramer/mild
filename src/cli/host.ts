@@ -21,7 +21,7 @@ new EventSource('/dev/events').onmessage = (event) => {
 };
 `;
 const DEV_SCRIPT = '<script type="module" src="/dev/reload.js"></script>';
-const DEV_BUILDING = `<!doctype html><html class="dark"><head><meta charset="UTF-8" /><title>sift</title>${DEV_SCRIPT}</head><body>Building the page…</body></html>`;
+const DEV_BUILDING = `<!doctype html><html class="dark"><head><meta charset="UTF-8" /><title>Sift</title>${DEV_SCRIPT}</head><body>Building the page…</body></html>`;
 
 /** Addresses of this machine: a forwarded scheme is believed only from one, as `tailscale serve` sends it. */
 const LOCAL_PEERS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
@@ -160,7 +160,7 @@ export async function serveDashboard(
           server.once('error', (error: NodeJS.ErrnoException) =>
             reject(
               error.code === 'EADDRINUSE'
-                ? new Error(`Port ${port} is already in use. Is sift already running? If not, set SIFT_DASHBOARD_PORT in ${config.envPath}.`)
+                ? new Error(`Port ${port} is already in use. Is Sift already running? If not, set SIFT_DASHBOARD_PORT in ${config.envPath}.`)
                 : error,
             ),
           );

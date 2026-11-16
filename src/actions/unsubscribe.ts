@@ -97,7 +97,7 @@ export async function unsubscribe(deps: UnsubscribeDeps, accountId: string, mess
     return {
       status: 'refused',
       reason: signals.hasListUnsubscribe
-        ? 'This list can only be left by sending an email or opening a page, and sift does neither. Use the link in the message.'
+        ? 'This list can only be left by sending an email or opening a page, and Sift does neither. Use the link in the message.'
         : 'This message offers no way to unsubscribe.',
     };
   }
@@ -143,7 +143,7 @@ export async function unsubscribe(deps: UnsubscribeDeps, accountId: string, mess
     }
     reason =
       status >= 300 && status < 400
-        ? `${url.hostname} answered with a redirect, which sift does not follow.`
+        ? `${url.hostname} answered with a redirect, which Sift does not follow.`
         : `${url.hostname} refused the request (${status}).`;
   } catch (error) {
     reason = `The request to ${url.hostname} failed, so it is not known whether it took: ${error instanceof Error ? error.message : String(error)}.`;
