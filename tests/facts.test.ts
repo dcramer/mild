@@ -70,11 +70,29 @@ describe('deriveFacts', () => {
     expect(deriveFacts(facts({ accountId: ACCOUNT, to: [other] })).addressed).toBe('neither');
   });
 
+  it('counts a dot-variant or googlemail.com address as the owner on gmail.com only', () => {
+    const to = (accountId: string, address: string) => deriveFacts(facts({ accountId, to: [{ address, domain: address.split('@')[1]! }] })).addressed;
+    expect(to('ada.lovelace@gmail.com', 'adalovelace@gmail.com')).toBe('to');
+    expect(to('adalovelace@gmail.com', 'a.d.a.lovelace+news@googlemail.com')).toBe('to');
+    expect(to('ada.lovelace@example.org', 'adalovelace@example.org')).toBe('neither');
+    expect(to('ada@example.org', 'ada@googlemail.com')).toBe('neither');
+  });
+
+  it("counts the owner's send-as addresses as the owner", () => {
+    const alias = { address: 'ada@example.com', domain: 'example.com' };
+    const other = { address: 'team@example.com', domain: 'example.com' };
+    expect(deriveFacts(facts({ accountId: ACCOUNT, to: [alias] }), {}, ['ada@example.com']).addressed).toBe('to');
+    expect(deriveFacts(facts({ accountId: ACCOUNT, to: [other], cc: [alias] }), {}, ['ada@example.com']).addressed).toBe('cc');
+    expect(deriveFacts(facts({ accountId: ACCOUNT, to: [alias] })).addressed).toBe('neither');
+  });
+
   it('recognises a bulk service by its own headers, its envelope sender or what signed the message', () => {
     const via = (headers: Record<string, string>) => deriveFacts(facts({ headers })).bulkService;
     expect(via({ 'x-sg-eid': 'abc' })).toBe('SendGrid');
     expect(via({ 'return-path': '<bounces+123@em.sparkpostmail.com>' })).toBe('SparkPost');
     expect(via({ 'authentication-results': 'mx.google.com; dkim=pass header.d=amazonses.com' })).toBe('Amazon SES');
+    // SendGrid signs as sendgrid.info, and a sender on it may send none of its headers.
+    expect(via({ 'authentication-results': 'mx.google.com; dkim=pass header.i=@em1234.example.com; dkim=pass header.i=@sendgrid.info' })).toBe('SendGrid');
     expect(via({ 'feedback-id': '1.us-east-1.abc:AmazonSES' })).toBe('Amazon SES');
     expect(via({ 'return-path': '<ada@notmcsv.net>', 'x-mailer': 'Apple Mail' })).toBeNull();
   });

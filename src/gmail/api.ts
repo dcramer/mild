@@ -89,6 +89,8 @@ export interface GmailApi {
   getContent(messageId: string): Promise<MessageContent | null>;
   /** A thread's messages, oldest first, with their labels and nothing else. Null when the thread no longer exists. */
   getThread(threadId: string): Promise<{ id: string; labelIds: string[] }[] | null>;
+  /** The addresses the owner can send as, the account's own among them, lowercased. */
+  listSendAs(): Promise<string[]>;
 }
 
 export const isNotFound = (error: unknown) => {
@@ -156,6 +158,12 @@ export function createGmailApi(auth: OAuth2Client): GmailApi {
     async listLabels() {
       const { data } = await client.users.labels.list({ userId });
       return (data.labels ?? []).flatMap((l) => (l.id && l.name ? [{ id: l.id, name: l.name }] : []));
+    },
+
+    async listSendAs() {
+      const { data } = await client.users.settings.sendAs.list({ userId });
+      // An address added but never confirmed from its own inbox is not shown to be the owner's.
+      return (data.sendAs ?? []).flatMap((a) => (a.sendAsEmail && a.verificationStatus !== 'pending' ? [a.sendAsEmail.toLowerCase()] : []));
     },
 
     async getBodyText(messageId) {

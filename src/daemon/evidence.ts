@@ -2,6 +2,7 @@ import type { Sql } from '../store/sql.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import type { MessageContent } from '../gmail/body.ts';
+import { mailboxAliases } from '../store/accounts.ts';
 import { recordFacts } from '../store/messages.ts';
 import { cachedCorrespondent, domainFacts, rememberCorrespondent, senderFacts, senderHistory } from '../store/senders.ts';
 import { type ThreadFacts, deriveFacts, threadFacts } from '../triage/facts.ts';
@@ -39,7 +40,7 @@ export async function gatherEvidence(sources: EvidenceSources, facts: MessageFac
       thread = null;
     }
   }
-  const known = deriveFacts(facts, { ...content?.facts, ...thread });
+  const known = deriveFacts(facts, { ...content?.facts, ...thread }, await mailboxAliases(db, facts.accountId));
   if (content || thread) await recordFacts(db, facts.accountId, facts.messageId, known);
 
   const userHasWritten = await ownerHasWritten(sources, facts);

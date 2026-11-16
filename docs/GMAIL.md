@@ -13,6 +13,7 @@ What sift can use directly, and what it has to do itself. From Google's document
 | Many at once | `users.messages.batchModify` | Up to 1,000 ids, 50 units. Not used yet: sift changes one message at a time so each has its own audit row. |
 | Labels | `users.labels.*` | Nested names (`sift/newsletters`) are ordinary labels with a slash. |
 | Copy a rule to Gmail | `users.settings.filters` | With `gmail.settings.basic`, which sift already asks for. A filter matches on from, to, subject, a Gmail search query, attachment and size, and can add or remove labels: archive (`INBOX` off), mark read (`UNREAD` off), star, mark important, one user label, never-spam. Up to 1,000 filters; no update, only create, delete, get and list; creating a duplicate is refused. The documentation does not say a filter can add `SPAM`, so sift never writes one. Filters apply to a message, not its thread, and only to mail that arrives afterwards. `to` matches Cc and Bcc as well as To. |
+| The owner's other addresses | `users.settings.sendAs.list` | With `gmail.settings.basic`. Lists the account's own address and every send-as alias; one still `pending` was never confirmed from its own inbox, so sift does not count it. 1 unit. |
 | Put a message in the mailbox | `users.messages.insert` | Works with `gmail.modify`. "Does not send a message." This is how a daily digest can arrive without sift being able to send. 25 units. |
 
 Rate limit: 6,000 quota units a minute per user, which is about 300 metadata reads.

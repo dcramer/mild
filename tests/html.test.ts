@@ -51,6 +51,9 @@ describe('htmlFacts', () => {
     expect(htmlFacts([1, 2, 3].map(redirect).join(''), 'example.com')).toMatchObject({ linkHosts: 1, trackedLinks: true, linksOffDomain: true });
     const article = (n: number) => `<a href="https://blog.example.com/2026/how-we-rebuilt-our-search-index-part-${n}">Post ${n}</a>`;
     expect(htmlFacts([1, 2, 3].map(article).join(''), 'example.com').trackedLinks).toBe(false);
+    // A notification's own links carry long references and go nowhere else.
+    const own = (n: number) => `<a href="https://example.com/acme/app/pull/${n}?notification_referrer_id=NT_kwDOAbCdEf9876543210xyz${n}">Pull ${n}</a>`;
+    expect(htmlFacts([1, 2, 3].map(own).join(''), 'example.com').trackedLinks).toBe(false);
   });
 
   it("compares sites, not hosts, when asking whether links go to the sender's domain", () => {

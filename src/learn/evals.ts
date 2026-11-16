@@ -21,6 +21,7 @@ import {
   sql,
 } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
+import { mailboxAliases } from '../store/accounts.ts';
 import { shotCandidates } from '../store/examples.ts';
 import { listLabels } from '../store/labels.ts';
 import { getFacts } from '../store/messages.ts';
@@ -95,7 +96,7 @@ async function storedEvidence(db: Sql, facts: MessageFacts, body: string | null)
     .where(and(eq(correspondents.accountId, accountId), eq(correspondents.address, facts.from.address)));
   return {
     facts,
-    known: deriveFacts(facts),
+    known: deriveFacts(facts, {}, await mailboxAliases(db, accountId)),
     body,
     sender: {
       messagesSeen: Math.max(1, n),

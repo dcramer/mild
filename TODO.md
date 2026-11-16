@@ -90,9 +90,6 @@ The dashboard manages sift, behind Google sign-in. That sign-in also connects th
 
 Built: one model call per message that names a label; the label's outcome decides what happens. In use with a ChatGPT subscription model, with sift off.
 
-- [ ] **Message facts, the rest.** Built: one named set of facts per message, recorded, given to the model, shown when a message is opened, conditions a rule can have, and filters on Suggestions and Activity. Still to do:
-  - Check the bulk-service list and tracker patterns against real mail (the owner's own, run by them: tests and tools never touch a real home). The headers they rely on are all fetched at sync; senders with their own DKIM and Return-Path are recognised only by their links.
-  - "Reads as AI-generated" and language were left out as judgements, not facts. Mail to a dot-variant or alias of the owner's address is not counted as addressed to them.
 - [ ] **Several labels with a confidence each.** Have the model (and the decision model in front of it) score every plausible label instead of naming one, then take the highest if it clears a threshold and ask the user if none does. It gives a real "how sure", shows the runner-up when sift was wrong ("it was nearly Receipts"), lets thresholds differ by what the label does (higher for spam and block), and makes "these two labels are hard to tell apart" measurable. To settle: whether a message still gets exactly one label; what the threshold is and whether it is per label; and how the scores are recorded so they can be tested against examples.
 - [ ] Decision model tier (Jev or Clef through pi-ai `classify`) in front of the reasoning model, once there are enough examples to set thresholds. The stage exists and is not wired.
 - [ ] Confirm a ChatGPT subscription token refreshes by itself over weeks and survives a restart; try the device-code login inside Docker.

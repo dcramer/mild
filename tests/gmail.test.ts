@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { syncAccount } from '../src/daemon/sync.ts';
 import { type GmailApi, HistoryExpiredError, type HistoryPage, type RawMessage } from '../src/gmail/api.ts';
 import { pullChanges, toFacts } from '../src/gmail/sync.ts';
-import { addMailbox, listAccounts } from '../src/store/accounts.ts';
+import { addMailbox, listAccounts, setMailboxAliases } from '../src/store/accounts.ts';
 import { openUserDb, raw } from './fixtures.ts';
 import { parseAddressList } from '../src/triage/features.ts';
 
@@ -30,6 +30,8 @@ interface Fake {
   search?: string[];
   searchPages?: Record<string, { ids: string[]; nextPageToken?: string }>;
   messages?: Record<string, RawMessage>;
+  /** What `listSendAs` answers, or how it fails. */
+  sendAs?: string[] | Error;
 }
 
 function fakeApi(fake: Fake): GmailApi & { calls: string[] } {
@@ -68,6 +70,10 @@ function fakeApi(fake: Fake): GmailApi & { calls: string[] } {
     },
     async getThread() {
       return null;
+    },
+    async listSendAs() {
+      if (fake.sendAs instanceof Error) throw fake.sendAs;
+      return fake.sendAs ?? ['me@example.org'];
     },
   };
 }
@@ -182,6 +188,8 @@ describe('parseAddressList', () => {
     expect(parseAddressList('undisclosed-recipients:;, a@example.com').map((a) => a.address)).toEqual(['a@example.com']);
   });
 });
+
+const DAY = 86_400_000;
 
 const page = (ids: string[], historyId: string): Record<string, HistoryPage> => ({
   '': { additions: ids.map((id) => ({ id, labelIds: ['INBOX'] })), historyId },
@@ -302,6 +310,66 @@ describe('syncAccount', () => {
     const api = fakeApi({ expired: true, search: ['a'], messages: { a: gmailMessage('a', { labelIds: ['INBOX'] }) } });
     await syncAccount(db, api, (await listAccounts(db))[0]!);
     expect(await raw(db).get('SELECT read_at FROM messages')).toEqual({ read_at: null });
+  });
+
+  it("records the owner's send-as addresses on the first sync of a day, and counts mail to them as the owner's", async () => {
+    const db = await openUserDb('me@example.org');
+    await addMailbox(db, 'me@example.org', '500', 0);
+    const toAlias = (id: string) =>
+      gmailMessage(id, {
+        headers: [
+          { name: 'From', value: 'ada@example.com' },
+          { name: 'To', value: 'Me <me@example.com>' },
+        ],
+      });
+    const messages = { a: toAlias('a'), b: toAlias('b'), c: toAlias('c') };
+    const addressed = async () => await raw(db).all("SELECT id, facts->>'addressed' AS addressed FROM messages ORDER BY id");
+    const aliases = async () => (await raw(db).get<{ aliases: string[] }>('SELECT aliases FROM mailboxes'))!.aliases;
+
+    await syncAccount(db, fakeApi({ pages: page(['a'], '510'), messages, sendAs: ['me@example.org'] }), (await listAccounts(db))[0]!, () => DAY);
+    expect(await addressed()).toEqual([{ id: 'a', addressed: 'neither' }]);
+
+    // Added the same day: not looked up again until the next.
+    await syncAccount(
+      db,
+      fakeApi({ pages: page(['b'], '520'), messages, sendAs: ['me@example.org', 'me@example.com'] }),
+      (await listAccounts(db))[0]!,
+      () => DAY + 1000,
+    );
+    expect(await aliases()).toEqual([]);
+    await syncAccount(
+      db,
+      fakeApi({ pages: page(['c'], '530'), messages, sendAs: ['me@example.org', 'me@example.com'] }),
+      (await listAccounts(db))[0]!,
+      () => 2 * DAY,
+    );
+    expect(await aliases()).toEqual(['me@example.com']);
+    expect(await addressed()).toEqual([
+      { id: 'a', addressed: 'neither' },
+      { id: 'b', addressed: 'neither' },
+      { id: 'c', addressed: 'to' },
+    ]);
+  });
+
+  it('keeps the last send-as addresses and goes on syncing when they cannot be read', async () => {
+    const db = await openUserDb('me@example.org');
+    await addMailbox(db, 'me@example.org', '500', 0);
+    await setMailboxAliases(db, 'me@example.org', ['me@example.com']);
+    const messages = {
+      a: gmailMessage('a', {
+        headers: [
+          { name: 'From', value: 'ada@example.com' },
+          { name: 'Cc', value: 'me@example.com' },
+        ],
+      }),
+    };
+    const report = await syncAccount(db, fakeApi({ pages: page(['a'], '520'), messages, sendAs: new Error('network') }), (await listAccounts(db))[0]!);
+    expect(report.added.map((m) => m.messageId)).toEqual(['a']);
+    expect((await listAccounts(db))[0]?.historyId).toBe('520');
+    expect(await raw(db).get("SELECT aliases, facts->>'addressed' AS addressed FROM mailboxes, messages")).toEqual({
+      aliases: ['me@example.com'],
+      addressed: 'cc',
+    });
   });
 
   it('leaves the cursor alone when a fetch fails', async () => {

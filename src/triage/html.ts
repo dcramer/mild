@@ -61,7 +61,8 @@ export function htmlFacts(html: string, senderDomain: string): HtmlFacts {
     const host = l.hostname.toLowerCase();
     return host !== sender && (TRACKER_DOMAINS.test(host) || TRACKER_LABEL.test(host));
   }).length;
-  const oneOpaqueHost = links.length >= 3 && hosts.size === 1 && links.every(opaque);
+  // The sender's own links can carry long ids (a notification's reference) without going through anything.
+  const oneOpaqueHost = links.length >= 3 && hosts.size === 1 && !hosts.has(sender) && links.every(opaque);
 
   return {
     trackingPixel: [...html.matchAll(/<img\s[^>]*>/gi)].some(([tag]) => isPixel(tag)),

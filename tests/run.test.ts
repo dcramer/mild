@@ -56,6 +56,7 @@ function api(): GmailApi {
     listLabels: async () => [...new Set([...mailbox.labels.values()].flat())].filter((id) => id.startsWith('L:')).map((id) => ({ id, name: id.slice(2) })),
     getBodyText: async (id) => bodies.get(id) ?? null,
     getThread: async () => null,
+    listSendAs: async () => [ACCOUNT],
     getContent: async (id) => (bodies.has(id) ? { text: bodies.get(id)!, facts: { hasAttachments: false } } : null),
   };
 }

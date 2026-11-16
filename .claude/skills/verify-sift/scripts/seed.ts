@@ -108,6 +108,7 @@ const api: GmailApi = {
     return { text: m.body, facts: { hasAttachments: id === 'm7', ...html } };
   },
   getThread: async () => null,
+  listSendAs: async () => [ACCOUNT],
 };
 
 // A stand-in model that calls no provider. It is sure the Store's sale is Marketing, answers unusably about

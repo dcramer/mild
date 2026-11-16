@@ -60,7 +60,7 @@ export interface Facts extends Partial<ContentFacts>, Partial<ThreadFacts> {
 const SERVICES: { name: string; domains?: string[]; headers?: string[]; mailer?: RegExp; feedbackId?: RegExp }[] = [
   { name: 'Mailchimp', domains: ['mcsv.net', 'mcdlv.net', 'rsgsv.net', 'mailchimpapp.net'], headers: ['x-mc-user'], mailer: /mailchimp/i },
   { name: 'Mandrill', domains: ['mandrillapp.com'] },
-  { name: 'SendGrid', domains: ['sendgrid.net'], headers: ['x-sg-eid'] },
+  { name: 'SendGrid', domains: ['sendgrid.net', 'sendgrid.info'], headers: ['x-sg-eid'] },
   { name: 'Mailgun', domains: ['mailgun.org'], headers: ['x-mailgun-sid'] },
   { name: 'Amazon SES', domains: ['amazonses.com'], headers: ['x-ses-outgoing'], feedbackId: /amazonses/i },
   { name: 'Postmark', domains: ['mtasv.net'], headers: ['x-pm-message-id'] },
@@ -114,8 +114,18 @@ function bulkService(headers: Record<string, string>): string | null {
   return service?.name ?? null;
 }
 
-/** Gmail delivers `name+tag@` to `name@`, so mail to a tagged address was still addressed to the owner. */
-const untagged = (address: string) => address.replace(/\+[^@]*@/, '@');
+/**
+ * An address as Gmail delivers it: `name+tag@` reaches `name@`, and on gmail.com, which googlemail.com is,
+ * dots in the name are ignored. A Workspace domain's dots are significant, so only those two lose them.
+ */
+function canonical(address: string): string {
+  const at = address.lastIndexOf('@');
+  let local = address.slice(0, at).toLowerCase().replace(/\+.*$/, '');
+  let domain = address.slice(at + 1).toLowerCase();
+  if (domain === 'googlemail.com') domain = 'gmail.com';
+  if (domain === 'gmail.com') local = local.replaceAll('.', '');
+  return `${local}@${domain}`;
+}
 
 const CATEGORIES = {
   personal: 'CATEGORY_PERSONAL',
@@ -125,16 +135,17 @@ const CATEGORIES = {
   forums: 'CATEGORY_FORUMS',
 } as const;
 
-/** The facts a message's headers and labels give. The account id is the owner's address. */
+/** The facts a message's headers and labels give. The owner is the account id and `aliases`, its other addresses in Gmail (send-as). */
 export function deriveFacts(
   message: Pick<MessageFacts, 'accountId' | 'from' | 'to' | 'cc' | 'labelIds' | 'headers'>,
   read: Partial<ContentFacts & ThreadFacts> = {},
+  aliases: readonly string[] = [],
 ): Facts {
   const { headers } = message;
   const signals = bulkSignals(headers);
   const results = receivedResults(headers);
-  const owner = message.accountId.toLowerCase();
-  const isOwner = (a: { address: string }) => untagged(a.address) === owner;
+  const owner = new Set([message.accountId, ...aliases].map(canonical));
+  const isOwner = (a: { address: string }) => owner.has(canonical(a.address));
   const replyTo = parseAddressList(headers['reply-to']);
   const category = (Object.keys(CATEGORIES) as (keyof typeof CATEGORIES)[]).find((key) => message.labelIds.includes(CATEGORIES[key]));
 

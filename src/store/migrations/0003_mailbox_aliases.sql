@@ -1,0 +1,1 @@
+ALTER TABLE "mailboxes" ADD COLUMN "aliases" jsonb DEFAULT '[]'::jsonb NOT NULL;

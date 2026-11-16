@@ -140,8 +140,22 @@ export async function listAccounts(db: Sql): Promise<Account[]> {
   return rows.map((r) => ({ id: r.id, email: r.id, historyId: r.historyId }));
 }
 
+/** The mailbox's other addresses in Gmail, as its last sync found them. */
+export async function mailboxAliases(db: Sql, accountId: string): Promise<string[]> {
+  const [row] = await db.select({ aliases: mailboxes.aliases }).from(mailboxes).where(eq(mailboxes.id, accountId));
+  return row?.aliases ?? [];
+}
+
+export async function setMailboxAliases(db: Sql, accountId: string, aliases: readonly string[]): Promise<void> {
+  await db
+    .update(mailboxes)
+    .set({ aliases: aliases.filter((a) => a !== accountId) })
+    .where(eq(mailboxes.id, accountId));
+}
+
 async function insertMessages(db: Sql, accountId: string, messages: readonly MessageFacts[], now: number, suggestOnly: boolean): Promise<number> {
   if (messages.length === 0) return 0;
+  const aliases = await mailboxAliases(db, accountId);
   const added = await db
     .insert(messageRows)
     .values(
@@ -161,7 +175,7 @@ async function insertMessages(db: Sql, accountId: string, messages: readonly Mes
         labelIds: m.labelIds,
         syncedAt: now,
         suggestOnly,
-        facts: deriveFacts(m),
+        facts: deriveFacts(m, {}, aliases),
       })),
     )
     .onConflictDoNothing()
