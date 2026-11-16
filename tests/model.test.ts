@@ -10,7 +10,7 @@ import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts'
 import { openUserDb, raw } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { startRun } from '../src/store/runs.ts';
-import { PROPOSE_AFTER, listProposals, proposeForSender, proposeSettled, resolveProposal } from '../src/store/proposals.ts';
+import { PROPOSE_AFTER, listProposals, madeFromProposal, proposeForSender, proposeSettled, resolveProposal } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { domainFacts, rememberCorrespondent, senderFacts } from '../src/store/senders.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
@@ -259,12 +259,14 @@ describe('preferences in the database', () => {
     // One more agreeing message does not open a second proposal.
     expect(await modelDecision(db, 'again', 'newsletter', 'archive')).toBe(false);
 
-    expect(await resolveProposal(db, proposal!.id, true)).toBe(true);
-    // It is the user's rule now, and carries no action of its own, so it follows the label when the label changes.
-    expect(await listRules(db, ACCOUNT)).toMatchObject([{ match: { from: 'news@example.com' }, labelId: 'newsletter', source: 'user' }]);
-    expect((await listRules(db, ACCOUNT))[0]).not.toHaveProperty('disposition');
+    // Accepting it does not make it: the user makes it in the rule dialog, where they can change it first.
+    await expect(resolveProposal(db, proposal!.id, true)).rejects.toThrow('rule dialog');
+    expect(await listRules(db, ACCOUNT)).toEqual([]);
+    expect(await madeFromProposal(db, proposal!.id, 'other@example.org')).toBe(false);
+    expect(await madeFromProposal(db, proposal!.id, ACCOUNT)).toBe(true);
     expect(await listProposals(db, ACCOUNT)).toEqual([]);
-    expect(await resolveProposal(db, proposal!.id, true)).toBe(false);
+    expect(await madeFromProposal(db, proposal!.id, ACCOUNT)).toBe(false);
+    expect(await resolveProposal(db, proposal!.id, false)).toBe(false);
   });
 
   it('does not propose again what the user dismissed', async () => {

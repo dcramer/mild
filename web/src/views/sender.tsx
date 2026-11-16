@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { DecisionTable } from '@/components/decision-table.tsx';
 import { SenderFacts, SenderLink, StandingStamp } from '@/components/sender.tsx';
 import { api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, percent } from '@/lib/format.ts';
+import { standingStart } from '@/lib/rule-start.ts';
+import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { ChoiceGroup, Empty, Failure, Figure, Figures, Loading, PageHeader, Section, Sub, Table, Td, Th, Tr } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
@@ -28,6 +31,9 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
     'address' in who ? api.sender(accountId, who.address, signal) : api.domain(accountId, who.domain, signal),
   );
   const give = useAction();
+  // A standing is a rule: choosing one opens the rule dialog on it, to see and change before adding.
+  const [giving, setGiving] = useState<Given | null>(null);
+  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   if (error && !data)
     return 'domain' in who ? <Empty>Anyone can get an address at {who.domain}, so it has no standing of its own.</Empty> : <ErrorNote message={error} />;
   if (loading || !data) return <Loading rows={6} />;
@@ -64,8 +70,17 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
             options={GIVE}
             clearable
             disabled={give.busy}
-            onChange={(standing) => give.run(() => api.setStanding(accountId, who, standing ?? 'none'), reload)}
+            onChange={(standing) => (standing ? setGiving(standing) : give.run(() => api.clearStanding(accountId, who), reload))}
           />
+          {giving ? (
+            <AddRuleDialog
+              accountId={accountId}
+              labels={manage.data?.labels[accountId] ?? []}
+              start={standingStart(who, giving)}
+              onClose={() => setGiving(null)}
+              onAdded={reload}
+            />
+          ) : null}
           <p className="text-muted-foreground">
             {given ? `${FOLLOWS[given]} Press it again to take it back.` : 'None given: sift judges each message as it comes.'}
           </p>

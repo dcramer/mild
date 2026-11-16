@@ -15,7 +15,8 @@ import type { Sql } from '../../store/sql.ts';
 import { accuracy, pendingSuggestions } from '../../learn/feedback.ts';
 import { listLabels } from '../../store/labels.ts';
 import type { Label } from '../../triage/types.ts';
-import { listProposals } from '../../store/proposals.ts';
+import { listProposals, settledAction } from '../../store/proposals.ts';
+import { listRules } from '../../store/rules.ts';
 import { type Scope, sees, within } from '../scope.ts';
 import { FACT_FILTERS, type FactFilter, type SuggestionDetail, type SuggestionItem, type Suggestions } from '../types.ts';
 import { outcomeOf } from './labels.ts';
@@ -141,27 +142,30 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
   return {
     labels: Object.fromEntries([...labels].map(([id, list]) => [id, list.map((l) => ({ id: l.id, name: l.name, disposition: outcomeOf(l) }))])),
     examples: { captured: examples.captured ?? 0, pending: examples.pending ?? 0 },
-    proposals: (await listProposals(db))
-      .filter((p) => sees(scope, p.accountId))
-      .flatMap((p) => {
-        const label = labels.get(p.accountId)?.find((l) => l.id === p.labelId);
-        // A proposal whose label has been removed has nothing to offer.
-        if (!label) return [];
-        return [
-          {
-            id: p.id,
-            accountId: p.accountId,
-            kind: p.kind,
-            match: p.match,
-            labelId: p.labelId,
-            labelName: label.name,
-            disposition: outcomeOf(label),
-            agreed: p.agreed,
-          },
-        ];
-      }),
+    proposals: await proposalSummaries(db, scope, labels),
     items,
     waiting: waitingNow.length,
     accuracy: { reviewed, right },
   };
+}
+
+async function proposalSummaries(db: Sql, scope: Scope, labels: Map<string, Label[]>): Promise<Suggestions['proposals']> {
+  const summaries: Suggestions['proposals'] = [];
+  for (const p of await listProposals(db)) {
+    const label = labels.get(p.accountId)?.find((l) => l.id === p.labelId);
+    // A proposal whose label has been removed has nothing to offer.
+    if (!sees(scope, p.accountId) || !label) continue;
+    const rule = p.ruleId === null ? undefined : (await listRules(db, p.accountId)).find((r) => r.id === p.ruleId)!;
+    summaries.push({
+      id: p.id,
+      accountId: p.accountId,
+      kind: p.kind,
+      match: p.match,
+      labelId: p.labelId,
+      labelName: label.name,
+      disposition: rule ? settledAction(rule, label) : outcomeOf(label),
+      agreed: p.agreed,
+    });
+  }
+  return summaries;
 }

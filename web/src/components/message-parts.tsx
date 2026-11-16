@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { type MessageDetail, api } from '@/lib/api.ts';
-import { FACTS, type FactAnswer, capitalised, factParam, factWords } from '@/lib/format.ts';
+import { FACTS, type FactAnswer, capitalised, factWords } from '@/lib/format.ts';
+import { type RuleStart, factStart, listStart } from '@/lib/rule-start.ts';
 import { Button, ChoiceGroup, MailFrame, RowActions, Section, Sub, Table, Td, Tr } from '@/system';
 
 const people = (list: MessageDetail['to']) => list.map((p) => p.address).join(', ');
@@ -78,8 +79,8 @@ interface Seen {
   /** What is true of the message, in the words of the rule condition it makes. */
   words: string;
   detail?: string | null;
-  /** Where "Make a rule" starts the rule: this sender and the fact, or the list by name. */
-  rule?: string;
+  /** Where "Rule…" starts the rule: this sender and the fact, or the list by name. */
+  rule?: RuleStart;
 }
 
 /**
@@ -87,21 +88,18 @@ interface Seen {
  * addressed to you that passed DMARC says nothing), each in the words of the rule condition it makes, with a
  * way to make that rule.
  */
-export function SeenFacts({ detail }: { detail: MessageDetail }) {
+export function SeenFacts({ detail, onRule }: { detail: MessageDetail; onRule: (start: RuleStart) => void }) {
   const f = detail.facts;
-  const sender = encodeURIComponent(detail.fromAddress);
   const fact = (answer: FactAnswer, extra: Omit<Seen, 'words' | 'rule'> = {}): Seen => ({
     words: capitalised(factWords(answer)),
-    rule: `/rules?from=${sender}&fact=${factParam(answer)}`,
+    rule: factStart(detail.fromAddress, answer),
     ...extra,
   });
   const seen: Seen[] = [
     ...(f.isReply ? [fact({ key: 'isReply', index: 0 }, { detail: f.ownerInThread ? 'In a thread you wrote in' : null })] : []),
     ...(f.addressed === 'cc' ? [fact({ key: 'addressed', index: 1 })] : f.addressed === 'neither' ? [fact({ key: 'addressed', index: 2 })] : []),
     ...(f.dmarc === 'pass' ? [] : [fact({ key: 'dmarc', index: 1 }, { detail: 'Who sent it is not proven' })]),
-    ...(f.listId
-      ? [{ words: capitalised(factWords({ key: 'listId', index: 0 })), detail: f.listId, rule: `/rules?list=${encodeURIComponent(f.listId)}` }]
-      : []),
+    ...(f.listId ? [{ words: capitalised(factWords({ key: 'listId', index: 0 })), detail: f.listId, rule: listStart(f.listId) }] : []),
     ...(f.unsubscribe === 'one-click'
       ? [fact({ key: 'unsubscribe', index: 0 }, { detail: UNSUBSCRIBE[detail.unsubscribe] })]
       : f.unsubscribe === 'header'
@@ -131,7 +129,7 @@ export function SeenFacts({ detail }: { detail: MessageDetail }) {
               </Td>
               <RowActions phone="keep">
                 {s.rule ? (
-                  <Button variant="quiet" href={s.rule} aria-label={`Make a rule for mail that ${s.words.toLowerCase()}`}>
+                  <Button variant="quiet" onClick={() => onRule(s.rule!)} aria-label={`Make a rule for mail that ${s.words.toLowerCase()}`}>
                     Rule…
                   </Button>
                 ) : null}

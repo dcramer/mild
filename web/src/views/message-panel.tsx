@@ -4,9 +4,11 @@ import { useAnswer } from '@/components/answer.tsx';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { MessageBody, SeenFacts } from '@/components/message-parts.tsx';
 import { AddLabelDialog } from '@/views/label-panel.tsx';
+import { AddRuleDialog } from '@/views/rule-dialog.tsx';
+import { type RuleStart, messageStart } from '@/lib/rule-start.ts';
 import { SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { type MessageDetail, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ago, count, dateTime, money, sureness, tier } from '@/lib/format.ts';
+import { ago, count, dateTime, describeMatch, money, sureness, tier } from '@/lib/format.ts';
 import {
   AnswerPicker,
   Button,
@@ -134,6 +136,8 @@ function Body({
   const undo = useAction();
   const toast = useToast();
   const [adding, setAdding] = useState(false);
+  // The rule dialog, opened in place on what this message shows: its sender and label, or one thing sift saw in it.
+  const [ruling, setRuling] = useState<RuleStart | null>(null);
   const history = [
     ...detail.decisions.map((d) => ({ at: d.decidedAt, order: 0, node: <DecisionEvent key={`d${d.id}`} d={d} /> })),
     ...detail.actions.map((a) => ({
@@ -197,9 +201,18 @@ function Body({
           />
           {adding ? <AddLabelDialog accountId={detail.accountId} onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
           <span className="flex-1" />
-          <Button variant="quiet" href={`/rules?from=${encodeURIComponent(detail.fromAddress)}`}>
+          <Button variant="quiet" onClick={() => setRuling(messageStart(detail.fromAddress, current?.labelId ?? null))}>
             Make a rule…
           </Button>
+          {ruling ? (
+            <AddRuleDialog
+              accountId={detail.accountId}
+              labels={labels}
+              start={ruling}
+              onClose={() => setRuling(null)}
+              onAdded={(match) => toast(`Added a rule for mail ${describeMatch(match)}.`)}
+            />
+          ) : null}
         </div>
         {current ? (
           <p className="text-muted-foreground">
@@ -221,7 +234,7 @@ function Body({
           <Section title="Sender" action={<TextLink href={senderHref(detail.accountId, detail.fromAddress)}>All their mail</TextLink>}>
             <SenderFacts accountId={detail.accountId} profile={detail.sender} />
           </Section>
-          <SeenFacts detail={detail} />
+          <SeenFacts detail={detail} onRule={setRuling} />
           {others.length > 0 ? (
             <Section title="Also waiting" meta={count(others.length)}>
               <div className="max-h-56 overflow-y-auto">

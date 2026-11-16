@@ -7,7 +7,7 @@ A message sift could not place, or placed wrongly, waits in Suggestions. The use
 - `answer-open` opens a waiting message in the side panel from its row.
 - `answer-pick` chooses a label in the panel's dropdown (`What this message is`), sift's likely labels first, each with a meter.
 - `answer-save` is the check: `Agree:` the label while it is sift's, `Save:` once changed. The panel moves to the next waiting message and the count drops.
-- `answer-rule` is `Make a rule…`, which opens the rule dialog on Rules started on this sender.
+- `answer-rule` is `Make a rule…`, which opens the rule dialog over the panel, started on this sender and the message's label (see rule-shortcuts.md).
 
 ## How to get to it (user POV)
 
@@ -22,7 +22,7 @@ Preconditions:
 
 - **Open.** `ab open "$B/suggestions"`, then `ab find role cell click --name "48 hours only: 30% off"`. The address gains `?message=m4`, a level-2 heading reads `48 hours only: 30% off`, the dropdown reads `Which label?`, and the check is disabled.
 - **Choose and save.** `ab find role combobox click --name "What this message is"`, `ab find role option click --name "Marketing"`, then `ab find role button click --name "Save: Marketing"`. A toast reads `Archived as Marketing`; the panel shows the next waiting message (`?message=m6`, `Lunch on Thursday?`).
-- **A rule, on purpose.** On m6, `ab find role link click --name "Make a rule…"`. Rules opens with the rule dialog's value reading `ada@example.org`.
+- **A rule, on purpose.** On m6, `ab find role button click --name "Make a rule…"`. The rule dialog opens over the panel with the value reading `ada@example.org`; the address keeps `?message=m6`. `Cancel`.
 - **Second view.** `ab open "$B/rules"`. Still 3 rules: answering made none.
 - **Stored.** `verify.sh sql "$RUN" "SELECT label_id, carry_out, by_user FROM decisions WHERE message_id = 'm4' ORDER BY id DESC LIMIT 1"` returns `marketing`, `true`, `true`. `SELECT message_id, label_id FROM examples` returns `m4` with `marketing`.
 

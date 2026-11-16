@@ -1,0 +1,53 @@
+import { describe, expect, it } from 'vitest';
+import { listRuleSummaries } from '../src/dashboard/queries/rules.ts';
+import { addRule, setRule } from '../src/store/rules.ts';
+import { factStart, listStart, messageStart, proposalStart, replacedBy, standingStart } from '../web/src/lib/rule-start.ts';
+import { onePerson } from './fixtures.ts';
+import { everything } from './helpers.ts';
+
+const ACCOUNT = 'me@example.org';
+
+describe('where each way into the rule dialog starts it', () => {
+  it('starts a proposal on its sender and label', () => {
+    expect(proposalStart({ from: 'news@example.com' }, 'newsletter')).toEqual({ by: 'from', value: 'news@example.com', facts: [], label: 'newsletter' });
+    expect(proposalStart({ fromDomain: 'example.com', facts: { isReply: false } }, 'newsletter')).toEqual({
+      by: 'from',
+      value: 'example.com',
+      facts: [{ key: 'isReply', index: 1 }],
+      label: 'newsletter',
+    });
+  });
+
+  it("starts a message's Make a rule on its sender and the label sift gave it, if any", () => {
+    expect(messageStart('ada@example.org', 'personal')).toEqual({ by: 'from', value: 'ada@example.org', facts: [], label: 'personal' });
+    expect(messageStart('ada@example.org', null)).toEqual({ by: 'from', value: 'ada@example.org', facts: [] });
+  });
+
+  it('starts a fact row on the sender and that fact, and the list row on the list', () => {
+    expect(factStart('deals@example.com', { key: 'unsubscribe', index: 0 })).toEqual({
+      by: 'from',
+      value: 'deals@example.com',
+      facts: [{ key: 'unsubscribe', index: 0 }],
+    });
+    expect(listStart('promo.example.com')).toEqual({ by: 'listId', value: 'promo.example.com', facts: [] });
+  });
+
+  it('starts a standing on the sender or domain and what that standing does, with no label', () => {
+    expect(standingStart({ address: 'x@example.com' }, 'trusted')).toEqual({ by: 'from', value: 'x@example.com', facts: [], action: 'keep' });
+    expect(standingStart({ address: 'x@example.com' }, 'unwanted')).toMatchObject({ action: 'archive' });
+    expect(standingStart({ domain: 'example.net' }, 'blocked')).toEqual({ by: 'from', value: 'example.net', facts: [], action: 'spam' });
+  });
+
+  it('names the rule adding would replace, the same one the write replaces', async () => {
+    const { db } = await onePerson(ACCOUNT, 'work@example.org');
+    await addRule(db, ACCOUNT, { match: { from: 'x@example.com' }, whenLabel: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: 'x@example.com' }, except: [{ subjectContains: 'sale' }], disposition: 'keep' }, 'user');
+    await addRule(db, 'work@example.org', { match: { from: 'x@example.com' }, disposition: 'spam' }, 'user');
+    const mine = await addRule(db, ACCOUNT, { match: { from: 'x@example.com', facts: { isReply: false } }, labelId: 'newsletter' }, 'user');
+    const rules = await listRuleSummaries(db, await everything(db));
+
+    expect(replacedBy(rules, ACCOUNT, { facts: { isReply: false }, from: 'x@example.com' })?.id).toBe(mine);
+    expect(replacedBy(rules, ACCOUNT, { from: 'x@example.com' })).toBeUndefined();
+    expect(await setRule(db, ACCOUNT, { facts: { isReply: false }, from: 'x@example.com' }, { disposition: 'archive' }, 'user')).toBe(mine);
+  });
+});

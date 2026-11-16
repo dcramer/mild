@@ -1,6 +1,7 @@
 import { type PROPOSAL_KINDS, alias, and, decisions, desc, eq, feedback, isNotNull, max, messages, proposals } from './query.ts';
 import type { Sql } from './sql.ts';
-import type { RuleMatch } from '../triage/stages/rules.ts';
+import type { Rule, RuleMatch } from '../triage/stages/rules.ts';
+import type { DecidedDisposition, Label } from '../triage/types.ts';
 import { listLabels } from './labels.ts';
 import { hasRuleFor, listRules, removeRule, setRule } from './rules.ts';
 
@@ -135,41 +136,53 @@ export async function proposeSettled(db: Sql, accountId: string, ruleId: string,
   return await propose(db, { accountId, kind: 'always', match: rule.match, labelId: rule.whenLabel, ruleId, agreed: recent.length }, now);
 }
 
+/** What a judged rule does to everything it matches once it stops waiting for its label: its own action, or the label's. */
+export function settledAction(rule: Pick<Rule, 'disposition'>, label: Pick<Label, 'disposition'>): DecidedDisposition {
+  const does = rule.disposition ?? label.disposition;
+  return does === 'review' ? 'keep' : does;
+}
+
 /**
- * Accept or dismiss a proposal. Accepting writes the rule as the user's own, or turns a rule that waited
- * for a label into one that acts on everything it matches. Returns false if it was not open.
+ * Dismiss a proposal, or accept one of kind `always`: the rule that waited for a label then acts on
+ * everything it matches. A proposed rule is not accepted here but made from it (`madeFromProposal`), so
+ * the user sees and can change the rule first. Returns false if it was not open.
  */
 export async function resolveProposal(db: Sql, id: number, accept: boolean, now: number = Date.now()): Promise<boolean> {
-  const [row] = await db
+  const [p] = await db
     .select(COLUMNS)
     .from(proposals)
     .where(and(eq(proposals.id, id), eq(proposals.status, 'open')));
-  const p = row;
   if (!p) return false;
   if (accept) {
-    const existing = p.ruleId ? (await listRules(db, p.accountId)).find((r) => r.id === p.ruleId) : undefined;
-    if (existing) {
-      // What the rule did when the mail was that label, it now does to all of it, without waiting to be told.
-      const does = existing.disposition ?? (await listLabels(db, p.accountId)).find((l) => l.id === p.labelId)!.disposition;
-      // Takes this proposal with it.
-      await removeRule(db, existing.id);
-      await setRule(
-        db,
-        p.accountId,
-        p.match,
-        {
-          disposition: does === 'review' ? 'keep' : does,
-          ...(existing.subscription ? { subscription: existing.subscription } : {}),
-          ...(existing.markRead ? { markRead: true } : {}),
-        },
-        'user',
-        now,
-      );
-    } else await setRule(db, p.accountId, p.match, { labelId: p.labelId }, 'user', now);
+    if (p.kind === 'rule') throw new Error('A proposed rule is made from the rule dialog.');
+    const existing = (await listRules(db, p.accountId)).find((r) => r.id === p.ruleId)!;
+    const label = (await listLabels(db, p.accountId)).find((l) => l.id === p.labelId)!;
+    // Takes this proposal with it.
+    await removeRule(db, existing.id);
+    await setRule(
+      db,
+      p.accountId,
+      p.match,
+      {
+        disposition: settledAction(existing, label),
+        ...(existing.subscription ? { subscription: existing.subscription } : {}),
+        ...(existing.markRead ? { markRead: true } : {}),
+      },
+      'user',
+      now,
+    );
+    return true;
   }
-  await db
-    .update(proposals)
-    .set({ status: accept ? 'accepted' : 'dismissed', resolvedAt: now })
-    .where(eq(proposals.id, id));
+  await db.update(proposals).set({ status: 'dismissed', resolvedAt: now }).where(eq(proposals.id, id));
   return true;
+}
+
+/** Mark a proposed rule for `accountId` accepted, once a rule has been made from it. Returns false if there is no such proposal open. */
+export async function madeFromProposal(db: Sql, id: number, accountId: string, now: number = Date.now()): Promise<boolean> {
+  const done = await db
+    .update(proposals)
+    .set({ status: 'accepted', resolvedAt: now })
+    .where(and(eq(proposals.id, id), eq(proposals.accountId, accountId), eq(proposals.kind, 'rule'), eq(proposals.status, 'open')))
+    .returning({ id: proposals.id });
+  return done.length > 0;
 }

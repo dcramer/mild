@@ -1,16 +1,16 @@
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
-import { type LabelSummary, api, useAction } from '@/lib/api.ts';
+import { type LabelSummary, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type By, type RuleStart, replacedBy } from '@/lib/rule-start.ts';
 import { FACTS, type FactAnswer, type FactKey, factConditions, factParam, factWords, outcomeName } from '@/lib/format.ts';
-import { Button, Check, Dialog, Failure, Field, Form, Input, Select } from '@/system';
+import { Button, Check, Dialog, Does, Failure, Field, Form, Input, Select } from '@/system';
 
 const BY = [
   ['from', 'from'],
   ['listId', 'on the list'],
   ['to', 'sent to'],
   ['subjectContains', 'with a subject containing'],
-] as const;
-type By = (typeof BY)[number][0];
+] as const satisfies readonly (readonly [By, string])[];
 const ACTIONS = ['archive', 'spam', 'keep'] as const;
 type Action = (typeof ACTIONS)[number];
 
@@ -26,13 +26,6 @@ function fromMatch(text: string): Record<string, string> {
   return /^[^@\s]+@[^@\s]+$/.test(value) ? { from: value } : { fromDomain: value.replace(/^@/, '') };
 }
 
-/** Where the dialog starts when it is opened from a message: its sender or its list, and what sift saw in it. */
-export interface RuleStart {
-  by: By;
-  value: string;
-  facts: FactAnswer[];
-}
-
 /**
  * A rule in the order sift applies it: which mail (an address, a domain, a list, a recipient or words in
  * the subject, and what sift saw in it), only when it is something in the reader's words, and the label it
@@ -42,22 +35,25 @@ export function AddRuleDialog({
   accountId,
   labels,
   start,
+  proposal,
   onClose,
   onAdded,
 }: {
   accountId: string;
-  labels: LabelSummary[];
+  labels: readonly Pick<LabelSummary, 'id' | 'name'>[];
   start?: RuleStart;
+  /** Adding the rule accepts this proposal; closing without adding leaves it open. */
+  proposal?: number;
   onClose: () => void;
-  onAdded: () => void;
+  onAdded: (match: RuleMatch) => void;
 }) {
   const { busy, error, run } = useAction();
   const [by, setBy] = useState<By>(start?.by ?? 'from');
   const [value, setValue] = useState(start?.value ?? '');
   const [facts, setFacts] = useState<FactAnswer[]>(start?.facts ?? []);
   const [condition, setCondition] = useState('');
-  const [label, setLabel] = useState('');
-  const [then, setThen] = useState<'' | Action>('');
+  const [label, setLabel] = useState(start?.label ?? '');
+  const [then, setThen] = useState<'' | Action>(start?.action ?? '');
   const [markRead, setMarkRead] = useState(false);
   const [unsubscribe, setUnsubscribe] = useState(false);
   const chosen = labels.find((l) => l.id === label);
@@ -67,6 +63,10 @@ export function AddRuleDialog({
   const named = by === 'from' ? fromMatch(value) : value.trim() === '' ? {} : { [by]: value.trim() };
   const match = facts.length > 0 ? { ...named, facts: factConditions(facts) } : named;
   const ready = (value.trim() !== '' || facts.length > 0) && !needsLabel;
+  // Adding a rule with exactly the conditions of one already there replaces it, so the dialog says which.
+  const rules = useLoaded('rules', (signal) => api.rules(signal));
+  const replaces = ready ? replacedBy(rules.data?.rules ?? [], accountId, match) : undefined;
+  const replacing = replaces ? (replaces.kind === 'label' ? replaces.override : replaces.disposition) : null;
   const unused = (except: FactKey | null) => ANSWERS.filter((a) => a.key === except || !facts.some((f) => f.key === a.key));
   const add = () =>
     run(
@@ -79,9 +79,10 @@ export function AddRuleDialog({
           ...(!chosen && markRead ? { markRead } : {}),
           ...(!chosen && unsubscribe ? { unsubscribe } : {}),
           ...(chosen && condition.trim() !== '' ? { when: condition.trim() } : {}),
+          ...(proposal === undefined ? {} : { proposal }),
         }),
       () => {
-        onAdded();
+        onAdded(match);
         onClose();
       },
     );
@@ -152,6 +153,15 @@ export function AddRuleDialog({
             ) : null}
           </div>
         </Field>
+        {replaces ? (
+          <Field inline label="Replaces">
+            <span className="flex min-h-(--control) items-center gap-1">
+              {replaces.labelName ? <span>{replaces.labelName}</span> : null}
+              {replaces.labelName && replacing ? <span className="text-muted-foreground">·</span> : null}
+              {replacing ? <Does action={replacing}>{outcomeName(replacing)}</Does> : null}
+            </span>
+          </Field>
+        ) : null}
         <Field
           inline
           label="Only when"

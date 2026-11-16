@@ -13,7 +13,7 @@ import { updateLabel } from '../src/store/labels.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { setActive } from '../src/store/preferences.ts';
 import { MAX_ATTEMPTS, finishRun, putBackInQueue, startRun } from '../src/store/runs.ts';
-import { listProposals, resolveProposal } from '../src/store/proposals.ts';
+import { listProposals, madeFromProposal } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import { FakeMailbox, facts } from './helpers.ts';
@@ -538,7 +538,9 @@ describe('inference tier', () => {
     expect(await listRules(db, ACCOUNT)).toEqual([]);
     expect(logs.some((line) => line.includes('proposed 1 rule'))).toBe(true);
 
-    await resolveProposal(db, (await listProposals(db, ACCOUNT))[0]!.id, true);
+    const [proposal] = await listProposals(db, ACCOUNT);
+    await addRule(db, ACCOUNT, { match: proposal!.match, labelId: proposal!.labelId }, 'user');
+    expect(await madeFromProposal(db, proposal!.id, ACCOUNT)).toBe(true);
     await arrive('n7');
     expect(judged).not.toContain('n7');
     expect(await raw(db).get(`SELECT stage, disposition, label_id, reason FROM decisions WHERE message_id = 'n7'`)).toEqual({

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { listAccounts } from '../../store/accounts.ts';
-import { setStanding } from '../../store/rules.ts';
+import { standingRule } from '../../store/rules.ts';
+import { removeRuleAndFilter } from './rules.ts';
 import { senderPage } from '../queries/senders.ts';
 import { SenderPage } from '../types.ts';
 import { type Read, type Write, accountId, done, missing, named, ok, read, text, write } from './route.ts';
@@ -34,7 +35,7 @@ export const reads: Read[] = [
 
 export const writes: Write[] = [
   write({
-    path: '/api/standing',
+    path: '/api/standing/clear',
     body: z
       .strictObject({
         accountId,
@@ -44,14 +45,14 @@ export const writes: Write[] = [
         domain: text()
           .regex(/^[^@\s]+$/)
           .optional(),
-        standing: z.enum(['trusted', 'unwanted', 'blocked', 'none']),
       })
       .refine((who) => (who.address === undefined) !== (who.domain === undefined), { message: 'Name an address or a domain, and not both.' }),
     reply: done,
     touches: named,
-    run: async ({ db, now }, { accountId, address, domain, standing }) => {
-      if (!(await listAccounts(db)).some((a) => a.id === accountId)) return null;
-      await setStanding(db, accountId, address === undefined ? { fromDomain: domain!.toLowerCase() } : { from: address.toLowerCase() }, standing, now());
+    run: async (ctx, { accountId, address, domain }) => {
+      if (!(await listAccounts(ctx.db)).some((a) => a.id === accountId)) return null;
+      const id = await standingRule(ctx.db, accountId, address === undefined ? { fromDomain: domain!.toLowerCase() } : { from: address.toLowerCase() });
+      if (id) await removeRuleAndFilter(ctx, id);
       return { ok: true as const };
     },
   }),

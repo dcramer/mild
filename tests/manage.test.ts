@@ -409,6 +409,16 @@ describe('managing sift from the dashboard', () => {
     expect((await listRules(db, ACCOUNT)).map((r) => r.id)).toEqual([spam]);
   });
 
+  it('takes a standing back with its Gmail filter, as removing the rule does', async () => {
+    const { call } = await start();
+    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, disposition: 'archive' }, 'user');
+    await setActive(db, true);
+    expect((await call('POST', '/api/rules/filter', { id, on: true })).status).toBe(200);
+    expect((await call('POST', '/api/standing/clear', { accountId: ACCOUNT, address: 'news@example.com' })).status).toBe(200);
+    expect(calls).toEqual([`filter ${id} on`, `filter ${id} off`]);
+    expect(await listRules(db, ACCOUNT)).toEqual([]);
+  });
+
   it('can only look, not manage, when no controls are given', async () => {
     const { call } = await start({ withControls: false });
     expect((await call('POST', '/api/undo', { id: 1 })).status).toBe(409);

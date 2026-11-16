@@ -183,12 +183,8 @@ export const factAnswers = (facts: RuleFacts = {}): FactAnswer[] =>
 /** Answers as the conditions a rule carries. */
 export const factConditions = (answers: readonly FactAnswer[]): RuleFacts =>
   Object.fromEntries(answers.map((answer) => [answer.key, answerOf(answer)?.[0]])) as RuleFacts;
-/** An answer in an address (`?fact=isReply:0`), and back. */
+/** An answer as one string, for a select's value. */
 export const factParam = ({ key, index }: FactAnswer) => `${key}:${index}`;
-export function parseFactParam(text: string): FactAnswer | null {
-  const [key = '', index = ''] = text.split(':');
-  return key in FACTS && answerOf({ key: key as FactKey, index: Number(index) }) ? { key: key as FactKey, index: Number(index) } : null;
-}
 
 /** The facts Suggestions and Activity can be narrowed by (`FACT_FILTERS`, src/dashboard/types.ts), in the words of the conditions they are. */
 export const FACT_FILTER_WORDS = [

@@ -8,7 +8,7 @@ On the Rules screen the user writes a rule directly: a condition, then what it s
 - `rule-facts` adds conditions on what sift saw in the message (`Add a condition`, then `Condition 1`, …); see message-facts.md.
 - `rule-label` chooses `Label it as` (`No label, just act`, or a label); `Only when it is, in your words` narrows a label rule.
 - `rule-action` chooses `What happens to it` (`Archive`, `Spam`, `Keep`).
-- `rule-add` adds it to the list; waiting suggestions it covers are re-decided.
+- `rule-add` adds it to the list; waiting suggestions it covers are re-decided. A rule with exactly the conditions of one already there (no exceptions, waiting for no label) replaces it; the dialog shows `Replaces` with what that rule says.
 - `rule-remove` removes a rule from its row.
 
 ## How to get to it (user POV)

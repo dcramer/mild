@@ -393,7 +393,7 @@ const ProposalSummary = z.object({
   match,
   labelId: z.string(),
   labelName: z.string(),
-  /** What the label does to mail. */
+  /** What happens to the mail: the label's action, or for `always` what the rule will do to all of it. */
   disposition: z.string(),
   /** How many decisions in a row it rests on. */
   agreed: z.number(),

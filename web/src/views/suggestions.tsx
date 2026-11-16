@@ -23,7 +23,10 @@ import {
   AnswerPicker,
   Button,
   Check,
+  Dialog,
   Empty,
+  Fact,
+  Facts,
   Failure,
   FilterGroup,
   ListView,
@@ -42,6 +45,8 @@ import {
   useToast,
 } from '@/system';
 import { AddLabelDialog } from '@/views/label-panel.tsx';
+import { AddRuleDialog } from '@/views/rule-dialog.tsx';
+import { proposalStart } from '@/lib/rule-start.ts';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 const UNSURE = '-';
@@ -66,32 +71,81 @@ function Week({ summary }: { summary: Summary }) {
 
 type Proposal = Suggestions['proposals'][number];
 
-/** A rule sift thinks is worth having. Nothing changes until it is accepted. */
-function ProposalRow({ proposal, onResolved }: { proposal: Proposal; onResolved: (line: string | null) => void }) {
+/** A judged rule becoming one that acts on all it matches, said as what happens now and what will. */
+function StopReadingDialog({ proposal, onClose }: { proposal: Proposal; onClose: () => void }) {
   const { busy, error, run } = useAction();
+  const toast = useToast();
   const whose = describeMatch(proposal.match);
-  const resolve = (accept: boolean) =>
-    run(async () => {
-      await api.resolveProposal(proposal.id, accept);
-      onResolved(accept ? `From now on, mail ${whose} is ${proposal.labelName}: ${willBe(proposal.disposition)}, without sift reading it.` : null);
-    });
+  const does = willBe(proposal.disposition);
+  const stop = () =>
+    run(
+      () => api.resolveProposal(proposal.id, true),
+      () => {
+        toast(`From now on, mail ${whose} is ${does} without sift reading it.`);
+        onClose();
+      },
+    );
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Stop reading mail ${whose}?`}
+      footer={
+        <>
+          <Button variant="ink" busy={busy} onClick={stop}>
+            Stop reading them
+          </Button>
+          <Button variant="quiet" onClick={onClose}>
+            Cancel
+          </Button>
+          <Failure>{error}</Failure>
+        </>
+      }
+    >
+      <Facts>
+        <Fact term="Now">
+          A model reads each message, and those it says are {proposal.labelName} are {does}.
+        </Fact>
+        <Fact term="After">Every message is {does}, without being read.</Fact>
+      </Facts>
+    </Dialog>
+  );
+}
+
+/** A rule sift thinks is worth having. Nothing changes until the user has seen the rule and said yes. */
+function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonly AnswerLabel[] }) {
+  const { busy, error, run } = useAction();
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
   return (
     <li className="row flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
       <p className="min-w-0 flex-1 basis-80">
         <span className="font-semibold">{proposal.kind === 'rule' ? 'Make a rule?' : 'Stop checking?'}</span>{' '}
         <span className="text-muted-foreground">
-          The last {count(proposal.agreed)} from {whose.replace(/^from /, '')} were {proposal.labelName}.
+          The last {count(proposal.agreed)} from {describeMatch(proposal.match).replace(/^from /, '')} were {proposal.labelName}.
         </span>
         <Failure>{error}</Failure>
       </p>
       <span className="flex items-center gap-1.5">
-        <Button busy={busy} onClick={() => resolve(true)}>
-          {proposal.kind === 'rule' ? 'Make the rule' : 'Stop reading them'}
+        <Button disabled={busy} onClick={() => setOpen(true)}>
+          {proposal.kind === 'rule' ? 'Make a rule…' : 'Stop reading them…'}
         </Button>
-        <Button variant="quiet" disabled={busy} onClick={() => resolve(false)}>
+        <Button variant="quiet" busy={busy} onClick={() => run(() => api.resolveProposal(proposal.id, false))}>
           Dismiss
         </Button>
       </span>
+      {!open ? null : proposal.kind === 'rule' ? (
+        <AddRuleDialog
+          accountId={proposal.accountId}
+          labels={labels}
+          start={proposalStart(proposal.match, proposal.labelId)}
+          proposal={proposal.id}
+          onClose={() => setOpen(false)}
+          onAdded={(match) => toast(`Added a rule for mail ${describeMatch(match)}.`)}
+        />
+      ) : (
+        <StopReadingDialog proposal={proposal} onClose={() => setOpen(false)} />
+      )}
     </li>
   );
 }
@@ -187,7 +241,6 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
     api.suggestions(includeKept, fact, signal),
   );
   const summary = useLoaded('summary-7', (signal) => api.summary(7, signal));
-  const toast = useToast();
   const [search, setSearch] = useParam('q');
   const [label, setLabel] = useParam('label');
   const [does, setDoes] = useParam('does', DOES);
@@ -220,14 +273,7 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
             {data && data.proposals.length > 0 ? (
               <ul className="sheet flex flex-col">
                 {data.proposals.map((proposal) => (
-                  <ProposalRow
-                    key={proposal.id}
-                    proposal={proposal}
-                    onResolved={(line) => {
-                      if (line) toast(line);
-                      reload();
-                    }}
-                  />
+                  <ProposalRow key={proposal.id} proposal={proposal} labels={data.labels[proposal.accountId] ?? []} />
                 ))}
               </ul>
             ) : null}

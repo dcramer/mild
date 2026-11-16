@@ -167,25 +167,11 @@ export async function blockSender(db: Sql, accountId: string, address: string, l
   return true;
 }
 
-/** A standing the owner can give by hand. `none` takes back whatever rule said so. */
-type GivenStanding = 'trusted' | 'unwanted' | 'blocked' | 'none';
-
 /**
- * Give a sender or a domain a standing, which is a rule for exactly them that says only what happens:
- * trusted keeps their mail, unwanted archives it, blocked marks it spam. It replaces any rule for all
- * their mail; rules that wait for a label stay.
+ * Take back a sender's or a domain's standing: remove the rule for exactly them that waits for no label.
+ * A standing is given by adding that rule, in the rule dialog. Returns false if there was none.
  */
-export async function setStanding(
-  db: Sql,
-  accountId: string,
-  match: { from: string } | { fromDomain: string },
-  standing: GivenStanding,
-  now: number = Date.now(),
-): Promise<void> {
-  if (standing === 'none') {
-    const existing = await ruleMatching(db, accountId, match);
-    if (existing) await removeRule(db, existing.id);
-    return;
-  }
-  await setRule(db, accountId, match, { disposition: standing === 'trusted' ? 'keep' : standing === 'unwanted' ? 'archive' : 'spam' }, 'user', now);
+/** The user's own rule for exactly this address or domain, which is what their standing is read from. */
+export async function standingRule(db: Sql, accountId: string, match: { from: string } | { fromDomain: string }): Promise<string | null> {
+  return (await ruleMatching(db, accountId, match))?.id ?? null;
 }

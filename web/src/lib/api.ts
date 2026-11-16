@@ -145,8 +145,8 @@ export const api = {
   sender: (account: string, address: string, signal: AbortSignal) => get<SenderPage>('/api/sender', { account, address }, signal),
   domain: (account: string, domain: string, signal: AbortSignal) => get<SenderPage>('/api/domain', { account, domain }, signal),
   /** Give a sender or a domain a standing; `none` takes back the rule that said so. */
-  setStanding: (accountId: string, who: { address: string } | { domain: string }, standing: 'trusted' | 'unwanted' | 'blocked' | 'none') =>
-    post('/api/standing', { accountId, ...who, standing }),
+  /** A standing is given by adding its rule; this takes it back. */
+  clearStanding: (accountId: string, who: { address: string } | { domain: string }) => post('/api/standing/clear', { accountId, ...who }),
   rules: (signal: AbortSignal) => get<{ rules: RuleSummary[] }>('/api/rules', {}, signal),
   suggestions: (includeKept: boolean, fact: FactFilter | '', signal: AbortSignal) =>
     get<Suggestions>('/api/suggestions', { ...(includeKept ? { kept: 1 } : {}), ...(fact ? { fact } : {}) }, signal),
@@ -190,8 +190,11 @@ export const api = {
     markRead?: boolean;
     unsubscribe?: boolean;
     when?: string;
+    /** The proposal it was made from, which this resolves. */
+    proposal?: number;
   }) => post('/api/rules', rule),
   removeRule: (id: string) => post('/api/rules/remove', { id }),
+  /** Dismiss a proposal, or accept one of kind `always`. A proposed rule is made with `addRule`. */
   resolveProposal: (id: number, accept: boolean) => post('/api/proposals', { id, accept }),
   undo: (id: number) => post<{ message: string }>('/api/undo', { id }),
   /** Try a failed change again. `waiting`: it is sift's own, and waits for sift to be on. */

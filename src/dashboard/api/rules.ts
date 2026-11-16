@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import { getRuleFilter, ruleFilterStatus } from '../../store/filters.ts';
 import { preferences } from '../../store/preferences.ts';
-import { addRule, removeRule } from '../../store/rules.ts';
+import { madeFromProposal } from '../../store/proposals.ts';
+import { removeRule, setRule } from '../../store/rules.ts';
 import { listRuleSummaries } from '../queries/rules.ts';
 import { rules } from '../../store/query.ts';
 import { RuleFacts, RuleFilter, type RuleMatch, RuleSummary } from '../types.ts';
-import { type Read, type Write, accountId, decided, labelId, named, ok, ownerOf, read, redecide, text, write } from './route.ts';
+import { type Context, type Read, type Write, accountId, decided, id, labelId, named, ok, ownerOf, read, redecide, text, write } from './route.ts';
 
 const value = z.string().max(200).optional();
 /** A condition left empty is not one. */
@@ -28,6 +29,18 @@ export const reads: Read[] = [
   }),
 ];
 
+/** Remove a rule, and the Gmail filter written for it, then re-decide what is waiting. Returns how many were re-decided. */
+export async function removeRuleAndFilter({ db, controls, now }: Context, id: string): Promise<number> {
+  const rule = await getRuleFilter(db, id);
+  if (!rule) throw new Error('That rule no longer exists.');
+  // A filter left behind would keep acting on mail with no rule to explain or remove it. Asked even
+  // with no filter recorded: one sift wrote and lost track of is found and removed there too.
+  if (controls) await controls.ruleFilter(db, id, false);
+  else if (rule.filterId) throw new Error('This rule is also a Gmail filter, which this dashboard cannot remove.');
+  if (!(await removeRule(db, id))) throw new Error('That rule no longer exists.');
+  return await redecide(db, now, rule.accountId);
+}
+
 export const writes: Write[] = [
   write({
     path: '/api/rules',
@@ -41,6 +54,8 @@ export const writes: Write[] = [
         markRead: z.boolean().optional(),
         unsubscribe: z.boolean().optional(),
         when: z.string().max(200).optional(),
+        /** The proposal this rule was made from, as the user left it. */
+        proposal: id.optional(),
       })
       .refine((rule) => rule.label !== undefined || rule.whenLabel !== undefined || rule.disposition !== undefined, {
         message: 'A rule says what mail is, what happens to it, or what happens when it is a given label.',
@@ -51,23 +66,28 @@ export const writes: Write[] = [
       }),
     reply: z.object({ id: z.string(), redecided: z.number() }),
     touches: named,
-    run: async ({ db, now }, { accountId, match, label, whenLabel, disposition, markRead, unsubscribe, when }) => {
-      const id = await addRule(
-        db,
-        accountId,
-        {
+    run: async ({ db, now }, { accountId, match, label, whenLabel, disposition, markRead, unsubscribe, when, proposal }) => {
+      const created = await db.transaction(async (tx) => {
+        // First: making the rule also settles any proposal for exactly that mail.
+        if (proposal !== undefined && !(await madeFromProposal(tx, proposal, accountId, now()))) throw new Error('That proposal is no longer open.');
+        // A rule with exactly these conditions is replaced; the dialog shows which.
+        return await setRule(
+          tx,
+          accountId,
           match,
-          ...(label === undefined ? {} : { labelId: label }),
-          ...(whenLabel === undefined ? {} : { whenLabel }),
-          ...(disposition ? { disposition } : {}),
-          ...(markRead ? { markRead } : {}),
-          ...(unsubscribe ? { subscription: 'unsubscribe' as const } : {}),
-          ...(when !== undefined && when.trim() !== '' ? { when } : {}),
-        },
-        'user',
-        now(),
-      );
-      return { id, redecided: await redecide(db, now, accountId) };
+          {
+            ...(label === undefined ? {} : { labelId: label }),
+            ...(whenLabel === undefined ? {} : { whenLabel }),
+            ...(disposition ? { disposition } : {}),
+            ...(markRead ? { markRead } : {}),
+            ...(unsubscribe ? { subscription: 'unsubscribe' as const } : {}),
+            ...(when !== undefined && when.trim() !== '' ? { when } : {}),
+          },
+          'user',
+          now(),
+        );
+      });
+      return { id: created, redecided: await redecide(db, now, accountId) };
     },
   }),
   write({
@@ -88,15 +108,6 @@ export const writes: Write[] = [
     body: z.strictObject({ id: ruleId }),
     reply: z.object({ ok: z.literal(true), redecided: z.number() }),
     touches: ownerOf(rules),
-    run: async ({ db, controls, now }, { id }) => {
-      const rule = await getRuleFilter(db, id);
-      if (!rule) throw new Error('That rule no longer exists.');
-      // A filter left behind would keep acting on mail with no rule to explain or remove it. Asked even
-      // with no filter recorded: one sift wrote and lost track of is found and removed there too.
-      if (controls) await controls.ruleFilter(db, id, false);
-      else if (rule.filterId) throw new Error('This rule is also a Gmail filter, which this dashboard cannot remove.');
-      if (!(await removeRule(db, id))) throw new Error('That rule no longer exists.');
-      return { ok: true as const, redecided: await redecide(db, now, rule.accountId) };
-    },
+    run: async (ctx, { id }) => ({ ok: true as const, redecided: await removeRuleAndFilter(ctx, id) }),
   }),
 ];

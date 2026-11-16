@@ -13,12 +13,14 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadConfig } from '../../../../src/config.ts';
 import { runEveryone } from '../../../../src/daemon/run.ts';
+import { applyFeedback, pendingSuggestions } from '../../../../src/learn/feedback.ts';
 import type { GmailApi, RawMessage } from '../../../../src/gmail/api.ts';
 import { saveApiKey } from '../../../../src/model/models.ts';
 import { writeSecret } from '../../../../src/secrets.ts';
 import { connectAccount } from '../../../../src/store/accounts.ts';
 import { credentials } from '../../../../src/store/credentials.ts';
 import { setModel } from '../../../../src/store/preferences.ts';
+import { listProposals } from '../../../../src/store/proposals.ts';
 import { openStore } from '../../../../src/store/store.ts';
 import { addRule } from '../../../../src/store/rules.ts';
 import type { JudgeInput } from '../../../../src/triage/stages/model.ts';
@@ -78,6 +80,10 @@ const inbox = [
   // The stand-in model fails on these every time, so after three passes they are out of the queue and not judged.
   mail('Ops <alerts@ops.example.com>', 'Disk 91% full on db-2', 'Free space is running low.'),
   mail('Ops <alerts@ops.example.com>', 'Replica lag on db-3', 'The replica is 40 seconds behind.'),
+  // Answered below as Receipts, three alike, so sift proposes a rule for the sender.
+  mail('Utility <billing@utility.example.net>', 'Your March bill', 'Your bill is ready.'),
+  mail('Utility <billing@utility.example.net>', 'Your April bill', 'Your bill is ready.'),
+  mail('Utility <billing@utility.example.net>', 'Your May bill', 'Your bill is ready.'),
 ];
 
 const store = await openStore(config);
@@ -129,6 +135,22 @@ for (let pass = 0; pass < 3; pass++) {
   if (result?.error) throw new Error(`seed pass failed: ${result.error}`);
 }
 if (mailbox.modifyCalls > 0) throw new Error('seed pass changed the fake mailbox while sift was off');
+// Each answered as the dashboard answers one, which is how a proposal from answers comes about.
+for (const waiting of await pendingSuggestions(db, { accountId: ACCOUNT, sender: 'billing@utility.example.net' }))
+  await applyFeedback(
+    db,
+    {
+      accountId: ACCOUNT,
+      sender: waiting.fromAddress,
+      label: 'transactional',
+      scope: 'once',
+      decisionId: waiting.decisionId,
+      messageId: waiting.messageId,
+      carryOut: true,
+    },
+    now,
+  );
+if ((await listProposals(db, ACCOUNT)).length !== 1) throw new Error('seed answers did not propose a rule');
 // A second mailbox of the same person, with no mail (connected after the passes, so none comes to it), to remove; and a second person, who owns nothing yet and
 // takes over the install when the first deletes their account. Neither can be signed in to here.
 await connectAccount(store, WORK, '1', now - 23 * HOUR, user);

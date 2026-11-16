@@ -2,9 +2,9 @@ import { ArrowRightIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type RuleMatch, type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
-import { setParams, useParam } from '@/lib/route.ts';
+import { useParam } from '@/lib/route.ts';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
-import { ago, count, factAnswers, factWords, outcomeName, parseFactParam, plural, shortDate } from '@/lib/format.ts';
+import { ago, count, factAnswers, factWords, outcomeName, plural, shortDate } from '@/lib/format.ts';
 import {
   Button,
   ConfirmButton,
@@ -146,14 +146,6 @@ export function Rules() {
   const [source, setSource] = useParam('by', SOURCES);
   const [open, setOpen] = useParam('rule');
   const [adding, setAdding] = useState(false);
-  // Opened from a message ("Make a rule…"): the dialog starts on its sender, or its list, and what sift saw in it.
-  const [from] = useParam('from');
-  const [list] = useParam('list');
-  const [fact] = useParam('fact');
-  const start =
-    from !== '' || list !== '' || fact !== ''
-      ? { by: list !== '' ? ('listId' as const) : ('from' as const), value: list || from, facts: fact.split(',').flatMap((one) => parseFactParam(one) ?? []) }
-      : undefined;
   const accountId = manage.data?.accounts[0]?.id;
   const labels = accountId ? (manage.data?.labels[accountId] ?? []).map((l) => [l.id, l.name] as const) : [];
   const needle = search.trim().toLowerCase();
@@ -265,17 +257,8 @@ export function Rules() {
           remove={removeButton(rules[at], true)}
         />
       ) : null}
-      {(adding || start) && accountId ? (
-        <AddRuleDialog
-          accountId={accountId}
-          labels={manage.data?.labels[accountId] ?? []}
-          {...(start ? { start } : {})}
-          onClose={() => {
-            setAdding(false);
-            setParams({ from: '', list: '', fact: '' });
-          }}
-          onAdded={reload}
-        />
+      {adding && accountId ? (
+        <AddRuleDialog accountId={accountId} labels={manage.data?.labels[accountId] ?? []} onClose={() => setAdding(false)} onAdded={reload} />
       ) : null}
     </ListView>
   );

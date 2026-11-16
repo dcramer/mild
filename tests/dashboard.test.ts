@@ -11,7 +11,7 @@ import { summarize } from '../src/dashboard/queries/summary.ts';
 import type { SenderPage } from '../src/dashboard/types.ts';
 import type { DashboardOptions } from '../src/dashboard/server.ts';
 import { people } from '../src/store/people.ts';
-import { addMailbox, recordSync } from '../src/store/accounts.ts';
+import { addMailbox, connectAccount, recordSync } from '../src/store/accounts.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { finishRun, startRun } from '../src/store/runs.ts';
@@ -490,7 +490,7 @@ describe('dashboard server', () => {
     ]);
   });
 
-  it('serves a sender and a domain, and gives them a standing with one write', async () => {
+  it('serves a sender and a domain, whose standing is a rule made in the dialog and taken back in one press', async () => {
     const { store, db } = await seededStore();
     const base = await start({}, store);
     const sender = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
@@ -499,30 +499,89 @@ describe('dashboard server', () => {
     expect(sender.decisions.every((d) => d.fromAddress === 'news@example.com')).toBe(true);
     expect(sender.decisions.map((d) => d.messageId)).toContain('a');
 
-    const write = (body: object) =>
-      fetch(`${base}/api/standing`, {
+    const write = (path: string, body: object) =>
+      fetch(`${base}${path}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' },
         body: JSON.stringify(body),
       });
-    expect((await write({ accountId: ACCOUNT, address: 'news@example.com', standing: 'trusted' })).status).toBe(200);
-    // Trust is a rule for exactly them that only says what happens: keep it, whatever it is.
-    expect((await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from'] === 'news@example.com')).toMatchObject([
-      { kind: 'action', labelId: null, override: 'keep', disposition: 'keep', source: 'user' },
-    ]);
+    const theirs = async () => (await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from'] === 'news@example.com');
+    await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    // Trust is given in the rule dialog, as what Trust starts it on: a rule for exactly them that only keeps their mail. It replaces the rule for exactly them.
+    expect((await write('/api/rules', { accountId: ACCOUNT, match: { from: 'news@example.com' }, disposition: 'keep' })).status).toBe(200);
+    expect(await theirs()).toMatchObject([{ kind: 'action', labelId: null, override: 'keep', disposition: 'keep', source: 'user' }]);
     const trusted = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
     expect(trusted.profile).toMatchObject({ standing: 'trusted', why: 'a rule keeps their mail' });
 
-    expect((await write({ accountId: ACCOUNT, domain: 'example.net', standing: 'blocked' })).status).toBe(200);
+    expect((await write('/api/rules', { accountId: ACCOUNT, match: { fromDomain: 'example.net' }, disposition: 'spam' })).status).toBe(200);
     const domain = (await (await fetch(`${base}/api/domain?account=${ACCOUNT}&domain=example.net`)).json()) as SenderPage;
     expect(domain).toMatchObject({ kind: 'domain', profile: { standing: 'blocked' }, senders: [{ address: 'cold@example.net', standing: 'new' }] });
 
-    expect((await write({ accountId: ACCOUNT, address: 'news@example.com', standing: 'none' })).status).toBe(200);
-    expect((await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from'] === 'news@example.com')).toEqual([]);
+    // Taking it back is one press.
+    expect((await write('/api/standing/clear', { accountId: ACCOUNT, address: 'news@example.com' })).status).toBe(200);
+    expect(await theirs()).toEqual([]);
 
-    expect((await write({ accountId: ACCOUNT, address: 'news@example.com', domain: 'example.com', standing: 'trusted' })).status).toBe(400);
-    expect((await write({ accountId: ACCOUNT, address: 'not an address', standing: 'trusted' })).status).toBe(400);
+    expect((await write('/api/standing/clear', { accountId: ACCOUNT, address: 'news@example.com', domain: 'example.com' })).status).toBe(400);
+    expect((await write('/api/standing/clear', { accountId: ACCOUNT, address: 'not an address' })).status).toBe(400);
     expect((await fetch(`${base}/api/domain?account=${ACCOUNT}&domain=gmail.com`)).status).toBe(404);
+  });
+
+  it('makes a proposed rule only as the user left it in the dialog, which resolves the proposal', async () => {
+    const { store, db } = await seededStore();
+    const base = await start({}, store);
+    const { id: proposal } = (await raw(db).get<{ id: number }>(
+      `INSERT INTO proposals (account_id, kind, match, label_id, agreed, created_at) VALUES (?, 'rule', '{"from":"news@example.com"}', 'newsletter', 5, 1) RETURNING id`,
+      ACCOUNT,
+    ))!;
+    const post = (path: string, body: object) =>
+      fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' }, body: JSON.stringify(body) });
+    const open = async () => ((await (await fetch(`${base}/api/suggestions`)).json()) as { proposals: { id: number }[] }).proposals.map((p) => p.id);
+    const fromNews = async () => (await listRuleSummaries(db, await everything(db))).filter((r) => r.match['fromDomain'] === 'example.com');
+
+    // Accepting it without a rule in hand is not a way to make one.
+    expect((await post('/api/proposals', { id: proposal, accept: true })).status).toBe(409);
+    // A rule made some other way, or the dialog closed, leaves it open.
+    expect((await post('/api/rules', { accountId: ACCOUNT, match: { from: 'other@example.com' }, label: 'newsletter' })).status).toBe(200);
+    expect(await open()).toEqual([proposal]);
+    // A proposal of another mailbox's is refused, and with it the rule.
+    await connectAccount(store, 'work@example.org', '1', 0, db.person!);
+    const elsewhere = await post('/api/rules', { accountId: 'work@example.org', match: { fromDomain: 'example.com' }, disposition: 'archive', proposal });
+    expect([elsewhere.status, await elsewhere.json()]).toEqual([409, { error: 'That proposal is no longer open.' }]);
+    expect(await fromNews()).toEqual([]);
+
+    // Edited in the dialog: everyone at the domain, as Receipts, not the sender as Newsletters.
+    const made = await post('/api/rules', { accountId: ACCOUNT, match: { fromDomain: 'example.com' }, label: 'transactional', proposal });
+    expect(made.status).toBe(200);
+    expect(await fromNews()).toMatchObject([{ labelId: 'transactional', source: 'user' }]);
+    expect((await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from'] === 'news@example.com')).toEqual([]);
+    expect(await open()).toEqual([]);
+    expect(await raw(db).get('SELECT status FROM proposals WHERE id = ?', proposal)).toEqual({ status: 'accepted' });
+    // Made once: the same proposal again makes no second rule.
+    expect((await post('/api/rules', { accountId: ACCOUNT, match: { fromDomain: 'example.org' }, label: 'transactional', proposal })).status).toBe(409);
+    expect((await listRuleSummaries(db, await everything(db))).filter((r) => r.match['fromDomain'] === 'example.org')).toEqual([]);
+  });
+
+  it('says what a judged rule will do once it stops reading, and does that when accepted', async () => {
+    const { store, db } = await seededStore();
+    const base = await start({}, store);
+    const ruleId = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, whenLabel: 'transactional', disposition: 'archive' }, 'user');
+    const { id: proposal } = (await raw(db).get<{ id: number }>(
+      `INSERT INTO proposals (account_id, kind, match, label_id, rule_id, agreed, created_at) VALUES (?, 'always', '{"from":"news@example.com"}', 'transactional', ?, 10, 1) RETURNING id`,
+      ACCOUNT,
+      ruleId,
+    ))!;
+    // Receipts keeps its mail, but this rule archives it, and will archive all of it.
+    const listed = (await (await fetch(`${base}/api/suggestions`)).json()) as { proposals: unknown[] };
+    expect(listed.proposals).toMatchObject([{ id: proposal, kind: 'always', labelName: 'Receipts and transactions', disposition: 'archive' }]);
+    const accepted = await fetch(`${base}/api/proposals`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' },
+      body: JSON.stringify({ id: proposal, accept: true }),
+    });
+    expect(accepted.status).toBe(200);
+    expect((await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from'] === 'news@example.com')).toMatchObject([
+      { kind: 'action', whenLabel: null, disposition: 'archive', source: 'user' },
+    ]);
   });
 
   it('rejects bad input, other methods and unknown paths', async () => {

@@ -260,13 +260,24 @@ describe("nobody sees or changes another person's mail", () => {
         { accountId: NOBODY, match: { from: 'x@example.com' }, disposition: 'spam' },
       ],
       [
-        '/api/standing',
-        { accountId: ALPHA, address: 'x@example.com', standing: 'blocked' },
-        { accountId: NOBODY, address: 'x@example.com', standing: 'blocked' },
+        '/api/standing/clear',
+        { accountId: ALPHA, address: `sender@${MARK[ALPHA]}.example.com` },
+        { accountId: NOBODY, address: `sender@${MARK[ALPHA]}.example.com` },
+      ],
+      [
+        '/api/rules',
+        { accountId: ALPHA, match: { from: 'x@example.com' }, label: 'newsletter', proposal: theirs.proposal },
+        { accountId: NOBODY, match: { from: 'x@example.com' }, label: 'newsletter', proposal: 9999 },
+      ],
+      // Their own mailbox, with a proposal of someone else's: none of theirs has that id.
+      [
+        '/api/rules',
+        { accountId: BRAVO, match: { from: 'x@example.com' }, label: 'newsletter', proposal: theirs.proposal },
+        { accountId: BRAVO, match: { from: 'x@example.com' }, label: 'newsletter', proposal: 9999 },
       ],
       ['/api/rules/remove', { id: theirs.rule }, { id: 'r-nobody' }],
       ['/api/rules/filter', { id: theirs.rule, on: true }, { id: 'r-nobody', on: true }],
-      ['/api/proposals', { id: theirs.proposal, accept: true }, { id: 9999, accept: true }],
+      ['/api/proposals', { id: theirs.proposal, accept: false }, { id: 9999, accept: false }],
       ['/api/undo', { id: theirs.action }, { id: 9999 }],
       ['/api/unjudged/retry', { accountId: ALPHA, messageId: `u-${MARK[ALPHA]}` }, { accountId: NOBODY, messageId: `u-${MARK[ALPHA]}` }],
       ['/api/examples/delete', { accountId: ALPHA, messageId: `m-${MARK[ALPHA]}` }, { accountId: NOBODY, messageId: `m-${MARK[ALPHA]}` }],
@@ -286,6 +297,9 @@ describe("nobody sees or changes another person's mail", () => {
 
     // The same writes are the owner's to make on their own mail.
     expect((await call('POST', '/api/rules/remove', ALPHA, { id: theirs.rule })).status).toBe(200);
+    const fromProposal = { accountId: ALPHA_WORK, match: { from: 'x@example.com' }, label: 'newsletter', proposal: theirs.proposal };
+    expect((await call('POST', '/api/rules', ALPHA, fromProposal)).status).toBe(200);
+    expect(await raw(db).get('SELECT status FROM proposals WHERE id = ?', theirs.proposal)).toEqual({ status: 'accepted' });
     expect((await call('POST', '/api/undo', ALPHA_WORK, { id: theirs.action })).status).toBe(200);
     const unjudged = async () => (JSON.parse((await call('GET', '/api/unjudged', ALPHA)).text) as { rows: { messageId: string }[] }).rows;
     expect((await unjudged()).map((r) => r.messageId).toSorted()).toEqual([`u-${MARK[ALPHA]}`, `u-${MARK[ALPHA_WORK]}`]);
