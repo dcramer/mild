@@ -19,6 +19,7 @@ import {
   Document,
   Empty,
   Entry,
+  Splash,
   Fact,
   Facts,
   Failure,
@@ -700,6 +701,17 @@ export function SystemView() {
               <ArrowRightIcon aria-hidden />
             </Button>
           </Entry>
+        </div>
+      </Section>
+
+      <Section title="Splash" meta="the first page of someone not signed in: the name, one line set large, the one action">
+        <div className="sheet [&>div]:min-h-0">
+          <Splash title="Gmail, sifted.">
+            <Button variant="mark" size="lg" className="justify-between gap-8 self-start">
+              Sign in with Google
+              <ArrowRightIcon aria-hidden />
+            </Button>
+          </Splash>
         </div>
       </Section>
 

@@ -25,6 +25,7 @@ export { Reserve } from './reserve.tsx';
 export { Select } from './select.tsx';
 export { Share } from './share.tsx';
 export { SettingRow, SettingsGroup, Sheet } from './sheet.tsx';
+export { Splash } from './splash.tsx';
 export { ActionIcon, Does } from './does.tsx';
 export { Entry } from './entry.tsx';
 export { Empty, Loading } from './state.tsx';

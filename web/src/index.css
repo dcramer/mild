@@ -180,6 +180,15 @@
   .wordmark.large {
     font-size: 34px;
   }
+  /* The splash's one line: the largest type there is, so the tightest. */
+  .display {
+    font-family: var(--face-display);
+    font-weight: 700;
+    font-size: clamp(44px, 7.5vw, 88px);
+    line-height: 0.98;
+    letter-spacing: -0.05em;
+    text-wrap: balance;
+  }
 
   /* Column heads and a figure's label: the reading face at the supporting size. A heading is a `.heading`. */
   .slug {

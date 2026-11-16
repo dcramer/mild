@@ -111,3 +111,4 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | One answer about one message does not become a rule about its sender, and a weak signal (having written to someone) is not trust | Nothing: judgment |
 | sift classifies mail and helps the user sift through it, never "sorts" it. Whether it changes Gmail is whether it is on (Settings: Active, On/Off), not "acting" or "observing" | Nothing: judgment. None of those words is left in the repository to copy |
 | What sift does is shown as the action alone ("Archive"), never with its extras ("+ unsubscribe") | `Does` takes no extras and there is no helper that formats them |
+| The name is "Sift" in every sentence the user reads; only the wordmark is lowercase | Nothing: judgment |
