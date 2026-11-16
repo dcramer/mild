@@ -1,3 +1,4 @@
+import { scopeFor } from '../src/dashboard/scope.ts';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -5,7 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { execute } from '../src/actions/executor.ts';
-import { listDecisions } from '../src/dashboard/queries/decisions.ts';
+import { listDecisions, retryDecision } from '../src/dashboard/queries/decisions.ts';
 import { listRuleSummaries } from '../src/dashboard/queries/rules.ts';
 import { summarize } from '../src/dashboard/queries/summary.ts';
 import type { SenderPage } from '../src/dashboard/types.ts';
@@ -145,6 +146,14 @@ describe('tracking', () => {
     expect(ids('undone')).toEqual([done]);
     expect(ids('done')).toEqual([]);
     expect(listDecisions(db, everything(db), { days: 7, status: 'trouble' }, NOW).total).toBe(1);
+    // What changed in Gmail, or was tried: not the suggestions, which never touched it.
+    expect(ids('changed')).toEqual([failed, done]);
+
+    // A failed change goes back to waiting; sift's own waits for sift to act, and only a failure can be retried.
+    expect(retryDecision(db, scopeFor(['someone@example.net'], false), failed)).toEqual({ retried: false, waiting: false });
+    expect(retryDecision(db, everything(db), failed)).toEqual({ retried: true, waiting: true });
+    expect(db.prepare('SELECT outcome FROM decisions WHERE id = ?').get(failed)).toEqual({ outcome: null });
+    expect(retryDecision(db, everything(db), done)).toEqual({ retried: false, waiting: false });
   });
 
   it('upgrades a version 1 database in place, keeping its messages', () => {
@@ -199,6 +208,25 @@ describe('summarize', () => {
     expect(daily).toHaveLength(7);
     expect(daily.reduce((sum, d) => sum + Object.values(d.counts).reduce((a, b) => a + b, 0), 0)).toBe(3);
     expect(daily.at(-1)?.counts).toEqual({ rules: 0, sender: 0, heuristics: 0, classifier: 0, agent: 0, fallback: 0 });
+  });
+
+  it('says per day what was done in Gmail, what failed, and what the model cost', () => {
+    const db = seeded();
+    const base = { subscription: 'preserve', reason: 'test', stage: 'rules' } as const;
+    const archived = recordDecision(db, ACCOUNT, 'a', { ...base, disposition: 'archive' }, { mode: 'act', now: NOW });
+    const change = insertPendingAction(
+      db,
+      { accountId: ACCOUNT, messageId: 'a', type: 'archive', payload: { add: [], remove: ['INBOX'] }, originalLabels: ['INBOX'], decisionId: archived },
+      NOW,
+    );
+    finishAction(db, change, 'done', [], null, NOW);
+    settleDecision(db, archived, 'done');
+    settleDecision(db, recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'spam' }, { mode: 'act', now: NOW }), 'failed', 'Gmail answered 503');
+    const { daily } = summarize(db, everything(db), 7, NOW);
+    expect(daily.at(-1)?.changes).toEqual({ archive: 1, spam: 0, keep: 0, failed: 1 });
+    // Suggestions changed nothing, so the other days have no changes; the model's cost is on the day it was asked.
+    expect(daily.slice(0, -1).every((d) => d.changes.archive + d.changes.spam + d.changes.keep + d.changes.failed === 0)).toBe(true);
+    expect(daily.reduce((sum, d) => sum + d.costUsd, 0)).toBeCloseTo(0.02);
   });
 
   it('lists senders and recent decisions with their message', () => {

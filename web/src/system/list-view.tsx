@@ -25,6 +25,7 @@ export function ListView({
   actions,
   intro,
   search,
+  view,
   filters,
   children,
 }: {
@@ -34,6 +35,8 @@ export function ListView({
   /** What the page shows between its header and its list. */
   intro?: ReactNode;
   search?: { value: string; onChange: (value: string) => void; placeholder: string };
+  /** Which of a few ways to see the list, as segments at the end of the search bar: "Changed" or "Everything". */
+  view?: { label: string; value: string; options: readonly (readonly [string, string])[]; onChange: (value: string) => void };
   filters?: { panel: ReactNode; active: ActiveFilter[] };
   children: ReactNode;
 }) {
@@ -47,7 +50,7 @@ export function ListView({
       {intro}
 
       <div className="flex flex-col gap-3">
-        {search || filters ? (
+        {search || filters || view ? (
           <div className="flex flex-col gap-2">
             {/* One bar: the search and the filters share an outline, and nothing is filled until it is used. */}
             <div className="flex h-9 items-stretch rounded-(--cut-control) border border-(--frame) transition-colors focus-within:border-foreground/45">
@@ -71,6 +74,22 @@ export function ListView({
               ) : (
                 <span className="flex-1" />
               )}
+              {view ? (
+                <div role="radiogroup" aria-label={view.label} className="flex shrink-0 border-l border-(--frame)">
+                  {view.options.map(([key, text]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      role="radio"
+                      aria-checked={key === view.value}
+                      className="cursor-pointer px-3 text-sm font-medium text-muted-foreground hover:bg-(--fill) hover:text-foreground aria-checked:bg-(--fill-strong) aria-checked:text-foreground"
+                      onClick={() => view.onChange(key)}
+                    >
+                      {text}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               {filters ? (
                 <button
                   type="button"

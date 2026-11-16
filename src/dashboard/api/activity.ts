@@ -1,4 +1,4 @@
-import { listChanges, listDecisions } from '../queries/decisions.ts';
+import { listChanges, listDecisions, retryDecision } from '../queries/decisions.ts';
 import { messageDetail } from '../queries/messages.ts';
 import { summarize } from '../queries/summary.ts';
 import { BAD_DAYS, type Read, type Write, daysOf, missing, ok, ownerOf } from './route.ts';
@@ -57,6 +57,17 @@ export const writes: Write[] = [
       if (typeof body['id'] !== 'number' || !Number.isInteger(body['id'])) return null;
       if (!controls) throw new Error('This dashboard cannot undo changes.');
       return { message: await controls.undo(body['id']) };
+    },
+  },
+  {
+    path: '/api/decisions/retry',
+    touches: ownerOf('decisions'),
+    run: ({ db, controls }, body, scope) => {
+      if (typeof body['id'] !== 'number' || !Number.isInteger(body['id'])) return null;
+      const result = retryDecision(db, scope, body['id']);
+      if (!result.retried) throw new Error('That change did not fail, so there is nothing to try again.');
+      controls?.checkNow();
+      return result;
     },
   },
 ];

@@ -1,7 +1,7 @@
 import { ArrowRightIcon, PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { StatusWord, TierLabel, Verdict } from '@/components/bits.tsx';
-import { ACTIONS, STANDINGS, STATUS_NAMES, TIERS, outcomeName } from '@/lib/format.ts';
+import { ACTIONS, STANDINGS, STATUS_NAMES, TIERS, money, outcomeName } from '@/lib/format.ts';
 import {
   AnswerPicker,
   Avatar,
@@ -56,6 +56,7 @@ import {
   Timeline,
   TimelineEvent,
   Tr,
+  TrGroup,
   useToast,
   Wordmark,
 } from '@/system';
@@ -115,6 +116,7 @@ export function SystemView() {
   const [dialog, setDialog] = useState(false);
   const [panel, setPanel] = useState(false);
   const [search, setSearch] = useState('');
+  const [shown, setShown] = useState('');
   const [made, setMade] = useState('');
   const toast = useToast();
   return (
@@ -419,6 +421,57 @@ export function SystemView() {
         </p>
       </Section>
 
+      <Section title="A log" meta="a few ways to see the list; one table, a heading for each day">
+        <Sheet className="p-5">
+          <ListView
+            title="Activity"
+            view={{
+              label: 'Show',
+              value: shown,
+              options: [
+                ['', 'Changed'],
+                ['all', 'Everything'],
+              ],
+              onChange: setShown,
+            }}
+          >
+            <Table>
+              <thead className="sr-only">
+                <Tr>
+                  <Th>Sender</Th>
+                  <Th phone="hide">Subject</Th>
+                  <Th phone="hide">What happened</Th>
+                </Tr>
+              </thead>
+              {(
+                [
+                  ['Today', ROWS.slice(0, 2)],
+                  ['Yesterday', ROWS.slice(2, 3)],
+                ] as const
+              ).map(([day, rows]) => (
+                <tbody key={day}>
+                  <TrGroup title={day} span={3} />
+                  {rows.map((row) => (
+                    <Tr key={row.address} onOpen={() => setPanel(true)}>
+                      <Td className="max-w-0 md:w-1/3">
+                        <span className="name block truncate">{row.sender}</span>
+                      </Td>
+                      <Td phone="hide" quiet className="max-w-0 md:w-full">
+                        <span className="block truncate">{row.subject}</span>
+                      </Td>
+                      <Td phone="hide" className="whitespace-nowrap">
+                        <span className="font-semibold">Archived</span>
+                        <span className="text-muted-foreground"> · {row.label ?? 'Newsletters'}</span>
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              ))}
+            </Table>
+          </ListView>
+        </Sheet>
+      </Section>
+
       <div className="grid gap-14 lg:grid-cols-2">
         <Section title="Facts">
           <Facts>
@@ -451,7 +504,13 @@ export function SystemView() {
             <Figure label="Waiting on you" value="23" tone="look" />
             <Figure label="Needs a look" value="2" note="in Activity" tone="failure" href="/system" />
           </Figures>
-          <StackedBars compact unit="decisions" series={SERIES} rows={DAYS} />
+          <StackedBars
+            compact
+            unit="decisions"
+            series={SERIES}
+            rows={DAYS}
+            strip={{ name: 'Model cost', values: [0.04, 0.02, 0.06, 0, 0.03, 0.08, 0.05], format: money, color: 'var(--change-cost)' }}
+          />
         </div>
       </Section>
 

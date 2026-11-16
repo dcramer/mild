@@ -49,7 +49,7 @@ export const named = (_ctx: Context, body: Record<string, unknown>): Touches => 
 
 /** The mailbox that owns the row a write names by `id`. */
 export const ownerOf =
-  (table: 'rules' | 'proposals' | 'actions') =>
+  (table: 'rules' | 'proposals' | 'actions' | 'decisions') =>
   ({ db }: Context, body: Record<string, unknown>): Touches => {
     const id = body['id'];
     if (typeof id !== 'string' && typeof id !== 'number') return null;

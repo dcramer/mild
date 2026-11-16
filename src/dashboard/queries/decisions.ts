@@ -28,6 +28,7 @@ export interface DecisionSqlRow {
   mode: string;
   outcome: string | null;
   outcome_detail: string | null;
+  by_user: number;
   action_id: number | null;
   action_type: string | null;
   action_status: string | null;
@@ -35,7 +36,7 @@ export interface DecisionSqlRow {
 
 export const DECISION_SELECT = `
   SELECT d.id, d.account_id, d.message_id, d.decided_at, d.stage, d.disposition, d.block, d.subscription, d.label_id, l.name AS label_name, d.gmail_label, d.reason, d.confidence, d.model, d.cost_usd,
-         m.from_address, m.from_name, m.subject, d.mode, d.outcome, d.outcome_detail,
+         m.from_address, m.from_name, m.subject, d.mode, d.outcome, d.outcome_detail, d.by_user,
          a.id AS action_id, a.type AS action_type, a.status AS action_status
   FROM decisions d
   JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
@@ -48,7 +49,23 @@ const STATUS_WHERE: Record<string, string> = {
   done: "d.mode = 'act' AND d.outcome IN ('done', 'none') AND coalesce(a.status, 'done') = 'done'",
   undone: "a.status = 'undone'",
   trouble: "d.mode = 'act' AND (d.outcome IS NULL OR d.outcome IN ('failed', 'unknown') OR a.status IN ('failed', 'unknown', 'pending'))",
+  // What was done to mail in Gmail, or tried: a change was made or failed. Suggestions and mail left alone are not.
+  changed: "d.mode = 'act' AND (a.id IS NOT NULL OR d.outcome IN ('failed', 'unknown'))",
 };
+
+/**
+ * Try a failed or unconfirmed change again: the decision goes back to waiting, and the next pass carries it
+ * out through the executor as it would any other. The user's own answer is retried even while sift only
+ * observes; anything else waits for sift to be acting. False if there was nothing to retry.
+ */
+export function retryDecision(db: DatabaseSync, scope: Scope, id: number): { retried: boolean; waiting: boolean } {
+  const row = db
+    .prepare(`SELECT by_user FROM decisions WHERE id = ? AND mode = 'act' AND outcome IN ('failed', 'unknown') AND ${within(scope, 'account_id')}`)
+    .get(id) as { by_user: number } | undefined;
+  if (!row) return { retried: false, waiting: false };
+  db.prepare('UPDATE decisions SET outcome = NULL, outcome_detail = NULL WHERE id = ?').run(id);
+  return { retried: true, waiting: row.by_user === 0 };
+}
 
 export const toDecisionRow = (r: DecisionSqlRow): DecisionRow => ({
   id: r.id,
@@ -74,6 +91,7 @@ export const toDecisionRow = (r: DecisionSqlRow): DecisionRow => ({
   actionId: r.action_id,
   actionType: r.action_type,
   actionStatus: r.action_status,
+  byUser: r.by_user === 1,
 });
 
 export interface DecisionFilter {

@@ -88,6 +88,12 @@
   --tier-classifier: #74726a;
   --tier-agent: #4e4c46;
   --tier-fallback: var(--highlight);
+
+  /* What a change did, in Activity's chart: an ordered ramp of the ink, with a failure in red. */
+  --change-archive: #a8a69d;
+  --change-spam: #f0eee8;
+  --change-keep: #74726a;
+  --change-cost: #74726a;
 }
 
 @layer components {

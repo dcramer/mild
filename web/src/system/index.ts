@@ -1,6 +1,6 @@
 export { AnswerPicker, type Pick } from './answer-picker.tsx';
 export { Button } from './button.tsx';
-export { type ChartRow, type Series, StackedBars, Swatch } from './chart.tsx';
+export { type ChartRow, type Series, StackedBars, type Strip, Swatch } from './chart.tsx';
 export { ChoiceGroup } from './choice.tsx';
 export { ConfirmButton } from './confirm.tsx';
 export { Copyable } from './copyable.tsx';
@@ -23,7 +23,7 @@ export { Reserve } from './reserve.tsx';
 export { Select } from './select.tsx';
 export { SettingRow, Sheet } from './sheet.tsx';
 export { Empty, Loading } from './state.tsx';
-export { OnPhone, RowActions, Sub, Table, Td, Th, Tr } from './table.tsx';
+export { OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from './table.tsx';
 export { Timeline, TimelineEvent } from './timeline.tsx';
 export { Toaster, type ToastOptions, useToast } from './toast.tsx';
 export { Code, Highlight, Kbd, Look, Marked, Stamp, TextLink, Wordmark } from './type.tsx';

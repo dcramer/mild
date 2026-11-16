@@ -111,6 +111,20 @@ export function Td({ num, quiet, phone, className, ...props }: ComponentProps<'t
   );
 }
 
+/**
+ * A heading for the rows after it inside one table, such as a day, so the rows keep one set of keys and
+ * one column layout across groups. Put each group in its own `tbody`; `span` is the table's column count.
+ */
+export function TrGroup({ title, span }: { title: string; span: number }) {
+  return (
+    <tr>
+      <th colSpan={span} scope="colgroup" className={cn('heading pt-8 pb-1 text-left [tbody:first-of-type_&]:pt-0', EDGES)}>
+        {title}
+      </th>
+    </tr>
+  );
+}
+
 /** A second, quieter line under the point of a cell. One line; it truncates. */
 export function Sub({ children, className }: { children: ReactNode; className?: string }) {
   return <span className={cn('mt-0.5 block truncate text-sm text-muted-foreground', className)}>{children}</span>;

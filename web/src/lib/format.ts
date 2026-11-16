@@ -14,6 +14,13 @@ export const TIERS: { key: StageKey; name: string; color: string }[] = [
   { key: 'agent', name: 'Agent', color: 'var(--tier-agent)' },
   { key: 'fallback', name: 'Not sure', color: 'var(--tier-fallback)' },
 ];
+/** What a change in Gmail did, for Activity's chart, bottom to top. */
+export const CHANGES = [
+  { key: 'archive', name: 'Archived', color: 'var(--change-archive)' },
+  { key: 'spam', name: 'Marked spam', color: 'var(--change-spam)' },
+  { key: 'keep', name: 'Kept', color: 'var(--change-keep)' },
+  { key: 'failed', name: 'Failed', color: 'var(--destructive)' },
+] as const;
 export const tier = (key: string) => TIERS.find((t) => t.key === key) ?? { key, name: key, color: 'var(--muted-foreground)' };
 
 /**
@@ -134,3 +141,38 @@ export const describeMatch = (match: Record<string, string>) =>
 
 /** Where a sender stands, in a word. */
 export const STANDINGS = { trusted: 'Trusted', known: 'Known', new: 'New', unwanted: 'Unwanted', blocked: 'Blocked' } as const;
+
+const DID: Record<string, string> = { archive: 'Archived', spam: 'Marked spam', block: 'Blocked', keep: 'Kept' };
+const DOING: Record<string, string> = { archive: 'archive', spam: 'mark spam', block: 'block', keep: 'keep' };
+/**
+ * What happened to a message, as a log says it: "Archived", "Archive failed", "Waiting to archive". `tone`
+ * says how to show it: a failure is red, an undone change is struck through, the rest are plain.
+ */
+export function happened(d: { mode: string; outcome: string | null; actionStatus: string | null; disposition: string }): {
+  text: string;
+  tone: 'plain' | 'failed' | 'undone' | 'quiet';
+} {
+  const s = status(d);
+  const doing = DOING[d.disposition];
+  if (d.disposition === 'review') return { text: outcomeName('review'), tone: 'quiet' };
+  if (s === 'failed') return { text: `${capitalised(doing ?? d.disposition)} failed`, tone: 'failed' };
+  if (s === 'undone') return { text: DID[d.disposition] ?? d.disposition, tone: 'undone' };
+  if (s === 'waiting') return { text: `Waiting to ${doing ?? d.disposition}`, tone: 'quiet' };
+  if (s === 'suggested') return { text: `Would ${doing ?? d.disposition}`, tone: 'quiet' };
+  if (s === 'skipped') return { text: 'Skipped', tone: 'quiet' };
+  return { text: DID[d.disposition] ?? d.disposition, tone: 'plain' };
+}
+const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** A day in the log: "Today", "Yesterday", else "Thu, Nov 12". */
+export function dayName(ms: number, now: number = Date.now()): string {
+  const start = (at: number) => {
+    const d = new Date(at);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  };
+  const back = Math.round((start(now) - start(ms)) / 86_400_000);
+  if (back === 0) return 'Today';
+  if (back === 1) return 'Yesterday';
+  return new Date(ms).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+export const clock = (ms: number) => new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });

@@ -172,6 +172,8 @@ export const api = {
   removeRule: (id: string) => post('/api/rules/remove', { id }),
   resolveProposal: (id: number, accept: boolean) => post('/api/proposals', { id, accept }),
   undo: (id: number) => post<{ message: string }>('/api/undo', { id }),
+  /** Try a failed change again. `waiting`: it is sift's own, and waits for sift to be acting. */
+  retry: (id: number) => post<{ retried: boolean; waiting: boolean }>('/api/decisions/retry', { id }),
   backfill: (days: number) => post<{ added: number }>('/api/backfill', { days }),
   checkNow: () => post('/api/check', {}),
   session: (signal: AbortSignal) => get<Session>('/api/session', {}, signal),

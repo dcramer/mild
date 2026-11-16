@@ -250,7 +250,7 @@ The dashboard is where the user watches sift, teaches it and manages it. `sift r
 
 **What it may do**
 
-Everything that manages sift: answer suggestions, switch between observing and acting, choose the model and interval, edit the guidelines, add and edit labels and what happens to each, add and remove rules, write a rule to Gmail as a filter or take it out, undo a mailbox change, pull in older mail, and trigger a check.
+Everything that manages sift: answer suggestions, switch between observing and acting, choose the model and interval, edit the guidelines, add and edit labels and what happens to each, add and remove rules, write a rule to Gmail as a filter or take it out, undo a mailbox change, try a failed change again (the decision's outcome is cleared and the next pass acts on it, `POST /api/decisions/retry`), pull in older mail, and trigger a check.
 
 - It changes the database and `sift.toml` directly. A running sift re-reads its settings before every pass, and a change wakes it, so nothing needs restarting.
 - It never imports Gmail, the executor or the daemon (lint enforces this). The few things that need them (signing in, undo, Gmail filters, pulling in older mail, check now, a test run of the model, judging suggestions again) are passed in by the process as `SignIn` and `Controls` (`src/dashboard/controls.ts`), so every mailbox change still goes through the executor and the audit log.

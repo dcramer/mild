@@ -1,25 +1,26 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
-import { DecisionTable } from '@/components/decision-table.tsx';
-import { type Days, api, useLoaded } from '@/lib/api.ts';
+import { MailLog } from '@/components/mail-log.tsx';
+import { type Days, type DecisionRow, api, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/route.ts';
-import { OUTCOME_KEYS, PERIODS, STATUS_FILTERS, TIERS, count, outcomeName } from '@/lib/format.ts';
-import { Button, Empty, FilterGroup, ListView, Loading, useToast } from '@/system';
+import { CHANGES, PERIODS, count, longDay, money, plural, shortDay } from '@/lib/format.ts';
+import { Button, Empty, Failure, ListView, Loading, Select, StackedBars, TextLink, useToast } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 const PAGE = 50;
-const TIER_OPTIONS = [['', 'Any'], ...TIERS.map((t) => [t.key, t.name] as const)] as const;
-const OUTCOME_OPTIONS = [['', 'Any'], ...OUTCOME_KEYS.map((k) => [k, outcomeName(k)] as const)] as const;
+/** What the list shows. Changed: what sift did, or tried to do, in Gmail. Everything adds suggestions and mail left alone. */
+const VIEWS = [
+  ['', 'Changed'],
+  ['all', 'Everything'],
+] as const;
+const FAILED = [['trouble', 'Failed'] as const];
 
-/** Everything sift decided, newest first, with where each got to in Gmail and a way to undo what it changed. */
+/** What sift did to mail, by day, newest first, with a way to undo it or try a failed change again. */
 export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
   const [chosen, setChosen] = useParam('days');
   const days = (PERIODS.some(([key]) => key === chosen) ? Number(chosen) : 7) as Days;
-  const setDays = (next: Days) => setChosen(next === 7 ? '' : String(next));
-  const [status, setStatus] = useParam('status', STATUS_FILTERS);
-  const [stage, setStage] = useParam('by', TIER_OPTIONS);
-  const [disposition, setDisposition] = useParam('outcome', OUTCOME_OPTIONS);
+  const [view, setView] = useParam('show', [...VIEWS, ...FAILED]);
   const [search, setSearch] = useParam('q');
   const [typed, setTyped] = useState(search);
   const [offset, setOffset] = useState(0);
@@ -31,64 +32,76 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
     const timer = setTimeout(() => setSearch(typed.trim()), 250);
     return () => clearTimeout(timer);
   }, [typed]);
-  useEffect(() => setOffset(0), [days, status, stage, disposition, search]);
+  useEffect(() => setOffset(0), [days, view, search]);
 
-  const query = { days, stage, disposition, status, search, limit: PAGE, offset };
+  const status = view === '' ? 'changed' : view === 'trouble' ? 'trouble' : '';
+  const query = { days, stage: '', disposition: '', status, search, limit: PAGE, offset };
   const { data, error, loading } = useLoaded(`decisions-${JSON.stringify(query)}`, (signal) => api.decisions(query, signal));
-  const filtered = stage !== '' || disposition !== '' || status !== '' || search !== '';
-  const period = PERIODS.find(([key]) => Number(key) === days)?.[1] ?? '';
-  const name = (options: readonly (readonly [string, string])[], key: string) => options.find(([k]) => k === key)?.[1] ?? key;
+  const failures = useLoaded(`decisions-trouble-${days}`, (signal) =>
+    api.decisions({ days, stage: '', disposition: '', status: 'trouble', search: '', limit: 1, offset: 0 }, signal),
+  );
+  const failed = failures.data?.total ?? 0;
+  const summary = useLoaded(`summary-${days}`, (signal) => api.summary(days, signal));
+  const daily = summary.data?.daily ?? [];
+  // A day's column is worth drawing only beside others, and only once something happened.
+  const charted = daily.length > 1 && daily.some((day) => day.costUsd > 0 || CHANGES.some((c) => day.changes[c.key] > 0));
+
+  const report = <T,>(work: Promise<T>, line: (result: T) => string) =>
+    void work.then(
+      (result) => {
+        toast(line(result));
+        void client.invalidateQueries();
+      },
+      (failure: unknown) => toast('That did not work', { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) }),
+    );
+  const undo = (row: DecisionRow) => report(api.undo(row.actionId ?? 0), ({ message }) => message);
+  const retry = (row: DecisionRow) =>
+    report(api.retry(row.id), ({ waiting }) => (waiting ? 'It will be tried again once sift is acting.' : 'Trying again now.'));
 
   return (
     <ListView
       title="Activity"
+      actions={
+        <Select
+          label="Period"
+          value={String(days) as (typeof PERIODS)[number][0]}
+          options={PERIODS}
+          onChange={(value) => setChosen(value === '7' ? '' : value)}
+        />
+      }
       search={{ value: typed, onChange: setTyped, placeholder: 'Search subject or sender' }}
-      filters={{
-        active: [
-          ...(status === '' ? [] : [{ label: `Status: ${name(STATUS_FILTERS, status)}`, clear: () => setStatus('') }]),
-          ...(disposition === '' ? [] : [{ label: `Then: ${outcomeName(disposition)}`, clear: () => setDisposition('') }]),
-          ...(stage === '' ? [] : [{ label: `Decided by: ${name(TIER_OPTIONS, stage)}`, clear: () => setStage('') }]),
-          ...(days === 7 ? [] : [{ label: period, clear: () => setDays(7) }]),
-        ],
-        panel: (
-          <>
-            <FilterGroup
-              label="Period"
-              value={String(days) as (typeof PERIODS)[number][0]}
-              options={PERIODS}
-              onChange={(value) => setDays(Number(value) as Days)}
-            />
-            <FilterGroup label="Status" value={status} options={STATUS_FILTERS} onChange={setStatus} />
-            <FilterGroup label="Then" value={disposition} options={OUTCOME_OPTIONS} onChange={setDisposition} />
-            <FilterGroup label="Decided by" value={stage} options={TIER_OPTIONS} onChange={setStage} />
-          </>
-        ),
+      view={{
+        label: 'Show',
+        value: view,
+        options: view === 'trouble' || failed > 0 ? [...VIEWS, ...FAILED] : VIEWS,
+        onChange: (next) => setView(next as typeof view),
       }}
+      intro={
+        <>
+          {charted ? (
+            <StackedBars
+              compact
+              unit="changes"
+              series={CHANGES}
+              rows={daily.map((day) => ({ key: day.day, label: shortDay(day.day), title: longDay(day.day), values: { ...day.changes } }))}
+              strip={{ name: 'Model cost', values: daily.map((day) => day.costUsd), format: money, color: 'var(--change-cost)' }}
+            />
+          ) : null}
+          {failed > 0 && view !== 'trouble' ? (
+            <Failure>
+              {plural(failed, 'change')} failed. <TextLink href="/activity?show=trouble">See {failed === 1 ? 'it' : 'them'}</TextLink>
+            </Failure>
+          ) : null}
+        </>
+      }
     >
       {error ? <ErrorNote message={error} /> : null}
       {loading ? (
         <Loading rows={8} />
       ) : !data || data.rows.length === 0 ? (
-        <Empty>
-          {filtered
-            ? 'Nothing matches.'
-            : 'Nothing decided in this period. sift records a decision for every message it sorts, including the ones it leaves alone.'}
-        </Empty>
+        <Empty>{search !== '' ? 'Nothing matches.' : view === '' ? 'sift has changed nothing in Gmail in this period.' : 'Nothing in this period.'}</Empty>
       ) : (
-        <DecisionTable
-          rows={data.rows}
-          onOpen={onOpen}
-          search={search}
-          onUndo={(row) =>
-            void api.undo(row.actionId ?? 0).then(
-              ({ message }) => {
-                toast(message);
-                void client.invalidateQueries();
-              },
-              (failure: unknown) => toast('Could not undo', { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) }),
-            )
-          }
-        />
+        <MailLog rows={data.rows} onOpen={onOpen} onUndo={undo} onRetry={retry} search={search} />
       )}
       {data && data.total > PAGE ? (
         <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground tabular-nums">

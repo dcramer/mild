@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { accuracy } from '../../learn/feedback.ts';
 import { type Scope, within } from '../scope.ts';
-import { STAGES, type StageKey, type Summary } from '../types.ts';
+import { type DayChanges, STAGES, type StageKey, type Summary } from '../types.ts';
 import { DAY_MS, listDecisions } from './decisions.ts';
 
 const emptyCounts = () => Object.fromEntries(STAGES.map((s) => [s, 0])) as Record<StageKey, number>;
@@ -34,14 +34,32 @@ export function summarize(db: DatabaseSync, scope: Scope, days: number, now: num
     return { stage, decisions: row?.n ?? 0, costUsd: row?.cost ?? 0, tokens: row?.tokens ?? 0 };
   });
 
-  const dailyByDay = new Map<string, Record<StageKey, number>>();
-  for (let i = days - 1; i >= 0; i--) dailyByDay.set(localDay(now - i * DAY_MS), emptyCounts());
-  for (const row of all<{ decided_at: number; stage: StageKey }>(
-    `SELECT decided_at, stage FROM decisions WHERE decided_at >= ? AND ${mine('account_id')}`,
+  const dailyByDay = new Map<string, { counts: Record<StageKey, number>; changes: DayChanges; costUsd: number }>();
+  for (let i = days - 1; i >= 0; i--)
+    dailyByDay.set(localDay(now - i * DAY_MS), { counts: emptyCounts(), changes: { archive: 0, spam: 0, keep: 0, failed: 0 }, costUsd: 0 });
+  for (const row of all<{ decided_at: number; stage: StageKey; cost_usd: number }>(
+    `SELECT decided_at, stage, cost_usd FROM decisions WHERE decided_at >= ? AND ${mine('account_id')}`,
     since,
   )) {
-    const counts = dailyByDay.get(localDay(row.decided_at));
-    if (counts && row.stage in counts) counts[row.stage]++;
+    const day = dailyByDay.get(localDay(row.decided_at));
+    if (!day) continue;
+    if (row.stage in day.counts) day.counts[row.stage]++;
+    day.costUsd += row.cost_usd;
+  }
+  // What was done in Gmail each day: a change that stands, by what it did, or one that failed. Undone ones are not counted.
+  for (const row of all<{ decided_at: number; disposition: string; block: number; outcome: string | null; status: string | null }>(
+    `SELECT d.decided_at, d.disposition, d.block, d.outcome, a.status FROM decisions d
+     LEFT JOIN actions a ON a.id = (SELECT max(id) FROM actions WHERE decision_id = d.id AND type != 'unsubscribe')
+     WHERE d.decided_at >= ? AND d.mode = 'act' AND ${mine('d.account_id')}`,
+    since,
+  )) {
+    const day = dailyByDay.get(localDay(row.decided_at));
+    if (!day) continue;
+    if (row.outcome === 'failed' || row.outcome === 'unknown' || row.status === 'failed' || row.status === 'unknown') day.changes.failed++;
+    else if (row.status === 'done') {
+      const what = row.block === 1 ? 'spam' : row.disposition;
+      if (what === 'archive' || what === 'spam' || what === 'keep') day.changes[what]++;
+    }
   }
 
   const answered = accuracy(db, since, scope.accounts);
@@ -69,7 +87,7 @@ export function summarize(db: DatabaseSync, scope: Scope, days: number, now: num
       `SELECT disposition, count(*) AS n FROM decisions WHERE decided_at >= ? AND ${mine('account_id')} GROUP BY disposition ORDER BY n DESC`,
       since,
     ).map((r) => ({ disposition: r.disposition, decisions: r.n })),
-    daily: [...dailyByDay].map(([day, counts]) => ({ day, counts })),
+    daily: [...dailyByDay].map(([day, { counts, changes, costUsd }]) => ({ day, counts, changes, costUsd })),
     topSenders: all<{ address: string; n: number; last: string | null }>(
       `SELECT m.from_address AS address, count(*) AS n,
               (SELECT d.disposition FROM decisions d JOIN messages m2 ON m2.account_id = d.account_id AND m2.id = d.message_id

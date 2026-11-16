@@ -5,6 +5,14 @@
 export const STAGES = ['rules', 'sender', 'heuristics', 'classifier', 'agent', 'fallback'] as const;
 export type StageKey = (typeof STAGES)[number];
 
+/** What was done in Gmail on a day: changes that stand, by what they did, and changes that failed. */
+export interface DayChanges {
+  archive: number;
+  spam: number;
+  keep: number;
+  failed: number;
+}
+
 export interface Summary {
   days: number;
   generatedAt: number;
@@ -25,7 +33,7 @@ export interface Summary {
   byStage: { stage: StageKey; decisions: number; costUsd: number; tokens: number }[];
   byDisposition: { disposition: string; decisions: number }[];
   /** One entry per day in the window, oldest first, with a count for every stage. */
-  daily: { day: string; counts: Record<StageKey, number> }[];
+  daily: { day: string; counts: Record<StageKey, number>; changes: DayChanges; costUsd: number }[];
   topSenders: { address: string; messages: number; lastDisposition: string | null }[];
   /** The ten latest decisions in the window. */
   recent: DecisionRow[];
@@ -73,6 +81,8 @@ export interface DecisionRow {
   actionId: number | null;
   actionType: string | null;
   actionStatus: string | null;
+  /** The user's own answer, not sift's decision. */
+  byUser: boolean;
 }
 
 export interface MessageDetail {
