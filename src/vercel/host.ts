@@ -21,8 +21,9 @@ const Piece = z.discriminatedUnion('kind', [
 ]) satisfies z.ZodType<Work>;
 
 /**
- * Only Vercel's cron and sift's own calls carry `CRON_SECRET`, and only they may start work. Without the
- * variable nothing may: `required` throws rather than compare against nothing.
+ * Whether a call comes from the deployment itself. `CRON_SECRET` is in the project's environment only:
+ * Vercel sends it to `api/cron`, and `fanOut` sends it to `api/work`, only ever at the deployment's own
+ * address. Without the variable nothing passes: `required` throws rather than compare against nothing.
  */
 const fromSift = (request: Request) => {
   const expected = Buffer.from(`Bearer ${required('CRON_SECRET')}`);
@@ -34,7 +35,7 @@ const fromSift = (request: Request) => {
  * Hand each piece of what is due to a call of its own (`api/work.ts`), so each has its own time limit and
  * opens only what its ids name. Resolves once every call has taken its piece, not when they finish.
  */
-async function fanOut(sift: Sift, people?: readonly number[]): Promise<void> {
+export async function fanOut(due: Sift['due'], people?: readonly number[]): Promise<void> {
   // Deployment Protection guards each deployment's own address, so production calls its production domain; a
   // preview can be reached only with Vercel's bypass for automation, sent when the project has one.
   const domain = process.env['VERCEL_ENV'] === 'production' ? process.env['VERCEL_PROJECT_PRODUCTION_URL'] : process.env['VERCEL_URL'];
@@ -45,7 +46,7 @@ async function fanOut(sift: Sift, people?: readonly number[]): Promise<void> {
     'content-type': 'application/json',
     ...(bypass ? { 'x-vercel-protection-bypass': bypass } : {}),
   };
-  const taken = await Promise.allSettled((await sift.due(people)).map((piece) => fetch(self, { method: 'POST', headers, body: JSON.stringify(piece) })));
+  const taken = await Promise.allSettled((await due(people)).map((piece) => fetch(self, { method: 'POST', headers, body: JSON.stringify(piece) })));
   const refused = taken.filter((call) => call.status === 'rejected' || call.value.status !== 202).length;
   // What was not taken is due again at the next tick.
   if (refused > 0) process.stdout.write(`${refused} of ${taken.length} pieces of work were not taken\n`);
@@ -79,7 +80,7 @@ async function open(): Promise<Sift> {
     allowedHosts: [process.env['VERCEL_URL'], process.env['VERCEL_BRANCH_URL'], production, config.settings.dashboardHost].filter((name) => name !== undefined),
     signInAddresses: production ? [`https://${production}`] : [],
     log: (line) => process.stdout.write(`${line}\n`),
-    start: (sift, people) => waitUntil(fanOut(sift, people)),
+    start: (sift, people) => waitUntil(fanOut(sift.due, people)),
     limitMs: LIMIT_MS,
   });
 }
@@ -96,15 +97,22 @@ export async function respond(request: Request): Promise<Response> {
 /** Vercel Cron, each minute: hands out what is due. */
 export async function cron(request: Request): Promise<Response> {
   if (!fromSift(request)) return new Response(null, { status: 401 });
-  await fanOut(await sift());
+  await fanOut((await sift()).due);
   return new Response(null, { status: 204 });
+}
+
+/** The piece of work a call to `api/work` carries, if it is one from the deployment itself; otherwise the refusal. */
+export async function admit(request: Request): Promise<Work | Response> {
+  // Checked before the body is read, so a stranger's call costs nothing.
+  if (request.method !== 'POST' || !fromSift(request)) return new Response(null, { status: 401 });
+  const piece = Piece.safeParse(await request.json().catch(() => null));
+  return piece.success ? piece.data : new Response(null, { status: 400 });
 }
 
 /** One piece of work, taken at once and done after the reply, within this call's own time limit. */
 export async function work(request: Request): Promise<Response> {
-  if (request.method !== 'POST' || !fromSift(request)) return new Response(null, { status: 401 });
-  const piece = Piece.safeParse(await request.json().catch(() => null));
-  if (!piece.success) return new Response(null, { status: 400 });
-  waitUntil((await sift()).work(piece.data));
+  const piece = await admit(request);
+  if (piece instanceof Response) return piece;
+  waitUntil((await sift()).work(piece));
   return new Response(null, { status: 202 });
 }

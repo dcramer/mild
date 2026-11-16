@@ -1,8 +1,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HEADERS } from '../src/dashboard/server.ts';
 import { READS, WRITES } from '../src/dashboard/api/index.ts';
-import { MAX_DURATION_S, cron, work } from '../src/vercel/host.ts';
+import type { Work } from '../src/daemon/run.ts';
+import { MAX_DURATION_S, admit, cron, fanOut, work } from '../src/vercel/host.ts';
 
 /** `vercel.json`: what Vercel does without sift seeing the request. */
 const vercel = JSON.parse(readFileSync('vercel.json', 'utf8')) as {
@@ -13,7 +14,8 @@ const vercel = JSON.parse(readFileSync('vercel.json', 'utf8')) as {
 };
 
 afterEach(() => {
-  delete process.env['CRON_SECRET'];
+  for (const name of ['CRON_SECRET', 'VERCEL_ENV', 'VERCEL_URL', 'VERCEL_PROJECT_PRODUCTION_URL']) delete process.env[name];
+  vi.unstubAllGlobals();
 });
 
 describe('the Vercel host', () => {
@@ -51,6 +53,26 @@ describe('the Vercel host', () => {
     // Taken only as ids sift itself sends.
     for (const body of ['nonsense', '{"kind":"pass","person":1}', '{"kind":"pass","person":1,"account":"me@example.org","extra":1}', '{"kind":"drop"}'])
       expect((await post('Bearer synthetic-secret', body)).status).toBe(400);
+  });
+
+  it("hands each piece only to the deployment's own api/work, which takes exactly those and refuses a stranger's copy", async () => {
+    process.env['CRON_SECRET'] = 'synthetic-secret';
+    process.env['VERCEL_ENV'] = 'production';
+    process.env['VERCEL_URL'] = 'sift-abc123.vercel.app';
+    process.env['VERCEL_PROJECT_PRODUCTION_URL'] = 'sift.example.com';
+    const sent: Request[] = [];
+    vi.stubGlobal('fetch', async (input: string, init: RequestInit) => (sent.push(new Request(input, init)), new Response(null, { status: 202 })));
+    const pieces: Work[] = [
+      { kind: 'pass', person: 1, account: 'me@example.org' },
+      { kind: 'eval', person: 2, run: 7 },
+    ];
+    await fanOut(async () => pieces);
+    expect(sent.map((request) => request.url)).toEqual(['https://sift.example.com/api/work', 'https://sift.example.com/api/work']);
+    expect(await Promise.all(sent.map((request) => admit(request.clone())))).toEqual(pieces);
+
+    // The same call without the deployment's secret, as anyone who saw its shape could make it.
+    const stranger = new Request(sent[0]!.url, { method: 'POST', body: JSON.stringify(pieces[0]) });
+    expect(((await admit(stranger)) as Response).status).toBe(401);
   });
 
   it("names no dashboard route as one of Vercel's own functions, which would answer it instead", () => {
