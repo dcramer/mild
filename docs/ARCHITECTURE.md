@@ -223,7 +223,7 @@ Together they are the complete record of what sift saw and did, and everything e
 
 Everything reaches them through `Sql` (`src/store/sql.ts`), whose calls are async so a database outside the process could stand behind it; over `node:sqlite` each is answered at once. A transaction is one call taking a function, and while it is open every other caller on that database waits, so the function awaits nothing but the database: no Gmail or model call inside one. Using the outer handle inside it is refused rather than left to wait on itself.
 
-SQLite is the only engine sift will support (decided 2026-11-15). Postgres was declined: without row-level security, which is not acceptable here, it keeps people apart only by a database or schema per user, the same as a file per user, plus a server to run. Hosting is on Cloudflare Durable Objects or a machine with a disk, not Vercel; what that still needs is in TODO.md.
+sift is moving to Postgres, with everyone in one database (decided 2026-11-15, replacing an earlier decision to stay on SQLite): it is to run on Vercel, on Cloudflare and locally, and Postgres is the one engine all three have. People will then be kept apart by the layers in [SECURITY.md](SECURITY.md) instead of a database each. Until then, what follows is how it works now; the plan is in TODO.md.
 
 - **messages:** one row per message sift has seen: sender, recipients, subject, the triage headers, the labels at sync time and the facts derived from them. No body. This is enough to triage a message again without refetching it.
 - **feedback, examples:** the user's answers to suggestions, and the full content of each message they answered for, kept as evaluation and training data until deleted (see Teaching).
