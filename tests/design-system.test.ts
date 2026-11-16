@@ -80,3 +80,25 @@ describe('screens style nothing themselves', () => {
     expect(failures, failures.join('\n')).toEqual([]);
   });
 });
+
+describe('one type scale', () => {
+  const css = readFileSync(join(WEB, 'index.css'), 'utf8');
+  const scale = [...css.matchAll(/^\s*--text-([a-z]+):/gm)].map((match) => `text-${match[1]}`);
+
+  test('a size is a step of the scale in web/src/index.css, never one set by eye', () => {
+    const offScale = ['text-xs', 'text-sm', 'text-base', 'text-lg', 'text-xl', ...[2, 3, 4, 5, 6, 7, 8, 9].map((n) => `text-${n}xl`)].filter(
+      (name) => !scale.includes(name),
+    );
+    const use = `use ${scale.join(', ')}, or a role class (.statement, .title, .heading, .name, .figure, .slug).`;
+    const failures = check(ALL, [
+      [/^text-\[[\d.]+(px|rem)\]$/, use],
+      [new RegExp(`^(${offScale.join('|')})$`), `not on the scale, so it sets nothing: ${use}`],
+    ]);
+    expect(failures, failures.join('\n')).toEqual([]);
+  });
+
+  test('nothing is set under 12px', () => {
+    const small = [...css.matchAll(/font-size:\s*([\d.]+)px/g)].map((match) => Number(match[1])).filter((px) => px < 12);
+    expect(small, 'docs/DESIGN.md: only labels and stamps go under 15px, and nothing under 12px.').toEqual([]);
+  });
+});

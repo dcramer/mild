@@ -122,7 +122,7 @@ export function SystemView() {
             {INKS.map(([swatch, name, use]) => (
               <div key={name} className="flex flex-col gap-2 bg-background p-4">
                 <span aria-hidden className={`h-10 border border-(--frame) ${swatch}`} />
-                <span className="font-mono text-[14px]">{name}</span>
+                <span className="font-mono text-sm">{name}</span>
                 <span className="text-muted-foreground">{use}</span>
               </div>
             ))}
@@ -579,7 +579,7 @@ export function SystemView() {
         position="1 of 3"
         onNext={() => {}}
       >
-        <p className="max-w-[68ch] text-[17px] leading-relaxed">
+        <p className="max-w-[68ch] text-reading leading-relaxed">
           The message on the left; on the right what sift said, the answer, the sender and the history.
         </p>
       </Panel>

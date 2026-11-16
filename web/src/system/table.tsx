@@ -69,12 +69,12 @@ export function Td({ num, quiet, phone, className, ...props }: ComponentProps<'t
 
 /** A second, quieter line under the point of a cell. One line; it truncates. */
 export function Sub({ children, className }: { children: ReactNode; className?: string }) {
-  return <span className={cn('mt-0.5 block truncate text-[15px] text-muted-foreground', className)}>{children}</span>;
+  return <span className={cn('mt-0.5 block truncate text-sm text-muted-foreground', className)}>{children}</span>;
 }
 
 /** What a row says in the columns a phone drops, under its first column. */
 export function OnPhone({ children }: { children: ReactNode }) {
-  return <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] text-muted-foreground md:hidden">{children}</span>;
+  return <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground md:hidden">{children}</span>;
 }
 
 /**

@@ -82,7 +82,7 @@ export function ListView({
                 >
                   <SlidersHorizontalIcon aria-hidden className="size-4" />
                   Filters
-                  {on > 0 ? <span className="hl mx-0 px-1.5 py-0 text-[14px] tabular-nums">{on}</span> : null}
+                  {on > 0 ? <span className="hl mx-0 px-1.5 py-0 text-sm tabular-nums">{on}</span> : null}
                 </button>
               ) : null}
             </div>
@@ -93,7 +93,7 @@ export function ListView({
                     <button
                       type="button"
                       aria-label={`Clear ${filter.label}`}
-                      className="press flex h-6 cursor-pointer items-center gap-1 bg-(--fill) pr-1.5 pl-2 text-[14px] font-medium hover:bg-(--fill-strong)"
+                      className="press flex h-6 cursor-pointer items-center gap-1 bg-(--fill) pr-1.5 pl-2 text-sm font-medium hover:bg-(--fill-strong)"
                       onClick={filter.clear}
                     >
                       {filter.label}

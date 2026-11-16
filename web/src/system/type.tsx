@@ -9,7 +9,7 @@ export function Highlight({ children, className }: { children: ReactNode; classN
 /** The name, always highlighted. */
 export function Wordmark({ size = 'md' }: { size?: 'md' | 'lg' }) {
   return (
-    <span className={cn('wordmark', size === 'lg' && 'text-[34px]')}>
+    <span className={cn('wordmark', size === 'lg' && 'large')}>
       <span className="hl mx-0 px-[0.35em] py-[0.08em]">sift</span>
     </span>
   );
@@ -60,5 +60,5 @@ export function TextLink({ href, children, className }: { href: string; children
 
 /** A key on the keyboard, where it works: beside the button it presses, or in a hint. */
 export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
-  return <kbd className={cn('font-mono text-[12px] font-normal text-muted-foreground', className)}>{children}</kbd>;
+  return <kbd className={cn('font-mono text-label font-normal text-muted-foreground', className)}>{children}</kbd>;
 }
