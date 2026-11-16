@@ -5,6 +5,7 @@ import { useParam } from '@/lib/route.ts';
 import { type SuggestionItem, type Suggestions, type Summary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ACTIONS, ago, count, describeMatch, money, outcomeName, percent, plural, sureness, willBe } from '@/lib/format.ts';
 import {
+  AnswerPicker,
   Button,
   Check,
   Empty,
@@ -16,7 +17,6 @@ import {
   Meter,
   OnPhone,
   RowActions,
-  SplitButton,
   Reserve,
   Table,
   TextLink,
@@ -80,8 +80,8 @@ function ProposalRow({ proposal, onResolved }: { proposal: Proposal; onResolved:
 }
 
 /**
- * One suggestion: who, what, when, and what sift says it is, as the button that agrees, with how sure it
- * is. The caret beside it lists what else it might be. Pressing the row opens the message.
+ * One suggestion: who, what, when, and what sift says it is with how sure, in a dropdown with what else it
+ * might be, and a check that commits. Pressing the row opens the message.
  */
 function SuggestionRow({
   item,
@@ -98,8 +98,7 @@ function SuggestionRow({
 }) {
   const target = { accountId: item.accountId, sender: item.sender, messageId: item.messageId, decisionId: item.decisionId, labelId: item.labelId };
   const { answer, choices, busy, error } = useAnswer(labels, waiting, onAnswered);
-  const groups = [...choices(target, item.alternatives), [{ id: 'open', label: 'Open the message…', quiet: true, onSelect: onOpen }]];
-  const name = item.labelName ?? outcomeName(item.disposition);
+  const groups = choices(target, sureness(item.stage, item.confidence), item.alternatives);
 
   return (
     <Tr onOpen={onOpen}>
@@ -109,8 +108,17 @@ function SuggestionRow({
             {item.senderName ?? item.sender}
           </SenderLink>
         </span>
+        {/* On a phone the row only says what sift thinks; it opens the message, where the answer is. */}
         <OnPhone>
           <span className="w-full truncate text-foreground">{item.subject || '(no subject)'}</span>
+          {item.labelId !== null ? (
+            <span className="inline-flex items-center gap-2">
+              <Meter level={sureness(item.stage, item.confidence)} />
+              {item.labelName ?? outcomeName(item.disposition)}
+            </span>
+          ) : (
+            <Look>{outcomeName('review')}</Look>
+          )}
         </OnPhone>
       </Td>
       <Td phone="hide" className="max-w-0 md:w-full">
@@ -120,25 +128,17 @@ function SuggestionRow({
       <Td phone="hide" num quiet>
         {ago(item.receivedAt)}
       </Td>
-      <RowActions phone="keep">
-        {item.labelId !== null ? (
-          <SplitButton
-            className="w-60"
-            label={`Agree: ${name}`}
-            menuLabel="Something else"
-            busy={busy}
-            onPress={() => answer(target, item.labelId ?? '')}
-            groups={groups}
-            shortcut={{ key: 'a', label: 'Agree with sift' }}
-          >
-            <Meter level={sureness(item.stage, item.confidence)} />
-            <span className="truncate">{name}</span>
-          </SplitButton>
-        ) : (
-          <SplitButton className="w-60" label="Not sure: open the message" menuLabel="Say what it is" confirm={false} onPress={onOpen} groups={groups}>
-            <Look>{outcomeName('review')}…</Look>
-          </SplitButton>
-        )}
+      <RowActions>
+        <AnswerPicker
+          key={item.decisionId}
+          className="w-60"
+          label="What this message is"
+          value={item.labelId}
+          groups={groups}
+          empty={<Look>{outcomeName('review')}</Look>}
+          busy={busy}
+          onSubmit={(id) => answer(target, id)}
+        />
       </RowActions>
     </Tr>
   );

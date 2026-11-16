@@ -30,7 +30,7 @@ An H1 and one paragraph of what the user gets, then four H2s in order: `Sub-feat
 
 ## Features
 
-- [Agree with a suggestion](./agree-suggestion.md): press the label sift gave a row, or `A` on it.
+- [Agree with a suggestion](./agree-suggestion.md): press the check beside the label sift gave a row.
 - [Answer a suggestion](./answer-suggestion.md): teach sift what a waiting message is, and the rule that makes.
 - [Add a rule](./add-rule.md): a rule made on the Rules screen, and its effect on what is waiting.
 - [Edit a label](./edit-label.md): change what a label does.

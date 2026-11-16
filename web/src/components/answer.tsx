@@ -1,6 +1,6 @@
 import { api, useAction } from '@/lib/api.ts';
 import { willBe } from '@/lib/format.ts';
-import { type Choice, Meter, useToast } from '@/system';
+import { Meter, type Pick, useToast } from '@/system';
 
 /** A message whose label the user can say, as the list and the panel both hold it. */
 export interface Answerable {
@@ -65,12 +65,17 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
       onDone();
     });
 
-  /** What a message might be, as menu choices: sift's other likely labels with how likely, then every other label. */
-  const choices = (target: Answerable, alternatives: readonly { id: string; name: string; share: number }[]): Choice[][] => {
-    const likely = alternatives.map((a) => ({ id: a.id, label: a.name, lead: <Meter level={a.share >= 0.5 ? 2 : 1} />, onSelect: () => answer(target, a.id) }));
-    const rest = labels
-      .filter((l) => l.id !== target.labelId && !alternatives.some((a) => a.id === l.id))
-      .map((l) => ({ id: l.id, label: l.name, onSelect: () => answer(target, l.id) }));
+  /**
+   * What a message might be, for the answer's dropdown: sift's label and its other likely ones, each with
+   * how sure, then every other label.
+   */
+  const choices = (target: Answerable, sure: 1 | 2 | 3, alternatives: readonly { id: string; name: string; share: number }[]): Pick[][] => {
+    const guess = labels.find((l) => l.id === target.labelId);
+    const likely = [
+      ...(guess ? [{ id: guess.id, label: guess.name, lead: <Meter level={sure} /> }] : []),
+      ...alternatives.filter((a) => a.id !== target.labelId).map((a) => ({ id: a.id, label: a.name, lead: <Meter level={a.share >= 0.5 ? 2 : 1} /> })),
+    ];
+    const rest = labels.filter((l) => !likely.some((p) => p.id === l.id)).map((l) => ({ id: l.id, label: l.name }));
     return [likely, rest];
   };
 

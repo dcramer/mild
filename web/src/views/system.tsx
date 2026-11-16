@@ -3,6 +3,7 @@ import { type ReactNode, useState } from 'react';
 import { StatusWord, TierLabel, Verdict } from '@/components/bits.tsx';
 import { ACTIONS, STANDINGS, STATUS_NAMES, TIERS, outcomeName } from '@/lib/format.ts';
 import {
+  AnswerPicker,
   Avatar,
   Button,
   Check,
@@ -43,7 +44,6 @@ import {
   Select,
   SettingRow,
   Sheet,
-  SplitButton,
   StackedBars,
   Stamp,
   Sub,
@@ -395,27 +395,17 @@ export function SystemView() {
                         </span>
                       </Td>
                       <RowActions phone="keep">
-                        <SplitButton
-                          className="w-52"
-                          label={row.label ? `Agree: ${row.label}` : 'Not sure: open the message'}
-                          menuLabel="Something else"
-                          confirm={row.label !== null}
-                          onPress={() => (row.label ? toast(`${row.does === 'keep' ? 'Kept' : 'Archived'} as ${row.label}`) : setPanel(true))}
+                        <AnswerPicker
+                          className="w-60"
+                          label="What this message is"
+                          value={row.label === null ? null : (LABELS.find(([, name]) => name === row.label)?.[0] ?? null)}
                           groups={[
-                            [{ id: 'marketing', label: 'Marketing', lead: <Meter level={1} />, onSelect: () => toast('Archived as Marketing') }],
-                            LABELS.filter(([id]) => id !== 'marketing').map(([id, name]) => ({ id, label: name, onSelect: () => toast(`Answered: ${name}`) })),
-                            [{ id: 'open', label: 'Open the message…', quiet: true, onSelect: () => setPanel(true) }],
+                            LABELS.slice(0, 2).map(([id, name], i) => ({ id, label: name, lead: <Meter level={i === 0 ? 3 : 1} /> })),
+                            LABELS.slice(2).map(([id, name]) => ({ id, label: name })),
                           ]}
-                        >
-                          {row.label ? (
-                            <>
-                              <Meter level={row.does === 'keep' ? 3 : 2} />
-                              <span className="truncate">{row.label}</span>
-                            </>
-                          ) : (
-                            <Look>{outcomeName('review')}…</Look>
-                          )}
-                        </SplitButton>
+                          empty={<Look>{outcomeName('review')}</Look>}
+                          onSubmit={(id) => toast(`Answered: ${LABELS.find(([key]) => key === id)?.[1] ?? id}`)}
+                        />
                       </RowActions>
                     </Tr>
                   ),
