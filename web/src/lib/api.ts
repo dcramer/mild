@@ -44,6 +44,7 @@ export interface DecisionQuery {
   days: Days;
   stage: string;
   disposition: string;
+  status: string;
   search: string;
   limit: number;
   offset: number;
@@ -123,7 +124,11 @@ async function post<T = unknown>(path: string, body: unknown): Promise<T> {
 export const api = {
   summary: (days: Days, signal: AbortSignal) => get<Summary>('/api/summary', { days }, signal),
   decisions: (q: DecisionQuery, signal: AbortSignal) =>
-    get<DecisionPage>('/api/decisions', { days: q.days, stage: q.stage, disposition: q.disposition, q: q.search, limit: q.limit, offset: q.offset }, signal),
+    get<DecisionPage>(
+      '/api/decisions',
+      { days: q.days, stage: q.stage, disposition: q.disposition, status: q.status, q: q.search, limit: q.limit, offset: q.offset },
+      signal,
+    ),
   message: (account: string, id: string, signal: AbortSignal) => get<MessageDetail>('/api/message', { account, id }, signal),
   sender: (account: string, address: string, signal: AbortSignal) => get<SenderPage>('/api/sender', { account, address }, signal),
   domain: (account: string, domain: string, signal: AbortSignal) => get<SenderPage>('/api/domain', { account, domain }, signal),

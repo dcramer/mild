@@ -5,11 +5,12 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { execute } from '../src/actions/executor.ts';
-import { listRuleSummaries, summarize } from '../src/dashboard/queries.ts';
+import { listDecisions, listRuleSummaries, summarize } from '../src/dashboard/queries.ts';
 import type { SenderPage } from '../src/dashboard/types.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
-import { recordDecision } from '../src/store/decisions.ts';
+import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
+import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { openDb, schemaVersion } from '../src/store/db.ts';
 import { addRule } from '../src/store/rules.ts';
 import { facts } from './helpers.ts';
@@ -109,6 +110,39 @@ describe('tracking', () => {
     await execute({ db, mailbox, now: () => NOW }, ACCOUNT, 'a', { type: 'archive' }, 1);
     expect(db.prepare('SELECT decision_id, status FROM actions').get()).toEqual({ decision_id: 1, status: 'done' });
     expect(summarize(db, 7, NOW).recent.find((r) => r.id === 1)).toMatchObject({ actionId: 1, actionType: 'archive', actionStatus: 'done' });
+  });
+
+  it('groups decisions by where they got to, and shows the mailbox change rather than an unsubscribe', () => {
+    const db = seeded();
+    const base = { subscription: 'preserve', reason: 'test', stage: 'rules' } as const;
+    const done = recordDecision(db, ACCOUNT, 'a', { ...base, disposition: 'archive' }, { mode: 'act', now: NOW });
+    const archived = insertPendingAction(
+      db,
+      { accountId: ACCOUNT, messageId: 'a', type: 'archive', payload: { add: [], remove: ['INBOX'] }, originalLabels: ['INBOX'], decisionId: done },
+      NOW,
+    );
+    finishAction(db, archived, 'done', [], null, NOW);
+    const unsubscribed = insertPendingAction(
+      db,
+      { accountId: ACCOUNT, messageId: 'a', type: 'unsubscribe', payload: { add: [], remove: [] }, originalLabels: [], decisionId: done },
+      NOW,
+    );
+    finishAction(db, unsubscribed, 'done', null, null, NOW);
+    settleDecision(db, done, 'done');
+    const failed = recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'archive' }, { mode: 'act', now: NOW });
+    settleDecision(db, failed, 'failed', 'Gmail answered 503');
+    const ids = (status: string) => listDecisions(db, { days: 7, status }, NOW).rows.map((r) => r.id);
+
+    expect(ids('suggested')).toEqual([3, 2, 1]);
+    expect(ids('done')).toEqual([done]);
+    expect(ids('trouble')).toEqual([failed]);
+    expect(ids('nonsense')).toEqual([]);
+    expect(listDecisions(db, { days: 7, status: 'done' }, NOW).rows[0]).toMatchObject({ actionId: archived, actionType: 'archive' });
+
+    setActionStatus(db, archived, 'undone');
+    expect(ids('undone')).toEqual([done]);
+    expect(ids('done')).toEqual([]);
+    expect(listDecisions(db, { days: 7, status: 'trouble' }, NOW).total).toBe(1);
   });
 
   it('upgrades a version 1 database in place, keeping its messages', () => {

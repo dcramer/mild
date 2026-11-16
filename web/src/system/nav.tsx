@@ -1,10 +1,8 @@
 import { Dialog } from '@base-ui/react/dialog';
 import { MenuIcon, XIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
-import { navigate } from '@/lib/route.ts';
 import { Button } from './button.tsx';
 import { Avatar, Menu, type MenuItem } from './menu.tsx';
-import { Select } from './select.tsx';
 import { Wordmark } from './type.tsx';
 
 export interface NavItem {
@@ -144,35 +142,5 @@ export function Masthead({
       </Dialog.Root>
       {status ? <div className="flex basis-full flex-wrap gap-x-4 gap-y-1 pt-2 md:hidden">{status}</div> : null}
     </header>
-  );
-}
-
-/**
- * The pages within a section. Quieter than the sections: the current page is marked with a stroke of
- * highlighter, not filled with it. Beside the page on a wide screen; a select above it on a narrow one.
- */
-export function SubNav({ label, items, current, children }: { label: string; items: readonly NavItem[]; current: string; children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-x-8 gap-y-4 md:grid-cols-[10rem_minmax(0,1fr)]">
-      <div className="md:hidden">
-        <Select label={label} value={current} options={items.map((item) => [item.to, item.label] as const)} onChange={(to) => navigate(`/${to}`)} />
-      </div>
-      <nav aria-label={label} className="hidden md:block">
-        <ul className="sticky top-5 flex flex-col gap-y-0.5">
-          {items.map((item) => (
-            <li key={item.to}>
-              <a
-                href={`/${item.to}`}
-                aria-current={item.to === current ? 'page' : undefined}
-                className="block border-l-2 border-transparent px-2.5 py-1.5 text-sm whitespace-nowrap text-muted-foreground hover:text-foreground aria-[current=page]:border-highlight aria-[current=page]:font-semibold aria-[current=page]:text-foreground"
-              >
-                {item.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
-      <div className="flex min-w-0 flex-col gap-4">{children}</div>
-    </div>
   );
 }

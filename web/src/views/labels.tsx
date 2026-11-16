@@ -1,35 +1,33 @@
-import { PencilIcon, PlusIcon } from 'lucide-react';
+import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type LabelSummary, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ACTIONS, type ActionKey, count, extras, percent } from '@/lib/format.ts';
 import { useParam } from '@/lib/route.ts';
+import { ACTIONS, type ActionKey, EXPLAIN, count, extras, outcomeName, percent } from '@/lib/format.ts';
 import {
   Button,
-  Card,
-  CardFoot,
-  CardGrid,
-  CardHead,
   Check,
   Code,
   Dialog,
   Empty,
+  Field,
   FilterGroup,
+  Form,
   Input,
   ListView,
   Loading,
+  OnPhone,
   Select,
-  Sheet,
+  Stamp,
+  Sub,
+  Table,
+  Td,
   TextArea,
+  Th,
+  Tr,
 } from '@/system';
 
 const canMarkRead = (does: string) => does === 'keep' || does === 'archive';
-const EXPLAIN: Record<ActionKey, string> = {
-  keep: 'It stays in your inbox, with its label.',
-  archive: 'It leaves your inbox and stays findable under its label.',
-  spam: 'It goes to spam. Refused for anyone you have written to.',
-  block: 'It goes to spam, and so does everything that sender sends afterwards, without being judged again. Only when the message proves who sent it.',
-};
 
 interface Draft {
   name: string;
@@ -49,6 +47,7 @@ function LabelDialog({ accountId, label, onClose, onSaved }: { accountId: string
     markRead: label?.markRead ?? false,
     unsubscribe: label?.unsubscribe ?? false,
   });
+  const ready = draft.name.trim() !== '';
   const save = () =>
     run(
       () =>
@@ -64,115 +63,78 @@ function LabelDialog({ accountId, label, onClose, onSaved }: { accountId: string
     <Dialog
       open
       onClose={onClose}
-      title={label ? `Edit ${label.name}` : 'Add a label'}
-      subtitle={label ? <>In Gmail it stays {label.gmailLabel}, so mail already labelled keeps its label.</> : undefined}
+      title={label ? label.name : 'Add a label'}
       footer={
         <>
-          <Button variant="ink" busy={busy} disabled={draft.name.trim() === ''} onClick={save}>
+          <Button variant="ink" busy={busy} disabled={!ready} onClick={save}>
             {label ? 'Save' : 'Add label'}
           </Button>
           <Button variant="quiet" onClick={onClose}>
             Cancel
           </Button>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? <p className="text-destructive">{error}</p> : null}
         </>
       }
     >
-      <form
-        className="flex flex-col gap-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (draft.name.trim() !== '') save();
-        }}
-      >
-        <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">Name</span>
-          <Input autoFocus maxLength={60} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
-        </label>
-        <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">How to recognise it</span>
+      <Form onSubmit={() => ready && save()}>
+        <Field
+          label="Name"
+          {...(label
+            ? {
+                hint: (
+                  <>
+                    In Gmail it stays <Code>{label.gmailLabel}</Code>, so mail already labelled keeps its label.
+                  </>
+                ),
+              }
+            : {})}
+        >
+          <Input
+            autoFocus
+            aria-label="Name"
+            className="w-full"
+            maxLength={60}
+            value={draft.name}
+            onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+          />
+        </Field>
+        <Field label="How to recognise it" hint="The model reads this to decide. Say what belongs and what does not.">
           <TextArea
+            aria-label="How to recognise it"
             className="min-h-28"
             maxLength={600}
             value={draft.description}
             onChange={(event) => setDraft({ ...draft, description: event.target.value })}
           />
-          <span className="text-sm text-muted-foreground">The model reads this to decide. Say what belongs and what does not.</span>
-        </label>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">What sift does with it</span>
-          <div>
-            <Select
-              label="What sift does with it"
-              value={draft.disposition}
-              options={ACTIONS}
-              onChange={(disposition) => setDraft({ ...draft, disposition })}
-            />
-          </div>
-          <span className="text-sm text-muted-foreground">{EXPLAIN[draft.disposition]}</span>
-          {canMarkRead(draft.disposition) ? (
-            <Check checked={draft.markRead} onChange={(markRead) => setDraft({ ...draft, markRead })}>
-              Also mark it read
+        </Field>
+        <Field label="Then" hint={EXPLAIN[draft.disposition]}>
+          <Select label="What sift does with it" value={draft.disposition} options={ACTIONS} onChange={(disposition) => setDraft({ ...draft, disposition })} />
+        </Field>
+        <Field
+          label="Also"
+          hint={
+            draft.unsubscribe
+              ? `Only while sift is acting, never from someone you have written to, and it cannot be undone from here.${
+                  draft.disposition === 'spam' || draft.disposition === 'block'
+                    ? ' Answering a spammer’s link tells them the address is read, so sift only does it when the message proves who sent it.'
+                    : ''
+                }`
+              : undefined
+          }
+        >
+          <div className="flex flex-col gap-2">
+            {canMarkRead(draft.disposition) ? (
+              <Check checked={draft.markRead} onChange={(markRead) => setDraft({ ...draft, markRead })}>
+                Mark it read
+              </Check>
+            ) : null}
+            <Check checked={draft.unsubscribe} onChange={(unsubscribe) => setDraft({ ...draft, unsubscribe })}>
+              Unsubscribe, when the sender offers a safe way
             </Check>
-          ) : null}
-          <Check checked={draft.unsubscribe} onChange={(unsubscribe) => setDraft({ ...draft, unsubscribe })}>
-            Also unsubscribe, when the sender offers a safe way
-          </Check>
-          {draft.unsubscribe ? (
-            <span className="text-sm text-muted-foreground">
-              Only while sift is acting, never from someone you have written to, and it cannot be undone from here.
-              {draft.disposition === 'spam' || draft.disposition === 'block'
-                ? ' Answering a spammer’s link tells them the address is read; sift only does it when the message proves who sent it.'
-                : ''}
-            </span>
-          ) : null}
-        </div>
-      </form>
+          </div>
+        </Field>
+      </Form>
     </Dialog>
-  );
-}
-
-/** One label: what it is, what happens to its mail, and how much rests on it. */
-function LabelCard({
-  accountId,
-  label,
-  account,
-  onEdit,
-  reload,
-}: {
-  accountId: string;
-  label: LabelSummary;
-  account: string | null;
-  onEdit: () => void;
-  reload: () => void;
-}) {
-  const { busy, error, run } = useAction();
-  const facts = [
-    `${count(label.messages)} ${label.messages === 1 ? 'message' : 'messages'}`,
-    `${count(label.rules)} ${label.rules === 1 ? 'rule' : 'rules'}`,
-    extras(label) || null,
-    label.record.reviewed > 0 ? `right ${percent(label.record.right, label.record.reviewed)} of ${count(label.record.reviewed)}` : null,
-  ].filter(Boolean);
-  return (
-    <Card>
-      <CardHead title={label.name} note={account ?? undefined} aside={<Code>{label.gmailLabel}</Code>} />
-      <p className="text-sm text-muted-foreground">{label.description}</p>
-      <p className="text-sm text-muted-foreground tabular-nums">{facts.join(' · ')}</p>
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      <CardFoot>
-        <Select
-          label={`What sift does with ${label.name}`}
-          value={label.disposition as ActionKey}
-          options={ACTIONS}
-          disabled={busy}
-          onChange={(disposition) => run(() => api.saveLabel(accountId, label.id, { disposition }), reload)}
-        />
-        <Button variant="quiet" className="ml-auto" onClick={onEdit}>
-          <PencilIcon aria-hidden />
-          Edit
-        </Button>
-      </CardFoot>
-    </Card>
   );
 }
 
@@ -196,11 +158,10 @@ export function LabelsView() {
   return (
     <ListView
       title="Labels"
-      count={data ? count(all.length) : null}
-      description="Every message gets one label, from a rule or from a model. The label decides what happens to the message, and is added to it in Gmail."
+      meta={data ? `${count(all.length)} kinds of mail` : null}
       actions={
         first ? (
-          <Button variant="ink" onClick={() => setEditing({ accountId: first.id, label: null })}>
+          <Button onClick={() => setEditing({ accountId: first.id, label: null })}>
             <PlusIcon aria-hidden />
             Add a label
           </Button>
@@ -208,32 +169,67 @@ export function LabelsView() {
       }
       search={{ value: search, onChange: setSearch, placeholder: 'Search labels' }}
       filters={{
-        active: does === '' ? [] : [{ label: `sift does: ${DOES.find(([key]) => key === does)?.[1].toLowerCase()}`, clear: () => setDoes('') }],
-        panel: <FilterGroup label="sift does" value={does} options={DOES} onChange={setDoes} />,
+        active: does === '' ? [] : [{ label: `Then: ${outcomeName(does)}`, clear: () => setDoes('') }],
+        panel: <FilterGroup label="Then" value={does} options={DOES} onChange={setDoes} />,
       }}
     >
       {error ? <ErrorNote message={error} /> : null}
       {loading ? (
-        <Sheet>
-          <Loading rows={6} />
-        </Sheet>
+        <Loading rows={6} />
       ) : shown.length === 0 ? (
-        <Sheet>
-          <Empty>No label matches.</Empty>
-        </Sheet>
+        <Empty>{all.length === 0 ? 'No labels yet.' : 'No label matches.'}</Empty>
       ) : (
-        <CardGrid>
-          {shown.map(({ account, label }) => (
-            <LabelCard
-              key={`${account.id}/${label.id}`}
-              accountId={account.id}
-              label={label}
-              account={accounts.length > 1 ? account.email : null}
-              onEdit={() => setEditing({ accountId: account.id, label })}
-              reload={reload}
-            />
-          ))}
-        </CardGrid>
+        <Table>
+          <thead>
+            <Tr>
+              <Th>Label</Th>
+              <Th phone="hide">Then</Th>
+              <Th phone="hide" num>
+                Messages
+              </Th>
+              <Th phone="hide" num>
+                Rules
+              </Th>
+              <Th phone="hide" num>
+                Right
+              </Th>
+            </Tr>
+          </thead>
+          <tbody>
+            {shown.map(({ account, label }) => (
+              <Tr key={`${account.id}/${label.id}`} onOpen={() => setEditing({ accountId: account.id, label })}>
+                <Td className="max-w-0 md:w-[55%]">
+                  <span className="name">{label.name}</span>
+                  <Sub>{accounts.length > 1 ? `${account.email} · ${label.description}` : label.description}</Sub>
+                  <OnPhone>
+                    <Stamp>{outcomeName(label.disposition)}</Stamp>
+                    {extras(label) ? <span>+ {extras(label)}</span> : null}
+                  </OnPhone>
+                </Td>
+                <Td phone="hide" className="whitespace-nowrap">
+                  <span className="inline-flex items-center gap-2">
+                    <Stamp>{outcomeName(label.disposition)}</Stamp>
+                    {extras(label) ? <span className="text-muted-foreground">+ {extras(label)}</span> : null}
+                  </span>
+                </Td>
+                <Td phone="hide" num quiet={label.messages === 0}>
+                  {count(label.messages)}
+                </Td>
+                <Td phone="hide" num quiet={label.rules === 0}>
+                  {count(label.rules)}
+                </Td>
+                <Td
+                  phone="hide"
+                  num
+                  quiet
+                  title={label.record.reviewed > 0 ? `${count(label.record.right)} of ${count(label.record.reviewed)} you checked` : undefined}
+                >
+                  {label.record.reviewed > 0 ? percent(label.record.right, label.record.reviewed) : '–'}
+                </Td>
+              </Tr>
+            ))}
+          </tbody>
+        </Table>
       )}
       {editing ? <LabelDialog accountId={editing.accountId} label={editing.label} onClose={() => setEditing(null)} onSaved={reload} /> : null}
     </ListView>

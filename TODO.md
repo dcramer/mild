@@ -10,10 +10,8 @@ sift is a better Gmail filter and spam filter: models work out what mail is, and
 
 In this order.
 
-0. **An answer flow that makes sense** (under Labels and rules).
-1. **Settings designed with intent** (under Dashboard).
-2. **Fold Overview into the home page** (under Dashboard).
-3. **Keyboard shortcuts in the design system** (under Dashboard).
+1. **An answer flow that makes sense** (under Labels and rules).
+2. **Keyboard shortcuts in the design system** (under Dashboard).
 
 ## Labels and rules
 
@@ -63,22 +61,19 @@ Built: Suggestions as one row per sender with a one-press answer; opening a row 
 
 The dashboard manages sift, behind Google sign-in. That sign-in also connects the Gmail account.
 
-- [ ] **Page headers with intent.** The top of each page reads as filler: on Suggestions the title repeats the nav item beside it, the count appears twice (in the nav and in a badge), and two lines of explanation sit under it every visit. Decide what the top of a page is for (what needs the reader now, and the one thing they can do about it), make it one part in the design system, and move explanation to where it is needed (the empty state, the first visit). Do it together with the figures below.
-- [ ] **Fold Overview into the home page, and remove the tab.** Suggestions is the home page. Between the header and the list, show the key indicators and a small chart in a compressed band (how much was decided without a model, how often sift was right, what is waiting, cost, decisions over time), so the page says how sift is doing before it asks for anything. The rest of Overview already has a better home: latest decisions are the Decisions tab, and who sends what belongs with senders and domains (which need a list to browse). Then the Overview tab goes.
 - [ ] **The message panel, the rest.** Built: one side panel opened from every list, at its own address, with the message, what sift decided, the sender, and an answer that confirms or changes the decision for this message or for the future; a correction also takes back what sift did to that message in Gmail; answering moves to the next row. Still to do: the text of mail sift already acted on or kept is not held, so those open without it; correcting one message does not go back and fix the sender's other mail sift already moved.
-- [ ] **Settings needs designing with intent.** What is there is a list of whatever was built, in the order it was built. Decide what a person comes to Settings to do and order it by that: whether sift is working and acting, which accounts, the model and what it costs, then the rarely touched. Each page should say what changing it will do before it is changed.
 - [ ] **Server-handled routes, then a server-rendered app.** The page is a client-rendered app whose sections are fragments (`#rules`), which the server never sees. First step, in progress: plain paths (`/rules`, `/settings/accounts`, a sender or a message at its own address) that the server answers and the page reads. Then decide how far to take rendering on the server: what it would buy here (a first paint with data in it, pages that work before the script loads, links that can be checked for access on the server), what it costs under the strict content security policy and with mail sealed to a key only the browser holds (the server cannot render what it cannot read), and whether that means a framework or the current server growing a renderer.
 - [ ] **Sign in to ChatGPT (and other model providers) from the dashboard**, as Gmail already is, so setup in the terminal ends at the Google client. The device-code flow suits a page: show the code and the link, wait, then offer the models.
-- [ ] Dashboard plumbing, the rest. Built: paths instead of fragments, with filters and the open message in the address; an offline state that keeps the last data and refuses writes; an avatar menu; installable, with a service worker that never caches `/api/`; an expired Google sign-in shown in the masthead. Still to do: after Google sign-in the browser returns to `/`, not where it started; an account with no token at all gets no masthead notice; the expired notice clears only after the next pass; the Decisions page offset is not in the address; a focused menu or select popup draws the yellow outline around the whole popup; the JS bundle is over 500 kB; push notifications; switching account from the menu; whether `/system` stays in the production build.
-- [ ] `/overview` and `/system` scroll sideways on a phone (the chart's legend).
-- [ ] Labels are cards and everything else is rows. Decide whether labels should be rows too.
-- [ ] Narrow screens: Suggestions has a phone layout; Rules, Decisions, Changes and the Overview tables still scroll sideways.
+- [ ] Dashboard plumbing, the rest. Built: paths instead of fragments, with filters and the open message in the address; an offline state that keeps the last data and refuses writes; an avatar menu; installable, with a service worker that never caches `/api/`; an expired Google sign-in shown in the masthead. Still to do: after Google sign-in the browser returns to `/`, not where it started; an account with no token at all gets no masthead notice; the expired notice clears only after the next pass; the Activity page offset is not in the address; a focused menu or select popup draws the yellow outline around the whole popup; the JS bundle is over 500 kB; push notifications; switching account from the menu; whether `/system` stays in the production build.
+- [ ] `/system` scrolls sideways on a phone (the chart's legend).
 - [ ] **Keyboard shortcuts as part of the design system.** Obvious things get the keys people already know (J and K or the arrows for next and previous in the panel and down a list, Enter to open, Escape to close, / to search, the number keys for a label), and each shortcut is shown on the page where it applies, so it is learned by looking. To design before building: one part that both binds a key and draws its hint, so the two cannot drift apart; how the hint looks beside a button, in a row and in a menu without adding clutter; what happens to hints on a touch screen; and a switch in Settings that turns shortcuts and their hints off. The panel has previous and next buttons and the answer has number keys and Enter today, each done by hand.
-- [ ] Design system parts still missing: a confirmation for a press that cannot be taken back (removing a rule acts at once), somewhere for "done" that survives the list reloading, a text link, a form layout, and a select for a long list (the model select has no search).
+- [ ] Design system parts still missing: a select for a long list (the model select has no search), and a filter that narrows by sender or label by typing rather than from a fixed list.
+- [ ] Activity lists decisions, so a change with no decision behind it (an unsubscribe, putting a message back after a correction) shows only in that message's history. Decide whether Activity should list those as rows of their own.
+- [ ] Undo from a toast: undoing a change from Activity says what it did in a toast, but nothing offers to redo it, and answering a suggestion cannot be taken back from the toast that reports it. The toast part already takes an action; the server needs a way to take an answer back.
+- [ ] The figures on Suggestions follow the chart's period, but "sift was right" counts every answer ever given. Give the accuracy a period too, or say it is all-time.
 - [ ] Message text is plain and cut at 4,000 characters, as the model sees it. Decide whether reading needs more (longer text, quoted replies folded, links listed).
 - [ ] Suggestion bodies are fetched once per waiting message; reuse the text the model tier already fetched instead of asking Gmail twice. `getContent` now returns the text from the model's one read, which makes this straightforward.
 - [ ] Per-rule detail: the messages matched, hits over time.
-- [ ] Merge Decisions and Changes into one activity view.
 - [ ] Keep people apart: today everyone signed in sees every connected account. Scope each session to its own account before more than one person uses an install. Filter every view by account once there is more than one.
 - [ ] Remove an account, and its token and data, from the dashboard.
 - [ ] Try a second account end to end.

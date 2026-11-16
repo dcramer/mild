@@ -27,10 +27,10 @@ function Swatch({ color }: { color: string }) {
 }
 
 /**
- * Counts over time, stacked by series. The line above the columns is the legend until a column is
+ * Counts over time, stacked by series. `compact` for a chart beside figures rather than one of its own. The line above the columns is the legend until a column is
  * pointed at or focused, then it reads out that column.
  */
-export function StackedBars({ series, rows, unit }: { series: readonly Series[]; rows: readonly ChartRow[]; unit: string }) {
+export function StackedBars({ series, rows, unit, compact }: { series: readonly Series[]; rows: readonly ChartRow[]; unit: string; compact?: boolean }) {
   const [at, setAt] = useState<number | null>(null);
   const total = (row: ChartRow) => series.reduce((sum, s) => sum + (row.values[s.key] ?? 0), 0);
   const max = ceiling(Math.max(...rows.map(total), 1));
@@ -38,8 +38,8 @@ export function StackedBars({ series, rows, unit }: { series: readonly Series[];
   const every = Math.ceil(rows.length / 8);
 
   return (
-    <div className="flex flex-col gap-3 px-4 pt-2 pb-4">
-      <p className="flex min-h-10 flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground tabular-nums">
+    <div className="flex flex-col gap-3">
+      <p className="flex min-h-6 flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground tabular-nums">
         {shown ? <span className="font-medium text-foreground">{shown.title}</span> : null}
         {series
           .filter((s) => !shown || (shown.values[s.key] ?? 0) > 0)
@@ -53,7 +53,7 @@ export function StackedBars({ series, rows, unit }: { series: readonly Series[];
         {shown && total(shown) === 0 ? <span>No {unit}</span> : null}
       </p>
 
-      <div className="relative ml-8 h-52">
+      <div className={`relative ml-8 ${compact ? 'h-28' : 'h-52'}`}>
         {[1, 0.5, 0].map((share) => (
           <div key={share} className="absolute inset-x-0 border-t border-dashed border-(--rule)" style={{ bottom: `${share * 100}%` }}>
             <span className="absolute right-full -translate-y-1/2 pr-2 text-[13px] text-muted-foreground tabular-nums">{Math.round(max * share)}</span>

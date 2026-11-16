@@ -13,13 +13,13 @@ Signing in with Google is what connects a Gmail account, and only someone signed
 
 ## Screens
 
-- **Suggestions:** one row per sender for what sift would do. Answer in one press, or open it to read the mail, see what sift knows about the sender, and choose how far your answer reaches (the sender, their domain, only when the subject contains something, or just this mail). Each message you answer for is stored whole, as an example to test and train sift with.
-- **Overview:** decisions per day by tier, how much was decided without a model, model cost, the backlog and the most frequent senders.
-- **Decisions:** every decision, searchable by subject or sender and filterable by tier and outcome. A row opens that message's history: each decision, its reason and cost, and each mailbox change.
-- **Rules:** what mail is, without asking a model. Add and remove them; see how often and how recently each matched. When the model has given a sender's mail the same label three times, sift writes the rule itself.
-- **Labels:** what mail can be, and what sift does with each. Add your own.
-- **Changes:** everything sift has done in Gmail, each with Undo.
-- **Settings:** switch between suggesting and acting, choose the model and how often to check, pull in older mail to teach with, and edit your guidelines. Changes apply to the running sift straight away.
+- **Suggestions,** the home page: how sift is doing (how much it decided without a model, how often it was right, what the model cost, decisions per day by tier), the rules it proposes, then one row per sender for what sift would do. Agree in one press, or open the row to read the mail, see what sift knows about the sender, and choose how far your answer reaches (the sender, their domain, only when the subject contains something, or just this mail). Each message you answer for is stored whole, as an example to test and train sift with.
+- **Activity:** every decision, searchable by subject or sender and filterable by where it got to (suggested, done, undone, needs a look), what sift did and which tier decided. Undo what sift changed in Gmail from the row; open it for that message's whole history, with each decision's reason and cost and each mailbox change.
+- **Labels:** what mail can be, and what sift does with each. Open one to change it; add your own.
+- **Rules:** what mail is, without asking a model. Add and remove them; see how often and how recently each matched. When the model has given a sender's mail the same label five times running, sift proposes the rule on Suggestions.
+- **Settings:** whether sift is observing or acting, the model and what it has cost, how often to check, the connected accounts, your guidelines, and pulling in older mail to teach with. Changes apply to the running sift straight away.
+
+A sender's name anywhere is a link to their page: where they stand and why, what sift knows about them, the standing you give them, and all their mail.
 
 ## What sift leaves in Gmail
 
@@ -27,7 +27,7 @@ Mail sift acts on gets its label (`sift/newsletters`) and, if sift moved it, a s
 
 ## Working on the page
 
-The page is a React app in `web/`, styled with Tailwind and built from sift's own design system ([DESIGN.md](DESIGN.md), every part shown at `/#system`).
+The page is a React app in `web/`, styled with Tailwind and built from sift's own design system ([DESIGN.md](DESIGN.md), every part shown at `/system`).
 
 - `sift run` builds it the first time and whenever its sources are newer than the build. `pnpm build:web` does the same by hand, into `web/dist`.
 - `pnpm dev` runs sift from source and reloads the page when either the server or the page changes. Give it `--home <scratch>`.

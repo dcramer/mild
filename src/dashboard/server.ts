@@ -549,6 +549,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
         const text = (name: string) => query.get(name) || undefined;
         const stage = text('stage');
         const disposition = text('disposition');
+        const status = text('status');
         const search = text('q');
         const result = listDecisions(
           db,
@@ -556,6 +557,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
             days,
             ...(stage ? { stage } : {}),
             ...(disposition ? { disposition } : {}),
+            ...(status ? { status } : {}),
             ...(search ? { search } : {}),
             limit: Number(query.get('limit') ?? 50) || 50,
             offset: Number(query.get('offset') ?? 0) || 0,

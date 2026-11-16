@@ -10,11 +10,13 @@ A proof sheet on a dark desk: ink on near-black, one highlighter pen, hard edges
 
 - **Dark only.**
 - **Two colours mean something.** Yellow (`highlight`) means "look here": the name, the current section, the headline figure, what is waiting on the reader, a search match. Red (`destructive`) means a failure. Nothing else is coloured; everything else is the ink colour at some strength.
-- **As little chrome as it takes.** Nothing on the page has a fill of its own: a list sits straight on it, and a sheet or a card is set apart by a thin frame alone. Only what floats above the page (a panel, a dialog, a menu) is filled, so it can cover what is under it. A sheet is for a group of settings or a figure, not for a table. Inside either, space and type separate things before any line does. Controls are filled (`--fill`), not outlined. Notes and headings have no box and no rule. The only lines inside a sheet are faint dashes between rows (`--rule`).
+- **As little chrome as it takes.** Nothing on the page has a fill of its own: a list sits straight on it, and a sheet is set apart by a thin frame alone. Only what floats above the page (a panel, a dialog, a menu, a toast) is filled, so it can cover what is under it. A sheet is for a group of settings, not for a list. Inside it, space and type separate things before any line does. Controls are filled (`--fill`), not outlined. Notes and headings have no box and no rule. The only lines inside a sheet are faint dashes between rows (`--rule`).
 - **Lines are ink, thinned.** `--frame` for a sheet's edge, `--rule` between rows. Never a separate grey.
 - **One shadow.** `--edge`: hard, offset down and right, the edge of the sheet beneath. It belongs to sheets and to what floats (a dialog, a menu). Buttons have none: the highlighted button is a flat stroke of yellow, like the name.
+- **One word for each thing.** What sift does with mail (Keep, Archive, Spam, Block, Not sure), where a decision got to (Suggested, Done, Undone, Failed…), where a sender stands and which tier decided each have exactly one name, kept in `web/src/lib/format.ts` and used in every stamp, filter, select and column. A sentence uses the matching phrase (`willBe`). Never write one of these words in a view.
+- **Say what the reader can use.** A list shows what something is, what sift said, why, where it got to and when. Model names, token counts, cost per message, confidence and change ids belong in the message panel's history, not in a row.
 - **Things you press have hand-cut corners** (`--cut-control`); the highlighter stroke has its own (`--cut`). Surfaces are square.
-- **Type is by role.** Karla carries everything read. Hanken Grotesk, bold, is for what is named or counted: page titles, headings, names, figures. IBM Plex Mono is for anything typed or pasted, and in small capitals (`.slug`) for labels and column heads. The wordmark alone is in Bricolage Grotesque. Sized like a mail reader: text is 16px, what supports it 15px, an opened message 17px; only labels and stamps go smaller, and nothing under 12px. Secondary text is a lighter ink, not a smaller size. (The same three faces as Peated.)
+- **Type is by role.** Karla carries everything read. Hanken Grotesk, bold, is for what is named or counted: a page's title (`.statement`), a dialog's (`.title`), a section's heading (`.heading`), names, figures. IBM Plex Mono is for anything typed or pasted, and in small capitals (`.slug`) for column heads and a figure's label only; a heading is never a slug. The wordmark alone is in Bricolage Grotesque. Sized like a mail reader: text is 16px, what supports it 15px, an opened message 17px; only labels and stamps go smaller, and nothing under 12px. Secondary text is a lighter ink, not a smaller size. (The same three faces as Peated.)
 - **One height for controls.** Everything pressed or typed into in a row or a toolbar is `--control` high (32px), so buttons, selects and inputs line up. `lg` is for the one action a screen is about. Somewhere to type or choose (an input, a text area, a select, the search bar) is outlined and empty; something to press is filled (`--fill`), and stronger on hover. So a form reads as fields with one filled action.
 - No app bar, no gradients, no pills, no icons as decoration.
 
@@ -24,30 +26,36 @@ Tokens and the role classes are in `web/src/index.css`.
 
 | Part | Use |
 | --- | --- |
-| `Button` | `mark`: what the screen is waiting on, one per screen at most. `ink`: the main action of a sheet or row. `plain`: everything else, filled not outlined. `quiet`: repeated down a list, and ways out. With `href` it is a link. `busy` while a press is being acted on. |
-| `Select`, `Input`, `TextArea`, `Check` | Controls. Filled, with the hand-cut corners. `Select` is for a short list. |
+| `Button` | `mark`: what the screen is waiting on, one per screen at most, never down a list. `ink`: what finishes a dialog or form. `plain`: a page's own action (adding to its list) and anything else said once. `quiet`: repeated down a list, firmer when its row is pointed at, and ways out. With `href` it is a link. `busy` while a press is being acted on. |
+| `ConfirmButton` | A press that cannot be taken back (removing a rule, starting to act). It asks in place, with the same words on the button that does it. |
+| `Select`, `Input`, `TextArea`, `Check` | Controls. `Select` is for a short list. |
+| `ChoiceGroup` | A few choices seen at once, one on: what a message is, where a sender stands. `numbered` shows the keys that pick them; `clearable` when none is a choice too. |
+| `Field`, `Form` | A form is a column of fields with what finishes it last. A field is its label, its controls, what follows from the answer (`hint`) and what is wrong (`error`). `inline` puts the label beside the controls, for a short form in a narrow column. |
 | `Masthead` | The top of every screen: the name, the sections (highlighted when current), a `Notice` when there is one, when sift last synced, and who is signed in, as an `Avatar` that opens a `Menu`. No bar. |
 | `Notice` | A state of sift itself, true on every screen, in the masthead: sift cannot be reached (plain ink, a pulse: it mends itself), a sign-in has expired (`look`, with a link: the reader mends it). |
-| `SubNav` | The pages within a section, beside the page, the current one marked with a stroke. Like the sections, they are links to a path (`/settings/accounts`), read with `useRoute`. |
-| `Menu`, `Avatar` | A few things to do, behind one button: under the avatar, who is signed in and Sign out. An item that cannot be pressed says why under its label. An avatar is the initial of an address, never a picture: the page loads nothing from another origin. Choosing one value is a `Select`, not a menu. |
-| `Sheet`, `SheetHead` | The surface everything sits on. Rows inside take the class `row`. |
-| `Table`, `Tr`, `Th`, `Td` | Rows of the same kind of thing, one row per item: the default for a list. On the page a row reaches a little past its text on both sides (`--bleed`), so the hover has room around what it holds while the text stays in line with the heading above. It has no surface of its own, no background and no frame: on the page it sits flush under the list's heading, divided only by the dashes between rows. `Tr onOpen` makes the whole row pressable. |
-| `Figures`, `Figure` | Headline numbers, straight on the page. `look` for the one to see first, `failure` for a count of things gone wrong. |
-| `StackedBars` | Counts over time, stacked by series. Its legend reads out the column pointed at or focused. |
-| `ListView`, `FilterGroup` | **How every screen shows many of one thing.** Its search and filters are kept in the address (`useParam`), so a narrowed list can be bookmarked. A title with the count, then one outlined bar holding the search and the Filters button (not filled: the list has no surface, so its search has none either), then the rows or cards. The filter button opens a panel on the right that pushes the list left. Filters that are on show as a count on the button and, when the panel is closed, as a line of chips that each clear one. |
-| `Card`, `CardHead`, `CardFoot`, `CardGrid` | A thing shown whole, where each one is read on its own rather than compared down a column: a label. Head (what it is), body, foot (what can be done to it). Lists of mail, rules and decisions are tables, not cards. |
+| `PageHeader` | The top of every page: its title, one line of where things stand, and the page's own action. No explanation: that goes in the empty state or beside the control it explains. |
+| `Section` | A part of a page or a panel under its own heading, with a count and at most one action beside it. Space sets it apart. |
+| `ListView`, `FilterGroup` | **How every screen shows many of one thing.** Its search and filters are kept in the address (`useParam`), so a narrowed list can be bookmarked. The page header, anything the page shows first (`intro`), one outlined bar holding the search and the Filters button, then the rows. The filter button opens a panel on the right that pushes the list left. Filters that are on show as a count on the button and, when the panel is closed, as a line of chips that each clear one. |
+| `Table`, `Tr`, `Th`, `Td`, `Sub`, `OnPhone`, `RowActions` | Rows of the same kind of thing, one row per item: the only way to show a list. No surface of its own; on the page a row reaches a little past its text on both sides (`--bleed`), so the hover has room around what it holds. `Tr onOpen` makes the whole row pressable. `Sub` is a quieter second line in a cell. `RowActions` is the last cell: quiet presses that act without opening the row. |
+| `Facts`, `Fact` | What is known about one thing, as terms and values: a sender, a message's signals. Leave a fact out rather than give it no value. |
+| `Timeline`, `TimelineEvent` | What happened to one thing, oldest first, each with at most one press (Undo). |
+| `Sheet`, `SettingRow` | A group of settings, framed. Each row says what it is, what follows from changing it, and holds its control. Not for a list. |
+| `Figures`, `Figure` | Headline numbers, straight on the page. `look` for the one to see first, `failure` for a count of things gone wrong; `href` links to the list it counts. |
+| `StackedBars` | Counts over time, stacked by series. Its legend reads out the column pointed at or focused. `compact` beside figures. |
 | `Panel` | One item from a list, opened beside the list: it slides over from the right, up to three quarters of the screen, with previous and next to step through the list. Every list opens a message in the same panel (`views/message-panel.tsx`). |
-| `Dialog` | A form or a question: adding a label or a rule. Centred. `footer` for the actions that finish it. Looking at one of many things is a `Panel`, not a `Dialog`. |
+| `Dialog` | A form or a question: adding or changing a label or a rule. Centred. `footer` for the actions that finish it. |
+| `Toaster`, `useToast` | What a press did, said once in the corner after the list has moved on: what sift learned, what was undone. A failure stays until dismissed and is the only one in red. Never for something the page already shows. |
+| `Menu`, `Avatar` | A few things to do, behind one button: under the avatar, who is signed in and Sign out. An item that cannot be pressed says why under its label. An avatar is the initial of an address, never a picture: the page loads nothing from another origin. Choosing one value is a `Select`, not a menu. |
 | `HoverCard` | A link that previews where it goes when the pointer rests on it or it takes focus. Only a preview: a touch screen never shows it, so everything in it is also on the page the link opens. |
-| `Note` | Said to the reader outside the flow: `plain`, `look` (needs them), `failure`. No box. |
-| `Empty`, `Loading` | What a sheet shows with nothing in it, and while rows are on their way. |
-| `Stamp` | A short verdict. Weight is meaning: `outline`, `tint`, `ink`; `look` for what is left to the reader. |
+| `Note` | Said to the reader outside the flow, about the whole page: `plain`, `look` (needs them), `failure`. No box. |
+| `Empty`, `Loading` | What a list shows with nothing in it (say what would put something here), and while rows are on their way. |
+| `Stamp` | A verdict in one word from the vocabulary. All stamps weigh the same; `look` only for what is left to the reader. |
 | `Highlight`, `Marked` | A stroke of highlighter; a search term marked in text. |
-| `Code`, `Copyable` | Something typed, inline; a value carried somewhere else whole, with a copy button where the browser allows one. |
+| `TextLink`, `Code`, `Kbd`, `Copyable` | A link in text; something typed; a key; a value carried somewhere else whole. |
 | `Disclosure` | What most readers never need, folded under the question that leads to it. |
 | `Wordmark` | The name. |
 
-`web/src/components/` holds what is particular to sift and built from these: a tier's label, a decision's stamp, the decision table, and `SenderLink`, which is how a sender is named anywhere: a link to their page with a preview of their standing.
+`web/src/components/` holds what is particular to sift and built from these: `Verdict` (a label and what sift does, the same everywhere), `StatusWord`, `TierLabel`, the decision table that Activity and the sender page share, the answer form, and `SenderLink`, which is how a sender is named anywhere: a link to their page with a preview of their standing.
 
 ## Narrow screens
 
@@ -57,12 +65,12 @@ Every part has an answer for a phone, and a new part needs one before it is adde
 | --- | --- |
 | `Masthead` | The sections, the synced line and the account (its address and what its menu holds, as buttons) move into a panel that covers the screen, opened from a menu button. The bar shows the current section's name; a dot on the button means something is waiting in another section. |
 | `Notice` | A line of its own under the masthead's bar. |
-| `SubNav` | A select above the page. |
 | `Menu` | Opens under its button, kept inside the screen, with rows 44px tall on a touch screen. The masthead's own is not shown on a narrow screen: its panel lists the same things. |
+| `Field inline` | The label goes above the controls. |
+| `Facts` | Each term goes above its value. |
 | `Panel`, `Dialog` | Cover the screen. |
 | `ListView` | The filter panel opens above the list. |
-| `CardGrid` | One column. |
-| `Table` | A table says which columns a phone keeps; what the dropped ones said moves under the first column, and the row opens for the rest (Suggestions does this). Tables that have not been given this still scroll sideways. |
+| `Table` | Columns marked `phone="hide"` drop; what they said moves under the first column in an `OnPhone`, and the row opens for the rest. `RowActions` drop too, unless the row does not open (`phone="keep"`). |
 | Rows with a control | The control wraps under the text. |
 | Anything pressed | At least 40px tall on a touch screen (`pointer: coarse`), whatever its size on a desktop. |
 
@@ -70,7 +78,9 @@ The page itself never scrolls sideways.
 
 ## Rules for adding to it
 
-- A screen that lists something is a `ListView`. Don't lay out a heading, a search box or filters by hand.
+- A page starts with a `PageHeader`; a screen that lists something is a `ListView`. Don't lay out a heading, a search box or filters by hand.
+- A list is a `Table`. There are no cards.
+- What a press did is a toast. An error that stops a form goes under the form; a failure that stops a page is a `Note`.
 - A form that adds or changes something opens in a `Dialog`; it does not unfold inside the list.
 - Opening an item of a list opens the `Panel`, and the same panel wherever that kind of item appears, so it behaves the same everywhere.
 
