@@ -1,7 +1,7 @@
 import { SenderLink } from '@/components/sender.tsx';
 import type { DecisionRow } from '@/lib/api.ts';
 import { clock, dateTime, dayName, happened, status } from '@/lib/format.ts';
-import { Button, Failure, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from '@/system';
+import { Button, Does, Failure, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 /**
@@ -13,7 +13,7 @@ function Happened({ row, stacked }: { row: DecisionRow; stacked?: boolean }) {
   const label = row.labelName ? stacked ? <Sub>{row.labelName}</Sub> : <span className="text-muted-foreground"> · {row.labelName}</span> : null;
   const what = (
     <>
-      <span className="font-semibold">{text}</span>
+      <Does action={row.disposition}>{text}</Does>
       {row.byUser ? <span className="text-muted-foreground/70"> · you</span> : null}
       {label}
     </>
