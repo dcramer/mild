@@ -1,545 +1,638 @@
 /**
- * The JSON the dashboard API returns. This file has no imports so the web app can share it.
+ * What the dashboard API sends, and the bodies the page sends it, as schemas the server parses them
+ * with. The web app imports only their types, so zod stays out of the page; keep this file's imports to
+ * zod and the pure triage types.
  */
+import { z } from 'zod';
+import { DECIDED } from '../triage/types.ts';
 
 export const STAGES = ['rules', 'sender', 'heuristics', 'classifier', 'agent', 'fallback'] as const;
 export type StageKey = (typeof STAGES)[number];
+const stage = z.enum(STAGES);
+
+export const LABEL_ID = /^[a-z0-9_-]{1,40}$/;
+/** Text a person typed or the page sent, not empty and not long. */
+export const text = (max = 200) => z.string().min(1).max(max);
+export const labelId = z.string().regex(LABEL_ID);
+export const decided = z.enum(DECIDED);
+const ruleKind = z.enum(['label', 'action', 'when-label']);
+const match = z.record(z.string(), z.string());
+const answered = z.object({ reviewed: z.number(), right: z.number() });
 
 /** What was done in Gmail on a day: changes that stand, by what they did, and changes that failed. */
-export interface DayChanges {
-  archive: number;
-  spam: number;
-  keep: number;
-  failed: number;
-}
+export const DayChanges = z.object({
+  archive: z.number(),
+  spam: z.number(),
+  keep: z.number(),
+  failed: z.number(),
+});
+export type DayChanges = z.infer<typeof DayChanges>;
 
-export interface Summary {
-  days: number;
-  generatedAt: number;
-  accounts: { email: string; lastSyncedAt: number | null }[];
-  totals: {
+export const DecisionRow = z.object({
+  id: z.number(),
+  accountId: z.string(),
+  messageId: z.string(),
+  decidedAt: z.number(),
+  stage,
+  disposition: z.string(),
+  /** What sift said the mail is, or null if it could not place it. The name is null if that label has since gone. */
+  labelId: z.string().nullable(),
+  labelName: z.string().nullable(),
+  gmailLabel: z.string().nullable(),
+  /** The decision also says to unsubscribe. */
+  unsubscribe: z.boolean(),
+  reason: z.string(),
+  confidence: z.number().nullable(),
+  model: z.string().nullable(),
+  costUsd: z.number(),
+  fromAddress: z.string(),
+  fromName: z.string().nullable(),
+  subject: z.string(),
+  /** `observe`: recorded only. `act`: meant to be carried out. */
+  mode: z.string(),
+  /** Null while an `act` decision is still waiting to be carried out. */
+  outcome: z.string().nullable(),
+  outcomeDetail: z.string().nullable(),
+  actionId: z.number().nullable(),
+  actionType: z.string().nullable(),
+  actionStatus: z.string().nullable(),
+  /** The user's own answer, not sift's decision. */
+  byUser: z.boolean(),
+});
+export type DecisionRow = z.infer<typeof DecisionRow>;
+
+export const Summary = z.object({
+  days: z.number(),
+  generatedAt: z.number(),
+  accounts: z.array(z.object({ email: z.string(), lastSyncedAt: z.number().nullable() })),
+  totals: z.object({
     /** Messages received in the window. */
-    messages: number;
+    messages: z.number(),
     /** Decisions made in the window. */
-    decisions: number;
+    decisions: z.number(),
     /** Of those, how many used no model at all. */
-    withoutInference: number;
-    costUsd: number;
+    withoutInference: z.number(),
+    costUsd: z.number(),
     /** Recorded messages with no decision yet (all time). */
-    awaitingTriage: number;
+    awaitingTriage: z.number(),
     /** Actions in the window that failed or whose outcome is unconfirmed. */
-    troubledActions: number;
-  };
-  byStage: { stage: StageKey; decisions: number; costUsd: number; tokens: number }[];
-  byDisposition: { disposition: string; decisions: number }[];
+    troubledActions: z.number(),
+  }),
+  byStage: z.array(z.object({ stage, decisions: z.number(), costUsd: z.number(), tokens: z.number() })),
+  byDisposition: z.array(z.object({ disposition: z.string(), decisions: z.number() })),
   /** One entry per day in the window, oldest first, with a count for every stage. */
-  daily: { day: string; counts: Record<StageKey, number>; changes: DayChanges; costUsd: number }[];
-  topSenders: { address: string; messages: number; lastDisposition: string | null }[];
+  daily: z.array(z.object({ day: z.string(), counts: z.record(stage, z.number()), changes: DayChanges, costUsd: z.number() })),
+  topSenders: z.array(z.object({ address: z.string(), messages: z.number(), lastDisposition: z.string().nullable() })),
   /** The ten latest decisions in the window. */
-  recent: DecisionRow[];
+  recent: z.array(DecisionRow),
   /**
    * How often sift's suggestion was what the user wanted, from the answers given in the window. Answers
    * to mail sift could not place are not counted.
    */
-  accuracy: {
-    reviewed: number;
-    right: number;
+  accuracy: z.object({
+    reviewed: z.number(),
+    right: z.number(),
     /** Every tier, in cascade order. */
-    byStage: { stage: StageKey; reviewed: number; right: number }[];
+    byStage: z.array(z.object({ stage, reviewed: z.number(), right: z.number() })),
     /** Per label sift gave, most answers first. The name is null if the label has gone. */
-    byLabel: { labelId: string; labelName: string | null; reviewed: number; right: number }[];
+    byLabel: z.array(z.object({ labelId: z.string(), labelName: z.string().nullable(), reviewed: z.number(), right: z.number() })),
     /** What sift called one label when the user said another, commonest first. */
-    confusion: { suggested: string; correct: string; count: number }[];
-  };
-}
+    confusion: z.array(z.object({ suggested: z.string(), correct: z.string(), count: z.number() })),
+  }),
+});
+export type Summary = z.infer<typeof Summary>;
 
-export interface DecisionRow {
-  id: number;
-  accountId: string;
-  messageId: string;
-  decidedAt: number;
-  stage: StageKey;
-  disposition: string;
-  /** What sift said the mail is, or null if it could not place it. The name is null if that label has since gone. */
-  labelId: string | null;
-  labelName: string | null;
-  gmailLabel: string | null;
-  /** The decision also says to unsubscribe. */
-  unsubscribe: boolean;
-  reason: string;
-  confidence: number | null;
-  model: string | null;
-  costUsd: number;
-  fromAddress: string;
-  fromName: string | null;
-  subject: string;
-  /** `observe`: recorded only. `act`: meant to be carried out. */
-  mode: string;
-  /** Null while an `act` decision is still waiting to be carried out. */
-  outcome: string | null;
-  outcomeDetail: string | null;
-  actionId: number | null;
-  actionType: string | null;
-  actionStatus: string | null;
-  /** The user's own answer, not sift's decision. */
-  byUser: boolean;
-}
+/** GET /api/decisions: a page of decisions, and how many match in all. */
+export const DecisionPage = z.object({ total: z.number(), rows: z.array(DecisionRow) });
+export type DecisionPage = z.infer<typeof DecisionPage>;
 
-export interface MessageDetail {
-  accountId: string;
-  messageId: string;
-  threadId: string;
-  fromAddress: string;
-  fromName: string | null;
-  to: { address: string; name?: string }[];
-  cc: { address: string; name?: string }[];
-  subject: string;
-  listId: string | null;
-  receivedAt: number;
-  syncedAt: number | null;
+export const Standing = z.enum(['trusted', 'known', 'new', 'unwanted', 'blocked']);
+export type Standing = z.infer<typeof Standing>;
+
+const authentication = z.enum(['pass', 'fail', 'none']);
+
+/** What sift checked about one message. Mirrors `Facts` in src/triage/facts.ts, which says what each means. */
+export const MessageFactSet = z.object({
+  unsubscribe: z.enum(['none', 'header', 'one-click']),
+  listId: z.string().nullable(),
+  markedBulk: z.boolean(),
+  autoGenerated: z.boolean(),
+  dmarc: authentication,
+  spf: authentication,
+  dkim: authentication,
+  bulkService: z.string().nullable(),
+  replyToDiffers: z.boolean(),
+  addressed: z.enum(['to', 'cc', 'neither']),
+  isReply: z.boolean(),
+  category: z.enum(['personal', 'social', 'promotions', 'updates', 'forums']).nullable(),
+  /** These five are known only once a model has been asked about the message; the last four only for mail with HTML. */
+  hasAttachments: z.boolean().optional(),
+  trackingPixel: z.boolean().optional(),
+  linkHosts: z.number().optional(),
+  trackedLinks: z.boolean().optional(),
+  linksOffDomain: z.boolean().optional(),
+  /** Known only for a reply a model has been asked about. */
+  earlierInThread: z.number().optional(),
+  ownerInThread: z.boolean().optional(),
+});
+export type MessageFactSet = z.infer<typeof MessageFactSet>;
+
+/** What sift knows about one sender, or about everyone at one domain, to judge their mail by. */
+export const SenderProfile = z.object({
+  /** An address, or for a domain's profile the domain. */
+  address: z.string(),
+  /** How the owner regards them, and the reason in a few words. */
+  standing: Standing,
+  why: z.string(),
+  lastSeenAt: z.number().nullable(),
+  /** Messages in the last 30 days. */
+  recent: z.number(),
+  /** For a domain: how many addresses have written from it. */
+  senders: z.number(),
+  /** Share of their labelled mail that got the commonest label, 0 to 1. Null with too little to say. */
+  consistency: z.number().nullable(),
+  /** The owner's answers about their mail. */
+  answers: z.object({ right: z.number(), wrong: z.number() }),
+  /** The sender's domain, with its own standing. Null for a domain's own profile and for a domain anyone can get an address at. */
+  domain: z.object({ name: z.string(), standing: Standing, why: z.string(), messages: z.number(), senders: z.number() }).nullable(),
+  /** Messages recorded from this address. */
+  messages: z.number(),
+  firstSeenAt: z.number().nullable(),
+  /** Whether the account owner has ever written to this address. Null if that has not been checked. */
+  userHasWritten: z.boolean().nullable(),
+  /** What this sender's mail currently is, by label, most first. */
+  labels: z.array(z.object({ id: z.string(), name: z.string(), messages: z.number() })),
+  /** Rules that name this sender or their domain. */
+  rules: z.array(
+    z.object({
+      id: z.string(),
+      match,
+      labelName: z.string().nullable(),
+      disposition: z.string().nullable(),
+      source: z.string(),
+      kind: ruleKind,
+      when: z.string().nullable(),
+    }),
+  ),
+});
+export type SenderProfile = z.infer<typeof SenderProfile>;
+
+const address = z.object({ address: z.string(), name: z.string().optional() });
+
+export const MessageDetail = z.object({
+  accountId: z.string(),
+  messageId: z.string(),
+  threadId: z.string(),
+  fromAddress: z.string(),
+  fromName: z.string().nullable(),
+  to: z.array(address),
+  cc: z.array(address),
+  subject: z.string(),
+  listId: z.string().nullable(),
+  receivedAt: z.number(),
+  syncedAt: z.number().nullable(),
   /** Triage headers as synced. */
-  headers: Record<string, string>;
+  headers: z.record(z.string(), z.string()),
   /**
    * The readable text, where sift holds it: while the message is waiting on the user (and sift would move it or
    * could not place it), or for good once the user has answered for it. Null otherwise.
    */
-  body: string | null;
-  facts: MessageFactSet;
-  sender: SenderProfile;
+  body: z.string().nullable(),
+  facts: MessageFactSet,
+  sender: SenderProfile,
   /**
    * Whether sift could leave the list this message came from. `available`: yes, with one request to the sender.
    * `done`: it already has. `manual`: the message has an unsubscribe link sift will not use (it needs an
    * email sent or a page opened, or the message did not prove who sent it). `none`: it offers no way.
    */
-  unsubscribe: 'available' | 'done' | 'manual' | 'none';
+  unsubscribe: z.enum(['available', 'done', 'manual', 'none']),
   /** Every decision made about this message, oldest first. */
-  decisions: (DecisionRow & { ruleId: string | null; inputTokens: number; outputTokens: number; durationMs: number | null })[];
+  decisions: z.array(
+    DecisionRow.extend({ ruleId: z.string().nullable(), inputTokens: z.number(), outputTokens: z.number(), durationMs: z.number().nullable() }),
+  ),
   /** Every mailbox change made to this message, oldest first. */
-  actions: {
-    id: number;
-    type: string;
-    status: string;
-    decisionId: number | null;
-    added: string[];
-    removed: string[];
-    originalLabels: string[];
-    finalLabels: string[] | null;
-    error: string | null;
-    createdAt: number;
-  }[];
-}
-
-export type Standing = 'trusted' | 'known' | 'new' | 'unwanted' | 'blocked';
-
-/** What sift checked about one message. Mirrors `Facts` in src/triage/facts.ts, which says what each means. */
-export interface MessageFactSet {
-  unsubscribe: 'none' | 'header' | 'one-click';
-  listId: string | null;
-  markedBulk: boolean;
-  autoGenerated: boolean;
-  dmarc: 'pass' | 'fail' | 'none';
-  spf: 'pass' | 'fail' | 'none';
-  dkim: 'pass' | 'fail' | 'none';
-  bulkService: string | null;
-  replyToDiffers: boolean;
-  addressed: 'to' | 'cc' | 'neither';
-  isReply: boolean;
-  category: 'personal' | 'social' | 'promotions' | 'updates' | 'forums' | null;
-  /** These five are known only once a model has been asked about the message; the last four only for mail with HTML. */
-  hasAttachments?: boolean;
-  trackingPixel?: boolean;
-  linkHosts?: number;
-  trackedLinks?: boolean;
-  linksOffDomain?: boolean;
-  /** Known only for a reply a model has been asked about. */
-  earlierInThread?: number;
-  ownerInThread?: boolean;
-}
-
-/** What sift knows about one sender, or about everyone at one domain, to judge their mail by. */
-export interface SenderProfile {
-  /** An address, or for a domain's profile the domain. */
-  address: string;
-  /** How the owner regards them, and the reason in a few words. */
-  standing: Standing;
-  why: string;
-  lastSeenAt: number | null;
-  /** Messages in the last 30 days. */
-  recent: number;
-  /** For a domain: how many addresses have written from it. */
-  senders: number;
-  /** Share of their labelled mail that got the commonest label, 0 to 1. Null with too little to say. */
-  consistency: number | null;
-  /** The owner's answers about their mail. */
-  answers: { right: number; wrong: number };
-  /** The sender's domain, with its own standing. Null for a domain's own profile and for a domain anyone can get an address at. */
-  domain: { name: string; standing: Standing; why: string; messages: number; senders: number } | null;
-  /** Messages recorded from this address. */
-  messages: number;
-  firstSeenAt: number | null;
-  /** Whether the account owner has ever written to this address. Null if that has not been checked. */
-  userHasWritten: boolean | null;
-  /** What this sender's mail currently is, by label, most first. */
-  labels: { id: string; name: string; messages: number }[];
-  /** Rules that name this sender or their domain. */
-  rules: {
-    id: string;
-    match: Record<string, string>;
-    labelName: string | null;
-    disposition: string | null;
-    source: string;
-    kind: 'label' | 'action' | 'when-label';
-    when: string | null;
-  }[];
-}
+  actions: z.array(
+    z.object({
+      id: z.number(),
+      type: z.string(),
+      status: z.string(),
+      decisionId: z.number().nullable(),
+      added: z.array(z.string()),
+      removed: z.array(z.string()),
+      originalLabels: z.array(z.string()),
+      finalLabels: z.array(z.string()).nullable(),
+      error: z.string().nullable(),
+      createdAt: z.number(),
+    }),
+  ),
+});
+export type MessageDetail = z.infer<typeof MessageDetail>;
 
 /** GET /api/sender and /api/domain. */
-export interface SenderPage {
-  accountId: string;
-  kind: 'sender' | 'domain';
+export const SenderPage = z.object({
+  accountId: z.string(),
+  kind: z.enum(['sender', 'domain']),
   /** The name the sender last used. */
-  name: string | null;
-  profile: SenderProfile;
+  name: z.string().nullable(),
+  profile: SenderProfile,
   /** For a domain: who writes from it, most mail first. */
-  senders: { address: string; name: string | null; messages: number; lastSeenAt: number; standing: Standing }[];
+  senders: z.array(z.object({ address: z.string(), name: z.string().nullable(), messages: z.number(), lastSeenAt: z.number(), standing: Standing })),
   /** Their mail, newest first. */
-  decisions: DecisionRow[];
+  decisions: z.array(DecisionRow),
   /** How much of it is waiting on the owner. */
-  waiting: number;
-}
+  waiting: z.number(),
+});
+export type SenderPage = z.infer<typeof SenderPage>;
 
 /** One sender's mail that is waiting on the user. GET /api/suggestion. */
-export interface SuggestionDetail {
-  sender: SenderProfile;
-  messages: {
-    decisionId: number;
-    messageId: string;
-    subject: string;
-    receivedAt: number;
-    disposition: string;
-    labelId: string | null;
-    labelName: string | null;
-    stage: StageKey;
-    reason: string;
-  }[];
-}
+export const SuggestionDetail = z.object({
+  sender: SenderProfile,
+  messages: z.array(
+    z.object({
+      decisionId: z.number(),
+      messageId: z.string(),
+      subject: z.string(),
+      receivedAt: z.number(),
+      disposition: z.string(),
+      labelId: z.string().nullable(),
+      labelName: z.string().nullable(),
+      stage,
+      reason: z.string(),
+    }),
+  ),
+});
+export type SuggestionDetail = z.infer<typeof SuggestionDetail>;
 
 /** A rule's standing as a Gmail filter, which runs in Gmail itself and so applies when sift is off. */
-export interface RuleFilter {
+export const RuleFilter = z.object({
   /**
    * `none`: not in Gmail. `active`: sift wrote it and it is still there. `changed`: it was edited in Gmail,
    * and sift leaves it alone. `gone`: it was deleted in Gmail. `outdated`: the rule no longer says what the
    * filter does; sift replaces or removes it once it is acting. `RuleSummary.filterId` says whether Gmail still has one.
    */
-  state: 'none' | 'active' | 'changed' | 'gone' | 'outdated';
+  state: z.enum(['none', 'active', 'changed', 'gone', 'outdated']),
   /** Whether the rule as it stands can be written as a filter. */
-  possible: boolean;
+  possible: z.boolean(),
   /** Why not, in a sentence. */
-  reason: string | null;
+  reason: z.string().nullable(),
   /** Where Gmail will not do exactly what the rule does. To show before the user asks for the filter. */
-  differs: string[];
+  differs: z.array(z.string()),
   /** When sift last compared it with Gmail. */
-  checkedAt: number | null;
-}
+  checkedAt: z.number().nullable(),
+});
+export type RuleFilter = z.infer<typeof RuleFilter>;
 
-export interface RuleSummary {
-  id: string;
-  accountId: string;
-  match: Record<string, string>;
-  except: Record<string, string>[];
+export const RuleSummary = z.object({
+  id: z.string(),
+  accountId: z.string(),
+  match,
+  except: z.array(match),
   /**
    * `label`: the mail is `labelId`, and that label's action applies unless the rule has its own.
    * `action`: only what happens, whatever the mail is. `when-label`: what happens once a tier has said
    * the mail is `whenLabel`.
    */
-  kind: 'label' | 'action' | 'when-label';
-  labelId: string | null;
-  whenLabel: string | null;
+  kind: ruleKind,
+  labelId: z.string().nullable(),
+  whenLabel: z.string().nullable(),
   /** The name of the label the rule names or waits for. Null for an `action` rule, and when that label has been removed. */
-  labelName: string | null;
+  labelName: z.string().nullable(),
   /** The label the rule names or waits for has been removed; the rule then does nothing. */
-  labelGone: boolean;
+  labelGone: z.boolean(),
   /** The rule's own action. For a `label` rule it is an exception to the label's. */
-  override: string | null;
+  override: z.string().nullable(),
   /** What happens to mail the rule decides: its own action, else its label's. */
-  disposition: string | null;
+  disposition: z.string().nullable(),
   /** Extras for mail the rule matches, from the rule or its label. */
-  markRead: boolean;
-  unsubscribe: boolean;
+  markRead: z.boolean(),
+  unsubscribe: z.boolean(),
   /** A plain-language condition only the model can apply. */
-  when: string | null;
+  when: z.string().nullable(),
   /** `user`: written by the user. `correction`: made by correcting sift. `agent`: made by sift when it blocked the sender. */
-  source: string;
-  hits: number;
-  lastHitAt: number | null;
+  source: z.string(),
+  hits: z.number(),
+  lastHitAt: z.number().nullable(),
   /** The rule's filter in Gmail, while there is one. */
-  filterId: string | null;
-  filter: RuleFilter;
-  createdAt: number;
-}
+  filterId: z.string().nullable(),
+  filter: RuleFilter,
+  createdAt: z.number(),
+});
+export type RuleSummary = z.infer<typeof RuleSummary>;
 
-/** One sender's mail that is waiting for the user to confirm or correct. */
 /** One waiting suggestion: what sift proposes for one message, which the user has not answered. */
-export interface SuggestionItem {
-  accountId: string;
-  messageId: string;
-  decisionId: number;
-  sender: string;
-  senderName: string | null;
-  subject: string;
-  receivedAt: number;
+export const SuggestionItem = z.object({
+  accountId: z.string(),
+  messageId: z.string(),
+  decisionId: z.number(),
+  sender: z.string(),
+  senderName: z.string().nullable(),
+  subject: z.string(),
+  receivedAt: z.number(),
   /** What sift would do. `review` without a label means it could not place the mail. */
-  disposition: string;
+  disposition: z.string(),
   /** What sift says the mail is, or null if it could not place it. */
-  labelId: string | null;
-  labelName: string | null;
+  labelId: z.string().nullable(),
+  labelName: z.string().nullable(),
   /** sift would also unsubscribe. */
-  unsubscribe: boolean;
+  unsubscribe: z.boolean(),
   /** Which tier decided, and how sure a model was (0 to 1); null when no model was asked. */
-  stage: StageKey;
-  confidence: number | null;
+  stage,
+  confidence: z.number().nullable(),
   /**
    * What else it might be, most likely first: the labels the sender's other mail has had, with the share
    * of it each had. Until the model ranks its own guesses, this is the best second opinion sift holds.
    */
-  alternatives: { id: string; name: string; share: number }[];
+  alternatives: z.array(z.object({ id: z.string(), name: z.string(), share: z.number() })),
   /** The start of the message's text, on one line, where sift holds it: enough to tell what it is without opening it. */
-  preview: string | null;
-}
+  preview: z.string().nullable(),
+});
+export type SuggestionItem = z.infer<typeof SuggestionItem>;
 
 /** A rule sift thinks is worth having, for the user to accept or dismiss. */
-export interface ProposalSummary {
-  id: number;
-  accountId: string;
+export const ProposalSummary = z.object({
+  id: z.number(),
+  accountId: z.string(),
   /** `rule`: make this rule. `always`: stop having the model check a rule it has always agreed with. */
-  kind: 'rule' | 'always';
-  match: Record<string, string>;
-  labelId: string;
-  labelName: string;
+  kind: z.enum(['rule', 'always']),
+  match,
+  labelId: z.string(),
+  labelName: z.string(),
   /** What the label does to mail. */
-  disposition: string;
+  disposition: z.string(),
   /** How many decisions in a row it rests on. */
-  agreed: number;
-}
+  agreed: z.number(),
+});
+export type ProposalSummary = z.infer<typeof ProposalSummary>;
 
-export interface Suggestions {
+export const Suggestions = z.object({
   /** Newest first. */
-  items: SuggestionItem[];
-  proposals: ProposalSummary[];
+  items: z.array(SuggestionItem),
+  proposals: z.array(ProposalSummary),
   /** Messages waiting, which can be more than `items` holds. */
-  waiting: number;
+  waiting: z.number(),
   /** From the user's answers so far. */
-  accuracy: { reviewed: number; right: number };
+  accuracy: answered,
   /** The labels the user can say something is, per account, with what sift does for each. */
-  labels: Record<string, { id: string; name: string; disposition: string }[]>;
+  labels: z.record(z.string(), z.array(z.object({ id: z.string(), name: z.string(), disposition: z.string() }))),
   /** Marked messages kept whole as examples, and how many are still to be fetched. */
-  examples: { captured: number; pending: number };
-}
+  examples: z.object({ captured: z.number(), pending: z.number() }),
+});
+export type Suggestions = z.infer<typeof Suggestions>;
 
 /** The body of POST /api/feedback. */
-export interface FeedbackRequest {
-  accountId: string;
-  sender: string;
-  /** What the mail is: a label's id. Left out when the answer says only what should happen. */
-  label?: string;
-  /** What should happen to it. Left out: what the label does. */
-  disposition?: string;
-  /** Also unsubscribe, whether or not the label does. */
-  unsubscribe?: boolean;
-  /** A plain-language condition that narrows a rule for the sender. Needs `label`. */
-  when?: string;
-  /**
-   * How far the answer reaches, and so what rule it makes. `label`: the sender's mail of this kind (what
-   * agreeing means). `sender`, `domain`, `subject`: that mail whatever it is. `once`: no rule.
-   */
-  scope: 'label' | 'sender' | 'domain' | 'subject' | 'once';
-  /** For `subject`: the words the subject must contain. */
-  contains?: string;
-  decisionId?: number;
-  /** The message the answer was given on, which need not be waiting: this is how a decision already made is corrected. */
-  messageId?: string;
-}
+export const FeedbackRequest = z
+  .strictObject({
+    accountId: z.string(),
+    sender: z.string(),
+    /** What the mail is: a label's id. Left out when the answer says only what should happen. */
+    label: labelId.optional(),
+    /** What should happen to it. Left out: what the label does. */
+    disposition: decided.optional(),
+    /** Also unsubscribe, whether or not the label does. */
+    unsubscribe: z.boolean().optional(),
+    /** A plain-language condition that narrows a rule for the sender. Needs `label`. */
+    when: z.string().max(200).optional(),
+    /**
+     * How far the answer reaches, and so what rule it makes. `label`: the sender's mail of this kind (what
+     * agreeing means). `sender`, `domain`, `subject`: that mail whatever it is. `once`: no rule.
+     */
+    scope: z.enum(['label', 'sender', 'domain', 'subject', 'once']),
+    /** For `subject`: the words the subject must contain. */
+    contains: z.string().max(200).optional(),
+    decisionId: z.int().optional(),
+    /** The message the answer was given on, which need not be waiting: this is how a decision already made is corrected. */
+    messageId: text().optional(),
+  })
+  .refine((a) => a.label !== undefined || a.disposition !== undefined, { message: 'An answer says what the mail is, what should happen to it, or both.' })
+  .refine((a) => a.label !== undefined || (a.scope !== 'label' && a.when === undefined), { path: ['label'], message: 'This answer needs a label.' })
+  .refine((a) => a.scope !== 'subject' || (a.contains ?? '').trim() !== '', { path: ['contains'], message: 'An answer about a subject needs its words.' });
+export type FeedbackRequest = z.infer<typeof FeedbackRequest>;
+
+/** What POST /api/feedback answers. */
+export const FeedbackReply = z.object({
+  /** Suggestions this answer settled. */
+  reviewed: z.number(),
+  /** What sift will do differently from now on, in a sentence. Null if nothing lasting was learned. */
+  taught: z.string().nullable(),
+  /** The message whose earlier decision was replaced. */
+  corrected: z.string().nullable(),
+  /** How many messages now have the answer waiting to be carried out in Gmail. */
+  carrying: z.number(),
+  /** sift proposed a rule because the sender's mail has been answered the same way enough times. */
+  proposed: z.boolean(),
+  /** What was done in Gmail about the corrected message, in a sentence. Null if nothing needed doing. */
+  fixed: z.string().nullable(),
+});
+export type FeedbackReply = z.infer<typeof FeedbackReply>;
+
+/** A label: what mail is, and what sift does with it. */
+export const LabelSummary = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  /** What sift does with it: `keep`, `archive`, `spam`, or `block` (spam, and the sender's later mail too). */
+  disposition: z.string(),
+  /** Also mark the mail read. Only with `keep` and `archive`. */
+  markRead: z.boolean(),
+  /** Also leave the sender's mailing list, where that can be done safely. */
+  unsubscribe: z.boolean(),
+  gmailLabel: z.string(),
+  /** Rules that say mail is this label. */
+  rules: z.number(),
+  /** Messages whose current decision carries this label. */
+  messages: z.number(),
+  /** Of the suggestions for this label the user has answered, how many sift had right. */
+  record: answered,
+});
+export type LabelSummary = z.infer<typeof LabelSummary>;
+
+/** A ChatGPT sign-in waiting on the person: the code to enter at OpenAI, and where. */
+export const SignInCode = z.object({ code: z.string(), url: z.string(), expiresAt: z.number() });
+export type SignInCode = z.infer<typeof SignInCode>;
 
 /** GET /api/manage: everything the Settings view shows. */
-export interface ManageState {
+export const ManageState = z.object({
   /** Whether the viewer owns the install, and so may change the settings that apply to all of it. */
-  owner: boolean;
-  settings: { act: boolean; interval: number; fewShot: boolean; examplesKeepDays: number | null };
+  owner: z.boolean(),
+  settings: z.object({ act: z.boolean(), interval: z.number(), fewShot: z.boolean(), examplesKeepDays: z.number().nullable() }),
   /** The viewer's own model: which one they chose, how they can reach one, and a ChatGPT sign-in under way. */
-  model: {
-    chosen: string | null;
-    choices: { provider: string; label: string; how: 'chatgpt' | 'key' }[];
-    signedIn: string[];
-    pending: { code: string; url: string; expiresAt: number } | { error: string } | null;
-  };
+  model: z.object({
+    chosen: z.string().nullable(),
+    choices: z.array(z.object({ provider: z.string(), label: z.string(), how: z.enum(['chatgpt', 'key']) })),
+    signedIn: z.array(z.string()),
+    pending: z.union([SignInCode, z.object({ error: z.string() })]).nullable(),
+  }),
   /** The viewer's own words about their mail, which the model reads. */
-  guidelines: string;
-  activity: { sorting: boolean; lastPassAt: number | null; problems: string[]; expired: string[] };
-  accounts: { id: string; email: string; lastSyncedAt: number | null }[];
+  guidelines: z.string(),
+  activity: z.object({ sorting: z.boolean(), lastPassAt: z.number().nullable(), problems: z.array(z.string()), expired: z.array(z.string()) }),
+  accounts: z.array(z.object({ id: z.string(), email: z.string(), lastSyncedAt: z.number().nullable() })),
   /** Per account, in order. */
-  labels: Record<string, LabelSummary[]>;
+  labels: z.record(z.string(), z.array(LabelSummary)),
   /** How many labels an account may have. */
-  labelLimit: number;
+  labelLimit: z.number(),
   /**
    * Per account, waiting suggestions a model judged (or no tier could place) before the viewer's
    * guidelines last changed. POST /api/suggestions/rejudge judges a batch of them again, at a model call each.
    */
-  predateGuidelines: Record<string, number>;
-}
+  predateGuidelines: z.record(z.string(), z.number()),
+});
+export type ManageState = z.infer<typeof ManageState>;
 
-/** A label: what mail is, and what sift does with it. */
-export interface LabelSummary {
-  id: string;
-  name: string;
-  description: string;
-  /** What sift does with it: `keep`, `archive`, `spam`, or `block` (spam, and the sender's later mail too). */
-  disposition: string;
-  /** Also mark the mail read. Only with `keep` and `archive`. */
-  markRead: boolean;
-  /** Also leave the sender's mailing list, where that can be done safely. */
-  unsubscribe: boolean;
-  gmailLabel: string;
-  /** Rules that say mail is this label. */
-  rules: number;
-  /** Messages whose current decision carries this label. */
-  messages: number;
-  /** Of the suggestions for this label the user has answered, how many sift had right. */
-  record: { reviewed: number; right: number };
-}
+/** GET /api/models: the models the viewer's sign-ins offer, and per provider the one to suggest first. */
+export const Models = z.object({
+  models: z.array(z.string()),
+  recommended: z.record(z.string(), z.string()),
+  /** A provider could not be reached. */
+  error: z.string().optional(),
+});
+export type Models = z.infer<typeof Models>;
 
 /** A change sift made to the mailbox. */
-export interface ChangeRow {
-  id: number;
-  accountId: string;
-  messageId: string;
-  type: string;
-  status: string;
-  error: string | null;
-  createdAt: number;
-  subject: string | null;
-  fromAddress: string | null;
+export const ChangeRow = z.object({
+  id: z.number(),
+  accountId: z.string(),
+  messageId: z.string(),
+  type: z.string(),
+  status: z.string(),
+  error: z.string().nullable(),
+  createdAt: z.number(),
+  subject: z.string().nullable(),
+  fromAddress: z.string().nullable(),
   /** For an undo, the change it reversed. */
-  undoOf: number | null;
-}
+  undoOf: z.number().nullable(),
+});
+export type ChangeRow = z.infer<typeof ChangeRow>;
 
 /** GET /api/session. */
-export interface Session {
+export const Session = z.object({
   /** False when this dashboard does not ask for sign-in. */
-  required: boolean;
+  required: z.boolean(),
   /** The signed-in account, or null. */
-  email: string | null;
-  canSignIn: boolean;
+  email: z.string().nullable(),
+  canSignIn: z.boolean(),
   /** Why not: no Google client is set up; Google cannot return to this address; or the client is a Desktop one, which sift no longer signs in with. */
-  reason: 'no-client' | 'address' | 'desktop-client' | null;
+  reason: z.enum(['no-client', 'address', 'desktop-client']).nullable(),
   /** Addresses sign-in works at. */
-  addresses: string[];
+  addresses: z.array(z.string()),
   /** What the Google client must list as an authorised redirect URI for sign-in at this address. */
-  redirectUri: string;
-}
+  redirectUri: z.string(),
+});
+export type Session = z.infer<typeof Session>;
 
 /** Right, wrong, "unsure" and failed calls among some judged examples. Accuracy is `right / (total - failed)`. */
-export interface EvalTally {
-  total: number;
-  right: number;
-  wrong: number;
-  unsure: number;
+export const EvalTally = z.object({
+  total: z.number(),
+  right: z.number(),
+  wrong: z.number(),
+  unsure: z.number(),
   /** Calls that returned nothing usable. Not counted for or against. */
-  failed: number;
-}
+  failed: z.number(),
+});
+export type EvalTally = z.infer<typeof EvalTally>;
 
-export interface EvalScore extends EvalTally {
+export const EvalScore = EvalTally.extend({
   /** By the label the user gave, most examples first. */
-  byLabel: ({ labelId: string } & EvalTally)[];
+  byLabel: z.array(EvalTally.extend({ labelId: z.string() })),
   /** Which label was taken for which, commonest first. */
-  confusion: { expected: string; got: string; count: number }[];
-  costUsd: number;
-  inputTokens: number;
-  outputTokens: number;
+  confusion: z.array(z.object({ expected: z.string(), got: z.string(), count: z.number() })),
+  costUsd: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
   /** Averages over the calls that answered. */
-  perMessage: { costUsd: number; inputTokens: number; outputTokens: number };
-}
+  perMessage: z.object({ costUsd: z.number(), inputTokens: z.number(), outputTokens: z.number() }),
+});
+export type EvalScore = z.infer<typeof EvalScore>;
 
 /** One replay of the model over stored examples. */
-export interface EvalRun {
-  id: number;
-  accountId: string;
-  startedAt: number;
-  finishedAt: number | null;
+export const EvalRun = z.object({
+  id: z.number(),
+  accountId: z.string(),
+  startedAt: z.number(),
+  finishedAt: z.number().nullable(),
   /** `interrupted`: sift stopped while it was going. */
-  status: 'running' | 'done' | 'failed' | 'interrupted';
-  error: string | null;
+  status: z.enum(['running', 'done', 'failed', 'interrupted']),
+  error: z.string().nullable(),
   /** What it ran with. Runs that agree on all of these were asked the same question the same way. */
-  model: string;
-  promptHash: string;
-  guidelinesHash: string;
-  labelsHash: string;
-  labels: { id: string; name: string; description: string }[];
-  fewShot: boolean;
+  model: z.string(),
+  promptHash: z.string(),
+  guidelinesHash: z.string(),
+  labelsHash: z.string(),
+  labels: z.array(z.object({ id: z.string(), name: z.string(), description: z.string() })),
+  fewShot: z.boolean(),
   /** Examples in the run. `score.total` is how many have been judged so far. */
-  total: number;
-  score: EvalScore;
+  total: z.number(),
+  score: EvalScore,
   /** Of the answers, those given with an example from the same sender in the prompt, which makes them easy. */
-  withSenderExample: { answered: number; right: number };
-}
+  withSenderExample: z.object({ answered: z.number(), right: z.number() }),
+});
+export type EvalRun = z.infer<typeof EvalRun>;
 
 /** GET /api/evals. */
-export interface Evals {
+export const Evals = z.object({
   /** Newest first. */
-  runs: EvalRun[];
+  runs: z.array(EvalRun),
   /** Stored examples a run could use, per account. */
-  examples: Record<string, number>;
-  defaultLimit: number;
-  maxLimit: number;
-}
+  examples: z.record(z.string(), z.number()),
+  defaultLimit: z.number(),
+  maxLimit: z.number(),
+});
+export type Evals = z.infer<typeof Evals>;
 
 /** GET /api/eval?id=. */
-export interface EvalDetail {
-  run: EvalRun;
-  results: {
-    messageId: string;
-    fromAddress: string;
-    subject: string;
-    /** The user's label. */
-    expected: string;
-    /** A label id, `unsure`, or null when the call failed. */
-    got: string | null;
-    confidence: number | null;
-    inputTokens: number;
-    outputTokens: number;
-    costUsd: number;
-    durationMs: number;
-    /** Examples shown beside it, and how many of those were from the same sender. */
-    shots: number;
-    senderShots: number;
-  }[];
-}
+export const EvalDetail = z.object({
+  run: EvalRun,
+  results: z.array(
+    z.object({
+      messageId: z.string(),
+      fromAddress: z.string(),
+      subject: z.string(),
+      /** The user's label. */
+      expected: z.string(),
+      /** A label id, `unsure`, or null when the call failed. */
+      got: z.string().nullable(),
+      confidence: z.number().nullable(),
+      inputTokens: z.number(),
+      outputTokens: z.number(),
+      costUsd: z.number(),
+      durationMs: z.number(),
+      /** Examples shown beside it, and how many of those were from the same sender. */
+      shots: z.number(),
+      senderShots: z.number(),
+    }),
+  ),
+});
+export type EvalDetail = z.infer<typeof EvalDetail>;
 
 /** The body of POST /api/evals/run. Answers `{ id }`; the run goes on in the background. */
-export interface EvalRequest {
-  accountId: string;
+export const EvalRequest = z.strictObject({
+  accountId: text(),
   /** Show the model the other stored examples. Default: the `fewShot` setting. */
-  fewShot?: boolean;
-  /** How many examples, newest answers first. */
-  limit?: number;
-}
+  fewShot: z.boolean().optional(),
+  /** How many examples, newest answers first. At most `Evals.maxLimit`. */
+  limit: z.int().min(1).optional(),
+});
+export type EvalRequest = z.infer<typeof EvalRequest>;
 
 /** GET /api/examples: the messages held whole because the user answered for them. No content. */
-export interface Examples {
+export const Examples = z.object({
   /** Newest answers first, at most 500. */
-  examples: {
-    accountId: string;
-    messageId: string;
-    fromAddress: string;
-    fromName: string | null;
-    subject: string;
-    /** The user's answer. */
-    labelId: string | null;
-    markedAt: number;
-    /** `pending`: not fetched yet. `gone`: the message no longer existed, so only the answer is held. */
-    status: 'pending' | 'captured' | 'gone';
-  }[];
+  examples: z.array(
+    z.object({
+      accountId: z.string(),
+      messageId: z.string(),
+      fromAddress: z.string(),
+      fromName: z.string().nullable(),
+      subject: z.string(),
+      /** The user's answer. */
+      labelId: z.string().nullable(),
+      markedAt: z.number(),
+      /** `pending`: not fetched yet. `gone`: the message no longer existed, so only the answer is held. */
+      status: z.enum(['pending', 'captured', 'gone']),
+    }),
+  ),
   /** How many are held per account, including any beyond the list. */
-  held: Record<string, number>;
+  held: z.record(z.string(), z.number()),
   /** Days an example is kept after its answer, or null when they are kept until deleted. */
-  keepDays: number | null;
-}
+  keepDays: z.number().nullable(),
+});
+export type Examples = z.infer<typeof Examples>;

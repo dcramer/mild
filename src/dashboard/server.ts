@@ -4,6 +4,7 @@ import { type IncomingMessage, type Server, type ServerResponse, createServer } 
 import { extname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { People } from '../store/people.ts';
+import type { z } from 'zod';
 import { READS, WRITES } from './api/index.ts';
 import type { Context, Write } from './api/route.ts';
 import type { Controls, SignIn } from './controls.ts';
@@ -65,6 +66,27 @@ const json = (res: ServerResponse, status: number, body: unknown) =>
   res.writeHead(status, { ...HEADERS, 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(body));
 
 const MAX_BODY = 20_000;
+
+/**
+ * What was wrong with a request, for whoever sent it: the first field refused and why. It names the
+ * field, never its value.
+ */
+const refusedBy = (error: z.ZodError) => {
+  const issue = error.issues[0];
+  const field = issue?.path.join('.');
+  return field ? `${field}: ${issue?.message}` : (issue?.message ?? 'That request is not well formed.');
+};
+
+/**
+ * A reply that does not match its route's schema is sift's own mistake: it is not sent, since what it
+ * would send is not what the page was promised.
+ */
+const replied = (schema: z.ZodType, body: unknown): { status: number; body: unknown } => {
+  const parsed = schema.safeParse(body);
+  return parsed.success
+    ? { status: 200, body: parsed.data }
+    : { status: 500, body: { error: `The reply did not match its schema (${refusedBy(parsed.error)}).` } };
+};
 
 /** Read a small JSON body. Null if it is too large or not a JSON object. */
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown> | null> {
@@ -172,13 +194,7 @@ export function createDashboardServer(people: People, options: DashboardOptions 
   const reads = new Map(READS.map((route) => [route.path, route]));
   const writes = new Map(WRITES.map((route) => [route.path, route]));
   /** Why this person may not make this write, or null if they may. Someone else's data is reported as not there. */
-  const refusal = async (
-    route: Write,
-    ctx: Context,
-    body: Record<string, unknown>,
-    scope: Scope,
-    someone: boolean,
-  ): Promise<{ status: number; error: string } | null> => {
+  const refusal = async (route: Write, ctx: Context, body: unknown, scope: Scope, someone: boolean): Promise<{ status: number; error: string } | null> => {
     const whose = await route.touches(ctx, body);
     if (whose === 'self') return someone ? null : { status: 401, error: 'Sign in to use the dashboard.' };
     if (whose === 'install') return scope.owner ? null : { status: 403, error: 'Only the person who set sift up can change this.' };
@@ -290,12 +306,16 @@ export function createDashboardServer(people: People, options: DashboardOptions 
         return void json(res, 403, { error: 'This request did not come from the dashboard.' });
       }
       void readJson(req)
-        .then(async (body) => {
-          const refused = body && (await refusal(handler, ctx, body, whole, person !== null));
+        .then(async (raw) => {
+          if (raw === null) return void json(res, 400, { error: 'That request is not well formed.' });
+          const body = handler.body.safeParse(raw);
+          if (!body.success) return void json(res, 400, { error: refusedBy(body.error) });
+          const refused = await refusal(handler, ctx, body.data, whole, person !== null);
           if (refused) return void json(res, refused.status, { error: refused.error });
-          const result = body && (await handler.run(ctx, body, whole));
-          if (result === null) json(res, 400, { error: 'That request is not well formed.' });
-          else json(res, 200, result);
+          const result: unknown = await handler.run(ctx, body.data, whole);
+          if (result === null) return void json(res, 400, { error: 'That request is not well formed.' });
+          const reply = replied(handler.reply, result);
+          json(res, reply.status, reply.body);
         })
         .catch((error: unknown) => json(res, 409, { error: error instanceof Error ? error.message : String(error) }));
       return;
@@ -312,9 +332,14 @@ export function createDashboardServer(people: People, options: DashboardOptions 
       const mailbox = query.get('mailbox');
       const scope = mailbox ? narrow(whole, mailbox) : whole;
       if (!scope) return void json(res, 404, { error: 'No such mailbox' });
+      const params = route.query.safeParse(Object.fromEntries(query));
+      if (!params.success) return void json(res, 400, { error: refusedBy(params.error) });
       void Promise.resolve()
-        .then(() => route.run(ctx, scope, query))
-        .then((reply) => json(res, reply.status, reply.body))
+        .then(() => route.run(ctx, scope, params.data))
+        .then((reply) => {
+          const sent = reply.status === 200 ? replied(route.reply, reply.body) : reply;
+          json(res, sent.status, sent.body);
+        })
         .catch((error: unknown) => json(res, 500, { error: error instanceof Error ? error.message : String(error) }));
       return;
     }

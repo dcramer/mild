@@ -1,48 +1,46 @@
+import { z } from 'zod';
 import { listAccounts } from '../../store/accounts.ts';
 import { addLabel, updateLabel } from '../../store/labels.ts';
-import { type Write, fromOutcome, named, outcome, redecide, str } from './route.ts';
+import { type Write, accountId, fromOutcome, named, outcome, redecide, text, write } from './route.ts';
+
+const DESCRIPTION = z.string().max(600);
 
 export const writes: Write[] = [
-  {
+  write({
     path: '/api/labels',
+    body: z.strictObject({
+      accountId,
+      id: text(40),
+      name: text(60).optional(),
+      description: DESCRIPTION.optional(),
+      disposition: outcome.optional(),
+      markRead: z.boolean().optional(),
+      unsubscribe: z.boolean().optional(),
+    }),
+    reply: z.object({ ok: z.literal(true), redecided: z.number() }),
     touches: named,
-    run: async ({ db, now }, body) => {
-      const { accountId, id, name, description, disposition, markRead, unsubscribe } = body;
-      if (!str(accountId) || !str(id, 40)) return null;
-      if (name !== undefined && !str(name, 60)) return null;
-      if (description !== undefined && (typeof description !== 'string' || description.length > 600)) return null;
-      if (disposition !== undefined && !outcome(disposition)) return null;
-      if (markRead !== undefined && typeof markRead !== 'boolean') return null;
-      if (unsubscribe !== undefined && typeof unsubscribe !== 'boolean') return null;
-      const change: Parameters<typeof updateLabel>[3] = {};
-      if (name !== undefined) change.name = name;
-      if (description !== undefined) change.description = description;
-      if (disposition !== undefined) Object.assign(change, fromOutcome(disposition));
-      if (markRead !== undefined) change.markRead = markRead;
-      if (unsubscribe !== undefined) change.unsubscribe = unsubscribe;
+    run: async ({ db, now }, { accountId, id, disposition, ...rest }) => {
+      const change: Parameters<typeof updateLabel>[3] = { ...rest, ...(disposition === undefined ? {} : fromOutcome(disposition)) };
       if (!(await updateLabel(db, accountId, id, change, now()))) throw new Error(`There is no label "${id}".`);
-      return { ok: true, redecided: await redecide(db, now, accountId) };
+      return { ok: true as const, redecided: await redecide(db, now, accountId) };
     },
-  },
-  {
+  }),
+  write({
     path: '/api/labels/add',
+    body: z.strictObject({
+      accountId,
+      name: text(60),
+      description: DESCRIPTION,
+      disposition: outcome,
+      markRead: z.boolean().optional(),
+      unsubscribe: z.boolean().optional(),
+    }),
+    reply: z.object({ id: z.string() }),
     touches: named,
-    run: async ({ db, now }, body) => {
-      const { accountId, name, description, disposition, markRead, unsubscribe } = body;
-      if (!str(accountId) || !str(name, 60) || typeof description !== 'string' || description.length > 600) return null;
-      if (!outcome(disposition) || (markRead !== undefined && typeof markRead !== 'boolean')) return null;
-      if (unsubscribe !== undefined && typeof unsubscribe !== 'boolean') return null;
+    run: async ({ db, now }, { accountId, name, description, disposition, markRead, unsubscribe }) => {
       if (!(await listAccounts(db)).some((a) => a.id === accountId)) return null;
-      return {
-        id: (
-          await addLabel(
-            db,
-            accountId,
-            { name, description, ...fromOutcome(disposition), ...(markRead ? { markRead } : {}), ...(unsubscribe ? { unsubscribe } : {}) },
-            now(),
-          )
-        ).id,
-      };
+      const label = { name, description, ...fromOutcome(disposition), ...(markRead ? { markRead } : {}), ...(unsubscribe ? { unsubscribe } : {}) };
+      return { id: (await addLabel(db, accountId, label, now())).id };
     },
-  },
+  }),
 ];

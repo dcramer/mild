@@ -1,15 +1,19 @@
+import { z } from 'zod';
 import { listAccounts } from '../../store/accounts.ts';
 import { count, eq, examples as exampleRows } from '../../store/query.ts';
 import { deleteExamples, listExamples } from '../../store/examples.ts';
 import { sees } from '../scope.ts';
-import type { Examples } from '../types.ts';
-import { type Read, type Write, missing, named, ok, str } from './route.ts';
+import { Examples } from '../types.ts';
+import { type Read, type Write, accountId, missing, named, ok, read, text, write } from './route.ts';
+
+const deleted = z.object({ deleted: z.number() });
 
 export const reads: Read[] = [
-  {
+  read({
     path: '/api/examples',
-    run: async ({ db, controls }, scope, query) => {
-      const one = query.get('account');
+    query: z.object({ account: z.string().optional() }),
+    reply: Examples,
+    run: async ({ db, controls }, scope, { account: one }) => {
       if (one && !sees(scope, one)) return missing('No such mailbox');
       const held = await Promise.all(
         scope.accounts.map(async (id) => [id, (await db.select({ n: count() }).from(exampleRows).where(eq(exampleRows.accountId, id)))[0]!.n] as const),
@@ -21,26 +25,25 @@ export const reads: Read[] = [
       };
       return ok(examples);
     },
-  },
+  }),
 ];
 
 export const writes: Write[] = [
-  {
+  write({
     path: '/api/examples/delete',
+    body: z.strictObject({ accountId, messageId: text() }),
+    reply: deleted,
     touches: named,
-    run: async ({ db }, body) => {
-      const { accountId, messageId } = body;
-      if (!str(accountId) || !str(messageId)) return null;
-      return { deleted: await deleteExamples(db, accountId, messageId) };
-    },
-  },
-  {
+    run: async ({ db }, { accountId, messageId }) => ({ deleted: await deleteExamples(db, accountId, messageId) }),
+  }),
+  write({
     path: '/api/examples/delete-all',
+    body: z.strictObject({ accountId }),
+    reply: deleted,
     touches: named,
-    run: async ({ db }, body) => {
-      const { accountId } = body;
-      if (!str(accountId) || !(await listAccounts(db)).some((a) => a.id === accountId)) return null;
+    run: async ({ db }, { accountId }) => {
+      if (!(await listAccounts(db)).some((a) => a.id === accountId)) return null;
       return { deleted: await deleteExamples(db, accountId) };
     },
-  },
+  }),
 ];

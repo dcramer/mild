@@ -1,29 +1,36 @@
+import { z } from 'zod';
 import { actions, decisions } from '../../store/query.ts';
 import { getAction } from '../../store/actions.ts';
 import { listChanges, listDecisions, retryDecision } from '../queries/decisions.ts';
 import { messageDetail } from '../queries/messages.ts';
 import { summarize } from '../queries/summary.ts';
-import { BAD_DAYS, type Read, type Write, daysOf, missing, ok, ownerOf } from './route.ts';
+import { ChangeRow, DecisionPage, MessageDetail, Summary } from '../types.ts';
+import { type Read, type Write, days, id, missing, ok, ownerOf, read, write } from './route.ts';
+
+/** A filter left empty is no filter. */
+const filter = z.string().optional();
 
 export const reads: Read[] = [
-  {
+  read({
     path: '/api/summary',
-    run: async ({ db, now }, scope, query) => {
-      const days = daysOf(query);
-      return days === null ? BAD_DAYS : ok(await summarize(db, scope, days, now()));
-    },
-  },
-  {
+    query: z.object({ days }),
+    reply: Summary,
+    run: async ({ db, now }, scope, { days }) => ok(await summarize(db, scope, days, now())),
+  }),
+  read({
     path: '/api/decisions',
-    run: async ({ db, now }, scope, query) => {
-      const days = daysOf(query);
-      if (days === null) return BAD_DAYS;
-      const text = (name: string) => query.get(name) || undefined;
-      const stage = text('stage');
-      const disposition = text('disposition');
-      const status = text('status');
-      const search = text('q');
-      return ok(
+    query: z.object({
+      days,
+      stage: filter,
+      disposition: filter,
+      status: filter,
+      q: filter,
+      limit: z.coerce.number().int().positive().catch(50),
+      offset: z.coerce.number().int().nonnegative().catch(0),
+    }),
+    reply: DecisionPage,
+    run: async ({ db, now }, scope, { days, stage, disposition, status, q, limit, offset }) =>
+      ok(
         await listDecisions(
           db,
           scope,
@@ -32,45 +39,53 @@ export const reads: Read[] = [
             ...(stage ? { stage } : {}),
             ...(disposition ? { disposition } : {}),
             ...(status ? { status } : {}),
-            ...(search ? { search } : {}),
-            limit: Number(query.get('limit') ?? 50) || 50,
-            offset: Number(query.get('offset') ?? 0) || 0,
+            ...(q ? { search: q } : {}),
+            limit,
+            offset,
           },
           now(),
         ),
-      );
-    },
-  },
-  {
+      ),
+  }),
+  read({
     path: '/api/message',
-    run: async ({ db }, scope, query) => {
-      const detail = await messageDetail(db, scope, query.get('account') ?? '', query.get('id') ?? '');
+    query: z.object({ account: z.string().default(''), id: z.string().default('') }),
+    reply: MessageDetail,
+    run: async ({ db }, scope, { account, id }) => {
+      const detail = await messageDetail(db, scope, account, id);
       return detail ? ok(detail) : missing('No such message');
     },
-  },
-  { path: '/api/changes', run: async ({ db }, scope) => ok({ changes: await listChanges(db, scope, 200) }) },
+  }),
+  read({
+    path: '/api/changes',
+    query: z.object({}),
+    reply: z.object({ changes: z.array(ChangeRow) }),
+    run: async ({ db }, scope) => ok({ changes: await listChanges(db, scope, 200) }),
+  }),
 ];
 
 export const writes: Write[] = [
-  {
+  write({
     path: '/api/undo',
+    body: z.strictObject({ id }),
+    reply: z.object({ message: z.string() }),
     touches: ownerOf(actions),
-    run: async ({ db, controls }, body) => {
-      if (typeof body['id'] !== 'number' || !Number.isInteger(body['id'])) return null;
+    run: async ({ db, controls }, { id }) => {
       if (!controls) throw new Error('This dashboard cannot undo changes.');
-      if (!(await getAction(db, body['id']))) throw new Error(`There is no change #${body['id']}.`);
-      return { message: await controls.undo(db, body['id']) };
+      if (!(await getAction(db, id))) throw new Error(`There is no change #${id}.`);
+      return { message: await controls.undo(db, id) };
     },
-  },
-  {
+  }),
+  write({
     path: '/api/decisions/retry',
+    body: z.strictObject({ id }),
+    reply: z.object({ retried: z.boolean(), waiting: z.boolean() }),
     touches: ownerOf(decisions),
-    run: async ({ db, controls }, body, scope) => {
-      if (typeof body['id'] !== 'number' || !Number.isInteger(body['id'])) return null;
-      const result = await retryDecision(db, scope, body['id']);
+    run: async ({ db, controls }, { id }, scope) => {
+      const result = await retryDecision(db, scope, id);
       if (!result.retried) throw new Error('That change did not fail, so there is nothing to try again.');
       controls?.checkNow();
       return result;
     },
-  },
+  }),
 ];

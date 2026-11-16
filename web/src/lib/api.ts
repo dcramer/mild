@@ -3,6 +3,7 @@ import { useState, useSyncExternalStore } from 'react';
 
 export type {
   ChangeRow,
+  DecisionPage,
   DecisionRow,
   FeedbackRequest,
   LabelSummary,
@@ -21,24 +22,22 @@ export type {
 } from '../../../src/dashboard/types.ts';
 import type {
   ChangeRow,
-  DecisionRow,
+  DecisionPage,
+  FeedbackReply,
   FeedbackRequest,
   ManageState,
   MessageDetail,
+  Models,
   RuleSummary,
   SenderPage,
   Session,
+  SignInCode,
   SuggestionDetail,
   Suggestions,
   Summary,
 } from '../../../src/dashboard/types.ts';
 
 export type Days = 1 | 7 | 30 | 90;
-
-export interface DecisionPage {
-  total: number;
-  rows: DecisionRow[];
-}
 
 export interface DecisionQuery {
   days: Days;
@@ -142,18 +141,17 @@ export const api = {
    * Say what a message is. Resolves with what sift learned and, when the message had already been acted on,
    * what was done about that in Gmail.
    */
-  feedback: (answer: FeedbackRequest) =>
-    post<{ reviewed: number; taught: string | null; corrected: string | null; fixed: string | null }>('/api/feedback', answer),
+  feedback: (answer: FeedbackRequest) => post<FeedbackReply>('/api/feedback', answer),
   manage: (signal: AbortSignal) => get<ManageState>('/api/manage', {}, signal),
   /** The models the reader's own sign-ins offer, and the one to suggest first. */
-  models: (signal: AbortSignal) => get<{ models: string[]; recommended: Record<string, string>; error?: string }>('/api/models', {}, signal),
+  models: (signal: AbortSignal) => get<Models>('/api/models', {}, signal),
   changes: (signal: AbortSignal) => get<{ changes: ChangeRow[] }>('/api/changes', {}, signal),
   saveSettings: (change: { act?: boolean; interval?: number }) => post('/api/settings', change),
   saveGuidelines: (text: string) => post('/api/guidelines', { text }),
   /** The reader's own model, `provider/model-id`, or null for none. */
   setModel: (model: string | null) => post('/api/model', { model }),
   /** Start a ChatGPT sign-in: resolves with the code to enter at OpenAI. It finishes in the background. */
-  signInChatGPT: () => post<{ code: string; url: string; expiresAt: number }>('/api/model/chatgpt', {}),
+  signInChatGPT: () => post<SignInCode>('/api/model/chatgpt', {}),
   saveModelKey: (provider: string, key: string) => post('/api/model/key', { provider, key }),
   signOutModel: (provider: string) => post('/api/model/signout', { provider }),
   saveLabel: (

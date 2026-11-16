@@ -1,5 +1,8 @@
 import { type actions, type decisions, eq, type proposals, type rules } from '../../store/query.ts';
+import { z } from 'zod';
 import type { Sql } from '../../store/sql.ts';
+import { DECIDED } from '../../triage/types.ts';
+import { text } from '../types.ts';
 import { redecideWaiting } from '../../learn/redecide.ts';
 import { listAccounts } from '../../store/accounts.ts';
 import type { Controls } from '../controls.ts';
@@ -16,18 +19,21 @@ export interface Context {
   now: () => number;
 }
 
-export interface Reply {
-  status: number;
-  body: unknown;
-}
-export const ok = (body: unknown): Reply => ({ status: 200, body });
-export const missing = (error: string): Reply => ({ status: 404, body: { error } });
-export const malformed = (error: string): Reply => ({ status: 400, body: { error } });
+export type Reply<T = unknown> = { status: 200; body: T } | { status: 400 | 404; body: { error: string } };
+export const ok = <T>(body: T): Reply<T> => ({ status: 200, body });
+export const missing = (error: string): Reply<never> => ({ status: 404, body: { error } });
+export const malformed = (error: string): Reply<never> => ({ status: 400, body: { error } });
 
-/** A GET. It is given the scope of whoever asked and must show nothing outside it. */
-export interface Read {
+/**
+ * A GET. It is given the scope of whoever asked and must show nothing outside it. `query` parses the
+ * URL's parameters (each a string, or absent) and a request it refuses is answered 400; `reply` is what
+ * a 200 sends, and the server parses every one through it, dropping any field it does not name.
+ */
+export interface Read<Q extends z.ZodType = z.ZodType, R extends z.ZodType = z.ZodType> {
   path: string;
-  run(ctx: Context, scope: Scope, query: URLSearchParams): Reply | Promise<Reply>;
+  query: Q;
+  reply: R;
+  run(ctx: Context, scope: Scope, query: z.output<Q>): Reply<z.input<R>> | Promise<Reply<z.input<R>>>;
 }
 
 /**
@@ -39,48 +45,53 @@ export interface Read {
 export type Touches = { account: string } | 'self' | 'install' | 'anyone' | null;
 
 /**
- * A POST. `touches` is asked first, and the write is refused before `run` when the data is someone
- * else's. `run` checks the body field by field and returns the response, null for a malformed body, or
- * throws with a sentence for the user.
+ * A POST. The server parses the body through `body` (a body it refuses, or one with a field it does not
+ * name, is answered 400), then asks `touches`, and refuses the write before `run` when the data is someone
+ * else's. `run` returns the reply, which is parsed through `reply` as a read's is; null for a body that
+ * is well formed but names nothing usable; or throws with a sentence for the user.
  */
-export interface Write {
+export interface Write<B extends z.ZodType = z.ZodType, R extends z.ZodType = z.ZodType> {
   path: string;
-  touches(ctx: Context, body: Record<string, unknown>): Touches | Promise<Touches>;
-  run(ctx: Context, body: Record<string, unknown>, scope: Scope): unknown;
+  body: B;
+  reply: R;
+  touches(ctx: Context, body: z.output<B>): Touches | Promise<Touches>;
+  run(ctx: Context, body: z.output<B>, scope: Scope): z.input<R> | null | Promise<z.input<R> | null>;
 }
 
+/** A read, with its query and reply typed from its schemas. */
+export const read = <Q extends z.ZodType, R extends z.ZodType>(route: Read<Q, R>): Read => route;
+/** A write, with its body and reply typed from its schemas. */
+export const write = <B extends z.ZodType, R extends z.ZodType>(route: Write<B, R>): Write => route;
+
 /** The mailbox a write names in `accountId`. */
-export const named = (_ctx: Context, body: Record<string, unknown>): Touches => (typeof body['accountId'] === 'string' ? { account: body['accountId'] } : null);
+export const named = (_ctx: Context, body: { accountId: string }): Touches => ({ account: body.accountId });
 
 /** The mailbox that owns the row a write names by `id`. */
 export const ownerOf =
   (table: typeof rules | typeof proposals | typeof actions | typeof decisions) =>
-  async ({ db }: Context, body: Record<string, unknown>): Promise<Touches> => {
-    const id = body['id'];
-    if (typeof id !== 'string' && typeof id !== 'number') return null;
+  async ({ db }: Context, body: { id: string | number }): Promise<Touches> => {
     const [row] = await db
       .select({ accountId: table.accountId })
       .from(table)
-      .where(eq(table.id, id as never));
+      .where(eq(table.id, body.id as never));
     return row ? { account: row.accountId } : null;
   };
 
-export const LABEL_ID = /^[a-z0-9_-]{1,40}$/;
-export const RULE_KEYS = new Set(['from', 'fromDomain', 'to', 'listId', 'subjectContains']);
-export const str = (value: unknown, max = 200): value is string => typeof value === 'string' && value.length > 0 && value.length <= max;
-export const decided = (value: unknown): value is 'keep' | 'archive' | 'spam' => value === 'keep' || value === 'archive' || value === 'spam';
+// Parts of bodies and queries. Those the page's own bodies use are in ../types.ts.
+export { decided, labelId, text } from '../types.ts';
+export const RULE_KEYS = ['from', 'fromDomain', 'to', 'listId', 'subjectContains'] as const;
+export const accountId = text();
+export const id = z.int().positive();
 /** What a label can be set to do. `block` is spam plus blocking the sender. */
-export const outcome = (value: unknown): value is 'keep' | 'archive' | 'spam' | 'block' => decided(value) || value === 'block';
-export const fromOutcome = (value: 'keep' | 'archive' | 'spam' | 'block') =>
+export const outcome = z.enum([...DECIDED, 'block']);
+export const fromOutcome = (value: z.output<typeof outcome>) =>
   value === 'block' ? { disposition: 'spam' as const, block: true } : { disposition: value, block: false };
-
-const ALLOWED_DAYS = new Set([1, 7, 30, 90]);
-/** The period a read covers, from `?days=`. Null if it is not one the page offers. */
-export function daysOf(query: URLSearchParams): number | null {
-  const days = Number(query.get('days') ?? 7);
-  return ALLOWED_DAYS.has(days) ? days : null;
-}
-export const BAD_DAYS = malformed('days must be 1, 7, 30 or 90');
+/** A flag in a URL: present as `1`. */
+export const flag = z.literal('1').optional();
+/** The period a read covers, from `?days=`, one the page offers. */
+export const days = z.enum(['1', '7', '30', '90'], { error: 'must be 1, 7, 30 or 90' }).default('7').transform(Number);
+/** What most writes answer. */
+export const done = z.object({ ok: z.literal(true) });
 
 /** After a rule or label changed: waiting suggestions they now decide differently get a new decision. No model is called. */
 export async function redecide(db: Sql, now: () => number, accountId?: string): Promise<number> {

@@ -1,60 +1,42 @@
+import { z } from 'zod';
 import { type FeedbackInput, applyFeedback } from '../../learn/feedback.ts';
 import { listAccounts } from '../../store/accounts.ts';
 import { resolveProposal } from '../../store/proposals.ts';
 import { proposals } from '../../store/query.ts';
 import { listSuggestions, suggestionDetail } from '../queries/suggestions.ts';
-import { LABEL_ID, type Read, type Write, missing, named, ok, ownerOf, str } from './route.ts';
-
-const SCOPES = new Set(['label', 'sender', 'domain', 'subject', 'once']);
-
-/** Check an answer to a suggestion field by field. Null if it is not well formed. */
-function parseFeedback(body: Record<string, unknown>): FeedbackInput | null {
-  const { accountId, sender, label, disposition, scope, contains, decisionId, messageId, unsubscribe, when } = body;
-  if (typeof accountId !== 'string' || typeof sender !== 'string') return null;
-  if (label !== undefined && (typeof label !== 'string' || !LABEL_ID.test(label))) return null;
-  if (typeof scope !== 'string' || !SCOPES.has(scope)) return null;
-  if (disposition !== undefined && disposition !== 'keep' && disposition !== 'archive' && disposition !== 'spam') return null;
-  // An answer says what the mail is, what should happen to it, or both.
-  if (label === undefined && disposition === undefined) return null;
-  if (label === undefined && (scope === 'label' || when !== undefined)) return null;
-  if (contains !== undefined && (typeof contains !== 'string' || contains.length > 200)) return null;
-  if (scope === 'subject' && (typeof contains !== 'string' || contains.trim() === '')) return null;
-  if (decisionId !== undefined && (typeof decisionId !== 'number' || !Number.isInteger(decisionId))) return null;
-  if (messageId !== undefined && !str(messageId)) return null;
-  if (unsubscribe !== undefined && typeof unsubscribe !== 'boolean') return null;
-  if (when !== undefined && (typeof when !== 'string' || when.length > 200)) return null;
-  return {
-    accountId,
-    sender,
-    ...(typeof label === 'string' ? { label } : {}),
-    scope: scope as FeedbackInput['scope'],
-    ...(disposition === undefined ? {} : { disposition }),
-    ...(typeof contains === 'string' ? { contains } : {}),
-    ...(decisionId === undefined ? {} : { decisionId }),
-    ...(messageId === undefined ? {} : { messageId }),
-    ...(unsubscribe ? { unsubscribe } : {}),
-    ...(typeof when === 'string' && when.trim() !== '' ? { when } : {}),
-  };
-}
+import { FeedbackReply, FeedbackRequest, SuggestionDetail, Suggestions } from '../types.ts';
+import { type Read, type Write, accountId, done, flag, id, missing, named, ok, ownerOf, read, write } from './route.ts';
 
 export const reads: Read[] = [
-  { path: '/api/suggestions', run: async ({ db }, scope, query) => ok(await listSuggestions(db, scope, { includeKept: query.get('kept') === '1' })) },
-  {
+  read({
+    path: '/api/suggestions',
+    query: z.object({ kept: flag }),
+    reply: Suggestions,
+    run: async ({ db }, scope, { kept }) => ok(await listSuggestions(db, scope, { includeKept: kept !== undefined })),
+  }),
+  read({
     path: '/api/suggestion',
-    run: async ({ db }, scope, query) => {
-      const detail = await suggestionDetail(db, scope, query.get('account') ?? '', query.get('sender') ?? '');
+    query: z.object({ account: z.string().default(''), sender: z.string().default('') }),
+    reply: SuggestionDetail,
+    run: async ({ db }, scope, { account, sender }) => {
+      const detail = await suggestionDetail(db, scope, account, sender);
       return detail ? ok(detail) : missing('No such mailbox');
     },
-  },
+  }),
 ];
 
 export const writes: Write[] = [
-  {
+  write({
     path: '/api/feedback',
+    body: FeedbackRequest,
+    reply: FeedbackReply,
     touches: named,
-    run: async ({ db, controls, now }, body) => {
-      const input = parseFeedback(body);
-      if (!input) return null;
+    run: async ({ db, controls, now }, { unsubscribe, when, ...answer }) => {
+      const input: FeedbackInput = {
+        ...answer,
+        ...(unsubscribe ? { unsubscribe } : {}),
+        ...(when !== undefined && when.trim() !== '' ? { when } : {}),
+      };
       // An answer pressed here is carried out on its message whether or not sift is acting.
       const result = await applyFeedback(db, { ...input, act: true }, now());
       if (result.corrected === null || !controls) {
@@ -72,25 +54,26 @@ export const writes: Write[] = [
         };
       }
     },
-  },
-  {
+  }),
+  write({
     path: '/api/suggestions/rejudge',
+    body: z.strictObject({ accountId }),
+    reply: z.object({ started: z.number(), remaining: z.number() }),
     touches: named,
-    run: async ({ db, controls }, body) => {
-      const { accountId } = body;
-      if (!str(accountId) || !(await listAccounts(db)).some((a) => a.id === accountId)) return null;
+    run: async ({ db, controls }, { accountId }) => {
+      if (!(await listAccounts(db)).some((a) => a.id === accountId)) return null;
       if (!controls) throw new Error('This dashboard cannot run the model.');
       return await controls.rejudge(db, accountId);
     },
-  },
-  {
+  }),
+  write({
     path: '/api/proposals',
+    body: z.strictObject({ id, accept: z.boolean() }),
+    reply: done,
     touches: ownerOf(proposals),
-    run: async ({ db, now }, body) => {
-      const { id, accept } = body;
-      if (typeof id !== 'number' || !Number.isInteger(id) || typeof accept !== 'boolean') return null;
+    run: async ({ db, now }, { id, accept }) => {
       if (!(await resolveProposal(db, id, accept, now()))) throw new Error('That proposal is no longer open.');
-      return { ok: true };
+      return { ok: true as const };
     },
-  },
+  }),
 ];

@@ -1,71 +1,97 @@
+import { z } from 'zod';
 import { getRuleFilter, ruleFilterStatus } from '../../store/filters.ts';
 import { addRule, removeRule } from '../../store/rules.ts';
 import { listRuleSummaries } from '../queries/rules.ts';
 import { rules } from '../../store/query.ts';
-import { LABEL_ID, RULE_KEYS, type Read, type Write, decided, named, ok, ownerOf, redecide, str } from './route.ts';
+import { RuleFilter, RuleSummary } from '../types.ts';
+import { RULE_KEYS, type Read, type Write, accountId, decided, labelId, named, ok, ownerOf, read, redecide, text, write } from './route.ts';
 
-export const reads: Read[] = [{ path: '/api/rules', run: async ({ db }, scope) => ok({ rules: await listRuleSummaries(db, scope) }) }];
+/** A condition left empty is not one. */
+const conditions = z
+  .partialRecord(z.enum(RULE_KEYS), z.string().max(200))
+  .transform((match) => Object.fromEntries(Object.entries(match).filter(([, value]) => value !== '')) as typeof match)
+  .refine((match) => Object.keys(match).length > 0, 'A rule needs at least one condition.');
+
+const ruleId = text(40);
+
+export const reads: Read[] = [
+  read({
+    path: '/api/rules',
+    query: z.object({}),
+    reply: z.object({ rules: z.array(RuleSummary) }),
+    run: async ({ db }, scope) => ok({ rules: await listRuleSummaries(db, scope) }),
+  }),
+];
 
 export const writes: Write[] = [
-  {
+  write({
     path: '/api/rules',
+    body: z
+      .strictObject({
+        accountId,
+        match: conditions,
+        label: labelId.optional(),
+        whenLabel: labelId.optional(),
+        disposition: decided.optional(),
+        markRead: z.boolean().optional(),
+        unsubscribe: z.boolean().optional(),
+        when: z.string().max(200).optional(),
+      })
+      .refine((rule) => rule.label !== undefined || rule.whenLabel !== undefined || rule.disposition !== undefined, {
+        message: 'A rule says what mail is, what happens to it, or what happens when it is a given label.',
+      })
+      .refine((rule) => rule.label === undefined || rule.whenLabel === undefined, {
+        path: ['whenLabel'],
+        message: 'A rule that says what mail is cannot also wait for a label.',
+      }),
+    reply: z.object({ id: z.string(), redecided: z.number() }),
     touches: named,
-    run: async ({ db, now }, body) => {
-      const { accountId, match, label, whenLabel, disposition, markRead, unsubscribe, when } = body;
-      if (when !== undefined && (typeof when !== 'string' || when.length > 200)) return null;
-      if (!str(accountId) || typeof match !== 'object' || match === null) return null;
-      for (const id of [label, whenLabel]) if (id !== undefined && (typeof id !== 'string' || !LABEL_ID.test(id))) return null;
-      if (disposition !== undefined && !decided(disposition)) return null;
-      // A rule says what mail is, what happens to it, or what happens when it is a given label.
-      if (label === undefined && whenLabel === undefined && disposition === undefined) return null;
-      if (label !== undefined && whenLabel !== undefined) return null;
-      if ((markRead !== undefined && typeof markRead !== 'boolean') || (unsubscribe !== undefined && typeof unsubscribe !== 'boolean')) return null;
-      const conditions = Object.entries(match).filter(([, value]) => value !== '');
-      if (conditions.length === 0 || !conditions.every(([key, value]) => RULE_KEYS.has(key) && str(value))) return null;
+    run: async ({ db, now }, { accountId, match, label, whenLabel, disposition, markRead, unsubscribe, when }) => {
       const id = await addRule(
         db,
         accountId,
         {
-          match: Object.fromEntries(conditions),
-          ...(typeof label === 'string' ? { labelId: label } : {}),
-          ...(typeof whenLabel === 'string' ? { whenLabel } : {}),
+          match,
+          ...(label === undefined ? {} : { labelId: label }),
+          ...(whenLabel === undefined ? {} : { whenLabel }),
           ...(disposition ? { disposition } : {}),
           ...(markRead ? { markRead } : {}),
           ...(unsubscribe ? { subscription: 'unsubscribe' as const } : {}),
-          ...(typeof when === 'string' && when.trim() !== '' ? { when } : {}),
+          ...(when !== undefined && when.trim() !== '' ? { when } : {}),
         },
         'user',
         now(),
       );
       return { id, redecided: await redecide(db, now, accountId) };
     },
-  },
-  {
+  }),
+  write({
     path: '/api/rules/filter',
+    body: z.strictObject({ id: ruleId, on: z.boolean() }),
+    reply: z.object({ filterId: z.string().nullable(), filter: RuleFilter.nullable() }),
     touches: ownerOf(rules),
-    run: async ({ db, controls, now }, body) => {
-      const { id, on } = body;
-      if (!str(id, 40) || typeof on !== 'boolean') return null;
+    run: async ({ db, controls, now }, { id, on }) => {
       if (!controls) throw new Error('This dashboard cannot change Gmail filters.');
       // Taking a filter out is always allowed: it only reduces what runs unattended.
       if (on && !controls.settings().act) throw new Error('sift is only observing, so it writes nothing to Gmail. Let it act first, in Settings.');
       await controls.ruleFilter(db, id, on);
       return { filterId: (await getRuleFilter(db, id))?.filterId ?? null, filter: (await ruleFilterStatus(db, now())).get(id) ?? null };
     },
-  },
-  {
+  }),
+  write({
     path: '/api/rules/remove',
+    body: z.strictObject({ id: ruleId }),
+    reply: z.object({ ok: z.literal(true), redecided: z.number() }),
     touches: ownerOf(rules),
-    run: async ({ db, controls, now }, body) => {
-      if (!str(body['id'], 40)) return null;
-      const owner = (await getRuleFilter(db, body['id']))?.accountId ?? null;
+    run: async ({ db, controls, now }, { id }) => {
+      const owner = (await getRuleFilter(db, id))?.accountId ?? null;
       // A filter left behind would keep acting on mail with no rule to explain or remove it.
-      if ((await getRuleFilter(db, body['id']))?.filterId) {
+      if ((await getRuleFilter(db, id))?.filterId) {
         if (!controls) throw new Error('This rule is also a Gmail filter, which this dashboard cannot remove.');
-        await controls.ruleFilter(db, body['id'], false);
+        await controls.ruleFilter(db, id, false);
       }
-      if (!(await removeRule(db, body['id']))) throw new Error('That rule no longer exists.');
-      return { ok: true, redecided: await redecide(db, now, owner ?? undefined) };
+      if (!(await removeRule(db, id))) throw new Error('That rule no longer exists.');
+      return { ok: true as const, redecided: await redecide(db, now, owner ?? undefined) };
     },
-  },
+  }),
 ];
