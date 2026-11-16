@@ -25,6 +25,7 @@ export { Select } from './select.tsx';
 export { Share } from './share.tsx';
 export { SettingRow, SettingsGroup, Sheet } from './sheet.tsx';
 export { ActionIcon, Does } from './does.tsx';
+export { Entry } from './entry.tsx';
 export { Empty, Loading } from './state.tsx';
 export { OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from './table.tsx';
 export { Timeline, TimelineEvent } from './timeline.tsx';

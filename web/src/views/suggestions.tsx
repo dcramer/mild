@@ -15,7 +15,6 @@ import {
   FilterGroup,
   ListView,
   Look,
-  Note,
   Loading,
   Meter,
   OnPhone,
@@ -172,7 +171,6 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
   const { data, error, loading, reload } = useLoaded(`suggestions-${includeKept}`, (signal) => api.suggestions(includeKept, signal));
   const summary = useLoaded('summary-7', (signal) => api.summary(7, signal));
   const toast = useToast();
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const [search, setSearch] = useParam('q');
   const [label, setLabel] = useParam('label');
   const [does, setDoes] = useParam('does', DOES);
@@ -200,14 +198,6 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
       actions={summary.data ? <Week summary={summary.data} /> : null}
       intro={
         <>
-          {/* With no model, what no rule covers is left unsorted rather than asked about, so the page says why it is quiet. */}
-          {manage.data && manage.data.model.chosen === null ? (
-            <Note tone="look" title="No model connected">
-              <p>
-                Mail no rule covers waits, unsorted, until one is. <TextLink href="/settings">Connect a model</TextLink>
-              </p>
-            </Note>
-          ) : null}
           {/* Proposals arrive after the list is drawn, and would push it down. */}
           <Reserve id="home-proposals" ready={data !== null} room={{ narrow: 0, wide: 0 }}>
             {data && data.proposals.length > 0 ? (
@@ -251,7 +241,7 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
       ) : shown.length === 0 ? (
         <Empty>{data && data.items.length > 0 ? 'Nothing waiting matches.' : 'Nothing is waiting on you.'}</Empty>
       ) : (
-        <Table>
+        <Table keys>
           <thead className="sr-only">
             <Tr>
               <Th>Sender</Th>

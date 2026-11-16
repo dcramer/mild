@@ -18,6 +18,7 @@ import {
   Disclosure,
   Document,
   Empty,
+  Entry,
   Fact,
   Facts,
   Failure,
@@ -394,7 +395,7 @@ export function SystemView() {
               panel: <FilterGroup label="Then" value={made} options={[['', 'Anything'], ...ACTIONS]} onChange={setMade} />,
             }}
           >
-            <Table>
+            <Table keys>
               <thead className="sr-only">
                 <Tr>
                   <Th>Sender</Th>
@@ -458,7 +459,7 @@ export function SystemView() {
               onChange: setShown,
             }}
           >
-            <Table>
+            <Table keys>
               <thead className="sr-only">
                 <Tr>
                   <Th>Sender</Th>
@@ -666,6 +667,19 @@ export function SystemView() {
             </Clause>
           </Document>
         </Sheet>
+      </Section>
+
+      <Section title="Entry" meta="the page in place of the dashboard: signing in, then connecting a model; centred in the window">
+        <div className="sheet [&>main]:min-h-0">
+          <Entry account={{ name: 'me@example.org', onSignOut: () => {} }}>
+            <p className="statement">Connect a model.</p>
+            <p className="text-muted-foreground">It reads the mail no rule covers and says which of your labels it is.</p>
+            <Button variant="mark" size="lg" className="justify-between">
+              Continue
+              <ArrowRightIcon aria-hidden />
+            </Button>
+          </Entry>
+        </div>
       </Section>
 
       <Section title="Dialog and panel" meta="a form or a question; one item of a list">

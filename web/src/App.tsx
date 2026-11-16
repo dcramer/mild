@@ -6,7 +6,7 @@ import { lazyView } from '@/lib/lazy.tsx';
 import { Loading, Masthead, Note, Notice, PageHeader, Wordmark } from '@/system';
 import type { MessageRef } from '@/views/message-panel.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
-import { Setup } from '@/components/setup.tsx';
+import { ModelWall } from '@/components/model-wall.tsx';
 
 // The home page comes with the app. Every other screen is its own file, fetched when first needed and,
 // once the page is idle, ahead of need, so that going to one does not wait on the network.
@@ -136,7 +136,11 @@ function Gate({ route }: { route: string[] }) {
       </Suspense>
     );
   }
-  return <Dashboard signedInAs={session.data.email} route={route} />;
+  return (
+    <ModelWall signedInAs={session.data.email}>
+      <Dashboard signedInAs={session.data.email} route={route} />
+    </ModelWall>
+  );
 }
 
 function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: string[] }) {
@@ -218,10 +222,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
                 onOpen={openMessages}
               />
             ) : section === 'suggestions' ? (
-              <>
-                <SuggestionsView onOpen={openMessages} />
-                <Setup />
-              </>
+              <SuggestionsView onOpen={openMessages} />
             ) : section === 'activity' ? (
               <ActivityView onOpen={openMessages} />
             ) : section === 'labels' ? (

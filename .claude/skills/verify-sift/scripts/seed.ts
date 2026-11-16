@@ -14,8 +14,11 @@ import { resolve } from 'node:path';
 import { loadConfig } from '../../../../src/config.ts';
 import { runEveryone } from '../../../../src/daemon/run.ts';
 import type { GmailApi, RawMessage } from '../../../../src/gmail/api.ts';
+import { saveApiKey } from '../../../../src/model/models.ts';
 import { writeSecret } from '../../../../src/secrets.ts';
 import { connectAccount } from '../../../../src/store/accounts.ts';
+import { credentials } from '../../../../src/store/credentials.ts';
+import { setModel } from '../../../../src/store/preferences.ts';
 import { openStore } from '../../../../src/store/store.ts';
 import { addRule } from '../../../../src/store/rules.ts';
 import { FakeMailbox } from '../../../../tests/helpers.ts';
@@ -101,6 +104,10 @@ const unsure = async () => ({ guidelines: '', judge: async () => ({ label: 'unsu
 const [result] = await runEveryone(store, { act: false, heuristics: true, model: unsure, connect: () => ({ api, mailbox }), log: () => {} });
 if (result?.error) throw new Error(`seed pass failed: ${result.error}`);
 if (mailbox.modifyCalls > 0) throw new Error('seed pass changed the fake mailbox while observing');
+// A model in use, so the dashboard is not behind its connect-a-model wall. The key is made up, and this
+// instance runs no passes, so nothing ever calls Anthropic with it.
+await saveApiKey(await credentials(db, 'model', config.keys), 'anthropic', 'sk-ant-synthetic-seed');
+await setModel(db, 'anthropic/claude-haiku-4-5');
 await store.close();
 
 // The same cookie `/auth/callback` sets (`signSession` in src/dashboard/server.ts), signed with this home's key.

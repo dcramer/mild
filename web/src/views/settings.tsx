@@ -112,15 +112,13 @@ function ChangeProvider({ state, reload, onClose }: { state: ManageState; reload
   const { choices, chosen } = state.model;
   const inUse = chosen?.split('/')[0] ?? null;
   const [picked, setPicked] = useState<(typeof choices)[number] | null>(null);
-  const subtitle = inUse
-    ? `${providerName(
-        choices.find((c) => c.provider === inUse),
-        inUse,
-      )} keeps sorting until you switch.`
-    : undefined;
+  const subtitle = `${providerName(
+    choices.find((c) => c.provider === inUse),
+    inUse ?? '',
+  )} keeps sorting until you switch.`;
   if (!picked)
     return (
-      <Dialog open onClose={onClose} title="Change provider" {...(subtitle ? { subtitle } : {})}>
+      <Dialog open onClose={onClose} title="Change provider" subtitle={subtitle}>
         <ProviderList choices={choices} inUse={inUse} onChoose={setPicked} />
       </Dialog>
     );
@@ -138,7 +136,7 @@ function Switch({
   choice: ManageState['model']['choices'][number];
   state: ManageState;
   reload: () => void;
-  subtitle: string | undefined;
+  subtitle: string;
   onBack: () => void;
   onClose: () => void;
 }) {
@@ -162,7 +160,7 @@ function Switch({
       open
       onClose={onClose}
       title={name}
-      {...(subtitle ? { subtitle } : {})}
+      subtitle={subtitle}
       footer={
         <>
           <Button variant="ink" busy={busy} disabled={!ready} onClick={doSwitch}>
@@ -187,45 +185,35 @@ function Model({ state, reload }: { state: ManageState; reload: () => void }) {
   const [changing, setChanging] = useState(false);
   const models = useLoaded(`models ${signedIn.join(' ')}`, (signal) => api.models(signal), 300_000);
   const month = useLoaded('summary-30', (signal) => api.summary(30, signal), 300_000);
-  const provider = chosen?.split('/')[0] ?? null;
+  // Behind the model wall there is always a model in use, and it is signed in.
+  if (chosen === null) return null;
+  const provider = chosen.split('/')[0] ?? '';
   const choice = choices.find((c) => c.provider === provider);
-  const reachable = provider !== null && signedIn.includes(provider);
-  const offered = [...new Set([...(chosen ? [chosen] : []), ...(models.data?.models ?? []).filter((m) => provider && m.startsWith(`${provider}/`))])];
+  const offered = [...new Set([chosen, ...(models.data?.models ?? []).filter((m) => m.startsWith(`${provider}/`))])];
   const others = signedIn.filter((p) => p !== provider);
   const spent = month.data?.totals;
   return (
     <SettingsGroup
       title="Model"
       note={
-        spent && spent.decisions > 0 && chosen
+        spent && spent.decisions > 0
           ? `Sorts what no rule covers. ${money(spent.costUsd)} in the last 30 days, for ${plural(spent.decisions - spent.withoutInference, 'message')}.`
-          : 'Sorts what no rule covers. Without one, that mail waits for you.'
+          : 'Sorts what no rule covers.'
       }
     >
       <Sheet>
-        {chosen && provider ? (
-          <>
-            <SettingRow
-              title={providerName(choice, provider)}
-              note={reachable ? choice?.how === 'chatgpt' ? 'Signed in.' : 'Key saved.' : <Failure>Not signed in. Change provider to sign in again.</Failure>}
-            >
-              <Button onClick={() => setChanging(true)}>Change provider</Button>
-            </SettingRow>
-            <SettingRow title="Model" note="A small one is usually enough.">
-              <Select
-                label="Model"
-                value={chosen}
-                options={offered.map((m) => [m, m.slice(provider.length + 1)] as const)}
-                disabled={busy || !reachable}
-                onChange={(model) => run(() => api.setModel(model), reload)}
-              />
-            </SettingRow>
-          </>
-        ) : (
-          <SettingRow title="No model" note="Rules still sort what they cover.">
-            <Button onClick={() => setChanging(true)}>Connect a model</Button>
-          </SettingRow>
-        )}
+        <SettingRow title={providerName(choice, provider)} note={choice?.how === 'chatgpt' ? 'Signed in.' : 'Key saved.'}>
+          <Button onClick={() => setChanging(true)}>Change provider</Button>
+        </SettingRow>
+        <SettingRow title="Model" note="A small one is usually enough.">
+          <Select
+            label="Model"
+            value={chosen}
+            options={offered.map((m) => [m, m.slice(provider.length + 1)] as const)}
+            disabled={busy}
+            onChange={(model) => run(() => api.setModel(model), reload)}
+          />
+        </SettingRow>
         {others.map((p) => (
           <SettingRow
             key={p}

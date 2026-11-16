@@ -21,7 +21,7 @@ $V up "$RUN"
 
 `up` seeds `$RUN/home`, picks a free port, starts `sift dashboard` on it (rebuilding `web/dist` first if the page sources are newer, which can take a minute), runs the doctor, and signs the browser session in. It is ready when it prints `ok  pid …` and `browser session … signed in`. It refuses a directory that already has a `home/`.
 
-What the seed leaves (through a real observing pass, `runEveryone`, with heuristics on and no model):
+What the seed leaves (through a real observing pass, `runEveryone`, with heuristics on and a stand-in model that places nothing):
 
 | Id | Sender | What places it | Shows as |
 | --- | --- | --- | --- |
@@ -33,7 +33,7 @@ What the seed leaves (through a real observing pass, `runEveryone`, with heurist
 | `m7` | `grace@example.net` | nothing | Suggestions, `Which label?` |
 | `m8` | `sale@store.example.com` | header heuristics → Marketing | Suggestions, `Marketing` (sure), the only row with a label to agree with |
 
-The connected account is `me@example.org`, observing, no model, default labels, 3 user rules. Every message carries `dmarc=pass`; the three lists (news, promo, store) carry one-click unsubscribe headers. `m8` also has a Mailgun header and Gmail's Promotions category, which is what the heuristics need.
+The connected account is `me@example.org`, observing, default labels, 3 user rules. Its model is Anthropic, `claude-haiku-4-5`, with a made-up key, so the dashboard is not behind the connect-a-model wall; nothing calls Anthropic, since no pass runs. To see the wall, sign it out from the page: `ab eval "fetch('/api/model/signout',{method:'POST',headers:{'content-type':'application/json','x-sift':'1'},body:JSON.stringify({provider:'anthropic'})})"`. Every message carries `dmarc=pass`; the three lists (news, promo, store) carry one-click unsubscribe headers. `m8` also has a Mailgun header and Gmail's Promotions category, which is what the heuristics need.
 
 The dashboard does not pick up code changes. After editing `src/` or `web/src`, `down` and `up` a new directory.
 
@@ -96,6 +96,6 @@ State is in `~/.cache/sift-verify-maint/`. Delete `suggested-on` there to see to
 ## What this cannot show
 
 - Anything that talks to Google: sign-in itself, connecting another account, Pull in (older mail), Gmail filters, undo of a real change. They fail here; that failure is not the change's fault.
-- The model tier: the seed's stand-in model can place nothing (it never calls a provider), so an unmatched message is always "Which label?". With no model at all such mail would wait undecided and not be a suggestion.
+- The model tier: the seed's stand-in model can place nothing (it never calls a provider), so an unmatched message is always "Which label?". With no model at all such mail would wait undecided and not be a suggestion, and every screen would be the connect-a-model wall.
 - Acting. Settings can be switched to acting, but `sift dashboard` never runs a pass, so nothing is acted on. Prove the executor with tests (`tests/actions.test.ts`, `tests/run.test.ts`).
 - `examples` rows stay `pending`: the body is captured on the next pass, which never comes.

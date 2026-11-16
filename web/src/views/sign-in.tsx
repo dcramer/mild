@@ -1,31 +1,19 @@
 import { ArrowRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Session } from '@/lib/api.ts';
-import { Button, Code, Copyable, Disclosure, Note, Sheet, TextLink, Wordmark } from '@/system';
+import { Button, Code, Copyable, Disclosure, Entry, Note } from '@/system';
 
 /** The only thing an unsigned-in visitor sees. Signing in with Google also connects that Gmail account to sift. */
 export function SignInScreen({ session, error }: { session: Session; error: string | null }) {
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-[27rem] flex-col justify-center px-5 py-12">
-      <div className="relative">
-        {/* The name sits across the sheet's top edge, like a label stuck to it. */}
-        <h1 className="absolute -top-5 left-6 z-10">
-          <Wordmark size="lg" />
-        </h1>
-        <Sheet className="gap-5 px-6 pt-12 pb-6">
-          {error ? (
-            <Note tone="failure" title="Not signed in">
-              <p>{error}</p>
-            </Note>
-          ) : null}
-          {session.canSignIn ? <Ready session={session} /> : <Blocked session={session} />}
-        </Sheet>
-      </div>
-      <p className="mt-6 flex gap-4 px-6 text-sm text-muted-foreground">
-        <TextLink href="/terms">Terms</TextLink>
-        <TextLink href="/privacy">Privacy</TextLink>
-      </p>
-    </main>
+    <Entry>
+      {error ? (
+        <Note tone="failure" title="Not signed in">
+          <p>{error}</p>
+        </Note>
+      ) : null}
+      {session.canSignIn ? <Ready session={session} /> : <Blocked session={session} />}
+    </Entry>
   );
 }
 

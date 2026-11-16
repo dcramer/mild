@@ -96,6 +96,7 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | Screens write no fills, frames, corners, shadows, colours or inline styles; red is `Failure`, yellow a part's tone | `tests/design-system.test.ts` |
 | Type sizes come from the scale in `web/src/index.css`; nothing under 12px | `tests/design-system.test.ts` |
 | Only what floats has a surface; one shadow, the `--edge` | `tests/design-system.test.ts`, and the theme has no grey tokens to reach for |
+| Keys only where someone works through a list one item after another (Suggestions, Activity, and the panel they open); no other list, form or step gets shortcuts or key hints | `Table` has none unless given `keys`; `tests/design-system.test.ts` |
 | `mark` and `ink` buttons are never down a list; one `mark` per screen | `tests/design-system.test.ts` (inside `Tr` / `RowActions` in the same file) |
 | Every part is on the specimen page | `tests/design-system.test.ts` |
 | Every Gmail filter passes `validateFilter` | `tests/filters.test.ts` |

@@ -8,16 +8,18 @@ import { Control, ControlBar } from './controls.tsx';
  * heading above it, and inside a sheet it takes the sheet's gutter. On the page its rows reach a little
  * past the text on both sides, so a row's hover has room around what it holds.
  *
+ * `keys`: J and K move through it, with the page's controls bar under it. Only for a list someone works
+ * through one item after another (Suggestions, Activity); every other list is pressed or tabbed through.
+ *
  * On a phone a table keeps its first column and drops those marked `phone="hide"`; what they said goes
  * under the first column in an `OnPhone`, and the row opens for the rest. A table not given that scrolls sideways.
  */
-export function Table({ children }: { children: ReactNode }) {
+export function Table({ keys = false, children }: { keys?: boolean; children: ReactNode }) {
   const element = useRef<HTMLDivElement>(null);
   // Where the reader was, so that after a row is answered and gone the next key carries on from there.
   const last = useRef(0);
   // In a panel J and K step through the panel's own list.
   const moves = !useLayerMoves();
-  // The page's controls bar is the page's: a short list in a dialog keeps its keys and shows no bar.
   const onPage = useOnPage();
   const rows = () => [...(element.current?.querySelectorAll<HTMLElement>('tbody > tr[tabindex="0"]') ?? [])];
   const within = () => element.current;
@@ -32,7 +34,7 @@ export function Table({ children }: { children: ReactNode }) {
   };
   const [openable, setOpenable] = useState(false);
   useEffect(() => setOpenable(rows().length > 0));
-  const live = { enabled: moves && openable, within };
+  const live = { enabled: keys && moves && openable, within };
   const down = useShortcut('j', 'Next row', () => step(1), live);
   const up = useShortcut('k', 'Previous row', () => step(-1), live);
   return (

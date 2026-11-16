@@ -175,3 +175,19 @@ test('every part is on the specimen page', () => {
   const missing = parts.filter((name) => name !== 'Toaster' && !new RegExp(`<${name}\\b`).test(specimen));
   expect(missing, 'add each to web/src/views/system.tsx, in its states (docs/DESIGN.md)').toEqual([]);
 });
+
+test('keys are for working through a list, and screens bind none of their own', () => {
+  // Keys kept spreading to every list and step because the parts allowed them. Only these lists are worked through one item after another.
+  const LISTS = new Set(['views/suggestions.tsx', 'components/mail-log.tsx']);
+  const failures = SCREENS.flatMap((path) => {
+    const source = readFileSync(path, 'utf8');
+    const file = relative(WEB, path);
+    return [
+      ...(/<Table keys\b/.test(source) && !LISTS.has(file)
+        ? [`web/src/${file}: <Table keys> is only for Suggestions and Activity (docs/DESIGN.md, Keys).`]
+        : []),
+      ...(/\bshortcut=|\buseShortcut\(/.test(source) ? [`web/src/${file}: a screen binds no key; keys belong to the parts (docs/DESIGN.md, Keys).`] : []),
+    ];
+  });
+  expect(failures, failures.join('\n')).toEqual([]);
+});

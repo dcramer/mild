@@ -57,7 +57,7 @@ export function MailLog({
   });
 
   return (
-    <Table>
+    <Table keys>
       <thead className="sr-only">
         <Tr>
           <Th>Sender</Th>
