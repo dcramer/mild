@@ -1,3 +1,4 @@
+import { globSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { listRuleSummaries } from '../src/dashboard/queries/rules.ts';
 import { addRule, setRule } from '../src/store/rules.ts';
@@ -56,5 +57,16 @@ describe('where each way into the rule dialog starts it', () => {
     expect(replacedBy(rules, ACCOUNT, { from: 'x@example.com' }, 'newsletter')?.id).toBe(waiting);
     expect(replacedBy(rules, ACCOUNT, { from: 'x@example.com' }, 'marketing')).toBeUndefined();
     expect(await setRule(db, ACCOUNT, { from: 'x@example.com' }, { whenLabel: 'newsletter', disposition: 'keep' }, 'user')).toBe(waiting);
+  });
+});
+
+describe('making a rule from the dashboard', () => {
+  it('always goes through the rule dialog, so the user sees the rule and agrees before it is added', () => {
+    const pages = globSync('web/src/**/*.{ts,tsx}').filter((file) => file !== 'web/src/lib/api.ts');
+    const adding = pages.filter((file) => readFileSync(file, 'utf8').includes('api.addRule('));
+    expect(adding).toEqual(['web/src/views/rule-dialog.tsx']);
+    // An answer's other scopes make a rule on the server; the page answers for the message alone.
+    const scopes = pages.flatMap((file) => [...readFileSync(file, 'utf8').matchAll(/scope: '(\w+)'/g)].map((m) => `${file}: ${m[1]}`));
+    expect(scopes.filter((s) => !s.endsWith(': once'))).toEqual([]);
   });
 });
