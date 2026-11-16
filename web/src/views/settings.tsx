@@ -5,7 +5,6 @@ import { type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, money, plural } from '@/lib/format.ts';
 import {
   Button,
-  Code,
   ConfirmButton,
   Dialog,
   Failure,
@@ -52,13 +51,6 @@ function Sorting({ state, reload }: { state: ManageState; reload: () => void }) 
           {activity.problems.map((problem) => (
             <p key={problem}>{problem}</p>
           ))}
-        </Note>
-      ) : null}
-      {!activity.sorting ? (
-        <Note tone="look" title="Not sorting">
-          <p>
-            Only the dashboard is running. Start <Code>sift run</Code>.
-          </p>
         </Note>
       ) : null}
       <Sheet>
