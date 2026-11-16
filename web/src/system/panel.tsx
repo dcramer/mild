@@ -1,6 +1,7 @@
 import { Dialog as Base } from '@base-ui/react/dialog';
-import { ChevronDownIcon, ChevronUpIcon, XIcon } from 'lucide-react';
+import { ChevronLeftIcon, ChevronRightIcon, XIcon } from 'lucide-react';
 import { type ReactNode, useRef } from 'react';
+import { Control, ControlBar } from './controls.tsx';
 import { KeyLayer, keyName, useHintsShown, useShortcut } from './keys.tsx';
 import { Kbd } from './type.tsx';
 
@@ -37,6 +38,7 @@ export function Panel({
 }) {
   const shortcuts = useHintsShown();
   const popup = useRef<HTMLDivElement>(null);
+  const stepping = onPrevious !== undefined || onNext !== undefined;
   return (
     <Base.Root open={open} onOpenChange={(next) => !next && onClose()}>
       <Base.Portal>
@@ -54,25 +56,27 @@ export function Panel({
                 <Base.Title className="title break-words">{title}</Base.Title>
                 {subtitle ? <div className="mt-0.5 text-sm text-muted-foreground">{subtitle}</div> : null}
               </div>
-              <div className="flex shrink-0 items-center gap-0.5">
-                {position ? <span className="mr-2 hidden text-sm whitespace-nowrap text-muted-foreground tabular-nums sm:inline">{position}</span> : null}
-                {onPrevious || onNext ? (
-                  <>
-                    <Step label="Previous" shortcut="k" onPress={onPrevious}>
-                      <ChevronUpIcon className="size-4" />
-                    </Step>
-                    <Step label="Next" shortcut="j" onPress={onNext}>
-                      <ChevronDownIcon className="size-4" />
-                    </Step>
-                  </>
-                ) : null}
-                <Base.Close aria-label="Close" aria-keyshortcuts="Escape" className={ICON}>
-                  <XIcon className="size-4" />
-                  {shortcuts ? <Kbd className="hidden md:inline-flex">{keyName('Escape')}</Kbd> : null}
-                </Base.Close>
-              </div>
+              {/* Closing has a control in the footer; the corner keeps one for a panel with no footer, and on a phone, where the footer steps. */}
+              <Base.Close aria-label="Close" aria-keyshortcuts="Escape" className={stepping ? `${ICON} md:hidden` : ICON}>
+                <XIcon className="size-4" />
+                {shortcuts && !stepping ? <Kbd className="hidden md:inline-flex">{keyName('Escape')}</Kbd> : null}
+              </Base.Close>
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8 md:px-7">{children}</div>
+            {stepping ? (
+              <ControlBar start={position} className="border-t border-(--rule) px-3 py-1.5 md:px-5">
+                <Step label="Previous" shortcut="k" onPress={onPrevious} icon={<ChevronLeftIcon aria-hidden className="size-4" />} />
+                <Step
+                  label="Next"
+                  shortcut="j"
+                  onPress={onNext}
+                  icon={<ChevronRightIcon aria-hidden className="size-4" />}
+                  iconAfter
+                  className="max-md:order-3"
+                />
+                <Base.Close render={<Control keys={['Escape']} label="Close" className="max-md:hidden" />} />
+              </ControlBar>
+            ) : null}
           </KeyLayer>
         </Base.Popup>
       </Base.Portal>
@@ -81,12 +85,31 @@ export function Panel({
 }
 
 /** Previous or next in the list the panel was opened from. Its key works only while there is somewhere to go. */
-function Step({ label, shortcut, onPress, children }: { label: string; shortcut: string; onPress: (() => void) | undefined; children: ReactNode }) {
-  const hint = useShortcut(shortcut, label, () => onPress?.(), { enabled: onPress !== undefined });
+function Step({
+  label,
+  shortcut,
+  onPress,
+  icon,
+  iconAfter,
+  className,
+}: {
+  label: string;
+  shortcut: string;
+  onPress: (() => void) | undefined;
+  icon: ReactNode;
+  iconAfter?: boolean;
+  className?: string;
+}) {
+  void useShortcut(shortcut, label, () => onPress?.(), { enabled: onPress !== undefined });
   return (
-    <button type="button" aria-label={label} aria-keyshortcuts={shortcut} className={ICON} disabled={!onPress} onClick={onPress}>
-      {children}
-      {hint}
-    </button>
+    <Control
+      keys={[shortcut]}
+      label={label}
+      icon={icon}
+      iconAfter={iconAfter ?? false}
+      disabled={!onPress}
+      onClick={() => onPress?.()}
+      {...(className ? { className } : {})}
+    />
   );
 }

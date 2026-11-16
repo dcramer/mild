@@ -45,7 +45,7 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Figures`, `Figure` | Headline numbers, straight on the page. `look` for the one to see first, `failure` for a count of things gone wrong; `href` links to the list it counts. |
 | `StackedBars` | Counts over time, stacked by series, on the left axis. `line` adds a second measure (model cost) on its own right axis; both start at zero and share their gridlines. No legend: pointing at or focusing a column opens a tooltip with that day's figures, the segment under the pointer in bold. `compact` beside figures. |
 | `Swatch` | A series' or a tier's colour, always beside its name. |
-| `Panel` | One item from a list, opened beside the list: it slides over from the right, up to three quarters of the screen, with previous and next to step through the list. Every list opens a message in the same panel (`views/message-panel.tsx`). |
+| `Panel` | One item from a list, opened beside the list: it slides over from the right, up to three quarters of the screen, with previous and next in its footer to step through the list. Every list opens a message in the same panel (`views/message-panel.tsx`). |
 | `Dialog` | A form or a question: adding or changing a label or a rule. Centred. `footer` for the actions that finish it. |
 | `Toaster`, `useToast` | What a press did, said once in the corner after the list has moved on: what sift learned, what was undone. A failure stays until dismissed and is the only one in red. Never for something the page already shows. |
 | `Menu`, `Avatar` | A few things to do, behind one button: under the avatar, who is signed in and Sign out. An item that cannot be pressed says why under its label. An avatar is the initial of an address, never a picture: the page loads nothing from another origin. Choosing one value is a `Select`, not a menu. |
@@ -95,7 +95,8 @@ A control asks for its key and draws the keycap itself (`shortcut` on a `Button`
 
 - **The keys are Gmail's** where it has one: `J` and `K` to move, `Enter` or `O` to open, `Esc` to close, `/` to search, `E` archive, `!` spam, `?` for the list of every key live where the reader is. `I` keeps (the inbox), `A` agrees with sift, `1` to `9` say what a message is.
 - **A keycap** (`Kbd`) sits after the label, outlined; on a filled control it takes that control's ink.
-- **Down a list** only the row the reader is on shows and answers to its keys. A table says how to move in one quiet line under it.
+- **Down a list** only the row the reader is on shows and answers to its keys.
+- **A layer's own controls are a footer** (`ControlBar`, `Control`), the way a game lists its buttons: the key first, then what it does. A table's (Move, Open, Every key) holds at the bottom of the screen while the table is on it; a panel's (Previous, Next, Close) runs along its bottom edge, beside where it is in the list. On a phone the panel's become wide Previous and Next buttons at the bottom, where a thumb is, and Close stays in the corner. Each one in a panel can be pressed as well as keyed.
 - **What floats is a layer.** With a panel or dialog open the page under it hears nothing; `?` alone works everywhere.
 - **Nothing happens while typing** in a field, and Enter never presses a second thing when a button or row already has the focus. A panel takes the focus itself when it opens, so Enter answers.
 - **No hints on a touch screen**, and the reader can turn keys and hints off in Settings. That choice is kept in the browser, not in `sift.toml`: it is about the reader, not the mail.

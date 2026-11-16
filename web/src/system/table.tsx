@@ -1,7 +1,7 @@
 import { type ComponentProps, type ReactNode, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { RowActive, keyName, useLayerMoves, useShortcut } from './keys.tsx';
-import { Kbd } from './type.tsx';
+import { RowActive, useLayerMoves, useShortcut } from './keys.tsx';
+import { Control, ControlBar } from './controls.tsx';
 
 /**
  * Rows of the same kind of thing. It has no surface of its own: on the page it sits flush with the
@@ -34,18 +34,18 @@ export function Table({ children }: { children: ReactNode }) {
   const down = useShortcut('j', 'Next row', () => step(1), live);
   const up = useShortcut('k', 'Previous row', () => step(-1), live);
   return (
-    <div ref={element} className="-mx-(--bleed) overflow-x-auto">
-      <table className="w-full text-left">{children}</table>
-      {down ? (
-        <p className="hidden items-center gap-1.5 px-(--bleed) pt-3 text-label text-muted-foreground md:flex">
-          {down}
-          {up}
-          <span>to move</span>
-          <Kbd className="ml-2">{keyName('Enter')}</Kbd>
-          <span>to open</span>
-          <Kbd className="ml-2">?</Kbd>
-          <span>for every key</span>
-        </p>
+    <div ref={element} className="-mx-(--bleed)">
+      {/* The bar below sits outside the sideways scroll, which would otherwise hold it in place instead of the screen. */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">{children}</table>
+      </div>
+      {down || up ? (
+        // The page's controls, held at the bottom of the screen while the table is on it.
+        <ControlBar className="sticky bottom-0 z-10 mt-3 hidden border-t border-(--rule) bg-background px-(--bleed) py-1.5 md:flex">
+          <Control keys={['j', 'k']} label="Move" />
+          <Control keys={['Enter']} label="Open" />
+          <Control keys={['?']} label="Every key" />
+        </ControlBar>
       ) : null}
     </div>
   );
