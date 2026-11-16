@@ -105,7 +105,18 @@ describe('one type scale', () => {
 
 describe('as little chrome as it takes', () => {
   // What floats over the page is filled so it can cover what is under it. Nothing else is.
-  const FLOATING = new Set(['dialog.tsx', 'panel.tsx', 'menu.tsx', 'answer-picker.tsx', 'select.tsx', 'toast.tsx', 'hover-card.tsx', 'nav.tsx', 'chart.tsx']);
+  const FLOATING = new Set([
+    'dialog.tsx',
+    'panel.tsx',
+    'menu.tsx',
+    'answer-picker.tsx',
+    'select.tsx',
+    'toast.tsx',
+    'hover-card.tsx',
+    'nav.tsx',
+    'chart.tsx',
+    'confirm.tsx',
+  ]);
 
   test('only a part that floats has a surface', () => {
     const grounded = [...SYSTEM].filter((path) => !FLOATING.has(relative(join(WEB, 'system'), path)));

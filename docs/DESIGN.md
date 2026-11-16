@@ -27,7 +27,7 @@ Tokens and the role classes are in `web/src/index.css`.
 | Part | Use |
 | --- | --- |
 | `Button` | `mark`: what the screen is waiting on, one per screen at most, never down a list. `ink`: what finishes a dialog or form. `plain`: a page's own action (adding to its list),  and anything else said once. `quiet`: repeated down a list, firmer when its row is pointed at, and ways out. With `href` it is a link. `busy` while a press is being acted on. |
-| `ConfirmButton` | A press that cannot be taken back (removing a rule, starting to act). It asks in place, with the same words on the button that does it. |
+| `ConfirmButton` | A press that cannot be taken back (removing a rule, starting to act). It asks in place, with the same words on the button that does it. Down a list it is an `icon` (a trash can for removing), and the question covers the row from the right rather than widening its column. |
 | `Select`, `Input`, `TextArea`, `Check` | Controls. `Select` is for a short list. |
 | `ChoiceGroup` | A few choices seen at once, one on: what a message is, where a sender stands. `numbered` shows the keys that pick them; `clearable` when none is a choice too. |
 | `Field`, `Form` | A form is a column of fields with what finishes it last. A field is its label, its controls, what follows from the answer (`hint`) and what is wrong (`error`). `inline` puts the label beside the controls, for a short form in a narrow column. |
@@ -67,6 +67,8 @@ Tokens and the role classes are in `web/src/index.css`.
 ## Narrow screens
 
 Every part has an answer for a phone, and a new part needs one before it is added.
+
+On a phone a row keeps only what identifies it and what it is; figures, dates and who made it go to the panel the row opens, and so does anything that cannot be taken back, so a thumb cannot remove something by brushing a row.
 
 | Part | On a narrow screen |
 | --- | --- |

@@ -1,4 +1,4 @@
-import { ArrowRightIcon, PlusIcon } from 'lucide-react';
+import { ArrowRightIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { StatusWord, TierLabel, Verdict } from '@/components/bits.tsx';
 import { ACTIONS, STANDINGS, STATUS_NAMES, TIERS, money, moneyTick, outcomeName } from '@/lib/format.ts';
@@ -253,6 +253,9 @@ export function SystemView() {
           ))}
           <Row label="confirm" note="A press that cannot be taken back asks first, in place.">
             <ConfirmButton question="Remove this rule?" onConfirm={() => toast('Removed the rule.')}>
+              Remove
+            </ConfirmButton>
+            <ConfirmButton question="Remove this rule?" icon={<Trash2Icon aria-hidden />} onConfirm={() => toast('Removed the rule.')}>
               Remove
             </ConfirmButton>
           </Row>

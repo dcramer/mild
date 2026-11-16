@@ -126,8 +126,8 @@ export function StackedBars({ series, rows, line, compact }: { series: readonly 
             }
           >
             <p className="font-medium">{shown.title}</p>
-            {[...series]
-              .reverse()
+            {series
+              .toReversed()
               .filter((s) => (shown.values[s.key] ?? 0) > 0)
               .map((s) => (
                 <p key={s.key} className={`flex items-center gap-2 ${under === null || under === s.key ? '' : 'text-muted-foreground'}`}>

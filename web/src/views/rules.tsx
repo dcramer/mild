@@ -1,16 +1,18 @@
-import { PlusIcon } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowRightIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
-import { api, useAction, useLoaded } from '@/lib/api.ts';
+import { type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/route.ts';
-import { ago, count, describeMatch, outcomeName } from '@/lib/format.ts';
+import { ago, count, outcomeName, plural, shortDate } from '@/lib/format.ts';
 import {
-  Does,
   Button,
   Check,
   ConfirmButton,
   Dialog,
+  Does,
   Empty,
+  Fact,
+  Facts,
   Failure,
   Field,
   FilterGroup,
@@ -18,7 +20,7 @@ import {
   Input,
   ListView,
   Loading,
-  OnPhone,
+  Panel,
   RowActions,
   Select,
   Sub,
@@ -165,6 +167,101 @@ function AddRuleDialog({
   );
 }
 
+const MADE_BY: Record<string, string> = { user: 'You', correction: 'Your answers', agent: 'sift, when it blocked them' };
+const QUIET: Record<string, string> = { fromDomain: 'anyone at', to: 'sent to', listId: 'the list', subjectContains: 'subject has' };
+
+/** What a rule matches: an address alone, or a quiet word and the value. */
+function Who({ match }: { match: Record<string, string> }) {
+  return (
+    <span className="name">
+      {Object.entries(match).map(([key, value], index) => (
+        <span key={key}>
+          {index > 0 ? <span className="font-normal text-muted-foreground">, </span> : null}
+          {QUIET[key] ? <span className="font-normal text-muted-foreground">{QUIET[key]} </span> : null}
+          {key === 'subjectContains' ? `“${value}”` : value}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+const whoText = (match: Record<string, string>) =>
+  Object.entries(match)
+    .map(([key, value]) => `${QUIET[key] ? `${QUIET[key]} ` : ''}${key === 'subjectContains' ? `“${value}”` : value}`)
+    .join(', ');
+
+/** The rule's own action: an action rule's, or an exception to its label's. */
+const own = (rule: RuleSummary) => (rule.kind === 'label' ? rule.override : rule.disposition);
+
+/** What the rule makes of the mail: its label, then an action only where the rule has its own. */
+function Result({ rule }: { rule: RuleSummary }) {
+  const action = own(rule);
+  return (
+    <>
+      {rule.labelGone ? <Failure inline>A removed label</Failure> : rule.kind === 'label' ? <span>{rule.labelName}</span> : null}
+      {rule.kind === 'label' && action ? <span className="text-muted-foreground"> · </span> : null}
+      {action ? <Does action={action}>{outcomeName(action)}</Does> : null}
+    </>
+  );
+}
+
+function RulePanel({
+  rule,
+  position,
+  onPrevious,
+  onNext,
+  onClose,
+  remove,
+}: {
+  rule: RuleSummary;
+  position: string;
+  onPrevious: (() => void) | undefined;
+  onNext: (() => void) | undefined;
+  onClose: () => void;
+  remove: ReactNode;
+}) {
+  const action = rule.disposition;
+  return (
+    <Panel open onClose={onClose} title={whoText(rule.match)} position={position} onPrevious={onPrevious} onNext={onNext}>
+      <div className="flex flex-col gap-8">
+        <Facts>
+          {rule.kind === 'action' ? null : (
+            <Fact term={rule.kind === 'when-label' ? 'When it is' : 'Is'}>{rule.labelGone ? <Failure inline>A removed label</Failure> : rule.labelName}</Fact>
+          )}
+          {action ? (
+            <Fact term="Then">
+              <Does action={action}>{outcomeName(action)}</Does>
+              {rule.override && rule.kind === 'label' ? <span className="text-muted-foreground"> instead of the label’s</span> : null}
+              {[rule.markRead ? 'marked read' : null, rule.unsubscribe ? 'unsubscribed' : null].filter(Boolean).map((extra) => (
+                <span key={extra} className="text-muted-foreground">
+                  , {extra}
+                </span>
+              ))}
+            </Fact>
+          ) : null}
+          {rule.when ? <Fact term="Only when it is">{rule.when}</Fact> : null}
+          {rule.except.length > 0 ? (
+            <Fact term="Unless">
+              {rule.except.map((except, index) => (
+                <span key={index} className="block">
+                  <Who match={except} />
+                </span>
+              ))}
+            </Fact>
+          ) : null}
+          {rule.kind === 'when-label' || rule.when ? <Fact term="Reading">sift reads each message it matches.</Fact> : null}
+          <Fact term="Used">{rule.hits === 0 ? 'Never' : `${plural(rule.hits, 'time')}${rule.lastHitAt ? `, last ${ago(rule.lastHitAt)}` : ''}`}</Fact>
+          <Fact term="Made by">
+            {MADE_BY[rule.source] ?? rule.source}, {shortDate(rule.createdAt)}
+          </Fact>
+          {rule.filterId ? <Fact term="In Gmail">A filter does this too.</Fact> : null}
+        </Facts>
+        <div>{remove}</div>
+      </div>
+    </Panel>
+  );
+}
+
 /** Everything sift knows without asking a model: the user's rules and the ones it learned. */
 export function Rules() {
   const { data, error, loading, reload } = useLoaded('rules', (signal) => api.rules(signal));
@@ -174,18 +271,41 @@ export function Rules() {
   const [search, setSearch] = useParam('q');
   const [label, setLabel] = useParam('label');
   const [source, setSource] = useParam('by', SOURCES);
+  const [open, setOpen] = useParam('rule');
   const [adding, setAdding] = useState(false);
   // Opened from a message ("Make a rule…"): the dialog starts on its sender.
   const [from, setFrom] = useParam('from');
   const accountId = manage.data?.accounts[0]?.id;
   const labels = accountId ? (manage.data?.labels[accountId] ?? []).map((l) => [l.id, l.name] as const) : [];
-  const multipleAccounts = new Set(data?.rules.map((r) => r.accountId)).size > 1;
   const needle = search.trim().toLowerCase();
-  const rules = (data?.rules ?? []).filter(
-    (r) =>
-      (label === '' || r.labelId === label) &&
-      (source === '' || r.source === source) &&
-      (needle === '' || [...Object.values(r.match), r.labelName ?? ''].some((text) => text.toLowerCase().includes(needle))),
+  const rules = (data?.rules ?? [])
+    .filter(
+      (r) =>
+        (label === '' || r.labelId === label || r.whenLabel === label) &&
+        (source === '' || r.source === source) &&
+        (needle === '' || [...Object.values(r.match), r.labelName ?? ''].some((text) => text.toLowerCase().includes(needle))),
+    )
+    .toSorted((a, b) => b.hits - a.hits);
+  const at = rules.findIndex((r) => r.id === open);
+  const removeButton = (rule: RuleSummary, inPanel: boolean) => (
+    <ConfirmButton
+      question="Remove this rule?"
+      variant={inPanel ? 'plain' : 'quiet'}
+      {...(inPanel ? {} : { icon: <Trash2Icon aria-hidden /> })}
+      disabled={remove.busy}
+      onConfirm={() =>
+        remove.run(
+          () => api.removeRule(rule.id),
+          () => {
+            toast(`Removed the rule for ${whoText(rule.match)}.`);
+            if (inPanel) setOpen('');
+            reload();
+          },
+        )
+      }
+    >
+      Remove
+    </ConfirmButton>
   );
 
   return (
@@ -217,97 +337,55 @@ export function Rules() {
       {loading ? (
         <Loading />
       ) : rules.length === 0 ? (
-        <Empty>
-          {data && data.rules.length > 0
-            ? 'No rule matches.'
-            : 'No rules yet. A rule says what mail is without asking a model; answering a suggestion makes one.'}
-        </Empty>
+        <Empty>{data && data.rules.length > 0 ? 'No rule matches.' : 'No rules yet.'}</Empty>
       ) : (
         <Table>
-          <thead>
+          <thead className="sr-only">
             <Tr>
-              <Th>Mail</Th>
-              <Th phone="hide">Is</Th>
-              <Th phone="hide">Then</Th>
-              <Th phone="hide">Made by</Th>
-              <Th phone="hide" num>
-                Used
-              </Th>
-              <Th />
+              <Th>Rule</Th>
+              <Th phone="hide">Used</Th>
+              <Th phone="hide">Remove</Th>
             </Tr>
           </thead>
           <tbody>
-            {rules.map((rule) => {
-              const then = rule.disposition ? (
-                <Does action={rule.disposition}>{outcomeName(rule.disposition)}</Does>
-              ) : (
-                <span className="text-muted-foreground">Nothing</span>
-              );
-              const is = rule.labelGone
-                ? 'A removed label'
-                : rule.kind === 'action'
-                  ? 'Anything'
-                  : rule.kind === 'when-label'
-                    ? `When it is ${rule.labelName}`
-                    : (rule.labelName ?? '');
-              return (
-                <Tr key={rule.id}>
-                  <Td className="max-w-0 md:w-[40%]">
-                    <span className="block break-words">{describeMatch(rule.match)}</span>
-                    {rule.except.map((except, index) => (
-                      <Sub key={index}>unless {describeMatch(except)}</Sub>
-                    ))}
-                    {rule.when ? <Sub className="whitespace-normal">when it is {rule.when}</Sub> : null}
-                    {multipleAccounts ? <Sub>{rule.accountId}</Sub> : null}
-                    <OnPhone>
-                      <span className="font-medium text-foreground">{is}</span>
-                      {then}
-                    </OnPhone>
-                  </Td>
-                  <Td phone="hide" className="whitespace-nowrap">
-                    {rule.labelGone ? (
-                      <Failure inline>A removed label</Failure>
-                    ) : rule.kind === 'action' ? (
-                      <span className="text-muted-foreground">Anything</span>
-                    ) : (
-                      <span className="font-medium">{is}</span>
-                    )}
-                    {rule.kind === 'when-label' || rule.when ? <Sub>sift reads each one</Sub> : null}
-                  </Td>
-                  <Td phone="hide" className="whitespace-nowrap">
-                    {then}
-                    {rule.override && rule.kind === 'label' ? <Sub>instead of the label’s</Sub> : null}
-                  </Td>
-                  <Td phone="hide" quiet className="whitespace-nowrap">
-                    {SOURCES.find(([key]) => key === rule.source)?.[1] ?? rule.source}
-                  </Td>
-                  <Td phone="hide" num quiet={rule.hits === 0}>
-                    {rule.hits === 0 ? 'Never' : count(rule.hits)}
-                    {rule.lastHitAt ? <Sub>{ago(rule.lastHitAt)}</Sub> : null}
-                  </Td>
-                  <RowActions phone="keep">
-                    <ConfirmButton
-                      question="Remove this rule?"
-                      disabled={remove.busy}
-                      onConfirm={() =>
-                        remove.run(
-                          () => api.removeRule(rule.id),
-                          () => {
-                            toast(`Removed the rule for mail ${describeMatch(rule.match)}.`);
-                            reload();
-                          },
-                        )
-                      }
-                    >
-                      Remove
-                    </ConfirmButton>
-                  </RowActions>
-                </Tr>
-              );
-            })}
+            {rules.map((rule) => (
+              <Tr key={rule.id} onOpen={() => setOpen(rule.id)}>
+                <Td className="max-w-0 md:w-full">
+                  <span className="block break-words md:truncate">
+                    <Who match={rule.match} />
+                    {rule.kind === 'when-label' ? <span className="text-muted-foreground"> as {rule.labelName}</span> : null}
+                    <ArrowRightIcon aria-label="is" className="mx-2 inline size-4 align-[-0.15em] text-muted-foreground" />
+                    <Result rule={rule} />
+                  </span>
+                  {rule.when ? <Sub className="whitespace-normal">only when it is {rule.when}</Sub> : null}
+                </Td>
+                <Td phone="hide" num quiet className="md:w-44">
+                  {rule.hits === 0 ? (
+                    'Never used'
+                  ) : (
+                    <>
+                      <span className="text-foreground">{count(rule.hits)}</span>
+                      {rule.lastHitAt ? ` · ${ago(rule.lastHitAt)}` : null}
+                    </>
+                  )}
+                </Td>
+                <RowActions>{removeButton(rule, false)}</RowActions>
+              </Tr>
+            ))}
           </tbody>
         </Table>
       )}
+      {at !== -1 ? (
+        <RulePanel
+          key={rules[at].id}
+          rule={rules[at]}
+          position={`${at + 1} of ${rules.length}`}
+          onPrevious={at > 0 ? () => setOpen(rules[at - 1].id) : undefined}
+          onNext={at < rules.length - 1 ? () => setOpen(rules[at + 1].id) : undefined}
+          onClose={() => setOpen('')}
+          remove={removeButton(rules[at], true)}
+        />
+      ) : null}
       {(adding || from !== '') && accountId ? (
         <AddRuleDialog
           accountId={accountId}

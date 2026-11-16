@@ -16,9 +16,10 @@ const VARIANT = {
   quiet: 'text-foreground/75 hover:bg-(--fill) hover:text-foreground group-hover/row:bg-(--fill-strong) group-hover/row:text-foreground',
 } as const;
 
-/** `md` everywhere a control sits in a row or a toolbar; `lg` for the one action a screen is about. */
+/** `md` everywhere a control sits in a row or a toolbar; `lg` for the one action a screen is about; `icon` for an icon alone, with an `aria-label`. */
 const SIZE = {
   md: 'h-(--control) px-3 text-sm',
+  icon: 'size-(--control) text-sm',
   lg: 'h-12 px-5 text-base',
 } as const;
 
