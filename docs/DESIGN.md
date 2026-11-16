@@ -26,9 +26,10 @@ Tokens and the role classes are in `web/src/index.css`.
 | --- | --- |
 | `Button` | `mark`: what the screen is waiting on, one per screen at most. `ink`: the main action of a sheet or row. `plain`: everything else, filled not outlined. `quiet`: repeated down a list, and ways out. With `href` it is a link. `busy` while a press is being acted on. |
 | `Select`, `Input`, `TextArea`, `Check` | Controls. Filled, with the hand-cut corners. `Select` is for a short list. |
-| `Masthead` | The top of every screen: the name, the sections (highlighted when current), a `Notice` when there is one, and who is signed in. No bar. |
+| `Masthead` | The top of every screen: the name, the sections (highlighted when current), a `Notice` when there is one, when sift last synced, and who is signed in, as an `Avatar` that opens a `Menu`. No bar. |
 | `Notice` | A state of sift itself, true on every screen, in the masthead: sift cannot be reached (plain ink, a pulse: it mends itself), a sign-in has expired (`look`, with a link: the reader mends it). |
 | `SubNav` | The pages within a section, beside the page, the current one marked with a stroke. Like the sections, they are links to a path (`/settings/accounts`), read with `useRoute`. |
+| `Menu`, `Avatar` | A few things to do, behind one button: under the avatar, who is signed in and Sign out. An item that cannot be pressed says why under its label. An avatar is the initial of an address, never a picture: the page loads nothing from another origin. Choosing one value is a `Select`, not a menu. |
 | `Sheet`, `SheetHead` | The surface everything sits on. Rows inside take the class `row`. |
 | `Table`, `Tr`, `Th`, `Td` | Rows of the same kind of thing, one row per item: the default for a list. It has no surface of its own, no background and no frame: on the page it sits flush under the list's heading, divided only by the dashes between rows. `Tr onOpen` makes the whole row pressable. |
 | `Figures`, `Figure` | Headline numbers, straight on the page. `look` for the one to see first, `failure` for a count of things gone wrong. |
@@ -53,9 +54,10 @@ Every part has an answer for a phone, and a new part needs one before it is adde
 
 | Part | On a narrow screen |
 | --- | --- |
-| `Masthead` | The sections and the signed-in line move into a panel that covers the screen, opened from a menu button. The bar shows the current section's name; a dot on the button means something is waiting in another section. |
+| `Masthead` | The sections, the synced line and the account (its address and what its menu holds, as buttons) move into a panel that covers the screen, opened from a menu button. The bar shows the current section's name; a dot on the button means something is waiting in another section. |
 | `Notice` | A line of its own under the masthead's bar. |
 | `SubNav` | A select above the page. |
+| `Menu` | Opens under its button, kept inside the screen, with rows 44px tall on a touch screen. The masthead's own is not shown on a narrow screen: its panel lists the same things. |
 | `Panel`, `Dialog` | Cover the screen. |
 | `ListView` | The filter panel opens above the list. |
 | `CardGrid` | One column. |

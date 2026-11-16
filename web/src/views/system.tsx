@@ -1,6 +1,7 @@
 import { ArrowRightIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import {
+  Avatar,
   Button,
   Check,
   Code,
@@ -21,6 +22,7 @@ import {
   Loading,
   Marked,
   Masthead,
+  Menu,
   Note,
   Notice,
   Sections,
@@ -226,9 +228,30 @@ export function SystemView() {
               { to: 'system/rules', label: 'Rules' },
             ]}
             status={<Notice>Offline</Notice>}
-            aside={<span>On a narrow screen this becomes a menu button and a panel that covers the screen.</span>}
+            aside={<span>Synced 2 min ago</span>}
+            account={{ name: 'ada@example.org', items: [{ label: 'Sign out', onSelect: () => {} }] }}
           />
         </div>
+        <Row
+          label="menu"
+          note="A few things to do behind one button. Under an avatar it is who is signed in; on a narrow screen the masthead lists the same things in its panel instead."
+        >
+          <Menu
+            label="Account, ada@example.org"
+            trigger={<Avatar name="ada@example.org" />}
+            heading={
+              <>
+                <p className="slug text-muted-foreground">Signed in</p>
+                <p className="mt-1 font-medium">ada@example.org</p>
+              </>
+            }
+            items={[
+              { label: 'Sign out', onSelect: () => {} },
+              { label: 'Disabled', note: 'With the reason under it.', disabled: true, onSelect: () => {} },
+            ]}
+          />
+          <Avatar name="grace@example.com" />
+        </Row>
         <Row label="notice" note="A state of sift itself, in the masthead. Plain mends itself; highlighted needs the reader.">
           <Notice>Offline</Notice>
           <Notice tone="look" href="/system" action="Reconnect">

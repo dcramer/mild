@@ -3,7 +3,7 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { type Days, api, useLoaded, useOnline } from '@/lib/api.ts';
 import { ago } from '@/lib/format.ts';
 import { setParams, useParam, useRoute } from '@/lib/route.ts';
-import { Button, Loading, Masthead, Note, Notice, Select, Wordmark } from '@/system';
+import { Loading, Masthead, Note, Notice, Select, Wordmark } from '@/system';
 import { ChangesView } from '@/views/changes.tsx';
 import { Decisions, PERIODS } from '@/views/decisions.tsx';
 import { MessagePanel, type MessageRef } from '@/views/message-panel.tsx';
@@ -92,19 +92,25 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
         items={SECTIONS.map((to) => ({ to, label: NAMES[to], ...(to === 'suggestions' && waiting.data?.waiting ? { count: waiting.data.waiting } : {}) }))}
         status={online ? null : <Notice>Offline</Notice>}
         aside={
-          <>
-            {summary.data ? (
-              <span>{accounts.length === 0 ? 'No account connected' : synced.length > 0 ? `Synced ${ago(Math.min(...synced))}` : 'Not synced yet'}</span>
-            ) : null}
-            {signedInAs ? (
-              <>
-                <span>{signedInAs}</span>
-                <Button variant="quiet" onClick={() => void api.signOut().then(() => window.location.assign('/'))}>
-                  Sign out
-                </Button>
-              </>
-            ) : null}
-          </>
+          summary.data ? (
+            <span className="whitespace-nowrap">
+              {accounts.length === 0 ? 'No account connected' : synced.length > 0 ? `Synced ${ago(Math.min(...synced))}` : 'Not synced yet'}
+            </span>
+          ) : null
+        }
+        account={
+          signedInAs
+            ? {
+                name: signedInAs,
+                items: [
+                  {
+                    label: 'Sign out',
+                    onSelect: () => void api.signOut().then(() => window.location.assign('/')),
+                    ...(online ? {} : { disabled: true, note: 'Not while sift is unreachable.' }),
+                  },
+                ],
+              }
+            : undefined
         }
       />
 

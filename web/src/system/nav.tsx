@@ -2,6 +2,8 @@ import { Dialog } from '@base-ui/react/dialog';
 import { MenuIcon, XIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { navigate } from '@/lib/route.ts';
+import { Button } from './button.tsx';
+import { Avatar, Menu, type MenuItem } from './menu.tsx';
 import { Select } from './select.tsx';
 import { Wordmark } from './type.tsx';
 
@@ -38,12 +40,25 @@ export function Sections({ items, current }: { items: readonly NavItem[]; curren
 }
 
 /**
- * The top of every screen: the name, the sections, `status` (a `Notice`: what is wrong with sift itself)
- * and `aside` (who is signed in, the way out). No bar; it sits straight on the page. On a narrow screen
- * the sections and `aside` move into a panel that covers the screen, opened from a menu button, and
- * `status` gets a line of its own under the bar, where it cannot be missed.
+ * The top of every screen: the name, the sections, `status` (a `Notice`: what is wrong with sift itself),
+ * `aside` (a line about sift, such as when it last synced) and `account` (who is signed in and what they
+ * can do about it, behind their `Avatar`). No bar; it sits straight on the page. On a narrow screen the
+ * sections, `aside` and the account move into a panel that covers the screen, opened from a menu button,
+ * and `status` gets a line of its own under the bar, where it cannot be missed.
  */
-export function Masthead({ items, current, status, aside }: { items: readonly NavItem[]; current: string; status?: ReactNode; aside?: ReactNode }) {
+export function Masthead({
+  items,
+  current,
+  status,
+  aside,
+  account,
+}: {
+  items: readonly NavItem[];
+  current: string;
+  status?: ReactNode;
+  aside?: ReactNode;
+  account?: { name: string; items: readonly MenuItem[] } | undefined;
+}) {
   const [open, setOpen] = useState(false);
   // Going somewhere closes the panel.
   useEffect(() => setOpen(false), [current]);
@@ -60,6 +75,20 @@ export function Masthead({ items, current, status, aside }: { items: readonly Na
         <div className="ml-auto flex items-center gap-4 text-sm text-muted-foreground">
           {status}
           {aside}
+          {account ? (
+            <Menu
+              label={`Account, ${account.name}`}
+              align="end"
+              trigger={<Avatar name={account.name} />}
+              heading={
+                <>
+                  <p className="slug text-muted-foreground">Signed in</p>
+                  <p className="mt-1 font-medium break-all">{account.name}</p>
+                </>
+              }
+              items={account.items}
+            />
+          ) : null}
         </div>
       </div>
 
@@ -95,7 +124,21 @@ export function Masthead({ items, current, status, aside }: { items: readonly Na
                 ))}
               </ul>
             </nav>
-            {aside ? <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 pt-10 text-sm text-muted-foreground">{aside}</div> : null}
+            {aside || account ? (
+              <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 pt-10 text-sm text-muted-foreground">
+                {aside}
+                {account ? (
+                  <>
+                    <span className="break-all">{account.name}</span>
+                    {account.items.map((item) => (
+                      <Button key={item.label} variant="quiet" disabled={item.disabled} title={item.note} onClick={item.onSelect}>
+                        {item.label}
+                      </Button>
+                    ))}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
