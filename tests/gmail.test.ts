@@ -25,7 +25,10 @@ interface Fake {
   historyId?: string;
   pages?: Record<string, HistoryPage>;
   expired?: boolean;
+  /** History pages, by page token, that fail as an expired cursor would. */
+  expiredAt?: string[];
   search?: string[];
+  searchPages?: Record<string, { ids: string[]; nextPageToken?: string }>;
   messages?: Record<string, RawMessage>;
 }
 
@@ -39,14 +42,14 @@ function fakeApi(fake: Fake): GmailApi & { calls: string[] } {
     },
     async listHistory(start, pageToken) {
       calls.push(`history:${start}:${pageToken ?? ''}`);
-      if (fake.expired) throw new HistoryExpiredError();
+      if (fake.expired || fake.expiredAt?.includes(pageToken ?? '')) throw new HistoryExpiredError();
       const page = fake.pages?.[pageToken ?? ''];
       if (!page) throw new Error('unexpected page');
       return page;
     },
-    async searchInbox(query) {
-      calls.push(`search:${query}`);
-      return { ids: fake.search ?? [] };
+    async searchInbox(query, pageToken) {
+      calls.push(`search:${query}${pageToken ? `:${pageToken}` : ''}`);
+      return fake.searchPages?.[pageToken ?? ''] ?? { ids: fake.search ?? [] };
     },
     async getMetadata(id) {
       return fake.messages?.[id] ?? null;
@@ -95,6 +98,36 @@ describe('pullChanges', () => {
     const api = fakeApi({ expired: true, historyId: '900', search: ['new', 'old'] });
     expect(await pullChanges(api, '1', { recoveryDays: 3 })).toEqual({ messageIds: ['old', 'new'], historyId: '900', mode: 'recovery' });
     expect(api.calls).toEqual(['history:1:', 'profile', 'search:newer_than:3d']);
+  });
+
+  it('takes the cursor from the last of many pages', async () => {
+    const pages: Record<string, HistoryPage> = {};
+    for (let n = 0; n < 5; n++) {
+      pages[n === 0 ? '' : `p${n}`] = {
+        additions: Array.from({ length: 100 }, (_, i) => ({ id: `m${n * 100 + i}`, labelIds: ['INBOX'] })),
+        historyId: String(600 + n),
+        ...(n < 4 ? { nextPageToken: `p${n + 1}` } : {}),
+      };
+    }
+    const api = fakeApi({ pages });
+    const pull = await pullChanges(api, '500');
+    expect(pull.messageIds).toHaveLength(500);
+    expect(pull.messageIds[0]).toBe('m0');
+    expect(pull.messageIds.at(-1)).toBe('m499');
+    expect(pull.historyId).toBe('604');
+    expect(api.calls).toEqual(['history:500:', 'history:500:p1', 'history:500:p2', 'history:500:p3', 'history:500:p4']);
+  });
+
+  it('recovers when the cursor expires part-way through the pages, and pages through the search', async () => {
+    const api = fakeApi({
+      pages: { '': { additions: [{ id: 'from-history', labelIds: ['INBOX'] }], historyId: '510', nextPageToken: 'p2' } },
+      expiredAt: ['p2'],
+      historyId: '900',
+      searchPages: { '': { ids: ['d', 'c'], nextPageToken: 's2' }, s2: { ids: ['c', 'b', 'a'] } },
+    });
+    // What the first history page said is dropped: the search covers it, and the cursor is the profile's.
+    expect(await pullChanges(api, '500')).toEqual({ messageIds: ['a', 'b', 'c', 'd'], historyId: '900', mode: 'recovery' });
+    expect(api.calls).toEqual(['history:500:', 'history:500:p2', 'profile', 'search:newer_than:7d', 'search:newer_than:7d:s2']);
   });
 
   it('propagates other errors without moving the cursor', async () => {
@@ -169,6 +202,55 @@ describe('syncAccount', () => {
     const again = await syncAccount(db, fakeApi(fake), listAccounts(db)[0]!);
     expect(again.added).toEqual([]);
     expect(db.prepare('SELECT count(*) AS n FROM messages').get()).toEqual({ n: 1 });
+  });
+
+  it('records every page of a busy day in one pass and leaves the cursor alone if a later page fails', async () => {
+    const db = openDb(':memory:');
+    connectAccount(db, 'me@example.org', '500', 0);
+    const pages: Record<string, HistoryPage> = {
+      '': { additions: [{ id: 'a', labelIds: ['INBOX'] }], historyId: '510', nextPageToken: 'p2' },
+      p2: { additions: [{ id: 'b', labelIds: ['INBOX'] }], historyId: '520', nextPageToken: 'p3' },
+    };
+    const messages = { a: raw('a'), b: raw('b'), c: raw('c') };
+    await expect(syncAccount(db, fakeApi({ pages, messages }), listAccounts(db)[0]!)).rejects.toThrow('unexpected page');
+    expect(listAccounts(db)[0]?.historyId).toBe('500');
+    expect(db.prepare('SELECT count(*) AS n FROM messages').get()).toEqual({ n: 0 });
+
+    pages['p3'] = { additions: [{ id: 'c', labelIds: ['INBOX'] }], historyId: '530' };
+    const report = await syncAccount(db, fakeApi({ pages, messages }), listAccounts(db)[0]!);
+    expect(report.added.map((m) => m.messageId)).toEqual(['a', 'b', 'c']);
+    expect(listAccounts(db)[0]?.historyId).toBe('530');
+  });
+
+  it('after an expired cursor, records what the search finds, skips what it already had, and carries on from the new cursor', async () => {
+    const db = openDb(':memory:');
+    connectAccount(db, 'me@example.org', '500', 0);
+    const messages = { a: raw('a'), b: raw('b'), c: raw('c') };
+    await syncAccount(db, fakeApi({ pages: page(['a'], '520'), messages }), listAccounts(db)[0]!);
+
+    const recovering = fakeApi({ expired: true, historyId: '900', search: ['b', 'a'], messages });
+    const recovered = await syncAccount(db, recovering, listAccounts(db)[0]!);
+    expect(recovered.mode).toBe('recovery');
+    expect(recovered.added.map((m) => m.messageId)).toEqual(['b']);
+    expect(recovering.calls).toEqual(['history:520:', 'profile', 'search:newer_than:7d']);
+    expect(listAccounts(db)[0]?.historyId).toBe('900');
+
+    const next = fakeApi({ pages: page(['c'], '910'), messages });
+    const after = await syncAccount(db, next, listAccounts(db)[0]!);
+    expect(after.mode).toBe('incremental');
+    expect(after.added.map((m) => m.messageId)).toEqual(['c']);
+    expect(next.calls).toEqual(['history:900:']);
+  });
+
+  it('leaves the cursor alone when the search after an expired cursor fails', async () => {
+    const db = openDb(':memory:');
+    connectAccount(db, 'me@example.org', '500', 0);
+    const api = fakeApi({ expired: true, historyId: '900' });
+    api.searchInbox = async () => {
+      throw new Error('network');
+    };
+    await expect(syncAccount(db, api, listAccounts(db)[0]!)).rejects.toThrow('network');
+    expect(listAccounts(db)[0]?.historyId).toBe('500');
   });
 
   it('leaves the cursor alone when a fetch fails', async () => {
