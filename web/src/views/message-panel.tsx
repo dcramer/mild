@@ -111,9 +111,10 @@ function ActionEvent({ a, onUndo, busy }: { a: Action; onUndo: (id: number) => v
 }
 
 /**
- * One message, whichever list it was opened from: its text on the left; on the right what sift said, the
- * answer that confirms or changes it, who sent it, and everything that happened to it. Answering moves to
- * the next item in the list.
+ * One message, whichever list it was opened from: the message on the left; on the right everything for
+ * answering it, top to bottom: what Sift said and the answer that confirms or changes it, who sent it, what
+ * Sift saw, and what happened to it. On a phone the answer comes first, then the message. Answering moves
+ * to the next item in the list.
  */
 function Body({
   detail,
@@ -206,44 +207,19 @@ function Body({
     });
 
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <AnswerPicker
-            key={current?.id ?? 'undecided'}
-            className="w-72"
-            label="What this message is"
-            value={current?.labelId ?? null}
-            groups={groups}
-            empty={<Look>Which label?</Look>}
-            busy={busy}
-            onSubmit={(id) => answer(target, id)}
-            extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
-          />
-          {keepable ? (
-            <Button variant="quiet" busy={keep.busy} onClick={() => setRuling(keepStart(detail.fromAddress, keepable.id))}>
-              Keep as {keepable.name}…
-            </Button>
-          ) : null}
-          {adding ? <AddLabelDialog accountId={detail.accountId} onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
-          <span className="flex-1" />
-          <Button variant="quiet" onClick={() => setRuling(messageStart(detail.fromAddress, current?.labelId ?? null))}>
-            Make a rule…
-          </Button>
-          {ruling ? (
-            <AddRuleDialog
-              accountId={detail.accountId}
-              labels={labels}
-              start={ruling}
-              onClose={() => setRuling(null)}
-              onAdded={(match, outcome, rule) => {
-                toast(`Rule added: ${describeMatch(match)} → ${outcome}`);
-                if (rule.whenLabel !== undefined && rule.whenLabel === current?.labelId && rule.disposition === 'keep' && covers(match))
-                  keepThis(rule.whenLabel);
-              }}
-            />
-          ) : null}
-        </div>
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="flex min-w-0 flex-col gap-3 lg:col-start-2 lg:row-start-1">
+        <AnswerPicker
+          key={current?.id ?? 'undecided'}
+          className="min-w-0 flex-1"
+          label="What this message is"
+          value={current?.labelId ?? null}
+          groups={groups}
+          empty={<Look>Which label?</Look>}
+          busy={busy}
+          onSubmit={(id) => answer(target, id)}
+          extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
+        />
         {current ? (
           <p className="text-muted-foreground">
             {current.reason}
@@ -255,44 +231,64 @@ function Body({
             ) : null}
           </p>
         ) : null}
+        <div className="-ml-3 flex flex-wrap items-center gap-1">
+          {keepable ? (
+            <Button variant="quiet" busy={keep.busy} onClick={() => setRuling(keepStart(detail.fromAddress, keepable.id))}>
+              Keep as {keepable.name}…
+            </Button>
+          ) : null}
+          <Button variant="quiet" onClick={() => setRuling(messageStart(detail.fromAddress, current?.labelId ?? null))}>
+            Make a rule…
+          </Button>
+        </div>
         <Failure>{error}</Failure>
         <Failure>{keep.error}</Failure>
+        {adding ? <AddLabelDialog accountId={detail.accountId} onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
+        {ruling ? (
+          <AddRuleDialog
+            accountId={detail.accountId}
+            labels={labels}
+            start={ruling}
+            onClose={() => setRuling(null)}
+            onAdded={(match, outcome, rule) => {
+              toast(`Rule added: ${describeMatch(match)} → ${outcome}`);
+              if (rule.whenLabel !== undefined && rule.whenLabel === current?.labelId && rule.disposition === 'keep' && covers(match)) keepThis(rule.whenLabel);
+            }}
+          />
+        ) : null}
       </div>
-
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="min-w-0 lg:col-start-1 lg:row-span-2 lg:row-start-1">
         <MessageBody detail={detail} />
-        <div className="flex min-w-0 flex-col gap-8">
-          <Section title="Sender" action={<TextLink href={senderHref(detail.accountId, detail.fromAddress)}>All their mail</TextLink>}>
-            <SenderFacts accountId={detail.accountId} profile={detail.sender} />
+      </div>
+      <div className="flex min-w-0 flex-col gap-8 lg:col-start-2 lg:row-start-2">
+        <Section title="Sender" action={<TextLink href={senderHref(detail.accountId, detail.fromAddress)}>All their mail</TextLink>}>
+          <SenderFacts accountId={detail.accountId} profile={detail.sender} />
+        </Section>
+        <SeenFacts detail={detail} onRule={setRuling} />
+        {others.length > 0 ? (
+          <Section title="Also waiting" meta={count(others.length)}>
+            <div className="max-h-56 overflow-y-auto">
+              <Table>
+                <tbody>
+                  {others.map((m) => (
+                    <Tr key={m.messageId} onOpen={() => onPick(m.messageId)}>
+                      <Td className="w-full max-w-0 truncate">{m.subject || '(no subject)'}</Td>
+                      <Td num quiet>
+                        {ago(m.receivedAt)}
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
           </Section>
-          <SeenFacts detail={detail} onRule={setRuling} />
-          {others.length > 0 ? (
-            <Section title="Also waiting" meta={count(others.length)}>
-              <div className="max-h-56 overflow-y-auto">
-                <Table>
-                  <tbody>
-                    {others.map((m) => (
-                      <Tr key={m.messageId} onOpen={() => onPick(m.messageId)}>
-                        <Td className="w-full max-w-0 truncate">{m.subject || '(no subject)'}</Td>
-                        <Td num quiet>
-                          {ago(m.receivedAt)}
-                        </Td>
-                      </Tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
-            </Section>
-          ) : null}
-          <div className="flex flex-col gap-3">
-            {history.length > 0 ? (
-              <Disclosure summary={`History · ${history.length}`}>
-                <Failure>{undo.error}</Failure>
-                <Timeline>{history.map((entry) => entry.node)}</Timeline>
-              </Disclosure>
-            ) : null}
-          </div>
-        </div>
+        ) : null}
+        {history.length > 0 ? (
+          <Disclosure summary={`History · ${history.length}`}>
+            <Failure>{undo.error}</Failure>
+            <Timeline>{history.map((entry) => entry.node)}</Timeline>
+          </Disclosure>
+        ) : null}
       </div>
     </div>
   );

@@ -23,13 +23,16 @@ function storedView(): View {
 }
 
 /**
- * A message under who it went to: its HTML, fetched from Gmail while it is shown, or its text as far as sift
- * holds it when it has no HTML or the reader chose text. Who sent it and when are in the panel's header.
+ * A message under who it went to, unless that was the account alone: its HTML, fetched from Gmail while it
+ * is shown, or its text as far as sift holds it when it has no HTML or the reader chose text. Who sent it and
+ * when are in the panel's header.
  */
 export function MessageBody({ detail }: { detail: MessageDetail }) {
   const [view, setView] = useState(storedView);
   // Null: sift has not read the whole message, so it may have HTML. The frame says so if it has none.
   const html = detail.hasHtml !== false && view === 'html';
+  // Mail to the account alone says nothing by saying who it went to.
+  const addressed = detail.cc.length > 0 || detail.to.some((p) => p.address !== detail.accountId);
   const choose = (next: View | null) => {
     if (!next) return;
     setView(next);
@@ -41,14 +44,18 @@ export function MessageBody({ detail }: { detail: MessageDetail }) {
   };
   return (
     <article className="flex min-w-0 flex-col gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        {detail.to.length > 0 || detail.cc.length > 0 ? (
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 empty:hidden">
+        {addressed ? (
           <p className="min-w-0 text-muted-foreground">
             {detail.to.length > 0 ? `To ${people(detail.to)}` : ''}
             {detail.cc.length > 0 ? `${detail.to.length > 0 ? ', cc ' : 'Cc '}${people(detail.cc)}` : ''}
           </p>
         ) : null}
-        {detail.hasHtml === false ? null : <ChoiceGroup label="Read it as" value={html ? 'html' : 'text'} options={VIEWS} onChange={choose} />}
+        {detail.hasHtml === false ? null : (
+          <div className="ml-auto">
+            <ChoiceGroup label="Read it as" value={html ? 'html' : 'text'} options={VIEWS} onChange={choose} />
+          </div>
+        )}
       </div>
       {html ? (
         <div className="flex flex-col gap-2">
