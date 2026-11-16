@@ -292,7 +292,7 @@ describe('settings', () => {
   });
 
   it('round-trips through sift.toml', () => {
-    const settings = { model: 'openai-codex/some-model', act: true, interval: 120, dashboardPort: 9000, dashboardHost: 'box.example.ts.net' };
+    const settings = { model: 'openai-codex/some-model', act: true, heuristics: true, interval: 120, dashboardPort: 9000, dashboardHost: 'box.example.ts.net' };
     expect(parseSettings(renderSettings(settings))).toEqual(settings);
     expect(parseSettings(renderSettings(DEFAULT_SETTINGS))).toEqual(DEFAULT_SETTINGS);
     expect(parseSettings('')).toEqual(DEFAULT_SETTINGS);

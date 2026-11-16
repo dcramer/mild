@@ -2,7 +2,7 @@
  * The JSON the dashboard API returns. This file has no imports so the web app can share it.
  */
 
-export const STAGES = ['rules', 'sender', 'classifier', 'agent', 'fallback'] as const;
+export const STAGES = ['rules', 'sender', 'heuristics', 'classifier', 'agent', 'fallback'] as const;
 export type StageKey = (typeof STAGES)[number];
 
 export interface Summary {

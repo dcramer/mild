@@ -18,13 +18,16 @@ Tiers run cheapest first. A tier either names a label or abstains; the first ans
 | --- | --- | --- | --- |
 | 1. Gmail filters | Gmail itself; runs even when sift is down | none | not built |
 | 2. Rules | `src/triage/stages/rules.ts` | none | built and wired |
-| 3. Decision model (Jev / Clef via pi-ai `classify`) | `src/triage/stages/classifier.ts` | ~$0.0001 per message | stage built, provider not wired |
-| 4. Model | `src/triage/stages/model.ts`, `src/model/` | one model call | built; not yet run against a real model |
+| 3. Header heuristics | `src/triage/stages/heuristics.ts` | none (one search of sent mail per new sender) | built and wired; off unless `heuristics = true` |
+| 4. Decision model (Jev / Clef via pi-ai `classify`) | `src/triage/stages/classifier.ts` | ~$0.0001 per message | stage built, provider not wired |
+| 5. Model | `src/triage/stages/model.ts`, `src/model/` | one model call | built; not yet run against a real model |
 | Fallback | `src/triage/pipeline.ts` | none | built |
 
 The fallback is `review`: the message stays where it is, gets the review label, and is shown to the user.
 
 **A rule** says that mail matching some conditions is a label. It is the only deterministic thing sift knows, and there is one kind: what used to be a separate memory of senders is a rule with a single "from" condition. Rules come from the user (`user`), from the user correcting a suggestion (`correction`), or from sift itself (`agent`) once a model has given a sender's last three messages the same label.
+
+**The heuristics tier** labels mail that is plainly bulk from its facts alone. Every sign has to agree: a mailing list id, a one-click unsubscribe, a recognised bulk mail service, a DMARC pass, not a reply, not marked auto-generated, and the owner known never to have written to the sender ("could not check" abstains). It names only two labels, and only when it can tell them apart: Marketing when Gmail filed the message under Promotions, Newsletters when it came through a newsletter platform and Gmail did not file it under Promotions or Primary. Everything else, notifications included, goes on to the model. Its decisions are suggestions like any other, and three of them do not make a learned rule.
 
 Rules that matter across tiers:
 
@@ -138,7 +141,7 @@ There is no shell and no filesystem here. A sandboxed agent with those is planne
 
 Everything sift keeps is in one directory, the home: `~/.config/sift` by default (`$XDG_CONFIG_HOME/sift`), or wherever `--home` or `SIFT_HOME` points (the Docker image uses `/data`). Keeping settings, guidance, the database and credentials together means it can be backed up or moved as a unit. No setting requires an environment variable.
 
-- `sift.toml`: settings (`model`, `act`, `interval`, `dashboard.port`, `dashboard.host`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
+- `sift.toml`: settings (`model`, `act`, `heuristics`, `interval`, `dashboard.port`, `dashboard.host`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
 - `guidelines.md`: the user's broad guidance, read on every pass.
 - `sift.db`: everything structured or learned.
 - `google-client.json`, `google/`, `model-auth.json`, `device-id`, `dashboard-key`: credentials and the session secret, owner-only, kept out of the database.

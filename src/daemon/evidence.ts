@@ -23,7 +23,6 @@ export interface EvidenceSources {
  */
 export async function gatherEvidence(sources: EvidenceSources, facts: MessageFacts): Promise<Evidence> {
   const { db } = sources;
-  const now = (sources.now ?? Date.now)();
 
   let content: MessageContent | null = null;
   try {
@@ -34,15 +33,21 @@ export async function gatherEvidence(sources: EvidenceSources, facts: MessageFac
   const known = deriveFacts(facts, content?.facts);
   if (content) recordFacts(db, facts.accountId, facts.messageId, known);
 
-  let userHasWritten: boolean | null = cachedCorrespondent(db, facts.accountId, facts.from.address, now) ?? null;
-  if (userHasWritten === null) {
-    try {
-      userHasWritten = await sources.mailbox.hasSentTo(facts.from.address);
-      rememberCorrespondent(db, facts.accountId, facts.from.address, userHasWritten, now);
-    } catch {
-      userHasWritten = null;
-    }
-  }
-
+  const userHasWritten = await ownerHasWritten(sources, facts);
   return { facts, known, body: content?.text ?? null, sender: { ...senderHistory(db, facts.accountId, facts.from.address), userHasWritten } };
+}
+
+/** Whether the owner has ever written to the sender: the cached answer, or one search of sent mail, remembered. Null if that failed. */
+export async function ownerHasWritten(sources: Pick<EvidenceSources, 'db' | 'mailbox' | 'now'>, facts: MessageFacts): Promise<boolean | null> {
+  const { db } = sources;
+  const now = (sources.now ?? Date.now)();
+  const cached = cachedCorrespondent(db, facts.accountId, facts.from.address, now);
+  if (cached !== undefined) return cached;
+  try {
+    const written = await sources.mailbox.hasSentTo(facts.from.address);
+    rememberCorrespondent(db, facts.accountId, facts.from.address, written, now);
+    return written;
+  } catch {
+    return null;
+  }
 }

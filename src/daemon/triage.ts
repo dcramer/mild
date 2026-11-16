@@ -11,10 +11,11 @@ import { blockSender, countRuleHit, learnSender, listRules } from '../store/rule
 import { cachedCorrespondent } from '../store/senders.ts';
 import { passedDmarc } from '../triage/features.ts';
 import { triage } from '../triage/pipeline.ts';
+import { heuristicsStage } from '../triage/stages/heuristics.ts';
 import { rulesStage } from '../triage/stages/rules.ts';
 import { type Judge, modelStage } from '../triage/stages/model.ts';
 import type { Decision, Disposition, Stage } from '../triage/types.ts';
-import { type EvidenceSources, gatherEvidence } from './evidence.ts';
+import { type EvidenceSources, gatherEvidence, ownerHasWritten } from './evidence.ts';
 
 export interface TriageDeps {
   db: DatabaseSync;
@@ -22,6 +23,8 @@ export interface TriageDeps {
   mailbox: Mailbox | null;
   /** The inference tier. Omitted when no model is configured: mail no rule covers goes to review. */
   model?: ModelTier;
+  /** The heuristics tier, when the user has turned it on. The mailbox is only searched, for whether the owner has written to a sender. */
+  heuristics?: { mailbox: Pick<Mailbox, 'hasSentTo'> };
   /**
    * Leaves a mailing list. Called for a decision that says to unsubscribe, after its mailbox change has
    * gone through. Omitted in tests and tools that must not reach the network.
@@ -55,11 +58,15 @@ export interface TriageReport {
   unsubscribed: number;
 }
 
-/** The cascade for one account, cheapest first. The decision-model tier would slot in before the model. */
+/** The cascade for one account, cheapest first. The decision-model tier would slot in after the heuristics. */
 function stagesFor(deps: TriageDeps, accountId: string): Stage[] {
   const { db, model } = deps;
   const labels = listLabels(db, accountId);
   const stages = [rulesStage(listRules(db, accountId), labels, { hasWritten: (facts) => cachedCorrespondent(db, facts.accountId, facts.from.address) })];
+  if (deps.heuristics) {
+    const sources = { db, mailbox: deps.heuristics.mailbox, ...(deps.now ? { now: deps.now } : {}) };
+    stages.push(heuristicsStage({ labels, hasWritten: (facts) => ownerHasWritten(sources, facts) }));
+  }
   if (model) {
     stages.push(
       modelStage({

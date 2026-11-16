@@ -9,6 +9,8 @@ export interface Settings {
   model?: string;
   /** false: record what sift would do. true: carry decisions out in Gmail. */
   act: boolean;
+  /** true: mail that is plainly bulk by its headers is labelled before any model is asked. */
+  heuristics: boolean;
   /** Seconds between passes. */
   interval: number;
   dashboardPort: number;
@@ -19,7 +21,7 @@ export interface Settings {
   dashboardHost?: string;
 }
 
-export const DEFAULT_SETTINGS: Settings = { act: false, interval: 60, dashboardPort: 8787 };
+export const DEFAULT_SETTINGS: Settings = { act: false, heuristics: false, interval: 60, dashboardPort: 8787 };
 
 /**
  * Everything sift keeps lives in one directory, the home: settings, guidance, the database and
@@ -92,6 +94,9 @@ export function parseSettings(text: string, path = 'sift.toml'): Settings {
     } else if (key === 'act') {
       if (typeof value !== 'boolean') throw bad('act', 'true or false');
       settings.act = value;
+    } else if (key === 'heuristics') {
+      if (typeof value !== 'boolean') throw bad('heuristics', 'true or false');
+      settings.heuristics = value;
     } else if (key === 'interval') {
       if (typeof value !== 'number' || !Number.isFinite(value) || value < 5) throw bad('interval', 'a number of seconds, at least 5');
       settings.interval = value;
@@ -120,6 +125,11 @@ ${settings.model ? `model = ${JSON.stringify(settings.model)}` : '# model = "pro
 
 # false: record what sift would do. true: carry it out in Gmail (reversible with \`sift undo\`).
 act = ${settings.act}
+
+# true: mail that is plainly bulk by its headers (a mailing list with a one-click unsubscribe, sent through
+# a bulk mail service, from a sender you have never written to) is labelled Marketing or Newsletters
+# without asking the model. Anything less clear still goes to the model.
+heuristics = ${settings.heuristics}
 
 # Seconds between checks for new mail.
 interval = ${settings.interval}
