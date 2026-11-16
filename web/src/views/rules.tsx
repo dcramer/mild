@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { DispositionBadge, ErrorNote, Outcome, Sub } from '@/components/bits.tsx';
 import { api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, extras } from '@/lib/format.ts';
+import { useParam } from '@/lib/route.ts';
 import { Button, Check, Code, Dialog, Empty, FilterGroup, Input, ListView, Loading, Select, Table, Td, Th, Tr } from '@/system';
 
 const CONDITIONS: Record<string, string> = { from: 'from', fromDomain: 'from domain', to: 'to', listId: 'list', subjectContains: 'subject contains' };
@@ -144,9 +145,9 @@ export function Rules() {
   const { data, error, loading, reload } = useLoaded('rules', (signal) => api.rules(signal));
   const manage = useLoaded('rule-accounts', (signal) => api.manage(signal), 60_000);
   const remove = useAction();
-  const [search, setSearch] = useState('');
-  const [label, setLabel] = useState('');
-  const [source, setSource] = useState<(typeof SOURCES)[number][0]>('');
+  const [search, setSearch] = useParam('q');
+  const [label, setLabel] = useParam('label');
+  const [source, setSource] = useParam('by', SOURCES);
   const [adding, setAdding] = useState(false);
   const accountId = manage.data?.accounts[0]?.id;
   const labels = accountId ? (manage.data?.labels[accountId] ?? []).map((l) => [l.id, l.name] as const) : [];

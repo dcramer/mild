@@ -96,7 +96,7 @@ function ActionEntry({ a }: { a: Action }) {
         {a.status === 'done' ? (
           <p className="text-muted-foreground">
             Undo it under{' '}
-            <a className="text-foreground underline underline-offset-2" href="#changes">
+            <a className="text-foreground underline underline-offset-2" href="/changes">
               Changes
             </a>
             .

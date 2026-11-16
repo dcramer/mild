@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { DispositionBadge, ErrorNote, Sub } from '@/components/bits.tsx';
 import { type SuggestionGroup, type Suggestions, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ACTIONS, ago, count, percent, willBe } from '@/lib/format.ts';
+import { useParam } from '@/lib/route.ts';
 import { Button, Check, Empty, FilterGroup, Highlight, ListView, Loading, Note, Select, Stamp, Table, Td, Th, Tr } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
@@ -114,12 +115,14 @@ const DOES = [['', 'Anything'] as const, ...ACTIONS.filter(([key]) => key !== 'k
 
 /** What sift would do, waiting for the user to say right or wrong. */
 export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
-  const [includeKept, setIncludeKept] = useState(false);
+  const [kept, setKept] = useParam('kept');
+  const includeKept = kept === '1';
+  const setIncludeKept = (on: boolean) => setKept(on ? '1' : '');
   const { data, error, loading, reload } = useLoaded(`suggestions-${includeKept}`, (signal) => api.suggestions(includeKept, signal));
   const [taught, setTaught] = useState<string[]>([]);
-  const [search, setSearch] = useState('');
-  const [label, setLabel] = useState('');
-  const [does, setDoes] = useState<(typeof DOES)[number][0]>('');
+  const [search, setSearch] = useParam('q');
+  const [label, setLabel] = useParam('label');
+  const [does, setDoes] = useParam('does', DOES);
 
   const names = new Map(Object.values(data?.labels ?? {}).flatMap((list) => list.map((l) => [l.id, l.name] as const)));
   const needle = search.trim().toLowerCase();

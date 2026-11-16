@@ -503,7 +503,10 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       else res.writeHead(503, { ...HEADERS, 'content-type': 'text/plain' }).end('The dashboard has not been built. Run: pnpm build:web');
       return;
     }
-    const asset = assets.get(url.pathname === '/' ? '/index.html' : url.pathname);
+    // The page is one document that reads the path (`/rules`, `/settings/accounts`), so a path that names
+    // no file gets the page. A name with an extension is a file that is not there.
+    const isPage = extname(url.pathname) === '' && !/^\/(auth|dev|assets)\//.test(url.pathname);
+    const asset = assets.get(url.pathname) ?? (isPage ? assets.get('/index.html') : undefined);
     if (!asset) {
       res.writeHead(404, { ...HEADERS, 'content-type': 'text/plain' }).end('Not found');
       return;

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type Days, api, useLoaded, useOnline } from '@/lib/api.ts';
 import { ago } from '@/lib/format.ts';
-import { useRoute } from '@/lib/route.ts';
+import { setParams, useParam, useRoute } from '@/lib/route.ts';
 import { Button, Loading, Masthead, Note, Notice, Select, Wordmark } from '@/system';
 import { ChangesView } from '@/views/changes.tsx';
 import { Decisions, PERIODS } from '@/views/decisions.tsx';
@@ -61,16 +61,27 @@ function Gate({ route }: { route: string[] }) {
 
 function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: string[] }) {
   const section = SECTIONS.find((s) => s === route[0]) ?? 'suggestions';
-  const [days, setDays] = useState<Days>(7);
-  // The message panel: the list it was opened from and which item is showing.
-  const [open, setOpen] = useState<{ items: MessageRef[]; index: number } | null>(null);
+  const [period, setPeriod] = useParam('days');
+  const days = (PERIODS.some(([key]) => key === period) ? Number(period) : 7) as Days;
+  const setDays = (next: Days) => setPeriod(next === 7 ? '' : String(next));
+  // The message panel. Which message is open is in the address, so it can be linked to and Back closes
+  // it; the list it was opened from, for previous and next, is only known when it was opened from one here.
+  const [list, setList] = useState<MessageRef[]>([]);
+  const [messageId] = useParam('message');
+  const [accountId] = useParam('account');
+  const listed = list.findIndex((item) => item.messageId === messageId && item.accountId === accountId);
+  const open = messageId === '' ? null : listed === -1 ? { items: [{ accountId, messageId, subject: '' }], index: 0 } : { items: list, index: listed };
+  const show = (item: MessageRef | undefined, push?: { state: unknown }) => setParams({ message: item?.messageId ?? '', account: item?.accountId ?? '' }, push);
   const online = useOnline();
   const summary = useLoaded(`summary-${days}`, (signal) => api.summary(days, signal));
   const waiting = useLoaded('suggestions-false', (signal) => api.suggestions(false, signal));
-  const openMessages = (items: MessageRef[], index: number) => setOpen({ items, index });
+  const openMessages = (items: MessageRef[], index: number) => {
+    setList(items);
+    show(items[index], { state: { panel: true } });
+  };
   const accounts = summary.data?.accounts ?? [];
   const synced = accounts.map((a) => a.lastSyncedAt).filter((at) => at !== null);
-  const period = (
+  const periodSelect = (
     <Select label="Period" value={String(days) as (typeof PERIODS)[number][0]} options={PERIODS} onChange={(value) => setDays(Number(value) as Days)} />
   );
 
@@ -103,7 +114,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
         ) : section === 'overview' ? (
           <div className="flex flex-col gap-4">
             {summary.error ? <ErrorNote message={summary.error} /> : null}
-            {summary.data ? <Overview data={summary.data} period={period} onOpen={openMessages} /> : summary.loading ? <Loading rows={6} /> : null}
+            {summary.data ? <Overview data={summary.data} period={periodSelect} onOpen={openMessages} /> : summary.loading ? <Loading rows={6} /> : null}
           </div>
         ) : section === 'decisions' ? (
           <Decisions days={days} onDays={setDays} onOpen={openMessages} />
@@ -118,7 +129,13 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
         )}
       </main>
       {open ? (
-        <MessagePanel items={open.items} index={open.index} onIndex={(index) => setOpen({ items: open.items, index })} onClose={() => setOpen(null)} />
+        <MessagePanel
+          items={open.items}
+          index={open.index}
+          onIndex={(index) => show(open.items[index])}
+          // Opened from a list here, the entry before this one is that list: go back to it, so Back and Close agree.
+          onClose={() => ((window.history.state as { panel?: boolean } | null)?.panel ? window.history.back() : show(undefined))}
+        />
       ) : null}
     </div>
   );

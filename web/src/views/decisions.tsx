@@ -3,6 +3,7 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { DecisionTable } from '@/components/decision-table.tsx';
 import { type Days, api, useLoaded } from '@/lib/api.ts';
 import { DISPOSITION_KEYS, TIERS, count, dispositionName } from '@/lib/format.ts';
+import { useParam } from '@/lib/route.ts';
 import { Button, Empty, FilterGroup, ListView, Loading } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
@@ -18,10 +19,10 @@ export const PERIODS = [
 
 /** Every decision sift made, newest first. */
 export function Decisions({ days, onDays, onOpen }: { days: Days; onDays: (days: Days) => void; onOpen: OpenMessages }) {
-  const [stage, setStage] = useState('');
-  const [disposition, setDisposition] = useState('');
-  const [typed, setTyped] = useState('');
-  const [search, setSearch] = useState('');
+  const [stage, setStage] = useParam('by', TIER_OPTIONS);
+  const [disposition, setDisposition] = useParam('outcome', OUTCOME_OPTIONS);
+  const [search, setSearch] = useParam('q');
+  const [typed, setTyped] = useState(search);
   const [offset, setOffset] = useState(0);
 
   // Search as the viewer types, but not on every keystroke.

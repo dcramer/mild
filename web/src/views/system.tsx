@@ -78,7 +78,7 @@ const VARIANTS = [
   ['quiet', 'Repeated down a list, and ways out.'],
 ] as const;
 
-/** Every part of the design system in every state, at `#system`. Add to it when the system grows. */
+/** Every part of the design system in every state, at `/system`. Add to it when the system grows. */
 export function SystemView() {
   const [choice, setChoice] = useState<(typeof CHOICES)[number][0]>('archive');
   const [checked, setChecked] = useState(false);

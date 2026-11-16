@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type LabelSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ACTIONS, type ActionKey, count, extras, percent } from '@/lib/format.ts';
+import { useParam } from '@/lib/route.ts';
 import {
   Button,
   Card,
@@ -180,8 +181,8 @@ const DOES = [['', 'Anything'] as const, ...ACTIONS];
 /** The labels: what mail can be, and what sift does with each. */
 export function LabelsView() {
   const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
-  const [search, setSearch] = useState('');
-  const [does, setDoes] = useState<(typeof DOES)[number][0]>('');
+  const [search, setSearch] = useParam('q');
+  const [does, setDoes] = useParam('does', DOES);
   const [editing, setEditing] = useState<{ accountId: string; label: LabelSummary | null } | null>(null);
   const accounts = data?.accounts ?? [];
   const needle = search.trim().toLowerCase();
