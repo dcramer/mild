@@ -5,14 +5,14 @@ The maintained recipes for proving what a dashboard user sees and does. Read thi
 ## Baseline preconditions
 
 - A run started with `verify.sh up "$RUN"` in a new directory, and `verify.sh doctor "$RUN"` printing `ok`.
-- The seed as SKILL.md describes it: account `me@example.org`, observing, no model; 3 suggestions (Deals, Ada Lovelace, Grace Hopper); 3 user rules; the default labels.
+- The seed as SKILL.md describes it: account `me@example.org`, observing, no model; 4 suggestions (Deals, Ada Lovelace, Grace Hopper as `Not sure…`; Store as `Marketing`); 3 user rules; the default labels.
 - `B=http://127.0.0.1:$(cat "$RUN/port")`, and `ab` below means `verify.sh ab "$RUN"`.
 - Never drive an instance this run did not start.
 
 ## Driving conventions
 
 - Start each recipe from a fresh seed unless it says otherwise. Recipes change rules and labels, so two in one run interact: answering one suggestion re-decides the others.
-- Find by role and accessible name (`ab find role button click --name "Save answer"`). Table rows have no useful name; open one with `ab find text "<sender or label name>" click --exact`.
+- Find by role and accessible name (`ab find role button click --name "Save answer"`). Table rows have no name to find by. Open a suggestion by its subject cell, `ab find role cell click --name "<subject>"`; `find text` on a subject reaches the hidden phone copy and fails. Open a label with `ab find text "<label name>" click --exact`.
 - Pick from a combobox with two steps: `ab find role combobox click --name "<combobox>"`, then `ab find role option click --name "<option>"`.
 - After every action, wait for the result you expect to see, not a fixed time.
 
@@ -30,6 +30,7 @@ An H1 and one paragraph of what the user gets, then four H2s in order: `Sub-feat
 
 ## Features
 
+- [Agree with a suggestion](./agree-suggestion.md): press the label sift gave a row, or `A` on it.
 - [Answer a suggestion](./answer-suggestion.md): teach sift what a waiting message is, and the rule that makes.
 - [Add a rule](./add-rule.md): a rule made on the Rules screen, and its effect on what is waiting.
 - [Edit a label](./edit-label.md): change what a label does.
