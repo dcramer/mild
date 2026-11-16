@@ -1,7 +1,7 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
@@ -12,8 +12,10 @@ import { backfill } from '../daemon/backfill.ts';
 import type { Activity, Controls, SignIn } from '../dashboard/controls.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
 import { ensureWebBuilt } from './web-build.ts';
+import { rejudgeWaiting } from '../daemon/rejudge.ts';
 import { type PassResult, type Wake, createWake, runLoop, runOnce } from '../daemon/run.ts';
 import { createGmailApi } from '../gmail/api.ts';
+import { interruptEvals, startEval } from '../learn/evals.ts';
 import { browserSignInUrl, clientFor, completeBrowserSignIn, hasClientSecrets, installClient, loadClientSecrets, saveRefreshToken } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { createJudge } from '../model/judge.ts';
@@ -186,25 +188,56 @@ function buildSignIn(config: Config, db: ReturnType<typeof openDb>): SignIn {
 /** What the dashboard may ask this process to do. See `Controls`. */
 function buildControls(config: Config, db: ReturnType<typeof openDb>, live: { wake?: Wake; activity: Activity }): Controls {
   const current = () => loadConfig().settings;
+  interruptEvals(db);
+  const guidelinesChangedAt = () => (existsSync(config.guidelinesPath) ? statSync(config.guidelinesPath).mtimeMs : null);
+  let rejudging = false;
   return {
     settings: () => {
       const s = current();
-      return { act: s.act, interval: s.interval, model: s.model ?? null };
+      return { act: s.act, interval: s.interval, model: s.model ?? null, fewShot: s.fewShot, examplesKeepDays: s.examplesKeepDays ?? null };
     },
     saveSettings: (change) => {
-      const { model: _old, ...rest } = current();
+      const { model: _old, examplesKeepDays: _kept, ...rest } = current();
       const model = change.model === undefined ? current().model : (change.model ?? undefined);
+      const keepDays = change.examplesKeepDays === undefined ? current().examplesKeepDays : (change.examplesKeepDays ?? undefined);
       saveSettings(config, {
         ...rest,
         ...(change.act === undefined ? {} : { act: change.act }),
         ...(change.interval === undefined ? {} : { interval: change.interval }),
+        ...(change.fewShot === undefined ? {} : { fewShot: change.fewShot }),
         ...(model ? { model } : {}),
+        ...(keepDays ? { examplesKeepDays: keepDays } : {}),
       });
       live.wake?.now();
     },
     models: async () => (await openModels(config).getAvailable()).map((m) => `${m.provider}/${m.id}`),
     guidelines: () => (existsSync(config.guidelinesPath) ? readFileSync(config.guidelinesPath, 'utf8') : ''),
-    saveGuidelines: (text) => writeFileSync(config.guidelinesPath, text, { mode: 0o600 }),
+    saveGuidelines: (text) => {
+      // Saving the same text must not make every waiting suggestion look out of date.
+      if (existsSync(config.guidelinesPath) && readFileSync(config.guidelinesPath, 'utf8') === text) return;
+      writeFileSync(config.guidelinesPath, text, { mode: 0o600 });
+    },
+    guidelinesChangedAt,
+    rejudge: async (accountId) => {
+      const spec = current().model;
+      const account = listAccounts(db).find((a) => a.id === accountId);
+      const since = guidelinesChangedAt();
+      if (!spec) throw new Error('Choose a model first.');
+      if (!account || since === null) return { started: 0, remaining: 0 };
+      if (rejudging) throw new Error('Suggestions are already being judged again. Wait for that to finish.');
+      const tier = await openModelTier(config, spec);
+      const client = clientFor(config, loadClientSecrets(config), account.email);
+      const model = {
+        judge: tier.judge,
+        guidelines: tier.guidelines(),
+        fewShot: current().fewShot,
+        sources: { api: createGmailApi(client), mailbox: createGmailMailbox(client) },
+      };
+      const { started, remaining, done } = rejudgeWaiting({ db, mailbox: null, model }, account, since);
+      rejudging = true;
+      void done.finally(() => (rejudging = false));
+      return { started, remaining };
+    },
     undo: async (actionId) => {
       const action = getAction(db, actionId);
       if (!action) throw new Error(`There is no change #${actionId}.`);
@@ -225,6 +258,12 @@ function buildControls(config: Config, db: ReturnType<typeof openDb>, live: { wa
       // The corrected decision is waiting to be carried out; do it now, not at the next interval.
       live.wake?.now();
       return last !== null;
+    },
+    startEval: async (request) => {
+      const spec = current().model;
+      if (!spec) throw new Error('Choose a model first.');
+      const tier = await openModelTier(config, spec);
+      return startEval({ db, judge: tier.judge, model: spec, guidelines: tier.guidelines() }, request).id;
     },
     checkNow: () => live.wake?.now(),
     activity: () => live.activity,
@@ -373,8 +412,9 @@ async function run(args: string[]): Promise<void> {
       return {
         act,
         heuristics: settings.heuristics,
-        ...(tier ? { model: tier } : {}),
+        ...(tier ? { model: { ...tier, fewShot: settings.fewShot } } : {}),
         unsubscribe: (accountId: string, messageId: string) => unsubscribe({ db }, accountId, messageId),
+        ...(settings.examplesKeepDays ? { examplesKeepDays: settings.examplesKeepDays } : {}),
         connect: (account: Account) => {
           const client = clientFor(config, loadClientSecrets(config), account.email);
           return { api: createGmailApi(client), mailbox: createGmailMailbox(client) };

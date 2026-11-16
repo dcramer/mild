@@ -380,6 +380,8 @@ describe('settings', () => {
       dashboardPort: 9000,
       dashboardHost: 'box.example.ts.net',
       dashboardAllow: ['me@example.org', 'work@example.com'],
+      fewShot: false,
+      examplesKeepDays: 90,
     };
     expect(parseSettings(renderSettings(settings))).toEqual(settings);
     expect(parseSettings(renderSettings(DEFAULT_SETTINGS))).toEqual(DEFAULT_SETTINGS);
@@ -388,6 +390,7 @@ describe('settings', () => {
 
   it('rejects typos and wrong types with the setting named', () => {
     expect(() => parseSettings('modle = "a/b"')).toThrow('unknown setting modle');
+    expect(() => parseSettings('[examples]\nkeep_days = 0')).toThrow('examples.keep_days must be a whole number of days, at least 1');
     expect(() => parseSettings('act = "yes"')).toThrow('act must be true or false');
     expect(() => parseSettings('model = "no-slash"')).toThrow('provider/model-id');
     expect(() => parseSettings('interval = 1')).toThrow('at least 5');

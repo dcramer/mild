@@ -5,6 +5,7 @@ import type { GmailApi } from '../gmail/api.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
 import { type Account, listAccounts } from '../store/accounts.ts';
+import { pruneExamples } from '../store/examples.ts';
 import { keepSuggestionBodies } from './bodies.ts';
 import { captureExamples } from './examples.ts';
 import { PRUNE_PER_RUN, pruneOld } from './retention.ts';
@@ -17,11 +18,13 @@ export interface RunOptions {
   /** Opens a provider connection for an account. */
   connect: (account: Account) => { api: GmailApi; mailbox: Mailbox };
   /** The inference tier, if a model is configured. */
-  model?: { judge: Judge; guidelines: () => string };
+  model?: { judge: Judge; guidelines: () => string; fewShot?: boolean };
   /** Label plainly bulk mail by its headers before the model. Off unless set. */
   heuristics?: boolean;
   /** Leaves a mailing list, for decisions that say to. Without it sift never unsubscribes. */
   unsubscribe?: (accountId: string, messageId: string) => Promise<UnsubscribeOutcome>;
+  /** Delete examples this many days after the user answered for them. Unset keeps them. */
+  examplesKeepDays?: number;
   log: (line: string) => void;
   now?: () => number;
 }
@@ -58,7 +61,16 @@ export async function runOnce(db: DatabaseSync, options: RunOptions): Promise<Pa
           mailbox: options.act ? mailbox : null,
           ...(options.unsubscribe ? { unsubscribe: options.unsubscribe } : {}),
           ...(options.heuristics ? { heuristics: { mailbox } } : {}),
-          ...(options.model ? { model: { judge: options.model.judge, guidelines: options.model.guidelines(), sources: { api, mailbox } } } : {}),
+          ...(options.model
+            ? {
+                model: {
+                  judge: options.model.judge,
+                  guidelines: options.model.guidelines(),
+                  sources: { api, mailbox },
+                  ...(options.model.fewShot === undefined ? {} : { fewShot: options.model.fewShot }),
+                },
+              }
+            : {}),
         },
         account,
       );
@@ -126,6 +138,17 @@ export function createWake(): Wake {
   };
 }
 
+/** Upkeep that runs when sift starts and once a day after. */
+export function daily(db: DatabaseSync, options: Pick<RunOptions, 'examplesKeepDays' | 'log' | 'now'>): void {
+  dropOldExamples(db, options);
+}
+
+function dropOldExamples(db: DatabaseSync, options: Pick<RunOptions, 'examplesKeepDays' | 'log' | 'now'>): void {
+  if (options.examplesKeepDays === undefined) return;
+  const dropped = pruneExamples(db, options.examplesKeepDays, (options.now ?? Date.now)());
+  if (dropped > 0) options.log(`Deleted ${dropped} example${dropped === 1 ? '' : 's'} older than ${options.examplesKeepDays} days`);
+}
+
 /**
  * Run passes until `signal` aborts. `next` is asked before every pass, so a change to the settings
  * (acting or observing, the model, the interval) takes effect on the following pass without a restart.
@@ -137,18 +160,25 @@ export async function runLoop(
   control: { signal: AbortSignal; wake: Wake; onPass?: (results: PassResult[]) => void },
 ): Promise<void> {
   let prunedAt = -Infinity;
+  let lastDaily = -Infinity;
   while (!control.signal.aborted) {
     const options = await next();
-    control.onPass?.(await runOnce(db, options));
     const now = (options.now ?? Date.now)();
-    if (options.retentionDays !== undefined && now - prunedAt >= DAY_MS) {
+    if (now - lastDaily >= 86_400_000) {
+      lastDaily = now;
+      daily(db, options);
+    }
+    control.onPass?.(await runOnce(db, options));
+    // After the pass, which may have taken a while.
+    const after = (options.now ?? Date.now)();
+    if (options.retentionDays !== undefined && after - prunedAt >= DAY_MS) {
       try {
-        const pruned = pruneOld(db, options.retentionDays, now);
+        const pruned = pruneOld(db, options.retentionDays, after);
         if (pruned > 0) options.log(`Forgot ${pruned} message${pruned === 1 ? '' : 's'} with nothing newer than ${options.retentionDays} days`);
         // A backlog goes a piece per pass.
-        if (pruned < PRUNE_PER_RUN) prunedAt = now;
+        if (pruned < PRUNE_PER_RUN) prunedAt = after;
       } catch (error) {
-        prunedAt = now;
+        prunedAt = after;
         options.log(`Could not prune old records, will retry tomorrow: ${error instanceof Error ? error.message : String(error)}`);
       }
     }

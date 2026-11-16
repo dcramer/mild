@@ -4,6 +4,7 @@ import type { Mailbox } from '../actions/mailbox.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import { planAction } from '../actions/plan.ts';
 import type { Account } from '../store/accounts.ts';
+import { shotCandidates } from '../store/examples.ts';
 import { listLabels } from '../store/labels.ts';
 import { listUnsettledDecisions, recordDecision, settleDecision } from '../store/decisions.ts';
 import { listUndecided } from '../store/messages.ts';
@@ -40,6 +41,8 @@ export interface ModelTier {
   sources: Omit<EvidenceSources, 'db' | 'now'>;
   /** The user's broad guidance, in plain language. */
   guidelines: string;
+  /** False: mail the user labelled before is not shown to the model as examples. */
+  fewShot?: boolean;
 }
 
 export interface TriageReport {
@@ -60,7 +63,7 @@ export interface TriageReport {
 }
 
 /** The cascade for one account, cheapest first. The decision-model tier would slot in after the heuristics. */
-function stagesFor(deps: TriageDeps, accountId: string): Stage[] {
+export function stagesFor(deps: TriageDeps, accountId: string): Stage[] {
   const { db, model } = deps;
   const labels = listLabels(db, accountId);
   const rules = listRules(db, accountId);
@@ -81,6 +84,7 @@ function stagesFor(deps: TriageDeps, accountId: string): Stage[] {
           const hit = pickRule(rules, labels, facts, options);
           return hit && isJudged(hit.rule) ? hit : null;
         },
+        ...(model.fewShot === false ? {} : { examples: (facts) => shotCandidates(db, facts) }),
       }),
     );
   }

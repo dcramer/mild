@@ -34,7 +34,7 @@ Built: labels with defaults and the user's own; outcomes keep, archive, mark spa
 - [ ] More scopes for an answer: this mailing list, this recipient address.
 - [ ] Rules with more than one condition and with exceptions, from the dashboard; reorder rules.
 - [ ] Remove a label, and say what becomes of its rules and of mail already labelled; reorder labels.
-- [ ] Choose which account a rule or label is for when there is more than one (the Rules screen uses the first).
+- [ ] **Rules for one inbox.** Someone with a personal and a work account wants a rule to apply to one and not the other. Rules already belong to an account, but the Rules screen always uses the first, and nothing lets a rule be shared or kept apart on purpose. Decide: whether a rule is made for one account, several or all; how that is chosen when answering a suggestion (default: the account the mail came to); the same for labels; and matching on which of the user's own addresses the mail was sent to, for aliases within one account (the `to` condition exists but is not offered when answering).
 
 ## Beyond triage
 

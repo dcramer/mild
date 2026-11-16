@@ -302,14 +302,42 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
   };
 }
 
-/** How often sift's suggestions matched what the user wanted, from their answers. */
-export function accuracy(db: DatabaseSync): { reviewed: number; right: number; byStage: { stage: StageName; reviewed: number; right: number }[] } {
-  const rows = db
-    .prepare(
-      `SELECT d.stage, count(*) AS reviewed, sum(f.verdict = 'right') AS right
-       FROM feedback f JOIN decisions d ON d.id = f.decision_id
-       WHERE f.verdict IN ('right', 'wrong') GROUP BY d.stage`,
-    )
-    .all() as unknown as { stage: StageName; reviewed: number; right: number }[];
-  return { reviewed: rows.reduce((sum, r) => sum + r.reviewed, 0), right: rows.reduce((sum, r) => sum + r.right, 0), byStage: rows };
+export interface Accuracy {
+  reviewed: number;
+  right: number;
+  /** Per tier that made the suggestion. Tiers with no answers are absent. */
+  byStage: { stage: StageName; reviewed: number; right: number }[];
+  /** Per label sift gave, most answers first. The name is null if the label has gone. */
+  byLabel: { labelId: string; labelName: string | null; reviewed: number; right: number }[];
+  /** What sift called one label when the user said another, commonest first. */
+  confusion: { suggested: string; correct: string; count: number }[];
+}
+
+/**
+ * How often sift's suggestions matched what the user wanted, from the answers given since `since`.
+ * An answer to mail sift could not place is not counted: having no suggestion is not being wrong.
+ */
+export function accuracy(db: DatabaseSync, since = 0): Accuracy {
+  const all = <T>(sql: string) => db.prepare(sql).all(since) as unknown as T[];
+  const scored = `FROM feedback f JOIN decisions d ON d.id = f.decision_id WHERE f.verdict IN ('right', 'wrong') AND f.created_at >= ?`;
+  const byStage = all<{ stage: StageName; reviewed: number; right: number }>(
+    `SELECT d.stage, count(*) AS reviewed, sum(f.verdict = 'right') AS right ${scored} GROUP BY d.stage ORDER BY d.stage`,
+  );
+  const byLabel = all<{ label_id: string; name: string | null; reviewed: number; right: number }>(
+    `SELECT d.label_id, (SELECT l.name FROM labels l WHERE l.account_id = d.account_id AND l.id = d.label_id) AS name,
+            count(*) AS reviewed, sum(f.verdict = 'right') AS right
+     ${scored} AND d.label_id IS NOT NULL GROUP BY d.label_id ORDER BY reviewed DESC, d.label_id`,
+  );
+  const confusion = all<{ suggested: string; correct: string; count: number }>(
+    `SELECT d.label_id AS suggested, f.label_id AS correct, count(*) AS count
+     ${scored} AND f.verdict = 'wrong' AND d.label_id IS NOT NULL AND f.label_id IS NOT NULL
+     GROUP BY d.label_id, f.label_id ORDER BY count DESC, suggested, correct`,
+  );
+  return {
+    reviewed: byStage.reduce((sum, r) => sum + r.reviewed, 0),
+    right: byStage.reduce((sum, r) => sum + r.right, 0),
+    byStage,
+    byLabel: byLabel.map((r) => ({ labelId: r.label_id, labelName: r.name, reviewed: r.reviewed, right: r.right })),
+    confusion,
+  };
 }

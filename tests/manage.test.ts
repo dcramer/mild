@@ -12,12 +12,13 @@ import { triageAccount } from '../src/daemon/triage.ts';
 import type { Controls, ManagedSettings, SignIn } from '../src/dashboard/controls.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
 import type { RawMessage } from '../src/gmail/api.ts';
+import { startEval } from '../src/learn/evals.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { listLabels } from '../src/store/labels.ts';
 import { openDb } from '../src/store/db.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { listRules } from '../src/store/rules.ts';
-import { FakeMailbox, facts } from './helpers.ts';
+import { FakeMailbox, facts, storeExample } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
 let db: DatabaseSync;
@@ -25,6 +26,7 @@ let close: (() => void) | undefined;
 let calls: string[];
 let settings: ManagedSettings;
 let guidelines: string;
+let guidelinesChangedAt: number | null;
 
 const controls: Controls = {
   settings: () => settings,
@@ -35,6 +37,11 @@ const controls: Controls = {
   guidelines: () => guidelines,
   saveGuidelines: (text) => {
     guidelines = text;
+  },
+  guidelinesChangedAt: () => guidelinesChangedAt,
+  rejudge: async (accountId) => {
+    calls.push(`rejudge ${accountId}`);
+    return { started: 2, remaining: 0 };
   },
   undo: async (id) => {
     calls.push(`undo ${id}`);
@@ -50,6 +57,10 @@ const controls: Controls = {
     if (messageId === 'gone') throw new Error('The message no longer exists.');
     return true;
   },
+  startEval: async ({ accountId, fewShot, limit }) => {
+    calls.push(`eval ${accountId} ${fewShot} ${limit}`);
+    return 7;
+  },
   checkNow: () => void calls.push('check'),
   activity: () => ({ sorting: true, lastPassAt: 5, problems: [], expired: [ACCOUNT] }),
 };
@@ -58,8 +69,9 @@ beforeEach(() => {
   db = openDb(':memory:');
   connectAccount(db, ACCOUNT, '1', 0);
   calls = [];
-  settings = { act: false, interval: 60, model: null };
+  settings = { act: false, interval: 60, model: null, fewShot: true, examplesKeepDays: null };
   guidelines = 'Be careful.';
+  guidelinesChangedAt = null;
 });
 afterEach(() => close?.());
 
@@ -117,12 +129,132 @@ describe('managing sift from the dashboard', () => {
   it('changes settings, and refuses values that make no sense', async () => {
     const port = await start();
     expect((await call(port, 'POST', '/api/settings', { act: true, model: 'p/small' })).body).toEqual({
-      settings: { act: true, interval: 60, model: 'p/small' },
+      settings: { act: true, interval: 60, model: 'p/small', fewShot: true, examplesKeepDays: null },
     });
-    expect((await call(port, 'POST', '/api/settings', { model: null, interval: 300 })).body).toEqual({ settings: { act: true, interval: 300, model: null } });
-    for (const bad of [{ act: 'yes' }, { interval: 1 }, { interval: '60' }, { model: 'no-slash' }])
+    expect((await call(port, 'POST', '/api/settings', { model: null, interval: 300 })).body).toEqual({
+      settings: { act: true, interval: 300, model: null, fewShot: true, examplesKeepDays: null },
+    });
+    expect((await call(port, 'POST', '/api/settings', { fewShot: false })).body).toMatchObject({ settings: { fewShot: false } });
+    for (const bad of [{ act: 'yes' }, { interval: 1 }, { interval: '60' }, { model: 'no-slash' }, { fewShot: 'no' }])
       expect((await call(port, 'POST', '/api/settings', bad)).status).toBe(400);
-    expect(settings).toEqual({ act: true, interval: 300, model: null });
+    expect(settings).toEqual({ act: true, interval: 300, model: null, fewShot: false, examplesKeepDays: null });
+  });
+
+  it('starts a test run of the model only when asked, through the process that holds the model', async () => {
+    const port = await start();
+    storeExample(db, ACCOUNT, { id: 'e1', from: 'news@example.com', label: 'newsletter' });
+    expect((await call(port, 'GET', '/api/evals')).body).toEqual({ runs: [], examples: { [ACCOUNT]: 1 }, defaultLimit: 50, maxLimit: 200 });
+    expect(calls).toEqual([]);
+
+    expect((await call(port, 'POST', '/api/evals/run', { accountId: ACCOUNT })).body).toEqual({ id: 7 });
+    expect((await call(port, 'POST', '/api/evals/run', { accountId: ACCOUNT, fewShot: false, limit: 20 })).status).toBe(200);
+    expect(calls).toEqual([`eval ${ACCOUNT} true 50`, `eval ${ACCOUNT} false 20`]);
+    for (const bad of [
+      {},
+      { accountId: 'nobody@example.org' },
+      { accountId: ACCOUNT, limit: 201 },
+      { accountId: ACCOUNT, limit: 0 },
+      { accountId: ACCOUNT, fewShot: 1 },
+    ])
+      expect((await call(port, 'POST', '/api/evals/run', bad)).status).toBe(400);
+
+    const { id, done } = startEval(
+      { db, judge: async () => ({ label: 'marketing', reason: 'r' }), model: 'p/small', guidelines: '' },
+      { accountId: ACCOUNT, fewShot: false },
+    );
+    await done;
+    const listed = (await call(port, 'GET', '/api/evals')).body['runs'] as { id: number; model: string; score: { wrong: number } }[];
+    expect(listed).toMatchObject([{ id, model: 'p/small', status: 'done', fewShot: false, score: { total: 1, wrong: 1 } }]);
+    const detail = await call(port, 'GET', `/api/eval?id=${id}`);
+    expect(detail.body).toMatchObject({ run: { id }, results: [{ messageId: 'e1', expected: 'newsletter', got: 'marketing', subject: 'Subject e1' }] });
+    expect((await call(port, 'GET', '/api/eval?id=99')).status).toBe(404);
+
+    close?.();
+    const bare = await start({ withControls: false });
+    expect((await call(bare, 'POST', '/api/evals/run', { accountId: ACCOUNT })).status).toBe(409);
+  });
+
+  it("lists the examples it holds without their content, and deletes one or all of an account's", async () => {
+    const port = await start();
+    storeExample(db, ACCOUNT, { id: 'e1', from: 'news@example.com', label: 'newsletter', body: 'Private words.', markedAt: 1, name: 'News' });
+    storeExample(db, ACCOUNT, { id: 'e2', from: 'ada@example.org', label: 'personal', markedAt: 2 });
+    storeExample(db, ACCOUNT, { id: 'e3', from: 'bob@example.org', label: 'personal', markedAt: 3 });
+    connectAccount(db, 'other@example.org', '1', 0);
+    storeExample(db, 'other@example.org', { id: 'o1', from: 'cy@example.org', label: 'personal', markedAt: 4 });
+    settings.examplesKeepDays = 90;
+
+    const listed = await call(port, 'GET', `/api/examples?account=${encodeURIComponent(ACCOUNT)}`);
+    expect(listed.body).toMatchObject({ held: { [ACCOUNT]: 3, 'other@example.org': 1 }, keepDays: 90 });
+    expect((listed.body['examples'] as { messageId: string }[]).map((e) => e.messageId)).toEqual(['e3', 'e2', 'e1']);
+    expect((listed.body['examples'] as unknown[])[2]).toEqual({
+      accountId: ACCOUNT,
+      messageId: 'e1',
+      fromAddress: 'news@example.com',
+      fromName: 'News',
+      subject: 'Subject e1',
+      labelId: 'newsletter',
+      markedAt: 1,
+      status: 'captured',
+    });
+    expect(JSON.stringify(listed.body)).not.toContain('Private words.');
+
+    expect((await call(port, 'POST', '/api/examples/delete', { accountId: ACCOUNT, messageId: 'e1' })).body).toEqual({ deleted: 1 });
+    expect((await call(port, 'POST', '/api/examples/delete', { accountId: ACCOUNT, messageId: 'e1' })).body).toEqual({ deleted: 0 });
+    expect((await call(port, 'POST', '/api/examples/delete', { accountId: ACCOUNT })).status).toBe(400);
+    expect((await call(port, 'POST', '/api/examples/delete-all', { accountId: 'nobody@example.org' })).status).toBe(400);
+    expect((await call(port, 'POST', '/api/examples/delete-all', { accountId: ACCOUNT })).body).toEqual({ deleted: 2 });
+    expect(db.prepare('SELECT account_id, message_id FROM examples').all()).toEqual([{ account_id: 'other@example.org', message_id: 'o1' }]);
+    // The message row and its decision are sift's record of what it saw and did; only the stored content goes.
+    expect(db.prepare(`SELECT count(*) AS n FROM messages WHERE id = 'e1'`).get()).toEqual({ n: 1 });
+  });
+
+  it('sets how long examples are kept', async () => {
+    const port = await start();
+    expect((await call(port, 'POST', '/api/settings', { examplesKeepDays: 30 })).body).toMatchObject({ settings: { examplesKeepDays: 30 } });
+    expect((await call(port, 'POST', '/api/settings', { examplesKeepDays: null })).body).toMatchObject({ settings: { examplesKeepDays: null } });
+    for (const bad of [0, 1.5, '30', 40_000]) expect((await call(port, 'POST', '/api/settings', { examplesKeepDays: bad })).status).toBe(400);
+  });
+
+  it('decides waiting suggestions again when a rule or a label changes, and says how many', async () => {
+    const port = await start();
+    const from = { address: 'sales@example.com', domain: 'example.com' };
+    recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'w1', from }), facts({ accountId: ACCOUNT, messageId: 'w2', from })], '2');
+    const marketing = { disposition: 'archive', subscription: 'unsubscribe', stage: 'agent', reason: 'Marketing: a sale', labelId: 'marketing' } as const;
+    recordDecision(db, ACCOUNT, 'w1', marketing, { now: 10 });
+    recordDecision(db, ACCOUNT, 'w2', marketing, { now: 20 });
+    const latest = (id: string) => db.prepare('SELECT stage, disposition, label_id FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1').get(id);
+
+    const label = await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'keep' });
+    expect(label.body).toEqual({ ok: true, redecided: 2 });
+    expect(latest('w1')).toEqual({ stage: 'agent', disposition: 'keep', label_id: 'marketing' });
+
+    const rule = await call(port, 'POST', '/api/rules', { accountId: ACCOUNT, match: { from: from.address }, label: 'newsletter' });
+    expect(rule.body).toMatchObject({ redecided: 2 });
+    expect(latest('w2')).toEqual({ stage: 'rules', disposition: 'archive', label_id: 'newsletter' });
+    expect(((await call(port, 'GET', '/api/suggestions')).body as { waiting: number }).waiting).toBe(0);
+
+    expect((await call(port, 'POST', '/api/rules/remove', { id: rule.body['id'] })).body).toEqual({ ok: true, redecided: 2 });
+    expect(latest('w2')).toEqual({ stage: 'agent', disposition: 'keep', label_id: 'marketing' });
+    expect(((await call(port, 'GET', '/api/suggestions?kept=1')).body as { waiting: number }).waiting).toBe(2);
+  });
+
+  it('says how many waiting suggestions predate the guidelines, and judges them again only when asked', async () => {
+    const port = await start();
+    recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'w1' }), facts({ accountId: ACCOUNT, messageId: 'w2' })], '2');
+    const agent = { disposition: 'archive', subscription: 'preserve', stage: 'agent', reason: 'r', labelId: 'marketing' } as const;
+    recordDecision(db, ACCOUNT, 'w1', agent, { now: 10 });
+    recordDecision(db, ACCOUNT, 'w2', agent, { now: 30 });
+
+    expect((await call(port, 'GET', '/api/manage')).body['predateGuidelines']).toEqual({ [ACCOUNT]: 0 });
+    guidelinesChangedAt = 20;
+    expect((await call(port, 'GET', '/api/manage')).body['predateGuidelines']).toEqual({ [ACCOUNT]: 1 });
+    await call(port, 'POST', '/api/guidelines', { text: 'Recruiters are cold outreach.' });
+    expect(calls).toEqual([]);
+
+    expect((await call(port, 'POST', '/api/suggestions/rejudge', { accountId: ACCOUNT })).body).toEqual({ started: 2, remaining: 0 });
+    expect(calls).toEqual([`rejudge ${ACCOUNT}`]);
+    expect((await call(port, 'POST', '/api/suggestions/rejudge', { accountId: 'nobody@example.org' })).status).toBe(400);
+    expect((await call(port, 'POST', '/api/suggestions/rejudge', {})).status).toBe(400);
   });
 
   it('edits the guidelines, labels and rules', async () => {
@@ -527,5 +659,52 @@ describe('run loop', () => {
     await done;
     expect(seen).toEqual([1, 2, 3]);
     expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it('deletes examples past their keep time when it starts and once a day after, and keeps them all by default', async () => {
+    const DAY = 86_400_000;
+    storeExample(db, ACCOUNT, { id: 'old', from: 'a@example.org', label: 'personal', markedAt: 0 });
+    storeExample(db, ACCOUNT, { id: 'soon', from: 'd@example.org', label: 'personal', markedAt: 2 * DAY + DAY / 5 });
+    storeExample(db, ACCOUNT, { id: 'mid', from: 'b@example.org', label: 'personal', markedAt: 5 * DAY });
+    storeExample(db, ACCOUNT, { id: 'new', from: 'c@example.org', label: 'personal', markedAt: 12 * DAY });
+    const held = () => (db.prepare('SELECT message_id FROM examples ORDER BY marked_at').all() as { message_id: string }[]).map((r) => r.message_id);
+    const logs: string[] = [];
+
+    /** Run passes at the given times, with the given keep time. */
+    const passesAt = async (times: number[], examplesKeepDays?: number) => {
+      const stop = new AbortController();
+      const wake = createWake();
+      let pass = 0;
+      await runLoop(
+        db,
+        async () => ({
+          act: false,
+          connect: () => {
+            throw new Error('offline');
+          },
+          log: (line) => logs.push(line),
+          now: () => times[Math.min(pass, times.length - 1)]!,
+          intervalMs: 60_000,
+          ...(examplesKeepDays === undefined ? {} : { examplesKeepDays }),
+        }),
+        {
+          signal: stop.signal,
+          wake,
+          onPass: () => {
+            if (++pass < times.length) setTimeout(() => wake.now(), 1);
+            else setTimeout(() => stop.abort(), 1);
+          },
+        },
+      );
+    };
+
+    await passesAt([12 * DAY]);
+    expect(held()).toEqual(['old', 'soon', 'mid', 'new']);
+
+    // Ten days kept. At day 12 only `old` is past it. Half a day later `soon` is too, but upkeep has run
+    // today, so it waits; three days on, it goes with `mid`.
+    await passesAt([12 * DAY, 12.5 * DAY, 15.5 * DAY], 10);
+    expect(logs.filter((l) => l.startsWith('Deleted'))).toEqual(['Deleted 1 example older than 10 days', 'Deleted 2 examples older than 10 days']);
+    expect(held()).toEqual(['new']);
   });
 });

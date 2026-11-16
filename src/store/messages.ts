@@ -64,3 +64,9 @@ export function storedFacts(db: DatabaseSync, accountId: string, messageId: stri
 export function recordFacts(db: DatabaseSync, accountId: string, messageId: string, facts: Facts): void {
   db.prepare('UPDATE messages SET facts_json = ? WHERE account_id = ? AND id = ?').run(JSON.stringify(facts), accountId, messageId);
 }
+
+/** One recorded message as triage input, or null if sift never saw it. */
+export function getFacts(db: DatabaseSync, accountId: string, messageId: string): MessageFacts | null {
+  const row = db.prepare(`SELECT ${COLUMNS} FROM messages WHERE account_id = ? AND id = ?`).get(accountId, messageId) as unknown as Row | undefined;
+  return row ? toMessage(accountId, row) : null;
+}

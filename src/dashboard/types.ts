@@ -29,6 +29,20 @@ export interface Summary {
   topSenders: { address: string; messages: number; lastDisposition: string | null }[];
   /** The ten latest decisions in the window. */
   recent: DecisionRow[];
+  /**
+   * How often sift's suggestion was what the user wanted, from the answers given in the window. Answers
+   * to mail sift could not place are not counted.
+   */
+  accuracy: {
+    reviewed: number;
+    right: number;
+    /** Every tier, in cascade order. */
+    byStage: { stage: StageKey; reviewed: number; right: number }[];
+    /** Per label sift gave, most answers first. The name is null if the label has gone. */
+    byLabel: { labelId: string; labelName: string | null; reviewed: number; right: number }[];
+    /** What sift called one label when the user said another, commonest first. */
+    confusion: { suggested: string; correct: string; count: number }[];
+  };
 }
 
 export interface DecisionRow {
@@ -304,12 +318,17 @@ export interface FeedbackRequest {
 
 /** GET /api/manage: everything the Settings view shows. */
 export interface ManageState {
-  settings: { act: boolean; interval: number; model: string | null };
+  settings: { act: boolean; interval: number; model: string | null; fewShot: boolean; examplesKeepDays: number | null };
   guidelines: string;
   activity: { sorting: boolean; lastPassAt: number | null; problems: string[]; expired: string[] };
   accounts: { id: string; email: string; lastSyncedAt: number | null }[];
   /** Per account, in order. */
   labels: Record<string, LabelSummary[]>;
+  /**
+   * Per account, waiting suggestions a model judged (or no tier could place) before the guidelines last
+   * changed. POST /api/suggestions/rejudge judges a batch of them again, at a model call each.
+   */
+  predateGuidelines: Record<string, number>;
 }
 
 /** A label: what mail is, and what sift does with it. */
@@ -360,4 +379,111 @@ export interface Session {
   addresses: string[];
   /** What the Google client must list as an authorised redirect URI for sign-in at this address. */
   redirectUri: string;
+}
+
+/** Right, wrong, "unsure" and failed calls among some judged examples. Accuracy is `right / (total - failed)`. */
+export interface EvalTally {
+  total: number;
+  right: number;
+  wrong: number;
+  unsure: number;
+  /** Calls that returned nothing usable. Not counted for or against. */
+  failed: number;
+}
+
+export interface EvalScore extends EvalTally {
+  /** By the label the user gave, most examples first. */
+  byLabel: ({ labelId: string } & EvalTally)[];
+  /** Which label was taken for which, commonest first. */
+  confusion: { expected: string; got: string; count: number }[];
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  /** Averages over the calls that answered. */
+  perMessage: { costUsd: number; inputTokens: number; outputTokens: number };
+}
+
+/** One replay of the model over stored examples. */
+export interface EvalRun {
+  id: number;
+  accountId: string;
+  startedAt: number;
+  finishedAt: number | null;
+  /** `interrupted`: sift stopped while it was going. */
+  status: 'running' | 'done' | 'failed' | 'interrupted';
+  error: string | null;
+  /** What it ran with. Runs that agree on all of these were asked the same question the same way. */
+  model: string;
+  promptHash: string;
+  guidelinesHash: string;
+  labelsHash: string;
+  labels: { id: string; name: string; description: string }[];
+  fewShot: boolean;
+  /** Examples in the run. `score.total` is how many have been judged so far. */
+  total: number;
+  score: EvalScore;
+  /** Of the answers, those given with an example from the same sender in the prompt, which makes them easy. */
+  withSenderExample: { answered: number; right: number };
+}
+
+/** GET /api/evals. */
+export interface Evals {
+  /** Newest first. */
+  runs: EvalRun[];
+  /** Stored examples a run could use, per account. */
+  examples: Record<string, number>;
+  defaultLimit: number;
+  maxLimit: number;
+}
+
+/** GET /api/eval?id=. */
+export interface EvalDetail {
+  run: EvalRun;
+  results: {
+    messageId: string;
+    fromAddress: string;
+    subject: string;
+    /** The user's label. */
+    expected: string;
+    /** A label id, `unsure`, or null when the call failed. */
+    got: string | null;
+    confidence: number | null;
+    inputTokens: number;
+    outputTokens: number;
+    costUsd: number;
+    durationMs: number;
+    /** Examples shown beside it, and how many of those were from the same sender. */
+    shots: number;
+    senderShots: number;
+  }[];
+}
+
+/** The body of POST /api/evals/run. Answers `{ id }`; the run goes on in the background. */
+export interface EvalRequest {
+  accountId: string;
+  /** Show the model the other stored examples. Default: the `fewShot` setting. */
+  fewShot?: boolean;
+  /** How many examples, newest answers first. */
+  limit?: number;
+}
+
+/** GET /api/examples: the messages held whole because the user answered for them. No content. */
+export interface Examples {
+  /** Newest answers first, at most 500. */
+  examples: {
+    accountId: string;
+    messageId: string;
+    fromAddress: string;
+    fromName: string | null;
+    subject: string;
+    /** The user's answer. */
+    labelId: string | null;
+    markedAt: number;
+    /** `pending`: not fetched yet. `gone`: the message no longer existed, so only the answer is held. */
+    status: 'pending' | 'captured' | 'gone';
+  }[];
+  /** How many are held per account, including any beyond the list. */
+  held: Record<string, number>;
+  /** Days an example is kept after its answer, or null when they are kept until deleted. */
+  keepDays: number | null;
 }

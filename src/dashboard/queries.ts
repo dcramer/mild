@@ -60,6 +60,8 @@ export function summarize(db: DatabaseSync, days: number, now: number = Date.now
     if (counts && row.stage in counts) counts[row.stage]++;
   }
 
+  const answered = accuracy(db, since);
+
   return {
     days,
     generatedAt: now,
@@ -89,6 +91,7 @@ export function summarize(db: DatabaseSync, days: number, now: number = Date.now
       since,
     ).map((r) => ({ address: r.address, messages: r.n, lastDisposition: r.last })),
     recent: listDecisions(db, { days, limit: 10 }, now).rows,
+    accuracy: { ...answered, byStage: STAGES.map((stage) => answered.byStage.find((r) => r.stage === stage) ?? { stage, reviewed: 0, right: 0 }) },
   };
 }
 

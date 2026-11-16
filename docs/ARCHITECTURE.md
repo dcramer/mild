@@ -75,7 +75,7 @@ tests/        synthetic fixtures only
 docker/       Dockerfile and compose file; upgrade, backup and restore are in docs/DEPLOY.md
 ```
 
-Planned, not yet created: `src/learn/` (correction detection, rule promotion), `evals/` (a labelled set for measuring each tier).
+Planned, not yet created: correction detection and rule promotion in `src/learn/`.
 
 Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 
@@ -97,7 +97,7 @@ Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 
 - **Observe is the default.** Decisions are recorded with `mode = observe` and the mailbox is not touched. `--act` carries them out. Observed decisions are never acted on later.
 - **Decide, record, then act.** The decision row is written before any mailbox change. Its `outcome` then records what happened: `none` (nothing needed doing), `done`, `skipped` with the reason (left the inbox, spam refused), `failed` or `unknown`.
-- **Nothing is dropped.** If the change cannot even be attempted (a provider error), the decision stays unsettled and the next pass retries it. Each message is decided once.
+- **Nothing is dropped.** If the change cannot even be attempted (a provider error), the decision stays unsettled and the next pass retries it. A pass decides each message once; a waiting suggestion gets a further decision only when a rule, a label or (on request) the guidelines change (see Teaching).
 - **One account failing does not stop the others.**
 
 ## Actions
@@ -132,6 +132,7 @@ When no rule or sender record decides a message, one model call does. It is deli
 - **Its only output is a label** from the user's list, or `unsure`, with a one-line reason. The reply is validated; anything else abstains.
 - **The label's action decides the outcome**, so the user's choice, not the model, determines what happens to the message.
 - **Three protections apply whatever the model says:** mail from someone the user has written to is never archived or marked spam on the model's word (and "could not check" counts as yes), nor is a reply in a thread the user has written in, and `unsure` or an unknown category leaves the message for review.
+- **It is shown a few of the user's own answers.** Beside each message go up to six stored examples, chosen for it: from the same sender first, then the same domain, then the newest of each label, within a budget of about 1,200 tokens (`src/triage/fewshot.ts`). Each is only sender, subject, the first 300 characters and the owner's label, fenced as untrusted like the email itself, with every field JSON on one line so an example's text cannot close its fence or forge a label. `examples.few_shot = false` in `sift.toml` turns it off.
 - **The prompt marks the email as untrusted** and keeps it apart from the guidelines and the header facts. The worst an injected email can do is get itself given the wrong label, which the audit log can undo.
 - **Learning:** after three consecutive model decisions give a sender the same label, and each ended the way that label says, sift writes a rule for the sender and later mail from them is decided without inference. A rule the user made for that sender is left alone. (Next: propose the rule to the user instead of saving it; see TODO.md.)
 
@@ -147,7 +148,7 @@ Four commands: `init` sets sift up, `run` sorts mail and serves the dashboard, `
 
 Everything sift keeps is in one directory, the home: `~/.config/sift` by default (`$XDG_CONFIG_HOME/sift`), or wherever `--home` or `SIFT_HOME` points (the Docker image uses `/data`). Keeping settings, guidance, the database and credentials together means it can be backed up or moved as a unit. No setting requires an environment variable, with one exception: the key that encrypts the credentials.
 
-- `sift.toml`: settings (`model`, `act`, `heuristics`, `interval`, `dashboard.port`, `dashboard.host`, `dashboard.allow`, `retention.days`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
+- `sift.toml`: settings (`model`, `act`, `heuristics`, `interval`, `dashboard.port`, `dashboard.host`, `dashboard.allow`, `retention.days`, `examples.few_shot`, `examples.keep_days`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
 - `guidelines.md`: the user's broad guidance, read on every pass.
 - `sift.db`: everything structured or learned.
 - `google-client.json`, `google/`, `model-auth.json`, `dashboard-key`: credentials and the session secret, owner-only, kept out of the database.
@@ -172,22 +173,28 @@ sift suggests first and acts second. While it only observes, every decision is a
 - **A suggestion** is the current decision for a message, made while observing, that the user has not answered. Decisions that only repeat what the user already said (a rule they wrote, or made by correcting sift) are not suggestions; ones from a rule sift learned are.
 - **Suggestions are grouped by sender**, label and what sift would do, so one answer settles a sender: "Right", or "No, it is…" with another label. The answer becomes a rule for that sender; what then happens is the label's action.
 - **An answer is durable.** It writes a sender record (`source` `user` or `correction`), so that sender's later mail is decided by the sender tier, with no model and no further suggestion. It overrides anything sift learned by itself.
-- **Every answer is scored.** `feedback` records right, wrong, or "answered" (sift had no suggestion, which is not a mistake), per decision, so accuracy can be reported per tier.
+- **Every answer is scored.** `feedback` records right, wrong, or "answered" (sift had no suggestion, which is not a mistake), per decision. The summary the Overview reads reports it for the window per tier and per label, with which labels sift took for which.
 - **An answer says how far it reaches:** everything from the sender, anyone at the sender's domain, the sender when the subject contains some words, or only the mail waiting now. All but the last make a rule with those conditions.
 - **Any decision can be answered, not only a suggestion.** Every list opens a message in the same panel: its text where held, what sift decided and why, what it knows about the sender, and the answer. Answering a message sift had already decided records the user's answer as a new decision for it, makes the rule, and, if sift had changed the message in Gmail, takes that change back so the new decision is carried out from where the message started.
+- **A waiting suggestion follows the rules and labels as they are now.** When a rule or a label changes in the dashboard, each waiting suggestion is run through the rules again, with no model (`src/learn/redecide.ts`), and a new decision is recorded where the answer differs: a rule of the user's now decides it, so it stops being a suggestion; its label now does something else, so the same label is recorded with the new outcome (and mail is never newly hidden from a sender who was not checked); or the rule that had decided it is gone, so it goes back to what a tier said before, or to review. Mail the user answered for is never touched, and mail a rule decided when it arrived stays as history.
+- **A change to the guidelines does not run the model.** It would cost a call per waiting message. The dashboard is told how many waiting suggestions were judged before `guidelines.md` last changed, and judges them again, a hundred at a time in the background, only when the user asks (`src/daemon/rejudge.ts`). Nothing is learned from a second judgement of the same message.
 - **Every marked message becomes an example.** The answer creates an `examples` row; the next pass of `sift run` fetches the whole message (raw RFC 822, all headers, readable text) into it. These are the evaluation and training set. A message that has since been deleted keeps its answer and is marked gone.
 
-Code: `src/learn/feedback.ts` (suggestions, answers, accuracy), `src/daemon/examples.ts` (capture).
+- **Examples are kept until the user deletes them**, one at a time or all of an account's, or for `examples.keep_days` days after the answer if that is set; `sift run` deletes the ones past it when it starts and once a day. Deleting an example removes the stored message only: the answer stays in `feedback`, and any rule it made stays a rule.
+- **Examples test the model.** A test run replays the model over an account's stored examples and scores it against the user's answers: right, wrong, "unsure" and failed calls overall and per label, which labels were taken for which, and cost and tokens per message. It is started from the dashboard and never by sift itself, because every example is a paid model call; a run takes at most 200 examples, newest answers first, four calls at a time, in the background. Each example is judged on what is stored (the recorded headers, the example's text, the sender's history as it stood before the message's first decision), so Gmail is not asked and the user's later answer does not leak in. A run records what it ran with (model, a hash each of the prompt layout, the guidelines and the labels, and whether examples were shown) and one row per example, so two runs can be compared example by example. With examples shown, the one under test is left out of its own prompt; answers that still had another example from the same sender are counted apart, since they are easier than new mail.
+
+Code: `src/learn/feedback.ts` (suggestions, answers, accuracy), `src/daemon/examples.ts` (capture), `src/learn/evals.ts` and `src/triage/score.ts` (test runs).
 
 ## State
 
 One SQLite database, `sift.db` in the home directory (schema in `src/store/migrations/`). It is the complete record of what sift saw and did, and everything else (the dashboard, undo, future analytics) reads from it.
 
 - **messages:** one row per message sift has seen: sender, recipients, subject, the triage headers, the labels at sync time and the facts derived from them. No body. This is enough to triage a message again without refetching it.
-- **feedback, examples:** the user's answers to suggestions, and the full content of each message they answered for, kept as evaluation and training data.
+- **feedback, examples:** the user's answers to suggestions, and the full content of each message they answered for, kept as evaluation and training data until deleted (see Teaching).
 - **suggestion_bodies:** the readable text of mail still waiting on the user, so a suggestion can be judged by reading it. Held only for mail sift would move or could not place, and deleted when the message is answered or stops being a suggestion, and after 30 days regardless (`src/daemon/bodies.ts`). These two tables are the only places message content is stored.
 - **decisions:** an append-only log, each with its mode (observe or act) and outcome. Every triage outcome is recorded, including "keep" and "could not decide", with the tier that made it, the reason, the confidence, and what it cost (model, tokens, dollars, duration). A message can have several decisions; the latest is current.
 - **actions:** the audit log of every mailbox change, with labels before and after, linked to the decision it carried out.
+- **eval_runs, eval_results:** each test run of the model over the examples, with its settings, and what the model said for each example. Labels and costs only, no message content.
 - **labels, rules, accounts:** what mail can be, what sift knows without a model, and each account's history cursor and last sync time.
 
 **Retention.** Everything is kept unless `retention.days` is set in `sift.toml` (30 at least, so sync's 7-day recovery search cannot bring back a message already forgotten). Then `sift run` deletes, on its first pass and once a day, each message that nothing has happened to for that long, with its decisions and actions (`src/daemon/retention.ts`). What it costs: a change older than the window can no longer be undone from sift, and the model is told less about how much a sender has sent. Kept however old:
@@ -221,7 +228,7 @@ The dashboard is where the user watches sift, teaches it and manages it. `sift r
 Everything that manages sift: answer suggestions, switch between observing and acting, choose the model and interval, edit the guidelines, add and edit labels and what happens to each, add and remove rules, undo a mailbox change, pull in older mail, and trigger a check.
 
 - It changes the database and `sift.toml` directly. A running sift re-reads its settings before every pass, and a change wakes it, so nothing needs restarting.
-- It never imports Gmail, the executor or the daemon (lint enforces this). The few things that need them (signing in, undo, pulling in older mail, check now) are passed in by the process as `SignIn` and `Controls` (`src/dashboard/controls.ts`), so every mailbox change still goes through the executor and the audit log.
+- It never imports Gmail, the executor or the daemon (lint enforces this). The few things that need them (signing in, undo, pulling in older mail, check now, a test run of the model, judging suggestions again) are passed in by the process as `SignIn` and `Controls` (`src/dashboard/controls.ts`), so every mailbox change still goes through the executor and the audit log.
 - Signing in to a model provider is still done with `sift init`.
 
 **Older mail.** Pulling in the last N days records those messages as suggest-only. They are decided on the next pass and are never acted on, even when sift is acting on new mail.

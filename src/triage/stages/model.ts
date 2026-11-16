@@ -1,6 +1,7 @@
 import type { Facts } from '../facts.ts';
 import type { Standing } from '../standing.ts';
 import { type RuleHit, describeRule, ruleOutcome } from './rules.ts';
+import { type Shot, pickShots } from '../fewshot.ts';
 import { type DecisionUsage, type Disposition, type Label, type MessageFacts, type Stage, labelled } from '../types.ts';
 
 /** Everything the model is shown about one message. Gathered by deterministic code, never by the model. */
@@ -40,7 +41,15 @@ export interface Verdict {
 }
 
 /** Port for the model. Returns null when the call failed or the answer was unusable: that abstains. */
-export type Judge = (input: { evidence: Evidence; labels: readonly Label[]; guidelines: string }) => Promise<Verdict | null>;
+export type Judge = (input: JudgeInput) => Promise<Verdict | null>;
+
+export interface JudgeInput {
+  evidence: Evidence;
+  labels: readonly Label[];
+  guidelines: string;
+  /** Mail the owner labelled before, shown to the model as examples. Already chosen and cut to size. */
+  examples?: readonly Shot[];
+}
 
 export interface ModelStageDeps {
   gather: (facts: MessageFacts) => Promise<Evidence>;
@@ -50,6 +59,8 @@ export interface ModelStageDeps {
   labels: readonly Label[];
   /** The user's broad guidance in plain language. May be empty. */
   guidelines: string;
+  /** Port for labelled examples that might help with this message. The stage picks from what it returns. Omitted: none are shown. */
+  examples?: (facts: MessageFacts) => readonly Shot[] | Promise<readonly Shot[]>;
 }
 
 /**
@@ -65,7 +76,8 @@ export function modelStage(deps: ModelStageDeps): Stage {
       const evidence: Evidence = prior
         ? { ...gathered, prior: { labelId: prior.label.id, labelName: prior.label.name, ...(prior.rule.when ? { when: prior.rule.when } : {}) } }
         : gathered;
-      const verdict = await deps.judge({ evidence, labels: deps.labels, guidelines: deps.guidelines });
+      const examples = deps.examples ? pickShots(await deps.examples(facts), facts, deps.labels) : [];
+      const verdict = await deps.judge({ evidence, labels: deps.labels, guidelines: deps.guidelines, ...(examples.length > 0 ? { examples } : {}) });
       if (!verdict) return null;
 
       const base = {

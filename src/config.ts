@@ -27,12 +27,16 @@ export interface Settings {
   dashboardAllow?: string[];
   /** Days to keep the record of a message, its decisions and changes. Unset: forever. */
   retentionDays?: number;
+  /** Show the model a few messages the user labelled before, chosen for the message it is judging. */
+  fewShot: boolean;
+  /** Delete an example this many days after the user answered for it. Unset: examples are kept. */
+  examplesKeepDays?: number;
 }
 
 /** Shorter, and sync's 7-day recovery search could bring back a message already forgotten and decide it twice. */
 const MIN_RETENTION_DAYS = 30;
 
-export const DEFAULT_SETTINGS: Settings = { act: false, heuristics: false, interval: 60, dashboardPort: 8787 };
+export const DEFAULT_SETTINGS: Settings = { act: false, heuristics: false, interval: 60, dashboardPort: 8787, fewShot: true };
 
 /**
  * Everything sift keeps lives in one directory, the home: settings, guidance, the database and
@@ -153,6 +157,17 @@ export function parseSettings(text: string, path = 'sift.toml'): Settings {
           throw bad('retention.days', `a whole number of days, at least ${MIN_RETENTION_DAYS}`);
         settings.retentionDays = days;
       }
+    } else if (key === 'examples') {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) throw bad('examples', 'a table');
+      for (const [sub, given] of Object.entries(value as Record<string, unknown>)) {
+        if (sub === 'few_shot') {
+          if (typeof given !== 'boolean') throw bad('examples.few_shot', 'true or false');
+          settings.fewShot = given;
+        } else if (sub === 'keep_days') {
+          if (typeof given !== 'number' || !Number.isInteger(given) || given < 1) throw bad('examples.keep_days', 'a whole number of days, at least 1');
+          settings.examplesKeepDays = given;
+        } else throw new Error(`${path}: unknown setting examples.${sub}.`);
+      }
     } else {
       throw new Error(`${path}: unknown setting ${key}.`);
     }
@@ -190,6 +205,15 @@ ${settings.dashboardAllow ? `allow = ${JSON.stringify(settings.dashboardAllow)}`
 # to it. After that the change can no longer be undone from sift. Suggestions still waiting on you, mail you
 # answered for and what sift learned are kept regardless. Unset: keep everything.
 ${settings.retentionDays ? `days = ${settings.retentionDays}` : '# days = 365'}
+
+# Examples are the messages you answered for in the dashboard, kept whole.
+[examples]
+# true: the model is shown a few of them (sender, subject, the first lines, your label) beside each
+# message it judges. It learns from your answers and each call costs a little more.
+few_shot = ${settings.fewShot}
+# Delete an example this many days after you answered for it. They hold the whole message. Unset: kept
+# until you delete them in the dashboard.
+${settings.examplesKeepDays ? `keep_days = ${settings.examplesKeepDays}` : '# keep_days = 365'}
 `;
 }
 

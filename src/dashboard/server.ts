@@ -4,8 +4,11 @@ import { type IncomingMessage, type Server, type ServerResponse, createServer } 
 import { extname, join, relative, sep } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_EVAL_EXAMPLES, MAX_EVAL_EXAMPLES, getEvalRun, listEvalRuns } from '../learn/evals.ts';
 import { type FeedbackInput, applyFeedback } from '../learn/feedback.ts';
+import { predatingGuidelines, redecideWaiting } from '../learn/redecide.ts';
 import { listAccounts } from '../store/accounts.ts';
+import { deleteExamples, listExamples } from '../store/examples.ts';
 import { addLabel, updateLabel } from '../store/labels.ts';
 import { resolveProposal } from '../store/proposals.ts';
 import { addRule, removeRule, setStanding } from '../store/rules.ts';
@@ -22,7 +25,7 @@ import {
   suggestionDetail,
   summarize,
 } from './queries.ts';
-import type { ManageState } from './types.ts';
+import type { EvalDetail, Evals, Examples, ManageState } from './types.ts';
 
 /** Where `pnpm build:web` puts the built web app. */
 export const WEB_DIST = fileURLToPath(new URL('../../web/dist/', import.meta.url));
@@ -222,6 +225,13 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
   // Sign-ins in flight: the state Google echoes back, with the PKCE verifier and where to return to.
   const pending = new Map<string, { verifier: string; redirectUri: string; allowNew: boolean; expires: number }>();
 
+  /** After a rule or label changed: waiting suggestions they now decide differently get a new decision. No model is called. */
+  const redecide = async (accountId?: string) => {
+    let recorded = 0;
+    for (const account of listAccounts(db)) if (accountId === undefined || account.id === accountId) recorded += await redecideWaiting(db, account.id, now());
+    return recorded;
+  };
+
   /** POST handlers. Each validates its own body and returns the response, or null for a malformed body. */
   const writes: Record<string, (body: Record<string, unknown>) => unknown> = {
     '/api/feedback': async (body) => {
@@ -240,7 +250,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
         };
       }
     },
-    '/api/labels': (body) => {
+    '/api/labels': async (body) => {
       const { accountId, id, name, description, disposition, markRead, unsubscribe } = body;
       if (!str(accountId) || !str(id, 40)) return null;
       if (name !== undefined && !str(name, 60)) return null;
@@ -255,7 +265,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       if (markRead !== undefined) change.markRead = markRead;
       if (unsubscribe !== undefined) change.unsubscribe = unsubscribe;
       if (!updateLabel(db, accountId, id, change, now())) throw new Error(`There is no label "${id}".`);
-      return { ok: true };
+      return { ok: true, redecided: await redecide(accountId) };
     },
     '/api/labels/add': (body) => {
       const { accountId, name, description, disposition, markRead, unsubscribe } = body;
@@ -272,7 +282,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
         ).id,
       };
     },
-    '/api/rules': (body) => {
+    '/api/rules': async (body) => {
       const { accountId, match, label, disposition, markRead, unsubscribe, tier, when } = body;
       if (tier !== undefined && tier !== 'always' && tier !== 'usually') return null;
       if (when !== undefined && (typeof when !== 'string' || when.length > 200)) return null;
@@ -287,15 +297,14 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
         ...(tier === 'usually' ? { tier: 'usually' as const } : {}),
         ...(typeof when === 'string' && when.trim() !== '' ? { when } : {}),
       };
-      return {
-        id: addRule(
-          db,
-          accountId,
-          { match: Object.fromEntries(conditions), labelId: label, ...(disposition ? { disposition } : {}), ...extras },
-          'user',
-          now(),
-        ),
-      };
+      const id = addRule(
+        db,
+        accountId,
+        { match: Object.fromEntries(conditions), labelId: label, ...(disposition ? { disposition } : {}), ...extras },
+        'user',
+        now(),
+      );
+      return { id, redecided: await redecide(accountId) };
     },
     '/api/standing': (body) => {
       const { accountId, address, domain, standing } = body;
@@ -316,14 +325,16 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       if (!resolveProposal(db, id, accept, now())) throw new Error('That proposal is no longer open.');
       return { ok: true };
     },
-    '/api/rules/remove': (body) => {
+    '/api/rules/remove': async (body) => {
       if (!str(body['id'], 40)) return null;
       if (!removeRule(db, body['id'])) throw new Error('That rule no longer exists.');
-      return { ok: true };
+      return { ok: true, redecided: await redecide() };
     },
     '/api/settings': (body) => {
-      const { act, interval, model } = body;
+      const { act, interval, model, fewShot, examplesKeepDays: keep } = body;
+      if (keep !== undefined && keep !== null && (typeof keep !== 'number' || !Number.isInteger(keep) || keep < 1 || keep > 36_500)) return null;
       if (act !== undefined && typeof act !== 'boolean') return null;
+      if (fewShot !== undefined && typeof fewShot !== 'boolean') return null;
       if (interval !== undefined && (typeof interval !== 'number' || !Number.isFinite(interval) || interval < 5 || interval > 86_400)) return null;
       if (model !== undefined && model !== null && (!str(model) || !/^[^/\s]+\/\S+$/.test(model))) return null;
       if (!controls) throw new Error('This dashboard cannot change settings.');
@@ -331,6 +342,8 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
         ...(act === undefined ? {} : { act }),
         ...(interval === undefined ? {} : { interval }),
         ...(model === undefined ? {} : { model }),
+        ...(fewShot === undefined ? {} : { fewShot }),
+        ...(keep === undefined ? {} : { examplesKeepDays: keep }),
       });
       return { settings: controls.settings() };
     },
@@ -353,6 +366,30 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       controls.checkNow();
       return { added };
     },
+    '/api/suggestions/rejudge': async (body) => {
+      const { accountId } = body;
+      if (!str(accountId) || !listAccounts(db).some((a) => a.id === accountId)) return null;
+      if (!controls) throw new Error('This dashboard cannot run the model.');
+      return await controls.rejudge(accountId);
+    },
+    '/api/examples/delete': (body) => {
+      const { accountId, messageId } = body;
+      if (!str(accountId) || !str(messageId)) return null;
+      return { deleted: deleteExamples(db, accountId, messageId) };
+    },
+    '/api/examples/delete-all': (body) => {
+      const { accountId } = body;
+      if (!str(accountId) || !listAccounts(db).some((a) => a.id === accountId)) return null;
+      return { deleted: deleteExamples(db, accountId) };
+    },
+    '/api/evals/run': async (body) => {
+      const { accountId, fewShot, limit } = body;
+      if (!str(accountId) || (fewShot !== undefined && typeof fewShot !== 'boolean')) return null;
+      if (limit !== undefined && (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > MAX_EVAL_EXAMPLES)) return null;
+      if (!listAccounts(db).some((a) => a.id === accountId)) return null;
+      if (!controls) throw new Error('This dashboard cannot run the model.');
+      return { id: await controls.startEval({ accountId, fewShot: fewShot ?? controls.settings().fewShot, limit: limit ?? DEFAULT_EVAL_EXAMPLES }) };
+    },
     '/api/check': () => {
       if (!controls) throw new Error('Nothing is sorting mail from this dashboard.');
       controls.checkNow();
@@ -363,12 +400,14 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
   const manageState = (): ManageState => {
     const accounts = listAccounts(db);
     const synced = db.prepare('SELECT last_synced_at AS at FROM accounts WHERE id = ?');
+    const changedAt = controls?.guidelinesChangedAt() ?? null;
     return {
-      settings: controls?.settings() ?? { act: false, interval: 60, model: null },
+      settings: controls?.settings() ?? { act: false, interval: 60, model: null, fewShot: true, examplesKeepDays: null },
       guidelines: controls?.guidelines() ?? '',
       activity: controls?.activity() ?? { sorting: false, lastPassAt: null, problems: [], expired: [] },
       accounts: accounts.map((a) => ({ id: a.id, email: a.email, lastSyncedAt: (synced.get(a.id) as { at: number | null } | undefined)?.at ?? null })),
       labels: Object.fromEntries(accounts.map((a) => [a.id, listLabelSummaries(db, a.id)])),
+      predateGuidelines: Object.fromEntries(accounts.map((a) => [a.id, changedAt === null ? 0 : predatingGuidelines(db, changedAt, a.id).length])),
     };
   };
 
@@ -524,6 +563,29 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       if (url.pathname === '/api/suggestions') return void json(res, 200, listSuggestions(db, { includeKept: query.get('kept') === '1' }));
       if (url.pathname === '/api/manage') return void json(res, 200, manageState());
       if (url.pathname === '/api/changes') return void json(res, 200, { changes: listChanges(db, 200) });
+      if (url.pathname === '/api/examples') {
+        const held = db.prepare('SELECT account_id, count(*) AS n FROM examples GROUP BY account_id').all() as { account_id: string; n: number }[];
+        const examples: Examples = {
+          examples: listExamples(db, query.get('account') || undefined),
+          held: Object.fromEntries(held.map((r) => [r.account_id, r.n])),
+          keepDays: controls?.settings().examplesKeepDays ?? null,
+        };
+        return void json(res, 200, examples);
+      }
+      if (url.pathname === '/api/evals') {
+        const counts = db.prepare(`SELECT account_id, count(*) AS n FROM examples WHERE status = 'captured' AND label_id IS NOT NULL GROUP BY account_id`);
+        const evals: Evals = {
+          runs: listEvalRuns(db),
+          examples: Object.fromEntries((counts.all() as { account_id: string; n: number }[]).map((r) => [r.account_id, r.n])),
+          defaultLimit: DEFAULT_EVAL_EXAMPLES,
+          maxLimit: MAX_EVAL_EXAMPLES,
+        };
+        return void json(res, 200, evals);
+      }
+      if (url.pathname === '/api/eval') {
+        const detail: EvalDetail | null = getEvalRun(db, Number(query.get('id')));
+        return void json(res, detail ? 200 : 404, detail ?? { error: 'No such run' });
+      }
       if (url.pathname === '/api/models') {
         void (controls ? controls.models() : Promise.resolve([]))
           .then((models) => json(res, 200, { models }))

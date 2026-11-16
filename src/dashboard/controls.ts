@@ -11,6 +11,14 @@ export interface Controls {
   models(): Promise<string[]>;
   guidelines(): string;
   saveGuidelines(text: string): void;
+  /** When the guidelines last changed, or null if there are none. */
+  guidelinesChangedAt(): number | null;
+  /**
+   * Judge again, in the background, an account's waiting suggestions that were judged before the
+   * guidelines last changed. A model call each, so only when the user asks, and at most a batch at a
+   * time. Resolves with how many were started and how many are left for another press.
+   */
+  rejudge(accountId: string): Promise<{ started: number; remaining: number }>;
   /** Reverse one mailbox change. Resolves with a sentence describing what happened. */
   undo(actionId: number): Promise<string>;
   /** Pull the last `days` days of the inbox in as suggestions. Resolves with how many messages were new. */
@@ -20,6 +28,11 @@ export interface Controls {
    * decision can be carried out from where the message started. Resolves with whether anything was taken back.
    */
   putBack(accountId: string, messageId: string): Promise<boolean>;
+  /**
+   * Replay the model over an account's stored examples, in the background. Every example is a model call
+   * that costs money, so this only ever runs because the user asked. Resolves with the run's id.
+   */
+  startEval(request: { accountId: string; fewShot: boolean; limit: number }): Promise<number>;
   /** Start a pass now instead of waiting for the interval. */
   checkNow(): void;
   activity(): Activity;
@@ -32,6 +45,10 @@ export interface ManagedSettings {
   interval: number;
   /** `provider/model-id`, or null for no model. */
   model: string | null;
+  /** Whether the model is shown messages the user labelled before as examples. */
+  fewShot: boolean;
+  /** Days an example is kept after the user answered for it, or null to keep them. */
+  examplesKeepDays: number | null;
 }
 
 export interface Activity {
