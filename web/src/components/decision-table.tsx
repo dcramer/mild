@@ -1,11 +1,23 @@
 import { DecidedBy, DispositionBadge, Result, Sub } from '@/components/bits.tsx';
+import { SenderLink } from '@/components/sender.tsx';
 import type { DecisionRow } from '@/lib/api.ts';
 import { ago, dateTime } from '@/lib/format.ts';
 import { Marked, Table, Td, Th, Tr } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 /** Decisions, newest first. Choosing a row opens that message's full history. `search` marks matching text. */
-export function DecisionTable({ rows, onOpen, search }: { rows: DecisionRow[]; onOpen: OpenMessages; search?: string }) {
+export function DecisionTable({
+  rows,
+  onOpen,
+  search,
+  oneSender,
+}: {
+  rows: DecisionRow[];
+  onOpen: OpenMessages;
+  search?: string;
+  /** Every row is from the same sender, named above the table, so the rows do not repeat it. */
+  oneSender?: boolean;
+}) {
   const items = rows.map((row) => ({ accountId: row.accountId, messageId: row.messageId, subject: row.subject }));
   return (
     <Table>
@@ -25,9 +37,13 @@ export function DecisionTable({ rows, onOpen, search }: { rows: DecisionRow[]; o
               <span className="block truncate font-medium">
                 {row.subject ? <Marked text={row.subject} {...(search ? { term: search } : {})} /> : '(no subject)'}
               </span>
-              <Sub>
-                <Marked text={row.fromName ? `${row.fromName} · ${row.fromAddress}` : row.fromAddress} {...(search ? { term: search } : {})} />
-              </Sub>
+              {oneSender ? null : (
+                <Sub>
+                  <SenderLink accountId={row.accountId} address={row.fromAddress}>
+                    <Marked text={row.fromName ? `${row.fromName} · ${row.fromAddress}` : row.fromAddress} {...(search ? { term: search } : {})} />
+                  </SenderLink>
+                </Sub>
+              )}
             </Td>
             <Td className="whitespace-nowrap">
               <DispositionBadge disposition={row.disposition} />

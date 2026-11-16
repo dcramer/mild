@@ -8,9 +8,11 @@ export type {
   ManageState,
   MessageDetail,
   RuleSummary,
+  SenderPage,
   SenderProfile,
   Session,
   StageKey,
+  Standing,
   SuggestionDetail,
   SuggestionGroup,
   Suggestions,
@@ -23,6 +25,7 @@ import type {
   ManageState,
   MessageDetail,
   RuleSummary,
+  SenderPage,
   Session,
   SuggestionDetail,
   Suggestions,
@@ -66,6 +69,11 @@ export const api = {
   decisions: (q: DecisionQuery, signal: AbortSignal) =>
     get<DecisionPage>('/api/decisions', { days: q.days, stage: q.stage, disposition: q.disposition, q: q.search, limit: q.limit, offset: q.offset }, signal),
   message: (account: string, id: string, signal: AbortSignal) => get<MessageDetail>('/api/message', { account, id }, signal),
+  sender: (account: string, address: string, signal: AbortSignal) => get<SenderPage>('/api/sender', { account, address }, signal),
+  domain: (account: string, domain: string, signal: AbortSignal) => get<SenderPage>('/api/domain', { account, domain }, signal),
+  /** Give a sender or a domain a standing; `none` takes back the rule that said so. */
+  setStanding: (accountId: string, who: { address: string } | { domain: string }, standing: 'trusted' | 'unwanted' | 'blocked' | 'none') =>
+    post('/api/standing', { accountId, ...who, standing }),
   rules: (signal: AbortSignal) => get<{ rules: RuleSummary[] }>('/api/rules', {}, signal),
   suggestions: (includeKept: boolean, signal: AbortSignal) => get<Suggestions>('/api/suggestions', includeKept ? { kept: 1 } : {}, signal),
   suggestion: (account: string, sender: string, signal: AbortSignal) => get<SuggestionDetail>('/api/suggestion', { account, sender }, signal),

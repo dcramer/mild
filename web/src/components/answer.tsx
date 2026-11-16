@@ -149,7 +149,8 @@ export function Answer({
               onChange={(event) => setCondition(event.target.value)}
             />
           ) : null}
-          {scope === 'once' || scope === 'when' ? null : (
+          {/* The default depends on what the label does, so there is nothing to show before one is chosen. */}
+          {!label || scope === 'once' || scope === 'when' ? null : (
             <Select
               label="Whether sift checks each message"
               value={tier}

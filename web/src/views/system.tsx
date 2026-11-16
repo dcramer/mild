@@ -17,6 +17,7 @@ import {
   Figure,
   Figures,
   Highlight,
+  HoverCard,
   Input,
   Loading,
   Marked,
@@ -340,6 +341,33 @@ export function SystemView() {
             <Marked text="Your invoice for November is ready" term="invoice" />
           </p>
         </Row>
+      </Sheet>
+
+      <Sheet>
+        <SheetHead
+          title="Hover card"
+          description="A link that previews where it goes, on hover or focus. A touch screen never shows it, so the page it opens must say the same."
+        />
+        <p className="px-4 pb-4">
+          Mail from{' '}
+          <HoverCard
+            href="#system"
+            className="font-medium"
+            card={
+              <div className="flex flex-col gap-2">
+                <p className="name">Example News</p>
+                <p className="flex items-center gap-2">
+                  <Stamp tone="ink">Trusted</Stamp>
+                  <span className="text-muted-foreground">a rule keeps their mail</span>
+                </p>
+                <p>42 messages since Oct 16, 2026.</p>
+              </div>
+            }
+          >
+            news@example.com
+          </HoverCard>{' '}
+          is kept.
+        </p>
       </Sheet>
 
       <Sheet>

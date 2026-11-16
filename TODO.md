@@ -117,6 +117,11 @@ Observe mode has run for real on the owner's inbox: sync, the model, suggestions
 
 ## Deployment and isolation
 
+- [ ] **Security policies for hosting it for other people.** Write down, then enforce in code, what makes sift safe to run as a service someone else trusts. This is what the hashing in telemetry, the sealed mail and the encrypted credentials below are parts of. To decide and record in one document (`docs/SECURITY.md`), then hold every change to:
+  - **Hold as little as possible.** For each thing stored or sent anywhere (database columns, logs, telemetry, the model provider), say why it is needed, for how long, and in what form (plain, hashed, sealed to the user). Anything without a reason goes.
+  - **Tenants cannot see each other.** Every query and every write is scoped to the signed-in account by construction, not by remembering a `WHERE`: one data-access layer that takes the tenant and cannot be called without it, a test that fails when a query is not scoped, and the same for background work. Today every signed-in person sees every connected account.
+  - **What the operator can see.** With sealed mail and hashed telemetry, say plainly what someone running the service can and cannot read, and make the claim checkable.
+  - Goes with: keeping people apart (Dashboard), sealing stored mail, Sentry, and the one-click deploy.
 - [ ] **Seal stored mail to a key only the user holds.** Decided 2026-11-15: message content sift keeps (`suggestion_bodies`, `examples`) is encrypted so the server cannot read it back. The cost is accepted: sift cannot re-analyse stored mail by itself.
   - **How.** The browser makes a key pair when the user sets a passphrase in the dashboard. The server keeps the public key and seals each body to it as it arrives (it has the text at that moment, from Gmail, and never again). The private key stays in the browser, and a copy wrapped with the passphrase is kept on the server so a second device can unlock with the passphrase. Reading a message decrypts in the page.
   - **What it changes.** Search over message text is not possible. Replaying examples through a model (the evals) and using them as few-shot examples need the page to be open and unlocked to hand the text over for that run, or use only what is not sealed (sender, subject, headers, label).

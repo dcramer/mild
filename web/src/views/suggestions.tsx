@@ -1,6 +1,7 @@
 import { CheckIcon } from 'lucide-react';
 import { useState } from 'react';
 import { DispositionBadge, ErrorNote, Sub } from '@/components/bits.tsx';
+import { SenderLink } from '@/components/sender.tsx';
 import { type SuggestionGroup, type Suggestions, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ACTIONS, ago, count, percent, willBe } from '@/lib/format.ts';
 import { Button, Check, Empty, FilterGroup, Highlight, ListView, Loading, Note, Select, Stamp, Table, Td, Th, Tr } from '@/system';
@@ -56,7 +57,11 @@ function SuggestionRow({
   return (
     <Tr onOpen={onOpen}>
       <Td className="max-w-0 w-full md:w-64 md:max-w-64">
-        <span className="name block truncate">{group.senderName ?? group.sender}</span>
+        <span className="name block truncate">
+          <SenderLink accountId={group.accountId} address={group.sender}>
+            {group.senderName ?? group.sender}
+          </SenderLink>
+        </span>
         {group.senderName ? <Sub>{group.sender}</Sub> : null}
         {/* On a phone the mail and the answers have no column: the subject sits here and the row opens to answer. */}
         <span className="mt-1 block truncate text-sm text-muted-foreground md:hidden">

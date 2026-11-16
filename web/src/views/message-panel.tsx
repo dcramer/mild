@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { Answer, type AnswerValue } from '@/components/answer.tsx';
 import { DispositionBadge, Result } from '@/components/bits.tsx';
 import { MessageBody, Part, SenderFacts, Unsubscribe } from '@/components/message-parts.tsx';
+import { StandingLines, senderHref } from '@/components/sender.tsx';
 import { type MessageDetail, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, dateTime, money, tier } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
@@ -216,7 +217,13 @@ function Body({
         </Part>
 
         <Part title="This sender">
+          <StandingLines profile={detail.sender} />
           <SenderFacts sender={detail.sender} />
+          <p className="text-sm">
+            <a className="underline underline-offset-4" href={senderHref(detail.accountId, detail.fromAddress)}>
+              Everything from this sender
+            </a>
+          </p>
           <Unsubscribe detail={detail} />
         </Part>
 

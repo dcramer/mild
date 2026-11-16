@@ -10,6 +10,7 @@ import { MessagePanel, type MessageRef } from '@/views/message-panel.tsx';
 import { Overview } from '@/views/overview.tsx';
 import { LabelsView } from '@/views/labels.tsx';
 import { Rules } from '@/views/rules.tsx';
+import { SenderView } from '@/views/sender.tsx';
 import { SettingsView } from '@/views/settings.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
@@ -52,6 +53,11 @@ function Gate({ route }: { route: string[] }) {
 
 function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: string[] }) {
   const section = SECTIONS.find((s) => s === route[0]) ?? 'suggestions';
+  // A sender's or a domain's own page: `#sender/<account>/<address>`.
+  const profile =
+    (route[0] === 'sender' || route[0] === 'domain') && route[1] && route[2]
+      ? { kind: route[0], accountId: decodeURIComponent(route[1]), key: decodeURIComponent(route[2]) }
+      : null;
   const [days, setDays] = useState<Days>(7);
   // The message panel: the list it was opened from and which item is showing.
   const [open, setOpen] = useState<{ items: MessageRef[]; index: number } | null>(null);
@@ -69,7 +75,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
   return (
     <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col px-4">
       <Masthead
-        current={section}
+        current={profile ? '' : section}
         items={SECTIONS.map((to) => ({ to, label: NAMES[to], ...(to === 'suggestions' && waiting.data?.waiting ? { count: waiting.data.waiting } : {}) }))}
         aside={
           <>
@@ -89,7 +95,14 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
       />
 
       <main className="pb-10">
-        {section === 'suggestions' ? (
+        {profile ? (
+          <SenderView
+            accountId={profile.accountId}
+            who={profile.kind === 'sender' ? { address: profile.key } : { domain: profile.key }}
+            onOpen={openMessages}
+            epoch={epoch}
+          />
+        ) : section === 'suggestions' ? (
           <SuggestionsView onOpen={openMessages} onChanged={waiting.reload} epoch={epoch} />
         ) : section === 'overview' ? (
           <div className="flex flex-col gap-4">

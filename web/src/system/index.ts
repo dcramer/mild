@@ -6,6 +6,7 @@ export { Dialog } from './dialog.tsx';
 export { Disclosure } from './disclosure.tsx';
 export { Check, Input, TextArea } from './field.tsx';
 export { Figure, Figures } from './figures.tsx';
+export { HoverCard } from './hover-card.tsx';
 export { type ActiveFilter, FilterGroup, ListView } from './list-view.tsx';
 export { Masthead, type NavItem, Sections, SubNav } from './nav.tsx';
 export { Note } from './note.tsx';

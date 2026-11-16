@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { MessageDetail, SenderProfile } from '@/lib/api.ts';
-import { dateTime, shortDate, willBe } from '@/lib/format.ts';
+import { dateTime, willBe } from '@/lib/format.ts';
 import { Code } from '@/system';
 
 /** A heading inside a dialog or a card, over the few lines it names. */
@@ -55,11 +55,6 @@ export function Unsubscribe({ detail }: { detail: MessageDetail }) {
 export function SenderFacts({ sender }: { sender: SenderProfile }) {
   return (
     <ul className="flex flex-col gap-1.5 text-sm">
-      <li>
-        {sender.messages === 0
-          ? 'No mail recorded from them.'
-          : `${sender.messages} ${sender.messages === 1 ? 'message' : 'messages'}${sender.firstSeenAt ? `, the first on ${shortDate(sender.firstSeenAt)}` : ''}.`}
-      </li>
       <li className={sender.userHasWritten ? 'font-medium' : 'text-muted-foreground'}>
         {sender.userHasWritten === null
           ? 'Not checked whether you have written to them.'
@@ -67,7 +62,7 @@ export function SenderFacts({ sender }: { sender: SenderProfile }) {
             ? 'You have written to them.'
             : 'You have never written to them.'}
       </li>
-      {sender.labels.length > 0 ? <li className="text-muted-foreground">So far: {sender.labels.map((l) => `${l.name} ${l.messages}`).join(' · ')}</li> : null}
+      {sender.labels.length > 1 ? <li className="text-muted-foreground">So far: {sender.labels.map((l) => `${l.name} ${l.messages}`).join(' · ')}</li> : null}
       {sender.rules.map((rule) => (
         <li key={rule.id} className="flex flex-wrap items-baseline gap-x-1.5">
           <span className="text-muted-foreground">Rule:</span>
@@ -78,7 +73,8 @@ export function SenderFacts({ sender }: { sender: SenderProfile }) {
             </span>
           ))}
           <span>
-            is {rule.labelName ?? 'a removed label'}
+            is {rule.tier === 'usually' && !rule.when ? 'usually ' : ''}
+            {rule.labelName ?? 'a removed label'}
             {rule.disposition ? `: ${willBe(rule.disposition)}` : ''}
           </span>
         </li>

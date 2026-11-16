@@ -36,6 +36,7 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Card`, `CardHead`, `CardFoot`, `CardGrid` | A thing shown whole, where each one is read on its own rather than compared down a column: a label. Head (what it is), body, foot (what can be done to it). Lists of mail, rules and decisions are tables, not cards. |
 | `Panel` | One item from a list, opened beside the list: it slides over from the right, up to three quarters of the screen, with previous and next to step through the list. Every list opens a message in the same panel (`views/message-panel.tsx`). |
 | `Dialog` | A form or a question: adding a label or a rule. Centred. `footer` for the actions that finish it. Looking at one of many things is a `Panel`, not a `Dialog`. |
+| `HoverCard` | A link that previews where it goes when the pointer rests on it or it takes focus. Only a preview: a touch screen never shows it, so everything in it is also on the page the link opens. |
 | `Note` | Said to the reader outside the flow: `plain`, `look` (needs them), `failure`. No box. |
 | `Empty`, `Loading` | What a sheet shows with nothing in it, and while rows are on their way. |
 | `Stamp` | A short verdict. Weight is meaning: `outline`, `tint`, `ink`; `look` for what is left to the reader. |
@@ -44,7 +45,7 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Disclosure` | What most readers never need, folded under the question that leads to it. |
 | `Wordmark` | The name. |
 
-`web/src/components/` holds what is particular to sift and built from these: a tier's label, a decision's stamp, the decision table.
+`web/src/components/` holds what is particular to sift and built from these: a tier's label, a decision's stamp, the decision table, and `SenderLink`, which is how a sender is named anywhere: a link to their page with a preview of their standing.
 
 ## Narrow screens
 
