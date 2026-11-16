@@ -8,7 +8,7 @@ import { parseArgs, promisify } from 'node:util';
 import { undo } from '../actions/executor.ts';
 import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
 import { unsubscribe } from '../actions/unsubscribe.ts';
-import { type Config, loadConfig, loadEnvFiles, resolveHome, saveSettings, secretPaths } from '../config.ts';
+import { type Config, loadConfig, loadEnvFiles, resolveHome, saveKeyFile, saveSettings, secretPaths } from '../config.ts';
 import { backfill } from '../daemon/backfill.ts';
 import type { Activity, Controls, SignIn } from '../dashboard/controls.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
@@ -23,7 +23,7 @@ import { createJudge } from '../model/judge.ts';
 import { login, openModels, resolveModel } from '../model/models.ts';
 import { type Account, connectAccount, listAccounts } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
-import { readSecret, rekeySecrets, writeSecret } from '../secrets.ts';
+import { loadKeyring, readSecret, rekeySecrets, writeSecret } from '../secrets.ts';
 import { openDb } from '../store/db.ts';
 import { type SetupState, runInit } from './init.ts';
 import { signInRefusal } from './sign-in.ts';
@@ -64,7 +64,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
 function checkSecrets(config: Config, rekey: boolean): () => void {
   const { encrypted, rotated } = rekeySecrets(secretPaths(config), config.keys, rekey);
   return () => {
-    if (!config.keys.current) ui.warn(`Credentials are stored unencrypted. Set ${paint.cmd('SIFT_KEY')} to encrypt them.`);
+    if (!config.keys.current) ui.warn(`Credentials are stored unencrypted. ${paint.cmd('sift init')} makes a key to encrypt them.`);
     if (!rekey) return;
     for (const path of encrypted) ui.ok(`Encrypted ${paint.path(path)}`);
     for (const path of rotated) ui.ok(`Re-encrypted ${paint.path(path)} with the current key`);
@@ -104,6 +104,8 @@ function status(): void {
 
 async function init(): Promise<void> {
   const config = loadConfig();
+  // Started away from the .env that holds the key, init would otherwise make a second one.
+  checkSecrets(config, false);
   const models = openModels(config);
   const withDb = <T>(work: (db: ReturnType<typeof openDb>) => T): T => {
     const db = openDb(config.dbPath);
@@ -117,6 +119,13 @@ async function init(): Promise<void> {
     config,
     ui,
     saveSettings: (settings) => saveSettings(config, settings),
+    saveKey: (key) => {
+      const path = saveKeyFile(process.cwd(), key);
+      process.env['SIFT_KEY'] = key;
+      // In place: the model credential store already holds this keyring.
+      Object.assign(config.keys, loadKeyring());
+      return path;
+    },
     hasGoogleClient: () => hasClientSecrets(config),
     // A home set up before progress was recorded has a client and no state file: treat it as finished.
     setupState: () =>

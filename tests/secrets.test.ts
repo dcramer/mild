@@ -1,8 +1,9 @@
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parseEnv } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { loadConfig, loadEnvFiles, secretPaths } from '../src/config.ts';
+import { loadConfig, loadEnvFiles, saveKeyFile, secretPaths } from '../src/config.ts';
 import { clientFor, installClient, loadClientSecrets, saveRefreshToken } from '../src/gmail/auth.ts';
 import { fileCredentialStore } from '../src/model/credentials.ts';
 import { loadKeyring, readSecret, rekeySecrets, writeSecret } from '../src/secrets.ts';
@@ -137,5 +138,13 @@ describe('.env', () => {
     } finally {
       for (const name of names) delete process.env[name];
     }
+  });
+
+  it('adds the key to an existing .env without losing what it held, owner-only', () => {
+    const cwd = dir();
+    writeFileSync(join(cwd, '.env'), 'OTHER=1', { mode: 0o644 });
+    const path = saveKeyFile(cwd, 'key-a');
+    expect(parseEnv(readFileSync(path, 'utf8'))).toEqual({ OTHER: '1', SIFT_KEY: 'key-a' });
+    expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 });

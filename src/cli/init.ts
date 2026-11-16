@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { existsSync, writeFileSync } from 'node:fs';
 import { type Config, GUIDELINES_TEMPLATE, type Settings, isAddress } from '../config.ts';
 import { type Ui, paint } from './ui.ts';
@@ -59,6 +60,8 @@ export interface InitDeps {
   config: Config;
   ui: Ui;
   saveSettings(settings: Settings): void;
+  /** Save the key as SIFT_KEY where sift will read it, and use it from now on. Returns the file. Throws if it cannot be written. */
+  saveKey(key: string): string;
   hasGoogleClient(): boolean;
   /** `desktop` is a client from an older setup, which has to be replaced. */
   googleClientKind(): 'web' | 'desktop' | null;
@@ -97,6 +100,13 @@ interface Step {
 
 const steps = (deps: InitDeps): Step[] => [
   {
+    title: 'Encryption key',
+    missing: () => !deps.config.keys.current,
+    value: () =>
+      deps.config.keys.current ? `Credentials encrypted${paint.dim(` · key ${deps.config.keys.current.id}`)}` : paint.dim('none, credentials stored plain'),
+    run: () => createKey(deps),
+  },
+  {
     title: 'Where sift runs',
     missing: () => deps.setupState().location === undefined,
     value: () => `Dashboard at ${paint.bold(dashboardAddress(deps))}`,
@@ -131,7 +141,7 @@ const steps = (deps: InitDeps): Step[] => [
   },
 ];
 /** The steps above, then the Gmail account, which is connected in the browser. */
-const STEPS = 5;
+const STEPS = 6;
 
 /**
  * Set sift up. A first run walks through every step, and one that was stopped part-way carries on with
@@ -148,8 +158,8 @@ export async function runInit(deps: InitDeps): Promise<void> {
 
   const all = steps(deps);
   const accounts = deps.connectedAccounts();
-  // The model and the sign-in list are optional, so they do not keep a finished setup in the walk-through.
-  if (all.slice(0, 2).some((step) => step.missing())) {
+  // The key, the model and the sign-in list are optional, so they do not keep a finished setup in the walk-through.
+  if (all.slice(1, 3).some((step) => step.missing())) {
     for (const [index, step] of all.entries()) {
       ui.step(index + 1, STEPS, step.title);
       if (step.missing()) await step.run();
@@ -157,7 +167,7 @@ export async function runInit(deps: InitDeps): Promise<void> {
     }
     ui.step(STEPS, STEPS, 'Gmail account');
     if (accounts.length > 0) ui.ok(`Connected ${paint.bold(accounts.join(', '))}`);
-    else if (!googleReady(deps)) ui.skip('Needs step 2 finished');
+    else if (!googleReady(deps)) ui.skip('Needs step 3 finished');
     else ui.info('Connected in the browser: signing in to the dashboard with Google is what connects the account.');
   } else {
     ui.fields([
@@ -182,6 +192,32 @@ export async function runInit(deps: InitDeps): Promise<void> {
     `${paint.mark(' Ready ')} Start it with ${paint.cmd('sift run')}, then open ${paint.bold(dashboardAddress(deps))}${accounts.length === 0 ? ' and sign in with Google' : ''}.`,
   );
   ui.blank();
+}
+
+/**
+ * Generate the key that encrypts stored credentials, before any are stored. It goes in `.env` where init
+ * runs, not in the home, so a copy of the home does not carry its own key.
+ */
+async function createKey(deps: InitDeps): Promise<void> {
+  const { ui } = deps;
+  if (deps.config.keys.current) {
+    ui.info(
+      `A key is set. Replacing it needs the old one kept as ${paint.cmd('SIFT_OLD_KEYS')} until sift run has re-encrypted everything: see docs/SECRETS.md.`,
+    );
+    return;
+  }
+  const key = randomBytes(32).toString('base64url');
+  let path: string;
+  try {
+    path = deps.saveKey(key);
+  } catch (error) {
+    ui.fail(`Could not save the key: ${reason(error)}`);
+    ui.info(`Set this as ${paint.cmd('SIFT_KEY')} wherever sift runs, then run sift init again:`);
+    ui.plain(key);
+    return;
+  }
+  ui.ok(`Saved as ${paint.cmd('SIFT_KEY')} in ${paint.path(path)}`);
+  ui.info('sift reads it only when started from this directory, and cannot open your credentials without it. Keep a copy somewhere else.');
 }
 
 async function chooseModel(deps: InitDeps): Promise<void> {

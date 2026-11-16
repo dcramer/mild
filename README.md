@@ -20,7 +20,7 @@ pnpm install
 pnpm sift init
 ```
 
-`init` asks for four things, and can be run again to change any of them:
+`init` asks for four things, and can be run again to change any of them. First it generates the key that encrypts your Google and model credentials, and saves it as `SIFT_KEY` in `.env` in the directory you ran it from. sift finds it only when started from there.
 
 1. **Where sift runs.** This machine, or a server you reach from another one. Google only signs people in at `localhost` or an HTTPS address, so on a server `init` turns on `tailscale serve`.
 2. **A Google OAuth client.** sift reads your mail through a client you own, so nobody sits in between. `init` gives you each Google Cloud page in turn with the values to enter, and you paste the client's JSON back.

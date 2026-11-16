@@ -103,6 +103,15 @@ export function loadEnvFiles(home: string, cwd: string = process.cwd()): void {
   for (const path of new Set([join(home, '.env'), join(cwd, '.env')])) if (existsSync(path)) process.loadEnvFile(path);
 }
 
+/** Add `SIFT_KEY` to the `.env` in `dir`, keeping what the file already holds, and make it owner-only. Returns its path. */
+export function saveKeyFile(dir: string, key: string): string {
+  const path = join(dir, '.env');
+  const before = existsSync(path) ? readFileSync(path, 'utf8') : '';
+  writeFileSync(path, `${before}${before === '' || before.endsWith('\n') ? '' : '\n'}SIFT_KEY=${key}\n`, { mode: 0o600 });
+  chmodSync(path, 0o600);
+  return path;
+}
+
 /** Every file that holds a credential, for checking and re-encrypting them together. */
 export function secretPaths(config: Config): string[] {
   const tokens = existsSync(config.googleTokenDir) ? readdirSync(config.googleTokenDir).filter((f) => f.endsWith('.json')) : [];

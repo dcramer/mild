@@ -7,6 +7,7 @@ import { dashboardUrls, listenAddresses, localAddresses, machineNames, resolveHe
 import type { Ui } from '../src/cli/ui.ts';
 import { DEFAULT_SETTINGS, GUIDELINES_TEMPLATE, loadConfig, parseSettings, renderSettings, resolveHome, saveSettings } from '../src/config.ts';
 import { DEFAULT_LABELS } from '../src/store/labels.ts';
+import { loadKeyring } from '../src/secrets.ts';
 import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
 
 const freshHome = () => mkdtempSync(join(tmpdir(), 'sift-home-'));
@@ -32,9 +33,12 @@ function wizard(
     allow?: string[];
     /** The step to change when setup is finished and init lists them. Without it, none. */
     change?: number;
+    /** A SIFT_KEY already set. */
+    key?: string;
+    keyFails?: boolean;
   } = {},
 ) {
-  const config = loadConfig({ SIFT_HOME: freshHome() });
+  const config = loadConfig({ SIFT_HOME: freshHome(), ...(state.key ? { SIFT_KEY: state.key } : {}) });
   const said: string[] = [];
   const asked: string[] = [];
   const calls: string[] = [];
@@ -91,6 +95,12 @@ function wizard(
     config,
     ui,
     saveSettings: (settings) => saveSettings(config, settings),
+    saveKey: (key) => {
+      calls.push('save key');
+      if (state.keyFails) throw new Error('read-only file system');
+      Object.assign(config.keys, loadKeyring({ SIFT_KEY: key }));
+      return '/work/sift/.env';
+    },
     hasGoogleClient: () => world.client !== null,
     googleClientKind: () => world.client,
     setupState: () => world.setup,
@@ -126,9 +136,10 @@ const PUBLISH = 1;
 const GOOGLE = [...COMMON, TEST_USER, 'done'];
 const NO_MODEL = 3;
 /** Positions in the list of steps a finished setup offers to change. */
-const CLIENT_STEP = 2;
-const MODEL_STEP = 3;
-const SIGN_IN_STEP = 4;
+const KEY_STEP = 1;
+const CLIENT_STEP = 3;
+const MODEL_STEP = 4;
+const SIGN_IN_STEP = 5;
 const links = (said: string[]) => said.filter((line) => line.startsWith('link: ')).map((line) => line.slice(6).replace('https://console.cloud.google.com', ''));
 
 describe('sift init', () => {
@@ -136,7 +147,9 @@ describe('sift init', () => {
     const w = wizard([...GOOGLE, 0, 0]);
     await runInit(w.deps);
 
-    expect(w.calls).toEqual([`install ${CLIENT}`, 'login openai-codex oauth']);
+    expect(w.calls).toEqual(['save key', `install ${CLIENT}`, 'login openai-codex oauth']);
+    expect(w.config.keys.current).not.toBeNull();
+    expect(w.text()).toContain('ok: Saved as SIFT_KEY in /work/sift/.env');
     expect(loadConfig({ SIFT_HOME: w.config.home }).settings).toEqual({ ...DEFAULT_SETTINGS, model: 'openai-codex/small' });
     expect(readFileSync(w.config.guidelinesPath, 'utf8')).toBe(GUIDELINES_TEMPLATE);
     expect(w.text()).toContain('signing in to the dashboard with Google is what connects the account');
@@ -177,7 +190,7 @@ describe('sift init', () => {
     await runInit(first.deps);
     expect(first.world.setup).toEqual({ googleTasks: 2, location: 'local' });
     expect(first.text()).toContain('skip: Stopped here');
-    expect(first.text()).toContain('skip: Needs step 2 finished');
+    expect(first.text()).toContain('skip: Needs step 3 finished');
     expect(first.text()).toContain('warn: Still needed: the Google client');
 
     const later = wizard(['done', TEST_USER, 'done', NO_MODEL], { client: 'web', progress: 4 });
@@ -233,6 +246,31 @@ describe('sift init', () => {
     expect(stopped.text()).toContain('warn: Still needed: the Google client');
   });
 
+  it('generates the encryption key before any credential is stored, and shows it when it cannot be saved', async () => {
+    const saved = wizard([...GOOGLE, NO_MODEL]);
+    await runInit(saved.deps);
+    expect(saved.said.indexOf('ok: Saved as SIFT_KEY in /work/sift/.env')).toBeLessThan(saved.said.findIndex((line) => line.startsWith('link: ')));
+    expect(saved.text()).toContain('sift reads it only when started from this directory');
+
+    const failed = wizard([...GOOGLE, NO_MODEL], { keyFails: true });
+    await runInit(failed.deps);
+    expect(failed.config.keys.current).toBeNull();
+    expect(failed.text()).toContain('fail: Could not save the key: read-only file system');
+    expect(failed.said[failed.said.findIndex((line) => line.includes('Set this as SIFT_KEY')) + 1]).toMatch(/^[\w-]{43}$/);
+
+    // A finished setup without one lists it, and makes one when picked; with one set it is never replaced.
+    const later = wizard([], { client: 'web', accounts: ['me@example.org'], change: KEY_STEP });
+    await runInit(later.deps);
+    expect(later.text()).toContain('Encryption key: none, credentials stored plain');
+    expect(later.calls).toEqual(['save key']);
+
+    const set = wizard([], { client: 'web', accounts: ['me@example.org'], key: 'key-a', change: KEY_STEP });
+    await runInit(set.deps);
+    expect(set.text()).toContain(`Encryption key: Credentials encrypted · key ${set.config.keys.current!.id}`);
+    expect(set.text()).toContain('SIFT_OLD_KEYS');
+    expect(set.calls).toEqual([]);
+  });
+
   it('limits sign-in to the addresses given, asking again for one that is not an address', async () => {
     const w = wizard([...GOOGLE, NO_MODEL], { allow: ['me@example.org, nonsense', 'Me@Example.org, work@example.com'] });
     await runInit(w.deps);
@@ -261,20 +299,20 @@ describe('sift init', () => {
   it('asks again when what was pasted is not a client, and stops on s', async () => {
     const w = wizard(['done', 'done', 'done', '{"nonsense":{}}', CLIENT, 'done', TEST_USER, 'done', NO_MODEL]);
     await runInit(w.deps);
-    expect(w.calls).toEqual(['install {"nonsense":{}}', `install ${CLIENT}`]);
+    expect(w.calls).toEqual(['save key', 'install {"nonsense":{}}', `install ${CLIENT}`]);
     expect(w.text()).toContain('fail: What you pasted is not a Google OAuth client');
 
     const stopped = wizard(['done', 'done', 'done', 's', NO_MODEL]);
     await runInit(stopped.deps);
     expect(stopped.world.setup.googleTasks).toBe(3);
-    expect(stopped.calls).toEqual([]);
+    expect(stopped.calls).toEqual(['save key']);
   });
 
   it('on a server, serves the dashboard over Tailscale HTTPS so Google can sign people in', async () => {
     const server = wizard([1, 0, 'skip', NO_MODEL], { location: 'ask' });
     await runInit(server.deps);
     expect(server.asked.slice(0, 2)).toEqual(['Where will you open the dashboard?', expect.stringContaining('tailscale serve --bg 8787')]);
-    expect(server.calls).toEqual(['serve 8787']);
+    expect(server.calls).toEqual(['save key', 'serve 8787']);
     expect(server.world.setup.location).toBe('remote');
     expect(server.config.settings.dashboardHost).toBeUndefined();
     expect(server.text()).toContain('ok: Dashboard at');
@@ -289,7 +327,7 @@ describe('sift init', () => {
     // Without Tailscale there is no HTTPS address to offer.
     const bare = wizard([1, 'skip', NO_MODEL], { location: 'ask', tailscale: null });
     await runInit(bare.deps);
-    expect(bare.calls).toEqual([]);
+    expect(bare.calls).toEqual(['save key']);
     expect(bare.text()).toContain('warn: Google only signs people in at localhost or an HTTPS address');
   });
 

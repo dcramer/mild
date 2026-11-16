@@ -6,11 +6,9 @@ A key beside what it protects protects nothing, so the key is the one setting th
 
 ## Setting a key
 
-```sh
-openssl rand -base64 32
-```
+`sift init` generates one and adds it as `SIFT_KEY` to `.env` in the directory it was run from, before it stores any credential. If it cannot write there (in Docker, say), it prints the key for you to set.
 
-Give the result to sift as `SIFT_KEY`: in the environment, or in a `.env` file. sift reads `.env` from the home directory and then from the directory it was started in; a variable already set is never replaced. `.env` in the home directory is the convenient place and the weak one, since a copy of the home then carries its own key. With Docker, set it on the container (the compose file passes `SIFT_KEY` and `SIFT_OLD_KEYS` through).
+To set one yourself, `openssl rand -base64 32`, and give the result to sift as `SIFT_KEY`: in the environment, or in a `.env` file. sift reads `.env` from the home directory and then from the directory it was started in; a variable already set is never replaced. `.env` in the home directory is the convenient place and the weak one, since a copy of the home then carries its own key. With Docker, set it on the container (the compose file passes `SIFT_KEY` and `SIFT_OLD_KEYS` through).
 
 At the next `sift run`, everything stored plain is encrypted, and says so. Without a key sift still runs, stores these files plain with owner-only permissions, and says so at start.
 
@@ -37,7 +35,7 @@ Then rotate the key itself. The database is not encrypted by this key, so a copi
 
 ## Losing the key
 
-sift refuses to start, and names the files it cannot open. Nothing in them can be recovered. Delete them and set up again:
+sift refuses to start, and names the files it cannot open. If `sift init` made the key, first check that sift was started from the directory whose `.env` holds it. Otherwise nothing in them can be recovered. Delete them and set up again:
 
 | Deleted | Then |
 | --- | --- |
