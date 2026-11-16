@@ -211,7 +211,7 @@ Code: `src/learn/feedback.ts` (suggestions, answers, accuracy), `src/learn/gmail
 
 ## State
 
-One SQLite database, `sift.db` in the home directory (schema in `src/store/migrations/`). It is the complete record of what sift saw and did, and everything else (the dashboard, undo, future analytics) reads from it.
+One SQLite database, `sift.db` in the home directory (schema in `src/store/migrations/`). Each migration file is applied once and recorded by name in `schema_migrations`, so a file that lands with a lower number than ones already applied still runs; a database that has had a file this build does not know was opened by a newer sift, and is refused. It is the complete record of what sift saw and did, and everything else (the dashboard, undo, future analytics) reads from it.
 
 - **messages:** one row per message sift has seen: sender, recipients, subject, the triage headers, the labels at sync time and the facts derived from them. No body. This is enough to triage a message again without refetching it.
 - **feedback, examples:** the user's answers to suggestions, and the full content of each message they answered for, kept as evaluation and training data until deleted (see Teaching).

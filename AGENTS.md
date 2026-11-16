@@ -77,7 +77,7 @@ The database is the full account of what sift saw and did. Every message synced 
 1. `pnpm check` passes. Never skip, delete or weaken a test to get there.
 2. Behavior change: a test covers it.
 3. Dashboard change: `pnpm build:web` passes and you looked at the page in a browser with the console open (a content security policy violation shows up there, not in the build).
-4. Schema change: a new numbered file in `src/store/migrations/`; never edit an applied migration.
+4. Schema change: a new numbered file in `src/store/migrations/`; never edit or rename an applied migration. Applied files are recorded by name, so any unused number works, but files run in name order: number it after whatever it depends on.
 
 ## Rules and what enforces them
 

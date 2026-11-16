@@ -26,6 +26,48 @@ describe('store', () => {
     db.close();
   });
 
+  it('records each migration by name, and applies one that arrives with a lower number than those already applied', () => {
+    const db = openDb(':memory:');
+    expect((db.prepare('SELECT name FROM schema_migrations ORDER BY name').all() as { name: string }[]).map((row) => row.name)).toEqual(files);
+
+    // A database that was migrated while a lower-numbered file did not exist yet: it must still get that file.
+    const [late] = files.filter((f) => f.startsWith('050_'));
+    const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
+    openDb(path).close();
+    const behind = new DatabaseSync(path);
+    behind.exec('DROP TABLE eval_results; DROP TABLE eval_runs;');
+    behind.prepare('DELETE FROM schema_migrations WHERE name = ?').run(late!);
+    behind.close();
+    const caught = openDb(path);
+    expect(caught.prepare(`SELECT count(*) AS n FROM sqlite_master WHERE name IN ('eval_runs', 'eval_results')`).get()).toEqual({ n: 2 });
+    expect(schemaVersion(caught)).toBe(Number.parseInt(files.at(-1)!, 10));
+    caught.close();
+  });
+
+  it('takes a database from before migrations were named to have had every file up to its version', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
+    const old = new DatabaseSync(path);
+    for (const file of files.filter((f) => Number.parseInt(f, 10) <= 41)) old.exec(readFileSync(new URL(file, MIGRATIONS), 'utf8'));
+    old.exec('PRAGMA user_version = 41');
+    old.close();
+
+    const db = openDb(path);
+    const applied = db.prepare('SELECT name, applied_at FROM schema_migrations ORDER BY name').all() as { name: string; applied_at: number }[];
+    expect(applied.map((row) => row.name)).toEqual(files);
+    // The ones it already had are marked without a time; the rest ran now.
+    expect(applied.filter((row) => row.applied_at === 0).map((row) => row.name)).toEqual(files.filter((f) => Number.parseInt(f, 10) <= 41));
+    db.close();
+  });
+
+  it('refuses a database a newer sift has migrated, and leaves it as it was', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
+    openDb(path).close();
+    const newer = new DatabaseSync(path);
+    newer.exec(`INSERT INTO schema_migrations (name, applied_at) VALUES ('999_from_the_future.sql', 1)`);
+    newer.close();
+    expect(() => openDb(path)).toThrow(/last opened by a newer sift: it has had 999_from_the_future\.sql/);
+  });
+
   it('turns a rule the model checked into one that waits for its label', () => {
     const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
     const old = new DatabaseSync(path);
