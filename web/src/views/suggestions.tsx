@@ -70,7 +70,7 @@ function ProposalRow({ proposal, onResolved }: { proposal: Proposal; onResolved:
   );
 }
 
-/** One sender's waiting mail, as a row: who, what, what sift says, when. Pointing at it offers Agree, and Change… to say otherwise. */
+/** One sender's waiting mail, as a row: who, what, what sift says, when, and Agree or Change… to say otherwise. */
 function SuggestionRow({ group, onOpen, onAnswered }: { group: SuggestionGroup; onOpen: () => void; onAnswered: (taught: string) => void }) {
   const { busy, error, run } = useAction();
   const [first] = subjects(group.sample);
@@ -114,7 +114,7 @@ function SuggestionRow({ group, onOpen, onAnswered }: { group: SuggestionGroup; 
       <Td phone="hide" num quiet>
         {ago(group.latestReceivedAt)}
       </Td>
-      <RowActions reveal>
+      <RowActions>
         {sure ? (
           <Button variant="quiet" busy={busy} onClick={agree}>
             Agree

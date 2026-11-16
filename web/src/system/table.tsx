@@ -79,19 +79,13 @@ export function OnPhone({ children }: { children: ReactNode }) {
 
 /**
  * The last cell of a row: presses that act on the row without opening it. Quiet buttons only, and they
- * firm up when the row is pointed at; with `reveal` they appear only then. Dropped on a phone, where the row opens to the same actions; a row
+ * firm up when the row is pointed at. Dropped on a phone, where the row opens to the same actions; a row
  * that does not open keeps them (`phone="keep"`).
  */
-export function RowActions({ phone, reveal, children }: { phone?: 'keep'; reveal?: boolean; children: ReactNode }) {
+export function RowActions({ phone, children }: { phone?: 'keep'; children: ReactNode }) {
   return (
     <td
-      className={cn(
-        'w-px py-1.5 pl-3 text-right whitespace-nowrap align-top',
-        phone !== 'keep' && PHONE.hide,
-        // Shown on the row pointed at or focused, so a long list reads as a list.
-        reveal && 'pointer-fine:opacity-0 pointer-fine:group-hover/row:opacity-100 pointer-fine:group-focus-within/row:opacity-100',
-        EDGES,
-      )}
+      className={cn('w-px py-1.5 pl-3 text-right whitespace-nowrap align-top', phone !== 'keep' && PHONE.hide, EDGES)}
       onClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => event.stopPropagation()}
     >
