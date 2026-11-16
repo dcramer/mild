@@ -68,7 +68,7 @@ Everything it prints goes through `src/cli/ui.ts`, never `console.log`. The look
 
 ## Configuration
 
-No setting may require an environment variable, with one exception: the key that encrypts stored credentials (`SIFT_KEY`, `SIFT_OLD_KEYS`; [docs/SECRETS.md](docs/SECRETS.md)), since a key kept beside what it protects protects nothing. sift must still run without it. Credentials are encrypted and decrypted only through `src/secrets.ts`: the install's in files, a person's sign-ins in their own database (`src/store/credentials.ts`). Settings go in `sift.toml` (`Settings` in `src/config.ts`, parsed strictly) and get a step in `sift init` if the user must choose them. Everything sift stores lives under the one home directory; add new paths to `Config`, never beside the working directory.
+Every setting can be given in the environment, which is how Vercel and Cloudflare configure sift, or in `sift.toml`, which is how a local install does; the environment wins. A local install must still run with no environment variable set, except the key that encrypts stored credentials (`SIFT_KEY`, `SIFT_OLD_KEYS`; [docs/SECRETS.md](docs/SECRETS.md)), since a key kept beside what it protects protects nothing; sift must still run without it. Not all of this is built yet; see TODO.md. Credentials are encrypted and decrypted only through `src/secrets.ts`: the install's in files, a person's sign-ins in their own database (`src/store/credentials.ts`). Settings go in `sift.toml` (`Settings` in `src/config.ts`, parsed strictly) and get a step in `sift init` if the user must choose them. Everything sift stores lives under the one home directory; add new paths to `Config`, never beside the working directory.
 
 ## Record everything
 
