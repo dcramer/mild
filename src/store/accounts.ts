@@ -209,6 +209,11 @@ export async function recordSync(
   });
 }
 
+/** Record synced messages before the cursor moves, for a sync too long to fetch in one go. Returns how many were not already known. */
+export async function recordSynced(db: Sql, accountId: string, messages: readonly MessageFacts[], now: number = Date.now()): Promise<number> {
+  return await db.transaction(async (tx) => await insertMessages(tx, accountId, messages, now, false));
+}
+
 /**
  * Record older mail the user asked to pull in. It does not move the sync cursor, and these messages are
  * only ever suggested about. Returns how many were not already known.

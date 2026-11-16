@@ -3,10 +3,15 @@ import type { Sql } from '../store/sql.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { type PullResult, pullChanges, toFacts } from '../gmail/sync.ts';
 import { learnFromGmail, userChanges } from '../learn/gmail.ts';
-import { type Account, lastSyncedAt, recordSync, setMailboxAliases } from '../store/accounts.ts';
+import { type Account, lastSyncedAt, recordSync, recordSynced, setMailboxAliases } from '../store/accounts.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
 const DAY_MS = 86_400_000;
+/**
+ * Fetched messages are recorded this many at a time, so a sync cut short keeps what it fetched and the
+ * next fetches only the rest. 50 metadata reads are 1,000 quota units.
+ */
+const CHUNK = 50;
 
 export interface SyncReport {
   mode: PullResult['mode'];
@@ -19,8 +24,8 @@ export interface SyncReport {
 }
 
 /**
- * Pull one account's new inbox mail into the store. Nothing is persisted until every message has
- * been fetched, so a failure part-way leaves the cursor where it was and the next run retries.
+ * Pull one account's new inbox mail into the store. The cursor moves only once every message has been
+ * fetched, so a failure part-way leaves it where it was and the next run reads the same history again.
  */
 export async function syncAccount(db: Sql, api: GmailApi, account: Account, now: () => number = Date.now): Promise<SyncReport> {
   // Recorded as the sync time, so the next sync knows which of sift's own changes its history can contain: those made since this one began.
@@ -36,31 +41,39 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
   }
   const pull = await pullChanges(api, account.historyId);
   const byUser = await userChanges(db, account.id, pull.labelChanges, syncedAt ?? 0);
-  const fetched: MessageFacts[] = [];
-  let skipped = 0;
-
-  for (const id of pull.messageIds) {
-    const raw = await api.getMetadata(id);
-    const facts = raw?.labelIds.includes('INBOX') ? toFacts(account.id, raw) : null;
-    if (facts) fetched.push(facts);
-    else skipped++;
-  }
-
-  const ids = fetched.map((m) => m.messageId);
   const known = new Set(
-    ids.length === 0
+    pull.messageIds.length === 0
       ? []
       : (
           await db
             .select({ id: messages.id })
             .from(messages)
-            .where(and(eq(messages.accountId, account.id), inArray(messages.id, ids)))
+            .where(and(eq(messages.accountId, account.id), inArray(messages.id, pull.messageIds)))
         ).map((r) => r.id),
   );
-  const added = fetched.filter((m) => !known.has(m.messageId));
+  const added: MessageFacts[] = [];
+  let unrecorded: MessageFacts[] = [];
+  let skipped = 0;
+
+  for (const id of pull.messageIds) {
+    if (known.has(id)) continue;
+    const raw = await api.getMetadata(id);
+    const facts = raw?.labelIds.includes('INBOX') ? toFacts(account.id, raw) : null;
+    if (!facts) {
+      skipped++;
+      continue;
+    }
+    added.push(facts);
+    unrecorded.push(facts);
+    if (unrecorded.length === CHUNK) {
+      await recordSynced(db, account.id, unrecorded, startedAt);
+      unrecorded = [];
+    }
+  }
+
   // Before the cursor moves: a failure here means the same history is read again, which this tolerates.
   const corrections = await learnFromGmail(db, account.id, byUser, api, startedAt);
   const read = byUser.filter((c) => c.removed.includes('UNREAD')).map((c) => c.messageId);
-  await recordSync(db, account.id, fetched, pull.historyId, startedAt, read);
+  await recordSync(db, account.id, unrecorded, pull.historyId, startedAt, read);
   return { mode: pull.mode, added, skipped, corrections };
 }

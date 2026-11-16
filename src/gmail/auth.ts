@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { CodeChallengeMethod, OAuth2Client } from 'google-auth-library';
 import type { Config } from '../config.ts';
 import { readSecret, writeSecret } from '../secrets.ts';
-import { createGmailApi } from './api.ts';
+import { readProfile } from './api.ts';
 import { GMAIL_SCOPES } from './scopes.ts';
 
 interface ClientSecrets {
@@ -83,7 +83,7 @@ export async function completeBrowserSignIn(
   const { tokens } = await client.getToken({ code: request.code, codeVerifier: request.verifier, redirect_uri: request.redirectUri });
   if (!tokens.refresh_token) throw new Error('Google did not return a refresh token.');
   client.setCredentials(tokens);
-  const profile = await createGmailApi(client).getProfile();
+  const profile = await readProfile(client);
   return { email: profile.emailAddress, historyId: profile.historyId, refreshToken: tokens.refresh_token };
 }
 

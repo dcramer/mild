@@ -259,6 +259,30 @@ describe('syncAccount', () => {
     expect(next.calls).toEqual(['history:900:']);
   });
 
+  it('keeps what it fetched before a failure, and fetches only the rest next time', async () => {
+    const db = await openUserDb('me@example.org');
+    await addMailbox(db, 'me@example.org', '500', 0);
+    const ids = Array.from({ length: 120 }, (_, i) => `m${i}`);
+    const messages = Object.fromEntries(ids.map((id) => [id, gmailMessage(id)]));
+    const failing = fakeApi({ pages: page(ids, '520'), messages });
+    let reads = 0;
+    failing.getMetadata = async (id) => {
+      if (++reads > 110) throw new Error('rate limited');
+      return messages[id] ?? null;
+    };
+    await expect(syncAccount(db, failing, (await listAccounts(db))[0]!)).rejects.toThrow('rate limited');
+    expect((await listAccounts(db))[0]?.historyId).toBe('500');
+    expect(await raw(db).get('SELECT count(*) AS n FROM messages')).toEqual({ n: 100 });
+
+    const read: string[] = [];
+    const next = fakeApi({ pages: page(ids, '520'), messages });
+    next.getMetadata = async (id) => (read.push(id), messages[id] ?? null);
+    const report = await syncAccount(db, next, (await listAccounts(db))[0]!);
+    expect(read).toEqual(ids.slice(100));
+    expect(report.added.map((m) => m.messageId)).toEqual(ids.slice(100));
+    expect((await listAccounts(db))[0]?.historyId).toBe('520');
+  });
+
   it('leaves the cursor alone when the search after an expired cursor fails', async () => {
     const db = await openUserDb('me@example.org');
     await addMailbox(db, 'me@example.org', '500', 0);

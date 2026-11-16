@@ -37,7 +37,7 @@ export async function gmailClient(config: Config, db: Sql, email: string) {
   return clientFor(loadClientSecrets(config), token);
 }
 
-const mailboxFor = async (config: Config, db: Sql, email: string) => createGmailMailbox(await gmailClient(config, db, email));
+const mailboxFor = async (config: Config, db: Sql, email: string) => createGmailMailbox(await gmailClient(config, db, email), email);
 
 /** One person's model providers, signed in with what is kept in their database. */
 const modelsFor = async (config: Config, db: Sql) => openModels(await credentials(db, 'model', config.keys), config.settings.chatgptSignIn ?? 'device-code');
@@ -154,7 +154,7 @@ export async function buildControls(config: Config, store: Store, live: { wake?:
       let added = 0;
       for (const db of await everyone())
         for (const account of await listAccounts(db))
-          added += await backfill(db, createGmailApi(await gmailClient(config, db, account.email)), account.id, days);
+          added += await backfill(db, createGmailApi(await gmailClient(config, db, account.email), account.email), account.id, days);
       return added;
     },
     putBack: async (db, accountId, messageId) => {
@@ -183,7 +183,7 @@ export async function buildControls(config: Config, store: Store, live: { wake?:
       const token = await (await credentials(db, 'gmail', config.keys)).read(email).catch(() => undefined);
       return token === null || (token !== undefined && (await revokeGrant(token)));
     },
-    messageHtml: async (db, accountId, messageId) => getMessageHtml(await gmailClient(config, db, accountId), messageId),
+    messageHtml: async (db, accountId, messageId) => getMessageHtml(await gmailClient(config, db, accountId), accountId, messageId),
     checkNow: () => live.wake?.now(),
     activity: () => live.activity,
   };

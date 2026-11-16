@@ -70,7 +70,7 @@ export async function run(args: string[]): Promise<void> {
         unsubscribe: (db: Sql, accountId: string, messageId: string) => unsubscribe({ db }, accountId, messageId),
         connect: async (db: Sql, account: Account) => {
           const client = await gmailClient(config, db, account.email);
-          return { api: createGmailApi(client), mailbox: createGmailMailbox(client) };
+          return { api: createGmailApi(client, account.email), mailbox: createGmailMailbox(client, account.email) };
         },
         log,
       };
