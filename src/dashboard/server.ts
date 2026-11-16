@@ -1,8 +1,4 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
-import { extname, join, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { People } from '../store/people.ts';
 import type { z } from 'zod';
 import { FRAMES, READS, WRITES } from './api/index.ts';
@@ -11,23 +7,8 @@ import { frameNote } from './mail-html.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { type Scope, narrow, scopeFor, sees } from './scope.ts';
 
-/** Where `pnpm build:web` puts the built web app. */
-export const WEB_DIST = fileURLToPath(new URL('../../web/dist/', import.meta.url));
-
-const TYPES: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.ico': 'image/x-icon',
-  '.woff2': 'font/woff2',
-  '.json': 'application/json',
-  '.webmanifest': 'application/manifest+json',
-  '.map': 'application/json',
-};
-
-const HEADERS = {
+/** Sent with everything the page loads, its own files included. */
+export const HEADERS = {
   // Subjects and sender names are untrusted. The page only ever renders them as text, and this is the backstop:
   // no inline script, no inline style element, nothing loaded from another origin. `manifest-src` and
   // `worker-src` let the page be installed as an app with its own service worker; both are files of this
@@ -58,32 +39,16 @@ const FRAME_HEADERS = {
 };
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+const LOCAL_PEERS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
-/** Every file under `dir`, keyed by its URL path. Built once: requests can only ever name a file that was listed. */
-function listAssets(dir: string): Map<string, { file: string; type: string }> {
-  const assets = new Map<string, { file: string; type: string }>();
-  if (!existsSync(dir)) return assets;
-  for (const entry of readdirSync(dir, { recursive: true, withFileTypes: true })) {
-    if (!entry.isFile()) continue;
-    const file = join(entry.parentPath, entry.name);
-    const type = TYPES[extname(entry.name)];
-    if (type) assets.set(`/${relative(dir, file).split(sep).join('/')}`, { file, type });
-  }
-  return assets;
-}
+const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
+  new Response(JSON.stringify(body), { status, headers: { ...HEADERS, 'content-type': 'application/json', 'cache-control': 'no-store', ...headers } });
 
-/** Loaded by the page in dev mode. Reloads when the page's files change or the server comes back as a new process. */
-const DEV_RELOAD_JS = `let seen = null;
-new EventSource('/dev/events').onmessage = (event) => {
-  if (seen !== null && event.data !== seen) setTimeout(() => location.reload(), 150);
-  seen = event.data;
+const redirect = (location: string, ...cookies: string[]) => {
+  const headers = new Headers({ location, 'cache-control': 'no-store' });
+  for (const value of cookies) headers.append('set-cookie', value);
+  return new Response(null, { status: 303, headers });
 };
-`;
-const DEV_SCRIPT = '<script type="module" src="/dev/reload.js"></script>';
-const DEV_BUILDING = `<!doctype html><html class="dark"><head><meta charset="UTF-8" /><title>sift</title>${DEV_SCRIPT}</head><body>Building the page…</body></html>`;
-
-const json = (res: ServerResponse, status: number, body: unknown) =>
-  res.writeHead(status, { ...HEADERS, 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(body));
 
 const MAX_BODY = 20_000;
 
@@ -109,11 +74,14 @@ const replied = (schema: z.ZodType, body: unknown): { status: number; body: unkn
 };
 
 /** Read a small JSON body. Null if it is too large or not a JSON object. */
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown> | null> {
+async function readJson(request: Request): Promise<Record<string, unknown> | null> {
   let body = '';
-  for await (const chunk of req) {
-    body += String(chunk);
-    if (body.length > MAX_BODY) return null;
+  if (request.body) {
+    const decoder = new TextDecoder();
+    for await (const chunk of request.body) {
+      body += decoder.decode(chunk, { stream: true });
+      if (body.length > MAX_BODY) return null;
+    }
   }
   try {
     const parsed: unknown = JSON.parse(body);
@@ -124,8 +92,6 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown> |
 }
 
 export interface DashboardOptions {
-  /** Directory holding the built web app. */
-  assetsDir?: string;
   /** Names and addresses, besides localhost, that the dashboard answers to. */
   allowedHosts?: readonly string[];
   /**
@@ -139,13 +105,17 @@ export interface DashboardOptions {
   signInAddresses?: readonly string[];
   /** What the dashboard can ask the rest of sift to do. Without it the page can look but not manage. */
   controls?: Controls;
-  /**
-   * For working on sift (`sift dev`): the page's files are read afresh on every request, and the page is
-   * told to reload when they change or when this process restarts. Same origin and the same content
-   * security policy as normal, so a policy violation shows up while developing.
-   */
-  dev?: boolean;
   now?: () => number;
+}
+
+export interface Dashboard {
+  /** Whether a request with this Host header is for the dashboard. One that is not is refused by `handle`. */
+  answers: (host: string | null | undefined) => boolean;
+  /**
+   * Everything but the page's own files. `peer` is the address the request came from, when the adapter
+   * knows it: a forwarded scheme is only believed from this machine.
+   */
+  handle: (request: Request, peer?: string) => Promise<Response>;
 }
 
 const SESSION_DAYS = 30;
@@ -180,11 +150,13 @@ const same = (a: string, b: string) => {
   return x.length === y.length && x.length > 0 && timingSafeEqual(x, y);
 };
 
-const cookie = (req: IncomingMessage, name: string) =>
-  (req.headers.cookie ?? '')
+const cookie = (request: Request, name: string) =>
+  (request.headers.get('cookie') ?? '')
     .split(';')
     .map((part) => part.trim().split('='))
     .find(([key]) => key === name)?.[1];
+
+const hostname = (host: string | null | undefined) => (host ?? '').replace(/:\d+$/, '').toLowerCase();
 
 /**
  * The dashboard: where the user watches sift, teaches it and manages it.
@@ -193,23 +165,16 @@ const cookie = (req: IncomingMessage, name: string) =>
  * gives sift its access to the account. Requests must be addressed to localhost or one of this
  * machine's own names (which stops another website reaching it through DNS rebinding), and every write
  * must come from the dashboard's own page. The page's static files, its app manifest and service worker
- * among them, are public and hold no data; everything under `/api/` needs the session.
+ * among them, are public, hold no data and are served by the adapter; everything under `/api/` needs the
+ * session.
  *
  * What it may do: change what sift has been taught and how it is set up. It never reaches Gmail itself;
  * the few things that do (signing in, undo, pulling in older mail) are handed in and audited as usual.
  */
-export function createDashboardServer(people: People, options: DashboardOptions = {}): Server {
-  const assetsDir = options.assetsDir ?? WEB_DIST;
-  const builtAssets = listAssets(assetsDir);
-  const dev = options.dev ?? false;
-  // Changes when the page is rebuilt, and when this process is a new one.
-  const boot = Date.now();
-  const devVersion = () => {
-    const index = join(assetsDir, 'index.html');
-    return `${boot}:${existsSync(index) ? statSync(index).mtimeMs : 0}`;
-  };
+export function createDashboard(people: People, options: DashboardOptions = {}): Dashboard {
   const now = options.now ?? Date.now;
   const hosts = new Set([...LOCAL_HOSTS, ...(options.allowedHosts ?? []).map((h) => h.toLowerCase())]);
+  const answers = (host: string | null | undefined) => hosts.has(hostname(host));
   const { controls, signIn } = options;
   const secret = options.sessionSecret ?? '';
   if (signIn && secret === '') throw new Error('signIn needs a sessionSecret');
@@ -231,24 +196,27 @@ export function createDashboardServer(people: People, options: DashboardOptions 
     return { status: 404, error: 'There is no such thing here.' };
   };
 
-  const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    const host = (req.headers.host ?? '').replace(/:\d+$/, '').toLowerCase();
-    if (!hosts.has(host)) {
-      res.writeHead(403, { 'content-type': 'text/plain' }).end('The sift dashboard does not answer to this address. Set dashboard.host in sift.toml.');
-      return;
+  const handle = async (request: Request, peer?: string): Promise<Response> => {
+    // The Host header, not the URL: a `node:http` adapter cannot always build a URL from it.
+    const hostHeader = request.headers.get('host');
+    if (!answers(hostHeader)) {
+      return new Response('The sift dashboard does not answer to this address. Set dashboard.host in sift.toml.', {
+        status: 403,
+        headers: { 'content-type': 'text/plain' },
+      });
     }
+    const host = hostname(hostHeader);
 
-    const url = new URL(req.url ?? '/', 'http://localhost');
+    const url = new URL(request.url);
     const query = url.searchParams;
 
     // The address the browser used. Behind `tailscale serve` the request arrives from this machine over
     // plain HTTP with the original scheme in a header, which is only believed from this machine.
-    const local = req.socket.remoteAddress === '127.0.0.1' || req.socket.remoteAddress === '::1' || req.socket.remoteAddress === '::ffff:127.0.0.1';
-    const https = local && req.headers['x-forwarded-proto'] === 'https';
-    const origin = `${https ? 'https' : 'http'}://${req.headers.host ?? ''}`;
+    const https = peer !== undefined && LOCAL_PEERS.has(peer) && request.headers.get('x-forwarded-proto') === 'https';
+    const origin = `${https ? 'https' : 'http'}://${hostHeader ?? ''}`;
     // Google only returns a browser to localhost or to an HTTPS address.
     const googleCanReturnHere = https || LOCAL_HOSTS.has(host);
-    const issued = signIn ? readSession(cookie(req, 'sift_session'), secret, now()) : null;
+    const issued = signIn ? readSession(cookie(request, 'sift_session'), secret, now()) : null;
     // A session is for one person: once its mailbox has been removed, and perhaps signed in to again by someone new, it is no one's.
     const found = issued !== null && signIn?.allowed(issued.email) ? await people.signedIn(issued.email) : null;
     const known = found?.id === issued?.person ? found : null;
@@ -271,114 +239,80 @@ export function createDashboardServer(people: People, options: DashboardOptions 
     // started the sign-in also holds it here, so a consent link sent to someone else completes nothing.
     const signInCookie = (state: string, maxAge: number) =>
       `sift_signin=${state}; Path=/auth; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
+    const { method } = request;
 
-    if (signIn && req.method === 'GET' && url.pathname === '/api/session') {
+    if (signIn && method === 'GET' && url.pathname === '/api/session') {
       const reason = !signIn.hasClient() ? 'no-client' : !googleCanReturnHere ? 'address' : null;
-      return void json(res, 200, {
-        required: true,
-        email: session,
-        canSignIn: reason === null,
-        reason,
-        addresses: options.signInAddresses ?? [],
-      });
+      return json(200, { required: true, email: session, canSignIn: reason === null, reason, addresses: options.signInAddresses ?? [] });
     }
-    if (signIn && req.method === 'GET' && url.pathname === '/auth/login') {
-      if (!signIn.hasClient() || !googleCanReturnHere) {
-        res.writeHead(303, { location: '/', 'cache-control': 'no-store' }).end();
-        return;
-      }
+    if (signIn && method === 'GET' && url.pathname === '/auth/login') {
+      if (!signIn.hasClient() || !googleCanReturnHere) return redirect('/');
       for (const [key, entry] of pending) if (entry.expires < now()) pending.delete(key);
       const state = randomBytes(16).toString('hex');
       const verifier = randomBytes(32).toString('base64url');
       const redirectUri = `${origin}/auth/callback`;
       // Adding a second account is only for someone already signed in.
       pending.set(state, { verifier, redirectUri, addTo: query.get('add') === '1' ? session : null, expires: now() + SIGN_IN_MS });
-      res
-        .writeHead(303, {
-          location: signIn.url(redirectUri, state, createHash('sha256').update(verifier).digest('base64url')),
-          'set-cookie': signInCookie(state, SIGN_IN_MS / 1000),
-          'cache-control': 'no-store',
-        })
-        .end();
-      return;
+      return redirect(signIn.url(redirectUri, state, createHash('sha256').update(verifier).digest('base64url')), signInCookie(state, SIGN_IN_MS / 1000));
     }
-    if (signIn && req.method === 'GET' && url.pathname === '/auth/callback') {
+    if (signIn && method === 'GET' && url.pathname === '/auth/callback') {
       const state = query.get('state') ?? '';
       const entry = pending.get(state);
       pending.delete(state);
-      const fail = (message: string) =>
-        res.writeHead(303, { location: `/?signin=${encodeURIComponent(message)}`, 'set-cookie': signInCookie('', 0), 'cache-control': 'no-store' }).end();
+      const fail = (message: string) => redirect(`/?signin=${encodeURIComponent(message)}`, signInCookie('', 0));
       const code = query.get('code');
-      if (!entry || entry.expires < now()) return void fail('That sign-in expired. Try again.');
-      if (!same(cookie(req, 'sift_signin') ?? '', state)) return void fail('That sign-in was started in another browser. Start it again here.');
+      if (!entry || entry.expires < now()) return fail('That sign-in expired. Try again.');
+      if (!same(cookie(request, 'sift_signin') ?? '', state)) return fail('That sign-in was started in another browser. Start it again here.');
       // A mailbox joins whoever started adding it, so that person must still be the one signed in here.
-      if (entry.addTo !== null && session !== entry.addTo) return void fail('Sign in again, then add the mailbox.');
-      if (!code) return void fail(query.get('error') === 'access_denied' ? 'Google did not grant access.' : 'Google did not complete the sign-in.');
-      signIn
-        .complete(entry.redirectUri, code, entry.verifier, entry.addTo)
-        .then(async (email) => {
-          const who = await people.signedIn(email);
-          if (!who) return void fail('Google did not complete the sign-in.');
-          res
-            .writeHead(303, {
-              location: '/',
-              'set-cookie': [sessionCookie(signSession({ email, person: who.id }, secret, now()), SESSION_DAYS * 86_400), signInCookie('', 0)],
-              'cache-control': 'no-store',
-            })
-            .end();
-        })
-        .catch((error: unknown) => fail(error instanceof Error ? error.message : String(error)));
-      return;
+      if (entry.addTo !== null && session !== entry.addTo) return fail('Sign in again, then add the mailbox.');
+      if (!code) return fail(query.get('error') === 'access_denied' ? 'Google did not grant access.' : 'Google did not complete the sign-in.');
+      try {
+        const email = await signIn.complete(entry.redirectUri, code, entry.verifier, entry.addTo);
+        const who = await people.signedIn(email);
+        if (!who) return fail('Google did not complete the sign-in.');
+        return redirect('/', sessionCookie(signSession({ email, person: who.id }, secret, now()), SESSION_DAYS * 86_400), signInCookie('', 0));
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : String(error));
+      }
     }
-    if (signIn && session === null && url.pathname.startsWith('/api/')) return void json(res, 401, { error: 'Sign in to use the dashboard.' });
-    if (signIn && req.method === 'POST' && url.pathname === '/api/signout') {
-      res
-        .writeHead(200, { ...HEADERS, 'content-type': 'application/json', 'set-cookie': sessionCookie('', 0), 'cache-control': 'no-store' })
-        .end('{"ok":true}');
-      return;
-    }
-    if (!signIn && req.method === 'GET' && url.pathname === '/api/session')
-      return void json(res, 200, { required: false, email: null, canSignIn: false, reason: null, addresses: [] });
+    if (signIn && session === null && url.pathname.startsWith('/api/')) return json(401, { error: 'Sign in to use the dashboard.' });
+    if (signIn && method === 'POST' && url.pathname === '/api/signout') return json(200, { ok: true }, { 'set-cookie': sessionCookie('', 0) });
+    if (!signIn && method === 'GET' && url.pathname === '/api/session')
+      return json(200, { required: false, email: null, canSignIn: false, reason: null, addresses: [] });
 
-    if (req.method === 'POST') {
+    if (method === 'POST') {
       const handler = writes.get(url.pathname);
       // A write must come from the dashboard's own page: a browser sends Origin on every cross-site
       // request, and another site cannot set a custom header or a JSON content type without a preflight
       // this server never approves.
       let origin: string | null = null;
       try {
-        origin = new URL(req.headers.origin ?? '').hostname.toLowerCase();
+        origin = new URL(request.headers.get('origin') ?? '').hostname.toLowerCase();
       } catch {
         origin = null;
       }
       const fromOwnPage = origin !== null && hosts.has(origin.includes(':') ? `[${origin}]` : origin);
-      if (!handler) return void json(res, 405, { error: 'Not something this dashboard does.' });
-      if (!fromOwnPage || req.headers['x-sift'] !== '1' || !(req.headers['content-type'] ?? '').startsWith('application/json')) {
-        return void json(res, 403, { error: 'This request did not come from the dashboard.' });
+      if (!handler) return json(405, { error: 'Not something this dashboard does.' });
+      if (!fromOwnPage || request.headers.get('x-sift') !== '1' || !(request.headers.get('content-type') ?? '').startsWith('application/json')) {
+        return json(403, { error: 'This request did not come from the dashboard.' });
       }
-      void readJson(req)
-        .then(async (raw) => {
-          if (raw === null) return void json(res, 400, { error: 'That request is not well formed.' });
-          const body = handler.body.safeParse(raw);
-          if (!body.success) return void json(res, 400, { error: refusedBy(body.error) });
-          const refused = await refusal(handler, ctx, body.data, whole, person !== null);
-          if (refused) return void json(res, refused.status, { error: refused.error });
-          const result: unknown = await handler.run(ctx, body.data, whole);
-          if (result === null) return void json(res, 400, { error: 'That request is not well formed.' });
-          const reply = replied(handler.reply, result);
-          if (reply.status === 200 && handler.endsSession?.(reply.body))
-            return void res
-              .writeHead(200, { ...HEADERS, 'content-type': 'application/json', 'set-cookie': sessionCookie('', 0), 'cache-control': 'no-store' })
-              .end(JSON.stringify(reply.body));
-          json(res, reply.status, reply.body);
-        })
-        .catch((error: unknown) => json(res, 409, { error: error instanceof Error ? error.message : String(error) }));
-      return;
+      try {
+        const raw = await readJson(request);
+        if (raw === null) return json(400, { error: 'That request is not well formed.' });
+        const body = handler.body.safeParse(raw);
+        if (!body.success) return json(400, { error: refusedBy(body.error) });
+        const refused = await refusal(handler, ctx, body.data, whole, person !== null);
+        if (refused) return json(refused.status, { error: refused.error });
+        const result: unknown = await handler.run(ctx, body.data, whole);
+        if (result === null) return json(400, { error: 'That request is not well formed.' });
+        const reply = replied(handler.reply, result);
+        if (reply.status === 200 && handler.endsSession?.(reply.body)) return json(200, reply.body, { 'set-cookie': sessionCookie('', 0) });
+        return json(reply.status, reply.body);
+      } catch (error) {
+        return json(409, { error: error instanceof Error ? error.message : String(error) });
+      }
     }
-    if (req.method !== 'GET') {
-      res.writeHead(405, { allow: 'GET, POST' }).end();
-      return;
-    }
+    if (method !== 'GET') return new Response(null, { status: 405, headers: { allow: 'GET, POST' } });
 
     const shown = frames.get(url.pathname);
     if (shown) {
@@ -393,73 +327,30 @@ export function createDashboardServer(people: People, options: DashboardOptions 
               status: 500,
               html: frameNote(error instanceof Error ? error.message : String(error)),
             }));
-      res.writeHead(reply.status, FRAME_HEADERS).end(reply.html);
-      return;
+      return new Response(reply.html, { status: reply.status, headers: FRAME_HEADERS });
     }
     if (url.pathname.startsWith('/api/')) {
       const route = reads.get(url.pathname);
-      if (!route) return void json(res, 404, { error: 'Not found' });
+      if (!route) return json(404, { error: 'Not found' });
       // `mailbox` narrows any read to one of the person's own mailboxes.
       const mailbox = query.get('mailbox');
       const scope = mailbox ? narrow(whole, mailbox) : whole;
-      if (!scope) return void json(res, 404, { error: 'No such mailbox' });
+      if (!scope) return json(404, { error: 'No such mailbox' });
       const params = route.query.safeParse(Object.fromEntries(query));
-      if (!params.success) return void json(res, 400, { error: refusedBy(params.error) });
-      void Promise.resolve()
-        .then(() => route.run(ctx, scope, params.data))
-        .then((reply) => {
-          const sent = reply.status === 200 ? replied(route.reply, reply.body) : reply;
-          json(res, sent.status, sent.body);
-        })
-        .catch((error: unknown) => json(res, 500, { error: error instanceof Error ? error.message : String(error) }));
-      return;
+      if (!params.success) return json(400, { error: refusedBy(params.error) });
+      try {
+        const reply = await route.run(ctx, scope, params.data);
+        const sent = reply.status === 200 ? replied(route.reply, reply.body) : reply;
+        return json(sent.status, sent.body);
+      } catch (error) {
+        return json(500, { error: error instanceof Error ? error.message : String(error) });
+      }
     }
-
-    if (dev && url.pathname === '/dev/reload.js') {
-      res.writeHead(200, { ...HEADERS, 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' }).end(DEV_RELOAD_JS);
-      return;
-    }
-    if (dev && url.pathname === '/dev/events') {
-      res.writeHead(200, { ...HEADERS, 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
-      res.write('retry: 500\n\n');
-      let sent = '';
-      const tick = () => {
-        const version = devVersion();
-        if (version !== sent) res.write(`data: ${(sent = version)}\n\n`);
-      };
-      tick();
-      const timer = setInterval(tick, 300);
-      req.on('close', () => clearInterval(timer));
-      return;
-    }
-
-    const assets = dev ? listAssets(assetsDir) : builtAssets;
-    if (assets.size === 0) {
-      if (dev) res.writeHead(200, { ...HEADERS, 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(DEV_BUILDING);
-      else res.writeHead(503, { ...HEADERS, 'content-type': 'text/plain' }).end('The dashboard has not been built. Run: pnpm build:web');
-      return;
-    }
-    // The page is one document that reads the path (`/rules`, `/sender/…`), so a path that names
-    // no file gets the page. A name with an extension is a file that is not there.
-    // A sender's or a domain's page ends in an address, which has a dot in it and is still a page.
-    const isPage = (extname(url.pathname) === '' || /^\/(sender|domain)\//.test(url.pathname)) && !/^\/(auth|dev|assets)\//.test(url.pathname);
-    const asset = assets.get(url.pathname) ?? (isPage ? assets.get('/index.html') : undefined);
-    if (!asset) {
-      res.writeHead(404, { ...HEADERS, 'content-type': 'text/plain' }).end('Not found');
-      return;
-    }
-    // Vite fingerprints everything under /assets, so those never change; the page itself must always be fresh.
-    const cache = !dev && url.pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-store';
-    const body = readFileSync(asset.file);
-    const html = dev && asset.file.endsWith('index.html') ? body.toString('utf8') : null;
-    const page = html === null ? body : html.includes('</head>') ? html.replace('</head>', `${DEV_SCRIPT}</head>`) : html + DEV_SCRIPT;
-    res.writeHead(200, { ...HEADERS, 'content-type': asset.type, 'cache-control': cache }).end(page);
+    return new Response('Not found', { status: 404, headers: { ...HEADERS, 'content-type': 'text/plain' } });
   };
 
-  return createServer(
-    (req, res) =>
-      void handle(req, res).catch((error: unknown) => {
-        if (!res.headersSent) json(res, 500, { error: error instanceof Error ? error.message : String(error) });
-      }),
-  );
+  return {
+    answers,
+    handle: (request, peer) => handle(request, peer).catch((error: unknown) => json(500, { error: error instanceof Error ? error.message : String(error) })),
+  };
 }

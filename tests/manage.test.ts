@@ -604,10 +604,20 @@ describe('signing in with Google', () => {
   it('does not believe a forwarded scheme from another machine', async () => {
     // Every test request comes from this machine, so this checks the header alone is not enough to be
     // offered sign-in at a name that is not localhost.
-    const { call, port } = await startWithSignIn();
+    const { call, port, handle } = await startWithSignIn();
     expect((await call('GET', '/api/session', undefined, { host: `homebox:${port}`, 'x-forwarded-proto': 'http' })).body).toMatchObject({
       canSignIn: false,
     });
+    // The handler believes it only from the peer address its adapter gives, and with none given, not at all.
+    const forwarded = async (peer?: string) =>
+      (
+        (await (await handle(new Request('http://homebox/api/session', { headers: { host: 'homebox', 'x-forwarded-proto': 'https' } }), peer)).json()) as {
+          canSignIn: boolean;
+        }
+      ).canSignIn;
+    expect(await forwarded('127.0.0.1')).toBe(true);
+    expect(await forwarded('100.64.0.9')).toBe(false);
+    expect(await forwarded()).toBe(false);
   });
 });
 

@@ -3,12 +3,13 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { WEB_DIST } from '../dashboard/server.ts';
 import { spin } from './ui.ts';
 
 /** The checkout sift runs from. */
 export const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const WEB = join(ROOT, 'web');
+/** Where `pnpm build:web` puts the built web app. */
+export const WEB_DIST = join(WEB, 'dist');
 
 function newest(path: string): number {
   if (!existsSync(path)) return 0;

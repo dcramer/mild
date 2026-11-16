@@ -9,7 +9,6 @@ import { listDecisions, retryDecision } from '../src/dashboard/queries/decisions
 import { listRuleSummaries } from '../src/dashboard/queries/rules.ts';
 import { summarize } from '../src/dashboard/queries/summary.ts';
 import type { SenderPage } from '../src/dashboard/types.ts';
-import type { DashboardOptions } from '../src/dashboard/server.ts';
 import { people } from '../src/store/people.ts';
 import { addMailbox, connectAccount, recordSync } from '../src/store/accounts.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
@@ -291,7 +290,7 @@ const get = async <T>(url: string) => (await (await fetch(url)).json()) as T;
 
 describe('dashboard server', () => {
   /** The dashboard's address, over `store` or else a newly seeded one. */
-  async function start(options: DashboardOptions = {}, store?: Store) {
+  async function start(options: Parameters<typeof startDashboard>[1] = {}, store?: Store) {
     const over = store ?? (await seededStore()).store;
     return (await startDashboard(people(over), { assetsDir: assets(), now: () => NOW, ...options })).base;
   }

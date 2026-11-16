@@ -87,7 +87,6 @@ The enforcement is tests, since `vercel dev` runs neither cron nor queues:
 | `startEval` in the background, `interruptEvals` at start | `eval` jobs |
 | `Controls.backfill` in the request | `backfill` jobs |
 | `device-id`, `dashboard-key` files | settings (`SIFT_DEVICE_ID`, `SIFT_SESSION_KEY`), files only locally |
-| `node:http` handler | `handle(Request)` behind the adapter |
 | `src/cli/` wiring `Controls` and the loop | `createSift(host)`; `src/cli/` is the `sift run` adapter |
 
 ## Open
