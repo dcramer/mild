@@ -196,7 +196,8 @@ export const api = {
   removeRule: (id: string) => post('/api/rules/remove', { id }),
   /** Dismiss a proposal, or accept one of kind `always`. A proposed rule is made with `addRule`. */
   resolveProposal: (id: number, accept: boolean) => post('/api/proposals', { id, accept }),
-  undo: (id: number) => post<{ message: string }>('/api/undo', { id }),
+  /** `message`: what the page will not show by itself, if anything. */
+  undo: (id: number) => post<{ message: string | null }>('/api/undo', { id }),
   /** Try a failed change again. `waiting`: it is sift's own, and waits for sift to be on. */
   retry: (id: number) => post<{ retried: boolean; waiting: boolean }>('/api/decisions/retry', { id }),
   requeue: (accountId: string, messageId: string) => post<{ ok: true }>('/api/unjudged/retry', { accountId, messageId }),

@@ -458,6 +458,8 @@ export const FeedbackReply = z.object({
   proposed: z.boolean(),
   /** What was done in Gmail about the corrected message, in a sentence. Null if nothing needed doing. */
   fixed: z.string().nullable(),
+  /** Why sift's own change to the corrected message could not be taken back in Gmail. The answer is saved either way. */
+  notFixed: z.string().nullable(),
 });
 export type FeedbackReply = z.infer<typeof FeedbackReply>;
 

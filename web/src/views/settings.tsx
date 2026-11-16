@@ -129,7 +129,7 @@ function Switch({
       // The new model first, so something always classifies; the old sign-in goes once nothing uses it.
       await api.setModel(ready);
       if (old && old !== choice.provider) await api.signOutModel(old);
-      toast(`Now classifying with ${name}.`);
+      toast(`Now classifying with ${name}`);
       reload();
       onClose();
     });
@@ -226,7 +226,17 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
  * A person's only mailbox is how they sign in, so it is never removed on its own: that is deleting the
  * account. Removing the one they are signed in as, with others left, ends their session.
  */
-function RemoveMailbox({ email, signedIn, last, reload }: { email: string; signedIn: boolean; last: boolean; reload: () => void }) {
+function RemoveMailbox({
+  email,
+  signedIn,
+  last,
+  onRemoved,
+}: {
+  email: string;
+  signedIn: boolean;
+  last: boolean;
+  onRemoved: (notRevoked: string | null) => void;
+}) {
   const [removing, setRemoving] = useState(false);
   return (
     <>
@@ -246,7 +256,7 @@ function RemoveMailbox({ email, signedIn, last, reload }: { email: string; signe
           confirm={email}
           action="Remove mailbox"
           send={() => api.removeMailbox(email)}
-          onDone={reload}
+          onDone={onRemoved}
           onClose={() => setRemoving(false)}
         >
           sift stops reading it, revokes its access at Google, and deletes everything it recorded about its mail: decisions, answers, rules and labels.
@@ -258,6 +268,8 @@ function RemoveMailbox({ email, signedIn, last, reload }: { email: string; signe
 }
 
 function Mailboxes({ state, signedInAs, reload }: { state: ManageState; signedInAs: string | null; reload: () => void }) {
+  // Kept on the page, not in a toast: it asks the reader to do something at Google, and a toast would go before it was done.
+  const [notRevoked, setNotRevoked] = useState<string | null>(null);
   return (
     <SettingsGroup title="Mailboxes" note="Anyone signed in as one of these sees all of them.">
       <Sheet>
@@ -267,13 +279,26 @@ function Mailboxes({ state, signedInAs, reload }: { state: ManageState; signedIn
             title={account.email}
             note={`${account.lastSyncedAt ? `Synced ${ago(account.lastSyncedAt)}` : 'Not synced yet'}${account.email === signedInAs ? ' · Signed in as this one' : ''}`}
           >
-            <RemoveMailbox email={account.email} signedIn={account.email === signedInAs} last={state.accounts.length === 1} reload={reload} />
+            <RemoveMailbox
+              email={account.email}
+              signedIn={account.email === signedInAs}
+              last={state.accounts.length === 1}
+              onRemoved={(note) => {
+                setNotRevoked(note);
+                reload();
+              }}
+            />
           </SettingRow>
         ))}
         <SettingRow title="Another Gmail account">
           <Button href="/auth/login?add=1">Connect</Button>
         </SettingRow>
       </Sheet>
+      {notRevoked ? (
+        <Note tone="failure" title="sift still has access at Google">
+          <p>{notRevoked}</p>
+        </Note>
+      ) : null}
       {state.owner ? <OlderMail /> : null}
     </SettingsGroup>
   );
@@ -299,21 +324,19 @@ function ConfirmRemoval({
   confirm: string;
   action: string;
   send: () => Promise<Removed>;
-  onDone?: () => void;
+  onDone?: (notRevoked: string | null) => void;
   onClose: () => void;
   children: ReactNode;
 }) {
   const [typed, setTyped] = useState('');
   const { busy, error, run } = useAction();
-  const toast = useToast();
   const submit = () =>
     run(async () => {
       const reply = await send();
       const note = notRevoked(reply);
       if (reply.signedOut) return window.location.assign(note ? `/?signin=${encodeURIComponent(note)}` : '/');
-      toast(`${confirm} removed`, note ? { description: note } : {});
       onClose();
-      onDone?.();
+      onDone?.(note);
     });
   return (
     <Dialog
@@ -395,7 +418,7 @@ function OlderMail() {
             run(async () => {
               const { added } = await api.backfill(Number(days));
               toast(
-                added === 0 ? 'Nothing new in that period.' : `${plural(added, 'message')} pulled in`,
+                added === 0 ? 'Nothing new in that period' : `${plural(added, 'message')} pulled in`,
                 added === 0 ? {} : { description: 'They show under Suggestions as sift decides them.' },
               );
             })

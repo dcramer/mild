@@ -146,8 +146,8 @@ export async function buildControls(config: Config, store: Store, live: { wake?:
       const action = await getAction(db, actionId);
       if (!action) throw new Error(`There is no change #${actionId}.`);
       const outcome = await undo({ db, mailbox: await mailboxFor(config, db, action.accountId) }, actionId);
-      if (outcome.status === 'done') return 'Reversed.';
-      if (outcome.status === 'skipped') return 'It had already been put back by hand.';
+      if (outcome.status === 'done') return null;
+      if (outcome.status === 'skipped') return 'Already put back by hand';
       throw new Error(outcome.reason);
     },
     backfill: async (days) => {

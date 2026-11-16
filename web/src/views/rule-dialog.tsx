@@ -45,7 +45,7 @@ export function AddRuleDialog({
   /** Adding the rule accepts this proposal; closing without adding leaves it open. */
   proposal?: number;
   onClose: () => void;
-  onAdded: (match: RuleMatch) => void;
+  onAdded: (match: RuleMatch, outcome: string) => void;
 }) {
   const { busy, error, run } = useAction();
   const [by, setBy] = useState<By>(start?.by ?? 'from');
@@ -82,7 +82,7 @@ export function AddRuleDialog({
           ...(proposal === undefined ? {} : { proposal }),
         }),
       () => {
-        onAdded(match);
+        onAdded(match, chosen ? chosen.name : outcomeName(action || 'archive'));
         onClose();
       },
     );

@@ -51,18 +51,22 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
   // A day's column is worth drawing only beside others, and only once something happened.
   const charted = daily.length > 1 && daily.some((day) => day.costUsd > 0 || Object.values(day.counts).some((n) => n > 0));
 
-  const report = <T,>(work: Promise<T>, line: (result: T) => string) =>
+  // `line` is null when the list itself shows what happened.
+  const report = <T,>(work: Promise<T>, line: (result: T) => string | null, failed: string) =>
     void work.then(
       (result) => {
-        toast(line(result));
+        const said = line(result);
+        if (said) toast(said);
         void client.invalidateQueries();
       },
-      (failure: unknown) => toast('That did not work', { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) }),
+      (failure: unknown) => toast(failed, { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) }),
     );
-  const undo = (row: DecisionRow) => report(api.undo(row.actionId ?? 0), ({ message }) => message);
-  const retry = (row: DecisionRow) => report(api.retry(row.id), ({ waiting }) => (waiting ? 'It will be tried again once sift is on.' : 'Trying again now.'));
-  const requeue = (row: UnjudgedRow) => report(api.requeue(row.accountId, row.messageId), () => 'Asking the model again now.');
-  const requeueAll = () => report(api.requeueAll(), ({ retried }) => `Asking the model again about ${plural(retried, 'message')}.`);
+  const undo = (row: DecisionRow) => report(api.undo(row.actionId ?? 0), ({ message }) => message, 'Could not undo');
+  const retry = (row: DecisionRow) =>
+    report(api.retry(row.id), ({ waiting }) => (waiting ? 'It will be tried again once sift is on' : 'Trying again now'), 'Could not retry');
+  const requeue = (row: UnjudgedRow) => report(api.requeue(row.accountId, row.messageId), () => 'Asking the model again now', 'Could not ask the model again');
+  const requeueAll = () =>
+    report(api.requeueAll(), ({ retried }) => `Asking the model again about ${plural(retried, 'message')}`, 'Could not ask the model again');
   const troubles = [
     failed > 0 ? `${plural(failed, 'change')} failed` : '',
     unjudged.length > 0 ? `the model could not judge ${plural(unjudged.length, 'message')}` : '',

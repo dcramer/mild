@@ -32,7 +32,7 @@ const controls: Controls = {
   signOutModel: async (_db, provider) => void calls.push(`signout ${provider}`),
   undo: async (_db, id) => {
     calls.push(`undo ${id}`);
-    return 'Reversed.';
+    return null;
   },
   backfill: async (days) => {
     calls.push(`backfill ${days}`);
@@ -338,10 +338,11 @@ describe('managing sift from the dashboard', () => {
     expect((await call('POST', '/api/feedback', { ...answer, messageId: 'done' })).body).toMatchObject({
       corrected: 'done',
       fixed: 'What sift did to this message in Gmail has been taken back.',
+      notFixed: null,
     });
     const failed = await call('POST', '/api/feedback', { ...answer, messageId: 'gone' });
     expect(failed.status).toBe(200);
-    expect(failed.body['fixed']).toContain('could not be put back in Gmail: The message no longer exists.');
+    expect(failed.body).toMatchObject({ fixed: null, notFixed: 'The message no longer exists.' });
     expect(await raw(db).get('SELECT count(*) AS n FROM feedback')).toEqual({ n: 2 });
     expect(calls).toEqual(['putBack done', 'putBack gone']);
   });
@@ -352,7 +353,7 @@ describe('managing sift from the dashboard', () => {
       `INSERT INTO actions (id, account_id, type, payload, original_labels, status, created_at) VALUES (3, ?, 'archive', '{}', '[]', 'done', 1)`,
       ACCOUNT,
     );
-    expect((await call('POST', '/api/undo', { id: 3 })).body).toEqual({ message: 'Reversed.' });
+    expect((await call('POST', '/api/undo', { id: 3 })).body).toEqual({ message: null });
     // A change that is not in this person's database is not passed on.
     expect(await call('POST', '/api/undo', { id: 404 })).toMatchObject({ status: 409, body: { error: 'There is no change #404.' } });
     expect((await call('POST', '/api/backfill', { days: 7 })).body).toEqual({ added: 12 });

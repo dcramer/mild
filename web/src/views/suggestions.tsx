@@ -81,7 +81,7 @@ function StopReadingDialog({ proposal, onClose }: { proposal: Proposal; onClose:
     run(
       () => api.resolveProposal(proposal.id, true),
       () => {
-        toast(`From now on, mail ${whose} is ${does} without sift reading it.`);
+        toast(`Stopped reading mail ${whose}`);
         onClose();
       },
     );
@@ -141,7 +141,7 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
           start={proposalStart(proposal.match, proposal.labelId)}
           proposal={proposal.id}
           onClose={() => setOpen(false)}
-          onAdded={(match) => toast(`Added a rule for mail ${describeMatch(match)}.`)}
+          onAdded={(match, outcome) => toast(`Rule added: ${describeMatch(match)} → ${outcome}`)}
         />
       ) : (
         <StopReadingDialog proposal={proposal} onClose={() => setOpen(false)} />

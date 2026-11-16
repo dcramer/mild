@@ -673,6 +673,7 @@ describe('feedback endpoint', () => {
         carrying: 1,
         proposed: false,
         fixed: null,
+        notFixed: null,
         taught:
           'From now on, mail from news@example.com that is Newsletters is archived, and unsubscribed from. sift still reads each message, and asks about anything else from them.',
       },

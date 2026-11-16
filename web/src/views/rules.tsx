@@ -4,7 +4,7 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { type RuleMatch, type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/route.ts';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
-import { ago, count, factAnswers, factWords, outcomeName, plural, shortDate } from '@/lib/format.ts';
+import { ago, count, describeMatch, factAnswers, factWords, outcomeName, plural, shortDate } from '@/lib/format.ts';
 import {
   Button,
   ConfirmButton,
@@ -168,7 +168,7 @@ export function Rules() {
         remove.run(
           () => api.removeRule(rule.id),
           () => {
-            toast(`Removed the rule for ${whoText(rule.match)}.`);
+            toast(`Rule removed: ${describeMatch(rule.match)}`);
             if (inPanel) setOpen('');
             reload();
           },

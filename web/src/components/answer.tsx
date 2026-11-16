@@ -1,5 +1,5 @@
 import { api, useAction } from '@/lib/api.ts';
-import { willBe } from '@/lib/format.ts';
+import { outcomeName } from '@/lib/format.ts';
 import { Meter, type Pick, useToast } from '@/system';
 
 /** A message whose label the user can say, as the list and the panel both hold it. */
@@ -18,8 +18,6 @@ export interface AnswerLabel {
   name: string;
   disposition: string;
 }
-
-const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 /**
  * Saying what one message is, like a spam button with more than two outcomes: sift records it, does what
@@ -41,11 +39,15 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
 
   const answer = (target: Answerable, labelId: string) =>
     run(async () => {
-      await say(target, labelId);
+      const reply = await say(target, labelId);
+      // The answer is saved; what sift itself did to the message could not be taken back in Gmail.
+      if (reply.notFixed !== null) toast('Could not put the message back in Gmail', { tone: 'failure', description: reply.notFixed });
       const label = labels.find((l) => l.id === labelId);
       const alike = waiting.filter((w) => w.messageId !== target.messageId && w.sender === target.sender && w.labelId === target.labelId);
+      // The verdict, as every list says it: "Archive as Marketing".
+      const said = label ? `${outcomeName(label.disposition)} as ${label.name}` : 'Answered';
       toast(
-        label ? `${capital(willBe(label.disposition))} as ${label.name}` : 'Noted',
+        said,
         alike.length > 0
           ? {
               action: {
@@ -53,7 +55,7 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
                 onPress: () =>
                   void Promise.all(alike.map((w) => say(w, labelId))).then(
                     () => {
-                      toast(`Done for ${alike.length} more from ${target.sender}`);
+                      toast(`${said}: ${alike.length} more`);
                       onDone();
                     },
                     (failure: unknown) =>

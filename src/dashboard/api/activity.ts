@@ -94,7 +94,7 @@ export const writes: Write[] = [
   write({
     path: '/api/undo',
     body: z.strictObject({ id }),
-    reply: z.object({ message: z.string() }),
+    reply: z.object({ message: z.string().nullable() }),
     touches: ownerOf(actions),
     run: async ({ db, controls }, { id }) => {
       if (!controls) throw new Error('This dashboard cannot undo changes.');

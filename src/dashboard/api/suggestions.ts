@@ -40,17 +40,14 @@ export const writes: Write[] = [
       const result = await applyFeedback(db, { ...input, carryOut: true }, now());
       if (result.corrected === null || !controls) {
         if (result.carrying > 0) controls?.checkNow();
-        return { ...result, fixed: null };
+        return { ...result, fixed: null, notFixed: null };
       }
       // The answer is saved whatever happens next; a mailbox that cannot be put right is reported, not hidden.
       try {
         const undone = await controls.putBack(db, input.accountId, result.corrected);
-        return { ...result, fixed: undone ? 'What sift did to this message in Gmail has been taken back.' : null };
+        return { ...result, fixed: undone ? 'What sift did to this message in Gmail has been taken back.' : null, notFixed: null };
       } catch (error) {
-        return {
-          ...result,
-          fixed: `The answer is saved, but the message could not be put back in Gmail: ${error instanceof Error ? error.message : String(error)}`,
-        };
+        return { ...result, fixed: null, notFixed: error instanceof Error ? error.message : String(error) };
       }
     },
   }),

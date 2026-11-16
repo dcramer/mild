@@ -21,8 +21,11 @@ export interface Controls {
   /** Store an API key for one of the providers that takes one. */
   saveModelKey(db: Sql, provider: string, key: string): Promise<void>;
   signOutModel(db: Sql, provider: string): Promise<void>;
-  /** Reverse one mailbox change. Resolves with a sentence describing what happened. */
-  undo(db: Sql, actionId: number): Promise<string>;
+  /**
+   * Reverse one mailbox change. Resolves with what the page cannot show for itself (it shows the change
+   * as undone), or null when there is nothing more to say.
+   */
+  undo(db: Sql, actionId: number): Promise<string | null>;
   /** Pull the last `days` days of everyone's inbox in as suggestions. Resolves with how many messages were new. */
   backfill(days: number): Promise<number>;
   /**

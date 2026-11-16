@@ -123,7 +123,7 @@ function Teach({ state, onDone }: { state: ManageState; onDone: () => void }) {
           run(async () => {
             const { added } = await api.backfill(Number(days));
             toast(
-              added === 0 ? 'Nothing new in that period.' : `${plural(added, 'message')} pulled in`,
+              added === 0 ? 'Nothing new in that period' : `${plural(added, 'message')} pulled in`,
               added === 0 ? {} : { description: 'They show here as sift decides them.' },
             );
             onDone();

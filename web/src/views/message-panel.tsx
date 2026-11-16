@@ -151,7 +151,7 @@ function Body({
           onUndo={(id) =>
             undo.run(async () => {
               const { message } = await api.undo(id);
-              toast(message);
+              if (message) toast(message);
               onUndone();
             })
           }
@@ -210,7 +210,7 @@ function Body({
               labels={labels}
               start={ruling}
               onClose={() => setRuling(null)}
-              onAdded={(match) => toast(`Added a rule for mail ${describeMatch(match)}.`)}
+              onAdded={(match, outcome) => toast(`Rule added: ${describeMatch(match)} → ${outcome}`)}
             />
           ) : null}
         </div>

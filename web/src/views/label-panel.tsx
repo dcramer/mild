@@ -1,7 +1,7 @@
 import { type ReactNode, useState } from 'react';
 import { type LabelSummary, api, useAction } from '@/lib/api.ts';
 import { ACTIONS, type ActionKey, EXPLAIN, count, percent, plural } from '@/lib/format.ts';
-import { ActionIcon, Button, Check, Code, Dialog, Failure, Field, Figure, Figures, Form, Input, Panel, Select, TextArea, useToast } from '@/system';
+import { ActionIcon, Button, Check, Code, Dialog, Failure, Field, Figure, Figures, Form, Input, Panel, Select, TextArea } from '@/system';
 
 const canMarkRead = (does: string) => does === 'keep' || does === 'archive';
 /** Wrong often enough to look at: under 85% right, over at least ten answers. */
@@ -115,15 +115,8 @@ export function LabelPanel({
   const changed = JSON.stringify(draft) !== JSON.stringify(initial);
   const ready = changed && draft.name.trim() !== '';
   const { busy, error, run } = useAction();
-  const toast = useToast();
-  const save = () =>
-    run(
-      () => api.saveLabel(accountId, label.id, { ...draft, name: draft.name.trim(), description: draft.description.trim() }),
-      () => {
-        toast(`Saved ${draft.name.trim()}.`);
-        onSaved();
-      },
-    );
+  // No toast: the panel shows what was saved.
+  const save = () => run(() => api.saveLabel(accountId, label.id, { ...draft, name: draft.name.trim(), description: draft.description.trim() }), onSaved);
 
   return (
     <Panel narrow open onClose={onClose} title={label.name} position={position} onPrevious={onPrevious} onNext={onNext}>

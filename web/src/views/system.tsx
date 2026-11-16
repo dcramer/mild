@@ -98,8 +98,8 @@ const ROWS = [
 
 const INKS = [
   ['bg-background', 'background', 'The page.'],
-  ['bg-popover', 'popover', 'What floats: a dialog, a menu, a toast.'],
-  ['bg-foreground', 'foreground', 'Ink: text, and the main action.'],
+  ['bg-popover', 'popover', 'What floats: a dialog, a menu, a failed toast.'],
+  ['bg-foreground', 'foreground', 'Ink: text, the main action, and a toast.'],
   ['bg-muted-foreground', 'muted-foreground', 'Secondary text.'],
   ['bg-(--frame)', '--frame', 'A sheet’s edge.'],
   ['bg-(--rule)', '--rule', 'Lines between rows, dashed.'],
@@ -127,6 +127,11 @@ export function SystemView() {
   const [shown, setShown] = useState('');
   const [made, setMade] = useState('');
   const toast = useToast();
+  const answer = () =>
+    toast('Archive as Marketing', {
+      undo: () => toast('Back in the inbox'),
+      action: { label: 'Same for 2 more', onPress: () => toast('Archive as Marketing: 2 more') },
+    });
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-14 px-4 py-8 md:px-6">
       <PageHeader title="Design system" meta="Every part, in every state. The rules for using them are in docs/DESIGN.md." />
@@ -268,10 +273,10 @@ export function SystemView() {
             </Button>
           </Row>
           <Row label="confirm" note="A press that cannot be taken back asks first, in place.">
-            <ConfirmButton question="Remove this rule?" onConfirm={() => toast('Removed the rule.')}>
+            <ConfirmButton question="Remove this rule?" onConfirm={() => toast('Rule removed: from news@example.com')}>
               Remove
             </ConfirmButton>
-            <ConfirmButton question="Remove this rule?" icon={<Trash2Icon aria-hidden />} onConfirm={() => toast('Removed the rule.')}>
+            <ConfirmButton question="Remove this rule?" icon={<Trash2Icon aria-hidden />} onConfirm={() => toast('Rule removed: from news@example.com')}>
               Remove
             </ConfirmButton>
           </Row>
@@ -337,7 +342,7 @@ export function SystemView() {
 
       <Section title="Form" meta="fields, one under another, the action last">
         <div className="grid gap-10 md:grid-cols-2">
-          <Form onSubmit={() => toast('Saved.')}>
+          <Form onSubmit={() => toast('Saved')}>
             <Field label="Name" hint="In Gmail it stays sift/newsletters.">
               <Input aria-label="Name" className="w-full" defaultValue="Newsletters" />
             </Field>
@@ -435,7 +440,7 @@ export function SystemView() {
                             LABELS.slice(2).map(([id, name]) => ({ id, label: name })),
                           ]}
                           empty={<Look>Which label?</Look>}
-                          extra={{ label: 'Add a label…', onSelect: () => toast('Adds a label, then it is among the choices.') }}
+                          extra={{ label: 'Add a label…', onSelect: () => toast('Adds a label, then it is among the choices') }}
                           onSubmit={(id) => toast(`Answered: ${LABELS.find(([key]) => key === id)?.[1] ?? id}`)}
                         />
                       </RowActions>
@@ -592,13 +597,20 @@ export function SystemView() {
       </div>
 
       <div className="grid gap-14 lg:grid-cols-2">
-        <Section title="Toast" meta="what a press did, after the list moved on">
+        <Section title="Toast" meta="what a press did, after the list moved on: one line, the newest replacing the last">
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => toast('From now on, mail from news@example.com is Newsletters: archived.')}>Plain</Button>
-            <Button onClick={() => toast('Put back in the inbox', { action: { label: 'Undo', onPress: () => toast('Archived again.') } })}>
-              With an action
-            </Button>
+            <Button onClick={() => toast('12 messages pulled in', { description: 'They show under Suggestions as sift decides them.' })}>A result</Button>
+            <Button onClick={answer}>With Undo</Button>
             <Button onClick={() => toast('Could not undo', { tone: 'failure', description: 'Gmail answered 503.' })}>Failure</Button>
+            <Button
+              onClick={() => {
+                toast('Could not undo', { tone: 'failure', description: 'Gmail answered 503.' });
+                toast('Rule added: from news@example.com → Newsletters');
+                answer();
+              }}
+            >
+              Several at once
+            </Button>
           </div>
         </Section>
         <Section title="Menu, notice and hover card">
@@ -613,7 +625,7 @@ export function SystemView() {
                 </>
               }
               items={[
-                { label: 'Sign out', onSelect: () => toast('Signed out.') },
+                { label: 'Sign out', onSelect: () => toast('Signed out') },
                 { label: 'Disabled', note: 'With the reason under it.', disabled: true, onSelect: () => {} },
               ]}
             />
@@ -656,7 +668,7 @@ export function SystemView() {
             ]}
             status={<Notice>Offline</Notice>}
             aside={<span>Synced just now</span>}
-            account={{ name: 'ada@example.org', items: [{ label: 'Sign out', onSelect: () => toast('Signed out.') }] }}
+            account={{ name: 'ada@example.org', items: [{ label: 'Sign out', onSelect: () => toast('Signed out') }] }}
           />
         </Sheet>
       </Section>
