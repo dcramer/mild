@@ -298,6 +298,11 @@ thead .row:last-child {
   outline: 2px solid var(--highlight);
   outline-offset: 2px;
 }
+/* A row shows the focus as a stronger fill instead: an outline around a table row draws only its top
+   and bottom edges, across the page. */
+.row:focus-visible {
+  outline: none;
+}
 /* For a field whose container shows the focus instead. */
 .focus-within-shown:focus-visible {
   outline: none;

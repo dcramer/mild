@@ -67,7 +67,7 @@ export function Tr({ onOpen, className, ...props }: ComponentProps<'tr'> & { onO
     <RowActive value={active}>
       <tr
         tabIndex={0}
-        className={cn('row group/row cursor-pointer hover:bg-(--fill) focus-visible:bg-(--fill) focus-within:bg-(--fill)', className)}
+        className={cn('row group/row cursor-pointer hover:bg-(--fill) focus-visible:bg-(--fill-strong) focus-within:bg-(--fill)', className)}
         onClick={onOpen}
         onFocus={() => setActive(true)}
         onBlur={(event) => {

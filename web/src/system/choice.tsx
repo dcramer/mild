@@ -42,7 +42,7 @@ export function ChoiceGroup<T extends string>({
             role="radio"
             aria-checked={key === value}
             disabled={disabled}
-            className="row flex w-full cursor-pointer items-center gap-3 py-2.5 pr-[calc(var(--gutter)+var(--bleed))] pl-[calc(var(--gutter)+var(--bleed))] text-left hover:bg-(--fill) focus-visible:bg-(--fill) disabled:pointer-events-none disabled:opacity-45"
+            className="row flex w-full cursor-pointer items-center gap-3 py-2.5 pr-[calc(var(--gutter)+var(--bleed))] pl-[calc(var(--gutter)+var(--bleed))] text-left hover:bg-(--fill) focus-visible:bg-(--fill-strong) disabled:pointer-events-none disabled:opacity-45"
             onClick={() => onChange(key)}
           >
             <span className="min-w-0 flex-1">
