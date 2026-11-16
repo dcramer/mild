@@ -17,9 +17,11 @@ export interface Settings {
    * addresses or names, or `all` for every network it is on. Unset: this machine only.
    */
   dashboardHost?: string;
+  /** Show the model a few messages the user labelled before, chosen for the message it is judging. */
+  fewShot: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { act: false, interval: 60, dashboardPort: 8787 };
+export const DEFAULT_SETTINGS: Settings = { act: false, interval: 60, dashboardPort: 8787, fewShot: true };
 
 /**
  * Everything sift keeps lives in one directory, the home: settings, guidance, the database and
@@ -106,6 +108,14 @@ export function parseSettings(text: string, path = 'sift.toml'): Settings {
           settings.dashboardHost = port === '0.0.0.0' ? 'all' : port;
         } else throw new Error(`${path}: unknown setting dashboard.${sub}.`);
       }
+    } else if (key === 'examples') {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) throw bad('examples', 'a table');
+      for (const [sub, given] of Object.entries(value as Record<string, unknown>)) {
+        if (sub === 'few_shot') {
+          if (typeof given !== 'boolean') throw bad('examples.few_shot', 'true or false');
+          settings.fewShot = given;
+        } else throw new Error(`${path}: unknown setting examples.${sub}.`);
+      }
     } else {
       throw new Error(`${path}: unknown setting ${key}.`);
     }
@@ -129,6 +139,12 @@ port = ${settings.dashboardPort}
 # Where else the dashboard listens: one of this machine's addresses (a Tailscale one, say), or "all" for
 # every network it is on. It has no login: anyone who can reach it there can read it. Unset: localhost only.
 ${settings.dashboardHost ? `host = ${JSON.stringify(settings.dashboardHost)}` : '# host = "all"'}
+
+# Examples are the messages you answered for in the dashboard, kept whole.
+[examples]
+# true: the model is shown a few of them (sender, subject, the first lines, your label) beside each
+# message it judges. It learns from your answers and each call costs a little more.
+few_shot = ${settings.fewShot}
 `;
 }
 

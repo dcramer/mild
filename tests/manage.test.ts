@@ -57,7 +57,7 @@ beforeEach(() => {
   db = openDb(':memory:');
   connectAccount(db, ACCOUNT, '1', 0);
   calls = [];
-  settings = { act: false, interval: 60, model: null };
+  settings = { act: false, interval: 60, model: null, fewShot: true };
   guidelines = 'Be careful.';
 });
 afterEach(() => close?.());
@@ -116,12 +116,15 @@ describe('managing sift from the dashboard', () => {
   it('changes settings, and refuses values that make no sense', async () => {
     const port = await start();
     expect((await call(port, 'POST', '/api/settings', { act: true, model: 'p/small' })).body).toEqual({
-      settings: { act: true, interval: 60, model: 'p/small' },
+      settings: { act: true, interval: 60, model: 'p/small', fewShot: true },
     });
-    expect((await call(port, 'POST', '/api/settings', { model: null, interval: 300 })).body).toEqual({ settings: { act: true, interval: 300, model: null } });
-    for (const bad of [{ act: 'yes' }, { interval: 1 }, { interval: '60' }, { model: 'no-slash' }])
+    expect((await call(port, 'POST', '/api/settings', { model: null, interval: 300 })).body).toEqual({
+      settings: { act: true, interval: 300, model: null, fewShot: true },
+    });
+    expect((await call(port, 'POST', '/api/settings', { fewShot: false })).body).toMatchObject({ settings: { fewShot: false } });
+    for (const bad of [{ act: 'yes' }, { interval: 1 }, { interval: '60' }, { model: 'no-slash' }, { fewShot: 'no' }])
       expect((await call(port, 'POST', '/api/settings', bad)).status).toBe(400);
-    expect(settings).toEqual({ act: true, interval: 300, model: null });
+    expect(settings).toEqual({ act: true, interval: 300, model: null, fewShot: false });
   });
 
   it('edits the guidelines, labels and rules', async () => {

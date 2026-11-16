@@ -215,7 +215,7 @@ export interface FeedbackRequest {
 
 /** GET /api/manage: everything the Settings view shows. */
 export interface ManageState {
-  settings: { act: boolean; interval: number; model: string | null };
+  settings: { act: boolean; interval: number; model: string | null; fewShot: boolean };
   guidelines: string;
   activity: { sorting: boolean; lastPassAt: number | null; problems: string[] };
   accounts: { id: string; email: string; lastSyncedAt: number | null }[];

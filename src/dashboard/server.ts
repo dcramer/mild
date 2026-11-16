@@ -276,8 +276,9 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       return { ok: true };
     },
     '/api/settings': (body) => {
-      const { act, interval, model } = body;
+      const { act, interval, model, fewShot } = body;
       if (act !== undefined && typeof act !== 'boolean') return null;
+      if (fewShot !== undefined && typeof fewShot !== 'boolean') return null;
       if (interval !== undefined && (typeof interval !== 'number' || !Number.isFinite(interval) || interval < 5 || interval > 86_400)) return null;
       if (model !== undefined && model !== null && (!str(model) || !/^[^/\s]+\/\S+$/.test(model))) return null;
       if (!controls) throw new Error('This dashboard cannot change settings.');
@@ -285,6 +286,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
         ...(act === undefined ? {} : { act }),
         ...(interval === undefined ? {} : { interval }),
         ...(model === undefined ? {} : { model }),
+        ...(fewShot === undefined ? {} : { fewShot }),
       });
       return { settings: controls.settings() };
     },
@@ -318,7 +320,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
     const accounts = listAccounts(db);
     const synced = db.prepare('SELECT last_synced_at AS at FROM accounts WHERE id = ?');
     return {
-      settings: controls?.settings() ?? { act: false, interval: 60, model: null },
+      settings: controls?.settings() ?? { act: false, interval: 60, model: null, fewShot: true },
       guidelines: controls?.guidelines() ?? '',
       activity: controls?.activity() ?? { sorting: false, lastPassAt: null, problems: [] },
       accounts: accounts.map((a) => ({ id: a.id, email: a.email, lastSyncedAt: (synced.get(a.id) as { at: number | null } | undefined)?.at ?? null })),

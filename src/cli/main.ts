@@ -285,7 +285,7 @@ function buildControls(config: Config, db: ReturnType<typeof openDb>, live: { wa
   return {
     settings: () => {
       const s = current();
-      return { act: s.act, interval: s.interval, model: s.model ?? null };
+      return { act: s.act, interval: s.interval, model: s.model ?? null, fewShot: s.fewShot };
     },
     saveSettings: (change) => {
       const { model: _old, ...rest } = current();
@@ -294,6 +294,7 @@ function buildControls(config: Config, db: ReturnType<typeof openDb>, live: { wa
         ...rest,
         ...(change.act === undefined ? {} : { act: change.act }),
         ...(change.interval === undefined ? {} : { interval: change.interval }),
+        ...(change.fewShot === undefined ? {} : { fewShot: change.fewShot }),
         ...(model ? { model } : {}),
       });
       live.wake?.now();
@@ -519,7 +520,7 @@ async function run(args: string[]): Promise<void> {
       announced = state;
       return {
         act,
-        ...(tier ? { model: tier } : {}),
+        ...(tier ? { model: { ...tier, fewShot: settings.fewShot } } : {}),
         unsubscribe: (accountId: string, messageId: string) => unsubscribe({ db }, accountId, messageId),
         connect: (account: Account) => {
           const client = clientFor(config, loadClientSecrets(config), account.email);

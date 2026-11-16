@@ -117,6 +117,7 @@ When no rule or sender record decides a message, one model call does. It is deli
 - **Its only output is a label** from the user's list, or `unsure`, with a one-line reason. The reply is validated; anything else abstains.
 - **The label's action decides the outcome**, so the user's choice, not the model, determines what happens to the message.
 - **Two protections apply whatever the model says:** mail from someone the user has written to is never archived or marked spam on the model's word (and "could not check" counts as yes), and `unsure` or an unknown category leaves the message for review.
+- **It is shown a few of the user's own answers.** Beside each message go up to six stored examples, chosen for it: from the same sender first, then the same domain, then the newest of each label, within a budget of about 1,200 tokens (`src/triage/fewshot.ts`). Each is only sender, subject, the first 300 characters and the owner's label, fenced as untrusted like the email itself, with every field JSON on one line so an example's text cannot close its fence or forge a label. `examples.few_shot = false` in `sift.toml` turns it off.
 - **The prompt marks the email as untrusted** and keeps it apart from the guidelines and the header facts. The worst an injected email can do is get itself given the wrong label, which the audit log can undo.
 - **Learning:** after three consecutive model decisions give a sender the same label, and each ended the way that label says, sift writes a rule for the sender and later mail from them is decided without inference. A rule the user made for that sender is left alone. (Next: propose the rule to the user instead of saving it; see TODO.md.)
 
@@ -128,7 +129,7 @@ There is no shell and no filesystem here. A sandboxed agent with those is planne
 
 Everything sift keeps is in one directory, the home: `~/.config/sift` by default (`$XDG_CONFIG_HOME/sift`), or wherever `--home` or `SIFT_HOME` points (the Docker image uses `/data`). Keeping settings, guidance, the database and credentials together means it can be backed up or moved as a unit. No setting requires an environment variable.
 
-- `sift.toml`: settings (`model`, `act`, `interval`, `dashboard.port`, `dashboard.host`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
+- `sift.toml`: settings (`model`, `act`, `interval`, `dashboard.port`, `dashboard.host`, `examples.few_shot`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
 - `guidelines.md`: the user's broad guidance, read on every pass.
 - `sift.db`: everything structured or learned.
 - `google-client.json`, `google/`, `model-auth.json`, `device-id`, `dashboard-key`: credentials and the session secret, owner-only, kept out of the database.

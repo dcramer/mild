@@ -4,6 +4,7 @@ import type { Mailbox } from '../actions/mailbox.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import { planAction } from '../actions/plan.ts';
 import type { Account } from '../store/accounts.ts';
+import { shotCandidates } from '../store/examples.ts';
 import { listLabels } from '../store/labels.ts';
 import { listUnsettledDecisions, recordDecision, settleDecision } from '../store/decisions.ts';
 import { listUndecided } from '../store/messages.ts';
@@ -36,6 +37,8 @@ export interface ModelTier {
   sources: Omit<EvidenceSources, 'db' | 'now'>;
   /** The user's broad guidance, in plain language. */
   guidelines: string;
+  /** False: mail the user labelled before is not shown to the model as examples. */
+  fewShot?: boolean;
 }
 
 export interface TriageReport {
@@ -67,6 +70,7 @@ function stagesFor(deps: TriageDeps, accountId: string): Stage[] {
         labels,
         guidelines: model.guidelines,
         gather: (facts) => gatherEvidence({ db, ...model.sources, ...(deps.now ? { now: deps.now } : {}) }, facts),
+        ...(model.fewShot === false ? {} : { examples: (facts) => shotCandidates(db, facts) }),
       }),
     );
   }

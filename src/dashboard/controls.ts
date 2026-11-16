@@ -32,6 +32,8 @@ export interface ManagedSettings {
   interval: number;
   /** `provider/model-id`, or null for no model. */
   model: string | null;
+  /** Whether the model is shown messages the user labelled before as examples. */
+  fewShot: boolean;
 }
 
 export interface Activity {
