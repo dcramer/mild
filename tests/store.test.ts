@@ -11,64 +11,68 @@ const MIGRATIONS = new URL('../src/store/migrations/', import.meta.url);
 const files = readdirSync(MIGRATIONS).toSorted();
 
 describe('store', () => {
-  it('migrates a fresh database and enforces constraints', () => {
-    const db = openDb(':memory:');
+  it('migrates a fresh database and enforces constraints', async () => {
+    const db = await openDb(':memory:');
     // Numbers may skip, so the version is the highest one, not how many there are.
-    expect(schemaVersion(db)).toBe(Number.parseInt(files.at(-1)!, 10));
-    expect(db.prepare(`SELECT count(*) AS n FROM sqlite_master WHERE name = 'questions'`).get()).toEqual({ n: 0 });
-    db.prepare('INSERT INTO accounts (id, email, created_at) VALUES (?, ?, ?)').run('acct', 'me@example.org', 0);
-    const insert = db.prepare(
-      `INSERT INTO labels (account_id, id, name, description, disposition, gmail_label, position, updated_at) VALUES (?, ?, 'N', '', ?, 'sift/n', 0, 0)`,
-    );
-    insert.run('acct', 'n', 'archive');
-    expect(() => insert.run('acct', 'x', 'delete')).toThrow();
-    expect(() => insert.run('missing', 'y', 'keep')).toThrow();
+    expect(await schemaVersion(db)).toBe(Number.parseInt(files.at(-1)!, 10));
+    expect(await db.get(`SELECT count(*) AS n FROM sqlite_master WHERE name = 'questions'`)).toEqual({ n: 0 });
+    await db.run('INSERT INTO accounts (id, email, created_at) VALUES (?, ?, ?)', 'acct', 'me@example.org', 0);
+    const insert = (account: string, id: string, disposition: string) =>
+      db.run(
+        `INSERT INTO labels (account_id, id, name, description, disposition, gmail_label, position, updated_at) VALUES (?, ?, 'N', '', ?, 'sift/n', 0, 0)`,
+        account,
+        id,
+        disposition,
+      );
+    await insert('acct', 'n', 'archive');
+    await expect(insert('acct', 'x', 'delete')).rejects.toThrow();
+    await expect(insert('missing', 'y', 'keep')).rejects.toThrow();
     db.close();
   });
 
-  it('records each migration by name, and applies one that arrives with a lower number than those already applied', () => {
-    const db = openDb(':memory:');
-    expect((db.prepare('SELECT name FROM schema_migrations ORDER BY name').all() as { name: string }[]).map((row) => row.name)).toEqual(files);
+  it('records each migration by name, and applies one that arrives with a lower number than those already applied', async () => {
+    const db = await openDb(':memory:');
+    expect((await db.all<{ name: string }>('SELECT name FROM schema_migrations ORDER BY name')).map((row) => row.name)).toEqual(files);
 
     // A database that was migrated while a lower-numbered file did not exist yet: it must still get that file.
     const late = files.find((f) => f.startsWith('050_'));
     const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
-    openDb(path).close();
+    (await openDb(path)).close();
     const behind = new DatabaseSync(path);
     behind.exec('DROP TABLE eval_results; DROP TABLE eval_runs;');
     behind.prepare('DELETE FROM schema_migrations WHERE name = ?').run(late!);
     behind.close();
-    const caught = openDb(path);
-    expect(caught.prepare(`SELECT count(*) AS n FROM sqlite_master WHERE name IN ('eval_runs', 'eval_results')`).get()).toEqual({ n: 2 });
-    expect(schemaVersion(caught)).toBe(Number.parseInt(files.at(-1)!, 10));
+    const caught = await openDb(path);
+    expect(await caught.get(`SELECT count(*) AS n FROM sqlite_master WHERE name IN ('eval_runs', 'eval_results')`)).toEqual({ n: 2 });
+    expect(await schemaVersion(caught)).toBe(Number.parseInt(files.at(-1)!, 10));
     caught.close();
   });
 
-  it('takes a database from before migrations were named to have had every file up to its version', () => {
+  it('takes a database from before migrations were named to have had every file up to its version', async () => {
     const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
     const old = new DatabaseSync(path);
     for (const file of files.filter((f) => Number.parseInt(f, 10) <= 41)) old.exec(readFileSync(new URL(file, MIGRATIONS), 'utf8'));
     old.exec('PRAGMA user_version = 41');
     old.close();
 
-    const db = openDb(path);
-    const applied = db.prepare('SELECT name, applied_at FROM schema_migrations ORDER BY name').all() as { name: string; applied_at: number }[];
+    const db = await openDb(path);
+    const applied = await db.all<{ name: string; applied_at: number }>('SELECT name, applied_at FROM schema_migrations ORDER BY name');
     expect(applied.map((row) => row.name)).toEqual(files);
     // The ones it already had are marked without a time; the rest ran now.
     expect(applied.filter((row) => row.applied_at === 0).map((row) => row.name)).toEqual(files.filter((f) => Number.parseInt(f, 10) <= 41));
     db.close();
   });
 
-  it('refuses a database a newer sift has migrated, and leaves it as it was', () => {
+  it('refuses a database a newer sift has migrated, and leaves it as it was', async () => {
     const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
-    openDb(path).close();
+    (await openDb(path)).close();
     const newer = new DatabaseSync(path);
     newer.exec(`INSERT INTO schema_migrations (name, applied_at) VALUES ('999_from_the_future.sql', 1)`);
     newer.close();
-    expect(() => openDb(path)).toThrow(/last opened by a newer sift: it has had 999_from_the_future\.sql/);
+    await expect(openDb(path)).rejects.toThrow(/last opened by a newer sift: it has had 999_from_the_future\.sql/);
   });
 
-  it('turns a rule the model checked into one that waits for its label', () => {
+  it('turns a rule the model checked into one that waits for its label', async () => {
     const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
     const old = new DatabaseSync(path);
     for (const file of files.filter((f) => Number.parseInt(f, 10) <= 62)) old.exec(readFileSync(new URL(file, MIGRATIONS), 'utf8'));
@@ -85,18 +89,18 @@ describe('store', () => {
     `);
     old.close();
 
-    const db = openDb(path);
-    expect(listRules(db, 'a@example.org').map(({ source: _source, subscription: _subscription, ...rule }) => rule)).toEqual([
+    const db = await openDb(path);
+    expect((await listRules(db, 'a@example.org')).map(({ source: _source, subscription: _subscription, ...rule }) => rule)).toEqual([
       { id: 'r-usual', match: { from: 'news@example.com' }, whenLabel: 'newsletter', hits: 3 },
       { id: 'r-always', match: { from: 'ada@example.org' }, labelId: 'personal', disposition: 'keep', hits: 0 },
       // A condition in the user's words still needs its label to answer with.
       { id: 'r-words', match: { from: 'bids@example.com' }, labelId: 'newsletter', when: 'a lot I did not bid on', hits: 0 },
     ]);
-    expect(db.prepare(`SELECT filter_id FROM rules WHERE id = 'r-always'`).get()).toEqual({ filter_id: 'f1' });
+    expect(await db.get(`SELECT filter_id FROM rules WHERE id = 'r-always'`)).toEqual({ filter_id: 'f1' });
     db.close();
   });
 
-  it('turns the categories, rules and senders of an older database into labels and rules', () => {
+  it('turns the categories, rules and senders of an older database into labels and rules', async () => {
     const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
     const old = new DatabaseSync(path);
     for (const file of files.filter((f) => Number.parseInt(f, 10) <= 6)) old.exec(readFileSync(new URL(file, MIGRATIONS), 'utf8'));
@@ -122,8 +126,8 @@ describe('store', () => {
     `);
     old.close();
 
-    const db = openDb(path);
-    expect(listLabels(db, 'a@example.org')).toMatchObject([
+    const db = await openDb(path);
+    expect(await listLabels(db, 'a@example.org')).toMatchObject([
       { id: 'personal', disposition: 'keep', gmailLabel: 'sift/personal' },
       { id: 'newsletter', disposition: 'archive', gmailLabel: 'sift/newsletters' },
       // Was still at its old default, "leave it for me", which labels no longer do.
@@ -134,9 +138,9 @@ describe('store', () => {
       { id: 'phishing', disposition: 'spam', block: true, gmailLabel: 'sift/phishing' },
     ]);
     // An account that had never been given its categories gets the defaults.
-    expect(db.prepare(`SELECT count(*) AS n FROM labels WHERE account_id = 'b@example.org'`).get()).toEqual({ n: 10 });
+    expect(await db.get(`SELECT count(*) AS n FROM labels WHERE account_id = 'b@example.org'`)).toEqual({ n: 10 });
 
-    const rules = listRules(db, 'a@example.org').map(({ id: _id, hits: _hits, subscription: _subscription, ...rule }) => rule);
+    const rules = (await listRules(db, 'a@example.org')).map(({ id: _id, hits: _hits, subscription: _subscription, ...rule }) => rule);
     expect(rules).toEqual([
       { match: { fromDomain: 'example.com' }, labelId: 'newsletter', source: 'user' },
       // No label was named, so the one that does the same thing.
@@ -146,11 +150,11 @@ describe('store', () => {
       { match: { from: 'digest@example.com' }, labelId: 'newsletter', disposition: 'keep', source: 'user' },
       { match: { from: 'promo@example.com' }, labelId: 'newsletter', learned: true, source: 'agent' },
     ]);
-    expect(listRules(db, 'a@example.org')[0]).toMatchObject({ id: 'r-news', hits: 4 });
+    expect((await listRules(db, 'a@example.org'))[0]).toMatchObject({ id: 'r-news', hits: 4 });
     // A spam rule that named no label is Junk, and keeps its own action from before Junk marked spam.
-    expect(listRules(db, 'b@example.org')).toMatchObject([{ id: 'r-spam', labelId: 'junk', disposition: 'spam' }]);
-    expect(db.prepare('SELECT label_id, gmail_label FROM decisions').get()).toEqual({ label_id: 'newsletter', gmail_label: 'sift/newsletters' });
-    expect(() => db.prepare('SELECT 1 FROM senders').get()).toThrow();
+    expect(await listRules(db, 'b@example.org')).toMatchObject([{ id: 'r-spam', labelId: 'junk', disposition: 'spam' }]);
+    expect(await db.get('SELECT label_id, gmail_label FROM decisions')).toEqual({ label_id: 'newsletter', gmail_label: 'sift/newsletters' });
+    await expect(db.get('SELECT 1 FROM senders')).rejects.toThrow();
     db.close();
   });
 });

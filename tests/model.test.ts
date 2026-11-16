@@ -186,20 +186,20 @@ describe('judge', () => {
 });
 
 describe('preferences in the database', () => {
-  function seeded() {
-    const db = openDb(':memory:');
-    connectAccount(db, ACCOUNT, '1', 0);
+  async function seeded() {
+    const db = await openDb(':memory:');
+    await connectAccount(db, ACCOUNT, '1', 0);
     return db;
   }
-  const modelDecision = (db: ReturnType<typeof seeded>, id: string, labelId: string, disposition: 'keep' | 'archive' | 'review') => {
-    recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id })], '2');
-    recordDecision(db, ACCOUNT, id, { disposition, subscription: 'preserve', stage: 'agent', labelId, reason: 'r' });
-    return proposeForSender(db, ACCOUNT, 'news@example.com');
+  const modelDecision = async (db: Awaited<ReturnType<typeof seeded>>, id: string, labelId: string, disposition: 'keep' | 'archive' | 'review') => {
+    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id })], '2');
+    await recordDecision(db, ACCOUNT, id, { disposition, subscription: 'preserve', stage: 'agent', labelId, reason: 'r' });
+    return await proposeForSender(db, ACCOUNT, 'news@example.com');
   };
 
-  it('seeds default labels, each with a Gmail label and an outcome, and lets the user change them', () => {
-    const db = seeded();
-    const defaults = listLabels(db, ACCOUNT);
+  it('seeds default labels, each with a Gmail label and an outcome, and lets the user change them', async () => {
+    const db = await seeded();
+    const defaults = await listLabels(db, ACCOUNT);
     expect(defaults).toEqual(DEFAULT_LABELS);
     // No label is left for the user by default: that is a matter of trust, not something a label does.
     expect(defaults.filter((l) => l.disposition === 'review')).toEqual([]);
@@ -212,9 +212,9 @@ describe('preferences in the database', () => {
     });
     expect(new Set(defaults.map((l) => l.gmailLabel)).size).toBe(defaults.length);
 
-    expect(updateLabel(db, ACCOUNT, 'newsletter', { disposition: 'keep', name: 'Reading', description: 'Things I read.' })).toBe(true);
+    expect(await updateLabel(db, ACCOUNT, 'newsletter', { disposition: 'keep', name: 'Reading', description: 'Things I read.' })).toBe(true);
     // The id and the Gmail label never change, so nothing already labelled is orphaned.
-    expect(listLabels(db, ACCOUNT).find((l) => l.id === 'newsletter')).toEqual({
+    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'newsletter')).toEqual({
       id: 'newsletter',
       name: 'Reading',
       description: 'Things I read.',
@@ -222,63 +222,63 @@ describe('preferences in the database', () => {
       gmailLabel: 'sift/newsletters',
       unsubscribe: true,
     });
-    expect(updateLabel(db, ACCOUNT, 'nope', { disposition: 'keep' })).toBe(false);
+    expect(await updateLabel(db, ACCOUNT, 'nope', { disposition: 'keep' })).toBe(false);
   });
 
   const ids = (n: number, prefix = 'm') => Array.from({ length: n }, (_, i) => `${prefix}${i}`);
 
-  it(`proposes a rule for a sender after ${PROPOSE_AFTER} model decisions with the same label, and writes it only when accepted`, () => {
-    const db = seeded();
-    for (const id of ids(PROPOSE_AFTER - 1)) expect(modelDecision(db, id, 'newsletter', 'archive')).toBe(false);
-    expect(modelDecision(db, 'last', 'newsletter', 'archive')).toBe(true);
-    expect(listRules(db, ACCOUNT)).toEqual([]);
-    const [proposal] = listProposals(db, ACCOUNT);
+  it(`proposes a rule for a sender after ${PROPOSE_AFTER} model decisions with the same label, and writes it only when accepted`, async () => {
+    const db = await seeded();
+    for (const id of ids(PROPOSE_AFTER - 1)) expect(await modelDecision(db, id, 'newsletter', 'archive')).toBe(false);
+    expect(await modelDecision(db, 'last', 'newsletter', 'archive')).toBe(true);
+    expect(await listRules(db, ACCOUNT)).toEqual([]);
+    const [proposal] = await listProposals(db, ACCOUNT);
     expect(proposal).toMatchObject({ kind: 'rule', match: { from: 'news@example.com' }, labelId: 'newsletter', agreed: PROPOSE_AFTER });
     // One more agreeing message does not open a second proposal.
-    expect(modelDecision(db, 'again', 'newsletter', 'archive')).toBe(false);
+    expect(await modelDecision(db, 'again', 'newsletter', 'archive')).toBe(false);
 
-    expect(resolveProposal(db, proposal!.id, true)).toBe(true);
+    expect(await resolveProposal(db, proposal!.id, true)).toBe(true);
     // It is the user's rule now, and carries no action of its own, so it follows the label when the label changes.
-    expect(listRules(db, ACCOUNT)).toMatchObject([{ match: { from: 'news@example.com' }, labelId: 'newsletter', source: 'user' }]);
-    expect(listRules(db, ACCOUNT)[0]).not.toHaveProperty('disposition');
-    expect(listProposals(db, ACCOUNT)).toEqual([]);
-    expect(resolveProposal(db, proposal!.id, true)).toBe(false);
+    expect(await listRules(db, ACCOUNT)).toMatchObject([{ match: { from: 'news@example.com' }, labelId: 'newsletter', source: 'user' }]);
+    expect((await listRules(db, ACCOUNT))[0]).not.toHaveProperty('disposition');
+    expect(await listProposals(db, ACCOUNT)).toEqual([]);
+    expect(await resolveProposal(db, proposal!.id, true)).toBe(false);
   });
 
-  it('does not propose again what the user dismissed', () => {
-    const db = seeded();
-    for (const id of ids(PROPOSE_AFTER)) modelDecision(db, id, 'newsletter', 'archive');
-    resolveProposal(db, listProposals(db, ACCOUNT)[0]!.id, false);
-    expect(modelDecision(db, 'later', 'newsletter', 'archive')).toBe(false);
-    expect(listProposals(db, ACCOUNT)).toEqual([]);
-    expect(listRules(db, ACCOUNT)).toEqual([]);
+  it('does not propose again what the user dismissed', async () => {
+    const db = await seeded();
+    for (const id of ids(PROPOSE_AFTER)) await modelDecision(db, id, 'newsletter', 'archive');
+    await resolveProposal(db, (await listProposals(db, ACCOUNT))[0]!.id, false);
+    expect(await modelDecision(db, 'later', 'newsletter', 'archive')).toBe(false);
+    expect(await listProposals(db, ACCOUNT)).toEqual([]);
+    expect(await listRules(db, ACCOUNT)).toEqual([]);
   });
 
-  it('does not propose for senders who send mixed mail, or mail a protection held back', () => {
-    const db = seeded();
-    modelDecision(db, 'a', 'transactional', 'keep');
-    for (const id of ids(PROPOSE_AFTER - 2)) modelDecision(db, id, 'marketing', 'archive');
-    expect(modelDecision(db, 'c', 'marketing', 'archive')).toBe(false);
+  it('does not propose for senders who send mixed mail, or mail a protection held back', async () => {
+    const db = await seeded();
+    await modelDecision(db, 'a', 'transactional', 'keep');
+    for (const id of ids(PROPOSE_AFTER - 2)) await modelDecision(db, id, 'marketing', 'archive');
+    expect(await modelDecision(db, 'c', 'marketing', 'archive')).toBe(false);
 
     // Marketing archives, but each of these was left for review because the owner had written to the sender.
-    const held = seeded();
-    for (const id of ids(PROPOSE_AFTER - 1)) modelDecision(held, id, 'marketing', 'review');
-    expect(modelDecision(held, 'c', 'marketing', 'review')).toBe(false);
+    const held = await seeded();
+    for (const id of ids(PROPOSE_AFTER - 1)) await modelDecision(held, id, 'marketing', 'review');
+    expect(await modelDecision(held, 'c', 'marketing', 'review')).toBe(false);
   });
 
-  it('proposes nothing for a sender who already has a rule', () => {
-    const db = seeded();
-    addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'personal' }, 'user');
-    for (const id of ids(PROPOSE_AFTER)) expect(modelDecision(db, id, 'newsletter', 'archive')).toBe(false);
-    expect(listProposals(db, ACCOUNT)).toEqual([]);
+  it('proposes nothing for a sender who already has a rule', async () => {
+    const db = await seeded();
+    await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'personal' }, 'user');
+    for (const id of ids(PROPOSE_AFTER)) expect(await modelDecision(db, id, 'newsletter', 'archive')).toBe(false);
+    expect(await listProposals(db, ACCOUNT)).toEqual([]);
   });
 
-  it('proposes to stop waiting for the label once every message a rule was checked against had it', () => {
-    const db = seeded();
-    const ruleId = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, whenLabel: 'newsletter' }, 'user');
-    const checked = (id: string, agreed: boolean) => {
-      recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id })], '2');
-      recordDecision(db, ACCOUNT, id, {
+  it('proposes to stop waiting for the label once every message a rule was checked against had it', async () => {
+    const db = await seeded();
+    const ruleId = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, whenLabel: 'newsletter' }, 'user');
+    const checked = async (id: string, agreed: boolean) => {
+      await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id })], '2');
+      await recordDecision(db, ACCOUNT, id, {
         disposition: 'archive',
         subscription: 'preserve',
         stage: 'agent',
@@ -287,55 +287,55 @@ describe('preferences in the database', () => {
         ...(agreed ? { ruleId } : {}),
         reason: 'r',
       });
-      return proposeSettled(db, ACCOUNT, ruleId);
+      return await proposeSettled(db, ACCOUNT, ruleId);
     };
-    for (const id of ids(5)) expect(checked(id, true)).toBe(false);
+    for (const id of ids(5)) expect(await checked(id, true)).toBe(false);
     // One disagreement starts the count again.
-    expect(checked('odd', false)).toBe(false);
-    for (const id of ids(9, 'n')) expect(checked(id, true)).toBe(false);
-    expect(checked('tenth', true)).toBe(true);
-    const [proposal] = listProposals(db, ACCOUNT);
+    expect(await checked('odd', false)).toBe(false);
+    for (const id of ids(9, 'n')) expect(await checked(id, true)).toBe(false);
+    expect(await checked('tenth', true)).toBe(true);
+    const [proposal] = await listProposals(db, ACCOUNT);
     expect(proposal).toMatchObject({ kind: 'always', ruleId, agreed: 10 });
 
-    resolveProposal(db, proposal!.id, true);
+    await resolveProposal(db, proposal!.id, true);
     // The rule no longer waits to be told: it archives everything from them, as Newsletters would have been.
-    const [rule] = listRules(db, ACCOUNT);
+    const [rule] = await listRules(db, ACCOUNT);
     expect(rule).toMatchObject({ match: { from: 'news@example.com' }, disposition: 'archive', source: 'user' });
     expect(rule).not.toHaveProperty('whenLabel');
     expect(rule).not.toHaveProperty('labelId');
   });
 
-  it('keeps only the extras that go with what a label does', () => {
-    const db = seeded();
-    updateLabel(db, ACCOUNT, 'junk', { block: true, markRead: true });
-    expect(listLabels(db, ACCOUNT).find((l) => l.id === 'junk')).toMatchObject({ disposition: 'spam', block: true });
-    expect(listLabels(db, ACCOUNT).find((l) => l.id === 'junk')).not.toHaveProperty('markRead');
+  it('keeps only the extras that go with what a label does', async () => {
+    const db = await seeded();
+    await updateLabel(db, ACCOUNT, 'junk', { block: true, markRead: true });
+    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'junk')).toMatchObject({ disposition: 'spam', block: true });
+    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'junk')).not.toHaveProperty('markRead');
     // Changing what the label does drops the block, and marking read can now be asked for.
-    updateLabel(db, ACCOUNT, 'junk', { disposition: 'archive', markRead: true });
-    expect(listLabels(db, ACCOUNT).find((l) => l.id === 'junk')).toEqual(expect.objectContaining({ disposition: 'archive', markRead: true }));
-    expect(listLabels(db, ACCOUNT).find((l) => l.id === 'junk')).not.toHaveProperty('block');
+    await updateLabel(db, ACCOUNT, 'junk', { disposition: 'archive', markRead: true });
+    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'junk')).toEqual(expect.objectContaining({ disposition: 'archive', markRead: true }));
+    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'junk')).not.toHaveProperty('block');
   });
 });
 
 describe('standing', () => {
-  const db = () => {
-    const d = openDb(':memory:');
-    connectAccount(d, ACCOUNT, '1', 0);
+  const db = async () => {
+    const d = await openDb(':memory:');
+    await connectAccount(d, ACCOUNT, '1', 0);
     return d;
   };
-  const mail = (d: ReturnType<typeof db>, id: string, address: string, labelId: string | null, at = 1000) => {
+  const mail = async (d: Awaited<ReturnType<typeof db>>, id: string, address: string, labelId: string | null, at = 1000) => {
     const domain = address.split('@')[1]!;
-    recordSync(d, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id, from: { address, domain }, receivedAt: at })], '2');
-    recordDecision(d, ACCOUNT, id, { disposition: 'keep', subscription: 'preserve', stage: 'agent', ...(labelId ? { labelId } : {}), reason: 'r' });
+    await recordSync(d, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id, from: { address, domain }, receivedAt: at })], '2');
+    await recordDecision(d, ACCOUNT, id, { disposition: 'keep', subscription: 'preserve', stage: 'agent', ...(labelId ? { labelId } : {}), reason: 'r' });
   };
 
-  it('is new until enough mail has come, then known, and says how consistent the mail is', () => {
-    const d = db();
-    mail(d, 'a', 'news@example.com', 'newsletter');
-    expect(senderFacts(d, ACCOUNT, 'news@example.com', 2000)).toMatchObject({ messages: 1, standing: 'new', consistency: null, userHasWritten: null });
-    for (const id of ['b', 'c', 'd']) mail(d, id, 'news@example.com', 'newsletter');
-    mail(d, 'e', 'news@example.com', 'transactional');
-    expect(senderFacts(d, ACCOUNT, 'news@example.com', 2000)).toMatchObject({
+  it('is new until enough mail has come, then known, and says how consistent the mail is', async () => {
+    const d = await db();
+    await mail(d, 'a', 'news@example.com', 'newsletter');
+    expect(await senderFacts(d, ACCOUNT, 'news@example.com', 2000)).toMatchObject({ messages: 1, standing: 'new', consistency: null, userHasWritten: null });
+    for (const id of ['b', 'c', 'd']) await mail(d, id, 'news@example.com', 'newsletter');
+    await mail(d, 'e', 'news@example.com', 'transactional');
+    expect(await senderFacts(d, ACCOUNT, 'news@example.com', 2000)).toMatchObject({
       messages: 5,
       recent: 5,
       labels: [
@@ -347,43 +347,43 @@ describe('standing', () => {
     });
   });
 
-  it('takes trust only from a rule of the owner: having written to someone makes them known, not trusted', () => {
-    const d = db();
-    mail(d, 'a', 'ada@example.org', 'personal');
-    rememberCorrespondent(d, ACCOUNT, 'ada@example.org', true);
-    expect(senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'known', why: 'you have written to them' });
+  it('takes trust only from a rule of the owner: having written to someone makes them known, not trusted', async () => {
+    const d = await db();
+    await mail(d, 'a', 'ada@example.org', 'personal');
+    await rememberCorrespondent(d, ACCOUNT, 'ada@example.org', true);
+    expect(await senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'known', why: 'you have written to them' });
 
-    addRule(d, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'personal' }, 'user');
-    expect(senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'trusted', why: 'a rule keeps their mail' });
+    await addRule(d, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'personal' }, 'user');
+    expect(await senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'trusted', why: 'a rule keeps their mail' });
   });
 
-  it('is unwanted or blocked by a rule that hides their mail, but not by one that waits for a label', () => {
-    const d = db();
-    mail(d, 'a', 'promo@example.com', 'marketing');
-    addRule(d, ACCOUNT, { match: { from: 'promo@example.com' }, whenLabel: 'marketing' }, 'user');
-    expect(senderFacts(d, ACCOUNT, 'promo@example.com').standing).toBe('new');
-    addRule(d, ACCOUNT, { match: { from: 'promo@example.com' }, disposition: 'archive' }, 'user');
-    expect(senderFacts(d, ACCOUNT, 'promo@example.com').standing).toBe('unwanted');
-    addRule(d, ACCOUNT, { match: { from: 'scam@example.net' }, labelId: 'junk' }, 'user');
-    expect(senderFacts(d, ACCOUNT, 'scam@example.net').standing).toBe('blocked');
+  it('is unwanted or blocked by a rule that hides their mail, but not by one that waits for a label', async () => {
+    const d = await db();
+    await mail(d, 'a', 'promo@example.com', 'marketing');
+    await addRule(d, ACCOUNT, { match: { from: 'promo@example.com' }, whenLabel: 'marketing' }, 'user');
+    expect((await senderFacts(d, ACCOUNT, 'promo@example.com')).standing).toBe('new');
+    await addRule(d, ACCOUNT, { match: { from: 'promo@example.com' }, disposition: 'archive' }, 'user');
+    expect((await senderFacts(d, ACCOUNT, 'promo@example.com')).standing).toBe('unwanted');
+    await addRule(d, ACCOUNT, { match: { from: 'scam@example.net' }, labelId: 'junk' }, 'user');
+    expect((await senderFacts(d, ACCOUNT, 'scam@example.net')).standing).toBe('blocked');
   });
 
-  it('gives a domain a standing of its own, except one anyone can get an address at', () => {
-    const d = db();
-    mail(d, 'a', 'one@example.com', 'newsletter');
-    mail(d, 'b', 'two@example.com', 'newsletter');
-    addRule(d, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'personal' }, 'user');
-    expect(domainFacts(d, ACCOUNT, 'example.com')).toMatchObject({ messages: 2, senders: 2, standing: 'trusted' });
-    expect(domainFacts(d, ACCOUNT, 'gmail.com')).toBeNull();
+  it('gives a domain a standing of its own, except one anyone can get an address at', async () => {
+    const d = await db();
+    await mail(d, 'a', 'one@example.com', 'newsletter');
+    await mail(d, 'b', 'two@example.com', 'newsletter');
+    await addRule(d, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'personal' }, 'user');
+    expect(await domainFacts(d, ACCOUNT, 'example.com')).toMatchObject({ messages: 2, senders: 2, standing: 'trusted' });
+    expect(await domainFacts(d, ACCOUNT, 'gmail.com')).toBeNull();
   });
 });
 
 describe('gatherEvidence', () => {
   it('caches whether the owner has written to a sender and counts history', async () => {
-    const db = openDb(':memory:');
-    connectAccount(db, ACCOUNT, '1', 0);
+    const db = await openDb(':memory:');
+    await connectAccount(db, ACCOUNT, '1', 0);
     const f = facts({ accountId: ACCOUNT });
-    recordSync(db, ACCOUNT, [f], '2');
+    await recordSync(db, ACCOUNT, [f], '2');
     let lookups = 0;
     const fail = async () => {
       throw new Error('not a reply, so the thread is not read');
@@ -402,8 +402,8 @@ describe('gatherEvidence', () => {
   });
 
   it('reports unknown instead of failing when a lookup errors', async () => {
-    const db = openDb(':memory:');
-    connectAccount(db, ACCOUNT, '1', 0);
+    const db = await openDb(':memory:');
+    await connectAccount(db, ACCOUNT, '1', 0);
     const fail = async () => {
       throw new Error('network');
     };

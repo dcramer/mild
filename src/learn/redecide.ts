@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../store/sql.ts';
 import { recordDecision } from '../store/decisions.ts';
 import { listLabels } from '../store/labels.ts';
 import { getFacts } from '../store/messages.ts';
@@ -44,31 +44,29 @@ const same = (standing: Standing, next: Decision) =>
  * Mail a rule decided only because of an earlier call here is included, so removing that rule brings
  * the suggestion back. Mail the user answered for is never touched. Returns how many decisions were recorded.
  */
-export async function redecideWaiting(db: DatabaseSync, accountId: string, now: number = Date.now()): Promise<number> {
-  const labels = listLabels(db, accountId, now);
-  const stored = listRules(db, accountId);
-  const written = (address: string) => cachedCorrespondent(db, accountId, address, now);
-  const rules = rulesStage(stored, labels, { hasWritten: (facts) => written(facts.from.address) });
-  const standing = db.prepare(`SELECT ${COLUMNS} FROM decisions WHERE id = ?`);
-  const judged = db.prepare(`SELECT ${COLUMNS} FROM decisions WHERE account_id = ? AND message_id = ? AND stage != 'rules' ORDER BY id DESC LIMIT 1`);
+export async function redecideWaiting(db: Sql, accountId: string, now: number = Date.now()): Promise<number> {
+  const labels = await listLabels(db, accountId, now);
+  const stored = await listRules(db, accountId);
+  let known: boolean | undefined;
+  const rules = rulesStage(stored, labels, { hasWritten: () => known });
   // Decided by a rule that no longer exists, after another tier had already decided it, and never answered.
-  const orphaned = db
-    .prepare(
-      `SELECT d.id AS decisionId, d.message_id AS messageId FROM decisions d
+  const orphaned = await db.all<Pick<Suggestion, 'decisionId' | 'messageId'>>(
+    `SELECT d.id AS decisionId, d.message_id AS messageId FROM decisions d
        WHERE d.account_id = ? AND d.mode = 'observe' AND d.stage = 'rules' AND d.rule_id IS NOT NULL
          AND d.id = (SELECT max(id) FROM decisions x WHERE x.account_id = d.account_id AND x.message_id = d.message_id)
          AND NOT EXISTS (SELECT 1 FROM rules r WHERE r.id = d.rule_id)
          AND NOT EXISTS (SELECT 1 FROM feedback f WHERE f.account_id = d.account_id AND f.message_id = d.message_id)
          AND EXISTS (SELECT 1 FROM decisions p WHERE p.account_id = d.account_id AND p.message_id = d.message_id AND p.id < d.id)`,
-    )
-    .all(accountId) as unknown as Pick<Suggestion, 'decisionId' | 'messageId'>[];
-  const waiting = new Map([...pendingSuggestions(db, { accountId }), ...orphaned].map((s) => [s.messageId, s.decisionId] as const));
+    accountId,
+  );
+  const waiting = new Map([...(await pendingSuggestions(db, { accountId })), ...orphaned].map((s) => [s.messageId, s.decisionId] as const));
 
   let recorded = 0;
   for (const [messageId, decisionId] of waiting) {
-    const facts = getFacts(db, accountId, messageId);
-    const current = standing.get(decisionId) as unknown as Standing | undefined;
+    const facts = await getFacts(db, accountId, messageId);
+    const current = await db.get<Standing>(`SELECT ${COLUMNS} FROM decisions WHERE id = ?`, decisionId);
     if (!facts || !current) continue;
+    known = await cachedCorrespondent(db, accountId, facts.from.address, now);
 
     let next: Decision | null = null;
     const ruled = await rules.decide(facts);
@@ -76,12 +74,18 @@ export async function redecideWaiting(db: DatabaseSync, accountId: string, now: 
       const learned = stored.find((r) => r.id === ruled.ruleId)?.learned ?? false;
       if (!learned || !same(current, ruled)) next = ruled;
     } else {
-      const base = current.stage === 'rules' ? (judged.get(accountId, messageId) as unknown as Standing | undefined) : current;
+      const base =
+        current.stage === 'rules'
+          ? await db.get<Standing>(
+              `SELECT ${COLUMNS} FROM decisions WHERE account_id = ? AND message_id = ? AND stage != 'rules' ORDER BY id DESC LIMIT 1`,
+              accountId,
+              messageId,
+            )
+          : current;
       const label = labels.find((l) => l.id === base?.label_id);
       if (base && label) {
         const outcome = labelled(label);
         // Unknown counts as written to, unless the earlier decision hid the mail: the sender was checked then.
-        const known = written(facts.from.address);
         const safe = known === false || (known === undefined && hides(base.disposition));
         const held = hides(outcome.disposition) && !safe;
         const before = base.reason.replace(/^.* Before: /, '');
@@ -100,8 +104,8 @@ export async function redecideWaiting(db: DatabaseSync, accountId: string, now: 
       }
     }
     if (!next) continue;
-    recordDecision(db, accountId, messageId, next, { mode: 'observe', now });
-    if (next.ruleId) countRuleHit(db, next.ruleId);
+    await recordDecision(db, accountId, messageId, next, { mode: 'observe', now });
+    if (next.ruleId) await countRuleHit(db, next.ruleId);
     recorded++;
   }
   return recorded;
@@ -112,8 +116,6 @@ export async function redecideWaiting(db: DatabaseSync, accountId: string, now: 
  * `since` (when the guidelines last changed). Oldest first. Judging them again costs a model call each,
  * so it only happens when the user asks.
  */
-export function predatingGuidelines(db: DatabaseSync, since: number, accountId?: string): Suggestion[] {
-  return pendingSuggestions(db, accountId === undefined ? {} : { accountId })
-    .filter((s) => s.stage !== 'rules' && s.decidedAt < since)
-    .toReversed();
+export async function predatingGuidelines(db: Sql, since: number, accountId?: string): Promise<Suggestion[]> {
+  return (await pendingSuggestions(db, accountId === undefined ? {} : { accountId })).filter((s) => s.stage !== 'rules' && s.decidedAt < since).toReversed();
 }

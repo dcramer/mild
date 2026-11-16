@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { type ActionDeps, execute, reconcile, undo } from '../src/actions/executor.ts';
 import { planAction } from '../src/actions/plan.ts';
@@ -9,14 +9,14 @@ import { FakeMailbox, facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
 
-let db: DatabaseSync;
+let db: Sql;
 let mailbox: FakeMailbox;
 let deps: ActionDeps;
 
-beforeEach(() => {
-  db = openDb(':memory:');
-  connectAccount(db, ACCOUNT, '1', 0);
-  recordSync(db, ACCOUNT, [facts({ messageId: 'm1' })], '2');
+beforeEach(async () => {
+  db = await openDb(':memory:');
+  await connectAccount(db, ACCOUNT, '1', 0);
+  await recordSync(db, ACCOUNT, [facts({ messageId: 'm1' })], '2');
   mailbox = new FakeMailbox();
   mailbox.labels.set('m1', ['INBOX', 'UNREAD', 'L:mine']);
   deps = { db, mailbox, now: () => 1000 };
@@ -26,7 +26,7 @@ describe('execute', () => {
   it('archives with an audit label, preserving unread state and other labels', async () => {
     const outcome = await execute(deps, ACCOUNT, 'm1', { type: 'archive' });
     expect(outcome).toMatchObject({ status: 'done', finalLabels: ['UNREAD', 'L:mine', 'L:sift/did/archived'] });
-    const action = getAction(db, 1);
+    const action = await getAction(db, 1);
     expect(action).toMatchObject({
       type: 'archive',
       status: 'done',
@@ -50,7 +50,7 @@ describe('execute', () => {
     expect(await execute(deps, ACCOUNT, 'm1', { type: 'archive' })).toEqual({ status: 'skipped', reason: 'message is not in the inbox' });
     expect(await execute(deps, ACCOUNT, 'gone', { type: 'archive' })).toEqual({ status: 'skipped', reason: 'message no longer exists' });
     expect(mailbox.modifyCalls).toBe(0);
-    expect(db.prepare('SELECT count(*) AS n FROM actions').get()).toEqual({ n: 0 });
+    expect(await db.get('SELECT count(*) AS n FROM actions')).toEqual({ n: 0 });
   });
 
   it('skips when the message already has the label', async () => {
@@ -80,11 +80,11 @@ describe('execute', () => {
   it('records unknown when the provider call errors, then settles it from the mailbox without replaying', async () => {
     mailbox.failModify = 'after';
     expect(await execute(deps, ACCOUNT, 'm1', { type: 'archive' })).toMatchObject({ status: 'unknown', actionId: 1, reason: 'timeout' });
-    expect(getAction(db, 1)?.status).toBe('unknown');
+    expect((await getAction(db, 1))?.status).toBe('unknown');
 
     mailbox.failModify = null;
     expect(await reconcile(deps)).toBe(1);
-    expect(getAction(db, 1)).toMatchObject({ status: 'done', finalLabels: ['UNREAD', 'L:mine', 'L:sift/did/archived'] });
+    expect(await getAction(db, 1)).toMatchObject({ status: 'done', finalLabels: ['UNREAD', 'L:mine', 'L:sift/did/archived'] });
     expect(mailbox.modifyCalls).toBe(1);
   });
 
@@ -94,15 +94,17 @@ describe('execute', () => {
 
     mailbox.failModify = null;
     expect(await execute(deps, ACCOUNT, 'm1', { type: 'archive' })).toMatchObject({ status: 'done', actionId: 2 });
-    expect(getAction(db, 1)).toMatchObject({ status: 'failed', error: 'network down' });
+    expect(await getAction(db, 1)).toMatchObject({ status: 'failed', error: 'network down' });
   });
 
   it('settles a crash that left an action pending', async () => {
-    db.prepare(
+    await db.run(
       `INSERT INTO actions (account_id, message_id, type, payload_json, original_labels, status, created_at) VALUES (?, 'm1', 'archive', ?, '["INBOX"]', 'pending', 0)`,
-    ).run(ACCOUNT, JSON.stringify({ add: ['L:sift/did/archived'], remove: ['INBOX'] }));
+      ACCOUNT,
+      JSON.stringify({ add: ['L:sift/did/archived'], remove: ['INBOX'] }),
+    );
     await reconcile(deps);
-    expect(getAction(db, 1)).toMatchObject({ status: 'failed', error: 'change was not applied' });
+    expect(await getAction(db, 1)).toMatchObject({ status: 'failed', error: 'change was not applied' });
   });
 });
 
@@ -128,8 +130,8 @@ describe('undo', () => {
     await execute(deps, ACCOUNT, 'm1', { type: 'spam' });
     expect(await undo(deps, 1)).toMatchObject({ status: 'done', actionId: 2 });
     expect(mailbox.labels.get('m1')?.toSorted()).toEqual(['INBOX', 'L:mine', 'UNREAD']);
-    expect(getAction(db, 1)?.status).toBe('undone');
-    expect(getAction(db, 2)).toMatchObject({ type: 'undo', status: 'done', payload: { undoOf: 1 } });
+    expect((await getAction(db, 1))?.status).toBe('undone');
+    expect(await getAction(db, 2)).toMatchObject({ type: 'undo', status: 'done', payload: { undoOf: 1 } });
   });
 
   it('keeps changes the user made afterwards', async () => {
@@ -143,7 +145,7 @@ describe('undo', () => {
     await execute(deps, ACCOUNT, 'm1', { type: 'archive' });
     mailbox.labels.set('m1', ['INBOX']);
     expect(await undo(deps, 1)).toMatchObject({ status: 'skipped' });
-    expect(getAction(db, 1)?.status).toBe('undone');
+    expect((await getAction(db, 1))?.status).toBe('undone');
   });
 
   it('refuses to undo twice, to undo an undo, or to touch trashed mail', async () => {

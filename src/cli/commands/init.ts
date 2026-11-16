@@ -7,6 +7,7 @@ import { login, openModels } from '../../model/models.ts';
 import { listAccounts } from '../../store/accounts.ts';
 import { loadKeyring } from '../../secrets.ts';
 import { openDb } from '../../store/db.ts';
+import type { Database } from '../../store/sql.ts';
 import { type SetupState, runInit } from '../init.ts';
 import { tailscaleName } from '../network.ts';
 import { ui } from '../ui.ts';
@@ -17,10 +18,10 @@ export async function init(): Promise<void> {
   // Started away from the .env that holds the key, init would otherwise make a second one.
   checkSecrets(config, false);
   const models = openModels(config);
-  const withDb = <T>(work: (db: ReturnType<typeof openDb>) => T): T => {
-    const db = openDb(config.dbPath);
+  const withDb = async <T>(work: (db: Database) => Promise<T>): Promise<T> => {
+    const db = await openDb(config.dbPath);
     try {
-      return work(db);
+      return await work(db);
     } finally {
       db.close();
     }
@@ -46,7 +47,7 @@ export async function init(): Promise<void> {
           : { googleTasks: 0 },
     saveSetupState: (state) => writeFileSync(config.setupStatePath, JSON.stringify(state), { mode: 0o600 }),
     installGoogleClient: (json) => installClient(config, json),
-    connectedAccounts: () => withDb((db) => listAccounts(db).map((a) => a.email)),
+    connectedAccounts: async () => await withDb(async (db) => (await listAccounts(db)).map((a) => a.email)),
     loginModel: (choice) => login(models, config, choice.provider, choice.type, ui),
     availableModels: async (provider) => (await models.getAvailable(provider)).map((m) => m.id),
     googleClientKind: () => (hasClientSecrets(config) ? loadClientSecrets(config).kind : null),

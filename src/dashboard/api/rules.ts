@@ -3,7 +3,7 @@ import { addRule, removeRule } from '../../store/rules.ts';
 import { listRuleSummaries } from '../queries/rules.ts';
 import { LABEL_ID, RULE_KEYS, type Read, type Write, decided, named, ok, ownerOf, redecide, str } from './route.ts';
 
-export const reads: Read[] = [{ path: '/api/rules', run: ({ db }, scope) => ok({ rules: listRuleSummaries(db, scope) }) }];
+export const reads: Read[] = [{ path: '/api/rules', run: async ({ db }, scope) => ok({ rules: await listRuleSummaries(db, scope) }) }];
 
 export const writes: Write[] = [
   {
@@ -21,7 +21,7 @@ export const writes: Write[] = [
       if ((markRead !== undefined && typeof markRead !== 'boolean') || (unsubscribe !== undefined && typeof unsubscribe !== 'boolean')) return null;
       const conditions = Object.entries(match).filter(([, value]) => value !== '');
       if (conditions.length === 0 || !conditions.every(([key, value]) => RULE_KEYS.has(key) && str(value))) return null;
-      const id = addRule(
+      const id = await addRule(
         db,
         accountId,
         {
@@ -49,7 +49,7 @@ export const writes: Write[] = [
       // Taking a filter out is always allowed: it only reduces what runs unattended.
       if (on && !controls.settings().act) throw new Error('sift is only observing, so it writes nothing to Gmail. Let it act first, in Settings.');
       await controls.ruleFilter(id, on);
-      return { filterId: getRuleFilter(db, id)?.filterId ?? null, filter: ruleFilterStatus(db, now()).get(id) ?? null };
+      return { filterId: (await getRuleFilter(db, id))?.filterId ?? null, filter: (await ruleFilterStatus(db, now())).get(id) ?? null };
     },
   },
   {
@@ -57,13 +57,13 @@ export const writes: Write[] = [
     touches: ownerOf('rules'),
     run: async ({ db, controls, now }, body) => {
       if (!str(body['id'], 40)) return null;
-      const owner = getRuleFilter(db, body['id'])?.accountId ?? null;
+      const owner = (await getRuleFilter(db, body['id']))?.accountId ?? null;
       // A filter left behind would keep acting on mail with no rule to explain or remove it.
-      if (getRuleFilter(db, body['id'])?.filterId) {
+      if ((await getRuleFilter(db, body['id']))?.filterId) {
         if (!controls) throw new Error('This rule is also a Gmail filter, which this dashboard cannot remove.');
         await controls.ruleFilter(body['id'], false);
       }
-      if (!removeRule(db, body['id'])) throw new Error('That rule no longer exists.');
+      if (!(await removeRule(db, body['id']))) throw new Error('That rule no longer exists.');
       return { ok: true, redecided: await redecide(db, now, owner ?? undefined) };
     },
   },

@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../store/sql.ts';
 import type { GmailApi } from '../gmail/api.ts';
 
 /** Every header of a raw message, in order. Folded lines are joined. */
@@ -22,25 +22,33 @@ const PER_PASS = 50;
  * fetch leaves the example pending for the next pass. Returns how many were captured.
  */
 export async function captureExamples(
-  db: DatabaseSync,
+  db: Sql,
   api: Pick<GmailApi, 'getRaw' | 'getBodyText'>,
   accountId: string,
   now: () => number = Date.now,
 ): Promise<number> {
-  const pending = db
-    .prepare(`SELECT message_id FROM examples WHERE account_id = ? AND status = 'pending' ORDER BY marked_at, message_id LIMIT ?`)
-    .all(accountId, PER_PASS) as { message_id: string }[];
+  const pending = await db.all<{ message_id: string }>(
+    `SELECT message_id FROM examples WHERE account_id = ? AND status = 'pending' ORDER BY marked_at, message_id LIMIT ?`,
+    accountId,
+    PER_PASS,
+  );
   let captured = 0;
   for (const { message_id: messageId } of pending) {
     const raw = await api.getRaw(messageId);
     if (raw === null) {
-      db.prepare(`UPDATE examples SET status = 'gone', captured_at = ? WHERE account_id = ? AND message_id = ?`).run(now(), accountId, messageId);
+      await db.run(`UPDATE examples SET status = 'gone', captured_at = ? WHERE account_id = ? AND message_id = ?`, now(), accountId, messageId);
       continue;
     }
     const body = await api.getBodyText(messageId);
-    db.prepare(
+    await db.run(
       `UPDATE examples SET status = 'captured', raw = ?, headers_json = ?, body_text = ?, captured_at = ? WHERE account_id = ? AND message_id = ?`,
-    ).run(raw, JSON.stringify(parseHeaders(raw)), body ?? '', now(), accountId, messageId);
+      raw,
+      JSON.stringify(parseHeaders(raw)),
+      body ?? '',
+      now(),
+      accountId,
+      messageId,
+    );
     captured++;
   }
   return captured;

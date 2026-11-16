@@ -20,25 +20,27 @@ export const writes: Write[] = [
       if (disposition !== undefined) Object.assign(change, fromOutcome(disposition));
       if (markRead !== undefined) change.markRead = markRead;
       if (unsubscribe !== undefined) change.unsubscribe = unsubscribe;
-      if (!updateLabel(db, accountId, id, change, now())) throw new Error(`There is no label "${id}".`);
+      if (!(await updateLabel(db, accountId, id, change, now()))) throw new Error(`There is no label "${id}".`);
       return { ok: true, redecided: await redecide(db, now, accountId) };
     },
   },
   {
     path: '/api/labels/add',
     touches: named,
-    run: ({ db, now }, body) => {
+    run: async ({ db, now }, body) => {
       const { accountId, name, description, disposition, markRead, unsubscribe } = body;
       if (!str(accountId) || !str(name, 60) || typeof description !== 'string' || description.length > 600) return null;
       if (!outcome(disposition) || (markRead !== undefined && typeof markRead !== 'boolean')) return null;
       if (unsubscribe !== undefined && typeof unsubscribe !== 'boolean') return null;
-      if (!listAccounts(db).some((a) => a.id === accountId)) return null;
+      if (!(await listAccounts(db)).some((a) => a.id === accountId)) return null;
       return {
-        id: addLabel(
-          db,
-          accountId,
-          { name, description, ...fromOutcome(disposition), ...(markRead ? { markRead } : {}), ...(unsubscribe ? { unsubscribe } : {}) },
-          now(),
+        id: (
+          await addLabel(
+            db,
+            accountId,
+            { name, description, ...fromOutcome(disposition), ...(markRead ? { markRead } : {}), ...(unsubscribe ? { unsubscribe } : {}) },
+            now(),
+          )
         ).id,
       };
     },

@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { type RunOptions, runOnce } from '../src/daemon/run.ts';
 import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
@@ -33,7 +33,7 @@ function message(id: string, from: string, subject = `Subject ${id}`): RawMessag
   };
 }
 
-let db: DatabaseSync;
+let db: Sql;
 let mailbox: FakeMailbox;
 let inbox: RawMessage[];
 let logs: string[];
@@ -60,11 +60,11 @@ function api(): GmailApi {
 }
 
 const options = (act: boolean): RunOptions => ({ act, connect: () => ({ api: api(), mailbox }), log: (line) => logs.push(line), now: () => 5000 });
-const decisions = () => db.prepare('SELECT message_id, stage, disposition, mode, outcome, outcome_detail, rule_id FROM decisions ORDER BY id').all();
+const decisions = async () => await db.all('SELECT message_id, stage, disposition, mode, outcome, outcome_detail, rule_id FROM decisions ORDER BY id');
 
-beforeEach(() => {
-  db = openDb(':memory:');
-  connectAccount(db, ACCOUNT, '1', 0);
+beforeEach(async () => {
+  db = await openDb(':memory:');
+  await connectAccount(db, ACCOUNT, '1', 0);
   mailbox = new FakeMailbox();
   logs = [];
   cursor = 1;
@@ -75,35 +75,35 @@ beforeEach(() => {
 
 describe('runOnce', () => {
   it('observes by default: records what it would do and changes nothing', async () => {
-    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
     await runOnce(db, options(false));
 
-    expect(decisions()).toMatchObject([
+    expect(await decisions()).toMatchObject([
       { message_id: 'ada', stage: 'fallback', disposition: 'review', mode: 'observe', outcome: 'observed' },
       { message_id: 'news', stage: 'rules', disposition: 'archive', mode: 'observe', outcome: 'observed' },
     ]);
     expect(mailbox.modifyCalls).toBe(0);
-    expect(db.prepare('SELECT count(*) AS n FROM actions').get()).toEqual({ n: 0 });
+    expect(await db.get('SELECT count(*) AS n FROM actions')).toEqual({ n: 0 });
     expect(logs).toEqual([`${ACCOUNT}: 2 new; would archive 1, review 1`]);
   });
 
   it('acts on decisions, links each action to its decision and counts rule hits', async () => {
-    const ruleId = addRule(db, ACCOUNT, { match: { listId: 'news.example.com', from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
-    addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'personal' }, 'user');
+    const ruleId = await addRule(db, ACCOUNT, { match: { listId: 'news.example.com', from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'personal' }, 'user');
     await runOnce(db, options(true));
 
     // Both get the label for what they are; only the archived one gets the label for what sift did.
     expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/newsletters', 'L:sift/did/archived']);
     expect(mailbox.labels.get('ada')).toEqual(['INBOX', 'UNREAD', 'L:sift/personal']);
-    expect(decisions()).toMatchObject([
+    expect(await decisions()).toMatchObject([
       { message_id: 'ada', disposition: 'keep', mode: 'act', outcome: 'done' },
       { message_id: 'news', disposition: 'archive', mode: 'act', outcome: 'done', rule_id: ruleId },
     ]);
-    expect(db.prepare('SELECT message_id, type, status, decision_id FROM actions ORDER BY message_id').all()).toEqual([
+    expect(await db.all('SELECT message_id, type, status, decision_id FROM actions ORDER BY message_id')).toEqual([
       { message_id: 'ada', type: 'label', status: 'done', decision_id: 1 },
       { message_id: 'news', type: 'archive', status: 'done', decision_id: 2 },
     ]);
-    expect(listRules(db, ACCOUNT).map((r) => r.hits)).toEqual([1, 1]);
+    expect((await listRules(db, ACCOUNT)).map((r) => r.hits)).toEqual([1, 1]);
   });
 
   it('labels undecided mail for review and leaves it in the inbox', async () => {
@@ -114,18 +114,18 @@ describe('runOnce', () => {
   it('decides each message once, however many passes run', async () => {
     await runOnce(db, options(true));
     await runOnce(db, options(true));
-    expect(decisions()).toHaveLength(2);
+    expect(await decisions()).toHaveLength(2);
     expect(mailbox.modifyCalls).toBe(2);
     expect(logs).toHaveLength(1);
   });
 
   it('records why a decision was not carried out', async () => {
-    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'marketing', disposition: 'spam' }, 'user');
+    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'marketing', disposition: 'spam' }, 'user');
     mailbox.sentTo.add('news@example.com');
     mailbox.labels.set('ada', ['UNREAD']);
     await runOnce(db, options(true));
 
-    expect(decisions()).toMatchObject([
+    expect(await decisions()).toMatchObject([
       { message_id: 'ada', outcome: 'skipped', outcome_detail: 'message is not in the inbox' },
       { message_id: 'news', disposition: 'spam', outcome: 'skipped', outcome_detail: 'you have written to this sender, so spam is refused' },
     ]);
@@ -152,26 +152,26 @@ describe('runOnce', () => {
   });
 
   it('keeps a decision it could not carry out and retries it on the next pass', async () => {
-    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
     inbox = [inbox[0]!];
     mailbox.failReads = true;
     const [failed] = await runOnce(db, options(true));
     expect(failed?.error).toBe('network down');
-    expect(decisions()).toMatchObject([{ message_id: 'news', mode: 'act', outcome: null }]);
+    expect(await decisions()).toMatchObject([{ message_id: 'news', mode: 'act', outcome: null }]);
 
     mailbox.failReads = false;
     inbox = [];
     await runOnce(db, options(true));
-    expect(decisions()).toMatchObject([{ message_id: 'news', outcome: 'done' }]);
+    expect(await decisions()).toMatchObject([{ message_id: 'news', outcome: 'done' }]);
     expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/newsletters', 'L:sift/did/archived']);
   });
 });
 
 describe('teaching from Gmail', () => {
-  const feedback = () => db.prepare('SELECT message_id, verdict, correct, scope, label_id, via FROM feedback ORDER BY id').all();
-  const latest = (id: string) =>
-    db.prepare('SELECT stage, disposition, label_id, mode, rule_id, reason FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1').get(id);
-  const count = (table: string) => (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n;
+  const feedback = async () => await db.all('SELECT message_id, verdict, correct, scope, label_id, via FROM feedback ORDER BY id');
+  const latest = async (id: string) =>
+    await db.get('SELECT stage, disposition, label_id, mode, rule_id, reason FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1', id);
+  const count = async (table: string) => (await db.get<{ n: number }>(`SELECT count(*) AS n FROM ${table}`))!.n;
   // Time moves between passes: which of its own changes sift expects in a history depends on when they were made.
   let clock: number;
   const run = async (act: boolean) => {
@@ -185,10 +185,10 @@ describe('teaching from Gmail', () => {
     return run(act);
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     clock = 5000;
-    addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
-    addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'personal' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'personal' }, 'user');
   });
 
   it('takes mail moved back to the inbox as an answer for that message, makes no rule and changes nothing in Gmail', async () => {
@@ -199,8 +199,8 @@ describe('teaching from Gmail', () => {
 
     expect(await pass(true)).toBe(1);
     // The move does not say what the mail is, so the label stands and the outcome is the exception.
-    expect(feedback()).toEqual([{ message_id: 'news', verdict: 'right', correct: null, scope: 'message', label_id: 'newsletter', via: 'gmail' }]);
-    expect(latest('news')).toEqual({
+    expect(await feedback()).toEqual([{ message_id: 'news', verdict: 'right', correct: null, scope: 'message', label_id: 'newsletter', via: 'gmail' }]);
+    expect(await latest('news')).toEqual({
       stage: 'rules',
       disposition: 'keep',
       label_id: 'newsletter',
@@ -208,10 +208,10 @@ describe('teaching from Gmail', () => {
       rule_id: null,
       reason: 'you said this is Newsletters',
     });
-    expect(db.prepare('SELECT message_id, disposition, suggested FROM examples').all()).toEqual([
+    expect(await db.all('SELECT message_id, disposition, suggested FROM examples')).toEqual([
       { message_id: 'news', disposition: 'keep', suggested: 'archive' },
     ]);
-    expect(listRules(db, ACCOUNT)).toHaveLength(2);
+    expect(await listRules(db, ACCOUNT)).toHaveLength(2);
     expect(mailbox.modifyCalls).toBe(calls);
     expect(logs.at(-1)).toMatch(/learned from 1 message you moved or relabelled in Gmail/);
   });
@@ -221,27 +221,27 @@ describe('teaching from Gmail', () => {
     mailbox.byUser('news', { add: ['INBOX'] });
     const again = [...mailbox.history];
     expect(await pass(true)).toBe(1);
-    const before = [count('decisions'), count('feedback'), count('actions')];
+    const before = [await count('decisions'), await count('feedback'), await count('actions')];
 
     mailbox.history.push(...again);
     expect(await pass(true)).toBe(0);
-    expect([count('decisions'), count('feedback'), count('actions')]).toEqual(before);
+    expect([await count('decisions'), await count('feedback'), await count('actions')]).toEqual(before);
   });
 
   it('takes mail out of spam, archived or marked as spam by the user as answers too', async () => {
-    updateLabel(db, ACCOUNT, 'newsletter', { disposition: 'spam' });
+    await updateLabel(db, ACCOUNT, 'newsletter', { disposition: 'spam' });
     await run(true);
     expect(mailbox.labels.get('news')).toContain('SPAM');
 
     mailbox.byUser('news', { add: ['INBOX'], remove: ['SPAM'] });
     mailbox.byUser('ada', { remove: ['INBOX'] });
     expect(await pass(true)).toBe(2);
-    expect(latest('news')).toMatchObject({ disposition: 'keep', label_id: 'newsletter' });
-    expect(latest('ada')).toMatchObject({ disposition: 'archive', label_id: 'personal' });
+    expect(await latest('news')).toMatchObject({ disposition: 'keep', label_id: 'newsletter' });
+    expect(await latest('ada')).toMatchObject({ disposition: 'archive', label_id: 'personal' });
 
     mailbox.byUser('ada', { add: ['SPAM'] });
     expect(await pass(true)).toBe(1);
-    expect(latest('ada')).toMatchObject({ disposition: 'spam', label_id: 'personal' });
+    expect(await latest('ada')).toMatchObject({ disposition: 'spam', label_id: 'personal' });
     // The user's answers are not carried out again by sift.
     expect(mailbox.labels.get('ada')).toEqual(['UNREAD', 'L:sift/personal', 'SPAM']);
   });
@@ -250,9 +250,9 @@ describe('teaching from Gmail', () => {
     await run(true);
     mailbox.byUser('news', { remove: ['L:sift/newsletters'], add: ['L:sift/receipts'] });
     expect(await pass(true)).toBe(1);
-    expect(feedback()).toEqual([{ message_id: 'news', verdict: 'wrong', correct: 'archive', scope: 'message', label_id: 'transactional', via: 'gmail' }]);
+    expect(await feedback()).toEqual([{ message_id: 'news', verdict: 'wrong', correct: 'archive', scope: 'message', label_id: 'transactional', via: 'gmail' }]);
     // Receipts are kept, but the user left this one archived.
-    expect(latest('news')).toMatchObject({ disposition: 'archive', label_id: 'transactional', rule_id: null });
+    expect(await latest('news')).toMatchObject({ disposition: 'archive', label_id: 'transactional', rule_id: null });
     expect(mailbox.labels.get('news')).not.toContain('INBOX');
   });
 
@@ -266,28 +266,28 @@ describe('teaching from Gmail', () => {
     mailbox.byUser('news', { add: ['INBOX'] });
     mailbox.labels.delete('news');
     expect(await pass(true)).toBe(0);
-    expect(feedback()).toEqual([]);
+    expect(await feedback()).toEqual([]);
   });
 
   it("does not mistake sift's own changes for the user's: acting, undoing, and putting right after an answer in the dashboard", async () => {
     await run(true);
     expect(await pass(true)).toBe(0);
 
-    await undo({ db, mailbox, now: () => clock }, lastStandingChange(db, ACCOUNT, 'news')!.id);
+    await undo({ db, mailbox, now: () => clock }, (await lastStandingChange(db, ACCOUNT, 'news'))!.id);
     expect(mailbox.labels.get('news')).toContain('INBOX');
     expect(await pass(true)).toBe(0);
 
-    applyFeedback(db, { accountId: ACCOUNT, sender: 'ada@example.org', label: 'newsletter', scope: 'sender', messageId: 'ada', mode: 'act' });
-    await undo({ db, mailbox, now: () => clock }, lastStandingChange(db, ACCOUNT, 'ada')!.id);
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'ada@example.org', label: 'newsletter', scope: 'sender', messageId: 'ada', mode: 'act' });
+    await undo({ db, mailbox, now: () => clock }, (await lastStandingChange(db, ACCOUNT, 'ada'))!.id);
     expect(await pass(true)).toBe(0);
     expect(mailbox.labels.get('ada')).not.toContain('INBOX');
     expect(await pass(true)).toBe(0);
-    expect(db.prepare(`SELECT count(*) AS n FROM feedback WHERE via = 'gmail'`).get()).toEqual({ n: 0 });
+    expect(await db.get(`SELECT count(*) AS n FROM feedback WHERE via = 'gmail'`)).toEqual({ n: 0 });
   });
 
   it('tells the user moving mail back from sift archiving it, when both are in the same history', async () => {
     await run(true);
-    await undo({ db, mailbox, now: () => clock }, lastStandingChange(db, ACCOUNT, 'news')!.id);
+    await undo({ db, mailbox, now: () => clock }, (await lastStandingChange(db, ACCOUNT, 'news'))!.id);
     clock += 1;
     // sift put it back in the inbox, and then the user archived it by hand.
     mailbox.byUser('news', { remove: ['INBOX'] });
@@ -297,56 +297,61 @@ describe('teaching from Gmail', () => {
 
     mailbox.byUser('news', { add: ['INBOX'] });
     expect(await pass(true)).toBe(1);
-    expect(latest('news')).toMatchObject({ disposition: 'keep' });
+    expect(await latest('news')).toMatchObject({ disposition: 'keep' });
   });
 
   it('while observing, counts the user doing what sift suggested as agreement, and doing otherwise as the answer', async () => {
-    db.prepare(`UPDATE rules SET source = 'agent'`).run();
+    await db.run(`UPDATE rules SET source = 'agent'`);
     await run(false);
     mailbox.byUser('news', { remove: ['INBOX'] });
     mailbox.byUser('ada', { remove: ['INBOX'] });
     const again = [...mailbox.history];
     expect(await pass(false)).toBe(2);
-    expect(feedback()).toEqual([
+    expect(await feedback()).toEqual([
       { message_id: 'news', verdict: 'right', correct: null, scope: 'message', label_id: 'newsletter', via: 'gmail' },
       { message_id: 'ada', verdict: 'right', correct: null, scope: 'message', label_id: 'personal', via: 'gmail' },
     ]);
-    expect(db.prepare('SELECT message_id, disposition, suggested FROM examples ORDER BY message_id').all()).toEqual([
+    expect(await db.all('SELECT message_id, disposition, suggested FROM examples ORDER BY message_id')).toEqual([
       { message_id: 'ada', disposition: 'archive', suggested: 'keep' },
       { message_id: 'news', disposition: 'archive', suggested: 'archive' },
     ]);
 
     mailbox.history.push(...again);
     expect(await pass(false)).toBe(0);
-    expect(count('feedback')).toBe(2);
-    expect(count('decisions')).toBe(2);
+    expect(await count('feedback')).toBe(2);
+    expect(await count('decisions')).toBe(2);
   });
 
   it('skips mail sift could not place unless the user gave it a sift label', async () => {
-    db.prepare('DELETE FROM rules').run();
+    await db.run('DELETE FROM rules');
     await run(true);
-    expect(latest('news')).toMatchObject({ disposition: 'review', label_id: null });
+    expect(await latest('news')).toMatchObject({ disposition: 'review', label_id: null });
     mailbox.byUser('news', { remove: ['INBOX'] });
     expect(await pass(true)).toBe(0);
 
     mailbox.byUser('ada', { add: ['L:sift/personal'] });
     expect(await pass(true)).toBe(1);
-    expect(latest('ada')).toMatchObject({ disposition: 'keep', label_id: 'personal', rule_id: null });
-    expect(feedback()).toEqual([{ message_id: 'ada', verdict: 'answered', correct: 'keep', scope: 'message', label_id: 'personal', via: 'gmail' }]);
+    expect(await latest('ada')).toMatchObject({ disposition: 'keep', label_id: 'personal', rule_id: null });
+    expect(await feedback()).toEqual([{ message_id: 'ada', verdict: 'answered', correct: 'keep', scope: 'message', label_id: 'personal', via: 'gmail' }]);
   });
 });
 
 describe('telling the user from sift in history', () => {
-  const act = (messageId: string, payload: { add: string[]; remove: string[] }, status: string, at: number) =>
-    db
-      .prepare(`INSERT INTO actions (account_id, message_id, type, payload_json, original_labels, status, created_at) VALUES (?, ?, 'archive', ?, '[]', ?, ?)`)
-      .run(ACCOUNT, messageId, JSON.stringify(payload), status, at);
+  const act = async (messageId: string, payload: { add: string[]; remove: string[] }, status: string, at: number) =>
+    await db.run(
+      `INSERT INTO actions (account_id, message_id, type, payload_json, original_labels, status, created_at) VALUES (?, ?, 'archive', ?, '[]', ?, ?)`,
+      ACCOUNT,
+      messageId,
+      JSON.stringify(payload),
+      status,
+      at,
+    );
 
-  it('cancels each of its own changes since the last sync against one entry, and leaves the rest', () => {
-    act('a', { add: ['L1'], remove: ['INBOX', 'UNREAD'] }, 'done', 200);
-    act('b', { add: [], remove: ['INBOX'] }, 'unknown', 200);
-    act('c', { add: [], remove: ['INBOX'] }, 'failed', 200);
-    act('d', { add: [], remove: ['INBOX'] }, 'done', 99);
+  it('cancels each of its own changes since the last sync against one entry, and leaves the rest', async () => {
+    await act('a', { add: ['L1'], remove: ['INBOX', 'UNREAD'] }, 'done', 200);
+    await act('b', { add: [], remove: ['INBOX'] }, 'unknown', 200);
+    await act('c', { add: [], remove: ['INBOX'] }, 'failed', 200);
+    await act('d', { add: [], remove: ['INBOX'] }, 'done', 99);
     const history = [
       { messageId: 'a', added: ['L1'], removed: [] },
       { messageId: 'a', added: [], removed: ['INBOX', 'UNREAD'] },
@@ -357,47 +362,47 @@ describe('telling the user from sift in history', () => {
       { messageId: 'd', added: [], removed: ['INBOX'] },
       { messageId: 'e', added: ['STARRED'], removed: ['UNREAD'] },
     ];
-    expect(userChanges(db, ACCOUNT, history, 100)).toEqual([
+    expect(await userChanges(db, ACCOUNT, history, 100)).toEqual([
       { messageId: 'a', added: ['INBOX'], removed: ['INBOX'] },
       { messageId: 'c', added: [], removed: ['INBOX'] },
       { messageId: 'd', added: [], removed: ['INBOX'] },
       { messageId: 'e', added: ['STARRED'], removed: ['UNREAD'] },
     ]);
-    expect(userChanges(db, ACCOUNT, [], 0)).toEqual([]);
+    expect(await userChanges(db, ACCOUNT, [], 0)).toEqual([]);
   });
 });
 
 describe('read state', () => {
-  const readAt = (id: string) => (db.prepare('SELECT read_at FROM messages WHERE id = ?').get(id) as { read_at: number | null }).read_at;
+  const readAt = async (id: string) => (await db.get<{ read_at: number | null }>('SELECT read_at FROM messages WHERE id = ?', id))!.read_at;
 
   it('records when the user opened a message, and not when sift marked it read', async () => {
-    updateLabel(db, ACCOUNT, 'newsletter', { markRead: true });
-    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    await updateLabel(db, ACCOUNT, 'newsletter', { markRead: true });
+    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
     await runOnce(db, options(true));
     expect(mailbox.labels.get('news')).not.toContain('UNREAD');
 
     inbox = [];
     mailbox.byUser('ada', { remove: ['UNREAD'] });
     await runOnce(db, { ...options(true), now: () => 6000 });
-    expect(readAt('news')).toBeNull();
-    expect(readAt('ada')).toBe(6000);
+    expect(await readAt('news')).toBeNull();
+    expect(await readAt('ada')).toBe(6000);
   });
 
   it('still sees the user open a message sift marked read, undid, and that they then read themselves', async () => {
-    updateLabel(db, ACCOUNT, 'newsletter', { markRead: true });
-    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    await updateLabel(db, ACCOUNT, 'newsletter', { markRead: true });
+    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
     await runOnce(db, options(true));
-    await undo({ db, mailbox, now: () => 5000 }, lastStandingChange(db, ACCOUNT, 'news')!.id);
+    await undo({ db, mailbox, now: () => 5000 }, (await lastStandingChange(db, ACCOUNT, 'news'))!.id);
     mailbox.byUser('news', { remove: ['UNREAD'] });
     inbox = [];
     await runOnce(db, { ...options(true), now: () => 6000 });
-    expect(readAt('news')).toBe(6000);
+    expect(await readAt('news')).toBe(6000);
   });
 });
 
 describe('Gmail filters', () => {
   it('are checked during a pass, and a Gmail that cannot list them does not fail it', async () => {
-    const id = addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'personal' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'personal' }, 'user');
     await writeRuleFilter({ db, mailbox }, id);
     mailbox.filters = [];
     mailbox.failFilters = true;
@@ -409,7 +414,7 @@ describe('Gmail filters', () => {
     const [result] = await runOnce(db, options(false));
     expect(result?.filters).toEqual({ gone: 1, changed: 0, outdated: 0 });
     expect(logs.at(-1)).toMatch(/1 filter deleted in Gmail/);
-    expect(db.prepare('SELECT filter_id, filter_state FROM rules WHERE id = ?').get(id)).toEqual({ filter_id: null, filter_state: 'gone' });
+    expect(await db.get('SELECT filter_id, filter_state FROM rules WHERE id = ?', id)).toEqual({ filter_id: null, filter_state: 'gone' });
   });
 });
 
@@ -419,8 +424,8 @@ describe('triage queue', () => {
       ...options(false),
       connect: () => ({ api: { ...api(), listHistory: async () => ({ additions: [{ id: 'news', labelIds: ['INBOX'] }], historyId: '9' }) }, mailbox }),
     });
-    db.exec('DELETE FROM decisions');
-    expect(listUndecided(db, ACCOUNT, 10).map((queued) => queued.facts)).toEqual([
+    await db.exec('DELETE FROM decisions');
+    expect((await listUndecided(db, ACCOUNT, 10)).map((queued) => queued.facts)).toEqual([
       {
         accountId: ACCOUNT,
         messageId: 'news',
@@ -452,7 +457,7 @@ describe('inference tier', () => {
     inbox = [inbox[0]!];
     await runOnce(db, { ...options(true), model: model('newsletter') });
 
-    expect(db.prepare('SELECT stage, disposition, label_id, gmail_label, model, cost_usd, outcome FROM decisions').get()).toEqual({
+    expect(await db.get('SELECT stage, disposition, label_id, gmail_label, model, cost_usd, outcome FROM decisions')).toEqual({
       stage: 'agent',
       disposition: 'archive',
       label_id: 'newsletter',
@@ -473,13 +478,13 @@ describe('inference tier', () => {
     };
     for (const id of ['n1', 'n2', 'n3', 'n4', 'n5', 'n6']) await arrive(id);
     expect(judged).toEqual(['n1', 'n2', 'n3', 'n4', 'n5', 'n6']);
-    expect(listRules(db, ACCOUNT)).toEqual([]);
+    expect(await listRules(db, ACCOUNT)).toEqual([]);
     expect(logs.some((line) => line.includes('proposed 1 rule'))).toBe(true);
 
-    resolveProposal(db, listProposals(db, ACCOUNT)[0]!.id, true);
+    await resolveProposal(db, (await listProposals(db, ACCOUNT))[0]!.id, true);
     await arrive('n7');
     expect(judged).not.toContain('n7');
-    expect(db.prepare(`SELECT stage, disposition, label_id, reason FROM decisions WHERE message_id = 'n7'`).get()).toEqual({
+    expect(await db.get(`SELECT stage, disposition, label_id, reason FROM decisions WHERE message_id = 'n7'`)).toEqual({
       stage: 'rules',
       disposition: 'archive',
       label_id: 'newsletter',
@@ -489,12 +494,12 @@ describe('inference tier', () => {
 
   it('archives what an action rule covers without asking the model or naming a label', async () => {
     judged.length = 0;
-    const ruleId = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, disposition: 'archive' }, 'user');
+    const ruleId = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, disposition: 'archive' }, 'user');
     inbox = [message('g1', 'News <news@example.com>')];
     mailbox.labels.set('g1', ['INBOX', 'UNREAD']);
     await runOnce(db, { ...options(true), model: model('newsletter') });
     expect(judged).toEqual([]);
-    expect(db.prepare(`SELECT stage, disposition, label_id, gmail_label, rule_id, reason FROM decisions WHERE message_id = 'g1'`).get()).toEqual({
+    expect(await db.get(`SELECT stage, disposition, label_id, gmail_label, rule_id, reason FROM decisions WHERE message_id = 'g1'`)).toEqual({
       stage: 'rules',
       disposition: 'archive',
       label_id: null,
@@ -508,12 +513,12 @@ describe('inference tier', () => {
 
   it('applies a rule that waits for a label only to mail the model gives that label, and asks about the rest', async () => {
     judged.length = 0;
-    const ruleId = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, whenLabel: 'newsletter' }, 'user');
+    const ruleId = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, whenLabel: 'newsletter' }, 'user');
     inbox = [message('u1', 'News <news@example.com>')];
     mailbox.labels.set('u1', ['INBOX']);
     await runOnce(db, { ...options(true), model: model('newsletter') });
     expect(judged).toEqual(['u1']);
-    expect(db.prepare(`SELECT stage, disposition, rule_id, prior_rule_id, reason FROM decisions WHERE message_id = 'u1'`).get()).toEqual({
+    expect(await db.get(`SELECT stage, disposition, rule_id, prior_rule_id, reason FROM decisions WHERE message_id = 'u1'`)).toEqual({
       stage: 'agent',
       disposition: 'archive',
       rule_id: ruleId,
@@ -524,7 +529,7 @@ describe('inference tier', () => {
     inbox = [message('u2', 'News <news@example.com>')];
     mailbox.labels.set('u2', ['INBOX']);
     await runOnce(db, { ...options(true), model: model('transactional') });
-    expect(db.prepare(`SELECT disposition, label_id, rule_id, prior_rule_id, reason FROM decisions WHERE message_id = 'u2'`).get()).toEqual({
+    expect(await db.get(`SELECT disposition, label_id, rule_id, prior_rule_id, reason FROM decisions WHERE message_id = 'u2'`)).toEqual({
       disposition: 'keep',
       label_id: 'transactional',
       rule_id: null,
@@ -539,7 +544,7 @@ describe('inference tier', () => {
     inbox = [inbox[0]!];
     await runOnce(db, { ...options(false), model: model('marketing') });
     expect(judged).toEqual(['news']);
-    expect(db.prepare('SELECT disposition, mode, outcome FROM decisions').get()).toEqual({ disposition: 'archive', mode: 'observe', outcome: 'observed' });
+    expect(await db.get('SELECT disposition, mode, outcome FROM decisions')).toEqual({ disposition: 'archive', mode: 'observe', outcome: 'observed' });
     expect(mailbox.modifyCalls).toBe(0);
   });
 });
@@ -556,13 +561,13 @@ describe('unsubscribing', () => {
 
   it('follows the mailbox change for a label that unsubscribes, and only while acting', async () => {
     asked.length = 0;
-    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
     inbox = [inbox[0]!];
     await runOnce(db, withUnsubscribe(false));
     expect(asked).toEqual([]);
-    expect(db.prepare('SELECT subscription FROM decisions').get()).toEqual({ subscription: 'unsubscribe' });
+    expect(await db.get('SELECT subscription FROM decisions')).toEqual({ subscription: 'unsubscribe' });
 
-    db.exec('DELETE FROM decisions');
+    await db.exec('DELETE FROM decisions');
     await runOnce(db, withUnsubscribe(true));
     expect(asked).toEqual(['news']);
     expect(mailbox.labels.get('news')).toContain('L:sift/did/archived');
@@ -571,7 +576,7 @@ describe('unsubscribing', () => {
 
   it('can be asked for by a rule whose label does not, and is not counted when it could not be done', async () => {
     asked.length = 0;
-    addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'notification', subscription: 'unsubscribe', markRead: true }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'notification', subscription: 'unsubscribe', markRead: true }, 'user');
     inbox = [inbox[1]!];
     await runOnce(db, withUnsubscribe(true, 'refused'));
     expect(asked).toEqual(['ada']);
@@ -582,43 +587,50 @@ describe('unsubscribing', () => {
 
   it('never unsubscribes from someone the user has written to, or when the mailbox change did not happen', async () => {
     asked.length = 0;
-    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
-    rememberCorrespondent(db, ACCOUNT, 'news@example.com', true);
+    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    await rememberCorrespondent(db, ACCOUNT, 'news@example.com', true);
     inbox = [inbox[0]!];
     await runOnce(db, withUnsubscribe(true));
     expect(mailbox.labels.get('news')).toContain('L:sift/did/archived');
     expect(asked).toEqual([]);
 
-    db.exec('DELETE FROM actions; DELETE FROM decisions; DELETE FROM correspondents');
+    await db.exec('DELETE FROM actions; DELETE FROM decisions; DELETE FROM correspondents');
     mailbox.labels.set('news', ['UNREAD']);
     await runOnce(db, withUnsubscribe(true));
-    expect(db.prepare('SELECT outcome FROM decisions').get()).toEqual({ outcome: 'skipped' });
+    expect(await db.get('SELECT outcome FROM decisions')).toEqual({ outcome: 'skipped' });
     expect(asked).toEqual([]);
   });
 });
 
 describe('correcting what sift did', () => {
   it('takes the change back and carries out what the user said instead', async () => {
-    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'agent');
+    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'agent');
     inbox = [inbox[0]!];
     await runOnce(db, options(true));
     expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/newsletters', 'L:sift/did/archived']);
 
-    const result = applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', scope: 'sender', messageId: 'news', mode: 'act' });
+    const result = await applyFeedback(db, {
+      accountId: ACCOUNT,
+      sender: 'news@example.com',
+      label: 'personal',
+      scope: 'sender',
+      messageId: 'news',
+      mode: 'act',
+    });
     expect(result.corrected).toBe('news');
     // What the dashboard asks the running sift to do next.
-    const last = lastStandingChange(db, ACCOUNT, 'news');
+    const last = await lastStandingChange(db, ACCOUNT, 'news');
     await undo({ db, mailbox }, last!.id);
     expect(mailbox.labels.get('news')?.toSorted()).toEqual(['INBOX', 'UNREAD']);
 
     inbox = [];
     await runOnce(db, options(true));
     expect(mailbox.labels.get('news')?.toSorted()).toEqual(['INBOX', 'L:sift/personal', 'UNREAD']);
-    expect(db.prepare(`SELECT disposition, outcome FROM decisions WHERE message_id = 'news' ORDER BY id DESC LIMIT 1`).get()).toEqual({
+    expect(await db.get(`SELECT disposition, outcome FROM decisions WHERE message_id = 'news' ORDER BY id DESC LIMIT 1`)).toEqual({
       disposition: 'keep',
       outcome: 'done',
     });
-    expect(lastStandingChange(db, ACCOUNT, 'news')).toMatchObject({ type: 'label' });
+    expect(await lastStandingChange(db, ACCOUNT, 'news')).toMatchObject({ type: 'label' });
   });
 });
 
@@ -634,7 +646,7 @@ describe('blocking', () => {
     mailbox.labels.set('p1', ['INBOX']);
     await runOnce(db, { ...options(true), model: phishing });
     expect(mailbox.labels.get('p1')).toEqual(['L:sift/phishing', 'L:sift/did/spam', 'SPAM']);
-    expect(listRules(db, ACCOUNT)).toMatchObject([{ match: { from: 'alerts@example.net' }, labelId: 'phishing', source: 'agent' }]);
+    expect(await listRules(db, ACCOUNT)).toMatchObject([{ match: { from: 'alerts@example.net' }, labelId: 'phishing', source: 'agent' }]);
     expect(logs.at(-1)).toContain('blocked 1 sender');
 
     let asked = 0;
@@ -642,7 +654,7 @@ describe('blocking', () => {
     mailbox.labels.set('p2', ['INBOX']);
     await runOnce(db, { ...options(true), model: { guidelines: () => '', judge: async () => (asked++, null) } });
     expect(asked).toBe(0);
-    expect(db.prepare(`SELECT stage, disposition, block FROM decisions WHERE message_id = 'p2'`).get()).toEqual({
+    expect(await db.get(`SELECT stage, disposition, block FROM decisions WHERE message_id = 'p2'`)).toEqual({
       stage: 'rules',
       disposition: 'spam',
       block: 1,
@@ -654,12 +666,12 @@ describe('blocking', () => {
     mailbox.labels.set('p1', ['INBOX']);
     await runOnce(db, { ...options(true), model: phishing });
     expect(mailbox.labels.get('p1')).toContain('SPAM');
-    expect(listRules(db, ACCOUNT)).toEqual([]);
+    expect(await listRules(db, ACCOUNT)).toEqual([]);
 
     inbox = [phish('p2', true)];
     mailbox.labels.set('p2', ['INBOX']);
     await runOnce(db, { ...options(false), model: phishing });
-    expect(listRules(db, ACCOUNT)).toEqual([]);
+    expect(await listRules(db, ACCOUNT)).toEqual([]);
   });
 
   it('holds mail from someone the user has written to for review instead, and blocks nobody', async () => {
@@ -668,7 +680,7 @@ describe('blocking', () => {
     mailbox.labels.set('p1', ['INBOX']);
     await runOnce(db, { ...options(true), model: phishing });
     expect(mailbox.labels.get('p1')).toEqual(['INBOX', 'L:sift/phishing', 'L:sift/review']);
-    expect(listRules(db, ACCOUNT)).toEqual([]);
+    expect(await listRules(db, ACCOUNT)).toEqual([]);
   });
 });
 
@@ -677,13 +689,13 @@ describe('examples', () => {
     inbox = [inbox[0]!];
     bodies.set('news', 'The full text of the newsletter.');
     await runOnce(db, { ...options(false), model: { guidelines: () => '', judge: async () => ({ label: 'newsletter', reason: 'r' }) } });
-    applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' });
 
     inbox = [];
     const [result] = await runOnce(db, options(false));
     expect(result?.captured).toBe(1);
     expect(logs.at(-1)).toContain('stored 1 marked message as examples');
-    const example = db.prepare('SELECT label_id, disposition, body_text, raw FROM examples').get() as { raw: Uint8Array; body_text: string };
+    const example = (await db.get<{ raw: Uint8Array; body_text: string }>('SELECT label_id, disposition, body_text, raw FROM examples'))!;
     expect(example).toMatchObject({ label_id: 'newsletter', disposition: 'archive', body_text: 'The full text of the newsletter.' });
     expect(Buffer.from(example.raw).toString()).toContain('The full text of the newsletter.');
     expect(mailbox.modifyCalls).toBe(0);

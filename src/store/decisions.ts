@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from './sql.ts';
 import type { Decision, Disposition } from '../triage/types.ts';
 
 export type DecisionMode = 'act' | 'observe';
@@ -11,50 +11,47 @@ export type DecisionOutcome = 'observed' | 'none' | 'done' | 'skipped' | 'failed
  * In `observe` mode (the default) the decision is final as recorded. In `act` mode it stays
  * unsettled until `settleDecision` records what happened in the mailbox.
  */
-export function recordDecision(
-  db: DatabaseSync,
+export async function recordDecision(
+  db: Sql,
   accountId: string,
   messageId: string,
   decision: Decision,
   options: { mode?: DecisionMode; durationMs?: number; now?: number; byUser?: boolean } = {},
-): number {
+): Promise<number> {
   const mode = options.mode ?? 'observe';
-  const result = db
-    .prepare(
-      `INSERT INTO decisions
+  const result = await db.run(
+    `INSERT INTO decisions
          (account_id, message_id, stage, disposition, subscription, gmail_label, rule_id, confidence, reason,
           model, input_tokens, output_tokens, cost_usd, duration_ms, decided_at, mode, outcome, label_id, block, mark_read, prior_rule_id, by_user)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      accountId,
-      messageId,
-      decision.stage,
-      decision.disposition,
-      decision.subscription,
-      decision.gmailLabel ?? null,
-      decision.ruleId ?? null,
-      decision.confidence ?? null,
-      decision.reason,
-      decision.usage?.model ?? null,
-      decision.usage?.inputTokens ?? 0,
-      decision.usage?.outputTokens ?? 0,
-      decision.usage?.costUsd ?? 0,
-      options.durationMs ?? null,
-      options.now ?? Date.now(),
-      mode,
-      mode === 'observe' ? 'observed' : null,
-      decision.labelId ?? null,
-      decision.block ? 1 : 0,
-      decision.markRead ? 1 : 0,
-      decision.priorRuleId ?? null,
-      options.byUser ? 1 : 0,
-    );
-  return Number(result.lastInsertRowid);
+    accountId,
+    messageId,
+    decision.stage,
+    decision.disposition,
+    decision.subscription,
+    decision.gmailLabel ?? null,
+    decision.ruleId ?? null,
+    decision.confidence ?? null,
+    decision.reason,
+    decision.usage?.model ?? null,
+    decision.usage?.inputTokens ?? 0,
+    decision.usage?.outputTokens ?? 0,
+    decision.usage?.costUsd ?? 0,
+    options.durationMs ?? null,
+    options.now ?? Date.now(),
+    mode,
+    mode === 'observe' ? 'observed' : null,
+    decision.labelId ?? null,
+    decision.block ? 1 : 0,
+    decision.markRead ? 1 : 0,
+    decision.priorRuleId ?? null,
+    options.byUser ? 1 : 0,
+  );
+  return result.lastInsertRowid;
 }
 
-export function settleDecision(db: DatabaseSync, id: number, outcome: DecisionOutcome, detail: string | null = null): void {
-  db.prepare('UPDATE decisions SET outcome = ?, outcome_detail = ? WHERE id = ?').run(outcome, detail, id);
+export async function settleDecision(db: Sql, id: number, outcome: DecisionOutcome, detail: string | null = null): Promise<void> {
+  await db.run('UPDATE decisions SET outcome = ?, outcome_detail = ? WHERE id = ?', outcome, detail, id);
 }
 
 export interface UnsettledDecision {
@@ -70,13 +67,12 @@ export interface UnsettledDecision {
  * a provider error), oldest first. `byUserOnly` keeps only the user's own answers, which are carried out
  * even while sift only observes.
  */
-export function listUnsettledDecisions(db: DatabaseSync, accountId: string, options: { byUserOnly?: boolean } = {}): UnsettledDecision[] {
-  const rows = db
-    .prepare(
-      `SELECT id, message_id, disposition, gmail_label, mark_read FROM decisions
+export async function listUnsettledDecisions(db: Sql, accountId: string, options: { byUserOnly?: boolean } = {}): Promise<UnsettledDecision[]> {
+  const rows = await db.all<{ id: number; message_id: string; disposition: Disposition; gmail_label: string | null; mark_read: number }>(
+    `SELECT id, message_id, disposition, gmail_label, mark_read FROM decisions
        WHERE account_id = ? AND outcome IS NULL AND mode = 'act' ${options.byUserOnly ? 'AND by_user = 1' : ''} ORDER BY id`,
-    )
-    .all(accountId) as unknown as { id: number; message_id: string; disposition: Disposition; gmail_label: string | null; mark_read: number }[];
+    accountId,
+  );
   return rows.map((r) => ({
     id: r.id,
     messageId: r.message_id,

@@ -97,18 +97,18 @@ describe('readContent', () => {
 describe('content facts', () => {
   it('are recorded with the message and shown to the model once it has been read', async () => {
     const ACCOUNT = 'me@example.org';
-    const db = openDb(':memory:');
-    connectAccount(db, ACCOUNT, '1', 0);
+    const db = await openDb(':memory:');
+    await connectAccount(db, ACCOUNT, '1', 0);
     const f = facts({ accountId: ACCOUNT });
-    recordSync(db, ACCOUNT, [f], '2');
-    expect(storedFacts(db, ACCOUNT, f.messageId)).not.toHaveProperty('trackingPixel');
+    await recordSync(db, ACCOUNT, [f], '2');
+    expect(await storedFacts(db, ACCOUNT, f.messageId)).not.toHaveProperty('trackingPixel');
 
     const content = { text: 'Shop the sale', facts: { hasAttachments: false, ...htmlFacts(CAMPAIGN, 'example.com') } };
     const evidence = await gatherEvidence(
       { db, api: { getContent: async () => content, getThread: async () => null }, mailbox: { hasSentTo: async () => false } },
       f,
     );
-    expect(storedFacts(db, ACCOUNT, f.messageId)).toMatchObject({ trackingPixel: true, trackedLinks: true, hasAttachments: false });
+    expect(await storedFacts(db, ACCOUNT, f.messageId)).toMatchObject({ trackingPixel: true, trackedLinks: true, hasAttachments: false });
     expect(describeFacts(evidence.known)).toEqual(
       expect.arrayContaining(['Has a tracking pixel: yes', 'Links pass through click tracking: yes', "Links go to the sender's own domain: no"]),
     );

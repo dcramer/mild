@@ -1,14 +1,13 @@
 import { predatingGuidelines } from '../../learn/redecide.ts';
-import { listAccounts } from '../../store/accounts.ts';
+import { lastSyncedAt, listAccounts } from '../../store/accounts.ts';
 import { listLabelSummaries } from '../queries/labels.ts';
 import { type Scope, sees } from '../scope.ts';
 import type { ManageState } from '../types.ts';
 import { type Context, type Read, type Write, ok, str } from './route.ts';
 
 /** Everything the Settings screen shows, for the mailboxes in scope. */
-function manageState({ db, controls }: Context, scope: Scope): ManageState {
-  const accounts = listAccounts(db).filter((a) => sees(scope, a.id));
-  const synced = db.prepare('SELECT last_synced_at AS at FROM accounts WHERE id = ?');
+async function manageState({ db, controls }: Context, scope: Scope): Promise<ManageState> {
+  const accounts = (await listAccounts(db)).filter((a) => sees(scope, a.id));
   const changedAt = controls?.guidelinesChangedAt() ?? null;
   const activity = controls?.activity() ?? { sorting: false, lastPassAt: null, problems: [], expired: [] };
   return {
@@ -22,16 +21,18 @@ function manageState({ db, controls }: Context, scope: Scope): ManageState {
       problems: activity.problems.filter((line) => accounts.some((a) => line.startsWith(`${a.email}: `))),
       expired: activity.expired.filter((email) => accounts.some((a) => a.email === email)),
     },
-    accounts: accounts.map((a) => ({ id: a.id, email: a.email, lastSyncedAt: (synced.get(a.id) as { at: number | null } | undefined)?.at ?? null })),
-    labels: Object.fromEntries(accounts.map((a) => [a.id, listLabelSummaries(db, scope, a.id)])),
-    predateGuidelines: Object.fromEntries(accounts.map((a) => [a.id, changedAt === null ? 0 : predatingGuidelines(db, changedAt, a.id).length])),
+    accounts: await Promise.all(accounts.map(async (a) => ({ id: a.id, email: a.email, lastSyncedAt: await lastSyncedAt(db, a.id) }))),
+    labels: Object.fromEntries(await Promise.all(accounts.map(async (a) => [a.id, await listLabelSummaries(db, scope, a.id)] as const))),
+    predateGuidelines: Object.fromEntries(
+      await Promise.all(accounts.map(async (a) => [a.id, changedAt === null ? 0 : (await predatingGuidelines(db, changedAt, a.id)).length] as const)),
+    ),
   };
 }
 
 const install = () => 'install' as const;
 
 export const reads: Read[] = [
-  { path: '/api/manage', run: (ctx, scope) => ok(manageState(ctx, scope)) },
+  { path: '/api/manage', run: async (ctx, scope) => ok(await manageState(ctx, scope)) },
   {
     path: '/api/models',
     // A provider that cannot be reached is said beside an empty list, not as a failed request.

@@ -65,7 +65,8 @@
               {
                 "group": ["**/gmail/**", "**/actions/**", "**/store/**", "**/daemon/**", "@googleapis/*", "googleapis", "google-auth-library"],
                 "message": "model/ only turns evidence into a verdict. It never reaches Gmail, the database or anything that acts."
-              }
+              },
+              { "group": ["node:sqlite"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }
             ]
           }
         ]
@@ -81,7 +82,8 @@
               {
                 "group": ["**/gmail/**", "**/actions/**", "**/agent/**", "**/daemon/**", "@googleapis/*", "googleapis", "google-auth-library"],
                 "message": "dashboard/ shows the database and records what the user teaches sift (src/learn). It never reaches Gmail or changes the mailbox."
-              }
+              },
+              { "group": ["node:sqlite"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }
             ]
           }
         ]
@@ -107,7 +109,7 @@
       }
     },
     {
-      "files": ["src/store/**/*.ts", "src/actions/**/*.ts", "src/cli/**/*.ts", "src/daemon/**/*.ts", "src/learn/**/*.ts"],
+      "files": ["src/store/**/*.ts"],
       "rules": {
         "no-restricted-imports": [
           "error",
@@ -119,6 +121,25 @@
           }
         ]
       }
+    },
+    {
+      "files": ["src/actions/**/*.ts", "src/cli/**/*.ts", "src/daemon/**/*.ts", "src/learn/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." },
+              { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
+              { "group": ["node:sqlite"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/gmail/**/*.ts", "src/*.ts"],
+      "rules": { "no-restricted-imports": ["error", { "patterns": [{ "group": ["node:sqlite"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }] }] }
     }
   ],
   "ignorePatterns": [".claude/**", "node_modules/**", "data/**", "web/dist/**"]

@@ -15,21 +15,21 @@ export const MAX_REJUDGE = 100;
  * cannot answer for keeps its old decision, so it is still counted as out of date. Nothing is learned
  * from these: the same message judged twice is not two messages.
  */
-export function rejudgeWaiting(deps: TriageDeps, account: Account, since: number): { started: number; remaining: number; done: Promise<void> } {
+export async function rejudgeWaiting(deps: TriageDeps, account: Account, since: number): Promise<{ started: number; remaining: number; done: Promise<void> }> {
   const { db } = deps;
   const now = deps.now ?? Date.now;
-  const waiting = predatingGuidelines(db, since, account.id);
+  const waiting = await predatingGuidelines(db, since, account.id);
   const batch = waiting.slice(0, MAX_REJUDGE);
-  const decide = cascadeFor(deps, account.id);
+  const decide = await cascadeFor(deps, account.id);
   const work = async () => {
     for (const { messageId } of batch) {
-      const facts = getFacts(db, account.id, messageId);
+      const facts = await getFacts(db, account.id, messageId);
       if (!facts) continue;
       const started = performance.now();
       const decision = await decide(facts);
       if (decision.stage === 'fallback') continue;
-      recordDecision(db, account.id, messageId, decision, { mode: 'observe', durationMs: Math.round(performance.now() - started), now: now() });
-      if (decision.ruleId) countRuleHit(db, decision.ruleId);
+      await recordDecision(db, account.id, messageId, decision, { mode: 'observe', durationMs: Math.round(performance.now() - started), now: now() });
+      if (decision.ruleId) await countRuleHit(db, decision.ruleId);
     }
   };
   return { started: batch.length, remaining: waiting.length - batch.length, done: work().catch(() => {}) };

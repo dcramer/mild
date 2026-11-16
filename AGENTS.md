@@ -40,6 +40,7 @@ Enforced by `no-restricted-imports` in `.oxlintrc.json`. They are the security m
 - The dashboard is the management surface. Its data and controls are only for someone signed in with Google as a connected account; that same sign-in is how an account is connected. Keep every `/api/` route behind the session, keep rejecting requests whose Host is not one of this machine's own names, and require every write to come from its own page. Routes live under `src/dashboard/api/`, one module per resource; `server.ts` applies the session and these checks to all of them. A new write is a `Write` there: it says whose data it touches and validates its body field by field.
 - A signed-in person sees and changes only their own mailboxes. Every query under `src/dashboard/queries/` takes a `Scope` (`src/dashboard/scope.ts`) and filters by it; every write declares `touches`, and is refused before it runs when that is someone else's. What applies to the whole install is the owner's alone. `tests/tenants.test.ts` runs every route as two people: add each new route to it.
 - `src/dashboard/` never imports Gmail, action or daemon code. Anything it needs from them is passed in as `Controls` (`src/dashboard/controls.ts`) by the process that starts it, so mailbox changes still go through the executor.
+- `src/store/` is the only module that opens a database. Everything else takes an `Sql` (`src/store/sql.ts`) and awaits it; a transaction awaits nothing but the database.
 - `src/model/` is the only module that imports pi-ai. It turns evidence into a verdict and nothing else: it never imports Gmail, the store, actions or the daemon. The model gets no tools. Never give it one that sends, forwards, fetches a URL, runs a command or changes the mailbox; if a future agent needs tools, it gets its own sandbox (see TODO.md).
 
 ## Safety rules
@@ -88,6 +89,7 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | --- | --- |
 | Module boundaries (`triage/` pure, Google only in `gmail/`, pi-ai only in `model/`, `dashboard/` never reaches Gmail or actions) | `no-restricted-imports`, `.oxlintrc.json` |
 | Only `web/src/system/` imports Base UI | `no-restricted-imports`, `.oxlintrc.json` |
+| Only `src/store/` imports `node:sqlite` | `no-restricted-imports`, `.oxlintrc.json` |
 | The CLI prints only through `src/cli/ui.ts` | `no-console`, `.oxlintrc.json` |
 | Screens write no fills, frames, corners, shadows, colours or inline styles; red is `Failure`, yellow a part's tone | `tests/design-system.test.ts` |
 | Type sizes come from the scale in `web/src/index.css`; nothing under 12px | `tests/design-system.test.ts` |

@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../../store/sql.ts';
 import { redecideWaiting } from '../../learn/redecide.ts';
 import { listAccounts } from '../../store/accounts.ts';
 import type { Controls } from '../controls.ts';
@@ -6,7 +6,7 @@ import type { Scope } from '../scope.ts';
 
 /** What a route is given besides the request: the database, what the process lets the dashboard do, and the clock. */
 export interface Context {
-  db: DatabaseSync;
+  db: Sql;
   /** Absent when the page can look but not manage. */
   controls: Controls | undefined;
   now: () => number;
@@ -40,7 +40,7 @@ export type Touches = { account: string } | 'install' | 'anyone' | null;
  */
 export interface Write {
   path: string;
-  touches(ctx: Context, body: Record<string, unknown>): Touches;
+  touches(ctx: Context, body: Record<string, unknown>): Touches | Promise<Touches>;
   run(ctx: Context, body: Record<string, unknown>, scope: Scope): unknown;
 }
 
@@ -50,10 +50,10 @@ export const named = (_ctx: Context, body: Record<string, unknown>): Touches => 
 /** The mailbox that owns the row a write names by `id`. */
 export const ownerOf =
   (table: 'rules' | 'proposals' | 'actions' | 'decisions') =>
-  ({ db }: Context, body: Record<string, unknown>): Touches => {
+  async ({ db }: Context, body: Record<string, unknown>): Promise<Touches> => {
     const id = body['id'];
     if (typeof id !== 'string' && typeof id !== 'number') return null;
-    const row = db.prepare(`SELECT account_id FROM ${table} WHERE id = ?`).get(id) as { account_id: string } | undefined;
+    const row = await db.get<{ account_id: string }>(`SELECT account_id FROM ${table} WHERE id = ?`, id);
     return row ? { account: row.account_id } : null;
   };
 
@@ -75,8 +75,9 @@ export function daysOf(query: URLSearchParams): number | null {
 export const BAD_DAYS = malformed('days must be 1, 7, 30 or 90');
 
 /** After a rule or label changed: waiting suggestions they now decide differently get a new decision. No model is called. */
-export async function redecide(db: DatabaseSync, now: () => number, accountId?: string): Promise<number> {
+export async function redecide(db: Sql, now: () => number, accountId?: string): Promise<number> {
   let recorded = 0;
-  for (const account of listAccounts(db)) if (accountId === undefined || account.id === accountId) recorded += await redecideWaiting(db, account.id, now());
+  for (const account of await listAccounts(db))
+    if (accountId === undefined || account.id === accountId) recorded += await redecideWaiting(db, account.id, now());
   return recorded;
 }

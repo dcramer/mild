@@ -1,7 +1,7 @@
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { request } from 'node:https';
 import { isIP } from 'node:net';
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../store/sql.ts';
 import { finishAction, insertPendingAction, lastUnsubscribeFailure, unsubscribedAt } from '../store/actions.ts';
 import { bulkSignals, passedDmarc } from '../triage/features.ts';
 
@@ -17,7 +17,7 @@ export type UnsubscribeOutcome =
 export type PostOneClick = (url: URL, address: string) => Promise<number>;
 
 export interface UnsubscribeDeps {
-  db: DatabaseSync;
+  db: Sql;
   now?: () => number;
   /** Resolve a hostname to its addresses. */
   resolve?: (hostname: string) => Promise<string[]>;
@@ -86,9 +86,11 @@ const postOneClick: PostOneClick = (url, address) =>
  */
 export async function unsubscribe(deps: UnsubscribeDeps, accountId: string, messageId: string): Promise<UnsubscribeOutcome> {
   const now = deps.now ?? Date.now;
-  const message = deps.db.prepare('SELECT from_address, headers_json FROM messages WHERE account_id = ? AND id = ?').get(accountId, messageId) as
-    | { from_address: string; headers_json: string }
-    | undefined;
+  const message = await deps.db.get<{ from_address: string; headers_json: string }>(
+    'SELECT from_address, headers_json FROM messages WHERE account_id = ? AND id = ?',
+    accountId,
+    messageId,
+  );
   if (!message) return { status: 'refused', reason: 'There is no such message.' };
   const headers = JSON.parse(message.headers_json) as Record<string, string>;
   const signals = bulkSignals(headers);
@@ -101,10 +103,10 @@ export async function unsubscribe(deps: UnsubscribeDeps, accountId: string, mess
     };
   }
   if (!passedDmarc(headers)) return { status: 'refused', reason: 'The message did not prove who sent it, so its unsubscribe address is not trusted.' };
-  if (unsubscribedAt(deps.db, accountId, message.from_address) !== null)
+  if ((await unsubscribedAt(deps.db, accountId, message.from_address)) !== null)
     return { status: 'refused', reason: 'You have already unsubscribed from this sender.' };
   // sift runs this for every message a label says to unsubscribe from: a sender whose address fails is left alone for a while.
-  const failed = lastUnsubscribeFailure(deps.db, accountId, message.from_address);
+  const failed = await lastUnsubscribeFailure(deps.db, accountId, message.from_address);
   if (failed !== null && now() - failed < RETRY_AFTER_MS)
     return { status: 'refused', reason: 'Unsubscribing from this sender failed recently; it will be tried again later.' };
 
@@ -128,7 +130,7 @@ export async function unsubscribe(deps: UnsubscribeDeps, accountId: string, mess
     return { status: 'refused', reason: `The unsubscribe address (${url.hostname}) does not lead to the public internet, so it is not used.` };
 
   // The host is recorded, not the whole address: the rest of it is a token that identifies the subscriber.
-  const actionId = insertPendingAction(
+  const actionId = await insertPendingAction(
     deps.db,
     { accountId, messageId, type: 'unsubscribe', payload: { add: [], remove: [], unsubscribe: url.hostname }, originalLabels: [] },
     now(),
@@ -137,7 +139,7 @@ export async function unsubscribe(deps: UnsubscribeDeps, accountId: string, mess
   try {
     const status = await (deps.post ?? postOneClick)(url, address);
     if (status >= 200 && status < 300) {
-      finishAction(deps.db, actionId, 'done', null, null, now());
+      await finishAction(deps.db, actionId, 'done', null, null, now());
       return { status: 'done', actionId };
     }
     reason =
@@ -147,6 +149,6 @@ export async function unsubscribe(deps: UnsubscribeDeps, accountId: string, mess
   } catch (error) {
     reason = `The request to ${url.hostname} failed, so it is not known whether it took: ${error instanceof Error ? error.message : String(error)}.`;
   }
-  finishAction(deps.db, actionId, 'failed', null, reason, now());
+  await finishAction(deps.db, actionId, 'failed', null, reason, now());
   return { status: 'failed', actionId, reason };
 }

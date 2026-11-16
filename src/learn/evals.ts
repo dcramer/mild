@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../store/sql.ts';
 import { shotCandidates } from '../store/examples.ts';
 import { listLabels } from '../store/labels.ts';
 import { getFacts } from '../store/messages.ts';
@@ -18,7 +18,7 @@ const CONCURRENCY = 4;
 const hash = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 12);
 
 export interface EvalDeps {
-  db: DatabaseSync;
+  db: Sql;
   judge: Judge;
   /** `provider/model-id`, as recorded with the run. */
   model: string;
@@ -39,26 +39,33 @@ export interface EvalRequest {
  * headers, the example's text, and the sender's history up to the message's first decision. Nothing the
  * user's answer changed afterwards is in it, and Gmail is not asked.
  */
-function storedEvidence(db: DatabaseSync, facts: MessageFacts, body: string | null): Evidence {
+async function storedEvidence(db: Sql, facts: MessageFacts, body: string | null): Promise<Evidence> {
   const { accountId, messageId } = facts;
-  const { first } = db.prepare('SELECT min(id) AS first FROM decisions WHERE account_id = ? AND message_id = ?').get(accountId, messageId) as {
+  const { first } = (await db.get<{
     first: number | null;
-  };
-  const { n } = db
-    .prepare('SELECT count(*) AS n FROM messages WHERE account_id = ? AND from_address = ? AND received_at <= ?')
-    .get(accountId, facts.from.address, facts.receivedAt) as { n: number };
-  const past = db
-    .prepare(
-      `SELECT d.disposition, count(*) AS n FROM decisions d
+  }>('SELECT min(id) AS first FROM decisions WHERE account_id = ? AND message_id = ?', accountId, messageId))!;
+  const { n } = (await db.get<{ n: number }>(
+    'SELECT count(*) AS n FROM messages WHERE account_id = ? AND from_address = ? AND received_at <= ?',
+    accountId,
+    facts.from.address,
+    facts.receivedAt,
+  ))!;
+  const past = await db.all<{ disposition: Disposition; n: number }>(
+    `SELECT d.disposition, count(*) AS n FROM decisions d
        JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
        WHERE d.account_id = ? AND m.from_address = ? AND d.message_id != ?
          AND d.id = (SELECT max(id) FROM decisions x WHERE x.account_id = d.account_id AND x.message_id = d.message_id AND x.id < ?)
        GROUP BY d.disposition`,
-    )
-    .all(accountId, facts.from.address, messageId, first ?? 0) as unknown as { disposition: Disposition; n: number }[];
-  const written = db.prepare('SELECT user_has_written AS yes FROM correspondents WHERE account_id = ? AND address = ?').get(accountId, facts.from.address) as
-    | { yes: number }
-    | undefined;
+    accountId,
+    facts.from.address,
+    messageId,
+    first ?? 0,
+  );
+  const written = await db.get<{ yes: number }>(
+    'SELECT user_has_written AS yes FROM correspondents WHERE account_id = ? AND address = ?',
+    accountId,
+    facts.from.address,
+  );
   return {
     facts,
     known: deriveFacts(facts),
@@ -77,59 +84,59 @@ function storedEvidence(db: DatabaseSync, facts: MessageFacts, body: string | nu
  * `done` resolves when it has finished and never rejects. Only one run at a time. Throws with a
  * message for the user if there is nothing to run.
  */
-export function startEval(deps: EvalDeps, request: EvalRequest): { id: number; done: Promise<void> } {
+export async function startEval(deps: EvalDeps, request: EvalRequest): Promise<{ id: number; done: Promise<void> }> {
   const { db } = deps;
   const now = deps.now ?? Date.now;
-  if (db.prepare(`SELECT 1 FROM eval_runs WHERE status = 'running'`).get()) throw new Error('A test run is already going. Wait for it to finish.');
-  const labels = listLabels(db, request.accountId, now());
+  if (await db.get(`SELECT 1 FROM eval_runs WHERE status = 'running'`)) throw new Error('A test run is already going. Wait for it to finish.');
+  const labels = await listLabels(db, request.accountId, now());
   const limit = Math.min(Math.max(1, Math.trunc(request.limit ?? DEFAULT_EVAL_EXAMPLES)), MAX_EVAL_EXAMPLES);
   // An example whose label has since gone cannot be answered correctly, so it is left out.
   const examples = (
-    db
-      .prepare(
-        `SELECT message_id, label_id, body_text FROM examples
+    await db.all<{ message_id: string; label_id: string; body_text: string | null }>(
+      `SELECT message_id, label_id, body_text FROM examples
          WHERE account_id = ? AND status = 'captured' AND label_id IS NOT NULL ORDER BY marked_at DESC, message_id`,
-      )
-      .all(request.accountId) as unknown as { message_id: string; label_id: string; body_text: string | null }[]
+      request.accountId,
+    )
   )
     .filter((e) => labels.some((l) => l.id === e.label_id))
     .slice(0, limit);
   if (examples.length === 0) throw new Error('There are no stored examples to test against yet. Answer some suggestions first.');
 
   const shown = labels.map((l) => ({ id: l.id, name: l.name, description: l.description }));
-  const id = Number(
-    db
-      .prepare(
-        `INSERT INTO eval_runs (account_id, started_at, status, model, prompt_hash, guidelines_hash, labels_hash, labels_json, few_shot, total)
+  const id = (
+    await db.run(
+      `INSERT INTO eval_runs (account_id, started_at, status, model, prompt_hash, guidelines_hash, labels_hash, labels_json, few_shot, total)
          VALUES (?, ?, 'running', ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        request.accountId,
-        now(),
-        deps.model,
-        hash(PROMPT_TEMPLATE),
-        hash(deps.guidelines.trim()),
-        hash(JSON.stringify(shown)),
-        JSON.stringify(shown),
-        request.fewShot ? 1 : 0,
-        examples.length,
-      ).lastInsertRowid,
-  );
+      request.accountId,
+      now(),
+      deps.model,
+      hash(PROMPT_TEMPLATE),
+      hash(deps.guidelines.trim()),
+      hash(JSON.stringify(shown)),
+      JSON.stringify(shown),
+      request.fewShot ? 1 : 0,
+      examples.length,
+    )
+  ).lastInsertRowid;
 
-  const record = db.prepare(
-    `INSERT INTO eval_results (run_id, message_id, expected, got, confidence, input_tokens, output_tokens, cost_usd, duration_ms, shots, sender_shots)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
+  const RECORD = `INSERT INTO eval_results (run_id, message_id, expected, got, confidence, input_tokens, output_tokens, cost_usd, duration_ms, shots, sender_shots)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   const judgeOne = async (example: (typeof examples)[number], labels: readonly Label[]) => {
-    const facts = getFacts(db, request.accountId, example.message_id);
+    const facts = await getFacts(db, request.accountId, example.message_id);
     if (!facts) return;
     // `pickShots` leaves out the message itself, so an example is never shown its own answer.
-    const shots = request.fewShot ? pickShots(shotCandidates(db, facts), facts, labels) : [];
+    const shots = request.fewShot ? pickShots(await shotCandidates(db, facts), facts, labels) : [];
     const started = performance.now();
     const verdict = await deps
-      .judge({ evidence: storedEvidence(db, facts, example.body_text), labels, guidelines: deps.guidelines, ...(shots.length > 0 ? { examples: shots } : {}) })
+      .judge({
+        evidence: await storedEvidence(db, facts, example.body_text),
+        labels,
+        guidelines: deps.guidelines,
+        ...(shots.length > 0 ? { examples: shots } : {}),
+      })
       .catch(() => null);
-    record.run(
+    await db.run(
+      RECORD,
       id,
       example.message_id,
       example.label_id,
@@ -148,17 +155,19 @@ export function startEval(deps: EvalDeps, request: EvalRequest): { id: number; d
   const worker = async () => {
     while (next < examples.length) await judgeOne(examples[next++]!, labels);
   };
-  const finish = db.prepare('UPDATE eval_runs SET status = ?, error = ?, finished_at = ? WHERE id = ?');
+  const finish = async (status: 'done' | 'failed', error: string | null) => {
+    await db.run('UPDATE eval_runs SET status = ?, error = ?, finished_at = ? WHERE id = ?', status, error, now(), id);
+  };
   const done = Promise.all(Array.from({ length: CONCURRENCY }, worker)).then(
-    () => void finish.run('done', null, now(), id),
-    (error: unknown) => void finish.run('failed', error instanceof Error ? error.message : String(error), now(), id),
+    () => finish('done', null),
+    (error: unknown) => finish('failed', error instanceof Error ? error.message : String(error)),
   );
   return { id, done };
 }
 
 /** Call when sift starts: a run still marked as going belongs to a process that has stopped. */
-export function interruptEvals(db: DatabaseSync, now: number = Date.now()): void {
-  db.prepare(`UPDATE eval_runs SET status = 'interrupted', finished_at = ? WHERE status = 'running'`).run(now);
+export async function interruptEvals(db: Sql, now: number = Date.now()): Promise<void> {
+  await db.run(`UPDATE eval_runs SET status = 'interrupted', finished_at = ? WHERE status = 'running'`, now);
 }
 
 export interface EvalRun {
@@ -216,16 +225,8 @@ interface RunRow {
   total: number;
 }
 
-function results(db: DatabaseSync, runId: number): EvalResult[] {
-  const rows = db
-    .prepare(
-      `SELECT r.message_id, coalesce(m.from_address, '') AS from_address, coalesce(m.subject, '') AS subject, r.expected, r.got, r.confidence,
-              r.input_tokens, r.output_tokens, r.cost_usd, r.duration_ms, r.shots, r.sender_shots
-       FROM eval_results r JOIN eval_runs e ON e.id = r.run_id
-       LEFT JOIN messages m ON m.account_id = e.account_id AND m.id = r.message_id
-       WHERE r.run_id = ? ORDER BY r.message_id`,
-    )
-    .all(runId) as unknown as {
+async function results(db: Sql, runId: number): Promise<EvalResult[]> {
+  const rows = await db.all<{
     message_id: string;
     from_address: string;
     subject: string;
@@ -238,7 +239,14 @@ function results(db: DatabaseSync, runId: number): EvalResult[] {
     duration_ms: number;
     shots: number;
     sender_shots: number;
-  }[];
+  }>(
+    `SELECT r.message_id, coalesce(m.from_address, '') AS from_address, coalesce(m.subject, '') AS subject, r.expected, r.got, r.confidence,
+              r.input_tokens, r.output_tokens, r.cost_usd, r.duration_ms, r.shots, r.sender_shots
+       FROM eval_results r JOIN eval_runs e ON e.id = r.run_id
+       LEFT JOIN messages m ON m.account_id = e.account_id AND m.id = r.message_id
+       WHERE r.run_id = ? ORDER BY r.message_id`,
+    runId,
+  );
   return rows.map((r) => ({
     messageId: r.message_id,
     fromAddress: r.from_address,
@@ -277,15 +285,15 @@ function toRun(row: RunRow, judged: readonly EvalResult[]): EvalRun {
 }
 
 /** Past runs with their scores, newest first. */
-export function listEvalRuns(db: DatabaseSync, limit = 50): EvalRun[] {
-  const rows = db.prepare('SELECT * FROM eval_runs ORDER BY id DESC LIMIT ?').all(limit) as unknown as RunRow[];
-  return rows.map((row) => toRun(row, results(db, row.id)));
+export async function listEvalRuns(db: Sql, limit = 50): Promise<EvalRun[]> {
+  const rows = await db.all<RunRow>('SELECT * FROM eval_runs ORDER BY id DESC LIMIT ?', limit);
+  return await Promise.all(rows.map(async (row) => toRun(row, await results(db, row.id))));
 }
 
 /** One run with what the model said for each example, or null if there is no such run. */
-export function getEvalRun(db: DatabaseSync, id: number): { run: EvalRun; results: EvalResult[] } | null {
-  const row = db.prepare('SELECT * FROM eval_runs WHERE id = ?').get(id) as unknown as RunRow | undefined;
+export async function getEvalRun(db: Sql, id: number): Promise<{ run: EvalRun; results: EvalResult[] } | null> {
+  const row = await db.get<RunRow>('SELECT * FROM eval_runs WHERE id = ?', id);
   if (!row) return null;
-  const judged = results(db, id);
+  const judged = await results(db, id);
   return { run: toRun(row, judged), results: judged };
 }

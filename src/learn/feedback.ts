@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../store/sql.ts';
 import { listLabels } from '../store/labels.ts';
 import { recordDecision } from '../store/decisions.ts';
 import { proposeFromAnswers } from '../store/proposals.ts';
@@ -69,10 +69,10 @@ const toSuggestion = (r: Row): Suggestion => ({
  * observing, with no answer yet. Decisions that only repeat what the user already told sift (rules they
  * wrote or made by correcting it) are not suggestions and are left out; ones from a rule sift learned are.
  */
-export function pendingSuggestions(
-  db: DatabaseSync,
+export async function pendingSuggestions(
+  db: Sql,
   filter: { accountId?: string; accounts?: readonly string[]; sender?: string; domain?: string; limit?: number } = {},
-): Suggestion[] {
+): Promise<Suggestion[]> {
   const where: string[] = [];
   const params: (string | number)[] = [];
   if (filter.accounts !== undefined) {
@@ -91,9 +91,8 @@ export function pendingSuggestions(
     where.push('m.from_domain = ?');
     params.push(filter.domain);
   }
-  const rows = db
-    .prepare(
-      `SELECT d.id, d.account_id, d.message_id, d.stage, d.disposition, d.block, d.subscription, d.label_id, d.reason, d.confidence, d.decided_at,
+  const rows = await db.all<Row>(
+    `SELECT d.id, d.account_id, d.message_id, d.stage, d.disposition, d.block, d.subscription, d.label_id, d.reason, d.confidence, d.decided_at,
               m.received_at, m.from_address, m.from_name, m.subject
        FROM decisions d
        JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
@@ -104,8 +103,9 @@ export function pendingSuggestions(
          AND NOT ((d.stage = 'rules' OR d.rule_id IS NOT NULL) AND coalesce(r.source, 'user') != 'agent')
          ${where.map((clause) => `AND ${clause}`).join(' ')}
        ORDER BY d.decided_at DESC, d.id DESC LIMIT ?`,
-    )
-    .all(...params, filter.limit ?? 5000) as unknown as Row[];
+    ...params,
+    filter.limit ?? 5000,
+  );
   return rows.map(toSuggestion);
 }
 
@@ -126,13 +126,13 @@ const SUGGESTION_COLUMNS = `d.id, d.account_id, d.message_id, d.stage, d.disposi
               m.received_at, m.from_address, m.from_name, m.subject`;
 
 /** The decision that currently stands for a message, in the shape of a suggestion, or null if it has none. */
-function currentDecision(db: DatabaseSync, accountId: string, messageId: string): Suggestion | null {
-  const row = db
-    .prepare(
-      `SELECT ${SUGGESTION_COLUMNS} FROM decisions d JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
+async function currentDecision(db: Sql, accountId: string, messageId: string): Promise<Suggestion | null> {
+  const row = await db.get<Row>(
+    `SELECT ${SUGGESTION_COLUMNS} FROM decisions d JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
        WHERE d.account_id = ? AND d.message_id = ? ORDER BY d.id DESC LIMIT 1`,
-    )
-    .get(accountId, messageId) as unknown as Row | undefined;
+    accountId,
+    messageId,
+  );
   return row ? toSuggestion(row) : null;
 }
 
@@ -193,8 +193,8 @@ const DO: Record<DecidedDisposition, string> = { keep: 'keep it', archive: 'arch
  * Throws if the label does not exist, the answer says neither what the mail is nor what should happen,
  * or it refers to nothing that is waiting.
  */
-export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: number = Date.now()): FeedbackResult {
-  const labels = listLabels(db, input.accountId, now);
+export async function applyFeedback(db: Sql, input: FeedbackInput, now: number = Date.now()): Promise<FeedbackResult> {
+  const labels = await listLabels(db, input.accountId, now);
   const label = input.label === undefined ? undefined : labels.find((l) => l.id === input.label);
   if (input.label !== undefined && !label) throw new Error(`There is no label "${input.label}".`);
   const outcome = input.disposition ?? label?.disposition;
@@ -207,7 +207,7 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
   if (input.scope === 'subject' && contains === '') throw new Error('Say which words the subject must contain.');
   if ((input.scope === 'label' || when !== '') && !label) throw new Error('Say what kind of mail this is for.');
   const domain = input.sender.split('@')[1] ?? '';
-  const waiting = pendingSuggestions(db, { accountId: input.accountId, ...(input.scope === 'domain' ? { domain } : { sender: input.sender }) });
+  const waiting = await pendingSuggestions(db, { accountId: input.accountId, ...(input.scope === 'domain' ? { domain } : { sender: input.sender }) });
   const targets = waiting.filter((s) =>
     input.scope === 'subject'
       ? s.subject.toLowerCase().includes(contains.toLowerCase())
@@ -220,7 +220,7 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
   // A message that is not waiting (sift already acted on it, a rule decided it, or it was answered before)
   // is corrected through its current decision.
   const given =
-    input.messageId !== undefined && !targets.some((t) => t.messageId === input.messageId) ? currentDecision(db, input.accountId, input.messageId) : null;
+    input.messageId !== undefined && !targets.some((t) => t.messageId === input.messageId) ? await currentDecision(db, input.accountId, input.messageId) : null;
   if (given && given.fromAddress !== input.sender) throw new Error('That message is not from that sender.');
   if (targets.length === 0 && !given)
     throw new Error(
@@ -255,30 +255,36 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
   // Agreeing with a decision that already stands changes nothing about the message itself.
   const changes = given !== null && ((label !== undefined && given.labelId !== label.id) || given.disposition !== outcome);
 
-  const insert = db.prepare(
-    `INSERT INTO feedback (account_id, decision_id, message_id, verdict, correct, scope, created_at, label_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  const INSERT_FEEDBACK = `INSERT INTO feedback (account_id, decision_id, message_id, verdict, correct, scope, created_at, label_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (decision_id) DO UPDATE
-       SET verdict = excluded.verdict, correct = excluded.correct, scope = excluded.scope, created_at = excluded.created_at, label_id = excluded.label_id`,
-  );
+       SET verdict = excluded.verdict, correct = excluded.correct, scope = excluded.scope, created_at = excluded.created_at, label_id = excluded.label_id`;
   // Every marked message is kept whole as an example; `sift run` fetches it on its next pass.
-  const example = db.prepare(
-    `INSERT INTO examples (account_id, message_id, disposition, label_id, suggested, suggested_by, marked_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (account_id, message_id) DO UPDATE SET disposition = excluded.disposition, label_id = excluded.label_id, marked_at = excluded.marked_at`,
-  );
+  const KEEP_EXAMPLE = `INSERT INTO examples (account_id, message_id, disposition, label_id, suggested, suggested_by, marked_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (account_id, message_id) DO UPDATE SET disposition = excluded.disposition, label_id = excluded.label_id, marked_at = excluded.marked_at`;
   // sift having no suggestion is not sift being wrong. Otherwise it was right if it gave the same label,
   // or, when the user said only what should happen, if it would have done the same.
   const verdictFor = (target: Suggestion) =>
     target.labelId === null ? 'answered' : (label ? target.labelId === label.id : target.disposition === wanted) ? 'right' : 'wrong';
-  db.exec('BEGIN');
-  try {
+  await db.transaction(async (tx) => {
     const all = given ? [...targets, given] : targets;
     for (const target of all) {
       const verdict = verdictFor(target);
       const is = standing(target)?.id ?? null;
-      insert.run(target.accountId, target.decisionId, target.messageId, verdict, verdict === 'right' ? null : wanted, match ? 'sender' : 'message', now, is);
-      example.run(target.accountId, target.messageId, wanted, is, target.disposition, target.stage, now);
+      await tx.run(
+        INSERT_FEEDBACK,
+        target.accountId,
+        target.decisionId,
+        target.messageId,
+        verdict,
+        verdict === 'right' ? null : wanted,
+        match ? 'sender' : 'message',
+        now,
+        is,
+      );
+      await tx.run(KEEP_EXAMPLE, target.accountId, target.messageId, wanted, is, target.disposition, target.stage, now);
     }
-    const ruleId = match && says ? setRule(db, input.accountId, match, says, all.every((t) => verdictFor(t) === 'right') ? 'user' : 'correction', now) : null;
+    const ruleId =
+      match && says ? await setRule(tx, input.accountId, match, says, all.every((t) => verdictFor(t) === 'right') ? 'user' : 'correction', now) : null;
     // Pressed in the dashboard: what the user said is done to each waiting message it settled.
     const answer = (target: Suggestion): Decision => {
       const is = standing(target);
@@ -290,25 +296,22 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
         reason: label ? `you said this is ${label.name}` : `you said to ${DO[wanted]}`,
       };
     };
-    if (input.act) for (const target of targets) recordDecision(db, input.accountId, target.messageId, answer(target), { mode: 'act', byUser: true, now });
+    if (input.act)
+      for (const target of targets) await recordDecision(tx, input.accountId, target.messageId, answer(target), { mode: 'act', byUser: true, now });
     // The corrected message gets a decision of its own, so the log shows what the user said and, when
     // sift is acting, the mailbox is brought into line with it.
     if (given && changes)
-      recordDecision(
-        db,
+      await recordDecision(
+        tx,
         input.accountId,
         given.messageId,
         answer(given),
         input.act ? { mode: 'act', byUser: true, now } : { mode: input.mode ?? 'observe', now },
       );
-    db.exec('COMMIT');
-  } catch (error) {
-    db.exec('ROLLBACK');
-    throw error;
-  }
+  });
   const unsubscribed = (fromLabel: boolean) => ((fromLabel && label?.unsubscribe) || input.unsubscribe ? ', and unsubscribed from' : '');
   // An answer makes no rule of its own; enough of the same answers for a sender, and sift offers one.
-  const proposed = !match && label !== undefined && proposeFromAnswers(db, input.accountId, input.sender, now);
+  const proposed = !match && label !== undefined && (await proposeFromAnswers(db, input.accountId, input.sender, now));
   return {
     reviewed: targets.length + (given ? 1 : 0),
     corrected: given && changes ? given.messageId : null,
@@ -339,20 +342,20 @@ export interface Accuracy {
  * How often sift's suggestions matched what the user wanted, from the answers given since `since`.
  * An answer to mail sift could not place is not counted: having no suggestion is not being wrong.
  */
-export function accuracy(db: DatabaseSync, since = 0, accounts?: readonly string[]): Accuracy {
-  const all = <T>(sql: string) => db.prepare(sql).all(since, ...(accounts ?? [])) as unknown as T[];
+export async function accuracy(db: Sql, since = 0, accounts?: readonly string[]): Promise<Accuracy> {
+  const all = async <T>(sql: string) => await db.all<T>(sql, since, ...(accounts ?? []));
   // Given, only these accounts' answers count; none given means none count.
   const whose = accounts === undefined ? '' : `AND f.account_id IN (${accounts.map(() => '?').join(', ') || 'NULL'})`;
   const scored = `FROM feedback f JOIN decisions d ON d.id = f.decision_id WHERE f.verdict IN ('right', 'wrong') AND f.created_at >= ? ${whose}`;
-  const byStage = all<{ stage: StageName; reviewed: number; right: number }>(
+  const byStage = await all<{ stage: StageName; reviewed: number; right: number }>(
     `SELECT d.stage, count(*) AS reviewed, sum(f.verdict = 'right') AS right ${scored} GROUP BY d.stage ORDER BY d.stage`,
   );
-  const byLabel = all<{ label_id: string; name: string | null; reviewed: number; right: number }>(
+  const byLabel = await all<{ label_id: string; name: string | null; reviewed: number; right: number }>(
     `SELECT d.label_id, (SELECT l.name FROM labels l WHERE l.account_id = d.account_id AND l.id = d.label_id) AS name,
             count(*) AS reviewed, sum(f.verdict = 'right') AS right
      ${scored} AND d.label_id IS NOT NULL GROUP BY d.label_id ORDER BY reviewed DESC, d.label_id`,
   );
-  const confusion = all<{ suggested: string; correct: string; count: number }>(
+  const confusion = await all<{ suggested: string; correct: string; count: number }>(
     `SELECT d.label_id AS suggested, f.label_id AS correct, count(*) AS count
      ${scored} AND f.verdict = 'wrong' AND d.label_id IS NOT NULL AND f.label_id IS NOT NULL
      GROUP BY d.label_id, f.label_id ORDER BY count DESC, suggested, correct`,

@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from './sql.ts';
 import { type FilterVerdict, filterFor } from '../triage/filter.ts';
 import { listAccounts } from './accounts.ts';
 import { listLabels } from './labels.ts';
@@ -40,24 +40,25 @@ const fromRow = (r: Row): RuleFilterRow => ({
   checkedAt: r.filter_checked_at,
 });
 
-export function getRuleFilter(db: DatabaseSync, ruleId: string): RuleFilterRow | null {
-  const row = db.prepare(`SELECT ${COLUMNS} FROM rules WHERE id = ?`).get(ruleId) as Row | undefined;
+export async function getRuleFilter(db: Sql, ruleId: string): Promise<RuleFilterRow | null> {
+  const row = await db.get<Row>(`SELECT ${COLUMNS} FROM rules WHERE id = ?`, ruleId);
   return row ? fromRow(row) : null;
 }
 
 /** The account's rules that have a filter in Gmail, as far as sift knows. */
-export function listRuleFilters(db: DatabaseSync, accountId: string): RuleFilterRow[] {
-  const rows = db.prepare(`SELECT ${COLUMNS} FROM rules WHERE account_id = ? AND filter_id IS NOT NULL ORDER BY position, id`).all(accountId);
+export async function listRuleFilters(db: Sql, accountId: string): Promise<RuleFilterRow[]> {
+  const rows = await db.all(`SELECT ${COLUMNS} FROM rules WHERE account_id = ? AND filter_id IS NOT NULL ORDER BY position, id`, accountId);
   return (rows as unknown as Row[]).map(fromRow);
 }
 
-export function setRuleFilter(
-  db: DatabaseSync,
+export async function setRuleFilter(
+  db: Sql,
   ruleId: string,
   value: { filterId: string | null; state: FilterState | null; written: string | null },
   now: number,
-): void {
-  db.prepare('UPDATE rules SET filter_id = ?, filter_state = ?, filter_json = ?, filter_checked_at = ? WHERE id = ?').run(
+): Promise<void> {
+  await db.run(
+    'UPDATE rules SET filter_id = ?, filter_state = ?, filter_json = ?, filter_checked_at = ? WHERE id = ?',
     value.filterId,
     value.state,
     value.written,
@@ -67,18 +68,18 @@ export function setRuleFilter(
 }
 
 /** For each of the account's rules, whether it can be a Gmail filter as things stand. */
-export function filterVerdicts(db: DatabaseSync, accountId: string, now: number = Date.now()): Map<string, FilterVerdict> {
-  const rules = listRules(db, accountId);
-  const labels = listLabels(db, accountId, now);
+export async function filterVerdicts(db: Sql, accountId: string, now: number = Date.now()): Promise<Map<string, FilterVerdict>> {
+  const rules = await listRules(db, accountId);
+  const labels = await listLabels(db, accountId, now);
   return new Map(rules.map((rule) => [rule.id, filterFor(rule, labels, rules)]));
 }
 
-export function filtersCheckedAt(db: DatabaseSync, accountId: string): number | null {
-  return (db.prepare('SELECT filters_checked_at AS at FROM accounts WHERE id = ?').get(accountId) as { at: number | null } | undefined)?.at ?? null;
+export async function filtersCheckedAt(db: Sql, accountId: string): Promise<number | null> {
+  return (await db.get<{ at: number | null }>('SELECT filters_checked_at AS at FROM accounts WHERE id = ?', accountId))?.at ?? null;
 }
 
-export function markFiltersChecked(db: DatabaseSync, accountId: string, now: number): void {
-  db.prepare('UPDATE accounts SET filters_checked_at = ? WHERE id = ?').run(now, accountId);
+export async function markFiltersChecked(db: Sql, accountId: string, now: number): Promise<void> {
+  await db.run('UPDATE accounts SET filters_checked_at = ? WHERE id = ?', now, accountId);
 }
 
 export interface RuleFilterStatus {
@@ -90,12 +91,14 @@ export interface RuleFilterStatus {
 }
 
 /** Every rule's standing as a Gmail filter, by rule id, for the dashboard. */
-export function ruleFilterStatus(db: DatabaseSync, now: number = Date.now()): Map<string, RuleFilterStatus> {
+export async function ruleFilterStatus(db: Sql, now: number = Date.now()): Promise<Map<string, RuleFilterStatus>> {
   const status = new Map<string, RuleFilterStatus>();
-  const stored = db.prepare('SELECT filter_state, filter_checked_at FROM rules WHERE id = ?');
-  for (const account of listAccounts(db)) {
-    for (const [ruleId, verdict] of filterVerdicts(db, account.id, now)) {
-      const row = stored.get(ruleId) as { filter_state: FilterState | null; filter_checked_at: number | null };
+  for (const account of await listAccounts(db)) {
+    for (const [ruleId, verdict] of await filterVerdicts(db, account.id, now)) {
+      const row = (await db.get<{ filter_state: FilterState | null; filter_checked_at: number | null }>(
+        'SELECT filter_state, filter_checked_at FROM rules WHERE id = ?',
+        ruleId,
+      ))!;
       status.set(ruleId, {
         state: row.filter_state ?? 'none',
         possible: verdict.possible,

@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from './sql.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
 import { listLabels } from './labels.ts';
 import { hasRuleFor, listRules, removeRule, setRule } from './rules.ts';
@@ -40,28 +40,31 @@ const toProposal = (r: Row): Proposal => ({
   createdAt: r.created_at,
 });
 
-export function listProposals(db: DatabaseSync, accountId?: string): Proposal[] {
-  const rows = db
-    .prepare(
-      `SELECT id, account_id, kind, match_json, label_id, rule_id, agreed, created_at FROM proposals
+export async function listProposals(db: Sql, accountId?: string): Promise<Proposal[]> {
+  const rows = await db.all<Row>(
+    `SELECT id, account_id, kind, match_json, label_id, rule_id, agreed, created_at FROM proposals
        WHERE status = 'open' ${accountId === undefined ? '' : 'AND account_id = ?'} ORDER BY created_at DESC, id DESC`,
-    )
-    .all(...(accountId === undefined ? [] : [accountId])) as unknown as Row[];
+    ...(accountId === undefined ? [] : [accountId]),
+  );
   return rows.map(toProposal);
 }
 
 /** Open a proposal, or refresh the count on one already open. One the user dismissed stays dismissed. Returns true if it is new. */
-function propose(db: DatabaseSync, p: Omit<Proposal, 'id' | 'createdAt'>, now: number): boolean {
+async function propose(db: Sql, p: Omit<Proposal, 'id' | 'createdAt'>, now: number): Promise<boolean> {
   const match = JSON.stringify(p.match);
-  const existing = db.prepare('SELECT id, status FROM proposals WHERE account_id = ? AND kind = ? AND match_json = ?').get(p.accountId, p.kind, match) as
-    | { id: number; status: string }
-    | undefined;
+  const existing = await db.get<{ id: number; status: string }>(
+    'SELECT id, status FROM proposals WHERE account_id = ? AND kind = ? AND match_json = ?',
+    p.accountId,
+    p.kind,
+    match,
+  );
   if (existing) {
     if (existing.status === 'open')
-      db.prepare('UPDATE proposals SET agreed = ?, label_id = ?, rule_id = ? WHERE id = ?').run(p.agreed, p.labelId, p.ruleId, existing.id);
+      await db.run('UPDATE proposals SET agreed = ?, label_id = ?, rule_id = ? WHERE id = ?', p.agreed, p.labelId, p.ruleId, existing.id);
     return false;
   }
-  db.prepare('INSERT INTO proposals (account_id, kind, match_json, label_id, rule_id, agreed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+  await db.run(
+    'INSERT INTO proposals (account_id, kind, match_json, label_id, rule_id, agreed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
     p.accountId,
     p.kind,
     match,
@@ -83,22 +86,23 @@ export const SETTLED_AFTER = 10;
  * ended the way the label says. Senders who send mixed mail never settle. Nothing is proposed where a
  * rule for exactly that sender exists. Returns true if a proposal was opened.
  */
-export function proposeForSender(db: DatabaseSync, accountId: string, address: string, now: number = Date.now()): boolean {
-  if (hasRuleFor(db, accountId, { from: address })) return false;
-  const recent = db
-    .prepare(
-      `SELECT d.label_id, d.disposition, d.prior_rule_id FROM decisions d
+export async function proposeForSender(db: Sql, accountId: string, address: string, now: number = Date.now()): Promise<boolean> {
+  if (await hasRuleFor(db, accountId, { from: address })) return false;
+  const recent = await db.all<{ label_id: string | null; disposition: string; prior_rule_id: string | null }>(
+    `SELECT d.label_id, d.disposition, d.prior_rule_id FROM decisions d
        JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
        WHERE d.account_id = ? AND m.from_address = ? AND d.stage = 'agent'
        ORDER BY d.id DESC LIMIT ?`,
-    )
-    .all(accountId, address, PROPOSE_AFTER) as unknown as { label_id: string | null; disposition: string; prior_rule_id: string | null }[];
+    accountId,
+    address,
+    PROPOSE_AFTER,
+  );
   const [first] = recent;
   if (!first || recent.length < PROPOSE_AFTER || first.label_id === null) return false;
-  const label = listLabels(db, accountId, now).find((l) => l.id === first.label_id);
+  const label = (await listLabels(db, accountId, now)).find((l) => l.id === first.label_id);
   // One where a protection held sift back, or a wider rule already spoke, is not settled.
   if (!label || !recent.every((r) => r.label_id === first.label_id && r.disposition === label.disposition && r.prior_rule_id === null)) return false;
-  return propose(db, { accountId, kind: 'rule', match: { from: address }, labelId: first.label_id, ruleId: null, agreed: recent.length }, now);
+  return await propose(db, { accountId, kind: 'rule', match: { from: address }, labelId: first.label_id, ruleId: null, agreed: recent.length }, now);
 }
 
 /** How many answers in a row about a sender, all the same label, before sift offers to make it a rule. */
@@ -108,50 +112,52 @@ export const PROPOSE_AFTER_ANSWERS = 3;
  * Propose a rule for a sender whose last few answers all said the same label. Answering one message makes
  * no rule; this is how answers turn into one, with the user's say-so.
  */
-export function proposeFromAnswers(db: DatabaseSync, accountId: string, address: string, now: number = Date.now()): boolean {
-  if (hasRuleFor(db, accountId, { from: address })) return false;
-  const recent = db
-    .prepare(
-      `SELECT f.label_id FROM feedback f
+export async function proposeFromAnswers(db: Sql, accountId: string, address: string, now: number = Date.now()): Promise<boolean> {
+  if (await hasRuleFor(db, accountId, { from: address })) return false;
+  const recent = await db.all<{ label_id: string | null }>(
+    `SELECT f.label_id FROM feedback f
        JOIN messages m ON m.account_id = f.account_id AND m.id = f.message_id
        WHERE f.account_id = ? AND m.from_address = ?
        ORDER BY f.created_at DESC, f.decision_id DESC LIMIT ?`,
-    )
-    .all(accountId, address, PROPOSE_AFTER_ANSWERS) as unknown as { label_id: string | null }[];
+    accountId,
+    address,
+    PROPOSE_AFTER_ANSWERS,
+  );
   const [first] = recent;
   if (!first || recent.length < PROPOSE_AFTER_ANSWERS || first.label_id === null || !recent.every((r) => r.label_id === first.label_id)) return false;
-  if (!listLabels(db, accountId, now).some((l) => l.id === first.label_id)) return false;
-  return propose(db, { accountId, kind: 'rule', match: { from: address }, labelId: first.label_id, ruleId: null, agreed: recent.length }, now);
+  if (!(await listLabels(db, accountId, now)).some((l) => l.id === first.label_id)) return false;
+  return await propose(db, { accountId, kind: 'rule', match: { from: address }, labelId: first.label_id, ruleId: null, agreed: recent.length }, now);
 }
 
 /** Propose dropping the "when it is L" from a rule once every message it was checked against turned out to be L, for long enough. */
-export function proposeSettled(db: DatabaseSync, accountId: string, ruleId: string, now: number = Date.now()): boolean {
-  const rule = listRules(db, accountId).find((r) => r.id === ruleId);
+export async function proposeSettled(db: Sql, accountId: string, ruleId: string, now: number = Date.now()): Promise<boolean> {
+  const rule = (await listRules(db, accountId)).find((r) => r.id === ruleId);
   if (!rule || rule.whenLabel === undefined) return false;
-  const recent = db.prepare('SELECT rule_id FROM decisions WHERE prior_rule_id = ? ORDER BY id DESC LIMIT ?').all(ruleId, SETTLED_AFTER) as unknown as {
+  const recent = await db.all<{
     rule_id: string | null;
-  }[];
+  }>('SELECT rule_id FROM decisions WHERE prior_rule_id = ? ORDER BY id DESC LIMIT ?', ruleId, SETTLED_AFTER);
   if (recent.length < SETTLED_AFTER || !recent.every((r) => r.rule_id === ruleId)) return false;
-  return propose(db, { accountId, kind: 'always', match: rule.match, labelId: rule.whenLabel, ruleId, agreed: recent.length }, now);
+  return await propose(db, { accountId, kind: 'always', match: rule.match, labelId: rule.whenLabel, ruleId, agreed: recent.length }, now);
 }
 
 /**
  * Accept or dismiss a proposal. Accepting writes the rule as the user's own, or turns a rule that waited
  * for a label into one that acts on everything it matches. Returns false if it was not open.
  */
-export function resolveProposal(db: DatabaseSync, id: number, accept: boolean, now: number = Date.now()): boolean {
-  const row = db
-    .prepare(`SELECT id, account_id, kind, match_json, label_id, rule_id, agreed, created_at FROM proposals WHERE id = ? AND status = 'open'`)
-    .get(id) as Row | undefined;
+export async function resolveProposal(db: Sql, id: number, accept: boolean, now: number = Date.now()): Promise<boolean> {
+  const row = await db.get<Row>(
+    `SELECT id, account_id, kind, match_json, label_id, rule_id, agreed, created_at FROM proposals WHERE id = ? AND status = 'open'`,
+    id,
+  );
   if (!row) return false;
   const p = toProposal(row);
   if (accept) {
-    const existing = p.ruleId ? listRules(db, p.accountId).find((r) => r.id === p.ruleId) : undefined;
+    const existing = p.ruleId ? (await listRules(db, p.accountId)).find((r) => r.id === p.ruleId) : undefined;
     if (existing) {
       // What the rule did when the mail was that label, it now does to all of it, without waiting to be told.
-      const does = existing.disposition ?? listLabels(db, p.accountId, now).find((l) => l.id === p.labelId)?.disposition ?? 'keep';
-      removeRule(db, existing.id);
-      setRule(
+      const does = existing.disposition ?? (await listLabels(db, p.accountId, now)).find((l) => l.id === p.labelId)?.disposition ?? 'keep';
+      await removeRule(db, existing.id);
+      await setRule(
         db,
         p.accountId,
         p.match,
@@ -163,8 +169,8 @@ export function resolveProposal(db: DatabaseSync, id: number, accept: boolean, n
         'user',
         now,
       );
-    } else setRule(db, p.accountId, p.match, { labelId: p.labelId }, 'user', now);
+    } else await setRule(db, p.accountId, p.match, { labelId: p.labelId }, 'user', now);
   }
-  db.prepare('UPDATE proposals SET status = ?, resolved_at = ? WHERE id = ?').run(accept ? 'accepted' : 'dismissed', now, id);
+  await db.run('UPDATE proposals SET status = ?, resolved_at = ? WHERE id = ?', accept ? 'accepted' : 'dismissed', now, id);
   return true;
 }

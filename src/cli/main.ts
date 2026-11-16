@@ -43,7 +43,7 @@ async function main(): Promise<void> {
   }
   loadEnvFiles(resolveHome());
   const [command, ...args] = argv;
-  if (command === 'status') status();
+  if (command === 'status') await status();
   else if (command === 'init') await init();
   else if (command === 'dashboard') await dashboard(args);
   else if (command === 'run') await run(args);

@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../store/sql.ts';
 import {
   type ActionPayload,
   type ActionRecord,
@@ -34,7 +34,7 @@ export type Outcome =
   | { status: 'failed' | 'unknown'; actionId: number; reason: string };
 
 export interface ActionDeps {
-  db: DatabaseSync;
+  db: Sql;
   mailbox: Mailbox;
   now?: () => number;
 }
@@ -60,7 +60,7 @@ async function applyChange(
   if (change.add.length === 0 && change.remove.length === 0) return { status: 'skipped', reason: 'already in the requested state' };
 
   const payload: ActionPayload = { ...change, ...(target.undoOf === undefined ? {} : { undoOf: target.undoOf }) };
-  const actionId = insertPendingAction(
+  const actionId = await insertPendingAction(
     deps.db,
     {
       accountId: target.accountId,
@@ -79,16 +79,16 @@ async function applyChange(
     finalLabels = await deps.mailbox.getLabelIds(target.messageId);
   } catch (error) {
     // The call may or may not have landed. Leave it open; reconcile() settles it from the mailbox's actual state.
-    finishAction(deps.db, actionId, 'unknown', null, message(error), clock(deps));
+    await finishAction(deps.db, actionId, 'unknown', null, message(error), clock(deps));
     return { status: 'unknown', actionId, reason: message(error) };
   }
 
   if (finalLabels && applied(finalLabels, change)) {
-    finishAction(deps.db, actionId, 'done', finalLabels, null, clock(deps));
+    await finishAction(deps.db, actionId, 'done', finalLabels, null, clock(deps));
     return { status: 'done', actionId, finalLabels };
   }
   const reason = finalLabels ? 'labels read back did not match the change' : 'message disappeared during the change';
-  finishAction(deps.db, actionId, 'failed', finalLabels, reason, clock(deps));
+  await finishAction(deps.db, actionId, 'failed', finalLabels, reason, clock(deps));
   return { status: 'failed', actionId, reason };
 }
 
@@ -99,11 +99,11 @@ async function applyChange(
  */
 export async function reconcile(deps: ActionDeps, scope?: { accountId: string; messageId: string }): Promise<number> {
   let settled = 0;
-  for (const action of listOpenActions(deps.db, scope)) {
+  for (const action of await listOpenActions(deps.db, scope)) {
     const labels = await deps.mailbox.getLabelIds(action.messageId);
-    if (labels === null) finishAction(deps.db, action.id, 'failed', null, 'message no longer exists', clock(deps));
-    else if (applied(labels, action.payload)) finishAction(deps.db, action.id, 'done', labels, null, clock(deps));
-    else finishAction(deps.db, action.id, 'failed', labels, action.error ?? 'change was not applied', clock(deps));
+    if (labels === null) await finishAction(deps.db, action.id, 'failed', null, 'message no longer exists', clock(deps));
+    else if (applied(labels, action.payload)) await finishAction(deps.db, action.id, 'done', labels, null, clock(deps));
+    else await finishAction(deps.db, action.id, 'failed', labels, action.error ?? 'change was not applied', clock(deps));
     settled++;
   }
   return settled;
@@ -131,14 +131,12 @@ export async function execute(deps: ActionDeps, accountId: string, messageId: st
   const change: LabelChange =
     action.type === 'label' ? { add, remove: read } : { add: [...add, ...(action.type === 'spam' ? ['SPAM'] : [])], remove: ['INBOX', ...read] };
 
-  return applyChange(deps, { accountId, messageId, type: action.type, ...(decisionId === undefined ? {} : { decisionId }) }, current, change);
+  return await applyChange(deps, { accountId, messageId, type: action.type, ...(decisionId === undefined ? {} : { decisionId }) }, current, change);
 }
 
 /** Spam is the costliest mistake, so every doubt refuses: unknown sender, failed lookup, or any prior correspondence. */
 async function spamRefusal(deps: ActionDeps, accountId: string, messageId: string): Promise<string | null> {
-  const row = deps.db.prepare('SELECT from_address FROM messages WHERE account_id = ? AND id = ?').get(accountId, messageId) as
-    | { from_address: string }
-    | undefined;
+  const row = await deps.db.get<{ from_address: string }>('SELECT from_address FROM messages WHERE account_id = ? AND id = ?', accountId, messageId);
   if (!row) return 'sender is unknown, so spam is refused';
   try {
     if (await deps.mailbox.hasSentTo(row.from_address)) return 'you have written to this sender, so spam is refused';
@@ -153,7 +151,7 @@ async function spamRefusal(deps: ActionDeps, accountId: string, messageId: strin
  * has changed since are left as they are. The undo is itself an audited action.
  */
 export async function undo(deps: ActionDeps, actionId: number): Promise<Outcome> {
-  const action: ActionRecord | null = getAction(deps.db, actionId);
+  const action: ActionRecord | null = await getAction(deps.db, actionId);
   if (!action) throw new Error(`There is no change #${actionId}.`);
   if (action.type === 'undo') throw new Error(`Change #${actionId} is itself an undo.`);
   if (action.type === 'filter' || action.type === 'unfilter') throw new Error('A Gmail filter is added or taken out from its rule, not undone.');
@@ -169,6 +167,6 @@ export async function undo(deps: ActionDeps, actionId: number): Promise<Outcome>
     remove: action.payload.add,
   });
   // 'skipped' means the user already put everything back by hand.
-  if (outcome.status === 'done' || outcome.status === 'skipped') setActionStatus(deps.db, action.id, 'undone');
+  if (outcome.status === 'done' || outcome.status === 'skipped') await setActionStatus(deps.db, action.id, 'undone');
   return outcome;
 }

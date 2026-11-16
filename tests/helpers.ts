@@ -1,5 +1,5 @@
 import { type Scope, scopeFor } from '../src/dashboard/scope.ts';
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../src/store/sql.ts';
 import type { ExistingFilter, FilterProposal } from '../src/actions/filters.ts';
 import type { Mailbox } from '../src/actions/mailbox.ts';
 import { recordSync, listAccounts } from '../src/store/accounts.ts';
@@ -24,18 +24,29 @@ export function facts(overrides: Partial<MessageFacts> = {}): MessageFacts {
 }
 
 /** A message the user answered for, stored whole as `captureExamples` would leave it. */
-export function storeExample(
-  db: DatabaseSync,
+export async function storeExample(
+  db: Sql,
   accountId: string,
   example: { id: string; from: string; label: string; subject?: string; body?: string; markedAt?: number; name?: string },
-): void {
+): Promise<void> {
   const from = { address: example.from, domain: example.from.split('@')[1] ?? '', ...(example.name ? { name: example.name } : {}) };
-  recordSync(db, accountId, [facts({ accountId, messageId: example.id, from, subject: example.subject ?? `Subject ${example.id}` })], '2');
-  recordDecision(db, accountId, example.id, { disposition: 'review', subscription: 'preserve', stage: 'fallback', reason: 'no stage reached a decision' });
-  db.prepare(
+  await recordSync(db, accountId, [facts({ accountId, messageId: example.id, from, subject: example.subject ?? `Subject ${example.id}` })], '2');
+  await recordDecision(db, accountId, example.id, {
+    disposition: 'review',
+    subscription: 'preserve',
+    stage: 'fallback',
+    reason: 'no stage reached a decision',
+  });
+  await db.run(
     `INSERT INTO examples (account_id, message_id, disposition, label_id, suggested, suggested_by, marked_at, status, body_text, headers_json, captured_at)
      VALUES (?, ?, 'keep', ?, 'review', 'fallback', ?, 'captured', ?, '[]', ?)`,
-  ).run(accountId, example.id, example.label, example.markedAt ?? 0, example.body ?? `Body of ${example.id}`, example.markedAt ?? 0);
+    accountId,
+    example.id,
+    example.label,
+    example.markedAt ?? 0,
+    example.body ?? `Body of ${example.id}`,
+    example.markedAt ?? 0,
+  );
 }
 
 /** An in-memory mailbox. Label ids are `L:<name>`. */
@@ -113,8 +124,8 @@ export class FakeMailbox implements Mailbox {
 }
 
 /** A scope that sees every connected account, as the dashboard has when no sign-in is set up. */
-export const everything = (db: DatabaseSync): Scope =>
+export const everything = async (db: Sql): Promise<Scope> =>
   scopeFor(
-    listAccounts(db).map((a) => a.id),
+    (await listAccounts(db)).map((a) => a.id),
     true,
   );

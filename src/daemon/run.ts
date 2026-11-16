@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../store/sql.ts';
 import { reconcile } from '../actions/executor.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
@@ -50,9 +50,9 @@ export interface PassResult {
  * One pass over every account: settle unconfirmed actions, sync, triage. An account that fails is
  * reported and the others still run; the next pass picks up where it stopped.
  */
-export async function runOnce(db: DatabaseSync, options: RunOptions): Promise<PassResult[]> {
+export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[]> {
   const results: PassResult[] = [];
-  for (const account of listAccounts(db)) {
+  for (const account of await listAccounts(db)) {
     const result: PassResult = { email: account.email };
     try {
       const { api, mailbox } = options.connect(account);
@@ -157,13 +157,13 @@ export function createWake(): Wake {
 }
 
 /** Upkeep that runs when sift starts and once a day after. */
-export function daily(db: DatabaseSync, options: Pick<RunOptions, 'examplesKeepDays' | 'log' | 'now'>): void {
-  dropOldExamples(db, options);
+export async function daily(db: Sql, options: Pick<RunOptions, 'examplesKeepDays' | 'log' | 'now'>): Promise<void> {
+  await dropOldExamples(db, options);
 }
 
-function dropOldExamples(db: DatabaseSync, options: Pick<RunOptions, 'examplesKeepDays' | 'log' | 'now'>): void {
+async function dropOldExamples(db: Sql, options: Pick<RunOptions, 'examplesKeepDays' | 'log' | 'now'>): Promise<void> {
   if (options.examplesKeepDays === undefined) return;
-  const dropped = pruneExamples(db, options.examplesKeepDays, (options.now ?? Date.now)());
+  const dropped = await pruneExamples(db, options.examplesKeepDays, (options.now ?? Date.now)());
   if (dropped > 0) options.log(`Deleted ${dropped} example${dropped === 1 ? '' : 's'} older than ${options.examplesKeepDays} days`);
 }
 
@@ -173,9 +173,9 @@ function dropOldExamples(db: DatabaseSync, options: Pick<RunOptions, 'examplesKe
  * With `retentionDays`, old records are pruned on the first pass and then once a day.
  */
 export async function runLoop(
-  db: DatabaseSync,
+  db: Sql,
   next: () => Promise<RunOptions & { intervalMs: number; retentionDays?: number }>,
-  control: { signal: AbortSignal; wake: Wake; onPass?: (results: PassResult[]) => void },
+  control: { signal: AbortSignal; wake: Wake; onPass?: (results: PassResult[]) => void | Promise<void> },
 ): Promise<void> {
   let prunedAt = -Infinity;
   let lastDaily = -Infinity;
@@ -184,14 +184,14 @@ export async function runLoop(
     const now = (options.now ?? Date.now)();
     if (now - lastDaily >= 86_400_000) {
       lastDaily = now;
-      daily(db, options);
+      await daily(db, options);
     }
-    control.onPass?.(await runOnce(db, options));
+    await control.onPass?.(await runOnce(db, options));
     // After the pass, which may have taken a while.
     const after = (options.now ?? Date.now)();
     if (options.retentionDays !== undefined && after - prunedAt >= DAY_MS) {
       try {
-        const pruned = pruneOld(db, options.retentionDays, after);
+        const pruned = await pruneOld(db, options.retentionDays, after);
         if (pruned > 0) options.log(`Forgot ${pruned} message${pruned === 1 ? '' : 's'} with nothing newer than ${options.retentionDays} days`);
         // A backlog goes a piece per pass.
         if (pruned < PRUNE_PER_RUN) prunedAt = after;

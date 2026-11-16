@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from './sql.ts';
 import type { Disposition, Label } from '../triage/types.ts';
 
 /**
@@ -100,17 +100,30 @@ const INSERT =
   'INSERT INTO labels (account_id, id, name, description, disposition, gmail_label, position, updated_at, block, mark_read, unsubscribe) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
 /** An account's labels in order, seeding the defaults the first time. */
-export function listLabels(db: DatabaseSync, accountId: string, now: number = Date.now()): Label[] {
-  const select = db.prepare(
-    'SELECT id, name, description, disposition, gmail_label, block, mark_read, unsubscribe FROM labels WHERE account_id = ? ORDER BY position, id',
-  );
-  let rows = select.all(accountId) as unknown as Row[];
-  if (rows.length === 0) {
-    const insert = db.prepare(INSERT);
-    DEFAULT_LABELS.forEach((l, index) =>
-      insert.run(accountId, l.id, l.name, l.description, l.disposition, l.gmailLabel, index, now, l.block ? 1 : 0, l.markRead ? 1 : 0, l.unsubscribe ? 1 : 0),
+export async function listLabels(db: Sql, accountId: string, now: number = Date.now()): Promise<Label[]> {
+  const select = () =>
+    db.all<Row>(
+      'SELECT id, name, description, disposition, gmail_label, block, mark_read, unsubscribe FROM labels WHERE account_id = ? ORDER BY position, id',
+      accountId,
     );
-    rows = select.all(accountId) as unknown as Row[];
+  let rows = await select();
+  if (rows.length === 0) {
+    for (const [index, l] of DEFAULT_LABELS.entries())
+      await db.run(
+        INSERT,
+        accountId,
+        l.id,
+        l.name,
+        l.description,
+        l.disposition,
+        l.gmailLabel,
+        index,
+        now,
+        l.block ? 1 : 0,
+        l.markRead ? 1 : 0,
+        l.unsubscribe ? 1 : 0,
+      );
+    rows = await select();
   }
   return rows.map((r) => ({
     id: r.id,
@@ -146,16 +159,16 @@ function normalise(disposition: Disposition, block: boolean, markRead: boolean):
  * Add a label of the user's own. Its id and its Gmail label come from the name and never change after.
  * Throws if the name is unusable or already taken.
  */
-export function addLabel(
-  db: DatabaseSync,
+export async function addLabel(
+  db: Sql,
   accountId: string,
   label: { name: string; description: string; disposition: Disposition; block?: boolean; markRead?: boolean; unsubscribe?: boolean },
   now: number = Date.now(),
-): Label {
+): Promise<Label> {
   const name = label.name.trim();
   const id = slug(name);
   if (id === '' || RESERVED.has(id)) throw new Error(`"${name}" cannot be used as a label name.`);
-  const existing = listLabels(db, accountId, now);
+  const existing = await listLabels(db, accountId, now);
   if (existing.some((l) => l.id === id || l.id.replace(/_/g, '-') === id || l.gmailLabel === `sift/${id}` || l.name.toLowerCase() === name.toLowerCase()))
     throw new Error(`There is already a label "${name}".`);
   const extras = normalise(label.disposition, label.block ?? false, label.markRead ?? false);
@@ -168,7 +181,8 @@ export function addLabel(
     ...extras,
     ...(label.unsubscribe ? { unsubscribe: true } : {}),
   };
-  db.prepare(INSERT).run(
+  await db.run(
+    INSERT,
     accountId,
     created.id,
     created.name,
@@ -188,14 +202,14 @@ export function addLabel(
  * Change a label's name, how it is recognised, or what happens to its mail. Rules that name the label
  * follow it, unless they carry their own action. Returns false if there is no such label.
  */
-export function updateLabel(
-  db: DatabaseSync,
+export async function updateLabel(
+  db: Sql,
   accountId: string,
   id: string,
   change: { name?: string; description?: string; disposition?: Disposition; block?: boolean; markRead?: boolean; unsubscribe?: boolean },
   now: number = Date.now(),
-): boolean {
-  const current = listLabels(db, accountId, now).find((l) => l.id === id);
+): Promise<boolean> {
+  const current = (await listLabels(db, accountId, now)).find((l) => l.id === id);
   if (!current) return false;
   const disposition = change.disposition ?? current.disposition;
   // Changing what a label does drops a block unless the change asks for one.
@@ -204,9 +218,8 @@ export function updateLabel(
     change.block ?? (change.disposition === undefined && (current.block ?? false)),
     change.markRead ?? current.markRead ?? false,
   );
-  db.prepare(
+  await db.run(
     'UPDATE labels SET name = ?, description = ?, disposition = ?, block = ?, mark_read = ?, unsubscribe = ?, updated_at = ? WHERE account_id = ? AND id = ?',
-  ).run(
     change.name?.trim() || current.name,
     change.description?.trim() ?? current.description,
     disposition,

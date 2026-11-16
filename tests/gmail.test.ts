@@ -192,84 +192,84 @@ const page = (ids: string[], historyId: string): Record<string, HistoryPage> => 
 
 describe('syncAccount', () => {
   it('records new inbox mail and advances the cursor', async () => {
-    const db = openDb(':memory:');
-    connectAccount(db, 'me@example.org', '500', 0);
+    const db = await openDb(':memory:');
+    await connectAccount(db, 'me@example.org', '500', 0);
     const api = fakeApi({
       pages: page(['a', 'archived', 'gone', 'nosender'], '520'),
       messages: { a: raw('a'), archived: raw('archived', { labelIds: ['UNREAD'] }), nosender: raw('nosender', { headers: [] }) },
     });
 
-    const report = await syncAccount(db, api, listAccounts(db)[0]!);
+    const report = await syncAccount(db, api, (await listAccounts(db))[0]!);
     expect(report.added.map((m) => m.messageId)).toEqual(['a']);
     expect(report.skipped).toBe(3);
-    expect(listAccounts(db)[0]?.historyId).toBe('520');
-    expect(db.prepare('SELECT id, from_domain FROM messages').all()).toEqual([{ id: 'a', from_domain: 'example.com' }]);
+    expect((await listAccounts(db))[0]?.historyId).toBe('520');
+    expect(await db.all('SELECT id, from_domain FROM messages')).toEqual([{ id: 'a', from_domain: 'example.com' }]);
   });
 
   it('does not report a redelivered message as new', async () => {
-    const db = openDb(':memory:');
-    connectAccount(db, 'me@example.org', '500', 0);
+    const db = await openDb(':memory:');
+    await connectAccount(db, 'me@example.org', '500', 0);
     const fake = { pages: page(['a'], '520'), messages: { a: raw('a') } };
-    await syncAccount(db, fakeApi(fake), listAccounts(db)[0]!);
-    const again = await syncAccount(db, fakeApi(fake), listAccounts(db)[0]!);
+    await syncAccount(db, fakeApi(fake), (await listAccounts(db))[0]!);
+    const again = await syncAccount(db, fakeApi(fake), (await listAccounts(db))[0]!);
     expect(again.added).toEqual([]);
-    expect(db.prepare('SELECT count(*) AS n FROM messages').get()).toEqual({ n: 1 });
+    expect(await db.get('SELECT count(*) AS n FROM messages')).toEqual({ n: 1 });
   });
 
   it('records every page of a busy day in one pass and leaves the cursor alone if a later page fails', async () => {
-    const db = openDb(':memory:');
-    connectAccount(db, 'me@example.org', '500', 0);
+    const db = await openDb(':memory:');
+    await connectAccount(db, 'me@example.org', '500', 0);
     const pages: Record<string, HistoryPage> = {
       '': { additions: [{ id: 'a', labelIds: ['INBOX'] }], historyId: '510', nextPageToken: 'p2' },
       p2: { additions: [{ id: 'b', labelIds: ['INBOX'] }], historyId: '520', nextPageToken: 'p3' },
     };
     const messages = { a: raw('a'), b: raw('b'), c: raw('c') };
-    await expect(syncAccount(db, fakeApi({ pages, messages }), listAccounts(db)[0]!)).rejects.toThrow('unexpected page');
-    expect(listAccounts(db)[0]?.historyId).toBe('500');
-    expect(db.prepare('SELECT count(*) AS n FROM messages').get()).toEqual({ n: 0 });
+    await expect(syncAccount(db, fakeApi({ pages, messages }), (await listAccounts(db))[0]!)).rejects.toThrow('unexpected page');
+    expect((await listAccounts(db))[0]?.historyId).toBe('500');
+    expect(await db.get('SELECT count(*) AS n FROM messages')).toEqual({ n: 0 });
 
     pages['p3'] = { additions: [{ id: 'c', labelIds: ['INBOX'] }], historyId: '530' };
-    const report = await syncAccount(db, fakeApi({ pages, messages }), listAccounts(db)[0]!);
+    const report = await syncAccount(db, fakeApi({ pages, messages }), (await listAccounts(db))[0]!);
     expect(report.added.map((m) => m.messageId)).toEqual(['a', 'b', 'c']);
-    expect(listAccounts(db)[0]?.historyId).toBe('530');
+    expect((await listAccounts(db))[0]?.historyId).toBe('530');
   });
 
   it('after an expired cursor, records what the search finds, skips what it already had, and carries on from the new cursor', async () => {
-    const db = openDb(':memory:');
-    connectAccount(db, 'me@example.org', '500', 0);
+    const db = await openDb(':memory:');
+    await connectAccount(db, 'me@example.org', '500', 0);
     const messages = { a: raw('a'), b: raw('b'), c: raw('c') };
-    await syncAccount(db, fakeApi({ pages: page(['a'], '520'), messages }), listAccounts(db)[0]!);
+    await syncAccount(db, fakeApi({ pages: page(['a'], '520'), messages }), (await listAccounts(db))[0]!);
 
     const recovering = fakeApi({ expired: true, historyId: '900', search: ['b', 'a'], messages });
-    const recovered = await syncAccount(db, recovering, listAccounts(db)[0]!);
+    const recovered = await syncAccount(db, recovering, (await listAccounts(db))[0]!);
     expect(recovered.mode).toBe('recovery');
     expect(recovered.added.map((m) => m.messageId)).toEqual(['b']);
     expect(recovering.calls).toEqual(['history:520:', 'profile', 'search:newer_than:7d']);
-    expect(listAccounts(db)[0]?.historyId).toBe('900');
+    expect((await listAccounts(db))[0]?.historyId).toBe('900');
 
     const next = fakeApi({ pages: page(['c'], '910'), messages });
-    const after = await syncAccount(db, next, listAccounts(db)[0]!);
+    const after = await syncAccount(db, next, (await listAccounts(db))[0]!);
     expect(after.mode).toBe('incremental');
     expect(after.added.map((m) => m.messageId)).toEqual(['c']);
     expect(next.calls).toEqual(['history:900:']);
   });
 
   it('leaves the cursor alone when the search after an expired cursor fails', async () => {
-    const db = openDb(':memory:');
-    connectAccount(db, 'me@example.org', '500', 0);
+    const db = await openDb(':memory:');
+    await connectAccount(db, 'me@example.org', '500', 0);
     const api = fakeApi({ expired: true, historyId: '900' });
     api.searchInbox = async () => {
       throw new Error('network');
     };
-    await expect(syncAccount(db, api, listAccounts(db)[0]!)).rejects.toThrow('network');
-    expect(listAccounts(db)[0]?.historyId).toBe('500');
+    await expect(syncAccount(db, api, (await listAccounts(db))[0]!)).rejects.toThrow('network');
+    expect((await listAccounts(db))[0]?.historyId).toBe('500');
   });
 
   it('records that the user opened a message, once, whichever page or pass says so', async () => {
-    const db = openDb(':memory:');
-    connectAccount(db, 'me@example.org', '500', 0);
+    const db = await openDb(':memory:');
+    await connectAccount(db, 'me@example.org', '500', 0);
     const messages = { a: raw('a'), b: raw('b', { labelIds: ['INBOX'] }) };
-    await syncAccount(db, fakeApi({ pages: page(['a'], '510'), messages }), listAccounts(db)[0]!, () => 1000);
+    await syncAccount(db, fakeApi({ pages: page(['a'], '510'), messages }), (await listAccounts(db))[0]!, () => 1000);
 
     // `a` is opened, `b` arrives and is opened before sift has seen it, and a message sift never recorded is opened.
     const pages: Record<string, HistoryPage> = {
@@ -284,37 +284,37 @@ describe('syncAccount', () => {
         historyId: '530',
       },
     };
-    const reads = () => db.prepare('SELECT id, read_at FROM messages ORDER BY id').all();
-    await syncAccount(db, fakeApi({ pages, messages }), listAccounts(db)[0]!, () => 2000);
-    expect(reads()).toEqual([
+    const reads = async () => await db.all('SELECT id, read_at FROM messages ORDER BY id');
+    await syncAccount(db, fakeApi({ pages, messages }), (await listAccounts(db))[0]!, () => 2000);
+    expect(await reads()).toEqual([
       { id: 'a', read_at: 2000 },
       { id: 'b', read_at: 2000 },
     ]);
 
     // The same history again, as after a crash before the cursor moved, and the user marking it unread and reading it again.
-    await syncAccount(db, fakeApi({ pages, messages }), listAccounts(db)[0]!, () => 3000);
-    expect(reads()).toEqual([
+    await syncAccount(db, fakeApi({ pages, messages }), (await listAccounts(db))[0]!, () => 3000);
+    expect(await reads()).toEqual([
       { id: 'a', read_at: 2000 },
       { id: 'b', read_at: 2000 },
     ]);
   });
 
   it('learns nothing about reading from a search after an expired cursor', async () => {
-    const db = openDb(':memory:');
-    connectAccount(db, 'me@example.org', '500', 0);
+    const db = await openDb(':memory:');
+    await connectAccount(db, 'me@example.org', '500', 0);
     const api = fakeApi({ expired: true, search: ['a'], messages: { a: raw('a', { labelIds: ['INBOX'] }) } });
-    await syncAccount(db, api, listAccounts(db)[0]!);
-    expect(db.prepare('SELECT read_at FROM messages').get()).toEqual({ read_at: null });
+    await syncAccount(db, api, (await listAccounts(db))[0]!);
+    expect(await db.get('SELECT read_at FROM messages')).toEqual({ read_at: null });
   });
 
   it('leaves the cursor alone when a fetch fails', async () => {
-    const db = openDb(':memory:');
-    connectAccount(db, 'me@example.org', '500', 0);
+    const db = await openDb(':memory:');
+    await connectAccount(db, 'me@example.org', '500', 0);
     const api = fakeApi({ pages: page(['a'], '520') });
     api.getMetadata = async () => {
       throw new Error('network');
     };
-    await expect(syncAccount(db, api, listAccounts(db)[0]!)).rejects.toThrow('network');
-    expect(listAccounts(db)[0]?.historyId).toBe('500');
+    await expect(syncAccount(db, api, (await listAccounts(db))[0]!)).rejects.toThrow('network');
+    expect((await listAccounts(db))[0]?.historyId).toBe('500');
   });
 });

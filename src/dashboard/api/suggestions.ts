@@ -37,11 +37,11 @@ function parseFeedback(body: Record<string, unknown>): FeedbackInput | null {
 }
 
 export const reads: Read[] = [
-  { path: '/api/suggestions', run: ({ db }, scope, query) => ok(listSuggestions(db, scope, { includeKept: query.get('kept') === '1' })) },
+  { path: '/api/suggestions', run: async ({ db }, scope, query) => ok(await listSuggestions(db, scope, { includeKept: query.get('kept') === '1' })) },
   {
     path: '/api/suggestion',
-    run: ({ db }, scope, query) => {
-      const detail = suggestionDetail(db, scope, query.get('account') ?? '', query.get('sender') ?? '');
+    run: async ({ db }, scope, query) => {
+      const detail = await suggestionDetail(db, scope, query.get('account') ?? '', query.get('sender') ?? '');
       return detail ? ok(detail) : missing('No such mailbox');
     },
   },
@@ -55,7 +55,7 @@ export const writes: Write[] = [
       const input = parseFeedback(body);
       if (!input) return null;
       // An answer pressed here is carried out on its message whether or not sift is acting.
-      const result = applyFeedback(db, { ...input, act: true }, now());
+      const result = await applyFeedback(db, { ...input, act: true }, now());
       if (result.corrected === null || !controls) {
         if (result.carrying > 0) controls?.checkNow();
         return { ...result, fixed: null };
@@ -77,7 +77,7 @@ export const writes: Write[] = [
     touches: named,
     run: async ({ db, controls }, body) => {
       const { accountId } = body;
-      if (!str(accountId) || !listAccounts(db).some((a) => a.id === accountId)) return null;
+      if (!str(accountId) || !(await listAccounts(db)).some((a) => a.id === accountId)) return null;
       if (!controls) throw new Error('This dashboard cannot run the model.');
       return await controls.rejudge(accountId);
     },
@@ -85,10 +85,10 @@ export const writes: Write[] = [
   {
     path: '/api/proposals',
     touches: ownerOf('proposals'),
-    run: ({ db, now }, body) => {
+    run: async ({ db, now }, body) => {
       const { id, accept } = body;
       if (typeof id !== 'number' || !Number.isInteger(id) || typeof accept !== 'boolean') return null;
-      if (!resolveProposal(db, id, accept, now())) throw new Error('That proposal is no longer open.');
+      if (!(await resolveProposal(db, id, accept, now()))) throw new Error('That proposal is no longer open.');
       return { ok: true };
     },
   },

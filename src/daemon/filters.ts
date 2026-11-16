@@ -8,9 +8,9 @@ export const FILTER_CHECK_MINUTES = 15;
 /** Look at the account's filters in Gmail if it has not been done lately. Null when it was not due or there was nothing to look at. */
 export async function checkFiltersWhenDue(deps: ActionDeps, accountId: string, act: boolean): Promise<FilterCheck | null> {
   const now = (deps.now ?? Date.now)();
-  const last = filtersCheckedAt(deps.db, accountId);
+  const last = await filtersCheckedAt(deps.db, accountId);
   if (last !== null && now - last < FILTER_CHECK_MINUTES * 60_000) return null;
   const check = await checkRuleFilters(deps, accountId, act);
-  markFiltersChecked(deps.db, accountId, now);
+  await markFiltersChecked(deps.db, accountId, now);
   return check;
 }

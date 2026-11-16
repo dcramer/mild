@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from './sql.ts';
 import type { Rule, RuleMatch } from '../triage/stages/rules.ts';
 import type { DecidedDisposition, SubscriptionAction } from '../triage/types.ts';
 import { listLabels } from './labels.ts';
@@ -27,12 +27,11 @@ interface Row {
 }
 
 /** An account's rules in evaluation order. */
-export function listRules(db: DatabaseSync, accountId: string): StoredRule[] {
-  const rows = db
-    .prepare(
-      'SELECT id, match_json, except_json, label_id, when_label, disposition, subscription, mark_read, condition, source, hits FROM rules WHERE account_id = ? ORDER BY position, id',
-    )
-    .all(accountId) as unknown as Row[];
+export async function listRules(db: Sql, accountId: string): Promise<StoredRule[]> {
+  const rows = await db.all<Row>(
+    'SELECT id, match_json, except_json, label_id, when_label, disposition, subscription, mark_read, condition, source, hits FROM rules WHERE account_id = ? ORDER BY position, id',
+    accountId,
+  );
   return rows.map((r) => {
     const except = JSON.parse(r.except_json) as RuleMatch[];
     return {
@@ -56,25 +55,24 @@ export function listRules(db: DatabaseSync, accountId: string): StoredRule[] {
 export type RuleSays = Pick<Rule, 'labelId' | 'whenLabel' | 'disposition' | 'subscription' | 'markRead' | 'when'>;
 
 /** Throws, with a sentence for the user, unless `rule` says something sift can act on with the account's labels. */
-function check(db: DatabaseSync, accountId: string, rule: RuleSays, now: number): void {
+async function check(db: Sql, accountId: string, rule: RuleSays, now: number): Promise<void> {
   if (rule.labelId === undefined && rule.whenLabel === undefined && rule.disposition === undefined)
     throw new Error('A rule needs a label, an action, or both.');
   if (rule.labelId !== undefined && rule.whenLabel !== undefined) throw new Error('A rule either says what mail is or waits for a label, not both.');
   if (rule.when?.trim() && rule.labelId === undefined) throw new Error('A condition in your own words needs a label for the mail it describes.');
   const named = rule.labelId ?? rule.whenLabel;
-  if (named !== undefined && !listLabels(db, accountId, now).some((l) => l.id === named)) throw new Error(`There is no label "${named}".`);
+  if (named !== undefined && !(await listLabels(db, accountId, now)).some((l) => l.id === named)) throw new Error(`There is no label "${named}".`);
 }
 
 /** Append a rule after the account's existing ones. Returns its id. Throws if it has no condition, says nothing, or names no label of the account's. */
-export function addRule(db: DatabaseSync, accountId: string, rule: Omit<Rule, 'id' | 'learned'>, source: RuleSource, now: number = Date.now()): string {
+export async function addRule(db: Sql, accountId: string, rule: Omit<Rule, 'id' | 'learned'>, source: RuleSource, now: number = Date.now()): Promise<string> {
   if (Object.values(rule.match).every((v) => v === undefined || v === '')) throw new Error('A rule needs at least one condition.');
-  check(db, accountId, rule, now);
+  await check(db, accountId, rule, now);
   const id = `r-${randomBytes(4).toString('hex')}`;
-  const { next } = db.prepare('SELECT coalesce(max(position), 0) + 1 AS next FROM rules WHERE account_id = ?').get(accountId) as { next: number };
-  db.prepare(
+  const { next } = (await db.get<{ next: number }>('SELECT coalesce(max(position), 0) + 1 AS next FROM rules WHERE account_id = ?', accountId))!;
+  await db.run(
     `INSERT INTO rules (id, account_id, position, match_json, except_json, label_id, when_label, disposition, subscription, mark_read, condition, source, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
     id,
     accountId,
     next,
@@ -93,12 +91,12 @@ export function addRule(db: DatabaseSync, accountId: string, rule: Omit<Rule, 'i
 }
 
 /** Returns false if there was no such rule. Past decisions keep the rule id as history. */
-export function removeRule(db: DatabaseSync, id: string): boolean {
-  return Number(db.prepare('DELETE FROM rules WHERE id = ?').run(id).changes) > 0;
+export async function removeRule(db: Sql, id: string): Promise<boolean> {
+  return (await db.run('DELETE FROM rules WHERE id = ?', id)).changes > 0;
 }
 
-export function countRuleHit(db: DatabaseSync, id: string): void {
-  db.prepare('UPDATE rules SET hits = hits + 1 WHERE id = ?').run(id);
+export async function countRuleHit(db: Sql, id: string): Promise<void> {
+  await db.run('UPDATE rules SET hits = hits + 1 WHERE id = ?', id);
 }
 
 /**
@@ -106,21 +104,24 @@ export function countRuleHit(db: DatabaseSync, id: string): void {
  * for all their mail and one for each label it might be, so `whenLabel` says which is meant: null for the
  * rule that waits for no label.
  */
-export function ruleMatching(
-  db: DatabaseSync,
+export async function ruleMatching(
+  db: Sql,
   accountId: string,
   match: RuleMatch,
   whenLabel: string | null = null,
-): { id: string; source: RuleSource } | undefined {
-  return db
-    .prepare(`SELECT id, source FROM rules WHERE account_id = ? AND match_json = ? AND except_json = '[]' AND when_label IS ? ORDER BY position LIMIT 1`)
-    .get(accountId, JSON.stringify(match), whenLabel) as { id: string; source: RuleSource } | undefined;
+): Promise<{ id: string; source: RuleSource } | undefined> {
+  return await db.get<{ id: string; source: RuleSource }>(
+    `SELECT id, source FROM rules WHERE account_id = ? AND match_json = ? AND except_json = '[]' AND when_label IS ? ORDER BY position LIMIT 1`,
+    accountId,
+    JSON.stringify(match),
+    whenLabel,
+  );
 }
 
 /** Whether any rule, of any kind, has exactly these conditions. */
-export function hasRuleFor(db: DatabaseSync, accountId: string, match: RuleMatch): boolean {
+export async function hasRuleFor(db: Sql, accountId: string, match: RuleMatch): Promise<boolean> {
   return (
-    db.prepare(`SELECT 1 FROM rules WHERE account_id = ? AND match_json = ? AND except_json = '[]' LIMIT 1`).get(accountId, JSON.stringify(match)) !== undefined
+    (await db.get(`SELECT 1 FROM rules WHERE account_id = ? AND match_json = ? AND except_json = '[]' LIMIT 1`, accountId, JSON.stringify(match))) !== undefined
   );
 }
 
@@ -128,17 +129,19 @@ export function hasRuleFor(db: DatabaseSync, accountId: string, match: RuleMatch
  * Say what mail matching `match` is or what happens to it, replacing the rule with exactly the same
  * conditions (and the same awaited label) if there is one. Returns the rule's id.
  */
-export function setRule(db: DatabaseSync, accountId: string, match: RuleMatch, rule: RuleSays, source: RuleSource, now: number = Date.now()): string {
+export async function setRule(db: Sql, accountId: string, match: RuleMatch, rule: RuleSays, source: RuleSource, now: number = Date.now()): Promise<string> {
   // Whatever sift was proposing for this mail is settled by the user saying what it is.
-  db.prepare(`UPDATE proposals SET status = 'accepted', resolved_at = ? WHERE account_id = ? AND match_json = ? AND status = 'open'`).run(
+  await db.run(
+    `UPDATE proposals SET status = 'accepted', resolved_at = ? WHERE account_id = ? AND match_json = ? AND status = 'open'`,
     now,
     accountId,
     JSON.stringify(match),
   );
-  const existing = ruleMatching(db, accountId, match, rule.whenLabel ?? null);
-  if (!existing) return addRule(db, accountId, { match, ...rule }, source, now);
-  check(db, accountId, rule, now);
-  db.prepare('UPDATE rules SET label_id = ?, disposition = ?, subscription = ?, mark_read = ?, condition = ?, source = ? WHERE id = ?').run(
+  const existing = await ruleMatching(db, accountId, match, rule.whenLabel ?? null);
+  if (!existing) return await addRule(db, accountId, { match, ...rule }, source, now);
+  await check(db, accountId, rule, now);
+  await db.run(
+    'UPDATE rules SET label_id = ?, disposition = ?, subscription = ?, mark_read = ?, condition = ?, source = ? WHERE id = ?',
     rule.labelId ?? null,
     rule.disposition ?? null,
     rule.subscription ?? 'preserve',
@@ -154,9 +157,9 @@ export function setRule(db: DatabaseSync, accountId: string, match: RuleMatch, r
  * Block a sender: from now on their mail is `labelId` without being judged, whatever that label does.
  * A rule already made for exactly that sender is left alone. Returns true if a rule was written.
  */
-export function blockSender(db: DatabaseSync, accountId: string, address: string, labelId: string, now: number = Date.now()): boolean {
-  if (ruleMatching(db, accountId, { from: address })) return false;
-  addRule(db, accountId, { match: { from: address }, labelId }, 'agent', now);
+export async function blockSender(db: Sql, accountId: string, address: string, labelId: string, now: number = Date.now()): Promise<boolean> {
+  if (await ruleMatching(db, accountId, { from: address })) return false;
+  await addRule(db, accountId, { match: { from: address }, labelId }, 'agent', now);
   return true;
 }
 
@@ -168,17 +171,17 @@ export type GivenStanding = 'trusted' | 'unwanted' | 'blocked' | 'none';
  * trusted keeps their mail, unwanted archives it, blocked marks it spam. It replaces any rule for all
  * their mail; rules that wait for a label stay.
  */
-export function setStanding(
-  db: DatabaseSync,
+export async function setStanding(
+  db: Sql,
   accountId: string,
   match: { from: string } | { fromDomain: string },
   standing: GivenStanding,
   now: number = Date.now(),
-): void {
+): Promise<void> {
   if (standing === 'none') {
-    const existing = ruleMatching(db, accountId, match);
-    if (existing) removeRule(db, existing.id);
+    const existing = await ruleMatching(db, accountId, match);
+    if (existing) await removeRule(db, existing.id);
     return;
   }
-  setRule(db, accountId, match, { disposition: standing === 'trusted' ? 'keep' : standing === 'unwanted' ? 'archive' : 'spam' }, 'user', now);
+  await setRule(db, accountId, match, { disposition: standing === 'trusted' ? 'keep' : standing === 'unwanted' ? 'archive' : 'spam' }, 'user', now);
 }

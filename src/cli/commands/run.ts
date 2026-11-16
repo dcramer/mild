@@ -34,7 +34,7 @@ export async function run(args: string[]): Promise<void> {
   const config = loadConfig();
   const secrets = checkSecrets(config, true);
 
-  const db = openDb(config.dbPath);
+  const db = await openDb(config.dbPath);
   try {
     const log = (line: string) => ui.plain(`${paint.dim(new Date().toLocaleTimeString(undefined, { hour12: false }))}  ${line}`);
 
@@ -62,7 +62,7 @@ export async function run(args: string[]): Promise<void> {
         act,
         heuristics: settings.heuristics,
         ...(tier ? { model: { ...tier, fewShot: settings.fewShot } } : {}),
-        unsubscribe: (accountId: string, messageId: string) => unsubscribe({ db }, accountId, messageId),
+        unsubscribe: async (accountId: string, messageId: string) => await unsubscribe({ db }, accountId, messageId),
         ...(settings.examplesKeepDays ? { examplesKeepDays: settings.examplesKeepDays } : {}),
         connect: (account: Account) => {
           const client = clientFor(config, loadClientSecrets(config), account.email);
@@ -78,7 +78,7 @@ export async function run(args: string[]): Promise<void> {
     ui.heading(first.act ? 'acting' : 'observing', `${config.settings.model ?? 'no model'} · every ${first.intervalMs / 1000}s`);
     secrets();
     if (!hasClientSecrets(config)) ui.warn(`No Google client yet. Run ${paint.cmd('sift init')}.`);
-    else if (listAccounts(db).length === 0) ui.warn('No Gmail account yet. Open the dashboard and sign in with Google.');
+    else if ((await listAccounts(db)).length === 0) ui.warn('No Gmail account yet. Open the dashboard and sign in with Google.');
     else if (!first.act) ui.info('Gmail is not changed while sift is observing. Switch it in the dashboard, under Settings.');
 
     if (values.once) {
@@ -95,7 +95,7 @@ export async function run(args: string[]): Promise<void> {
     const stopDashboard = values['no-dashboard']
       ? () => {}
       : await serveDashboard(config, db, {
-          controls: buildControls(config, db, { wake, activity }),
+          controls: await buildControls(config, db, { wake, activity }),
           ...(values.dev ? { dev: true } : {}),
           ...(port === undefined ? {} : { port }),
           ...(values.host ? { host: values.host } : {}),

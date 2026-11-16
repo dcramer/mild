@@ -70,7 +70,7 @@ src/
   cli/        main.ts parses and dispatches; commands/ has one module per command (init, run, status, dev, dashboard)
   config.ts   data directory and paths
   secrets.ts  encrypts the credential files with a key from the environment
-  store/      SQLite (node:sqlite) and numbered SQL migrations
+  store/      the only module that opens a database: the async Sql handle (sql.ts) over node:sqlite, queries, numbered SQL migrations
   triage/     pure pipeline: types, header features, stages
   actions/    the only mutation path: executor, undo, decision-to-action planning, Mailbox port, filter validation
   gmail/      the only module that holds the Google token: OAuth, API adapter, history sync
@@ -212,6 +212,8 @@ Code: `src/learn/feedback.ts` (suggestions, answers, accuracy), `src/learn/gmail
 ## State
 
 One SQLite database, `sift.db` in the home directory (schema in `src/store/migrations/`). Each migration file is applied once and recorded by name in `schema_migrations`, so a file that lands with a lower number than ones already applied still runs; a database that has had a file this build does not know was opened by a newer sift, and is refused. It is the complete record of what sift saw and did, and everything else (the dashboard, undo, future analytics) reads from it.
+
+Everything reaches it through `Sql` (`src/store/sql.ts`), whose calls are async so a database outside the process could stand behind it; over `node:sqlite` each is answered at once. A transaction is one call taking a function, and while it is open every other caller on that database waits, so the function awaits nothing but the database: no Gmail or model call inside one. Using the outer handle inside it is refused rather than left to wait on itself.
 
 SQLite is the only engine sift will support (decided 2026-11-15). Postgres was declined: without row-level security, which is not acceptable here, it keeps people apart only by a database or schema per user, the same as a file per user, plus a server to run. Hosting is on Cloudflare Durable Objects or a machine with a disk, not Vercel. The plan for a database per user is in TODO.md.
 

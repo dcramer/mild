@@ -70,7 +70,7 @@ export interface InitDeps {
   saveSetupState(state: SetupState): void;
   /** Save the pasted client JSON into the home directory. Throws a readable message if it is the wrong kind. */
   installGoogleClient(json: string): void;
-  connectedAccounts(): string[];
+  connectedAccounts(): Promise<string[]>;
   loginModel(choice: ModelChoice): Promise<void>;
   /** Model ids the signed-in provider offers. */
   availableModels(provider: string): Promise<string[]>;
@@ -157,7 +157,7 @@ export async function runInit(deps: InitDeps): Promise<void> {
   if (!existsSync(config.guidelinesPath)) writeFileSync(config.guidelinesPath, GUIDELINES_TEMPLATE, { mode: 0o600 });
 
   const all = steps(deps);
-  const accounts = deps.connectedAccounts();
+  const accounts = await deps.connectedAccounts();
   // The key, the model and the sign-in list are optional, so they do not keep a finished setup in the walk-through.
   if (all.slice(1, 3).some((step) => step.missing())) {
     for (const [index, step] of all.entries()) {
@@ -291,7 +291,7 @@ async function chooseAllowed(deps: InitDeps): Promise<void> {
     deps.saveSettings({ ...settings, ...(entered.length > 0 ? { dashboardAllow: entered } : {}) });
     if (entered.length === 0) return ui.skip('No limit');
     ui.ok(`Only ${paint.bold(entered.join(', '))}`);
-    const shut = deps.connectedAccounts().filter((account) => !entered.includes(account.toLowerCase()));
+    const shut = (await deps.connectedAccounts()).filter((account) => !entered.includes(account.toLowerCase()));
     if (shut.length > 0) ui.warn(`${shut.join(', ')} ${shut.length === 1 ? 'is' : 'are'} connected but can no longer sign in. sift still sorts that mail.`);
     return;
   }

@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../../store/sql.ts';
 import { type Scope, within } from '../scope.ts';
 import { type DecisionRow, STAGES, type StageKey, type ChangeRow } from '../types.ts';
 
@@ -58,12 +58,13 @@ const STATUS_WHERE: Record<string, string> = {
  * out through the executor as it would any other. The user's own answer is retried even while sift only
  * observes; anything else waits for sift to be acting. False if there was nothing to retry.
  */
-export function retryDecision(db: DatabaseSync, scope: Scope, id: number): { retried: boolean; waiting: boolean } {
-  const row = db
-    .prepare(`SELECT by_user FROM decisions WHERE id = ? AND mode = 'act' AND outcome IN ('failed', 'unknown') AND ${within(scope, 'account_id')}`)
-    .get(id) as { by_user: number } | undefined;
+export async function retryDecision(db: Sql, scope: Scope, id: number): Promise<{ retried: boolean; waiting: boolean }> {
+  const row = await db.get<{ by_user: number }>(
+    `SELECT by_user FROM decisions WHERE id = ? AND mode = 'act' AND outcome IN ('failed', 'unknown') AND ${within(scope, 'account_id')}`,
+    id,
+  );
   if (!row) return { retried: false, waiting: false };
-  db.prepare('UPDATE decisions SET outcome = NULL, outcome_detail = NULL WHERE id = ?').run(id);
+  await db.run('UPDATE decisions SET outcome = NULL, outcome_detail = NULL WHERE id = ?', id);
   return { retried: true, waiting: row.by_user === 0 };
 }
 
@@ -112,7 +113,7 @@ export interface DecisionFilter {
 }
 
 /** Decisions in the window, newest first, with the total number that match the filter. Unknown filter values match nothing. */
-export function listDecisions(db: DatabaseSync, scope: Scope, filter: DecisionFilter, now: number = Date.now()): { total: number; rows: DecisionRow[] } {
+export async function listDecisions(db: Sql, scope: Scope, filter: DecisionFilter, now: number = Date.now()): Promise<{ total: number; rows: DecisionRow[] }> {
   const where = [within(scope, 'd.account_id'), 'd.decided_at >= ?'];
   const params: (string | number)[] = [now - filter.days * DAY_MS];
   if (filter.stage !== undefined) {
@@ -149,22 +150,14 @@ export function listDecisions(db: DatabaseSync, scope: Scope, filter: DecisionFi
   const limit = Math.min(Math.max(Math.trunc(filter.limit ?? 50), 1), 200);
   const offset = Math.max(Math.trunc(filter.offset ?? 0), 0);
 
-  const { total } = db.prepare(`SELECT count(*) AS total FROM (${DECISION_SELECT} WHERE ${clause})`).get(...params) as { total: number };
-  const rows = db
-    .prepare(`${DECISION_SELECT} WHERE ${clause} ORDER BY d.id DESC LIMIT ? OFFSET ?`)
-    .all(...params, limit, offset) as unknown as DecisionSqlRow[];
+  const { total } = (await db.get<{ total: number }>(`SELECT count(*) AS total FROM (${DECISION_SELECT} WHERE ${clause})`, ...params))!;
+  const rows = await db.all<DecisionSqlRow>(`${DECISION_SELECT} WHERE ${clause} ORDER BY d.id DESC LIMIT ? OFFSET ?`, ...params, limit, offset);
   return { total, rows: rows.map(toDecisionRow) };
 }
 
 /** Changes sift made to the mailbox, newest first, with the message each was about. */
-export function listChanges(db: DatabaseSync, scope: Scope, limit: number): ChangeRow[] {
-  const rows = db
-    .prepare(
-      `SELECT a.id, a.account_id, a.message_id, a.type, a.status, a.error, a.created_at, a.payload_json, m.subject, m.from_address
-       FROM actions a LEFT JOIN messages m ON m.account_id = a.account_id AND m.id = a.message_id
-       WHERE a.message_id IS NOT NULL AND ${within(scope, 'a.account_id')} ORDER BY a.id DESC LIMIT ?`,
-    )
-    .all(limit) as unknown as {
+export async function listChanges(db: Sql, scope: Scope, limit: number): Promise<ChangeRow[]> {
+  const rows = await db.all<{
     id: number;
     account_id: string;
     message_id: string;
@@ -175,7 +168,12 @@ export function listChanges(db: DatabaseSync, scope: Scope, limit: number): Chan
     payload_json: string;
     subject: string | null;
     from_address: string | null;
-  }[];
+  }>(
+    `SELECT a.id, a.account_id, a.message_id, a.type, a.status, a.error, a.created_at, a.payload_json, m.subject, m.from_address
+       FROM actions a LEFT JOIN messages m ON m.account_id = a.account_id AND m.id = a.message_id
+       WHERE a.message_id IS NOT NULL AND ${within(scope, 'a.account_id')} ORDER BY a.id DESC LIMIT ?`,
+    limit,
+  );
   return rows.map((r) => ({
     id: r.id,
     accountId: r.account_id,

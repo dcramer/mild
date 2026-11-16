@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../store/sql.ts';
 import { execute } from '../actions/executor.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
@@ -20,7 +20,7 @@ import type { Decision, Disposition, MessageFacts, Stage } from '../triage/types
 import { type EvidenceSources, gatherEvidence, ownerHasWritten } from './evidence.ts';
 
 export interface TriageDeps {
-  db: DatabaseSync;
+  db: Sql;
   /** Null means observe: decisions are recorded and nothing in the mailbox changes. */
   mailbox: Mailbox | null;
   /** While sift only observes: the mailbox to carry out the user's own answers in. Nothing else is done with it. */
@@ -68,15 +68,28 @@ export interface TriageReport {
  * The cascade for one account, as a function that decides one message: the tiers cheapest first, then
  * the rules that wait for a label. The decision-model tier would slot in after the heuristics.
  */
-export function cascadeFor(deps: TriageDeps, accountId: string): (facts: MessageFacts) => Promise<Decision> {
+export async function cascadeFor(deps: TriageDeps, accountId: string): Promise<(facts: MessageFacts) => Promise<Decision>> {
   const { db, model } = deps;
-  const labels = listLabels(db, accountId);
-  const rules = listRules(db, accountId);
-  const options = { hasWritten: (facts: MessageFacts) => cachedCorrespondent(db, facts.accountId, facts.from.address) };
+  const labels = await listLabels(db, accountId);
+  const rules = await listRules(db, accountId);
+  // The rules ask whether the owner has written to the sender as they rank; the answer is read before
+  // each message, and again whenever something in the cascade may have just found out.
+  let written: boolean | undefined;
+  const options = { hasWritten: () => written };
+  const read = async (facts: MessageFacts) => (written = await cachedCorrespondent(db, facts.accountId, facts.from.address));
   const stages: Stage[] = [rulesStage(rules, labels, { ...options, judged: model !== undefined })];
   if (deps.heuristics) {
     const sources = { db, mailbox: deps.heuristics.mailbox, ...(deps.now ? { now: deps.now } : {}) };
-    stages.push(heuristicsStage({ labels, hasWritten: (facts) => ownerHasWritten(sources, facts) }));
+    stages.push(
+      heuristicsStage({
+        labels,
+        hasWritten: async (facts) => {
+          const known = await ownerHasWritten(sources, facts);
+          written = known ?? undefined;
+          return known;
+        },
+      }),
+    );
   }
   if (model) {
     stages.push(
@@ -84,16 +97,19 @@ export function cascadeFor(deps: TriageDeps, accountId: string): (facts: Message
         judge: model.judge,
         labels,
         guidelines: model.guidelines,
-        gather: (facts) => gatherEvidence({ db, ...model.sources, ...(deps.now ? { now: deps.now } : {}) }, facts),
+        gather: async (facts) => await gatherEvidence({ db, ...model.sources, ...(deps.now ? { now: deps.now } : {}) }, facts),
         prior: (facts) => {
           const hit = priorRule(rules, labels, facts, options);
           return hit?.label ? { rule: hit.rule, label: hit.label } : null;
         },
-        ...(model.fewShot === false ? {} : { examples: (facts) => shotCandidates(db, facts) }),
+        ...(model.fewShot === false ? {} : { examples: async (facts) => await shotCandidates(db, facts) }),
       }),
     );
   }
-  return (facts) => triage(stages, facts, (decision) => settle(rules, labels, facts, decision, options));
+  return async (facts) => {
+    await read(facts);
+    return await triage(stages, facts, async (decision) => (await read(facts), settle(rules, labels, facts, decision, options)));
+  };
 }
 
 /**
@@ -117,11 +133,11 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
   const carryOut = async (decisionId: number, messageId: string, decision: Pick<Decision, 'disposition' | 'gmailLabel' | 'markRead'>, box: Mailbox) => {
     const action = planAction(decision);
     if (!action) {
-      settleDecision(db, decisionId, 'none');
+      await settleDecision(db, decisionId, 'none');
       return 'none';
     }
     const outcome = await execute({ db, mailbox: box, now }, account.id, messageId, action, decisionId);
-    settleDecision(db, decisionId, outcome.status, outcome.status === 'done' ? null : outcome.reason);
+    await settleDecision(db, decisionId, outcome.status, outcome.status === 'done' ? null : outcome.reason);
     if (outcome.status === 'done') report.acted++;
     else if (outcome.status === 'skipped') report.skipped++;
     else report.troubled++;
@@ -129,26 +145,27 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
   };
 
   if (mailbox) {
-    for (const pending of listUnsettledDecisions(db, account.id)) await carryOut(pending.id, pending.messageId, pending, mailbox);
+    for (const pending of await listUnsettledDecisions(db, account.id)) await carryOut(pending.id, pending.messageId, pending, mailbox);
   } else if (deps.answers) {
-    for (const pending of listUnsettledDecisions(db, account.id, { byUserOnly: true })) await carryOut(pending.id, pending.messageId, pending, deps.answers);
+    for (const pending of await listUnsettledDecisions(db, account.id, { byUserOnly: true }))
+      await carryOut(pending.id, pending.messageId, pending, deps.answers);
   }
 
-  const decide = cascadeFor(deps, account.id);
-  for (const { facts, observeOnly } of listUndecided(db, account.id, limit)) {
+  const decide = await cascadeFor(deps, account.id);
+  for (const { facts, observeOnly } of await listUndecided(db, account.id, limit)) {
     const act = mailbox !== null && !observeOnly;
     const started = performance.now();
     const decision = await decide(facts);
-    const decisionId = recordDecision(db, account.id, facts.messageId, decision, {
+    const decisionId = await recordDecision(db, account.id, facts.messageId, decision, {
       mode: act ? 'act' : 'observe',
       durationMs: Math.round(performance.now() - started),
       now: now(),
     });
-    if (decision.ruleId) countRuleHit(db, decision.ruleId);
+    if (decision.ruleId) await countRuleHit(db, decision.ruleId);
     if (decision.stage === 'agent') {
       const proposed = decision.priorRuleId
-        ? proposeSettled(db, account.id, decision.priorRuleId, now())
-        : proposeForSender(db, account.id, facts.from.address, now());
+        ? await proposeSettled(db, account.id, decision.priorRuleId, now())
+        : await proposeForSender(db, account.id, facts.from.address, now());
       if (proposed) report.proposed++;
     }
     report.decided[decision.disposition]++;
@@ -160,7 +177,7 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
       decision.block &&
       decision.labelId &&
       passedDmarc(facts.headers) &&
-      blockSender(db, account.id, facts.from.address, decision.labelId, now())
+      (await blockSender(db, account.id, facts.from.address, decision.labelId, now()))
     )
       report.blocked++;
     // Unsubscribing follows the mailbox change, never goes ahead of it, and never happens to someone the user writes to.
@@ -168,7 +185,7 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
       (status === 'done' || status === 'none') &&
       decision.subscription === 'unsubscribe' &&
       deps.unsubscribe &&
-      cachedCorrespondent(db, account.id, facts.from.address) !== true &&
+      (await cachedCorrespondent(db, account.id, facts.from.address)) !== true &&
       (await deps.unsubscribe(account.id, facts.messageId)).status === 'done'
     )
       report.unsubscribed++;

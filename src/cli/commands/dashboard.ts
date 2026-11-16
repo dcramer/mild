@@ -11,10 +11,10 @@ export async function dashboard(args: string[]): Promise<void> {
   const port = portOption(values.port);
   const config = loadConfig();
   const secrets = checkSecrets(config, true);
-  const db = openDb(config.dbPath);
+  const db = await openDb(config.dbPath);
   ui.heading('dashboard');
   secrets();
-  const controls = buildControls(config, db, { activity: { sorting: false, lastPassAt: null, problems: [], expired: [] } });
+  const controls = await buildControls(config, db, { activity: { sorting: false, lastPassAt: null, problems: [], expired: [] } });
   const stop = await serveDashboard(config, db, { controls, ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) });
   ui.info('Only the dashboard is running. `sift run` also sorts mail.');
   ui.blank();

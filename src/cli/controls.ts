@@ -14,7 +14,7 @@ import { createJudge } from '../model/judge.ts';
 import { openModels, resolveModel } from '../model/models.ts';
 import { listAccounts } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
-import { type openDb } from '../store/db.ts';
+import type { Database } from '../store/sql.ts';
 import { ui } from './ui.ts';
 import { getRuleFilter } from '../store/filters.ts';
 
@@ -33,9 +33,9 @@ export async function openModelTier(config: Config, spec: string) {
 }
 
 /** What the dashboard may ask this process to do. See `Controls`. */
-export function buildControls(config: Config, db: ReturnType<typeof openDb>, live: { wake?: Wake; activity: Activity }): Controls {
+export async function buildControls(config: Config, db: Database, live: { wake?: Wake; activity: Activity }): Promise<Controls> {
   const current = () => loadConfig().settings;
-  interruptEvals(db);
+  await interruptEvals(db);
   const guidelinesChangedAt = () => (existsSync(config.guidelinesPath) ? statSync(config.guidelinesPath).mtimeMs : null);
   let rejudging = false;
   return {
@@ -67,7 +67,7 @@ export function buildControls(config: Config, db: ReturnType<typeof openDb>, liv
     guidelinesChangedAt,
     rejudge: async (accountId) => {
       const spec = current().model;
-      const account = listAccounts(db).find((a) => a.id === accountId);
+      const account = (await listAccounts(db)).find((a) => a.id === accountId);
       const since = guidelinesChangedAt();
       if (!spec) throw new Error('Choose a model first.');
       if (!account || since === null) return { started: 0, remaining: 0 };
@@ -80,13 +80,13 @@ export function buildControls(config: Config, db: ReturnType<typeof openDb>, liv
         fewShot: current().fewShot,
         sources: { api: createGmailApi(client), mailbox: createGmailMailbox(client) },
       };
-      const { started, remaining, done } = rejudgeWaiting({ db, mailbox: null, model }, account, since);
+      const { started, remaining, done } = await rejudgeWaiting({ db, mailbox: null, model }, account, since);
       rejudging = true;
       void done.finally(() => (rejudging = false));
       return { started, remaining };
     },
     undo: async (actionId) => {
-      const action = getAction(db, actionId);
+      const action = await getAction(db, actionId);
       if (!action) throw new Error(`There is no change #${actionId}.`);
       const outcome = await undo({ db, mailbox: mailboxFor(config, action.accountId) }, actionId);
       if (outcome.status === 'done') return 'Reversed.';
@@ -96,11 +96,11 @@ export function buildControls(config: Config, db: ReturnType<typeof openDb>, liv
     backfill: async (days) => {
       const secrets = loadClientSecrets(config);
       let added = 0;
-      for (const account of listAccounts(db)) added += await backfill(db, createGmailApi(clientFor(config, secrets, account.email)), account.id, days);
+      for (const account of await listAccounts(db)) added += await backfill(db, createGmailApi(clientFor(config, secrets, account.email)), account.id, days);
       return added;
     },
     putBack: async (accountId, messageId) => {
-      const last = lastStandingChange(db, accountId, messageId);
+      const last = await lastStandingChange(db, accountId, messageId);
       if (last) await undo({ db, mailbox: mailboxFor(config, accountId) }, last.id);
       // The corrected decision is waiting to be carried out; do it now, not at the next interval.
       live.wake?.now();
@@ -110,10 +110,10 @@ export function buildControls(config: Config, db: ReturnType<typeof openDb>, liv
       const spec = current().model;
       if (!spec) throw new Error('Choose a model first.');
       const tier = await openModelTier(config, spec);
-      return startEval({ db, judge: tier.judge, model: spec, guidelines: tier.guidelines() }, request).id;
+      return (await startEval({ db, judge: tier.judge, model: spec, guidelines: tier.guidelines() }, request)).id;
     },
     ruleFilter: async (ruleId, on) => {
-      const rule = getRuleFilter(db, ruleId);
+      const rule = await getRuleFilter(db, ruleId);
       if (!rule) throw new Error('That rule no longer exists.');
       const deps = { db, mailbox: mailboxFor(config, rule.accountId) };
       if (on) await writeRuleFilter(deps, ruleId);

@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../store/sql.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import type { MessageContent } from '../gmail/body.ts';
@@ -9,7 +9,7 @@ import type { Evidence } from '../triage/stages/model.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
 export interface EvidenceSources {
-  db: DatabaseSync;
+  db: Sql;
   /** For the message body. */
   api: Pick<GmailApi, 'getContent' | 'getThread'>;
   /** For "has the owner written to this sender". Only read from here. */
@@ -40,18 +40,18 @@ export async function gatherEvidence(sources: EvidenceSources, facts: MessageFac
     }
   }
   const known = deriveFacts(facts, { ...content?.facts, ...thread });
-  if (content || thread) recordFacts(db, facts.accountId, facts.messageId, known);
+  if (content || thread) await recordFacts(db, facts.accountId, facts.messageId, known);
 
   const userHasWritten = await ownerHasWritten(sources, facts);
   const now = (sources.now ?? Date.now)();
-  const sender = senderFacts(db, facts.accountId, facts.from.address, now);
-  const domain = domainFacts(db, facts.accountId, facts.from.domain, now);
+  const sender = await senderFacts(db, facts.accountId, facts.from.address, now);
+  const domain = await domainFacts(db, facts.accountId, facts.from.domain, now);
   return {
     facts,
     known,
     body: content?.text ?? null,
     sender: {
-      ...senderHistory(db, facts.accountId, facts.from.address),
+      ...(await senderHistory(db, facts.accountId, facts.from.address)),
       userHasWritten,
       standing: { standing: sender.standing, why: sender.why },
       pastLabels: sender.labels,
@@ -67,11 +67,11 @@ export async function gatherEvidence(sources: EvidenceSources, facts: MessageFac
 export async function ownerHasWritten(sources: Pick<EvidenceSources, 'db' | 'mailbox' | 'now'>, facts: MessageFacts): Promise<boolean | null> {
   const { db } = sources;
   const now = (sources.now ?? Date.now)();
-  const cached = cachedCorrespondent(db, facts.accountId, facts.from.address, now);
+  const cached = await cachedCorrespondent(db, facts.accountId, facts.from.address, now);
   if (cached !== undefined) return cached;
   try {
     const written = await sources.mailbox.hasSentTo(facts.from.address);
-    rememberCorrespondent(db, facts.accountId, facts.from.address, written, now);
+    await rememberCorrespondent(db, facts.accountId, facts.from.address, written, now);
     return written;
   } catch {
     return null;

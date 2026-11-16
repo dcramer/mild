@@ -94,9 +94,9 @@ describe('heuristics in the cascade', () => {
     ],
   };
 
-  function setup() {
-    const db = openDb(':memory:');
-    connectAccount(db, ACCOUNT, '1', 0);
+  async function setup() {
+    const db = await openDb(':memory:');
+    await connectAccount(db, ACCOUNT, '1', 0);
     const mailbox = new FakeMailbox();
     mailbox.labels.set(raw.id, [...raw.labelIds]);
     const api: GmailApi = {
@@ -112,7 +112,7 @@ describe('heuristics in the cascade', () => {
       listLabels: async () => [],
     };
     const options = (heuristics: boolean): RunOptions => ({ act: false, heuristics, connect: () => ({ api, mailbox }), log: () => {} });
-    const decisions = () => db.prepare('SELECT stage, disposition, label_id FROM decisions').all();
+    const decisions = async () => await db.all('SELECT stage, disposition, label_id FROM decisions');
     return { db, mailbox, options, decisions };
   }
 
@@ -121,24 +121,24 @@ describe('heuristics in the cascade', () => {
     expect(parseSettings('heuristics = true').heuristics).toBe(true);
     expect(() => parseSettings('heuristics = "yes"')).toThrow('heuristics must be true or false');
 
-    const { db, options, decisions } = setup();
+    const { db, options, decisions } = await setup();
     await runOnce(db, options(false));
-    expect(decisions()).toMatchObject([{ stage: 'fallback', disposition: 'review' }]);
+    expect(await decisions()).toMatchObject([{ stage: 'fallback', disposition: 'review' }]);
   });
 
   it('decides before the model and is recorded under its own name', async () => {
-    const { db, options, decisions } = setup();
+    const { db, options, decisions } = await setup();
     let judged = 0;
     const model = { judge: async () => (judged++, null), guidelines: () => '' };
     await runOnce(db, { ...options(true), model });
-    expect(decisions()).toMatchObject([{ stage: 'heuristics', disposition: 'archive', label_id: 'marketing' }]);
+    expect(await decisions()).toMatchObject([{ stage: 'heuristics', disposition: 'archive', label_id: 'marketing' }]);
     expect(judged).toBe(0);
   });
 
   it('leaves mail from someone the owner has written to for the next tier', async () => {
-    const { db, mailbox, options, decisions } = setup();
+    const { db, mailbox, options, decisions } = await setup();
     mailbox.sentTo.add('offers@example.com');
     await runOnce(db, options(true));
-    expect(decisions()).toMatchObject([{ stage: 'fallback', disposition: 'review' }]);
+    expect(await decisions()).toMatchObject([{ stage: 'fallback', disposition: 'review' }]);
   });
 });

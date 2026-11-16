@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import type { Database } from '../src/store/sql.ts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
@@ -19,40 +20,46 @@ const ALPHA_WORK = 'alpha@work.example.com';
 const BRAVO = 'bravo@example.net';
 const MARK: Record<string, string> = { [ALPHA]: 'alpha-home-secret', [ALPHA_WORK]: 'alpha-work-secret', [BRAVO]: 'bravo-secret' };
 
-let db: DatabaseSync;
+let db: Database;
 let close: (() => void) | undefined;
 let port: number;
 let calls: string[];
 const cookies: Record<string, string> = {};
 const ids: Record<string, { rule: string; action: number; proposal: number }> = {};
 
-function seed(account: string): void {
+async function seed(account: string): Promise<void> {
   const mark = MARK[account]!;
   const sender = { address: `sender@${mark}.example.com`, domain: `${mark}.example.com` };
-  recordSync(db, account, [facts({ accountId: account, messageId: `m-${mark}`, subject: `Subject ${mark}`, from: sender })], '2', 1000);
-  const decision = recordDecision(
+  await recordSync(db, account, [facts({ accountId: account, messageId: `m-${mark}`, subject: `Subject ${mark}`, from: sender })], '2', 1000);
+  const decision = await recordDecision(
     db,
     account,
     `m-${mark}`,
     { disposition: 'archive', subscription: 'preserve', stage: 'agent', labelId: 'newsletter', reason: `because ${mark}` },
     { now: 1000 },
   );
-  const rule = addRule(db, account, { match: { from: sender.address }, disposition: 'archive' }, 'user', 1000);
-  const action = Number(
-    db
-      .prepare(
-        `INSERT INTO actions (account_id, message_id, type, payload_json, status, created_at, decision_id) VALUES (?, ?, 'archive', '{}', 'done', 1000, ?)`,
-      )
-      .run(account, `m-${mark}`, decision).lastInsertRowid,
-  );
-  const proposal = Number(
-    db
-      .prepare(`INSERT INTO proposals (account_id, kind, match_json, label_id, agreed, created_at) VALUES (?, 'rule', ?, 'newsletter', 5, 1000)`)
-      .run(account, JSON.stringify({ from: `proposed@${mark}.example.com` })).lastInsertRowid,
-  );
-  db.prepare(
+  const rule = await addRule(db, account, { match: { from: sender.address }, disposition: 'archive' }, 'user', 1000);
+  const action = (
+    await db.run(
+      `INSERT INTO actions (account_id, message_id, type, payload_json, status, created_at, decision_id) VALUES (?, ?, 'archive', '{}', 'done', 1000, ?)`,
+      account,
+      `m-${mark}`,
+      decision,
+    )
+  ).lastInsertRowid;
+  const proposal = (
+    await db.run(
+      `INSERT INTO proposals (account_id, kind, match_json, label_id, agreed, created_at) VALUES (?, 'rule', ?, 'newsletter', 5, 1000)`,
+      account,
+      JSON.stringify({ from: `proposed@${mark}.example.com` }),
+    )
+  ).lastInsertRowid;
+  await db.run(
     `INSERT INTO examples (account_id, message_id, disposition, label_id, suggested, suggested_by, marked_at, status, body_text) VALUES (?, ?, 'archive', 'newsletter', 'archive', 'agent', 1000, 'captured', ?)`,
-  ).run(account, `m-${mark}`, `Body ${mark}`);
+    account,
+    `m-${mark}`,
+    `Body ${mark}`,
+  );
   ids[account] = { rule, action, proposal };
 }
 
@@ -78,12 +85,12 @@ const signIn: SignIn = {
 };
 
 beforeEach(async () => {
-  db = openDb(':memory:');
+  db = await openDb(':memory:');
   calls = [];
-  connectAccount(db, ALPHA, '1', 0);
-  connectAccount(db, ALPHA_WORK, '1', 1, userOf(db, ALPHA)!.id);
-  connectAccount(db, BRAVO, '1', 2);
-  for (const account of [ALPHA, ALPHA_WORK, BRAVO]) seed(account);
+  await connectAccount(db, ALPHA, '1', 0);
+  await connectAccount(db, ALPHA_WORK, '1', 1, (await userOf(db, ALPHA))!.id);
+  await connectAccount(db, BRAVO, '1', 2);
+  for (const account of [ALPHA, ALPHA_WORK, BRAVO]) await seed(account);
 
   const assets = mkdtempSync(join(tmpdir(), 'sift-web-'));
   mkdirSync(join(assets, 'assets'));
@@ -151,28 +158,28 @@ const READS = (account: string, mark: string) => [
 ];
 
 describe('users and their mailboxes', () => {
-  it('makes the first person the owner, adds a mailbox to whoever connects it, and never moves one', () => {
-    expect(userOf(db, ALPHA)).toEqual({ id: 1, owner: true });
-    expect(userOf(db, ALPHA_WORK)).toEqual({ id: 1, owner: true });
-    expect(userOf(db, BRAVO)).toMatchObject({ owner: false });
-    expect(userOf(db, BRAVO)!.id).not.toBe(1);
-    expect(accountsOf(db, 1).map((a) => a.email)).toEqual([ALPHA, ALPHA_WORK]);
+  it('makes the first person the owner, adds a mailbox to whoever connects it, and never moves one', async () => {
+    expect(await userOf(db, ALPHA)).toEqual({ id: 1, owner: true });
+    expect(await userOf(db, ALPHA_WORK)).toEqual({ id: 1, owner: true });
+    expect(await userOf(db, BRAVO)).toMatchObject({ owner: false });
+    expect((await userOf(db, BRAVO))!.id).not.toBe(1);
+    expect((await accountsOf(db, 1)).map((a) => a.email)).toEqual([ALPHA, ALPHA_WORK]);
     // Connecting again, even as someone else's, leaves it where it was.
-    connectAccount(db, BRAVO, '9', 5, 1);
-    expect(accountsOf(db, 1).map((a) => a.email)).toEqual([ALPHA, ALPHA_WORK]);
-    expect(userOf(db, 'nobody@example.com')).toBeNull();
+    await connectAccount(db, BRAVO, '9', 5, 1);
+    expect((await accountsOf(db, 1)).map((a) => a.email)).toEqual([ALPHA, ALPHA_WORK]);
+    expect(await userOf(db, 'nobody@example.com')).toBeNull();
   });
 
-  it('gives the accounts of a database from before there were users to the first person', () => {
+  it('gives the accounts of a database from before there were users to the first person', async () => {
     const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
     const migrations = new URL('../src/store/migrations/', import.meta.url);
     const old = new DatabaseSync(path);
     old.exec(readFileSync(new URL('001_init.sql', migrations), 'utf8'));
     old.exec(`PRAGMA user_version = 1; INSERT INTO accounts (id, email, created_at) VALUES ('${ALPHA}', '${ALPHA}', 5), ('${ALPHA_WORK}', '${ALPHA_WORK}', 9)`);
     old.close();
-    const migrated = openDb(path);
-    expect(userOf(migrated, ALPHA)).toEqual({ id: 1, owner: true });
-    expect(accountsOf(migrated, 1)).toHaveLength(2);
+    const migrated = await openDb(path);
+    expect(await userOf(migrated, ALPHA)).toEqual({ id: 1, owner: true });
+    expect(await accountsOf(migrated, 1)).toHaveLength(2);
     migrated.close();
   });
 });
@@ -217,7 +224,7 @@ describe("nobody sees or changes another person's mail", () => {
 
   it("refuses every write to another person's mailbox as if it were not there, and changes nothing", async () => {
     const theirs = ids[ALPHA]!;
-    const before = JSON.stringify([listRules(db, ALPHA), db.prepare('SELECT * FROM labels').all(), db.prepare('SELECT * FROM proposals').all()]);
+    const before = JSON.stringify([await listRules(db, ALPHA), await db.all('SELECT * FROM labels'), await db.all('SELECT * FROM proposals')]);
     const writes: [string, unknown][] = [
       ['/api/feedback', { accountId: ALPHA, sender: `sender@${MARK[ALPHA]}.example.com`, disposition: 'keep', scope: 'sender', messageId: `m-${MARK[ALPHA]}` }],
       ['/api/labels', { accountId: ALPHA, id: 'newsletter', disposition: 'keep' }],
@@ -238,8 +245,8 @@ describe("nobody sees or changes another person's mail", () => {
       expect(status, `${path} as someone else`).toBe(404);
       expect(text).not.toContain(MARK[ALPHA]);
     }
-    expect(JSON.stringify([listRules(db, ALPHA), db.prepare('SELECT * FROM labels').all(), db.prepare('SELECT * FROM proposals').all()])).toBe(before);
-    expect(db.prepare('SELECT count(*) AS n FROM examples WHERE account_id = ?').get(ALPHA)).toEqual({ n: 1 });
+    expect(JSON.stringify([await listRules(db, ALPHA), await db.all('SELECT * FROM labels'), await db.all('SELECT * FROM proposals')])).toBe(before);
+    expect(await db.get('SELECT count(*) AS n FROM examples WHERE account_id = ?', ALPHA)).toEqual({ n: 1 });
     expect(calls).toEqual([]);
 
     // The same writes are the owner's to make on their own mail.

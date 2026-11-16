@@ -67,12 +67,12 @@ const inbox = [
   ]),
 ];
 
-const db = openDb(config.dbPath);
-connectAccount(db, ACCOUNT, '1', now - 24 * HOUR);
+const db = await openDb(config.dbPath);
+await connectAccount(db, ACCOUNT, '1', now - 24 * HOUR);
 // One of each kind of rule: a label, an action, and an action for mail that turns out to be a label.
-addRule(db, ACCOUNT, { match: { fromDomain: 'news.example.com' }, labelId: 'newsletter' }, 'user');
-addRule(db, ACCOUNT, { match: { from: 'orders@shop.example.com' }, labelId: 'transactional' }, 'user');
-addRule(db, ACCOUNT, { match: { fromDomain: 'ci.example.org' }, disposition: 'archive' }, 'user');
+await addRule(db, ACCOUNT, { match: { fromDomain: 'news.example.com' }, labelId: 'newsletter' }, 'user');
+await addRule(db, ACCOUNT, { match: { from: 'orders@shop.example.com' }, labelId: 'transactional' }, 'user');
+await addRule(db, ACCOUNT, { match: { fromDomain: 'ci.example.org' }, disposition: 'archive' }, 'user');
 
 const mailbox = new FakeMailbox();
 for (const { raw } of inbox) mailbox.labels.set(raw.id, [...raw.labelIds]);

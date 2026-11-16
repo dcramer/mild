@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from './sql.ts';
 import { type Facts, deriveFacts } from '../triage/facts.ts';
 import type { Address, MessageFacts } from '../triage/types.ts';
 
@@ -41,32 +41,32 @@ export interface QueuedMessage {
 }
 
 /** Recorded messages that have no decision yet, oldest first, rebuilt as triage input. This is the triage queue. */
-export function listUndecided(db: DatabaseSync, accountId: string, limit: number): QueuedMessage[] {
-  const rows = db
-    .prepare(
-      `SELECT ${COLUMNS}
+export async function listUndecided(db: Sql, accountId: string, limit: number): Promise<QueuedMessage[]> {
+  const rows = await db.all<Row>(
+    `SELECT ${COLUMNS}
        FROM messages m
        WHERE account_id = ? AND NOT EXISTS (SELECT 1 FROM decisions d WHERE d.account_id = m.account_id AND d.message_id = m.id)
        ORDER BY received_at, id LIMIT ?`,
-    )
-    .all(accountId, limit) as unknown as Row[];
+    accountId,
+    limit,
+  );
   return rows.map((r) => ({ observeOnly: r.observe_only === 1, facts: toMessage(accountId, r) }));
 }
 
 /** The facts recorded for a message, or null if sift has not seen it. Rows synced before facts were recorded get them from their stored headers. */
-export function storedFacts(db: DatabaseSync, accountId: string, messageId: string): Facts | null {
-  const row = db.prepare(`SELECT ${COLUMNS} FROM messages WHERE account_id = ? AND id = ?`).get(accountId, messageId) as unknown as Row | undefined;
+export async function storedFacts(db: Sql, accountId: string, messageId: string): Promise<Facts | null> {
+  const row = await db.get<Row>(`SELECT ${COLUMNS} FROM messages WHERE account_id = ? AND id = ?`, accountId, messageId);
   if (!row) return null;
   return row.facts_json ? (JSON.parse(row.facts_json) as Facts) : deriveFacts(toMessage(accountId, row));
 }
 
 /** Replace a message's recorded facts, once reading the whole message has added to them. */
-export function recordFacts(db: DatabaseSync, accountId: string, messageId: string, facts: Facts): void {
-  db.prepare('UPDATE messages SET facts_json = ? WHERE account_id = ? AND id = ?').run(JSON.stringify(facts), accountId, messageId);
+export async function recordFacts(db: Sql, accountId: string, messageId: string, facts: Facts): Promise<void> {
+  await db.run('UPDATE messages SET facts_json = ? WHERE account_id = ? AND id = ?', JSON.stringify(facts), accountId, messageId);
 }
 
 /** One recorded message as triage input, or null if sift never saw it. */
-export function getFacts(db: DatabaseSync, accountId: string, messageId: string): MessageFacts | null {
-  const row = db.prepare(`SELECT ${COLUMNS} FROM messages WHERE account_id = ? AND id = ?`).get(accountId, messageId) as unknown as Row | undefined;
+export async function getFacts(db: Sql, accountId: string, messageId: string): Promise<MessageFacts | null> {
+  const row = await db.get<Row>(`SELECT ${COLUMNS} FROM messages WHERE account_id = ? AND id = ?`, accountId, messageId);
   return row ? toMessage(accountId, row) : null;
 }

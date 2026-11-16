@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../store/sql.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { pendingSuggestions } from '../learn/feedback.ts';
 
@@ -11,34 +11,34 @@ export const KEEP_BODY_DAYS = 30;
  * of anything answered, no longer a suggestion, or older than `KEEP_BODY_DAYS`. A failed fetch is tried
  * again on the next pass. Returns how many were fetched.
  */
-export async function keepSuggestionBodies(
-  db: DatabaseSync,
-  api: Pick<GmailApi, 'getBodyText'>,
-  accountId: string,
-  now: () => number = Date.now,
-): Promise<number> {
+export async function keepSuggestionBodies(db: Sql, api: Pick<GmailApi, 'getBodyText'>, accountId: string, now: () => number = Date.now): Promise<number> {
   const cutoff = now() - KEEP_BODY_DAYS * 86_400_000;
-  const waiting = pendingSuggestions(db, { accountId }).filter((s) => s.disposition !== 'keep' && s.decidedAt >= cutoff);
+  const waiting = (await pendingSuggestions(db, { accountId })).filter((s) => s.disposition !== 'keep' && s.decidedAt >= cutoff);
   const wanted = new Set(waiting.map((s) => s.messageId));
 
-  const stored = db.prepare('SELECT message_id, fetched_at FROM suggestion_bodies WHERE account_id = ?').all(accountId) as {
+  const stored = await db.all<{
     message_id: string;
     fetched_at: number;
-  }[];
-  const drop = db.prepare('DELETE FROM suggestion_bodies WHERE account_id = ? AND message_id = ?');
+  }>('SELECT message_id, fetched_at FROM suggestion_bodies WHERE account_id = ?', accountId);
   const have = new Set<string>();
   for (const row of stored) {
     if (wanted.has(row.message_id) && row.fetched_at >= cutoff) have.add(row.message_id);
-    else drop.run(accountId, row.message_id);
+    else await db.run('DELETE FROM suggestion_bodies WHERE account_id = ? AND message_id = ?', accountId, row.message_id);
   }
 
-  const insert = db.prepare('INSERT OR REPLACE INTO suggestion_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, ?, ?, ?)');
   let fetched = 0;
   for (const suggestion of waiting) {
     if (fetched >= PER_PASS) break;
     if (have.has(suggestion.messageId)) continue;
     // A message that has gone is stored empty, so it is not asked for again on every pass.
-    insert.run(accountId, suggestion.messageId, (await api.getBodyText(suggestion.messageId)) ?? '', now());
+    const text = (await api.getBodyText(suggestion.messageId)) ?? '';
+    await db.run(
+      'INSERT OR REPLACE INTO suggestion_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, ?, ?, ?)',
+      accountId,
+      suggestion.messageId,
+      text,
+      now(),
+    );
     fetched++;
   }
   return fetched;

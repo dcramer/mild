@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { undo } from '../src/actions/executor.ts';
 import { checkRuleFilters, removeRuleFilter, writeRuleFilter } from '../src/actions/rule-filters.ts';
@@ -105,29 +105,29 @@ describe('whether a rule can be a Gmail filter', () => {
 });
 
 const ACCOUNT = 'me@example.org';
-let db: DatabaseSync;
+let db: Sql;
 let mailbox: FakeMailbox;
 let clock: number;
 const deps = () => ({ db, mailbox, now: () => clock });
-const actions = () => db.prepare('SELECT type, status, message_id, payload_json FROM actions ORDER BY id').all() as { type: string; status: string }[];
+const actions = async () => await db.all<{ type: string; status: string }>('SELECT type, status, message_id, payload_json FROM actions ORDER BY id');
 
-beforeEach(() => {
-  db = openDb(':memory:');
-  connectAccount(db, ACCOUNT, '1', 0);
+beforeEach(async () => {
+  db = await openDb(':memory:');
+  await connectAccount(db, ACCOUNT, '1', 0);
   mailbox = new FakeMailbox();
   clock = 1000;
 });
 
 describe("a rule's Gmail filter", () => {
   it('is created through the audit log, read back, and recorded on the rule', async () => {
-    const id = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
     await writeRuleFilter(deps(), id);
 
     expect(mailbox.filters).toEqual([
       { id: expect.any(String), criteria: { from: 'news@example.com' }, action: { addLabelIds: ['L:sift/newsletters'], removeLabelIds: ['INBOX'] } },
     ]);
-    expect(getRuleFilter(db, id)).toMatchObject({ filterId: mailbox.filters[0]!.id, state: 'active', checkedAt: 1000 });
-    expect(actions()).toEqual([
+    expect(await getRuleFilter(db, id)).toMatchObject({ filterId: mailbox.filters[0]!.id, state: 'active', checkedAt: 1000 });
+    expect(await actions()).toEqual([
       {
         type: 'filter',
         status: 'done',
@@ -143,72 +143,72 @@ describe("a rule's Gmail filter", () => {
   });
 
   it('is refused, with nothing sent to Gmail, for a rule that cannot be one', async () => {
-    const id = addRule(db, ACCOUNT, { match: { from: 'junk@example.com' }, labelId: 'junk' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: 'junk@example.com' }, labelId: 'junk' }, 'user');
     await expect(writeRuleFilter(deps(), id)).rejects.toThrow('Gmail filters cannot mark mail as spam.');
     await expect(writeRuleFilter(deps(), 'r-missing')).rejects.toThrow(/no longer exists/);
     expect(mailbox.filters).toEqual([]);
-    expect(actions()).toEqual([]);
+    expect(await actions()).toEqual([]);
   });
 
   it('takes over a filter the account already has that does the same, and replaces its own when asked again', async () => {
-    const id = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
     mailbox.filters.push({ id: 'theirs', criteria: { from: 'News@Example.com' }, action: { addLabelIds: ['L:sift/newsletters'], removeLabelIds: ['INBOX'] } });
     await writeRuleFilter(deps(), id);
     expect(mailbox.filters.map((f) => f.id)).toEqual(['theirs']);
-    expect(getRuleFilter(db, id)?.filterId).toBe('theirs');
+    expect((await getRuleFilter(db, id))?.filterId).toBe('theirs');
 
     await writeRuleFilter(deps(), id);
     expect(mailbox.filters).toHaveLength(1);
-    expect(getRuleFilter(db, id)?.filterId).toBe(mailbox.filters[0]!.id);
-    expect(actions().map((a) => `${a.type} ${a.status}`)).toEqual(['filter done', 'unfilter done', 'filter done']);
+    expect((await getRuleFilter(db, id))?.filterId).toBe(mailbox.filters[0]!.id);
+    expect((await actions()).map((a) => `${a.type} ${a.status}`)).toEqual(['filter done', 'unfilter done', 'filter done']);
   });
 
   it('records a call that failed as unknown and leaves the rule without a filter', async () => {
-    const id = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
     const create = mailbox.createFilter.bind(mailbox);
     mailbox.createFilter = async (filter) => {
       await create(filter);
       throw new Error('timeout');
     };
     await expect(writeRuleFilter(deps(), id)).rejects.toThrow('timeout');
-    expect(actions().map((a) => `${a.type} ${a.status}`)).toEqual(['filter unknown']);
-    expect(getRuleFilter(db, id)).toMatchObject({ filterId: null, state: null });
+    expect((await actions()).map((a) => `${a.type} ${a.status}`)).toEqual(['filter unknown']);
+    expect(await getRuleFilter(db, id)).toMatchObject({ filterId: null, state: null });
 
     // It did land in Gmail. Asking again adopts it instead of making a second.
     mailbox.createFilter = create;
     await writeRuleFilter(deps(), id);
     expect(mailbox.filters).toHaveLength(1);
-    expect(getRuleFilter(db, id)).toMatchObject({ filterId: mailbox.filters[0]!.id, state: 'active' });
+    expect(await getRuleFilter(db, id)).toMatchObject({ filterId: mailbox.filters[0]!.id, state: 'active' });
   });
 
   it('is removed through the audit log, and removing one already deleted in Gmail succeeds', async () => {
-    const id = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
     await writeRuleFilter(deps(), id);
     expect(await removeRuleFilter(deps(), id)).toBe(true);
     expect(mailbox.filters).toEqual([]);
-    expect(getRuleFilter(db, id)).toMatchObject({ filterId: null, state: null });
+    expect(await getRuleFilter(db, id)).toMatchObject({ filterId: null, state: null });
     expect(await removeRuleFilter(deps(), id)).toBe(false);
 
     await writeRuleFilter(deps(), id);
     mailbox.filters = [];
     expect(await removeRuleFilter(deps(), id)).toBe(true);
-    expect(actions().map((a) => `${a.type} ${a.status}`)).toEqual(['filter done', 'unfilter done', 'filter done', 'unfilter done']);
+    expect((await actions()).map((a) => `${a.type} ${a.status}`)).toEqual(['filter done', 'unfilter done', 'filter done', 'unfilter done']);
   });
 
   it('keeps the rule marked as a filter when Gmail could not be reached to remove it', async () => {
-    const id = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
     await writeRuleFilter(deps(), id);
     mailbox.failFilters = true;
     await expect(removeRuleFilter(deps(), id)).rejects.toThrow('network down');
-    expect(getRuleFilter(db, id)).toMatchObject({ state: 'active' });
-    expect(actions().at(-1)).toMatchObject({ type: 'unfilter', status: 'unknown' });
+    expect(await getRuleFilter(db, id)).toMatchObject({ state: 'active' });
+    expect((await actions()).at(-1)).toMatchObject({ type: 'unfilter', status: 'unknown' });
   });
 });
 
 describe('checking filters against Gmail', () => {
   let id: string;
   beforeEach(async () => {
-    id = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
     await writeRuleFilter(deps(), id);
     clock = 2000;
   });
@@ -221,14 +221,14 @@ describe('checking filters against Gmail', () => {
 
   it('confirms a filter that is still as written', async () => {
     expect(await checkRuleFilters(deps(), ACCOUNT, false)).toEqual({ gone: 0, changed: 0, outdated: 0 });
-    expect(getRuleFilter(db, id)).toMatchObject({ state: 'active', checkedAt: 2000 });
-    expect(ruleFilterStatus(db).get(id)).toMatchObject({ state: 'active', possible: true, checkedAt: 2000 });
+    expect(await getRuleFilter(db, id)).toMatchObject({ state: 'active', checkedAt: 2000 });
+    expect((await ruleFilterStatus(db)).get(id)).toMatchObject({ state: 'active', possible: true, checkedAt: 2000 });
   });
 
   it('notices one the user deleted in Gmail and does not put it back', async () => {
     mailbox.filters = [];
     expect(await checkRuleFilters(deps(), ACCOUNT, true)).toEqual({ gone: 1, changed: 0, outdated: 0 });
-    expect(getRuleFilter(db, id)).toMatchObject({ filterId: null, state: 'gone' });
+    expect(await getRuleFilter(db, id)).toMatchObject({ filterId: null, state: 'gone' });
     expect(await checkRuleFilters(deps(), ACCOUNT, true)).toBeNull();
     expect(mailbox.filters).toEqual([]);
   });
@@ -236,39 +236,39 @@ describe('checking filters against Gmail', () => {
   it('notices one the user edited in Gmail, leaves it alone, and sees it put back', async () => {
     mailbox.filters[0]!.criteria['subject'] = 'digest';
     expect(await checkRuleFilters(deps(), ACCOUNT, true)).toEqual({ gone: 0, changed: 1, outdated: 0 });
-    expect(getRuleFilter(db, id)).toMatchObject({ filterId: mailbox.filters[0]!.id, state: 'changed' });
+    expect(await getRuleFilter(db, id)).toMatchObject({ filterId: mailbox.filters[0]!.id, state: 'changed' });
     // Reported once, not on every check.
     expect(await checkRuleFilters(deps(), ACCOUNT, true)).toEqual({ gone: 0, changed: 0, outdated: 0 });
     expect(mailbox.filters[0]!.criteria).toEqual({ from: 'news@example.com', subject: 'digest' });
 
     delete mailbox.filters[0]!.criteria['subject'];
     await checkRuleFilters(deps(), ACCOUNT, true);
-    expect(getRuleFilter(db, id)).toMatchObject({ state: 'active' });
+    expect(await getRuleFilter(db, id)).toMatchObject({ state: 'active' });
   });
 
   it('replaces a filter whose rule now says something else, but only marks it while observing', async () => {
-    setRule(db, ACCOUNT, { from: 'news@example.com' }, { labelId: 'personal' }, 'user');
+    await setRule(db, ACCOUNT, { from: 'news@example.com' }, { labelId: 'personal' }, 'user');
     expect(await checkRuleFilters(deps(), ACCOUNT, false)).toEqual({ gone: 0, changed: 0, outdated: 1 });
-    expect(getRuleFilter(db, id)).toMatchObject({ state: 'outdated' });
+    expect(await getRuleFilter(db, id)).toMatchObject({ state: 'outdated' });
     expect(mailbox.filters[0]!.action.removeLabelIds).toEqual(['INBOX']);
 
     await checkRuleFilters(deps(), ACCOUNT, true);
     expect(mailbox.filters).toEqual([
       { id: expect.any(String), criteria: { from: 'news@example.com' }, action: { addLabelIds: ['L:sift/personal'], removeLabelIds: [] } },
     ]);
-    expect(getRuleFilter(db, id)).toMatchObject({ filterId: mailbox.filters[0]!.id, state: 'active' });
+    expect(await getRuleFilter(db, id)).toMatchObject({ filterId: mailbox.filters[0]!.id, state: 'active' });
   });
 
   it('removes a filter whose rule can no longer be one, such as when its label starts marking spam', async () => {
-    updateLabel(db, ACCOUNT, 'newsletter', { disposition: 'spam' });
+    await updateLabel(db, ACCOUNT, 'newsletter', { disposition: 'spam' });
     expect(await checkRuleFilters(deps(), ACCOUNT, true)).toEqual({ gone: 0, changed: 0, outdated: 1 });
     expect(mailbox.filters).toEqual([]);
-    expect(getRuleFilter(db, id)).toMatchObject({ filterId: null, state: 'outdated' });
-    expect(ruleFilterStatus(db).get(id)).toMatchObject({ state: 'outdated', possible: false, reason: 'Gmail filters cannot mark mail as spam.' });
+    expect(await getRuleFilter(db, id)).toMatchObject({ filterId: null, state: 'outdated' });
+    expect((await ruleFilterStatus(db)).get(id)).toMatchObject({ state: 'outdated', possible: false, reason: 'Gmail filters cannot mark mail as spam.' });
   });
 
   it('removes a filter when a later rule could overrule it', async () => {
-    addRule(db, ACCOUNT, { match: { from: 'news@example.com', subjectContains: 'invoice' }, labelId: 'transactional' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: 'news@example.com', subjectContains: 'invoice' }, labelId: 'transactional' }, 'user');
     await checkRuleFilters(deps(), ACCOUNT, true);
     expect(mailbox.filters).toEqual([]);
   });
@@ -280,7 +280,7 @@ describe('checking filters against Gmail', () => {
     mailbox.filters = [];
     clock += FILTER_CHECK_MINUTES * 60_000 - 1;
     expect(await checkFiltersWhenDue(deps(), ACCOUNT, false)).toBeNull();
-    expect(getRuleFilter(db, id)).toMatchObject({ state: 'active' });
+    expect(await getRuleFilter(db, id)).toMatchObject({ state: 'active' });
     clock += 1;
     expect(await checkFiltersWhenDue(deps(), ACCOUNT, false)).toEqual({ gone: 1, changed: 0, outdated: 0 });
   });

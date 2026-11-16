@@ -112,7 +112,7 @@ function wizard(
       if (json.includes('nonsense')) throw new Error('What you pasted is not a Google OAuth client');
       world.client = json.includes('web') ? 'web' : 'desktop';
     },
-    connectedAccounts: () => world.accounts,
+    connectedAccounts: async () => world.accounts,
     loginModel: async (choice) => {
       calls.push(`login ${choice.provider} ${choice.type}`);
       if (state.loginFails) throw new Error('cancelled');

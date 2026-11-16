@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import type { Database } from '../src/store/sql.ts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { execute } from '../src/actions/executor.ts';
 import { listDecisions, retryDecision } from '../src/dashboard/queries/decisions.ts';
@@ -22,10 +23,10 @@ const ACCOUNT = 'me@example.org';
 const DAY = 86_400_000;
 const NOW = Date.UTC(2026, 5, 15, 12);
 
-function seeded(): DatabaseSync {
-  const db = openDb(':memory:');
-  connectAccount(db, ACCOUNT, '1', 0);
-  recordSync(
+async function seeded(): Promise<Database> {
+  const db = await openDb(':memory:');
+  await connectAccount(db, ACCOUNT, '1', 0);
+  await recordSync(
     db,
     ACCOUNT,
     [
@@ -49,47 +50,47 @@ function seeded(): DatabaseSync {
     NOW,
   );
   const base = { subscription: 'preserve', reason: 'test' } as const;
-  recordDecision(
+  await recordDecision(
     db,
     ACCOUNT,
     'a',
     { ...base, disposition: 'archive', stage: 'rules', ruleId: 'r1', labelId: 'newsletter', gmailLabel: 'sift/newsletters' },
     { now: NOW - DAY },
   );
-  recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'archive', stage: 'sender' }, { now: NOW - DAY });
-  recordDecision(
+  await recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'archive', stage: 'sender' }, { now: NOW - DAY });
+  await recordDecision(
     db,
     ACCOUNT,
     'c',
     { ...base, disposition: 'review', stage: 'agent', confidence: 0.4, usage: { model: 'test-model', inputTokens: 900, outputTokens: 100, costUsd: 0.02 } },
     { now: NOW - 2 * DAY, durationMs: 1500 },
   );
-  recordDecision(db, ACCOUNT, 'old', { ...base, disposition: 'keep', stage: 'rules' }, { now: NOW - 40 * DAY });
+  await recordDecision(db, ACCOUNT, 'old', { ...base, disposition: 'keep', stage: 'rules' }, { now: NOW - 40 * DAY });
   return db;
 }
 
 describe('tracking', () => {
-  it('stores the subject and triage headers with each message, and never a body', () => {
-    const db = openDb(':memory:');
-    connectAccount(db, ACCOUNT, '1', 0);
-    recordSync(
+  it('stores the subject and triage headers with each message, and never a body', async () => {
+    const db = await openDb(':memory:');
+    await connectAccount(db, ACCOUNT, '1', 0);
+    await recordSync(
       db,
       ACCOUNT,
       [facts({ messageId: 'a', headers: { 'list-id': '<dev.lists.example.com>' }, cc: [{ address: 'c@example.org', domain: 'example.org' }] })],
       '2',
       NOW,
     );
-    const row = db.prepare('SELECT * FROM messages').get() as Record<string, unknown>;
+    const row = (await db.get<Record<string, unknown>>('SELECT * FROM messages'))!;
     expect(row).toMatchObject({ subject: 'Weekly digest', list_id: 'dev.lists.example.com', synced_at: NOW, labels_json: '["INBOX","UNREAD"]' });
     expect(JSON.parse(row['headers_json'] as string)).toEqual({ 'list-id': '<dev.lists.example.com>' });
     expect(JSON.parse(row['cc_json'] as string)).toEqual([{ address: 'c@example.org', domain: 'example.org' }]);
     expect(Object.keys(row).some((k) => /body|snippet|content/.test(k))).toBe(false);
   });
 
-  it('keeps every decision for a message, with its cost', () => {
-    const db = seeded();
-    recordDecision(db, ACCOUNT, 'c', { disposition: 'keep', subscription: 'preserve', stage: 'rules', reason: 'user correction' }, { now: NOW });
-    const rows = db.prepare(`SELECT stage, disposition, model, cost_usd, input_tokens, duration_ms FROM decisions WHERE message_id = 'c' ORDER BY id`).all();
+  it('keeps every decision for a message, with its cost', async () => {
+    const db = await seeded();
+    await recordDecision(db, ACCOUNT, 'c', { disposition: 'keep', subscription: 'preserve', stage: 'rules', reason: 'user correction' }, { now: NOW });
+    const rows = await db.all(`SELECT stage, disposition, model, cost_usd, input_tokens, duration_ms FROM decisions WHERE message_id = 'c' ORDER BY id`);
     expect(rows).toEqual([
       { stage: 'agent', disposition: 'review', model: 'test-model', cost_usd: 0.02, input_tokens: 900, duration_ms: 1500 },
       { stage: 'rules', disposition: 'keep', model: null, cost_usd: 0, input_tokens: 0, duration_ms: null },
@@ -97,7 +98,7 @@ describe('tracking', () => {
   });
 
   it('links an action to the decision it carried out', async () => {
-    const db = seeded();
+    const db = await seeded();
     const labels = ['INBOX'];
     const mailbox = {
       getLabelIds: async () => [...labels],
@@ -111,52 +112,59 @@ describe('tracking', () => {
       listFilters: async () => [],
     };
     await execute({ db, mailbox, now: () => NOW }, ACCOUNT, 'a', { type: 'archive' }, 1);
-    expect(db.prepare('SELECT decision_id, status FROM actions').get()).toEqual({ decision_id: 1, status: 'done' });
-    expect(summarize(db, everything(db), 7, NOW).recent.find((r) => r.id === 1)).toMatchObject({ actionId: 1, actionType: 'archive', actionStatus: 'done' });
+    expect(await db.get('SELECT decision_id, status FROM actions')).toEqual({ decision_id: 1, status: 'done' });
+    expect((await summarize(db, await everything(db), 7, NOW)).recent.find((r) => r.id === 1)).toMatchObject({
+      actionId: 1,
+      actionType: 'archive',
+      actionStatus: 'done',
+    });
   });
 
-  it('groups decisions by where they got to, and shows the mailbox change rather than an unsubscribe', () => {
-    const db = seeded();
+  it('groups decisions by where they got to, and shows the mailbox change rather than an unsubscribe', async () => {
+    const db = await seeded();
     const base = { subscription: 'preserve', reason: 'test', stage: 'rules' } as const;
-    const done = recordDecision(db, ACCOUNT, 'a', { ...base, disposition: 'archive' }, { mode: 'act', now: NOW });
-    const archived = insertPendingAction(
+    const done = await recordDecision(db, ACCOUNT, 'a', { ...base, disposition: 'archive' }, { mode: 'act', now: NOW });
+    const archived = await insertPendingAction(
       db,
       { accountId: ACCOUNT, messageId: 'a', type: 'archive', payload: { add: [], remove: ['INBOX'] }, originalLabels: ['INBOX'], decisionId: done },
       NOW,
     );
-    finishAction(db, archived, 'done', [], null, NOW);
-    const unsubscribed = insertPendingAction(
+    await finishAction(db, archived, 'done', [], null, NOW);
+    const unsubscribed = await insertPendingAction(
       db,
       { accountId: ACCOUNT, messageId: 'a', type: 'unsubscribe', payload: { add: [], remove: [] }, originalLabels: [], decisionId: done },
       NOW,
     );
-    finishAction(db, unsubscribed, 'done', null, null, NOW);
-    settleDecision(db, done, 'done');
-    const failed = recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'archive' }, { mode: 'act', now: NOW });
-    settleDecision(db, failed, 'failed', 'Gmail answered 503');
-    const ids = (status: string) => listDecisions(db, everything(db), { days: 7, status }, NOW).rows.map((r) => r.id);
+    await finishAction(db, unsubscribed, 'done', null, null, NOW);
+    await settleDecision(db, done, 'done');
+    const failed = await recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'archive' }, { mode: 'act', now: NOW });
+    await settleDecision(db, failed, 'failed', 'Gmail answered 503');
+    const ids = async (status: string) => (await listDecisions(db, await everything(db), { days: 7, status }, NOW)).rows.map((r) => r.id);
 
-    expect(ids('suggested')).toEqual([3, 2, 1]);
-    expect(ids('done')).toEqual([done]);
-    expect(ids('trouble')).toEqual([failed]);
-    expect(ids('nonsense')).toEqual([]);
-    expect(listDecisions(db, everything(db), { days: 7, status: 'done' }, NOW).rows[0]).toMatchObject({ actionId: archived, actionType: 'archive' });
+    expect(await ids('suggested')).toEqual([3, 2, 1]);
+    expect(await ids('done')).toEqual([done]);
+    expect(await ids('trouble')).toEqual([failed]);
+    expect(await ids('nonsense')).toEqual([]);
+    expect((await listDecisions(db, await everything(db), { days: 7, status: 'done' }, NOW)).rows[0]).toMatchObject({
+      actionId: archived,
+      actionType: 'archive',
+    });
 
-    setActionStatus(db, archived, 'undone');
-    expect(ids('undone')).toEqual([done]);
-    expect(ids('done')).toEqual([]);
-    expect(listDecisions(db, everything(db), { days: 7, status: 'trouble' }, NOW).total).toBe(1);
+    await setActionStatus(db, archived, 'undone');
+    expect(await ids('undone')).toEqual([done]);
+    expect(await ids('done')).toEqual([]);
+    expect((await listDecisions(db, await everything(db), { days: 7, status: 'trouble' }, NOW)).total).toBe(1);
     // What changed in Gmail, or was tried: not the suggestions, which never touched it.
-    expect(ids('changed')).toEqual([failed, done]);
+    expect(await ids('changed')).toEqual([failed, done]);
 
     // A failed change goes back to waiting; sift's own waits for sift to act, and only a failure can be retried.
-    expect(retryDecision(db, scopeFor(['someone@example.net'], false), failed)).toEqual({ retried: false, waiting: false });
-    expect(retryDecision(db, everything(db), failed)).toEqual({ retried: true, waiting: true });
-    expect(db.prepare('SELECT outcome FROM decisions WHERE id = ?').get(failed)).toEqual({ outcome: null });
-    expect(retryDecision(db, everything(db), done)).toEqual({ retried: false, waiting: false });
+    expect(await retryDecision(db, scopeFor(['someone@example.net'], false), failed)).toEqual({ retried: false, waiting: false });
+    expect(await retryDecision(db, await everything(db), failed)).toEqual({ retried: true, waiting: true });
+    expect(await db.get('SELECT outcome FROM decisions WHERE id = ?', failed)).toEqual({ outcome: null });
+    expect(await retryDecision(db, await everything(db), done)).toEqual({ retried: false, waiting: false });
   });
 
-  it('upgrades a version 1 database in place, keeping its messages', () => {
+  it('upgrades a version 1 database in place, keeping its messages', async () => {
     const path = join(mkdtempSync(join(tmpdir(), 'sift-test-')), 'sift.db');
     const v1 = new DatabaseSync(path);
     v1.exec(readFileSync(new URL('../src/store/migrations/001_init.sql', import.meta.url), 'utf8'));
@@ -167,24 +175,24 @@ describe('tracking', () => {
     );
     v1.close();
 
-    const db = openDb(path);
-    expect(schemaVersion(db)).toBeGreaterThan(1);
-    expect(db.prepare('SELECT id, subject, headers_json, synced_at FROM messages').get()).toEqual({
+    const db = await openDb(path);
+    expect(await schemaVersion(db)).toBeGreaterThan(1);
+    expect(await db.get('SELECT id, subject, headers_json, synced_at FROM messages')).toEqual({
       id: 'm',
       subject: '',
       headers_json: '{}',
       synced_at: null,
     });
-    recordDecision(db, ACCOUNT, 'm', { disposition: 'keep', subscription: 'preserve', stage: 'rules', reason: 'r' });
-    expect(db.prepare('SELECT count(*) AS n FROM decisions').get()).toEqual({ n: 1 });
+    await recordDecision(db, ACCOUNT, 'm', { disposition: 'keep', subscription: 'preserve', stage: 'rules', reason: 'r' });
+    expect(await db.get('SELECT count(*) AS n FROM decisions')).toEqual({ n: 1 });
     db.close();
   });
 });
 
 describe('summarize', () => {
-  it('counts only the window and reports tiers, cost and backlog', () => {
-    const db = seeded();
-    const summary = summarize(db, everything(db), 7, NOW);
+  it('counts only the window and reports tiers, cost and backlog', async () => {
+    const db = await seeded();
+    const summary = await summarize(db, await everything(db), 7, NOW);
     expect(summary.totals).toEqual({ messages: 4, decisions: 3, withoutInference: 2, costUsd: 0.02, awaitingTriage: 1, troubledActions: 0 });
     expect(summary.byStage.map((s) => [s.stage, s.decisions])).toEqual([
       ['rules', 1],
@@ -202,36 +210,41 @@ describe('summarize', () => {
     expect(summary.accounts).toEqual([{ email: ACCOUNT, lastSyncedAt: NOW }]);
   });
 
-  it('returns one entry per day, including empty days', () => {
-    const db = seeded();
-    const { daily } = summarize(db, everything(db), 7, NOW);
+  it('returns one entry per day, including empty days', async () => {
+    const db = await seeded();
+    const { daily } = await summarize(db, await everything(db), 7, NOW);
     expect(daily).toHaveLength(7);
     expect(daily.reduce((sum, d) => sum + Object.values(d.counts).reduce((a, b) => a + b, 0), 0)).toBe(3);
     expect(daily.at(-1)?.counts).toEqual({ rules: 0, sender: 0, heuristics: 0, classifier: 0, agent: 0, fallback: 0 });
   });
 
-  it('says per day what was done in Gmail, what failed, and what the model cost', () => {
-    const db = seeded();
+  it('says per day what was done in Gmail, what failed, and what the model cost', async () => {
+    const db = await seeded();
     const base = { subscription: 'preserve', reason: 'test', stage: 'rules' } as const;
-    const archived = recordDecision(db, ACCOUNT, 'a', { ...base, disposition: 'archive' }, { mode: 'act', now: NOW });
-    const change = insertPendingAction(
+    const archived = await recordDecision(db, ACCOUNT, 'a', { ...base, disposition: 'archive' }, { mode: 'act', now: NOW });
+    const change = await insertPendingAction(
       db,
       { accountId: ACCOUNT, messageId: 'a', type: 'archive', payload: { add: [], remove: ['INBOX'] }, originalLabels: ['INBOX'], decisionId: archived },
       NOW,
     );
-    finishAction(db, change, 'done', [], null, NOW);
-    settleDecision(db, archived, 'done');
-    settleDecision(db, recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'spam' }, { mode: 'act', now: NOW }), 'failed', 'Gmail answered 503');
-    const { daily } = summarize(db, everything(db), 7, NOW);
+    await finishAction(db, change, 'done', [], null, NOW);
+    await settleDecision(db, archived, 'done');
+    await settleDecision(
+      db,
+      await recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'spam' }, { mode: 'act', now: NOW }),
+      'failed',
+      'Gmail answered 503',
+    );
+    const { daily } = await summarize(db, await everything(db), 7, NOW);
     expect(daily.at(-1)?.changes).toEqual({ archive: 1, spam: 0, keep: 0, failed: 1 });
     // Suggestions changed nothing, so the other days have no changes; the model's cost is on the day it was asked.
     expect(daily.slice(0, -1).every((d) => d.changes.archive + d.changes.spam + d.changes.keep + d.changes.failed === 0)).toBe(true);
     expect(daily.reduce((sum, d) => sum + d.costUsd, 0)).toBeCloseTo(0.02);
   });
 
-  it('lists senders and recent decisions with their message', () => {
-    const db = seeded();
-    const summary = summarize(db, everything(db), 7, NOW);
+  it('lists senders and recent decisions with their message', async () => {
+    const db = await seeded();
+    const summary = await summarize(db, await everything(db), 7, NOW);
     expect(summary.topSenders[0]).toEqual({ address: 'news@example.com', messages: 3, lastDisposition: 'keep' });
     expect(summary.recent.map((r) => r.id)).toEqual([3, 2, 1]);
     expect(summary.recent[2]).toMatchObject({
@@ -244,9 +257,9 @@ describe('summarize', () => {
     });
   });
 
-  it('handles an empty database', () => {
-    const empty = openDb(':memory:');
-    const summary = summarize(empty, everything(empty), 30, NOW);
+  it('handles an empty database', async () => {
+    const empty = await openDb(':memory:');
+    const summary = await summarize(empty, await everything(empty), 30, NOW);
     expect(summary.totals.decisions).toBe(0);
     expect(summary.daily).toHaveLength(30);
     expect(summary.recent).toEqual([]);
@@ -271,7 +284,7 @@ describe('dashboard server', () => {
   afterEach(() => close?.());
 
   async function start(assetsDir: string = builtAssets()) {
-    const server = createDashboardServer(seeded(), { assetsDir, now: () => NOW });
+    const server = createDashboardServer(await seeded(), { assetsDir, now: () => NOW });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     close = () => server.close();
     return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -336,7 +349,7 @@ describe('dashboard server', () => {
 
   it('in dev mode serves the page as it is on disk now, and tells it when to reload', async () => {
     const dir = builtAssets();
-    const server = createDashboardServer(seeded(), { assetsDir: dir, dev: true, now: () => NOW });
+    const server = createDashboardServer(await seeded(), { assetsDir: dir, dev: true, now: () => NOW });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     close = () => server.close();
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -421,10 +434,10 @@ describe('dashboard server', () => {
   });
 
   it('lists rules with their hits', async () => {
-    const db = seeded();
-    const id = addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user', NOW);
-    recordDecision(db, ACCOUNT, 'waiting', { disposition: 'archive', subscription: 'preserve', stage: 'rules', ruleId: id, reason: 'r' }, { now: NOW });
-    expect(listRuleSummaries(db, everything(db))).toEqual([
+    const db = await seeded();
+    const id = await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user', NOW);
+    await recordDecision(db, ACCOUNT, 'waiting', { disposition: 'archive', subscription: 'preserve', stage: 'rules', ruleId: id, reason: 'r' }, { now: NOW });
+    expect(await listRuleSummaries(db, await everything(db))).toEqual([
       {
         id,
         accountId: ACCOUNT,
@@ -457,7 +470,7 @@ describe('dashboard server', () => {
   });
 
   it('serves a sender and a domain, and gives them a standing with one write', async () => {
-    const db = seeded();
+    const db = await seeded();
     const server = createDashboardServer(db, { assetsDir: builtAssets(), now: () => NOW });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     close = () => server.close();
@@ -476,7 +489,7 @@ describe('dashboard server', () => {
       });
     expect((await write({ accountId: ACCOUNT, address: 'news@example.com', standing: 'trusted' })).status).toBe(200);
     // Trust is a rule for exactly them that only says what happens: keep it, whatever it is.
-    expect(listRuleSummaries(db, everything(db)).filter((r) => r.match['from'] === 'news@example.com')).toMatchObject([
+    expect((await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from'] === 'news@example.com')).toMatchObject([
       { kind: 'action', labelId: null, override: 'keep', disposition: 'keep', source: 'user' },
     ]);
     const trusted = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
@@ -487,7 +500,7 @@ describe('dashboard server', () => {
     expect(domain).toMatchObject({ kind: 'domain', profile: { standing: 'blocked' }, senders: [{ address: 'cold@example.net', standing: 'new' }] });
 
     expect((await write({ accountId: ACCOUNT, address: 'news@example.com', standing: 'none' })).status).toBe(200);
-    expect(listRuleSummaries(db, everything(db)).filter((r) => r.match['from'] === 'news@example.com')).toEqual([]);
+    expect((await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from'] === 'news@example.com')).toEqual([]);
 
     expect((await write({ accountId: ACCOUNT, address: 'news@example.com', domain: 'example.com', standing: 'trusted' })).status).toBe(400);
     expect((await write({ accountId: ACCOUNT, address: 'not an address', standing: 'trusted' })).status).toBe(400);
@@ -515,7 +528,7 @@ describe('dashboard server', () => {
     expect(await statusFor(base, '100.64.0.7:8787')).toBe(403);
     close?.();
 
-    const server = createDashboardServer(seeded(), { assetsDir: builtAssets(), allowedHosts: ['Box.example.ts.net', '100.64.0.7'], now: () => NOW });
+    const server = createDashboardServer(await seeded(), { assetsDir: builtAssets(), allowedHosts: ['Box.example.ts.net', '100.64.0.7'], now: () => NOW });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     close = () => server.close();
     const configured = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

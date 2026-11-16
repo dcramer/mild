@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { parseSettings, renderSettings } from '../src/config.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
@@ -137,20 +137,27 @@ describe('the model stage', () => {
 });
 
 describe('stored examples', () => {
-  let db: DatabaseSync;
-  beforeEach(() => {
-    db = openDb(':memory:');
-    connectAccount(db, ACCOUNT, '1', 0);
-    storeExample(db, ACCOUNT, { id: 'e1', from: 'news@example.com', label: 'newsletter', body: 'Issue  12\n\nof the weekly.', markedAt: 1, name: 'News' });
-    storeExample(db, ACCOUNT, { id: 'e2', from: 'sales@example.com', label: 'marketing', markedAt: 2 });
-    storeExample(db, ACCOUNT, { id: 'e3', from: 'ada@example.org', label: 'personal', markedAt: 3 });
-    storeExample(db, ACCOUNT, { id: 'e4', from: 'bob@example.org', label: 'personal', markedAt: 4 });
-    storeExample(db, ACCOUNT, { id: 'e5', from: 'cy@example.org', label: 'personal', markedAt: 5 });
-    db.prepare(`UPDATE examples SET status = 'pending', body_text = NULL WHERE message_id = 'e2'`).run();
+  let db: Sql;
+  beforeEach(async () => {
+    db = await openDb(':memory:');
+    await connectAccount(db, ACCOUNT, '1', 0);
+    await storeExample(db, ACCOUNT, {
+      id: 'e1',
+      from: 'news@example.com',
+      label: 'newsletter',
+      body: 'Issue  12\n\nof the weekly.',
+      markedAt: 1,
+      name: 'News',
+    });
+    await storeExample(db, ACCOUNT, { id: 'e2', from: 'sales@example.com', label: 'marketing', markedAt: 2 });
+    await storeExample(db, ACCOUNT, { id: 'e3', from: 'ada@example.org', label: 'personal', markedAt: 3 });
+    await storeExample(db, ACCOUNT, { id: 'e4', from: 'bob@example.org', label: 'personal', markedAt: 4 });
+    await storeExample(db, ACCOUNT, { id: 'e5', from: 'cy@example.org', label: 'personal', markedAt: 5 });
+    await db.run(`UPDATE examples SET status = 'pending', body_text = NULL WHERE message_id = 'e2'`);
   });
 
-  it('offers captured examples from the sender, the domain and each label, with an excerpt and never the whole text', () => {
-    const candidates = shotCandidates(db, facts({ accountId: ACCOUNT, from: { address: 'other@example.com', domain: 'example.com' } }));
+  it('offers captured examples from the sender, the domain and each label, with an excerpt and never the whole text', async () => {
+    const candidates = await shotCandidates(db, facts({ accountId: ACCOUNT, from: { address: 'other@example.com', domain: 'example.com' } }));
     expect(candidates.map((c) => c.messageId).toSorted()).toEqual(['e1', 'e4', 'e5']);
     expect(candidates.find((c) => c.messageId === 'e1')).toEqual({
       messageId: 'e1',
@@ -178,10 +185,10 @@ describe('stored examples', () => {
         mailbox: new FakeMailbox(),
       },
     });
-    const [account] = listAccounts(db);
-    recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'new1' })], '3');
+    const [account] = await listAccounts(db);
+    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'new1' })], '3');
     await triageAccount({ db, mailbox: null, model: model(true) }, account!);
-    recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'new2' })], '4');
+    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'new2' })], '4');
     await triageAccount({ db, mailbox: null, model: model(false) }, account!);
 
     expect(seen.map((s) => s.evidence.facts.messageId)).toEqual(['new1', 'new2']);

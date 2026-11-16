@@ -9,12 +9,12 @@ import { signInAddresses } from '../serve.ts';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 
-export function status(): void {
+export async function status(): Promise<void> {
   const config = loadConfig();
   const secrets = checkSecrets(config, false);
-  const db = openDb(config.dbPath);
-  const accounts = listAccounts(db);
-  const count = (table: string, where = '') => (db.prepare(`SELECT count(*) AS n FROM ${table} ${where}`).get() as { n: number }).n;
+  const db = await openDb(config.dbPath);
+  const accounts = await listAccounts(db);
+  const count = async (table: string, where = '') => (await db.get<{ n: number }>(`SELECT count(*) AS n FROM ${table} ${where}`))!.n;
   const { settings } = config;
   const ready = hasClientSecrets(config) && accounts.length > 0;
 
@@ -27,10 +27,13 @@ export function status(): void {
     ['Dashboard', signInAddresses(settings.dashboardPort).join(paint.dim('  or  '))],
   ]);
   ui.blank();
-  const troubled = count('actions', `WHERE status IN ('failed', 'unknown', 'pending')`);
+  const troubled = await count('actions', `WHERE status IN ('failed', 'unknown', 'pending')`);
   ui.fields([
-    ['Recorded', `${plural(count('messages'), 'message')} · ${plural(count('decisions'), 'decision')} · ${plural(count('actions'), 'change')}`],
-    ['Rules', plural(count('rules'), 'rule')],
+    [
+      'Recorded',
+      `${plural(await count('messages'), 'message')} · ${plural(await count('decisions'), 'decision')} · ${plural(await count('actions'), 'change')}`,
+    ],
+    ['Rules', plural(await count('rules'), 'rule')],
     ...(troubled > 0 ? [['Check', paint.bad(`${plural(troubled, 'change')} failed or unconfirmed; see Changes in the dashboard`)] as const] : []),
   ]);
   ui.blank();

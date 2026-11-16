@@ -85,21 +85,24 @@ describe('deriveFacts', () => {
 });
 
 describe('recorded facts', () => {
-  it('stores them with the message and returns them with its detail', () => {
-    const db = openDb(':memory:');
-    connectAccount(db, ACCOUNT, '1', 0);
-    recordSync(db, ACCOUNT, [campaign], '2');
-    expect(JSON.parse((db.prepare('SELECT facts_json FROM messages').get() as { facts_json: string }).facts_json)).toEqual(deriveFacts(campaign));
-    expect(messageDetail(db, everything(db), ACCOUNT, campaign.messageId)?.facts).toMatchObject({ bulkService: 'Mailchimp', category: 'promotions' });
+  it('stores them with the message and returns them with its detail', async () => {
+    const db = await openDb(':memory:');
+    await connectAccount(db, ACCOUNT, '1', 0);
+    await recordSync(db, ACCOUNT, [campaign], '2');
+    expect(JSON.parse((await db.get<{ facts_json: string }>('SELECT facts_json FROM messages'))!.facts_json)).toEqual(deriveFacts(campaign));
+    expect((await messageDetail(db, await everything(db), ACCOUNT, campaign.messageId))?.facts).toMatchObject({
+      bulkService: 'Mailchimp',
+      category: 'promotions',
+    });
   });
 
-  it('derives them for a message synced before they were recorded', () => {
-    const db = openDb(':memory:');
-    connectAccount(db, ACCOUNT, '1', 0);
-    recordSync(db, ACCOUNT, [campaign], '2');
-    db.exec('UPDATE messages SET facts_json = NULL');
-    expect(storedFacts(db, ACCOUNT, campaign.messageId)).toEqual(deriveFacts(campaign));
-    expect(storedFacts(db, ACCOUNT, 'missing')).toBeNull();
+  it('derives them for a message synced before they were recorded', async () => {
+    const db = await openDb(':memory:');
+    await connectAccount(db, ACCOUNT, '1', 0);
+    await recordSync(db, ACCOUNT, [campaign], '2');
+    await db.exec('UPDATE messages SET facts_json = NULL');
+    expect(await storedFacts(db, ACCOUNT, campaign.messageId)).toEqual(deriveFacts(campaign));
+    expect(await storedFacts(db, ACCOUNT, 'missing')).toBeNull();
   });
 });
 
@@ -140,11 +143,11 @@ describe('thread context', () => {
     expect(threadFacts(thread, 'elsewhere')).toBeNull();
   });
 
-  const setup = (headers: Record<string, string>) => {
-    const db = openDb(':memory:');
-    connectAccount(db, ACCOUNT, '1', 0);
+  const setup = async (headers: Record<string, string>) => {
+    const db = await openDb(':memory:');
+    await connectAccount(db, ACCOUNT, '1', 0);
     const message = facts({ accountId: ACCOUNT, messageId: 'reply', threadId: 't9', headers });
-    recordSync(db, ACCOUNT, [message], '2');
+    await recordSync(db, ACCOUNT, [message], '2');
     const asked: string[] = [];
     const sources = (getThread: (id: string) => Promise<typeof thread | null>) => ({
       db,
@@ -155,17 +158,17 @@ describe('thread context', () => {
   };
 
   it("reads a reply's thread for the model, records it, and reads nothing for mail that is not a reply", async () => {
-    const reply = setup({ 'in-reply-to': '<mine@example.org>' });
+    const reply = await setup({ 'in-reply-to': '<mine@example.org>' });
     const evidence = await gatherEvidence(
       reply.sources(async () => thread),
       reply.message,
     );
     expect(reply.asked).toEqual(['t9']);
     expect(evidence.known).toMatchObject({ earlierInThread: 2, ownerInThread: true });
-    expect(storedFacts(reply.db, ACCOUNT, 'reply')).toMatchObject({ earlierInThread: 2, ownerInThread: true });
+    expect(await storedFacts(reply.db, ACCOUNT, 'reply')).toMatchObject({ earlierInThread: 2, ownerInThread: true });
     expect(describeFacts(evidence.known)).toEqual(expect.arrayContaining(['Earlier messages in its thread: 2', 'Owner has written in its thread: yes']));
 
-    const fresh = setup({});
+    const fresh = await setup({});
     const alone = await gatherEvidence(
       fresh.sources(async () => thread),
       fresh.message,
@@ -175,7 +178,7 @@ describe('thread context', () => {
   });
 
   it('leaves the thread unknown when it cannot be read', async () => {
-    const reply = setup({ references: '<mine@example.org>' });
+    const reply = await setup({ references: '<mine@example.org>' });
     const failed = await gatherEvidence(
       reply.sources(async () => {
         throw new Error('network');

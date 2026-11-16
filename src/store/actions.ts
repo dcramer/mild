@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from './sql.ts';
 
 export type ActionStatus = 'pending' | 'done' | 'failed' | 'unknown' | 'undone';
 
@@ -59,29 +59,27 @@ const fromRow = (r: Row): ActionRecord => ({
 });
 
 /** Write the intent before touching the provider. Returns the action id. */
-export function insertPendingAction(
-  db: DatabaseSync,
+export async function insertPendingAction(
+  db: Sql,
   action: { accountId: string; messageId: string | null; type: string; payload: ActionPayload; originalLabels: string[]; decisionId?: number },
   now: number,
-): number {
-  const result = db
-    .prepare(
-      `INSERT INTO actions (account_id, message_id, type, payload_json, original_labels, decision_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
-    )
-    .run(
-      action.accountId,
-      action.messageId,
-      action.type,
-      JSON.stringify(action.payload),
-      JSON.stringify(action.originalLabels),
-      action.decisionId ?? null,
-      now,
-    );
-  return Number(result.lastInsertRowid);
+): Promise<number> {
+  const result = await db.run(
+    `INSERT INTO actions (account_id, message_id, type, payload_json, original_labels, decision_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
+    action.accountId,
+    action.messageId,
+    action.type,
+    JSON.stringify(action.payload),
+    JSON.stringify(action.originalLabels),
+    action.decisionId ?? null,
+    now,
+  );
+  return result.lastInsertRowid;
 }
 
-export function finishAction(db: DatabaseSync, id: number, status: ActionStatus, finalLabels: string[] | null, error: string | null, now: number): void {
-  db.prepare('UPDATE actions SET status = ?, final_labels = ?, error = ?, completed_at = ? WHERE id = ?').run(
+export async function finishAction(db: Sql, id: number, status: ActionStatus, finalLabels: string[] | null, error: string | null, now: number): Promise<void> {
+  await db.run(
+    'UPDATE actions SET status = ?, final_labels = ?, error = ?, completed_at = ? WHERE id = ?',
     status,
     finalLabels === null ? null : JSON.stringify(finalLabels),
     error,
@@ -90,52 +88,52 @@ export function finishAction(db: DatabaseSync, id: number, status: ActionStatus,
   );
 }
 
-export function setActionStatus(db: DatabaseSync, id: number, status: ActionStatus): void {
-  db.prepare('UPDATE actions SET status = ? WHERE id = ?').run(status, id);
+export async function setActionStatus(db: Sql, id: number, status: ActionStatus): Promise<void> {
+  await db.run('UPDATE actions SET status = ? WHERE id = ?', status, id);
 }
 
-export function getAction(db: DatabaseSync, id: number): ActionRecord | null {
-  const row = db.prepare(`SELECT ${COLUMNS} FROM actions WHERE id = ?`).get(id) as Row | undefined;
+export async function getAction(db: Sql, id: number): Promise<ActionRecord | null> {
+  const row = await db.get<Row>(`SELECT ${COLUMNS} FROM actions WHERE id = ?`, id);
   return row ? fromRow(row) : null;
 }
 
 /** The last thing sift did to a message's labels that still stands, or null. */
-export function lastStandingChange(db: DatabaseSync, accountId: string, messageId: string): ActionRecord | null {
-  const row = db
-    .prepare(
-      `SELECT ${COLUMNS} FROM actions WHERE account_id = ? AND message_id = ? AND type NOT IN ('undo', 'unsubscribe') AND status = 'done' ORDER BY id DESC LIMIT 1`,
-    )
-    .get(accountId, messageId) as Row | undefined;
+export async function lastStandingChange(db: Sql, accountId: string, messageId: string): Promise<ActionRecord | null> {
+  const row = await db.get<Row>(
+    `SELECT ${COLUMNS} FROM actions WHERE account_id = ? AND message_id = ? AND type NOT IN ('undo', 'unsubscribe') AND status = 'done' ORDER BY id DESC LIMIT 1`,
+    accountId,
+    messageId,
+  );
   return row ? fromRow(row) : null;
 }
 
 /** Actions whose outcome was never confirmed, oldest first. Optionally limited to one message. */
-export function listOpenActions(db: DatabaseSync, scope?: { accountId: string; messageId: string }): ActionRecord[] {
+export async function listOpenActions(db: Sql, scope?: { accountId: string; messageId: string }): Promise<ActionRecord[]> {
   const open = `status IN ('pending', 'unknown') AND message_id IS NOT NULL`;
   const rows = scope
-    ? db.prepare(`SELECT ${COLUMNS} FROM actions WHERE ${open} AND account_id = ? AND message_id = ? ORDER BY id`).all(scope.accountId, scope.messageId)
-    : db.prepare(`SELECT ${COLUMNS} FROM actions WHERE ${open} ORDER BY id`).all();
+    ? await db.all(`SELECT ${COLUMNS} FROM actions WHERE ${open} AND account_id = ? AND message_id = ? ORDER BY id`, scope.accountId, scope.messageId)
+    : await db.all(`SELECT ${COLUMNS} FROM actions WHERE ${open} ORDER BY id`);
   return (rows as unknown as Row[]).map(fromRow);
 }
 
 /** When the user unsubscribed from this sender through sift, or null. */
-export function unsubscribedAt(db: DatabaseSync, accountId: string, sender: string): number | null {
-  const row = db
-    .prepare(
-      `SELECT min(a.created_at) AS at FROM actions a JOIN messages m ON m.account_id = a.account_id AND m.id = a.message_id
+export async function unsubscribedAt(db: Sql, accountId: string, sender: string): Promise<number | null> {
+  const row = (await db.get<{ at: number | null }>(
+    `SELECT min(a.created_at) AS at FROM actions a JOIN messages m ON m.account_id = a.account_id AND m.id = a.message_id
        WHERE a.account_id = ? AND a.type = 'unsubscribe' AND a.status = 'done' AND m.from_address = ?`,
-    )
-    .get(accountId, sender) as { at: number | null };
+    accountId,
+    sender,
+  ))!;
   return row.at;
 }
 
 /** When an unsubscribe request to this sender last failed, or null. */
-export function lastUnsubscribeFailure(db: DatabaseSync, accountId: string, sender: string): number | null {
-  const row = db
-    .prepare(
-      `SELECT max(a.created_at) AS at FROM actions a JOIN messages m ON m.account_id = a.account_id AND m.id = a.message_id
+export async function lastUnsubscribeFailure(db: Sql, accountId: string, sender: string): Promise<number | null> {
+  const row = (await db.get<{ at: number | null }>(
+    `SELECT max(a.created_at) AS at FROM actions a JOIN messages m ON m.account_id = a.account_id AND m.id = a.message_id
        WHERE a.account_id = ? AND a.type = 'unsubscribe' AND a.status = 'failed' AND m.from_address = ?`,
-    )
-    .get(accountId, sender) as { at: number | null };
+    accountId,
+    sender,
+  ))!;
   return row.at;
 }

@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../store/sql.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { toFacts } from '../gmail/sync.ts';
 import { recordBackfill } from '../store/accounts.ts';
@@ -13,7 +13,7 @@ export const MAX_BACKFILL = 300;
  * them in Gmail. Returns how many were new to sift.
  */
 export async function backfill(
-  db: DatabaseSync,
+  db: Sql,
   api: Pick<GmailApi, 'searchInbox' | 'getMetadata'>,
   accountId: string,
   days: number,
@@ -33,5 +33,5 @@ export async function backfill(
     const facts = raw ? toFacts(accountId, raw) : null;
     if (facts) messages.push(facts);
   }
-  return recordBackfill(db, accountId, messages, now);
+  return await recordBackfill(db, accountId, messages, now);
 }

@@ -2,7 +2,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { extname, join, relative, sep } from 'node:path';
-import type { DatabaseSync } from 'node:sqlite';
+import type { Sql } from '../store/sql.ts';
 import { fileURLToPath } from 'node:url';
 import { accountsOf, listAccounts, userOf } from '../store/accounts.ts';
 import { READS, WRITES } from './api/index.ts';
@@ -149,7 +149,7 @@ const cookie = (req: IncomingMessage, name: string) =>
  * What it may do: change what sift has been taught and how it is set up. It never reaches Gmail itself;
  * the few things that do (signing in, undo, pulling in older mail) are handed in and audited as usual.
  */
-export function createDashboardServer(db: DatabaseSync, options: DashboardOptions = {}): Server {
+export function createDashboardServer(db: Sql, options: DashboardOptions = {}): Server {
   const assetsDir = options.assetsDir ?? WEB_DIST;
   const builtAssets = listAssets(assetsDir);
   const dev = options.dev ?? false;
@@ -171,14 +171,14 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
   const reads = new Map(READS.map((route) => [route.path, route]));
   const writes = new Map(WRITES.map((route) => [route.path, route]));
   /** Why this person may not make this write, or null if they may. Someone else's data is reported as not there. */
-  const refusal = (route: Write, body: Record<string, unknown>, scope: Scope): { status: number; error: string } | null => {
-    const whose = route.touches(ctx, body);
+  const refusal = async (route: Write, body: Record<string, unknown>, scope: Scope): Promise<{ status: number; error: string } | null> => {
+    const whose = await route.touches(ctx, body);
     if (whose === 'install') return scope.owner ? null : { status: 403, error: 'Only the person who set sift up can change this.' };
     if (whose === null || whose === 'anyone' || sees(scope, whose.account)) return null;
     return { status: 404, error: 'There is no such thing here.' };
   };
 
-  return createServer((req, res) => {
+  const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const host = (req.headers.host ?? '').replace(/:\d+$/, '').toLowerCase();
     if (!hosts.has(host)) {
       res.writeHead(403, { 'content-type': 'text/plain' }).end('The sift dashboard does not answer to this address. Set dashboard.host in sift.toml.');
@@ -196,17 +196,17 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
     // Google only returns a browser to localhost or to an HTTPS address.
     const googleCanReturnHere = https || LOCAL_HOSTS.has(host);
     const signedInAs = signIn ? readSession(cookie(req, 'sift_session'), secret, now()) : null;
-    const session = signedInAs !== null && signIn?.allowed(signedInAs) && listAccounts(db).some((a) => a.email === signedInAs) ? signedInAs : null;
+    const session = signedInAs !== null && signIn?.allowed(signedInAs) && (await listAccounts(db)).some((a) => a.email === signedInAs) ? signedInAs : null;
     // What this request may see: the mailboxes of whoever is signed in. With no sign-in set up there is one person, who has them all.
-    const person = session === null ? null : userOf(db, session);
+    const person = session === null ? null : await userOf(db, session);
     const whole: Scope = !signIn
       ? scopeFor(
-          listAccounts(db).map((a) => a.id),
+          (await listAccounts(db)).map((a) => a.id),
           true,
         )
       : person
         ? scopeFor(
-            accountsOf(db, person.id).map((a) => a.id),
+            (await accountsOf(db, person.id)).map((a) => a.id),
             person.owner,
           )
         : scopeFor([], false);
@@ -290,7 +290,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       }
       void readJson(req)
         .then(async (body) => {
-          const refused = body && refusal(handler, body, whole);
+          const refused = body && (await refusal(handler, body, whole));
           if (refused) return void json(res, refused.status, { error: refused.error });
           const result = body && (await handler.run(ctx, body, whole));
           if (result === null) json(res, 400, { error: 'That request is not well formed.' });
@@ -357,5 +357,12 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
     const html = dev && asset.file.endsWith('index.html') ? body.toString('utf8') : null;
     const page = html === null ? body : html.includes('</head>') ? html.replace('</head>', `${DEV_SCRIPT}</head>`) : html + DEV_SCRIPT;
     res.writeHead(200, { ...HEADERS, 'content-type': asset.type, 'cache-control': cache }).end(page);
-  });
+  };
+
+  return createServer(
+    (req, res) =>
+      void handle(req, res).catch((error: unknown) => {
+        if (!res.headersSent) json(res, 500, { error: error instanceof Error ? error.message : String(error) });
+      }),
+  );
 }
