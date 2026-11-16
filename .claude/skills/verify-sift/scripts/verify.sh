@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Drives one disposable sift dashboard. Everything for a run lives in <dir>:
+#   home/       the sift home (seeded, synthetic)     removed by `down`
+#   evidence/   screenshots, snapshots, query output   kept by `down`
+#   pid port cookie dashboard.log
+# Usage: verify.sh up <dir> | doctor <dir> | ab <dir> <agent-browser args...> | sql <dir> <query> | down <dir>
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+AB_VERSION=0.39.2
+cmd="${1:-}"
+dir="${2:-}"
+[ -n "$cmd" ] && [ -n "$dir" ] || { echo "usage: verify.sh up|doctor|ab|sql|down <dir> [...]" >&2; exit 2; }
+dir="$(mkdir -p "$dir" && cd "$dir" && pwd)"
+session="verify-sift-$(basename "$dir")"
+
+# Chrome's own sandbox needs unprivileged user namespaces, which Ubuntu's AppArmor refuses here. The page is synthetic and local.
+ab() { npx -y "agent-browser@$AB_VERSION" --session "$session" --args --no-sandbox "$@"; }
+
+doctor() {
+  local pid port cookie session_json
+  pid="$(cat "$dir/pid" 2>/dev/null)" || { echo "doctor: no instance in $dir (run up)"; return 1; }
+  port="$(cat "$dir/port")"
+  cookie="$(cat "$dir/cookie")"
+  kill -0 "$pid" 2>/dev/null || { echo "doctor: pid $pid is not running; see $dir/dashboard.log"; return 1; }
+  # Only this home's key signed the cookie, so a signed-in answer proves the port is this run's instance.
+  session_json="$(curl -sf -H "cookie: sift_session=$cookie" "http://127.0.0.1:$port/api/session")" || { echo "doctor: nothing answering on $port"; return 1; }
+  case "$session_json" in
+    *'"email":"me@example.org"'*) ;;
+    *) echo "doctor: port $port is not this run's sift (or the cookie no longer signs in): $session_json"; return 1 ;;
+  esac
+  [ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/api/suggestions")" = 401 ] || { echo "doctor: /api/ answers without a session"; return 1; }
+  echo "ok  pid $pid  http://127.0.0.1:$port  home $dir/home  build $(git -C "$ROOT" rev-parse --short HEAD)$(git -C "$ROOT" diff --quiet HEAD -- src web/src || echo '+changes')"
+}
+
+case "$cmd" in
+  up)
+    [ ! -e "$dir/home" ] || { echo "up: $dir/home exists. Use a new directory per run." >&2; exit 1; }
+    mkdir -p "$dir/evidence"
+    node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/seed.ts" "$dir/home" > "$dir/cookie"
+    port="$(node -e 'const s=require("node:net").createServer().listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')"
+    echo "$port" > "$dir/port"
+    # `dashboard`, not `run`: there is no Gmail behind this home, so a pass would only fail. It rebuilds web/dist if sources are newer.
+    cd "$ROOT"
+    nohup node --disable-warning=ExperimentalWarning src/cli/main.ts --home "$dir/home" dashboard --port "$port" > "$dir/dashboard.log" 2>&1 &
+    echo $! > "$dir/pid"
+    for _ in $(seq 1 240); do
+      grep -q 'Only the dashboard is running' "$dir/dashboard.log" 2>/dev/null && break
+      kill -0 "$(cat "$dir/pid")" 2>/dev/null || { cat "$dir/dashboard.log" >&2; exit 1; }
+      sleep 0.5
+    done
+    doctor
+    ab cookies set sift_session "$(cat "$dir/cookie")" --url "http://127.0.0.1:$port" --httpOnly > /dev/null
+    echo "browser session $session signed in as me@example.org"
+    ;;
+  doctor) doctor ;;
+  ab) shift 2; ab "$@" ;;
+  sql)
+    node --disable-warning=ExperimentalWarning -e '
+      const { DatabaseSync } = require("node:sqlite");
+      const db = new DatabaseSync(process.argv[1], { readOnly: true });
+      console.log(JSON.stringify(db.prepare(process.argv[2]).all(), null, 1));
+    ' "$dir/home/sift.db" "$3"
+    ;;
+  down)
+    ab close > /dev/null 2>&1 || true
+    if [ -f "$dir/pid" ]; then
+      pid="$(cat "$dir/pid")"
+      kill "$pid" 2>/dev/null || true
+      for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.25; done
+      kill -0 "$pid" 2>/dev/null && kill -9 "$pid"
+    fi
+    rm -rf "$dir/home" "$dir/pid" "$dir/port" "$dir/cookie"
+    echo "stopped; evidence kept in $dir/evidence"
+    ;;
+  *) echo "unknown command: $cmd" >&2; exit 2 ;;
+esac
