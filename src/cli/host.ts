@@ -6,7 +6,7 @@ import { Readable } from 'node:stream';
 import type { Config } from '../config.ts';
 import { HEADERS } from '../dashboard/server.ts';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
-import type { Host, Sift } from '../host/sift.ts';
+import type { Host, Sift } from '../app/sift.ts';
 import type { Store } from '../store/store.ts';
 import { WEB_DIST, ensureWebBuilt } from './web-build.ts';
 import { readSecret, writeSecret } from '../secrets.ts';

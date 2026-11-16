@@ -143,7 +143,7 @@ export async function startEval(deps: Pick<EvalDeps, 'db' | 'model' | 'now'>, re
   return id;
 }
 
-/** Runs still going. Each is carried on by a job; a tick sends one again in case it was lost. */
+/** Runs still going: each tick judges the next slice of each. */
 export async function goingEvals(db: Sql): Promise<number[]> {
   return (await db.select({ id: evalRuns.id }).from(evalRuns).where(eq(evalRuns.status, 'running'))).map((r) => r.id);
 }

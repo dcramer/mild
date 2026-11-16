@@ -1,9 +1,9 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { RETENTION_DAYS, pruneOld } from '../src/daemon/retention.ts';
-import { KEEP_BODY_DAYS } from '../src/daemon/bodies.ts';
+import { RETENTION_DAYS, pruneOld } from '../src/work/retention.ts';
+import { KEEP_BODY_DAYS } from '../src/work/bodies.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { type RunOptions, tick, upkeep } from '../src/daemon/run.ts';
+import { type RunOptions, tick, upkeep } from '../src/work/run.ts';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { recordSync } from '../src/store/accounts.ts';
 import { type ActionType, finishAction, insertPendingAction, unsubscribedAt } from '../src/store/actions.ts';

@@ -8,13 +8,13 @@
  * Everything else is the real command's parts: the same store, controls, server, sign-in and policy.
  */
 import { resolve } from 'node:path';
-import { dashboardAddresses, serveDashboard, sessionSecret } from '../../../../src/cli/serve.ts';
+import { dashboardAddresses, serveDashboard, sessionSecret } from '../../../../src/cli/host.ts';
 import { ui } from '../../../../src/cli/ui.ts';
 import { loadConfig } from '../../../../src/config.ts';
 import { memoryEphemeral } from '../../../../src/ephemeral/ephemeral.ts';
 import { createDashboard } from '../../../../src/dashboard/server.ts';
-import { buildControls } from '../../../../src/host/controls.ts';
-import { buildSignIn } from '../../../../src/host/google-sign-in.ts';
+import { buildControls } from '../../../../src/app/controls.ts';
+import { buildSignIn } from '../../../../src/app/google-sign-in.ts';
 import { people } from '../../../../src/store/people.ts';
 import { openStore } from '../../../../src/store/store.ts';
 

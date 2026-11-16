@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { chatgptPending, checkChatGPT, finishChatGPT, forgetChatGPT, startChatGPT } from '../src/host/chatgpt.ts';
+import { chatgptPending, checkChatGPT, finishChatGPT, forgetChatGPT, startChatGPT } from '../src/app/chatgpt.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import type { SignIns } from '../src/model/credentials.ts';
 

@@ -1,8 +1,8 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { KEEP_BODY_DAYS, keepSuggestionBodies } from '../src/daemon/bodies.ts';
-import { captureExamples } from '../src/daemon/examples.ts';
-import { triageAccount } from '../src/daemon/triage.ts';
+import { KEEP_BODY_DAYS, keepSuggestionBodies } from '../src/work/bodies.ts';
+import { captureExamples } from '../src/work/examples.ts';
+import { triageAccount } from '../src/work/triage.ts';
 import { listSuggestions, suggestionDetail } from '../src/dashboard/queries/suggestions.ts';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { listUnjudged } from '../src/dashboard/queries/runs.ts';

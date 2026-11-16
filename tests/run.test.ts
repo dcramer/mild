@@ -1,6 +1,6 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { type RunOptions, askForBackfill, runOnce, tick } from '../src/daemon/run.ts';
+import { type RunOptions, askForBackfill, runOnce, tick } from '../src/work/run.ts';
 import type { Store } from '../src/store/store.ts';
 import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
 import { undo } from '../src/actions/executor.ts';
@@ -9,7 +9,7 @@ import { applyFeedback } from '../src/learn/feedback.ts';
 import { userChanges } from '../src/learn/gmail.ts';
 import { lastStandingChange } from '../src/store/actions.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { passStatus } from '../src/daemon/status.ts';
+import { passStatus } from '../src/work/status.ts';
 import { addMailbox, connectAccount, deleteUser, recordSync, removeMailbox } from '../src/store/accounts.ts';
 import { onePerson, openUserDb, raw } from './fixtures.ts';
 import { updateLabel } from '../src/store/labels.ts';

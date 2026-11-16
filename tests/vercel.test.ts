@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HEADERS } from '../src/dashboard/server.ts';
 import { READS, WRITES } from '../src/dashboard/api/index.ts';
-import type { Work } from '../src/daemon/run.ts';
+import type { Work } from '../src/work/run.ts';
 import { MAX_DURATION_S, admit, cron, fanOut, work } from '../src/vercel/host.ts';
 
 /** `vercel.json`: what Vercel does without sift seeing the request. */

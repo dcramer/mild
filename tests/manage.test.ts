@@ -1,10 +1,10 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MAX_BACKFILL, backfill } from '../src/daemon/backfill.ts';
+import { MAX_BACKFILL, backfill } from '../src/work/backfill.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { type RunOptions, tick } from '../src/daemon/run.ts';
-import { signInRefusal } from '../src/host/sign-in.ts';
-import { triageAccount } from '../src/daemon/triage.ts';
+import { type RunOptions, tick } from '../src/work/run.ts';
+import { signInRefusal } from '../src/app/sign-in.ts';
+import { triageAccount } from '../src/work/triage.ts';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { people } from '../src/store/people.ts';
 import type { RawMessage } from '../src/gmail/api.ts';

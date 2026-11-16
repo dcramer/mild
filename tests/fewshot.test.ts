@@ -1,6 +1,6 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { triageAccount } from '../src/daemon/triage.ts';
+import { triageAccount } from '../src/work/triage.ts';
 import { addMailbox, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { openUserDb, raw } from './fixtures.ts';
 import { shotCandidates } from '../src/store/examples.ts';

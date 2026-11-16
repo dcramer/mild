@@ -1,6 +1,6 @@
 import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { gatherEvidence } from '../src/daemon/evidence.ts';
+import { gatherEvidence } from '../src/work/evidence.ts';
 import { MAX_BODY_CHARS, extractText } from '../src/gmail/body.ts';
 import { type SignIns, credentialStore } from '../src/model/credentials.ts';
 import { createJudge } from '../src/model/judge.ts';

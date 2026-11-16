@@ -7,9 +7,9 @@ import { preferences } from '../../store/preferences.ts';
 import { openStore } from '../../store/store.ts';
 import { openEphemeral } from '../../ephemeral/open.ts';
 import { paint, ui } from '../ui.ts';
-import { createSift } from '../../host/sift.ts';
+import { createSift } from '../../app/sift.ts';
 import { checkSecrets } from '../secrets-check.ts';
-import { nodeHost, portOption, serveDashboard } from '../serve.ts';
+import { nodeHost, portOption, serveDashboard } from '../host.ts';
 
 /** A minute: new mail is classified soon after it lands, and a quiet pass costs a history read per mailbox. */
 const INTERVAL_MS = 60_000;

@@ -2,7 +2,7 @@ import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { undo } from '../src/actions/executor.ts';
 import { checkRuleFilters, removeRuleFilter, writeRuleFilter } from '../src/actions/rule-filters.ts';
-import { FILTER_CHECK_MINUTES, checkFiltersWhenDue } from '../src/daemon/filters.ts';
+import { FILTER_CHECK_MINUTES, checkFiltersWhenDue } from '../src/work/filters.ts';
 import { addMailbox } from '../src/store/accounts.ts';
 import { openUserDb, raw } from './fixtures.ts';
 import { getRuleFilter, ruleFilterStatus } from '../src/store/filters.ts';

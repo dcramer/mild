@@ -85,7 +85,7 @@ Closes this run's browser session, stops the process by the pid `up` recorded, d
 
 ## Upkeep
 
-A SessionStart hook (`.claude/settings.json`) runs `scripts/maintain-check.sh`. When `web/src`, `src/dashboard`, `src/cli`, `src/store`, `src/daemon` or `tests/helpers.ts` changed on `origin/main` since the last audit, the session is told to offer `/pstack:maintain-verification-skill`. It speaks at most once a day per machine, and never runs the pass itself. It reads local refs only, so it knows only as much of main as the last fetch.
+A SessionStart hook (`.claude/settings.json`) runs `scripts/maintain-check.sh`. When `web/src`, `src/dashboard`, `src/cli`, `src/store`, `src/work`, `src/app` or `tests/helpers.ts` changed on `origin/main` since the last audit, the session is told to offer `/pstack:maintain-verification-skill`. It speaks at most once a day per machine, and never runs the pass itself. It reads local refs only, so it knows only as much of main as the last fetch.
 
 After a maintenance pass ends clean or changed, record it, or tomorrow's first session asks again:
 

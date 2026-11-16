@@ -15,7 +15,7 @@ Postgres holds nothing brief; `Ephemeral` holds nothing that cannot be lost. The
 
 ## The core
 
-`createSift(host)` (`src/host/sift.ts`) returns:
+`createSift(host)` (`src/app/sift.ts`) returns:
 
 | | Does |
 | --- | --- |
@@ -42,7 +42,7 @@ Each host builds a `Host` and calls `createSift`. What differs is who calls `res
 | | `sift run` (`src/cli/`) | Vercel (`src/vercel/`, `api/`, `vercel.json`) |
 | --- | --- | --- |
 | Requests | `node:http` turned into a `Request`; a forwarded scheme believed only from this machine | `api/site.ts`, for `/api/*` and `/auth/*` |
-| The page | served by sift (`site`, `src/host/site.ts`) | Vercel's CDN, with the same headers (`vercel.json`, held equal by `tests/vercel.test.ts`) |
+| The page | served by sift (`site`, `src/app/site.ts`) | Vercel's CDN, with the same headers (`vercel.json`, held equal by `tests/vercel.test.ts`) |
 | Each minute | `tick()` in this process, not waiting for the last | `api/cron.ts` (Vercel Cron) posts each piece of `due()` to `api/work.ts` |
 | A piece of work | in this process, 5-minute limit | a call of its own: replies at once and works under `waitUntil`, with the function's limit less a minute |
 | Started by a person | `tick(person)` in this process | the same fan-out, for that person |
@@ -79,7 +79,7 @@ Each piece of work is a call of its own, so mailboxes do not wait on each other 
 
 ## Code
 
-- `src/host/`: what every host shares. `createSift(host)` (`sift.ts`), the controls the dashboard is given, the sign-ins, and serving the page (`site.ts`).
-- `src/cli/`: the commands and the Node host (`serve.ts`: `nodeHost`, the listener).
+- `src/app/`: what every host shares. `createSift(host)` (`sift.ts`), the controls the dashboard is given, the sign-ins, and serving the page (`site.ts`).
+- `src/cli/`: the commands and the Node host (`host.ts`: `nodeHost`, the listener).
 - `src/vercel/host.ts`, `api/` (`site`, `cron`, `work`), `vercel.json`: the Vercel host. `src/vercel/migrate.ts` runs in its build.
 - `tests/runtime.test.ts`: no module state outside the hosts, and flows whose steps reach different instances. `tests/vercel.test.ts`: `vercel.json` against the code, and who may call `api/cron` and `api/work`.

@@ -3,8 +3,8 @@ import { waitUntil } from '@vercel/functions';
 import { loadConfig } from '../config.ts';
 import { openEphemeral } from '../ephemeral/open.ts';
 import { z } from 'zod';
-import type { Work } from '../daemon/run.ts';
-import { type Sift, createSift } from '../host/sift.ts';
+import type { Work } from '../work/run.ts';
+import { type Sift, createSift } from '../app/sift.ts';
 import { openStore } from '../store/store.ts';
 
 /** The time limit of every route, as `vercel.json` sets it. */

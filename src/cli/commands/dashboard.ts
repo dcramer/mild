@@ -3,9 +3,9 @@ import { loadConfig } from '../../config.ts';
 import { openEphemeral } from '../../ephemeral/open.ts';
 import { openStore } from '../../store/store.ts';
 import { ui } from '../ui.ts';
-import { createSift } from '../../host/sift.ts';
+import { createSift } from '../../app/sift.ts';
 import { checkSecrets } from '../secrets-check.ts';
-import { nodeHost, portOption, serveDashboard } from '../serve.ts';
+import { nodeHost, portOption, serveDashboard } from '../host.ts';
 
 export async function dashboard(args: string[]): Promise<void> {
   const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string' } } });

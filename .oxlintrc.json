@@ -47,7 +47,7 @@
             "patterns": [
               { "group": ["node:*", "@googleapis/*", "googleapis", "google-auth-library", "@earendil-works/*"], "message": "triage/ is pure: no I/O. Inject what you need through a port (see src/triage/stages)." },
               {
-                "group": ["**/gmail/**", "**/store/**", "**/actions/**", "**/agent/**", "**/daemon/**", "**/learn/**", "**/cli/**", "**/config.ts"],
+                "group": ["**/gmail/**", "**/store/**", "**/actions/**", "**/agent/**", "**/work/**", "**/learn/**", "**/cli/**", "**/config.ts"],
                 "message": "triage/ is pure and depends on nothing else in src/."
               }
             ]
@@ -63,7 +63,7 @@
           {
             "patterns": [
               {
-                "group": ["**/gmail/**", "**/actions/**", "**/store/**", "**/daemon/**", "@googleapis/*", "googleapis", "google-auth-library"],
+                "group": ["**/gmail/**", "**/actions/**", "**/store/**", "**/work/**", "@googleapis/*", "googleapis", "google-auth-library"],
                 "message": "model/ only turns evidence into a verdict. It never reaches Gmail, the database or anything that acts."
               },
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }
@@ -80,11 +80,11 @@
           {
             "patterns": [
               {
-                "group": ["**/gmail/**", "**/actions/**", "**/agent/**", "**/daemon/**", "@googleapis/*", "googleapis", "google-auth-library"],
+                "group": ["**/gmail/**", "**/actions/**", "**/agent/**", "**/work/**", "@googleapis/*", "googleapis", "google-auth-library"],
                 "message": "dashboard/ shows the database and records what the user teaches sift (src/learn). It never reaches Gmail or changes the mailbox."
               },
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
-              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only src/cli and src/daemon/run.ts open databases. Take the Sql you are given; the dashboard asks People (src/store/people.ts)." }
+              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/app and src/work/run.ts hold the store. Take the Sql you are given; the dashboard asks People (src/store/people.ts)." }
             ]
           }
         ]
@@ -133,7 +133,7 @@
       "rules": { "no-restricted-imports": ["error", { "patterns": [{ "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." }, { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." }] }] }
     },
     {
-      "files": ["src/actions/**/*.ts", "src/daemon/**/*.ts", "src/learn/**/*.ts"],
+      "files": ["src/actions/**/*.ts", "src/work/**/*.ts", "src/learn/**/*.ts"],
       "rules": {
         "no-restricted-imports": [
           "error",
@@ -142,15 +142,15 @@
               { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." },
               { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
-              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only src/cli and src/daemon/run.ts open databases. Take the Sql you are given; the dashboard asks People (src/store/people.ts)." }
+              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/app and src/work/run.ts hold the store. Take the Sql you are given; the dashboard asks People (src/store/people.ts)." }
             ]
           }
         ]
       }
     },
     {
-      // What starts sift wires the store up (the hosts: src/cli, src/vercel; their shared wiring in src/host), and the daemon's loop hands each pass one person's database.
-      "files": ["src/cli/**/*.ts", "src/host/**/*.ts", "src/vercel/**/*.ts", "src/daemon/run.ts"],
+      // What starts sift wires the store up (the hosts: src/cli, src/vercel; the app they build, src/app), and a tick hands each piece of work one person's database.
+      "files": ["src/cli/**/*.ts", "src/app/**/*.ts", "src/vercel/**/*.ts", "src/work/run.ts"],
       "rules": {
         "no-restricted-imports": [
           "error",

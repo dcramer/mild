@@ -1,6 +1,6 @@
 # Security
 
-How sift keeps one person's mail from anyone else, including the people running it. Decided 2026-11-15 for sift on Postgres, hosted for others (Vercel, Cloudflare) or run locally. Every change is held to it. Where the code does not do something yet, this says so; the plan is in TODO.md.
+How sift keeps one person's mail from anyone else, including the people running it. Decided 2026-11-15 for sift on Postgres, hosted (Vercel) or run locally. Every change is held to it. Where the code does not do something yet, this says so; the plan is in TODO.md.
 
 ## Hold as little as possible
 

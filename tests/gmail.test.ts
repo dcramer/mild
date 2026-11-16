@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { syncAccount } from '../src/daemon/sync.ts';
+import { syncAccount } from '../src/work/sync.ts';
 import { type GmailApi, HistoryExpiredError, type HistoryPage, type RawMessage } from '../src/gmail/api.ts';
 import { pullChanges, toFacts } from '../src/gmail/sync.ts';
 import { addMailbox, listAccounts, setMailboxAliases } from '../src/store/accounts.ts';

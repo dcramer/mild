@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gatherEvidence } from '../src/daemon/evidence.ts';
+import { gatherEvidence } from '../src/work/evidence.ts';
 import { readContent } from '../src/gmail/body.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { openUserDb } from './fixtures.ts';

@@ -2,7 +2,7 @@ import type { Sql } from '../store/sql.ts';
 
 /**
  * What the dashboard can ask the rest of sift to do. The dashboard itself may not import Gmail, the
- * action executor or the daemon, so the process that starts it hands these in. Anything that changes
+ * action executor or the work code, so the process that starts it hands these in. Anything that changes
  * the mailbox goes through here and is audited like any other change. `db` is the database of whoever
  * asked, which is where the thing named is looked for.
  */
@@ -26,7 +26,7 @@ export interface Controls {
    * as undone), or null when there is nothing more to say.
    */
   undo(db: Sql, actionId: number): Promise<string | null>;
-  /** Start pulling the last `days` days of everyone's inbox in as suggestions; they arrive as jobs run. */
+  /** Ask for the last `days` days of everyone's inbox as suggestions; the ticks that follow pull them in. */
   backfill(days: number): Promise<void>;
   /**
    * After the user has corrected a decision: take back what sift last did to that message, so the new

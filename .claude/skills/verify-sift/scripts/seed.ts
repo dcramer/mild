@@ -4,7 +4,7 @@
  *
  *   node .claude/skills/verify-sift/scripts/seed.ts <home>
  *
- * The mail goes through the real daemon pass (`tick`, with sift off), so decisions, labels, suggestion
+ * The mail goes through the real pass (`tick`, with sift off), so decisions, labels, suggestion
  * bodies and proposals are what sift itself would record. Only Gmail is faked, at the `GmailApi` and
  * `Mailbox` ports. Prints one line: the `sift_session` cookie value for the connected account.
  */
@@ -12,7 +12,7 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadConfig } from '../../../../src/config.ts';
-import { tick } from '../../../../src/daemon/run.ts';
+import { tick } from '../../../../src/work/run.ts';
 import { memoryEphemeral } from '../../../../src/ephemeral/ephemeral.ts';
 import { applyFeedback, pendingSuggestions } from '../../../../src/learn/feedback.ts';
 import type { GmailApi, RawMessage } from '../../../../src/gmail/api.ts';

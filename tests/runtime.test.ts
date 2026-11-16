@@ -2,7 +2,7 @@ import { globSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { SignIn } from '../src/dashboard/controls.ts';
 import { type Ephemeral, memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { type RunOptions, askForBackfill, tick } from '../src/daemon/run.ts';
+import { type RunOptions, askForBackfill, tick } from '../src/work/run.ts';
 import { people } from '../src/store/people.ts';
 import { onePerson, startDashboard } from './fixtures.ts';
 import { FakeMailbox } from './helpers.ts';
