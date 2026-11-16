@@ -6,7 +6,7 @@ What it needs: the **Pro** plan (Hobby runs crons once a day; Sift ticks each mi
 
 ## 1. The project
 
-Import this repository as a Vercel project. `vercel.json` sets the build, the functions (`api/`), the minute's cron and the page's headers; leave Framework Preset at Other. Node comes from `package.json` (24.x).
+Import this repository as a Vercel project. Leave Root Directory empty, the repository root: Vercel offers `web/` because it finds Vite there, and a build from there knows nothing of `vercel.json` or the functions. Framework Preset: Other. `vercel.json` sets the build, the functions (`api/`), the minute's cron and the page's headers, and Node comes from `package.json` (24.x).
 
 Add Neon and a Redis database to the project from the Marketplace (Storage). Each sets its own variables; Sift reads the ones in step 3.
 
