@@ -213,6 +213,8 @@ Code: `src/learn/feedback.ts` (suggestions, answers, accuracy), `src/learn/gmail
 
 One SQLite database, `sift.db` in the home directory (schema in `src/store/migrations/`). Each migration file is applied once and recorded by name in `schema_migrations`, so a file that lands with a lower number than ones already applied still runs; a database that has had a file this build does not know was opened by a newer sift, and is refused. It is the complete record of what sift saw and did, and everything else (the dashboard, undo, future analytics) reads from it.
 
+SQLite is the only engine sift will support (decided 2026-11-15). Postgres was declined: without row-level security, which is not acceptable here, it keeps people apart only by a database or schema per user, the same as a file per user, plus a server to run. Hosting is on Cloudflare Durable Objects or a machine with a disk, not Vercel. The plan for a database per user is in TODO.md.
+
 - **messages:** one row per message sift has seen: sender, recipients, subject, the triage headers, the labels at sync time and the facts derived from them. No body. This is enough to triage a message again without refetching it.
 - **feedback, examples:** the user's answers to suggestions, and the full content of each message they answered for, kept as evaluation and training data until deleted (see Teaching).
 - **suggestion_bodies:** the readable text of mail still waiting on the user, so a suggestion can be judged by reading it. Held only for mail sift would move or could not place, and deleted when the message is answered or stops being a suggestion, and after 30 days regardless (`src/daemon/bodies.ts`). These two tables are the only places message content is stored.
