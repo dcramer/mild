@@ -1,6 +1,6 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MAX_EVAL_EXAMPLES, getEvalRun, interruptEvals, listEvalRuns, startEval } from '../src/learn/evals.ts';
+import { MAX_EVAL_EXAMPLES, getEvalRun, interruptEvals, listEvalRuns, startEval, tryModel } from '../src/learn/evals.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { openUserDb } from '../src/store/db.ts';
 import { recordDecision } from '../src/store/decisions.ts';
@@ -223,5 +223,44 @@ describe('replaying the model over stored examples', () => {
     await interruptEvals(db, 900);
     expect((await listEvalRuns(db))[0]).toMatchObject({ status: 'interrupted', finishedAt: 900 });
     expect(await getEvalRun(db, 999)).toBeNull();
+  });
+});
+
+describe('trying a model before it sorts anything', () => {
+  let db: Sql;
+  const usage = { model: 'test/model', inputTokens: 100, outputTokens: 5, costUsd: 0.001 };
+
+  beforeEach(async () => {
+    db = await openUserDb(':memory:');
+    await addMailbox(db, ACCOUNT, '1', 0);
+  });
+
+  it('asks about the newest answered examples and compares its labels with the answers, recording nothing', async () => {
+    for (const [id, label, at] of [
+      ['e1', 'newsletter', 1],
+      ['e2', 'marketing', 2],
+      ['e3', 'personal', 3],
+    ] as const)
+      await storeExample(db, ACCOUNT, { id, from: `${id}@example.com`, label, markedAt: at });
+    const answers: Record<string, string> = { e1: 'newsletter', e2: 'newsletter', e3: 'personal' };
+    const trial = await tryModel(
+      {
+        db,
+        judge: async (input) => ({ label: answers[input.evidence.facts.messageId]!, reason: 'r', confidence: 0.9, usage }),
+        guidelines: '',
+        errors: () => [],
+      },
+      [ACCOUNT],
+      2,
+    );
+    expect(trial).toMatchObject({ asked: 2, answered: 2, checked: 2, matched: 1, costUsd: 0.002, error: null });
+    expect(await listEvalRuns(db)).toEqual([]);
+  });
+
+  it('makes up the number from recent mail, and says why when no call answered', async () => {
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'm1', receivedAt: 5 }), facts({ messageId: 'm2', receivedAt: 6 })], '2', 10);
+    const trial = await tryModel({ db, judge: async () => null, guidelines: '', errors: () => ['401 invalid key'] }, [ACCOUNT]);
+    expect(trial).toMatchObject({ asked: 2, answered: 0, checked: 0, error: '401 invalid key' });
+    await expect(tryModel({ db, judge: async () => null, guidelines: '', errors: () => [] }, [])).rejects.toThrow('Connect a Gmail account first.');
   });
 });

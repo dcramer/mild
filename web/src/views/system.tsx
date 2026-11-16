@@ -48,6 +48,7 @@ import {
   Select,
   Share,
   SettingRow,
+  SettingsGroup,
   Sheet,
   StackedBars,
   Stamp,
@@ -550,23 +551,25 @@ export function SystemView() {
       </Section>
 
       <div className="grid gap-14 lg:grid-cols-2">
-        <Section title="Settings in a sheet">
-          <Sheet>
-            <SettingRow title="Observing" note="sift only suggests. Nothing in Gmail changes until you let it act.">
-              <Button>Start acting</Button>
-            </SettingRow>
-            <SettingRow title="Check for mail" note="Last checked 1 min ago.">
-              <Select
-                label="How often"
-                value="60"
-                options={[
-                  ['60', 'Every minute'],
-                  ['300', 'Every 5 minutes'],
-                ]}
-                onChange={() => {}}
-              />
-            </SettingRow>
-          </Sheet>
+        <Section title="Settings in a sheet" meta="a settings page is groups: what each governs on the left, its sheet on the right">
+          <SettingsGroup title="Sorting" note="Whether sift changes Gmail, and how often it looks.">
+            <Sheet>
+              <SettingRow title="Observing" note="Nothing in Gmail changes. sift suggests, and learns from your answers.">
+                <Button>Start acting</Button>
+              </SettingRow>
+              <SettingRow title="Check for mail" note="Last checked 1 min ago.">
+                <Select
+                  label="How often"
+                  value="60"
+                  options={[
+                    ['60', 'Every minute'],
+                    ['300', 'Every 5 minutes'],
+                  ]}
+                  onChange={() => {}}
+                />
+              </SettingRow>
+            </Sheet>
+          </SettingsGroup>
         </Section>
         <Section title="Empty and loading">
           <Empty>Nothing is waiting on you.</Empty>

@@ -2,6 +2,8 @@ import { type Api, type AuthContext, type Model, type Models, createModels } fro
 import { anthropicProvider } from '@earendil-works/pi-ai/providers/anthropic';
 import { openaiProvider } from '@earendil-works/pi-ai/providers/openai';
 import { openaiCodexProvider } from '@earendil-works/pi-ai/providers/openai-codex';
+import { openrouterProvider } from '@earendil-works/pi-ai/providers/openrouter';
+import { vercelAIGatewayProvider } from '@earendil-works/pi-ai/providers/vercel-ai-gateway';
 import { type SignIns, credentialStore } from './credentials.ts';
 
 /** A way to reach a model. `provider` is a pi-ai provider id; `chatgpt` signs in by device code, `key` takes an API key. */
@@ -15,10 +17,31 @@ export const MODEL_CHOICES: readonly ModelChoice[] = [
   { provider: 'openai-codex', label: 'ChatGPT', how: 'chatgpt' },
   { provider: 'openai', label: 'OpenAI API key', how: 'key' },
   { provider: 'anthropic', label: 'Anthropic API key', how: 'key' },
+  { provider: 'openrouter', label: 'OpenRouter API key', how: 'key' },
+  { provider: 'vercel-ai-gateway', label: 'Vercel AI Gateway API key', how: 'key' },
 ];
 
+/** Providers that resell many labs' models. Their ids carry the lab: `anthropic/claude-haiku-5.5`. */
+const RESELLERS = new Set(['openrouter', 'vercel-ai-gateway']);
+
+/**
+ * Whether to offer a model at all. A reseller lists hundreds; sorting mail wants a small, fast one, so
+ * only the major labs' small families are offered, and not a batch variant or a moving "latest" alias.
+ */
+export function offerModel(provider: string, id: string): boolean {
+  if (!RESELLERS.has(provider)) return true;
+  return /^(openai\/gpt-[\w.-]*(mini|luna)|anthropic\/claude-haiku|google\/gemini-[\w.-]*flash)/.test(id) && !/batch|latest/.test(id);
+}
+
 /** Each provider's small, cheap family, by the word its model ids carry. */
-const SMALL_FAMILY: Record<string, string> = { openai: 'luna', 'openai-codex': 'luna', anthropic: 'haiku', google: 'flash' };
+const SMALL_FAMILY: Record<string, string> = {
+  openai: 'luna',
+  'openai-codex': 'luna',
+  anthropic: 'haiku',
+  google: 'flash',
+  openrouter: 'haiku',
+  'vercel-ai-gateway': 'haiku',
+};
 
 /** The numbers in a model id up to the first that is a date (`3-5` in `claude-3-5-haiku-20241022`). */
 const version = (id: string) => {
@@ -54,7 +77,8 @@ const NOTHING_AMBIENT: AuthContext = { env: async () => undefined, fileExists: a
  */
 export function openModels(signIns: SignIns): Models {
   const models = createModels({ credentials: credentialStore(signIns), authContext: NOTHING_AMBIENT });
-  for (const provider of [openaiCodexProvider(), openaiProvider(), anthropicProvider()]) models.setProvider(provider);
+  for (const provider of [openaiCodexProvider(), openaiProvider(), anthropicProvider(), openrouterProvider(), vercelAIGatewayProvider()])
+    models.setProvider(provider);
   return models;
 }
 

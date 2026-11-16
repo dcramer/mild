@@ -4,7 +4,7 @@ import { gatherEvidence } from '../src/daemon/evidence.ts';
 import { MAX_BODY_CHARS, extractText } from '../src/gmail/body.ts';
 import { type SignIns, credentialStore } from '../src/model/credentials.ts';
 import { createJudge } from '../src/model/judge.ts';
-import { MODEL_CHOICES, openModels, recommendModel, resolveModel, saveApiKey } from '../src/model/models.ts';
+import { MODEL_CHOICES, offerModel, openModels, recommendModel, resolveModel, saveApiKey } from '../src/model/models.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts';
 import { openUserDb } from '../src/store/db.ts';
@@ -477,6 +477,16 @@ describe('providers', () => {
         import('@earendil-works/pi-ai/oauth'),
       ]),
     ).resolves.toHaveLength(5);
+  });
+});
+
+describe('offerModel', () => {
+  it("offers a reseller's small models from the major labs only, and everything a lab sells itself", () => {
+    for (const id of ['anthropic/claude-haiku-5.5', 'openai/gpt-5-mini', 'google/gemini-3-flash']) expect(offerModel('openrouter', id), id).toBe(true);
+    for (const id of ['anthropic/claude-haiku-5.5-batch', '~openai/gpt-luna-latest', 'anthropic/claude-opus-5', 'aion-labs/aion-3.0-mini'])
+      expect(offerModel('vercel-ai-gateway', id), id).toBe(false);
+    expect(offerModel('anthropic', 'claude-opus-5')).toBe(true);
+    expect(recommendModel('openrouter', ['anthropic/claude-haiku-4.5', 'anthropic/claude-haiku-5.5', 'openai/gpt-5-mini'])).toBe('anthropic/claude-haiku-5.5');
   });
 });
 

@@ -43,9 +43,9 @@ export const reads: Read[] = [
     // A provider that cannot be reached is said beside an empty list, not as a failed request.
     run: async ({ db, controls }) => {
       try {
-        return ok(controls ? await controls.models(db) : { models: [], recommended: null });
+        return ok(controls ? await controls.models(db) : { models: [], recommended: {} });
       } catch (error) {
-        return ok({ models: [], recommended: null, error: error instanceof Error ? error.message : String(error) });
+        return ok({ models: [], recommended: {}, error: error instanceof Error ? error.message : String(error) });
       }
     },
   },
@@ -108,6 +108,16 @@ export const writes: Write[] = [
       if (!controls) throw new Error('This dashboard cannot sign in to a model.');
       await controls.saveModelKey(db, provider, key.trim());
       return { ok: true };
+    },
+  },
+  {
+    path: '/api/model/try',
+    touches: self,
+    run: async ({ db, controls }, body) => {
+      const { model } = body;
+      if (!str(model) || !/^[^/\s]+\/\S+$/.test(model)) return null;
+      if (!controls) throw new Error('This dashboard cannot ask a model.');
+      return await controls.tryModel(db, model);
     },
   },
   {

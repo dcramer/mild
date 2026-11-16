@@ -34,11 +34,12 @@ const controls: Controls = {
   saveSettings: (change) => {
     settings = { ...settings, ...change };
   },
-  models: async () => ({ models: ['p/small', 'p/large'], recommended: 'p/small' }),
+  models: async () => ({ models: ['p/small', 'p/large'], recommended: { p: 'p/small' } }),
   modelSignIns: async () => ({ choices: [{ provider: 'openai-codex', label: 'ChatGPT', how: 'chatgpt' }], signedIn: ['openai-codex'], pending: null }),
   signInChatGPT: async () => (calls.push('chatgpt'), { code: 'ABCD-1234', url: 'https://auth.example/device', expiresAt: 900 }),
   saveModelKey: async (_db, provider, key) => void calls.push(`key ${provider} ${key}`),
   signOutModel: async (_db, provider) => void calls.push(`signout ${provider}`),
+  tryModel: async (_db, model) => (calls.push(`try ${model}`), { asked: 5, answered: 5, checked: 3, matched: 3, ms: 900, costUsd: 0.004, error: null }),
   rejudge: async (_db, accountId) => {
     calls.push(`rejudge ${accountId}`);
     return { started: 2, remaining: 0 };
@@ -126,7 +127,7 @@ describe('managing sift from the dashboard', () => {
     expect((body['labels'] as Record<string, { id: string; gmailLabel: string; rules: number }[]>)[ACCOUNT]).toContainEqual(
       expect.objectContaining({ id: 'newsletter', gmailLabel: 'sift/newsletters', rules: 0, messages: 0, record: { reviewed: 0, right: 0 } }),
     );
-    expect((await call(port, 'GET', '/api/models')).body).toEqual({ models: ['p/small', 'p/large'], recommended: 'p/small' });
+    expect((await call(port, 'GET', '/api/models')).body).toEqual({ models: ['p/small', 'p/large'], recommended: { p: 'p/small' } });
   });
 
   it('changes settings, and refuses values that make no sense', async () => {

@@ -146,7 +146,7 @@ export const api = {
     post<{ reviewed: number; taught: string | null; corrected: string | null; fixed: string | null }>('/api/feedback', answer),
   manage: (signal: AbortSignal) => get<ManageState>('/api/manage', {}, signal),
   /** The models the reader's own sign-ins offer, and the one to suggest first. */
-  models: (signal: AbortSignal) => get<{ models: string[]; recommended: string | null; error?: string }>('/api/models', {}, signal),
+  models: (signal: AbortSignal) => get<{ models: string[]; recommended: Record<string, string>; error?: string }>('/api/models', {}, signal),
   changes: (signal: AbortSignal) => get<{ changes: ChangeRow[] }>('/api/changes', {}, signal),
   saveSettings: (change: { act?: boolean; interval?: number }) => post('/api/settings', change),
   saveGuidelines: (text: string) => post('/api/guidelines', { text }),
@@ -156,6 +156,9 @@ export const api = {
   signInChatGPT: () => post<{ code: string; url: string; expiresAt: number }>('/api/model/chatgpt', {}),
   saveModelKey: (provider: string, key: string) => post('/api/model/key', { provider, key }),
   signOutModel: (provider: string) => post('/api/model/signout', { provider }),
+  /** Ask a model about a few recent messages before it sorts anything. Each call is paid for. */
+  tryModel: (model: string) =>
+    post<{ asked: number; answered: number; checked: number; matched: number; ms: number; costUsd: number; error: string | null }>('/api/model/try', { model }),
   saveLabel: (
     accountId: string,
     id: string,

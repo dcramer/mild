@@ -1,3 +1,4 @@
+import type { Trial } from '../learn/evals.ts';
 import type { Sql } from '../store/sql.ts';
 
 /**
@@ -11,7 +12,8 @@ export interface Controls {
   /** Save a change to `sift.toml`. A running sift picks it up on its next pass. */
   saveSettings(change: Partial<ManagedSettings>): void;
   /** `provider/model-id` for every model this person's sign-ins offer, and the one to suggest first. */
-  models(db: Sql): Promise<{ models: string[]; recommended: string | null }>;
+  /** The models this person's sign-ins offer, and for each provider the one to suggest first. */
+  models(db: Sql): Promise<{ models: string[]; recommended: Record<string, string> }>;
   /** The ways to reach a model, which of them this person has signed in to, and a ChatGPT sign-in under way. */
   modelSignIns(db: Sql): Promise<ModelSignIns>;
   /** Start signing this person in to ChatGPT. Resolves with the code they enter at OpenAI; it completes in the background. */
@@ -19,6 +21,8 @@ export interface Controls {
   /** Store an API key for one of the providers that takes one. */
   saveModelKey(db: Sql, provider: string, key: string): Promise<void>;
   signOutModel(db: Sql, provider: string): Promise<void>;
+  /** Ask `model` (`provider/model-id`, from one of this person's sign-ins) about a few recent messages. Records nothing. */
+  tryModel(db: Sql, model: string): Promise<Trial>;
   /**
    * Judge again, in the background, an account's waiting suggestions that were judged before the
    * person's guidelines last changed. A model call each, so only when the user asks, and at most a batch at a

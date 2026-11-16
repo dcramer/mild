@@ -24,3 +24,19 @@ export function SettingRow({ title, note, children }: { title: string; note?: Re
     </div>
   );
 }
+
+/**
+ * One part of a settings page: its name and what it governs on the left, its sheet on the right, and a
+ * rule above it that sets it apart from the part before. On a narrow screen the two stack.
+ */
+export function SettingsGroup({ title, note, children }: { title: string; note?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="grid gap-x-12 gap-y-4 border-t border-(--rule) pt-8 first-of-type:border-t-0 first-of-type:pt-0 md:grid-cols-[14rem_minmax(0,1fr)]">
+      <div>
+        <h2 className="heading">{title}</h2>
+        {note ? <div className="mt-1.5 text-sm text-muted-foreground">{note}</div> : null}
+      </div>
+      <div className="flex min-w-0 flex-col gap-3">{children}</div>
+    </section>
+  );
+}

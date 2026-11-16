@@ -8,11 +8,11 @@ import type { Activity, Controls, ModelSignIns } from '../dashboard/controls.ts'
 import { rejudgeWaiting } from '../daemon/rejudge.ts';
 import type { Wake } from '../daemon/run.ts';
 import { createGmailApi } from '../gmail/api.ts';
-import { interruptEvals, startEval } from '../learn/evals.ts';
+import { interruptEvals, startEval, tryModel } from '../learn/evals.ts';
 import { clientFor, loadClientSecrets } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { createJudge } from '../model/judge.ts';
-import { MODEL_CHOICES, openModels, recommendModel, resolveModel, saveApiKey, startChatGPTSignIn } from '../model/models.ts';
+import { MODEL_CHOICES, offerModel, openModels, recommendModel, resolveModel, saveApiKey, startChatGPTSignIn } from '../model/models.ts';
 import { listAccounts, listUsers, personOf } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
 import { credentials } from '../store/credentials.ts';
@@ -81,17 +81,18 @@ export async function buildControls(config: Config, store: Store, live: { wake?:
       live.wake?.now();
     },
     models: async (db) => {
-      const available = (await (await modelsFor(config, db)).getAvailable()).map((m) => ({ provider: m.provider, id: m.id }));
-      const providers = [...new Set(available.map((m) => m.provider))];
-      const recommended = providers
-        .map((provider) =>
-          recommendModel(
-            provider,
-            available.filter((m) => m.provider === provider).map((m) => m.id),
-          ),
-        )
-        .flatMap((id, index) => (id ? [`${providers[index]}/${id}`] : []))[0];
-      return { models: available.map((m) => `${m.provider}/${m.id}`), recommended: recommended ?? null };
+      const available = (await (await modelsFor(config, db)).getAvailable())
+        .filter((m) => offerModel(m.provider, m.id))
+        .map((m) => ({ provider: m.provider, id: m.id }));
+      const recommended: Record<string, string> = {};
+      for (const provider of new Set(available.map((m) => m.provider))) {
+        const id = recommendModel(
+          provider,
+          available.filter((m) => m.provider === provider).map((m) => m.id),
+        );
+        if (id) recommended[provider] = `${provider}/${id}`;
+      }
+      return { models: available.map((m) => `${m.provider}/${m.id}`), recommended };
     },
     modelSignIns: async (db) => {
       const waiting = pending.get(await personOf(db));
@@ -121,6 +122,18 @@ export async function buildControls(config: Config, store: Store, live: { wake?:
       if (!MODEL_CHOICES.some((c) => c.provider === provider && c.how === 'key')) throw new Error('That provider does not take an API key.');
       await saveApiKey(await credentials(db, 'model', config.keys), provider, key);
       live.wake?.now();
+    },
+    tryModel: async (db, spec) => {
+      const models = await modelsFor(config, db);
+      const model = resolveModel(models, spec);
+      if (!(await models.getAuth(model))) throw new Error(`Not signed in to ${model.provider}.`);
+      const errors: string[] = [];
+      const judge = createJudge(models, model, (message) => errors.push(message));
+      const { guidelines } = await preferences(db);
+      return await tryModel(
+        { db, judge, guidelines, errors: () => errors },
+        (await listAccounts(db)).map((a) => a.id),
+      );
     },
     signOutModel: async (db, provider) => {
       await (await credentials(db, 'model', config.keys)).remove(provider);
