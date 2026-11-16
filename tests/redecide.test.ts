@@ -111,6 +111,29 @@ describe('when a rule changes', () => {
     expect(await current(arrivedUnderRule.id)).toMatchObject({ stage: 'rules', rule_id: arrivedUnderRule.ruleId });
   });
 
+  it('a rule waiting for the label the model gave says what happens, and removing it brings the suggestion back', async () => {
+    const sale = await decided('sales@example.com', { ...MARKETING, confidence: 0.9 });
+    const other = await decided('sales@example.com', { disposition: 'keep', labelId: 'personal' });
+    const ruleId = await addRule(db, ACCOUNT, { match: { from: 'sales@example.com' }, whenLabel: 'marketing', disposition: 'keep' }, 'user');
+
+    expect(await redecideWaiting(db, ACCOUNT, 50)).toBe(1);
+    expect(await current(sale)).toMatchObject({
+      stage: 'model',
+      disposition: 'keep',
+      label_id: 'marketing',
+      rule_id: ruleId,
+      subscription: 'preserve',
+      reason: 'rule: from sales@example.com, when it is Marketing: keep it. Marketing: a sale',
+    });
+    expect(await waiting()).toEqual([other]);
+    expect(await redecideWaiting(db, ACCOUNT, 60)).toBe(0);
+
+    await removeRule(db, ruleId);
+    expect(await redecideWaiting(db, ACCOUNT, 70)).toBe(1);
+    expect(await current(sale)).toMatchObject({ stage: 'model', disposition: 'archive', label_id: 'marketing', rule_id: null, reason: 'Marketing: a sale' });
+    expect(await waiting()).toEqual([other, sale].toSorted());
+  });
+
   it('goes back to review when no tier had placed it before the rule', async () => {
     const lost = await decided('who@example.com', { stage: 'fallback', reason: 'no stage reached a decision' });
     const ruleId = await addRule(db, ACCOUNT, { match: { from: 'who@example.com' }, labelId: 'junk' }, 'user');

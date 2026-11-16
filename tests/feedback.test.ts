@@ -13,7 +13,8 @@ import { listAccounts, recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { listProposals } from '../src/store/proposals.ts';
 import { MAX_ATTEMPTS, startRun } from '../src/store/runs.ts';
-import { addRule, listRules } from '../src/store/rules.ts';
+import { addRule, listRules, setRule } from '../src/store/rules.ts';
+import { redecideWaiting } from '../src/learn/redecide.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import type { Decision, Disposition } from '../src/triage/types.ts';
 import { everything, facts, FakeMailbox } from './helpers.ts';
@@ -343,6 +344,24 @@ describe('an answer pressed in the dashboard', () => {
     mailbox.labels.set('m1', ['INBOX']);
     await triageAccount({ db, mailbox: null, answers: mailbox }, (await listAccounts(db))[0]!);
     expect(mailbox.labels.get('m1')).toContain('INBOX');
+  });
+
+  it('keeps the message a "when it is this label, keep" rule was made from, as the panel does after adding it', async () => {
+    const decisionId = await suggest('news@example.com', 'archive', { ...NEWS, subscription: 'unsubscribe' });
+    await setRule(db, ACCOUNT, { from: 'news@example.com' }, { whenLabel: 'newsletter', disposition: 'keep' }, 'user', 40);
+    await redecideWaiting(db, ACCOUNT, 41);
+    await applyFeedback(
+      db,
+      { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', disposition: 'keep', scope: 'once', decisionId, messageId: 'm1', carryOut: true },
+      50,
+    );
+    expect(await raw(db).get(`SELECT disposition, subscription, label_id FROM decisions WHERE message_id = 'm1' ORDER BY id DESC LIMIT 1`)).toEqual({
+      disposition: 'keep',
+      subscription: 'preserve',
+      label_id: 'newsletter',
+    });
+    expect(await raw(db).get(`SELECT verdict, disposition, label_id FROM feedback`)).toEqual({ verdict: 'right', disposition: 'keep', label_id: 'newsletter' });
+    expect(await raw(db).get(`SELECT disposition, label_id FROM examples WHERE message_id = 'm1'`)).toEqual({ disposition: 'keep', label_id: 'newsletter' });
   });
 
   it('answers that keep mail its label would move propose no rule that would move it', async () => {

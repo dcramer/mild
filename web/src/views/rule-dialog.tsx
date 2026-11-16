@@ -45,7 +45,8 @@ export function AddRuleDialog({
   /** Adding the rule accepts this proposal; closing without adding leaves it open. */
   proposal?: number;
   onClose: () => void;
-  onAdded: (match: RuleMatch, outcome: string) => void;
+  /** `rule` is what the rule does, for a caller that acts on the message it was opened from. */
+  onAdded: (match: RuleMatch, outcome: string, rule: { whenLabel?: string; disposition?: Action }) => void;
 }) {
   const { busy, error, run } = useAction();
   const [by, setBy] = useState<By>(start?.by ?? 'from');
@@ -53,19 +54,22 @@ export function AddRuleDialog({
   const [facts, setFacts] = useState<FactAnswer[]>(start?.facts ?? []);
   const [condition, setCondition] = useState('');
   const [label, setLabel] = useState(start?.label ?? '');
+  const [whenLabel, setWhenLabel] = useState(start?.whenLabel ?? '');
   const [then, setThen] = useState<'' | Action>(start?.action ?? '');
   const [markRead, setMarkRead] = useState(false);
   const [unsubscribe, setUnsubscribe] = useState(false);
-  const chosen = labels.find((l) => l.id === label);
+  // A rule that waits for a label takes the label a tier gives, so it names none of its own.
+  const waitsFor = labels.find((l) => l.id === whenLabel);
+  const chosen = waitsFor ? undefined : labels.find((l) => l.id === label);
   // A rule with no label is only an action, so it needs one; a condition in words needs a label to describe.
   const action: '' | Action = chosen ? '' : then || 'archive';
-  const needsLabel = condition.trim() !== '' && !chosen;
+  const needsLabel = !waitsFor && condition.trim() !== '' && !chosen;
   const named = by === 'from' ? fromMatch(value) : value.trim() === '' ? {} : { [by]: value.trim() };
   const match = facts.length > 0 ? { ...named, facts: factConditions(facts) } : named;
   const ready = (value.trim() !== '' || facts.length > 0) && !needsLabel;
   // Adding a rule with exactly the conditions of one already there replaces it, so the dialog says which.
   const rules = useLoaded('rules', (signal) => api.rules(signal));
-  const replaces = ready ? replacedBy(rules.data?.rules ?? [], accountId, match) : undefined;
+  const replaces = ready ? replacedBy(rules.data?.rules ?? [], accountId, match, waitsFor?.id ?? null) : undefined;
   const replacing = replaces ? (replaces.kind === 'label' ? replaces.override : replaces.disposition) : null;
   const unused = (except: FactKey | null) => ANSWERS.filter((a) => a.key === except || !facts.some((f) => f.key === a.key));
   const add = () =>
@@ -75,6 +79,7 @@ export function AddRuleDialog({
           accountId,
           match,
           ...(chosen ? { label: chosen.id } : {}),
+          ...(waitsFor ? { whenLabel: waitsFor.id } : {}),
           ...(action ? { disposition: action } : {}),
           ...(!chosen && markRead ? { markRead } : {}),
           ...(!chosen && unsubscribe ? { unsubscribe } : {}),
@@ -82,7 +87,10 @@ export function AddRuleDialog({
           ...(proposal === undefined ? {} : { proposal }),
         }),
       () => {
-        onAdded(match, chosen ? chosen.name : outcomeName(action || 'archive'));
+        onAdded(match, waitsFor ? `${outcomeName(action || 'archive')} when ${waitsFor.name}` : chosen ? chosen.name : outcomeName(action || 'archive'), {
+          ...(waitsFor ? { whenLabel: waitsFor.id } : {}),
+          ...(action ? { disposition: action } : {}),
+        });
         onClose();
       },
     );
@@ -162,29 +170,45 @@ export function AddRuleDialog({
             </span>
           </Field>
         ) : null}
-        <Field
-          inline
-          label="Only when"
-          hint={
-            needsLabel ? 'Choose a label below for this to describe.' : condition.trim() !== '' ? 'A model reads each message it matches to check.' : undefined
-          }
-        >
-          <Input
-            className="w-full"
-            aria-label="Only when it is, in your words"
-            placeholder="optional: it is a notice for a lot I did not bid on"
-            value={condition}
-            onChange={(event) => setCondition(event.target.value)}
-          />
-        </Field>
-        <Field inline label="Label as">
+        <Field inline label="When it is" hint={waitsFor ? 'A model reads each message it matches to tell.' : undefined}>
           <Select
-            label="Label it as"
-            value={label}
-            options={[['', 'No label, just act'] as const, ...labels.map((l) => [l.id, l.name] as const)]}
-            onChange={setLabel}
+            label="Only when it is this label"
+            value={whenLabel}
+            options={[['', 'Any label'] as const, ...labels.map((l) => [l.id, l.name] as const)]}
+            onChange={setWhenLabel}
           />
         </Field>
+        {waitsFor ? null : (
+          <>
+            <Field
+              inline
+              label="Only when"
+              hint={
+                needsLabel
+                  ? 'Choose a label below for this to describe.'
+                  : condition.trim() !== ''
+                    ? 'A model reads each message it matches to check.'
+                    : undefined
+              }
+            >
+              <Input
+                className="w-full"
+                aria-label="Only when it is, in your words"
+                placeholder="optional: it is a notice for a lot I did not bid on"
+                value={condition}
+                onChange={(event) => setCondition(event.target.value)}
+              />
+            </Field>
+            <Field inline label="Label as">
+              <Select
+                label="Label it as"
+                value={label}
+                options={[['', 'No label, just act'] as const, ...labels.map((l) => [l.id, l.name] as const)]}
+                onChange={setLabel}
+              />
+            </Field>
+          </>
+        )}
         {chosen ? null : (
           <>
             <Field inline label="Then">

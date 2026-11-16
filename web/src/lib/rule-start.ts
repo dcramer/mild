@@ -13,7 +13,9 @@ export interface RuleStart {
   value: string;
   facts: FactAnswer[];
   label?: string;
-  /** With no label: what happens to the mail. */
+  /** The label the rule waits for a tier to give, in place of `label`. */
+  whenLabel?: string;
+  /** With no label, or when it waits for one: what happens to the mail. */
   action?: 'keep' | 'archive' | 'spam';
 }
 
@@ -30,6 +32,9 @@ export const messageStart = (sender: string, label: string | null): RuleStart =>
   facts: [],
   ...(label === null ? {} : { label }),
 });
+
+/** A message's sender, when their mail is what sift says it is but should stay in the inbox. */
+export const keepStart = (sender: string, label: string): RuleStart => ({ by: 'from', value: sender, facts: [], whenLabel: label, action: 'keep' });
 
 /** A message's sender and one thing sift saw in it. */
 export const factStart = (sender: string, fact: FactAnswer): RuleStart => ({ by: 'from', value: sender, facts: [fact] });
@@ -58,8 +63,8 @@ const canonical = (value: unknown): unknown =>
       )
     : value;
 
-/** The rule adding `match` would replace: one of the account's with exactly those conditions, no exceptions, waiting for no label. */
-export function replacedBy(rules: readonly RuleSummary[], accountId: string, match: RuleMatch): RuleSummary | undefined {
+/** The rule adding `match` would replace: one of the account's with exactly those conditions, no exceptions, waiting for the same label or none. */
+export function replacedBy(rules: readonly RuleSummary[], accountId: string, match: RuleMatch, whenLabel: string | null): RuleSummary | undefined {
   const key = JSON.stringify(canonical(match));
-  return rules.find((r) => r.accountId === accountId && r.whenLabel === null && r.except.length === 0 && JSON.stringify(canonical(r.match)) === key);
+  return rules.find((r) => r.accountId === accountId && r.whenLabel === whenLabel && r.except.length === 0 && JSON.stringify(canonical(r.match)) === key);
 }

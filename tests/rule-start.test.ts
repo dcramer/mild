@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { listRuleSummaries } from '../src/dashboard/queries/rules.ts';
 import { addRule, setRule } from '../src/store/rules.ts';
-import { factStart, listStart, messageStart, proposalStart, replacedBy, standingStart } from '../web/src/lib/rule-start.ts';
+import { factStart, keepStart, listStart, messageStart, proposalStart, replacedBy, standingStart } from '../web/src/lib/rule-start.ts';
 import { onePerson } from './fixtures.ts';
 import { everything } from './helpers.ts';
 
@@ -38,16 +38,23 @@ describe('where each way into the rule dialog starts it', () => {
     expect(standingStart({ domain: 'example.net' }, 'blocked')).toEqual({ by: 'from', value: 'example.net', facts: [], action: 'spam' });
   });
 
+  it('starts keeping mail that is what sift says, as a rule that waits for its label', () => {
+    expect(keepStart('x@example.com', 'marketing')).toEqual({ by: 'from', value: 'x@example.com', facts: [], whenLabel: 'marketing', action: 'keep' });
+  });
+
   it('names the rule adding would replace, the same one the write replaces', async () => {
     const { db } = await onePerson(ACCOUNT, 'work@example.org');
-    await addRule(db, ACCOUNT, { match: { from: 'x@example.com' }, whenLabel: 'newsletter' }, 'user');
+    const waiting = await addRule(db, ACCOUNT, { match: { from: 'x@example.com' }, whenLabel: 'newsletter' }, 'user');
     await addRule(db, ACCOUNT, { match: { from: 'x@example.com' }, except: [{ subjectContains: 'sale' }], disposition: 'keep' }, 'user');
     await addRule(db, 'work@example.org', { match: { from: 'x@example.com' }, disposition: 'spam' }, 'user');
     const mine = await addRule(db, ACCOUNT, { match: { from: 'x@example.com', facts: { isReply: false } }, labelId: 'newsletter' }, 'user');
     const rules = await listRuleSummaries(db, await everything(db));
 
-    expect(replacedBy(rules, ACCOUNT, { facts: { isReply: false }, from: 'x@example.com' })?.id).toBe(mine);
-    expect(replacedBy(rules, ACCOUNT, { from: 'x@example.com' })).toBeUndefined();
+    expect(replacedBy(rules, ACCOUNT, { facts: { isReply: false }, from: 'x@example.com' }, null)?.id).toBe(mine);
+    expect(replacedBy(rules, ACCOUNT, { from: 'x@example.com' }, null)).toBeUndefined();
     expect(await setRule(db, ACCOUNT, { facts: { isReply: false }, from: 'x@example.com' }, { disposition: 'archive' }, 'user')).toBe(mine);
+    expect(replacedBy(rules, ACCOUNT, { from: 'x@example.com' }, 'newsletter')?.id).toBe(waiting);
+    expect(replacedBy(rules, ACCOUNT, { from: 'x@example.com' }, 'marketing')).toBeUndefined();
+    expect(await setRule(db, ACCOUNT, { from: 'x@example.com' }, { whenLabel: 'newsletter', disposition: 'keep' }, 'user')).toBe(waiting);
   });
 });

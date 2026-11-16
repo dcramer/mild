@@ -1,11 +1,11 @@
-import { alias, and, decisions, desc, eq, exists, feedback, lt, max, ne, notExists, isNotNull, rules as ruleRows, sql } from '../store/query.ts';
+import { alias, and, decisions, desc, eq, exists, feedback, lt, max, ne, notExists, isNotNull, isNull, rules as ruleRows, sql } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import { recordDecision } from '../store/decisions.ts';
 import { listLabels } from '../store/labels.ts';
 import { getFacts } from '../store/messages.ts';
 import { countRuleHit, listRules } from '../store/rules.ts';
 import { cachedCorrespondent } from '../store/senders.ts';
-import { rulesStage } from '../triage/stages/rules.ts';
+import { rulesStage, settle } from '../triage/stages/rules.ts';
 import { type Decision, type Disposition, labelled } from '../triage/types.ts';
 import { type Suggestion, pendingSuggestions } from './feedback.ts';
 
@@ -21,6 +21,7 @@ const STANDING = {
   reason: decisions.reason,
   runId: decisions.runId,
   priorRuleId: decisions.priorRuleId,
+  ruleId: decisions.ruleId,
 };
 
 const x = alias(decisions, 'x');
@@ -42,8 +43,9 @@ const same = (standing: { disposition: Disposition; labelId: string | null; subs
  *
  * - a rule now decides it: that decision is recorded (a rule of the user's settles it, so it stops
  *   being a suggestion; a rule sift learned only counts if the outcome differs);
- * - no rule does, and its label now has a different outcome: the same label is recorded with the new
- *   outcome. The label is still the tier's word; only what follows from it is worked out again;
+ * - no rule does by itself, and its label now has a different outcome, or a rule waiting for that label now
+ *   says what happens: the same label is recorded with the new outcome. The label is still the tier's
+ *   word; only what follows from it is worked out again;
  * - the rule that decided it has gone: it goes back to what a tier said before the rule, or to review.
  *
  * Mail a rule decided only because of an earlier call here is included, so removing that rule brings
@@ -83,7 +85,6 @@ async function redecide(db: Sql, accountId: string, now: number): Promise<number
       and(
         eq(decisions.accountId, accountId),
         eq(decisions.carryOut, false),
-        eq(decisions.stage, 'rules'),
         isNotNull(decisions.ruleId),
         eq(
           decisions.id,
@@ -130,24 +131,26 @@ async function redecide(db: Sql, accountId: string, now: number): Promise<number
       const learned = stored.find((r) => r.id === ruled.ruleId)?.learned ?? false;
       if (!learned || !same(current, ruled)) next = ruled;
     } else {
-      const base =
-        current.stage === 'rules'
-          ? (
-              await db
-                .select(STANDING)
-                .from(decisions)
-                .where(and(eq(decisions.accountId, accountId), eq(decisions.messageId, messageId), ne(decisions.stage, 'rules')))
-                .orderBy(desc(decisions.id))
-                .limit(1)
-            )[0]
-          : current;
+      // What the tier said before any rule had a hand in it.
+      const fromRule = current.stage === 'rules' || current.ruleId !== null;
+      const base = fromRule
+        ? (
+            await db
+              .select(STANDING)
+              .from(decisions)
+              .where(and(eq(decisions.accountId, accountId), eq(decisions.messageId, messageId), ne(decisions.stage, 'rules'), isNull(decisions.ruleId)))
+              .orderBy(desc(decisions.id))
+              .limit(1)
+          )[0]
+        : current;
       const label = labels.find((l) => l.id === base?.labelId);
       if (base && label) {
-        const outcome = labelled(label);
+        const before = base.reason.replace(/^.* Before: /, '');
+        // A rule that waits for this label says what happens to it, as it would have when the tier gave it.
+        const outcome = settle(stored, labels, facts, { ...labelled(label), stage: base.stage, reason: before }, { hasWritten: () => known });
         // Unknown counts as written to, unless the earlier decision hid the mail: the sender was checked then.
         const safe = known === false || (known === undefined && hides(base.disposition));
         const held = hides(outcome.disposition) && !safe;
-        const before = base.reason.replace(/^.* Before: /, '');
         const derived: Decision = {
           ...(held ? { disposition: 'review', subscription: 'preserve', labelId: label.id, gmailLabel: label.gmailLabel } : outcome),
           stage: base.stage,
@@ -155,12 +158,14 @@ async function redecide(db: Sql, accountId: string, now: number): Promise<number
           ...(base.priorRuleId === null ? {} : { priorRuleId: base.priorRuleId }),
           reason: held
             ? `${label.name} is now ${WILL[outcome.disposition]}, but ${known ? 'you have written to this sender' : 'whether you have written to this sender is not known'}. Before: ${before}`
-            : `${label.name} is now ${WILL[outcome.disposition]}. Before: ${before}`,
+            : outcome.ruleId
+              ? outcome.reason
+              : `${label.name} is now ${WILL[outcome.disposition]}. Before: ${before}`,
         };
-        const changed = !same(base, derived);
-        if (current.stage === 'rules' || changed) next = changed ? derived : { ...derived, reason: base.reason };
+        const changed = !same(base, derived) || derived.ruleId !== undefined;
+        if (fromRule || changed) next = changed ? derived : { ...derived, reason: base.reason };
         runId = base.runId;
-      } else if (current.stage === 'rules') {
+      } else if (fromRule) {
         next = { disposition: 'review', subscription: 'preserve', stage: 'fallback', reason: 'the rule that decided this no longer applies' };
       }
     }

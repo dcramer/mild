@@ -5,9 +5,9 @@ import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { MessageBody, SeenFacts } from '@/components/message-parts.tsx';
 import { AddLabelDialog } from '@/views/label-panel.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
-import { type RuleStart, messageStart } from '@/lib/rule-start.ts';
+import { type RuleStart, keepStart, messageStart } from '@/lib/rule-start.ts';
 import { SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
-import { type MessageDetail, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type MessageDetail, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, dateTime, describeMatch, money, sureness, tier } from '@/lib/format.ts';
 import {
   AnswerPicker,
@@ -183,9 +183,27 @@ function Body({
     .slice(0, 2)
     .map((l) => ({ id: l.id, name: l.name, share: total ? l.messages / total : 0 }));
   const groups = choices(target, current ? sureness(current.stage, current.confidence) : 1, alternatives);
-  // Mail that is what Sift says but matters anyway: the label stands and the message stays in the inbox.
+  // Mail that is what Sift says but matters anyway: a rule keeps the sender's mail of that kind, and this message with it.
   const given = labels.find((l) => l.id === current?.labelId);
   const keepable = given && current?.disposition !== 'keep' && given.disposition !== 'keep' && given.disposition !== 'review' ? given : null;
+  // A rule covers mail from here on; this message, which may already have been moved, is answered as the rule would.
+  const keep = useAction();
+  const covers = (match: RuleMatch) =>
+    Object.keys(match).length === 1 && (match.from === detail.fromAddress || match.fromDomain === detail.fromAddress.split('@')[1]);
+  const keepThis = (labelId: string) =>
+    keep.run(async () => {
+      const reply = await api.feedback({
+        accountId: detail.accountId,
+        sender: detail.fromAddress,
+        messageId: detail.messageId,
+        ...(current ? { decisionId: current.id } : {}),
+        scope: 'once',
+        label: labelId,
+        disposition: 'keep',
+      });
+      if (reply.notFixed !== null) toast('Could not put the message back in Gmail', { tone: 'failure', description: reply.notFixed });
+      onAnswered();
+    });
 
   return (
     <div className="flex flex-col gap-8">
@@ -203,8 +221,8 @@ function Body({
             extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
           />
           {keepable ? (
-            <Button variant="quiet" busy={busy} onClick={() => answer(target, keepable.id, 'keep')}>
-              Keep as {keepable.name}
+            <Button variant="quiet" busy={keep.busy} onClick={() => setRuling(keepStart(detail.fromAddress, keepable.id))}>
+              Keep as {keepable.name}…
             </Button>
           ) : null}
           {adding ? <AddLabelDialog accountId={detail.accountId} onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
@@ -218,7 +236,11 @@ function Body({
               labels={labels}
               start={ruling}
               onClose={() => setRuling(null)}
-              onAdded={(match, outcome) => toast(`Rule added: ${describeMatch(match)} → ${outcome}`)}
+              onAdded={(match, outcome, rule) => {
+                toast(`Rule added: ${describeMatch(match)} → ${outcome}`);
+                if (rule.whenLabel !== undefined && rule.whenLabel === current?.labelId && rule.disposition === 'keep' && covers(match))
+                  keepThis(rule.whenLabel);
+              }}
             />
           ) : null}
         </div>
@@ -234,6 +256,7 @@ function Body({
           </p>
         ) : null}
         <Failure>{error}</Failure>
+        <Failure>{keep.error}</Failure>
       </div>
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
