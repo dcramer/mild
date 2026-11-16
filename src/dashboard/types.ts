@@ -229,7 +229,7 @@ export interface FeedbackRequest {
 
 /** GET /api/manage: everything the Settings view shows. */
 export interface ManageState {
-  settings: { act: boolean; interval: number; model: string | null; fewShot: boolean };
+  settings: { act: boolean; interval: number; model: string | null; fewShot: boolean; examplesKeepDays: number | null };
   guidelines: string;
   activity: { sorting: boolean; lastPassAt: number | null; problems: string[] };
   accounts: { id: string; email: string; lastSyncedAt: number | null }[];
@@ -371,4 +371,25 @@ export interface EvalRequest {
   fewShot?: boolean;
   /** How many examples, newest answers first. */
   limit?: number;
+}
+
+/** GET /api/examples: the messages held whole because the user answered for them. No content. */
+export interface Examples {
+  /** Newest answers first, at most 500. */
+  examples: {
+    accountId: string;
+    messageId: string;
+    fromAddress: string;
+    fromName: string | null;
+    subject: string;
+    /** The user's answer. */
+    labelId: string | null;
+    markedAt: number;
+    /** `pending`: not fetched yet. `gone`: the message no longer existed, so only the answer is held. */
+    status: 'pending' | 'captured' | 'gone';
+  }[];
+  /** How many are held per account, including any beyond the list. */
+  held: Record<string, number>;
+  /** Days an example is kept after its answer, or null when they are kept until deleted. */
+  keepDays: number | null;
 }

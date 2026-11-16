@@ -62,7 +62,7 @@ beforeEach(() => {
   db = openDb(':memory:');
   connectAccount(db, ACCOUNT, '1', 0);
   calls = [];
-  settings = { act: false, interval: 60, model: null, fewShot: true };
+  settings = { act: false, interval: 60, model: null, fewShot: true, examplesKeepDays: null };
   guidelines = 'Be careful.';
 });
 afterEach(() => close?.());
@@ -121,15 +121,15 @@ describe('managing sift from the dashboard', () => {
   it('changes settings, and refuses values that make no sense', async () => {
     const port = await start();
     expect((await call(port, 'POST', '/api/settings', { act: true, model: 'p/small' })).body).toEqual({
-      settings: { act: true, interval: 60, model: 'p/small', fewShot: true },
+      settings: { act: true, interval: 60, model: 'p/small', fewShot: true, examplesKeepDays: null },
     });
     expect((await call(port, 'POST', '/api/settings', { model: null, interval: 300 })).body).toEqual({
-      settings: { act: true, interval: 300, model: null, fewShot: true },
+      settings: { act: true, interval: 300, model: null, fewShot: true, examplesKeepDays: null },
     });
     expect((await call(port, 'POST', '/api/settings', { fewShot: false })).body).toMatchObject({ settings: { fewShot: false } });
     for (const bad of [{ act: 'yes' }, { interval: 1 }, { interval: '60' }, { model: 'no-slash' }, { fewShot: 'no' }])
       expect((await call(port, 'POST', '/api/settings', bad)).status).toBe(400);
-    expect(settings).toEqual({ act: true, interval: 300, model: null, fewShot: false });
+    expect(settings).toEqual({ act: true, interval: 300, model: null, fewShot: false, examplesKeepDays: null });
   });
 
   it('starts a test run of the model only when asked, through the process that holds the model', async () => {
@@ -164,6 +164,47 @@ describe('managing sift from the dashboard', () => {
     close?.();
     const bare = await start({ withControls: false });
     expect((await call(bare, 'POST', '/api/evals/run', { accountId: ACCOUNT })).status).toBe(409);
+  });
+
+  it("lists the examples it holds without their content, and deletes one or all of an account's", async () => {
+    const port = await start();
+    storeExample(db, ACCOUNT, { id: 'e1', from: 'news@example.com', label: 'newsletter', body: 'Private words.', markedAt: 1, name: 'News' });
+    storeExample(db, ACCOUNT, { id: 'e2', from: 'ada@example.org', label: 'personal', markedAt: 2 });
+    storeExample(db, ACCOUNT, { id: 'e3', from: 'bob@example.org', label: 'personal', markedAt: 3 });
+    connectAccount(db, 'other@example.org', '1', 0);
+    storeExample(db, 'other@example.org', { id: 'o1', from: 'cy@example.org', label: 'personal', markedAt: 4 });
+    settings.examplesKeepDays = 90;
+
+    const listed = await call(port, 'GET', `/api/examples?account=${encodeURIComponent(ACCOUNT)}`);
+    expect(listed.body).toMatchObject({ held: { [ACCOUNT]: 3, 'other@example.org': 1 }, keepDays: 90 });
+    expect((listed.body['examples'] as { messageId: string }[]).map((e) => e.messageId)).toEqual(['e3', 'e2', 'e1']);
+    expect((listed.body['examples'] as unknown[])[2]).toEqual({
+      accountId: ACCOUNT,
+      messageId: 'e1',
+      fromAddress: 'news@example.com',
+      fromName: 'News',
+      subject: 'Subject e1',
+      labelId: 'newsletter',
+      markedAt: 1,
+      status: 'captured',
+    });
+    expect(JSON.stringify(listed.body)).not.toContain('Private words.');
+
+    expect((await call(port, 'POST', '/api/examples/delete', { accountId: ACCOUNT, messageId: 'e1' })).body).toEqual({ deleted: 1 });
+    expect((await call(port, 'POST', '/api/examples/delete', { accountId: ACCOUNT, messageId: 'e1' })).body).toEqual({ deleted: 0 });
+    expect((await call(port, 'POST', '/api/examples/delete', { accountId: ACCOUNT })).status).toBe(400);
+    expect((await call(port, 'POST', '/api/examples/delete-all', { accountId: 'nobody@example.org' })).status).toBe(400);
+    expect((await call(port, 'POST', '/api/examples/delete-all', { accountId: ACCOUNT })).body).toEqual({ deleted: 2 });
+    expect(db.prepare('SELECT account_id, message_id FROM examples').all()).toEqual([{ account_id: 'other@example.org', message_id: 'o1' }]);
+    // The message row and its decision are sift's record of what it saw and did; only the stored content goes.
+    expect(db.prepare(`SELECT count(*) AS n FROM messages WHERE id = 'e1'`).get()).toEqual({ n: 1 });
+  });
+
+  it('sets how long examples are kept', async () => {
+    const port = await start();
+    expect((await call(port, 'POST', '/api/settings', { examplesKeepDays: 30 })).body).toMatchObject({ settings: { examplesKeepDays: 30 } });
+    expect((await call(port, 'POST', '/api/settings', { examplesKeepDays: null })).body).toMatchObject({ settings: { examplesKeepDays: null } });
+    for (const bad of [0, 1.5, '30', 40_000]) expect((await call(port, 'POST', '/api/settings', { examplesKeepDays: bad })).status).toBe(400);
   });
 
   it('edits the guidelines, labels and rules', async () => {
@@ -535,5 +576,52 @@ describe('run loop', () => {
     await done;
     expect(seen).toEqual([1, 2, 3]);
     expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it('deletes examples past their keep time when it starts and once a day after, and keeps them all by default', async () => {
+    const DAY = 86_400_000;
+    storeExample(db, ACCOUNT, { id: 'old', from: 'a@example.org', label: 'personal', markedAt: 0 });
+    storeExample(db, ACCOUNT, { id: 'soon', from: 'd@example.org', label: 'personal', markedAt: 2 * DAY + DAY / 5 });
+    storeExample(db, ACCOUNT, { id: 'mid', from: 'b@example.org', label: 'personal', markedAt: 5 * DAY });
+    storeExample(db, ACCOUNT, { id: 'new', from: 'c@example.org', label: 'personal', markedAt: 12 * DAY });
+    const held = () => (db.prepare('SELECT message_id FROM examples ORDER BY marked_at').all() as { message_id: string }[]).map((r) => r.message_id);
+    const logs: string[] = [];
+
+    /** Run passes at the given times, with the given keep time. */
+    const passesAt = async (times: number[], examplesKeepDays?: number) => {
+      const stop = new AbortController();
+      const wake = createWake();
+      let pass = 0;
+      await runLoop(
+        db,
+        async () => ({
+          act: false,
+          connect: () => {
+            throw new Error('offline');
+          },
+          log: (line) => logs.push(line),
+          now: () => times[Math.min(pass, times.length - 1)]!,
+          intervalMs: 60_000,
+          ...(examplesKeepDays === undefined ? {} : { examplesKeepDays }),
+        }),
+        {
+          signal: stop.signal,
+          wake,
+          onPass: () => {
+            if (++pass < times.length) setTimeout(() => wake.now(), 1);
+            else setTimeout(() => stop.abort(), 1);
+          },
+        },
+      );
+    };
+
+    await passesAt([12 * DAY]);
+    expect(held()).toEqual(['old', 'soon', 'mid', 'new']);
+
+    // Ten days kept. At day 12 only `old` is past it. Half a day later `soon` is too, but upkeep has run
+    // today, so it waits; three days on, it goes with `mid`.
+    await passesAt([12 * DAY, 12.5 * DAY, 15.5 * DAY], 10);
+    expect(logs.filter((l) => l.startsWith('Deleted'))).toEqual(['Deleted 1 example older than 10 days', 'Deleted 2 examples older than 10 days']);
+    expect(held()).toEqual(['new']);
   });
 });

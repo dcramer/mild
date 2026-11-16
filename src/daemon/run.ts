@@ -5,6 +5,7 @@ import type { GmailApi } from '../gmail/api.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
 import { type Account, listAccounts } from '../store/accounts.ts';
+import { pruneExamples } from '../store/examples.ts';
 import { keepSuggestionBodies } from './bodies.ts';
 import { captureExamples } from './examples.ts';
 import { type SyncReport, syncAccount } from './sync.ts';
@@ -19,6 +20,8 @@ export interface RunOptions {
   model?: { judge: Judge; guidelines: () => string; fewShot?: boolean };
   /** Leaves a mailing list, for decisions that say to. Without it sift never unsubscribes. */
   unsubscribe?: (accountId: string, messageId: string) => Promise<UnsubscribeOutcome>;
+  /** Delete examples this many days after the user answered for them. Unset keeps them. */
+  examplesKeepDays?: number;
   log: (line: string) => void;
   now?: () => number;
 }
@@ -125,6 +128,17 @@ export function createWake(): Wake {
   };
 }
 
+/** Upkeep that runs when sift starts and once a day after. */
+export function daily(db: DatabaseSync, options: Pick<RunOptions, 'examplesKeepDays' | 'log' | 'now'>): void {
+  dropOldExamples(db, options);
+}
+
+function dropOldExamples(db: DatabaseSync, options: Pick<RunOptions, 'examplesKeepDays' | 'log' | 'now'>): void {
+  if (options.examplesKeepDays === undefined) return;
+  const dropped = pruneExamples(db, options.examplesKeepDays, (options.now ?? Date.now)());
+  if (dropped > 0) options.log(`Deleted ${dropped} example${dropped === 1 ? '' : 's'} older than ${options.examplesKeepDays} days`);
+}
+
 /**
  * Run passes until `signal` aborts. `next` is asked before every pass, so a change to the settings
  * (acting or observing, the model, the interval) takes effect on the following pass without a restart.
@@ -134,8 +148,14 @@ export async function runLoop(
   next: () => Promise<RunOptions & { intervalMs: number }>,
   control: { signal: AbortSignal; wake: Wake; onPass?: (results: PassResult[]) => void },
 ): Promise<void> {
+  let lastDaily = -Infinity;
   while (!control.signal.aborted) {
     const options = await next();
+    const now = (options.now ?? Date.now)();
+    if (now - lastDaily >= 86_400_000) {
+      lastDaily = now;
+      daily(db, options);
+    }
     control.onPass?.(await runOnce(db, options));
     await control.wake.wait(options.intervalMs, control.signal);
   }

@@ -39,6 +39,8 @@ export interface ManagedSettings {
   model: string | null;
   /** Whether the model is shown messages the user labelled before as examples. */
   fewShot: boolean;
+  /** Days an example is kept after the user answered for it, or null to keep them. */
+  examplesKeepDays: number | null;
 }
 
 export interface Activity {

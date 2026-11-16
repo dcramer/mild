@@ -7,11 +7,12 @@ import { fileURLToPath } from 'node:url';
 import { DEFAULT_EVAL_EXAMPLES, MAX_EVAL_EXAMPLES, getEvalRun, listEvalRuns } from '../learn/evals.ts';
 import { type FeedbackInput, applyFeedback } from '../learn/feedback.ts';
 import { listAccounts } from '../store/accounts.ts';
+import { deleteExamples, listExamples } from '../store/examples.ts';
 import { addLabel, updateLabel } from '../store/labels.ts';
 import { addRule, removeRule } from '../store/rules.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { listChanges, listDecisions, listLabelSummaries, listRuleSummaries, listSuggestions, messageDetail, suggestionDetail, summarize } from './queries.ts';
-import type { EvalDetail, Evals, ManageState } from './types.ts';
+import type { EvalDetail, Evals, Examples, ManageState } from './types.ts';
 
 /** Where `pnpm build:web` puts the built web app. */
 export const WEB_DIST = fileURLToPath(new URL('../../web/dist/', import.meta.url));
@@ -277,7 +278,8 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       return { ok: true };
     },
     '/api/settings': (body) => {
-      const { act, interval, model, fewShot } = body;
+      const { act, interval, model, fewShot, examplesKeepDays: keep } = body;
+      if (keep !== undefined && keep !== null && (typeof keep !== 'number' || !Number.isInteger(keep) || keep < 1 || keep > 36_500)) return null;
       if (act !== undefined && typeof act !== 'boolean') return null;
       if (fewShot !== undefined && typeof fewShot !== 'boolean') return null;
       if (interval !== undefined && (typeof interval !== 'number' || !Number.isFinite(interval) || interval < 5 || interval > 86_400)) return null;
@@ -288,6 +290,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
         ...(interval === undefined ? {} : { interval }),
         ...(model === undefined ? {} : { model }),
         ...(fewShot === undefined ? {} : { fewShot }),
+        ...(keep === undefined ? {} : { examplesKeepDays: keep }),
       });
       return { settings: controls.settings() };
     },
@@ -310,6 +313,16 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       controls.checkNow();
       return { added };
     },
+    '/api/examples/delete': (body) => {
+      const { accountId, messageId } = body;
+      if (!str(accountId) || !str(messageId)) return null;
+      return { deleted: deleteExamples(db, accountId, messageId) };
+    },
+    '/api/examples/delete-all': (body) => {
+      const { accountId } = body;
+      if (!str(accountId) || !listAccounts(db).some((a) => a.id === accountId)) return null;
+      return { deleted: deleteExamples(db, accountId) };
+    },
     '/api/evals/run': async (body) => {
       const { accountId, fewShot, limit } = body;
       if (!str(accountId) || (fewShot !== undefined && typeof fewShot !== 'boolean')) return null;
@@ -329,7 +342,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
     const accounts = listAccounts(db);
     const synced = db.prepare('SELECT last_synced_at AS at FROM accounts WHERE id = ?');
     return {
-      settings: controls?.settings() ?? { act: false, interval: 60, model: null, fewShot: true },
+      settings: controls?.settings() ?? { act: false, interval: 60, model: null, fewShot: true, examplesKeepDays: null },
       guidelines: controls?.guidelines() ?? '',
       activity: controls?.activity() ?? { sorting: false, lastPassAt: null, problems: [] },
       accounts: accounts.map((a) => ({ id: a.id, email: a.email, lastSyncedAt: (synced.get(a.id) as { at: number | null } | undefined)?.at ?? null })),
@@ -481,6 +494,15 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       if (url.pathname === '/api/suggestions') return void json(res, 200, listSuggestions(db, { includeKept: query.get('kept') === '1' }));
       if (url.pathname === '/api/manage') return void json(res, 200, manageState());
       if (url.pathname === '/api/changes') return void json(res, 200, { changes: listChanges(db, 200) });
+      if (url.pathname === '/api/examples') {
+        const held = db.prepare('SELECT account_id, count(*) AS n FROM examples GROUP BY account_id').all() as { account_id: string; n: number }[];
+        const examples: Examples = {
+          examples: listExamples(db, query.get('account') || undefined),
+          held: Object.fromEntries(held.map((r) => [r.account_id, r.n])),
+          keepDays: controls?.settings().examplesKeepDays ?? null,
+        };
+        return void json(res, 200, examples);
+      }
       if (url.pathname === '/api/evals') {
         const counts = db.prepare(`SELECT account_id, count(*) AS n FROM examples WHERE status = 'captured' AND label_id IS NOT NULL GROUP BY account_id`);
         const evals: Evals = {

@@ -287,17 +287,19 @@ function buildControls(config: Config, db: ReturnType<typeof openDb>, live: { wa
   return {
     settings: () => {
       const s = current();
-      return { act: s.act, interval: s.interval, model: s.model ?? null, fewShot: s.fewShot };
+      return { act: s.act, interval: s.interval, model: s.model ?? null, fewShot: s.fewShot, examplesKeepDays: s.examplesKeepDays ?? null };
     },
     saveSettings: (change) => {
-      const { model: _old, ...rest } = current();
+      const { model: _old, examplesKeepDays: _kept, ...rest } = current();
       const model = change.model === undefined ? current().model : (change.model ?? undefined);
+      const keepDays = change.examplesKeepDays === undefined ? current().examplesKeepDays : (change.examplesKeepDays ?? undefined);
       saveSettings(config, {
         ...rest,
         ...(change.act === undefined ? {} : { act: change.act }),
         ...(change.interval === undefined ? {} : { interval: change.interval }),
         ...(change.fewShot === undefined ? {} : { fewShot: change.fewShot }),
         ...(model ? { model } : {}),
+        ...(keepDays ? { examplesKeepDays: keepDays } : {}),
       });
       live.wake?.now();
     },
@@ -530,6 +532,7 @@ async function run(args: string[]): Promise<void> {
         act,
         ...(tier ? { model: { ...tier, fewShot: settings.fewShot } } : {}),
         unsubscribe: (accountId: string, messageId: string) => unsubscribe({ db }, accountId, messageId),
+        ...(settings.examplesKeepDays ? { examplesKeepDays: settings.examplesKeepDays } : {}),
         connect: (account: Account) => {
           const client = clientFor(config, loadClientSecrets(config), account.email);
           return { api: createGmailApi(client), mailbox: createGmailMailbox(client) };
