@@ -3,6 +3,7 @@ import { Fragment, type ReactNode, useState } from 'react';
 import { StatusWord, TierLabel, Verdict } from '@/components/bits.tsx';
 import { ACTIONS, STANDINGS, STATUS_NAMES, TIERS, money, moneyTick, outcomeName } from '@/lib/format.ts';
 import {
+  Blank,
   Does,
   AnswerPicker,
   ActionIcon,
@@ -585,8 +586,24 @@ export function SystemView() {
             </Sheet>
           </SettingsGroup>
         </Section>
-        <Section title="Empty and loading">
+        <Section title="Empty and loading" meta="rows set like the real ones, with a blank for each piece of text">
           <Empty>Nothing is waiting on you.</Empty>
+          <Loading rows={3}>
+            <Td className="max-w-0 md:w-1/3">
+              <span className="name">
+                <Blank />
+              </span>
+              <Sub>
+                <Blank />
+              </Sub>
+            </Td>
+            <Td phone="hide" className="max-w-0 md:w-full">
+              <Blank />
+            </Td>
+            <Td phone="hide" num>
+              <Blank word />
+            </Td>
+          </Loading>
           <Loading rows={3} />
         </Section>
         <Section title="Reserve" meta="holds the room for what arrives late, so nothing below moves">

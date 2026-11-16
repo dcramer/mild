@@ -22,6 +22,7 @@ import {
 import {
   AnswerPicker,
   Button,
+  Blank,
   Check,
   Dialog,
   Empty,
@@ -51,20 +52,26 @@ import type { OpenMessages } from '@/views/message-panel.tsx';
 
 const UNSURE = '-';
 
-/** How sift did this week, as one quiet line beside the title; changes that went wrong are the only thing in it that asks for anything. */
-function Week({ summary }: { summary: Summary }) {
-  const t = summary.totals;
+/**
+ * How sift did this week, as one quiet line beside the title; changes that went wrong are the only thing
+ * in it that asks for anything. Drawn before the week is known, so on a phone, where it wraps under the
+ * title, the page below does not move when it arrives.
+ */
+function Week({ summary }: { summary: Summary | null }) {
+  const t = summary?.totals;
   // On a phone only what went wrong is said here; the week's figures are on Activity.
   return (
     <p className="flex flex-col gap-0.5 text-sm text-muted-foreground tabular-nums md:items-end">
-      {t.troubledActions > 0 ? (
+      {t && t.troubledActions > 0 ? (
         <Failure inline>
           <TextLink href="/activity?show=trouble&days=30">{plural(t.troubledActions, 'change')} went wrong</TextLink>
         </Failure>
       ) : null}
-      <span className="hidden md:inline">
-        This week {percent(t.withoutInference, t.decided)} without a model · {money(t.costUsd)} · <TextLink href="/activity">Activity</TextLink>
-      </span>
+      {t ? (
+        <span className="hidden md:inline">
+          This week {percent(t.withoutInference, t.decided)} without a model · {money(t.costUsd)} · <TextLink href="/activity">Activity</TextLink>
+        </span>
+      ) : null}
     </p>
   );
 }
@@ -265,7 +272,7 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
   return (
     <ListView
       title="Suggestions"
-      actions={summary.data ? <Week summary={summary.data} /> : null}
+      actions={<Week summary={summary.data} />}
       intro={
         <>
           {/* Proposals arrive after the list is drawn, and would push it down. */}
@@ -302,7 +309,34 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
     >
       {error ? <ErrorNote message={error} /> : null}
       {loading ? (
-        <Loading rows={6} />
+        <Loading>
+          <Td className="max-w-0 md:w-[24%] md:min-w-52">
+            <span className="name">
+              <Blank />
+            </span>
+            <Sub className="hidden md:block">
+              <Blank />
+            </Sub>
+            <OnPhone>
+              <span className="w-full text-base">
+                <Blank />
+              </span>
+              <Blank />
+            </OnPhone>
+          </Td>
+          <Td phone="hide" className="max-w-0 md:w-full">
+            <Blank />
+            <Sub>
+              <Blank />
+            </Sub>
+          </Td>
+          <Td phone="hide" num>
+            <Blank word />
+          </Td>
+          <RowActions>
+            <Blank className="h-(--control) w-60 py-0" />
+          </RowActions>
+        </Loading>
       ) : shown.length === 0 ? (
         <Empty>{(data && data.items.length > 0) || fact !== '' ? 'Nothing waiting matches.' : 'Nothing is waiting on you.'}</Empty>
       ) : (

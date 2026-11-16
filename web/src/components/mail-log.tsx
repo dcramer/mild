@@ -1,7 +1,7 @@
 import { SenderLink } from '@/components/sender.tsx';
 import type { DecisionRow, UnjudgedRow } from '@/lib/api.ts';
 import { ago, clock, dateTime, dayName, happened, status } from '@/lib/format.ts';
-import { Button, Does, Failure, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from '@/system';
+import { Blank, Button, Does, Failure, Loading, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 /**
@@ -163,5 +163,37 @@ export function MailLog({
         </tbody>
       ))}
     </Table>
+  );
+}
+
+/** `MailLog` while its rows are on their way. */
+export function MailLogLoading() {
+  return (
+    <Loading rows={8}>
+      <Td className="max-w-0 md:w-[20%] md:min-w-44">
+        <span className="name">
+          <Blank />
+        </span>
+        <OnPhone>
+          <span className="w-full">
+            <Blank />
+          </span>
+          <Blank word />
+          <Blank word />
+        </OnPhone>
+      </Td>
+      <Td phone="hide" className="max-w-0 md:w-full">
+        <Blank />
+      </Td>
+      <Td phone="hide" className="max-w-0 md:min-w-60">
+        <Blank word />
+        <Sub>
+          <Blank word />
+        </Sub>
+      </Td>
+      <Td phone="hide" num>
+        <Blank word />
+      </Td>
+    </Loading>
   );
 }

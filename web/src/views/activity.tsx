@@ -1,11 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
-import { MailLog } from '@/components/mail-log.tsx';
+import { MailLog, MailLogLoading } from '@/components/mail-log.tsx';
 import { type Days, type DecisionRow, type UnjudgedRow, api, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/route.ts';
 import { FACT_FILTER_OPTIONS, HANDLED, PERIODS, count, factFilterName, longDay, money, moneyTick, plural, shortDay } from '@/lib/format.ts';
-import { Button, Empty, Failure, FilterGroup, ListView, Loading, Select, StackedBars, TextLink, useToast } from '@/system';
+import { Button, Empty, Failure, FilterGroup, ListView, Reserve, Select, StackedBars, TextLink, useToast } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 const PAGE = 50;
@@ -45,7 +45,8 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
   );
   const failed = failures.data?.total ?? 0;
   // Not period-bound: such mail waits on the user however long ago it came.
-  const unjudged = useLoaded('unjudged', (signal) => api.unjudged(signal)).data?.rows ?? [];
+  const waiting = useLoaded('unjudged', (signal) => api.unjudged(signal));
+  const unjudged = waiting.data?.rows ?? [];
   const summary = useLoaded(`summary-${days}`, (signal) => api.summary(days, signal));
   const daily = summary.data?.daily ?? [];
   // A day's column is worth drawing only beside others, and only once something happened.
@@ -106,35 +107,38 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
             },
           })}
       intro={
-        <>
-          {charted ? (
-            <StackedBars
-              series={HANDLED}
-              rows={daily.map((day) => {
-                const handled = Object.values(day.counts).reduce((a, b) => a + b, 0);
-                const changed = day.changes.archive + day.changes.spam + day.changes.keep;
-                return {
-                  key: day.day,
-                  label: shortDay(day.day),
-                  title: longDay(day.day),
-                  values: { changed, left: Math.max(0, handled - changed - day.changes.failed), failed: day.changes.failed },
-                };
-              })}
-              line={{ name: 'Model cost', values: daily.map((day) => day.costUsd), format: money, tick: moneyTick }}
-            />
-          ) : null}
-          {troubles !== '' && view !== 'trouble' ? (
-            <Failure>
-              {troubles[0].toUpperCase() + troubles.slice(1)}.{' '}
-              <TextLink href="/activity?show=trouble">See {failed + unjudged.length === 1 ? 'it' : 'them'}</TextLink>
-            </Failure>
-          ) : null}
-        </>
+        // The chart and what went wrong arrive after the list is drawn, and would push it down.
+        <Reserve id="activity-intro" ready={summary.data !== null && failures.data !== null && waiting.data !== null} room={{ narrow: 200, wide: 200 }}>
+          <div className="flex flex-col gap-6">
+            {charted ? (
+              <StackedBars
+                series={HANDLED}
+                rows={daily.map((day) => {
+                  const handled = Object.values(day.counts).reduce((a, b) => a + b, 0);
+                  const changed = day.changes.archive + day.changes.spam + day.changes.keep;
+                  return {
+                    key: day.day,
+                    label: shortDay(day.day),
+                    title: longDay(day.day),
+                    values: { changed, left: Math.max(0, handled - changed - day.changes.failed), failed: day.changes.failed },
+                  };
+                })}
+                line={{ name: 'Model cost', values: daily.map((day) => day.costUsd), format: money, tick: moneyTick }}
+              />
+            ) : null}
+            {troubles !== '' && view !== 'trouble' ? (
+              <Failure>
+                {troubles[0].toUpperCase() + troubles.slice(1)}.{' '}
+                <TextLink href="/activity?show=trouble">See {failed + unjudged.length === 1 ? 'it' : 'them'}</TextLink>
+              </Failure>
+            ) : null}
+          </div>
+        </Reserve>
       }
     >
       {error ? <ErrorNote message={error} /> : null}
       {loading ? (
-        <Loading rows={8} />
+        <MailLogLoading />
       ) : !data || data.rows.length + shown.length === 0 ? (
         <Empty>
           {search !== '' || narrowed !== ''

@@ -5,7 +5,7 @@ import { type LabelSummary, api, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/route.ts';
 import { AddLabelDialog, LabelPanel, weak } from '@/views/label-panel.tsx';
 import { count, outcomeName, percent } from '@/lib/format.ts';
-import { Button, Does, Empty, ListView, Look, Loading, OnPhone, Share, Sub, Table, Td, Th, Tr } from '@/system';
+import { Blank, Button, Does, Empty, ListView, Look, Loading, OnPhone, Share, Sub, Table, Td, Th, Tr } from '@/system';
 
 /** How often sift had the label right when the reader checked, in yellow when it is often wrong. */
 function Right({ label }: { label: LabelSummary }) {
@@ -40,9 +40,9 @@ export function LabelsView() {
       title="Labels"
       actions={
         <>
-          {first && data ? (
+          {!data || first ? (
             <span className="text-sm text-muted-foreground tabular-nums">
-              {count(data.labels[first.id]?.length ?? 0)} of {data.labelLimit}
+              {data && first ? `${count(data.labels[first.id]?.length ?? 0)} of ${data.labelLimit}` : <Blank word />}
             </span>
           ) : null}
           <Button
@@ -58,7 +58,28 @@ export function LabelsView() {
     >
       {error ? <ErrorNote message={error} /> : null}
       {loading ? (
-        <Loading rows={6} />
+        <Loading>
+          <Td className="max-w-0 md:w-[24%]">
+            <span className="name">
+              <Blank />
+            </span>
+            <OnPhone>
+              <Blank word />
+            </OnPhone>
+          </Td>
+          <Td phone="hide" className="md:w-32">
+            <Blank word />
+          </Td>
+          <Td phone="hide" className="md:w-full">
+            <Blank />
+          </Td>
+          <Td phone="hide" num className="md:w-32">
+            <Blank word />
+          </Td>
+          <Td phone="hide" num className="md:w-32">
+            <Blank word />
+          </Td>
+        </Loading>
       ) : all.length === 0 ? (
         <Empty>No labels yet.</Empty>
       ) : (

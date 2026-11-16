@@ -6,6 +6,7 @@ import { useParam } from '@/lib/route.ts';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { ago, count, describeMatch, factAnswers, factWords, outcomeName, plural, shortDate } from '@/lib/format.ts';
 import {
+  Blank,
   Button,
   ConfirmButton,
   Does,
@@ -206,7 +207,14 @@ export function Rules() {
       {error ? <ErrorNote message={error} /> : null}
       <Failure>{remove.error}</Failure>
       {loading ? (
-        <Loading />
+        <Loading>
+          <Td className="max-w-0 md:w-full">
+            <Blank />
+          </Td>
+          <Td phone="hide" num className="md:w-44">
+            <Blank word />
+          </Td>
+        </Loading>
       ) : rules.length === 0 ? (
         <Empty>{data && data.rules.length > 0 ? 'No rule matches.' : 'No rules yet.'}</Empty>
       ) : (

@@ -56,7 +56,7 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Note` | Said to the reader outside the flow, about the whole page: `plain`, `look` (needs them), `failure`. No box. |
 | `Failure` | What went wrong, where it went wrong: under the form or press that failed, or `inline` as the word for a step that failed. Renders nothing without a message. The only red a screen writes. |
 | `Reserve` | Holds the room for something above other content that arrives late and whose height depends on what loads (figures, a chart, a notice that may not be there), so the page below does not move. It remembers the height the part last had in this browser, per width; `room` is the usual height until then. |
-| `Empty`, `Loading` | What a list shows with nothing in it (say what would put something here), and while rows are on their way. |
+| `Empty`, `Loading`, `Blank` | What a list shows with nothing in it (say what would put something here), and while rows are on their way. `Loading` takes one row's cells, set as the real row's (the same `Td`s), with a `Blank` for each piece of text; a `Blank` sits in the line its text will take, so the row is the height it will be. Without cells, lines of text, for a panel. |
 | `Does` | What Sift does with mail: the action's icon in lighter ink, then its word. Never with what comes with the action (unsubscribe, mark read). "Not sure" is yellow. In every list, column and verdict. |
 | `Stamp` | Where a sender stands, in one framed word. Not for what Sift does (that is `Does`). |
 | `Highlight`, `Marked` | A stroke of highlighter; a search term marked in text. |
@@ -116,8 +116,8 @@ A page is drawn before its data arrives, and what arrives must not push what is 
 - A page header that will have a status line passes `meta={null}` until it knows it: the line's room is held.
 - A page's action button is shown from the start and disabled until it can work. It does not appear late.
 - Anything above other content whose height depends on data goes in a `Reserve`.
-- A list's rows may grow downward: nothing is below them.
-- Every screen but the home page is fetched when first needed (`lazyView` in `web/src/lib/lazy.tsx`) and, once the page is idle, ahead of need. While one is on its way the page shows that screen's own header and row placeholders.
+- A list's rows may grow downward: nothing is below them. While they load, its `Loading` shows its own rows, not lines.
+- Every screen but the home page is fetched when first needed (`lazyView` in `web/src/lib/lazy.tsx`) and, once the page is idle, ahead of need. While one is on its way the page shows that screen's own header, its search bar and row placeholders.
 
 ## Rules for adding to it
 

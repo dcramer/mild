@@ -23,7 +23,8 @@ export function ModelWall({ signedInAs, onSettings, children }: { signedInAs: st
   // Connecting a model lifts the wall at the next load, so the step after it is held here.
   const [teaching, setTeaching] = useState(false);
   const state = manage.data;
-  if (!state) return null;
+  // Until it is known, the dashboard draws its loading screens: almost everyone has a model, and the wall is only met once.
+  if (!state) return children;
   const inUse = state.model.chosen?.split('/')[0] ?? null;
   const walled = inUse === null || !state.model.signedIn.includes(inUse);
   if (!walled && !teaching) return children;

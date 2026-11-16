@@ -3,7 +3,7 @@ import { api, useLoaded, useOnline } from '@/lib/api.ts';
 import { ago } from '@/lib/format.ts';
 import { setParams, useParam, useRoute } from '@/lib/route.ts';
 import { lazyView } from '@/lib/lazy.tsx';
-import { Loading, Masthead, Note, Notice, PageHeader, Wordmark } from '@/system';
+import { ListView, Loading, Masthead, Note, Notice, PageHeader, Wordmark } from '@/system';
 import type { MessageRef } from '@/views/message-panel.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
 import { ModelWall } from '@/components/model-wall.tsx';
@@ -51,13 +51,22 @@ function useScreensAhead() {
   }, []);
 }
 
-/** What a screen shows while its code is on its way: its own header and the rows it will fill, so nothing moves when it arrives. */
-function ScreenLoading({ title }: { title: string }) {
+/**
+ * What a screen shows while its code is on its way: its own header, its search bar and the rows it will
+ * fill, so nothing moves when it arrives. A sender's page has a line under its title.
+ */
+function ScreenLoading({ title, sender, searched }: { title: string; sender: boolean; searched: boolean }) {
+  if (sender)
+    return (
+      <section className="flex flex-col gap-6">
+        <PageHeader title={title} meta={null} />
+        <Loading />
+      </section>
+    );
   return (
-    <section className="flex flex-col gap-6">
-      <PageHeader title={title} meta={null} />
-      <Loading rows={6} />
-    </section>
+    <ListView title={title} {...(searched ? { search: { value: '', onChange: () => {}, placeholder: 'Search' } } : {})}>
+      <Loading />
+    </ListView>
   );
 }
 
@@ -218,7 +227,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
 
       <main className="pb-16">
         <ScreenBoundary at={route.join('/')}>
-          <Suspense fallback={<ScreenLoading title={profile ? profile.key : NAMES[section]} />}>
+          <Suspense fallback={<ScreenLoading title={profile ? profile.key : NAMES[section]} sender={!!profile} searched={section !== 'labels'} />}>
             {profile ? (
               <SenderView
                 accountId={profile.accountId}

@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { Blank } from './state.tsx';
 
 /**
  * The top of a page: its name, and on the right the page's own action or one quiet line of numbers, the
  * two centred on each other. `badge` sits beside the title, for a stamp that says what the page's subject
- * is; `meta` is a line under it naming that subject (a sender's address). No count and no explanation.
+ * is; `meta` is a line under it naming that subject (a sender's address), and `null` holds its room
+ * until it is known. No count and no explanation.
  */
 export function PageHeader({ title, badge, meta, actions }: { title: string; badge?: ReactNode; meta?: ReactNode; actions?: ReactNode }) {
   return (
@@ -14,7 +16,7 @@ export function PageHeader({ title, badge, meta, actions }: { title: string; bad
           <h1 className="statement break-words">{title}</h1>
           {badge}
         </div>
-        {meta ? <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">{meta}</div> : null}
+        {meta === undefined ? null : <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">{meta ?? <Blank />}</div>}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </header>

@@ -36,7 +36,13 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   if (error && !data)
     return 'domain' in who ? <Empty>Anyone can get an address at {who.domain}, so it has no standing of its own.</Empty> : <ErrorNote message={error} />;
-  if (loading || !data) return <Loading rows={6} />;
+  if (loading || !data)
+    return (
+      <div className="flex flex-col gap-10">
+        <PageHeader title={key} meta={null} />
+        <Loading />
+      </div>
+    );
 
   const { profile } = data;
   const given: Given | null = profile.standing === 'trusted' || profile.standing === 'unwanted' || profile.standing === 'blocked' ? profile.standing : null;
