@@ -1,3 +1,4 @@
+import { Trash2Icon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
@@ -8,6 +9,9 @@ import {
   ConfirmButton,
   Dialog,
   Failure,
+  Field,
+  Form,
+  Input,
   Kbd,
   Loading,
   Note,
@@ -236,18 +240,106 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
   );
 }
 
-function Mailboxes({ state }: { state: ManageState }) {
+// There is no API to remove a mailbox or delete an account yet (TODO.md); these say so when pressed.
+const NOT_BUILT = 'Not built yet: there is no API for this.';
+
+/**
+ * A person's last mailbox is how they sign in, so removing it is deleting their account, and asks the
+ * same way. Removing the one they are signed in as, with others left, ends their session.
+ */
+function RemoveMailbox({ email, signedIn, last }: { email: string; signedIn: boolean; last: boolean }) {
+  const toast = useToast();
+  const [deleting, setDeleting] = useState(false);
+  if (last)
+    return (
+      <>
+        <Button variant="quiet" size="icon" aria-label="Remove" title="Remove" onClick={() => setDeleting(true)}>
+          <Trash2Icon />
+        </Button>
+        {deleting ? <DeleteAccount email={email} onClose={() => setDeleting(false)} /> : null}
+      </>
+    );
+  return (
+    <ConfirmButton
+      icon={<Trash2Icon />}
+      question={`Stop sorting ${email}, and delete what sift recorded about its mail?${signedIn ? ' You are signed in as it, so you will be signed out.' : ''}`}
+      onConfirm={() => toast(NOT_BUILT)}
+    >
+      Remove
+    </ConfirmButton>
+  );
+}
+
+function Mailboxes({ state, signedInAs }: { state: ManageState; signedInAs: string | null }) {
   return (
     <SettingsGroup title="Mailboxes" note="Anyone signed in as one of these sees all of them.">
       <Sheet>
         {state.accounts.map((account) => (
-          <SettingRow key={account.id} title={account.email} note={account.lastSyncedAt ? `Synced ${ago(account.lastSyncedAt)}` : 'Not synced yet'} />
+          <SettingRow
+            key={account.id}
+            title={account.email}
+            note={`${account.lastSyncedAt ? `Synced ${ago(account.lastSyncedAt)}` : 'Not synced yet'}${account.email === signedInAs ? ' · Signed in as this one' : ''}`}
+          >
+            <RemoveMailbox email={account.email} signedIn={account.email === signedInAs} last={state.accounts.length === 1} />
+          </SettingRow>
         ))}
         <SettingRow title="Another Gmail account">
           <Button href="/auth/login?add=1">Connect</Button>
         </SettingRow>
       </Sheet>
       {state.owner ? <OlderMail /> : null}
+    </SettingsGroup>
+  );
+}
+
+/** Everything sift holds for this person goes, and they are signed out. Typing the address is the confirmation, since nothing brings it back. */
+function DeleteAccount({ email, onClose }: { email: string; onClose: () => void }) {
+  const [typed, setTyped] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Delete your account"
+      footer={
+        <>
+          <Button variant="ink" disabled={typed.trim() !== email} onClick={() => setError(NOT_BUILT)}>
+            Delete everything
+          </Button>
+          <Button variant="quiet" onClick={onClose}>
+            Cancel
+          </Button>
+          <Failure>{error}</Failure>
+        </>
+      }
+    >
+      <Form onSubmit={() => {}}>
+        <p className="text-base">
+          Every mailbox stops being sorted, and everything sift recorded is deleted: decisions, answers, rules, labels and your model sign-in. The filters sift
+          made in Gmail are removed; the changes it made to mail, and its labels on it, stay. This cannot be undone.
+        </p>
+        <Field label={`Type ${email} to confirm`}>
+          <Input aria-label="Your address" autoComplete="off" value={typed} onChange={(event) => setTyped(event.target.value)} />
+        </Field>
+      </Form>
+    </Dialog>
+  );
+}
+
+function Account({ state, signedInAs }: { state: ManageState; signedInAs: string | null }) {
+  const [deleting, setDeleting] = useState(false);
+  const email = signedInAs ?? state.accounts[0]?.email ?? '';
+  return (
+    <SettingsGroup title="Your account">
+      <Sheet>
+        <SettingRow
+          title="Delete your account"
+          note={`Every mailbox stops being sorted, and everything sift recorded is deleted.${state.owner ? ' Others signed in to this sift keep theirs.' : ''}`}
+        >
+          <Button onClick={() => setDeleting(true)}>Delete account…</Button>
+        </SettingRow>
+      </Sheet>
+      {deleting ? <DeleteAccount email={email} onClose={() => setDeleting(false)} /> : null}
     </SettingsGroup>
   );
 }
@@ -343,6 +435,8 @@ function Keys() {
 /** Settings, over whatever is showing. Opened from the account menu, or from under the model wall, so nothing has to be set up first. */
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
+  const session = useLoaded('session', (signal) => api.session(signal), 300_000);
+  const signedInAs = session.data?.email ?? null;
   return (
     <Panel open onClose={onClose} title="Settings">
       <div className="flex flex-col gap-10">
@@ -356,8 +450,9 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             {/* The model, its sign-in and the guidelines are each person's own. */}
             <Model state={data} reload={reload} onConnect={onClose} />
             <Guidelines saved={data.guidelines} />
-            <Mailboxes state={data} />
+            <Mailboxes state={data} signedInAs={signedInAs} />
             <Keys />
+            <Account state={data} signedInAs={signedInAs} />
           </>
         ) : null}
       </div>

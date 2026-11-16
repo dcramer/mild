@@ -85,6 +85,7 @@ The dashboard manages sift, behind Google sign-in. That sign-in also connects th
   - **Nothing left behind elsewhere.** Gmail filters sift wrote for that mailbox are removed; the `sift/…` labels on mail are left (they are the user's mail) and the page says so. Backups and retention cannot be reached from here, and that is said too.
   - **One list of what holds account data**, used by this, by retention and by a test that fails when a new table keyed by account is not on it, so a table added later cannot be forgotten.
   - It is confirmed by typing the address, cannot be undone, and works while sift is running without the daemon tripping over a mailbox that has gone.
+  - The page is built and says "Not built yet" when pressed (Settings: a trash can on each mailbox; Delete account). A person's last mailbox is how they sign in, so removing it is deleting the account, through the same dialog. Removing the one they are signed in as, with others left, signs them out.
 - [ ] Try a second account end to end.
 - [ ] Use Tailscale's identity headers to skip the Google round trip for viewers on the tailnet.
 - [ ] Try a label's description, or a rule's "only when", on recent mail before saving it: what the model would now say about a few messages, beside what it said. (Trying a model when changing provider was built and taken out, 2026-11-15: it told the reader nothing they could act on there.)
