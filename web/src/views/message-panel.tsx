@@ -6,17 +6,16 @@ import { SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { type MessageDetail, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
 import {
+  AnswerPicker,
   Button,
   Code,
   Disclosure,
   Failure,
   Loading,
   Look,
-  Meter,
   Note,
   Panel,
   Section,
-  SplitButton,
   Table,
   Td,
   TextLink,
@@ -156,7 +155,6 @@ function Body({
   const current = detail.decisions.at(-1);
   const waitingNow = waiting.data?.messages ?? [];
   const others = waitingNow.filter((m) => m.messageId !== detail.messageId);
-  const isWaiting = waitingNow.some((m) => m.messageId === detail.messageId);
   const labels = manage.data?.labels[detail.accountId] ?? [];
   const target = current
     ? { accountId: detail.accountId, sender: detail.fromAddress, messageId: detail.messageId, decisionId: current.id, labelId: current.labelId }
@@ -172,38 +170,23 @@ function Body({
     .filter((l) => l.id !== current?.labelId)
     .slice(0, 2)
     .map((l) => ({ id: l.id, name: l.name, share: total ? l.messages / total : 0 }));
-  const [, rest = []] = target ? choices(target, alternatives) : [];
-  const name = current ? (current.labelName ?? outcomeName(current.disposition)) : null;
+  const groups = target && current ? choices(target, sureness(current.stage, current.confidence), alternatives) : [];
 
   return (
     <div className="flex flex-col gap-8">
       {target && current ? (
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            {current.labelId !== null && name ? (
-              <SplitButton
-                className="w-60"
-                label={`${isWaiting ? 'Agree' : 'Keep it'}: ${name}`}
-                menuLabel="Something else"
-                busy={busy}
-                onPress={() => answer(target, current.labelId ?? '')}
-                groups={[rest]}
-                shortcut={{ key: 'a', label: 'Agree with sift' }}
-              >
-                <Meter level={sureness(current.stage, current.confidence)} />
-                <span className="truncate">{name}</span>
-              </SplitButton>
-            ) : (
-              <SplitButton className="w-60" label="Not sure: say what it is" menuLabel="Say what it is" confirm={false} onPress={() => {}} groups={[rest]}>
-                <Look>{outcomeName('review')}</Look>
-              </SplitButton>
-            )}
-            {alternatives.map((a) => (
-              <Button key={a.id} disabled={busy} onClick={() => answer(target, a.id)}>
-                <Meter level={a.share >= 0.5 ? 2 : 1} />
-                {a.name}
-              </Button>
-            ))}
+            <AnswerPicker
+              key={current.id}
+              className="w-72"
+              label="What this message is"
+              value={current.labelId}
+              groups={groups}
+              empty={<Look>{outcomeName('review')}</Look>}
+              busy={busy}
+              onSubmit={(id) => answer(target, id)}
+            />
             <span className="flex-1" />
             <Button variant="quiet" href={`/rules?from=${encodeURIComponent(detail.fromAddress)}`}>
               Make a rule…
