@@ -68,6 +68,7 @@ export const DecisionRow = z.object({
   accountId: z.string(),
   messageId: z.string(),
   decidedAt: z.number(),
+  receivedAt: z.number(),
   stage,
   disposition: z.string(),
   /** What sift said the mail is, or null if it could not place it. */

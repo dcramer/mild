@@ -216,9 +216,12 @@ export function SystemView() {
             ))}
             <Does action="review">{outcomeName('review')}</Does>
           </Row>
-          <Row label="verdict" note="What Sift says mail is and does: the action, then the label.">
+          <Row label="verdict" note="What Sift says mail is and does: the action, then the label. At any size; a sender's next mail is a heading.">
             <Verdict labelName="Newsletters" disposition="archive" />
             <Verdict labelName={null} disposition="review" />
+            <p className="heading">
+              <Verdict labelName="Marketing" disposition="archive" />
+            </p>
           </Row>
           <Row label="meter" note="How sure Sift is about a label, in three steps. A suggestion's label is its answer button, meter first.">
             <Meter level={1} />

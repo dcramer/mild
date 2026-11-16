@@ -39,6 +39,7 @@ const DECISION_FIELDS = {
   accountId: decisions.accountId,
   messageId: decisions.messageId,
   decidedAt: decisions.decidedAt,
+  receivedAt: messages.receivedAt,
   stage: decisions.stage,
   disposition: decisions.disposition,
   block: decisions.block,
