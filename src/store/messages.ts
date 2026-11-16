@@ -40,13 +40,17 @@ export interface QueuedMessage {
   observeOnly: boolean;
 }
 
-/** Recorded messages that have no decision yet, oldest first, rebuilt as triage input. This is the triage queue. */
+/**
+ * Recorded messages that have no decision yet, newest first, rebuilt as triage input. This is the triage queue.
+ * Newest first because mail can wait in it (with no model, what no rule covers is left there), and what waits
+ * must never keep new mail from being sorted.
+ */
 export async function listUndecided(db: Sql, accountId: string, limit: number): Promise<QueuedMessage[]> {
   const rows = await db.all<Row>(
     `SELECT ${COLUMNS}
        FROM messages m
        WHERE account_id = ? AND NOT EXISTS (SELECT 1 FROM decisions d WHERE d.account_id = m.account_id AND d.message_id = m.id)
-       ORDER BY received_at, id LIMIT ?`,
+       ORDER BY received_at DESC, id LIMIT ?`,
     accountId,
     limit,
   );

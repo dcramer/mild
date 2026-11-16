@@ -1,3 +1,4 @@
+import { listUndecided } from '../src/store/messages.ts';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, parseSettings } from '../src/config.ts';
 import { type RunOptions, runOnce } from '../src/daemon/run.ts';
@@ -123,7 +124,9 @@ describe('heuristics in the cascade', () => {
 
     const { db, options, decisions } = await setup();
     await runOnce(db, options(false));
-    expect(await decisions()).toMatchObject([{ stage: 'fallback', disposition: 'review' }]);
+    // Nothing decided it, and with no model it waits in the queue rather than becoming a suggestion.
+    expect(await decisions()).toEqual([]);
+    expect(await listUndecided(db, ACCOUNT, 10)).toHaveLength(1);
   });
 
   it('decides before the model and is recorded under its own name', async () => {
@@ -139,6 +142,16 @@ describe('heuristics in the cascade', () => {
     const { db, mailbox, options, decisions } = await setup();
     mailbox.sentTo.add('offers@example.com');
     await runOnce(db, options(true));
-    expect(await decisions()).toMatchObject([{ stage: 'fallback', disposition: 'review' }]);
+    expect(await decisions()).toEqual([]);
+    expect(await listUndecided(db, ACCOUNT, 10)).toHaveLength(1);
+  });
+
+  it('leaves what no tier decided for a model, and the model decides it once there is one', async () => {
+    const { db, options, decisions } = await setup();
+    await runOnce(db, options(false));
+    expect(await decisions()).toEqual([]);
+    const model = async () => ({ judge: async () => ({ label: 'newsletter', reason: 'r', confidence: 0.9 }), guidelines: '' });
+    await runOnce(db, { ...options(false), model });
+    expect(await decisions()).toMatchObject([{ stage: 'agent', label_id: 'newsletter' }]);
   });
 });

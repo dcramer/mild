@@ -20,7 +20,7 @@ Preconditions:
 
 - Fresh seed. The `Suggestions` link reads `Suggestions 4`.
 
-- **Open.** `ab open "$B/suggestions"`, then `ab find role cell click --name "48 hours only: 30% off"`. The address gains `?message=m4`, a level-2 heading reads `48 hours only: 30% off`, the dropdown reads `Not sure`, and the check is disabled.
+- **Open.** `ab open "$B/suggestions"`, then `ab find role cell click --name "48 hours only: 30% off"`. The address gains `?message=m4`, a level-2 heading reads `48 hours only: 30% off`, the dropdown reads `Which label?`, and the check is disabled.
 - **Choose and save.** `ab find role combobox click --name "What this message is"`, `ab find role option click --name "Marketing"`, then `ab find role button click --name "Save: Marketing"`. A toast reads `Archived as Marketing`; the panel shows the next waiting message (`?message=m6`, `Lunch on Thursday?`).
 - **A rule, on purpose.** On m6, `ab find role link click --name "Make a rule…"`. Rules opens with the rule dialog's value reading `ada@example.org`.
 - **Second view.** `ab open "$B/rules"`. Still 3 rules: answering made none.

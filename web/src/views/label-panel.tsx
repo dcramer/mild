@@ -1,7 +1,7 @@
 import { type ReactNode, useState } from 'react';
 import { type LabelSummary, api, useAction } from '@/lib/api.ts';
 import { ACTIONS, type ActionKey, EXPLAIN, count, percent, plural } from '@/lib/format.ts';
-import { ActionIcon, Button, Check, Code, Failure, Field, Figure, Figures, Form, Input, Panel, Select, TextArea, useToast } from '@/system';
+import { ActionIcon, Button, Check, Code, Dialog, Failure, Field, Figure, Figures, Form, Input, Panel, Select, TextArea, useToast } from '@/system';
 
 const canMarkRead = (does: string) => does === 'keep' || does === 'archive';
 /** Wrong often enough to look at: under 85% right, over at least ten answers. */
@@ -154,5 +154,42 @@ export function LabelPanel({
         </Form>
       </div>
     </Panel>
+  );
+}
+
+/** Add a label. Changing one is in its panel. */
+export function AddLabelDialog({ accountId, onClose, onSaved }: { accountId: string; onClose: () => void; onSaved: () => void }) {
+  const { busy, error, run } = useAction();
+  const [draft, setDraft] = useState<LabelDraft>({ name: '', description: '', disposition: 'keep', markRead: false, unsubscribe: false });
+  const ready = draft.name.trim() !== '';
+  const add = () =>
+    run(
+      () => api.addLabel({ accountId, ...draft, name: draft.name.trim(), description: draft.description.trim() }),
+      () => {
+        onSaved();
+        onClose();
+      },
+    );
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Add a label"
+      footer={
+        <>
+          <Button variant="ink" busy={busy} disabled={!ready} onClick={add}>
+            Add label
+          </Button>
+          <Button variant="quiet" onClick={onClose}>
+            Cancel
+          </Button>
+          <Failure>{error}</Failure>
+        </>
+      }
+    >
+      <Form onSubmit={() => ready && add()}>
+        <LabelFields draft={draft} onChange={setDraft} />
+      </Form>
+    </Dialog>
   );
 }

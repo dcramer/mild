@@ -1,10 +1,12 @@
+import { PlusIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAnswer } from '@/components/answer.tsx';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { MessageBody, SignalFacts } from '@/components/message-parts.tsx';
+import { AddLabelDialog } from '@/views/label-panel.tsx';
 import { SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { type MessageDetail, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ago, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
+import { ago, count, dateTime, money, sureness, tier } from '@/lib/format.ts';
 import {
   AnswerPicker,
   Button,
@@ -131,6 +133,7 @@ function Body({
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const undo = useAction();
   const toast = useToast();
+  const [adding, setAdding] = useState(false);
   const history = [
     ...detail.decisions.map((d) => ({ at: d.decidedAt, order: 0, node: <DecisionEvent key={`d${d.id}`} d={d} /> })),
     ...detail.actions.map((a) => ({
@@ -183,10 +186,12 @@ function Body({
               label="What this message is"
               value={current.labelId}
               groups={groups}
-              empty={<Look>{outcomeName('review')}</Look>}
+              empty={<Look>Which label?</Look>}
               busy={busy}
               onSubmit={(id) => answer(target, id)}
+              extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
             />
+            {adding ? <AddLabelDialog accountId={detail.accountId} onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
             <span className="flex-1" />
             <Button variant="quiet" href={`/rules?from=${encodeURIComponent(detail.fromAddress)}`}>
               Make a rule…

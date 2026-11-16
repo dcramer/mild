@@ -1,3 +1,5 @@
+import { PlusIcon } from 'lucide-react';
+import { useState } from 'react';
 import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
 import { SenderLink } from '@/components/sender.tsx';
@@ -13,6 +15,7 @@ import {
   FilterGroup,
   ListView,
   Look,
+  Note,
   Loading,
   Meter,
   OnPhone,
@@ -26,6 +29,7 @@ import {
   Tr,
   useToast,
 } from '@/system';
+import { AddLabelDialog } from '@/views/label-panel.tsx';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 const UNSURE = '-';
@@ -99,6 +103,8 @@ function SuggestionRow({
 }) {
   const target = { accountId: item.accountId, sender: item.sender, messageId: item.messageId, decisionId: item.decisionId, labelId: item.labelId };
   const { answer, choices, busy, error } = useAnswer(labels, waiting, onAnswered);
+  // A message none of the labels fits gets a new one; it is then among the choices.
+  const [adding, setAdding] = useState(false);
   const groups = choices(target, sureness(item.stage, item.confidence), item.alternatives);
 
   return (
@@ -119,7 +125,7 @@ function SuggestionRow({
                 {item.labelName ?? outcomeName(item.disposition)}
               </span>
             ) : (
-              <Look>{outcomeName('review')}</Look>
+              <Look>Which label?</Look>
             )}
           </span>
         </span>
@@ -145,11 +151,13 @@ function SuggestionRow({
           label="What this message is"
           value={item.labelId}
           groups={groups}
-          empty={<Look>{outcomeName('review')}</Look>}
+          empty={<Look>Which label?</Look>}
           busy={busy}
           onSubmit={(id) => answer(target, id)}
+          extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
         />
       </RowActions>
+      {adding ? <AddLabelDialog accountId={item.accountId} onClose={() => setAdding(false)} onSaved={onAnswered} /> : null}
     </Tr>
   );
 }
@@ -164,6 +172,7 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
   const { data, error, loading, reload } = useLoaded(`suggestions-${includeKept}`, (signal) => api.suggestions(includeKept, signal));
   const summary = useLoaded('summary-7', (signal) => api.summary(7, signal));
   const toast = useToast();
+  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const [search, setSearch] = useParam('q');
   const [label, setLabel] = useParam('label');
   const [does, setDoes] = useParam('does', DOES);
@@ -190,23 +199,33 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
       title="Suggestions"
       actions={summary.data ? <Week summary={summary.data} /> : null}
       intro={
-        // Proposals arrive after the list is drawn, and would push it down.
-        <Reserve id="home-proposals" ready={data !== null} room={{ narrow: 0, wide: 0 }}>
-          {data && data.proposals.length > 0 ? (
-            <ul className="sheet flex flex-col">
-              {data.proposals.map((proposal) => (
-                <ProposalRow
-                  key={proposal.id}
-                  proposal={proposal}
-                  onResolved={(line) => {
-                    if (line) toast(line);
-                    reload();
-                  }}
-                />
-              ))}
-            </ul>
+        <>
+          {/* With no model, what no rule covers is left unsorted rather than asked about, so the page says why it is quiet. */}
+          {manage.data && manage.data.model.chosen === null ? (
+            <Note tone="look" title="No model connected">
+              <p>
+                Mail no rule covers waits, unsorted, until one is. <TextLink href="/settings">Connect a model</TextLink>
+              </p>
+            </Note>
           ) : null}
-        </Reserve>
+          {/* Proposals arrive after the list is drawn, and would push it down. */}
+          <Reserve id="home-proposals" ready={data !== null} room={{ narrow: 0, wide: 0 }}>
+            {data && data.proposals.length > 0 ? (
+              <ul className="sheet flex flex-col">
+                {data.proposals.map((proposal) => (
+                  <ProposalRow
+                    key={proposal.id}
+                    proposal={proposal}
+                    onResolved={(line) => {
+                      if (line) toast(line);
+                      reload();
+                    }}
+                  />
+                ))}
+              </ul>
+            ) : null}
+          </Reserve>
+        </>
       }
       search={{ value: search, onChange: setSearch, placeholder: 'Search senders and subjects' }}
       filters={{

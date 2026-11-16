@@ -627,7 +627,13 @@ describe('older mail', () => {
     const mailbox = new FakeMailbox();
     mailbox.labels.set('old', ['INBOX']);
     mailbox.labels.set('new', ['INBOX']);
-    await triageAccount({ db, mailbox }, (await listAccounts(db))[0]!);
+    // A model that can place neither, so each gets a decision: what is being tested is which may be acted on.
+    const model = {
+      judge: async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 }),
+      guidelines: '',
+      sources: { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } },
+    };
+    await triageAccount({ db, mailbox, model }, (await listAccounts(db))[0]!);
     expect(await db.all('SELECT message_id, mode, outcome FROM decisions ORDER BY message_id')).toEqual([
       { message_id: 'new', mode: 'act', outcome: 'done' },
       { message_id: 'old', mode: 'observe', outcome: 'observed' },

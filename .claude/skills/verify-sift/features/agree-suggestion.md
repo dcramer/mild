@@ -18,7 +18,7 @@ A message sift placed shows the label it gave in the row's answer: a dropdown st
 
 Preconditions:
 
-- Fresh seed. The Store row (`Winter sale starts now`, last) has a dropdown reading `Marketing` and a check; the other three read `Not sure`, with the check disabled.
+- Fresh seed. The Store row (`Winter sale starts now`, last) has a dropdown reading `Marketing` and a check; the other three read `Which label?`, with the check disabled.
 
 - **Agree.** `ab open "$B/suggestions"`, then `ab find role button click --name "Agree: Marketing"`. A toast reads `Archived as Marketing`. The link reads `Suggestions 3`, the Store row is gone, and no panel opens.
 - **Second view.** `ab open "$B/rules"`. No rule mentions `sale@store.example.com`.

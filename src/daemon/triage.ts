@@ -25,7 +25,7 @@ export interface TriageDeps {
   mailbox: Mailbox | null;
   /** While sift only observes: the mailbox to carry out the user's own answers in. Nothing else is done with it. */
   answers?: Mailbox | null;
-  /** The inference tier. Omitted when no model is configured: mail no rule covers goes to review. */
+  /** The inference tier. Omitted when no model is configured: mail no rule covers waits, undecided, for one. */
   model?: ModelTier;
   /** The heuristics tier, when the user has turned it on. The mailbox is only searched, for whether the owner has written to a sender. */
   heuristics?: { mailbox: Pick<Mailbox, 'hasSentTo'> };
@@ -156,6 +156,9 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     const act = mailbox !== null && !observeOnly;
     const started = performance.now();
     const decision = await decide(facts);
+    // With no model, mail no rule covers is not anyone's to answer yet: it stays in the queue, unrecorded, for a
+    // model once one is connected, or a rule added meanwhile. A model's own "unsure" is recorded and asked about.
+    if (decision.stage === 'fallback' && !deps.model) continue;
     const decisionId = await recordDecision(db, account.id, facts.messageId, decision, {
       mode: act ? 'act' : 'observe',
       durationMs: Math.round(performance.now() - started),

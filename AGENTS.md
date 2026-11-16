@@ -72,7 +72,7 @@ Every setting can be given in the environment, which is how Vercel and Cloudflar
 
 ## Record everything
 
-The database is the full account of what sift saw and did. Every message synced gets a row (metadata and subject, no body). Message content is stored in two places only: `examples`, for mail the user answered for, kept; and `suggestion_bodies`, the text of mail still waiting on the user, which is deleted when it is answered or stops being a suggestion and after 30 days regardless. Don't store message content anywhere else, and don't lengthen that. Every triage outcome gets a `decisions` row through `recordDecision`, including "keep" and "could not decide", with its cost. Every mailbox change goes through the executor and gets an `actions` row linked to its decision. Don't add a code path that decides or acts without recording.
+The database is the full account of what sift saw and did. Every message synced gets a row (metadata and subject, no body). Message content is stored in two places only: `examples`, for mail the user answered for, kept; and `suggestion_bodies`, the text of mail still waiting on the user, which is deleted when it is answered or stops being a suggestion and after 30 days regardless. Don't store message content anywhere else, and don't lengthen that. Every triage outcome gets a `decisions` row through `recordDecision`, including "keep" and "could not decide", with its cost; mail nothing looked at because no model is connected is not an outcome, and stays in the queue. Every mailbox change goes through the executor and gets an `actions` row linked to its decision. Don't add a code path that decides or acts without recording.
 
 ## Definition of done
 

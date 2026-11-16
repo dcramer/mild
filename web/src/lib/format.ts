@@ -12,7 +12,7 @@ export const TIERS: { key: StageKey; name: string; color: string }[] = [
   { key: 'sender', name: 'Sender (old)', color: 'var(--tier-sender)' },
   { key: 'classifier', name: 'Model', color: 'var(--tier-classifier)' },
   { key: 'agent', name: 'Agent', color: 'var(--tier-agent)' },
-  { key: 'fallback', name: 'Not sure', color: 'var(--tier-fallback)' },
+  { key: 'fallback', name: 'Undecided', color: 'var(--tier-fallback)' },
 ];
 /** What became of the mail sift handled in a day, for Activity's chart, bottom to top. */
 export const HANDLED = [
@@ -42,7 +42,7 @@ export const ACTIONS = [
 export type ActionKey = (typeof ACTIONS)[number][0];
 
 /** `review`: no tier was sure, so sift leaves the message alone and asks. */
-const OUTCOMES: Record<string, string> = { ...Object.fromEntries(ACTIONS), review: 'Not sure' };
+const OUTCOMES: Record<string, string> = { ...Object.fromEntries(ACTIONS), review: 'No label yet' };
 export const outcomeName = (key: string) => OUTCOMES[key] ?? key;
 /** What a decision can be filtered by: `block` is recorded as spam. */
 export const OUTCOME_KEYS = ['keep', 'archive', 'spam', 'review'] as const;

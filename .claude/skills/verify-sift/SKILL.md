@@ -27,10 +27,10 @@ What the seed leaves (through a real observing pass, `runEveryone`, with heurist
 | --- | --- | --- | --- |
 | `m1`, `m2` | `digest@news.example.com` | label rule → Newsletters | Activity only |
 | `m3` | `orders@shop.example.com` | label rule → Receipts and transactions | Activity only |
-| `m4` | `deals@promo.example.com` | nothing | Suggestions, `Not sure…` |
+| `m4` | `deals@promo.example.com` | nothing | Suggestions, `Which label?` |
 | `m5` | `builds@ci.example.org` | action rule → archive | Activity only |
-| `m6` | `ada@example.org` | nothing | Suggestions, `Not sure…` |
-| `m7` | `grace@example.net` | nothing | Suggestions, `Not sure…` |
+| `m6` | `ada@example.org` | nothing | Suggestions, `Which label?` |
+| `m7` | `grace@example.net` | nothing | Suggestions, `Which label?` |
 | `m8` | `sale@store.example.com` | header heuristics → Marketing | Suggestions, `Marketing` (sure), the only row with a label to agree with |
 
 The connected account is `me@example.org`, observing, no model, default labels, 3 user rules. Every message carries `dmarc=pass`; the three lists (news, promo, store) carry one-click unsubscribe headers. `m8` also has a Mailgun header and Gmail's Promotions category, which is what the heuristics need.
@@ -96,6 +96,6 @@ State is in `~/.cache/sift-verify-maint/`. Delete `suggested-on` there to see to
 ## What this cannot show
 
 - Anything that talks to Google: sign-in itself, connecting another account, Pull in (older mail), Gmail filters, undo of a real change. They fail here; that failure is not the change's fault.
-- The model tier: there is no model, so nothing reaches it, and an unmatched message is always "Not sure".
+- The model tier: the seed's stand-in model can place nothing (it never calls a provider), so an unmatched message is always "Which label?". With no model at all such mail would wait undecided and not be a suggestion.
 - Acting. Settings can be switched to acting, but `sift dashboard` never runs a pass, so nothing is acted on. Prove the executor with tests (`tests/actions.test.ts`, `tests/run.test.ts`).
 - `examples` rows stay `pending`: the body is captured on the next pass, which never comes.

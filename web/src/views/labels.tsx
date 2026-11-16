@@ -1,54 +1,17 @@
 import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
-import { type LabelSummary, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type LabelSummary, api, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/route.ts';
-import { type LabelDraft, LabelFields, LabelPanel, weak } from '@/views/label-panel.tsx';
+import { AddLabelDialog, LabelPanel, weak } from '@/views/label-panel.tsx';
 import { count, outcomeName, percent } from '@/lib/format.ts';
-import { Button, Dialog, Does, Empty, Failure, Form, ListView, Look, Loading, OnPhone, Share, Sub, Table, Td, Th, Tr } from '@/system';
+import { Button, Does, Empty, ListView, Look, Loading, OnPhone, Share, Sub, Table, Td, Th, Tr } from '@/system';
 
 /** How often sift had the label right when the reader checked, in yellow when it is often wrong. */
 function Right({ label }: { label: LabelSummary }) {
   if (label.record.reviewed === 0) return <span className="text-muted-foreground">Not checked</span>;
   const text = `${percent(label.record.right, label.record.reviewed)} right`;
   return weak(label) ? <Look>{text}</Look> : <span className="text-muted-foreground">{text}</span>;
-}
-
-/** Add a label. Changing one is in its panel. */
-function AddLabelDialog({ accountId, onClose, onSaved }: { accountId: string; onClose: () => void; onSaved: () => void }) {
-  const { busy, error, run } = useAction();
-  const [draft, setDraft] = useState<LabelDraft>({ name: '', description: '', disposition: 'keep', markRead: false, unsubscribe: false });
-  const ready = draft.name.trim() !== '';
-  const add = () =>
-    run(
-      () => api.addLabel({ accountId, ...draft, name: draft.name.trim(), description: draft.description.trim() }),
-      () => {
-        onSaved();
-        onClose();
-      },
-    );
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="Add a label"
-      footer={
-        <>
-          <Button variant="ink" busy={busy} disabled={!ready} onClick={add}>
-            Add label
-          </Button>
-          <Button variant="quiet" onClick={onClose}>
-            Cancel
-          </Button>
-          <Failure>{error}</Failure>
-        </>
-      }
-    >
-      <Form onSubmit={() => ready && add()}>
-        <LabelFields draft={draft} onChange={setDraft} />
-      </Form>
-    </Dialog>
-  );
 }
 
 /** The labels: what mail can be and what happens to it, with how much of the mail each is and how often sift has it right. */

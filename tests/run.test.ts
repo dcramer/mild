@@ -59,6 +59,9 @@ function api(): GmailApi {
   };
 }
 
+/** A model that can place nothing. Mail sift asks about comes from a model's "unsure"; with no model, nothing is asked. */
+const unsure = async () => ({ guidelines: '', judge: async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 }) });
+
 const options = (act: boolean): RunOptions => ({ act, connect: () => ({ api: api(), mailbox }), log: (line) => logs.push(line), now: () => 5000 });
 const decisions = async () => await db.all('SELECT message_id, stage, disposition, mode, outcome, outcome_detail, rule_id FROM decisions ORDER BY id');
 
@@ -76,10 +79,10 @@ beforeEach(async () => {
 describe('runOnce', () => {
   it('observes by default: records what it would do and changes nothing', async () => {
     await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
-    await runOnce(db, options(false));
+    await runOnce(db, { ...options(false), model: unsure });
 
     expect(await decisions()).toMatchObject([
-      { message_id: 'ada', stage: 'fallback', disposition: 'review', mode: 'observe', outcome: 'observed' },
+      { message_id: 'ada', stage: 'agent', disposition: 'review', mode: 'observe', outcome: 'observed' },
       { message_id: 'news', stage: 'rules', disposition: 'archive', mode: 'observe', outcome: 'observed' },
     ]);
     expect(mailbox.modifyCalls).toBe(0);
@@ -107,13 +110,23 @@ describe('runOnce', () => {
   });
 
   it('labels undecided mail for review and leaves it in the inbox', async () => {
-    await runOnce(db, options(true));
+    await runOnce(db, { ...options(true), model: unsure });
     expect(mailbox.labels.get('ada')).toEqual(['INBOX', 'UNREAD', 'L:sift/review']);
   });
 
+  it('with no model, leaves what no rule covers in the queue: no decision, no question, nothing changed', async () => {
+    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    await runOnce(db, options(true));
+    expect(await decisions()).toMatchObject([{ message_id: 'news' }]);
+    expect(await decisions()).toHaveLength(1);
+    expect((await listUndecided(db, ACCOUNT, 10)).map((m) => m.facts.messageId)).toEqual(['ada']);
+    expect(mailbox.labels.get('ada')).toEqual(['INBOX', 'UNREAD']);
+    expect(logs).toEqual([`${ACCOUNT}: 2 new; decided archive 1; 1 changed`]);
+  });
+
   it('decides each message once, however many passes run', async () => {
-    await runOnce(db, options(true));
-    await runOnce(db, options(true));
+    await runOnce(db, { ...options(true), model: unsure });
+    await runOnce(db, { ...options(true), model: unsure });
     expect(await decisions()).toHaveLength(2);
     expect(mailbox.modifyCalls).toBe(2);
     expect(logs).toHaveLength(1);
@@ -123,7 +136,7 @@ describe('runOnce', () => {
     await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'marketing', disposition: 'spam' }, 'user');
     mailbox.sentTo.add('news@example.com');
     mailbox.labels.set('ada', ['UNREAD']);
-    await runOnce(db, options(true));
+    await runOnce(db, { ...options(true), model: unsure });
 
     expect(await decisions()).toMatchObject([
       { message_id: 'ada', outcome: 'skipped', outcome_detail: 'message is not in the inbox' },
@@ -324,7 +337,8 @@ describe('teaching from Gmail', () => {
 
   it('skips mail sift could not place unless the user gave it a sift label', async () => {
     await db.run('DELETE FROM rules');
-    await run(true);
+    await runOnce(db, { ...options(true), now: () => clock, model: unsure });
+    clock += 1000;
     expect(await latest('news')).toMatchObject({ disposition: 'review', label_id: null });
     mailbox.byUser('news', { remove: ['INBOX'] });
     expect(await pass(true)).toBe(0);

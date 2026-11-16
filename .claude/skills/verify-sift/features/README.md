@@ -5,7 +5,7 @@ The maintained recipes for proving what a dashboard user sees and does. Read thi
 ## Baseline preconditions
 
 - A run started with `verify.sh up "$RUN"` in a new directory, and `verify.sh doctor "$RUN"` printing `ok`.
-- The seed as SKILL.md describes it: account `me@example.org`, observing, no model; 4 suggestions (Deals, Ada Lovelace, Grace Hopper as `Not sure…`; Store as `Marketing`); 3 user rules; the default labels.
+- The seed as SKILL.md describes it: account `me@example.org`, observing, no model connected (a stand-in that places nothing judged the seed mail, so Suggestions also says "No model connected"); 4 suggestions (Deals, Ada Lovelace, Grace Hopper as `Which label?`; Store as `Marketing`); 3 user rules; the default labels.
 - `B=http://127.0.0.1:$(cat "$RUN/port")`, and `ab` below means `verify.sh ab "$RUN"`.
 - Never drive an instance this run did not start.
 

@@ -4,6 +4,9 @@ import { Fragment, type ReactNode, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from './button.tsx';
 
+/** The value of `extra` in the list: never a choice, so never anyone's label id. */
+const EXTRA = '\u0000extra';
+
 export interface Pick {
   id: string;
   label: string;
@@ -26,6 +29,7 @@ export function AnswerPicker({
   onSubmit,
   busy,
   className,
+  extra,
 }: {
   /** Names the dropdown for a screen reader: "What this message is". */
   label: string;
@@ -36,6 +40,8 @@ export function AnswerPicker({
   onSubmit: (id: string) => void;
   busy?: boolean;
   className?: string;
+  /** Last in the list, set apart: something to do instead of a choice, such as adding a label that does not exist yet. */
+  extra?: { label: string; lead?: ReactNode; onSelect: () => void };
 }) {
   const [chosen, setChosen] = useState<string | null>(value);
   const all = groups.flat();
@@ -43,7 +49,11 @@ export function AnswerPicker({
   const changed = chosen !== value;
   return (
     <span className={cn('inline-flex items-center gap-1.5', className)}>
-      <Base.Root items={all.map((p) => ({ value: p.id, label: p.label }))} value={chosen} onValueChange={(next) => next !== null && setChosen(next)}>
+      <Base.Root
+        items={all.map((p) => ({ value: p.id, label: p.label }))}
+        value={chosen}
+        onValueChange={(next) => (next === EXTRA ? extra?.onSelect() : next !== null && setChosen(next))}
+      >
         <Base.Trigger
           aria-label={label}
           className="press inline-flex h-(--control) min-w-0 flex-1 cursor-pointer items-center gap-2 pr-2 pl-3 text-sm whitespace-nowrap select-none border border-transparent bg-(--fill) hover:bg-(--fill-strong) data-popup-open:bg-(--fill-strong)"
@@ -84,6 +94,20 @@ export function AnswerPicker({
                       ))}
                     </Fragment>
                   ))}
+                {extra ? (
+                  <>
+                    <Base.Separator className="my-1 border-t border-(--rule)" />
+                    <Base.Item
+                      value={EXTRA}
+                      className="relative flex cursor-pointer items-center gap-2.5 py-1.5 pr-8 pl-2 whitespace-nowrap text-muted-foreground outline-none select-none data-highlighted:bg-(--fill-strong) data-highlighted:text-foreground pointer-coarse:min-h-11"
+                    >
+                      <span aria-hidden className="flex w-3.5 shrink-0 justify-center [&_svg]:size-3.5">
+                        {extra.lead}
+                      </span>
+                      <Base.ItemText>{extra.label}</Base.ItemText>
+                    </Base.Item>
+                  </>
+                ) : null}
               </Base.List>
             </Base.Popup>
           </Base.Positioner>
