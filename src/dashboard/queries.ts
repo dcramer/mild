@@ -132,7 +132,15 @@ const DECISION_SELECT = `
   FROM decisions d
   JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
   LEFT JOIN labels l ON l.account_id = d.account_id AND l.id = d.label_id
-  LEFT JOIN actions a ON a.id = (SELECT max(id) FROM actions WHERE decision_id = d.id)`;
+  LEFT JOIN actions a ON a.id = (SELECT max(id) FROM actions WHERE decision_id = d.id AND type != 'unsubscribe')`;
+
+/** Where a decision has got to, as the dashboard groups it. `trouble`: not carried out, failed, or not confirmed. */
+const STATUS_WHERE: Record<string, string> = {
+  suggested: "d.mode = 'observe'",
+  done: "d.mode = 'act' AND d.outcome IN ('done', 'none') AND coalesce(a.status, 'done') = 'done'",
+  undone: "a.status = 'undone'",
+  trouble: "d.mode = 'act' AND (d.outcome IS NULL OR d.outcome IN ('failed', 'unknown') OR a.status IN ('failed', 'unknown', 'pending'))",
+};
 
 const toDecisionRow = (r: DecisionSqlRow): DecisionRow => ({
   id: r.id,
@@ -164,6 +172,8 @@ export interface DecisionFilter {
   days: number;
   stage?: string;
   disposition?: string;
+  /** `suggested`, `done`, `undone` or `trouble`. */
+  status?: string;
   /** Case-insensitive substring of the subject, sender address or sender name. */
   search?: string;
   accountId?: string;
@@ -189,6 +199,11 @@ export function listDecisions(db: DatabaseSync, filter: DecisionFilter, now: num
     where.push('d.disposition = ?');
     params.push(filter.disposition);
   }
+  if (filter.status !== undefined) {
+    const clause = STATUS_WHERE[filter.status];
+    if (clause === undefined) return { total: 0, rows: [] };
+    where.push(clause);
+  }
   for (const [column, value] of [
     ['d.account_id', filter.accountId],
     ['m.from_address', filter.sender],
@@ -209,7 +224,7 @@ export function listDecisions(db: DatabaseSync, filter: DecisionFilter, now: num
   const offset = Math.max(Math.trunc(filter.offset ?? 0), 0);
 
   const { total } = db
-    .prepare(`SELECT count(*) AS total FROM decisions d JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id WHERE ${clause}`)
+    .prepare(`SELECT count(*) AS total FROM (${DECISION_SELECT} WHERE ${clause})`)
     .get(...params) as { total: number };
   const rows = db
     .prepare(`${DECISION_SELECT} WHERE ${clause} ORDER BY d.id DESC LIMIT ? OFFSET ?`)
