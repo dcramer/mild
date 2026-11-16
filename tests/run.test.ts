@@ -60,7 +60,7 @@ function api(): GmailApi {
 }
 
 /** A model that can place nothing. Mail sift asks about comes from a model's "unsure"; with no model, nothing is asked. */
-const unsure = async () => ({ guidelines: '', judge: async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 }) });
+const unsure = async () => ({ judge: async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 }) });
 
 const options = (act: boolean): RunOptions => ({ act, connect: () => ({ api: api(), mailbox }), log: (line) => logs.push(line), now: () => 5000 });
 const decisions = async () => await raw(db).all('SELECT message_id, stage, disposition, mode, outcome, outcome_detail, rule_id FROM decisions ORDER BY id');
@@ -459,7 +459,6 @@ describe('triage queue', () => {
 describe('inference tier', () => {
   const judged: string[] = [];
   const model = (label: string) => async () => ({
-    guidelines: '',
     judge: async ({ evidence }: { evidence: { facts: { messageId: string } } }) => {
       judged.push(evidence.facts.messageId);
       return { label, reason: 'looks like a mailing', confidence: 0.9, usage: { model: 'test/model', inputTokens: 800, outputTokens: 20, costUsd: 0.002 } };
@@ -655,7 +654,7 @@ describe('blocking', () => {
     const m = message(id, 'Bank <alerts@example.net>', 'Verify your account');
     return { ...m, headers: [...m.headers, { name: 'Authentication-Results', value: `mx.example.org; dmarc=${authenticated ? 'pass' : 'fail'}` }] };
   };
-  const phishing = async () => ({ guidelines: '', judge: async () => ({ label: 'phishing', reason: 'asks for a password' }) });
+  const phishing = async () => ({ judge: async () => ({ label: 'phishing', reason: 'asks for a password' }) });
 
   it('marks the message spam and makes a rule for the sender, so their later mail needs no model', async () => {
     inbox = [phish('p1', true)];
@@ -668,7 +667,7 @@ describe('blocking', () => {
     let asked = 0;
     inbox = [phish('p2', true)];
     mailbox.labels.set('p2', ['INBOX']);
-    await runOnce(db, { ...options(true), model: async () => ({ guidelines: '', judge: async () => (asked++, null) }) });
+    await runOnce(db, { ...options(true), model: async () => ({ judge: async () => (asked++, null) }) });
     expect(asked).toBe(0);
     expect(await raw(db).get(`SELECT stage, disposition, block FROM decisions WHERE message_id = 'p2'`)).toEqual({
       stage: 'rules',
@@ -704,7 +703,7 @@ describe('examples', () => {
   it('stores marked messages whole on the next pass, while only observing', async () => {
     inbox = [inbox[0]!];
     bodies.set('news', 'The full text of the newsletter.');
-    await runOnce(db, { ...options(false), model: async () => ({ guidelines: '', judge: async () => ({ label: 'newsletter', reason: 'r' }) }) });
+    await runOnce(db, { ...options(false), model: async () => ({ judge: async () => ({ label: 'newsletter', reason: 'r' }) }) });
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' });
 
     inbox = [];

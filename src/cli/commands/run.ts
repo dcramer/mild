@@ -52,7 +52,7 @@ export async function run(args: string[]): Promise<void> {
         try {
           const tier = await openModelTier(config, db);
           unreachable.delete(person);
-          return tier && { judge: tier.judge, guidelines: tier.guidelines, fewShot: settings.fewShot };
+          return tier && { judge: tier.judge, fewShot: settings.fewShot };
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           if (unreachable.get(person) !== message) ui.fail(`${(await listAccounts(db)).map((a) => a.email).join(', ')}: ${message}`);

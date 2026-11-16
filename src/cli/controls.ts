@@ -5,7 +5,6 @@ import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
 import { type Config, loadConfig, saveSettings } from '../config.ts';
 import { backfill } from '../daemon/backfill.ts';
 import type { Activity, Controls, ModelSignIns } from '../dashboard/controls.ts';
-import { rejudgeWaiting } from '../daemon/rejudge.ts';
 import type { Wake } from '../daemon/run.ts';
 import { createGmailApi } from '../gmail/api.ts';
 import { interruptEvals, startEval } from '../learn/evals.ts';
@@ -35,16 +34,16 @@ const mailboxFor = async (config: Config, db: Sql, email: string) => createGmail
 const modelsFor = async (config: Config, db: Sql) => openModels(await credentials(db, 'model', config.keys));
 
 /**
- * The model tier of the person whose database `db` is, from their own choice, sign-in and guidelines.
+ * The model tier of the person whose database `db` is, from their own choice and sign-in.
  * Null when they have chosen no model. Throws, with what to do, when they have chosen one they cannot reach.
  */
 export async function openModelTier(config: Config, db: Sql) {
-  const { model: spec, guidelines } = await preferences(db);
+  const { model: spec } = await preferences(db);
   if (!spec) return null;
   const models = await modelsFor(config, db);
   const model = resolveModel(models, spec);
   if (!(await models.getAuth(model))) throw new Error(`Not signed in to ${model.provider}. Sign in under Settings in the dashboard.`);
-  return { spec, guidelines, judge: createJudge(models, model, (message) => ui.fail(`Model call failed: ${message}`)) };
+  return { spec, judge: createJudge(models, model, (message) => ui.fail(`Model call failed: ${message}`)) };
 }
 
 /** A stable id for this installation, created on first use. ChatGPT registers the device under it. */
@@ -61,7 +60,6 @@ export async function buildControls(config: Config, store: Store, live: { wake?:
   const everyone = async () => await Promise.all((await listUsers(store.central)).map((u) => store.user(u.id)));
   for (const db of await everyone()) await interruptEvals(db);
   // By person: suggestions being judged again, and a ChatGPT sign-in waiting on them.
-  const rejudging = new Set<number>();
   const pending = new Map<number, NonNullable<ModelSignIns['pending']>>();
   return {
     settings: () => {
@@ -131,26 +129,6 @@ export async function buildControls(config: Config, store: Store, live: { wake?:
       await (await credentials(db, 'model', config.keys)).remove(provider);
       pending.delete(await personOf(db));
     },
-    rejudge: async (db, accountId) => {
-      const person = await personOf(db);
-      const account = (await listAccounts(db)).find((a) => a.id === accountId);
-      const since = (await preferences(db)).guidelinesChangedAt;
-      const tier = await openModelTier(config, db);
-      if (!tier) throw new Error('Choose a model first.');
-      if (!account || since === null) return { started: 0, remaining: 0 };
-      if (rejudging.has(person)) throw new Error('Suggestions are already being judged again. Wait for that to finish.');
-      const client = await gmailClient(config, db, account.email);
-      const model = {
-        judge: tier.judge,
-        guidelines: tier.guidelines,
-        fewShot: current().fewShot,
-        sources: { api: createGmailApi(client), mailbox: createGmailMailbox(client) },
-      };
-      const { started, remaining, done } = await rejudgeWaiting({ db, mailbox: null, model }, account, since);
-      rejudging.add(person);
-      void done.finally(() => rejudging.delete(person));
-      return { started, remaining };
-    },
     undo: async (db, actionId) => {
       const action = await getAction(db, actionId);
       if (!action) throw new Error(`There is no change #${actionId}.`);
@@ -176,7 +154,7 @@ export async function buildControls(config: Config, store: Store, live: { wake?:
     startEval: async (db, request) => {
       const tier = await openModelTier(config, db);
       if (!tier) throw new Error('Choose a model first.');
-      return (await startEval({ db, judge: tier.judge, model: tier.spec, guidelines: tier.guidelines }, request)).id;
+      return (await startEval({ db, judge: tier.judge, model: tier.spec }, request)).id;
     },
     ruleFilter: async (db, ruleId, on) => {
       const rule = await getRuleFilter(db, ruleId);

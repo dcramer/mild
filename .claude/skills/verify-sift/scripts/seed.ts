@@ -100,7 +100,7 @@ const api: GmailApi = {
 
 // A stand-in model that can place nothing, so what no rule covers becomes a question ("Which label?"):
 // with no model at all it would wait, undecided, and never be asked about. It calls no provider.
-const unsure = async () => ({ guidelines: '', judge: async () => ({ label: 'unsure', reason: 'synthetic: cannot tell', confidence: 0.3 }) });
+const unsure = async () => ({ judge: async () => ({ label: 'unsure', reason: 'synthetic: cannot tell', confidence: 0.3 }) });
 const [result] = await runEveryone(store, { act: false, heuristics: true, model: unsure, connect: () => ({ api, mailbox }), log: () => {} });
 if (result?.error) throw new Error(`seed pass failed: ${result.error}`);
 if (mailbox.modifyCalls > 0) throw new Error('seed pass changed the fake mailbox while observing');

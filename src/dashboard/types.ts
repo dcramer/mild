@@ -462,19 +462,12 @@ export const ManageState = z.object({
     signedIn: z.array(z.string()),
     pending: z.union([SignInCode, z.object({ error: z.string() })]).nullable(),
   }),
-  /** The viewer's own words about their mail, which the model reads. */
-  guidelines: z.string(),
   activity: z.object({ sorting: z.boolean(), lastPassAt: z.number().nullable(), problems: z.array(z.string()), expired: z.array(z.string()) }),
   accounts: z.array(z.object({ id: z.string(), email: z.string(), lastSyncedAt: z.number().nullable() })),
   /** Per account, in order. */
   labels: z.record(z.string(), z.array(LabelSummary)),
   /** How many labels an account may have. */
   labelLimit: z.number(),
-  /**
-   * Per account, waiting suggestions a model judged (or no tier could place) before the viewer's
-   * guidelines last changed. POST /api/suggestions/rejudge judges a batch of them again, at a model call each.
-   */
-  predateGuidelines: z.record(z.string(), z.number()),
 });
 export type ManageState = z.infer<typeof ManageState>;
 
@@ -555,7 +548,6 @@ export const EvalRun = z.object({
   /** What it ran with. Runs that agree on all of these were asked the same question the same way. */
   model: z.string(),
   promptHash: z.string(),
-  guidelinesHash: z.string(),
   labelsHash: z.string(),
   labels: z.array(z.object({ id: z.string(), name: z.string(), description: z.string() })),
   fewShot: z.boolean(),

@@ -1,17 +1,15 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MAX_REJUDGE, rejudgeWaiting } from '../src/daemon/rejudge.ts';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
-import { predatingGuidelines, redecideWaiting } from '../src/learn/redecide.ts';
-import { addMailbox, listAccounts, recordSync } from '../src/store/accounts.ts';
+import { redecideWaiting } from '../src/learn/redecide.ts';
+import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { openUserDb, raw } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { addRule, listRules, removeRule } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
-import type { JudgeInput } from '../src/triage/stages/model.ts';
 import type { Decision } from '../src/triage/types.ts';
-import { FakeMailbox, facts } from './helpers.ts';
+import { facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
 let db: Sql;
@@ -195,68 +193,5 @@ describe("when a label's outcome changes", () => {
     await decided('unsure@example.com', { stage: 'agent', reason: 'could be either' });
     await updateLabel(db, ACCOUNT, 'marketing', { disposition: 'keep' });
     expect(await redecideWaiting(db, ACCOUNT)).toBe(0);
-  });
-});
-
-describe('when the guidelines change', () => {
-  const judged: string[] = [];
-  const model = (label: string | null) => ({
-    judge: async (input: JudgeInput) => {
-      judged.push(input.evidence.facts.messageId);
-      return label === null ? null : { label, reason: 'fits the new guidelines', usage: { model: 'p/m', inputTokens: 500, outputTokens: 10, costUsd: 0.001 } };
-    },
-    guidelines: 'Sales mail is junk.',
-    sources: { api: { getContent: async () => ({ text: 'text', facts: { hasAttachments: false } }), getThread: async () => null }, mailbox: new FakeMailbox() },
-  });
-
-  it('counts the waiting mail judged before the change, and judges it again only when asked', async () => {
-    judged.length = 0;
-    const early = await decided('sales@example.com', MARKETING, 100);
-    const lost = await decided('who@example.com', { stage: 'fallback' }, 150);
-    const late = await decided('late@example.com', MARKETING, 300);
-    const ruled = await decided(
-      'rule@example.com',
-      { stage: 'rules', ruleId: await addRule(db, ACCOUNT, { match: { from: 'rule@example.com' }, labelId: 'marketing' }, 'agent') },
-      100,
-    );
-
-    expect((await predatingGuidelines(db, 200, ACCOUNT)).map((s) => s.messageId)).toEqual([early, lost]);
-    expect(await predatingGuidelines(db, 200, 'other@example.org')).toEqual([]);
-    expect(judged).toEqual([]);
-
-    const [account] = await listAccounts(db);
-    const run = await rejudgeWaiting({ db, mailbox: null, model: model('junk'), now: () => 400 }, account!, 200);
-    expect(run).toMatchObject({ started: 2, remaining: 0 });
-    await run.done;
-    expect(judged).toEqual([early, lost]);
-    expect(await current(early)).toMatchObject({ stage: 'agent', disposition: 'spam', label_id: 'junk', mode: 'observe', cost_usd: 0.001 });
-    expect(await current(late)).toMatchObject({ label_id: 'marketing' });
-    expect(await current(ruled)).toMatchObject({ stage: 'rules' });
-    expect(await predatingGuidelines(db, 200, ACCOUNT)).toEqual([]);
-    expect(await waiting()).toEqual([early, lost, late, ruled].toSorted());
-    // Judging one message twice is not grounds for a rule about its sender.
-    expect(await listRules(db, ACCOUNT)).toHaveLength(1);
-  });
-
-  it('keeps the old decision, still out of date, when the model cannot answer', async () => {
-    const early = await decided('sales@example.com', MARKETING, 100);
-    const [account] = await listAccounts(db);
-    const before = await count();
-    await (
-      await rejudgeWaiting({ db, mailbox: null, model: model(null) }, account!, 200)
-    ).done;
-    expect(await count()).toBe(before);
-    expect((await predatingGuidelines(db, 200, ACCOUNT)).map((s) => s.messageId)).toEqual([early]);
-  });
-
-  it('judges a batch at a time and says what is left', async () => {
-    judged.length = 0;
-    for (let i = 0; i < MAX_REJUDGE + 5; i++) await decided(`s${i}@example.com`, MARKETING, 100);
-    const [account] = await listAccounts(db);
-    const run = await rejudgeWaiting({ db, mailbox: null, model: model('marketing'), now: () => 400 }, account!, 200);
-    expect(run).toMatchObject({ started: MAX_REJUDGE, remaining: 5 });
-    await run.done;
-    expect(judged).toHaveLength(MAX_REJUDGE);
-    expect(await predatingGuidelines(db, 200, ACCOUNT)).toHaveLength(5);
   });
 });

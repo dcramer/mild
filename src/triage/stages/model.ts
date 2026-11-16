@@ -46,7 +46,6 @@ export type Judge = (input: JudgeInput) => Promise<Verdict | null>;
 export interface JudgeInput {
   evidence: Evidence;
   labels: readonly Label[];
-  guidelines: string;
   /** Mail the owner labelled before, shown to the model as examples. Already chosen and cut to size. */
   examples?: readonly Shot[];
 }
@@ -57,8 +56,6 @@ export interface ModelStageDeps {
   prior?: (facts: MessageFacts) => (RuleHit & { label: Label }) | null;
   judge: Judge;
   labels: readonly Label[];
-  /** The user's broad guidance in plain language. May be empty. */
-  guidelines: string;
   /** Port for labelled examples that might help with this message. The stage picks from what it returns. Omitted: none are shown. */
   examples?: (facts: MessageFacts) => readonly Shot[] | Promise<readonly Shot[]>;
 }
@@ -77,7 +74,7 @@ export function modelStage(deps: ModelStageDeps): Stage {
         ? { ...gathered, prior: { labelId: prior.label.id, labelName: prior.label.name, ...(prior.rule.when ? { when: prior.rule.when } : {}) } }
         : gathered;
       const examples = deps.examples ? pickShots(await deps.examples(facts), facts, deps.labels) : [];
-      const verdict = await deps.judge({ evidence, labels: deps.labels, guidelines: deps.guidelines, ...(examples.length > 0 ? { examples } : {}) });
+      const verdict = await deps.judge({ evidence, labels: deps.labels, ...(examples.length > 0 ? { examples } : {}) });
       if (!verdict) return null;
 
       const base = {

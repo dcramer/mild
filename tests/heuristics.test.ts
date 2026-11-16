@@ -132,7 +132,7 @@ describe('heuristics in the cascade', () => {
   it('decides before the model and is recorded under its own name', async () => {
     const { db, options, decisions } = await setup();
     let judged = 0;
-    const model = async () => ({ judge: async () => (judged++, null), guidelines: '' });
+    const model = async () => ({ judge: async () => (judged++, null) });
     await runOnce(db, { ...options(true), model });
     expect(await decisions()).toMatchObject([{ stage: 'heuristics', disposition: 'archive', label_id: 'marketing' }]);
     expect(judged).toBe(0);
@@ -150,7 +150,7 @@ describe('heuristics in the cascade', () => {
     const { db, options, decisions } = await setup();
     await runOnce(db, options(false));
     expect(await decisions()).toEqual([]);
-    const model = async () => ({ judge: async () => ({ label: 'newsletter', reason: 'r', confidence: 0.9 }), guidelines: '' });
+    const model = async () => ({ judge: async () => ({ label: 'newsletter', reason: 'r', confidence: 0.9 }) });
     await runOnce(db, { ...options(false), model });
     expect(await decisions()).toMatchObject([{ stage: 'agent', label_id: 'newsletter' }]);
   });

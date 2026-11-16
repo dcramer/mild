@@ -20,12 +20,6 @@ export interface Controls {
   /** Store an API key for one of the providers that takes one. */
   saveModelKey(db: Sql, provider: string, key: string): Promise<void>;
   signOutModel(db: Sql, provider: string): Promise<void>;
-  /**
-   * Judge again, in the background, an account's waiting suggestions that were judged before the
-   * person's guidelines last changed. A model call each, so only when the user asks, and at most a batch at a
-   * time. Resolves with how many were started and how many are left for another press.
-   */
-  rejudge(db: Sql, accountId: string): Promise<{ started: number; remaining: number }>;
   /** Reverse one mailbox change. Resolves with a sentence describing what happened. */
   undo(db: Sql, actionId: number): Promise<string>;
   /** Pull the last `days` days of everyone's inbox in as suggestions. Resolves with how many messages were new. */

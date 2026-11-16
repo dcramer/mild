@@ -8,8 +8,6 @@ import { type InitDeps, type SetupState, runInit } from '../src/cli/init.ts';
 import { dashboardUrls, listenAddresses, localAddresses, machineNames, resolveHere } from '../src/cli/network.ts';
 import type { Ui } from '../src/cli/ui.ts';
 import { DEFAULT_SETTINGS, loadConfig, parseSettings, renderSettings, resolveHome, saveSettings } from '../src/config.ts';
-import { DEFAULT_GUIDELINES } from '../src/store/preferences.ts';
-import { DEFAULT_LABELS } from '../src/store/labels.ts';
 import { loadKeyring } from '../src/secrets.ts';
 import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
 
@@ -332,13 +330,6 @@ describe('settings', () => {
       expect(path.startsWith(`${home}/`)).toBe(true);
     }
     expect(config.settings).toEqual(DEFAULT_SETTINGS);
-  });
-
-  it('starts the guidelines as instructions that keep mail when unsure and never ask for deletion', () => {
-    expect(DEFAULT_GUIDELINES).toContain('When in doubt, keep it in my inbox.');
-    expect(DEFAULT_GUIDELINES).not.toMatch(/delet|trash|replace these/i);
-    const named = DEFAULT_LABELS.filter((l) => DEFAULT_GUIDELINES.includes(l.name)).map((l) => l.id);
-    expect(named).toEqual(['personal', 'security', 'newsletter', 'marketing', 'cold_outreach', 'junk', 'phishing']);
   });
 
   it('round-trips through sift.toml', () => {

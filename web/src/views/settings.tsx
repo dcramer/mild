@@ -1,5 +1,5 @@
 import { Trash2Icon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
@@ -20,7 +20,6 @@ import {
   SettingRow,
   SettingsGroup,
   Sheet,
-  TextArea,
   TextLink,
   setShortcutsOn,
   useShortcutsOn,
@@ -344,37 +343,6 @@ function Account({ state, signedInAs }: { state: ManageState; signedInAs: string
   );
 }
 
-function Guidelines({ saved }: { saved: string }) {
-  const { busy, error, run } = useAction();
-  const [text, setText] = useState(saved);
-  const [stored, setStored] = useState(saved);
-  useEffect(() => {
-    setText(saved);
-    setStored(saved);
-  }, [saved]);
-  return (
-    <SettingsGroup title="Guidelines" note="In your words. The model reads them before each message.">
-      <TextArea aria-label="Guidelines" value={text} maxLength={8000} onChange={(event) => setText(event.target.value)} />
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ink"
-          busy={busy}
-          disabled={text === stored}
-          onClick={() =>
-            run(
-              () => api.saveGuidelines(text),
-              () => setStored(text),
-            )
-          }
-        >
-          Save
-        </Button>
-        <Failure>{error}</Failure>
-      </div>
-    </SettingsGroup>
-  );
-}
-
 function OlderMail() {
   const { busy, error, run } = useAction();
   const toast = useToast();
@@ -447,9 +415,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           <>
             {/* How sift runs applies to everyone it sorts for, so it is the owner's to change. The server refuses anyone else. */}
             {data.owner ? <Sorting state={data} reload={reload} /> : null}
-            {/* The model, its sign-in and the guidelines are each person's own. */}
+            {/* The model and its sign-in are each person's own. */}
             <Model state={data} reload={reload} onConnect={onClose} />
-            <Guidelines saved={data.guidelines} />
             <Mailboxes state={data} signedInAs={signedInAs} />
             <Keys />
             <Account state={data} signedInAs={signedInAs} />

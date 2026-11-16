@@ -147,7 +147,6 @@ export const api = {
   models: (signal: AbortSignal) => get<Models>('/api/models', {}, signal),
   changes: (signal: AbortSignal) => get<{ changes: ChangeRow[] }>('/api/changes', {}, signal),
   saveSettings: (change: { act?: boolean; interval?: number }) => post('/api/settings', change),
-  saveGuidelines: (text: string) => post('/api/guidelines', { text }),
   /** The reader's own model, `provider/model-id`, or null for none. */
   setModel: (model: string | null) => post('/api/model', { model }),
   /** Start a ChatGPT sign-in: resolves with the code to enter at OpenAI. It finishes in the background. */

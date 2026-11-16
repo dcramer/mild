@@ -1,8 +1,7 @@
 import { z } from 'zod';
-import { predatingGuidelines } from '../../learn/redecide.ts';
 import { lastSyncedAt, listAccounts } from '../../store/accounts.ts';
 import { MAX_LABELS } from '../../store/labels.ts';
-import { preferences, setGuidelines, setModel } from '../../store/preferences.ts';
+import { preferences, setModel } from '../../store/preferences.ts';
 import { listLabelSummaries } from '../queries/labels.ts';
 import { type Scope, sees } from '../scope.ts';
 import { ManageState, Models, SignInCode } from '../types.ts';
@@ -12,13 +11,11 @@ import { type Context, type Read, type Write, done, ok, read, text, write } from
 async function manageState({ db, controls }: Context, scope: Scope): Promise<ManageState> {
   const accounts = (await listAccounts(db)).filter((a) => sees(scope, a.id));
   const own = await preferences(db);
-  const changedAt = own.guidelinesChangedAt;
   const activity = controls?.activity() ?? { sorting: false, lastPassAt: null, problems: [], expired: [] };
   return {
     owner: scope.owner,
     settings: controls?.settings() ?? { act: false, interval: 60, fewShot: true, examplesKeepDays: null },
     model: { chosen: own.model, ...(controls ? await controls.modelSignIns(db) : { choices: [], signedIn: [], pending: null }) },
-    guidelines: own.guidelines,
     activity: {
       ...activity,
       // Each problem starts with the address it is about.
@@ -28,9 +25,6 @@ async function manageState({ db, controls }: Context, scope: Scope): Promise<Man
     accounts: await Promise.all(accounts.map(async (a) => ({ id: a.id, email: a.email, lastSyncedAt: await lastSyncedAt(db, a.id) }))),
     labels: Object.fromEntries(await Promise.all(accounts.map(async (a) => [a.id, await listLabelSummaries(db, scope, a.id)] as const))),
     labelLimit: MAX_LABELS,
-    predateGuidelines: Object.fromEntries(
-      await Promise.all(accounts.map(async (a) => [a.id, changedAt === null ? 0 : (await predatingGuidelines(db, changedAt, a.id)).length] as const)),
-    ),
   };
 }
 
@@ -76,16 +70,6 @@ export const writes: Write[] = [
         ...(examplesKeepDays === undefined ? {} : { examplesKeepDays }),
       });
       return { settings: controls.settings() };
-    },
-  }),
-  write({
-    path: '/api/guidelines',
-    body: z.strictObject({ text: z.string().max(8000) }),
-    reply: done,
-    touches: self,
-    run: async ({ db, now }, { text }) => {
-      await setGuidelines(db, text, now());
-      return { ok: true as const };
     },
   }),
   write({

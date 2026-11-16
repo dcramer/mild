@@ -125,14 +125,12 @@ export const mailboxes = pgTable(
 const mailbox = (t: { userId: AnyPgColumn; accountId: AnyPgColumn }) =>
   foreignKey({ columns: [t.userId, t.accountId], foreignColumns: [mailboxes.userId, mailboxes.id] });
 
-/** Their own choices: the model their mail is judged with (`provider/model-id`), and their guidelines. */
+/** Their own choices: the model their mail is judged with (`provider/model-id`). */
 export const preferences = pgTable(
   'preferences',
   {
     userId: userId().primaryKey(),
     model: text('model'),
-    guidelines: text('guidelines'), // null: the starting ones, DEFAULT_GUIDELINES
-    guidelinesChangedAt: time('guidelines_changed_at'),
   },
   () => [own()],
 ).enableRLS();
@@ -458,7 +456,6 @@ export const evalRuns = pgTable(
     error: text('error'),
     model: text('model').notNull(),
     promptHash: text('prompt_hash').notNull(), // the system prompt and the layout around a message
-    guidelinesHash: text('guidelines_hash').notNull(),
     labelsHash: text('labels_hash').notNull(),
     labels: jsonb('labels').$type<{ id: string; name: string; description: string }[]>().notNull(), // as the model was given them
     fewShot: boolean('few_shot').notNull(),

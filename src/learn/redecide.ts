@@ -142,12 +142,3 @@ export async function redecideWaiting(db: Sql, accountId: string, now: number = 
   }
   return recorded;
 }
-
-/**
- * Waiting suggestions the guidelines could change: ones a model judged, or no tier could place, before
- * `since` (when the guidelines last changed). Oldest first. Judging them again costs a model call each,
- * so it only happens when the user asks.
- */
-export async function predatingGuidelines(db: Sql, since: number, accountId?: string): Promise<Suggestion[]> {
-  return (await pendingSuggestions(db, accountId === undefined ? {} : { accountId })).filter((s) => s.stage !== 'rules' && s.decidedAt < since).toReversed();
-}

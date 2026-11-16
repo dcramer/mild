@@ -8,7 +8,7 @@ import { type eq, inArray } from '../store/query.ts';
 export interface Scope {
   /** Account ids. Empty means nothing is visible. */
   readonly accounts: readonly string[];
-  /** May change what applies to the whole install: acting, the model, the guidelines. */
+  /** May change what applies to the whole install: acting, the interval, pulling in older mail. */
   readonly owner: boolean;
 }
 

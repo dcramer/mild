@@ -15,7 +15,7 @@ This is about storage at rest. Plaintext passes through the server at the moment
 | Sender addresses and domains, wherever they are kept (mail records, rules, cached correspondents) | A keyed hash per person, for exact lookups and grouping, and a sealed copy for showing | The hash: nobody. The copy: only the person's browser |
 | Message text, subjects, sender names, recipients, stored headers | Sealed | Only the person's browser |
 | Credentials: Gmail refresh tokens, model sign-ins | Encrypted with the server's key, bound to the person and what each is for | The server, which uses them while the person is away |
-| What the person writes or sift decides: rules (apart from their addresses), labels, actions, guidelines, conditions in their own words, decisions and outcomes, times, costs | Plain | The server. Guidelines and conditions are read on every pass, to be given to the model |
+| What the person writes or sift decides: rules (apart from their addresses), labels, actions, conditions in their own words, decisions and outcomes, times, costs | Plain | The server. Conditions and label descriptions are read on every pass, to be given to the model |
 
 **Sealed** means encrypted to the person's own public key. The server can seal whenever it holds plaintext; it can never open what it sealed. The private key exists in usable form only in the person's browser, unlocked by a passkey (WebAuthn PRF) or by a passphrase stretched with Argon2id in the page, with a recovery code shown once. The server keeps it only wrapped.
 
@@ -36,7 +36,7 @@ This is about storage at rest. Plaintext passes through the server at the moment
 
 - **Mail while it is being sorted.** sift reads it from Gmail, and the model provider is sent what the model needs.
 - **A server under someone else's control.** It holds the credentials, and a Gmail token reads the whole mailbox. It also serves the page that unlocks the person's key, and could serve one that takes it.
-- **What the person writes.** Rules' conditions other than addresses, guidelines and labels are plain.
+- **What the person writes.** Rules' conditions other than addresses, and labels, are plain.
 
 ## What follows from it
 

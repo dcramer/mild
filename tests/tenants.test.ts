@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { people } from '../src/store/people.ts';
 import { connectAccount, connectedAddresses, personOf, recordSync, userOf } from '../src/store/accounts.ts';
-import { preferences, setGuidelines } from '../src/store/preferences.ts';
+import { preferences, setModel } from '../src/store/preferences.ts';
 import type { Store } from '../src/store/store.ts';
 import { freshStore, raw, startDashboard } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
@@ -75,7 +75,7 @@ beforeEach(async () => {
   await connectAccount(store, ALPHA_WORK, '1', 1, alpha);
   await connectAccount(store, BRAVO, '1', 2);
   for (const account of [ALPHA, ALPHA_WORK, BRAVO]) await seed(account);
-  await setGuidelines(await dbOf(ALPHA), 'guidelines alpha-own-words');
+  await setModel(await dbOf(ALPHA), 'alpha-own-words/model');
 
   const controls: Controls = {
     settings: () => ({ act: false, interval: 60, fewShot: true, examplesKeepDays: null }),
@@ -90,7 +90,6 @@ beforeEach(async () => {
     ruleFilter: async (_db, id) => void calls.push(`filter ${id}`),
     backfill: async () => (calls.push('backfill'), 0),
     startEval: async (_db, { accountId }) => (calls.push(`eval ${accountId}`), 1),
-    rejudge: async (_db, accountId) => (calls.push(`rejudge ${accountId}`), { started: 0, remaining: 0 }),
     checkNow: () => void calls.push('check'),
     activity: () => ({
       sorting: true,
@@ -232,7 +231,6 @@ describe("nobody sees or changes another person's mail", () => {
       ['/api/rules/filter', { id: theirs.rule, on: true }, { id: 'r-nobody', on: true }],
       ['/api/proposals', { id: theirs.proposal, accept: true }, { id: 9999, accept: true }],
       ['/api/undo', { id: theirs.action }, { id: 9999 }],
-      ['/api/suggestions/rejudge', { accountId: ALPHA }, { accountId: NOBODY }],
       ['/api/examples/delete', { accountId: ALPHA, messageId: `m-${MARK[ALPHA]}` }, { accountId: NOBODY, messageId: `m-${MARK[ALPHA]}` }],
       ['/api/examples/delete-all', { accountId: ALPHA }, { accountId: NOBODY }],
       ['/api/evals/run', { accountId: ALPHA }, { accountId: NOBODY }],
@@ -252,10 +250,9 @@ describe("nobody sees or changes another person's mail", () => {
     expect((await call('POST', '/api/undo', ALPHA_WORK, { id: theirs.action })).status).toBe(200);
   });
 
-  it('lets each person change their own guidelines, model and sign-ins, and only their own', async () => {
+  it('lets each person change their own model and sign-ins, and only their own', async () => {
     const bravo = (await userOf(store.central, BRAVO))!.id;
     for (const [path, body] of [
-      ['/api/guidelines', { text: 'bravo words' }],
       ['/api/model', { model: 'openai/small' }],
       ['/api/model/chatgpt', {}],
       ['/api/model/key', { provider: 'openai', key: 'k' }],
@@ -263,9 +260,9 @@ describe("nobody sees or changes another person's mail", () => {
     ] as const)
       expect((await call('POST', path, BRAVO, body)).status, path).toBe(200);
     expect(calls.filter((c) => c !== 'check')).toEqual([`chatgpt ${bravo}`, `key openai ${bravo}`, `signout openai ${bravo}`]);
-    expect(await preferences(await dbOf(BRAVO))).toMatchObject({ guidelines: 'bravo words', model: 'openai/small' });
-    expect(await preferences(await dbOf(ALPHA))).toMatchObject({ guidelines: 'guidelines alpha-own-words', model: null });
-    expect((await call('POST', '/api/guidelines', null, { text: 'nobody' })).status).toBe(401);
+    expect(await preferences(await dbOf(BRAVO))).toMatchObject({ model: 'openai/small' });
+    expect(await preferences(await dbOf(ALPHA))).toMatchObject({ model: 'alpha-own-words/model' });
+    expect((await call('POST', '/api/model', null, { model: 'nobody/model' })).status).toBe(401);
   });
 
   it('lets only the person who set sift up change what applies to everyone', async () => {

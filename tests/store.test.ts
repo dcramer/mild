@@ -114,8 +114,8 @@ describe("a person's data", () => {
       await addRule(db, account, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user', 0);
       await rememberCorrespondent(db, account, 'news@example.com', true, 0);
       const { id: run } = (await raw(db).get<{ id: number }>(
-        `INSERT INTO eval_runs (account_id, started_at, status, model, prompt_hash, guidelines_hash, labels_hash, labels, few_shot, total)
-         VALUES (?, 0, 'done', 'p/m', 'h', 'h', 'h', '[]', false, 1) RETURNING id`,
+        `INSERT INTO eval_runs (account_id, started_at, status, model, prompt_hash, labels_hash, labels, few_shot, total)
+         VALUES (?, 0, 'done', 'p/m', 'h', 'h', '[]', false, 1) RETURNING id`,
         account,
       ))!;
       for (const [statement, ...params] of [

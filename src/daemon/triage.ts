@@ -41,8 +41,6 @@ export interface ModelTier {
   judge: Judge;
   /** Read access for evidence. Used in observe mode too; it never changes the mailbox. */
   sources: Omit<EvidenceSources, 'db' | 'now'>;
-  /** The user's broad guidance, in plain language. */
-  guidelines: string;
   /** False: mail the user labelled before is not shown to the model as examples. */
   fewShot?: boolean;
 }
@@ -96,7 +94,6 @@ export async function cascadeFor(deps: TriageDeps, accountId: string): Promise<(
       modelStage({
         judge: model.judge,
         labels,
-        guidelines: model.guidelines,
         gather: async (facts) => await gatherEvidence({ db, ...model.sources, ...(deps.now ? { now: deps.now } : {}) }, facts),
         prior: (facts) => {
           const hit = priorRule(rules, labels, facts, options);

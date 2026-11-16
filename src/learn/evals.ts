@@ -43,7 +43,6 @@ export interface EvalDeps {
   judge: Judge;
   /** `provider/model-id`, as recorded with the run. */
   model: string;
-  guidelines: string;
   now?: () => number;
 }
 
@@ -140,7 +139,6 @@ export async function startEval(deps: EvalDeps, request: EvalRequest): Promise<{
       status: 'running',
       model: deps.model,
       promptHash: hash(PROMPT_TEMPLATE),
-      guidelinesHash: hash(deps.guidelines.trim()),
       labelsHash: hash(JSON.stringify(shown)),
       labels: shown,
       fewShot: request.fewShot,
@@ -158,7 +156,6 @@ export async function startEval(deps: EvalDeps, request: EvalRequest): Promise<{
       .judge({
         evidence: await storedEvidence(db, facts, example.bodyText),
         labels,
-        guidelines: deps.guidelines,
         ...(shots.length > 0 ? { examples: shots } : {}),
       })
       .catch(() => null);
@@ -206,7 +203,6 @@ export interface EvalRun {
   /** What it ran with. Two runs with the same values here differ only by chance and by the examples stored since. */
   model: string;
   promptHash: string;
-  guidelinesHash: string;
   labelsHash: string;
   labels: { id: string; name: string; description: string }[];
   fewShot: boolean;
@@ -244,7 +240,6 @@ const RUN = {
   error: evalRuns.error,
   model: evalRuns.model,
   promptHash: evalRuns.promptHash,
-  guidelinesHash: evalRuns.guidelinesHash,
   labelsHash: evalRuns.labelsHash,
   labels: evalRuns.labels,
   fewShot: evalRuns.fewShot,

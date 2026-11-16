@@ -10,21 +10,24 @@ export const DEFAULT_LABELS: readonly Label[] = [
   {
     id: 'personal',
     name: 'Personal',
-    description: 'Written by a person to the owner or a small group: conversation, a direct request, an introduction, a reply.',
+    description:
+      'Written by a person to the owner or a small group, however short or oddly written: conversation, a direct request, an introduction, a reply in a conversation the owner took part in.',
     disposition: 'keep',
     gmailLabel: 'sift/personal',
   },
   {
     id: 'security',
     name: 'Security and account',
-    description: "Sign-in alerts, password resets, verification codes, account, legal or policy notices that concern the owner's own account.",
+    description:
+      "Sign-in alerts, password resets, verification codes, account, legal or policy notices that concern the owner's own account, however alarming, when the sender is who they claim to be.",
     disposition: 'keep',
     gmailLabel: 'sift/security',
   },
   {
     id: 'transactional',
     name: 'Receipts and transactions',
-    description: 'Receipts, invoices, orders, shipping, bookings, statements, payment or renewal notices for something the owner did or owes.',
+    description:
+      'Receipts, invoices, orders, shipping, bookings, statements, tax, payment or renewal notices for something the owner did or owes, even from a company that also sends promotions.',
     disposition: 'keep',
     gmailLabel: 'sift/receipts',
   },
@@ -53,7 +56,8 @@ export const DEFAULT_LABELS: readonly Label[] = [
   {
     id: 'marketing',
     name: 'Marketing',
-    description: 'Promotions, sales, product announcements, webinars and re-engagement mail from a company.',
+    description:
+      'Promotions, sales, product announcements, webinars and re-engagement mail a company sends to a whole list, wanted or not. Not mail about the owner in particular: their order, account or support request.',
     disposition: 'archive',
     gmailLabel: 'sift/marketing',
     unsubscribe: true,
@@ -61,7 +65,8 @@ export const DEFAULT_LABELS: readonly Label[] = [
   {
     id: 'cold_outreach',
     name: 'Cold outreach',
-    description: 'An unsolicited pitch from a stranger: sales, recruiting, partnerships, guest posts, fundraising, surveys.',
+    description:
+      'An unsolicited pitch from a stranger: sales, recruiting, partnerships, guest posts, fundraising, surveys. Not someone the owner has written to, or who is answering them.',
     disposition: 'archive',
     gmailLabel: 'sift/cold-outreach',
     unsubscribe: true,
@@ -70,7 +75,7 @@ export const DEFAULT_LABELS: readonly Label[] = [
     id: 'junk',
     name: 'Junk',
     description:
-      'Mail the owner never asked for and would not want: scams, phishing, deceptive offers, bulk mail from a sender with no relationship to the owner.',
+      'Mail that is deceptive or that the owner could never have signed up for: scams, deceptive offers, bulk mail from a sender with no relationship to the owner.',
     disposition: 'spam',
     gmailLabel: 'sift/junk',
     unsubscribe: true,

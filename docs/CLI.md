@@ -41,7 +41,7 @@ Nothing needs an environment variable. Everything sift keeps is in one directory
 | File | What it is |
 | --- | --- |
 | `sift.toml` | Settings: whether to act or only suggest, how often to check, the dashboard's port and address, and who can sign in. Unknown keys are errors. |
-| `database/` | The database (PGlite), unless `DATABASE_URL` or `database.url` names a Postgres server: who has which mailbox, and for each person their sign-ins (encrypted), model and guidelines, labels, rules, the record of every message, decision and change, and the full content of mail they answered for. |
+| `database/` | The database (PGlite), unless `DATABASE_URL` or `database.url` names a Postgres server: who has which mailbox, and for each person their sign-ins (encrypted), model, labels, rules, the record of every message, decision and change, and the full content of mail they answered for. |
 | `database.lock` | Which process has the database open. |
 | `google-client.json`, `dashboard-key` | The Google client and the session secret. Owner-only. |
 | `setup.json` | How far `init` has got. |

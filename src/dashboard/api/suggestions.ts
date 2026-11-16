@@ -1,11 +1,10 @@
 import { z } from 'zod';
 import { type FeedbackInput, applyFeedback } from '../../learn/feedback.ts';
-import { listAccounts } from '../../store/accounts.ts';
 import { resolveProposal } from '../../store/proposals.ts';
 import { proposals } from '../../store/query.ts';
 import { listSuggestions, suggestionDetail } from '../queries/suggestions.ts';
 import { FeedbackReply, FeedbackRequest, SuggestionDetail, Suggestions } from '../types.ts';
-import { type Read, type Write, accountId, done, flag, id, missing, named, ok, ownerOf, read, write } from './route.ts';
+import { type Read, type Write, done, flag, id, missing, named, ok, ownerOf, read, write } from './route.ts';
 
 export const reads: Read[] = [
   read({
@@ -53,17 +52,6 @@ export const writes: Write[] = [
           fixed: `The answer is saved, but the message could not be put back in Gmail: ${error instanceof Error ? error.message : String(error)}`,
         };
       }
-    },
-  }),
-  write({
-    path: '/api/suggestions/rejudge',
-    body: z.strictObject({ accountId }),
-    reply: z.object({ started: z.number(), remaining: z.number() }),
-    touches: named,
-    run: async ({ db, controls }, { accountId }) => {
-      if (!(await listAccounts(db)).some((a) => a.id === accountId)) return null;
-      if (!controls) throw new Error('This dashboard cannot run the model.');
-      return await controls.rejudge(db, accountId);
     },
   }),
   write({

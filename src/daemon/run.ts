@@ -21,7 +21,7 @@ export interface RunOptions {
   /** Opens a provider connection for an account, with the sign-in kept in `db`, its person's database. */
   connect: (db: Sql, account: Account) => { api: GmailApi; mailbox: Mailbox } | Promise<{ api: GmailApi; mailbox: Mailbox }>;
   /** The inference tier of the person whose database `db` is: null when they have no model, or it cannot be reached. */
-  model?: (db: Sql) => Promise<{ judge: Judge; guidelines: string; fewShot?: boolean } | null>;
+  model?: (db: Sql) => Promise<{ judge: Judge; fewShot?: boolean } | null>;
   /** Label plainly bulk mail by its headers before the model. Off unless set. */
   heuristics?: boolean;
   /** Leaves a mailing list, for decisions that say to. Without it sift never unsubscribes. */
@@ -80,7 +80,6 @@ export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[
             ? {
                 model: {
                   judge: tier.judge,
-                  guidelines: tier.guidelines,
                   sources: { api, mailbox },
                   ...(tier.fewShot === undefined ? {} : { fewShot: tier.fewShot }),
                 },

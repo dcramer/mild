@@ -221,7 +221,6 @@ describe('teaching', () => {
     let modelCalls = 0;
     const model = {
       judge: async () => (modelCalls++, null),
-      guidelines: '',
       sources: { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } },
     };
     await triageAccount({ db, mailbox: null, model }, (await listAccounts(db))[0]!);

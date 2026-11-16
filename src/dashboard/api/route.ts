@@ -38,7 +38,7 @@ export interface Read<Q extends z.ZodType = z.ZodType, R extends z.ZodType = z.Z
 
 /**
  * Whose data a write touches. An account: only someone who has that mailbox may make it. `self`: the
- * signed-in person's own (their model, their guidelines), so anyone signed in may. `install`: it applies
+ * signed-in person's own (their model and its sign-in), so anyone signed in may. `install`: it applies
  * to everyone, so only the install's owner may. `anyone`: nothing of anybody's. Null: the body names
  * nothing that exists, which the route itself reports.
  */

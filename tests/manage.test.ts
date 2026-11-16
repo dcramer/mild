@@ -11,7 +11,7 @@ import { startEval } from '../src/learn/evals.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { MAX_LABELS, listLabels } from '../src/store/labels.ts';
 import { recordDecision } from '../src/store/decisions.ts';
-import { preferences, setGuidelines } from '../src/store/preferences.ts';
+import { preferences } from '../src/store/preferences.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { FakeMailbox, facts, storeExample } from './helpers.ts';
 import { builtAssets, raw, startDashboard, onePerson } from './fixtures.ts';
@@ -33,10 +33,6 @@ const controls: Controls = {
   signInChatGPT: async () => (calls.push('chatgpt'), { code: 'ABCD-1234', url: 'https://auth.example/device', expiresAt: 900 }),
   saveModelKey: async (_db, provider, key) => void calls.push(`key ${provider} ${key}`),
   signOutModel: async (_db, provider) => void calls.push(`signout ${provider}`),
-  rejudge: async (_db, accountId) => {
-    calls.push(`rejudge ${accountId}`);
-    return { started: 2, remaining: 0 };
-  },
   undo: async (_db, id) => {
     calls.push(`undo ${id}`);
     return 'Reversed.';
@@ -66,8 +62,6 @@ beforeEach(async () => {
   ({ store, db } = await onePerson(ACCOUNT));
   calls = [];
   settings = { act: false, interval: 60, fewShot: true, examplesKeepDays: null };
-  await setGuidelines(db, 'Be careful.', 1);
-  await raw(db).run('UPDATE preferences SET guidelines_changed_at = NULL');
 });
 
 async function start(options: { withControls?: boolean } = {}) {
@@ -81,7 +75,6 @@ describe('managing sift from the dashboard', () => {
     expect(body).toMatchObject({
       settings: { act: false, interval: 60 },
       model: { chosen: null, signedIn: ['openai-codex'], pending: null },
-      guidelines: 'Be careful.',
       activity: { sorting: true, expired: [ACCOUNT] },
       accounts: [{ id: ACCOUNT }],
     });
@@ -135,7 +128,7 @@ describe('managing sift from the dashboard', () => {
     expect((await call('POST', '/api/evals/run', { accountId: 'nobody@example.org' })).status).toBe(404);
 
     const { id, done } = await startEval(
-      { db, judge: async () => ({ label: 'marketing', reason: 'r' }), model: 'p/small', guidelines: '' },
+      { db, judge: async () => ({ label: 'marketing', reason: 'r' }), model: 'p/small' },
       { accountId: ACCOUNT, fewShot: false },
     );
     await done;
@@ -214,30 +207,8 @@ describe('managing sift from the dashboard', () => {
     expect(((await call('GET', '/api/suggestions?kept=1')).body as { waiting: number }).waiting).toBe(2);
   });
 
-  it('says how many waiting suggestions predate the guidelines, and judges them again only when asked', async () => {
+  it('edits labels and rules', async () => {
     const { call } = await start();
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'w1' }), facts({ accountId: ACCOUNT, messageId: 'w2' })], '2');
-    const agent = { disposition: 'archive', subscription: 'preserve', stage: 'agent', reason: 'r', labelId: 'marketing' } as const;
-    await recordDecision(db, ACCOUNT, 'w1', agent, { now: 10 });
-    await recordDecision(db, ACCOUNT, 'w2', agent, { now: 30 });
-
-    expect((await call('GET', '/api/manage')).body['predateGuidelines']).toEqual({ [ACCOUNT]: 0 });
-    await raw(db).run('UPDATE preferences SET guidelines_changed_at = 20');
-    expect((await call('GET', '/api/manage')).body['predateGuidelines']).toEqual({ [ACCOUNT]: 1 });
-    await call('POST', '/api/guidelines', { text: 'Recruiters are cold outreach.' });
-    expect(calls).toEqual([]);
-
-    expect((await call('POST', '/api/suggestions/rejudge', { accountId: ACCOUNT })).body).toEqual({ started: 2, remaining: 0 });
-    expect(calls).toEqual([`rejudge ${ACCOUNT}`]);
-    expect((await call('POST', '/api/suggestions/rejudge', { accountId: 'nobody@example.org' })).status).toBe(404);
-    expect((await call('POST', '/api/suggestions/rejudge', {})).status).toBe(400);
-  });
-
-  it('edits the guidelines, labels and rules', async () => {
-    const { call } = await start();
-    expect((await call('POST', '/api/guidelines', { text: 'Recruiters are cold outreach.' })).status).toBe(200);
-    expect((await preferences(db)).guidelines).toBe('Recruiters are cold outreach.');
-    expect((await call('POST', '/api/guidelines', { text: 'x'.repeat(9000) })).status).toBe(400);
 
     expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'newsletter', disposition: 'keep', name: 'Reading' })).status).toBe(200);
     expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'newsletter')).toMatchObject({
@@ -367,7 +338,6 @@ describe('managing sift from the dashboard', () => {
     const { call } = await start();
     for (const path of [
       '/api/settings',
-      '/api/guidelines',
       '/api/labels',
       '/api/labels/add',
       '/api/rules',
@@ -631,7 +601,6 @@ describe('older mail', () => {
     // A model that can place neither, so each gets a decision: what is being tested is which may be acted on.
     const model = {
       judge: async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 }),
-      guidelines: '',
       sources: { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } },
     };
     await triageAccount({ db, mailbox, model }, (await listAccounts(db))[0]!);

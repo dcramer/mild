@@ -11,19 +11,19 @@ beforeEach(async () => {
   ({ store } = await onePerson(ACCOUNT));
 });
 
-/** Controls whose `models` and `rejudge` answer with whatever a test gives them. */
-const answering = (models: unknown, rejudged: unknown = { started: 0, remaining: 0 }) =>
+/** Controls whose `models` and ChatGPT sign-in answer with whatever a test gives them. */
+const answering = (models: unknown, signIn: unknown = { code: 'C', url: 'https://auth.example/device', expiresAt: 1 }) =>
   ({
     settings: () => ({ act: false, interval: 60, fewShot: true, examplesKeepDays: null }),
     models: async () => models,
-    rejudge: async () => rejudged,
+    signInChatGPT: async () => signIn,
     checkNow: () => {},
   }) as unknown as Controls;
 
 describe('what the API accepts and sends', () => {
   it('refuses a body with a field the route does not name', async () => {
     const { call } = await startDashboard(people(store));
-    const { status, body } = await call('POST', '/api/guidelines', { text: 'Be careful.', also: 1 });
+    const { status, body } = await call('POST', '/api/model', { model: 'p/small', also: 1 });
     expect(status).toBe(400);
     expect(body['error']).toContain('also');
   });
@@ -52,13 +52,13 @@ describe('what the API accepts and sends', () => {
 
   it('sends nothing of a reply that does not match what the route promised', async () => {
     const { call } = await startDashboard(people(store), {
-      controls: answering({ models: 'p/small', recommended: {} }, { started: 'all of them', remaining: 0 }),
+      controls: answering({ models: 'p/small', recommended: {} }, { code: 'all of them', url: 'not an address', expiresAt: 'soon' }),
     });
     const read = await call('GET', '/api/models');
     expect(read.status).toBe(500);
     expect(read.body['error']).toContain('models');
     expect(read.text).not.toContain('p/small');
-    const written = await call('POST', '/api/suggestions/rejudge', { accountId: ACCOUNT });
+    const written = await call('POST', '/api/model/chatgpt', {});
     expect(written.status).toBe(500);
     expect(written.text).not.toContain('all of them');
   });
