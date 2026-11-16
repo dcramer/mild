@@ -4,7 +4,18 @@ import { gatherEvidence } from '../src/daemon/evidence.ts';
 import { MAX_BODY_CHARS, extractText } from '../src/gmail/body.ts';
 import { type SignIns, credentialStore } from '../src/model/credentials.ts';
 import { createJudge } from '../src/model/judge.ts';
-import { modelChoices, offerModel, openModels, recommendModel, resolveModel, saveApiKey, startChatGPTRedirect } from '../src/model/models.ts';
+import {
+  finishChatGPTRedirect,
+  modelChoices,
+  offerModel,
+  openModels,
+  pollChatGPTDeviceCode,
+  recommendModel,
+  resolveModel,
+  saveApiKey,
+  startChatGPTDeviceCode,
+  startChatGPTRedirect,
+} from '../src/model/models.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts';
 import { openUserDb, raw } from './fixtures.ts';
@@ -588,14 +599,14 @@ describe('Sign in with ChatGPT', () => {
   it('finishes with the address pasted back, and stores a sign-in pi-ai uses and refreshes', async () => {
     const signIns = memorySignIns();
     const asked = stubFetch(() => Response.json(TOKENS));
-    const started = await startChatGPTRedirect(signIns, DEVICE);
+    const started = await startChatGPTRedirect(DEVICE);
     const url = new URL(started.url);
     expect(url.origin + url.pathname).toBe('https://auth.openai.com/api/accounts/authorize');
     expect(url.searchParams.get('redirect_uri')).toBe('http://127.0.0.1:1455/auth/callback');
     expect(url.searchParams.get('agent_name_hint')).toBe('sift');
     expect(url.searchParams.get('ext_agent_host_id')).toBe(`urn:uuid:${DEVICE}`);
     expect(asked).toEqual([]);
-    await started.finish(`http://127.0.0.1:1455/auth/callback?code=c1&state=${url.searchParams.get('state')}&client_id=oaiapp_x`);
+    await finishChatGPTRedirect(signIns, started, `http://127.0.0.1:1455/auth/callback?code=c1&state=${url.searchParams.get('state')}&client_id=oaiapp_x`);
     const exchanged = new URLSearchParams(asked[0]!.body);
     expect([asked[0]!.url, exchanged.get('code'), exchanged.get('client_id')]).toEqual(['https://auth.openai.com/api/accounts/oauth/token', 'c1', 'oaiapp_x']);
     expect(JSON.parse(signIns.stored.get('chatgpt')!)).toMatchObject({
@@ -620,9 +631,11 @@ describe('Sign in with ChatGPT', () => {
   it('holds no port, so several people can sign in at once', async () => {
     stubFetch(() => Response.json(TOKENS));
     const people = [memorySignIns(), memorySignIns()];
-    const started = await Promise.all(people.map((signIns) => startChatGPTRedirect(signIns, DEVICE)));
+    const started = await Promise.all(people.map(() => startChatGPTRedirect(DEVICE)));
     await Promise.all(
-      started.map((s) => s.finish(`http://127.0.0.1:1455/auth/callback?code=c&state=${new URL(s.url).searchParams.get('state')}&client_id=oaiapp_x`)),
+      started.map((s, i) =>
+        finishChatGPTRedirect(people[i]!, s, `http://127.0.0.1:1455/auth/callback?code=c&state=${new URL(s.url).searchParams.get('state')}&client_id=oaiapp_x`),
+      ),
     );
     for (const signIns of people) expect(signIns.stored.has('chatgpt')).toBe(true);
   });
@@ -631,31 +644,82 @@ describe('Sign in with ChatGPT', () => {
     const asked = stubFetch(() => Response.json(TOKENS));
     let clock = 0;
     const signIns = memorySignIns();
-    const started = await startChatGPTRedirect(signIns, DEVICE, () => clock);
+    const started = await startChatGPTRedirect(DEVICE, () => clock);
     const state = new URL(started.url).searchParams.get('state');
-    await expect(started.finish('the code')).rejects.toThrow("Paste the whole address from the browser's address bar.");
-    await expect(started.finish(`https://chatgpt.com/?code=c&state=${state}&client_id=oaiapp_x`)).rejects.toThrow(
+    await expect(finishChatGPTRedirect(signIns, started, 'the code', () => clock)).rejects.toThrow("Paste the whole address from the browser's address bar.");
+    await expect(finishChatGPTRedirect(signIns, started, `https://chatgpt.com/?code=c&state=${state}&client_id=oaiapp_x`, () => clock)).rejects.toThrow(
       'That is not the address ChatGPT sent you to',
     );
-    await expect(started.finish('http://127.0.0.1:1455/auth/callback?code=c&state=another&client_id=oaiapp_x')).rejects.toThrow('from an earlier sign-in');
-    await expect(started.finish(`http://127.0.0.1:1455/auth/callback?error=access_denied&state=${state}`)).rejects.toThrow('access_denied');
+    await expect(
+      finishChatGPTRedirect(signIns, started, 'http://127.0.0.1:1455/auth/callback?code=c&state=another&client_id=oaiapp_x', () => clock),
+    ).rejects.toThrow('from an earlier sign-in');
+    await expect(
+      finishChatGPTRedirect(signIns, started, `http://127.0.0.1:1455/auth/callback?error=access_denied&state=${state}`, () => clock),
+    ).rejects.toThrow('access_denied');
     expect(asked).toEqual([]);
-    await started.finish(`http://127.0.0.1:1455/auth/callback?code=c&state=${state}&client_id=oaiapp_x`);
+    await finishChatGPTRedirect(signIns, started, `http://127.0.0.1:1455/auth/callback?code=c&state=${state}&client_id=oaiapp_x`, () => clock);
     expect(signIns.stored.has('chatgpt')).toBe(true);
     clock = 11 * 60_000;
-    await expect(started.finish(`http://127.0.0.1:1455/auth/callback?code=c&state=${state}&client_id=oaiapp_x`)).rejects.toThrow('expired');
+    await expect(
+      finishChatGPTRedirect(signIns, started, `http://127.0.0.1:1455/auth/callback?code=c&state=${state}&client_id=oaiapp_x`, () => clock),
+    ).rejects.toThrow('expired');
   });
 
   it('stores nothing when OpenAI refuses, or leaves out the plan', async () => {
     const signIns = memorySignIns();
     let answer = new Response('{}', { status: 400 });
     stubFetch(() => answer);
-    const started = await startChatGPTRedirect(signIns, DEVICE);
+    const started = await startChatGPTRedirect(DEVICE);
     const back = `http://127.0.0.1:1455/auth/callback?code=c&state=${new URL(started.url).searchParams.get('state')}&client_id=oaiapp_x`;
-    await expect(started.finish(back)).rejects.toThrow('OpenAI refused the sign-in (400)');
+    await expect(finishChatGPTRedirect(signIns, started, back)).rejects.toThrow('OpenAI refused the sign-in (400)');
     answer = Response.json({ ...TOKENS, scope: 'openid profile email' });
-    await expect(started.finish(back)).rejects.toThrow('did not allow sift to use your plan');
+    await expect(finishChatGPTRedirect(signIns, started, back)).rejects.toThrow('did not allow sift to use your plan');
     expect(signIns.stored.has('chatgpt')).toBe(false);
+  });
+});
+
+describe('ChatGPT by device code', () => {
+  /** An access token with the claim pi-ai reads the account from. */
+  const access = `x.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'acct-1' } })).toString('base64url')}.y`;
+
+  it('asks for a code, asks once per call whether it was entered, and stores what pi-ai would', async () => {
+    const polls = [
+      () => new Response('', { status: 403 }),
+      () => Response.json({ error: { code: 'slow_down' } }, { status: 400 }),
+      () => Response.json({ authorization_code: 'ac', code_verifier: 'cv' }),
+    ];
+    const asked = stubFetch((url) => {
+      if (url.endsWith('/deviceauth/usercode')) return Response.json({ device_auth_id: 'da', user_code: 'ABCD-1234', interval: '5' });
+      if (url.endsWith('/deviceauth/token')) return polls.shift()!();
+      return Response.json({ access_token: access, refresh_token: 'synthetic-refresh', expires_in: 3600 });
+    });
+    const device = await startChatGPTDeviceCode(() => 0);
+    expect(device).toEqual({ code: 'ABCD-1234', url: 'https://auth.openai.com/codex/device', expiresAt: 15 * 60_000, intervalMs: 5000, deviceAuthId: 'da' });
+    const signIns = memorySignIns();
+    expect(await pollChatGPTDeviceCode(signIns, device, () => 1)).toBe('waiting');
+    expect(await pollChatGPTDeviceCode(signIns, device, () => 1)).toBe('slow down');
+    expect(signIns.stored.size).toBe(0);
+    expect(await pollChatGPTDeviceCode(signIns, device, () => 1)).toBe('done');
+    const exchanged = new URLSearchParams(asked.at(-1)!.body);
+    expect([exchanged.get('code'), exchanged.get('code_verifier'), exchanged.get('redirect_uri')]).toEqual([
+      'ac',
+      'cv',
+      'https://auth.openai.com/deviceauth/callback',
+    ]);
+    expect(JSON.parse(signIns.stored.get('openai-codex')!)).toEqual({
+      type: 'oauth',
+      access,
+      refresh: 'synthetic-refresh',
+      expires: 3_600_001,
+      accountId: 'acct-1',
+    });
+  });
+
+  it('refuses a code that has expired, without asking', async () => {
+    const asked = stubFetch(() => Response.json({ device_auth_id: 'da', user_code: 'C', interval: 5 }));
+    const device = await startChatGPTDeviceCode(() => 0);
+    await expect(pollChatGPTDeviceCode(memorySignIns(), device, () => 16 * 60_000)).rejects.toThrow('expired');
+    expect(asked).toHaveLength(1);
   });
 });
 

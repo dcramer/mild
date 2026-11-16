@@ -3,14 +3,16 @@ export type Job =
   | { kind: 'pass'; person: number; account: string }
   | { kind: 'upkeep'; person: number }
   | { kind: 'backfill'; person: number; account: string; days: number }
-  | { kind: 'eval'; person: number; run: number };
+  | { kind: 'eval'; person: number; run: number }
+  | { kind: 'chatgpt-sign-in'; person: number };
 
 /**
  * Where jobs are sent. A queue may deliver a job twice, so running one twice must be harmless: a pass
  * claims its mailbox before it starts (`lock:pass:<mailbox>`).
  */
 export interface Jobs {
-  send(job: Job): void;
+  /** Run `job`, after `delayMs` when given. */
+  send(job: Job, delayMs?: number): void;
 }
 
 /**
@@ -35,16 +37,19 @@ const keyOf = (job: Job) => {
       return `backfill:${job.person}:${job.account}`;
     case 'eval':
       return `eval:${job.person}:${job.run}`;
+    case 'chatgpt-sign-in':
+      return `chatgpt-sign-in:${job.person}`;
   }
 };
 
 /**
  * Runs jobs in this process. A job already waiting is not queued again, and two alike never run together.
- * `run` must not reject. `stop` drops what is waiting and resolves once the running jobs end.
+ * `run` must not reject. `stop` drops what is waiting or delayed and resolves once the running jobs end.
  */
 export function localJobs(run: (job: Job, until: number) => Promise<void>): Jobs & { stop(): Promise<void> } {
   const waiting: Job[] = [];
   const running = new Map<string, Promise<void>>();
+  const delayed = new Set<ReturnType<typeof setTimeout>>();
   let stopped = false;
   const pump = () => {
     if (stopped) return;
@@ -62,15 +67,27 @@ export function localJobs(run: (job: Job, until: number) => Promise<void>): Jobs
       );
     }
   };
+  const send = (job: Job, delayMs = 0) => {
+    if (stopped) return;
+    if (delayMs > 0) {
+      const timer = setTimeout(() => {
+        delayed.delete(timer);
+        send(job);
+      }, delayMs);
+      delayed.add(timer);
+      return;
+    }
+    if (waiting.some((queued) => keyOf(queued) === keyOf(job))) return;
+    waiting.push(job);
+    pump();
+  };
   return {
-    send(job) {
-      if (stopped || waiting.some((queued) => keyOf(queued) === keyOf(job))) return;
-      waiting.push(job);
-      pump();
-    },
+    send,
     async stop() {
       stopped = true;
       waiting.length = 0;
+      for (const timer of delayed) clearTimeout(timer);
+      delayed.clear();
       await Promise.all(running.values());
     },
   };

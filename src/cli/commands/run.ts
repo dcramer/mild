@@ -11,6 +11,8 @@ import { openEphemeral } from '../../ephemeral/open.ts';
 import type { Sql } from '../../store/sql.ts';
 import { paint, ui } from '../ui.ts';
 import { buildControls, gmailFor, openModelTier } from '../controls.ts';
+import { checkChatGPT } from '../chatgpt.ts';
+import { credentials } from '../../store/credentials.ts';
 import { checkSecrets } from '../secrets-check.ts';
 import { serveDashboard, portOption } from '../serve.ts';
 
@@ -82,6 +84,7 @@ export async function run(args: string[]): Promise<void> {
         const { api, mailbox } = await gmailFor(config, ephemeral, db, account.email);
         return { api, mailbox };
       },
+      checkChatGPT: async (db: Sql) => await checkChatGPT(ephemeral, await personOf(db), await credentials(db, 'model', config.keys)),
       log,
     };
 

@@ -4,7 +4,7 @@ import { undo } from '../actions/executor.ts';
 import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
 import type { Config } from '../config.ts';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
-import type { Controls, ModelSignIns } from '../dashboard/controls.ts';
+import type { Controls } from '../dashboard/controls.ts';
 import { forgetPassStatus, passStatus } from '../daemon/status.ts';
 import type { Jobs } from '../daemon/jobs.ts';
 import { createGmailApi, getMessageHtml } from '../gmail/api.ts';
@@ -12,18 +12,9 @@ import { startEval } from '../learn/evals.ts';
 import { clientFor, loadClientSecrets, revokeGrant } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { pacer } from '../gmail/quota.ts';
+import { chatgptPending, finishChatGPT, forgetChatGPT, startChatGPT } from './chatgpt.ts';
 import { createJudge } from '../model/judge.ts';
-import {
-  type PendingRedirect,
-  modelChoices,
-  offerModel,
-  openModels,
-  recommendModel,
-  resolveModel,
-  saveApiKey,
-  startChatGPTRedirect,
-  startChatGPTSignIn,
-} from '../model/models.ts';
+import { modelChoices, offerModel, openModels, recommendModel, resolveModel, saveApiKey } from '../model/models.ts';
 import { listAccounts, listUsers, personOf } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
 import { credentials } from '../store/credentials.ts';
@@ -73,9 +64,6 @@ function deviceId(config: Config): string {
 /** What the dashboard may ask this process to do. See `Controls`. */
 export async function buildControls(config: Config, store: Store, live: { ephemeral: Ephemeral; jobs?: Jobs; running: boolean }): Promise<Controls> {
   const choices = modelChoices(config.settings.chatgptSignIn ?? 'device-code');
-  // By person: a ChatGPT sign-in waiting on them, and a Sign in with ChatGPT waiting for its address.
-  const pending = new Map<number, NonNullable<ModelSignIns['pending']>>();
-  const redirects = new Map<number, PendingRedirect>();
   /** Pass the person's mailboxes now, not at the next tick. Nothing does while only the dashboard runs. */
   const passNow = async (db: Sql) => {
     if (!live.jobs) return;
@@ -97,49 +85,20 @@ export async function buildControls(config: Config, store: Store, live: { epheme
       }
       return { models: available.map((m) => `${m.provider}/${m.id}`), recommended };
     },
-    modelSignIns: async (db) => {
-      const waiting = pending.get(await personOf(db));
-      return {
-        choices: choices.map((c) => ({ ...c })),
-        signedIn: await (await credentials(db, 'model', config.keys)).keys(),
-        pending:
-          waiting && 'expiresAt' in waiting && waiting.expiresAt < Date.now()
-            ? { error: waiting.code ? 'That code expired. Start again.' : 'That sign-in expired. Start again.' }
-            : (waiting ?? null),
-      };
-    },
+    modelSignIns: async (db) => ({
+      choices: choices.map((c) => ({ ...c })),
+      signedIn: await (await credentials(db, 'model', config.keys)).keys(),
+      pending: await chatgptPending(live.ephemeral, await personOf(db)),
+    }),
     signInChatGPT: async (db) => {
       const person = await personOf(db);
-      if (choices[0]!.how === 'redirect') {
-        const redirect = await startChatGPTRedirect(await credentials(db, 'model', config.keys), deviceId(config));
-        redirects.set(person, redirect);
-        const shown = { url: redirect.url, expiresAt: redirect.expiresAt };
-        pending.set(person, shown);
-        return shown;
-      }
-      const started = await startChatGPTSignIn(await modelsFor(config, db), deviceId(config));
-      const shown = { code: started.code, url: started.url, expiresAt: started.expiresAt };
-      pending.set(person, shown);
-      started.done.then(
-        () => {
-          if (pending.get(person) === shown) pending.delete(person);
-          passNow(db).catch(() => {});
-        },
-        (error: unknown) => {
-          if (pending.get(person) === shown) pending.set(person, { error: error instanceof Error ? error.message : String(error) });
-        },
-      );
+      const how = choices[0]!.how === 'redirect' ? 'redirect' : 'device-code';
+      const { shown, checkIn } = await startChatGPT(live.ephemeral, person, how, deviceId(config));
+      if (checkIn !== null) live.jobs?.send({ kind: 'chatgpt-sign-in', person }, checkIn);
       return shown;
     },
     finishChatGPT: async (db, address) => {
-      const person = await personOf(db);
-      const redirect = redirects.get(person);
-      if (!redirect) throw new Error('No ChatGPT sign-in is waiting. Start again.');
-      await redirect.finish(address);
-      if (redirects.get(person) === redirect) {
-        redirects.delete(person);
-        pending.delete(person);
-      }
+      await finishChatGPT(live.ephemeral, await personOf(db), await credentials(db, 'model', config.keys), address);
       await passNow(db);
     },
     saveModelKey: async (db, provider, key) => {
@@ -149,9 +108,7 @@ export async function buildControls(config: Config, store: Store, live: { epheme
     },
     signOutModel: async (db, provider) => {
       await (await credentials(db, 'model', config.keys)).remove(provider);
-      const person = await personOf(db);
-      pending.delete(person);
-      redirects.delete(person);
+      await forgetChatGPT(live.ephemeral, await personOf(db));
     },
     undo: async (db, actionId) => {
       const action = await getAction(db, actionId);

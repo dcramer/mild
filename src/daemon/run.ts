@@ -27,6 +27,11 @@ export interface RunOptions {
   ephemeral: Ephemeral;
   /** Where follow-ups go: a pass that stops at its time limit sends itself again. */
   jobs: Jobs;
+  /**
+   * Ask once whether a person waiting on a ChatGPT device code has entered it: how long until asking
+   * again, `done`, or null when there is nothing to ask.
+   */
+  checkChatGPT?: (db: Sql) => Promise<number | 'done' | null>;
   /** Opens a provider connection for an account, with the sign-in kept in `db`, its person's database. */
   connect: (db: Sql, account: Account) => { api: GmailApi; mailbox: Mailbox } | Promise<{ api: GmailApi; mailbox: Mailbox }>;
   /** The inference tier of the person whose database `db` is: null when they have no model, or it cannot be reached. */
@@ -100,6 +105,13 @@ export async function runJob(store: Store, job: Job, options: RunOptions, until:
     case 'eval':
       await carryOnEval(db, job, options, until);
       return null;
+    case 'chatgpt-sign-in': {
+      const next = options.checkChatGPT ? await options.checkChatGPT(db) : null;
+      // Signed in: their mail has a model to go to now.
+      if (next === 'done') for (const account of await listAccounts(db)) options.jobs.send({ kind: 'pass', person: job.person, account: account.id });
+      else if (next !== null) options.jobs.send(job, next);
+      return null;
+    }
     case 'backfill': {
       const account = (await listAccounts(db)).find((a) => a.id === job.account);
       if (!account) return null;

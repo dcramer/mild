@@ -87,7 +87,7 @@ export interface SignIn {
   complete(redirectUri: string, code: string, verifier: string, addTo: string | null): Promise<string>;
 }
 
-export interface ModelSignIns {
+interface ModelSignIns {
   choices: { provider: string; label: string; how: 'device-code' | 'redirect' | 'key' }[];
   /** Providers this person has a sign-in for. */
   signedIn: string[];
