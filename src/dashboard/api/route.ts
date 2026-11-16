@@ -8,6 +8,8 @@ import type { Scope } from '../scope.ts';
 export interface Context {
   /** The database of whoever asked. Nobody else's data is in it. */
   db: Sql;
+  /** Another person's database, for a view that merges several: refused unless whoever asked may read it. */
+  open: (id: number) => Promise<Sql>;
   /** Absent when the page can look but not manage. */
   controls: Controls | undefined;
   now: () => number;

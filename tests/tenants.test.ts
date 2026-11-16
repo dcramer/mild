@@ -177,6 +177,14 @@ describe('users and their mailboxes', () => {
     expect(await userOf(central, 'nobody@example.com')).toBeNull();
   });
 
+  it("opens a person's database only for a session that may read it", async () => {
+    const alpha = (await people(store).signedIn(ALPHA_WORK))!;
+    const bravo = (await userOf(store.central, BRAVO))!.id;
+    expect(await alpha.open(alpha.id)).toBe(await dbOf(ALPHA));
+    await expect(alpha.open(bravo)).rejects.toThrow(`may not open person ${bravo}'s database`);
+    expect(await people(store).signedIn('nobody@example.com')).toBeNull();
+  });
+
   it("keeps each person's mail in a database of their own", async () => {
     const alpha = await dbOf(ALPHA);
     const bravo = await dbOf(BRAVO);

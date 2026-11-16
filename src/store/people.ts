@@ -3,17 +3,22 @@ import { openUserDb } from './db.ts';
 import type { Sql } from './sql.ts';
 import type { Store } from './store.ts';
 
-/** Someone a request is from, with their database: the only one that request holds. */
+/** Someone a request is from. */
 export interface Person {
+  id: number;
   owner: boolean;
   /** Their mailboxes, by address. */
   accounts: string[];
-  db: Sql;
+  /**
+   * The only way a request opens a person's database. Refuses any id this person may not read, which
+   * today is everyone's but their own. A view that needs several opens each.
+   */
+  open: (id: number) => Promise<Sql>;
 }
 
 /**
  * What the dashboard may ask of the store. It finds a person by the address they signed in as, never by
- * id, so a request can only ever reach the database of whoever made it.
+ * id, and reaches databases only through that person's `open`.
  */
 export interface People {
   /** Whoever has the mailbox `email`, or null if no one does. */
@@ -25,8 +30,19 @@ export interface People {
 }
 
 export function people(store: Store): People {
-  const person = async (user: { id: number; owner: boolean } | null): Promise<Person | null> =>
-    user && { owner: user.owner, accounts: await connectedAddresses(store.central, user.id), db: await store.user(user.id) };
+  const person = async (user: { id: number; owner: boolean } | null): Promise<Person | null> => {
+    if (!user) return null;
+    const readable = new Set([user.id]);
+    return {
+      id: user.id,
+      owner: user.owner,
+      accounts: await connectedAddresses(store.central, user.id),
+      open: async (id) => {
+        if (!readable.has(id)) throw new Error(`Person ${user.id} may not open person ${id}'s database.`);
+        return await store.user(id);
+      },
+    };
+  };
   let empty: Promise<Sql> | undefined;
   return {
     signedIn: async (email) => await person(await userOf(store.central, email)),

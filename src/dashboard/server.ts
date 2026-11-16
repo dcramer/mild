@@ -166,6 +166,9 @@ export function createDashboardServer(people: People, options: DashboardOptions 
   // Sign-ins in flight: the state Google echoes back, with the PKCE verifier and where to return to.
   const pending = new Map<string, { verifier: string; redirectUri: string; addTo: string | null; expires: number }>();
 
+  const refuse = async (id: number): Promise<never> => {
+    throw new Error(`Nobody is signed in to open person ${id}'s database.`);
+  };
   const reads = new Map(READS.map((route) => [route.path, route]));
   const writes = new Map(WRITES.map((route) => [route.path, route]));
   /** Why this person may not make this write, or null if they may. Someone else's data is reported as not there. */
@@ -200,7 +203,7 @@ export function createDashboardServer(people: People, options: DashboardOptions 
     // one else's. With no sign-in set up (tests, tools) it is the owner's.
     const person = signIn ? known : await people.owner();
     const whole = person ? scopeFor(person.accounts, person.owner) : scopeFor([], !signIn);
-    const ctx: Context = { db: person ? person.db : await people.nobody(), controls, now };
+    const ctx: Context = { db: person ? await person.open(person.id) : await people.nobody(), open: person ? person.open : refuse, controls, now };
     const sessionCookie = (value: string, maxAge: number) =>
       `sift_session=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
 
