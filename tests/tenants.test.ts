@@ -88,6 +88,7 @@ beforeEach(async () => {
     models: async () => ({ models: [], recommended: {} }),
     modelSignIns: async (db) => ({ choices: [], signedIn: [`signed-in-${await personOf(db)}`], pending: null }),
     signInChatGPT: async (db) => (calls.push(`chatgpt ${await personOf(db)}`), { code: 'C', url: 'https://auth.example/device', expiresAt: 1 }),
+    finishChatGPT: async (db) => void calls.push(`finish ${await personOf(db)}`),
     saveModelKey: async (db, provider) => void calls.push(`key ${provider} ${await personOf(db)}`),
     signOutModel: async (db, provider) => void calls.push(`signout ${provider} ${await personOf(db)}`),
     undo: async (_db, id) => (calls.push(`undo ${id}`), 'undone'),
@@ -273,11 +274,12 @@ describe("nobody sees or changes another person's mail", () => {
       ['/api/active', { active: true }],
       ['/api/model', { model: 'openai/small' }],
       ['/api/model/chatgpt', {}],
+      ['/api/model/chatgpt/finish', { address: 'http://127.0.0.1:1455/auth/callback?code=c' }],
       ['/api/model/key', { provider: 'openai', key: 'k' }],
       ['/api/model/signout', { provider: 'openai' }],
     ] as const)
       expect((await call('POST', path, BRAVO, body)).status, path).toBe(200);
-    expect(calls.filter((c) => c !== 'check')).toEqual([`chatgpt ${bravo}`, `key openai ${bravo}`, `signout openai ${bravo}`]);
+    expect(calls.filter((c) => c !== 'check')).toEqual([`chatgpt ${bravo}`, `finish ${bravo}`, `key openai ${bravo}`, `signout openai ${bravo}`]);
     expect(await preferences(await dbOf(BRAVO))).toMatchObject({ active: true, model: 'openai/small' });
     expect(await preferences(await dbOf(ALPHA))).toMatchObject({ active: false, model: 'alpha-own-words/model' });
     expect((await call('GET', '/api/manage', BRAVO)).body).toMatchObject({ active: true });

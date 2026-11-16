@@ -103,6 +103,7 @@ Built: one model call per message that names a label; the label's outcome decide
 - [ ] **Several labels with a confidence each.** Have the model (and the decision model in front of it) score every plausible label instead of naming one, then take the highest if it clears a threshold and ask the user if none does. It gives a real "how sure", shows the runner-up when sift was wrong ("it was nearly Receipts"), lets thresholds differ by what the label does (higher for spam and block), and makes "these two labels are hard to tell apart" measurable. To settle: whether a message still gets exactly one label; what the threshold is and whether it is per label; and how the scores are recorded so they can be tested against examples.
 - [ ] Decision model tier (Jev or Clef through pi-ai `classify`) in front of the reasoning model, once there are enough examples to set thresholds. The stage exists and is not wired.
 - [ ] Confirm a ChatGPT subscription token refreshes by itself over weeks and survives a restart; try the device-code login inside Docker.
+- [ ] Sign in with ChatGPT (`chatgpt.sign_in = "redirect"`) with a real account: check that `/v1/models` lists the luna model sift offers, and offer what it lists instead of pi-ai's OpenAI catalogue if not. Ask OpenAI whether a self-hosted server counts as "locally hosted".
 - [ ] Decide whether pi-durable is needed. Triage is one call per message and the database's queue already retries and decides once, so it is not used today.
 
 ## Setup

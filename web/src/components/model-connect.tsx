@@ -8,6 +8,7 @@ type Choice = ManageState['model']['choices'][number];
 /** How each way to a model is paid for, in a line. */
 const HOW: Record<string, string> = {
   'openai-codex': 'With a ChatGPT Plus or Pro plan. No bill per message.',
+  chatgpt: 'With a ChatGPT Plus or Pro plan. No bill per message.',
   openai: 'Billed per message by OpenAI.',
   anthropic: 'Billed per message by Anthropic.',
   openrouter: 'One key for several labs’ models, billed by OpenRouter.',
@@ -66,18 +67,21 @@ export function useProviderConnect(choice: Choice, model: ManageState['model'], 
   const [picked, setPicked] = useState<string | null>(null);
   const chosen = picked ?? recommended;
   const [key, setKey] = useState('');
+  const [address, setAddress] = useState('');
   const sign = useAction();
   const pending = model.pending;
-  const code = pending && 'code' in pending ? pending : null;
+  const started = pending && 'url' in pending ? pending : null;
+  const code = started?.code === undefined ? null : { ...started, code: started.code };
+  const chatgpt = choice.how !== 'key';
   // ChatGPT has only the one way in, so choosing it starts it: there is nothing else to press first.
   const asked = useRef(false);
   useEffect(() => {
-    if (choice.how !== 'chatgpt' || signedIn || code || asked.current) return;
+    if (!chatgpt || signedIn || started || asked.current) return;
     asked.current = true;
     sign.run(() => api.signInChatGPT(), reload);
   });
   // The code, and then the sign-in finishing at OpenAI, are only learnt of by asking.
-  const waiting = choice.how === 'chatgpt' && !signedIn;
+  const waiting = chatgpt && !signedIn;
   useEffect(() => {
     if (!waiting) return;
     const timer = setInterval(reload, 3000);
@@ -86,7 +90,53 @@ export function useProviderConnect(choice: Choice, model: ManageState['model'], 
 
   const fields = (
     <Form onSubmit={() => {}}>
-      {choice.how === 'chatgpt' ? (
+      {choice.how === 'redirect' ? (
+        <Field
+          label="Account"
+          hint={
+            signedIn ? undefined : started && !sign.error ? (
+              'After signing in, ChatGPT sends you to a page that will not load. Copy its address from the address bar and paste it here.'
+            ) : (
+              <Failure>{sign.error ?? (pending && 'error' in pending ? pending.error : null)}</Failure>
+            )
+          }
+        >
+          {signedIn ? (
+            <span>Signed in</span>
+          ) : started ? (
+            <>
+              <Button href={started.url} target="_blank" rel="noreferrer">
+                Open ChatGPT
+                <ArrowUpRightIcon aria-hidden />
+              </Button>
+              <Input
+                autoComplete="off"
+                aria-label="Address of the page ChatGPT sent you to"
+                placeholder="http://127.0.0.1:1455/auth/callback?code=…"
+                className="min-w-48 flex-1 font-mono"
+                value={address}
+                onChange={(event) => setAddress(event.target.value)}
+              />
+              <Button
+                busy={sign.busy}
+                disabled={address.trim() === ''}
+                onClick={() =>
+                  sign.run(
+                    () => api.finishChatGPT(address),
+                    () => (setAddress(''), reload()),
+                  )
+                }
+              >
+                Finish
+              </Button>
+            </>
+          ) : sign.busy || !(sign.error || (pending && 'error' in pending)) ? (
+            <span className="text-muted-foreground">Starting…</span>
+          ) : (
+            <Button onClick={() => (setAddress(''), sign.run(() => api.signInChatGPT(), reload))}>Start again</Button>
+          )}
+        </Field>
+      ) : choice.how === 'device-code' ? (
         <Field
           label="Account"
           hint={

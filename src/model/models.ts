@@ -1,4 +1,4 @@
-import { type Api, type AuthContext, type Model, type Models, createModels } from '@earendil-works/pi-ai';
+import { type Api, type AuthContext, type Model, type Models, type Provider, createModels } from '@earendil-works/pi-ai';
 import { anthropicProvider } from '@earendil-works/pi-ai/providers/anthropic';
 import { openaiProvider } from '@earendil-works/pi-ai/providers/openai';
 import { openaiCodexProvider } from '@earendil-works/pi-ai/providers/openai-codex';
@@ -6,20 +6,32 @@ import { openrouterProvider } from '@earendil-works/pi-ai/providers/openrouter';
 import { vercelAIGatewayProvider } from '@earendil-works/pi-ai/providers/vercel-ai-gateway';
 import { type SignIns, credentialStore } from './credentials.ts';
 
-/** A way to reach a model. `provider` is a pi-ai provider id; `chatgpt` signs in by device code, `key` takes an API key. */
+/** How an install signs people in to ChatGPT (`chatgptSignIn` in `Settings`). */
+export type ChatGPTSignIn = 'device-code' | 'redirect';
+
+/**
+ * A way to reach a model. `provider` is a pi-ai provider id. `device-code` and `redirect` are the two
+ * ChatGPT sign-ins, of which an install offers one; `key` takes an API key.
+ */
 export interface ModelChoice {
   provider: string;
   label: string;
-  how: 'chatgpt' | 'key';
+  how: ChatGPTSignIn | 'key';
 }
 
-export const MODEL_CHOICES: readonly ModelChoice[] = [
-  { provider: 'openai-codex', label: 'ChatGPT', how: 'chatgpt' },
-  { provider: 'openai', label: 'OpenAI API key', how: 'key' },
-  { provider: 'anthropic', label: 'Anthropic API key', how: 'key' },
-  { provider: 'openrouter', label: 'OpenRouter API key', how: 'key' },
-  { provider: 'vercel-ai-gateway', label: 'Vercel AI Gateway API key', how: 'key' },
-];
+/** ChatGPT through Sign in with ChatGPT, under an id of its own so it can sit beside an OpenAI API key. */
+const CHATGPT = 'chatgpt';
+
+/** The ways in this install offers: one ChatGPT sign-in, then the API keys. */
+export function modelChoices(chatgpt: ChatGPTSignIn): ModelChoice[] {
+  return [
+    { provider: chatgpt === 'redirect' ? CHATGPT : 'openai-codex', label: 'ChatGPT', how: chatgpt },
+    { provider: 'openai', label: 'OpenAI API key', how: 'key' },
+    { provider: 'anthropic', label: 'Anthropic API key', how: 'key' },
+    { provider: 'openrouter', label: 'OpenRouter API key', how: 'key' },
+    { provider: 'vercel-ai-gateway', label: 'Vercel AI Gateway API key', how: 'key' },
+  ];
+}
 
 /** Providers that resell many labs' models. Their ids carry the lab: `anthropic/claude-haiku-5.5`. */
 const RESELLERS = new Set(['openrouter', 'vercel-ai-gateway']);
@@ -36,6 +48,7 @@ export function offerModel(provider: string, id: string): boolean {
 /** Each provider's small, cheap family, by the word its model ids carry. */
 const SMALL_FAMILY: Record<string, string> = {
   openai: 'luna',
+  [CHATGPT]: 'luna',
   'openai-codex': 'luna',
   anthropic: 'haiku',
   google: 'flash',
@@ -71,14 +84,35 @@ export function recommendModel(provider: string, ids: readonly string[]): string
 const NOTHING_AMBIENT: AuthContext = { env: async () => undefined, fileExists: async () => false };
 
 /**
+ * pi-ai's OpenAI provider, signed in with ChatGPT only. pi-ai recognises a ChatGPT token (and leaves out
+ * the request fields OpenAI refuses with one) only on a model whose provider is `openai`, so each call
+ * goes out as that provider's; the models and the sign-in stay under `chatgpt`.
+ */
+function chatgptProvider(): Provider {
+  const openai: Provider = openaiProvider();
+  const models = openai.getModels().map((model) => ({ ...model, provider: CHATGPT }));
+  const asOpenAI = (model: Model<Api>) => ({ ...model, provider: openai.id });
+  return {
+    id: CHATGPT,
+    name: 'ChatGPT',
+    baseUrl: openai.baseUrl,
+    auth: { oauth: openai.auth.oauth },
+    getModels: () => models,
+    stream: (model, context, options) => openai.stream(asOpenAI(model), context, options),
+    streamSimple: (model, context, options) => openai.streamSimple(asOpenAI(model), context, options),
+  };
+}
+
+/**
  * One person's providers, signed in with what they stored. Each is registered by name: pi-ai's
  * `providers/all` loads every provider's catalog, and a provider nobody can sign in to from sift is only
- * more to load and to trust.
+ * more to load and to trust. Only the install's own ChatGPT sign-in is registered, so a sign-in kept from
+ * the other is not used.
  */
-export function openModels(signIns: SignIns): Models {
+export function openModels(signIns: SignIns, chatgpt: ChatGPTSignIn): Models {
   const models = createModels({ credentials: credentialStore(signIns), authContext: NOTHING_AMBIENT });
-  for (const provider of [openaiCodexProvider(), openaiProvider(), anthropicProvider(), openrouterProvider(), vercelAIGatewayProvider()])
-    models.setProvider(provider);
+  const viaChatGPT = chatgpt === 'redirect' ? chatgptProvider() : openaiCodexProvider();
+  for (const provider of [viaChatGPT, openaiProvider(), anthropicProvider(), openrouterProvider(), vercelAIGatewayProvider()]) models.setProvider(provider);
   return models;
 }
 
@@ -126,6 +160,69 @@ export async function startChatGPTSignIn(models: Models, deviceId: string, now: 
     )
     .then(() => undefined);
   return { ...(await Promise.race([code, done.then(() => Promise.reject(new Error('ChatGPT finished signing in before giving a code.')))])), done };
+}
+
+/** How long a Sign in with ChatGPT waits for the person, holding port 1455 on this machine meanwhile. */
+const REDIRECT_WAIT_MS = 10 * 60_000;
+
+/** A Sign in with ChatGPT waiting on the person: where to sign in, and what takes the address they land on. */
+export interface PendingRedirect {
+  url: string;
+  expiresAt: number;
+  /** Give it the address the browser was sent back to. */
+  finish(address: string): void;
+  /** End it unfinished. */
+  cancel(): void;
+  /** Settles when the credential is stored, or rejects when the address was wrong, it expired or OpenAI refused. */
+  done: Promise<void>;
+}
+
+/**
+ * Start a Sign in with ChatGPT. OpenAI sends the browser back only to 127.0.0.1:1455 on the person's own
+ * machine. pi-ai listens there on this one, which finishes it where the browser runs beside sift;
+ * anywhere else that page fails to load, and the person pastes its address into the dashboard.
+ */
+export async function startChatGPTRedirect(models: Models, deviceId: string, now: () => number = Date.now): Promise<PendingRedirect> {
+  const expiresAt = now() + REDIRECT_WAIT_MS;
+  const cancelled = new AbortController();
+  let finish = (_: string) => {};
+  const pasted = new Promise<string>((resolve) => (finish = resolve));
+  let opened = (_: string) => {};
+  const url = new Promise<string>((resolve) => (opened = resolve));
+  const done = models
+    .login(
+      CHATGPT,
+      'oauth',
+      {
+        signal: AbortSignal.any([AbortSignal.timeout(REDIRECT_WAIT_MS), cancelled.signal]),
+        // pi-ai races this against its listener and lets go of the port only once both have ended.
+        prompt: (prompt) => {
+          if (prompt.type !== 'manual_code') return Promise.reject(new Error('ChatGPT asked for something sift cannot answer from the dashboard.'));
+          return new Promise<string>((resolve, reject) => {
+            prompt.signal?.addEventListener('abort', () => reject(new Error('Login cancelled')), { once: true });
+            void pasted.then(resolve);
+          });
+        },
+        notify: (event) => {
+          if (event.type === 'auth_url') opened(event.url);
+        },
+      },
+      { getDeviceId: () => deviceId, agentName: 'sift' },
+    )
+    .then(
+      () => undefined,
+      (error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(message === 'OAuth state mismatch' ? 'That address is from an earlier sign-in. Start again.' : message, { cause: error });
+      },
+    );
+  return {
+    url: await Promise.race([url, done.then(() => Promise.reject(new Error('ChatGPT finished signing in before giving an address.')))]),
+    expiresAt,
+    finish,
+    cancel: () => cancelled.abort(),
+    done,
+  };
 }
 
 /** Store an API key for `provider`. */

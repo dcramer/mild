@@ -11,8 +11,13 @@ export interface Controls {
   models(db: Sql): Promise<{ models: string[]; recommended: Record<string, string> }>;
   /** The ways to reach a model, which of them this person has signed in to, and a ChatGPT sign-in under way. */
   modelSignIns(db: Sql): Promise<ModelSignIns>;
-  /** Start signing this person in to ChatGPT. Resolves with the code they enter at OpenAI; it completes in the background. */
-  signInChatGPT(db: Sql): Promise<{ code: string; url: string; expiresAt: number }>;
+  /**
+   * Start signing this person in to ChatGPT, the install's one way. Resolves with where to go, and for a
+   * device code the code to enter there; that completes in the background, a redirect by `finishChatGPT`.
+   */
+  signInChatGPT(db: Sql): Promise<PendingChatGPT>;
+  /** Finish this person's Sign in with ChatGPT with the address their browser was sent back to. Rejects with what went wrong. */
+  finishChatGPT(db: Sql, address: string): Promise<void>;
   /** Store an API key for one of the providers that takes one. */
   saveModelKey(db: Sql, provider: string, key: string): Promise<void>;
   signOutModel(db: Sql, provider: string): Promise<void>;
@@ -70,9 +75,16 @@ export interface SignIn {
 }
 
 export interface ModelSignIns {
-  choices: { provider: string; label: string; how: 'chatgpt' | 'key' }[];
+  choices: { provider: string; label: string; how: 'device-code' | 'redirect' | 'key' }[];
   /** Providers this person has a sign-in for. */
   signedIn: string[];
   /** A ChatGPT sign-in waiting on them, or how the last one failed. */
-  pending: { code: string; url: string; expiresAt: number } | { error: string } | null;
+  pending: PendingChatGPT | { error: string } | null;
+}
+
+/** Where to sign in to ChatGPT, until when, and by device code the code to enter there. */
+export interface PendingChatGPT {
+  code?: string;
+  url: string;
+  expiresAt: number;
 }

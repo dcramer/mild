@@ -337,6 +337,7 @@ describe('settings', () => {
       dashboardAllow: ['me@example.org', 'work@example.com'],
       databaseUrl: 'postgres://app@db.example.com/sift',
       databaseMigrationUrl: 'postgres://owner@db.example.com/sift',
+      chatgptSignIn: 'redirect' as const,
     };
     expect(parseSettings(renderSettings(settings))).toEqual(settings);
     expect(parseSettings(renderSettings(DEFAULT_SETTINGS))).toEqual(DEFAULT_SETTINGS);
@@ -453,6 +454,8 @@ describe('settings from the environment', () => {
     const home = freshHome();
     expect(() => loadConfig({ SIFT_HOME: home, SIFT_DASHBOARD_PORT: 'soon' })).toThrow('SIFT_DASHBOARD_PORT must be a port number.');
     expect(() => loadConfig({ SIFT_HOME: home, DATABASE_URL: 'mysql://x' })).toThrow('DATABASE_URL must be an address starting postgres://');
+    expect(() => loadConfig({ SIFT_HOME: home, SIFT_CHATGPT_SIGN_IN: 'on' })).toThrow('SIFT_CHATGPT_SIGN_IN must be "device-code" or "redirect".');
+    expect(loadConfig({ SIFT_HOME: home, SIFT_CHATGPT_SIGN_IN: 'redirect' }).settings.chatgptSignIn).toBe('redirect');
   });
 
   it('never copies a variable into sift.toml', () => {

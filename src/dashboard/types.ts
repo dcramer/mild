@@ -446,8 +446,11 @@ export const LabelSummary = z.object({
 });
 export type LabelSummary = z.infer<typeof LabelSummary>;
 
-/** A ChatGPT sign-in waiting on the person: the code to enter at OpenAI, and where. */
-export const SignInCode = z.object({ code: z.string(), url: z.string(), expiresAt: z.number() });
+/**
+ * A ChatGPT sign-in waiting on the person: where to go, and by device code the code to enter there.
+ * Without a code, it is a Sign in with ChatGPT, finished by pasting back the address it ends on.
+ */
+export const SignInCode = z.object({ code: z.string().optional(), url: z.string(), expiresAt: z.number() });
 export type SignInCode = z.infer<typeof SignInCode>;
 
 /** GET /api/manage: everything the Settings view shows. */
@@ -459,7 +462,7 @@ export const ManageState = z.object({
   /** The viewer's own model: which one they chose, how they can reach one, and a ChatGPT sign-in under way. */
   model: z.object({
     chosen: z.string().nullable(),
-    choices: z.array(z.object({ provider: z.string(), label: z.string(), how: z.enum(['chatgpt', 'key']) })),
+    choices: z.array(z.object({ provider: z.string(), label: z.string(), how: z.enum(['device-code', 'redirect', 'key']) })),
     signedIn: z.array(z.string()),
     pending: z.union([SignInCode, z.object({ error: z.string() })]).nullable(),
   }),

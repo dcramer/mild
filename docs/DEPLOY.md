@@ -61,7 +61,7 @@ Not done. The compose file drops capabilities and mounts the filesystem read-onl
 | Host | For |
 | --- | --- |
 | `gmail.googleapis.com`, `oauth2.googleapis.com` | Gmail, and refreshing its token |
-| `api.openai.com`, or `chatgpt.com` and `auth.openai.com` for a ChatGPT subscription | The model |
+| `api.openai.com`, and `auth.openai.com` for a ChatGPT subscription (`chatgpt.com` too by device code) | The model |
 | `api.anthropic.com` | The model |
 | Whatever host a sender's `List-Unsubscribe` names, port 443 | One-click unsubscribe |
 

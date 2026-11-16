@@ -4,14 +4,24 @@ import { undo } from '../actions/executor.ts';
 import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
 import type { Config } from '../config.ts';
 import { backfill } from '../daemon/backfill.ts';
-import type { Activity, Controls, ModelSignIns } from '../dashboard/controls.ts';
+import type { Activity, Controls, ModelSignIns, PendingChatGPT } from '../dashboard/controls.ts';
 import type { Wake } from '../daemon/run.ts';
 import { createGmailApi } from '../gmail/api.ts';
 import { interruptEvals, startEval } from '../learn/evals.ts';
 import { clientFor, loadClientSecrets } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { createJudge } from '../model/judge.ts';
-import { MODEL_CHOICES, offerModel, openModels, recommendModel, resolveModel, saveApiKey, startChatGPTSignIn } from '../model/models.ts';
+import {
+  type PendingRedirect,
+  modelChoices,
+  offerModel,
+  openModels,
+  recommendModel,
+  resolveModel,
+  saveApiKey,
+  startChatGPTRedirect,
+  startChatGPTSignIn,
+} from '../model/models.ts';
 import { listAccounts, listUsers, personOf } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
 import { credentials } from '../store/credentials.ts';
@@ -30,7 +40,7 @@ export async function gmailClient(config: Config, db: Sql, email: string) {
 const mailboxFor = async (config: Config, db: Sql, email: string) => createGmailMailbox(await gmailClient(config, db, email));
 
 /** One person's model providers, signed in with what is kept in their database. */
-const modelsFor = async (config: Config, db: Sql) => openModels(await credentials(db, 'model', config.keys));
+const modelsFor = async (config: Config, db: Sql) => openModels(await credentials(db, 'model', config.keys), config.settings.chatgptSignIn ?? 'device-code');
 
 /**
  * The model tier of the person whose database `db` is, from their own choice and sign-in.
@@ -57,8 +67,10 @@ function deviceId(config: Config): string {
 export async function buildControls(config: Config, store: Store, live: { wake?: Wake; activity: Activity }): Promise<Controls> {
   const everyone = async () => await Promise.all((await listUsers(store.central)).map((u) => store.user(u.id)));
   for (const db of await everyone()) await interruptEvals(db);
-  // By person: suggestions being judged again, and a ChatGPT sign-in waiting on them.
+  const choices = modelChoices(config.settings.chatgptSignIn ?? 'device-code');
+  // By person: a ChatGPT sign-in waiting on them, and a Sign in with ChatGPT waiting for its address.
   const pending = new Map<number, NonNullable<ModelSignIns['pending']>>();
+  const redirects = new Map<number, PendingRedirect>();
   return {
     models: async (db) => {
       const available = (await (await modelsFor(config, db)).getAvailable())
@@ -77,15 +89,36 @@ export async function buildControls(config: Config, store: Store, live: { wake?:
     modelSignIns: async (db) => {
       const waiting = pending.get(await personOf(db));
       return {
-        choices: MODEL_CHOICES.map((c) => ({ ...c })),
+        choices: choices.map((c) => ({ ...c })),
         signedIn: await (await credentials(db, 'model', config.keys)).keys(),
-        pending: waiting && 'expiresAt' in waiting && waiting.expiresAt < Date.now() ? { error: 'That code expired. Start again.' } : (waiting ?? null),
+        pending:
+          waiting && 'expiresAt' in waiting && waiting.expiresAt < Date.now()
+            ? { error: waiting.code ? 'That code expired. Start again.' : 'That sign-in expired. Start again.' }
+            : (waiting ?? null),
       };
     },
     signInChatGPT: async (db) => {
       const person = await personOf(db);
-      const started = await startChatGPTSignIn(await modelsFor(config, db), deviceId(config));
-      const shown = { code: started.code, url: started.url, expiresAt: started.expiresAt };
+      const models = await modelsFor(config, db);
+      let started: { done: Promise<void> };
+      let shown: PendingChatGPT;
+      if (choices[0]!.how === 'redirect') {
+        // The one before holds port 1455 until it ends.
+        const before = redirects.get(person);
+        if (before) {
+          before.cancel();
+          await before.done.catch(() => {});
+        }
+        const redirect = await startChatGPTRedirect(models, deviceId(config));
+        redirects.set(person, redirect);
+        void redirect.done.catch(() => {}).finally(() => redirects.get(person) === redirect && redirects.delete(person));
+        started = redirect;
+        shown = { url: redirect.url, expiresAt: redirect.expiresAt };
+      } else {
+        const code = await startChatGPTSignIn(models, deviceId(config));
+        started = code;
+        shown = { code: code.code, url: code.url, expiresAt: code.expiresAt };
+      }
       pending.set(person, shown);
       started.done.then(
         () => {
@@ -98,14 +131,22 @@ export async function buildControls(config: Config, store: Store, live: { wake?:
       );
       return shown;
     },
+    finishChatGPT: async (db, address) => {
+      const redirect = redirects.get(await personOf(db));
+      if (!redirect) throw new Error('No ChatGPT sign-in is waiting. Start again.');
+      redirect.finish(address);
+      await redirect.done;
+    },
     saveModelKey: async (db, provider, key) => {
-      if (!MODEL_CHOICES.some((c) => c.provider === provider && c.how === 'key')) throw new Error('That provider does not take an API key.');
+      if (!choices.some((c) => c.provider === provider && c.how === 'key')) throw new Error('That provider does not take an API key.');
       await saveApiKey(await credentials(db, 'model', config.keys), provider, key);
       live.wake?.now();
     },
     signOutModel: async (db, provider) => {
       await (await credentials(db, 'model', config.keys)).remove(provider);
-      pending.delete(await personOf(db));
+      const person = await personOf(db);
+      pending.delete(person);
+      redirects.get(person)?.cancel();
     },
     undo: async (db, actionId) => {
       const action = await getAction(db, actionId);

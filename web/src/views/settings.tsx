@@ -189,7 +189,7 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
       }
     >
       <Sheet>
-        <SettingRow title={providerName(choice, provider)} note={choice?.how === 'chatgpt' ? 'Signed in.' : 'Key saved.'}>
+        <SettingRow title={providerName(choice, provider)} note={choice?.how === 'key' ? 'Key saved.' : 'Signed in.'}>
           <Button onClick={() => setChanging(true)}>Change provider</Button>
         </SettingRow>
         <SettingRow title="Model" note="A small one is usually enough.">

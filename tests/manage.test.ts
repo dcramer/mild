@@ -25,8 +25,9 @@ let calls: string[];
 
 const controls: Controls = {
   models: async () => ({ models: ['p/small', 'p/large'], recommended: { p: 'p/small' } }),
-  modelSignIns: async () => ({ choices: [{ provider: 'openai-codex', label: 'ChatGPT', how: 'chatgpt' }], signedIn: ['openai-codex'], pending: null }),
+  modelSignIns: async () => ({ choices: [{ provider: 'openai-codex', label: 'ChatGPT', how: 'device-code' }], signedIn: ['openai-codex'], pending: null }),
   signInChatGPT: async () => (calls.push('chatgpt'), { code: 'ABCD-1234', url: 'https://auth.example/device', expiresAt: 900 }),
+  finishChatGPT: async (_db, address) => void calls.push(`finish ${address}`),
   saveModelKey: async (_db, provider, key) => void calls.push(`key ${provider} ${key}`),
   signOutModel: async (_db, provider) => void calls.push(`signout ${provider}`),
   undo: async (_db, id) => {
@@ -99,10 +100,11 @@ describe('managing sift from the dashboard', () => {
     expect((await preferences(db)).model).toBeNull();
 
     expect((await call('POST', '/api/model/chatgpt', {})).body).toEqual({ code: 'ABCD-1234', url: 'https://auth.example/device', expiresAt: 900 });
+    expect((await call('POST', '/api/model/chatgpt/finish', { address: ' http://127.0.0.1:1455/auth/callback?code=c ' })).status).toBe(200);
     expect((await call('POST', '/api/model/key', { provider: 'openai', key: ' sk-test ' })).status).toBe(200);
     expect((await call('POST', '/api/model/key', { provider: 'openai' })).status).toBe(400);
     expect((await call('POST', '/api/model/signout', { provider: 'openai' })).status).toBe(200);
-    expect(calls).toEqual(['check', 'check', 'chatgpt', 'key openai sk-test', 'signout openai']);
+    expect(calls).toEqual(['check', 'check', 'chatgpt', 'finish http://127.0.0.1:1455/auth/callback?code=c', 'key openai sk-test', 'signout openai']);
   });
 
   it('starts a test run of the model only when asked, through the process that holds the model', async () => {

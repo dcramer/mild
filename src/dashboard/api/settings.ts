@@ -88,6 +88,17 @@ export const writes: Write[] = [
     },
   }),
   write({
+    path: '/api/model/chatgpt/finish',
+    body: z.strictObject({ address: text(4000) }),
+    reply: done,
+    touches: self,
+    run: async ({ db, controls }, { address }) => {
+      if (!controls) throw new Error('This dashboard cannot sign in to a model.');
+      await controls.finishChatGPT(db, address.trim());
+      return { ok: true as const };
+    },
+  }),
+  write({
     path: '/api/model/key',
     body: z.strictObject({ provider, key: text(500) }),
     reply: done,

@@ -153,8 +153,10 @@ export const api = {
   unjudged: (signal: AbortSignal) => get<{ rows: UnjudgedRow[] }>('/api/unjudged', {}, signal),
   /** The reader's own model, `provider/model-id`, or null for none. */
   setModel: (model: string | null) => post('/api/model', { model }),
-  /** Start a ChatGPT sign-in: resolves with the code to enter at OpenAI. It finishes in the background. */
+  /** Start a ChatGPT sign-in: resolves with where to go, and by device code the code to enter there. */
   signInChatGPT: () => post<SignInCode>('/api/model/chatgpt', {}),
+  /** Finish a Sign in with ChatGPT with the address the browser was sent back to. */
+  finishChatGPT: (address: string) => post('/api/model/chatgpt/finish', { address }),
   saveModelKey: (provider: string, key: string) => post('/api/model/key', { provider, key }),
   signOutModel: (provider: string) => post('/api/model/signout', { provider }),
   saveLabel: (

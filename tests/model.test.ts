@@ -1,10 +1,10 @@
 import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { gatherEvidence } from '../src/daemon/evidence.ts';
 import { MAX_BODY_CHARS, extractText } from '../src/gmail/body.ts';
 import { type SignIns, credentialStore } from '../src/model/credentials.ts';
 import { createJudge } from '../src/model/judge.ts';
-import { MODEL_CHOICES, offerModel, openModels, recommendModel, resolveModel, saveApiKey } from '../src/model/models.ts';
+import { modelChoices, offerModel, openModels, recommendModel, resolveModel, saveApiKey, startChatGPTRedirect } from '../src/model/models.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts';
 import { openUserDb } from './fixtures.ts';
@@ -434,10 +434,16 @@ describe('model credentials', () => {
 });
 
 describe('providers', () => {
-  it('registers the ones a person can sign in to and no others', async () => {
+  it("registers the ones a person can sign in to and no others, with the install's one ChatGPT sign-in", async () => {
     const signIns = memorySignIns();
-    const models = openModels(signIns);
-    expect(models.getProviders().map((p) => p.id)).toEqual(MODEL_CHOICES.map((c) => c.provider));
+    for (const way of ['device-code', 'redirect'] as const)
+      expect(
+        openModels(signIns, way)
+          .getProviders()
+          .map((p) => p.id),
+      ).toEqual(modelChoices(way).map((c) => c.provider));
+    expect(modelChoices('redirect')[0]).toEqual({ provider: 'chatgpt', label: 'ChatGPT', how: 'redirect' });
+    const models = openModels(signIns, 'device-code');
     expect(() => resolveModel(models, 'google/anything')).toThrow('Unknown model');
 
     await saveApiKey(signIns, 'anthropic', 'k');
@@ -451,7 +457,7 @@ describe('providers', () => {
     const before = process.env['ANTHROPIC_API_KEY'];
     process.env['ANTHROPIC_API_KEY'] = 'someone-elses-key';
     try {
-      expect(await openModels(memorySignIns()).getAuth('anthropic')).toBeUndefined();
+      expect(await openModels(memorySignIns(), 'device-code').getAuth('anthropic')).toBeUndefined();
     } finally {
       if (before === undefined) delete process.env['ANTHROPIC_API_KEY'];
       else process.env['ANTHROPIC_API_KEY'] = before;
@@ -469,6 +475,78 @@ describe('providers', () => {
         import('@earendil-works/pi-ai/oauth'),
       ]),
     ).resolves.toHaveLength(5);
+  });
+});
+
+/** Answers every request sift makes with `answer`, keeping what was asked. Nothing reaches OpenAI. */
+function stubFetch(answer: (url: string, body: string) => Response) {
+  const asked: { url: string; headers: Headers; body: string }[] = [];
+  vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const body = await request.text();
+    asked.push({ url: request.url, headers: request.headers, body });
+    return answer(request.url, body);
+  });
+  return asked;
+}
+
+const DEVICE = '00000000-0000-4000-8000-000000000001';
+const TOKENS = {
+  access_token: 'synthetic-access',
+  refresh_token: 'synthetic-refresh',
+  id_token: 'synthetic-id',
+  expires_in: 3600,
+  scope: 'openid profile email offline_access resource.invoke chatgpt.tokens.use.direct',
+};
+
+describe('Sign in with ChatGPT', () => {
+  afterEach(() => void vi.unstubAllGlobals());
+
+  it("calls OpenAI's own API with the ChatGPT token, leaving out what OpenAI refuses with one", async () => {
+    const signIns = memorySignIns();
+    await signIns.write(
+      'chatgpt',
+      JSON.stringify({ type: 'oauth', access: 'synthetic-access', refresh: 'r', expires: Date.now() + 3_600_000, clientId: 'oaiapp_x' }),
+    );
+    const asked = stubFetch(() => new Response(JSON.stringify({ error: { message: 'stubbed' } }), { status: 400 }));
+    const models = openModels(signIns, 'redirect');
+    const listed = (await models.getAvailable('chatgpt')).map((m) => m.id);
+    expect(recommendModel('chatgpt', listed)).toMatch(/luna/);
+    await models.complete(resolveModel(models, `chatgpt/${listed[0]}`), { messages: [{ role: 'user', content: 'Synthetic.', timestamp: 0 }] });
+    expect(asked[0]!.url).toBe('https://api.openai.com/v1/responses');
+    expect(asked[0]!.headers.get('authorization')).toBe('Bearer synthetic-access');
+    const body = JSON.parse(asked[0]!.body) as Record<string, unknown>;
+    expect(body).toMatchObject({ store: false, stream: true });
+    expect(body).not.toHaveProperty('prompt_cache_retention');
+  });
+
+  it('finishes with the address pasted back, and stores the sign-in under chatgpt', async () => {
+    const signIns = memorySignIns();
+    const asked = stubFetch(() => Response.json(TOKENS));
+    const started = await startChatGPTRedirect(openModels(signIns, 'redirect'), DEVICE);
+    const url = new URL(started.url);
+    expect(url.origin + url.pathname).toBe('https://auth.openai.com/api/accounts/authorize');
+    expect(url.searchParams.get('redirect_uri')).toBe('http://127.0.0.1:1455/auth/callback');
+    expect(url.searchParams.get('agent_name_hint')).toBe('sift');
+    expect(url.searchParams.get('ext_agent_host_id')).toBe(`urn:uuid:${DEVICE}`);
+    started.finish(`http://127.0.0.1:1455/auth/callback?code=c1&state=${url.searchParams.get('state')}&client_id=oaiapp_x`);
+    await started.done;
+    expect(new URLSearchParams(asked[0]!.body).get('code')).toBe('c1');
+    expect(JSON.parse(signIns.stored.get('chatgpt')!)).toMatchObject({ type: 'oauth', access: 'synthetic-access', clientId: 'oaiapp_x' });
+  });
+
+  it('refuses an address from another sign-in, and lets go of the port when it ends', async () => {
+    stubFetch(() => Response.json(TOKENS));
+    const models = openModels(memorySignIns(), 'redirect');
+    const first = await startChatGPTRedirect(models, DEVICE);
+    first.finish('http://127.0.0.1:1455/auth/callback?code=c1&state=someone-elses&client_id=oaiapp_x');
+    await expect(first.done).rejects.toThrow('That address is from an earlier sign-in. Start again.');
+    const second = await startChatGPTRedirect(models, DEVICE);
+    second.cancel();
+    await expect(second.done).rejects.toThrow();
+    const third = await startChatGPTRedirect(models, DEVICE);
+    third.cancel();
+    await third.done.catch(() => {});
   });
 });
 
