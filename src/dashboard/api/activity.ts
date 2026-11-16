@@ -1,4 +1,6 @@
-import { listChanges, listDecisions, messageDetail, summarize } from '../queries.ts';
+import { listChanges, listDecisions } from '../queries/decisions.ts';
+import { messageDetail } from '../queries/messages.ts';
+import { summarize } from '../queries/summary.ts';
 import { BAD_DAYS, type Read, type Write, daysOf, missing, ok, ownerOf } from './route.ts';
 
 export const reads: Read[] = [

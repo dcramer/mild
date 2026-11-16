@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { undo } from '../src/actions/executor.ts';
 import { RETRY_AFTER_MS, isPublicAddress, unsubscribe } from '../src/actions/unsubscribe.ts';
-import { messageDetail } from '../src/dashboard/queries.ts';
+import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { getAction } from '../src/store/actions.ts';
 import { openDb } from '../src/store/db.ts';

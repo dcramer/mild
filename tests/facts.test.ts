@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { messageDetail } from '../src/dashboard/queries.ts';
+import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { openDb } from '../src/store/db.ts';
 import { storedFacts } from '../src/store/messages.ts';

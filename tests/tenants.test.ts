@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -262,10 +262,14 @@ describe("nobody sees or changes another person's mail", () => {
   });
 
   it('requires every query the dashboard runs to be given a scope', () => {
-    const source = readFileSync(new URL('../src/dashboard/queries.ts', import.meta.url), 'utf8');
-    const unscoped = [...source.matchAll(/^export function (\w+)\(([^)]*)/gm)]
-      .filter((match) => !/\bscope: Scope\b/.test(match[2] ?? ''))
-      .map((match) => match[1]);
-    expect(unscoped, 'every exported query in src/dashboard/queries.ts takes `scope: Scope`').toEqual([]);
+    const dir = new URL('../src/dashboard/queries/', import.meta.url);
+    const files = readdirSync(dir).filter((name) => name.endsWith('.ts'));
+    expect(files.length).toBeGreaterThan(0);
+    const unscoped = files.flatMap((name) =>
+      [...readFileSync(new URL(name, dir), 'utf8').matchAll(/^export function (\w+)\(([^)]*)/gm)]
+        .filter((match) => !/\bscope: Scope\b/.test(match[2] ?? ''))
+        .map((match) => `${name}: ${match[1]}`),
+    );
+    expect(unscoped, 'every exported query under src/dashboard/queries/ takes `scope: Scope`').toEqual([]);
   });
 });

@@ -1,7 +1,7 @@
 import { type FeedbackInput, applyFeedback } from '../../learn/feedback.ts';
 import { listAccounts } from '../../store/accounts.ts';
 import { resolveProposal } from '../../store/proposals.ts';
-import { listSuggestions, suggestionDetail } from '../queries.ts';
+import { listSuggestions, suggestionDetail } from '../queries/suggestions.ts';
 import { LABEL_ID, type Read, type Write, missing, named, ok, ownerOf, str } from './route.ts';
 
 const SCOPES = new Set(['label', 'sender', 'domain', 'subject', 'once']);

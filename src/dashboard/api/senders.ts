@@ -1,6 +1,6 @@
 import { listAccounts } from '../../store/accounts.ts';
 import { setStanding } from '../../store/rules.ts';
-import { senderPage } from '../queries.ts';
+import { senderPage } from '../queries/senders.ts';
 import { type Read, type Write, missing, named, ok, str } from './route.ts';
 
 const SHARED = 'Anyone can get an address at that domain, so it has no standing of its own.';

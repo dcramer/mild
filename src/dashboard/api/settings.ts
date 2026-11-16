@@ -1,6 +1,6 @@
 import { predatingGuidelines } from '../../learn/redecide.ts';
 import { listAccounts } from '../../store/accounts.ts';
-import { listLabelSummaries } from '../queries.ts';
+import { listLabelSummaries } from '../queries/labels.ts';
 import { type Scope, sees } from '../scope.ts';
 import type { ManageState } from '../types.ts';
 import { type Context, type Read, type Write, ok, str } from './route.ts';

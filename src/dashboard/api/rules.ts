@@ -1,6 +1,6 @@
 import { getRuleFilter, ruleFilterStatus } from '../../store/filters.ts';
 import { addRule, removeRule } from '../../store/rules.ts';
-import { listRuleSummaries } from '../queries.ts';
+import { listRuleSummaries } from '../queries/rules.ts';
 import { LABEL_ID, RULE_KEYS, type Read, type Write, decided, named, ok, ownerOf, redecide, str } from './route.ts';
 
 export const reads: Read[] = [{ path: '/api/rules', run: ({ db }, scope) => ok({ rules: listRuleSummaries(db, scope) }) }];
