@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { unsubscribe } from '../actions/unsubscribe.ts';
 import type { Config } from '../config.ts';
-import { type PassResult, type RunOptions, tick } from '../daemon/run.ts';
+import { type PassResult, type RunOptions, type Work, dueWork, runWork, tick } from '../daemon/run.ts';
 import { createDashboard } from '../dashboard/server.ts';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 import { listAccounts, personOf } from '../store/accounts.ts';
@@ -27,18 +27,22 @@ export interface Host {
   pageDir?: string;
   log: (line: string) => void;
   /**
-   * Keeps work going after the request that started it is answered: in `sift run` it just runs on, on
-   * Vercel `waitUntil`. Absent where nothing classifies mail (`sift dashboard` on its own).
+   * Gets what is due for these people (or everyone) done, without the caller waiting: `sift run` in this
+   * process, Vercel each piece in a call of its own. Absent where nothing classifies mail (`sift dashboard`).
    */
-  background?: (work: Promise<unknown>) => void;
-  /** How long a tick may start work, short of what the host would cut a call off at. */
-  tickMs: number;
+  start?: (sift: Sift, people?: readonly number[]) => void;
+  /** How long one piece of work may start work, short of what the host would cut a call off at. */
+  limitMs: number;
 }
 
 export interface Sift {
   /** Any request to the site: the page, the API, sign-in. */
   respond: (request: Request) => Promise<Response>;
-  /** Do what is due, for these people or everyone, until the host's limit. */
+  /** What is due, for these people or everyone. */
+  due: (people?: readonly number[]) => Promise<Work[]>;
+  /** Do one piece of it, within the host's limit. */
+  work: (work: Work) => Promise<PassResult | null>;
+  /** Do all of it here, a few pieces at a time. */
   tick: (people?: readonly number[]) => Promise<PassResult[]>;
 }
 
@@ -75,14 +79,15 @@ export async function createSift(host: Host): Promise<Sift> {
       return { api, mailbox };
     },
   };
-  const ticking = (who?: readonly number[]) => tick(store, options, Date.now() + host.tickMs, who);
-  const { background } = host;
-  // What a person starts in the dashboard (check now, a test run, older mail) runs now, not at the next tick.
-  const kick = background && ((person?: number) => background(ticking(person === undefined ? undefined : [person])));
+  // Bound below, before any request can reach `kick`.
+  let sift: Sift | undefined;
+  const { start } = host;
+  // What a person starts in the dashboard (check now, a test run, older mail) begins now, not at the next tick.
+  const kick = start && ((person?: number) => start(sift!, person === undefined ? undefined : [person]));
   const controls = await buildControls(config, store, {
     ephemeral,
     deviceId: deviceId(host.sessionSecret),
-    running: Boolean(background),
+    running: Boolean(start),
     ...(kick ? { kick } : {}),
   });
   const dashboard = createDashboard(people(store), {
@@ -93,5 +98,11 @@ export async function createSift(host: Host): Promise<Sift> {
     signInAddresses: host.signInAddresses,
     ephemeral,
   });
-  return { respond: host.pageDir ? site(dashboard, host.pageDir) : dashboard.handle, tick: ticking };
+  sift = {
+    respond: host.pageDir ? site(dashboard, host.pageDir) : dashboard.handle,
+    due: (who) => dueWork(store, options, who),
+    work: (piece) => runWork(store, piece, options, Date.now() + host.limitMs),
+    tick: (who) => tick(store, options, host.limitMs, who),
+  };
+  return sift;
 }

@@ -1,13 +1,55 @@
+import { timingSafeEqual } from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import { loadConfig } from '../config.ts';
 import { openEphemeral } from '../ephemeral/open.ts';
+import { z } from 'zod';
+import type { Work } from '../daemon/run.ts';
 import { type Sift, createSift } from '../host/sift.ts';
 import { openStore } from '../store/store.ts';
 
-/** The time limit of both routes, as `vercel.json` sets it. */
+/** The time limit of every route, as `vercel.json` sets it. */
 export const MAX_DURATION_S = 300;
-/** A tick starts nothing in the last minute, which a model call already under way may need. */
-const TICK_MS = (MAX_DURATION_S - 60) * 1000;
+/** A piece of work starts nothing in the last minute, which a model call already under way may need. */
+const LIMIT_MS = (MAX_DURATION_S - 60) * 1000;
+
+/** A piece of due work, as one call hands it to the next: ids, checked before anything is opened with them. */
+const Piece = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('pass'), person: z.int().positive(), account: z.string().min(3) }),
+  z.strictObject({ kind: z.literal('upkeep'), person: z.int().positive() }),
+  z.strictObject({ kind: z.literal('backfill'), person: z.int().positive(), account: z.string().min(3), days: z.int().min(1).max(30) }),
+  z.strictObject({ kind: z.literal('eval'), person: z.int().positive(), run: z.int().positive() }),
+]) satisfies z.ZodType<Work>;
+
+/**
+ * Only Vercel's cron and sift's own calls carry `CRON_SECRET`, and only they may start work. Without the
+ * variable nothing may: `required` throws rather than compare against nothing.
+ */
+const fromSift = (request: Request) => {
+  const expected = Buffer.from(`Bearer ${required('CRON_SECRET')}`);
+  const given = Buffer.from(request.headers.get('authorization') ?? '');
+  return given.length === expected.length && timingSafeEqual(given, expected);
+};
+
+/**
+ * Hand each piece of what is due to a call of its own (`api/work.ts`), so each has its own time limit and
+ * opens only what its ids name. Resolves once every call has taken its piece, not when they finish.
+ */
+async function fanOut(sift: Sift, people?: readonly number[]): Promise<void> {
+  // Deployment Protection guards each deployment's own address, so production calls its production domain; a
+  // preview can be reached only with Vercel's bypass for automation, sent when the project has one.
+  const domain = process.env['VERCEL_ENV'] === 'production' ? process.env['VERCEL_PROJECT_PRODUCTION_URL'] : process.env['VERCEL_URL'];
+  const self = `https://${domain ?? required('VERCEL_URL')}/api/work`;
+  const bypass = process.env['VERCEL_AUTOMATION_BYPASS_SECRET'];
+  const headers = {
+    authorization: `Bearer ${required('CRON_SECRET')}`,
+    'content-type': 'application/json',
+    ...(bypass ? { 'x-vercel-protection-bypass': bypass } : {}),
+  };
+  const taken = await Promise.allSettled((await sift.due(people)).map((piece) => fetch(self, { method: 'POST', headers, body: JSON.stringify(piece) })));
+  const refused = taken.filter((call) => call.status === 'rejected' || call.value.status !== 202).length;
+  // What was not taken is due again at the next tick.
+  if (refused > 0) process.stdout.write(`${refused} of ${taken.length} pieces of work were not taken\n`);
+}
 
 /** What a deploy must give, in the environment: nothing is kept in files. */
 function required(name: string): string {
@@ -37,8 +79,8 @@ async function open(): Promise<Sift> {
     allowedHosts: [process.env['VERCEL_URL'], process.env['VERCEL_BRANCH_URL'], production, config.settings.dashboardHost].filter((name) => name !== undefined),
     signInAddresses: production ? [`https://${production}`] : [],
     log: (line) => process.stdout.write(`${line}\n`),
-    background: (work) => waitUntil(work),
-    tickMs: TICK_MS,
+    start: (sift, people) => waitUntil(fanOut(sift, people)),
+    limitMs: LIMIT_MS,
   });
 }
 
@@ -51,9 +93,18 @@ export async function respond(request: Request): Promise<Response> {
   return await (await sift()).respond(request);
 }
 
-/** Vercel Cron, each minute. Vercel sends `CRON_SECRET` as a bearer token; nothing else may start a tick. */
+/** Vercel Cron, each minute: hands out what is due. */
 export async function cron(request: Request): Promise<Response> {
-  if (request.headers.get('authorization') !== `Bearer ${required('CRON_SECRET')}`) return new Response(null, { status: 401 });
-  await (await sift()).tick();
+  if (!fromSift(request)) return new Response(null, { status: 401 });
+  await fanOut(await sift());
   return new Response(null, { status: 204 });
+}
+
+/** One piece of work, taken at once and done after the reply, within this call's own time limit. */
+export async function work(request: Request): Promise<Response> {
+  if (request.method !== 'POST' || !fromSift(request)) return new Response(null, { status: 401 });
+  const piece = Piece.safeParse(await request.json().catch(() => null));
+  if (!piece.success) return new Response(null, { status: 400 });
+  waitUntil((await sift()).work(piece.data));
+  return new Response(null, { status: 202 });
 }

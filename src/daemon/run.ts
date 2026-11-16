@@ -34,10 +34,13 @@ export interface RunOptions {
 }
 
 const DAY_MS = 86_400_000;
-/** How long a pass holds its mailbox: longer than a pass should take, and how long one that dies keeps it. */
-const PASS_HOLD_MS = 15 * 60_000;
-/** The same for a slice of a test run, or of pulling in older mail. */
-const WORK_HOLD_MS = 15 * 60_000;
+/**
+ * How long a piece of work holds its lock past its own time limit: a model call under way may run a
+ * minute over. A host that cuts the work off leaves the lock to run out about when the next tick wants it.
+ */
+const HOLD_PAST_LIMIT_MS = 60_000;
+/** The longest a lock is held, for work with no limit (`sift run --once`, tests). */
+const LONGEST_HOLD_MS = 15 * 60_000;
 /**
  * How many pieces of work one tick does at once: enough that one mailbox's backlog (a minute-long model
  * call, a sync waiting on Gmail's quota) does not hold up everyone's new mail.
@@ -69,24 +72,28 @@ const stillThere = async (store: Store, id: number) => (await listUsers(store.ce
 export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[]> {
   const results: PassResult[] = [];
   for (const account of await listAccounts(db)) {
-    const result = await passMailbox(db, account, options, Infinity);
+    const result = await unlessUnderWay(options, `lock:pass:${account.id}`, Infinity, () => passMailbox(db, account, options, Infinity));
     if (result) results.push(result);
   }
   return results;
 }
 
 /** A piece of work a tick found due. */
-type Work =
-  | { kind: 'pass'; person: number; account: Account }
+/**
+ * A piece of work a tick found due: ids only, so it can be handed to a call of its own (Vercel), and
+ * whatever runs it opens everything it touches from them.
+ */
+export type Work =
+  | { kind: 'pass'; person: number; account: string }
   | { kind: 'upkeep'; person: number }
-  | { kind: 'backfill'; person: number; account: Account; days: number }
+  | { kind: 'backfill'; person: number; account: string; days: number }
   | { kind: 'eval'; person: number; run: number };
 
 /**
  * What is due, for these people or everyone: found in the record and the ephemeral store, so a tick needs
  * nothing remembered from the last, and work a tick left unfinished is simply due again.
  */
-async function dueWork(store: Store, options: RunOptions, people?: readonly number[]): Promise<Work[]> {
+export async function dueWork(store: Store, options: RunOptions, people?: readonly number[]): Promise<Work[]> {
   const day = Math.floor((options.now ?? Date.now)() / DAY_MS);
   const due: Work[] = [];
   for (const { id: person } of await listUsers(store.central)) {
@@ -94,9 +101,9 @@ async function dueWork(store: Store, options: RunOptions, people?: readonly numb
     const db = await store.user(person);
     if (await options.ephemeral.claim(`upkeep:${person}:${day}`, 2 * DAY_MS)) due.push({ kind: 'upkeep', person });
     for (const account of await listAccounts(db)) {
-      due.push({ kind: 'pass', person, account });
+      due.push({ kind: 'pass', person, account: account.id });
       const days = await options.ephemeral.get<number>(backfillKey(account.id));
-      if (days !== null) due.push({ kind: 'backfill', person, account, days });
+      if (days !== null) due.push({ kind: 'backfill', person, account: account.id, days });
     }
     for (const run of await goingEvals(db)) due.push({ kind: 'eval', person, run });
   }
@@ -104,24 +111,17 @@ async function dueWork(store: Store, options: RunOptions, people?: readonly numb
 }
 
 /**
- * Do what is due, `AT_ONCE` at a time, starting nothing after `until`: a host's function has a time limit,
- * and `sift run` sets one too so the same path runs everywhere. Ticks may overlap; each piece of work holds
- * a lock, so one already under way is skipped.
+ * Do what is due here, `AT_ONCE` at a time, each piece starting nothing after `limitMs` from its own start,
+ * as it would in a call of its own. Ticks may overlap; each piece holds a lock, so one under way is skipped.
  */
-export async function tick(store: Store, options: RunOptions, until: number, people?: readonly number[]): Promise<PassResult[]> {
+export async function tick(store: Store, options: RunOptions, limitMs: number, people?: readonly number[]): Promise<PassResult[]> {
   const due = await dueWork(store, options, people);
   const results: PassResult[] = [];
   const now = options.now ?? Date.now;
   const worker = async () => {
-    for (let work = due.shift(); work && now() < until; work = due.shift()) {
-      try {
-        const result = await runWork(store, work, options, until);
-        if (result) results.push(result);
-      } catch (error) {
-        // A person deleted meanwhile has nothing left to report.
-        if (await stillThere(store, work.person))
-          options.log(`${describeWork(work)} failed, will retry: ${error instanceof Error ? error.message : String(error)}`);
-      }
+    for (let work = due.shift(); work; work = due.shift()) {
+      const result = await runWork(store, work, options, now() + limitMs);
+      if (result) results.push(result);
     }
   };
   await Promise.all(Array.from({ length: AT_ONCE }, worker));
@@ -130,9 +130,9 @@ export async function tick(store: Store, options: RunOptions, until: number, peo
 
 const describeWork = (work: Work) =>
   work.kind === 'pass'
-    ? `${work.account.email}: pass`
+    ? `${work.account}: pass`
     : work.kind === 'backfill'
-      ? `${work.account.email}: pulling in older mail`
+      ? `${work.account}: pulling in older mail`
       : work.kind === 'eval'
         ? 'A test run'
         : 'Deleting old records';
@@ -142,58 +142,65 @@ export async function askForBackfill(ephemeral: Ephemeral, account: string, days
   await ephemeral.set(backfillKey(account), days, BACKFILL_MS);
 }
 
-/** Run `work` unless another tick is doing it now. */
-async function unlessUnderWay(ephemeral: Ephemeral, lock: string, work: () => Promise<void>): Promise<void> {
-  const token = await ephemeral.claim(lock, WORK_HOLD_MS);
-  if (token === null) return;
-  try {
-    await work();
-  } finally {
-    await ephemeral.release(lock, token);
-  }
-}
-
-async function runWork(store: Store, work: Work, options: RunOptions, until: number): Promise<PassResult | null> {
-  if (!(await stillThere(store, work.person))) return null;
-  const db = await store.user(work.person);
-  switch (work.kind) {
-    case 'upkeep':
-      await upkeep(db, options);
-      return null;
-    case 'pass':
-      return await passMailbox(db, work.account, options, until);
-    case 'backfill':
-      await unlessUnderWay(options.ephemeral, `lock:backfill:${work.account.id}`, async () => {
-        const { api } = await options.connect(db, work.account);
-        if (await backfill(db, api, work.account.id, work.days, until, options.now)) await options.ephemeral.take(backfillKey(work.account.id));
-      });
-      return null;
-    case 'eval':
-      await unlessUnderWay(options.ephemeral, `lock:eval:${work.person}:${work.run}`, async () => {
-        const tier = options.model ? await options.model(db) : null;
-        if (tier) await continueEval({ db, judge: tier.judge, model: tier.model, ...(options.now ? { now: options.now } : {}) }, work.run, until);
-      });
-      return null;
-  }
-}
-
-/** Null when another pass holds the mailbox, or it was removed while this one ran. */
-async function passMailbox(db: Sql, account: Account, options: RunOptions, until: number): Promise<PassResult | null> {
-  const lock = `lock:pass:${account.id}`;
-  const token = await options.ephemeral.claim(lock, PASS_HOLD_MS);
+/** Run `work` unless something else is doing it now, holding it until a little past `until`. Null when it was. */
+async function unlessUnderWay<T>(options: RunOptions, lock: string, until: number, work: () => Promise<T>): Promise<T | null> {
+  const ms = Math.min(until - (options.now ?? Date.now)(), LONGEST_HOLD_MS) + HOLD_PAST_LIMIT_MS;
+  const token = await options.ephemeral.claim(lock, ms);
   if (token === null) return null;
   try {
-    const result = await runMailbox(db, account, options, until);
-    if (result)
-      await recordPassStatus(options.ephemeral, account.id, {
-        at: (options.now ?? Date.now)(),
-        ...(result.error ? { error: result.error } : {}),
-        ...(result.expired ? { expired: true } : {}),
-      });
-    return result;
+    return await work();
   } finally {
     await options.ephemeral.release(lock, token);
   }
+}
+
+/**
+ * Run one piece of due work, starting nothing after `until`. Everything it touches is opened here from the
+ * piece's ids. A failure is logged; the piece is due again at the next tick.
+ */
+export async function runWork(store: Store, work: Work, options: RunOptions, until: number): Promise<PassResult | null> {
+  try {
+    if (!(await stillThere(store, work.person))) return null;
+    const db = await store.user(work.person);
+    const account = 'account' in work ? (await listAccounts(db)).find((a) => a.id === work.account) : undefined;
+    switch (work.kind) {
+      case 'upkeep':
+        await upkeep(db, options);
+        return null;
+      case 'pass':
+        return account ? await unlessUnderWay(options, `lock:pass:${account.id}`, until, () => passMailbox(db, account, options, until)) : null;
+      case 'backfill':
+        if (account)
+          await unlessUnderWay(options, `lock:backfill:${account.id}`, until, async () => {
+            const { api } = await options.connect(db, account);
+            if (await backfill(db, api, account.id, work.days, until, options.now)) await options.ephemeral.take(backfillKey(account.id));
+          });
+        return null;
+      case 'eval':
+        await unlessUnderWay(options, `lock:eval:${work.person}:${work.run}`, until, async () => {
+          const tier = options.model ? await options.model(db) : null;
+          if (tier) await continueEval({ db, judge: tier.judge, model: tier.model, ...(options.now ? { now: options.now } : {}) }, work.run, until);
+        });
+        return null;
+    }
+  } catch (error) {
+    // A person deleted meanwhile has nothing left to report.
+    if (await stillThere(store, work.person))
+      options.log(`${describeWork(work)} failed, will retry: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
+/** One pass, its outcome kept for the dashboard. Null when the mailbox was removed while it ran. */
+async function passMailbox(db: Sql, account: Account, options: RunOptions, until: number): Promise<PassResult | null> {
+  const result = await runMailbox(db, account, options, until);
+  if (result)
+    await recordPassStatus(options.ephemeral, account.id, {
+      at: (options.now ?? Date.now)(),
+      ...(result.error ? { error: result.error } : {}),
+      ...(result.expired ? { expired: true } : {}),
+    });
+  return result;
 }
 
 /**

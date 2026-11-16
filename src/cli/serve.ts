@@ -121,12 +121,12 @@ export function signInAddresses(port: number): string[] {
   return [`http://localhost:${port}`, ...(name ? [`https://${name}`] : [])];
 }
 
-/** How long a tick in `sift run` may start work: as a host's function would cut it off, so the same path runs. */
-const TICK_MS = 5 * 60_000;
+/** How long a piece of work in `sift run` may start work: as a host's function would cut it off, so the same path runs. */
+const LIMIT_MS = 5 * 60_000;
 
 /** What `sift run` and `sift dashboard` give sift as its host: this machine, its home directory, its page. */
 export function nodeHost(config: Config, store: Store, ephemeral: Ephemeral, port: number, log: (line: string) => void): Host {
-  return { config, store, ephemeral, sessionSecret: sessionSecret(config), ...dashboardAddresses(config, port), pageDir: WEB_DIST, log, tickMs: TICK_MS };
+  return { config, store, ephemeral, sessionSecret: sessionSecret(config), ...dashboardAddresses(config, port), pageDir: WEB_DIST, log, limitMs: LIMIT_MS };
 }
 
 /**

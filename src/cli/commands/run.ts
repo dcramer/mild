@@ -43,7 +43,8 @@ export async function run(args: string[]): Promise<void> {
       running.add(held);
     };
     const port = portOption(values.port) ?? config.settings.dashboardPort;
-    const sift = await createSift({ ...nodeHost(config, store, ephemeral, port, log), background });
+    // What is due runs here, a few pieces at a time; stopping waits for it.
+    const sift = await createSift({ ...nodeHost(config, store, ephemeral, port, log), start: (sift, people) => background(sift.tick(people)) });
 
     const users = await listUsers(store.central);
     const people = users.length;
