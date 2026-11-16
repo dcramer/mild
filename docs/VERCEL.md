@@ -4,6 +4,16 @@ Sift on Vercel instead of a machine of your own. How it runs there is [RUNTIME.m
 
 What it needs: the **Pro** plan (Hobby runs crons once a day; Sift ticks each minute), a Postgres database (Neon) and a Redis database, both from the Vercel Marketplace, and a Google OAuth client of your own.
 
+## One click
+
+[![Deploy with Vercel](https://vercel.com/button)][deploy]
+
+It copies this repository to your GitHub account, adds Neon and Upstash for Redis to the project, and asks for the variables in step 3, so the first deploy migrates the database and comes up whole. Make the Google client (step 2) first: its id and secret are asked for, and its redirect URI can wait until Vercel has given the project its address. Then add that URI, and open the address.
+
+Upstash is expected to set `REDIS_https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift&project-name=sift&repository-name=sift&env=SIFT_GOOGLE_CLIENT_ID%2CSIFT_GOOGLE_CLIENT_SECRET%2CSIFT_DASHBOARD_ALLOW%2CSIFT_KEY%2CSIFT_SESSION_SECRET%2CCRON_SECRET%2CENABLE_EXPERIMENTAL_COREPACK&envDefaults=%7B%22ENABLE_EXPERIMENTAL_COREPACK%22%3A%221%22%7D&envDescription=Your%20Google%20OAuth%20client%2C%20the%20accounts%20that%20may%20sign%20in%2C%20and%20three%20secrets.&envLink=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift%2Fblob%2Fmain%2Fdocs%2FVERCEL.md%23one-click&products=%5B%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22neon%22%2C%22integrationSlug%22%3A%22neon%22%7D%2C%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22upstash-kv%22%2C%22integrationSlug%22%3A%22upstash%22%7D%5D`; if the site says it is missing, copy the store's `redis://`/`rediss://` address into it and deploy again.
+
+[deploy]: https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift&project-name=sift&repository-name=sift&env=SIFT_GOOGLE_CLIENT_ID%2CSIFT_GOOGLE_CLIENT_SECRET%2CSIFT_DASHBOARD_ALLOW%2CSIFT_KEY%2CSIFT_SESSION_SECRET%2CCRON_SECRET%2CENABLE_EXPERIMENTAL_COREPACK&envDefaults=%7B%22ENABLE_EXPERIMENTAL_COREPACK%22%3A%221%22%7D&envDescription=Your%20Google%20OAuth%20client%2C%20the%20accounts%20that%20may%20sign%20in%2C%20and%20three%20secrets.&envLink=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift%2Fblob%2Fmain%2Fdocs%2FVERCEL.md%23one-click&products=%5B%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22neon%22%2C%22integrationSlug%22%3A%22neon%22%7D%2C%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22upstash-kv%22%2C%22integrationSlug%22%3A%22upstash%22%7D%5D
+
 ## 1. The project
 
 Import this repository as a Vercel project and deploy it as it is: Vercel adds databases only to a project that exists. Root Directory: `./`, the repository root (Vercel offers `web/` because it finds Vite there, and a build from there knows nothing of `vercel.json` or the functions). Framework Preset: Other. `vercel.json` sets the build, the functions (`api/`), the minute's cron and the page's headers, and Node comes from `package.json` (24.x).

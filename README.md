@@ -10,7 +10,9 @@ It suggests before it acts. Every decision appears in a dashboard, you correct t
 
 ## Set up
 
-On a machine of your own, as below; on Vercel, [docs/VERCEL.md](docs/VERCEL.md). Requires Node 24 and pnpm.
+[![Deploy with Vercel](https://vercel.com/button)][deploy]
+
+On Vercel, the button above ([docs/VERCEL.md](docs/VERCEL.md) says what it needs first). On a machine of your own, as below; it requires Node 24 and pnpm.
 
 ```bash
 pnpm install
@@ -46,3 +48,5 @@ Open the address it prints and sign in with Google. Signing in is what connects 
 - [docs/SECRETS.md](docs/SECRETS.md): encrypting stored credentials with a key you supply.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it decides, and why it is built this way.
 - [AGENTS.md](AGENTS.md): the rules for changing it. `pnpm check` is the gate.
+
+[deploy]: https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift&project-name=sift&repository-name=sift&env=SIFT_GOOGLE_CLIENT_ID%2CSIFT_GOOGLE_CLIENT_SECRET%2CSIFT_DASHBOARD_ALLOW%2CSIFT_KEY%2CSIFT_SESSION_SECRET%2CCRON_SECRET%2CENABLE_EXPERIMENTAL_COREPACK&envDefaults=%7B%22ENABLE_EXPERIMENTAL_COREPACK%22%3A%221%22%7D&envDescription=Your%20Google%20OAuth%20client%2C%20the%20accounts%20that%20may%20sign%20in%2C%20and%20three%20secrets.&envLink=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift%2Fblob%2Fmain%2Fdocs%2FVERCEL.md%23one-click&products=%5B%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22neon%22%2C%22integrationSlug%22%3A%22neon%22%7D%2C%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22upstash-kv%22%2C%22integrationSlug%22%3A%22upstash%22%7D%5D
