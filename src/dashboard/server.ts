@@ -204,7 +204,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     // The Host header, not the URL: a `node:http` adapter cannot always build a URL from it.
     const hostHeader = request.headers.get('host');
     if (!answers(hostHeader)) {
-      return new Response('The sift dashboard does not answer to this address. Set dashboard.host in sift.toml.', {
+      return new Response('The sift dashboard does not answer to this address. Set SIFT_DASHBOARD_HOST to it.', {
         status: 403,
         headers: { 'content-type': 'text/plain' },
       });

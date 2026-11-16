@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { promisify } from 'node:util';
-import { loadConfig, saveKeyFile, saveSettings } from '../../config.ts';
+import { loadConfig, saveKeyFile, saveSetting } from '../../config.ts';
 import { hasClientSecrets, installClient } from '../../gmail/auth.ts';
 import { connectedAddresses } from '../../store/accounts.ts';
 import { loadKeyring } from '../../secrets.ts';
@@ -26,7 +26,7 @@ export async function init(): Promise<void> {
   await runInit({
     config,
     ui,
-    saveSettings: (settings) => saveSettings(config, settings),
+    saveSetting: (variable, value) => saveSetting(config, variable, value),
     saveKey: (key) => {
       const path = saveKeyFile(process.cwd(), key);
       process.env['SIFT_KEY'] = key;

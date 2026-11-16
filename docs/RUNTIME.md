@@ -48,7 +48,7 @@ Each host builds a `Host` and calls `createSift`. What differs is who calls `res
 | Started by a person | `tick(person)` in this process | the same fan-out, for that person |
 | `Ephemeral` | memory, or Redis when `REDIS_URL` is set | Redis |
 | Database | PGlite, or Postgres; migrated when opened | Postgres (Neon); migrated by the deploy's build |
-| Settings, keys | `sift.toml` and the home directory | the environment |
+| Settings, keys | the environment, and the home's `.env` and files | the environment |
 
 Memory is right for one `sift run` process only. Two processes, or any host with instances, need Redis.
 

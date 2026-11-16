@@ -69,7 +69,7 @@ The browser, not sift, talks to `accounts.google.com` during sign-in. Confirm th
 **The allowlist.** Docker cannot filter by hostname, and these hosts have no stable addresses, so firewall rules by IP will not hold. The workable shape is a network with no route out (`internal: true`) and, on it, a forward proxy that allows `CONNECT` only to the hosts above. That needs:
 
 - A proxy container (Squid, Envoy or similar) on both the internal network and an outside one, with the allowlist as its configuration.
-- sift's three HTTP clients to use it, each checked: the Google libraries read `HTTPS_PROXY`; the model library reads it for the ChatGPT subscription path and otherwise uses Node's `fetch`, which needs `NODE_USE_ENV_PROXY=1`. These would be set on the container, not in `sift.toml`.
+- sift's three HTTP clients to use it, each checked: the Google libraries read `HTTPS_PROXY`; the model library reads it for the ChatGPT subscription path and otherwise uses Node's `fetch`, which needs `NODE_USE_ENV_PROXY=1`. These would be set on the container.
 - The dashboard port still published; the proxy is for outbound only.
 
 **Unsubscribing is the exception**, and cannot go through that proxy:

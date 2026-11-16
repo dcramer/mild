@@ -57,13 +57,13 @@ export function machineNames(): string[] {
   return [...new Set([...addresses, host, short, `${short}.local`, ...(name ? [name] : [])])];
 }
 
-/** What the dashboard listens on, from the `dashboard.host` setting. */
+/** What the dashboard listens on, from `SIFT_DASHBOARD_HOST`. */
 export async function listenAddresses(settings: Settings): Promise<string[]> {
   const { dashboardHost } = settings;
   if (dashboardHost === undefined) return ['127.0.0.1'];
   // `::` takes IPv4 as well. A name such as a Tailscale one can resolve to IPv6 first, so IPv4 alone is not enough.
   if (dashboardHost === 'all') return ['::'];
   const address = await resolveHere(dashboardHost);
-  if (!address) throw new Error(`dashboard.host is ${dashboardHost}, which does not point at this machine.`);
+  if (!address) throw new Error(`SIFT_DASHBOARD_HOST is ${dashboardHost}, which does not point at this machine.`);
   return address === '127.0.0.1' ? ['127.0.0.1'] : ['127.0.0.1', address];
 }

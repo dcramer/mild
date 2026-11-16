@@ -106,7 +106,7 @@ A control asks for its key and draws the keycap itself (`shortcut` on a `Button`
 - **A layer's own controls are a footer** (`ControlBar`, `Control`), the way a game lists its buttons: the key first, then what it does. A table's (Move, Open, Every key) holds at the bottom of the screen while the table is on the page; a panel's (Previous, Next) runs along its bottom edge, with keys only on the message panel, beside where it is in the list. On a phone the panel's become wide Previous and Next buttons at the bottom, where a thumb is, and Close stays in the corner. Each one in a panel can be pressed as well as keyed.
 - **What floats is a layer.** With a panel or dialog open the page under it hears nothing; `?` alone works everywhere.
 - **Nothing happens while typing** in a field, and Enter never presses a second thing when a button or row already has the focus. A panel takes the focus itself when it opens, so Enter answers.
-- **No hints on a touch screen**, and the reader can turn keys and hints off in Settings. That choice is kept in the browser, not in `sift.toml`: it is about the reader, not the mail.
+- **No hints on a touch screen**, and the reader can turn keys and hints off in Settings. That choice is kept in the browser, not in sift: it is about the reader, not the mail.
 
 ## Nothing moves after it is drawn
 

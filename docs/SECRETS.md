@@ -7,7 +7,7 @@ Four kinds of thing would let someone else act as you, and sift encrypts each wh
 
 A person's sign-ins are their own rows, which row-level security keeps from everyone else. The rest of the database is not encrypted.
 
-A key beside what it protects protects nothing, so the key is the one setting that comes from the environment and not `sift.toml`. It guards a copied home directory or backup. It does not guard against someone who can read the running process's environment.
+A key beside what it protects protects nothing, so the key belongs in the environment, not in the home's `.env`. It guards a copied home directory or backup. It does not guard against someone who can read the running process's environment.
 
 ## Setting a key
 

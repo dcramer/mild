@@ -1,4 +1,4 @@
-import { type Config, loadConfig } from '../config.ts';
+import type { Config } from '../config.ts';
 import type { SignIn } from '../dashboard/controls.ts';
 import { browserSignInUrl, completeBrowserSignIn, hasClientSecrets, loadClientSecrets } from '../gmail/auth.ts';
 import { connectAccount, connectedAddresses, userOf } from '../store/accounts.ts';
@@ -8,8 +8,7 @@ import { signInRefusal } from './sign-in.ts';
 
 /** Google sign-in from the dashboard: the same step connects the Gmail account and signs the viewer in. */
 export function buildSignIn(config: Config, store: Store): SignIn {
-  // Read each time, so a change to sift.toml applies without a restart.
-  const allowed = () => loadConfig().settings.dashboardAllow;
+  const allowed = () => config.settings.dashboardAllow;
   return {
     hasClient: () => hasClientSecrets(config),
     url: (redirectUri, state, challenge) => browserSignInUrl(loadClientSecrets(config), { redirectUri, state, challenge }),

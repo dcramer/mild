@@ -131,7 +131,7 @@ export function nodeHost(config: Config, store: Store, ephemeral: Ephemeral, por
 
 /**
  * What the dashboard answers to on this machine: any name or address that is this machine, and the one
- * set in sift.toml; and where Google can sign someone in.
+ * given as SIFT_DASHBOARD_HOST; and where Google can sign someone in.
  */
 function dashboardAddresses(config: Config, port: number) {
   const host = config.settings.dashboardHost;
@@ -160,7 +160,7 @@ export async function serveDashboard(
           server.once('error', (error: NodeJS.ErrnoException) =>
             reject(
               error.code === 'EADDRINUSE'
-                ? new Error(`Port ${port} is already in use. Is sift already running? If not, change dashboard.port in ${config.settingsPath}.`)
+                ? new Error(`Port ${port} is already in use. Is sift already running? If not, set SIFT_DASHBOARD_PORT in ${config.envPath}.`)
                 : error,
             ),
           );

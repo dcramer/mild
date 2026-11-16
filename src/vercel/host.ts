@@ -75,7 +75,7 @@ async function open(): Promise<Sift> {
     store,
     ephemeral,
     sessionSecret: required('SIFT_SESSION_SECRET'),
-    // The deployment's own names, and a domain of the project's own given as dashboard.host.
+    // The deployment's own names, and a domain of the project's own given as SIFT_DASHBOARD_HOST.
     allowedHosts: [process.env['VERCEL_URL'], process.env['VERCEL_BRANCH_URL'], production, config.settings.dashboardHost].filter((name) => name !== undefined),
     signInAddresses: production ? [`https://${production}`] : [],
     log: (line) => process.stdout.write(`${line}\n`),

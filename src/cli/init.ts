@@ -1,6 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { type Config, type Settings, isAddress } from '../config.ts';
+import { type Config, type Variable, isAddress } from '../config.ts';
 import { type Ui, paint } from './ui.ts';
 
 /** Who may sign in to the user's Google app. Decides the last tasks of the Google setup. */
@@ -18,7 +17,8 @@ export interface SetupState {
 export interface InitDeps {
   config: Config;
   ui: Ui;
-  saveSettings(settings: Settings): void;
+  /** Set a setting in the home's `.env`, or take it out. */
+  saveSetting(variable: Variable, value: string | undefined): void;
   /** Save the key as SIFT_KEY where sift will read it, and use it from now on. Returns the file. Throws if it cannot be written. */
   saveKey(key: string): string;
   hasGoogleClient(): boolean;
@@ -97,7 +97,6 @@ export async function runInit(deps: InitDeps): Promise<void> {
   const { config, ui } = deps;
 
   ui.heading('setup', paint.path(config.home));
-  if (!existsSync(config.settingsPath)) deps.saveSettings(config.settings);
 
   const all = steps(deps);
   const accounts = await deps.connectedAccounts();
@@ -173,8 +172,8 @@ async function chooseLocation(deps: InitDeps): Promise<void> {
     { label: 'On this machine', value: false },
     { label: 'From another machine', hint: 'sift runs on a server', value: true },
   ]);
-  const { dashboardHost: _unused, ...settings } = config.settings;
-  deps.saveSettings(settings);
+  // Tailscale serves the dashboard from localhost, so it listens nowhere else.
+  deps.saveSetting('SIFT_DASHBOARD_HOST', undefined);
   deps.saveSetupState({ ...deps.setupState(), location: remote ? 'remote' : 'local' });
   if (!remote) return ui.ok(`Dashboard at ${paint.bold(dashboardAddress(deps))}`);
 
@@ -204,7 +203,7 @@ async function chooseLocation(deps: InitDeps): Promise<void> {
 
 /** Limit sign-in to listed Google accounts, or leave it to whoever signs in first. */
 async function chooseAllowed(deps: InitDeps): Promise<void> {
-  const { ui, config } = deps;
+  const { ui } = deps;
   ui.info('Signing in to the dashboard with Google connects that account. Without a list, the first account to sign in connects itself.');
   for (;;) {
     const entered = (await ui.text('Addresses allowed to sign in, separated by commas (Enter for no limit):'))
@@ -216,8 +215,7 @@ async function chooseAllowed(deps: InitDeps): Promise<void> {
       ui.fail(`${wrong} is not an email address.`);
       continue;
     }
-    const { dashboardAllow: _old, ...settings } = config.settings;
-    deps.saveSettings({ ...settings, ...(entered.length > 0 ? { dashboardAllow: entered } : {}) });
+    deps.saveSetting('SIFT_DASHBOARD_ALLOW', entered.length > 0 ? entered.join(',') : undefined);
     if (entered.length === 0) return ui.skip('No limit');
     ui.ok(`Only ${paint.bold(entered.join(', '))}`);
     const shut = (await deps.connectedAccounts()).filter((account) => !entered.includes(account.toLowerCase()));
