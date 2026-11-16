@@ -513,10 +513,13 @@ export const ManageState = z.object({
 });
 export type ManageState = z.infer<typeof ManageState>;
 
-/** GET /api/models: the models the viewer's sign-ins offer, and per provider the one to suggest first. */
+/** GET /api/models: the models the viewer's sign-ins offer. */
 export const Models = z.object({
   models: z.array(z.string()),
-  recommended: z.record(z.string(), z.string()),
+  /** Per provider, the few to offer before the full list; the first is the one to suggest. */
+  shortlist: z.record(z.string(), z.array(z.string())),
+  /** Per model, dollars for 1,000 messages at its catalog price, where the catalog has one. */
+  costs: z.record(z.string(), z.number()),
   /** A provider could not be reached. */
   error: z.string().optional(),
 });

@@ -88,7 +88,7 @@ beforeEach(async () => {
   await setModel(await dbOf(ALPHA), 'alpha-own-words/model');
 
   const controls: Controls = {
-    models: async () => ({ models: [], recommended: {} }),
+    models: async () => ({ models: [], shortlist: {}, costs: {} }),
     modelSignIns: async (db) => ({ choices: [], signedIn: [`signed-in-${await personOf(db)}`], pending: null }),
     signInChatGPT: async (db) => (calls.push(`chatgpt ${await personOf(db)}`), { code: 'C', url: 'https://auth.example/device', expiresAt: 1 }),
     finishChatGPT: async (db) => void calls.push(`finish ${await personOf(db)}`),

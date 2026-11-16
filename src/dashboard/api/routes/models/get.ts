@@ -9,9 +9,9 @@ export default read({
   // A provider that cannot be reached is said beside an empty list, not as a failed request.
   run: async ({ db, controls }) => {
     try {
-      return ok(controls ? await controls.models(db) : { models: [], recommended: {} });
+      return ok(controls ? await controls.models(db) : { models: [], shortlist: {}, costs: {} });
     } catch (error) {
-      return ok({ models: [], recommended: {}, error: error instanceof Error ? error.message : String(error) });
+      return ok({ models: [], shortlist: {}, costs: {}, error: error instanceof Error ? error.message : String(error) });
     }
   },
 });

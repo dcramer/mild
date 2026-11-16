@@ -7,14 +7,15 @@ import { createJudge } from '../src/model/judge.ts';
 import {
   finishChatGPTRedirect,
   modelChoices,
+  costPerThousand,
   offerModel,
   openModels,
   pollChatGPTDeviceCode,
-  recommendModel,
   resolveModel,
   saveApiKey,
   startChatGPTDeviceCode,
   startChatGPTRedirect,
+  shortlistModels,
 } from '../src/model/models.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts';
@@ -588,7 +589,7 @@ describe('Sign in with ChatGPT', () => {
     const asked = stubFetch(() => new Response(JSON.stringify({ error: { message: 'stubbed' } }), { status: 400 }));
     const models = openModels(signIns, 'redirect');
     const listed = (await models.getAvailable('chatgpt')).map((m) => m.id);
-    expect(recommendModel('chatgpt', listed)).toMatch(/luna/);
+    expect(shortlistModels('chatgpt', listed)[0]).toMatch(/luna/);
     await models.complete(resolveModel(models, `chatgpt/${listed[0]}`), { messages: [{ role: 'user', content: 'Synthetic.', timestamp: 0 }] });
     expect(asked[0]!.url).toBe('https://api.openai.com/v1/responses');
     expect(asked[0]!.headers.get('authorization')).toBe('Bearer synthetic-access');
@@ -730,28 +731,44 @@ describe('offerModel', () => {
     for (const id of ['anthropic/claude-haiku-5.5-batch', '~openai/gpt-luna-latest', 'anthropic/claude-opus-5', 'aion-labs/aion-3.0-mini'])
       expect(offerModel('vercel-ai-gateway', id), id).toBe(false);
     expect(offerModel('anthropic', 'claude-opus-5')).toBe(true);
-    expect(recommendModel('openrouter', ['anthropic/claude-haiku-4.5', 'anthropic/claude-haiku-5.5', 'openai/gpt-5-mini'])).toBe('anthropic/claude-haiku-5.5');
+    expect(shortlistModels('openrouter', ['anthropic/claude-haiku-4.5', 'anthropic/claude-haiku-5.5', 'openai/gpt-5-mini'])[0]).toBe(
+      'anthropic/claude-haiku-5.5',
+    );
   });
 });
 
-describe('recommendModel', () => {
-  it("picks the newest of the provider's small family, by version number", () => {
-    expect(recommendModel('openai', ['gpt-9', 'gpt-9-luna', 'gpt-10-luna', 'gpt-10'])).toBe('gpt-10-luna');
-    expect(recommendModel('openai-codex', ['luna-2.5', 'luna-2.10', 'sol-3'])).toBe('luna-2.10');
-    expect(recommendModel('anthropic', ['claude-3-5-haiku-20241022', 'claude-haiku-4-5-20251001', 'claude-opus-4-8'])).toBe('claude-haiku-4-5-20251001');
-    expect(recommendModel('google', ['gemini-2.5-flash', 'gemini-3-flash', 'gemini-3-pro'])).toBe('gemini-3-flash');
+describe('shortlistModels', () => {
+  it("offers the newest of each of the provider's families, cheapest family first", () => {
+    expect(shortlistModels('openai', ['gpt-9-sol', 'gpt-9-luna', 'gpt-10-luna', 'gpt-10', 'gpt-9.1-terra', 'gpt-9-terra'])).toEqual([
+      'gpt-10-luna',
+      'gpt-9.1-terra',
+      'gpt-9-sol',
+    ]);
+    expect(shortlistModels('openai-codex', ['luna-2.5', 'luna-2.10', 'sol-3'])).toEqual(['luna-2.10', 'sol-3']);
+    expect(shortlistModels('anthropic', ['claude-3-5-haiku-20241022', 'claude-haiku-4-5-20251001', 'claude-opus-4-8'])).toEqual([
+      'claude-haiku-4-5-20251001',
+      'claude-opus-4-8',
+    ]);
+    expect(shortlistModels('google', ['gemini-2.5-flash', 'gemini-3-flash', 'gemini-3-pro'])).toEqual(['gemini-3-flash', 'gemini-3-pro']);
   });
 
   it('prefers the plain name over a dated or variant one of the same version', () => {
-    expect(recommendModel('anthropic', ['claude-haiku-4-5-20251001', 'claude-haiku-4-5'])).toBe('claude-haiku-4-5');
-    expect(recommendModel('google', ['gemini-3-flash-lite', 'gemini-3-flash'])).toBe('gemini-3-flash');
-    expect(recommendModel('openai', ['gpt-9-luna-2026-03-01', 'gpt-9-luna'])).toBe('gpt-9-luna');
+    expect(shortlistModels('anthropic', ['claude-haiku-4-5-20251001', 'claude-haiku-4-5'])).toEqual(['claude-haiku-4-5']);
+    expect(shortlistModels('google', ['gemini-3-flash-lite', 'gemini-3-flash'])).toEqual(['gemini-3-flash']);
+    expect(shortlistModels('openai', ['gpt-9-luna-2026-03-01', 'gpt-9-luna'])).toEqual(['gpt-9-luna']);
   });
 
-  it('recommends nothing without a family member, for an unknown provider, or for a name that only contains the word', () => {
-    expect(recommendModel('openai', ['gpt-9', 'gpt-9-mini'])).toBeNull();
-    expect(recommendModel('example', ['luna-1'])).toBeNull();
-    expect(recommendModel('openai', ['lunar-1'])).toBeNull();
-    expect(recommendModel('openai', [])).toBeNull();
+  it('offers nothing without a family member, for an unknown provider, or for a name that only contains the word', () => {
+    expect(shortlistModels('openai', ['gpt-9', 'gpt-9-mini'])).toEqual([]);
+    expect(shortlistModels('example', ['luna-1'])).toEqual([]);
+    expect(shortlistModels('openai', ['lunar-1'])).toEqual([]);
+    expect(shortlistModels('openai', [])).toEqual([]);
+  });
+});
+
+describe('costPerThousand', () => {
+  it('prices 1,000 typical calls at the catalog rate per million tokens, and has nothing to say without a price', () => {
+    expect(costPerThousand({ input: 1, output: 5 })).toBeCloseTo(3.75);
+    expect(costPerThousand({ input: 0, output: 0 })).toBeNull();
   });
 });

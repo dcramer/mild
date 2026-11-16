@@ -8,7 +8,7 @@ import type { Sql } from '../store/sql.ts';
  */
 export interface Controls {
   /** The models this person's sign-ins offer, and for each provider the one to suggest first. */
-  models(db: Sql): Promise<{ models: string[]; recommended: Record<string, string> }>;
+  models(db: Sql): Promise<{ models: string[]; shortlist: Record<string, string[]>; costs: Record<string, number> }>;
   /** The ways to reach a model, which of them this person has signed in to, and a ChatGPT sign-in under way. */
   modelSignIns(db: Sql): Promise<ModelSignIns>;
   /**

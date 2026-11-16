@@ -42,16 +42,16 @@ describe('what the API accepts and sends', () => {
   });
 
   it('sends only the fields a reply names', async () => {
-    const { call } = await startDashboard(people(store), { controls: answering({ models: ['p/small'], recommended: {}, token: 'sk-secret' }) });
+    const { call } = await startDashboard(people(store), { controls: answering({ models: ['p/small'], shortlist: {}, costs: {}, token: 'sk-secret' }) });
     const { status, body, text } = await call('GET', '/api/models');
     expect(status).toBe(200);
-    expect(body).toEqual({ models: ['p/small'], recommended: {} });
+    expect(body).toEqual({ models: ['p/small'], shortlist: {}, costs: {} });
     expect(text).not.toContain('sk-secret');
   });
 
   it('sends nothing of a reply that does not match what the route promised', async () => {
     const { call } = await startDashboard(people(store), {
-      controls: answering({ models: 'p/small', recommended: {} }, { code: 'all of them', url: 'not an address', expiresAt: 'soon' }),
+      controls: answering({ models: 'p/small', shortlist: {}, costs: {} }, { code: 'all of them', url: 'not an address', expiresAt: 'soon' }),
     });
     const read = await call('GET', '/api/models');
     expect(read.status).toBe(500);

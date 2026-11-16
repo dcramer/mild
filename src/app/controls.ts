@@ -13,7 +13,7 @@ import { pacer } from '../gmail/quota.ts';
 import { chatgptPending, checkChatGPT, finishChatGPT, forgetChatGPT, startChatGPT } from './chatgpt.ts';
 import type { SignIns } from '../model/credentials.ts';
 import { createJudge } from '../model/judge.ts';
-import { modelChoices, offerModel, openModels, recommendModel, resolveModel, saveApiKey } from '../model/models.ts';
+import { costPerThousand, modelChoices, offerModel, openModels, resolveModel, saveApiKey, shortlistModels } from '../model/models.ts';
 import { listAccounts, listUsers, personOf } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
 import { credentials } from '../store/credentials.ts';
@@ -70,18 +70,21 @@ export async function buildControls(
   const passNow = async (db: Sql) => live.kick?.(await personOf(db));
   return {
     models: async (db) => {
-      const available = (await (await modelsFor(config, live.ephemeral, db)).getAvailable())
-        .filter((m) => offerModel(m.provider, m.id))
-        .map((m) => ({ provider: m.provider, id: m.id }));
-      const recommended: Record<string, string> = {};
+      const available = (await (await modelsFor(config, live.ephemeral, db)).getAvailable()).filter((m) => offerModel(m.provider, m.id));
+      const shortlist: Record<string, string[]> = {};
       for (const provider of new Set(available.map((m) => m.provider))) {
-        const id = recommendModel(
+        const ids = shortlistModels(
           provider,
           available.filter((m) => m.provider === provider).map((m) => m.id),
         );
-        if (id) recommended[provider] = `${provider}/${id}`;
+        if (ids.length > 0) shortlist[provider] = ids.map((id) => `${provider}/${id}`);
       }
-      return { models: available.map((m) => `${m.provider}/${m.id}`), recommended };
+      const costs: Record<string, number> = {};
+      for (const m of available) {
+        const cost = costPerThousand(m.cost);
+        if (cost !== null) costs[`${m.provider}/${m.id}`] = cost;
+      }
+      return { models: available.map((m) => `${m.provider}/${m.id}`), shortlist, costs };
     },
     modelSignIns: async (db) => {
       const person = await personOf(db);

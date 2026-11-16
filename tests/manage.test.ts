@@ -25,7 +25,7 @@ let store: Store;
 let calls: string[];
 
 const controls: Controls = {
-  models: async () => ({ models: ['p/small', 'p/large'], recommended: { p: 'p/small' } }),
+  models: async () => ({ models: ['p/small', 'p/large'], shortlist: { p: ['p/small', 'p/large'] }, costs: { 'p/small': 0.4 } }),
   modelSignIns: async () => ({ choices: [{ provider: 'openai-codex', label: 'ChatGPT', how: 'device-code' }], signedIn: ['openai-codex'], pending: null }),
   signInChatGPT: async () => (calls.push('chatgpt'), { code: 'ABCD-1234', url: 'https://auth.example/device', expiresAt: 900 }),
   finishChatGPT: async (_db, address) => void calls.push(`finish ${address}`),
@@ -77,7 +77,11 @@ describe('managing sift from the dashboard', () => {
     expect((body['labels'] as Record<string, { id: string; gmailLabel: string; rules: number }[]>)[ACCOUNT]).toContainEqual(
       expect.objectContaining({ id: 'newsletter', gmailLabel: 'sift/newsletters', rules: 0, messages: 0, record: { reviewed: 0, right: 0 } }),
     );
-    expect((await call('GET', '/api/models')).body).toEqual({ models: ['p/small', 'p/large'], recommended: { p: 'p/small' } });
+    expect((await call('GET', '/api/models')).body).toEqual({
+      models: ['p/small', 'p/large'],
+      shortlist: { p: ['p/small', 'p/large'] },
+      costs: { 'p/small': 0.4 },
+    });
   });
 
   it("turns sift on and off for the person's own mail, and starts a pass each time", async () => {

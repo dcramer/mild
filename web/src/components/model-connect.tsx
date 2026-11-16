@@ -1,7 +1,8 @@
-import { ArrowUpRightIcon, ChevronRightIcon } from 'lucide-react';
+import { ChevronRightIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
-import { Button, Copyable, Failure, Field, Form, Input, Select, Sub, Table, Td, TextLink, Th, Tr } from '@/system';
+import { money } from '@/lib/format.ts';
+import { Button, ChoiceGroup, Copyable, Disclosure, Fact, Facts, Failure, Form, Input, Select, Sub, Table, Td, TextLink, Th, Tr } from '@/system';
 
 type Choice = ManageState['model']['choices'][number];
 
@@ -55,23 +56,51 @@ export function ProviderList({ choices, inUse, onChoose }: { choices: readonly C
   );
 }
 
+/** Where to make an API key, for the providers whose page for it is known. */
+const KEY_PAGE: Record<string, string> = {
+  openai: 'https://platform.openai.com/api-keys',
+  anthropic: 'https://console.anthropic.com/settings/keys',
+  openrouter: 'https://openrouter.ai/settings/keys',
+};
+
+/** What classifying with a model costs: a ChatGPT plan's quota, or about so much per 1,000 messages. Null when the catalog has no price. */
+export function costLine(choice: Choice | undefined, costs: Record<string, number>, model: string): string | null {
+  if (choice && choice.how !== 'key') return `Uses your ${choice.label} quota.`;
+  const cost = costs[model];
+  return cost === undefined ? null : `About ${money(cost)} per 1,000 messages.`;
+}
+
+/** The press a step ends with: a link out, or something done here. */
+export interface Next {
+  label: string;
+  href?: string;
+  busy?: boolean;
+  disabled?: boolean;
+  onPress?: () => void;
+}
+
 /**
- * Signing in to one provider and choosing its model. Nothing about what classifies mail changes here:
- * `ready` is the model to switch to.
+ * Signing in to one provider and choosing its model, a step at a time: `title` says what to do now, `body`
+ * holds it, and `next` is the press that does it, until the provider is connected and `next` is null.
+ * Nothing about what classifies mail changes here: `ready` is the model to switch to.
  */
 export function useProviderConnect(choice: Choice, model: ManageState['model'], reload: () => void) {
+  const name = providerName(choice, choice.provider);
   const signedIn = model.signedIn.includes(choice.provider);
   const listed = useLoaded(`models ${model.signedIn.join(' ')}`, (signal) => api.models(signal), 300_000);
   const mine = (listed.data?.models ?? []).filter((m) => m.startsWith(`${choice.provider}/`));
-  const recommended = listed.data?.recommended[choice.provider] ?? mine[0] ?? '';
+  const shortlist = listed.data?.shortlist[choice.provider] ?? [];
+  const costs = listed.data?.costs ?? {};
   const [picked, setPicked] = useState<string | null>(null);
-  const chosen = picked ?? recommended;
+  const chosen = picked ?? shortlist[0] ?? mine[0] ?? '';
+  const [changing, setChanging] = useState(false);
   const [key, setKey] = useState('');
   const [address, setAddress] = useState('');
   const sign = useAction();
   const pending = model.pending;
   const started = pending && 'url' in pending ? pending : null;
   const code = started?.code === undefined ? null : { ...started, code: started.code };
+  const failed = sign.error ?? (pending && 'error' in pending ? pending.error : null);
   const chatgpt = choice.how !== 'key';
   // ChatGPT has only the one way in, so choosing it starts it: there is nothing else to press first.
   const asked = useRef(false);
@@ -87,135 +116,158 @@ export function useProviderConnect(choice: Choice, model: ManageState['model'], 
     const timer = setInterval(reload, 3000);
     return () => clearInterval(timer);
   }, [waiting, reload]);
+  const short = (m: string) => m.slice(choice.provider.length + 1);
 
-  const fields = (
-    <Form onSubmit={() => {}}>
-      {choice.how === 'redirect' ? (
-        <Field
-          label="Account"
-          hint={
-            signedIn ? undefined : started && !sign.error ? (
-              'After signing in, ChatGPT sends you to a page that will not load. Copy its address from the address bar and paste it here.'
-            ) : (
-              <Failure>{sign.error ?? (pending && 'error' in pending ? pending.error : null)}</Failure>
-            )
-          }
-        >
-          {signedIn ? (
-            <span>Signed in</span>
-          ) : started ? (
-            <>
-              <Button href={started.url} target="_blank" rel="noreferrer">
-                Open ChatGPT
-                <ArrowUpRightIcon aria-hidden />
-              </Button>
-              <Input
-                autoComplete="off"
-                aria-label="Address of the page ChatGPT sent you to"
-                placeholder="http://127.0.0.1:1455/auth/callback?code=…"
-                className="min-w-48 flex-1 font-mono"
-                value={address}
-                onChange={(event) => setAddress(event.target.value)}
-              />
-              <Button
-                busy={sign.busy}
-                disabled={address.trim() === ''}
-                onClick={() =>
-                  sign.run(
-                    () => api.finishChatGPT(address),
-                    () => (setAddress(''), reload()),
-                  )
-                }
-              >
-                Finish
-              </Button>
-            </>
-          ) : sign.busy || !(sign.error || (pending && 'error' in pending)) ? (
-            <span className="text-muted-foreground">Starting…</span>
-          ) : (
-            <Button onClick={() => (setAddress(''), sign.run(() => api.signInChatGPT(), reload))}>Start again</Button>
-          )}
-        </Field>
-      ) : choice.how === 'device-code' ? (
-        <Field
-          label="Account"
-          hint={
-            signedIn ? undefined : code ? (
-              <>
-                Enter it at{' '}
-                <TextLink href={code.url} away>
-                  {new URL(code.url).host}
-                </TextLink>
-                , signed in to ChatGPT. This page carries on by itself once you have.
-              </>
-            ) : (
-              <Failure>{sign.error ?? (pending && 'error' in pending ? pending.error : null)}</Failure>
-            )
-          }
-        >
-          {signedIn ? (
-            <span>Signed in</span>
-          ) : code ? (
-            <>
-              <Copyable value={code.code} label="the code" />
-              <Button href={code.url} target="_blank" rel="noreferrer" onClick={() => void navigator.clipboard?.writeText(code.code).catch(() => {})}>
-                Copy and open
-                <ArrowUpRightIcon aria-hidden />
-              </Button>
-            </>
-          ) : sign.busy || !(sign.error || (pending && 'error' in pending)) ? (
-            <span className="text-muted-foreground">Getting a code…</span>
-          ) : (
-            <Button onClick={() => sign.run(() => api.signInChatGPT(), reload)}>Get a new code</Button>
-          )}
-        </Field>
+  if (signedIn) {
+    const cost = costLine(choice, costs, chosen);
+    const per = (m: string) => (costs[m] === undefined ? null : `${money(costs[m])} per 1,000 messages`);
+    const notes = Object.fromEntries(
+      shortlist.map((m, index) => {
+        const price = per(m);
+        if (index === 0) return [m, chatgpt || !price ? 'Recommended' : `Recommended · about ${price}`];
+        return [m, chatgpt ? 'Uses more of your quota' : price ? `About ${price}` : ''];
+      }),
+    );
+    const every = <Select label="Model" value={chosen} options={mine.map((m) => [m, short(m)] as const)} onChange={setPicked} />;
+    const body =
+      chosen === '' ? (
+        listed.loading ? (
+          <p className="text-muted-foreground">Listing models…</p>
+        ) : (
+          <Failure>{listed.data?.error ?? `${name} offers no models Sift can use.`}</Failure>
+        )
+      ) : changing ? (
+        <>
+          {shortlist.length > 0 ? (
+            <ChoiceGroup
+              label="Model"
+              value={chosen}
+              options={shortlist.map((m) => [m, short(m)] as const)}
+              notes={notes}
+              onChange={(m) => m && setPicked(m)}
+            />
+          ) : null}
+          {mine.length > shortlist.length ? shortlist.length > 0 ? <Disclosure summary={`Every model (${mine.length})`}>{every}</Disclosure> : every : null}
+        </>
       ) : (
-        <Field label="API key" hint={signedIn ? 'Encrypted with your own data.' : <Failure>{sign.error}</Failure>}>
-          {signedIn ? (
-            <span>Saved</span>
-          ) : (
-            <>
-              <Input
-                type="password"
-                autoComplete="off"
-                autoFocus
-                aria-label="API key"
-                placeholder="Paste the key"
-                className="min-w-48 flex-1 font-mono"
-                value={key}
-                onChange={(event) => setKey(event.target.value)}
-              />
-              <Button
-                busy={sign.busy}
-                disabled={key.trim() === ''}
-                onClick={() =>
-                  sign.run(
-                    () => api.saveModelKey(choice.provider, key),
-                    () => (setKey(''), reload()),
-                  )
-                }
-              >
-                Save
-              </Button>
-            </>
-          )}
-        </Field>
-      )}
-      {signedIn ? (
-        <Field label="Model" hint="A small one is usually enough.">
-          <Select
-            label="Model"
-            value={chosen}
-            options={
-              mine.length === 0
-                ? [['', listed.loading ? 'Listing models…' : 'No models'] as const]
-                : mine.map((m) => [m, m.slice(choice.provider.length + 1)] as const)
-            }
-            onChange={setPicked}
-          />
-        </Field>
-      ) : null}
-    </Form>
-  );
-  return { fields, ready: signedIn && chosen !== '' ? chosen : null };
+        <Facts>
+          <Fact term="Model">
+            <span className="flex flex-wrap items-baseline gap-x-2">
+              {short(chosen)}
+              {mine.length > 1 ? (
+                // Pulled into the line's height, so the value stays level with its term.
+                <Button variant="quiet" className="-my-2" onClick={() => setChanging(true)}>
+                  Change
+                </Button>
+              ) : null}
+            </span>
+          </Fact>
+          {cost ? <Fact term="Cost">{cost}</Fact> : null}
+        </Facts>
+      );
+    return { title: `${name} is connected.`, body, next: null, ready: chosen === '' ? null : chosen };
+  }
+
+  if (choice.how === 'key') {
+    const save = () =>
+      key.trim() !== '' &&
+      sign.run(
+        () => api.saveModelKey(choice.provider, key),
+        () => (setKey(''), reload()),
+      );
+    const page = KEY_PAGE[choice.provider];
+    return {
+      title: `Paste your ${name} key.`,
+      body: (
+        <>
+          <Form onSubmit={save}>
+            <Input
+              type="password"
+              autoComplete="off"
+              autoFocus
+              aria-label="API key"
+              className="w-full font-mono"
+              value={key}
+              onChange={(event) => setKey(event.target.value)}
+            />
+          </Form>
+          {page ? (
+            <p className="text-sm text-muted-foreground">
+              No key yet? Make one at{' '}
+              <TextLink href={page} away>
+                {new URL(page).host}
+              </TextLink>
+              .
+            </p>
+          ) : null}
+          <Failure>{sign.error}</Failure>
+        </>
+      ),
+      next: { label: 'Continue', busy: sign.busy, disabled: key.trim() === '', onPress: save },
+      ready: null,
+    };
+  }
+
+  const getting = sign.busy || !failed;
+  if (choice.how === 'device-code')
+    return {
+      title: `Enter this code at ${name}.`,
+      body: code ? (
+        <>
+          <Copyable value={code.code} label="the code" />
+          <p className="text-sm text-muted-foreground">This page moves on once you have.</p>
+        </>
+      ) : getting ? (
+        <p className="text-muted-foreground">Getting a code…</p>
+      ) : (
+        <Failure>{failed}</Failure>
+      ),
+      next: code
+        ? { label: 'Copy and open', href: code.url, onPress: () => void navigator.clipboard?.writeText(code.code).catch(() => {}) }
+        : getting
+          ? { label: 'Copy and open', disabled: true }
+          : { label: 'Get a new code', onPress: () => sign.run(() => api.signInChatGPT(), reload) },
+      ready: null,
+    };
+
+  const finish = () =>
+    address.trim() !== '' &&
+    sign.run(
+      () => api.finishChatGPT(address),
+      () => (setAddress(''), reload()),
+    );
+  return {
+    title: `Sign in to ${name}.`,
+    body:
+      started && !sign.error ? (
+        <>
+          <p className="text-sm text-muted-foreground">
+            After signing in, {name} sends you to a page that will not load. Copy its address from the address bar and paste it here.
+          </p>
+          <Form onSubmit={finish}>
+            <Input
+              autoComplete="off"
+              aria-label={`Address of the page ${name} sent you to`}
+              placeholder="http://127.0.0.1:1455/auth/callback?code=…"
+              className="w-full font-mono"
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+            />
+          </Form>
+        </>
+      ) : getting ? (
+        <p className="text-muted-foreground">Starting…</p>
+      ) : (
+        <Failure>{failed}</Failure>
+      ),
+    next:
+      started && !sign.error
+        ? address.trim() === ''
+          ? { label: `Open ${name}`, href: started.url }
+          : { label: 'Finish', busy: sign.busy, onPress: finish }
+        : getting
+          ? { label: `Open ${name}`, disabled: true }
+          : { label: 'Start again', onPress: () => (setAddress(''), sign.run(() => api.signInChatGPT(), reload)) },
+    ready: null,
+  };
 }

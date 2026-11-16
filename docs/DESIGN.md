@@ -29,7 +29,7 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Button` | `mark`: what the screen is waiting on, one per screen at most, never down a list. `ink`: what finishes a dialog or form. `plain`: a page's own action (adding to its list),  and anything else said once. `quiet`: repeated down a list, firmer when its row is pointed at, and ways out. With `href` it is a link. `busy` while a press is being acted on. |
 | `ConfirmButton` | A press that cannot be taken back (removing a rule, turning Sift on). It asks in place, with the same words on the button that does it. Down a list it is an `icon` (a trash can for removing), and the question covers the row from the right rather than widening its column. |
 | `Select`, `Input`, `TextArea`, `Check` | Controls. `Select` is for a short list; `icons` puts an icon before a choice (an action's, from `ActionIcon`), in the list and once chosen. |
-| `ChoiceGroup` | A few choices seen at once, one on: what a message is, where a sender stands. `numbered` shows the keys that pick them; `clearable` when none is a choice too. |
+| `ChoiceGroup` | A few choices seen at once, one on: what a message is, where a sender stands. `numbered` shows the keys that pick them; `clearable` when none is a choice too. With `notes` they are rows, each with a quieter line saying what sets it apart and a tick on the one that is on: a model and what it costs. |
 | `Field`, `Form` | A form is a column of fields with what finishes it last. A field is its label, its controls, what follows from the answer (`hint`) and what is wrong (`error`). `inline` puts the label beside the controls, for a short form in a narrow column. |
 | `Masthead` | The top of every screen: the name, the sections (the current one underlined with the highlighter), a `Notice` when there is one, when Sift last synced, and who is signed in, as an `Avatar` that opens a `Menu`. No bar. |
 | `Notice` | A state of Sift itself, true on every screen, in the masthead: Sift cannot be reached (plain ink, a pulse: it mends itself), a sign-in has expired (`look`, with a link: the reader mends it). |
@@ -82,6 +82,7 @@ On a phone a row keeps only what identifies it and what it is; figures, dates an
 | `Toast` | Full width, 80px above the bottom so a panel's Previous and Next stay pressable; its presses take a row of their own. |
 | `Menu` | Opens under its button, kept inside the screen, with rows 44px tall on a touch screen. The masthead's own is not shown on a narrow screen: its panel lists the same things. |
 | `Field inline` | The label goes above the controls. |
+| `ChoiceGroup notes` | Rows already: a note wraps under its name. |
 | `Facts` | Each term goes above its value. |
 | `MailFrame` | Full width of the panel; a message wider than that (most are 600px) scrolls sideways inside the frame, never the page. |
 | `Panel`, `Dialog` | Cover the screen. |

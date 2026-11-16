@@ -1,6 +1,6 @@
-import { ArrowRightIcon } from 'lucide-react';
+import { ArrowRightIcon, ArrowUpRightIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
+import { type Next, ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
 import { plural } from '@/lib/format.ts';
 import { Button, Entry, Failure, Field, Form, Select, useToast } from '@/system';
@@ -84,17 +84,15 @@ function Provider({
   onBack: () => void;
   onDone: () => void;
 }) {
-  const { fields, ready } = useProviderConnect(choice, state.model, reload);
+  const step = useProviderConnect(choice, state.model, reload);
   const { busy, error, run } = useAction();
+  const ready = step.ready;
   return (
     <>
-      <p className="statement">{providerName(choice, choice.provider)}</p>
-      {fields}
+      <p className="statement">{step.title}</p>
+      {step.body}
       <Onward
-        label="Continue"
-        busy={busy}
-        disabled={!ready}
-        onPress={() => ready && run(() => api.setModel(ready), onDone)}
+        next={step.next ?? { label: 'Continue', busy, disabled: !ready, onPress: () => ready && run(() => api.setModel(ready), onDone) }}
         back={{ label: 'Back', onPress: onBack }}
       />
       <Failure>{error}</Failure>
@@ -118,15 +116,16 @@ function Teach({ state, onDone }: { state: ManageState; onDone: () => void }) {
         </Field>
       </Form>
       <Onward
-        label="Pull in mail"
-        busy={busy}
-        onPress={() =>
-          run(async () => {
-            await api.backfill(Number(days));
-            toast(`Pulling in the last ${plural(Number(days), 'day')}`);
-            onDone();
-          })
-        }
+        next={{
+          label: 'Pull in mail',
+          busy,
+          onPress: () =>
+            run(async () => {
+              await api.backfill(Number(days));
+              toast(`Pulling in the last ${plural(Number(days), 'day')}`);
+              onDone();
+            }),
+        }}
         back={{ label: 'New mail only', onPress: onDone }}
       />
       <Failure>{error}</Failure>
@@ -135,24 +134,15 @@ function Teach({ state, onDone }: { state: ManageState; onDone: () => void }) {
 }
 
 /** How a step ends: the one thing to press, and the other way out. */
-function Onward({
-  label,
-  busy,
-  disabled = false,
-  onPress,
-  back,
-}: {
-  label: string;
-  busy: boolean;
-  disabled?: boolean;
-  onPress: () => void;
-  back: { label: string; onPress: () => void };
-}) {
+function Onward({ next, back }: { next: Next; back: { label: string; onPress: () => void } }) {
+  const disabled = next.disabled ?? false;
+  // A link while it can be followed; a disabled button until then, since a link cannot be disabled.
+  const link = next.href !== undefined && !disabled ? { href: next.href, target: '_blank', rel: 'noreferrer' } : { disabled };
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button variant="mark" size="lg" busy={busy} disabled={disabled} onClick={onPress}>
-        {label}
-        <ArrowRightIcon aria-hidden />
+      <Button variant="mark" size="lg" busy={next.busy ?? false} onClick={next.onPress} {...link}>
+        {next.label}
+        {next.href ? <ArrowUpRightIcon aria-hidden /> : <ArrowRightIcon aria-hidden />}
       </Button>
       <Button variant="quiet" size="lg" onClick={back.onPress}>
         {back.label}

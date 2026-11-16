@@ -122,6 +122,7 @@ export function SystemView() {
   const [choice, setChoice] = useState<(typeof ACTIONS)[number][0]>('archive');
   const [label, setLabel] = useState<string | null>('newsletter');
   const [standing, setStanding] = useState<string | null>(null);
+  const [model, setModel] = useState<'small' | 'medium' | 'large'>('small');
   const [checked, setChecked] = useState(false);
   const [dialog, setDialog] = useState(false);
   const [panel, setPanel] = useState(false);
@@ -324,6 +325,25 @@ export function SystemView() {
               onChange={setStanding}
               clearable
             />
+          </Row>
+          <Row label="choice rows" note="With notes, each choice is a row saying what sets it apart, ticked when on.">
+            <div className="w-full max-w-md">
+              <ChoiceGroup
+                label="Model"
+                value={model}
+                options={[
+                  ['small', 'example-small'],
+                  ['medium', 'example-medium'],
+                  ['large', 'example-large'],
+                ]}
+                notes={{
+                  small: 'Recommended · about $0.38 per 1,000 messages',
+                  medium: 'About $3.75 per 1,000 messages',
+                  large: 'About $15.00 per 1,000 messages',
+                }}
+                onChange={(next) => next && setModel(next)}
+              />
+            </div>
           </Row>
           <Row label="input">
             <Input aria-label="Example" placeholder="example.com" className="w-56" />

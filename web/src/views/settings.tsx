@@ -1,7 +1,7 @@
 import { Trash2Icon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
-import { ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
+import { ProviderList, costLine, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { type ManageState, type Removed, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, money, plural } from '@/lib/format.ts';
 import {
@@ -118,7 +118,8 @@ function Switch({
   onBack: () => void;
   onClose: () => void;
 }) {
-  const { fields, ready } = useProviderConnect(choice, state.model, reload);
+  const step = useProviderConnect(choice, state.model, reload);
+  const { ready, next } = step;
   const { busy, error, run } = useAction();
   const toast = useToast();
   const old = state.model.chosen?.split('/')[0] ?? null;
@@ -137,13 +138,24 @@ function Switch({
     <Dialog
       open
       onClose={onClose}
-      title={name}
+      title={step.title}
       subtitle={subtitle}
       footer={
         <>
-          <Button variant="ink" busy={busy} disabled={!ready} onClick={doSwitch}>
-            Switch to {name}
-          </Button>
+          {next ? (
+            <Button
+              variant="ink"
+              busy={next.busy ?? false}
+              onClick={next.onPress}
+              {...(next.href !== undefined && !next.disabled ? { href: next.href, target: '_blank', rel: 'noreferrer' } : { disabled: next.disabled ?? false })}
+            >
+              {next.label}
+            </Button>
+          ) : (
+            <Button variant="ink" busy={busy} disabled={!ready} onClick={doSwitch}>
+              Switch to {name}
+            </Button>
+          )}
           <Button variant="quiet" onClick={onBack}>
             Back
           </Button>
@@ -151,7 +163,7 @@ function Switch({
         </>
       }
     >
-      {fields}
+      {step.body}
     </Dialog>
   );
 }
@@ -192,7 +204,7 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
         <SettingRow title={providerName(choice, provider)} note={choice?.how === 'key' ? 'Key saved.' : 'Signed in.'}>
           <Button onClick={() => setChanging(true)}>Change provider</Button>
         </SettingRow>
-        <SettingRow title="Model" note="A small one is usually enough.">
+        <SettingRow title="Model" note={costLine(choice, models.data?.costs ?? {}, chosen)}>
           <Select
             label="Model"
             value={chosen}
