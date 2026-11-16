@@ -57,6 +57,9 @@ function fakeApi(fake: Fake): GmailApi & { calls: string[] } {
     async getContent() {
       return null;
     },
+    async getThread() {
+      return null;
+    },
     async getRaw() {
       return null;
     },

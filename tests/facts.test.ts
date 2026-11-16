@@ -3,7 +3,8 @@ import { messageDetail } from '../src/dashboard/queries.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { openDb } from '../src/store/db.ts';
 import { storedFacts } from '../src/store/messages.ts';
-import { deriveFacts, matchesFacts } from '../src/triage/facts.ts';
+import { gatherEvidence } from '../src/daemon/evidence.ts';
+import { deriveFacts, describeFacts, matchesFacts, threadFacts } from '../src/triage/facts.ts';
 import { facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -122,5 +123,70 @@ describe('matchesFacts', () => {
     expect(matchesFacts({}, known)).toBe(false);
     expect(matchesFacts({ trackingPixel: false }, known)).toBe(false);
     expect(matchesFacts({ trackingPixel: true }, { ...known, trackingPixel: true })).toBe(true);
+  });
+});
+
+describe('thread context', () => {
+  const thread = [
+    { id: 'first', labelIds: ['INBOX'] },
+    { id: 'mine', labelIds: ['SENT'] },
+    { id: 'reply', labelIds: ['INBOX', 'UNREAD'] },
+    { id: 'later', labelIds: ['SENT'] },
+  ];
+
+  it('counts earlier messages and sees whether the owner sent one of them', () => {
+    expect(threadFacts(thread, 'reply')).toEqual({ earlierInThread: 2, ownerInThread: true });
+    expect(threadFacts(thread, 'mine')).toEqual({ earlierInThread: 1, ownerInThread: false });
+    expect(threadFacts(thread, 'elsewhere')).toBeNull();
+  });
+
+  const setup = (headers: Record<string, string>) => {
+    const db = openDb(':memory:');
+    connectAccount(db, ACCOUNT, '1', 0);
+    const message = facts({ accountId: ACCOUNT, messageId: 'reply', threadId: 't9', headers });
+    recordSync(db, ACCOUNT, [message], '2');
+    const asked: string[] = [];
+    const sources = (getThread: (id: string) => Promise<typeof thread | null>) => ({
+      db,
+      api: { getContent: async () => null, getThread: async (id: string) => (asked.push(id), getThread(id)) },
+      mailbox: { hasSentTo: async () => false },
+    });
+    return { db, message, asked, sources };
+  };
+
+  it("reads a reply's thread for the model, records it, and reads nothing for mail that is not a reply", async () => {
+    const reply = setup({ 'in-reply-to': '<mine@example.org>' });
+    const evidence = await gatherEvidence(
+      reply.sources(async () => thread),
+      reply.message,
+    );
+    expect(reply.asked).toEqual(['t9']);
+    expect(evidence.known).toMatchObject({ earlierInThread: 2, ownerInThread: true });
+    expect(storedFacts(reply.db, ACCOUNT, 'reply')).toMatchObject({ earlierInThread: 2, ownerInThread: true });
+    expect(describeFacts(evidence.known)).toEqual(expect.arrayContaining(['Earlier messages in its thread: 2', 'Owner has written in its thread: yes']));
+
+    const fresh = setup({});
+    const alone = await gatherEvidence(
+      fresh.sources(async () => thread),
+      fresh.message,
+    );
+    expect(fresh.asked).toEqual([]);
+    expect(alone.known).not.toHaveProperty('ownerInThread');
+  });
+
+  it('leaves the thread unknown when it cannot be read', async () => {
+    const reply = setup({ references: '<mine@example.org>' });
+    const failed = await gatherEvidence(
+      reply.sources(async () => {
+        throw new Error('network');
+      }),
+      reply.message,
+    );
+    expect(failed.known).not.toHaveProperty('ownerInThread');
+    const gone = await gatherEvidence(
+      reply.sources(async () => null),
+      reply.message,
+    );
+    expect(gone.known).not.toHaveProperty('earlierInThread');
   });
 });

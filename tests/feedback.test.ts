@@ -178,7 +178,7 @@ describe('teaching', () => {
     const model = {
       judge: async () => (modelCalls++, null),
       guidelines: '',
-      sources: { api: { getContent: async () => null }, mailbox: { hasSentTo: async () => false } },
+      sources: { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } },
     };
     await triageAccount({ db, mailbox: null, model }, listAccounts(db)[0]!);
     expect(db.prepare(`SELECT stage, disposition, label_id FROM decisions WHERE message_id = 'later'`).get()).toEqual({

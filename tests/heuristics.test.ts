@@ -106,6 +106,7 @@ describe('heuristics in the cascade', () => {
       getMetadata: async () => raw,
       getBodyText: async () => null,
       getContent: async () => null,
+      getThread: async () => null,
       getRaw: async () => null,
     };
     const options = (heuristics: boolean): RunOptions => ({ act: false, heuristics, connect: () => ({ api, mailbox }), log: () => {} });

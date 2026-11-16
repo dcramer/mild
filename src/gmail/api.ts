@@ -75,6 +75,8 @@ export interface GmailApi {
   getBodyText(messageId: string): Promise<string | null>;
   /** The same text with the facts only the whole message shows (attachments, tracking); null when the message no longer exists. Does not mark it read. */
   getContent(messageId: string): Promise<MessageContent | null>;
+  /** A thread's messages, oldest first, with their labels and nothing else. Null when the thread no longer exists. */
+  getThread(threadId: string): Promise<{ id: string; labelIds: string[] }[] | null>;
   /** The whole message as received (RFC 822); null when it no longer exists. Does not mark it read. */
   getRaw(messageId: string): Promise<Buffer | null>;
 }
@@ -132,6 +134,19 @@ export function createGmailApi(auth: OAuth2Client): GmailApi {
       try {
         const { data } = await client.users.messages.get({ userId, id: messageId, format: 'full' });
         return readContent(data.payload);
+      } catch (error) {
+        if (isNotFound(error)) return null;
+        throw error;
+      }
+    },
+
+    async getThread(threadId) {
+      try {
+        const { data } = await client.users.threads.get({ userId, id: threadId, format: 'minimal' });
+        return (data.messages ?? [])
+          .filter((m) => typeof m.id === 'string')
+          .toSorted((a, b) => Number(a.internalDate ?? 0) - Number(b.internalDate ?? 0))
+          .map((m) => ({ id: m.id as string, labelIds: m.labelIds ?? [] }));
       } catch (error) {
         if (isNotFound(error)) return null;
         throw error;

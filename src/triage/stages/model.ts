@@ -70,6 +70,16 @@ export function modelStage(deps: ModelStageDeps): Stage {
         return { ...base, disposition: 'review', labelId: label.id, gmailLabel: label.gmailLabel, reason: `${label.name}, but ${why}: ${verdict.reason}` };
       }
 
+      // Nor is a reply in a conversation the owner has taken part in, whoever sent it.
+      if (hides && evidence.known.ownerInThread)
+        return {
+          ...base,
+          disposition: 'review',
+          labelId: label.id,
+          gmailLabel: label.gmailLabel,
+          reason: `${label.name}, but you have written in this thread: ${verdict.reason}`,
+        };
+
       return { ...base, ...outcome, reason: `${label.name}: ${verdict.reason}` };
     },
   };

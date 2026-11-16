@@ -47,6 +47,7 @@ function api(): GmailApi {
     searchInbox: async () => ({ ids: [] }),
     getMetadata: async (id) => inbox.find((m) => m.id === id) ?? null,
     getBodyText: async (id) => bodies.get(id) ?? null,
+    getThread: async () => null,
     getContent: async (id) => (bodies.has(id) ? { text: bodies.get(id)!, facts: { hasAttachments: false } } : null),
     getRaw: async (id) => (bodies.has(id) ? Buffer.from(`Subject: raw ${id}\r\n\r\n${bodies.get(id)}`) : null),
   };

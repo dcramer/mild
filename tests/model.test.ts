@@ -64,6 +64,19 @@ describe('model stage', () => {
     expect(await stage({ label: 'transactional', reason: 'r' }, evidence({ userHasWritten: true })).decide(facts())).toMatchObject({ disposition: 'keep' });
   });
 
+  it('never hides a reply in a thread the owner has written in', async () => {
+    const ev = evidence();
+    const inThread = { ...ev, known: { ...ev.known, earlierInThread: 2, ownerInThread: true } };
+    expect(await stage({ label: 'marketing', reason: 'r' }, inThread).decide(facts())).toMatchObject({
+      disposition: 'review',
+      labelId: 'marketing',
+      reason: expect.stringContaining('you have written in this thread'),
+    });
+    expect(await stage({ label: 'personal', reason: 'r' }, inThread).decide(facts())).toMatchObject({ disposition: 'keep' });
+    const strangers = { ...ev, known: { ...ev.known, earlierInThread: 2, ownerInThread: false } };
+    expect(await stage({ label: 'marketing', reason: 'r' }, strangers).decide(facts())).toMatchObject({ disposition: 'archive' });
+  });
+
   it('abstains when the model call fails', async () => {
     expect(await stage(null).decide(facts())).toBeNull();
   });
@@ -264,9 +277,12 @@ describe('gatherEvidence', () => {
     const f = facts({ accountId: ACCOUNT });
     recordSync(db, ACCOUNT, [f], '2');
     let lookups = 0;
+    const fail = async () => {
+      throw new Error('not a reply, so the thread is not read');
+    };
     const sources = {
       db,
-      api: { getContent: async () => ({ text: 'hello', facts: { hasAttachments: false } }) },
+      api: { getContent: async () => ({ text: 'hello', facts: { hasAttachments: false } }), getThread: fail },
       mailbox: { hasSentTo: async () => (lookups++, false) },
       now: () => 1000,
     };
@@ -283,7 +299,7 @@ describe('gatherEvidence', () => {
     const fail = async () => {
       throw new Error('network');
     };
-    const result = await gatherEvidence({ db, api: { getContent: fail }, mailbox: { hasSentTo: fail } }, facts({ accountId: ACCOUNT }));
+    const result = await gatherEvidence({ db, api: { getContent: fail, getThread: fail }, mailbox: { hasSentTo: fail } }, facts({ accountId: ACCOUNT }));
     expect(result).toMatchObject({ body: null, sender: { userHasWritten: null } });
   });
 });

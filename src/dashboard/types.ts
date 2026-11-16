@@ -126,6 +126,9 @@ export interface MessageFactSet {
   linkHosts?: number;
   trackedLinks?: boolean;
   linksOffDomain?: boolean;
+  /** Known only for a reply a model has been asked about. */
+  earlierInThread?: number;
+  ownerInThread?: boolean;
 }
 
 /** What sift knows about one sender, to judge their mail by. */

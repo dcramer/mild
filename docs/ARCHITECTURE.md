@@ -43,7 +43,8 @@ Every tier, the prompt and the dashboard read one named set of facts about a mes
 
 - **From headers and labels, at sync:** unsubscribe header and whether it is one-click, mailing list id, marked bulk, marked auto-generated, the DMARC, SPF and DKIM results, the bulk mail service it went through (from who signed it, its envelope sender and the services' own headers), whether replies go elsewhere, whether the owner is in To, in Cc or in neither, whether it is a reply, and Gmail's category tab.
 - **From the whole message, when a model is about to judge it:** whether it has attachments and, from the HTML part (`src/triage/html.ts`), whether it carries a tracking pixel (a remote image drawn 1×1 or hidden), how many sites it links to, whether most links pass through a click-tracking redirect, and whether any link goes to the sender's own domain. These mark campaign mail even when the headers do not. The HTML is read and dropped, never stored, and nothing in it is fetched. Mail decided by a rule is never read whole, so it has none of these.
-- **Recorded** as JSON in `messages.facts_json`, rewritten when the whole message adds to them, and returned with a message's detail.
+- **From the thread, for a reply a model is about to judge:** how many messages came before it and whether the owner sent one of them (`users.threads.get`, labels only: a message the owner sent carries `SENT`). No other message's content is read or stored.
+- **Recorded** as JSON in `messages.facts_json`, rewritten when the whole message or its thread adds to them, and returned with a message's detail.
 - **Rules can match on them** once wired: `matchesFacts` takes conditions on facts ("has an unsubscribe header and is not a reply"). `RuleMatch` does not carry them yet.
 - **Only what can be checked.** Whether mail reads as AI-generated, and its language, are judgements for a model, not facts.
 
@@ -129,7 +130,7 @@ When no rule or sender record decides a message, one model call does. It is deli
 - **The model has no tools and takes no action.** Deterministic code gathers the evidence first: the message's facts, the body (fetched on demand, truncated, never stored), how much mail this sender has sent, what was done with it, and whether the user has ever written to them.
 - **Its only output is a label** from the user's list, or `unsure`, with a one-line reason. The reply is validated; anything else abstains.
 - **The label's action decides the outcome**, so the user's choice, not the model, determines what happens to the message.
-- **Two protections apply whatever the model says:** mail from someone the user has written to is never archived or marked spam on the model's word (and "could not check" counts as yes), and `unsure` or an unknown category leaves the message for review.
+- **Three protections apply whatever the model says:** mail from someone the user has written to is never archived or marked spam on the model's word (and "could not check" counts as yes), nor is a reply in a thread the user has written in, and `unsure` or an unknown category leaves the message for review.
 - **The prompt marks the email as untrusted** and keeps it apart from the guidelines and the header facts. The worst an injected email can do is get itself given the wrong label, which the audit log can undo.
 - **Learning:** after three consecutive model decisions give a sender the same label, and each ended the way that label says, sift writes a rule for the sender and later mail from them is decided without inference. A rule the user made for that sender is left alone. (Next: propose the rule to the user instead of saving it; see TODO.md.)
 

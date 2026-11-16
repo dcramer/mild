@@ -14,12 +14,28 @@ export interface ContentFacts extends Partial<HtmlFacts> {
   hasAttachments: boolean;
 }
 
+/** What the rest of the thread shows. Looked up only for a reply, when a model is about to judge it. */
+export interface ThreadFacts {
+  /** Messages in the thread before this one. */
+  earlierInThread: number;
+  /** One of those earlier messages was sent by the owner. */
+  ownerInThread: boolean;
+}
+
+/** `messages` is the thread oldest first; a message the owner sent carries Gmail's `SENT` label. Null if the message is not in it. */
+export function threadFacts(messages: readonly { id: string; labelIds: readonly string[] }[], messageId: string): ThreadFacts | null {
+  const index = messages.findIndex((m) => m.id === messageId);
+  if (index === -1) return null;
+  const earlier = messages.slice(0, index);
+  return { earlierInThread: earlier.length, ownerInThread: earlier.some((m) => m.labelIds.includes('SENT')) };
+}
+
 /**
  * What is known about one message, by name. The prompt, the heuristics tier, the dashboard and rule
  * conditions all read these instead of re-reading headers. Only what can be checked is here: whether
  * mail "reads as AI-generated" or what language it is in are judgements, and belong to a model.
  */
-export interface Facts extends Partial<ContentFacts> {
+export interface Facts extends Partial<ContentFacts>, Partial<ThreadFacts> {
   /** `one-click` is RFC 8058, the only kind sift will use itself. */
   unsubscribe: 'none' | 'header' | 'one-click';
   listId: string | null;
@@ -111,7 +127,10 @@ const CATEGORIES = {
 } as const;
 
 /** The facts a message's headers and labels give. The account id is the owner's address. */
-export function deriveFacts(message: Pick<MessageFacts, 'accountId' | 'from' | 'to' | 'cc' | 'labelIds' | 'headers'>, content?: ContentFacts): Facts {
+export function deriveFacts(
+  message: Pick<MessageFacts, 'accountId' | 'from' | 'to' | 'cc' | 'labelIds' | 'headers'>,
+  read: Partial<ContentFacts & ThreadFacts> = {},
+): Facts {
   const { headers } = message;
   const signals = bulkSignals(headers);
   const results = headers['authentication-results'] ?? '';
@@ -133,7 +152,7 @@ export function deriveFacts(message: Pick<MessageFacts, 'accountId' | 'from' | '
     addressed: message.to.some(isOwner) ? 'to' : message.cc.some(isOwner) ? 'cc' : 'neither',
     isReply: (headers['in-reply-to'] ?? headers['references'] ?? '').trim() !== '',
     category: category ?? null,
-    ...content,
+    ...read,
   };
 }
 
@@ -145,6 +164,8 @@ export function describeFacts(facts: Facts): string[] {
   return [
     `Addressed to the owner: ${addressed}`,
     `Is a reply to an earlier message: ${yesNo(facts.isReply)}`,
+    ...(facts.earlierInThread === undefined ? [] : [`Earlier messages in its thread: ${facts.earlierInThread}`]),
+    ...(facts.ownerInThread === undefined ? [] : [`Owner has written in its thread: ${yesNo(facts.ownerInThread)}`]),
     `Mailing list id: ${facts.listId ?? '(none)'}`,
     `Unsubscribe header: ${{ none: 'no', header: 'yes', 'one-click': 'yes, one-click' }[facts.unsubscribe]}`,
     `Marked bulk: ${yesNo(facts.markedBulk)}`,
