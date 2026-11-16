@@ -220,8 +220,6 @@ A request, a pass or a test run holds the database of the person it is for and n
 
 Each database is migrated when it is opened. Each migration file is applied once and recorded by name in `schema_migrations`, so a file that lands with a lower number than ones already applied still runs; a database that has had a file this build does not know was opened by a newer sift, and is refused. No migration may need the other kind of database: moving data between them takes two releases. Defaults (the starting labels) are written by code when a mailbox's labels are first read, never by a migration.
 
-A home from before there was a database per person has one `sift.db` holding everything. The next start splits it (`src/store/split.ts`): it is brought up to its last schema by `legacy/`, which is frozen, copied into the new files, and kept as `sift.db.before-split`. The new files are written to `split-in-progress/` and moved into place last, so a crash leaves either the old layout, done again on the next start, or a move to finish.
-
 Together they are the complete record of what sift saw and did, and everything else (the dashboard, undo, future analytics) reads from them.
 
 Everything reaches them through `Sql` (`src/store/sql.ts`), whose calls are async so a database outside the process could stand behind it; over `node:sqlite` each is answered at once. A transaction is one call taking a function, and while it is open every other caller on that database waits, so the function awaits nothing but the database: no Gmail or model call inside one. Using the outer handle inside it is refused rather than left to wait on itself.

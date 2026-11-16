@@ -9,7 +9,7 @@ export interface Migration {
 }
 
 /** The `NNN_name.sql` files in one of `migrations/`'s folders, in the order they run. */
-export function readMigrations(folder: 'central' | 'user' | 'legacy'): Migration[] {
+export function readMigrations(folder: 'central' | 'user'): Migration[] {
   const dir = new URL(`./migrations/${folder}/`, import.meta.url);
   return readdirSync(dir)
     .filter((f) => /^\d+_.+\.sql$/.test(f))

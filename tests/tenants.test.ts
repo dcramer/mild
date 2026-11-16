@@ -3,18 +3,14 @@ import { request } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
-import type { Sql } from '../src/store/sql.ts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
 import { people } from '../src/store/people.ts';
-import { connectAccount, connectedAddresses, listAccounts, recordSync, userOf } from '../src/store/accounts.ts';
+import { connectAccount, connectedAddresses, recordSync, userOf } from '../src/store/accounts.ts';
 import { type Store, openStore } from '../src/store/store.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
-
-const listAccountsOf = async (db: Sql) => (await listAccounts(db)).map((a) => a.id);
 import { facts } from './helpers.ts';
 
 // Two people. Alpha set sift up and has two mailboxes; Bravo arrived later with one.
@@ -192,18 +188,6 @@ describe('users and their mailboxes', () => {
     expect((await alpha.all<{ id: string }>('SELECT id FROM mailboxes ORDER BY id')).map((m) => m.id)).toEqual([ALPHA, ALPHA_WORK]);
     for (const table of ['mailboxes', 'messages', 'decisions', 'actions', 'rules', 'proposals', 'examples'])
       expect(await bravo.all(`SELECT DISTINCT ${table === 'mailboxes' ? 'id' : 'account_id'} AS id FROM ${table}`), table).toEqual([{ id: BRAVO }]);
-  });
-
-  it('gives the accounts of a database from before there were users to the first person', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'sift-db-'));
-    const old = new DatabaseSync(join(dir, 'sift.db'));
-    old.exec(readFileSync(new URL('../src/store/migrations/legacy/001_init.sql', import.meta.url), 'utf8'));
-    old.exec(`PRAGMA user_version = 1; INSERT INTO accounts (id, email, created_at) VALUES ('${ALPHA}', '${ALPHA}', 5), ('${ALPHA_WORK}', '${ALPHA_WORK}', 9)`);
-    old.close();
-    const migrated = await openStore({ dbPath: join(dir, 'sift.db'), usersDir: join(dir, 'users') });
-    expect(await userOf(migrated.central, ALPHA)).toEqual({ id: 1, owner: true });
-    expect(await listAccountsOf(await migrated.user(1))).toEqual([ALPHA, ALPHA_WORK]);
-    await migrated.close();
   });
 });
 

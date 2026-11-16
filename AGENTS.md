@@ -79,7 +79,7 @@ The database is the full account of what sift saw and did. Every message synced 
 1. `pnpm check` passes. Never skip, delete or weaken a test to get there.
 2. Behavior change: a test covers it.
 3. Dashboard change: `pnpm build:web` passes and you looked at the page in a browser with the console open (a content security policy violation shows up there, not in the build).
-4. Schema change: a new numbered file in `src/store/migrations/user/` (a person's mail) or `central/` (who has which mailbox); `legacy/` is frozen. Never edit or rename an applied migration. Applied files are recorded by name, so any unused number works, but files run in name order: number it after whatever it depends on. No migration may need the other database.
+4. Schema change: a new numbered file in `src/store/migrations/user/` (a person's mail) or `central/` (who has which mailbox). Never edit or rename an applied migration. Applied files are recorded by name, so any unused number works, but files run in name order: number it after whatever it depends on. No migration may need the other database.
 
 ## Rules and what enforces them
 

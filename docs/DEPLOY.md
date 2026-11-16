@@ -13,7 +13,6 @@ C up -d
 ```
 
 - **Back up first.** The databases are migrated when sift starts, each migration in its own transaction, and there is no way back down: an older sift refuses a database a newer one migrated.
-- The first start of a version with a database per person splits `sift.db` into `sift.db` and `users/`, and keeps the old file as `sift.db.before-split`. Delete it once the new one has run for a while.
 - The few seconds sift is down cost nothing. It picks up from its Gmail history cursor.
 - Without Docker: `git pull`, `pnpm install`, restart `sift run`.
 

@@ -1,7 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { openFile, readMigrations } from './db.ts';
-import { splitSingle } from './split.ts';
 import type { Database, Sql } from './sql.ts';
 
 /**
@@ -18,15 +17,9 @@ export interface Store {
 /** Where the databases are. `:memory:` keeps them all in memory, for tests. */
 export type StorePaths = { dbPath: string; usersDir: string } | ':memory:';
 
-/**
- * Open the store, migrating each database as it is opened. A home from before there was a database per
- * person is split first (`splitSingle`).
- */
+/** Open the store, migrating each database as it is opened. */
 export async function openStore(paths: StorePaths): Promise<Store> {
-  if (paths !== ':memory:') {
-    await splitSingle(paths);
-    mkdirSync(paths.usersDir, { recursive: true, mode: 0o700 });
-  }
+  if (paths !== ':memory:') mkdirSync(paths.usersDir, { recursive: true, mode: 0o700 });
   const central = await openFile(paths === ':memory:' ? ':memory:' : paths.dbPath, readMigrations('central'));
   const users = new Map<number, Promise<Database>>();
   const open = async (id: number) => {

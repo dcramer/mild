@@ -1,9 +1,8 @@
 import { scopeFor } from '../src/dashboard/scope.ts';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import type { Sql } from '../src/store/sql.ts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { execute } from '../src/actions/executor.ts';
@@ -17,7 +16,6 @@ import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { openUserDb } from '../src/store/db.ts';
-import { openSingle } from '../src/store/split.ts';
 import type { Store } from '../src/store/store.ts';
 import { addRule } from '../src/store/rules.ts';
 import { everything, facts, onePerson } from './helpers.ts';
@@ -167,32 +165,6 @@ describe('tracking', () => {
     expect(await retryDecision(db, await everything(db), done)).toEqual({ retried: false, waiting: false });
   });
 
-  it('upgrades a version 1 database in place, keeping its messages', async () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'sift-test-')), 'sift.db');
-    const v1 = new DatabaseSync(path);
-    v1.exec(readFileSync(new URL('../src/store/migrations/legacy/001_init.sql', import.meta.url), 'utf8'));
-    v1.exec('PRAGMA user_version = 1');
-    v1.exec(`INSERT INTO accounts (id, email, created_at) VALUES ('${ACCOUNT}', '${ACCOUNT}', 0)`);
-    v1.exec(
-      `INSERT INTO messages (account_id, id, thread_id, from_address, from_domain, received_at) VALUES ('${ACCOUNT}', 'm', 't', 'a@example.com', 'example.com', 5)`,
-    );
-    v1.close();
-
-    const db = await openSingle(path);
-    expect(await db.get(`SELECT 1 FROM schema_migrations WHERE name = '064_users.sql'`)).toBeDefined();
-    expect(await db.get('SELECT id, subject, headers_json, synced_at FROM messages')).toEqual({
-      id: 'm',
-      subject: '',
-      headers_json: '{}',
-      synced_at: null,
-    });
-    await recordDecision(db, ACCOUNT, 'm', { disposition: 'keep', subscription: 'preserve', stage: 'rules', reason: 'r' });
-    expect(await db.get('SELECT count(*) AS n FROM decisions')).toEqual({ n: 1 });
-    db.close();
-  });
-});
-
-describe('summarize', () => {
   it('counts only the window and reports tiers, cost and backlog', async () => {
     const db = await seeded();
     const summary = await summarize(db, await everything(db), 7, NOW);
