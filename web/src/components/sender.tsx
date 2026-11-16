@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { type SenderProfile, type Standing, api, useLoaded } from '@/lib/api.ts';
 import { STANDINGS, describeMatch, outcomeName, plural, shortDate } from '@/lib/format.ts';
-import { Fact, Facts, HoverCard, Stamp, TextLink } from '@/system';
+import { Fact, Facts, Failure, HoverCard, Stamp, TextLink } from '@/system';
 
 export const senderHref = (accountId: string, address: string) => `/sender/${encodeURIComponent(accountId)}/${encodeURIComponent(address)}`;
 export const domainHref = (accountId: string, domain: string) => `/domain/${encodeURIComponent(accountId)}/${encodeURIComponent(domain)}`;
@@ -90,7 +90,7 @@ export function SenderFacts({ accountId, profile, brief }: { accountId: string; 
 
 function Preview({ accountId, address }: { accountId: string; address: string }) {
   const { data, error } = useLoaded(`sender-${accountId}-${address}`, (signal) => api.sender(accountId, address, signal), 300_000);
-  if (error) return <p className="text-destructive">{error}</p>;
+  if (error) return <Failure>{error}</Failure>;
   if (!data) return <p className="text-muted-foreground">Loading…</p>;
   return (
     <div className="flex flex-col gap-3">

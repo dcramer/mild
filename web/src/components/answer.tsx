@@ -2,7 +2,7 @@ import { ArrowRightIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { FeedbackRequest } from '@/lib/api.ts';
 import { willBe } from '@/lib/format.ts';
-import { Button, Check, ChoiceGroup, Field, Form, Input, Kbd, Select } from '@/system';
+import { Button, Check, ChoiceGroup, Failure, Field, Form, Input, Kbd, Select } from '@/system';
 
 export interface AnswerLabel {
   id: string;
@@ -178,7 +178,7 @@ export function Answer({
       <div className="flex flex-col gap-3">
         <p className={label ? undefined : 'text-muted-foreground'}>{sentence}</p>
         {acted && label && label.id !== guess ? <p className="text-muted-foreground">This message is put right in Gmail too.</p> : null}
-        {error ? <p className="text-destructive">{error}</p> : null}
+        <Failure>{error}</Failure>
         <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" variant="mark" busy={busy} disabled={!ready}>
             {right ? 'Right' : 'Teach sift'}

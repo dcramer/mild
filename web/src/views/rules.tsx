@@ -10,6 +10,7 @@ import {
   ConfirmButton,
   Dialog,
   Empty,
+  Failure,
   Field,
   FilterGroup,
   Form,
@@ -114,7 +115,7 @@ function AddRuleDialog({
           <Button variant="quiet" onClick={onClose}>
             Cancel
           </Button>
-          {error ? <p className="text-destructive">{error}</p> : null}
+          <Failure>{error}</Failure>
         </>
       }
     >
@@ -208,7 +209,7 @@ export function Rules() {
       }}
     >
       {error ? <ErrorNote message={error} /> : null}
-      {remove.error ? <p className="text-destructive">{remove.error}</p> : null}
+      <Failure>{remove.error}</Failure>
       {loading ? (
         <Loading />
       ) : rules.length === 0 ? (
@@ -264,7 +265,7 @@ export function Rules() {
                   </Td>
                   <Td phone="hide" className="whitespace-nowrap">
                     {rule.labelGone ? (
-                      <span className="text-destructive">A removed label</span>
+                      <Failure inline>A removed label</Failure>
                     ) : rule.kind === 'action' ? (
                       <span className="text-muted-foreground">Anything</span>
                     ) : (

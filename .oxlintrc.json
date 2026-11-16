@@ -85,6 +85,19 @@
       "rules": { "react/react-in-jsx-scope": "off" }
     },
     {
+      "files": ["web/src/views/**/*.tsx", "web/src/components/**/*.tsx", "web/src/lib/**/*.ts", "web/src/lib/**/*.tsx", "web/src/App.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "group": ["@base-ui/**"], "message": "Only web/src/system imports Base UI. Use or extend a part from '@/system' (docs/DESIGN.md)." }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["src/store/**/*.ts", "src/actions/**/*.ts", "src/cli/**/*.ts", "src/daemon/**/*.ts", "src/learn/**/*.ts"],
       "rules": {
         "no-restricted-imports": [

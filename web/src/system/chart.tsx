@@ -22,7 +22,8 @@ function ceiling(n: number): number {
   return ([1, 2, 5, 10].find((step) => step * power >= n) ?? 10) * power;
 }
 
-function Swatch({ color }: { color: string }) {
+/** A series' or a tier's colour, always beside its name. */
+export function Swatch({ color }: { color: string }) {
   return <span aria-hidden className="size-2.5 shrink-0 rounded-[1px] ring-1 ring-foreground/20" style={{ background: color }} />;
 }
 

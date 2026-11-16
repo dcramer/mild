@@ -1,14 +1,14 @@
 import type { DecisionRow } from '@/lib/api.ts';
 import { type Status, STATUS_NAMES, outcomeName, status, tier } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
-import { Code, Note } from '@/system';
+import { Code, Failure, Note, Swatch } from '@/system';
 
 /** A tier's ink swatch and name. The name always accompanies the swatch. */
 export function TierLabel({ stage }: { stage: string }) {
   const t = tier(stage);
   return (
     <span className="inline-flex items-center gap-2 whitespace-nowrap">
-      <span aria-hidden className="size-2.5 shrink-0 rounded-[1px] ring-1 ring-foreground/20" style={{ background: t.color }} />
+      <Swatch color={t.color} />
       {t.name}
     </span>
   );
@@ -32,8 +32,14 @@ export function Verdict({ labelName, disposition, unsubscribe }: { labelName: st
 /** Where a decision has got to in Gmail, in a word. A failure is the only one in red. */
 export function StatusWord({ row, className }: { row: Pick<DecisionRow, 'mode' | 'outcome' | 'actionStatus' | 'outcomeDetail'>; className?: string }) {
   const s: Status = status(row);
+  if (s === 'failed')
+    return (
+      <Failure inline className={className} title={row.outcomeDetail ?? undefined}>
+        {STATUS_NAMES[s]}
+      </Failure>
+    );
   return (
-    <span className={cn(s === 'failed' ? 'font-medium text-destructive' : 'text-muted-foreground', className)} title={row.outcomeDetail ?? undefined}>
+    <span className={cn('text-muted-foreground', className)} title={row.outcomeDetail ?? undefined}>
       {STATUS_NAMES[s]}
     </span>
   );

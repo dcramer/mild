@@ -3,7 +3,7 @@ import { DecisionTable } from '@/components/decision-table.tsx';
 import { SenderFacts, SenderLink, StandingStamp } from '@/components/sender.tsx';
 import { api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, percent } from '@/lib/format.ts';
-import { ChoiceGroup, Empty, Figure, Figures, Loading, PageHeader, Section, Sub, Table, Td, Th, Tr } from '@/system';
+import { ChoiceGroup, Empty, Failure, Figure, Figures, Loading, PageHeader, Section, Sub, Table, Td, Th, Tr } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 const GIVE = [
@@ -69,7 +69,7 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
           <p className="text-muted-foreground">
             {given ? `${FOLLOWS[given]} Press it again to take it back.` : 'None given: sift judges each message as it comes.'}
           </p>
-          {give.error ? <p className="text-destructive">{give.error}</p> : null}
+          <Failure>{give.error}</Failure>
         </Section>
       </div>
 

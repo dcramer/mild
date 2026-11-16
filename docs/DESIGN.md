@@ -42,12 +42,14 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Sheet`, `SettingRow` | A group of settings, framed. Each row says what it is, what follows from changing it, and holds its control. Not for a list. |
 | `Figures`, `Figure` | Headline numbers, straight on the page. `look` for the one to see first, `failure` for a count of things gone wrong; `href` links to the list it counts. |
 | `StackedBars` | Counts over time, stacked by series. Its legend reads out the column pointed at or focused. `compact` beside figures. |
+| `Swatch` | A series' or a tier's colour, always beside its name. |
 | `Panel` | One item from a list, opened beside the list: it slides over from the right, up to three quarters of the screen, with previous and next to step through the list. Every list opens a message in the same panel (`views/message-panel.tsx`). |
 | `Dialog` | A form or a question: adding or changing a label or a rule. Centred. `footer` for the actions that finish it. |
 | `Toaster`, `useToast` | What a press did, said once in the corner after the list has moved on: what sift learned, what was undone. A failure stays until dismissed and is the only one in red. Never for something the page already shows. |
 | `Menu`, `Avatar` | A few things to do, behind one button: under the avatar, who is signed in and Sign out. An item that cannot be pressed says why under its label. An avatar is the initial of an address, never a picture: the page loads nothing from another origin. Choosing one value is a `Select`, not a menu. |
 | `HoverCard` | A link that previews where it goes when the pointer rests on it or it takes focus. Only a preview: a touch screen never shows it, so everything in it is also on the page the link opens. |
 | `Note` | Said to the reader outside the flow, about the whole page: `plain`, `look` (needs them), `failure`. No box. |
+| `Failure` | What went wrong, where it went wrong: under the form or press that failed, or `inline` as the word for a step that failed. Renders nothing without a message. The only red a screen writes. |
 | `Reserve` | Holds the room for something above other content that arrives late and whose height depends on what loads (figures, a chart, a notice that may not be there), so the page below does not move. It remembers the height the part last had in this browser, per width; `room` is the usual height until then. |
 | `Empty`, `Loading` | What a list shows with nothing in it (say what would put something here), and while rows are on their way. |
 | `Stamp` | A verdict in one word from the vocabulary. All stamps weigh the same; `look` only for what is left to the reader. |
@@ -97,7 +99,7 @@ A page is drawn before its data arrives, and what arrives must not push what is 
 
 - Build screens from these parts. If a screen needs something they cannot do, add or extend a part here, with its states (hover, focus, pressed, disabled, busy, empty, failed), and add it to the specimen page in the same change.
 - A part says when to use it in its doc comment; that is the line the specimen page shows.
-- No inline styles, no colours or radii written into a view. If a value is missing, it is a missing token.
-- Behaviour that is hard to get right (a list that opens, a focus trap) comes from an unstyled primitive, today Base UI. Only files in `web/src/system/` import it, so the library can change without a screen changing.
+- No inline styles, no fills, frames, corners, shadows or colours written outside `web/src/system/`; red is `Failure` and yellow comes only from a part's tone. If a value is missing, it is a missing token. `tests/design-system.test.ts` fails on any of these and names the file and line.
+- Behaviour that is hard to get right (a list that opens, a focus trap) comes from an unstyled primitive, today Base UI. Only files in `web/src/system/` import it (a lint error elsewhere), so the library can change without a screen changing.
 - A part's inline `style` is only for a value computed from data (a bar's height, a series colour).
 - Motion is short (80 to 150ms): a press, a dialog opening, rows pulsing while they load. All off under `prefers-reduced-motion`.

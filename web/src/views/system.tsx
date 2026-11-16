@@ -15,6 +15,7 @@ import {
   Empty,
   Fact,
   Facts,
+  Failure,
   Field,
   Figure,
   Figures,
@@ -528,6 +529,15 @@ export function SystemView() {
           <Note tone="failure" title="Failed">
             <p>What went wrong, and what to try.</p>
           </Note>
+        </div>
+      </Section>
+
+      <Section title="Failure" meta="under what failed, or the word for a step that failed">
+        <div className="flex flex-col gap-3">
+          <Failure>Gmail refused the change. Nothing was moved.</Failure>
+          <p>
+            Archive in Gmail <Failure inline>Failed</Failure>
+          </p>
         </div>
       </Section>
 

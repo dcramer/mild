@@ -1,5 +1,5 @@
 export { Button } from './button.tsx';
-export { type ChartRow, type Series, StackedBars } from './chart.tsx';
+export { type ChartRow, type Series, StackedBars, Swatch } from './chart.tsx';
 export { ChoiceGroup } from './choice.tsx';
 export { ConfirmButton } from './confirm.tsx';
 export { Copyable } from './copyable.tsx';
@@ -12,7 +12,7 @@ export { HoverCard } from './hover-card.tsx';
 export { type ActiveFilter, FilterGroup, ListView } from './list-view.tsx';
 export { Avatar, Menu, type MenuItem } from './menu.tsx';
 export { Masthead, type NavItem, Sections } from './nav.tsx';
-export { Note } from './note.tsx';
+export { Failure, Note } from './note.tsx';
 export { Notice } from './notice.tsx';
 export { PageHeader, Section } from './page.tsx';
 export { Panel } from './panel.tsx';
