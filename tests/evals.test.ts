@@ -193,6 +193,15 @@ describe('replaying the model over stored examples', () => {
     expect((await getEvalRun(db, id))?.run).toMatchObject({ status: 'done', total: 3, score: { total: 3, failed: 3 } });
   });
 
+  it('keeps the cost of a call that was billed but answered unusably', async () => {
+    const unusable = async (): Promise<JudgeFailure> => ({ failed: 'the model did not return a usable verdict', usage });
+    const { id, done } = await startEval({ db, judge: unusable, model: 'test/model' }, { accountId: ACCOUNT, fewShot: false });
+    await done;
+    const { run, results } = (await getEvalRun(db, id))!;
+    expect(run.score).toMatchObject({ failed: 4, costUsd: 0.004, inputTokens: 4000 });
+    expect(results.every((r) => r.got === null && r.costUsd === 0.001)).toBe(true);
+  });
+
   it('records settings that tell two runs apart', async () => {
     await (
       await startEval(deps({}), { accountId: ACCOUNT, fewShot: false })

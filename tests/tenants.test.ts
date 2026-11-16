@@ -106,8 +106,10 @@ beforeEach(async () => {
   };
   dashboard = await startDashboard(people(store), { controls, signIn, sessionSecret: 'secret', now: () => 2000 });
   for (const who of [ALPHA, ALPHA_WORK, BRAVO]) {
-    const state = new URL(String((await dashboard.call('GET', '/auth/login')).headers['location'])).searchParams.get('state');
-    const back = await dashboard.call('GET', `/auth/callback?state=${state}&code=${encodeURIComponent(who)}`);
+    const login = await dashboard.call('GET', '/auth/login');
+    const state = new URL(String(login.headers['location'])).searchParams.get('state');
+    const started = String(login.headers['set-cookie']).split(';')[0]!;
+    const back = await dashboard.call('GET', `/auth/callback?state=${state}&code=${encodeURIComponent(who)}`, undefined, { cookie: started });
     cookies[who] = String(back.headers['set-cookie']).split(';')[0] ?? '';
   }
 });
@@ -195,8 +197,8 @@ describe("nobody sees or changes another person's mail", () => {
     const one = await call('GET', `/api/rules?mailbox=${encodeURIComponent(ALPHA_WORK)}`, ALPHA);
     expect(one.text).toContain(MARK[ALPHA_WORK]);
     expect(one.text).not.toContain(MARK[ALPHA]);
-    const summary = JSON.parse((await call('GET', `/api/summary?mailbox=${encodeURIComponent(ALPHA_WORK)}`, ALPHA)).text) as { totals: { decisions: number } };
-    expect(summary.totals.decisions).toBe(1);
+    const summary = JSON.parse((await call('GET', `/api/summary?mailbox=${encodeURIComponent(ALPHA_WORK)}`, ALPHA)).text) as { totals: { decided: number } };
+    expect(summary.totals.decided).toBe(1);
     // Someone else's mailbox is not one that can be asked for.
     expect((await call('GET', `/api/rules?mailbox=${encodeURIComponent(BRAVO)}`, ALPHA)).status).toBe(404);
     expect((await call('GET', '/api/rules', null)).status).toBe(401);
@@ -266,6 +268,12 @@ describe("nobody sees or changes another person's mail", () => {
     expect((await call('POST', '/api/unjudged/retry', ALPHA_WORK, { accountId: ALPHA, messageId: `u-${MARK[ALPHA]}` })).status).toBe(200);
     expect((await unjudged()).map((r) => r.messageId)).toEqual([`u-${MARK[ALPHA_WORK]}`]);
     expect((await call('POST', '/api/unjudged/retry', ALPHA, { accountId: ALPHA, messageId: `u-${MARK[ALPHA]}` })).status).toBe(409);
+    // Retrying everything is each person's own.
+    expect((await call('POST', '/api/unjudged/retry-all', BRAVO, {})).body).toEqual({ retried: 1 });
+    expect((await unjudged()).map((r) => r.messageId)).toEqual([`u-${MARK[ALPHA_WORK]}`]);
+    expect((await call('POST', '/api/unjudged/retry-all', ALPHA, {})).body).toEqual({ retried: 1 });
+    expect(await unjudged()).toEqual([]);
+    expect((await call('POST', '/api/unjudged/retry-all', ALPHA, {})).status).toBe(409);
   });
 
   it('lets each person change their own mode, model and sign-ins, and only their own', async () => {

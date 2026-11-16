@@ -4,7 +4,7 @@ import { getAction } from '../../store/actions.ts';
 import { listChanges, listDecisions, retryDecision } from '../queries/decisions.ts';
 import { messageDetail } from '../queries/messages.ts';
 import { listUnjudged } from '../queries/runs.ts';
-import { putBackInQueue } from '../../store/runs.ts';
+import { putAllBackInQueue, putBackInQueue } from '../../store/runs.ts';
 import { summarize } from '../queries/summary.ts';
 import { ChangeRow, DecisionPage, MessageDetail, Summary, UnjudgedRow } from '../types.ts';
 import { type Read, type Write, accountId, days, id, missing, named, ok, ownerOf, read, text, write } from './route.ts';
@@ -105,6 +105,18 @@ export const writes: Write[] = [
       if (!(await putBackInQueue(db, accountId, messageId, now()))) throw new Error('That message is already waiting to be judged.');
       controls?.checkNow();
       return { ok: true as const };
+    },
+  }),
+  write({
+    path: '/api/unjudged/retry-all',
+    body: z.strictObject({}),
+    reply: z.object({ retried: z.number() }),
+    touches: () => 'self',
+    run: async ({ db, controls, now }, _body, scope) => {
+      const retried = await putAllBackInQueue(db, scope.accounts, now());
+      if (retried === 0) throw new Error('Nothing the model failed on is left to retry.');
+      controls?.checkNow();
+      return { retried };
     },
   }),
 ];

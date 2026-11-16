@@ -24,6 +24,12 @@ const ACCOUNT = 'me@example.org';
 const DAY = 86_400_000;
 const NOW = Date.UTC(2026, 5, 15, 12);
 
+async function modelRun(db: Sql, messageId: string, costUsd: number, outcome: 'judged' | 'failed' = 'judged'): Promise<number> {
+  const run = await startRun(db, { accountId: ACCOUNT, messageId, model: 'test-model', now: NOW - 2 * DAY });
+  await finishRun(db, run, { outcome, usage: { model: 'test-model', inputTokens: 900, outputTokens: 100, costUsd }, now: NOW - 2 * DAY });
+  return run;
+}
+
 async function seededStore(): Promise<{ store: Store; db: Sql }> {
   const { store, db } = await onePerson(ACCOUNT);
   await recordSync(
@@ -50,11 +56,7 @@ async function seededStore(): Promise<{ store: Store; db: Sql }> {
     NOW,
   );
   const base = { subscription: 'preserve', reason: 'test' } as const;
-  const judged = async (messageId: string, costUsd: number, outcome: 'judged' | 'failed' = 'judged') => {
-    const run = await startRun(db, { accountId: ACCOUNT, messageId, model: 'test-model', now: NOW - 2 * DAY });
-    await finishRun(db, run, { outcome, usage: { model: 'test-model', inputTokens: 900, outputTokens: 100, costUsd }, now: NOW - 2 * DAY });
-    return run;
-  };
+  const judged = async (messageId: string, costUsd: number, outcome: 'judged' | 'failed' = 'judged') => await modelRun(db, messageId, costUsd, outcome);
   await recordDecision(
     db,
     ACCOUNT,
@@ -172,6 +174,11 @@ describe('tracking', () => {
     // What changed in Gmail, or was tried: not the suggestions, which never touched it.
     expect(await ids('changed')).toEqual([failed, done]);
 
+    // An answer waiting for the next pass is not a failure, but it is shown among the changes.
+    const answer = await recordDecision(db, ACCOUNT, 'c', { ...base, disposition: 'archive' }, { mode: 'act', byUser: true, now: NOW });
+    expect(await ids('trouble')).toEqual([failed]);
+    expect(await ids('changed')).toEqual([answer, failed, done]);
+
     // A failed change goes back to waiting; sift's own waits for sift to be on, and only a failure can be retried.
     expect(await retryDecision(db, scopeFor(['someone@example.net'], false), failed)).toEqual({ retried: false, waiting: false });
     expect(await retryDecision(db, await everything(db), failed)).toEqual({ retried: true, waiting: true });
@@ -182,7 +189,7 @@ describe('tracking', () => {
   it('counts only the window and reports tiers, cost and backlog', async () => {
     const db = await seeded();
     const summary = await summarize(db, await everything(db), 7, NOW);
-    expect(summary.totals).toEqual({ messages: 4, decisions: 3, withoutInference: 2, costUsd: 0.03, awaitingTriage: 1, troubledActions: 0 });
+    expect(summary.totals).toEqual({ messages: 4, decided: 3, withoutInference: 2, judged: 2, costUsd: 0.03, awaitingTriage: 1, troubledActions: 0 });
     expect(summary.byStage.map((s) => [s.stage, s.decisions])).toEqual([
       ['rules', 1],
       ['classifier', 1],
@@ -195,6 +202,25 @@ describe('tracking', () => {
       { disposition: 'review', decisions: 1 },
     ]);
     expect(summary.accounts).toEqual([{ email: ACCOUNT, lastSyncedAt: NOW }]);
+  });
+
+  it('counts messages, not decisions: answers and decisions made again are the same message', async () => {
+    const db = await seeded();
+    const base = { subscription: 'preserve', reason: 'test' } as const;
+    // The user answers 'a' and 'c'; a label change decides 'b' again.
+    await recordDecision(db, ACCOUNT, 'a', { ...base, disposition: 'keep', stage: 'rules' }, { mode: 'act', byUser: true, now: NOW });
+    await recordDecision(db, ACCOUNT, 'c', { ...base, disposition: 'archive', stage: 'rules' }, { mode: 'act', byUser: true, now: NOW });
+    await recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'keep', stage: 'classifier' }, { now: NOW });
+    // A message the model could not judge, answered by the user: no model decided it, but neither did sift.
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'failed', receivedAt: NOW })], '3', NOW);
+    await modelRun(db, 'failed', 0.005, 'failed');
+    await modelRun(db, 'failed', 0.005, 'failed');
+    await recordDecision(db, ACCOUNT, 'failed', { ...base, disposition: 'archive', stage: 'rules' }, { mode: 'act', byUser: true, now: NOW });
+
+    const summary = await summarize(db, await everything(db), 7, NOW);
+    expect(summary.totals).toMatchObject({ decided: 3, withoutInference: 2, judged: 3, costUsd: expect.closeTo(0.04) });
+    expect(summary.daily.reduce((sum, d) => sum + Object.values(d.counts).reduce((a, b) => a + b, 0), 0)).toBe(3);
+    expect(summary.byStage.map((s) => s.decisions)).toEqual([1, 1, 1, 0]);
   });
 
   it('returns one entry per day, including empty days', async () => {
@@ -247,7 +273,7 @@ describe('tracking', () => {
   it('handles an empty database', async () => {
     const empty = await openUserDb();
     const summary = await summarize(empty, await everything(empty), 30, NOW);
-    expect(summary.totals.decisions).toBe(0);
+    expect(summary.totals.decided).toBe(0);
     expect(summary.daily).toHaveLength(30);
     expect(summary.recent).toEqual([]);
   });

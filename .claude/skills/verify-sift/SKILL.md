@@ -32,7 +32,7 @@ What the seed leaves (through three real passes with sift off, `runEveryone`, wi
 | `m6` | `ada@example.org` | nothing | Suggestions, `Which label?` |
 | `m7` | `grace@example.net` | nothing | Suggestions, `Which label?` |
 | `m8` | `sale@store.example.com` | stand-in model → Marketing, confidence 0.95 | Suggestions, `Marketing` (sure), the only row with a label to agree with |
-| `m9` | `alerts@ops.example.com` | the stand-in model fails on it, three passes running | Activity › Failed, under `Not judged`, with Retry |
+| `m9`, `m10` | `alerts@ops.example.com` | the stand-in model answers unusably, three passes running | Activity › Failed, under `Not judged`, with Retry and the page's Retry all |
 
 The connected account is `me@example.org`, with sift off (`preferences.active` false), default labels, 3 user rules. Its model is Anthropic, `claude-haiku-4-5`, with a made-up key, so the dashboard is not behind the connect-a-model wall; nothing calls Anthropic, since no pass runs. To see the wall, sign it out from the page: `ab eval "fetch('/api/model/signout',{method:'POST',headers:{'content-type':'application/json','x-sift':'1'},body:JSON.stringify({provider:'anthropic'})})"`. Every message carries `dmarc=pass`; the three lists (news, promo, store) carry one-click unsubscribe headers.
 

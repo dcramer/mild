@@ -133,6 +133,26 @@ type FeedbackScope =
   /** Only the mail that is waiting (or the one decision given). No rule: the answer is kept as an example for the model. */
   | 'once';
 
+/** A message sift never decided (the model could not judge it), with who sent it, or null. */
+async function undecided(db: Sql, accountId: string, messageId: string): Promise<{ fromAddress: string } | null> {
+  const [row] = await db
+    .select({ fromAddress: messages.fromAddress })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.accountId, accountId),
+        eq(messages.id, messageId),
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(decisions)
+            .where(and(eq(decisions.accountId, messages.accountId), eq(decisions.messageId, messages.id))),
+        ),
+      ),
+    );
+  return row ?? null;
+}
+
 /** The decision that currently stands for a message, in the shape of a suggestion, or null if it has none. */
 async function currentDecision(db: Sql, accountId: string, messageId: string): Promise<Suggestion | null> {
   const [row] = await db
@@ -163,7 +183,8 @@ export interface FeedbackInput {
   decisionId?: number;
   /**
    * The message the answer was given on. It need not be waiting: this is how a decision sift already
-   * made, or mail it kept, is corrected. A corrected message gets a new decision in `mode`.
+   * made, or mail it kept, is corrected, and how mail the model could not judge is answered. Either gets
+   * a new decision in `mode`.
    */
   messageId?: string;
   /** The corrected message's new decision: `act` (sift is on) to carry it out, `observe` to only record it. */
@@ -230,8 +251,14 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
   // is corrected through its current decision.
   const given =
     input.messageId !== undefined && !targets.some((t) => t.messageId === input.messageId) ? await currentDecision(db, input.accountId, input.messageId) : null;
-  if (given && given.fromAddress !== input.sender) throw new Error('That message is not from that sender.');
-  if (targets.length === 0 && !given)
+  // Mail sift never decided has nothing to correct: the answer is its first decision, with no suggestion before it.
+  const fresh =
+    input.messageId !== undefined && !given && !targets.some((t) => t.messageId === input.messageId)
+      ? await undecided(db, input.accountId, input.messageId)
+      : null;
+  const from = given?.fromAddress ?? fresh?.fromAddress;
+  if (from !== undefined && from !== input.sender) throw new Error('That message is not from that sender.');
+  if (targets.length === 0 && !given && !fresh)
     throw new Error(
       input.scope === 'subject' ? `Nothing waiting from ${input.sender} has "${contains}" in the subject.` : 'That suggestion is no longer waiting.',
     );
@@ -260,17 +287,39 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
         : { disposition: wanted, ...extra };
 
   // The label a corrected message ends with: the one given, else the one it had.
-  const standing = (target: Suggestion) => label ?? labels.find((l) => l.id === target.labelId);
+  const standing = (target: Pick<Suggestion, 'labelId'>) => label ?? labels.find((l) => l.id === target.labelId);
   // Agreeing with a decision that already stands changes nothing about the message itself.
   const changes = given !== null && ((label !== undefined && given.labelId !== label.id) || given.disposition !== outcome);
 
   // sift having no suggestion is not sift being wrong. Otherwise it was right if it gave the same label,
   // or, when the user said only what should happen, if it would have done the same.
-  const verdictFor = (target: Suggestion): (typeof VERDICTS)[number] =>
+  const verdictFor = (target: Pick<Suggestion, 'labelId' | 'disposition'>): (typeof VERDICTS)[number] =>
     target.labelId === null ? 'answered' : (label ? target.labelId === label.id : target.disposition === wanted) ? 'right' : 'wrong';
   await db.transaction(async (tx) => {
-    const all = given ? [...targets, given] : targets;
-    for (const target of all) {
+    const settled: Pick<Suggestion, 'accountId' | 'decisionId' | 'messageId' | 'labelId' | 'disposition' | 'stage'>[] = given
+      ? [...targets, given]
+      : [...targets];
+    const ruleId =
+      match && says
+        ? await setRule(tx, input.accountId, match, says, !fresh && settled.every((t) => verdictFor(t) === 'right') ? 'user' : 'correction', now)
+        : null;
+    // Pressed in the dashboard: what the user said is done to each waiting message it settled.
+    const answer = (target: Pick<Suggestion, 'labelId'>): Decision => {
+      const is = standing(target);
+      return {
+        ...(is ? labelled(is, wanted === is.disposition ? undefined : wanted) : { disposition: wanted, subscription: 'preserve' as const }),
+        ...extra,
+        stage: 'rules',
+        ...(ruleId ? { ruleId } : {}),
+        reason: label ? `you said this is ${label.name}` : `you said to ${DO[wanted]}`,
+      };
+    };
+    const carried = input.carryOut ? { mode: 'act' as const, byUser: true, now } : { mode: input.mode ?? ('observe' as const), now };
+    if (fresh && input.messageId !== undefined) {
+      const decisionId = await recordDecision(tx, input.accountId, input.messageId, answer({ labelId: null }), carried);
+      settled.push({ accountId: input.accountId, decisionId, messageId: input.messageId, labelId: null, disposition: 'review', stage: 'fallback' });
+    }
+    for (const target of settled) {
       const verdict = verdictFor(target);
       const is = standing(target)?.id ?? null;
       const answered = {
@@ -298,39 +347,19 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
         })
         .onConflictDoUpdate({ target: [examples.userId, examples.accountId, examples.messageId], set: { disposition: wanted, labelId: is, markedAt: now } });
     }
-    const ruleId =
-      match && says ? await setRule(tx, input.accountId, match, says, all.every((t) => verdictFor(t) === 'right') ? 'user' : 'correction', now) : null;
-    // Pressed in the dashboard: what the user said is done to each waiting message it settled.
-    const answer = (target: Suggestion): Decision => {
-      const is = standing(target);
-      return {
-        ...(is ? labelled(is, wanted === is.disposition ? undefined : wanted) : { disposition: wanted, subscription: 'preserve' as const }),
-        ...extra,
-        stage: 'rules',
-        ...(ruleId ? { ruleId } : {}),
-        reason: label ? `you said this is ${label.name}` : `you said to ${DO[wanted]}`,
-      };
-    };
     if (input.carryOut)
       for (const target of targets) await recordDecision(tx, input.accountId, target.messageId, answer(target), { mode: 'act', byUser: true, now });
     // The corrected message gets a decision of its own, so the log shows what the user said and, when
     // it is carried out, the mailbox is brought into line with it.
-    if (given && changes)
-      await recordDecision(
-        tx,
-        input.accountId,
-        given.messageId,
-        answer(given),
-        input.carryOut ? { mode: 'act', byUser: true, now } : { mode: input.mode ?? 'observe', now },
-      );
+    if (given && changes) await recordDecision(tx, input.accountId, given.messageId, answer(given), carried);
   });
   const unsubscribed = (fromLabel: boolean) => ((fromLabel && label?.unsubscribe) || input.unsubscribe ? ', and unsubscribed from' : '');
   // An answer makes no rule of its own; enough of the same answers for a sender, and sift offers one.
   const proposed = !match && label !== undefined && (await proposeFromAnswers(db, input.accountId, input.sender, now));
   return {
-    reviewed: targets.length + (given ? 1 : 0),
+    reviewed: targets.length + (given || fresh ? 1 : 0),
     corrected: given && changes ? given.messageId : null,
-    carrying: input.carryOut ? targets.length + (given && changes ? 1 : 0) : 0,
+    carrying: input.carryOut ? targets.length + ((given && changes) || fresh ? 1 : 0) : 0,
     proposed,
     taught: !says
       ? null

@@ -159,9 +159,14 @@ function Body({
   const waitingNow = waiting.data?.messages ?? [];
   const others = waitingNow.filter((m) => m.messageId !== detail.messageId);
   const labels = manage.data?.labels[detail.accountId] ?? [];
-  const target = current
-    ? { accountId: detail.accountId, sender: detail.fromAddress, messageId: detail.messageId, decisionId: current.id, labelId: current.labelId }
-    : null;
+  // Mail sift never decided (the model could not judge it) is answered all the same.
+  const target = {
+    accountId: detail.accountId,
+    sender: detail.fromAddress,
+    messageId: detail.messageId,
+    labelId: current?.labelId ?? null,
+    ...(current ? { decisionId: current.id } : {}),
+  };
   const { answer, choices, busy, error } = useAnswer(
     labels,
     waitingNow.map((m) => ({ accountId: detail.accountId, sender: detail.fromAddress, messageId: m.messageId, decisionId: m.decisionId, labelId: m.labelId })),
@@ -173,30 +178,30 @@ function Body({
     .filter((l) => l.id !== current?.labelId)
     .slice(0, 2)
     .map((l) => ({ id: l.id, name: l.name, share: total ? l.messages / total : 0 }));
-  const groups = target && current ? choices(target, sureness(current.stage, current.confidence), alternatives) : [];
+  const groups = choices(target, current ? sureness(current.stage, current.confidence) : 1, alternatives);
 
   return (
     <div className="flex flex-col gap-8">
-      {target && current ? (
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <AnswerPicker
-              key={current.id}
-              className="w-72"
-              label="What this message is"
-              value={current.labelId}
-              groups={groups}
-              empty={<Look>Which label?</Look>}
-              busy={busy}
-              onSubmit={(id) => answer(target, id)}
-              extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
-            />
-            {adding ? <AddLabelDialog accountId={detail.accountId} onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
-            <span className="flex-1" />
-            <Button variant="quiet" href={`/rules?from=${encodeURIComponent(detail.fromAddress)}`}>
-              Make a rule…
-            </Button>
-          </div>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <AnswerPicker
+            key={current?.id ?? 'undecided'}
+            className="w-72"
+            label="What this message is"
+            value={current?.labelId ?? null}
+            groups={groups}
+            empty={<Look>Which label?</Look>}
+            busy={busy}
+            onSubmit={(id) => answer(target, id)}
+            extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
+          />
+          {adding ? <AddLabelDialog accountId={detail.accountId} onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
+          <span className="flex-1" />
+          <Button variant="quiet" href={`/rules?from=${encodeURIComponent(detail.fromAddress)}`}>
+            Make a rule…
+          </Button>
+        </div>
+        {current ? (
           <p className="text-muted-foreground">
             {current.reason}
             {current.mode !== 'observe' ? (
@@ -206,9 +211,9 @@ function Body({
               </>
             ) : null}
           </p>
-          <Failure>{error}</Failure>
-        </div>
-      ) : null}
+        ) : null}
+        <Failure>{error}</Failure>
+      </div>
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <MessageBody detail={detail} />

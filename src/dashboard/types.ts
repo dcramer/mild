@@ -67,16 +67,19 @@ export const Summary = z.object({
   totals: z.object({
     /** Messages received in the window. */
     messages: z.number(),
-    /** Decisions made in the window. */
-    decisions: z.number(),
-    /** Of those, how many used no model at all. */
+    /** Messages sift first decided in the window. */
+    decided: z.number(),
+    /** Of those, how many it decided without a model. */
     withoutInference: z.number(),
+    /** Messages the model was asked about in the window, whatever came of it: what `costUsd` paid for. */
+    judged: z.number(),
     costUsd: z.number(),
     /** Recorded messages with no decision yet (all time). */
     awaitingTriage: z.number(),
     /** Actions in the window that failed or whose outcome is unconfirmed. */
     troubledActions: z.number(),
   }),
+  /** Messages by the tier that first decided them, with what that cost. */
   byStage: z.array(z.object({ stage, decisions: z.number(), costUsd: z.number(), tokens: z.number() })),
   byDisposition: z.array(z.object({ disposition: z.string(), decisions: z.number() })),
   /** One entry per day in the window, oldest first, with a count for every stage. */

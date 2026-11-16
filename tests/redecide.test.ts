@@ -1,5 +1,5 @@
 import type { Sql } from '../src/store/sql.ts';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
@@ -9,8 +9,24 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { addRule, listRules, removeRule } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
+import type * as Senders from '../src/store/senders.ts';
 import type { Decision } from '../src/triage/types.ts';
 import { facts } from './helpers.ts';
+
+/** Run once, on the handle redecide is using, the next time it reads whether the user writes to a sender. */
+let meanwhile: ((db: Sql) => Promise<void>) | null = null;
+vi.mock('../src/store/senders.ts', async (actual) => {
+  const real = await actual<typeof Senders>();
+  return {
+    ...real,
+    cachedCorrespondent: async (on: Sql, ...rest: [string, string, number?]) => {
+      const run = meanwhile;
+      meanwhile = null;
+      await run?.(on);
+      return await real.cachedCorrespondent(on, ...rest);
+    },
+  };
+});
 
 const ACCOUNT = 'me@example.org';
 let db: Sql;
@@ -119,6 +135,20 @@ describe('when a rule changes', () => {
     expect(await current(answered)).toMatchObject({ stage: 'rules', label_id: 'marketing' });
   });
 
+  it('an answer given while it runs stands', async () => {
+    const sale = await decided('sales@example.com', MARKETING);
+    await addRule(db, ACCOUNT, { match: { from: 'sales@example.com' }, labelId: 'newsletter' }, 'user');
+    // The user answers after the waiting mail was listed and before its new decision is recorded.
+    meanwhile = async (on) =>
+      void (await applyFeedback(
+        on,
+        { accountId: ACCOUNT, sender: 'sales@example.com', label: 'personal', scope: 'once', messageId: sale, carryOut: true },
+        70,
+      ));
+    expect(await redecideWaiting(db, ACCOUNT, 70)).toBe(0);
+    expect(await current(sale)).toMatchObject({ stage: 'rules', label_id: 'personal', mode: 'act' });
+  });
+
   it('a rule sift learned changes a suggestion only when the outcome differs', async () => {
     const sale = await decided('sales@example.com', MARKETING);
     await addRule(db, ACCOUNT, { match: { from: 'sales@example.com' }, labelId: 'marketing' }, 'agent');
@@ -142,7 +172,7 @@ describe("when a label's outcome changes", () => {
   it('waiting mail with that label gets the new outcome under the same label, without a model', async () => {
     const sale = await decided('sales@example.com', { ...MARKETING, confidence: 0.7 });
     const run = await startRun(db, { accountId: ACCOUNT, messageId: sale, model: 'p/m', now: 0 });
-    await raw(db).run('UPDATE decisions SET run_id = ? WHERE message_id = ?', run, sale);
+    await raw(db).run(`UPDATE decisions SET run_id = ?, prior_rule_id = 'r-prior' WHERE message_id = ?`, run, sale);
     const other = await decided('news@example.com', { disposition: 'archive', labelId: 'newsletter', subscription: 'unsubscribe' });
     await updateLabel(db, ACCOUNT, 'marketing', { disposition: 'keep', unsubscribe: false });
 
@@ -154,9 +184,11 @@ describe("when a label's outcome changes", () => {
       rule_id: null,
       subscription: 'preserve',
       reason: 'Marketing is now kept. Before: Marketing: a sale',
-      run_id: null,
+      // Still what that model call decided, with the rule it was shown.
+      run_id: run,
       mode: 'observe',
     });
+    expect(await raw(db).get('SELECT prior_rule_id FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1', sale)).toEqual({ prior_rule_id: 'r-prior' });
     expect(await current(other)).toMatchObject({ disposition: 'archive', reason: 'Marketing: a sale' });
     expect(await waiting()).toEqual([sale, other].toSorted());
     expect(await redecideWaiting(db, ACCOUNT)).toBe(0);

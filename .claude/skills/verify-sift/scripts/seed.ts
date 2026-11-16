@@ -67,8 +67,9 @@ const inbox = [
   mail('Grace Hopper <grace@example.net>', 'Notes from the review', 'Attached are my notes.'),
   // The one the stand-in model places, as Marketing.
   mail('Store <sale@store.example.com>', 'Winter sale starts now', 'Up to half off.', list('store.example.com')),
-  // The stand-in model fails on this one every time, so after three passes it is out of the queue and not judged.
+  // The stand-in model fails on these every time, so after three passes they are out of the queue and not judged.
   mail('Ops <alerts@ops.example.com>', 'Disk 91% full on db-2', 'Free space is running low.'),
+  mail('Ops <alerts@ops.example.com>', 'Replica lag on db-3', 'The replica is 40 seconds behind.'),
 ];
 
 const store = await openStore(config);
@@ -99,8 +100,8 @@ const api: GmailApi = {
   getRaw: async () => null,
 };
 
-// A stand-in model that calls no provider. It is sure the Store's sale is Marketing, fails on the Ops alert
-// every time, and can place nothing else, so what no rule covers becomes a question ("Which label?"): with
+// A stand-in model that calls no provider. It is sure the Store's sale is Marketing, answers unusably about
+// the Ops alerts every time (a provider error would be taken for an outage and not count), and can place nothing else, so what no rule covers becomes a question ("Which label?"): with
 // no model at all it would wait, undecided, and never be asked about.
 const standIn = async () => ({
   model: 'synthetic/stand-in',
@@ -108,10 +109,10 @@ const standIn = async () => ({
     evidence.facts.from.address === 'sale@store.example.com'
       ? { label: 'marketing', reason: 'synthetic: a sale sent to a list', confidence: 0.95 }
       : evidence.facts.from.address === 'alerts@ops.example.com'
-        ? { failed: 'synthetic: the provider answered 529 overloaded' }
+        ? { failed: 'synthetic: the model did not return a usable verdict', unusable: true as const }
         : { label: 'unsure', reason: 'synthetic: cannot tell', confidence: 0.3 },
 });
-// Three passes, so the Ops alert has used up its tries.
+// Three passes, so the Ops alerts have used up their tries.
 for (let pass = 0; pass < 3; pass++) {
   const [result] = await runEveryone(store, { model: standIn, connect: () => ({ api, mailbox }), log: () => {} });
   if (result?.error) throw new Error(`seed pass failed: ${result.error}`);

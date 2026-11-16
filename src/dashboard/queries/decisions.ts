@@ -79,17 +79,22 @@ export const decisionsJoined = (db: Sql) =>
       ),
     );
 
-/** Where a decision has got to, as the dashboard groups it. `trouble`: not carried out, failed, or not confirmed. */
+/**
+ * Where a decision has got to, as the dashboard groups it. `trouble`: failed or not confirmed. A change
+ * still waiting for a pass (an answer, or anything left while sift was off) is not trouble.
+ */
 const STATUS_WHERE: Record<string, SQL | undefined> = {
   suggested: eq(decisions.mode, 'observe'),
   done: and(eq(decisions.mode, 'act'), inArray(decisions.outcome, ['done', 'none']), sql`coalesce(${actions.status}, 'done') = 'done'`),
   undone: eq(actions.status, 'undone'),
   trouble: and(
     eq(decisions.mode, 'act'),
-    or(isNull(decisions.outcome), inArray(decisions.outcome, ['failed', 'unknown']), inArray(actions.status, ['failed', 'unknown', 'pending'])),
+    isNotNull(decisions.outcome),
+    sql`coalesce(${actions.status}, '') NOT IN ('pending', 'undone')`,
+    or(inArray(decisions.outcome, ['failed', 'unknown']), inArray(actions.status, ['failed', 'unknown'])),
   ),
-  // What was done to mail in Gmail, or tried: a change was made or failed. Suggestions and mail left alone are not.
-  changed: and(eq(decisions.mode, 'act'), or(isNotNull(actions.id), inArray(decisions.outcome, ['failed', 'unknown']))),
+  // What was done to mail in Gmail, tried, or waiting to be: suggestions and mail left alone are not.
+  changed: and(eq(decisions.mode, 'act'), or(isNotNull(actions.id), isNull(decisions.outcome), inArray(decisions.outcome, ['failed', 'unknown']))),
 };
 
 /**

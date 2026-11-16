@@ -1,4 +1,4 @@
-import { type PROPOSAL_KINDS, and, decisions, desc, eq, feedback, messages, proposals } from './query.ts';
+import { type PROPOSAL_KINDS, alias, and, decisions, desc, eq, feedback, isNotNull, max, messages, proposals } from './query.ts';
 import type { Sql } from './sql.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
 import { listLabels } from './labels.ts';
@@ -55,15 +55,18 @@ async function propose(db: Sql, p: Omit<Proposal, 'id' | 'createdAt'>, now: numb
   return true;
 }
 
-/** How many model decisions in a row must agree before sift proposes a rule for the sender. */
+const later = alias(decisions, 'later');
+
+/** How many messages in a row the model must have labelled alike before sift proposes a rule for the sender. */
 export const PROPOSE_AFTER = 5;
 /** How many times in a row the model must agree with a `usually` rule before sift proposes to stop checking it. */
 const SETTLED_AFTER = 10;
 
 /**
  * Propose a rule for a sender once the model has given their last few messages the same label and each
- * ended the way the label says. Senders who send mixed mail never settle. Nothing is proposed where a
- * rule for exactly that sender exists. Returns true if a proposal was opened.
+ * ended the way the label says. Each message counts once, by where it stands now: one the user answered,
+ * or that a rule decided since, is not the model's. Senders who send mixed mail never settle. Nothing is
+ * proposed where a rule for exactly that sender exists. Returns true if a proposal was opened.
  */
 export async function proposeForSender(db: Sql, accountId: string, address: string, now: number = Date.now()): Promise<boolean> {
   if (await hasRuleFor(db, accountId, { from: address })) return false;
@@ -71,7 +74,21 @@ export async function proposeForSender(db: Sql, accountId: string, address: stri
     .select({ labelId: decisions.labelId, disposition: decisions.disposition, priorRuleId: decisions.priorRuleId })
     .from(decisions)
     .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
-    .where(and(eq(decisions.accountId, accountId), eq(messages.fromAddress, address), eq(decisions.stage, 'agent')))
+    .where(
+      and(
+        eq(decisions.accountId, accountId),
+        eq(messages.fromAddress, address),
+        eq(
+          decisions.id,
+          db
+            .select({ id: max(later.id) })
+            .from(later)
+            .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
+        ),
+        eq(decisions.stage, 'agent'),
+        isNotNull(decisions.runId),
+      ),
+    )
     .orderBy(desc(decisions.id))
     .limit(PROPOSE_AFTER);
   const [first] = recent;

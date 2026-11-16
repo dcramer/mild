@@ -152,6 +152,14 @@ function readSession(value: string | undefined, secret: string, now: number): st
   }
 }
 
+/** How long a sign-in started here may take to come back from Google. */
+const SIGN_IN_MS = 600_000;
+
+const same = (a: string, b: string) => {
+  const [x, y] = [Buffer.from(a), Buffer.from(b)];
+  return x.length === y.length && x.length > 0 && timingSafeEqual(x, y);
+};
+
 const cookie = (req: IncomingMessage, name: string) =>
   (req.headers.cookie ?? '')
     .split(';')
@@ -229,6 +237,10 @@ export function createDashboardServer(people: People, options: DashboardOptions 
     const ctx: Context = { db: person ? await person.open(person.id) : people.nobody, open: person ? person.open : refuse, controls, now };
     const sessionCookie = (value: string, maxAge: number) =>
       `sift_session=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
+    // The sign-in under way in this browser. Google's return carries the state; only the browser that
+    // started the sign-in also holds it here, so a consent link sent to someone else completes nothing.
+    const signInCookie = (state: string, maxAge: number) =>
+      `sift_signin=${state}; Path=/auth; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
 
     if (signIn && req.method === 'GET' && url.pathname === '/api/session') {
       const reason = !signIn.hasClient() ? 'no-client' : !googleCanReturnHere ? 'address' : null;
@@ -250,18 +262,27 @@ export function createDashboardServer(people: People, options: DashboardOptions 
       const verifier = randomBytes(32).toString('base64url');
       const redirectUri = `${origin}/auth/callback`;
       // Adding a second account is only for someone already signed in.
-      pending.set(state, { verifier, redirectUri, addTo: query.get('add') === '1' ? session : null, expires: now() + 600_000 });
+      pending.set(state, { verifier, redirectUri, addTo: query.get('add') === '1' ? session : null, expires: now() + SIGN_IN_MS });
       res
-        .writeHead(303, { location: signIn.url(redirectUri, state, createHash('sha256').update(verifier).digest('base64url')), 'cache-control': 'no-store' })
+        .writeHead(303, {
+          location: signIn.url(redirectUri, state, createHash('sha256').update(verifier).digest('base64url')),
+          'set-cookie': signInCookie(state, SIGN_IN_MS / 1000),
+          'cache-control': 'no-store',
+        })
         .end();
       return;
     }
     if (signIn && req.method === 'GET' && url.pathname === '/auth/callback') {
-      const entry = pending.get(query.get('state') ?? '');
-      pending.delete(query.get('state') ?? '');
-      const fail = (message: string) => res.writeHead(303, { location: `/?signin=${encodeURIComponent(message)}`, 'cache-control': 'no-store' }).end();
+      const state = query.get('state') ?? '';
+      const entry = pending.get(state);
+      pending.delete(state);
+      const fail = (message: string) =>
+        res.writeHead(303, { location: `/?signin=${encodeURIComponent(message)}`, 'set-cookie': signInCookie('', 0), 'cache-control': 'no-store' }).end();
       const code = query.get('code');
       if (!entry || entry.expires < now()) return void fail('That sign-in expired. Try again.');
+      if (!same(cookie(req, 'sift_signin') ?? '', state)) return void fail('That sign-in was started in another browser. Start it again here.');
+      // A mailbox joins whoever started adding it, so that person must still be the one signed in here.
+      if (entry.addTo !== null && session !== entry.addTo) return void fail('Sign in again, then add the mailbox.');
       if (!code) return void fail(query.get('error') === 'access_denied' ? 'Google did not grant access.' : 'Google did not complete the sign-in.');
       signIn
         .complete(entry.redirectUri, code, entry.verifier, entry.addTo)
@@ -269,7 +290,7 @@ export function createDashboardServer(people: People, options: DashboardOptions 
           res
             .writeHead(303, {
               location: '/',
-              'set-cookie': sessionCookie(signSession(email, secret, now()), SESSION_DAYS * 86_400),
+              'set-cookie': [sessionCookie(signSession(email, secret, now()), SESSION_DAYS * 86_400), signInCookie('', 0)],
               'cache-control': 'no-store',
             })
             .end(),

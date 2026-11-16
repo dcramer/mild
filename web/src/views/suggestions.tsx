@@ -45,7 +45,7 @@ function Week({ summary }: { summary: Summary }) {
         </Failure>
       ) : null}
       <span className="hidden md:inline">
-        This week {percent(t.withoutInference, t.decisions)} without a model · {money(t.costUsd)} · <TextLink href="/activity">Activity</TextLink>
+        This week {percent(t.withoutInference, t.decided)} without a model · {money(t.costUsd)} · <TextLink href="/activity">Activity</TextLink>
       </span>
     </p>
   );

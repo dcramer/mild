@@ -19,6 +19,8 @@ const STANDING = {
   markRead: decisions.markRead,
   confidence: decisions.confidence,
   reason: decisions.reason,
+  runId: decisions.runId,
+  priorRuleId: decisions.priorRuleId,
 };
 
 const x = alias(decisions, 'x');
@@ -44,9 +46,30 @@ const same = (standing: { disposition: Disposition; labelId: string | null; subs
  * - the rule that decided it has gone: it goes back to what a tier said before the rule, or to review.
  *
  * Mail a rule decided only because of an earlier call here is included, so removing that rule brings
- * the suggestion back. Mail the user answered for is never touched. Returns how many decisions were recorded.
+ * the suggestion back. Mail the user answered for is never touched, including while this runs: it is one
+ * transaction, and each message is checked again just before its decision is recorded. Returns how many
+ * decisions were recorded.
  */
 export async function redecideWaiting(db: Sql, accountId: string, now: number = Date.now()): Promise<number> {
+  return await db.transaction(async (tx) => await redecide(tx, accountId, now));
+}
+
+/**
+ * Whether `decisionId` still stands for its message and is unanswered. Its row is locked first, so an
+ * answer to it (whose feedback row refers to it) waits until this transaction is done, or is seen here.
+ */
+async function stillWaiting(db: Sql, accountId: string, messageId: string, decisionId: number): Promise<boolean> {
+  await db.select({ id: decisions.id }).from(decisions).where(eq(decisions.id, decisionId)).for('update');
+  const [latest] = await db
+    .select({ id: max(decisions.id) })
+    .from(decisions)
+    .where(and(eq(decisions.accountId, accountId), eq(decisions.messageId, messageId)));
+  if (latest?.id !== decisionId) return false;
+  const answered = await db.select({ id: feedback.id }).from(feedback).where(eq(feedback.decisionId, decisionId)).limit(1);
+  return answered.length === 0;
+}
+
+async function redecide(db: Sql, accountId: string, now: number): Promise<number> {
   const labels = await listLabels(db, accountId, now);
   const stored = await listRules(db, accountId);
   let known: boolean | undefined;
@@ -98,6 +121,8 @@ export async function redecideWaiting(db: Sql, accountId: string, now: number = 
     known = await cachedCorrespondent(db, accountId, facts.from.address, now);
 
     let next: Decision | null = null;
+    // What a model decided, worked out again, is still that call's.
+    let runId: number | null = null;
     const ruled = await rules.decide(facts);
     if (ruled) {
       const learned = stored.find((r) => r.id === ruled.ruleId)?.learned ?? false;
@@ -125,18 +150,20 @@ export async function redecideWaiting(db: Sql, accountId: string, now: number = 
           ...(held ? { disposition: 'review', subscription: 'preserve', labelId: label.id, gmailLabel: label.gmailLabel } : outcome),
           stage: base.stage,
           ...(base.confidence === null ? {} : { confidence: base.confidence }),
+          ...(base.priorRuleId === null ? {} : { priorRuleId: base.priorRuleId }),
           reason: held
             ? `${label.name} is now ${WILL[outcome.disposition]}, but ${known ? 'you have written to this sender' : 'whether you have written to this sender is not known'}. Before: ${before}`
             : `${label.name} is now ${WILL[outcome.disposition]}. Before: ${before}`,
         };
         const changed = !same(base, derived);
         if (current.stage === 'rules' || changed) next = changed ? derived : { ...derived, reason: base.reason };
+        runId = base.runId;
       } else if (current.stage === 'rules') {
         next = { disposition: 'review', subscription: 'preserve', stage: 'fallback', reason: 'the rule that decided this no longer applies' };
       }
     }
-    if (!next) continue;
-    await recordDecision(db, accountId, messageId, next, { mode: 'observe', now });
+    if (!next || !(await stillWaiting(db, accountId, messageId, decisionId))) continue;
+    await recordDecision(db, accountId, messageId, next, { mode: 'observe', now, ...(runId === null ? {} : { runId }) });
     if (next.ruleId) await countRuleHit(db, next.ruleId);
     recorded++;
   }

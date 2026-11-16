@@ -8,7 +8,7 @@ import { shotCandidates } from '../store/examples.ts';
 import { listLabels } from '../store/labels.ts';
 import { listUnsettledDecisions, recordDecision, settleDecision } from '../store/decisions.ts';
 import { listUndecided } from '../store/messages.ts';
-import { finishRun, startRun } from '../store/runs.ts';
+import { excuseRuns, finishRun, startRun } from '../store/runs.ts';
 import { proposeForSender, proposeSettled } from '../store/proposals.ts';
 import { blockSender, countRuleHit, listRules } from '../store/rules.ts';
 import { cachedCorrespondent } from '../store/senders.ts';
@@ -58,20 +58,25 @@ export interface TriageReport {
   blocked: number;
   /** Mailing lists left this pass. */
   unsubscribed: number;
-  /** Messages the model failed on this pass. Each stays in the queue until it has failed `MAX_ATTEMPTS` times. */
+  /** Messages the model failed on this pass. Each stays in the queue until it has failed `MAX_ATTEMPTS` times on its own account. */
   unjudged: number;
   /** What went wrong the last time. */
   failure?: string;
 }
 
-/** After this many failed calls in a row a pass stops asking the model: the provider is likely down, and the rest of the queue keeps its tries. */
+/** After this many provider errors in a row a pass stops asking the model: the provider is likely down. */
 const FAILURES_IN_A_ROW = 3;
 
 /**
  * The cascade for one account, as a function that decides one message: the tiers cheapest first, then
- * the rules that wait for a label.
+ * the rules that wait for a label. Once `asking` turns false, mail that needs the model is left unfinished
+ * without asking, rather than given to a rule that would have deferred to it.
  */
-async function cascadeFor(deps: TriageDeps, accountId: string): Promise<(facts: MessageFacts) => Promise<Decision | Unfinished>> {
+async function cascadeFor(
+  deps: TriageDeps,
+  accountId: string,
+  asking: () => boolean = () => true,
+): Promise<(facts: MessageFacts) => Promise<Decision | Unfinished>> {
   const { db, model } = deps;
   const labels = await listLabels(db, accountId);
   const rules = await listRules(db, accountId);
@@ -82,18 +87,17 @@ async function cascadeFor(deps: TriageDeps, accountId: string): Promise<(facts: 
   const read = async (facts: MessageFacts) => (written = await cachedCorrespondent(db, facts.accountId, facts.from.address));
   const stages: Stage<Decision | Unfinished>[] = [rulesStage(rules, labels, { ...options, judged: model !== undefined })];
   if (model) {
-    stages.push(
-      modelStage({
-        judge: model.judge,
-        labels,
-        gather: async (facts) => await gatherEvidence({ db, ...model.sources, ...(deps.now ? { now: deps.now } : {}) }, facts),
-        prior: (facts) => {
-          const hit = priorRule(rules, labels, facts, options);
-          return hit?.label ? { rule: hit.rule, label: hit.label } : null;
-        },
-        examples: async (facts) => await shotCandidates(db, facts),
-      }),
-    );
+    const stage = modelStage({
+      judge: model.judge,
+      labels,
+      gather: async (facts) => await gatherEvidence({ db, ...model.sources, ...(deps.now ? { now: deps.now } : {}) }, facts),
+      prior: (facts) => {
+        const hit = priorRule(rules, labels, facts, options);
+        return hit?.label ? { rule: hit.rule, label: hit.label } : null;
+      },
+      examples: async (facts) => await shotCandidates(db, facts),
+    });
+    stages.push({ name: stage.name, decide: async (facts) => (asking() ? await stage.decide(facts) : { unfinished: 'the model was not asked' }) });
   }
   return async (facts) => {
     await read(facts);
@@ -121,7 +125,12 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     unjudged: 0,
   };
 
-  let inARow = 0;
+  // Provider errors since the model last answered. Only a failure of the message itself counts against it:
+  // an unusable answer, or an error while the model answers other calls in the same pass. The rest are an
+  // outage, and are excused (see `excuseRuns`) when the breaker trips or the pass ends with no answer at all.
+  let errors: number[] = [];
+  let answered = false;
+  let asking = true;
   // The run that reached the message being decided, if the model was asked.
   let runId: number | undefined;
   const judged = (tier: ModelTier): ModelTier => ({
@@ -133,12 +142,16 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
       const usage = verdict.usage ? { usage: verdict.usage } : {};
       if ('failed' in verdict) await finishRun(db, run, { outcome: 'failed', error: verdict.failed, ...usage, now: now() });
       else await finishRun(db, run, { outcome: 'judged', ...usage, now: now() });
-      inARow = 'failed' in verdict ? inARow + 1 : 0;
+      if ('failed' in verdict && !verdict.unusable) errors.push(run);
+      else {
+        errors = [];
+        answered = true;
+      }
       runId = run;
       return verdict;
     },
   });
-  let model = deps.model && judged(deps.model);
+  const model = deps.model && judged(deps.model);
 
   const carryOut = async (decisionId: number, messageId: string, decision: Pick<Decision, 'disposition' | 'gmailLabel' | 'markRead'>, box: Mailbox) => {
     const action = planAction(decision);
@@ -162,18 +175,21 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
   }
 
   const { model: _given, ...modelless } = deps;
-  let decide = await cascadeFor(model ? { ...deps, model } : modelless, account.id);
+  const decide = await cascadeFor(model ? { ...deps, model } : modelless, account.id, () => asking);
   for (const { facts, observeOnly } of await listUndecided(db, account.id, limit)) {
     const act = mailbox !== null && !observeOnly;
     const started = performance.now();
     runId = undefined;
     const decision = await decide(facts);
     if ('unfinished' in decision) {
+      // Not asked, because the provider is down: it stays in the queue, unrecorded, for the next pass.
+      if (runId === undefined) continue;
       report.unjudged++;
       report.failure = decision.unfinished;
-      if (model && inARow >= FAILURES_IN_A_ROW) {
-        model = undefined;
-        decide = await cascadeFor(modelless, account.id);
+      if (errors.length >= FAILURES_IN_A_ROW) {
+        await excuseRuns(db, errors, now());
+        errors = [];
+        asking = false;
       }
       continue;
     }
@@ -215,5 +231,6 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     )
       report.unsubscribed++;
   }
+  if (!answered) await excuseRuns(db, errors, now());
   return report;
 }

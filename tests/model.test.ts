@@ -7,8 +7,9 @@ import { createJudge } from '../src/model/judge.ts';
 import { modelChoices, offerModel, openModels, recommendModel, resolveModel, saveApiKey, startChatGPTRedirect } from '../src/model/models.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts';
-import { openUserDb } from './fixtures.ts';
+import { openUserDb, raw } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
+import { startRun } from '../src/store/runs.ts';
 import { PROPOSE_AFTER, listProposals, proposeForSender, proposeSettled, resolveProposal } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { domainFacts, rememberCorrespondent, senderFacts } from '../src/store/senders.ts';
@@ -153,10 +154,28 @@ describe('judge', () => {
     expect(verdict).toHaveProperty('usage.inputTokens', expect.any(Number));
   });
 
+  it('makes one attempt with a timeout, leaving retries to the queue', async () => {
+    const { faux, ask } = setup();
+    let given: { timeoutMs?: number; maxRetries?: number } | undefined;
+    faux.setResponses([
+      (_context, options) => {
+        given = options;
+        return fauxAssistantMessage([fauxToolCall(VERDICT_TOOL, { label: 'marketing', confidence: 0.9, reason: 'r' })], { stopReason: 'toolUse' });
+      },
+    ]);
+    await ask();
+    expect(given?.maxRetries).toBe(0);
+    expect(given?.timeoutMs).toBeLessThanOrEqual(120_000);
+  });
+
   it('rejects a label outside the list, a missing verdict and out-of-range confidence', async () => {
     const { faux, ask } = setup();
     // Still billed, so what it cost comes back with it.
-    const unusable = { failed: 'the model did not return a usable verdict', usage: expect.objectContaining({ model: expect.stringContaining('/') }) };
+    const unusable = {
+      failed: 'the model did not return a usable verdict',
+      usage: expect.objectContaining({ model: expect.stringContaining('/') }),
+      unusable: true,
+    };
     faux.setResponses([fauxAssistantMessage([fauxToolCall(VERDICT_TOOL, { label: 'trash_it', confidence: 1, reason: 'r' })], { stopReason: 'toolUse' })]);
     expect(await ask()).toEqual(unusable);
     faux.setResponses([fauxAssistantMessage([fauxText('I think this is marketing.')])]);
@@ -166,9 +185,11 @@ describe('judge', () => {
     expect(await ask()).not.toHaveProperty('confidence');
   });
 
-  it('reports a provider failure as one', async () => {
+  it('reports a provider failure as one, not as the message failing', async () => {
     const { ask } = setup();
-    expect(await ask()).toMatchObject({ failed: expect.any(String) });
+    const failure = await ask();
+    expect(failure).toMatchObject({ failed: expect.any(String) });
+    expect(failure).not.toHaveProperty('unusable');
   });
 });
 
@@ -180,7 +201,8 @@ describe('preferences in the database', () => {
   }
   const modelDecision = async (db: Awaited<ReturnType<typeof seeded>>, id: string, labelId: string, disposition: 'keep' | 'archive' | 'review') => {
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id })], '2');
-    await recordDecision(db, ACCOUNT, id, { disposition, subscription: 'preserve', stage: 'agent', labelId, reason: 'r' });
+    const runId = await startRun(db, { accountId: ACCOUNT, messageId: id, model: 'p/m', now: 0 });
+    await recordDecision(db, ACCOUNT, id, { disposition, subscription: 'preserve', stage: 'agent', labelId, reason: 'r' }, { runId });
     return await proposeForSender(db, ACCOUNT, 'news@example.com');
   };
 
@@ -239,6 +261,34 @@ describe('preferences in the database', () => {
     expect(await modelDecision(db, 'later', 'newsletter', 'archive')).toBe(false);
     expect(await listProposals(db, ACCOUNT)).toEqual([]);
     expect(await listRules(db, ACCOUNT)).toEqual([]);
+  });
+
+  it('counts each message once, and only what a model call decided', async () => {
+    const db = await seeded();
+    await modelDecision(db, 'a', 'newsletter', 'archive');
+    await modelDecision(db, 'b', 'newsletter', 'archive');
+    // A label toggled back and forth decides the same two messages again, as redecide does, under the same call.
+    for (let i = 0; i < PROPOSE_AFTER; i++)
+      await recordDecision(db, ACCOUNT, i % 2 ? 'a' : 'b', {
+        disposition: 'archive',
+        subscription: 'preserve',
+        stage: 'agent',
+        labelId: 'newsletter',
+        reason: 'r',
+      });
+    await raw(db).run('UPDATE decisions d SET run_id = (SELECT r.id FROM model_runs r WHERE r.message_id = d.message_id) WHERE run_id IS NULL');
+    expect(await proposeForSender(db, ACCOUNT, 'news@example.com')).toBe(false);
+    // What the user said about a message is theirs, not the model's.
+    await modelDecision(db, 'answered', 'newsletter', 'archive');
+    await recordDecision(db, ACCOUNT, 'answered', {
+      disposition: 'archive',
+      subscription: 'preserve',
+      stage: 'rules',
+      labelId: 'newsletter',
+      reason: 'you said',
+    });
+    for (const id of ids(PROPOSE_AFTER - 3)) expect(await modelDecision(db, id, 'newsletter', 'archive')).toBe(false);
+    expect(await modelDecision(db, 'last', 'newsletter', 'archive')).toBe(true);
   });
 
   it('does not propose for senders who send mixed mail, or mail a protection held back', async () => {

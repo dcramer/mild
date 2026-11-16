@@ -12,7 +12,7 @@ import { openUserDb, raw } from './fixtures.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { setActive } from '../src/store/preferences.ts';
-import { MAX_ATTEMPTS, putBackInQueue, startRun } from '../src/store/runs.ts';
+import { MAX_ATTEMPTS, finishRun, putBackInQueue, startRun } from '../src/store/runs.ts';
 import { listProposals, resolveProposal } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
@@ -574,32 +574,91 @@ describe('inference tier', () => {
 
 describe('a failed model call', () => {
   const runs = async () => await raw(db).all('SELECT message_id, model, outcome, error, cost_usd FROM model_runs ORDER BY id');
+  const usage = { model: 'test/model', inputTokens: 900, outputTokens: 5, costUsd: 0.001 };
+  /** A provider that is down. */
   const failing =
     (asked: string[] = []) =>
     async () => ({
       model: 'test/model',
-      judge: async ({ evidence }: { evidence: { facts: { messageId: string } } }) => (
-        asked.push(evidence.facts.messageId),
-        { failed: 'rate limited', usage: { model: 'test/model', inputTokens: 900, outputTokens: 5, costUsd: 0.001 } }
-      ),
+      judge: async ({ evidence }: { evidence: { facts: { messageId: string } } }) => (asked.push(evidence.facts.messageId), { failed: 'rate limited', usage }),
     });
+  /** A model that answers, but never with a verdict sift can use. */
+  const unusable = async () => ({
+    model: 'test/model',
+    judge: async () => ({ failed: 'the model did not return a usable verdict', usage, unusable: true as const }),
+  });
+  /** A model that answers for every message but those in `failing`, where the provider errs. */
+  const flaky =
+    (failing: string[], asked: string[] = []) =>
+    async () => ({
+      model: 'test/model',
+      judge: async ({ evidence }: { evidence: { facts: { messageId: string } } }) => {
+        asked.push(evidence.facts.messageId);
+        return failing.includes(evidence.facts.messageId) ? { failed: 'rate limited' } : { label: 'newsletter', reason: 'r' };
+      },
+    });
+  const excused = async () =>
+    (await raw(db).all<{ message_id: string }>('SELECT message_id FROM model_runs WHERE retried_at IS NOT NULL ORDER BY id')).map((r) => r.message_id);
 
   it('decides nothing and is tried again on later passes, until it has failed three times', async () => {
     inbox = [inbox[0]!];
     for (let pass = 1; pass <= 3; pass++) {
-      await runOnce(db, { ...options(), model: failing() });
+      await runOnce(db, { ...options(), model: unusable });
       expect(await decisions()).toEqual([]);
       expect(await listUndecided(db, ACCOUNT, 10)).toHaveLength(pass < 3 ? 1 : 0);
     }
     // A failed call was still billed.
     expect(await runs()).toEqual(
-      Array.from({ length: 3 }, () => ({ message_id: 'news', model: 'test/model', outcome: 'failed', error: 'rate limited', cost_usd: 0.001 })),
+      Array.from({ length: 3 }, () => ({
+        message_id: 'news',
+        model: 'test/model',
+        outcome: 'failed',
+        error: 'the model did not return a usable verdict',
+        cost_usd: 0.001,
+      })),
     );
-    expect(logs.at(-1)).toContain('the model failed on 1: rate limited');
+    expect(logs.at(-1)).toContain('the model failed on 1: the model did not return a usable verdict');
 
     const asked: string[] = [];
     await runOnce(db, { ...options(), model: failing(asked) });
     expect(asked).toEqual([]);
+  });
+
+  it('uses up no tries while the provider is down: a pass in which the model never answers', async () => {
+    inbox = [inbox[0]!];
+    for (let pass = 0; pass <= MAX_ATTEMPTS; pass++) await runOnce(db, { ...options(), model: failing() });
+    expect(await listUndecided(db, ACCOUNT, 10)).toHaveLength(1);
+    expect(await excused()).toEqual(Array.from({ length: MAX_ATTEMPTS + 1 }, () => 'news'));
+    // Billed all the same.
+    expect((await runs()).every((r) => (r as { cost_usd: number }).cost_usd === 0.001)).toBe(true);
+  });
+
+  it('counts an error while the model answers other calls, and excuses the run of errors that stopped the pass', async () => {
+    inbox = [1, 2, 3, 4, 5, 6, 7].map((n) => ({ ...message(`m${n}`, `S${n} <s${n}@example.org>`), internalDate: 9000 - n }));
+    const asked: string[] = [];
+    await runOnce(db, { ...options(), model: flaky(['m2', 'm4', 'm5', 'm6', 'm7'], asked) });
+    expect(asked).toEqual(['m1', 'm2', 'm3', 'm4', 'm5', 'm6']);
+    expect(await excused()).toEqual(['m4', 'm5', 'm6']);
+    expect(await raw(db).all(`SELECT message_id FROM model_runs WHERE outcome = 'failed' AND retried_at IS NULL`)).toEqual([{ message_id: 'm2' }]);
+    expect((await listUndecided(db, ACCOUNT, 10)).map((m) => m.facts.messageId)).toEqual(['m2', 'm4', 'm5', 'm6', 'm7']);
+  });
+
+  it('counts a billed verdict that was never recorded as a try', async () => {
+    inbox = [inbox[0]!];
+    await runOnce(db, options());
+    for (let i = 0; i < MAX_ATTEMPTS; i++)
+      await finishRun(db, await startRun(db, { accountId: ACCOUNT, messageId: 'news', model: 'test/model', now: 0 }), { outcome: 'judged', usage, now: 0 });
+    expect(await listUndecided(db, ACCOUNT, 10)).toEqual([]);
+  });
+
+  it('after it stops asking, leaves mail the model would have judged in the queue, not to a weaker rule', async () => {
+    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, disposition: 'archive' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: 'late@example.com' }, whenLabel: 'personal' }, 'user');
+    inbox = [1, 2, 3].map((n) => ({ ...message(`m${n}`, `S${n} <s${n}@example.org>`), internalDate: 9000 - n }));
+    inbox.push({ ...message('late', 'Late <late@example.com>'), internalDate: 1 });
+    await runOnce(db, { ...options(), model: failing() });
+    expect(await decisions()).toEqual([]);
+    expect((await listUndecided(db, ACCOUNT, 10)).map((m) => m.facts.messageId)).toContain('late');
   });
 
   it('counts a run the pass never finished as failed', async () => {
@@ -622,7 +681,7 @@ describe('a failed model call', () => {
 
   it('can be put back in the queue, and is decided once the model answers', async () => {
     inbox = [inbox[0]!];
-    for (let pass = 0; pass < MAX_ATTEMPTS; pass++) await runOnce(db, { ...options(), model: failing() });
+    for (let pass = 0; pass < MAX_ATTEMPTS; pass++) await runOnce(db, { ...options(), model: unusable });
     expect(await putBackInQueue(db, ACCOUNT, 'news', 6000)).toBe(true);
     expect(await putBackInQueue(db, ACCOUNT, 'news', 6000)).toBe(false);
     await runOnce(db, { ...options(), model: async () => ({ model: 'test/model', judge: async () => ({ label: 'newsletter', reason: 'r' }) }) });

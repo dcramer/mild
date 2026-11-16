@@ -53,6 +53,8 @@ export interface JudgeFailure {
   failed: string;
   /** A call that answered unusably was still billed. */
   usage?: Usage;
+  /** The model answered, but with no verdict sift could use: a failure of this message, not of the provider. */
+  unusable?: true;
 }
 
 /** Port for the model. */

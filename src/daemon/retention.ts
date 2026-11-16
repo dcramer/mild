@@ -1,5 +1,6 @@
 import type { Sql } from '../store/sql.ts';
 import { pendingSuggestions } from '../learn/feedback.ts';
+import { outOfTries } from '../store/runs.ts';
 import {
   actions,
   and,
@@ -34,11 +35,12 @@ export const PRUNE_PER_RUN = 5000;
  * Forget messages nothing has happened to for `RETENTION_DAYS`, with their decisions and changes. A message is
  * kept, however old, while anything still depends on its record:
  *
- * - it is a suggestion waiting on the user, or has not been decided at all;
+ * - it is a suggestion waiting on the user, or is waiting in the queue to be decided (mail the model ran out
+ *   of tries on is not waiting, and goes like the rest);
  * - the user answered for it (`feedback`, `examples`): that is what sift learned from;
  * - a decision for it has not been carried out, or a change to it was never confirmed;
  * - sift unsubscribed through it, which is how it knows not to ask that sender again;
- * - any decision or change for it is newer than the cutoff, so a recent change can still be undone.
+ * - any decision, change or model call for it is newer than the cutoff, so a recent change can still be undone.
  *
  * Returns how many messages went. `PRUNE_PER_RUN` means there may be more.
  */
@@ -52,11 +54,22 @@ export async function pruneOld(db: Sql, now: number = Date.now()): Promise<numbe
       and(
         lt(messages.receivedAt, cutoff),
         lt(messages.syncedAt, cutoff),
-        exists(
-          db
-            .select({ one: sql`1` })
-            .from(decisions)
-            .where(decided),
+        or(
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(decisions)
+              .where(decided),
+          ),
+          outOfTries(db, messages.accountId, messages.id),
+        ),
+        not(
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(modelRuns)
+              .where(and(eq(modelRuns.accountId, messages.accountId), eq(modelRuns.messageId, messages.id), gte(modelRuns.startedAt, cutoff))),
+          ),
         ),
         not(
           exists(

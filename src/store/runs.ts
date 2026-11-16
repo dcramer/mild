@@ -1,4 +1,4 @@
-import { type AnyColumn, type RUN_OUTCOMES, and, count, eq, isNull, modelRuns, or, sql } from './query.ts';
+import { type AnyColumn, type RUN_OUTCOMES, and, count, decisions, eq, inArray, isNull, messages, modelRuns, notExists, sql } from './query.ts';
 import type { Sql } from './sql.ts';
 import type { Usage } from '../triage/stages/model.ts';
 
@@ -9,8 +9,20 @@ const MAX_ERROR = 500;
 
 type RunOutcome = (typeof RUN_OUTCOMES)[number];
 
-/** A failure that still counts against its message: one cut short counts, one the user put back does not. */
-export const counted = and(or(isNull(modelRuns.outcome), eq(modelRuns.outcome, 'failed')), isNull(modelRuns.retriedAt));
+/**
+ * A call that counts against its message: one no decision came of (it failed, was cut short, or its
+ * verdict was never recorded), unless the user put the message back or it was part of an outage.
+ */
+const counted = (db: Sql) =>
+  and(
+    isNull(modelRuns.retriedAt),
+    notExists(
+      db
+        .select({ one: sql`1` })
+        .from(decisions)
+        .where(and(eq(decisions.userId, modelRuns.userId), eq(decisions.runId, modelRuns.id))),
+    ),
+  );
 
 const forMessage = (accountId: string | AnyColumn, messageId: string | AnyColumn) =>
   and(eq(modelRuns.accountId, accountId), eq(modelRuns.messageId, messageId));
@@ -20,7 +32,7 @@ export const outOfTries = (db: Sql, accountId: AnyColumn, messageId: AnyColumn) 
   sql`(${db
     .select({ n: count() })
     .from(modelRuns)
-    .where(and(forMessage(accountId, messageId), counted))}) >= ${MAX_ATTEMPTS}`;
+    .where(and(forMessage(accountId, messageId), counted(db)))}) >= ${MAX_ATTEMPTS}`;
 
 /** Stamped before the call, so a pass that stops part-way leaves a run that counts as failed. */
 export async function startRun(db: Sql, run: { accountId: string; messageId: string; model: string; now: number }): Promise<number> {
@@ -50,7 +62,35 @@ export async function putBackInQueue(db: Sql, accountId: string, messageId: stri
   const rows = await db
     .update(modelRuns)
     .set({ retriedAt: now })
-    .where(and(forMessage(accountId, messageId), counted))
+    .where(and(forMessage(accountId, messageId), counted(db)))
     .returning({ id: modelRuns.id });
   return rows.length > 0;
+}
+
+/** Put every undecided message the model has run out of tries on back in the queue. Returns how many. */
+export async function putAllBackInQueue(db: Sql, accounts: readonly string[], now: number): Promise<number> {
+  return await db.transaction(async (tx) => {
+    const stuck = await tx
+      .select({ accountId: messages.accountId, id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          inArray(messages.accountId, accounts),
+          notExists(
+            tx
+              .select({ one: sql`1` })
+              .from(decisions)
+              .where(and(eq(decisions.accountId, messages.accountId), eq(decisions.messageId, messages.id))),
+          ),
+          outOfTries(tx, messages.accountId, messages.id),
+        ),
+      );
+    for (const m of stuck) await putBackInQueue(tx, m.accountId, m.id, now);
+    return stuck.length;
+  });
+}
+
+/** Failures that say nothing about their messages (the provider was down): they stop counting, as if put back. */
+export async function excuseRuns(db: Sql, ids: readonly number[], now: number): Promise<void> {
+  if (ids.length > 0) await db.update(modelRuns).set({ retriedAt: now }).where(inArray(modelRuns.id, ids));
 }

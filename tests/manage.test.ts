@@ -15,7 +15,7 @@ import { EXAMPLE_KEEP_DAYS } from '../src/store/examples.ts';
 import { preferences, setActive } from '../src/store/preferences.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { FakeMailbox, facts, storeExample } from './helpers.ts';
-import { builtAssets, raw, startDashboard, onePerson } from './fixtures.ts';
+import { type Reply, builtAssets, raw, startDashboard, onePerson } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -408,6 +408,12 @@ describe('signing in with Google', () => {
   }
   const cookieFrom = (headers: Record<string, string | string[] | undefined>) => String(headers['set-cookie']).split(';')[0] ?? '';
   const stateFrom = (headers: Record<string, string | string[] | undefined>) => new URL(String(headers['location'])).searchParams.get('state') ?? '';
+  /** Google's return to the browser that started `login`, which holds its sign-in cookie. */
+  const callback = (call: Awaited<ReturnType<typeof startDashboard>>['call'], login: Reply, code: string, headers: Record<string, string> = {}) =>
+    call('GET', `/auth/callback?state=${stateFrom(login.headers)}&code=${code}`, undefined, {
+      ...headers,
+      cookie: [headers['cookie'], cookieFrom(login.headers)].filter(Boolean).join('; '),
+    });
 
   beforeEach(() => {
     completed = [];
@@ -434,10 +440,12 @@ describe('signing in with Google', () => {
     expect(login.status).toBe(303);
     expect(String(login.headers['location'])).toContain(encodeURIComponent(`http://localhost:${port}/auth/callback`));
 
-    const back = await call('GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`);
+    const back = await callback(call, login, 'abc');
     expect(back.status).toBe(303);
     expect(back.headers['location']).toBe('/');
-    expect(String(back.headers['set-cookie'])).toMatch(/^sift_session=[^;]+; Path=\/; Max-Age=2592000; HttpOnly; SameSite=Lax$/);
+    const [session, started] = back.headers['set-cookie'] as string[];
+    expect(session).toMatch(/^sift_session=[^;]+; Path=\/; Max-Age=2592000; HttpOnly; SameSite=Lax$/);
+    expect(started).toBe('sift_signin=; Path=/auth; Max-Age=0; HttpOnly; SameSite=Lax');
     expect(completed).toEqual([`http://localhost:${port}/auth/callback abc addTo=null`]);
 
     const cookie = { cookie: cookieFrom(back.headers) };
@@ -446,7 +454,7 @@ describe('signing in with Google', () => {
     expect((await call('POST', '/api/active', { active: true }, cookie)).status).toBe(200);
 
     // The same state cannot be used twice, and an unknown one is refused.
-    expect(String((await call('GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`)).headers['location'])).toContain('expired');
+    expect(String((await callback(call, login, 'abc')).headers['location'])).toContain('expired');
     expect(completed).toHaveLength(1);
   });
 
@@ -455,7 +463,7 @@ describe('signing in with Google', () => {
     const proxied = { host: 'box.example.ts.net', 'x-forwarded-proto': 'https' };
     const login = await call('GET', '/auth/login', undefined, proxied);
     expect(String(login.headers['location'])).toContain(encodeURIComponent('https://box.example.ts.net/auth/callback'));
-    const back = await call('GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`, undefined, proxied);
+    const back = await callback(call, login, 'abc', proxied);
     expect(String(back.headers['set-cookie'])).toMatch(/; Secure$/);
   });
 
@@ -472,15 +480,15 @@ describe('signing in with Google', () => {
   it('turns away an account sift is not connected to, and adds a second one only for someone signed in', async () => {
     const { call } = await startWithSignIn();
     const login = await call('GET', '/auth/login?add=1');
-    const refused = await call('GET', `/auth/callback?state=${stateFrom(login.headers)}&code=stranger`);
+    const refused = await callback(call, login, 'stranger');
     expect(decodeURIComponent(String(refused.headers['location']))).toBe('/?signin=stranger@example.net is not the account sift is connected to.');
-    expect(refused.headers['set-cookie']).toBeUndefined();
+    expect(String(refused.headers['set-cookie'])).not.toContain('sift_session');
     expect(completed.at(-1)).toContain('addTo=null');
 
     const first = await call('GET', '/auth/login');
-    const cookie = { cookie: cookieFrom((await call('GET', `/auth/callback?state=${stateFrom(first.headers)}&code=abc`)).headers) };
+    const cookie = { cookie: cookieFrom((await callback(call, first, 'abc')).headers) };
     const add = await call('GET', '/auth/login?add=1', undefined, cookie);
-    const added = await call('GET', `/auth/callback?state=${stateFrom(add.headers)}&code=second`, undefined, cookie);
+    const added = await callback(call, add, 'second', cookie);
     // The account being added joins the mailboxes of whoever is signed in.
     expect(completed.at(-1)).toContain(`addTo=${ACCOUNT}`);
     expect((await call('GET', '/api/session', undefined, { cookie: cookieFrom(added.headers) })).body).toMatchObject({ email: 'work@example.com' });
@@ -502,10 +510,31 @@ describe('signing in with Google', () => {
     expect(signInRefusal('work@example.com', { connected: ['me@example.org'], allowNew: true, ...open })).toBeNull();
   });
 
+  it('completes a sign-in only in the browser that started it', async () => {
+    const { call } = await startWithSignIn();
+    const login = await call('GET', '/auth/login');
+    // The consent link, followed in another browser: Google returns there with the state but no cookie.
+    const elsewhere = await call('GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`);
+    expect(String(elsewhere.headers['location'])).toContain('another%20browser');
+    expect(String(elsewhere.headers['set-cookie'])).not.toContain('sift_session=s');
+    expect(completed).toEqual([]);
+  });
+
+  it('adds a mailbox only to the person still signed in where it was started', async () => {
+    const { call } = await startWithSignIn();
+    const first = await call('GET', '/auth/login');
+    const cookie = { cookie: cookieFrom((await callback(call, first, 'abc')).headers) };
+    const add = await call('GET', '/auth/login?add=1', undefined, cookie);
+    // Signed out before Google came back: the mailbox would join someone no longer here.
+    const back = await callback(call, add, 'second');
+    expect(String(back.headers['location'])).toContain('Sign%20in%20again');
+    expect(completed).toHaveLength(1);
+  });
+
   it('ends a session when its account is taken off the list', async () => {
     const { call } = await startWithSignIn();
     const login = await call('GET', '/auth/login');
-    const cookie = { cookie: cookieFrom((await call('GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`)).headers) };
+    const cookie = { cookie: cookieFrom((await callback(call, login, 'abc')).headers) };
     expect((await call('GET', '/api/summary', undefined, cookie)).status).toBe(200);
     allow = ['work@example.com'];
     expect((await call('GET', '/api/summary', undefined, cookie)).status).toBe(401);
@@ -515,7 +544,7 @@ describe('signing in with Google', () => {
   it('ends a session on sign-out, when it expires, and when its account is removed', async () => {
     const { call } = await startWithSignIn();
     const login = await call('GET', '/auth/login');
-    const cookie = { cookie: cookieFrom((await call('GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`)).headers) };
+    const cookie = { cookie: cookieFrom((await callback(call, login, 'abc')).headers) };
     const out = await call('POST', '/api/signout', {}, cookie);
     expect(String(out.headers['set-cookie'])).toContain('Max-Age=0');
 

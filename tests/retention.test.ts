@@ -8,7 +8,7 @@ import { type ActionType, finishAction, insertPendingAction, unsubscribedAt } fr
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { addRule } from '../src/store/rules.ts';
-import { finishRun, startRun } from '../src/store/runs.ts';
+import { MAX_ATTEMPTS, finishRun, startRun } from '../src/store/runs.ts';
 import type { Decision } from '../src/triage/types.ts';
 import { raw, onePerson } from './fixtures.ts';
 import { facts } from './helpers.ts';
@@ -98,6 +98,22 @@ describe('pruneOld', () => {
 
     expect(await pruneOld(db, NOW)).toBe(0);
     expect((await listUndecided(db, ACCOUNT, 10)).map((m) => m.facts.messageId)).toEqual(['undecided']);
+  });
+
+  it('forgets mail the model could never judge that nobody answered, once its last try is as old', async () => {
+    await message('stuck');
+    await message('tried lately');
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+      await startRun(db, { accountId: ACCOUNT, messageId: 'stuck', model: 'p/m', now: OLD });
+      await startRun(db, { accountId: ACCOUNT, messageId: 'tried lately', model: 'p/m', now: i === 0 ? RECENT : OLD });
+    }
+    await message('answered');
+    for (let i = 0; i < MAX_ATTEMPTS; i++) await startRun(db, { accountId: ACCOUNT, messageId: 'answered', model: 'p/m', now: OLD });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'answered@example.com', label: 'newsletter', scope: 'once', messageId: 'answered' }, OLD);
+
+    expect(await pruneOld(db, NOW)).toBe(1);
+    expect(await left('messages', 'id')).toEqual(['answered', 'tried lately']);
+    expect(await left('model_runs')).not.toContain('stuck');
   });
 
   it('keeps the record of an unsubscribe, so the sender is not asked twice', async () => {

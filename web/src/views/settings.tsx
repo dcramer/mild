@@ -183,8 +183,8 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
     <SettingsGroup
       title="Model"
       note={
-        spent && spent.decisions > 0
-          ? `Classifies what no rule covers. ${money(spent.costUsd)} in the last 30 days, for ${plural(spent.decisions - spent.withoutInference, 'message')}.`
+        spent && spent.costUsd > 0
+          ? `Classifies what no rule covers. ${money(spent.costUsd)} in the last 30 days, for ${plural(spent.judged, 'message')}.`
           : 'Classifies what no rule covers.'
       }
     >

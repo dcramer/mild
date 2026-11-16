@@ -7,7 +7,8 @@ export interface Answerable {
   accountId: string;
   sender: string;
   messageId: string;
-  decisionId: number;
+  /** Absent for mail sift never decided: the answer is its first decision. */
+  decisionId?: number;
   /** The label sift gave, if any. */
   labelId: string | null;
 }
@@ -33,7 +34,7 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
       accountId: target.accountId,
       sender: target.sender,
       messageId: target.messageId,
-      decisionId: target.decisionId,
+      ...(target.decisionId === undefined ? {} : { decisionId: target.decisionId }),
       scope: 'once',
       label: labelId,
     });

@@ -3,6 +3,11 @@ import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../triage/prompt.ts';
 import { type Judge, UNSURE } from '../triage/stages/model.ts';
 
 const MAX_REASON = 300;
+/**
+ * One attempt, with no retries inside the SDK: a hung call would otherwise hold up every person's pass for
+ * the SDK's ten minutes, and each attempt must be a run of its own. The queue does the retrying.
+ */
+const CALL = { timeoutMs: 60_000, maxRetries: 0 };
 
 /**
  * A Judge backed by a pi-ai model. One request per message, no conversation and no tools the model can
@@ -35,7 +40,7 @@ export function createJudge(models: Models, model: Model<Api>): Judge {
 
     let message;
     try {
-      message = await models.complete(model, context);
+      message = await models.complete(model, context, CALL);
     } catch (error) {
       return { failed: error instanceof Error ? error.message : String(error) };
     }
@@ -53,7 +58,8 @@ export function createJudge(models: Models, model: Model<Api>): Judge {
     const label = args?.['label'];
     const reason = args?.['reason'];
     const confidence = args?.['confidence'];
-    if (typeof label !== 'string' || !ids.includes(label) || typeof reason !== 'string') return { failed: 'the model did not return a usable verdict', usage };
+    if (typeof label !== 'string' || !ids.includes(label) || typeof reason !== 'string')
+      return { failed: 'the model did not return a usable verdict', usage, unusable: true };
 
     return {
       label,

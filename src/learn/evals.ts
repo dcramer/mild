@@ -152,23 +152,24 @@ export async function startEval(deps: EvalDeps, request: EvalRequest): Promise<{
     // `pickShots` leaves out the message itself, so an example is never shown its own answer.
     const shots = request.fewShot ? pickShots(await shotCandidates(db, facts), facts, labels) : [];
     const started = performance.now();
-    const verdict = await deps
+    const answer = await deps
       .judge({
         evidence: await storedEvidence(db, facts, example.bodyText),
         labels,
         ...(shots.length > 0 ? { examples: shots } : {}),
       })
-      .then((v) => ('failed' in v ? null : v))
       .catch(() => null);
+    // An unusable answer was still billed.
+    const verdict = answer && !('failed' in answer) ? answer : null;
     await db.insert(evalResults).values({
       runId: id,
       messageId: example.messageId,
       expected: example.labelId,
       got: verdict?.label ?? null,
       confidence: verdict?.confidence ?? null,
-      inputTokens: verdict?.usage?.inputTokens ?? 0,
-      outputTokens: verdict?.usage?.outputTokens ?? 0,
-      costUsd: verdict?.usage?.costUsd ?? 0,
+      inputTokens: answer?.usage?.inputTokens ?? 0,
+      outputTokens: answer?.usage?.outputTokens ?? 0,
+      costUsd: answer?.usage?.costUsd ?? 0,
       durationMs: Math.round(performance.now() - started),
       shots: shots.length,
       senderShots: shots.filter((s) => s.fromAddress === facts.from.address).length,

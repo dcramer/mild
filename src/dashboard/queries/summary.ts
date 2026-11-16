@@ -4,6 +4,7 @@ import {
   and,
   asc,
   count,
+  countDistinct,
   decisions,
   desc,
   eq,
@@ -12,6 +13,7 @@ import {
   mailboxes,
   max,
   messages,
+  min,
   modelRuns,
   ne,
   not,
@@ -24,6 +26,8 @@ import { accuracy } from '../../learn/feedback.ts';
 import { type Scope, within } from '../scope.ts';
 import { type DayChanges, STAGES, type StageKey, type Summary } from '../types.ts';
 import { DAY_MS, listDecisions } from './decisions.ts';
+
+const first = alias(decisions, 'first');
 
 const emptyCounts = () => Object.fromEntries(STAGES.map((s) => [s, 0])) as Record<StageKey, number>;
 
@@ -42,16 +46,33 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
     .from(mailboxes)
     .where(within(scope, mailboxes.id))
     .orderBy(asc(mailboxes.id));
-  const [decisionTotals] = (await db
+  // Each message once: where sift first decided it. Later decisions (an answer, a rule or label changed
+  // since) are about the same message, and one the user answered before sift decided it is not sift's.
+  const triagedSince = and(
+    decidedSince,
+    eq(
+      decisions.id,
+      db
+        .select({ id: min(first.id) })
+        .from(first)
+        .where(and(eq(first.accountId, decisions.accountId), eq(first.messageId, decisions.messageId))),
+    ),
+    eq(decisions.byUser, false),
+  );
+  const [triaged] = (await db
     .select({
       n: count(),
       free: sql<number>`count(*) FILTER (WHERE ${decisions.runId} IS NULL)`.mapWith(Number),
     })
     .from(decisions)
-    .where(decidedSince)) as [{ n: number; free: number | null }];
+    .where(triagedSince)) as [{ n: number; free: number | null }];
   // Every call costs, the ones that failed included, so cost is summed over runs rather than decisions.
   const ranSince = and(gte(modelRuns.startedAt, since), within(scope, modelRuns.accountId));
   const runs = await db.select({ startedAt: modelRuns.startedAt, costUsd: modelRuns.costUsd }).from(modelRuns).where(ranSince);
+  const [asked] = (await db
+    .select({ n: countDistinct(sql`(${modelRuns.accountId}, ${modelRuns.messageId})`) })
+    .from(modelRuns)
+    .where(ranSince)) as [{ n: number }];
 
   const stageRows = await db
     .select({
@@ -62,7 +83,7 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
     })
     .from(decisions)
     .leftJoin(modelRuns, eq(modelRuns.id, decisions.runId))
-    .where(decidedSince)
+    .where(triagedSince)
     .groupBy(decisions.stage);
   const byStage = STAGES.map((stage) => {
     const row = stageRows.find((r) => r.stage === stage);
@@ -72,7 +93,7 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
   const dailyByDay = new Map<string, { counts: Record<StageKey, number>; changes: DayChanges; costUsd: number }>();
   for (let i = days - 1; i >= 0; i--)
     dailyByDay.set(localDay(now - i * DAY_MS), { counts: emptyCounts(), changes: { archive: 0, spam: 0, keep: 0, failed: 0 }, costUsd: 0 });
-  for (const row of await db.select({ decidedAt: decisions.decidedAt, stage: decisions.stage }).from(decisions).where(decidedSince)) {
+  for (const row of await db.select({ decidedAt: decisions.decidedAt, stage: decisions.stage }).from(decisions).where(triagedSince)) {
     const day = dailyByDay.get(localDay(row.decidedAt));
     if (day) day.counts[row.stage]++;
   }
@@ -80,7 +101,8 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
     const day = dailyByDay.get(localDay(run.startedAt));
     if (day) day.costUsd += run.costUsd;
   }
-  // What was done in Gmail each day: a change that stands, by what it did, or one that failed. Undone ones are not counted.
+  // What was done in Gmail each day, once per message, by its latest change: one that stands, by what it
+  // did, or one that failed. Undone ones are not counted.
   const latest = alias(actions, 'latest');
   for (const row of await db
     .select({ decidedAt: decisions.decidedAt, disposition: decisions.disposition, block: decisions.block, outcome: decisions.outcome, status: actions.status })
@@ -95,7 +117,19 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
           .where(and(eq(latest.decisionId, decisions.id), ne(latest.type, 'unsubscribe'))),
       ),
     )
-    .where(and(decidedSince, eq(decisions.mode, 'act')))) {
+    .where(
+      and(
+        decidedSince,
+        eq(decisions.mode, 'act'),
+        eq(
+          decisions.id,
+          db
+            .select({ id: max(first.id) })
+            .from(first)
+            .where(and(eq(first.accountId, decisions.accountId), eq(first.messageId, decisions.messageId), eq(first.mode, 'act'))),
+        ),
+      ),
+    )) {
     const day = dailyByDay.get(localDay(row.decidedAt));
     if (!day) continue;
     if (row.outcome === 'failed' || row.outcome === 'unknown' || row.status === 'failed' || row.status === 'unknown') day.changes.failed++;
@@ -118,8 +152,9 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
           .from(messages)
           .where(and(gte(messages.receivedAt, since), within(scope, messages.accountId)))
       )[0]!.n,
-      decisions: decisionTotals.n,
-      withoutInference: decisionTotals.free ?? 0,
+      decided: triaged.n,
+      withoutInference: triaged.free ?? 0,
+      judged: asked.n,
       costUsd: runs.reduce((sum, run) => sum + run.costUsd, 0),
       awaitingTriage: (
         await db

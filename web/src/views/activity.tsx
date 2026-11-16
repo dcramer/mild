@@ -59,6 +59,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
   const undo = (row: DecisionRow) => report(api.undo(row.actionId ?? 0), ({ message }) => message);
   const retry = (row: DecisionRow) => report(api.retry(row.id), ({ waiting }) => (waiting ? 'It will be tried again once sift is on.' : 'Trying again now.'));
   const requeue = (row: UnjudgedRow) => report(api.requeue(row.accountId, row.messageId), () => 'Asking the model again now.');
+  const requeueAll = () => report(api.requeueAll(), ({ retried }) => `Asking the model again about ${plural(retried, 'message')}.`);
   const troubles = [
     failed > 0 ? `${plural(failed, 'change')} failed` : '',
     unjudged.length > 0 ? `the model could not judge ${plural(unjudged.length, 'message')}` : '',
@@ -72,12 +73,15 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
     <ListView
       title="Activity"
       actions={
-        <Select
-          label="Period"
-          value={String(days) as (typeof PERIODS)[number][0]}
-          options={PERIODS}
-          onChange={(value) => setChosen(value === '7' ? '' : value)}
-        />
+        <>
+          {view === 'trouble' && unjudged.length > 1 ? <Button onClick={requeueAll}>Retry all</Button> : null}
+          <Select
+            label="Period"
+            value={String(days) as (typeof PERIODS)[number][0]}
+            options={PERIODS}
+            onChange={(value) => setChosen(value === '7' ? '' : value)}
+          />
+        </>
       }
       search={{ value: typed, onChange: setTyped, placeholder: 'Search subject or sender' }}
       view={{

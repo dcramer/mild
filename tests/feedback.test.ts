@@ -5,12 +5,14 @@ import { captureExamples, parseHeaders } from '../src/daemon/examples.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
 import { listSuggestions, suggestionDetail } from '../src/dashboard/queries/suggestions.ts';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
+import { listUnjudged } from '../src/dashboard/queries/runs.ts';
 import { summarize } from '../src/dashboard/queries/summary.ts';
 import { people } from '../src/store/people.ts';
 import { accuracy, applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { listAccounts, recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { listProposals } from '../src/store/proposals.ts';
+import { MAX_ATTEMPTS, startRun } from '../src/store/runs.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import type { Decision, Disposition } from '../src/triage/types.ts';
@@ -271,6 +273,43 @@ describe('an answer pressed in the dashboard', () => {
       mode: 'act',
       outcome: 'done',
     });
+  });
+
+  it('answers mail the model could never judge, as mail sift had no suggestion for, and takes it out of Failed', async () => {
+    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'stuck', from: { address: 'news@example.com', domain: 'example.com' } })], '3');
+    for (let i = 0; i < MAX_ATTEMPTS; i++) await startRun(db, { accountId: ACCOUNT, messageId: 'stuck', model: 'test/model', now: 0 });
+    const scope = await everything(db);
+    expect((await listUnjudged(db, scope, 10)).map((r) => r.messageId)).toEqual(['stuck']);
+    await expect(
+      applyFeedback(db, { accountId: ACCOUNT, sender: 'other@example.com', label: 'newsletter', scope: 'once', messageId: 'stuck', carryOut: true }),
+    ).rejects.toThrow('not from that sender');
+
+    const result = await applyFeedback(
+      db,
+      { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'once', messageId: 'stuck', carryOut: true },
+      50,
+    );
+    expect(result).toMatchObject({ reviewed: 1, carrying: 1, corrected: null, taught: null });
+    expect(await raw(db).all(`SELECT stage, disposition, label_id, by_user, mode, run_id FROM decisions WHERE message_id = 'stuck'`)).toEqual([
+      { stage: 'rules', disposition: 'archive', label_id: 'newsletter', by_user: true, mode: 'act', run_id: null },
+    ]);
+    expect(await raw(db).get(`SELECT verdict, correct, label_id FROM feedback WHERE message_id = 'stuck'`)).toEqual({
+      verdict: 'answered',
+      correct: 'archive',
+      label_id: 'newsletter',
+    });
+    expect(await raw(db).get(`SELECT suggested, suggested_by, label_id FROM examples WHERE message_id = 'stuck'`)).toEqual({
+      suggested: 'review',
+      suggested_by: 'fallback',
+      label_id: 'newsletter',
+    });
+    expect(await listUnjudged(db, scope, 10)).toEqual([]);
+    expect(await accuracy(db)).toMatchObject({ reviewed: 0 });
+
+    const mailbox = new FakeMailbox();
+    mailbox.labels.set('stuck', ['INBOX']);
+    await triageAccount({ db, mailbox: null, answers: mailbox }, (await listAccounts(db))[0]!);
+    expect(mailbox.labels.get('stuck')).not.toContain('INBOX');
   });
 
   it('three answers in a row the same for a sender propose a rule, and make none themselves', async () => {

@@ -185,6 +185,7 @@ export const api = {
   /** Try a failed change again. `waiting`: it is sift's own, and waits for sift to be on. */
   retry: (id: number) => post<{ retried: boolean; waiting: boolean }>('/api/decisions/retry', { id }),
   requeue: (accountId: string, messageId: string) => post<{ ok: true }>('/api/unjudged/retry', { accountId, messageId }),
+  requeueAll: () => post<{ retried: number }>('/api/unjudged/retry-all', {}),
   backfill: (days: number) => post<{ added: number }>('/api/backfill', { days }),
   checkNow: () => post('/api/check', {}),
   session: (signal: AbortSignal) => get<Session>('/api/session', {}, signal),
