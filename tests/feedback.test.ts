@@ -12,6 +12,7 @@ import { listSuggestions, suggestionDetail } from '../src/dashboard/queries/sugg
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { summarize } from '../src/dashboard/queries/summary.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
+import { people } from '../src/store/people.ts';
 import { accuracy, applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { listAccounts, recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
@@ -601,7 +602,7 @@ describe('feedback endpoint', () => {
     const assets = mkdtempSync(join(tmpdir(), 'sift-web-'));
     mkdirSync(join(assets, 'assets'));
     writeFileSync(join(assets, 'index.html'), '<!doctype html>');
-    const server = createDashboardServer(store, { assetsDir: assets, allowedHosts: ['homebox'], now: () => 77 });
+    const server = createDashboardServer(people(store), { assetsDir: assets, allowedHosts: ['homebox'], now: () => 77 });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     close = () => server.close();
     return (server.address() as AddressInfo).port;

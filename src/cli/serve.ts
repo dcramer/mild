@@ -4,6 +4,7 @@ import type { Controls } from '../dashboard/controls.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
 import { ensureWebBuilt } from './web-build.ts';
 import { readSecret, writeSecret } from '../secrets.ts';
+import { people } from '../store/people.ts';
 import type { Store } from '../store/store.ts';
 import { listenAddresses, machineNames, tailscaleName } from './network.ts';
 import { paint, ui } from './ui.ts';
@@ -43,7 +44,7 @@ export async function serveDashboard(
   if (!options.dev) await ensureWebBuilt();
 
   const servers = listen.map(() =>
-    createDashboardServer(store, {
+    createDashboardServer(people(store), {
       ...(options.dev ? { dev: true } : {}),
       allowedHosts,
       controls: options.controls,

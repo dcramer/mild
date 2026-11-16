@@ -12,6 +12,7 @@ import { listRuleSummaries } from '../src/dashboard/queries/rules.ts';
 import { summarize } from '../src/dashboard/queries/summary.ts';
 import type { SenderPage } from '../src/dashboard/types.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
+import { people } from '../src/store/people.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
@@ -286,7 +287,7 @@ describe('dashboard server', () => {
   afterEach(() => close?.());
 
   async function start(assetsDir: string = builtAssets()) {
-    const server = createDashboardServer((await seededStore()).store, { assetsDir, now: () => NOW });
+    const server = createDashboardServer(people((await seededStore()).store), { assetsDir, now: () => NOW });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     close = () => server.close();
     return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -351,7 +352,7 @@ describe('dashboard server', () => {
 
   it('in dev mode serves the page as it is on disk now, and tells it when to reload', async () => {
     const dir = builtAssets();
-    const server = createDashboardServer((await seededStore()).store, { assetsDir: dir, dev: true, now: () => NOW });
+    const server = createDashboardServer(people((await seededStore()).store), { assetsDir: dir, dev: true, now: () => NOW });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     close = () => server.close();
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -473,7 +474,7 @@ describe('dashboard server', () => {
 
   it('serves a sender and a domain, and gives them a standing with one write', async () => {
     const { store, db } = await seededStore();
-    const server = createDashboardServer(store, { assetsDir: builtAssets(), now: () => NOW });
+    const server = createDashboardServer(people(store), { assetsDir: builtAssets(), now: () => NOW });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     close = () => server.close();
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -530,7 +531,7 @@ describe('dashboard server', () => {
     expect(await statusFor(base, '100.64.0.7:8787')).toBe(403);
     close?.();
 
-    const server = createDashboardServer((await seededStore()).store, {
+    const server = createDashboardServer(people((await seededStore()).store), {
       assetsDir: builtAssets(),
       allowedHosts: ['Box.example.ts.net', '100.64.0.7'],
       now: () => NOW,

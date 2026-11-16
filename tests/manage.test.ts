@@ -11,6 +11,7 @@ import { signInRefusal } from '../src/cli/sign-in.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
 import type { Controls, ManagedSettings, SignIn } from '../src/dashboard/controls.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
+import { people } from '../src/store/people.ts';
 import type { RawMessage } from '../src/gmail/api.ts';
 import { startEval } from '../src/learn/evals.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
@@ -82,7 +83,7 @@ async function start(options: { withControls?: boolean } = {}) {
   const assets = mkdtempSync(join(tmpdir(), 'sift-web-'));
   mkdirSync(join(assets, 'assets'));
   writeFileSync(join(assets, 'index.html'), '<!doctype html>page');
-  const server = createDashboardServer(store, {
+  const server = createDashboardServer(people(store), {
     assetsDir: assets,
     ...(options.withControls === false ? {} : { controls }),
     now: () => 77,
@@ -468,7 +469,7 @@ describe('signing in with Google', () => {
     writeFileSync(join(assets, 'assets', 'app.js'), '1');
     writeFileSync(join(assets, 'sw.js'), '1');
     writeFileSync(join(assets, 'manifest.webmanifest'), '{}');
-    const server = createDashboardServer(store, {
+    const server = createDashboardServer(people(store), {
       assetsDir: assets,
       controls,
       signIn,

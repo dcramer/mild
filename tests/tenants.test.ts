@@ -8,6 +8,7 @@ import type { Sql } from '../src/store/sql.ts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
+import { people } from '../src/store/people.ts';
 import { connectAccount, connectedAddresses, listAccounts, recordSync, userOf } from '../src/store/accounts.ts';
 import { type Store, openStore } from '../src/store/store.ts';
 import { recordDecision } from '../src/store/decisions.ts';
@@ -121,7 +122,7 @@ beforeEach(async () => {
       expired: [ALPHA_WORK, BRAVO],
     }),
   };
-  const server = createDashboardServer(store, { assetsDir: assets, controls, signIn, sessionSecret: 'secret', now: () => 2000 });
+  const server = createDashboardServer(people(store), { assetsDir: assets, controls, signIn, sessionSecret: 'secret', now: () => 2000 });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   close = () => server.close();
   port = (server.address() as AddressInfo).port;

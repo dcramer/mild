@@ -2,11 +2,8 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { extname, join, relative, sep } from 'node:path';
-import type { Sql } from '../store/sql.ts';
 import { fileURLToPath } from 'node:url';
-import { connectedAddresses, owner, userOf } from '../store/accounts.ts';
-import { openUserDb } from '../store/db.ts';
-import type { Store } from '../store/store.ts';
+import type { People } from '../store/people.ts';
 import { READS, WRITES } from './api/index.ts';
 import type { Context, Write } from './api/route.ts';
 import type { Controls, SignIn } from './controls.ts';
@@ -151,7 +148,7 @@ const cookie = (req: IncomingMessage, name: string) =>
  * What it may do: change what sift has been taught and how it is set up. It never reaches Gmail itself;
  * the few things that do (signing in, undo, pulling in older mail) are handed in and audited as usual.
  */
-export function createDashboardServer(store: Store, options: DashboardOptions = {}): Server {
+export function createDashboardServer(people: People, options: DashboardOptions = {}): Server {
   const assetsDir = options.assetsDir ?? WEB_DIST;
   const builtAssets = listAssets(assetsDir);
   const dev = options.dev ?? false;
@@ -169,9 +166,6 @@ export function createDashboardServer(store: Store, options: DashboardOptions = 
   // Sign-ins in flight: the state Google echoes back, with the PKCE verifier and where to return to.
   const pending = new Map<string, { verifier: string; redirectUri: string; addTo: string | null; expires: number }>();
 
-  // What a request with nobody behind it reads: no one's mail.
-  let empty: Promise<Sql> | undefined;
-  const nobody = () => (empty ??= openUserDb(':memory:'));
   const reads = new Map(READS.map((route) => [route.path, route]));
   const writes = new Map(WRITES.map((route) => [route.path, route]));
   /** Why this person may not make this write, or null if they may. Someone else's data is reported as not there. */
@@ -200,13 +194,13 @@ export function createDashboardServer(store: Store, options: DashboardOptions = 
     // Google only returns a browser to localhost or to an HTTPS address.
     const googleCanReturnHere = https || LOCAL_HOSTS.has(host);
     const signedInAs = signIn ? readSession(cookie(req, 'sift_session'), secret, now()) : null;
-    const known = signedInAs !== null && signIn?.allowed(signedInAs) ? await userOf(store.central, signedInAs) : null;
+    const known = signedInAs !== null && signIn?.allowed(signedInAs) ? await people.signedIn(signedInAs) : null;
     const session = known ? signedInAs : null;
     // What this request may see: the mailboxes of whoever is signed in, in their own database and no
     // one else's. With no sign-in set up (tests, tools) it is the owner's.
-    const person = signIn ? known : await owner(store.central);
-    const whole = person ? scopeFor(await connectedAddresses(store.central, person.id), person.owner) : scopeFor([], !signIn);
-    const ctx: Context = { db: person ? await store.user(person.id) : await nobody(), controls, now };
+    const person = signIn ? known : await people.owner();
+    const whole = person ? scopeFor(person.accounts, person.owner) : scopeFor([], !signIn);
+    const ctx: Context = { db: person ? person.db : await people.nobody(), controls, now };
     const sessionCookie = (value: string, maxAge: number) =>
       `sift_session=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
 
