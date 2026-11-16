@@ -1,7 +1,5 @@
 import { parseListId } from '../features.ts';
-import { type DecidedDisposition, type Label, type MessageFacts, type Stage, type SubscriptionAction, labelled } from '../types.ts';
-
-export type RuleTier = 'always' | 'usually';
+import { type DecidedDisposition, type Decision, type Label, type MessageFacts, type Stage, type SubscriptionAction, labelled } from '../types.ts';
 
 /** Every condition present must hold. A match with no conditions never matches. */
 export interface RuleMatch {
@@ -16,27 +14,32 @@ export interface RuleMatch {
   subjectContains?: string;
 }
 
-/** Mail matching `match` is `labelId`. What happens to it is the label's action, unless the rule carries its own. */
+/**
+ * What the user wants for mail matching `match`. A rule says what the mail is (`labelId`), what happens
+ * to it (`disposition`), or both; or, with `whenLabel`, what happens to it only when some tier has said
+ * it is that label. It carries at least one of the three.
+ *
+ * - `labelId` alone: the mail is that label, and the label's action applies.
+ * - `disposition` alone: do this, whatever the mail is. It is labelled only if that costs nothing.
+ * - `labelId` and `disposition`: the mail is that label, with this action instead of the label's.
+ * - `whenLabel`: applies only to mail a tier labelled `whenLabel`. With `disposition`, that action
+ *   replaces the label's; without, the label's action is confirmed as the user's own.
+ */
 export interface Rule {
   id: string;
   match: RuleMatch;
   /** If any of these match, the rule does not apply. */
   except?: RuleMatch[];
-  labelId: string;
-  /** An exception to the label's action, for this rule only. */
+  labelId?: string;
+  whenLabel?: string;
   disposition?: DecidedDisposition;
-  /** `unsubscribe` adds that to what the label does, for mail this rule matches. */
+  /** `unsubscribe` adds that to what happens, for mail this rule decides. */
   subscription?: SubscriptionAction;
-  /** Also mark the mail read, when it is kept or archived, whether or not the label does. */
+  /** Also mark the mail read, when it is kept or archived. */
   markRead?: boolean;
-  /**
-   * `always` (the default) decides by itself. `usually` is a prior: when a model tier follows, the model
-   * is told and still reads each message, so the odd one that is something else is not swept up.
-   */
-  tier?: RuleTier;
-  /** A condition in plain language ("auction notices for lots I did not bid on"). Only a model can apply it. */
+  /** A condition in plain language ("auction notices for lots I did not bid on"). Only a model can apply it, and it needs `labelId` for the model to answer with. */
   when?: string;
-  /** sift made this rule itself, from what a model kept deciding. The user's own rules are trusted further. */
+  /** sift made this rule itself, when it blocked the sender. The user's own rules are trusted further. */
   learned?: boolean;
 }
 
@@ -77,64 +80,140 @@ export interface RulesOptions {
 
 export interface RuleHit {
   rule: Rule;
-  label: Label;
+  /** The label the rule names or waits for. Absent for a rule that only says what happens. */
+  label?: Label;
 }
 
-/** Whether a rule needs a model to apply it. */
-export const isJudged = (rule: Rule) => rule.tier === 'usually' || rule.when !== undefined;
+/** Whether a rule can only apply once something has said what the mail is: a model, for a condition in words; any tier, for `whenLabel`. */
+export const isJudged = (rule: Rule) => rule.whenLabel !== undefined || rule.when !== undefined;
 
-/** What a rule does to mail it applies to: its label's action, its own exception, and its extras on top. */
-export function ruleOutcome({ rule, label }: RuleHit): ReturnType<typeof labelled> & { ruleId: string } {
-  const outcome = labelled(label, rule.disposition);
-  const stays = outcome.disposition === 'keep' || outcome.disposition === 'archive';
-  return {
-    ...outcome,
+type Outcome = Pick<Decision, 'disposition' | 'subscription' | 'labelId' | 'gmailLabel' | 'block' | 'markRead'> & { ruleId: string };
+
+/**
+ * What a rule does to mail it applies to. `found` is a label the mail is known to be from elsewhere, for
+ * a rule that names none: the mail keeps it, and the rule's action stands.
+ */
+export function ruleOutcome({ rule, label }: RuleHit, found?: Label): Outcome {
+  const extras = (disposition: Decision['disposition']) => ({
     // A rule's extras add to its label's; they never take one away.
     ...(rule.subscription === 'unsubscribe' ? { subscription: 'unsubscribe' as const } : {}),
-    ...(rule.markRead && stays ? { markRead: true } : {}),
+    ...(rule.markRead && (disposition === 'keep' || disposition === 'archive') ? { markRead: true } : {}),
     ruleId: rule.id,
-  };
+  });
+  if (label) {
+    const outcome = labelled(label, rule.disposition);
+    return { ...outcome, ...extras(outcome.disposition) };
+  }
+  // Only what happens: the label's own extras are not the rule's to apply.
+  const disposition = rule.disposition ?? 'keep';
+  return { disposition, subscription: 'preserve', ...(found ? { labelId: found.id, gmailLabel: found.gmailLabel } : {}), ...extras(disposition) };
+}
+
+const keeps = (hit: RuleHit) => (hit.label ? labelled(hit.label, hit.rule.disposition).disposition : hit.rule.disposition) === 'keep';
+
+/**
+ * Every rule that could speak for a message, best first. A rule whose label no longer exists is left
+ * out, as is a learned rule that would hide mail from someone the owner has written to. The most
+ * specific match comes first (more conditions, then an exact sender over a domain, then a rule that
+ * waits for a label over one that does not); ties go to the earlier rule.
+ */
+export function rankRules(rules: readonly Rule[], labels: readonly Label[], facts: MessageFacts, options: RulesOptions = {}): RuleHit[] {
+  const hits = rules.flatMap((rule): RuleHit[] => {
+    if (!applies(rule, facts)) return [];
+    const named = rule.labelId ?? rule.whenLabel;
+    const label = named === undefined ? undefined : labels.find((l) => l.id === named);
+    if (named !== undefined && !label) return [];
+    if (!label && rule.disposition === undefined) return [];
+    const disposition = label ? labelled(label, rule.disposition).disposition : rule.disposition;
+    const hides = disposition === 'archive' || disposition === 'spam';
+    if (rule.learned && hides && options.hasWritten?.(facts) === true) return [];
+    return [label ? { rule, label } : { rule }];
+  });
+  const weight = ({ rule }: RuleHit) => specificity(rule.match) * 2 + (isJudged(rule) ? 1 : 0);
+  return hits.toSorted((a, b) => weight(b) - weight(a));
 }
 
 /**
- * The rule that speaks for a message, if any. A rule whose outcome is `keep` is a protection and beats
- * every other match. Otherwise the most specific match wins (more conditions, then an exact sender over
- * a domain), so "this sender when the subject contains X" beats "this sender" whichever was written
- * first; ties go to the earlier rule. A rule whose label no longer exists is ignored, and a learned rule
- * never hides mail from someone the owner has written to.
+ * The rule that decides a message before anything has said what it is, or null. A rule that keeps mail
+ * is a protection and beats every other match; otherwise the best match wins. If the best match can
+ * only apply once the mail has a label, and `judged` says a tier that names labels follows, nothing is
+ * decided here and `settle` finishes the job afterwards.
  */
-export function pickRule(rules: readonly Rule[], labels: readonly Label[], facts: MessageFacts, options: RulesOptions = {}): RuleHit | null {
-  const hits = rules.flatMap((rule) => {
-    const label = labels.find((l) => l.id === rule.labelId);
-    if (!label || !applies(rule, facts)) return [];
-    const { disposition } = labelled(label, rule.disposition);
-    const hides = disposition === 'archive' || disposition === 'spam';
-    if (rule.learned && hides && options.hasWritten?.(facts) === true) return [];
-    return [{ rule, label, keeps: disposition === 'keep' }];
-  });
-  const ranked = hits.toSorted((a, b) => specificity(b.rule.match) - specificity(a.rule.match));
-  // Only a rule that decides by itself can protect: a judged one may turn out not to apply.
-  return ranked.find((h) => h.keeps && !isJudged(h.rule)) ?? ranked[0] ?? null;
+export function pickRule(
+  rules: readonly Rule[],
+  labels: readonly Label[],
+  facts: MessageFacts,
+  options: RulesOptions & { judged?: boolean } = {},
+): RuleHit | null {
+  const ranked = rankRules(rules, labels, facts, options);
+  const sure = ranked.filter((h) => !isJudged(h.rule));
+  const protection = sure.find(keeps);
+  if (protection) return protection;
+  const [best] = ranked;
+  if (!best) return null;
+  if (isJudged(best.rule)) return options.judged ? null : (sure[0] ?? null);
+  return best;
 }
+
+/** The judged rule a model should be told about, if the best match for a message is one. */
+export function priorRule(rules: readonly Rule[], labels: readonly Label[], facts: MessageFacts, options: RulesOptions = {}): RuleHit | null {
+  const ranked = rankRules(rules, labels, facts, options);
+  if (ranked.some((h) => !isJudged(h.rule) && keeps(h))) return null;
+  const [best] = ranked;
+  return best && isJudged(best.rule) && best.label ? best : null;
+}
+
+const DOES: Record<DecidedDisposition, string> = { keep: 'keep it', archive: 'archive it', spam: 'mark it spam' };
 
 /** A rule's conditions and what it says, in words. */
 export function describeRule({ rule, label }: RuleHit): string {
-  const when = rule.when ? `, when it is ${rule.when},` : '';
-  return `${describeMatch(rule.match)}${when} is ${rule.tier === 'usually' ? 'usually ' : ''}${label.name}`;
+  const who = describeMatch(rule.match);
+  if (rule.when) return `${who}, when it is ${rule.when}, is ${label?.name ?? rule.labelId}`;
+  if (rule.whenLabel) return `${who}, when it is ${label?.name ?? rule.whenLabel}${rule.disposition ? `: ${DOES[rule.disposition]}` : ''}`;
+  if (rule.labelId) return `${who} is ${label?.name ?? rule.labelId}${rule.disposition ? `, but ${DOES[rule.disposition]}` : ''}`;
+  return `${who}: ${DOES[rule.disposition ?? 'keep']}`;
 }
 
 /**
- * Deterministic rules. `judged` says a model tier follows: then a rule that needs judging abstains here
- * and reaches the model as a prior. Without a model, a `usually` rule is all there is and decides; a
- * rule with a plain-language condition cannot be applied at all.
+ * A label for mail that a rule only says what to do with, if one is to be had for nothing: from another
+ * rule that names what this mail is.
+ */
+function freeLabel(ranked: readonly RuleHit[]): Label | undefined {
+  return ranked.find((h) => h.rule.labelId !== undefined && !isJudged(h.rule) && h.label)?.label;
+}
+
+/**
+ * Rules that decide by themselves. `judged` says a tier that names labels follows: then a message whose
+ * best rule waits for a label is left for that tier, and `settle` applies the rule afterwards.
  */
 export function rulesStage(rules: readonly Rule[], labels: readonly Label[], options: RulesOptions & { judged?: boolean } = {}): Stage {
   return {
     name: 'rules',
     decide(facts) {
       const hit = pickRule(rules, labels, facts, options);
-      if (!hit || hit.rule.when !== undefined || (options.judged && isJudged(hit.rule))) return null;
-      return { ...ruleOutcome(hit), stage: 'rules', reason: `${hit.rule.learned ? 'learned' : 'rule'}: ${describeRule(hit)}` };
+      if (!hit) return null;
+      const found = hit.label ? undefined : freeLabel(rankRules(rules, labels, facts, options));
+      return { ...ruleOutcome(hit, found), stage: 'rules', reason: `${hit.rule.learned ? 'learned' : 'rule'}: ${describeRule(hit)}` };
     },
   };
+}
+
+/**
+ * Apply the user's rules to a decision another tier made, now that the mail has a label: the best rule
+ * that waits for exactly that label, or failing that one that decides by itself. The tier's label
+ * stands; the rule says what happens. A decision with no label, or one a rule already made, is left as it is.
+ */
+export function settle(rules: readonly Rule[], labels: readonly Label[], facts: MessageFacts, decision: Decision, options: RulesOptions = {}): Decision {
+  if (decision.stage === 'rules' || decision.labelId === undefined || decision.ruleId !== undefined) return decision;
+  const said = labels.find((l) => l.id === decision.labelId);
+  if (!said) return decision;
+  const usable = rankRules(rules, labels, facts, options).filter(
+    (h) => h.rule.when === undefined && (h.rule.whenLabel === undefined || h.rule.whenLabel === said.id),
+  );
+  const hit = usable.find(keeps) ?? usable[0];
+  if (!hit) return decision;
+  // A rule that names a different label than the tier found is the user saying what this mail is.
+  const outcome = hit.rule.whenLabel !== undefined || hit.rule.labelId === undefined ? ruleOutcome({ rule: hit.rule, label: said }) : ruleOutcome(hit);
+  const { block: _block, markRead: _markRead, ...rest } = decision;
+  return { ...rest, ...outcome, reason: `rule: ${describeRule(hit)}. ${decision.reason}` };
 }

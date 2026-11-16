@@ -73,9 +73,9 @@ export function SenderFacts({ sender }: { sender: SenderProfile }) {
             </span>
           ))}
           <span>
-            is {rule.tier === 'usually' && !rule.when ? 'usually ' : ''}
-            {rule.labelName ?? 'a removed label'}
-            {rule.disposition ? `: ${willBe(rule.disposition)}` : ''}
+            {rule.kind === 'action'
+              ? `is ${rule.disposition ? willBe(rule.disposition) : 'left alone'}`
+              : `${rule.kind === 'when-label' ? 'when it is' : 'is'} ${rule.labelName ?? 'a removed label'}${rule.disposition ? `: ${willBe(rule.disposition)}` : ''}`}
           </span>
         </li>
       ))}

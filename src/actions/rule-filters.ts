@@ -36,8 +36,11 @@ export async function writeRuleFilter(deps: ActionDeps, ruleId: string): Promise
   if (row.filterId) await removeRuleFilter(deps, ruleId);
 
   const { plan } = verdict;
-  const labelId = await deps.mailbox.ensureLabel(plan.gmailLabel);
-  const filter: FilterProposal = { criteria: plan.criteria, action: { addLabelIds: [labelId], ...(plan.archive ? { removeLabelIds: ['INBOX'] } : {}) } };
+  const add = plan.gmailLabel === undefined ? [] : [await deps.mailbox.ensureLabel(plan.gmailLabel)];
+  const filter: FilterProposal = {
+    criteria: plan.criteria,
+    action: { ...(add.length > 0 ? { addLabelIds: add } : {}), ...(plan.archive ? { removeLabelIds: ['INBOX'] } : {}) },
+  };
   const problems = validateFilter(filter);
   if (problems.length > 0) throw new Error(`Refusing to create filter: ${problems.join('; ')}`);
   const before = await deps.mailbox.listFilters();

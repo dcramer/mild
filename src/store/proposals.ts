@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { RuleMatch } from '../triage/stages/rules.ts';
 import { listLabels } from './labels.ts';
-import { listRules, ruleMatching, setRule } from './rules.ts';
+import { hasRuleFor, listRules, removeRule, setRule } from './rules.ts';
 
 /** `rule`: make a rule for `match`. `always`: stop having the model check `ruleId`. */
 export type ProposalKind = 'rule' | 'always';
@@ -84,7 +84,7 @@ export const SETTLED_AFTER = 10;
  * rule for exactly that sender exists. Returns true if a proposal was opened.
  */
 export function proposeForSender(db: DatabaseSync, accountId: string, address: string, now: number = Date.now()): boolean {
-  if (ruleMatching(db, accountId, { from: address })) return false;
+  if (hasRuleFor(db, accountId, { from: address })) return false;
   const recent = db
     .prepare(
       `SELECT d.label_id, d.disposition, d.prior_rule_id FROM decisions d
@@ -101,20 +101,20 @@ export function proposeForSender(db: DatabaseSync, accountId: string, address: s
   return propose(db, { accountId, kind: 'rule', match: { from: address }, labelId: first.label_id, ruleId: null, agreed: recent.length }, now);
 }
 
-/** Propose making a `usually` rule `always` once the model has agreed with it every time for long enough. */
+/** Propose dropping the "when it is L" from a rule once every message it was checked against turned out to be L, for long enough. */
 export function proposeSettled(db: DatabaseSync, accountId: string, ruleId: string, now: number = Date.now()): boolean {
   const rule = listRules(db, accountId).find((r) => r.id === ruleId);
-  if (!rule || rule.tier !== 'usually' || rule.when !== undefined) return false;
+  if (!rule || rule.whenLabel === undefined) return false;
   const recent = db.prepare('SELECT rule_id FROM decisions WHERE prior_rule_id = ? ORDER BY id DESC LIMIT ?').all(ruleId, SETTLED_AFTER) as unknown as {
     rule_id: string | null;
   }[];
   if (recent.length < SETTLED_AFTER || !recent.every((r) => r.rule_id === ruleId)) return false;
-  return propose(db, { accountId, kind: 'always', match: rule.match, labelId: rule.labelId, ruleId, agreed: recent.length }, now);
+  return propose(db, { accountId, kind: 'always', match: rule.match, labelId: rule.whenLabel, ruleId, agreed: recent.length }, now);
 }
 
 /**
- * Accept or dismiss a proposal. Accepting writes the rule as the user's own (or makes the checked rule
- * `always`). Returns false if it was not open.
+ * Accept or dismiss a proposal. Accepting writes the rule as the user's own, or turns a rule that waited
+ * for a label into one that acts on everything it matches. Returns false if it was not open.
  */
 export function resolveProposal(db: DatabaseSync, id: number, accept: boolean, now: number = Date.now()): boolean {
   const row = db
@@ -124,22 +124,23 @@ export function resolveProposal(db: DatabaseSync, id: number, accept: boolean, n
   const p = toProposal(row);
   if (accept) {
     const existing = p.ruleId ? listRules(db, p.accountId).find((r) => r.id === p.ruleId) : undefined;
-    setRule(
-      db,
-      p.accountId,
-      p.match,
-      existing
-        ? {
-            labelId: existing.labelId,
-            ...(existing.disposition ? { disposition: existing.disposition } : {}),
-            ...(existing.subscription ? { subscription: existing.subscription } : {}),
-            ...(existing.markRead ? { markRead: true } : {}),
-            tier: 'always',
-          }
-        : { labelId: p.labelId, tier: 'always' },
-      'user',
-      now,
-    );
+    if (existing) {
+      // What the rule did when the mail was that label, it now does to all of it, without waiting to be told.
+      const does = existing.disposition ?? listLabels(db, p.accountId, now).find((l) => l.id === p.labelId)?.disposition ?? 'keep';
+      removeRule(db, existing.id);
+      setRule(
+        db,
+        p.accountId,
+        p.match,
+        {
+          disposition: does === 'review' ? 'keep' : does,
+          ...(existing.subscription ? { subscription: existing.subscription } : {}),
+          ...(existing.markRead ? { markRead: true } : {}),
+        },
+        'user',
+        now,
+      );
+    } else setRule(db, p.accountId, p.match, { labelId: p.labelId }, 'user', now);
   }
   db.prepare('UPDATE proposals SET status = ?, resolved_at = ? WHERE id = ?').run(accept ? 'accepted' : 'dismissed', now, id);
   return true;

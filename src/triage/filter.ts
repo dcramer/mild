@@ -4,7 +4,8 @@ import { type Label, labelled } from './types.ts';
 /** A rule as Gmail could run it by itself. The label is named, not given by id: the id is Gmail's to assign. */
 export interface FilterPlan {
   criteria: { from?: string; to?: string; subject?: string };
-  gmailLabel: string;
+  /** Absent for a rule that only says what happens to the mail. */
+  gmailLabel?: string;
   /** Also take the mail out of the inbox. */
   archive: boolean;
 }
@@ -18,14 +19,17 @@ export type FilterVerdict =
     }
   | { possible: false; reason: string };
 
-/** `tier` and `when` belong to rules that are judged, not matched. A rule with neither is deterministic. */
-export type FilterableRule = Rule & { tier?: 'always' | 'usually'; when?: string };
+export type FilterableRule = Rule;
 
 // The values go into a Gmail search, so anything that could change the search's meaning is refused.
 const ADDRESS = /^[^\s"'(){}<>:,]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 const DOMAIN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 
 const no = (reason: string): FilterVerdict => ({ possible: false, reason });
+
+/** What a rule does to mail, with or without a label of its own. */
+const does = (rule: Rule, label: Label | undefined): { disposition: string | undefined; labelId?: string | undefined; markRead?: boolean | undefined } =>
+  label ? labelled(label, rule.disposition) : { disposition: rule.disposition };
 
 /** False only when no message could match both. Errs towards true. */
 function mayOverlap(a: RuleMatch, b: RuleMatch): boolean {
@@ -41,12 +45,13 @@ function mayOverlap(a: RuleMatch, b: RuleMatch): boolean {
  * `rules` is every rule of the account, for finding one that could decide the same mail differently.
  */
 export function filterFor(rule: FilterableRule, labels: readonly Label[], rules: readonly FilterableRule[]): FilterVerdict {
-  const label = labels.find((l) => l.id === rule.labelId);
-  if (!label) return no('Its label has been removed.');
-  if (rule.tier === 'usually') return no('sift judges each message this rule covers.');
+  if (rule.whenLabel !== undefined) return no('It applies only once sift has said what the mail is.');
+  const label = rule.labelId === undefined ? undefined : labels.find((l) => l.id === rule.labelId);
+  if (rule.labelId !== undefined && !label) return no('Its label has been removed.');
   if (rule.when !== undefined) return no('It has a condition in plain language, which Gmail cannot match.');
 
-  const outcome = labelled(label, rule.disposition);
+  const outcome = does(rule, label);
+  if (!label && outcome.disposition === 'keep') return no('It only keeps mail in your inbox, which Gmail does anyway.');
   if (outcome.disposition === 'spam') return no('Gmail filters cannot mark mail as spam.');
   if (outcome.disposition !== 'keep' && outcome.disposition !== 'archive') return no('Its label leaves mail for you.');
   const archive = outcome.disposition === 'archive';
@@ -82,10 +87,11 @@ export function filterFor(rule: FilterableRule, labels: readonly Label[], rules:
   // In sift a keep rule beats everything and otherwise the narrowest rule wins. Gmail would run this one regardless.
   const rival = rules.find((other) => {
     if (other.id === rule.id || !mayOverlap(rule.match, other.match)) return false;
-    const otherLabel = labels.find((l) => l.id === other.labelId);
-    if (!otherLabel) return false;
-    const theirs = labelled(otherLabel, other.disposition);
-    const judged = other.tier === 'usually' || other.when !== undefined;
+    const named = other.labelId ?? other.whenLabel;
+    const otherLabel = named === undefined ? undefined : labels.find((l) => l.id === named);
+    if (named !== undefined && !otherLabel) return false;
+    const theirs = does(other, otherLabel);
+    const judged = other.whenLabel !== undefined || other.when !== undefined;
     if (!judged && theirs.labelId === outcome.labelId && theirs.disposition === outcome.disposition) return false;
     const narrower = specificity(other.match) >= specificity(rule.match);
     return archive ? theirs.disposition === 'keep' || judged || narrower : (theirs.disposition === 'keep' || judged) && narrower;
@@ -93,5 +99,5 @@ export function filterFor(rule: FilterableRule, labels: readonly Label[], rules:
   if (rival) return no(`Another rule (${describeMatch(rival.match)}) can decide the same mail, and a filter would get to it first.`);
 
   if (archive) differs.push('Mail the filter archives never reaches sift: it is not recorded, counted or unsubscribed from.');
-  return { possible: true, plan: { criteria, gmailLabel: label.gmailLabel, archive }, differs };
+  return { possible: true, plan: { criteria, ...(label ? { gmailLabel: label.gmailLabel } : {}), archive }, differs };
 }

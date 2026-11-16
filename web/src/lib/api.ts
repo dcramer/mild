@@ -151,15 +151,17 @@ export const api = {
   ) => post('/api/labels', { accountId, id, ...change }),
   addLabel: (label: { accountId: string; name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }) =>
     post<{ id: string }>('/api/labels/add', label),
-  /** `label` is what the mail is; `disposition` an exception to that label's action. */
+  /** A rule carries a label, an action (`disposition`), or both; or an action for mail that turns out to be `whenLabel`. */
   addRule: (rule: {
     accountId: string;
     match: Record<string, string>;
-    label: string;
+    /** What the mail is. */
+    label?: string;
+    /** Apply only once sift has said the mail is this label. */
+    whenLabel?: string;
     disposition?: string;
     markRead?: boolean;
     unsubscribe?: boolean;
-    tier?: 'always' | 'usually';
     when?: string;
   }) => post('/api/rules', rule),
   removeRule: (id: string) => post('/api/rules/remove', { id }),

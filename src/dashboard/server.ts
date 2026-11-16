@@ -12,7 +12,6 @@ import { deleteExamples, listExamples } from '../store/examples.ts';
 import { addLabel, updateLabel } from '../store/labels.ts';
 import { resolveProposal } from '../store/proposals.ts';
 import { addRule, removeRule, setStanding } from '../store/rules.ts';
-import { senderFacts } from '../store/senders.ts';
 import { getRuleFilter, ruleFilterStatus } from '../store/filters.ts';
 import type { Controls, SignIn } from './controls.ts';
 import {
@@ -284,24 +283,29 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       };
     },
     '/api/rules': async (body) => {
-      const { accountId, match, label, disposition, markRead, unsubscribe, tier, when } = body;
-      if (tier !== undefined && tier !== 'always' && tier !== 'usually') return null;
+      const { accountId, match, label, whenLabel, disposition, markRead, unsubscribe, when } = body;
       if (when !== undefined && (typeof when !== 'string' || when.length > 200)) return null;
-      if (!str(accountId) || typeof label !== 'string' || !LABEL_ID.test(label) || typeof match !== 'object' || match === null) return null;
+      if (!str(accountId) || typeof match !== 'object' || match === null) return null;
+      for (const id of [label, whenLabel]) if (id !== undefined && (typeof id !== 'string' || !LABEL_ID.test(id))) return null;
       if (disposition !== undefined && !decided(disposition)) return null;
+      // A rule says what mail is, what happens to it, or what happens when it is a given label.
+      if (label === undefined && whenLabel === undefined && disposition === undefined) return null;
+      if (label !== undefined && whenLabel !== undefined) return null;
       if ((markRead !== undefined && typeof markRead !== 'boolean') || (unsubscribe !== undefined && typeof unsubscribe !== 'boolean')) return null;
       const conditions = Object.entries(match).filter(([, value]) => value !== '');
       if (conditions.length === 0 || !conditions.every(([key, value]) => RULE_KEYS.has(key) && str(value))) return null;
-      const extras = {
-        ...(markRead ? { markRead } : {}),
-        ...(unsubscribe ? { subscription: 'unsubscribe' as const } : {}),
-        ...(tier === 'usually' ? { tier: 'usually' as const } : {}),
-        ...(typeof when === 'string' && when.trim() !== '' ? { when } : {}),
-      };
       const id = addRule(
         db,
         accountId,
-        { match: Object.fromEntries(conditions), labelId: label, ...(disposition ? { disposition } : {}), ...extras },
+        {
+          match: Object.fromEntries(conditions),
+          ...(typeof label === 'string' ? { labelId: label } : {}),
+          ...(typeof whenLabel === 'string' ? { whenLabel } : {}),
+          ...(disposition ? { disposition } : {}),
+          ...(markRead ? { markRead } : {}),
+          ...(unsubscribe ? { subscription: 'unsubscribe' as const } : {}),
+          ...(typeof when === 'string' && when.trim() !== '' ? { when } : {}),
+        },
         'user',
         now(),
       );
@@ -316,8 +320,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       if (domain !== undefined && (!str(domain) || /[@\s]/.test(domain))) return null;
       if (!listAccounts(db).some((a) => a.id === accountId)) return null;
       const who = typeof address === 'string' ? address.toLowerCase() : (domain as string).toLowerCase();
-      const usual = typeof address === 'string' ? (senderFacts(db, accountId, who, now()).labels[0]?.id ?? null) : null;
-      setStanding(db, accountId, typeof address === 'string' ? { from: who } : { fromDomain: who }, standing, usual, now());
+      setStanding(db, accountId, typeof address === 'string' ? { from: who } : { fromDomain: who }, standing, now());
       return { ok: true };
     },
     '/api/rules/filter': async (body) => {

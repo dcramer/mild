@@ -26,6 +26,34 @@ describe('store', () => {
     db.close();
   });
 
+  it('turns a rule the model checked into one that waits for its label', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
+    const old = new DatabaseSync(path);
+    for (const file of files.filter((f) => Number.parseInt(f, 10) <= 62)) old.exec(readFileSync(new URL(file, MIGRATIONS), 'utf8'));
+    old.exec('PRAGMA user_version = 62');
+    old.exec(`
+      INSERT INTO accounts (id, email, created_at) VALUES ('a@example.org', 'a@example.org', 0);
+      INSERT INTO labels (account_id, id, name, description, disposition, gmail_label, position, updated_at) VALUES
+        ('a@example.org', 'newsletter', 'Newsletters', 'Lists.', 'archive', 'sift/newsletters', 0, 1),
+        ('a@example.org', 'personal', 'Personal', 'People.', 'keep', 'sift/personal', 1, 1);
+      INSERT INTO rules (id, account_id, position, match_json, label_id, disposition, source, hits, tier, condition, filter_id, created_at) VALUES
+        ('r-usual', 'a@example.org', 1, '{"from":"news@example.com"}', 'newsletter', NULL, 'user', 3, 'usually', NULL, NULL, 1),
+        ('r-always', 'a@example.org', 2, '{"from":"ada@example.org"}', 'personal', 'keep', 'user', 0, 'always', NULL, 'f1', 2),
+        ('r-words', 'a@example.org', 3, '{"from":"bids@example.com"}', 'newsletter', NULL, 'user', 0, 'usually', 'a lot I did not bid on', NULL, 3);
+    `);
+    old.close();
+
+    const db = openDb(path);
+    expect(listRules(db, 'a@example.org').map(({ source: _source, subscription: _subscription, ...rule }) => rule)).toEqual([
+      { id: 'r-usual', match: { from: 'news@example.com' }, whenLabel: 'newsletter', hits: 3 },
+      { id: 'r-always', match: { from: 'ada@example.org' }, labelId: 'personal', disposition: 'keep', hits: 0 },
+      // A condition in the user's words still needs its label to answer with.
+      { id: 'r-words', match: { from: 'bids@example.com' }, labelId: 'newsletter', when: 'a lot I did not bid on', hits: 0 },
+    ]);
+    expect(db.prepare(`SELECT filter_id FROM rules WHERE id = 'r-always'`).get()).toEqual({ filter_id: 'f1' });
+    db.close();
+  });
+
   it('turns the categories, rules and senders of an older database into labels and rules', () => {
     const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
     const old = new DatabaseSync(path);

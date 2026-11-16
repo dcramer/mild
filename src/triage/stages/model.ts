@@ -53,8 +53,8 @@ export interface JudgeInput {
 
 export interface ModelStageDeps {
   gather: (facts: MessageFacts) => Promise<Evidence>;
-  /** The judged rule that speaks for a message, if any. */
-  prior?: (facts: MessageFacts) => RuleHit | null;
+  /** The judged rule that speaks for a message, if any. It always has a label. */
+  prior?: (facts: MessageFacts) => (RuleHit & { label: Label }) | null;
   judge: Judge;
   labels: readonly Label[];
   /** The user's broad guidance in plain language. May be empty. */
@@ -87,9 +87,9 @@ export function modelStage(deps: ModelStageDeps): Stage {
         ...(verdict.confidence === undefined ? {} : { confidence: verdict.confidence }),
         ...(verdict.usage ? { usage: verdict.usage } : {}),
       };
-      // The model agrees with the owner's rule: the rule's outcome applies. A rule the owner made is trusted
-      // to hide mail; one sift learned is not, and falls through to the protection below.
-      if (prior && verdict.label === prior.label.id && !prior.rule.learned)
+      // The model found the owner's condition met: the rule's outcome applies. A rule that waits for a label
+      // is only a hint here; it is applied once the label is settled, by `settle`.
+      if (prior && prior.rule.when !== undefined && verdict.label === prior.label.id && !prior.rule.learned)
         return { ...base, ...ruleOutcome(prior), reason: `rule: ${describeRule(prior)}. ${verdict.reason}` };
       const unusual = prior && verdict.label !== prior.label.id ? `not the usual ${prior.label.name}. ` : '';
 

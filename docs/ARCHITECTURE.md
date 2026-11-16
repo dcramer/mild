@@ -7,7 +7,7 @@ sift polls Gmail for new inbox mail and decides, per message, a **disposition** 
 Two things are decided about every message, and they are kept apart.
 
 - **What it is: a label.** Each account has one list of labels (`labels`), seeded with cautious defaults and added to by the user. A label has a name, a description the model reads, a Gmail label, and an action.
-- **What happens: the label's action**, one of keep, archive, mark spam, or block. No tier picks an action. Beside the outcome a label can carry extras: mark read (with keep and archive) and unsubscribe. A rule can add either for the mail it matches. "Leave it for me" is not an action: sift suggesting instead of acting is a matter of trust, and the only time mail is held for the user is when no tier could place it or a protection stopped sift.
+- **What happens** is the user's to say, never a model's. Usually it is the label's action, one of keep, archive, mark spam, or block; a rule can name an action itself. Beside the outcome a label can carry extras: mark read (with keep and archive) and unsubscribe. A rule can add either for the mail it decides. "Leave it for me" is not an action: sift suggesting instead of acting is a matter of trust, and the only time mail is held for the user is when no tier could place it or a protection stopped sift.
 - **Block** is sift's own, since Gmail's block list is not in its API ([GMAIL.md](GMAIL.md)): the message is marked spam, and once that has happened a rule is written so the sender's later mail is that label without a model. Only when the message passed DMARC, so an impersonated sender is not the one blocked, and never for someone the user has written to. A rule may carry the user's own exception to its label's action ("this one is a newsletter, but keep it").
 
 A label's id and Gmail label never change after it is made, so renaming one orphans nothing.
@@ -25,15 +25,22 @@ Tiers run cheapest first. A tier either names a label or abstains; the first ans
 
 The fallback is `review`: the message stays where it is, gets the review label, and is shown to the user.
 
-**A rule** says that mail matching some conditions is a label. It is the only deterministic thing sift knows, and there is one kind: what used to be a separate memory of senders is a rule with a single "from" condition. Rules come from the user (`user`), from the user correcting a suggestion (`correction`), or from sift itself (`agent`) once a model has given a sender's last three messages the same label.
+**A rule** is conditions, then a label, an action, or both. There are three kinds, and a sender or domain can have one of the first two and any number of the third:
+
+- **Conditions → action** ("from this notifications address: archive"). No model. sift does not say what the mail is unless that costs nothing: another rule that matches names a label. A sender's standing (trusted, unwanted, blocked) is this kind of rule.
+- **Conditions → label**, optionally with its own action in place of the label's. No model.
+- **Conditions, when it is label L → action.** It cannot apply until a tier has said what the mail is, so when it is the best match the rules tier steps aside for the tiers that name labels, and `settle` applies it to their decision: the tier's label stands, the rule says what happens. Mail from there that turns out to be something else falls to the sender's rule for all their mail if there is one, and otherwise is as the tier said. With no action of its own it confirms the label's as the user's wish, which is what answering "right" for a sender makes when the label would hide their mail.
+
+A rule can also carry a condition in the user's own words, which only a model can apply; it needs a label for the model to answer with. Rules come from the user (`user`), from the user correcting a suggestion (`correction`), or from sift itself (`agent`), only when it blocks a sender. Otherwise sift proposes: a rule for a sender whose last five messages a model gave the same label, and dropping the "when it is L" from a rule once ten messages in a row were L.
 
 **The heuristics tier** labels mail that is plainly bulk from its facts alone. Every sign has to agree: a mailing list id, a one-click unsubscribe, a recognised bulk mail service, a DMARC pass, not a reply, not marked auto-generated, and the owner known never to have written to the sender ("could not check" abstains). It names only two labels, and only when it can tell them apart: Marketing when Gmail filed the message under Promotions, Newsletters when it came through a newsletter platform and Gmail did not file it under Promotions or Primary. Everything else, notifications included, goes on to the model. Its decisions are suggestions like any other, and three of them do not make a learned rule.
 
 Rules that matter across tiers:
 
-- A rule whose outcome is `keep` is a protection and beats any other rule. Otherwise the most specific rule wins (more conditions, then an exact sender over a domain), so "this sender when the subject contains X" beats "this sender" whichever was written first.
+- A rule that keeps all the mail it matches is a protection and beats any other rule. Otherwise the most specific rule wins (more conditions, then an exact sender over a domain, then a rule that waits for a label over one that does not), so "this sender when the subject contains X" beats "this sender" whichever was written first.
 - A rule sift learned never hides mail from someone the user has written to; the user's own rules do what they say.
 - A rule whose label has been removed does nothing.
+- Mail an action rule decides may carry no label at all: decisions, lists and Gmail (which then gets only the mark of what sift did) all allow for that.
 - Spam has a higher confidence bar than archive.
 - Errors abstain. Nothing fails toward a mutation.
 

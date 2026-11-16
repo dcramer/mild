@@ -14,7 +14,7 @@ import { cachedCorrespondent } from '../store/senders.ts';
 import { passedDmarc } from '../triage/features.ts';
 import { triage } from '../triage/pipeline.ts';
 import { heuristicsStage } from '../triage/stages/heuristics.ts';
-import { isJudged, pickRule, rulesStage } from '../triage/stages/rules.ts';
+import { priorRule, rulesStage, settle } from '../triage/stages/rules.ts';
 import { type Judge, modelStage } from '../triage/stages/model.ts';
 import type { Decision, Disposition, MessageFacts, Stage } from '../triage/types.ts';
 import { type EvidenceSources, gatherEvidence, ownerHasWritten } from './evidence.ts';
@@ -62,13 +62,16 @@ export interface TriageReport {
   unsubscribed: number;
 }
 
-/** The cascade for one account, cheapest first. The decision-model tier would slot in after the heuristics. */
-export function stagesFor(deps: TriageDeps, accountId: string): Stage[] {
+/**
+ * The cascade for one account, as a function that decides one message: the tiers cheapest first, then
+ * the rules that wait for a label. The decision-model tier would slot in after the heuristics.
+ */
+export function cascadeFor(deps: TriageDeps, accountId: string): (facts: MessageFacts) => Promise<Decision> {
   const { db, model } = deps;
   const labels = listLabels(db, accountId);
   const rules = listRules(db, accountId);
   const options = { hasWritten: (facts: MessageFacts) => cachedCorrespondent(db, facts.accountId, facts.from.address) };
-  const stages = [rulesStage(rules, labels, { ...options, judged: model !== undefined })];
+  const stages: Stage[] = [rulesStage(rules, labels, { ...options, judged: model !== undefined })];
   if (deps.heuristics) {
     const sources = { db, mailbox: deps.heuristics.mailbox, ...(deps.now ? { now: deps.now } : {}) };
     stages.push(heuristicsStage({ labels, hasWritten: (facts) => ownerHasWritten(sources, facts) }));
@@ -81,14 +84,14 @@ export function stagesFor(deps: TriageDeps, accountId: string): Stage[] {
         guidelines: model.guidelines,
         gather: (facts) => gatherEvidence({ db, ...model.sources, ...(deps.now ? { now: deps.now } : {}) }, facts),
         prior: (facts) => {
-          const hit = pickRule(rules, labels, facts, options);
-          return hit && isJudged(hit.rule) ? hit : null;
+          const hit = priorRule(rules, labels, facts, options);
+          return hit?.label ? { rule: hit.rule, label: hit.label } : null;
         },
         ...(model.fewShot === false ? {} : { examples: (facts) => shotCandidates(db, facts) }),
       }),
     );
   }
-  return stages;
+  return (facts) => triage(stages, facts, (decision) => settle(rules, labels, facts, decision, options));
 }
 
 /**
@@ -127,11 +130,11 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     for (const pending of listUnsettledDecisions(db, account.id)) await carryOut(pending.id, pending.messageId, pending, mailbox);
   }
 
-  const stages = stagesFor(deps, account.id);
+  const decide = cascadeFor(deps, account.id);
   for (const { facts, observeOnly } of listUndecided(db, account.id, limit)) {
     const act = mailbox !== null && !observeOnly;
     const started = performance.now();
-    const decision = await triage(stages, facts);
+    const decision = await decide(facts);
     const decisionId = recordDecision(db, account.id, facts.messageId, decision, {
       mode: act ? 'act' : 'observe',
       durationMs: Math.round(performance.now() - started),

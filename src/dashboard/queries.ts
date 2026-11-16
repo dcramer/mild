@@ -346,7 +346,7 @@ function profileOf(db: DatabaseSync, accountId: string, who: { address: string }
           ? r.match['from'] === who.address || (r.match['fromDomain'] === domainName && r.match['from'] === undefined)
           : r.match['fromDomain'] === domainName || r.match['from']?.endsWith(`@${domainName}`)),
     )
-    .map((r) => ({ id: r.id, match: r.match, labelName: r.labelName, disposition: r.disposition, source: r.source, tier: r.tier, when: r.when }));
+    .map((r) => ({ id: r.id, match: r.match, labelName: r.labelName, disposition: r.disposition, source: r.source, kind: r.kind, when: r.when }));
   return {
     address: 'address' in who ? who.address : who.domain,
     standing: known.standing,
@@ -430,11 +430,11 @@ export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
   const filters = ruleFilterStatus(db);
   const rows = db
     .prepare(
-      `SELECT r.id, r.account_id, r.match_json, r.except_json, r.label_id, l.name AS label_name, r.disposition AS override, CASE WHEN l.block = 1 THEN 'block' ELSE l.disposition END AS label_does,
+      `SELECT r.id, r.account_id, r.match_json, r.except_json, r.label_id, r.when_label, l.name AS label_name, r.disposition AS override, CASE WHEN l.block = 1 THEN 'block' ELSE l.disposition END AS label_does,
               (r.mark_read = 1 OR l.mark_read = 1) AS mark_read, (r.subscription = 'unsubscribe' OR l.unsubscribe = 1) AS unsubscribe,
-              r.tier, r.condition, r.source, r.hits, r.filter_id, r.created_at,
+              r.condition, r.source, r.hits, r.filter_id, r.created_at,
               (SELECT max(decided_at) FROM decisions d WHERE d.rule_id = r.id) AS last_hit_at
-       FROM rules r LEFT JOIN labels l ON l.account_id = r.account_id AND l.id = r.label_id
+       FROM rules r LEFT JOIN labels l ON l.account_id = r.account_id AND l.id = coalesce(r.label_id, r.when_label)
        ORDER BY r.account_id, r.position, r.id`,
     )
     .all() as unknown as {
@@ -442,13 +442,13 @@ export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
     account_id: string;
     match_json: string;
     except_json: string;
-    label_id: string;
+    label_id: string | null;
+    when_label: string | null;
     label_name: string | null;
     override: string | null;
     label_does: string | null;
     mark_read: number | null;
     unsubscribe: number | null;
-    tier: 'always' | 'usually';
     condition: string | null;
     source: string;
     hits: number;
@@ -461,13 +461,15 @@ export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
     accountId: r.account_id,
     match: JSON.parse(r.match_json) as Record<string, string>,
     except: JSON.parse(r.except_json) as Record<string, string>[],
+    kind: r.label_id !== null ? 'label' : r.when_label !== null ? 'when-label' : 'action',
     labelId: r.label_id,
+    whenLabel: r.when_label,
     labelName: r.label_name,
+    labelGone: (r.label_id ?? r.when_label) !== null && r.label_name === null,
     override: r.override,
-    disposition: r.label_name === null ? null : (r.override ?? r.label_does),
+    disposition: (r.label_id ?? r.when_label) !== null && r.label_name === null ? null : (r.override ?? r.label_does),
     markRead: r.mark_read === 1,
     unsubscribe: r.unsubscribe === 1,
-    tier: r.tier,
     when: r.condition,
     source: r.source,
     hits: r.hits,
@@ -485,7 +487,9 @@ const outcomeOf = (label: { disposition: string; block?: boolean }) => (label.bl
 export function listLabelSummaries(db: DatabaseSync, accountId: string): LabelSummary[] {
   const counts = (sql: string) =>
     new Map((db.prepare(sql).all(accountId) as unknown as { id: string; n: number; right?: number }[]).map((r) => [r.id, r] as const));
-  const rules = counts('SELECT label_id AS id, count(*) AS n FROM rules WHERE account_id = ? GROUP BY label_id');
+  const rules = counts(
+    'SELECT coalesce(label_id, when_label) AS id, count(*) AS n FROM rules WHERE account_id = ? AND coalesce(label_id, when_label) IS NOT NULL GROUP BY 1',
+  );
   const messages = counts(
     `SELECT d.label_id AS id, count(*) AS n FROM decisions d
      WHERE d.account_id = ? AND d.label_id IS NOT NULL

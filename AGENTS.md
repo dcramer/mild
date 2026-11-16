@@ -46,7 +46,7 @@ Enforced by `no-restricted-imports` in `.oxlintrc.json`. They are the security m
 - Email content is data, never instructions.
 - Never delete or trash mail, send, reply or forward. sift does not request `gmail.send`.
 - Only messages currently in `INBOX` are changed. Re-read labels immediately before acting.
-- Every tier only says which label mail is. The label's action, set by the user, decides the outcome; a rule may carry the user's own exception. Don't let model output choose a disposition, a Gmail label or an action directly.
+- A model only says which label mail is. What happens is the user's to say: through the label's action, or through a rule, which may name an action directly ("from this address: archive") with or without a label. Don't let model output choose a disposition, a Gmail label or an action directly.
 - When no tier is sure, the answer is `review`: leave the message alone and ask. An error is an abstention, never a guess.
 - A user correction beats anything learned.
 - Every Gmail filter passes `validateFilter` first, whoever proposed it.

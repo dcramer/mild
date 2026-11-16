@@ -33,6 +33,15 @@ describe('whether a rule can be a Gmail filter', () => {
     expect(verdict(rule({ disposition: 'keep' }))).toMatchObject({ possible: true, plan: { gmailLabel: 'sift/newsletters', archive: false } });
   });
 
+  it('turns a rule that only archives into a filter that only skips the inbox', () => {
+    const archive: FilterableRule = { id: 'a', match: { from: 'notifications@example.com' }, disposition: 'archive' };
+    const v = verdict(archive);
+    expect(v).toMatchObject({ possible: true, plan: { criteria: { from: 'notifications@example.com' }, archive: true } });
+    expect(v.possible && v.plan).not.toHaveProperty('gmailLabel');
+    expect(reason({ ...archive, disposition: 'keep' })).toMatch(/Gmail does anyway/);
+    expect(reason({ ...archive, disposition: 'spam' })).toMatch(/spam/);
+  });
+
   it('writes a domain, a recipient and subject words as Gmail matches them, and says where that differs', () => {
     const v = verdict(rule({ match: { fromDomain: 'Example.com', to: 'Me@example.org', subjectContains: ' weekly digest ' }, labelId: 'personal' }));
     expect(v).toMatchObject({ possible: true, plan: { criteria: { from: '@example.com', to: 'me@example.org', subject: '"weekly digest"' } } });
@@ -50,9 +59,9 @@ describe('whether a rule can be a Gmail filter', () => {
   });
 
   it('refuses a rule that is judged, not matched', () => {
-    expect(reason(rule({ tier: 'usually' }))).toMatch(/judges each message/);
-    expect(reason(rule({ tier: 'always', when: 'it is an auction notice' }))).toMatch(/plain language/);
-    expect(verdict(rule({ tier: 'always' })).possible).toBe(true);
+    expect(reason({ id: 'r', match: { from: 'news@example.com' }, whenLabel: 'newsletter' })).toMatch(/once sift has said what the mail is/);
+    expect(reason(rule({ when: 'it is an auction notice' }))).toMatch(/plain language/);
+    expect(verdict(rule()).possible).toBe(true);
   });
 
   it('refuses a rule sift learned when it would hide mail, since a filter cannot spare people the user writes to', () => {
@@ -85,7 +94,7 @@ describe('whether a rule can be a Gmail filter', () => {
     expect(reason(rule(), [keepAll])).toMatch(/Another rule/);
 
     // A rule for the same sender that is judged can say "not this one".
-    expect(reason(rule(), [rule({ id: 'soft', tier: 'usually', labelId: 'marketing' })])).toMatch(/Another rule/);
+    expect(reason(rule(), [{ id: 'soft', match: rule().match, whenLabel: 'marketing' }])).toMatch(/Another rule/);
 
     // Rules that cannot match the same mail, agree, or name a removed label are no obstacle.
     const elsewhere = rule({ id: 'other', match: { from: 'ada@example.org' }, labelId: 'personal' });

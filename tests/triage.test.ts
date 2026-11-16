@@ -3,7 +3,8 @@ import { DEFAULT_LABELS } from '../src/store/labels.ts';
 import { bulkSignals, parseAddress } from '../src/triage/features.ts';
 import { triage } from '../src/triage/pipeline.ts';
 import { classifierStage } from '../src/triage/stages/classifier.ts';
-import { type Rule, rulesStage } from '../src/triage/stages/rules.ts';
+import { type Rule, rulesStage, settle } from '../src/triage/stages/rules.ts';
+import { labelled } from '../src/triage/types.ts';
 import { facts } from './helpers.ts';
 
 const LABELS = DEFAULT_LABELS;
@@ -113,6 +114,92 @@ describe('rules stage', () => {
       disposition: 'keep',
     });
     expect(await decide([newsletters], facts(), written)).toMatchObject({ disposition: 'archive' });
+  });
+});
+
+describe('the three kinds of rule', () => {
+  const from = { address: 'notifications@example.com', domain: 'example.com' };
+  const mail = facts({ from });
+  const decide = (rules: Rule[], options = {}) => rulesStage(rules, LABELS, options).decide(mail);
+  const label = (id: string) => LABELS.find((l) => l.id === id)!;
+  // What a model tier would say about the message.
+  const said = (labelId: string) => ({ ...labelled(label(labelId)), stage: 'agent' as const, reason: 'looks like one' });
+
+  it('takes an action without saying what the mail is', async () => {
+    const archive: Rule = { id: 'a', match: { from: from.address }, disposition: 'archive' };
+    const decision = await decide([archive]);
+    expect(decision).toMatchObject({
+      disposition: 'archive',
+      subscription: 'preserve',
+      stage: 'rules',
+      ruleId: 'a',
+      reason: 'rule: from notifications@example.com: archive it',
+    });
+    expect(decision).not.toHaveProperty('labelId');
+    expect(decision).not.toHaveProperty('gmailLabel');
+    // Its own extras apply; there is no label whose extras could.
+    expect(await decide([{ ...archive, markRead: true, subscription: 'unsubscribe' }])).toMatchObject({ markRead: true, subscription: 'unsubscribe' });
+  });
+
+  it('labels mail an action rule decides only when another rule already says what it is', async () => {
+    const keep: Rule = { id: 'a', match: { from: from.address }, disposition: 'keep' };
+    const named: Rule = { id: 'n', match: { fromDomain: from.domain }, labelId: 'newsletter' };
+    // The action rule decides; the other names the label for nothing. Newsletters archives, the rule keeps.
+    const decision = await decide([named, keep]);
+    expect(decision).toMatchObject({ ruleId: 'a', disposition: 'keep', labelId: 'newsletter', gmailLabel: 'sift/newsletters' });
+    // The label's extras are not the rule's to apply.
+    expect(decision).toMatchObject({ subscription: 'preserve' });
+  });
+
+  it('leaves mail to the tier that names labels when its best rule waits for one, then applies it', async () => {
+    const whenMarketing: Rule = { id: 'w', match: { from: from.address }, whenLabel: 'marketing', disposition: 'keep' };
+    expect(await decide([whenMarketing], { judged: true })).toBeNull();
+    // With no such tier the rule can never apply, and it does not pretend to.
+    expect(await decide([whenMarketing])).toBeNull();
+
+    expect(settle([whenMarketing], LABELS, mail, said('marketing'))).toMatchObject({
+      disposition: 'keep',
+      labelId: 'marketing',
+      stage: 'agent',
+      ruleId: 'w',
+      reason: 'rule: from notifications@example.com, when it is Marketing: keep it. looks like one',
+    });
+    // Anything else from them is as the tier said.
+    expect(settle([whenMarketing], LABELS, mail, said('newsletter'))).toEqual(said('newsletter'));
+  });
+
+  it('falls back to the rule for all their mail when the label is not the one a narrower rule waits for', async () => {
+    const archive: Rule = { id: 'a', match: { from: from.address }, disposition: 'archive' };
+    const keepSecurity: Rule = { id: 'k', match: { from: from.address }, whenLabel: 'security', disposition: 'keep' };
+    expect(await decide([archive, keepSecurity], { judged: true })).toBeNull();
+    expect(settle([archive, keepSecurity], LABELS, mail, said('security'))).toMatchObject({ ruleId: 'k', disposition: 'keep', labelId: 'security' });
+    // The tier's label stays on mail the action rule then archives.
+    expect(settle([archive, keepSecurity], LABELS, mail, said('personal'))).toMatchObject({ ruleId: 'a', disposition: 'archive', labelId: 'personal' });
+    // Without a tier to ask, the rule that needs none decides.
+    expect(await decide([archive, keepSecurity])).toMatchObject({ ruleId: 'a', disposition: 'archive' });
+  });
+
+  it("confirms a label's own action when a rule waits for the label and says nothing else", () => {
+    const rule: Rule = { id: 'w', match: { from: from.address }, whenLabel: 'newsletter' };
+    expect(settle([rule], LABELS, mail, { ...said('newsletter'), disposition: 'review' })).toMatchObject({
+      ruleId: 'w',
+      disposition: 'archive',
+      labelId: 'newsletter',
+    });
+  });
+
+  it('does not touch a decision with no label, or one a rule made', () => {
+    const archive: Rule = { id: 'a', match: { from: from.address }, disposition: 'archive' };
+    const unsure = { disposition: 'review' as const, subscription: 'preserve' as const, stage: 'agent' as const, reason: 'unsure' };
+    expect(settle([archive], LABELS, mail, unsure)).toEqual(unsure);
+    const ruled = { ...said('marketing'), stage: 'rules' as const, ruleId: 'x' };
+    expect(settle([archive], LABELS, mail, ruled)).toEqual(ruled);
+  });
+
+  it('lets a rule that keeps all their mail beat one that waits for a label', async () => {
+    const trust: Rule = { id: 't', match: { fromDomain: from.domain }, disposition: 'keep' };
+    const whenMarketing: Rule = { id: 'w', match: { from: from.address }, whenLabel: 'marketing', disposition: 'archive' };
+    expect(await decide([trust, whenMarketing], { judged: true })).toMatchObject({ ruleId: 't', disposition: 'keep' });
   });
 });
 

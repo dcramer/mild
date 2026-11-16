@@ -487,9 +487,28 @@ describe('inference tier', () => {
     });
   });
 
-  it('has the model check a rule that says what a sender usually is, and asks when a message is something else', async () => {
+  it('archives what an action rule covers without asking the model or naming a label', async () => {
     judged.length = 0;
-    const ruleId = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter', tier: 'usually' }, 'user');
+    const ruleId = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, disposition: 'archive' }, 'user');
+    inbox = [message('g1', 'News <news@example.com>')];
+    mailbox.labels.set('g1', ['INBOX', 'UNREAD']);
+    await runOnce(db, { ...options(true), model: model('newsletter') });
+    expect(judged).toEqual([]);
+    expect(db.prepare(`SELECT stage, disposition, label_id, gmail_label, rule_id, reason FROM decisions WHERE message_id = 'g1'`).get()).toEqual({
+      stage: 'rules',
+      disposition: 'archive',
+      label_id: null,
+      gmail_label: null,
+      rule_id: ruleId,
+      reason: 'rule: from news@example.com: archive it',
+    });
+    // Out of the inbox, marked as sift's doing, and given no label of what it is.
+    expect(mailbox.labels.get('g1')).toEqual(['UNREAD', 'L:sift/did/archived']);
+  });
+
+  it('applies a rule that waits for a label only to mail the model gives that label, and asks about the rest', async () => {
+    judged.length = 0;
+    const ruleId = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, whenLabel: 'newsletter' }, 'user');
     inbox = [message('u1', 'News <news@example.com>')];
     mailbox.labels.set('u1', ['INBOX']);
     await runOnce(db, { ...options(true), model: model('newsletter') });
@@ -499,7 +518,7 @@ describe('inference tier', () => {
       disposition: 'archive',
       rule_id: ruleId,
       prior_rule_id: ruleId,
-      reason: 'rule: from news@example.com is usually Newsletters. looks like a mailing',
+      reason: 'rule: from news@example.com, when it is Newsletters. Newsletters: looks like a mailing',
     });
 
     inbox = [message('u2', 'News <news@example.com>')];

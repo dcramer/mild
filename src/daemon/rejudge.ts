@@ -3,8 +3,7 @@ import type { Account } from '../store/accounts.ts';
 import { recordDecision } from '../store/decisions.ts';
 import { getFacts } from '../store/messages.ts';
 import { countRuleHit } from '../store/rules.ts';
-import { triage } from '../triage/pipeline.ts';
-import { type TriageDeps, stagesFor } from './triage.ts';
+import { type TriageDeps, cascadeFor } from './triage.ts';
 
 /** Each is a model call, so one request judges at most this many. */
 export const MAX_REJUDGE = 100;
@@ -21,13 +20,13 @@ export function rejudgeWaiting(deps: TriageDeps, account: Account, since: number
   const now = deps.now ?? Date.now;
   const waiting = predatingGuidelines(db, since, account.id);
   const batch = waiting.slice(0, MAX_REJUDGE);
-  const stages = stagesFor(deps, account.id);
+  const decide = cascadeFor(deps, account.id);
   const work = async () => {
     for (const { messageId } of batch) {
       const facts = getFacts(db, account.id, messageId);
       if (!facts) continue;
       const started = performance.now();
-      const decision = await triage(stages, facts);
+      const decision = await decide(facts);
       if (decision.stage === 'fallback') continue;
       recordDecision(db, account.id, messageId, decision, { mode: 'observe', durationMs: Math.round(performance.now() - started), now: now() });
       if (decision.ruleId) countRuleHit(db, decision.ruleId);

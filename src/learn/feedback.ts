@@ -1,8 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { listLabels } from '../store/labels.ts';
 import { recordDecision } from '../store/decisions.ts';
-import { setRule } from '../store/rules.ts';
-import type { RuleMatch, RuleTier } from '../triage/stages/rules.ts';
+import { replaceRules } from '../store/rules.ts';
+import type { RuleMatch } from '../triage/stages/rules.ts';
 import { type DecidedDisposition, type Disposition, type StageName, labelled } from '../triage/types.ts';
 
 /** A decision sift made while only observing, that the user has not yet confirmed or corrected. */
@@ -125,6 +125,9 @@ function currentDecision(db: DatabaseSync, accountId: string, messageId: string)
     .get(accountId, messageId) as unknown as Row | undefined;
   return row ? toSuggestion(row) : null;
 }
+
+/** `always`: the rule says what the mail is. `usually`: it applies only when a tier has said so of each message. */
+export type RuleTier = 'always' | 'usually';
 
 export interface FeedbackInput {
   accountId: string;
@@ -254,15 +257,15 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
     }
     const all = given ? [...targets, given] : targets;
     const ruleId = match
-      ? setRule(
+      ? replaceRules(
           db,
           input.accountId,
           match,
           {
-            labelId: label.id,
+            // `usually` waits for a tier to say the mail is this label; otherwise the rule says it is.
+            ...(tier === 'usually' && when === '' ? { whenLabel: label.id } : { labelId: label.id }),
             ...(input.disposition ? { disposition: input.disposition } : {}),
             ...(input.unsubscribe ? { subscription: 'unsubscribe' as const } : {}),
-            tier,
             ...(when === '' ? {} : { when }),
           },
           all.every((t) => verdictFor(t) === 'right') ? 'user' : 'correction',

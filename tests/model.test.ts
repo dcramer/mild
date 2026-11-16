@@ -273,9 +273,9 @@ describe('preferences in the database', () => {
     expect(listProposals(db, ACCOUNT)).toEqual([]);
   });
 
-  it('proposes to stop checking a rule the model has agreed with every time', () => {
+  it('proposes to stop waiting for the label once every message a rule was checked against had it', () => {
     const db = seeded();
-    const ruleId = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter', tier: 'usually' }, 'user');
+    const ruleId = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, whenLabel: 'newsletter' }, 'user');
     const checked = (id: string, agreed: boolean) => {
       recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id })], '2');
       recordDecision(db, ACCOUNT, id, {
@@ -298,8 +298,11 @@ describe('preferences in the database', () => {
     expect(proposal).toMatchObject({ kind: 'always', ruleId, agreed: 10 });
 
     resolveProposal(db, proposal!.id, true);
-    expect(listRules(db, ACCOUNT)).toMatchObject([{ id: ruleId, labelId: 'newsletter' }]);
-    expect(listRules(db, ACCOUNT)[0]).not.toHaveProperty('tier');
+    // The rule no longer waits to be told: it archives everything from them, as Newsletters would have been.
+    const [rule] = listRules(db, ACCOUNT);
+    expect(rule).toMatchObject({ match: { from: 'news@example.com' }, disposition: 'archive', source: 'user' });
+    expect(rule).not.toHaveProperty('whenLabel');
+    expect(rule).not.toHaveProperty('labelId');
   });
 
   it('keeps only the extras that go with what a label does', () => {
@@ -354,12 +357,12 @@ describe('standing', () => {
     expect(senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'trusted', why: 'a rule keeps their mail' });
   });
 
-  it('is unwanted or blocked by a rule that hides their mail, but not by one the model still checks', () => {
+  it('is unwanted or blocked by a rule that hides their mail, but not by one that waits for a label', () => {
     const d = db();
     mail(d, 'a', 'promo@example.com', 'marketing');
-    addRule(d, ACCOUNT, { match: { from: 'promo@example.com' }, labelId: 'marketing', tier: 'usually' }, 'user');
+    addRule(d, ACCOUNT, { match: { from: 'promo@example.com' }, whenLabel: 'marketing' }, 'user');
     expect(senderFacts(d, ACCOUNT, 'promo@example.com').standing).toBe('new');
-    addRule(d, ACCOUNT, { match: { from: 'promo@example.com' }, labelId: 'marketing' }, 'user');
+    addRule(d, ACCOUNT, { match: { from: 'promo@example.com' }, disposition: 'archive' }, 'user');
     expect(senderFacts(d, ACCOUNT, 'promo@example.com').standing).toBe('unwanted');
     addRule(d, ACCOUNT, { match: { from: 'scam@example.net' }, labelId: 'junk' }, 'user');
     expect(senderFacts(d, ACCOUNT, 'scam@example.net').standing).toBe('blocked');

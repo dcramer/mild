@@ -178,7 +178,7 @@ export interface SenderProfile {
     labelName: string | null;
     disposition: string | null;
     source: string;
-    tier: 'always' | 'usually';
+    kind: 'label' | 'action' | 'when-label';
     when: string | null;
   }[];
 }
@@ -237,18 +237,25 @@ export interface RuleSummary {
   accountId: string;
   match: Record<string, string>;
   except: Record<string, string>[];
-  labelId: string;
-  /** Null if the label has been removed; the rule then does nothing. */
+  /**
+   * `label`: the mail is `labelId`, and that label's action applies unless the rule has its own.
+   * `action`: only what happens, whatever the mail is. `when-label`: what happens once a tier has said
+   * the mail is `whenLabel`.
+   */
+  kind: 'label' | 'action' | 'when-label';
+  labelId: string | null;
+  whenLabel: string | null;
+  /** The name of the label the rule names or waits for. Null for an `action` rule, and when that label has been removed. */
   labelName: string | null;
-  /** The rule's own action, when it is an exception to its label's. */
+  /** The label the rule names or waits for has been removed; the rule then does nothing. */
+  labelGone: boolean;
+  /** The rule's own action. For a `label` rule it is an exception to the label's. */
   override: string | null;
-  /** What happens to mail the rule matches: the override, else the label's action. */
+  /** What happens to mail the rule decides: its own action, else its label's. */
   disposition: string | null;
   /** Extras for mail the rule matches, from the rule or its label. */
   markRead: boolean;
   unsubscribe: boolean;
-  /** `always` decides by itself; `usually` is checked by the model on every message. */
-  tier: 'always' | 'usually';
   /** A plain-language condition only the model can apply. */
   when: string | null;
   /** `user`: written by the user. `correction`: made by correcting sift. `agent`: made by sift when it blocked the sender. */

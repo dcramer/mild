@@ -368,7 +368,9 @@ describe('dashboard server', () => {
         disposition: 'archive',
         markRead: false,
         unsubscribe: true,
-        tier: 'always',
+        kind: 'label',
+        whenLabel: null,
+        labelGone: false,
         when: null,
         source: 'user',
         hits: 0,
@@ -405,9 +407,9 @@ describe('dashboard server', () => {
         body: JSON.stringify(body),
       });
     expect((await write({ accountId: ACCOUNT, address: 'news@example.com', standing: 'trusted' })).status).toBe(200);
-    // Trust is a rule for exactly them that keeps their mail, under the label it has had.
+    // Trust is a rule for exactly them that only says what happens: keep it, whatever it is.
     expect(listRuleSummaries(db).filter((r) => r.match['from'] === 'news@example.com')).toMatchObject([
-      { labelId: 'newsletter', override: 'keep', disposition: 'keep', tier: 'always', source: 'user' },
+      { kind: 'action', labelId: null, override: 'keep', disposition: 'keep', source: 'user' },
     ]);
     const trusted = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
     expect(trusted.profile).toMatchObject({ standing: 'trusted', why: 'a rule keeps their mail' });

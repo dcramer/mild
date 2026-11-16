@@ -105,9 +105,9 @@ function facts(db: DatabaseSync, accountId: string, who: { address: string } | {
   const dispositions = new Map(listLabels(db, accountId, now).map((l) => [l.id, l.disposition]));
   const rule = listRules(db, accountId).find((r) => {
     const keys = Object.keys(r.match);
-    return keys.length === 1 && r.tier !== 'usually' && r.when === undefined && ('address' in who ? r.match.from === value : r.match.fromDomain === value);
+    return keys.length === 1 && r.whenLabel === undefined && r.when === undefined && ('address' in who ? r.match.from === value : r.match.fromDomain === value);
   });
-  const does = rule ? (rule.disposition ?? dispositions.get(rule.labelId)) : undefined;
+  const does = rule ? (rule.disposition ?? (rule.labelId ? dispositions.get(rule.labelId) : undefined)) : undefined;
   const labelled = labels.reduce((sum, l) => sum + l.messages, 0);
   const consistency = labelled >= 3 ? (labels[0]?.messages ?? 0) / labelled : null;
   return {

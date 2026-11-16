@@ -36,12 +36,19 @@ const WHEN = [
   ['to', 'Sent to'],
   ['subjectContains', 'Subject contains'],
 ] as const;
-const EXCEPTION = [
-  ['', 'What the label does'],
-  ['keep', 'Keep in inbox instead'],
-  ['archive', 'Archive instead'],
-  ['spam', 'Mark spam instead'],
+const KINDS = [
+  ['action', 'Always do this to it'],
+  ['label', 'It is always this label'],
+  ['when-label', 'When sift says it is this label, do this'],
 ] as const;
+type Kind = (typeof KINDS)[number][0];
+const DOES = [
+  ['keep', 'Keep in inbox'],
+  ['archive', 'Archive'],
+  ['spam', 'Mark spam'],
+] as const;
+const AS_LABEL = ['', 'What the label does'] as const;
+type Does = '' | (typeof DOES)[number][0];
 
 function AddRuleDialog({
   accountId,
@@ -57,24 +64,26 @@ function AddRuleDialog({
   const { busy, error, run } = useAction();
   const [when, setWhen] = useState<(typeof WHEN)[number][0]>('from');
   const [value, setValue] = useState('');
+  const [kind, setKind] = useState<Kind>('action');
   const [label, setLabel] = useState('');
-  const [exception, setException] = useState<(typeof EXCEPTION)[number][0]>('');
+  const [does, setDoes] = useState<Does>('archive');
   const [markRead, setMarkRead] = useState(false);
   const [unsubscribe, setUnsubscribe] = useState(false);
-  const [tier, setTier] = useState<'always' | 'usually'>('always');
   const [condition, setCondition] = useState('');
-  const ready = value.trim() !== '' && label !== '';
+  // An action rule has no label to take its action from.
+  const action = kind === 'action' && does === '' ? 'archive' : does;
+  const ready = value.trim() !== '' && (kind === 'action' || label !== '');
   const add = () =>
     run(
       () =>
         api.addRule({
           accountId,
           match: { [when]: value.trim() },
-          label,
-          ...(exception === '' ? {} : { disposition: exception }),
+          ...(kind === 'label' ? { label } : kind === 'when-label' ? { whenLabel: label } : {}),
+          ...(action === '' ? {} : { disposition: action }),
           ...(markRead ? { markRead } : {}),
           ...(unsubscribe ? { unsubscribe } : {}),
-          ...(condition.trim() === '' ? { tier } : { when: condition.trim() }),
+          ...(kind === 'label' && condition.trim() !== '' ? { when: condition.trim() } : {}),
         }),
       () => {
         onAdded();
@@ -86,7 +95,7 @@ function AddRuleDialog({
       open
       onClose={onClose}
       title="Add a rule"
-      subtitle="A rule says what mail is, without asking a model."
+      subtitle="What happens to mail, what it is, or both."
       footer={
         <>
           <Button variant="ink" busy={busy} disabled={!ready} onClick={add}>
@@ -121,39 +130,33 @@ function AddRuleDialog({
           </div>
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">And it is, in your words (optional)</span>
-          <Input
-            aria-label="What the mail must be, in your words"
-            placeholder="a notice for a lot I did not bid on"
-            value={condition}
-            onChange={(event) => setCondition(event.target.value)}
-          />
-          <p className="text-sm text-muted-foreground">Only a model can apply this, so sift reads each message the rule matches.</p>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">It is</span>
-          <div>
-            <Select label="Label" value={label} options={[['', 'Choose a label'] as const, ...labels]} onChange={setLabel} />
+          <span className="text-sm font-medium">Then</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select label="What the rule says" value={kind} options={KINDS} onChange={setKind} />
+            {kind === 'action' ? null : <Select label="Label" value={label} options={[['', 'Choose a label'] as const, ...labels]} onChange={setLabel} />}
+            <Select label="What sift does" value={action} options={kind === 'action' ? DOES : [AS_LABEL, ...DOES]} onChange={setDoes} />
           </div>
-          {condition.trim() === '' ? (
-            <div>
-              <Select
-                label="Whether sift checks each message"
-                value={tier}
-                options={[
-                  ['always', 'Always: without reading the message'],
-                  ['usually', 'Usually: sift reads each one, and asks about any that is something else'],
-                ]}
-                onChange={setTier}
-              />
-            </div>
-          ) : null}
+          <p className="text-sm text-muted-foreground">
+            {kind === 'action'
+              ? 'No model reads this mail, and sift does not say what it is.'
+              : kind === 'label'
+                ? 'No model reads this mail.'
+                : 'sift still reads each message. Mail from here that is something else is judged as usual.'}
+          </p>
         </div>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">sift does</span>
-          <div>
-            <Select label="What sift does" value={exception} options={EXCEPTION} onChange={setException} />
+        {kind === 'label' ? (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium">Only when it is, in your words (optional)</span>
+            <Input
+              aria-label="What the mail must be, in your words"
+              placeholder="a notice for a lot I did not bid on"
+              value={condition}
+              onChange={(event) => setCondition(event.target.value)}
+            />
+            <p className="text-sm text-muted-foreground">Only a model can apply this, so sift reads each message the rule matches.</p>
           </div>
+        ) : null}
+        <div className="flex flex-col gap-1.5">
           <Check checked={markRead} onChange={setMarkRead}>
             Also mark it read
           </Check>
@@ -190,7 +193,7 @@ export function Rules() {
     <ListView
       title="Rules"
       count={data ? count(data.rules.length) : null}
-      description="A rule says what mail is; its label decides what happens. The most specific one wins, and one that keeps mail always does."
+      description="A rule says what happens to mail, what it is, or both. The most specific one wins, and one that keeps mail always does."
       actions={
         accountId ? (
           <Button variant="ink" onClick={() => setAdding(true)}>
@@ -247,12 +250,23 @@ export function Rules() {
                     {multipleAccounts ? <Sub>{rule.accountId}</Sub> : null}
                   </Td>
                   <Td className="font-medium whitespace-nowrap">
-                    {rule.labelName ?? <span className="font-normal text-destructive">A label that was removed</span>}
-                    {rule.tier === 'usually' || rule.when ? <Sub>{rule.when ? 'sift reads each one' : 'usually; sift reads each one'}</Sub> : null}
+                    {rule.labelGone ? (
+                      <span className="font-normal text-destructive">A label that was removed</span>
+                    ) : rule.kind === 'action' ? (
+                      <span className="font-normal text-muted-foreground">Anything</span>
+                    ) : rule.kind === 'when-label' ? (
+                      <>
+                        <span className="font-normal text-muted-foreground">when it is </span>
+                        {rule.labelName}
+                      </>
+                    ) : (
+                      rule.labelName
+                    )}
+                    {rule.kind === 'when-label' || rule.when ? <Sub>sift reads each one</Sub> : null}
                   </Td>
                   <Td className="whitespace-nowrap">
                     {rule.disposition ? <DispositionBadge would disposition={rule.disposition} /> : <span className="text-muted-foreground">Nothing</span>}
-                    {rule.override ? <Sub>exception to the label</Sub> : null}
+                    {rule.override && rule.kind === 'label' ? <Sub>exception to the label</Sub> : null}
                     {extras(rule) ? <Sub>and {extras(rule)}</Sub> : null}
                   </Td>
                   <Td quiet className="whitespace-nowrap">
