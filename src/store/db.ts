@@ -32,7 +32,7 @@ export type Where = { url: string; migrateWith?: string } | { dir: string };
  */
 export async function openDatabase(where: Where): Promise<Driver> {
   if ('url' in where) {
-    const owner = new Pool({ connectionString: where.migrateWith ?? where.url });
+    const owner = new Pool({ connectionString: verified(where.migrateWith ?? where.url) });
     let bypass: string | null = null;
     try {
       await refuseForeign(async (text) => (await owner.query<Record<string, unknown>>(text)).rows, 'Give Sift an empty database.');
@@ -50,7 +50,7 @@ export async function openDatabase(where: Where): Promise<Driver> {
       return bypass ? { ...server(owner), warning } : server(owner);
     }
     await owner.end();
-    const pool = new Pool({ connectionString: where.url });
+    const pool = new Pool({ connectionString: verified(where.url) });
     try {
       bypass = await roleBypass(async (text) => (await pool.query<Record<string, unknown>>(text)).rows);
       if (bypass) throw new Error(`${bypass}, so row-level security would not hold Sift. Give DATABASE_URL a role that owns nothing and cannot bypass it.`);
@@ -72,6 +72,20 @@ export async function openDatabase(where: Where): Promise<Driver> {
   }
   const driver = pglite(file);
   return { ...driver, close: async () => (await driver.close(), release()) };
+}
+
+/**
+ * pg 8 treats `sslmode` `prefer`, `require` and `verify-ca` as `verify-full`, with a warning that pg 9 will
+ * give them libpq's meaning, under which `require` (what Neon's addresses carry) checks no certificate.
+ * Asking for `verify-full` by name keeps what sift has now through that upgrade. An address that opts into
+ * libpq's meaning (`uselibpqcompat`) is left as it is.
+ */
+export function verified(url: string): string {
+  const address = new URL(url);
+  const mode = address.searchParams.get('sslmode');
+  if (address.searchParams.has('uselibpqcompat') || !mode || !['prefer', 'require', 'verify-ca'].includes(mode)) return url;
+  address.searchParams.set('sslmode', 'verify-full');
+  return address.href;
 }
 
 /**

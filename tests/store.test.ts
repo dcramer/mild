@@ -10,7 +10,7 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts';
 import { addRule, removeRule } from '../src/store/rules.ts';
 import { accounts, labels } from '../src/store/query.ts';
-import { DatabaseInUse, moveAside, pglite, roleBypass } from '../src/store/db.ts';
+import { DatabaseInUse, moveAside, pglite, roleBypass, verified } from '../src/store/db.ts';
 import { openStore, storeOn } from '../src/store/store.ts';
 import { loadKeyring } from '../src/secrets.ts';
 import type { Disposition } from '../src/triage/types.ts';
@@ -73,6 +73,16 @@ describe('migrations', () => {
     await raw.query(`UPDATE drizzle.__drizzle_migrations SET hash = 'replaced' WHERE id = 1`);
     await raw.close();
     await expect(openStore(paths)).rejects.toThrow('sift reset-db');
+  });
+});
+
+describe('a Postgres address', () => {
+  it('names verify-full for every SSL mode pg treats as it, so pg 9 cannot stop checking the certificate', () => {
+    const at = (query: string) => `postgres://app:p%40ss@db.example.com/sift${query}`;
+    for (const mode of ['prefer', 'require', 'verify-ca'])
+      expect(verified(at(`?sslmode=${mode}&channel_binding=require`))).toBe(at('?sslmode=verify-full&channel_binding=require'));
+    for (const query of ['', '?sslmode=disable', '?sslmode=no-verify', '?sslmode=verify-full', '?uselibpqcompat=true&sslmode=require'])
+      expect(verified(at(query))).toBe(at(query));
   });
 });
 
