@@ -5,7 +5,7 @@ import { pruneOld } from '../src/daemon/retention.ts';
 import { type RunOptions, createWake, runLoop } from '../src/daemon/run.ts';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { recordSync } from '../src/store/accounts.ts';
-import { finishAction, insertPendingAction, unsubscribedAt } from '../src/store/actions.ts';
+import { type ActionType, finishAction, insertPendingAction, unsubscribedAt } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { addRule } from '../src/store/rules.ts';
@@ -30,7 +30,7 @@ async function message(id: string, at = OLD, from = `${id}@example.com`): Promis
 }
 
 /** A message sift decided and changed long ago. */
-async function acted(id: string, type = 'archive'): Promise<{ decisionId: number; actionId: number }> {
+async function acted(id: string, type: ActionType = 'archive'): Promise<{ decisionId: number; actionId: number }> {
   await message(id);
   const decisionId = await recordDecision(db, ACCOUNT, id, archive, { mode: 'act', now: OLD });
   await settleDecision(db, decisionId, 'done');

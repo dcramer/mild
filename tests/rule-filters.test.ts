@@ -109,7 +109,7 @@ let db: Sql;
 let mailbox: FakeMailbox;
 let clock: number;
 const deps = () => ({ db, mailbox, now: () => clock });
-const actions = async () => await raw(db).all<{ type: string; status: string }>('SELECT type, status, message_id, payload_json FROM actions ORDER BY id');
+const actions = async () => await raw(db).all<{ type: string; status: string }>('SELECT type, status, message_id, payload FROM actions ORDER BY id');
 
 beforeEach(async () => {
   db = await openUserDb();
@@ -132,11 +132,11 @@ describe("a rule's Gmail filter", () => {
         type: 'filter',
         status: 'done',
         message_id: null,
-        payload_json: JSON.stringify({
+        payload: {
           add: [],
           remove: [],
           filter: { ruleId: id, criteria: { from: 'news@example.com' }, action: { addLabelIds: ['L:sift/newsletters'], removeLabelIds: ['INBOX'] } },
-        }),
+        },
       },
     ]);
     await expect(undo(deps(), 1)).rejects.toThrow(/not undone/);

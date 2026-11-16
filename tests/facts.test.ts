@@ -89,7 +89,7 @@ describe('recorded facts', () => {
     const db = await openUserDb();
     await addMailbox(db, ACCOUNT, '1', 0);
     await recordSync(db, ACCOUNT, [campaign], '2');
-    expect(JSON.parse((await raw(db).get<{ facts_json: string }>('SELECT facts_json FROM messages'))!.facts_json)).toEqual(deriveFacts(campaign));
+    expect((await raw(db).get<{ facts: unknown }>('SELECT facts FROM messages'))!.facts).toEqual(deriveFacts(campaign));
     expect((await messageDetail(db, await everything(db), ACCOUNT, campaign.messageId))?.facts).toMatchObject({
       bulkService: 'Mailchimp',
       category: 'promotions',
@@ -100,7 +100,7 @@ describe('recorded facts', () => {
     const db = await openUserDb();
     await addMailbox(db, ACCOUNT, '1', 0);
     await recordSync(db, ACCOUNT, [campaign], '2');
-    await raw(db).run('UPDATE messages SET facts_json = NULL');
+    await raw(db).run('UPDATE messages SET facts = NULL');
     expect(await storedFacts(db, ACCOUNT, campaign.messageId)).toEqual(deriveFacts(campaign));
     expect(await storedFacts(db, ACCOUNT, 'missing')).toBeNull();
   });

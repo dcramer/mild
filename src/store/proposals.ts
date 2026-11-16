@@ -1,11 +1,10 @@
-import { and, decisions, desc, eq, feedback, messages, proposals } from './query.ts';
+import { type PROPOSAL_KINDS, and, decisions, desc, eq, feedback, messages, proposals } from './query.ts';
 import type { Sql } from './sql.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
 import { listLabels } from './labels.ts';
 import { hasRuleFor, listRules, removeRule, setRule } from './rules.ts';
 
-/** `rule`: make a rule for `match`. `always`: stop having the model check `ruleId`. */
-export type ProposalKind = 'rule' | 'always';
+export type ProposalKind = (typeof PROPOSAL_KINDS)[number];
 
 export interface Proposal {
   id: number;
@@ -23,32 +22,12 @@ const COLUMNS = {
   id: proposals.id,
   accountId: proposals.accountId,
   kind: proposals.kind,
-  matchJson: proposals.matchJson,
+  match: proposals.match,
   labelId: proposals.labelId,
   ruleId: proposals.ruleId,
   agreed: proposals.agreed,
   createdAt: proposals.createdAt,
 };
-
-const toProposal = (r: {
-  id: number;
-  accountId: string;
-  kind: string;
-  matchJson: string;
-  labelId: string;
-  ruleId: string | null;
-  agreed: number;
-  createdAt: number;
-}): Proposal => ({
-  id: r.id,
-  accountId: r.accountId,
-  kind: r.kind as ProposalKind,
-  match: JSON.parse(r.matchJson) as RuleMatch,
-  labelId: r.labelId,
-  ruleId: r.ruleId,
-  agreed: r.agreed,
-  createdAt: r.createdAt,
-});
 
 export async function listProposals(db: Sql, accountId?: string): Promise<Proposal[]> {
   const rows = await db
@@ -56,16 +35,15 @@ export async function listProposals(db: Sql, accountId?: string): Promise<Propos
     .from(proposals)
     .where(and(eq(proposals.status, 'open'), accountId === undefined ? undefined : eq(proposals.accountId, accountId)))
     .orderBy(desc(proposals.createdAt), desc(proposals.id));
-  return rows.map(toProposal);
+  return rows;
 }
 
 /** Open a proposal, or refresh the count on one already open. One the user dismissed stays dismissed. Returns true if it is new. */
 async function propose(db: Sql, p: Omit<Proposal, 'id' | 'createdAt'>, now: number): Promise<boolean> {
-  const match = JSON.stringify(p.match);
   const [existing] = await db
     .select({ id: proposals.id, status: proposals.status })
     .from(proposals)
-    .where(and(eq(proposals.accountId, p.accountId), eq(proposals.kind, p.kind), eq(proposals.matchJson, match)));
+    .where(and(eq(proposals.accountId, p.accountId), eq(proposals.kind, p.kind), eq(proposals.match, p.match)));
   if (existing) {
     if (existing.status === 'open')
       await db.update(proposals).set({ agreed: p.agreed, labelId: p.labelId, ruleId: p.ruleId }).where(eq(proposals.id, existing.id));
@@ -73,7 +51,7 @@ async function propose(db: Sql, p: Omit<Proposal, 'id' | 'createdAt'>, now: numb
   }
   await db
     .insert(proposals)
-    .values({ accountId: p.accountId, kind: p.kind, matchJson: match, labelId: p.labelId, ruleId: p.ruleId, agreed: p.agreed, createdAt: now });
+    .values({ accountId: p.accountId, kind: p.kind, match: p.match, labelId: p.labelId, ruleId: p.ruleId, agreed: p.agreed, createdAt: now });
   return true;
 }
 
@@ -149,8 +127,8 @@ export async function resolveProposal(db: Sql, id: number, accept: boolean, now:
     .select(COLUMNS)
     .from(proposals)
     .where(and(eq(proposals.id, id), eq(proposals.status, 'open')));
-  if (!row) return false;
-  const p = toProposal(row);
+  const p = row;
+  if (!p) return false;
   if (accept) {
     const existing = p.ruleId ? (await listRules(db, p.accountId)).find((r) => r.id === p.ruleId) : undefined;
     if (existing) {

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  type EVAL_STATUSES,
   alias,
   and,
   correspondents,
@@ -28,7 +29,7 @@ import { pickShots } from '../triage/fewshot.ts';
 import { PROMPT_TEMPLATE } from '../triage/prompt.ts';
 import { type Scorecard, score } from '../triage/score.ts';
 import type { Evidence, Judge } from '../triage/stages/model.ts';
-import type { Disposition, Label, MessageFacts } from '../triage/types.ts';
+import type { Label, MessageFacts } from '../triage/types.ts';
 
 /** Every example judged is a model call the user pays for, so one run is bounded. */
 export const MAX_EVAL_EXAMPLES = 200;
@@ -99,8 +100,8 @@ async function storedEvidence(db: Sql, facts: MessageFacts, body: string | null)
     body,
     sender: {
       messagesSeen: Math.max(1, n),
-      userHasWritten: written ? written.yes === 1 : null,
-      pastDispositions: Object.fromEntries(past.map((r) => [r.disposition as Disposition, r.n])),
+      userHasWritten: written?.yes ?? null,
+      pastDispositions: Object.fromEntries(past.map((r) => [r.disposition, r.n])),
     },
   };
 }
@@ -141,8 +142,8 @@ export async function startEval(deps: EvalDeps, request: EvalRequest): Promise<{
       promptHash: hash(PROMPT_TEMPLATE),
       guidelinesHash: hash(deps.guidelines.trim()),
       labelsHash: hash(JSON.stringify(shown)),
-      labelsJson: JSON.stringify(shown),
-      fewShot: request.fewShot ? 1 : 0,
+      labels: shown,
+      fewShot: request.fewShot,
       total: examples.length,
     })
     .returning({ id: evalRuns.id })) as [{ id: number }];
@@ -200,7 +201,7 @@ export interface EvalRun {
   accountId: string;
   startedAt: number;
   finishedAt: number | null;
-  status: 'running' | 'done' | 'failed' | 'interrupted';
+  status: (typeof EVAL_STATUSES)[number];
   error: string | null;
   /** What it ran with. Two runs with the same values here differ only by chance and by the examples stored since. */
   model: string;
@@ -239,13 +240,13 @@ const RUN = {
   accountId: evalRuns.accountId,
   startedAt: evalRuns.startedAt,
   finishedAt: evalRuns.finishedAt,
-  status: sql<EvalRun['status']>`${evalRuns.status}`,
+  status: evalRuns.status,
   error: evalRuns.error,
   model: evalRuns.model,
   promptHash: evalRuns.promptHash,
   guidelinesHash: evalRuns.guidelinesHash,
   labelsHash: evalRuns.labelsHash,
-  labelsJson: evalRuns.labelsJson,
+  labels: evalRuns.labels,
   fewShot: evalRuns.fewShot,
   total: evalRuns.total,
 };
@@ -273,15 +274,10 @@ async function results(db: Sql, runId: number): Promise<EvalResult[]> {
     .orderBy(evalResults.messageId);
 }
 
-function toRun(
-  { labelsJson, fewShot, ...row }: Omit<EvalRun, 'labels' | 'fewShot' | 'score' | 'withSenderExample'> & { labelsJson: string; fewShot: number },
-  judged: readonly EvalResult[],
-): EvalRun {
+function toRun(row: Omit<EvalRun, 'score' | 'withSenderExample'>, judged: readonly EvalResult[]): EvalRun {
   const helped = judged.filter((r) => r.senderShots > 0 && r.got !== null);
   return {
     ...row,
-    labels: JSON.parse(labelsJson) as EvalRun['labels'],
-    fewShot: fewShot === 1,
     score: score(judged),
     withSenderExample: { answered: helped.length, right: helped.filter((r) => r.got === r.expected).length },
   };

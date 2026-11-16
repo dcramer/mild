@@ -1,12 +1,11 @@
 import { randomBytes } from 'node:crypto';
-import { and, asc, eq, proposals, rules, sql } from './query.ts';
+import { type RULE_SOURCES, and, asc, eq, proposals, rules, sql } from './query.ts';
 import type { Sql } from './sql.ts';
 import type { Rule, RuleMatch } from '../triage/stages/rules.ts';
-import type { DecidedDisposition, SubscriptionAction } from '../triage/types.ts';
 import { listLabels } from './labels.ts';
 
 /** `user`: the user wrote it. `correction`: it came from the user correcting sift. `agent`: sift learned it. */
-export type RuleSource = 'user' | 'agent' | 'correction';
+export type RuleSource = (typeof RULE_SOURCES)[number];
 
 export interface StoredRule extends Rule {
   source: RuleSource;
@@ -18,8 +17,8 @@ export async function listRules(db: Sql, accountId: string): Promise<StoredRule[
   const rows = await db
     .select({
       id: rules.id,
-      matchJson: rules.matchJson,
-      exceptJson: rules.exceptJson,
+      match: rules.match,
+      except: rules.except,
       labelId: rules.labelId,
       whenLabel: rules.whenLabel,
       disposition: rules.disposition,
@@ -32,23 +31,20 @@ export async function listRules(db: Sql, accountId: string): Promise<StoredRule[
     .from(rules)
     .where(eq(rules.accountId, accountId))
     .orderBy(asc(rules.position), asc(rules.id));
-  return rows.map((r) => {
-    const except = JSON.parse(r.exceptJson) as RuleMatch[];
-    return {
-      id: r.id,
-      match: JSON.parse(r.matchJson) as RuleMatch,
-      ...(except.length > 0 ? { except } : {}),
-      ...(r.labelId ? { labelId: r.labelId } : {}),
-      ...(r.whenLabel ? { whenLabel: r.whenLabel } : {}),
-      ...(r.disposition ? { disposition: r.disposition as DecidedDisposition } : {}),
-      subscription: r.subscription as SubscriptionAction,
-      ...(r.markRead === 1 ? { markRead: true } : {}),
-      ...(r.condition ? { when: r.condition } : {}),
-      ...(r.source === 'agent' ? { learned: true } : {}),
-      source: r.source as RuleSource,
-      hits: r.hits,
-    };
-  });
+  return rows.map((r) => ({
+    id: r.id,
+    match: r.match,
+    ...(r.except.length > 0 ? { except: r.except } : {}),
+    ...(r.labelId ? { labelId: r.labelId } : {}),
+    ...(r.whenLabel ? { whenLabel: r.whenLabel } : {}),
+    ...(r.disposition ? { disposition: r.disposition } : {}),
+    subscription: r.subscription,
+    ...(r.markRead ? { markRead: true } : {}),
+    ...(r.condition ? { when: r.condition } : {}),
+    ...(r.source === 'agent' ? { learned: true } : {}),
+    source: r.source,
+    hits: r.hits,
+  }));
 }
 
 /** What a rule says, apart from its conditions. */
@@ -77,13 +73,13 @@ export async function addRule(db: Sql, accountId: string, rule: Omit<Rule, 'id' 
     id,
     accountId,
     position: next,
-    matchJson: JSON.stringify(rule.match),
-    exceptJson: JSON.stringify(rule.except ?? []),
+    match: rule.match,
+    except: rule.except ?? [],
     labelId: rule.labelId ?? null,
     whenLabel: rule.whenLabel ?? null,
     disposition: rule.disposition ?? null,
     subscription: rule.subscription ?? 'preserve',
-    markRead: rule.markRead ? 1 : 0,
+    markRead: rule.markRead ?? false,
     condition: rule.when?.trim() || null,
     source,
     createdAt: now,
@@ -117,17 +113,10 @@ export async function ruleMatching(
   const [row] = await db
     .select({ id: rules.id, source: rules.source })
     .from(rules)
-    .where(
-      and(
-        eq(rules.accountId, accountId),
-        eq(rules.matchJson, JSON.stringify(match)),
-        eq(rules.exceptJson, '[]'),
-        sql`${rules.whenLabel} IS NOT DISTINCT FROM ${whenLabel}`,
-      ),
-    )
+    .where(and(eq(rules.accountId, accountId), eq(rules.match, match), eq(rules.except, []), sql`${rules.whenLabel} IS NOT DISTINCT FROM ${whenLabel}`))
     .orderBy(asc(rules.position))
     .limit(1);
-  return row as { id: string; source: RuleSource } | undefined;
+  return row;
 }
 
 /** Whether any rule, of any kind, has exactly these conditions. */
@@ -135,7 +124,7 @@ export async function hasRuleFor(db: Sql, accountId: string, match: RuleMatch): 
   const found = await db
     .select({ id: rules.id })
     .from(rules)
-    .where(and(eq(rules.accountId, accountId), eq(rules.matchJson, JSON.stringify(match)), eq(rules.exceptJson, '[]')))
+    .where(and(eq(rules.accountId, accountId), eq(rules.match, match), eq(rules.except, [])))
     .limit(1);
   return found.length > 0;
 }
@@ -149,7 +138,7 @@ export async function setRule(db: Sql, accountId: string, match: RuleMatch, rule
   await db
     .update(proposals)
     .set({ status: 'accepted', resolvedAt: now })
-    .where(and(eq(proposals.accountId, accountId), eq(proposals.matchJson, JSON.stringify(match)), eq(proposals.status, 'open')));
+    .where(and(eq(proposals.accountId, accountId), eq(proposals.match, match), eq(proposals.status, 'open')));
   const existing = await ruleMatching(db, accountId, match, rule.whenLabel ?? null);
   if (!existing) return await addRule(db, accountId, { match, ...rule }, source, now);
   await check(db, accountId, rule, now);
@@ -159,7 +148,7 @@ export async function setRule(db: Sql, accountId: string, match: RuleMatch, rule
       labelId: rule.labelId ?? null,
       disposition: rule.disposition ?? null,
       subscription: rule.subscription ?? 'preserve',
-      markRead: rule.markRead ? 1 : 0,
+      markRead: rule.markRead ?? false,
       condition: rule.when?.trim() || null,
       source,
     })

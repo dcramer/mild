@@ -1,8 +1,7 @@
-import { actions, and, decisions, desc, eq, examples, feedback, gte, isNotNull, messages, ne, sql } from '../store/query.ts';
+import { actions, and, decisions, desc, eq, examples, feedback, gte, isNotNull, messages, ne } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
-import type { LabelChange } from '../store/actions.ts';
 import { listLabels } from '../store/labels.ts';
-import type { DecidedDisposition, Disposition } from '../triage/types.ts';
+import type { DecidedDisposition } from '../triage/types.ts';
 import { applyFeedback } from './feedback.ts';
 
 /** Labels put on or taken off one message in Gmail. */
@@ -34,15 +33,14 @@ export async function userChanges(db: Sql, accountId: string, history: readonly 
   }
   // A change whose outcome was never confirmed may have landed, so it counts; one that failed did not.
   const own = await db
-    .select({ messageId: actions.messageId, payloadJson: actions.payloadJson })
+    .select({ messageId: actions.messageId, payload: actions.payload })
     .from(actions)
     .where(and(eq(actions.accountId, accountId), isNotNull(actions.messageId), gte(actions.createdAt, since), ne(actions.status, 'failed')));
   for (const action of own) {
     const messageId = action.messageId!;
     if (!tally.has(messageId)) continue;
-    const payload = JSON.parse(action.payloadJson) as LabelChange;
-    for (const label of payload.add) count(messageId, `+${label}`, -1);
-    for (const label of payload.remove) count(messageId, `-${label}`, -1);
+    for (const label of action.payload.add) count(messageId, `+${label}`, -1);
+    for (const label of action.payload.remove) count(messageId, `-${label}`, -1);
   }
 
   const changes: MessageChange[] = [];
@@ -85,7 +83,7 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
       .select({
         id: decisions.id,
         labelId: decisions.labelId,
-        disposition: sql<Disposition>`${decisions.disposition}`,
+        disposition: decisions.disposition,
         mode: decisions.mode,
         stage: decisions.stage,
         ruleId: decisions.ruleId,

@@ -353,7 +353,7 @@ describe('managing sift from the dashboard', () => {
 
   it('asks the running sift to undo, pull in older mail and check now', async () => {
     const { call } = await start();
-    await raw(db).run(`INSERT INTO actions (id, account_id, type, payload_json, status, created_at) VALUES (3, ?, 'archive', '{}', 'done', 1)`, ACCOUNT);
+    await raw(db).run(`INSERT INTO actions (id, account_id, type, payload, status, created_at) VALUES (3, ?, 'archive', '{}', 'done', 1)`, ACCOUNT);
     expect((await call('POST', '/api/undo', { id: 3 })).body).toEqual({ message: 'Reversed.' });
     // A change that is not in this person's database is not passed on.
     expect(await call('POST', '/api/undo', { id: 404 })).toMatchObject({ status: 409, body: { error: 'There is no change #404.' } });
@@ -607,8 +607,8 @@ describe('older mail', () => {
     expect(calls).toEqual(['newer_than:7d', 'newer_than:7d']);
     expect((await listAccounts(db))[0]?.historyId).toBe('1');
     expect(await raw(db).all('SELECT id, observe_only FROM messages ORDER BY id')).toEqual([
-      { id: 'a', observe_only: 1 },
-      { id: 'b', observe_only: 1 },
+      { id: 'a', observe_only: true },
+      { id: 'b', observe_only: true },
     ]);
   });
 

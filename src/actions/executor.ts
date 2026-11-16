@@ -3,6 +3,7 @@ import type { Sql } from '../store/sql.ts';
 import {
   type ActionPayload,
   type ActionRecord,
+  type ActionType,
   type LabelChange,
   finishAction,
   getAction,
@@ -50,7 +51,7 @@ const applied = (labels: string[], change: LabelChange) => change.add.every((l) 
  */
 async function applyChange(
   deps: ActionDeps,
-  target: { accountId: string; messageId: string; type: string; undoOf?: number; decisionId?: number },
+  target: { accountId: string; messageId: string; type: ActionType; undoOf?: number; decisionId?: number },
   current: string[],
   requested: LabelChange,
 ): Promise<Outcome> {

@@ -1,7 +1,8 @@
-import { actions, and, asc, desc, eq, inArray, isNotNull, max, messages, min, notInArray } from './query.ts';
+import { type ACTION_STATUSES, type ACTION_TYPES, actions, and, asc, desc, eq, inArray, isNotNull, max, messages, min, notInArray } from './query.ts';
 import type { Sql } from './sql.ts';
 
-export type ActionStatus = 'pending' | 'done' | 'failed' | 'unknown' | 'undone';
+export type ActionStatus = (typeof ACTION_STATUSES)[number];
+export type ActionType = (typeof ACTION_TYPES)[number];
 
 /** The label change an action made (or tried to make), as provider label ids. */
 export interface LabelChange {
@@ -22,7 +23,7 @@ export interface ActionRecord {
   id: number;
   accountId: string;
   messageId: string;
-  type: string;
+  type: ActionType;
   payload: ActionPayload;
   originalLabels: string[];
   finalLabels: string[] | null;
@@ -36,7 +37,7 @@ const COLUMNS = {
   accountId: actions.accountId,
   messageId: actions.messageId,
   type: actions.type,
-  payloadJson: actions.payloadJson,
+  payload: actions.payload,
   originalLabels: actions.originalLabels,
   finalLabels: actions.finalLabels,
   status: actions.status,
@@ -44,34 +45,27 @@ const COLUMNS = {
   createdAt: actions.createdAt,
 };
 
-const fromRow = (r: {
+const fromRow = ({
+  messageId,
+  originalLabels,
+  ...r
+}: {
   id: number;
   accountId: string;
   messageId: string | null;
-  type: string;
-  payloadJson: string;
-  originalLabels: string | null;
-  finalLabels: string | null;
-  status: string;
+  type: ActionType;
+  payload: ActionPayload;
+  originalLabels: string[] | null;
+  finalLabels: string[] | null;
+  status: ActionStatus;
   error: string | null;
   createdAt: number;
-}): ActionRecord => ({
-  id: r.id,
-  accountId: r.accountId,
-  messageId: r.messageId!,
-  type: r.type,
-  payload: JSON.parse(r.payloadJson) as ActionPayload,
-  originalLabels: JSON.parse(r.originalLabels!) as string[],
-  finalLabels: r.finalLabels === null ? null : (JSON.parse(r.finalLabels) as string[]),
-  status: r.status as ActionStatus,
-  error: r.error,
-  createdAt: r.createdAt,
-});
+}): ActionRecord => ({ ...r, messageId: messageId!, originalLabels: originalLabels! });
 
 /** Write the intent before touching the provider. Returns the action id. */
 export async function insertPendingAction(
   db: Sql,
-  action: { accountId: string; messageId: string | null; type: string; payload: ActionPayload; originalLabels: string[]; decisionId?: number },
+  action: { accountId: string; messageId: string | null; type: ActionType; payload: ActionPayload; originalLabels: string[]; decisionId?: number },
   now: number,
 ): Promise<number> {
   const [row] = await db
@@ -80,8 +74,8 @@ export async function insertPendingAction(
       accountId: action.accountId,
       messageId: action.messageId,
       type: action.type,
-      payloadJson: JSON.stringify(action.payload),
-      originalLabels: JSON.stringify(action.originalLabels),
+      payload: action.payload,
+      originalLabels: action.originalLabels,
       decisionId: action.decisionId ?? null,
       status: 'pending',
       createdAt: now,
@@ -91,10 +85,7 @@ export async function insertPendingAction(
 }
 
 export async function finishAction(db: Sql, id: number, status: ActionStatus, finalLabels: string[] | null, error: string | null, now: number): Promise<void> {
-  await db
-    .update(actions)
-    .set({ status, finalLabels: finalLabels === null ? null : JSON.stringify(finalLabels), error, completedAt: now })
-    .where(eq(actions.id, id));
+  await db.update(actions).set({ status, finalLabels, error, completedAt: now }).where(eq(actions.id, id));
 }
 
 export async function setActionStatus(db: Sql, id: number, status: ActionStatus): Promise<void> {

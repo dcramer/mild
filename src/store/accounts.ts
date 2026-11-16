@@ -31,12 +31,9 @@ export async function connectAccount(store: Store, email: string, historyId: str
     let person = userId;
     if (person === undefined) {
       const first = (await tx.select({ id: users.id }).from(users).limit(1)).length === 0;
-      [{ id: person }] = (await tx
-        .insert(users)
-        .values({ owner: first ? 1 : 0, createdAt: now })
-        .returning({ id: users.id })) as [{ id: number }];
+      [{ id: person }] = (await tx.insert(users).values({ owner: first, createdAt: now }).returning({ id: users.id })) as [{ id: number }];
     }
-    await tx.insert(accounts).values({ id: email, email, userId: person, createdAt: now });
+    await tx.insert(accounts).values({ id: email, userId: person, createdAt: now });
     return person;
   });
   await addMailbox(await store.user(user), email, historyId, now);
@@ -57,28 +54,28 @@ export async function userOf(central: Sql, email: string): Promise<User | null> 
     .select({ id: users.id, owner: users.owner })
     .from(accounts)
     .innerJoin(users, eq(users.id, accounts.userId))
-    .where(eq(accounts.email, email));
-  return row ? { id: row.id, owner: row.owner === 1 } : null;
+    .where(eq(accounts.id, email));
+  return row ?? null;
 }
 
 /** The person who owns the install, once someone has signed in. */
 export async function owner(central: Sql): Promise<User | null> {
-  const [row] = await central.select({ id: users.id }).from(users).where(eq(users.owner, 1)).orderBy(asc(users.id)).limit(1);
+  const [row] = await central.select({ id: users.id }).from(users).where(eq(users.owner, true)).orderBy(asc(users.id)).limit(1);
   return row ? { id: row.id, owner: true } : null;
 }
 
 export async function listUsers(central: Sql): Promise<User[]> {
-  return (await central.select({ id: users.id, owner: users.owner }).from(users).orderBy(asc(users.id))).map((r) => ({ id: r.id, owner: r.owner === 1 }));
+  return await central.select({ id: users.id, owner: users.owner }).from(users).orderBy(asc(users.id));
 }
 
 /** Every connected address, everyone's; or one person's, given `userId`. */
 export async function connectedAddresses(central: Sql, userId?: number): Promise<string[]> {
   const rows = await central
-    .select({ email: accounts.email })
+    .select({ id: accounts.id })
     .from(accounts)
     .where(userId === undefined ? undefined : eq(accounts.userId, userId))
-    .orderBy(asc(accounts.email));
-  return rows.map((r) => r.email);
+    .orderBy(asc(accounts.id));
+  return rows.map((r) => r.id);
 }
 
 /** Whose rows `db` reads and writes. */
@@ -114,13 +111,13 @@ async function insertMessages(db: Sql, accountId: string, messages: readonly Mes
         listId: parseListId(m.headers['list-id']),
         receivedAt: m.receivedAt,
         subject: m.subject,
-        toJson: JSON.stringify(m.to),
-        ccJson: JSON.stringify(m.cc),
-        headersJson: JSON.stringify(m.headers),
-        labelsJson: JSON.stringify(m.labelIds),
+        to: m.to,
+        cc: m.cc,
+        headers: m.headers,
+        labelIds: m.labelIds,
         syncedAt: now,
-        observeOnly: observeOnly ? 1 : 0,
-        factsJson: JSON.stringify(deriveFacts(m)),
+        observeOnly,
+        facts: deriveFacts(m),
       })),
     )
     .onConflictDoNothing()

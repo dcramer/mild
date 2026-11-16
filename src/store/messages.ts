@@ -11,12 +11,12 @@ const COLUMNS = {
   fromName: messages.fromName,
   receivedAt: messages.receivedAt,
   subject: messages.subject,
-  toJson: messages.toJson,
-  ccJson: messages.ccJson,
-  headersJson: messages.headersJson,
-  labelsJson: messages.labelsJson,
+  to: messages.to,
+  cc: messages.cc,
+  headers: messages.headers,
+  labelIds: messages.labelIds,
   observeOnly: messages.observeOnly,
-  factsJson: messages.factsJson,
+  facts: messages.facts,
 };
 
 interface Row {
@@ -27,12 +27,12 @@ interface Row {
   fromName: string | null;
   receivedAt: number;
   subject: string;
-  toJson: string;
-  ccJson: string;
-  headersJson: string;
-  labelsJson: string;
-  observeOnly: number;
-  factsJson: string | null;
+  to: Address[];
+  cc: Address[];
+  headers: Record<string, string>;
+  labelIds: string[];
+  observeOnly: boolean;
+  facts: Facts | null;
 }
 
 const toMessage = (accountId: string, r: Row): MessageFacts => ({
@@ -40,11 +40,11 @@ const toMessage = (accountId: string, r: Row): MessageFacts => ({
   messageId: r.id,
   threadId: r.threadId,
   from: { address: r.fromAddress, domain: r.fromDomain, ...(r.fromName ? { name: r.fromName } : {}) },
-  to: JSON.parse(r.toJson) as Address[],
-  cc: JSON.parse(r.ccJson) as Address[],
+  to: r.to,
+  cc: r.cc,
   subject: r.subject,
-  labelIds: JSON.parse(r.labelsJson) as string[],
-  headers: JSON.parse(r.headersJson) as Record<string, string>,
+  labelIds: r.labelIds,
+  headers: r.headers,
   receivedAt: r.receivedAt,
 });
 
@@ -76,7 +76,7 @@ export async function listUndecided(db: Sql, accountId: string, limit: number): 
     )
     .orderBy(desc(messages.receivedAt), asc(messages.id))
     .limit(limit);
-  return rows.map((r) => ({ observeOnly: r.observeOnly === 1, facts: toMessage(accountId, r) }));
+  return rows.map((r) => ({ observeOnly: r.observeOnly, facts: toMessage(accountId, r) }));
 }
 
 /** The facts recorded for a message, or null if sift has not seen it. Rows synced before facts were recorded get them from their stored headers. */
@@ -86,14 +86,14 @@ export async function storedFacts(db: Sql, accountId: string, messageId: string)
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
   if (!row) return null;
-  return row.factsJson ? (JSON.parse(row.factsJson) as Facts) : deriveFacts(toMessage(accountId, row));
+  return row.facts ?? deriveFacts(toMessage(accountId, row));
 }
 
 /** Replace a message's recorded facts, once reading the whole message has added to them. */
 export async function recordFacts(db: Sql, accountId: string, messageId: string, facts: Facts): Promise<void> {
   await db
     .update(messages)
-    .set({ factsJson: JSON.stringify(facts) })
+    .set({ facts })
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
 }
 

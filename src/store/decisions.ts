@@ -1,9 +1,9 @@
-import { and, asc, decisions, eq, isNull } from './query.ts';
+import { type DECISION_MODES, type DECISION_OUTCOMES, and, asc, decisions, eq, isNull } from './query.ts';
 import type { Sql } from './sql.ts';
 import type { Decision, Disposition } from '../triage/types.ts';
 
-export type DecisionMode = 'act' | 'observe';
-export type DecisionOutcome = 'observed' | 'none' | 'done' | 'skipped' | 'failed' | 'unknown';
+export type DecisionMode = (typeof DECISION_MODES)[number];
+export type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
 
 /**
  * Append a decision to the log. Every triage outcome is recorded, including "leave it alone" and
@@ -41,10 +41,10 @@ export async function recordDecision(
       mode,
       outcome: mode === 'observe' ? 'observed' : null,
       labelId: decision.labelId ?? null,
-      block: decision.block ? 1 : 0,
-      markRead: decision.markRead ? 1 : 0,
+      block: decision.block ?? false,
+      markRead: decision.markRead ?? false,
       priorRuleId: decision.priorRuleId ?? null,
-      byUser: options.byUser ? 1 : 0,
+      byUser: options.byUser ?? false,
     })
     .returning({ id: decisions.id });
   return row!.id;
@@ -78,14 +78,19 @@ export async function listUnsettledDecisions(db: Sql, accountId: string, options
     })
     .from(decisions)
     .where(
-      and(eq(decisions.accountId, accountId), isNull(decisions.outcome), eq(decisions.mode, 'act'), options.byUserOnly ? eq(decisions.byUser, 1) : undefined),
+      and(
+        eq(decisions.accountId, accountId),
+        isNull(decisions.outcome),
+        eq(decisions.mode, 'act'),
+        options.byUserOnly ? eq(decisions.byUser, true) : undefined,
+      ),
     )
     .orderBy(asc(decisions.id));
   return rows.map((r) => ({
     id: r.id,
     messageId: r.messageId,
-    disposition: r.disposition as Disposition,
+    disposition: r.disposition,
     ...(r.gmailLabel ? { gmailLabel: r.gmailLabel } : {}),
-    ...(r.markRead === 1 ? { markRead: true } : {}),
+    ...(r.markRead ? { markRead: true } : {}),
   }));
 }

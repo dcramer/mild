@@ -12,6 +12,7 @@ import { type Driver, type Sql, handle } from '../src/store/sql.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { freshStore, raw, superuser } from './fixtures.ts';
 import { facts } from './helpers.ts';
+import type { Disposition } from '../src/triage/types.ts';
 
 /*
  * The builder's own hold on each person, with row-level security out of the way: these handles never
@@ -46,7 +47,7 @@ beforeEach(async () => {
     await recordSync(db, account, [facts({ accountId: account, messageId: `m-${id}`, subject: `Subject ${id}` })], '2', 1);
     await recordDecision(db, account, `m-${id}`, { disposition: 'review', subscription: 'preserve', stage: 'fallback', reason: id });
     await raw(db).run(
-      `INSERT INTO rules (id, account_id, position, match_json, label_id, source, created_at) VALUES (?, ?, 0, '{}', 'x', 'user', 0)`,
+      `INSERT INTO rules (id, account_id, position, match, label_id, source, created_at) VALUES (?, ?, 0, '{}', 'x', 'user', 0)`,
       `rule-${id}`,
       account,
     );
@@ -128,17 +129,28 @@ describe("a person's handle, without row-level security", () => {
       .insert(labels)
       .values({ accountId: ALPHA, id: 'l', name: 'L', description: '', disposition: 'keep', gmailLabel: 'sift/l', position: 0, updatedAt: 0 });
     expect((await everyone('labels')).map((r) => r['user_id'])).toEqual([1]);
-    const forged = { accountId: BRAVO, id: 'l', name: 'L', description: '', disposition: 'keep', gmailLabel: 'sift/l', position: 0, updatedAt: 0, userId: 2 };
+    const forged = {
+      accountId: BRAVO,
+      id: 'l',
+      name: 'L',
+      description: '',
+      disposition: 'keep' as const,
+      gmailLabel: 'sift/l',
+      position: 0,
+      updatedAt: 0,
+      userId: 2,
+    };
     expect(() => alpha.insert(labels).values(forged)).toThrow("user_id is the handle's to set");
     expect(() => alpha.update(labels).set({ userId: 2 })).toThrow("user_id is the handle's to set");
   });
 
   it('never updates the row of someone whose key it collides with', async () => {
+    const theirs = (await everyone('decisions')).find((r) => r['user_id'] === 2)!['id'] as number;
     await alpha
-      .insert(rules)
-      .values({ id: 'rule-b', accountId: ALPHA, position: 0, matchJson: '{}', labelId: 'x', source: 'user', createdAt: 0 })
-      .onConflictDoUpdate({ target: rules.id, set: { hits: 7 } });
-    expect((await everyone('rules')).map((r) => r['hits'])).toEqual([0, 0]);
+      .insert(decisions)
+      .values({ id: theirs, accountId: ALPHA, messageId: 'm-a', stage: 'fallback', disposition: 'review', subscription: 'preserve', reason: 'x', decidedAt: 0 })
+      .onConflictDoUpdate({ target: decisions.id, set: { reason: 'taken' } });
+    expect((await everyone('decisions')).map((r) => r['reason'])).toEqual(['a', 'b']);
   });
 
   it('runs the builder inside a transaction, all or nothing', async () => {
@@ -167,7 +179,7 @@ describe('a failed statement', () => {
       accountId: ALPHA,
       name: 'L',
       description: 'private words',
-      disposition: 'nonsense',
+      disposition: 'nonsense' as Disposition,
       gmailLabel: 'sift/l',
       position: 0,
       updatedAt: 0,

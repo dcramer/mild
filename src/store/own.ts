@@ -148,7 +148,7 @@ export function owned(db: PgRemoteDatabase, person: number | null): Builder {
                 if (method !== 'onConflictDoUpdate') return call;
                 return (config: { set: unknown; setWhere?: SQL }) => {
                   noUserId(config.set, nameOf(table), base);
-                  // A key without user_id (a rule's id) could collide with someone else's row: never update theirs.
+                  // A key without user_id could collide with someone else's row: never update theirs.
                   return call({ ...config, setWhere: and(config.setWhere, base) });
                 };
               },

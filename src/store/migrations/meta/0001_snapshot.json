@@ -1,6 +1,6 @@
 {
-  "id": "2bbf60bb-fa37-4ea4-9107-65f8adc5631a",
-  "prevId": "b5a3f1a7-f869-448b-8c27-d054a42f64ab",
+  "id": "dea13d1b-0e71-4918-8a2e-f95bd21d3562",
+  "prevId": "d55e9389-fbaa-4282-b661-74ac7ec9a5e3",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -12,12 +12,6 @@
           "name": "id",
           "type": "text",
           "primaryKey": true,
-          "notNull": true
-        },
-        "email": {
-          "name": "email",
-          "type": "text",
-          "primaryKey": false,
           "notNull": true
         },
         "user_id": {
@@ -58,17 +52,11 @@
           "tableTo": "users",
           "columnsTo": ["id"],
           "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "accounts_email_unique": {
-          "name": "accounts_email_unique",
-          "columns": ["email"],
-          "nullsNotDistinct": false
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -79,9 +67,20 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "integer",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "identity": {
+            "name": "actions_id_seq",
+            "increment": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "startWith": "1",
+            "cache": "1",
+            "cycle": false,
+            "schema": "public",
+            "type": "byDefault"
+          }
         },
         "user_id": {
           "name": "user_id",
@@ -114,21 +113,21 @@
           "primaryKey": false,
           "notNull": true
         },
-        "payload_json": {
-          "name": "payload_json",
-          "type": "text",
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": true
         },
         "original_labels": {
           "name": "original_labels",
-          "type": "text",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
         "final_labels": {
           "name": "final_labels",
-          "type": "text",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -219,7 +218,7 @@
           "tableTo": "users",
           "columnsTo": ["id"],
           "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade"
         },
         "actions_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "actions_user_id_account_id_mailboxes_user_id_id_fk",
@@ -253,6 +252,10 @@
         }
       },
       "checkConstraints": {
+        "actions_type": {
+          "name": "actions_type",
+          "value": "\"actions\".\"type\" IN ('archive', 'spam', 'label', 'undo', 'unsubscribe', 'filter', 'unfilter')"
+        },
         "actions_status": {
           "name": "actions_status",
           "value": "\"actions\".\"status\" IN ('pending', 'done', 'failed', 'unknown', 'undone')"
@@ -285,7 +288,7 @@
         },
         "user_has_written": {
           "name": "user_has_written",
-          "type": "integer",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true
         },
@@ -305,7 +308,7 @@
           "tableTo": "users",
           "columnsTo": ["id"],
           "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade"
         },
         "correspondents_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "correspondents_user_id_account_id_mailboxes_user_id_id_fk",
@@ -318,9 +321,9 @@
         }
       },
       "compositePrimaryKeys": {
-        "correspondents_account_id_address_pk": {
-          "name": "correspondents_account_id_address_pk",
-          "columns": ["account_id", "address"]
+        "correspondents_user_id_account_id_address_pk": {
+          "name": "correspondents_user_id_account_id_address_pk",
+          "columns": ["user_id", "account_id", "address"]
         }
       },
       "uniqueConstraints": {},
@@ -382,7 +385,7 @@
           "tableTo": "users",
           "columnsTo": ["id"],
           "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {
@@ -416,9 +419,20 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "integer",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "identity": {
+            "name": "decisions_id_seq",
+            "increment": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "startWith": "1",
+            "cache": "1",
+            "cycle": false,
+            "schema": "public",
+            "type": "byDefault"
+          }
         },
         "user_id": {
           "name": "user_id",
@@ -471,17 +485,17 @@
         },
         "block": {
           "name": "block",
-          "type": "integer",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
+          "default": false
         },
         "mark_read": {
           "name": "mark_read",
-          "type": "integer",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
+          "default": false
         },
         "rule_id": {
           "name": "rule_id",
@@ -567,10 +581,10 @@
         },
         "by_user": {
           "name": "by_user",
-          "type": "integer",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
+          "default": false
         }
       },
       "indexes": {
@@ -663,7 +677,7 @@
           "tableTo": "users",
           "columnsTo": ["id"],
           "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade"
         },
         "decisions_user_id_account_id_message_id_messages_user_id_account_id_id_fk": {
           "name": "decisions_user_id_account_id_message_id_messages_user_id_account_id_id_fk",
@@ -696,7 +710,7 @@
       "checkConstraints": {
         "decisions_stage": {
           "name": "decisions_stage",
-          "value": "\"decisions\".\"stage\" IN ('rules', 'sender', 'classifier', 'heuristics', 'agent', 'fallback')"
+          "value": "\"decisions\".\"stage\" IN ('rules', 'sender', 'heuristics', 'classifier', 'agent', 'fallback')"
         },
         "decisions_disposition": {
           "name": "decisions_disposition",
@@ -807,7 +821,7 @@
           "tableTo": "users",
           "columnsTo": ["id"],
           "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade"
         },
         "eval_results_user_id_run_id_eval_runs_user_id_id_fk": {
           "name": "eval_results_user_id_run_id_eval_runs_user_id_id_fk",
@@ -820,9 +834,9 @@
         }
       },
       "compositePrimaryKeys": {
-        "eval_results_run_id_message_id_pk": {
-          "name": "eval_results_run_id_message_id_pk",
-          "columns": ["run_id", "message_id"]
+        "eval_results_user_id_run_id_message_id_pk": {
+          "name": "eval_results_user_id_run_id_message_id_pk",
+          "columns": ["user_id", "run_id", "message_id"]
         }
       },
       "uniqueConstraints": {},
@@ -845,9 +859,20 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "integer",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "identity": {
+            "name": "eval_runs_id_seq",
+            "increment": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "startWith": "1",
+            "cache": "1",
+            "cycle": false,
+            "schema": "public",
+            "type": "byDefault"
+          }
         },
         "user_id": {
           "name": "user_id",
@@ -910,15 +935,15 @@
           "primaryKey": false,
           "notNull": true
         },
-        "labels_json": {
-          "name": "labels_json",
-          "type": "text",
+        "labels": {
+          "name": "labels",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": true
         },
         "few_shot": {
           "name": "few_shot",
-          "type": "integer",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true
         },
@@ -938,7 +963,7 @@
           "tableTo": "users",
           "columnsTo": ["id"],
           "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade"
         },
         "eval_runs_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "eval_runs_user_id_account_id_mailboxes_user_id_id_fk",
@@ -1042,9 +1067,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "headers_json": {
-          "name": "headers_json",
-          "type": "text",
+        "headers": {
+          "name": "headers",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -1087,7 +1112,7 @@
           "tableTo": "users",
           "columnsTo": ["id"],
           "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade"
         },
         "examples_user_id_account_id_message_id_messages_user_id_account_id_id_fk": {
           "name": "examples_user_id_account_id_message_id_messages_user_id_account_id_id_fk",
@@ -1100,9 +1125,9 @@
         }
       },
       "compositePrimaryKeys": {
-        "examples_account_id_message_id_pk": {
-          "name": "examples_account_id_message_id_pk",
-          "columns": ["account_id", "message_id"]
+        "examples_user_id_account_id_message_id_pk": {
+          "name": "examples_user_id_account_id_message_id_pk",
+          "columns": ["user_id", "account_id", "message_id"]
         }
       },
       "uniqueConstraints": {},
@@ -1134,9 +1159,20 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "integer",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "identity": {
+            "name": "feedback_id_seq",
+            "increment": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "startWith": "1",
+            "cache": "1",
+            "cycle": false,
+            "schema": "public",
+            "type": "byDefault"
+          }
         },
         "user_id": {
           "name": "user_id",
@@ -1232,7 +1268,7 @@
           "tableTo": "users",
           "columnsTo": ["id"],
           "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade"
         },
         "feedback_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "feedback_user_id_account_id_mailboxes_user_id_id_fk",
@@ -1255,9 +1291,9 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "feedback_decision_id_unique": {
-          "name": "feedback_decision_id_unique",
-          "columns": ["decision_id"],
+        "feedback_once": {
+          "name": "feedback_once",
+          "columns": ["user_id", "decision_id"],
           "nullsNotDistinct": false
         }
       },
@@ -1334,24 +1370,24 @@
         },
         "block": {
           "name": "block",
-          "type": "integer",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
+          "default": false
         },
         "mark_read": {
           "name": "mark_read",
-          "type": "integer",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
+          "default": false
         },
         "unsubscribe": {
           "name": "unsubscribe",
-          "type": "integer",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
+          "default": false
         },
         "gmail_label": {
           "name": "gmail_label",
@@ -1381,7 +1417,7 @@
           "tableTo": "users",
           "columnsTo": ["id"],
           "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade"
         },
         "labels_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "labels_user_id_account_id_mailboxes_user_id_id_fk",
@@ -1469,7 +1505,7 @@
           "tableTo": "users",
           "columnsTo": ["id"],
           "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {
@@ -1558,33 +1594,33 @@
           "notNull": true,
           "default": "''"
         },
-        "to_json": {
-          "name": "to_json",
-          "type": "text",
+        "to_addresses": {
+          "name": "to_addresses",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
-          "default": "'[]'"
+          "default": "'[]'::jsonb"
         },
-        "cc_json": {
-          "name": "cc_json",
-          "type": "text",
+        "cc_addresses": {
+          "name": "cc_addresses",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
-          "default": "'[]'"
+          "default": "'[]'::jsonb"
         },
-        "headers_json": {
-          "name": "headers_json",
-          "type": "text",
+        "headers": {
+          "name": "headers",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
-          "default": "'{}'"
+          "default": "'{}'::jsonb"
         },
-        "labels_json": {
-          "name": "labels_json",
-          "type": "text",
+        "label_ids": {
+          "name": "label_ids",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
-          "default": "'[]'"
+          "default": "'[]'::jsonb"
         },
         "synced_at": {
           "name": "synced_at",
@@ -1594,14 +1630,14 @@
         },
         "observe_only": {
           "name": "observe_only",
-          "type": "integer",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
+          "default": false
         },
-        "facts_json": {
-          "name": "facts_json",
-          "type": "text",
+        "facts": {
+          "name": "facts",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -1643,7 +1679,7 @@
           "tableTo": "users",
           "columnsTo": ["id"],
           "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade"
         },
         "messages_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "messages_user_id_account_id_mailboxes_user_id_id_fk",
@@ -1714,7 +1750,7 @@
           "tableTo": "users",
           "columnsTo": ["id"],
           "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -1738,9 +1774,20 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "integer",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "identity": {
+            "name": "proposals_id_seq",
+            "increment": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "startWith": "1",
+            "cache": "1",
+            "cycle": false,
+            "schema": "public",
+            "type": "byDefault"
+          }
         },
         "user_id": {
           "name": "user_id",
@@ -1761,9 +1808,9 @@
           "primaryKey": false,
           "notNull": true
         },
-        "match_json": {
-          "name": "match_json",
-          "type": "text",
+        "match": {
+          "name": "match",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": true
         },
@@ -1814,7 +1861,7 @@
           "tableTo": "users",
           "columnsTo": ["id"],
           "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade"
         },
         "proposals_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "proposals_user_id_account_id_mailboxes_user_id_id_fk",
@@ -1830,7 +1877,7 @@
       "uniqueConstraints": {
         "proposals_once": {
           "name": "proposals_once",
-          "columns": ["account_id", "kind", "match_json"],
+          "columns": ["user_id", "account_id", "kind", "match"],
           "nullsNotDistinct": false
         }
       },
@@ -1860,18 +1907,18 @@
       "name": "rules",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
         "user_id": {
           "name": "user_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "default": "current_setting('sift.user')::integer"
+        },
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         },
         "account_id": {
           "name": "account_id",
@@ -1885,18 +1932,18 @@
           "primaryKey": false,
           "notNull": true
         },
-        "match_json": {
-          "name": "match_json",
-          "type": "text",
+        "match": {
+          "name": "match",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": true
         },
-        "except_json": {
-          "name": "except_json",
-          "type": "text",
+        "except_matches": {
+          "name": "except_matches",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
-          "default": "'[]'"
+          "default": "'[]'::jsonb"
         },
         "label_id": {
           "name": "label_id",
@@ -1925,10 +1972,10 @@
         },
         "mark_read": {
           "name": "mark_read",
-          "type": "integer",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
+          "default": false
         },
         "condition": {
           "name": "condition",
@@ -1961,9 +2008,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "filter_json": {
-          "name": "filter_json",
-          "type": "text",
+        "filter_written": {
+          "name": "filter_written",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -2011,7 +2058,7 @@
           "tableTo": "users",
           "columnsTo": ["id"],
           "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade"
         },
         "rules_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "rules_user_id_account_id_mailboxes_user_id_id_fk",
@@ -2023,7 +2070,12 @@
           "onDelete": "no action"
         }
       },
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "rules_user_id_id_pk": {
+          "name": "rules_user_id_id_pk",
+          "columns": ["user_id", "id"]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {
         "own": {
@@ -2112,7 +2164,7 @@
           "tableTo": "users",
           "columnsTo": ["id"],
           "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade"
         },
         "suggestion_bodies_user_id_account_id_message_id_messages_user_id_account_id_id_fk": {
           "name": "suggestion_bodies_user_id_account_id_message_id_messages_user_id_account_id_id_fk",
@@ -2125,9 +2177,9 @@
         }
       },
       "compositePrimaryKeys": {
-        "suggestion_bodies_account_id_message_id_pk": {
-          "name": "suggestion_bodies_account_id_message_id_pk",
-          "columns": ["account_id", "message_id"]
+        "suggestion_bodies_user_id_account_id_message_id_pk": {
+          "name": "suggestion_bodies_user_id_account_id_message_id_pk",
+          "columns": ["user_id", "account_id", "message_id"]
         }
       },
       "uniqueConstraints": {},
@@ -2150,16 +2202,27 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "integer",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "identity": {
+            "name": "users_id_seq",
+            "increment": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "startWith": "1",
+            "cache": "1",
+            "cycle": false,
+            "schema": "public",
+            "type": "byDefault"
+          }
         },
         "owner": {
           "name": "owner",
-          "type": "integer",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
+          "default": false
         },
         "created_at": {
           "name": "created_at",
@@ -2168,7 +2231,24 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "users_one_owner": {
+          "name": "users_one_owner",
+          "columns": [
+            {
+              "expression": "owner",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "with": {},
+          "method": "btree",
+          "where": "\"users\".\"owner\"",
+          "concurrently": false
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

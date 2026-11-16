@@ -6,14 +6,14 @@ import { getFacts } from '../store/messages.ts';
 import { countRuleHit, listRules } from '../store/rules.ts';
 import { cachedCorrespondent } from '../store/senders.ts';
 import { rulesStage } from '../triage/stages/rules.ts';
-import { type Decision, type Disposition, type StageName, labelled } from '../triage/types.ts';
+import { type Decision, type Disposition, labelled } from '../triage/types.ts';
 import { type Suggestion, pendingSuggestions } from './feedback.ts';
 
 const STANDING = {
   id: decisions.id,
-  stage: sql<StageName>`${decisions.stage}`,
-  disposition: sql<Disposition>`${decisions.disposition}`,
-  subscription: sql<Decision['subscription']>`${decisions.subscription}`,
+  stage: decisions.stage,
+  disposition: decisions.disposition,
+  subscription: decisions.subscription,
   labelId: decisions.labelId,
   block: decisions.block,
   markRead: decisions.markRead,
@@ -26,12 +26,12 @@ const p = alias(decisions, 'p');
 const WILL: Record<Disposition, string> = { keep: 'kept', archive: 'archived', spam: 'marked as spam', review: 'left for you' };
 const hides = (disposition: Disposition) => disposition === 'archive' || disposition === 'spam';
 
-const same = (standing: { disposition: Disposition; labelId: string | null; subscription: string; block: number; markRead: number }, next: Decision) =>
+const same = (standing: { disposition: Disposition; labelId: string | null; subscription: string; block: boolean; markRead: boolean }, next: Decision) =>
   standing.disposition === next.disposition &&
   standing.labelId === (next.labelId ?? null) &&
   standing.subscription === next.subscription &&
-  (standing.block === 1) === (next.block ?? false) &&
-  (standing.markRead === 1) === (next.markRead ?? false);
+  standing.block === (next.block ?? false) &&
+  standing.markRead === (next.markRead ?? false);
 
 /**
  * Bring an account's waiting suggestions into line with its rules and labels as they are now, without

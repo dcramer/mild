@@ -48,7 +48,7 @@ export async function storeExample(
     markedAt: example.markedAt ?? 0,
     status: 'captured',
     bodyText: example.body ?? `Body of ${example.id}`,
-    headersJson: '[]',
+    headers: [],
     capturedAt: example.markedAt ?? 0,
   });
 }

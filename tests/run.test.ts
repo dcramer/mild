@@ -353,7 +353,7 @@ describe('teaching from Gmail', () => {
 describe('telling the user from sift in history', () => {
   const act = async (messageId: string, payload: { add: string[]; remove: string[] }, status: string, at: number) =>
     await raw(db).run(
-      `INSERT INTO actions (account_id, message_id, type, payload_json, original_labels, status, created_at) VALUES (?, ?, 'archive', ?, '[]', ?, ?)`,
+      `INSERT INTO actions (account_id, message_id, type, payload, original_labels, status, created_at) VALUES (?, ?, 'archive', ?, '[]', ?, ?)`,
       ACCOUNT,
       messageId,
       JSON.stringify(payload),
@@ -673,7 +673,7 @@ describe('blocking', () => {
     expect(await raw(db).get(`SELECT stage, disposition, block FROM decisions WHERE message_id = 'p2'`)).toEqual({
       stage: 'rules',
       disposition: 'spam',
-      block: 1,
+      block: true,
     });
   });
 

@@ -99,7 +99,7 @@ export function raw(db: Sql) {
 /** A new person's own database, with no mailbox yet. */
 export async function openUserDb(store?: Store): Promise<Sql> {
   const on = store ?? (await freshStore());
-  const created = await raw(on.central).get<{ id: number }>('INSERT INTO users (owner, created_at) VALUES (0, 0) RETURNING id');
+  const created = await raw(on.central).get<{ id: number }>('INSERT INTO users (owner, created_at) VALUES (false, 0) RETURNING id');
   return await on.user(created!.id);
 }
 

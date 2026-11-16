@@ -88,12 +88,11 @@ const postOneClick: PostOneClick = (url, address) =>
 export async function unsubscribe(deps: UnsubscribeDeps, accountId: string, messageId: string): Promise<UnsubscribeOutcome> {
   const now = deps.now ?? Date.now;
   const [message] = await deps.db
-    .select({ fromAddress: messages.fromAddress, headersJson: messages.headersJson })
+    .select({ fromAddress: messages.fromAddress, headers: messages.headers })
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
   if (!message) return { status: 'refused', reason: 'There is no such message.' };
-  const headers = JSON.parse(message.headersJson) as Record<string, string>;
-  const signals = bulkSignals(headers);
+  const signals = bulkSignals(message.headers);
   if (!signals.oneClickUnsubscribeUrl) {
     return {
       status: 'refused',
@@ -102,7 +101,7 @@ export async function unsubscribe(deps: UnsubscribeDeps, accountId: string, mess
         : 'This message offers no way to unsubscribe.',
     };
   }
-  if (!passedDmarc(headers)) return { status: 'refused', reason: 'The message did not prove who sent it, so its unsubscribe address is not trusted.' };
+  if (!passedDmarc(message.headers)) return { status: 'refused', reason: 'The message did not prove who sent it, so its unsubscribe address is not trusted.' };
   if ((await unsubscribedAt(deps.db, accountId, message.fromAddress)) !== null)
     return { status: 'refused', reason: 'You have already unsubscribed from this sender.' };
   // sift runs this for every message a label says to unsubscribe from: a sender whose address fails is left alone for a while.

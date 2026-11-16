@@ -38,13 +38,13 @@ async function seed(account: string): Promise<void> {
   );
   const rule = await addRule(db, account, { match: { from: sender.address }, disposition: 'archive' }, 'user', 1000);
   const { id: action } = (await raw(db).get<{ id: number }>(
-    `INSERT INTO actions (account_id, message_id, type, payload_json, status, created_at, decision_id) VALUES (?, ?, 'archive', '{}', 'done', 1000, ?) RETURNING id`,
+    `INSERT INTO actions (account_id, message_id, type, payload, status, created_at, decision_id) VALUES (?, ?, 'archive', '{}', 'done', 1000, ?) RETURNING id`,
     account,
     `m-${mark}`,
     decision,
   ))!;
   const { id: proposal } = (await raw(db).get<{ id: number }>(
-    `INSERT INTO proposals (account_id, kind, match_json, label_id, agreed, created_at) VALUES (?, 'rule', ?, 'newsletter', 5, 1000) RETURNING id`,
+    `INSERT INTO proposals (account_id, kind, match, label_id, agreed, created_at) VALUES (?, 'rule', ?, 'newsletter', 5, 1000) RETURNING id`,
     account,
     JSON.stringify({ from: `proposed@${mark}.example.com` }),
   ))!;

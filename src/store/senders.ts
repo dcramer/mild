@@ -48,16 +48,16 @@ export async function cachedCorrespondent(db: Sql, accountId: string, address: s
     .from(correspondents)
     .where(and(eq(correspondents.accountId, accountId), eq(correspondents.address, address)));
   if (!row) return undefined;
-  if (row.userHasWritten === 1) return true;
+  if (row.userHasWritten) return true;
   return now - row.checkedAt < CORRESPONDENT_TTL_MS ? false : undefined;
 }
 
 export async function rememberCorrespondent(db: Sql, accountId: string, address: string, userHasWritten: boolean, now: number = Date.now()): Promise<void> {
   await db
     .insert(correspondents)
-    .values({ accountId, address, userHasWritten: userHasWritten ? 1 : 0, checkedAt: now })
+    .values({ accountId, address, userHasWritten, checkedAt: now })
     .onConflictDoUpdate({
-      target: [correspondents.accountId, correspondents.address],
+      target: [correspondents.userId, correspondents.accountId, correspondents.address],
       set: { userHasWritten: sql`excluded.user_has_written`, checkedAt: sql`excluded.checked_at` },
     });
 }
@@ -122,10 +122,10 @@ async function facts(db: Sql, accountId: string, who: { address: string } | { do
           .from(correspondents)
           .where(and(eq(correspondents.accountId, accountId), eq(correspondents.address, value)))
       : await db
-          .select({ yes: max(correspondents.userHasWritten) })
+          .select({ yes: sql<boolean | null>`bool_or(${correspondents.userHasWritten})` })
           .from(correspondents)
           .where(and(eq(correspondents.accountId, accountId), ilike(correspondents.address, `%@${value}`)));
-  const userHasWritten = written?.yes === undefined || written.yes === null ? null : written.yes === 1;
+  const userHasWritten = written?.yes ?? null;
 
   // Only a rule for exactly this sender or domain that decides by itself says how the owner regards them.
   const dispositions = new Map((await listLabels(db, accountId, now)).map((l) => [l.id, l.disposition]));

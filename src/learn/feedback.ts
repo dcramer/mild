@@ -1,5 +1,6 @@
 import {
   type SQL,
+  type VERDICTS,
   alias,
   and,
   asc,
@@ -28,7 +29,7 @@ import { recordDecision } from '../store/decisions.ts';
 import { proposeFromAnswers } from '../store/proposals.ts';
 import { type RuleSays, setRule } from '../store/rules.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
-import { type DecidedDisposition, type Decision, type Disposition, type StageName, labelled } from '../triage/types.ts';
+import { type DecidedDisposition, type Decision, type Disposition, type StageName, type SubscriptionAction, labelled } from '../triage/types.ts';
 
 /** A decision sift made while only observing, that the user has not yet confirmed or corrected. */
 export interface Suggestion {
@@ -72,20 +73,8 @@ const SUGGESTION = {
   subject: messages.subject,
 };
 
-const toSuggestion = ({
-  block,
-  subscription,
-  ...r
-}: Omit<Suggestion, 'stage' | 'disposition' | 'block' | 'unsubscribe'> & {
-  stage: string;
-  disposition: string;
-  block: number;
-  subscription: string;
-}): Suggestion => ({
+const toSuggestion = ({ subscription, ...r }: Omit<Suggestion, 'unsubscribe'> & { subscription: SubscriptionAction }): Suggestion => ({
   ...r,
-  stage: r.stage as StageName,
-  disposition: r.disposition as Disposition,
-  block: block === 1,
   unsubscribe: subscription === 'unsubscribe',
 });
 
@@ -277,18 +266,24 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
 
   // sift having no suggestion is not sift being wrong. Otherwise it was right if it gave the same label,
   // or, when the user said only what should happen, if it would have done the same.
-  const verdictFor = (target: Suggestion) =>
+  const verdictFor = (target: Suggestion): (typeof VERDICTS)[number] =>
     target.labelId === null ? 'answered' : (label ? target.labelId === label.id : target.disposition === wanted) ? 'right' : 'wrong';
   await db.transaction(async (tx) => {
     const all = given ? [...targets, given] : targets;
     for (const target of all) {
       const verdict = verdictFor(target);
       const is = standing(target)?.id ?? null;
-      const answered = { verdict, correct: verdict === 'right' ? null : wanted, scope: match ? 'sender' : 'message', createdAt: now, labelId: is };
+      const answered = {
+        verdict,
+        correct: verdict === 'right' ? null : wanted,
+        scope: match ? ('sender' as const) : ('message' as const),
+        createdAt: now,
+        labelId: is,
+      };
       await tx
         .insert(feedback)
         .values({ accountId: target.accountId, decisionId: target.decisionId, messageId: target.messageId, ...answered })
-        .onConflictDoUpdate({ target: feedback.decisionId, set: answered });
+        .onConflictDoUpdate({ target: [feedback.userId, feedback.decisionId], set: answered });
       // Every marked message is kept whole as an example; `sift run` fetches it on its next pass.
       await tx
         .insert(examples)
@@ -301,7 +296,7 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
           suggestedBy: target.stage,
           markedAt: now,
         })
-        .onConflictDoUpdate({ target: [examples.accountId, examples.messageId], set: { disposition: wanted, labelId: is, markedAt: now } });
+        .onConflictDoUpdate({ target: [examples.userId, examples.accountId, examples.messageId], set: { disposition: wanted, labelId: is, markedAt: now } });
     }
     const ruleId =
       match && says ? await setRule(tx, input.accountId, match, says, all.every((t) => verdictFor(t) === 'right') ? 'user' : 'correction', now) : null;
@@ -372,15 +367,13 @@ export async function accuracy(db: Sql, since = 0, accounts?: readonly string[])
       accounts === undefined ? undefined : inArray(feedback.accountId, accounts),
       ...also,
     );
-  const byStage = (
-    await db
-      .select({ stage: decisions.stage, reviewed: count(), right })
-      .from(feedback)
-      .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
-      .where(scored())
-      .groupBy(decisions.stage)
-      .orderBy(asc(decisions.stage))
-  ).map((r) => ({ ...r, stage: r.stage as StageName }));
+  const byStage = await db
+    .select({ stage: decisions.stage, reviewed: count(), right })
+    .from(feedback)
+    .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
+    .where(scored())
+    .groupBy(decisions.stage)
+    .orderBy(asc(decisions.stage));
   const name = db.select({ name: labels.name }).from(labels).where(eq(labels.id, decisions.labelId)).orderBy(asc(labels.accountId)).limit(1);
   const byLabel = (await db
     .select({ labelId: decisions.labelId, labelName: sql<string | null>`${name}`, reviewed: count(), right })

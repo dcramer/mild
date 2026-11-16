@@ -66,7 +66,7 @@ export async function writeRuleFilter(deps: ActionDeps, ruleId: string): Promise
     throw new Error('Gmail did not keep the filter.');
   }
   await finishAction(deps.db, actionId, 'done', null, null, clock(deps));
-  await setRuleFilter(deps.db, ruleId, { filterId: got.id, state: 'active', written: JSON.stringify({ plan, got } satisfies Written) }, clock(deps));
+  await setRuleFilter(deps.db, ruleId, { filterId: got.id, state: 'active', written: { plan, got } satisfies Written }, clock(deps));
 }
 
 /** Take a rule's filter out of Gmail. Returns false if it had none. Throws if Gmail still has it afterwards. */
@@ -122,7 +122,7 @@ export async function checkRuleFilters(deps: ActionDeps, accountId: string, act:
   const check: FilterCheck = { gone: 0, changed: 0, outdated: 0 };
 
   for (const row of rows) {
-    const written = row.written === null ? null : (JSON.parse(row.written) as Written);
+    const written = row.written as Written | null;
     const found = existing.find((f) => f.id === row.filterId);
     if (!found) {
       await setRuleFilter(deps.db, row.ruleId, { ...NONE, state: 'gone' }, clock(deps));

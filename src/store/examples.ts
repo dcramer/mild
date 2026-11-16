@@ -1,4 +1,4 @@
-import { type SQL, and, asc, desc, eq, examples, isNotNull, lt, lte, messages, sql } from './query.ts';
+import { type EXAMPLE_STATUSES, type SQL, and, asc, desc, eq, examples, isNotNull, lt, lte, messages, sql } from './query.ts';
 import type { Sql } from './sql.ts';
 import { MAX_SHOTS, type Shot, excerptOf } from '../triage/fewshot.ts';
 import type { MessageFacts } from '../triage/types.ts';
@@ -67,12 +67,12 @@ export interface StoredExample {
   /** The user's answer. */
   labelId: string | null;
   markedAt: number;
-  status: 'pending' | 'captured' | 'gone';
+  status: (typeof EXAMPLE_STATUSES)[number];
 }
 
 /** What is held as examples, newest answers first, without the content. */
 export async function listExamples(db: Sql, accountId?: string, limit = 500): Promise<StoredExample[]> {
-  return (await db
+  return await db
     .select({
       accountId: examples.accountId,
       messageId: examples.messageId,
@@ -87,7 +87,7 @@ export async function listExamples(db: Sql, accountId?: string, limit = 500): Pr
     .innerJoin(messages, withMessage)
     .where(accountId === undefined ? undefined : eq(examples.accountId, accountId))
     .orderBy(desc(examples.markedAt), asc(examples.messageId))
-    .limit(limit)) as StoredExample[];
+    .limit(limit);
 }
 
 /**

@@ -95,9 +95,9 @@ const toRow = (accountId: string, l: Label, position: number, now: number) => ({
   gmailLabel: l.gmailLabel,
   position,
   updatedAt: now,
-  block: l.block ? 1 : 0,
-  markRead: l.markRead ? 1 : 0,
-  unsubscribe: l.unsubscribe ? 1 : 0,
+  block: l.block ?? false,
+  markRead: l.markRead ?? false,
+  unsubscribe: l.unsubscribe ?? false,
 });
 
 /** An account's labels in order, seeding the defaults the first time. */
@@ -126,11 +126,11 @@ export async function listLabels(db: Sql, accountId: string, now: number = Date.
     id: r.id,
     name: r.name,
     description: r.description,
-    disposition: r.disposition as Disposition,
+    disposition: r.disposition,
     gmailLabel: r.gmailLabel,
-    ...(r.block === 1 ? { block: true } : {}),
-    ...(r.markRead === 1 ? { markRead: true } : {}),
-    ...(r.unsubscribe === 1 ? { unsubscribe: true } : {}),
+    ...(r.block ? { block: true } : {}),
+    ...(r.markRead ? { markRead: true } : {}),
+    ...(r.unsubscribe ? { unsubscribe: true } : {}),
   }));
 }
 
@@ -212,9 +212,9 @@ export async function updateLabel(
       name: change.name?.trim() || current.name,
       description: change.description?.trim() ?? current.description,
       disposition,
-      block: extras.block ? 1 : 0,
-      markRead: extras.markRead ? 1 : 0,
-      unsubscribe: (change.unsubscribe ?? current.unsubscribe ?? false) ? 1 : 0,
+      block: extras.block ?? false,
+      markRead: extras.markRead ?? false,
+      unsubscribe: change.unsubscribe ?? current.unsubscribe ?? false,
       updatedAt: now,
     })
     .where(and(eq(labels.accountId, accountId), eq(labels.id, id)));

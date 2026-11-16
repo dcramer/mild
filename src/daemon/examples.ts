@@ -45,7 +45,7 @@ export async function captureExamples(
     const body = await api.getBodyText(messageId);
     await db
       .update(examples)
-      .set({ status: 'captured', raw, headersJson: JSON.stringify(parseHeaders(raw)), bodyText: body ?? '', capturedAt: now() })
+      .set({ status: 'captured', raw, headers: parseHeaders(raw), bodyText: body ?? '', capturedAt: now() })
       .where(example);
     captured++;
   }

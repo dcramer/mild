@@ -55,7 +55,7 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
     .where(decidedSince)) {
     const day = dailyByDay.get(localDay(row.decidedAt));
     if (!day) continue;
-    if (row.stage in day.counts) day.counts[row.stage as StageKey]++;
+    day.counts[row.stage]++;
     day.costUsd += row.costUsd;
   }
   // What was done in Gmail each day: a change that stands, by what it did, or one that failed. Undone ones are not counted.
@@ -78,7 +78,7 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
     if (!day) continue;
     if (row.outcome === 'failed' || row.outcome === 'unknown' || row.status === 'failed' || row.status === 'unknown') day.changes.failed++;
     else if (row.status === 'done') {
-      const what = row.block === 1 ? 'spam' : row.disposition;
+      const what = row.block ? 'spam' : row.disposition;
       if (what === 'archive' || what === 'spam' || what === 'keep') day.changes[what]++;
     }
   }

@@ -37,7 +37,7 @@ export async function keepSuggestionBodies(db: Sql, api: Pick<GmailApi, 'getBody
     await db
       .insert(suggestionBodies)
       .values({ accountId, messageId: suggestion.messageId, ...body })
-      .onConflictDoUpdate({ target: [suggestionBodies.accountId, suggestionBodies.messageId], set: body });
+      .onConflictDoUpdate({ target: [suggestionBodies.userId, suggestionBodies.accountId, suggestionBodies.messageId], set: body });
     fetched++;
   }
   return fetched;

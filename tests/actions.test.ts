@@ -99,7 +99,7 @@ describe('execute', () => {
 
   it('settles a crash that left an action pending', async () => {
     await raw(db).run(
-      `INSERT INTO actions (account_id, message_id, type, payload_json, original_labels, status, created_at) VALUES (?, 'm1', 'archive', ?, '["INBOX"]', 'pending', 0)`,
+      `INSERT INTO actions (account_id, message_id, type, payload, original_labels, status, created_at) VALUES (?, 'm1', 'archive', ?, '["INBOX"]', 'pending', 0)`,
       ACCOUNT,
       JSON.stringify({ add: ['L:sift/did/archived'], remove: ['INBOX'] }),
     );

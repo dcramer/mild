@@ -20,12 +20,13 @@ import {
   gte,
 } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
+import { DISPOSITIONS } from '../../triage/types.ts';
 import { type Scope, within } from '../scope.ts';
-import { type DecisionRow, STAGES, type StageKey, type ChangeRow } from '../types.ts';
+import { type DecisionRow, STAGES, type ChangeRow } from '../types.ts';
 
 export const DAY_MS = 86_400_000;
 
-const DISPOSITIONS = ['keep', 'archive', 'spam', 'review'] as const;
+const isOneOf = <T extends string>(values: readonly T[], value: string): value is T => (values as readonly string[]).includes(value);
 
 const latest = alias(actions, 'latest');
 
@@ -101,17 +102,15 @@ export async function retryDecision(db: Sql, scope: Scope, id: number): Promise<
     .where(and(eq(decisions.id, id), eq(decisions.mode, 'act'), inArray(decisions.outcome, ['failed', 'unknown']), within(scope, decisions.accountId)));
   if (!row) return { retried: false, waiting: false };
   await db.update(decisions).set({ outcome: null, outcomeDetail: null }).where(eq(decisions.id, id));
-  return { retried: true, waiting: row.byUser === 0 };
+  return { retried: true, waiting: !row.byUser };
 }
 
 type DecisionFields = Awaited<ReturnType<typeof decisionsJoined>>[number];
 
-export const toDecisionRow = ({ block, subscription, byUser, ...r }: DecisionFields): DecisionRow => ({
+export const toDecisionRow = ({ block, subscription, ...r }: DecisionFields): DecisionRow => ({
   ...r,
-  stage: r.stage as StageKey,
-  disposition: block === 1 ? 'block' : r.disposition,
+  disposition: block ? 'block' : r.disposition,
   unsubscribe: subscription === 'unsubscribe',
-  byUser: byUser === 1,
 });
 
 export interface DecisionFilter {
@@ -135,11 +134,11 @@ export interface DecisionFilter {
 export async function listDecisions(db: Sql, scope: Scope, filter: DecisionFilter, now: number = Date.now()): Promise<{ total: number; rows: DecisionRow[] }> {
   const where: (SQL | undefined)[] = [within(scope, decisions.accountId), gte(decisions.decidedAt, now - filter.days * DAY_MS)];
   if (filter.stage !== undefined) {
-    if (!(STAGES as readonly string[]).includes(filter.stage)) return { total: 0, rows: [] };
+    if (!isOneOf(STAGES, filter.stage)) return { total: 0, rows: [] };
     where.push(eq(decisions.stage, filter.stage));
   }
   if (filter.disposition !== undefined) {
-    if (!(DISPOSITIONS as readonly string[]).includes(filter.disposition)) return { total: 0, rows: [] };
+    if (!isOneOf(DISPOSITIONS, filter.disposition)) return { total: 0, rows: [] };
     where.push(eq(decisions.disposition, filter.disposition));
   }
   if (filter.status !== undefined) {
@@ -176,7 +175,7 @@ export async function listChanges(db: Sql, scope: Scope, limit: number): Promise
       status: actions.status,
       error: actions.error,
       createdAt: actions.createdAt,
-      payloadJson: actions.payloadJson,
+      payload: actions.payload,
       subject: messages.subject,
       fromAddress: messages.fromAddress,
     })
@@ -185,9 +184,9 @@ export async function listChanges(db: Sql, scope: Scope, limit: number): Promise
     .where(and(isNotNull(actions.messageId), within(scope, actions.accountId)))
     .orderBy(desc(actions.id))
     .limit(limit);
-  return rows.map(({ payloadJson, ...r }) => ({
+  return rows.map(({ payload, ...r }) => ({
     ...r,
     messageId: r.messageId!,
-    undoOf: (JSON.parse(payloadJson) as { undoOf?: number }).undoOf ?? null,
+    undoOf: payload.undoOf ?? null,
   }));
 }

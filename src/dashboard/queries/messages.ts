@@ -16,13 +16,13 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
       threadId: messages.threadId,
       fromAddress: messages.fromAddress,
       fromName: messages.fromName,
-      toJson: messages.toJson,
-      ccJson: messages.ccJson,
+      to: messages.to,
+      cc: messages.cc,
       subject: messages.subject,
       listId: messages.listId,
       receivedAt: messages.receivedAt,
       syncedAt: messages.syncedAt,
-      headersJson: messages.headersJson,
+      headers: messages.headers,
     })
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
@@ -51,7 +51,7 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
       type: actions.type,
       status: actions.status,
       decisionId: actions.decisionId,
-      payloadJson: actions.payloadJson,
+      payload: actions.payload,
       originalLabels: actions.originalLabels,
       finalLabels: actions.finalLabels,
       error: actions.error,
@@ -67,33 +67,24 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
     threadId: m.threadId,
     fromAddress: m.fromAddress,
     fromName: m.fromName,
-    to: JSON.parse(m.toJson) as MessageDetail['to'],
-    cc: JSON.parse(m.ccJson) as MessageDetail['cc'],
+    to: m.to,
+    cc: m.cc,
     subject: m.subject,
     listId: m.listId,
     receivedAt: m.receivedAt,
     syncedAt: m.syncedAt,
-    headers: JSON.parse(m.headersJson) as Record<string, string>,
+    headers: m.headers,
     body: await storedBody(db, accountId, messageId),
     facts,
-    unsubscribe: await canUnsubscribe(db, accountId, m.fromAddress, JSON.parse(m.headersJson) as Record<string, string>),
+    unsubscribe: await canUnsubscribe(db, accountId, m.fromAddress, m.headers),
     sender: (await senderProfile(db, scope, accountId, m.fromAddress))!,
     decisions: shown.map((r) => ({ ...toDecisionRow(r), ...costs.get(r.id)! })),
-    actions: changes.map((a) => {
-      const payload = JSON.parse(a.payloadJson) as { add?: string[]; remove?: string[] };
-      return {
-        id: a.id,
-        type: a.type,
-        status: a.status,
-        decisionId: a.decisionId,
-        added: payload.add ?? [],
-        removed: payload.remove ?? [],
-        originalLabels: a.originalLabels ? (JSON.parse(a.originalLabels) as string[]) : [],
-        finalLabels: a.finalLabels ? (JSON.parse(a.finalLabels) as string[]) : null,
-        error: a.error,
-        createdAt: a.createdAt,
-      };
-    }),
+    actions: changes.map(({ payload, originalLabels, ...a }) => ({
+      ...a,
+      added: payload.add,
+      removed: payload.remove,
+      originalLabels: originalLabels ?? [],
+    })),
   };
 }
 

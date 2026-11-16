@@ -1,13 +1,17 @@
 /** What happens to the message in the mailbox. `review` means no stage was sure: leave it in place and ask. */
-export type Disposition = 'keep' | 'archive' | 'spam' | 'review';
+export const DISPOSITIONS = ['keep', 'archive', 'spam', 'review'] as const;
+export type Disposition = (typeof DISPOSITIONS)[number];
 
 /** A disposition a stage may assert on its own. Only the pipeline falls back to `review`. */
-export type DecidedDisposition = Exclude<Disposition, 'review'>;
+export const DECIDED = ['keep', 'archive', 'spam'] as const;
+export type DecidedDisposition = (typeof DECIDED)[number];
 
 /** Chosen independently of the disposition: a kept sender can still be unsubscribed from. */
-export type SubscriptionAction = 'preserve' | 'unsubscribe';
+export const SUBSCRIPTION_ACTIONS = ['preserve', 'unsubscribe'] as const;
+export type SubscriptionAction = (typeof SUBSCRIPTION_ACTIONS)[number];
 
-export type StageName = 'rules' | 'sender' | 'heuristics' | 'classifier' | 'agent' | 'fallback';
+export const STAGE_NAMES = ['rules', 'sender', 'heuristics', 'classifier', 'agent', 'fallback'] as const;
+export type StageName = (typeof STAGE_NAMES)[number];
 
 export interface Address {
   /** Lowercased `local@domain`. */

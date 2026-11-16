@@ -263,7 +263,7 @@ describe('an answer pressed in the dashboard', () => {
     expect(mailbox.labels.get('m1')).not.toContain('INBOX');
     expect(mailbox.labels.get('left')).toEqual(['INBOX']);
     expect(await raw(db).get(`SELECT by_user, mode, outcome FROM decisions WHERE message_id = 'm1' ORDER BY id DESC LIMIT 1`)).toEqual({
-      by_user: 1,
+      by_user: true,
       mode: 'act',
       outcome: 'done',
     });
@@ -457,7 +457,7 @@ describe('how far an answer reaches', () => {
     ]);
 
     // The narrower rule wins whichever was written first.
-    await raw(db).run(`UPDATE rules SET position = 99 WHERE match_json LIKE '%subjectContains%'`);
+    await raw(db).run(`UPDATE rules SET position = 99 WHERE match ->> 'subjectContains' IS NOT NULL`);
     await recordSync(
       db,
       ACCOUNT,
@@ -591,11 +591,11 @@ describe('examples', () => {
       getBodyText: async () => 'Hello there.',
     };
     await expect(captureExamples(db, api, ACCOUNT, () => 99)).rejects.toThrow('network');
-    const stored = await raw(db).all('SELECT message_id, status, body_text, headers_json, captured_at, length(raw) AS bytes FROM examples ORDER BY message_id');
+    const stored = await raw(db).all('SELECT message_id, status, body_text, headers, captured_at, length(raw) AS bytes FROM examples ORDER BY message_id');
     expect(stored).toEqual([
-      { message_id: 'm1', status: 'captured', body_text: 'Hello there.', headers_json: JSON.stringify(parseHeaders(RAW)), captured_at: 99, bytes: RAW.length },
-      { message_id: 'm2', status: 'gone', body_text: null, headers_json: null, captured_at: 99, bytes: null },
-      { message_id: 'm3', status: 'pending', body_text: null, headers_json: null, captured_at: null, bytes: null },
+      { message_id: 'm1', status: 'captured', body_text: 'Hello there.', headers: parseHeaders(RAW), captured_at: 99, bytes: RAW.length },
+      { message_id: 'm2', status: 'gone', body_text: null, headers: null, captured_at: 99, bytes: null },
+      { message_id: 'm3', status: 'pending', body_text: null, headers: null, captured_at: null, bytes: null },
     ]);
 
     failing = false;

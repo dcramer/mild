@@ -1,4 +1,4 @@
--- sift's own queries run as sift_app (src/store/postgres.ts): it reads and writes every table, owns
+-- sift's own queries run as sift_app (src/store/sql.ts): it reads and writes every table, owns
 -- none, and is held to row-level security. Drizzle cannot say this, so it is written here.
 GRANT USAGE ON SCHEMA public TO sift_app;--> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO sift_app;--> statement-breakpoint
