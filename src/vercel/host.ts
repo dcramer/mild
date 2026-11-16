@@ -55,29 +55,30 @@ export async function fanOut(due: Sift['due'], people?: readonly number[]): Prom
 /** What a deploy must give, in the environment: nothing is kept in files. */
 function required(name: string): string {
   const value = process.env[name];
-  if (!value) throw new Error(`Set ${name} in the Vercel project's environment.`);
+  if (!value) throw new NotSetUp(`Set ${name} in the Vercel project's environment, then deploy again.`);
   return value;
 }
 
-/** Open the store as sift would anywhere else. There is no home directory to keep anything in, only `/tmp`. */
-export async function openVercelStore(config = loadVercelConfig()) {
-  required('DATABASE_URL');
-  return { config, store: await openStore(config) };
-}
+/** A setting the project still needs: said to whoever opens the site, since it names nothing secret. */
+class NotSetUp extends Error {}
 
 /** The settings, all from the environment, refused before anything is opened when one a public address needs is missing. */
 function loadVercelConfig() {
   process.env['SIFT_HOME'] ??= '/tmp/sift';
   const config = loadConfig();
-  // At a public address, without a list whoever signs in first would own the install.
-  if (!config.settings.dashboardAllow) throw new Error('Set SIFT_DASHBOARD_ALLOW to the Google accounts that may sign in.');
+  required('DATABASE_URL');
+  required('REDIS_URL');
   required('SIFT_GOOGLE_CLIENT_ID');
   required('SIFT_GOOGLE_CLIENT_SECRET');
+  required('SIFT_SESSION_SECRET');
+  // At a public address, without a list whoever signs in first would own the install.
+  if (!config.settings.dashboardAllow) throw new NotSetUp('Set SIFT_DASHBOARD_ALLOW to the Google accounts that may sign in, then deploy again.');
   return config;
 }
 
 async function open(): Promise<Sift> {
-  const { config, store } = await openVercelStore(loadVercelConfig());
+  const config = loadVercelConfig();
+  const store = await openStore(config);
   const ephemeral = await openEphemeral(required('REDIS_URL'));
   const production = process.env['VERCEL_PROJECT_PRODUCTION_URL'];
   return await createSift({
@@ -98,9 +99,19 @@ async function open(): Promise<Sift> {
 let opened: Promise<Sift> | undefined;
 const sift = () => (opened ??= open().catch((error: unknown) => ((opened = undefined), Promise.reject(error))));
 
-/** Every request Vercel's CDN does not answer from the built page: the API and sign-in. */
+/** Every request Vercel's CDN does not answer from the built page: the API and sign-in. Until the project is set up, what it still needs. */
 export async function respond(request: Request): Promise<Response> {
-  return await (await sift()).respond(request);
+  let opened: Sift;
+  try {
+    opened = await sift();
+  } catch (error) {
+    if (!(error instanceof NotSetUp)) throw error;
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 503,
+      headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+    });
+  }
+  return await opened.respond(request);
 }
 
 /** Vercel Cron, each minute: hands out what is due. */

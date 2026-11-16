@@ -6,9 +6,11 @@ What it needs: the **Pro** plan (Hobby runs crons once a day; Sift ticks each mi
 
 ## 1. The project
 
-Import this repository as a Vercel project. Leave Root Directory empty, the repository root: Vercel offers `web/` because it finds Vite there, and a build from there knows nothing of `vercel.json` or the functions. Framework Preset: Other. `vercel.json` sets the build, the functions (`api/`), the minute's cron and the page's headers, and Node comes from `package.json` (24.x).
+Import this repository as a Vercel project and deploy it as it is: Vercel adds databases only to a project that exists. Root Directory: `./`, the repository root (Vercel offers `web/` because it finds Vite there, and a build from there knows nothing of `vercel.json` or the functions). Framework Preset: Other. `vercel.json` sets the build, the functions (`api/`), the minute's cron and the page's headers, and Node comes from `package.json` (24.x).
 
-Add Neon and a Redis database to the project from the Marketplace (Storage). Each sets its own variables; Sift reads the ones in step 3.
+This first deploy builds without a database. Until steps 2 and 3 are done, the site says which variable it needs next.
+
+Then, from the project's Storage tab, add Neon and a Redis database. Each sets variables of its own; Sift reads the ones in step 3.
 
 ## 2. The Google client
 
@@ -41,15 +43,15 @@ In the project's Environment Variables, for Production:
 
 Sift refuses to start without the required ones and says which is missing.
 
-## 4. Deploy
+## 4. Deploy again
 
-Deploy production. The build migrates the database before the new functions serve anything. Open your address, sign in with Google as an allowed account (the first becomes the owner), choose a model under Settings, and pull in recent mail to teach it with. Nothing in Gmail changes until you turn Sift on, under Settings.
+Redeploy production, so the build sees the variables: it migrates the database before the new functions serve anything. Open your address, sign in with Google as an allowed account (the first becomes the owner), choose a model under Settings, and pull in recent mail to teach it with. Nothing in Gmail changes until you turn Sift on, under Settings.
 
 Mail is checked each minute. Logs are the project's function logs.
 
 ## Previews
 
-A preview deployment builds and migrates with whatever `DATABASE_URL` it is given, and production refuses a database a newer Sift migrated. Give previews a database of their own (Neon's integration can make a branch per preview), or set no Preview variables so their builds fail before touching anything. Crons run only in production.
+A preview deployment builds and migrates with whatever `DATABASE_URL` it is given, and production refuses a database a newer Sift migrated. Give previews a database of their own (Neon's integration can make a branch per preview), or no Preview variables at all, so they build without one and touch nothing. Crons run only in production.
 
 With Deployment Protection on, a preview reaches its own `api/work` only with Vercel's Protection Bypass for Automation (`VERCEL_AUTOMATION_BYPASS_SECRET`), which Sift sends when it is set.
 

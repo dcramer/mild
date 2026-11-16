@@ -77,16 +77,30 @@ describe('the Vercel host', () => {
     expect(((await admit(stranger)) as Response).status).toBe(401);
   });
 
-  it('will not start at a public address without an allow list or a Google client, before opening anything', async () => {
+  it('until it is set up, says to whoever opens it which variable is next, before opening anything', async () => {
     const home = process.env['SIFT_HOME'];
     process.env['SIFT_HOME'] = mkdtempSync(join(tmpdir(), 'sift-vercel-'));
-    process.env['DATABASE_URL'] = 'postgres://nobody@db.invalid/sift';
+    const missing = async () => {
+      const reply = await respond(new Request('https://sift.example.com/api/session'));
+      expect(reply.status).toBe(503);
+      return ((await reply.json()) as { error: string }).error;
+    };
+    const given = {
+      DATABASE_URL: 'postgres://nobody@db.invalid/sift',
+      REDIS_URL: 'redis://redis.invalid',
+      SIFT_GOOGLE_CLIENT_ID: 'id',
+      SIFT_GOOGLE_CLIENT_SECRET: 'secret',
+      SIFT_SESSION_SECRET: 'synthetic',
+    };
     try {
-      await expect(respond(new Request('https://sift.example.com/api/session'))).rejects.toThrow('SIFT_DASHBOARD_ALLOW');
-      process.env['SIFT_DASHBOARD_ALLOW'] = 'me@example.org';
-      await expect(respond(new Request('https://sift.example.com/api/session'))).rejects.toThrow('SIFT_GOOGLE_CLIENT_ID');
+      for (const [name, value] of Object.entries(given)) {
+        expect(await missing()).toContain(name);
+        process.env[name] = value;
+      }
+      // At a public address, without a list whoever signed in first would own it.
+      expect(await missing()).toContain('SIFT_DASHBOARD_ALLOW');
     } finally {
-      for (const name of ['DATABASE_URL', 'SIFT_DASHBOARD_ALLOW']) delete process.env[name];
+      for (const name of Object.keys(given)) delete process.env[name];
       if (home === undefined) delete process.env['SIFT_HOME'];
       else process.env['SIFT_HOME'] = home;
     }
