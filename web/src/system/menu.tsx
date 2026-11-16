@@ -12,10 +12,7 @@ export interface MenuItem {
 /** Who someone is, as the initial of their address. Never a picture: the page loads nothing from another origin. */
 export function Avatar({ name }: { name: string }) {
   return (
-    <span
-      aria-hidden
-      className="flex size-(--control) items-center justify-center rounded-(--cut-control) bg-(--fill) font-heading text-sm font-bold uppercase"
-    >
+    <span aria-hidden className="flex size-(--control) items-center justify-center rounded-(--corner) bg-(--fill) font-heading text-sm font-bold uppercase">
       {name.trim().charAt(0) || '?'}
     </span>
   );

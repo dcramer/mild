@@ -7,14 +7,14 @@ const FIELD =
 
 /** A line of text typed by the reader. Inside a `Field` it takes the field's label; on its own give it an `aria-label`. */
 export function Input({ className, ...props }: ComponentProps<'input'>) {
-  return <input className={cn('field focus-within-shown h-(--control) min-w-0 rounded-(--cut-control) px-3 text-base', FIELD, className)} {...props} />;
+  return <input className={cn('field focus-within-shown h-(--control) min-w-0 rounded-(--corner) px-3 text-base', FIELD, className)} {...props} />;
 }
 
 /** Longer text. */
 export function TextArea({ className, ...props }: ComponentProps<'textarea'>) {
   return (
     <textarea
-      className={cn('block min-h-48 w-full resize-y rounded-[2px] px-3 py-2.5 text-base leading-relaxed', FIELD, 'focus-within-shown', className)}
+      className={cn('block min-h-48 w-full resize-y rounded-(--corner) px-3 py-2.5 text-base leading-relaxed', FIELD, 'focus-within-shown', className)}
       {...props}
     />
   );

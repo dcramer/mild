@@ -2,7 +2,7 @@ import { Dialog as Base } from '@base-ui/react/dialog';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { KeyLayer } from './keys.tsx';
-import { Backdrop, LayerBody, LayerFooter, LayerHeader } from './layer.tsx';
+import { Backdrop, LayerBody, LayerFooter, LayerHeader, useLayerOpen } from './layer.tsx';
 
 /**
  * Something opened from the page and read or answered without leaving it: one message, one sender, a
@@ -28,7 +28,7 @@ export function Dialog({
   children: ReactNode;
 }) {
   return (
-    <Base.Root open={open} onOpenChange={(next) => !next && onClose()}>
+    <Base.Root {...useLayerOpen(open, onClose)}>
       <Base.Portal>
         <Backdrop />
         <Base.Popup

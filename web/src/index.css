@@ -58,11 +58,11 @@
   --highlight: #ffe033;
   --highlight-ink: #111110;
 
-  /* Corners cut by hand, not by a compass: the highlighter's shape, shared by everything you press. */
+  /* Corners cut by hand, not by a compass: the highlighter's shape, and only the highlighter's. */
   --cut: 0.5em 0.2em 0.55em 0.25em / 0.25em 0.5em 0.2em 0.45em;
 
-  /* The same hand, at the size of a control. */
-  --cut-control: 0.7em 0.3em 0.75em 0.35em / 0.4em 0.7em 0.3em 0.65em;
+  /* Everything else that has a corner (a control, a field, a stamp): small and even. */
+  --corner: 3px;
 
   /* The edge of the sheet beneath: the only shadow, always hard and offset down-right. */
   --edge: color-mix(in oklab, var(--foreground) 9%, transparent);
@@ -182,7 +182,7 @@
     align-items: center;
     height: 1.5rem;
     padding-inline: 0.5rem;
-    border-radius: var(--cut);
+    border-radius: var(--corner);
     font-size: 13px;
     font-weight: 600;
     white-space: nowrap;
@@ -190,9 +190,9 @@
 }
 
 @layer components {
-  /* Things you press: hand-cut corners, and a short travel when pressed. */
+  /* Things you press: a small even corner, and a short travel when pressed. */
   .press {
-    border-radius: var(--cut-control);
+    border-radius: var(--corner);
     transition:
       background-color 120ms ease-out,
       color 120ms ease-out,

@@ -53,7 +53,7 @@ export function ListView({
         {search || filters || view ? (
           <div className="flex flex-col gap-2">
             {/* One bar: the search and the filters share an outline, and nothing is filled until it is used. */}
-            <div className="flex h-9 items-stretch rounded-(--cut-control) border border-(--frame) transition-colors focus-within:border-foreground/45">
+            <div className="flex h-9 items-stretch rounded-(--corner) border border-(--frame) transition-colors focus-within:border-foreground/45">
               {search ? (
                 <label className="flex min-w-0 flex-1 items-center gap-2.5 px-3">
                   <SearchIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />

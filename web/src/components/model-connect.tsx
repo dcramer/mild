@@ -1,5 +1,5 @@
-import { ChevronRightIcon } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowUpRightIcon, ChevronRightIcon } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
 import { Button, Copyable, Failure, Field, Form, Input, Select, Sub, Table, Td, TextLink, Th, Tr } from '@/system';
 
@@ -68,6 +68,21 @@ export function useProviderConnect(choice: Choice, model: ManageState['model'], 
   const [key, setKey] = useState('');
   const sign = useAction();
   const pending = model.pending;
+  const code = pending && 'code' in pending ? pending : null;
+  // ChatGPT has only the one way in, so choosing it starts it: there is nothing else to press first.
+  const asked = useRef(false);
+  useEffect(() => {
+    if (choice.how !== 'chatgpt' || signedIn || code || asked.current) return;
+    asked.current = true;
+    sign.run(() => api.signInChatGPT(), reload);
+  });
+  // The code, and then the sign-in finishing at OpenAI, are only learnt of by asking.
+  const waiting = choice.how === 'chatgpt' && !signedIn;
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setInterval(reload, 3000);
+    return () => clearInterval(timer);
+  }, [waiting, reload]);
 
   const fields = (
     <Form onSubmit={() => {}}>
@@ -75,13 +90,13 @@ export function useProviderConnect(choice: Choice, model: ManageState['model'], 
         <Field
           label="Account"
           hint={
-            signedIn ? undefined : pending && 'code' in pending ? (
+            signedIn ? undefined : code ? (
               <>
-                Enter this code at{' '}
-                <TextLink href={pending.url} away>
-                  {new URL(pending.url).host}
+                Enter it at{' '}
+                <TextLink href={code.url} away>
+                  {new URL(code.url).host}
                 </TextLink>
-                . This finishes by itself once you have.
+                , signed in to ChatGPT. This page carries on by itself once you have.
               </>
             ) : (
               <Failure>{sign.error ?? (pending && 'error' in pending ? pending.error : null)}</Failure>
@@ -90,12 +105,18 @@ export function useProviderConnect(choice: Choice, model: ManageState['model'], 
         >
           {signedIn ? (
             <span>Signed in</span>
-          ) : pending && 'code' in pending ? (
-            <Copyable value={pending.code} label="the code" />
+          ) : code ? (
+            <>
+              <Copyable value={code.code} label="the code" />
+              <Button href={code.url} target="_blank" rel="noreferrer" onClick={() => void navigator.clipboard?.writeText(code.code).catch(() => {})}>
+                Copy and open
+                <ArrowUpRightIcon aria-hidden />
+              </Button>
+            </>
+          ) : sign.busy || !(sign.error || (pending && 'error' in pending)) ? (
+            <span className="text-muted-foreground">Getting a code…</span>
           ) : (
-            <Button busy={sign.busy} onClick={() => sign.run(() => api.signInChatGPT(), reload)}>
-              Sign in with ChatGPT
-            </Button>
+            <Button onClick={() => sign.run(() => api.signInChatGPT(), reload)}>Get a new code</Button>
           )}
         </Field>
       ) : (

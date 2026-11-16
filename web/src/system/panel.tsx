@@ -3,7 +3,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { type ReactNode, useRef } from 'react';
 import { Control, ControlBar } from './controls.tsx';
 import { KeyLayer, useShortcut } from './keys.tsx';
-import { Backdrop, LayerBody, LayerHeader } from './layer.tsx';
+import { Backdrop, LayerBody, LayerHeader, useLayerOpen } from './layer.tsx';
 
 /**
  * One thing from a list, opened beside the list: it slides over from the right, as wide as three
@@ -42,7 +42,7 @@ export function Panel({
   const popup = useRef<HTMLDivElement>(null);
   const stepping = onPrevious !== undefined || onNext !== undefined;
   return (
-    <Base.Root open={open} onOpenChange={(next) => !next && onClose()}>
+    <Base.Root {...useLayerOpen(open, onClose)}>
       <Base.Portal>
         <Backdrop />
         {/* The panel takes the focus itself, not its first button, so Enter answers and does not press Next. */}

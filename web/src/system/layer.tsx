@@ -1,6 +1,6 @@
 import { Dialog as Base } from '@base-ui/react/dialog';
 import { XIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 // What a Panel and a Dialog share, so the two read as one kind of thing: the same dimming behind, the
@@ -18,6 +18,32 @@ export function Backdrop() {
       className="fixed inset-0 z-50 bg-background/70 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none"
     />
   );
+}
+
+/**
+ * The Root's open state for a layer that is drawn already open. Base UI does not animate a popup that
+ * mounts open, so it opens on the next frame; and a layer the reader dismisses (Escape, a press outside,
+ * the close button) slides away before `onClose` takes it off the page.
+ */
+export function useLayerOpen(open: boolean, onClose: () => void) {
+  const [shown, setShown] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setShown(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  useEffect(() => {
+    if (open) setLeaving(false);
+  }, [open]);
+  return {
+    open: open && shown && !leaving,
+    onOpenChange: (next: boolean) => {
+      if (!next) setLeaving(true);
+    },
+    onOpenChangeComplete: (next: boolean) => {
+      if (!next && leaving) onClose();
+    },
+  };
 }
 
 export const GUTTER = 'px-5 md:px-6';
