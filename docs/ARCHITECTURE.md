@@ -20,7 +20,7 @@ Tiers run cheapest first. A tier either names a label or abstains; the first ans
 | 2. Rules | `src/triage/stages/rules.ts` | none | built and wired |
 | 3. Header heuristics | `src/triage/stages/heuristics.ts` | none (one search of sent mail per new sender) | built and wired; off unless `heuristics = true` |
 | 4. Decision model (Jev / Clef via pi-ai `classify`) | `src/triage/stages/classifier.ts` | ~$0.0001 per message | stage built, provider not wired |
-| 5. Model | `src/triage/stages/model.ts`, `src/model/` | one model call | built; not yet run against a real model |
+| 5. Model | `src/triage/stages/model.ts`, `src/model/` | one model call | built; in use while observing, with a ChatGPT subscription model |
 | Fallback | `src/triage/pipeline.ts` | none | built |
 
 The fallback is `review`: the message stays where it is, gets the review label, and is shown to the user.
@@ -38,7 +38,7 @@ A rule can also carry a condition in the user's own words, which only a model ca
 Rules that matter across tiers:
 
 - A rule that keeps all the mail it matches is a protection and beats any other rule. Otherwise the most specific rule wins (more conditions, then an exact sender over a domain, then a rule that waits for a label over one that does not), so "this sender when the subject contains X" beats "this sender" whichever was written first.
-- A rule sift learned never hides mail from someone the user has written to; the user's own rules do what they say.
+- A rule sift made itself (it does so only when it blocks a sender) never hides mail from someone the user has written to; the user's own rules do what they say.
 - A rule whose label has been removed does nothing.
 - Mail an action rule decides may carry no label at all: decisions, lists and Gmail (which then gets only the mark of what sift did) all allow for that.
 - Spam has a higher confidence bar than archive.
@@ -59,7 +59,7 @@ Every tier, the prompt and the dashboard read one named set of facts about a mes
 
 Decisions flow back down so the same mail is cheaper next time.
 
-1. An agent decision may propose a local rule or sender record.
+1. sift proposes a rule when the same thing keeps happening for a sender (a model's decisions agreeing, or the user's answers), and the user accepts or dismisses it. It writes one by itself only when it blocks a sender.
 2. A rule that Gmail can express is copied to a Gmail filter when the user asks for it. sift does not promote one by itself.
 3. Corrections are detected from Gmail history: the user moving a message back to the inbox or out of spam, archiving or marking as spam what sift kept, or changing its `sift/…` label, is their answer for that one message ([Teaching](#teaching)). It never makes or changes a rule by itself.
 
@@ -67,14 +67,14 @@ Decisions flow back down so the same mail is cheaper next time.
 
 ```
 src/
-  cli/        entry point: sift init | run | status | dev
+  cli/        main.ts parses and dispatches; commands/ has one module per command (init, run, status, dev, dashboard)
   config.ts   data directory and paths
   secrets.ts  encrypts the credential files with a key from the environment
   store/      SQLite (node:sqlite) and numbered SQL migrations
   triage/     pure pipeline: types, header features, stages
   actions/    the only mutation path: executor, undo, decision-to-action planning, Mailbox port, filter validation
   gmail/      the only module that holds the Google token: OAuth, API adapter, history sync
-  dashboard/  read-only JSON API over the database, and the server for the built web app (`sift dashboard`)
+  dashboard/  the server for the built web app and its JSON API: api/ (one module per resource), queries/ (what they read), scope.ts (whose data a request may see)
   daemon/     orchestration: sync pass, triage pass, and the `sift run` loop
   learn/      what the user teaches: suggestions and answers, and answers read from what they did in Gmail
   model/      the only module that talks to model providers (pi-ai): login, credentials, the classifier call
@@ -138,12 +138,12 @@ Preferences live in two places, by kind.
 - **Broad guidance is a Markdown file**, `guidelines.md` in the home directory, in the user's own words ("recruiters count as cold outreach", "anything from my accountant is personal"). It is read on every pass and given to the model. It starts as a few instructions that fit the default labels and lean towards keeping mail in the inbox (`GUIDELINES_TEMPLATE`, `src/config.ts`).
 - **Everything structured or learned is in the database:**
   - `labels`: what mail can be and what to do with each. Seeded with cautious defaults (nothing is marked spam); changed and added to in the dashboard, under Labels.
-  - `rules`: what sift knows without a model, the user's and the ones it learned.
+  - `rules`: what the user has said happens to mail, or what it is; and a rule for each sender sift blocked.
   - `correspondents`: whether the user has ever written to an address, cached.
 
 ## Model tier
 
-When no rule or sender record decides a message, one model call does. It is deliberately not an agent.
+When no rule decides a message, one model call does. It is deliberately not an agent.
 
 - **The model has no tools and takes no action.** Deterministic code gathers the evidence first: the message's facts, the body (fetched on demand, truncated, never stored), how much mail this sender has sent, what was done with it, and whether the user has ever written to them.
 - **Its only output is a label** from the user's list, or `unsure`, with a one-line reason. The reply is validated; anything else abstains.
@@ -151,7 +151,7 @@ When no rule or sender record decides a message, one model call does. It is deli
 - **Three protections apply whatever the model says:** mail from someone the user has written to is never archived or marked spam on the model's word (and "could not check" counts as yes), nor is a reply in a thread the user has written in, and `unsure` or an unknown category leaves the message for review.
 - **It is shown a few of the user's own answers.** Beside each message go up to six stored examples, chosen for it: from the same sender first, then the same domain, then the newest of each label, within a budget of about 1,200 tokens (`src/triage/fewshot.ts`). Each is only sender, subject, the first 300 characters and the owner's label, fenced as untrusted like the email itself, with every field JSON on one line so an example's text cannot close its fence or forge a label. `examples.few_shot = false` in `sift.toml` turns it off.
 - **The prompt marks the email as untrusted** and keeps it apart from the guidelines and the header facts. The worst an injected email can do is get itself given the wrong label, which the audit log can undo.
-- **Learning:** after three consecutive model decisions give a sender the same label, and each ended the way that label says, sift writes a rule for the sender and later mail from them is decided without inference. A rule the user made for that sender is left alone. (Next: propose the rule to the user instead of saving it; see TODO.md.)
+- **Learning:** after five model decisions in a row give a sender the same label, and each ended the way that label says, sift proposes a rule for the sender (`src/store/proposals.ts`); nothing changes until the user accepts it. A sender who already has a rule is left alone.
 
 Models are reached through pi-ai (`src/model/`, the only module that imports it). Only the providers `sift init` offers are registered (OpenAI by key or ChatGPT subscription, Anthropic by key); adding one means adding it in `openModels` and to `MODEL_CHOICES`. pi-ai depends on every provider's SDK; the ones sift cannot call (AWS, Google) are removed from the install by `overrides` in `pnpm-workspace.yaml`, so a new provider may also need its SDK put back there. The model step of `sift init` signs in, including with a ChatGPT subscription, and stores the credential in `model-auth.json`. The `model` setting in `sift.toml` turns the tier on; without it, mail no rule covers is left for review. pi-durable is not used: a triage run is one call, and the message queue in SQLite already gives retry and decide-once.
 
@@ -190,7 +190,7 @@ sift suggests first and acts second. While it only observes, every decision is a
 - **A suggestion** is the current decision for a message, made while observing, that the user has not answered. Decisions that only repeat what the user already said (a rule they wrote, or made by correcting sift) are not suggestions; ones from a rule sift learned are.
 - **Suggestions are listed one per message**, newest first, with the label sift gave it as the button that agrees and a meter for how sure it is (a rule is sure; a model gives a number). Beside it, a menu of what else it might be: the labels the sender's other mail has had, most first, then every other label. The model gives one label today, so the sender's history stands in for its runners-up.
 - **An answer says what one message is, and that is all it says.** Like a spam button with more outcomes: sift records the label, does what that label does to the message in Gmail (see Observe is the default), and keeps the message as an example the model is shown next time. It makes no rule. When the sender has other mail waiting that sift guessed the same way, the dashboard offers the same answer for those in one press.
-- **Every answer is scored.** `feedback` records right, wrong, or "answered" (sift had no suggestion, which is not a mistake), per decision. The summary the Overview reads reports it for the window per tier and per label, with which labels sift took for which.
+- **Every answer is scored.** `feedback` records right, wrong, or "answered" (sift had no suggestion, which is not a mistake), per decision. The summary the home page reads reports it for the window per tier and per label, with which labels sift took for which.
 - **Rules come from proposals and the Rules page, not from answers.** After three answers in a row giving a sender's mail the same label, sift proposes a rule for that sender (`proposeFromAnswers`), as it already does after five model decisions that agree. The panel's "Make a rule…" opens the rule dialog on that sender. The answer endpoint still takes the wider scopes (`label`, `sender`, `domain`, `subject`), which make rules; the dashboard sends only `once`.
 - **Any decision can be answered, not only a suggestion.** Every list opens a message in the same panel: sift's label as the answer to agree with, what else it might be, its reason, the message, and what sift knows about the sender. Answering a message sift had already decided records the user's answer as a new decision for it and, if sift had changed the message in Gmail, takes that change back so the new decision is carried out from where the message started.
 - **A waiting suggestion follows the rules and labels as they are now.** When a rule or a label changes in the dashboard, each waiting suggestion is run through the rules again, with no model (`src/learn/redecide.ts`), and a new decision is recorded where the answer differs: a rule of the user's now decides it, so it stops being a suggestion; its label now does something else, so the same label is recorded with the new outcome (and mail is never newly hidden from a sender who was not checked); or the rule that had decided it is gone, so it goes back to what a tier said before, or to review. Mail the user answered for is never touched, and mail a rule decided when it arrived stays as history.
@@ -279,6 +279,6 @@ Gmail has no API for it, so sift makes the request a mail client would: the send
 ## Open questions
 
 - Using a ChatGPT subscription from a third-party harness is unofficial; whether OpenAI permits it is unconfirmed. An API key works as a fallback.
-- The model tier has only run against a scripted test provider.
+- The model tier has run on real mail only while observing; nothing it decided has been carried out in Gmail yet.
 - Docker egress is not yet restricted to Google and the model providers. [DEPLOY.md](DEPLOY.md) says what it would take; unsubscribing needs a relay of its own first.
 - How suggestions reach the user beyond the dashboard (a digest would need a send path, which sift does not have).
