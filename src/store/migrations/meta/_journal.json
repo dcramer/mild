@@ -36,6 +36,13 @@
       "when": 1794854250574,
       "tag": "0004_bitter_mandrill",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794856433956,
+      "tag": "0005_pass_lock_out_of_postgres",
+      "breakpoints": true
     }
   ]
 }

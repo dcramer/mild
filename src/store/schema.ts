@@ -118,7 +118,6 @@ export const mailboxes = pgTable(
     historyId: text('history_id'), // Gmail history cursor; null forces a full sync
     lastSyncedAt: time('last_synced_at'),
     filtersCheckedAt: time('filters_checked_at'),
-    passUntil: time('pass_until'), // held by the pass running on this mailbox until then; a pass that dies holds it until then too
     aliases: jsonb('aliases').$type<string[]>().notNull().default([]), // Gmail send-as addresses besides the id, as of the last sync that could read them
     createdAt: time('created_at').notNull(),
   },

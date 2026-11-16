@@ -4,15 +4,14 @@ import { loadConfig } from '../../config.ts';
 import type { Activity } from '../../dashboard/controls.ts';
 import { localJobs } from '../../daemon/jobs.ts';
 import { type PassResult, type RunOptions, createWake, runEveryone, runJob, runLoop } from '../../daemon/run.ts';
-import { createGmailApi } from '../../gmail/api.ts';
 import { hasClientSecrets } from '../../gmail/auth.ts';
-import { createGmailMailbox } from '../../gmail/mailbox.ts';
 import { type Account, connectedAddresses, listAccounts, listUsers, personOf } from '../../store/accounts.ts';
 import { preferences } from '../../store/preferences.ts';
 import { openStore } from '../../store/store.ts';
+import { openEphemeral } from '../../ephemeral/open.ts';
 import type { Sql } from '../../store/sql.ts';
 import { paint, ui } from '../ui.ts';
-import { buildControls, gmailClient, openModelTier } from '../controls.ts';
+import { buildControls, gmailFor, openModelTier } from '../controls.ts';
 import { checkSecrets } from '../secrets-check.ts';
 import { serveDashboard, portOption } from '../serve.ts';
 
@@ -31,6 +30,7 @@ export async function run(args: string[]): Promise<void> {
   const config = loadConfig();
   const store = await openStore(config);
   if (store.warning) ui.warn(store.warning);
+  const ephemeral = await openEphemeral(config.settings.redisUrl);
   try {
     const secrets = await checkSecrets(config, store, true);
     const log = (line: string) => ui.plain(`${paint.dim(new Date().toLocaleTimeString(undefined, { hour12: false }))}  ${line}`);
@@ -66,11 +66,12 @@ export async function run(args: string[]): Promise<void> {
       }
     };
     const options: RunOptions = {
+      ephemeral,
       model,
       unsubscribe: (db: Sql, accountId: string, messageId: string) => unsubscribe({ db }, accountId, messageId),
       connect: async (db: Sql, account: Account) => {
-        const client = await gmailClient(config, db, account.email);
-        return { api: createGmailApi(client, account.email), mailbox: createGmailMailbox(client, account.email) };
+        const { api, mailbox } = await gmailFor(config, ephemeral, db, account.email);
+        return { api, mailbox };
       },
       log,
     };
@@ -98,7 +99,7 @@ export async function run(args: string[]): Promise<void> {
     const stopDashboard = values['no-dashboard']
       ? () => {}
       : await serveDashboard(config, store, {
-          controls: await buildControls(config, store, { wake, activity }),
+          controls: await buildControls(config, store, { ephemeral, wake, activity }),
           ...(values.dev ? { dev: true } : {}),
           ...(port === undefined ? {} : { port }),
           ...(values.host ? { host: values.host } : {}),
@@ -132,6 +133,7 @@ export async function run(args: string[]): Promise<void> {
       stopDashboard();
     }
   } finally {
+    await ephemeral.close();
     await store.close();
   }
 }

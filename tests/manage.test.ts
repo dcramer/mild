@@ -2,6 +2,7 @@ import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MAX_BACKFILL, backfill } from '../src/daemon/backfill.ts';
 import type { Job } from '../src/daemon/jobs.ts';
+import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { type RunOptions, type Wake, createWake, runJob, runLoop } from '../src/daemon/run.ts';
 import { signInRefusal } from '../src/cli/sign-in.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
@@ -711,6 +712,7 @@ describe('run loop', () => {
       const running: Promise<unknown>[] = [];
       let tick = 0;
       const options: RunOptions = {
+        ephemeral: memoryEphemeral(),
         connect: () => {
           throw new Error('offline');
         },

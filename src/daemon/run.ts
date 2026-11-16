@@ -5,7 +5,8 @@ import type { GmailApi } from '../gmail/api.ts';
 import type { FilterCheck } from '../actions/rule-filters.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
-import { type Account, claimMailbox, listAccounts, listUsers, releaseMailbox } from '../store/accounts.ts';
+import type { Ephemeral } from '../ephemeral/ephemeral.ts';
+import { type Account, listAccounts, listUsers } from '../store/accounts.ts';
 import type { Store } from '../store/store.ts';
 import { EXAMPLE_KEEP_DAYS, pruneExamples } from '../store/examples.ts';
 import { purgeSuggestionBodies } from '../store/messages.ts';
@@ -19,6 +20,7 @@ import { type SyncReport, syncAccount } from './sync.ts';
 import { type TriageReport, triageAccount } from './triage.ts';
 
 export interface RunOptions {
+  ephemeral: Ephemeral;
   /** Opens a provider connection for an account, with the sign-in kept in `db`, its person's database. */
   connect: (db: Sql, account: Account) => { api: GmailApi; mailbox: Mailbox } | Promise<{ api: GmailApi; mailbox: Mailbox }>;
   /** The inference tier of the person whose database `db` is: null when they have no model, or it cannot be reached. */
@@ -88,12 +90,13 @@ export async function runJob(store: Store, job: Job, options: RunOptions): Promi
 
 /** Null when another pass holds the mailbox, or it was removed while this one ran. */
 async function passMailbox(db: Sql, account: Account, options: RunOptions): Promise<PassResult | null> {
-  const now = (options.now ?? Date.now)();
-  if (!(await claimMailbox(db, account.id, now, now + PASS_HOLD_MS))) return null;
+  const lock = `lock:pass:${account.id}`;
+  const token = await options.ephemeral.claim(lock, PASS_HOLD_MS);
+  if (token === null) return null;
   try {
     return await runMailbox(db, account, options);
   } finally {
-    await releaseMailbox(db, account.id);
+    await options.ephemeral.release(lock, token);
   }
 }
 

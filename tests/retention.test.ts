@@ -2,6 +2,7 @@ import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { RETENTION_DAYS, pruneOld } from '../src/daemon/retention.ts';
 import { KEEP_BODY_DAYS } from '../src/daemon/bodies.ts';
+import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { type RunOptions, type Wake, runJob, runLoop, upkeep } from '../src/daemon/run.ts';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { recordSync } from '../src/store/accounts.ts';
@@ -159,6 +160,7 @@ describe('retention', () => {
     const stop = new AbortController();
     const running: Promise<unknown>[] = [];
     const options: RunOptions = {
+      ephemeral: memoryEphemeral(),
       connect: () => {
         throw new Error('not connected');
       },

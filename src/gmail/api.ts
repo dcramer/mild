@@ -1,7 +1,7 @@
 import { gmail, type gmail_v1 } from '@googleapis/gmail';
 import type { OAuth2Client } from 'google-auth-library';
 import { type MessageContent, findHtml, readContent } from './body.ts';
-import { pace } from './quota.ts';
+import type { Pace } from './quota.ts';
 
 /** Headers fetched for triage. Bodies are never requested here. */
 const METADATA_HEADERS = [
@@ -103,9 +103,9 @@ export const isNotFound = (error: unknown) => {
  * One message's HTML part, for the dashboard to show while it is open. Nothing keeps it. Null when the
  * message has no HTML part or is no longer in Gmail. Does not mark it read.
  */
-export async function getMessageHtml(auth: OAuth2Client, account: string, messageId: string): Promise<string | null> {
+export async function getMessageHtml(auth: OAuth2Client, pace: Pace, messageId: string): Promise<string | null> {
   try {
-    await pace(account, 60);
+    await pace(60);
     const { data } = await gmail({ version: 'v1', auth }).users.messages.get({ userId: 'me', id: messageId, format: 'full' });
     return findHtml(data.payload);
   } catch (error) {
@@ -121,19 +121,19 @@ export async function readProfile(auth: OAuth2Client) {
   return { emailAddress: data.emailAddress.toLowerCase(), historyId: data.historyId };
 }
 
-/** Every call waits its turn under `account`'s share of Google's quota (`pace`). */
-export function createGmailApi(auth: OAuth2Client, account: string): GmailApi {
+/** Every call first waits its turn under the mailbox's share of Google's quota. */
+export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
   const client: gmail_v1.Gmail = gmail({ version: 'v1', auth });
   const userId = 'me';
 
   return {
     async getProfile() {
-      await pace(account, 1);
+      await pace(1);
       return await readProfile(auth);
     },
 
     async listHistory(startHistoryId, pageToken) {
-      await pace(account, 2);
+      await pace(2);
       try {
         const { data } = await client.users.history.list({
           userId,
@@ -164,14 +164,14 @@ export function createGmailApi(auth: OAuth2Client, account: string): GmailApi {
     },
 
     async searchInbox(query, pageToken) {
-      await pace(account, 5);
+      await pace(5);
       const { data } = await client.users.messages.list({ userId, q: query, labelIds: ['INBOX'], maxResults: 500, ...(pageToken ? { pageToken } : {}) });
       const ids = (data.messages ?? []).map((m) => m.id).filter((id) => typeof id === 'string');
       return { ids, ...(data.nextPageToken ? { nextPageToken: data.nextPageToken } : {}) };
     },
 
     async getLabelIds(messageId) {
-      await pace(account, 20);
+      await pace(20);
       try {
         const { data } = await client.users.messages.get({ userId, id: messageId, format: 'minimal' });
         return data.labelIds ?? [];
@@ -182,13 +182,13 @@ export function createGmailApi(auth: OAuth2Client, account: string): GmailApi {
     },
 
     async listLabels() {
-      await pace(account, 1);
+      await pace(1);
       const { data } = await client.users.labels.list({ userId });
       return (data.labels ?? []).flatMap((l) => (l.id && l.name ? [{ id: l.id, name: l.name }] : []));
     },
 
     async listSendAs() {
-      await pace(account, 1);
+      await pace(1);
       const { data } = await client.users.settings.sendAs.list({ userId });
       // An address added but never confirmed from its own inbox is not shown to be the owner's.
       return (data.sendAs ?? []).flatMap((a) => (a.sendAsEmail && a.verificationStatus !== 'pending' ? [a.sendAsEmail.toLowerCase()] : []));
@@ -199,7 +199,7 @@ export function createGmailApi(auth: OAuth2Client, account: string): GmailApi {
     },
 
     async getContent(messageId) {
-      await pace(account, 60);
+      await pace(60);
       try {
         const { data } = await client.users.messages.get({ userId, id: messageId, format: 'full' });
         return readContent(data.payload);
@@ -210,7 +210,7 @@ export function createGmailApi(auth: OAuth2Client, account: string): GmailApi {
     },
 
     async getThread(threadId) {
-      await pace(account, 40);
+      await pace(40);
       try {
         const { data } = await client.users.threads.get({ userId, id: threadId, format: 'minimal' });
         return (data.messages ?? [])
@@ -224,7 +224,7 @@ export function createGmailApi(auth: OAuth2Client, account: string): GmailApi {
     },
 
     async getMetadata(messageId) {
-      await pace(account, 20);
+      await pace(20);
       try {
         const { data } = await client.users.messages.get({ userId, id: messageId, format: 'metadata', metadataHeaders: [...METADATA_HEADERS] });
         if (!data.id || !data.threadId) return null;

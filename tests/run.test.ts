@@ -8,7 +8,8 @@ import { writeRuleFilter } from '../src/actions/rule-filters.ts';
 import { applyFeedback } from '../src/learn/feedback.ts';
 import { userChanges } from '../src/learn/gmail.ts';
 import { lastStandingChange } from '../src/store/actions.ts';
-import { addMailbox, claimMailbox, connectAccount, deleteUser, recordSync, releaseMailbox, removeMailbox } from '../src/store/accounts.ts';
+import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
+import { addMailbox, connectAccount, deleteUser, recordSync, removeMailbox } from '../src/store/accounts.ts';
 import { onePerson, openUserDb, raw } from './fixtures.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { listUndecided } from '../src/store/messages.ts';
@@ -65,7 +66,7 @@ function api(): GmailApi {
 /** A model that can place nothing. Mail sift asks about comes from a model's "unsure"; with no model, nothing is asked. */
 const unsure = async () => ({ model: 'test/model', judge: async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 }) });
 
-const options = (): RunOptions => ({ connect: () => ({ api: api(), mailbox }), log: (line) => logs.push(line), now: () => 5000 });
+const options = (): RunOptions => ({ ephemeral: memoryEphemeral(), connect: () => ({ api: api(), mailbox }), log: (line) => logs.push(line), now: () => 5000 });
 /** The person's database, with sift on or off for them. */
 const active = async (on: boolean) => {
   await setActive(db, on);
@@ -190,24 +191,16 @@ describe('runOnce', () => {
 });
 
 describe('one pass at a time per mailbox', () => {
-  it('a claim holds until it is released or runs out', async () => {
-    expect(await claimMailbox(db, ACCOUNT, 1000, 2000)).toBe(true);
-    expect(await claimMailbox(db, ACCOUNT, 1500, 2500)).toBe(false);
-    expect(await claimMailbox(db, ACCOUNT, 2001, 3000)).toBe(true);
-    await releaseMailbox(db, ACCOUNT);
-    expect(await claimMailbox(db, ACCOUNT, 2002, 3000)).toBe(true);
-  });
-
   it('a pass for a mailbox another pass holds does nothing, and a finished pass lets go', async () => {
-    const { store, db: own } = await onePerson(ACCOUNT);
+    const { store } = await onePerson(ACCOUNT);
     const person = (await raw(store.central).get<{ id: number }>('SELECT id FROM users'))!.id;
     const pass: Job = { kind: 'pass', person, account: ACCOUNT };
     let connected = 0;
     const counting: RunOptions = { ...options(), connect: () => (connected++, { api: api(), mailbox }) };
-    await claimMailbox(own, ACCOUNT, 0, 10_000);
+    const token = await counting.ephemeral.claim(`lock:pass:${ACCOUNT}`, 10_000);
     expect(await runJob(store, pass, counting)).toBeNull();
     expect(connected).toBe(0);
-    await releaseMailbox(own, ACCOUNT);
+    await counting.ephemeral.release(`lock:pass:${ACCOUNT}`, token!);
     expect(await runJob(store, pass, counting)).toMatchObject({ email: ACCOUNT });
     expect(await runJob(store, pass, counting)).toMatchObject({ email: ACCOUNT });
     expect(connected).toBe(2);

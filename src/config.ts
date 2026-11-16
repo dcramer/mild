@@ -26,6 +26,11 @@ export interface Settings {
    */
   databaseMigrationUrl?: string;
   /**
+   * A Redis server for what sift keeps only briefly (sign-ins in progress, which pass holds a mailbox,
+   * Gmail quota). Unset: kept in this process's memory, which holds only while one `sift run` is running.
+   */
+  redisUrl?: string;
+  /**
    * How people sign in to ChatGPT. `device-code` (the default) enters a code at OpenAI and reaches
    * ChatGPT through Codex's backend. `redirect` is OpenAI's Sign in with ChatGPT, on the documented API:
    * its sign-in can only return to 127.0.0.1 on the person's own machine, so on a server they paste the
@@ -44,6 +49,7 @@ const ENVIRONMENT = {
   SIFT_DASHBOARD_ALLOW: { setting: 'dashboardAllow', key: ['dashboard', 'allow'], as: 'list' },
   DATABASE_URL: { setting: 'databaseUrl', key: ['database', 'url'], as: 'string' },
   DATABASE_MIGRATION_URL: { setting: 'databaseMigrationUrl', key: ['database', 'migration_url'], as: 'string' },
+  REDIS_URL: { setting: 'redisUrl', key: ['redis', 'url'], as: 'string' },
   SIFT_CHATGPT_SIGN_IN: { setting: 'chatgptSignIn', key: ['chatgpt', 'sign_in'], as: 'string' },
 } as const satisfies Record<string, { setting: keyof Settings; key: readonly string[]; as: 'number' | 'string' | 'list' }>;
 type Variable = keyof typeof ENVIRONMENT;
@@ -200,6 +206,13 @@ export function parseSettings(text: string, path = 'sift.toml', environment: rea
         if (sub === 'url') settings.databaseUrl = url;
         else settings.databaseMigrationUrl = url;
       }
+    } else if (key === 'redis') {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) throw bad('redis', 'a table');
+      for (const [sub, url] of Object.entries(value as Record<string, unknown>)) {
+        if (sub !== 'url') throw new Error(`${path}: unknown setting redis.${sub}.`);
+        if (typeof url !== 'string' || !/^rediss?:\/\//.test(url)) throw bad('redis.url', 'an address starting redis:// or rediss://');
+        settings.redisUrl = url;
+      }
     } else if (key === 'chatgpt') {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) throw bad('chatgpt', 'a table');
       for (const [sub, way] of Object.entries(value as Record<string, unknown>)) {
@@ -229,6 +242,9 @@ ${settings.dashboardAllow ? `allow = ${JSON.stringify(settings.dashboardAllow)}`
 # A Postgres server to keep everything in. Unset: sift keeps it in this directory itself (PGlite).
 # migration_url: the role that owns the tables, if sift should run as one that owns nothing.
 ${settings.databaseUrl ? `[database]\nurl = ${JSON.stringify(settings.databaseUrl)}\n${settings.databaseMigrationUrl ? `migration_url = ${JSON.stringify(settings.databaseMigrationUrl)}\n` : ''}` : '# [database]\n# url = "postgres://user:password@host/sift"\n'}
+# A Redis server for what sift keeps only briefly. Unset: this process's memory, which is enough while
+# one sift runs.
+${settings.redisUrl ? `[redis]\nurl = ${JSON.stringify(settings.redisUrl)}\n` : '# [redis]\n# url = "redis://localhost:6379"\n'}
 # How people sign in to ChatGPT: "device-code", a code entered at OpenAI, reaching ChatGPT through
 # Codex's backend; or "redirect", OpenAI's Sign in with ChatGPT on its documented API, where on a server
 # the person pastes back the address of the page that fails to load. Switching signs everyone out of ChatGPT.
