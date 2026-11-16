@@ -1,4 +1,4 @@
-import { openToRekey, sealSecret, staleSecret } from '../secrets.ts';
+import { openSecret, openToRekey, sealSecret, staleSecret } from '../secrets.ts';
 import { and, eq, examples, suggestionBodies } from './query.ts';
 import type { Sql } from './sql.ts';
 
@@ -12,13 +12,13 @@ export function sealBody(db: Sql, accountId: string, messageId: string, part: Pa
   return value === null ? null : sealSecret(nameOf(db, accountId, messageId, part), value, db.keys);
 }
 
-/**
- * A stored text or HTML, decrypted. One stored plain before there was a key is returned as it is until
- * `rekeyBodies` seals it: unlike a sign-in, a planted one gains nobody anything.
- */
+/** A stored text or HTML, decrypted. Refuses a plain one once there is a key, as `openSecret` does: every one was sealed at start. */
 export function openBody(db: Sql, accountId: string, messageId: string, part: Part, stored: string | null): string | null {
-  return stored === null ? null : openToRekey(nameOf(db, accountId, messageId, part), stored, db.keys);
+  return stored === null ? null : openSecret(nameOf(db, accountId, messageId, part), stored, db.keys);
 }
+
+const forRekey = (db: Sql, accountId: string, messageId: string, part: Part, stored: string | null) =>
+  stored === null ? null : openToRekey(nameOf(db, accountId, messageId, part), stored, db.keys);
 
 /**
  * Bring every message body in `db` under the current key, as `rekeyCredentials` does for sign-ins. Throws
@@ -49,8 +49,8 @@ export async function rekeyBodies(db: Sql, write = true): Promise<number> {
       .map((r) => ({
         table,
         row: r,
-        text: sealBody(db, r.accountId, r.messageId, 'text', openBody(db, r.accountId, r.messageId, 'text', r.text)),
-        html: sealBody(db, r.accountId, r.messageId, 'html', openBody(db, r.accountId, r.messageId, 'html', r.html)),
+        text: sealBody(db, r.accountId, r.messageId, 'text', forRekey(db, r.accountId, r.messageId, 'text', r.text)),
+        html: sealBody(db, r.accountId, r.messageId, 'html', forRekey(db, r.accountId, r.messageId, 'html', r.html)),
       })),
   );
   if (write)

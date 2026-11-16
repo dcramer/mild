@@ -220,6 +220,7 @@ describe('message bodies', () => {
     const { as, hold, stored } = await alpha();
     await hold(await as(NONE), 'm1', 'Hello', '<p>Hello</p>');
     await hold(await as(A), 'm2', 'Plain', null);
+    await expect(messageDetail(await as(A), await everything(await as(A)), 'alpha@example.org', 'm1')).rejects.toThrow('stored unencrypted');
     expect(await rekeyBodies(await as(B_AFTER_A), false)).toBe(2);
     expect(await rekeyBodies(await as(B_AFTER_A))).toBe(2);
     expect(await rekeyBodies(await as(B))).toBe(0);

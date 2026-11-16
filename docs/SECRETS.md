@@ -37,7 +37,7 @@ Rotating the key (above) is enough only if nobody who had the key could also hav
 | Model keys and sign-ins | Revoke the API key, or sign out other sessions, at the provider. Then sign in again under Settings in the dashboard. |
 | Dashboard sessions (`dashboard-key`) | Delete the file. Sift makes a new one and everyone is signed out. |
 
-Then rotate the key itself. The key does not encrypt the rest of the databases, so a copied home also carries its mail records. Bodies stored plain before there was a key are read as they are until the next start seals them.
+Then rotate the key itself. The key does not encrypt the rest of the databases, so a copied home also carries its mail records.
 
 ## Losing the key
 
