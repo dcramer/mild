@@ -59,3 +59,8 @@ export function storedFacts(db: DatabaseSync, accountId: string, messageId: stri
   if (!row) return null;
   return row.facts_json ? (JSON.parse(row.facts_json) as Facts) : deriveFacts(toMessage(accountId, row));
 }
+
+/** Replace a message's recorded facts, once reading the whole message has added to them. */
+export function recordFacts(db: DatabaseSync, accountId: string, messageId: string, facts: Facts): void {
+  db.prepare('UPDATE messages SET facts_json = ? WHERE account_id = ? AND id = ?').run(JSON.stringify(facts), accountId, messageId);
+}

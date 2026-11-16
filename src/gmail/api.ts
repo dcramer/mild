@@ -1,6 +1,6 @@
 import { gmail, type gmail_v1 } from '@googleapis/gmail';
 import type { OAuth2Client } from 'google-auth-library';
-import { extractText } from './body.ts';
+import { type MessageContent, readContent } from './body.ts';
 
 /** Headers fetched for triage. Bodies are never requested here. */
 export const METADATA_HEADERS = [
@@ -73,6 +73,8 @@ export interface GmailApi {
   getMetadata(messageId: string): Promise<RawMessage | null>;
   /** The message's readable text, truncated; null when the message no longer exists. Does not mark it read. Never stored. */
   getBodyText(messageId: string): Promise<string | null>;
+  /** The same text with the facts only the whole message shows (attachments, tracking); null when the message no longer exists. Does not mark it read. */
+  getContent(messageId: string): Promise<MessageContent | null>;
   /** The whole message as received (RFC 822); null when it no longer exists. Does not mark it read. */
   getRaw(messageId: string): Promise<Buffer | null>;
 }
@@ -123,9 +125,13 @@ export function createGmailApi(auth: OAuth2Client): GmailApi {
     },
 
     async getBodyText(messageId) {
+      return (await this.getContent(messageId))?.text ?? null;
+    },
+
+    async getContent(messageId) {
       try {
         const { data } = await client.users.messages.get({ userId, id: messageId, format: 'full' });
-        return extractText(data.payload);
+        return readContent(data.payload);
       } catch (error) {
         if (isNotFound(error)) return null;
         throw error;

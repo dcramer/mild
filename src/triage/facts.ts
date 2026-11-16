@@ -1,15 +1,25 @@
 import { bulkSignals, parseAddress, parseAddressList } from './features.ts';
+import type { HtmlFacts } from './html.ts';
 import type { MessageFacts } from './types.ts';
 
 /** `fail` is anything recorded that is not a pass (softfail, neutral, an error). `none`: the receiver recorded no result. */
 export type AuthResult = 'pass' | 'fail' | 'none';
 
 /**
+ * What only the whole message shows. It is read when a model is about to judge the message, so these are
+ * absent until then, and the HTML ones stay absent for mail with no HTML part.
+ */
+export interface ContentFacts extends Partial<HtmlFacts> {
+  /** A file came with it. Images shown inline in the text do not count. */
+  hasAttachments: boolean;
+}
+
+/**
  * What is known about one message, by name. The prompt, the heuristics tier, the dashboard and rule
  * conditions all read these instead of re-reading headers. Only what can be checked is here: whether
  * mail "reads as AI-generated" or what language it is in are judgements, and belong to a model.
  */
-export interface Facts {
+export interface Facts extends Partial<ContentFacts> {
   /** `one-click` is RFC 8058, the only kind sift will use itself. */
   unsubscribe: 'none' | 'header' | 'one-click';
   listId: string | null;
@@ -101,7 +111,7 @@ const CATEGORIES = {
 } as const;
 
 /** The facts a message's headers and labels give. The account id is the owner's address. */
-export function deriveFacts(message: Pick<MessageFacts, 'accountId' | 'from' | 'to' | 'cc' | 'labelIds' | 'headers'>): Facts {
+export function deriveFacts(message: Pick<MessageFacts, 'accountId' | 'from' | 'to' | 'cc' | 'labelIds' | 'headers'>, content?: ContentFacts): Facts {
   const { headers } = message;
   const signals = bulkSignals(headers);
   const results = headers['authentication-results'] ?? '';
@@ -123,12 +133,13 @@ export function deriveFacts(message: Pick<MessageFacts, 'accountId' | 'from' | '
     addressed: message.to.some(isOwner) ? 'to' : message.cc.some(isOwner) ? 'cc' : 'neither',
     isReply: (headers['in-reply-to'] ?? headers['references'] ?? '').trim() !== '',
     category: category ?? null,
+    ...content,
   };
 }
 
 const yesNo = (value: boolean) => (value ? 'yes' : 'no');
 
-/** The facts as `name: value` lines, for the model. */
+/** The facts as `name: value` lines, for the model. One that is not known has no line. */
 export function describeFacts(facts: Facts): string[] {
   const addressed = { to: 'directly (To)', cc: 'by copy (Cc)', neither: 'no (a list or a blind copy)' }[facts.addressed];
   return [
@@ -142,5 +153,12 @@ export function describeFacts(facts: Facts): string[] {
     `Sender authentication: DMARC ${facts.dmarc}, SPF ${facts.spf}, DKIM ${facts.dkim}`,
     `Replies go to a different address: ${yesNo(facts.replyToDiffers)}`,
     `Gmail's category: ${facts.category ?? '(none)'}`,
+    ...(facts.hasAttachments === undefined ? [] : [`Has attachments: ${yesNo(facts.hasAttachments)}`]),
+    ...(facts.trackingPixel === undefined ? [] : [`Has a tracking pixel: ${yesNo(facts.trackingPixel)}`]),
+    ...(facts.trackedLinks === undefined ? [] : [`Links pass through click tracking: ${yesNo(facts.trackedLinks)}`]),
+    ...(facts.linkHosts === undefined ? [] : [`Distinct sites linked to: ${facts.linkHosts}`]),
+    ...(facts.linksOffDomain === undefined
+      ? []
+      : [`Links go to the sender's own domain: ${facts.linkHosts === 0 ? '(no links)' : yesNo(!facts.linksOffDomain)}`]),
   ];
 }

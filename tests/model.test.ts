@@ -264,7 +264,12 @@ describe('gatherEvidence', () => {
     const f = facts({ accountId: ACCOUNT });
     recordSync(db, ACCOUNT, [f], '2');
     let lookups = 0;
-    const sources = { db, api: { getBodyText: async () => 'hello' }, mailbox: { hasSentTo: async () => (lookups++, false) }, now: () => 1000 };
+    const sources = {
+      db,
+      api: { getContent: async () => ({ text: 'hello', facts: { hasAttachments: false } }) },
+      mailbox: { hasSentTo: async () => (lookups++, false) },
+      now: () => 1000,
+    };
 
     const first = await gatherEvidence(sources, f);
     await gatherEvidence(sources, f);
@@ -278,7 +283,7 @@ describe('gatherEvidence', () => {
     const fail = async () => {
       throw new Error('network');
     };
-    const result = await gatherEvidence({ db, api: { getBodyText: fail }, mailbox: { hasSentTo: fail } }, facts({ accountId: ACCOUNT }));
+    const result = await gatherEvidence({ db, api: { getContent: fail }, mailbox: { hasSentTo: fail } }, facts({ accountId: ACCOUNT }));
     expect(result).toMatchObject({ body: null, sender: { userHasWritten: null } });
   });
 });

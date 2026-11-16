@@ -120,6 +120,12 @@ export interface MessageFactSet {
   addressed: 'to' | 'cc' | 'neither';
   isReply: boolean;
   category: 'personal' | 'social' | 'promotions' | 'updates' | 'forums' | null;
+  /** These five are known only once a model has been asked about the message; the last four only for mail with HTML. */
+  hasAttachments?: boolean;
+  trackingPixel?: boolean;
+  linkHosts?: number;
+  trackedLinks?: boolean;
+  linksOffDomain?: boolean;
 }
 
 /** What sift knows about one sender, to judge their mail by. */
