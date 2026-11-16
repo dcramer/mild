@@ -8,7 +8,7 @@ import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { type RuleStart, keepStart, messageStart } from '@/lib/rule-start.ts';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { type MessageDetail, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ago, count, dateTime, describeMatch, money, sureness, tier } from '@/lib/format.ts';
+import { ago, count, dateTime, money, sureness, tier } from '@/lib/format.ts';
 import {
   AnswerPicker,
   Button,
@@ -250,8 +250,7 @@ function Body({
             labels={labels}
             start={ruling}
             onClose={() => setRuling(null)}
-            onAdded={(match, outcome, rule) => {
-              toast(`Rule added: ${describeMatch(match)} → ${outcome}`);
+            onAdded={(match, rule) => {
               if (rule.whenLabel !== undefined && rule.whenLabel === current?.labelId && rule.disposition === 'keep' && covers(match)) keepThis(rule.whenLabel);
             }}
           />

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { madeFromProposal } from '../../../../store/proposals.ts';
-import { setRule } from '../../../../store/rules.ts';
+import { listRules, setRule } from '../../../../store/rules.ts';
 
 import { RuleFacts, type RuleMatch } from '../../../types.ts';
 import { accountId, decided, id, labelId, named, redecide, write } from '../../route.ts';
@@ -38,14 +38,16 @@ export default write({
       path: ['whenLabel'],
       message: 'A rule that says what mail is cannot also wait for a label.',
     }),
-  reply: z.object({ id: z.string(), redecided: z.number() }),
+  /** `replaced`: a rule with exactly these conditions was there and now says this, so removing it would not put things back. */
+  reply: z.object({ id: z.string(), replaced: z.boolean(), redecided: z.number() }),
   touches: named,
   run: async ({ db, now }, { accountId, match, label, whenLabel, disposition, markRead, unsubscribe, when, proposal }) => {
-    const created = await db.transaction(async (tx) => {
+    const { created, replaced } = await db.transaction(async (tx) => {
       // First: making the rule also settles any proposal for exactly that mail.
       if (proposal !== undefined && !(await madeFromProposal(tx, proposal, accountId, now()))) throw new Error('That proposal is no longer open.');
+      const before = new Set((await listRules(tx, accountId)).map((r) => r.id));
       // A rule with exactly these conditions is replaced; the dialog shows which.
-      return await setRule(
+      const id = await setRule(
         tx,
         accountId,
         match,
@@ -60,7 +62,8 @@ export default write({
         'user',
         now(),
       );
+      return { created: id, replaced: before.has(id) };
     });
-    return { id: created, redecided: await redecide(db, now, accountId) };
+    return { id: created, replaced, redecided: await redecide(db, now, accountId) };
   },
 });

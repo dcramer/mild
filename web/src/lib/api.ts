@@ -193,7 +193,7 @@ export const api = {
     when?: string;
     /** The proposal it was made from, which this resolves. */
     proposal?: number;
-  }) => post('/api/rules', rule),
+  }) => post<{ id: string; replaced: boolean }>('/api/rules', rule),
   removeRule: (id: string) => post('/api/rules/remove', { id }),
   /** Dismiss a proposal, or accept one of kind `always`. A proposed rule is made with `addRule`. */
   resolveProposal: (id: number, accept: boolean) => post('/api/proposals', { id, accept }),

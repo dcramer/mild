@@ -2,8 +2,8 @@ import { PlusIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { type LabelSummary, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
 import { type By, type RuleStart, replacedBy } from '@/lib/rule-start.ts';
-import { FACTS, type FactAnswer, type FactKey, factConditions, factParam, factWords, outcomeName } from '@/lib/format.ts';
-import { Button, Check, Dialog, Does, Failure, Field, Form, Input, Select } from '@/system';
+import { FACTS, type FactAnswer, type FactKey, describeMatch, factConditions, factParam, factWords, outcomeName } from '@/lib/format.ts';
+import { Button, Check, Dialog, Does, Failure, Field, Form, Input, Select, useToast } from '@/system';
 
 const BY = [
   ['from', 'from'],
@@ -45,10 +45,13 @@ export function AddRuleDialog({
   /** Adding the rule accepts this proposal; closing without adding leaves it open. */
   proposal?: number;
   onClose: () => void;
-  /** `rule` is what the rule does, for a caller that acts on the message it was opened from. */
-  onAdded: (match: RuleMatch, outcome: string, rule: { whenLabel?: string; disposition?: Action }) => void;
+  /** After the rule is added and said. `rule` is what it does, for a caller that acts on the message it was opened from. */
+  onAdded?: (match: RuleMatch, rule: { whenLabel?: string; disposition?: Action }) => void;
 }) {
   const { busy, error, run } = useAction();
+  // Undo is pressed after the dialog has closed, so what it reports goes to a toast.
+  const later = useAction();
+  const toast = useToast();
   const [by, setBy] = useState<By>(start?.by ?? 'from');
   const [value, setValue] = useState(start?.value ?? '');
   const [facts, setFacts] = useState<FactAnswer[]>(start?.facts ?? []);
@@ -72,10 +75,21 @@ export function AddRuleDialog({
   const replaces = ready ? replacedBy(rules.data?.rules ?? [], accountId, match, waitsFor?.id ?? null) : undefined;
   const replacing = replaces ? (replaces.kind === 'label' ? replaces.override : replaces.disposition) : null;
   const unused = (except: FactKey | null) => ANSWERS.filter((a) => a.key === except || !facts.some((f) => f.key === a.key));
-  const add = () =>
+  const add = () => {
+    let added: { id: string; replaced: boolean } | null = null;
+    const outcome = waitsFor ? `${outcomeName(action || 'archive')} when ${waitsFor.name}` : chosen ? chosen.name : outcomeName(action || 'archive');
+    const takeBack = (id: string) =>
+      later.run(
+        () =>
+          api.removeRule(id).catch((failure: unknown) => {
+            toast('Could not take the rule back', { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) });
+            throw failure;
+          }),
+        () => toast('Rule taken back'),
+      );
     run(
-      () =>
-        api.addRule({
+      async () => {
+        added = await api.addRule({
           accountId,
           match,
           ...(chosen ? { label: chosen.id } : {}),
@@ -85,15 +99,17 @@ export function AddRuleDialog({
           ...(!chosen && unsubscribe ? { unsubscribe } : {}),
           ...(chosen && condition.trim() !== '' ? { when: condition.trim() } : {}),
           ...(proposal === undefined ? {} : { proposal }),
-        }),
-      () => {
-        onAdded(match, waitsFor ? `${outcomeName(action || 'archive')} when ${waitsFor.name}` : chosen ? chosen.name : outcomeName(action || 'archive'), {
-          ...(waitsFor ? { whenLabel: waitsFor.id } : {}),
-          ...(action ? { disposition: action } : {}),
         });
+      },
+      () => {
+        // Removing a rule that replaced another would not bring the other back, so only a new one can be undone.
+        const fresh = added?.replaced === false ? added.id : null;
+        toast(`Rule added: ${describeMatch(match)} → ${outcome}`, fresh === null ? {} : { undo: () => takeBack(fresh) });
+        onAdded?.(match, { ...(waitsFor ? { whenLabel: waitsFor.id } : {}), ...(action ? { disposition: action } : {}) });
         onClose();
       },
     );
+  };
 
   return (
     <Dialog

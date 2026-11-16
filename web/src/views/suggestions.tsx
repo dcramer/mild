@@ -122,7 +122,6 @@ function StopReadingDialog({ proposal, onClose }: { proposal: Proposal; onClose:
 /** A rule sift thinks is worth having. Nothing changes until the user has seen the rule and said yes. */
 function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonly AnswerLabel[] }) {
   const { busy, error, run } = useAction();
-  const toast = useToast();
   const [open, setOpen] = useState(false);
   return (
     <li className="row flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
@@ -148,7 +147,6 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
           start={proposalStart(proposal.match, proposal.labelId)}
           proposal={proposal.id}
           onClose={() => setOpen(false)}
-          onAdded={(match, outcome) => toast(`Rule added: ${describeMatch(match)} → ${outcome}`)}
         />
       ) : (
         <StopReadingDialog proposal={proposal} onClose={() => setOpen(false)} />

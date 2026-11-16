@@ -55,7 +55,9 @@ function Receipt({ toast, front }: { toast: Base.Root.ToastObject<Own>; front: b
       toast={toast}
       swipeDirection="down"
       className={cn(
-        'sheet pointer-events-auto flex min-h-11 w-full flex-wrap items-center justify-end gap-x-2 py-1.5 pr-1.5 pl-4 md:w-auto md:max-w-2xl md:flex-nowrap',
+        'sheet pointer-events-auto flex min-h-11 w-full flex-wrap items-center justify-end gap-x-2 py-1.5 pl-4 md:w-auto md:max-w-2xl md:flex-nowrap',
+        // A press brings its own padding to the right edge; words alone need the same room as on the left.
+        undo || action || failed ? 'pr-1.5' : 'pr-4',
         'transition-[opacity,translate] duration-150 ease-out data-ending-style:opacity-0 data-limited:hidden data-starting-style:translate-y-2 data-starting-style:opacity-0 motion-reduce:transition-none',
         // Red cannot be read on ink (2.2:1), so a failure keeps the dark ground and says so in red (6.6:1).
         failed ? 'border-destructive bg-popover' : 'border-foreground bg-foreground text-background',
