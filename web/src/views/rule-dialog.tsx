@@ -107,11 +107,7 @@ export function AddRuleDialog({
           inline
           label="Only when"
           hint={
-            needsLabel
-              ? 'Choose what it is, below, for this to describe.'
-              : condition.trim() !== ''
-                ? 'A model reads each message it matches to check.'
-                : undefined
+            needsLabel ? 'Choose a label below for this to describe.' : condition.trim() !== '' ? 'A model reads each message it matches to check.' : undefined
           }
         >
           <Input
@@ -122,11 +118,11 @@ export function AddRuleDialog({
             onChange={(event) => setCondition(event.target.value)}
           />
         </Field>
-        <Field inline label="Is">
+        <Field inline label="Label as">
           <Select
-            label="What the mail is"
+            label="Label it as"
             value={label}
-            options={[['', 'No label'] as const, ...labels.map((l) => [l.id, l.name] as const)]}
+            options={[['', 'No label, just act'] as const, ...labels.map((l) => [l.id, l.name] as const)]}
             onChange={setLabel}
           />
         </Field>
