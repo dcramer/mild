@@ -9,7 +9,13 @@ import { Button, Does, Empty, ListView, Look, Loading, OnPhone, Share, Sub, Tabl
 
 /** How often sift had the label right when the reader checked, in yellow when it is often wrong. */
 function Right({ label }: { label: LabelSummary }) {
-  if (label.record.reviewed === 0) return <span className="text-muted-foreground">Not checked</span>;
+  if (label.record.reviewed === 0)
+    return (
+      <span className="text-muted-foreground">
+        <span aria-hidden>—</span>
+        <span className="sr-only">No answers yet</span>
+      </span>
+    );
   const text = `${percent(label.record.right, label.record.reviewed)} right`;
   return weak(label) ? <Look>{text}</Look> : <span className="text-muted-foreground">{text}</span>;
 }
