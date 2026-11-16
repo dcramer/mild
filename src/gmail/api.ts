@@ -68,6 +68,10 @@ export interface GmailApi {
   searchInbox(query: string, pageToken?: string): Promise<MessageIdPage>;
   /** Null when the message no longer exists. Does not mark it read. */
   getMetadata(messageId: string): Promise<RawMessage | null>;
+  /** The message's labels now, or null when it no longer exists. Does not mark it read. */
+  getLabelIds(messageId: string): Promise<string[] | null>;
+  /** Every label in the account with its name, to tell which label an id in history is. */
+  listLabels(): Promise<{ id: string; name: string }[]>;
   /** The message's readable text, truncated; null when the message no longer exists. Does not mark it read. Never stored. */
   getBodyText(messageId: string): Promise<string | null>;
   /** The whole message as received (RFC 822); null when it no longer exists. Does not mark it read. */
@@ -124,6 +128,21 @@ export function createGmailApi(auth: OAuth2Client): GmailApi {
       const { data } = await client.users.messages.list({ userId, q: query, labelIds: ['INBOX'], maxResults: 500, ...(pageToken ? { pageToken } : {}) });
       const ids = (data.messages ?? []).map((m) => m.id).filter((id) => typeof id === 'string');
       return { ids, ...(data.nextPageToken ? { nextPageToken: data.nextPageToken } : {}) };
+    },
+
+    async getLabelIds(messageId) {
+      try {
+        const { data } = await client.users.messages.get({ userId, id: messageId, format: 'minimal' });
+        return data.labelIds ?? [];
+      } catch (error) {
+        if (isNotFound(error)) return null;
+        throw error;
+      }
+    },
+
+    async listLabels() {
+      const { data } = await client.users.labels.list({ userId });
+      return (data.labels ?? []).flatMap((l) => (l.id && l.name ? [{ id: l.id, name: l.name }] : []));
     },
 
     async getBodyText(messageId) {

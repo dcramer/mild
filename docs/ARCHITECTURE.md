@@ -40,7 +40,7 @@ Decisions flow back down so the same mail is cheaper next time.
 
 1. An agent decision may propose a local rule or sender record.
 2. A rule that Gmail can express is copied to a Gmail filter when the user asks for it. sift does not promote one by itself.
-3. Corrections are detected from Gmail history: the user moving a message back to the inbox, or out of spam, becomes an exception on the rule or sender that caused it.
+3. Corrections are detected from Gmail history: the user moving a message back to the inbox or out of spam, archiving or marking as spam what sift kept, or changing its `sift/…` label, is their answer for that one message ([Teaching](#teaching)). It never makes or changes a rule by itself.
 
 ## Layout
 
@@ -54,13 +54,14 @@ src/
   gmail/      the only module that holds the Google token: OAuth, API adapter, history sync
   dashboard/  read-only JSON API over the database, and the server for the built web app (`sift dashboard`)
   daemon/     orchestration: sync pass, triage pass, and the `sift run` loop
+  learn/      what the user teaches: suggestions and answers, and answers read from what they did in Gmail
   model/      the only module that talks to model providers (pi-ai): login, credentials, the classifier call
 web/          the dashboard page: React, Tailwind, its own design system on Base UI; builds to web/dist
 tests/        synthetic fixtures only
 docker/       Dockerfile and compose file
 ```
 
-Planned, not yet created: `src/learn/` (correction detection, rule promotion), `evals/` (a labelled set for measuring each tier).
+Planned, not yet created: `evals/` (a labelled set for measuring each tier).
 
 Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 
@@ -157,8 +158,15 @@ sift suggests first and acts second. While it only observes, every decision is a
 - **An answer says how far it reaches:** everything from the sender, anyone at the sender's domain, the sender when the subject contains some words, or only the mail waiting now. All but the last make a rule with those conditions.
 - **Any decision can be answered, not only a suggestion.** Every list opens a message in the same panel: its text where held, what sift decided and why, what it knows about the sender, and the answer. Answering a message sift had already decided records the user's answer as a new decision for it, makes the rule, and, if sift had changed the message in Gmail, takes that change back so the new decision is carried out from where the message started.
 - **Every marked message becomes an example.** The answer creates an `examples` row; the next pass of `sift run` fetches the whole message (raw RFC 822, all headers, readable text) into it. These are the evaluation and training set. A message that has since been deleted keeps its answer and is marked gone.
+- **Gmail teaches too.** Each sync reads what the user did to messages sift has decided (`learnFromGmail`, `src/learn/gmail.ts`), and records it as the "only this one" answer is recorded, marked `via = gmail` in `feedback`:
+  - Where the message is now, read fresh, is the outcome the user wants. A move does not say what the mail is, so the label sift gave stands (and counts as right) and the outcome is recorded as the exception; a different `sift/…` label put on it is a correction of the label.
+  - The new decision is recorded in observe mode whatever sift is doing, so sift does not then move a message the user has just placed.
+  - While observing, the user doing in Gmail what sift suggested counts as agreeing.
+  - Skipped: mail sift could not place and the user did not label (there is no label to record), trashed or deleted mail, and mail sift never recorded.
+  - The same history read twice records nothing new: an answer is only recorded when the message's place and label differ from its current decision and from the answer already on it.
+  - Not seen: anything done while the history cursor was expired.
 
-Code: `src/learn/feedback.ts` (suggestions, answers, accuracy), `src/daemon/examples.ts` (capture).
+Code: `src/learn/feedback.ts` (suggestions, answers, accuracy), `src/learn/gmail.ts` (telling the user's changes from sift's, answers from Gmail), `src/daemon/examples.ts` (capture).
 
 ## State
 

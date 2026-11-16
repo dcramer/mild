@@ -5,6 +5,7 @@ import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
 import { undo } from '../src/actions/executor.ts';
 import { writeRuleFilter } from '../src/actions/rule-filters.ts';
 import { applyFeedback } from '../src/learn/feedback.ts';
+import { userChanges } from '../src/learn/gmail.ts';
 import { lastStandingChange } from '../src/store/actions.ts';
 import { connectAccount } from '../src/store/accounts.ts';
 import { openDb } from '../src/store/db.ts';
@@ -48,6 +49,8 @@ function api(): GmailApi {
     },
     searchInbox: async () => ({ ids: [] }),
     getMetadata: async (id) => inbox.find((m) => m.id === id) ?? null,
+    getLabelIds: async (id) => mailbox.labels.get(id) ?? null,
+    listLabels: async () => [...new Set([...mailbox.labels.values()].flat())].filter((id) => id.startsWith('L:')).map((id) => ({ id, name: id.slice(2) })),
     getBodyText: async (id) => bodies.get(id) ?? null,
     getRaw: async (id) => (bodies.has(id) ? Buffer.from(`Subject: raw ${id}\r\n\r\n${bodies.get(id)}`) : null),
   };
@@ -139,6 +142,206 @@ describe('runOnce', () => {
     await runOnce(db, options(true));
     expect(decisions()).toMatchObject([{ message_id: 'news', outcome: 'done' }]);
     expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/newsletters', 'L:sift/did/archived']);
+  });
+});
+
+describe('teaching from Gmail', () => {
+  const feedback = () => db.prepare('SELECT message_id, verdict, correct, scope, label_id, via FROM feedback ORDER BY id').all();
+  const latest = (id: string) =>
+    db.prepare('SELECT stage, disposition, label_id, mode, rule_id, reason FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1').get(id);
+  const count = (table: string) => (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n;
+  // Time moves between passes: which of its own changes sift expects in a history depends on when they were made.
+  let clock: number;
+  const run = async (act: boolean) => {
+    const [result] = await runOnce(db, { ...options(act), now: () => clock });
+    clock += 1000;
+    expect(result?.error).toBeUndefined();
+    return result?.sync?.corrections;
+  };
+  const pass = (act: boolean) => {
+    inbox = [];
+    return run(act);
+  };
+
+  beforeEach(() => {
+    clock = 5000;
+    addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'personal' }, 'user');
+  });
+
+  it('takes mail moved back to the inbox as an answer for that message, makes no rule and changes nothing in Gmail', async () => {
+    await run(true);
+    expect(mailbox.labels.get('news')).not.toContain('INBOX');
+    mailbox.byUser('news', { add: ['INBOX'] });
+    const calls = mailbox.modifyCalls;
+
+    expect(await pass(true)).toBe(1);
+    // The move does not say what the mail is, so the label stands and the outcome is the exception.
+    expect(feedback()).toEqual([{ message_id: 'news', verdict: 'right', correct: null, scope: 'message', label_id: 'newsletter', via: 'gmail' }]);
+    expect(latest('news')).toEqual({
+      stage: 'rules',
+      disposition: 'keep',
+      label_id: 'newsletter',
+      mode: 'observe',
+      rule_id: null,
+      reason: 'you said this is Newsletters',
+    });
+    expect(db.prepare('SELECT message_id, disposition, suggested FROM examples').all()).toEqual([
+      { message_id: 'news', disposition: 'keep', suggested: 'archive' },
+    ]);
+    expect(listRules(db, ACCOUNT)).toHaveLength(2);
+    expect(mailbox.modifyCalls).toBe(calls);
+    expect(logs.at(-1)).toMatch(/learned from 1 message you moved or relabelled in Gmail/);
+  });
+
+  it('records the same history only once when it is delivered again', async () => {
+    await run(true);
+    mailbox.byUser('news', { add: ['INBOX'] });
+    const again = [...mailbox.history];
+    expect(await pass(true)).toBe(1);
+    const before = [count('decisions'), count('feedback'), count('actions')];
+
+    mailbox.history.push(...again);
+    expect(await pass(true)).toBe(0);
+    expect([count('decisions'), count('feedback'), count('actions')]).toEqual(before);
+  });
+
+  it('takes mail out of spam, archived or marked as spam by the user as answers too', async () => {
+    updateLabel(db, ACCOUNT, 'newsletter', { disposition: 'spam' });
+    await run(true);
+    expect(mailbox.labels.get('news')).toContain('SPAM');
+
+    mailbox.byUser('news', { add: ['INBOX'], remove: ['SPAM'] });
+    mailbox.byUser('ada', { remove: ['INBOX'] });
+    expect(await pass(true)).toBe(2);
+    expect(latest('news')).toMatchObject({ disposition: 'keep', label_id: 'newsletter' });
+    expect(latest('ada')).toMatchObject({ disposition: 'archive', label_id: 'personal' });
+
+    mailbox.byUser('ada', { add: ['SPAM'] });
+    expect(await pass(true)).toBe(1);
+    expect(latest('ada')).toMatchObject({ disposition: 'spam', label_id: 'personal' });
+    // The user's answers are not carried out again by sift.
+    expect(mailbox.labels.get('ada')).toEqual(['UNREAD', 'L:sift/personal', 'SPAM']);
+  });
+
+  it('takes a different sift label as a correction of what the mail is, wherever the message was left', async () => {
+    await run(true);
+    mailbox.byUser('news', { remove: ['L:sift/newsletters'], add: ['L:sift/receipts'] });
+    expect(await pass(true)).toBe(1);
+    expect(feedback()).toEqual([{ message_id: 'news', verdict: 'wrong', correct: 'archive', scope: 'message', label_id: 'transactional', via: 'gmail' }]);
+    // Receipts are kept, but the user left this one archived.
+    expect(latest('news')).toMatchObject({ disposition: 'archive', label_id: 'transactional', rule_id: null });
+    expect(mailbox.labels.get('news')).not.toContain('INBOX');
+  });
+
+  it("ignores labels that are not sift's, stars, and messages that are gone or in the trash", async () => {
+    await run(true);
+    mailbox.byUser('news', { add: ['L:travel', 'STARRED'] });
+    mailbox.byUser('ada', { remove: ['INBOX'], add: ['TRASH'] });
+    mailbox.history.push({ messageId: 'never-seen', added: ['INBOX'], removed: [] });
+    expect(await pass(true)).toBe(0);
+
+    mailbox.byUser('news', { add: ['INBOX'] });
+    mailbox.labels.delete('news');
+    expect(await pass(true)).toBe(0);
+    expect(feedback()).toEqual([]);
+  });
+
+  it("does not mistake sift's own changes for the user's: acting, undoing, and putting right after an answer in the dashboard", async () => {
+    await run(true);
+    expect(await pass(true)).toBe(0);
+
+    await undo({ db, mailbox, now: () => clock }, lastStandingChange(db, ACCOUNT, 'news')!.id);
+    expect(mailbox.labels.get('news')).toContain('INBOX');
+    expect(await pass(true)).toBe(0);
+
+    applyFeedback(db, { accountId: ACCOUNT, sender: 'ada@example.org', label: 'newsletter', scope: 'sender', messageId: 'ada', mode: 'act' });
+    await undo({ db, mailbox, now: () => clock }, lastStandingChange(db, ACCOUNT, 'ada')!.id);
+    expect(await pass(true)).toBe(0);
+    expect(mailbox.labels.get('ada')).not.toContain('INBOX');
+    expect(await pass(true)).toBe(0);
+    expect(db.prepare(`SELECT count(*) AS n FROM feedback WHERE via = 'gmail'`).get()).toEqual({ n: 0 });
+  });
+
+  it('tells the user moving mail back from sift archiving it, when both are in the same history', async () => {
+    await run(true);
+    await undo({ db, mailbox, now: () => clock }, lastStandingChange(db, ACCOUNT, 'news')!.id);
+    clock += 1;
+    // sift put it back in the inbox, and then the user archived it by hand.
+    mailbox.byUser('news', { remove: ['INBOX'] });
+    mailbox.byUser('news', { add: ['INBOX'] });
+    mailbox.byUser('news', { remove: ['INBOX'] });
+    expect(await pass(true)).toBe(0);
+
+    mailbox.byUser('news', { add: ['INBOX'] });
+    expect(await pass(true)).toBe(1);
+    expect(latest('news')).toMatchObject({ disposition: 'keep' });
+  });
+
+  it('while observing, counts the user doing what sift suggested as agreement, and doing otherwise as the answer', async () => {
+    db.prepare(`UPDATE rules SET source = 'agent'`).run();
+    await run(false);
+    mailbox.byUser('news', { remove: ['INBOX'] });
+    mailbox.byUser('ada', { remove: ['INBOX'] });
+    const again = [...mailbox.history];
+    expect(await pass(false)).toBe(2);
+    expect(feedback()).toEqual([
+      { message_id: 'news', verdict: 'right', correct: null, scope: 'message', label_id: 'newsletter', via: 'gmail' },
+      { message_id: 'ada', verdict: 'right', correct: null, scope: 'message', label_id: 'personal', via: 'gmail' },
+    ]);
+    expect(db.prepare('SELECT message_id, disposition, suggested FROM examples ORDER BY message_id').all()).toEqual([
+      { message_id: 'ada', disposition: 'archive', suggested: 'keep' },
+      { message_id: 'news', disposition: 'archive', suggested: 'archive' },
+    ]);
+
+    mailbox.history.push(...again);
+    expect(await pass(false)).toBe(0);
+    expect(count('feedback')).toBe(2);
+    expect(count('decisions')).toBe(2);
+  });
+
+  it('skips mail sift could not place unless the user gave it a sift label', async () => {
+    db.prepare('DELETE FROM rules').run();
+    await run(true);
+    expect(latest('news')).toMatchObject({ disposition: 'review', label_id: null });
+    mailbox.byUser('news', { remove: ['INBOX'] });
+    expect(await pass(true)).toBe(0);
+
+    mailbox.byUser('ada', { add: ['L:sift/personal'] });
+    expect(await pass(true)).toBe(1);
+    expect(latest('ada')).toMatchObject({ disposition: 'keep', label_id: 'personal', rule_id: null });
+    expect(feedback()).toEqual([{ message_id: 'ada', verdict: 'answered', correct: 'keep', scope: 'message', label_id: 'personal', via: 'gmail' }]);
+  });
+});
+
+describe('telling the user from sift in history', () => {
+  const act = (messageId: string, payload: { add: string[]; remove: string[] }, status: string, at: number) =>
+    db
+      .prepare(`INSERT INTO actions (account_id, message_id, type, payload_json, original_labels, status, created_at) VALUES (?, ?, 'archive', ?, '[]', ?, ?)`)
+      .run(ACCOUNT, messageId, JSON.stringify(payload), status, at);
+
+  it('cancels each of its own changes since the last sync against one entry, and leaves the rest', () => {
+    act('a', { add: ['L1'], remove: ['INBOX', 'UNREAD'] }, 'done', 200);
+    act('b', { add: [], remove: ['INBOX'] }, 'unknown', 200);
+    act('c', { add: [], remove: ['INBOX'] }, 'failed', 200);
+    act('d', { add: [], remove: ['INBOX'] }, 'done', 99);
+    const history = [
+      { messageId: 'a', added: ['L1'], removed: [] },
+      { messageId: 'a', added: [], removed: ['INBOX', 'UNREAD'] },
+      { messageId: 'a', added: ['INBOX'], removed: [] },
+      { messageId: 'a', added: [], removed: ['INBOX'] },
+      { messageId: 'b', added: [], removed: ['INBOX'] },
+      { messageId: 'c', added: [], removed: ['INBOX'] },
+      { messageId: 'd', added: [], removed: ['INBOX'] },
+      { messageId: 'e', added: ['STARRED'], removed: ['UNREAD'] },
+    ];
+    expect(userChanges(db, ACCOUNT, history, 100)).toEqual([
+      { messageId: 'a', added: ['INBOX'], removed: ['INBOX'] },
+      { messageId: 'c', added: [], removed: ['INBOX'] },
+      { messageId: 'd', added: [], removed: ['INBOX'] },
+      { messageId: 'e', added: ['STARRED'], removed: ['UNREAD'] },
+    ]);
+    expect(userChanges(db, ACCOUNT, [], 0)).toEqual([]);
   });
 });
 

@@ -86,6 +86,7 @@ function describe(result: PassResult, act: boolean): string | null {
   const { sync, triage } = result;
   if (sync?.mode === 'recovery') parts.push('history cursor had expired, searched the last 7 days');
   if (sync && sync.added.length > 0) parts.push(`${sync.added.length} new`);
+  if (sync?.corrections) parts.push(`learned from ${sync.corrections} message${sync.corrections === 1 ? '' : 's'} you moved or relabelled in Gmail`);
   if (triage) {
     const decided = Object.entries(triage.decided).filter(([, n]) => n > 0);
     if (decided.length > 0) parts.push(`${act ? 'decided' : 'would'} ${decided.map(([d, n]) => `${d} ${n}`).join(', ')}`);

@@ -54,6 +54,12 @@ function fakeApi(fake: Fake): GmailApi & { calls: string[] } {
     async getMetadata(id) {
       return fake.messages?.[id] ?? null;
     },
+    async getLabelIds(id) {
+      return fake.messages?.[id]?.labelIds ?? null;
+    },
+    async listLabels() {
+      return [];
+    },
     async getBodyText() {
       return null;
     },

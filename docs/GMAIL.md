@@ -25,6 +25,7 @@ Rate limit: 6,000 quota units a minute per user, which is about 300 metadata rea
 
 - Whether a filter's `from: @example.com` leaves out subdomains, as sift's domain rules do.
 - Whether Gmail hands a filter back exactly as it was created. sift compares against what Gmail returned at creation, not what it sent, so a rewrite at creation is harmless; a later rewrite would show as "changed".
+- How a snoozed message appears in history. If snoozing takes `INBOX` off and waking puts it back, sift reads each as the user moving the message, and records two answers for it.
 - Whether editing a filter in Gmail's settings keeps its id (seen by sift as "changed") or replaces it (seen as "gone").
 
 ## Not in the API: sift does it itself, or cannot
