@@ -9,7 +9,7 @@
 
 A plain `http://hostname:8787` address shows the page but cannot sign you in: Google returns a browser only to `localhost` or an HTTPS address.
 
-Signing in with Google is what connects a Gmail account, and only someone signed in as a connected account sees anything. Connect a second account from Settings. To limit who can sign in at all, list the addresses in `SIFT_DASHBOARD_ALLOW`, separated by commas, or use that step of `sift init`; then no other account gets in, the first included.
+Signing in with Google is what connects a Gmail account, and only someone signed in as a connected account sees anything. Connect a second account from Settings. Who can sign in at all is Google's to say: the client's test users, or anyone once the app is published.
 
 ## Screens
 

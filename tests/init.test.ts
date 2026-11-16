@@ -27,8 +27,6 @@ function wizard(
     location?: 'ask' | 'remote';
     tailscale?: string | null;
     serveFails?: boolean;
-    /** Answers for the sign-in list. Without them the step is answered with Enter: no limit. */
-    allow?: string[];
     /** The step to change when setup is finished and init lists them. Without it, none. */
     change?: number;
     /** A SIFT_KEY already set. */
@@ -82,7 +80,7 @@ function wizard(
       if (typeof index !== 'number' || !option) throw new Error(`bad scripted choice for: ${question}`);
       return option.value;
     },
-    text: async (question) => (question.startsWith('Addresses allowed') ? (state.allow?.shift() ?? '') : String(next(question))),
+    text: async (question) => String(next(question)),
     pasteJson: async (question) => String(next(question)),
     pause: async () => next('pause') !== 'skip',
     mark: () => {},
@@ -129,7 +127,6 @@ const GOOGLE = [...COMMON, TEST_USER, 'done'];
 /** Positions in the list of steps a finished setup offers to change. */
 const KEY_STEP = 1;
 const CLIENT_STEP = 3;
-const SIGN_IN_STEP = 4;
 const links = (said: string[]) => said.filter((line) => line.startsWith('link: ')).map((line) => line.slice(6).replace('https://console.cloud.google.com', ''));
 
 describe('sift init', () => {
@@ -201,7 +198,6 @@ describe('sift init', () => {
     expect(w.calls).toEqual([]);
     expect(w.text()).toContain('Where Sift runs: Dashboard at');
     expect(w.text()).toContain('Google OAuth client: Client in place');
-    expect(w.text()).toContain('Who can sign in: ');
     expect(w.text()).toContain('Gmail account: me@example.org');
     expect(w.config.settings).toEqual(DEFAULT_SETTINGS);
     expect(w.text()).toMatch(/Ready.*sift run/);
@@ -243,25 +239,6 @@ describe('sift init', () => {
     expect(set.text()).toContain(`Encryption key: Credentials encrypted · key ${set.config.keys.current!.id}`);
     expect(set.text()).toContain('SIFT_OLD_KEYS');
     expect(set.calls).toEqual([]);
-  });
-
-  it('limits sign-in to the addresses given, asking again for one that is not an address', async () => {
-    const w = wizard([...GOOGLE], { allow: ['me@example.org, nonsense', 'Me@Example.org, work@example.com'] });
-    await runInit(w.deps);
-    expect(w.text()).toContain('fail: nonsense is not an email address.');
-    expect(saved(w.config).dashboardAllow).toEqual(['me@example.org', 'work@example.com']);
-
-    // Changing the list to one that leaves a connected account out says what that means; Enter removes the limit.
-    const narrowed = wizard([], { client: true, accounts: ['me@example.org'], allow: ['work@example.com'], change: SIGN_IN_STEP });
-    saveSetting(narrowed.config, 'SIFT_DASHBOARD_ALLOW', 'me@example.org');
-    await runInit(narrowed.deps);
-    expect(narrowed.config.settings.dashboardAllow).toEqual(['work@example.com']);
-    expect(narrowed.text()).toContain('warn: me@example.org is connected but can no longer sign in');
-
-    const lifted = wizard([], { client: true, accounts: ['me@example.org'], change: SIGN_IN_STEP });
-    saveSetting(lifted.config, 'SIFT_DASHBOARD_ALLOW', 'me@example.org');
-    await runInit(lifted.deps);
-    expect(saved(lifted.config).dashboardAllow).toBeUndefined();
   });
 
   it('asks again when what was pasted is not a client, and stops on s', async () => {
@@ -318,22 +295,19 @@ describe('settings', () => {
 
   it("writes one setting at a time to the home's .env, keeping every other line", () => {
     const config = loadConfig({ SIFT_HOME: freshHome() });
-    writeFileSync(config.envPath, 'SIFT_OLD_KEYS=old\nSIFT_DASHBOARD_ALLOW=gone@example.org\n');
-    saveSetting(config, 'SIFT_DASHBOARD_ALLOW', 'me@example.org,work@example.com');
+    writeFileSync(config.envPath, 'SIFT_OLD_KEYS=old\nSIFT_DASHBOARD_PORT=9000\n');
+    saveSetting(config, 'SIFT_DASHBOARD_PORT', '9100');
     saveSetting(config, 'SIFT_DASHBOARD_HOST', 'box.example.ts.net');
-    expect(saved(config)).toEqual({ ...DEFAULT_SETTINGS, dashboardHost: 'box.example.ts.net', dashboardAllow: ['me@example.org', 'work@example.com'] });
+    expect(saved(config)).toEqual({ ...DEFAULT_SETTINGS, dashboardPort: 9100, dashboardHost: 'box.example.ts.net' });
     expect(config.settings).toEqual(saved(config));
     saveSetting(config, 'SIFT_DASHBOARD_HOST', undefined);
-    expect(readFileSync(config.envPath, 'utf8')).toBe('SIFT_OLD_KEYS=old\nSIFT_DASHBOARD_ALLOW=me@example.org,work@example.com\n');
+    expect(readFileSync(config.envPath, 'utf8')).toBe('SIFT_OLD_KEYS=old\nSIFT_DASHBOARD_PORT=9100\n');
   });
 
   it('refuses a wrong value by the variable that gave it', () => {
     expect(() => readSettings({ SIFT_DASHBOARD_PORT: '0' })).toThrow('SIFT_DASHBOARD_PORT must be a port number.');
     expect(() => readSettings({ SIFT_DASHBOARD_PORT: 'soon' })).toThrow('SIFT_DASHBOARD_PORT must be a port number.');
     expect(() => readSettings({ SIFT_DASHBOARD_HOST: 'http://x/' })).toThrow('SIFT_DASHBOARD_HOST must be a hostname or IP address.');
-    expect(() => readSettings({ SIFT_DASHBOARD_ALLOW: 'me' })).toThrow('SIFT_DASHBOARD_ALLOW must be email addresses separated by commas.');
-    expect(() => readSettings({ SIFT_DASHBOARD_ALLOW: 'me@example.org,' })).toThrow('SIFT_DASHBOARD_ALLOW');
-    expect(readSettings({ SIFT_DASHBOARD_ALLOW: 'Me@Example.org, work@example.com' }).dashboardAllow).toEqual(['me@example.org', 'work@example.com']);
     expect(() => readSettings({ DATABASE_URL: 'mysql://x' })).toThrow('DATABASE_URL must be an address starting postgres://');
     expect(() => readSettings({ REDIS_URL: 'http://x' })).toThrow('REDIS_URL must be an address starting redis:// or rediss://');
     expect(() => readSettings({ SIFT_CHATGPT_SIGN_IN: 'on' })).toThrow('SIFT_CHATGPT_SIGN_IN must be "device-code" or "redirect".');
@@ -399,15 +373,15 @@ describe('settings from the environment', () => {
   };
 
   it('are read from their variables', () => {
-    const config = loadConfig({ SIFT_HOME: freshHome(), SIFT_DASHBOARD_PORT: '9100', SIFT_DASHBOARD_ALLOW: 'Me@example.org', ...DATABASE });
-    expect(config.settings).toMatchObject({ dashboardPort: 9100, dashboardAllow: ['me@example.org'] });
+    const config = loadConfig({ SIFT_HOME: freshHome(), SIFT_DASHBOARD_PORT: '9100', ...DATABASE });
+    expect(config.settings).toMatchObject({ dashboardPort: 9100 });
     expect([config.databaseUrl, config.databaseMigrationUrl]).toEqual([DATABASE.DATABASE_URL, DATABASE.DATABASE_MIGRATION_URL]);
   });
 
   it("never copies one into the home's .env when another is saved", () => {
     const config = loadConfig({ SIFT_HOME: freshHome(), ...DATABASE });
-    saveSetting(config, 'SIFT_DASHBOARD_ALLOW', 'me@example.org');
-    expect(readFileSync(config.envPath, 'utf8')).toBe('SIFT_DASHBOARD_ALLOW=me@example.org\n');
+    saveSetting(config, 'SIFT_DASHBOARD_HOST', 'box.example.ts.net');
+    expect(readFileSync(config.envPath, 'utf8')).toBe('SIFT_DASHBOARD_HOST=box.example.ts.net\n');
     expect(config.settings.databaseUrl).toBe(DATABASE.DATABASE_URL);
   });
 });

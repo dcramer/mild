@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { MAX_BACKFILL, backfill } from '../src/work/backfill.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { type RunOptions, tick } from '../src/work/run.ts';
-import { signInRefusal } from '../src/app/sign-in.ts';
 import { triageAccount } from '../src/work/triage.ts';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { people } from '../src/store/people.ts';
@@ -430,14 +429,12 @@ describe('signing in with Google', () => {
   const SECRET = 'session-secret';
   let completed: string[];
   let hasClient: boolean;
-  let allow: string[] | undefined;
   const signIn: SignIn = {
     hasClient: () => hasClient,
-    allowed: (email) => allow?.includes(email) ?? true,
     url: (redirectUri, state, challenge) => `https://accounts.example/auth?redirect=${encodeURIComponent(redirectUri)}&state=${state}&challenge=${challenge}`,
     complete: async (redirectUri, code, _verifier, addTo) => {
       completed.push(`${redirectUri} ${code} addTo=${addTo}`);
-      if (code === 'stranger') throw new Error('stranger@example.net is not the account Sift is connected to.');
+      if (code === 'refused') throw new Error('Google refused the sign-in.');
       if (code === 'second') {
         await connectAccount(store, 'work@example.com', '1', 0, 1);
         return 'work@example.com';
@@ -469,7 +466,6 @@ describe('signing in with Google', () => {
   beforeEach(() => {
     completed = [];
     hasClient = true;
-    allow = undefined;
   });
 
   it('serves the page to anyone but the data only to someone signed in', async () => {
@@ -528,11 +524,11 @@ describe('signing in with Google', () => {
     expect((await call('GET', '/api/session')).body).toMatchObject({ canSignIn: false, reason: 'no-client' });
   });
 
-  it('turns away an account sift is not connected to, and adds a second one only for someone signed in', async () => {
+  it('says why a sign-in failed, and adds a second account only for someone signed in', async () => {
     const { call } = await startWithSignIn();
     const login = await call('GET', '/auth/login?add=1');
-    const refused = await callback(call, login, 'stranger');
-    expect(decodeURIComponent(String(refused.headers['location']))).toBe('/?signin=stranger@example.net is not the account Sift is connected to.');
+    const refused = await callback(call, login, 'refused');
+    expect(decodeURIComponent(String(refused.headers['location']))).toBe('/?signin=Google refused the sign-in.');
     expect(String(refused.headers['set-cookie'])).not.toContain('sift_session');
     expect(completed.at(-1)).toContain('addTo=null');
 
@@ -543,22 +539,6 @@ describe('signing in with Google', () => {
     // The account being added joins the mailboxes of whoever is signed in.
     expect(completed.at(-1)).toContain(`addTo=${ACCOUNT}`);
     expect((await call('GET', '/api/session', undefined, { cookie: cookieFrom(added.headers) })).body).toMatchObject({ email: 'work@example.com' });
-  });
-
-  it('with a list of allowed accounts, refuses everyone else, the first account included', () => {
-    const allowed = ['me@example.org'];
-    expect(signInRefusal('stranger@example.com', { connected: [], allowNew: false, allowed })).toContain('not on the list');
-    expect(signInRefusal('stranger@example.com', { connected: ['me@example.org'], allowNew: true, allowed })).toContain('not on the list');
-    // Being connected already is not enough once the list leaves the account out.
-    expect(signInRefusal('work@example.com', { connected: ['work@example.com'], allowNew: false, allowed })).toContain('not on the list');
-    expect(signInRefusal('Me@Example.org', { connected: [], allowNew: false, allowed })).toBeNull();
-    // On the list and not connected: the list is who this install is for, so they may arrive by themselves.
-    expect(signInRefusal('me@example.org', { connected: ['work@example.com'], allowNew: false, allowed })).toBeNull();
-
-    const open = { allowed: undefined };
-    expect(signInRefusal('first@example.com', { connected: [], allowNew: false, ...open })).toBeNull();
-    expect(signInRefusal('stranger@example.com', { connected: ['me@example.org'], allowNew: false, ...open })).toContain('not the account');
-    expect(signInRefusal('work@example.com', { connected: ['me@example.org'], allowNew: true, ...open })).toBeNull();
   });
 
   it('completes a sign-in only in the browser that started it', async () => {
@@ -580,16 +560,6 @@ describe('signing in with Google', () => {
     const back = await callback(call, add, 'second');
     expect(String(back.headers['location'])).toContain('Sign%20in%20again');
     expect(completed).toHaveLength(1);
-  });
-
-  it('ends a session when its account is taken off the list', async () => {
-    const { call } = await startWithSignIn();
-    const login = await call('GET', '/auth/login');
-    const cookie = { cookie: cookieFrom((await callback(call, login, 'abc')).headers) };
-    expect((await call('GET', '/api/summary', undefined, cookie)).status).toBe(200);
-    allow = ['work@example.com'];
-    expect((await call('GET', '/api/summary', undefined, cookie)).status).toBe(401);
-    expect((await call('GET', '/api/session', undefined, cookie)).body).toMatchObject({ email: null });
   });
 
   it('ends a session on sign-out, when it expires, and when its account is removed', async () => {

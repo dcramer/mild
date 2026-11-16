@@ -91,7 +91,6 @@ describe('the Vercel host', () => {
       SIFT_GOOGLE_CLIENT_ID: 'id',
       SIFT_GOOGLE_CLIENT_SECRET: 'secret',
       SIFT_SESSION_SECRET: 'synthetic',
-      SIFT_DASHBOARD_ALLOW: 'me@example.org',
     };
     const saved = process.env['CRON_SECRET'];
     delete process.env['CRON_SECRET'];

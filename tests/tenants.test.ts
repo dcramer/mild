@@ -72,7 +72,6 @@ const call = (method: 'GET' | 'POST', path: string, who: string | null, body?: u
 
 const signIn: SignIn = {
   hasClient: () => true,
-  allowed: () => true,
   url: (_redirect, state) => `https://accounts.example/auth?state=${state}`,
   // The code stands in for the Google account that came back.
   complete: async (_redirect, code) => code,

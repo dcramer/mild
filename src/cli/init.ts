@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { type Config, type Variable, isAddress } from '../config.ts';
+import { type Config, type Variable } from '../config.ts';
 import { type Ui, paint } from './ui.ts';
 
 /** Who may sign in to the user's Google app. Decides the last tasks of the Google setup. */
@@ -77,15 +77,9 @@ const steps = (deps: InitDeps): Step[] => [
       return googleClient(deps);
     },
   },
-  {
-    title: 'Who can sign in',
-    missing: () => !deps.config.settings.dashboardAllow,
-    value: () => deps.config.settings.dashboardAllow?.join(', ') ?? paint.dim('no limit'),
-    run: () => chooseAllowed(deps),
-  },
 ];
 /** The steps above, then the Gmail account, which is connected in the browser. */
-const STEPS = 5;
+const STEPS = 4;
 
 /**
  * Set sift up. A first run walks through every step, and one that was stopped part-way carries on with
@@ -100,8 +94,8 @@ export async function runInit(deps: InitDeps): Promise<void> {
 
   const all = steps(deps);
   const accounts = await deps.connectedAccounts();
-  // The key and the sign-in list are optional, so they do not keep a finished setup in the walk-through.
-  if (all.slice(1, 3).some((step) => step.missing())) {
+  // The key is optional, so it does not keep a finished setup in the walk-through.
+  if (all.slice(1).some((step) => step.missing())) {
     for (const [index, step] of all.entries()) {
       ui.step(index + 1, STEPS, step.title);
       if (step.missing()) await step.run();
@@ -199,29 +193,6 @@ async function chooseLocation(deps: InitDeps): Promise<void> {
     }
   }
   ui.ok(`Dashboard at ${paint.bold(dashboardAddress(deps))}`);
-}
-
-/** Limit sign-in to listed Google accounts, or leave it to whoever signs in first. */
-async function chooseAllowed(deps: InitDeps): Promise<void> {
-  const { ui } = deps;
-  ui.info('Signing in to the dashboard with Google connects that account. Without a list, the first account to sign in connects itself.');
-  for (;;) {
-    const entered = (await ui.text('Addresses allowed to sign in, separated by commas (Enter for no limit):'))
-      .split(',')
-      .map((address) => address.trim().toLowerCase())
-      .filter((address) => address !== '');
-    const wrong = entered.find((address) => !isAddress(address));
-    if (wrong !== undefined) {
-      ui.fail(`${wrong} is not an email address.`);
-      continue;
-    }
-    deps.saveSetting('SIFT_DASHBOARD_ALLOW', entered.length > 0 ? entered.join(',') : undefined);
-    if (entered.length === 0) return ui.skip('No limit');
-    ui.ok(`Only ${paint.bold(entered.join(', '))}`);
-    const shut = (await deps.connectedAccounts()).filter((account) => !entered.includes(account.toLowerCase()));
-    if (shut.length > 0) ui.warn(`${shut.join(', ')} ${shut.length === 1 ? 'is' : 'are'} connected but can no longer sign in. Sift still reads that mail.`);
-    return;
-  }
 }
 
 interface Task {

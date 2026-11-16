@@ -12,7 +12,7 @@ It copies this repository to your GitHub account, adds Neon and Upstash for Redi
 
 Upstash is expected to set `REDIS_URL`; if the site says it is missing, copy the store's `redis://`/`rediss://` address into it and deploy again.
 
-[deploy]: https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift&project-name=sift&repository-name=sift&env=SIFT_GOOGLE_CLIENT_ID%2CSIFT_GOOGLE_CLIENT_SECRET%2CSIFT_DASHBOARD_ALLOW%2CSIFT_KEY%2CSIFT_SESSION_SECRET%2CCRON_SECRET&envDescription=Your%20Google%20OAuth%20client%2C%20the%20accounts%20that%20may%20sign%20in%2C%20and%20three%20secrets.&envLink=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift%2Fblob%2Fmain%2Fdocs%2FVERCEL.md%23one-click&products=%5B%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22neon%22%2C%22integrationSlug%22%3A%22neon%22%7D%2C%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22upstash-kv%22%2C%22integrationSlug%22%3A%22upstash%22%7D%5D
+[deploy]: https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift&project-name=sift&repository-name=sift&env=SIFT_GOOGLE_CLIENT_ID%2CSIFT_GOOGLE_CLIENT_SECRET%2CSIFT_KEY%2CSIFT_SESSION_SECRET%2CCRON_SECRET&envDescription=Your%20Google%20OAuth%20client%20and%20three%20secrets.&envLink=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift%2Fblob%2Fmain%2Fdocs%2FVERCEL.md%23one-click&products=%5B%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22neon%22%2C%22integrationSlug%22%3A%22neon%22%7D%2C%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22upstash-kv%22%2C%22integrationSlug%22%3A%22upstash%22%7D%5D
 
 ## 1. The project
 
@@ -31,7 +31,7 @@ The project's production domain is your Sift's address: `https://<project>.verce
 3. [Set up the consent screen](https://console.cloud.google.com/auth/overview): app name `sift`, audience External, your own address for support and contact.
 4. [Create a client](https://console.cloud.google.com/auth/clients): type Web application, authorised redirect URI `https://<your domain>/auth/callback`. Keep its id and secret.
 5. [Data Access](https://console.cloud.google.com/auth/scopes): add `https://www.googleapis.com/auth/gmail.modify` and `https://www.googleapis.com/auth/gmail.settings.basic`.
-6. [Audience](https://console.cloud.google.com/auth/audience): add each Gmail address Sift will read as a test user. While the app is in Testing, Google ends each sign-in after 7 days and you sign in again; publishing it ends that, and may need Google's verification.
+6. [Audience](https://console.cloud.google.com/auth/audience): add each Gmail address Sift will read as a test user. They are the only accounts that can sign in to your Sift. While the app is in Testing, Google ends each sign-in after 7 days and you sign in again; publishing it ends that, and may need Google's verification.
 
 ## 3. The environment
 
@@ -43,7 +43,6 @@ In the project's Environment Variables, for Production:
 | `DATABASE_MIGRATION_URL` | Optional, and better: Neon's unpooled address for the owner role, with `DATABASE_URL` then a role that owns nothing (`CREATE ROLE sift LOGIN PASSWORD '…'`), so row-level security holds Sift itself. |
 | `REDIS_URL` | The Redis database's `redis://` or `rediss://` address. |
 | `SIFT_GOOGLE_CLIENT_ID`, `SIFT_GOOGLE_CLIENT_SECRET` | From step 2. |
-| `SIFT_DASHBOARD_ALLOW` | The Google accounts that may sign in, separated by commas. Required: at a public address, without it whoever signed in first would own your Sift. |
 | `SIFT_KEY` | Encrypts the credentials Sift stores ([SECRETS.md](SECRETS.md)). `openssl rand -base64 32` |
 | `SIFT_SESSION_SECRET` | Signs sessions; changing it signs everyone out. `openssl rand -base64 32` |
 | `CRON_SECRET` | Vercel sends it with each cron call and Sift with each piece of work it hands out; nothing without it can start work. `openssl rand -hex 32` |
@@ -54,7 +53,7 @@ Until every required one is set, the site lists those still missing; `CRON_SECRE
 
 ## 4. Deploy again
 
-Redeploy production, so the build sees the variables: it migrates the database before the new functions serve anything. Open your address, sign in with Google as an allowed account (the first becomes the owner), choose a model under Settings, and pull in recent mail to teach it with. Nothing in Gmail changes until you turn Sift on, under Settings.
+Redeploy production, so the build sees the variables: it migrates the database before the new functions serve anything. Open your address, sign in with Google (the first account becomes the owner), choose a model under Settings, and pull in recent mail to teach it with. Nothing in Gmail changes until you turn Sift on, under Settings.
 
 Mail is checked each minute. Logs are the project's function logs.
 

@@ -37,7 +37,6 @@ const ACCOUNT = 'me@example.org';
 describe('a flow whose steps reach different instances', () => {
   const signIn: SignIn = {
     hasClient: () => true,
-    allowed: () => true,
     url: (_redirect, state) => `https://accounts.example/auth?state=${state}`,
     // The code stands in for the Google account that came back.
     complete: async (_redirect, code) => code,

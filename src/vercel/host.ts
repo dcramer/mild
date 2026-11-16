@@ -52,19 +52,8 @@ export async function fanOut(due: Sift['due'], people?: readonly number[]): Prom
   if (refused > 0) process.stdout.write(`${refused} of ${taken.length} pieces of work were not taken\n`);
 }
 
-/**
- * What a deploy must give, in the environment: nothing is kept in files. `SIFT_DASHBOARD_ALLOW` because at a
- * public address whoever signed in first would own the install; `CRON_SECRET` because without it nothing runs.
- */
-const REQUIRED = [
-  'DATABASE_URL',
-  'REDIS_URL',
-  'SIFT_GOOGLE_CLIENT_ID',
-  'SIFT_GOOGLE_CLIENT_SECRET',
-  'SIFT_SESSION_SECRET',
-  'SIFT_DASHBOARD_ALLOW',
-  'CRON_SECRET',
-] as const;
+/** What a deploy must give, in the environment: nothing is kept in files. `CRON_SECRET` because without it nothing runs. */
+const REQUIRED = ['DATABASE_URL', 'REDIS_URL', 'SIFT_GOOGLE_CLIENT_ID', 'SIFT_GOOGLE_CLIENT_SECRET', 'SIFT_SESSION_SECRET', 'CRON_SECRET'] as const;
 
 function required(name: (typeof REQUIRED)[number] | 'VERCEL_URL'): string {
   const value = process.env[name];

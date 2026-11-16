@@ -14,12 +14,6 @@ export interface Settings {
    * addresses or names, or `all` for every network it is on. Unset: this machine only.
    */
   dashboardHost?: string;
-  /**
-   * The only Google accounts that may sign in to the dashboard, and so the only ones that can be connected.
-   * Unset: the first account to sign in connects itself, and after that only connected accounts can.
-   * A listed account that signs in by itself is a person of their own, and sees only their own mail.
-   */
-  dashboardAllow?: string[];
   /** A Postgres server's address. Unset: PGlite, in the home directory. */
   databaseUrl?: string;
   /**
@@ -45,7 +39,6 @@ export interface Settings {
 const ENVIRONMENT = {
   SIFT_DASHBOARD_PORT: 'dashboardPort',
   SIFT_DASHBOARD_HOST: 'dashboardHost',
-  SIFT_DASHBOARD_ALLOW: 'dashboardAllow',
   DATABASE_URL: 'databaseUrl',
   DATABASE_MIGRATION_URL: 'databaseMigrationUrl',
   REDIS_URL: 'redisUrl',
@@ -107,7 +100,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   };
 }
 
-export const isAddress = (value: string) => /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(value);
 /**
  * Read `.env` from the home directory, then from the working directory. A variable already set is never
  * replaced, so the real environment wins, then the home's file.
@@ -148,13 +140,6 @@ export function readSettings(env: NodeJS.ProcessEnv): Settings {
         if (!/^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/.test(text)) throw bad(variable, 'a hostname or IP address');
         settings.dashboardHost = text === '0.0.0.0' ? 'all' : text;
         break;
-      case 'SIFT_DASHBOARD_ALLOW': {
-        // An empty list would lock everyone out; leaving the variable unset is how to have no limit.
-        const list = text.split(',').map((address) => address.trim().toLowerCase());
-        if (!list.every(isAddress)) throw bad(variable, 'email addresses separated by commas');
-        settings.dashboardAllow = list;
-        break;
-      }
       case 'DATABASE_URL':
       case 'DATABASE_MIGRATION_URL':
         if (!/^postgres(ql)?:\/\//.test(text)) throw bad(variable, 'an address starting postgres://');

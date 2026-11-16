@@ -220,7 +220,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     const googleCanReturnHere = https || LOCAL_HOSTS.has(host);
     const issued = signIn ? readSession(cookie(request, 'sift_session'), secret, now()) : null;
     // A session is for one person: once its mailbox has been removed, and perhaps signed in to again by someone new, it is no one's.
-    const found = issued !== null && signIn?.allowed(issued.email) ? await people.signedIn(issued.email) : null;
+    const found = issued !== null ? await people.signedIn(issued.email) : null;
     const known = found?.id === issued?.person ? found : null;
     const session = known ? issued!.email : null;
     // What this request may see: the mailboxes of whoever is signed in, in their own database and no

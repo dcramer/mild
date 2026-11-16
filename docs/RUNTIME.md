@@ -54,7 +54,7 @@ Memory is right for one `sift run` process only. Two processes, or any host with
 
 ### On Vercel
 
-Setting it up, and every variable it needs: [VERCEL.md](VERCEL.md). It refuses to start without an allow list (`SIFT_DASHBOARD_ALLOW`): at a public address, whoever signed in first would otherwise own it. Vercel compiles `api/*.ts` with the project's own TypeScript, extending `tsconfig.json` and rewriting the `.ts` in imports (`@vercel/node` 31), and keeps each file's place, so `src/store/migrations` (in `includeFiles`) is where `src/store/db.ts` looks.
+Setting it up, and every variable it needs: [VERCEL.md](VERCEL.md). Vercel compiles `api/*.ts` with the project's own TypeScript, extending `tsconfig.json` and rewriting the `.ts` in imports (`@vercel/node` 31), and keeps each file's place, so `src/store/migrations` (in `includeFiles`) is where `src/store/db.ts` looks.
 
 A piece handed to `api/work` names a person and their mailbox by id; Sift opens that person's database and finds the mailbox among their own, so even a forged piece cannot reach across people. `api/site` keeps the dashboard's own checks: a session for every `/api/` route, the Host one of the deployment's names, writes only from the page.
 

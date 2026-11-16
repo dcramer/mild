@@ -103,8 +103,7 @@ Built: one model call per message that names a label; the label's outcome decide
 ## Setup
 
 - [ ] Remove `sift dashboard` (and `Activity.running`, which exists only for it), or add it to the commands AGENTS.md allows.
-- [ ] `sift status` does not show the sign-in limit (`SIFT_DASHBOARD_ALLOW`). An account left off the list is still connected and classified, with no way to disconnect it short of removing the account.
-- [ ] `init` asks about the model and the sign-in list again on every partial re-run while they are unset: it cannot tell "chose none" from "never asked".
+- [ ] `init` asks about the model again on every partial re-run while they are unset: it cannot tell "chose none" from "never asked".
 - [ ] Find out what publishing the Google app requires (branding fields, verification for these scopes) and make that path of `init` exact; the privacy policy and terms links are `<dashboard address>/privacy` and `/terms`. Restricted scopes also need a yearly security assessment (CASA). Check its Console links and field names against the live console; they were written from memory.
 - [ ] Run `sift init` inside Docker, where the dashboard address is the host's, not the container's.
 
@@ -118,7 +117,7 @@ sift has run for real, off, on the owner's inbox: sync, the model, suggestions a
 - [ ] The unsubscribe request against a real list.
 - [ ] Gmail filters: whether `from:@domain` leaves out subdomains, whether Gmail rewrites a filter's criteria after it is created, and whether editing a filter in Gmail keeps its id.
 - [ ] History is no longer narrowed to the inbox (label changes are read too): check the volume on a busy account.
-- [ ] Encrypted credentials, the installed app and offline state, and the sign-in allow list, on the real install.
+- [ ] Encrypted credentials, the installed app and offline state, on the real install.
 
 ## Deployment and isolation
 
