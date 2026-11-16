@@ -144,7 +144,7 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
         <AddRuleDialog
           accountId={proposal.accountId}
           labels={labels}
-          start={proposalStart(proposal.match, proposal.labelId)}
+          start={proposalStart(proposal.match, proposal.labelId, proposal.disposition)}
           proposal={proposal.id}
           onClose={() => setOpen(false)}
         />

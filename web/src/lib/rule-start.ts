@@ -19,10 +19,22 @@ export interface RuleStart {
   action?: 'keep' | 'archive' | 'spam';
 }
 
-/** A proposed rule. A proposal names one sender, so its match has one named condition. */
-export function proposalStart({ facts, ...match }: RuleMatch, label: string): RuleStart {
+/** What a rule waiting for a label does, for what the label does: a rule cannot block, and a label left for review is kept, as an answer keeps it. */
+const WAITING_DOES = { keep: 'keep', archive: 'archive', spam: 'spam', block: 'spam', review: 'keep' } as const;
+
+/**
+ * A proposed rule, waiting for its label and then doing what the label does. A proposal names one sender,
+ * so its match has one named condition.
+ */
+export function proposalStart({ facts, ...match }: RuleMatch, label: string, does: string): RuleStart {
   const [key, value] = Object.entries(match)[0] ?? ['from', ''];
-  return { by: key === 'fromDomain' ? 'from' : (key as By), value: value ?? '', facts: factAnswers(facts), label };
+  return {
+    by: key === 'fromDomain' ? 'from' : (key as By),
+    value: value ?? '',
+    facts: factAnswers(facts),
+    whenLabel: label,
+    action: WAITING_DOES[does as keyof typeof WAITING_DOES] ?? 'keep',
+  };
 }
 
 /** A message's sender, as what sift says the message is. */

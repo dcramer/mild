@@ -9,14 +9,23 @@ import { everything } from './helpers.ts';
 const ACCOUNT = 'me@example.org';
 
 describe('where each way into the rule dialog starts it', () => {
-  it('starts a proposal on its sender and label', () => {
-    expect(proposalStart({ from: 'news@example.com' }, 'newsletter')).toEqual({ by: 'from', value: 'news@example.com', facts: [], label: 'newsletter' });
-    expect(proposalStart({ fromDomain: 'example.com', facts: { isReply: false } }, 'newsletter')).toEqual({
+  it('starts a proposal on its sender, waiting for its label and then doing what the label does', () => {
+    expect(proposalStart({ from: 'news@example.com' }, 'newsletter', 'archive')).toEqual({
+      by: 'from',
+      value: 'news@example.com',
+      facts: [],
+      whenLabel: 'newsletter',
+      action: 'archive',
+    });
+    expect(proposalStart({ fromDomain: 'example.com', facts: { isReply: false } }, 'newsletter', 'keep')).toEqual({
       by: 'from',
       value: 'example.com',
       facts: [{ key: 'isReply', index: 1 }],
-      label: 'newsletter',
+      whenLabel: 'newsletter',
+      action: 'keep',
     });
+    expect(proposalStart({ from: 'x@example.com' }, 'junk', 'block')).toMatchObject({ action: 'spam' });
+    expect(proposalStart({ from: 'x@example.com' }, 'unsure', 'review')).toMatchObject({ action: 'keep' });
   });
 
   it("starts a message's Make a rule on its sender and the label sift gave it, if any", () => {
