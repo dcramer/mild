@@ -1,4 +1,3 @@
-import type { Trial } from '../learn/evals.ts';
 import type { Sql } from '../store/sql.ts';
 
 /**
@@ -21,8 +20,6 @@ export interface Controls {
   /** Store an API key for one of the providers that takes one. */
   saveModelKey(db: Sql, provider: string, key: string): Promise<void>;
   signOutModel(db: Sql, provider: string): Promise<void>;
-  /** Ask `model` (`provider/model-id`, from one of this person's sign-ins) about a few recent messages. Records nothing. */
-  tryModel(db: Sql, model: string): Promise<Trial>;
   /**
    * Judge again, in the background, an account's waiting suggestions that were judged before the
    * person's guidelines last changed. A model call each, so only when the user asks, and at most a batch at a

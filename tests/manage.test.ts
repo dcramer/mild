@@ -39,7 +39,6 @@ const controls: Controls = {
   signInChatGPT: async () => (calls.push('chatgpt'), { code: 'ABCD-1234', url: 'https://auth.example/device', expiresAt: 900 }),
   saveModelKey: async (_db, provider, key) => void calls.push(`key ${provider} ${key}`),
   signOutModel: async (_db, provider) => void calls.push(`signout ${provider}`),
-  tryModel: async (_db, model) => (calls.push(`try ${model}`), { asked: 5, answered: 5, checked: 3, matched: 3, ms: 900, costUsd: 0.004, error: null }),
   rejudge: async (_db, accountId) => {
     calls.push(`rejudge ${accountId}`);
     return { started: 2, remaining: 0 };

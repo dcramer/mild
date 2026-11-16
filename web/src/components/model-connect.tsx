@@ -1,7 +1,6 @@
 import { ChevronRightIcon } from 'lucide-react';
 import { useState } from 'react';
 import { type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
-import { money, plural } from '@/lib/format.ts';
 import { Button, Copyable, Failure, Field, Form, Input, Select, Sub, Table, Td, TextLink, Th, Tr } from '@/system';
 
 type Choice = ManageState['model']['choices'][number];
@@ -55,17 +54,9 @@ export function ProviderList({ choices, inUse, onChoose }: { choices: readonly C
   );
 }
 
-type Trial = Awaited<ReturnType<typeof api.tryModel>>;
-
-/** What trying a model found, in a sentence. */
-function said(trial: Trial): string {
-  const matched = trial.checked > 0 ? ` It agreed with you on ${trial.matched} of ${trial.checked}.` : '';
-  return `Asked about ${plural(trial.asked, 'recent message')}: ${trial.answered} answered, ${(trial.ms / 1000).toFixed(1)} s each, ${money(trial.costUsd)} in all.${matched}`;
-}
-
 /**
- * Signing in to one provider, choosing its model and trying it on a few recent messages. Nothing about
- * what sorts mail changes here: `ready` is the model to switch to, once it has answered.
+ * Signing in to one provider and choosing its model. Nothing about what sorts mail changes here:
+ * `ready` is the model to switch to.
  */
 export function useProviderConnect(choice: Choice, model: ManageState['model'], reload: () => void) {
   const signedIn = model.signedIn.includes(choice.provider);
@@ -74,11 +65,8 @@ export function useProviderConnect(choice: Choice, model: ManageState['model'], 
   const recommended = listed.data?.recommended[choice.provider] ?? mine[0] ?? '';
   const [picked, setPicked] = useState<string | null>(null);
   const chosen = picked ?? recommended;
-  const [trial, setTrial] = useState<{ model: string; result: Trial } | null>(null);
   const [key, setKey] = useState('');
   const sign = useAction();
-  const trying = useAction();
-  const tried = trial?.model === chosen ? trial.result : null;
   const pending = model.pending;
 
   const fields = (
@@ -111,7 +99,7 @@ export function useProviderConnect(choice: Choice, model: ManageState['model'], 
           )}
         </Field>
       ) : (
-        <Field label="API key" hint={signedIn ? 'Encrypted with your own data. It is checked when you try a model.' : <Failure>{sign.error}</Failure>}>
+        <Field label="API key" hint={signedIn ? 'Encrypted with your own data.' : <Failure>{sign.error}</Failure>}>
           {signedIn ? (
             <span>Saved</span>
           ) : (
@@ -143,26 +131,7 @@ export function useProviderConnect(choice: Choice, model: ManageState['model'], 
         </Field>
       )}
       {signedIn ? (
-        <Field
-          label="Model"
-          hint={
-            tried ? (
-              tried.error ? (
-                <Failure>{tried.error}</Failure>
-              ) : (
-                said(tried)
-              )
-            ) : (
-              <>
-                {trying.error ? (
-                  <Failure>{trying.error}</Failure>
-                ) : (
-                  'A small one is usually enough. Try it on a few recent messages first; each is a paid call.'
-                )}
-              </>
-            )
-          }
-        >
+        <Field label="Model" hint="A small one is usually enough.">
           <Select
             label="Model"
             value={chosen}
@@ -173,21 +142,9 @@ export function useProviderConnect(choice: Choice, model: ManageState['model'], 
             }
             onChange={setPicked}
           />
-          <Button
-            busy={trying.busy}
-            disabled={chosen === '' || tried !== null}
-            onClick={() =>
-              trying.run(async () => {
-                const result = await api.tryModel(chosen);
-                setTrial({ model: chosen, result });
-              })
-            }
-          >
-            {tried ? 'Tried' : 'Try it'}
-          </Button>
         </Field>
       ) : null}
     </Form>
   );
-  return { fields, ready: tried && !tried.error && tried.answered > 0 ? chosen : null };
+  return { fields, ready: signedIn && chosen !== '' ? chosen : null };
 }

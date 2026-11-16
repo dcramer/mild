@@ -156,9 +156,6 @@ export const api = {
   signInChatGPT: () => post<{ code: string; url: string; expiresAt: number }>('/api/model/chatgpt', {}),
   saveModelKey: (provider: string, key: string) => post('/api/model/key', { provider, key }),
   signOutModel: (provider: string) => post('/api/model/signout', { provider }),
-  /** Ask a model about a few recent messages before it sorts anything. Each call is paid for. */
-  tryModel: (model: string) =>
-    post<{ asked: number; answered: number; checked: number; matched: number; ms: number; costUsd: number; error: string | null }>('/api/model/try', { model }),
   saveLabel: (
     accountId: string,
     id: string,

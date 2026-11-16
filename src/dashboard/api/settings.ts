@@ -111,16 +111,6 @@ export const writes: Write[] = [
     },
   },
   {
-    path: '/api/model/try',
-    touches: self,
-    run: async ({ db, controls }, body) => {
-      const { model } = body;
-      if (!str(model) || !/^[^/\s]+\/\S+$/.test(model)) return null;
-      if (!controls) throw new Error('This dashboard cannot ask a model.');
-      return await controls.tryModel(db, model);
-    },
-  },
-  {
     path: '/api/model/signout',
     touches: self,
     run: async ({ db, controls }, body) => {
