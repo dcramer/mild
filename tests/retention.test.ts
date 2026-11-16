@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { RETENTION_DAYS, pruneOld } from '../src/daemon/retention.ts';
 import { KEEP_BODY_DAYS } from '../src/daemon/bodies.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { type RunOptions, type Wake, runJob, runLoop, upkeep } from '../src/daemon/run.ts';
+import { type RunOptions, runJob, runLoop, upkeep } from '../src/daemon/run.ts';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { recordSync } from '../src/store/accounts.ts';
 import { type ActionType, finishAction, insertPendingAction, unsubscribedAt } from '../src/store/actions.ts';
@@ -161,23 +161,21 @@ describe('retention', () => {
     const running: Promise<unknown>[] = [];
     const options: RunOptions = {
       ephemeral: memoryEphemeral(),
+      jobs: { send: (job) => void running.push(runJob(store, job, options, Infinity)) },
       connect: () => {
         throw new Error('not connected');
       },
       log: (line) => logs.push(line),
       now: () => times[tick]!,
     };
-    const ticks: Wake = {
-      now: () => {},
-      wait: async () => {
-        await Promise.all(running.splice(0));
-        // Something else grows old after the first prune: it stays until a day has passed.
-        if (tick === 0) await acted('second');
-        if (++tick === times.length) stop.abort();
-      },
+    const wait = async () => {
+      await Promise.all(running.splice(0));
+      // Something else grows old after the first prune: it stays until a day has passed.
+      if (tick === 0) await acted('second');
+      if (++tick === times.length) stop.abort();
     };
     await acted('first');
-    await runLoop(store, { send: (job) => void running.push(runJob(store, job, options)) }, { signal: stop.signal, wake: ticks, now: () => times[tick]! });
+    await runLoop(store, options, { signal: stop.signal, wait });
     expect(logs.filter((line) => line.startsWith('Forgot'))).toEqual([
       'Forgot 1 message with nothing newer than 365 days',
       'Forgot 1 message with nothing newer than 365 days',

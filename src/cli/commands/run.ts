@@ -2,7 +2,7 @@ import { parseArgs } from 'node:util';
 import { unsubscribe } from '../../actions/unsubscribe.ts';
 import { loadConfig } from '../../config.ts';
 import { localJobs } from '../../daemon/jobs.ts';
-import { type RunOptions, createWake, runEveryone, runJob, runLoop } from '../../daemon/run.ts';
+import { type RunOptions, runEveryone, runJob, runLoop } from '../../daemon/run.ts';
 import { hasClientSecrets } from '../../gmail/auth.ts';
 import { type Account, connectedAddresses, listAccounts, listUsers, personOf } from '../../store/accounts.ts';
 import { preferences } from '../../store/preferences.ts';
@@ -64,8 +64,18 @@ export async function run(args: string[]): Promise<void> {
         return null;
       }
     };
+    const jobs = localJobs(async (job, until) => {
+      try {
+        await runJob(store, job, options, until);
+        if (job.kind === 'pass') await announce(job.person);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(job.kind === 'pass' ? `${job.account}: pass failed, will retry: ${message}` : `Could not delete old records, will retry tomorrow: ${message}`);
+      }
+    });
     const options: RunOptions = {
       ephemeral,
+      jobs,
       model,
       unsubscribe: (db: Sql, accountId: string, messageId: string) => unsubscribe({ db }, accountId, messageId),
       connect: async (db: Sql, account: Account) => {
@@ -92,12 +102,11 @@ export async function run(args: string[]): Promise<void> {
     }
 
     // One process keeps sift online: the same one that classifies mail serves the dashboard.
-    const wake = createWake();
     const port = portOption(values.port);
     const stopDashboard = values['no-dashboard']
       ? () => {}
       : await serveDashboard(config, store, {
-          controls: await buildControls(config, store, { ephemeral, wake, running: true }),
+          controls: await buildControls(config, store, { ephemeral, jobs, running: true }),
           ...(values.dev ? { dev: true } : {}),
           ...(port === undefined ? {} : { port }),
           ...(values.host ? { host: values.host } : {}),
@@ -106,17 +115,8 @@ export async function run(args: string[]): Promise<void> {
     const stop = new AbortController();
     process.once('SIGINT', () => stop.abort());
     process.once('SIGTERM', () => stop.abort());
-    const jobs = localJobs(async (job) => {
-      try {
-        await runJob(store, job, options);
-        if (job.kind === 'pass') await announce(job.person);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        log(job.kind === 'pass' ? `${job.account}: pass failed, will retry: ${message}` : `Could not delete old records, will retry tomorrow: ${message}`);
-      }
-    });
     try {
-      await runLoop(store, jobs, { signal: stop.signal, wake });
+      await runLoop(store, options, { signal: stop.signal });
     } finally {
       await jobs.stop();
       stopDashboard();

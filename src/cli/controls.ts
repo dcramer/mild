@@ -7,7 +7,7 @@ import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 import { backfill } from '../daemon/backfill.ts';
 import type { Controls, ModelSignIns } from '../dashboard/controls.ts';
 import { forgetPassStatus, passStatus } from '../daemon/status.ts';
-import type { Wake } from '../daemon/run.ts';
+import type { Jobs } from '../daemon/jobs.ts';
 import { createGmailApi, getMessageHtml } from '../gmail/api.ts';
 import { interruptEvals, startEval } from '../learn/evals.ts';
 import { clientFor, loadClientSecrets, revokeGrant } from '../gmail/auth.ts';
@@ -72,13 +72,19 @@ function deviceId(config: Config): string {
 }
 
 /** What the dashboard may ask this process to do. See `Controls`. */
-export async function buildControls(config: Config, store: Store, live: { ephemeral: Ephemeral; wake?: Wake; running: boolean }): Promise<Controls> {
+export async function buildControls(config: Config, store: Store, live: { ephemeral: Ephemeral; jobs?: Jobs; running: boolean }): Promise<Controls> {
   const everyone = async () => await Promise.all((await listUsers(store.central)).map((u) => store.user(u.id)));
   for (const db of await everyone()) await interruptEvals(db);
   const choices = modelChoices(config.settings.chatgptSignIn ?? 'device-code');
   // By person: a ChatGPT sign-in waiting on them, and a Sign in with ChatGPT waiting for its address.
   const pending = new Map<number, NonNullable<ModelSignIns['pending']>>();
   const redirects = new Map<number, PendingRedirect>();
+  /** Pass the person's mailboxes now, not at the next tick. Nothing does while only the dashboard runs. */
+  const passNow = async (db: Sql) => {
+    if (!live.jobs) return;
+    const person = await personOf(db);
+    for (const account of await listAccounts(db)) live.jobs.send({ kind: 'pass', person, account: account.id });
+  };
   return {
     models: async (db) => {
       const available = (await (await modelsFor(config, db)).getAvailable())
@@ -120,7 +126,7 @@ export async function buildControls(config: Config, store: Store, live: { epheme
       started.done.then(
         () => {
           if (pending.get(person) === shown) pending.delete(person);
-          live.wake?.now();
+          passNow(db).catch(() => {});
         },
         (error: unknown) => {
           if (pending.get(person) === shown) pending.set(person, { error: error instanceof Error ? error.message : String(error) });
@@ -137,12 +143,12 @@ export async function buildControls(config: Config, store: Store, live: { epheme
         redirects.delete(person);
         pending.delete(person);
       }
-      live.wake?.now();
+      await passNow(db);
     },
     saveModelKey: async (db, provider, key) => {
       if (!choices.some((c) => c.provider === provider && c.how === 'key')) throw new Error('That provider does not take an API key.');
       await saveApiKey(await credentials(db, 'model', config.keys), provider, key);
-      live.wake?.now();
+      await passNow(db);
     },
     signOutModel: async (db, provider) => {
       await (await credentials(db, 'model', config.keys)).remove(provider);
@@ -169,7 +175,7 @@ export async function buildControls(config: Config, store: Store, live: { epheme
       const last = await lastStandingChange(db, accountId, messageId);
       if (last) await undo({ db, mailbox: (await gmailFor(config, live.ephemeral, db, accountId)).mailbox }, last.id);
       // The corrected decision is waiting to be carried out; do it now, not at the next interval.
-      live.wake?.now();
+      await passNow(db);
       return last !== null;
     },
     startEval: async (db, request) => {
@@ -194,7 +200,7 @@ export async function buildControls(config: Config, store: Store, live: { epheme
       const { client, pace } = await gmailFor(config, live.ephemeral, db, accountId);
       return await getMessageHtml(client, pace, messageId);
     },
-    checkNow: () => live.wake?.now(),
+    checkNow: passNow,
     activity: async (mailboxes) => ({ running: live.running, ...(await passStatus(live.ephemeral, mailboxes)) }),
   };
 }

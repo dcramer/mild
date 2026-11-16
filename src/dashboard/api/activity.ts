@@ -110,7 +110,7 @@ export const writes: Write[] = [
     run: async ({ db, controls }, { id }, scope) => {
       const result = await retryDecision(db, scope, id);
       if (!result.retried) throw new Error('That change did not fail, so there is nothing to try again.');
-      controls?.checkNow();
+      await controls?.checkNow(db);
       return result;
     },
   }),
@@ -121,7 +121,7 @@ export const writes: Write[] = [
     touches: named,
     run: async ({ db, controls, now }, { accountId, messageId }) => {
       if (!(await putBackInQueue(db, accountId, messageId, now()))) throw new Error('That message is already waiting to be judged.');
-      controls?.checkNow();
+      await controls?.checkNow(db);
       return { ok: true as const };
     },
   }),
@@ -133,7 +133,7 @@ export const writes: Write[] = [
     run: async ({ db, controls, now }, _body, scope) => {
       const retried = await putAllBackInQueue(db, scope.accounts, now());
       if (retried === 0) throw new Error('Nothing the model failed on is left to retry.');
-      controls?.checkNow();
+      await controls?.checkNow(db);
       return { retried };
     },
   }),

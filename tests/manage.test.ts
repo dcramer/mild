@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { MAX_BACKFILL, backfill } from '../src/daemon/backfill.ts';
 import type { Job } from '../src/daemon/jobs.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { type RunOptions, type Wake, createWake, runJob, runLoop } from '../src/daemon/run.ts';
+import { type RunOptions, runJob, runLoop } from '../src/daemon/run.ts';
 import { signInRefusal } from '../src/cli/sign-in.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
@@ -55,7 +55,7 @@ const controls: Controls = {
   },
   revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), true),
   messageHtml: async () => null,
-  checkNow: () => void calls.push('check'),
+  checkNow: async () => void calls.push('check'),
   activity: async () => ({ running: true, lastPassAt: 5, problems: [], expired: [ACCOUNT] }),
 };
 
@@ -675,26 +675,16 @@ describe('older mail', () => {
 });
 
 describe('run loop', () => {
-  it('sends a pass for each mailbox every interval, and sooner when woken', async () => {
+  it('each tick sends a pass for every mailbox, and upkeep on the first tick of a day', async () => {
     const stop = new AbortController();
-    const wake = createWake();
-    const passes: Job[] = [];
-    const started = Date.now();
+    const sent: Job[] = [];
+    let ticks = 0;
     await runLoop(
       store,
-      {
-        send: (job) => {
-          if (job.kind !== 'pass') return;
-          passes.push(job);
-          // Wake during the wait that follows; stop after the third.
-          if (passes.length < 3) setTimeout(() => wake.now(), 5);
-          else setTimeout(() => stop.abort(), 5);
-        },
-      },
-      { signal: stop.signal, wake },
+      { ephemeral: memoryEphemeral(), jobs: { send: (job) => void sent.push(job) }, now: () => 5000 },
+      { signal: stop.signal, wait: async () => void (++ticks === 3 && stop.abort()) },
     );
-    expect(passes.map((job) => job.kind === 'pass' && job.account)).toEqual([ACCOUNT, ACCOUNT, ACCOUNT]);
-    expect(Date.now() - started).toBeLessThan(2000);
+    expect(sent.map((job) => (job.kind === 'pass' ? job.account : job.kind))).toEqual(['upkeep', ACCOUNT, ACCOUNT, ACCOUNT]);
   });
 
   it('deletes examples a year after their answer, when it starts and once a day after', async () => {
@@ -713,20 +703,18 @@ describe('run loop', () => {
       let tick = 0;
       const options: RunOptions = {
         ephemeral: memoryEphemeral(),
+        jobs: { send: (job) => void running.push(runJob(store, job, options, Infinity)) },
         connect: () => {
           throw new Error('offline');
         },
         log: (line) => logs.push(line),
         now: () => times[tick]!,
       };
-      const ticks: Wake = {
-        now: () => {},
-        wait: async () => {
-          await Promise.all(running.splice(0));
-          if (++tick === times.length) stop.abort();
-        },
+      const wait = async () => {
+        await Promise.all(running.splice(0));
+        if (++tick === times.length) stop.abort();
       };
-      await runLoop(store, { send: (job) => void running.push(runJob(store, job, options)) }, { signal: stop.signal, wake: ticks, now: () => times[tick]! });
+      await runLoop(store, options, { signal: stop.signal, wait });
     };
 
     await ticksAt([12 * DAY]);

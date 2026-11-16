@@ -34,6 +34,8 @@ type TriageDeps = {
    */
   unsubscribe?: (accountId: string, messageId: string) => Promise<UnsubscribeOutcome>;
   now?: () => number;
+  /** Start nothing new from this time on; the report says when work was left. */
+  until?: number;
 } & (
   | {
       /** The inference tier. Omitted when no model is configured: mail no rule covers waits, undecided, for one. */
@@ -68,6 +70,8 @@ export interface TriageReport {
   unjudged: number;
   /** What went wrong the last time. */
   failure?: string;
+  /** Stopped at `until` with mail left to decide or carry out. */
+  unfinished?: true;
 }
 
 /** After this many provider errors in a row a pass stops asking the model: the provider is likely down. */
@@ -182,16 +186,23 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     return outcome.status;
   };
 
-  if (mailbox) {
-    for (const pending of await listUnsettledDecisions(db, account.id)) await carryOut(pending.id, pending.messageId, pending, mailbox);
-  } else if (deps.answers) {
-    for (const pending of await listUnsettledDecisions(db, account.id, { byUserOnly: true }))
-      await carryOut(pending.id, pending.messageId, pending, deps.answers);
-  }
+  const over = () => {
+    if (deps.until === undefined || now() < deps.until) return false;
+    report.unfinished = true;
+    return true;
+  };
+
+  const box = mailbox ?? deps.answers;
+  if (box)
+    for (const pending of await listUnsettledDecisions(db, account.id, mailbox ? {} : { byUserOnly: true })) {
+      if (over()) break;
+      await carryOut(pending.id, pending.messageId, pending, box);
+    }
 
   const { model: _given, ...modelless } = deps;
   const decide = await cascadeFor(model ? { ...deps, model } : modelless, account.id, () => asking);
   for (const { facts, suggestOnly } of await listUndecided(db, account.id, limit)) {
+    if (over()) break;
     const act = mailbox !== null && !suggestOnly;
     const started = performance.now();
     runId = undefined;

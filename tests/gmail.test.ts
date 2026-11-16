@@ -283,6 +283,20 @@ describe('syncAccount', () => {
     expect((await listAccounts(db))[0]?.historyId).toBe('520');
   });
 
+  it('stops at its time limit with what it fetched recorded and the cursor where it was', async () => {
+    const db = await openUserDb('me@example.org');
+    await addMailbox(db, 'me@example.org', '500', 0);
+    const messages = { a: gmailMessage('a'), b: gmailMessage('b'), c: gmailMessage('c') };
+    let clock = 0;
+    const api = fakeApi({ pages: page(['a', 'b', 'c'], '520'), messages });
+    api.getMetadata = async (id) => ((clock += 1000), messages[id as 'a'] ?? null);
+    const report = await syncAccount(db, api, (await listAccounts(db))[0]!, () => clock, 1500);
+    expect(report).toMatchObject({ unfinished: true });
+    expect(report.added.map((m) => m.messageId)).toEqual(['a', 'b']);
+    expect((await listAccounts(db))[0]?.historyId).toBe('500');
+    expect(await raw(db).all('SELECT id FROM messages ORDER BY id')).toEqual([{ id: 'a' }, { id: 'b' }]);
+  });
+
   it('leaves the cursor alone when the search after an expired cursor fails', async () => {
     const db = await openUserDb('me@example.org');
     await addMailbox(db, 'me@example.org', '500', 0);

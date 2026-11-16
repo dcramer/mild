@@ -21,13 +21,15 @@ export interface SyncReport {
   skipped: number;
   /** Answers read from what the user did to messages in Gmail. */
   corrections: number;
+  /** Stopped at `until`: what was fetched is recorded, the cursor has not moved, and the next sync fetches the rest. */
+  unfinished?: true;
 }
 
 /**
  * Pull one account's new inbox mail into the store. The cursor moves only once every message has been
  * fetched, so a failure part-way leaves it where it was and the next run reads the same history again.
  */
-export async function syncAccount(db: Sql, api: GmailApi, account: Account, now: () => number = Date.now): Promise<SyncReport> {
+export async function syncAccount(db: Sql, api: GmailApi, account: Account, now: () => number = Date.now, until = Infinity): Promise<SyncReport> {
   // Recorded as the sync time, so the next sync knows which of sift's own changes its history can contain: those made since this one began.
   const startedAt = now();
   const syncedAt = await lastSyncedAt(db, account.id);
@@ -57,6 +59,10 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
 
   for (const id of pull.messageIds) {
     if (known.has(id)) continue;
+    if (now() >= until) {
+      await recordSynced(db, account.id, unrecorded, startedAt);
+      return { mode: pull.mode, added, skipped, corrections: 0, unfinished: true };
+    }
     const raw = await api.getMetadata(id);
     const facts = raw?.labelIds.includes('INBOX') ? toFacts(account.id, raw) : null;
     if (!facts) {

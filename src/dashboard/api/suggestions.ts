@@ -39,7 +39,7 @@ export const writes: Write[] = [
       // An answer pressed here is carried out on its message whether or not they have sift on.
       const result = await applyFeedback(db, { ...input, carryOut: true }, now());
       if (result.corrected === null || !controls) {
-        if (result.carrying > 0) controls?.checkNow();
+        if (result.carrying > 0) await controls?.checkNow(db);
         return { ...result, fixed: null, notFixed: null };
       }
       // The answer is saved whatever happens next; a mailbox that cannot be put right is reported, not hidden.

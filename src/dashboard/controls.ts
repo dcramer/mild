@@ -53,8 +53,8 @@ export interface Controls {
    * open. Nothing keeps or logs it. Null when it has no HTML part or is no longer in Gmail.
    */
   messageHtml(db: Sql, accountId: string, messageId: string): Promise<string | null>;
-  /** Start a pass now instead of waiting for the interval. */
-  checkNow(): void;
+  /** Pass this person's mailboxes now instead of at the next tick. */
+  checkNow(db: Sql): Promise<void>;
   /** How the last passes over these mailboxes went. */
   activity(mailboxes: string[]): Promise<Activity>;
 }

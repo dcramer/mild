@@ -67,7 +67,13 @@ function api(): GmailApi {
 /** A model that can place nothing. Mail sift asks about comes from a model's "unsure"; with no model, nothing is asked. */
 const unsure = async () => ({ model: 'test/model', judge: async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 }) });
 
-const options = (): RunOptions => ({ ephemeral: memoryEphemeral(), connect: () => ({ api: api(), mailbox }), log: (line) => logs.push(line), now: () => 5000 });
+const options = (): RunOptions => ({
+  ephemeral: memoryEphemeral(),
+  jobs: { send: () => {} },
+  connect: () => ({ api: api(), mailbox }),
+  log: (line) => logs.push(line),
+  now: () => 5000,
+});
 /** The person's database, with sift on or off for them. */
 const active = async (on: boolean) => {
   await setActive(db, on);
@@ -199,12 +205,39 @@ describe('one pass at a time per mailbox', () => {
     let connected = 0;
     const counting: RunOptions = { ...options(), connect: () => (connected++, { api: api(), mailbox }) };
     const token = await counting.ephemeral.claim(`lock:pass:${ACCOUNT}`, 10_000);
-    expect(await runJob(store, pass, counting)).toBeNull();
+    expect(await runJob(store, pass, counting, Infinity)).toBeNull();
     expect(connected).toBe(0);
     await counting.ephemeral.release(`lock:pass:${ACCOUNT}`, token!);
-    expect(await runJob(store, pass, counting)).toMatchObject({ email: ACCOUNT });
-    expect(await runJob(store, pass, counting)).toMatchObject({ email: ACCOUNT });
+    expect(await runJob(store, pass, counting, Infinity)).toMatchObject({ email: ACCOUNT });
+    expect(await runJob(store, pass, counting, Infinity)).toMatchObject({ email: ACCOUNT });
     expect(connected).toBe(2);
+  });
+});
+
+describe('a pass with a time limit', () => {
+  it('stops starting work at its limit, keeps what it did, and sends itself again', async () => {
+    const { store, db: own } = await onePerson(ACCOUNT);
+    const person = (await raw(store.central).get<{ id: number }>('SELECT id FROM users'))!.id;
+    const pass: Job = { kind: 'pass', person, account: ACCOUNT };
+    const sent: Job[] = [];
+    inbox.push(message('third', 'Third <third@example.net>'));
+    mailbox.labels.set('third', ['INBOX', 'UNREAD']);
+    let clock = 0;
+    // Each message the model is asked about takes a second.
+    const slow = async () => ({ model: 'test/model', judge: async () => ((clock += 1000), { label: 'unsure', reason: 'r', confidence: 0.2 }) });
+    const limited: RunOptions = { ...options(), jobs: { send: (job) => void sent.push(job) }, now: () => clock, model: slow };
+    const first = await runJob(store, pass, limited, 1500);
+    expect(first).toMatchObject({ unfinished: true });
+    expect(sent).toEqual([pass]);
+    // Two were asked about by 2000; the third waits for the follow-up.
+    expect(await raw(own).all('SELECT message_id FROM decisions')).toHaveLength(2);
+    expect(logs.at(-1)).toContain('out of time, carrying on');
+
+    sent.length = 0;
+    const second = await runJob(store, pass, limited, Infinity);
+    expect(second?.unfinished).toBeUndefined();
+    expect(sent).toEqual([]);
+    expect(await raw(own).all('SELECT message_id FROM decisions')).toHaveLength(3);
   });
 });
 

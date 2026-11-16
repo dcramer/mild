@@ -3,11 +3,17 @@ export type Job = { kind: 'pass'; person: number; account: string } | { kind: 'u
 
 /**
  * Where jobs are sent. A queue may deliver a job twice, so running one twice must be harmless: a pass
- * claims its mailbox before it starts (`claimMailbox`).
+ * claims its mailbox before it starts (`lock:pass:<mailbox>`).
  */
 export interface Jobs {
   send(job: Job): void;
 }
+
+/**
+ * How long a local job may run before it stops and sends itself again, as a hosted function's time limit
+ * would make it, so the same path runs everywhere.
+ */
+const LOCAL_JOB_MS = 5 * 60_000;
 
 /**
  * Passes run this many at a time: enough that one mailbox's backlog (a minute-long model call, a sync
@@ -21,7 +27,7 @@ const keyOf = (job: Job) => (job.kind === 'pass' ? `pass:${job.person}:${job.acc
  * Runs jobs in this process. A job already waiting is not queued again, and two alike never run together.
  * `run` must not reject. `stop` drops what is waiting and resolves once the running jobs end.
  */
-export function localJobs(run: (job: Job) => Promise<void>): Jobs & { stop(): Promise<void> } {
+export function localJobs(run: (job: Job, until: number) => Promise<void>): Jobs & { stop(): Promise<void> } {
   const waiting: Job[] = [];
   const running = new Map<string, Promise<void>>();
   let stopped = false;
@@ -34,7 +40,7 @@ export function localJobs(run: (job: Job) => Promise<void>): Jobs & { stop(): Pr
       const key = keyOf(job);
       running.set(
         key,
-        run(job).finally(() => {
+        run(job, Date.now() + LOCAL_JOB_MS).finally(() => {
           running.delete(key);
           pump();
         }),

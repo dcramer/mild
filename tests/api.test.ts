@@ -16,7 +16,7 @@ const answering = (models: unknown, signIn: unknown = { code: 'C', url: 'https:/
   ({
     models: async () => models,
     signInChatGPT: async () => signIn,
-    checkNow: () => {},
+    checkNow: async () => {},
   }) as unknown as Controls;
 
 describe('what the API accepts and sends', () => {

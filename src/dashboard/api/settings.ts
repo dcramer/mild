@@ -58,7 +58,7 @@ export const writes: Write[] = [
     touches: self,
     run: async ({ db, controls }, { active }) => {
       await setActive(db, active);
-      controls?.checkNow();
+      await controls?.checkNow(db);
       return { ok: true as const };
     },
   }),
@@ -73,7 +73,7 @@ export const writes: Write[] = [
     touches: self,
     run: async ({ db, controls }, { model }) => {
       await setModel(db, model);
-      controls?.checkNow();
+      await controls?.checkNow(db);
       return { ok: true as const };
     },
   }),
@@ -125,10 +125,10 @@ export const writes: Write[] = [
     body: z.strictObject({ days: z.int().min(1).max(30) }),
     reply: z.object({ added: z.number() }),
     touches: install,
-    run: async ({ controls }, { days }) => {
+    run: async ({ controls, db }, { days }) => {
       if (!controls) throw new Error('This dashboard cannot pull in mail.');
       const added = await controls.backfill(days);
-      controls.checkNow();
+      await controls.checkNow(db);
       return { added };
     },
   }),
@@ -137,9 +137,9 @@ export const writes: Write[] = [
     body: nothing,
     reply: done,
     touches: () => 'anyone',
-    run: ({ controls }) => {
+    run: async ({ controls, db }) => {
       if (!controls) throw new Error('Only the dashboard is running here, so there is nothing to check with.');
-      controls.checkNow();
+      await controls.checkNow(db);
       return { ok: true as const };
     },
   }),
