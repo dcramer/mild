@@ -19,13 +19,13 @@ const ICON_PRESS = 'press flex size-11 shrink-0 cursor-pointer items-center just
 export function Sections({ items, current }: { items: readonly NavItem[]; current: string }) {
   return (
     <nav aria-label="Sections">
-      <ul className="flex flex-wrap gap-x-1 gap-y-1">
+      <ul className="flex flex-wrap gap-x-6 gap-y-1">
         {items.map((item) => (
           <li key={item.to}>
             <a
               href={`/${item.to}`}
               aria-current={item.to === current ? 'page' : undefined}
-              className="flex items-baseline gap-1.5 rounded-(--cut) px-2.5 py-1 text-sm font-medium text-muted-foreground hover:text-foreground aria-[current=page]:bg-highlight aria-[current=page]:text-highlight-ink"
+              className="flex items-baseline gap-1.5 py-1 text-[15px] font-medium text-muted-foreground hover:text-foreground aria-[current=page]:text-foreground aria-[current=page]:shadow-[inset_0_-3px_0_var(--highlight)]"
             >
               {item.label}
               {item.count ? <span className="text-sm tabular-nums opacity-70">{item.count}</span> : null}

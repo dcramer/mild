@@ -1,32 +1,9 @@
-import { CheckIcon } from 'lucide-react';
 import { ErrorNote, Verdict } from '@/components/bits.tsx';
 import { SenderLink } from '@/components/sender.tsx';
 import { useParam } from '@/lib/route.ts';
-import { type Days, type SuggestionGroup, type Suggestions, type Summary, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ACTIONS, PERIODS, TIERS, ago, count, describeMatch, longDay, money, outcomeName, percent, plural, shortDay, willBe } from '@/lib/format.ts';
-import {
-  Button,
-  Check,
-  Empty,
-  Figure,
-  Figures,
-  FilterGroup,
-  Highlight,
-  ListView,
-  Loading,
-  OnPhone,
-  RowActions,
-  Reserve,
-  Section,
-  Select,
-  StackedBars,
-  Sub,
-  Table,
-  Td,
-  Th,
-  Tr,
-  useToast,
-} from '@/system';
+import { type SuggestionGroup, type Suggestions, type Summary, api, useAction, useLoaded } from '@/lib/api.ts';
+import { ACTIONS, ago, count, describeMatch, money, outcomeName, percent, plural, willBe } from '@/lib/format.ts';
+import { Button, Check, Empty, FilterGroup, ListView, Loading, OnPhone, RowActions, Reserve, Sub, Table, TextLink, Td, Th, Tr, useToast } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 const groupKey = (g: SuggestionGroup) => `${g.accountId}/${g.sender}`;
@@ -43,53 +20,21 @@ function subjects(sample: SuggestionGroup['sample']) {
   return [...seen.values()];
 }
 
-/** How sift is doing over the period: what it decided without a model, how often it was right, what it cost, and decisions per day by tier. */
-function Standing({
-  summary,
-  accuracy,
-  days,
-  onDays,
-}: {
-  summary: Summary;
-  accuracy: Suggestions['accuracy'] | undefined;
-  days: Days;
-  onDays: (days: Days) => void;
-}) {
+/** How sift did this week, as one quiet line beside the title; changes that went wrong are the only thing in it that asks for anything. */
+function Week({ summary }: { summary: Summary }) {
   const t = summary.totals;
-  // Before senders were folded into rules they were a tier of their own. It is shown only where that history exists.
-  const used = (stage: string) => stage !== 'sender' || summary.byStage.some((row) => row.stage === stage && row.decisions > 0);
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-x-12 gap-y-6 lg:grid-cols-[auto_minmax(0,1fr)]">
-      <Figures className="gap-x-8">
-        <Figure
-          label="No model needed"
-          value={percent(t.withoutInference, t.decisions)}
-          note={t.decisions ? `${count(t.withoutInference)} of ${count(t.decisions)}` : null}
-        />
-        {accuracy && accuracy.reviewed > 0 ? (
-          <Figure label="sift was right" value={percent(accuracy.right, accuracy.reviewed)} note={`of ${count(accuracy.reviewed)} you checked`} />
-        ) : null}
-        <Figure label="Model cost" value={money(t.costUsd)} note={t.decisions ? plural(t.decisions, 'decision') : null} />
-        {t.troubledActions > 0 ? (
-          <Figure label="Needs a look" value={count(t.troubledActions)} note="in Activity" tone="failure" href="/activity?status=trouble&days=30" />
-        ) : null}
-      </Figures>
-      <div className="flex min-w-0 flex-col gap-2">
-        <div className="flex justify-end">
-          <Select label="Period" value={String(days) as (typeof PERIODS)[number][0]} options={PERIODS} onChange={(value) => onDays(Number(value) as Days)} />
-        </div>
-        {t.decisions === 0 ? (
-          <p className="pt-10 text-muted-foreground">Nothing decided in this period.</p>
-        ) : (
-          <StackedBars
-            compact
-            unit="decisions"
-            series={TIERS.filter((tier) => used(tier.key))}
-            rows={summary.daily.map((d) => ({ key: d.day, label: shortDay(d.day), title: longDay(d.day), values: d.counts }))}
-          />
-        )}
-      </div>
-    </div>
+    <p className="text-right text-sm text-muted-foreground tabular-nums">
+      {t.troubledActions > 0 ? (
+        <>
+          <TextLink href="/activity?status=trouble&days=30" className="font-medium text-destructive">
+            {plural(t.troubledActions, 'change')} went wrong
+          </TextLink>
+          <br />
+        </>
+      ) : null}
+      This week {percent(t.withoutInference, t.decisions)} without a model · {money(t.costUsd)} · <TextLink href="/activity">Activity</TextLink>
+    </p>
   );
 }
 
@@ -105,18 +50,14 @@ function ProposalRow({ proposal, onResolved }: { proposal: Proposal; onResolved:
       onResolved(accept ? `From now on, mail ${whose} is ${proposal.labelName}: ${willBe(proposal.disposition)}, without sift reading it.` : null);
     });
   return (
-    <li className="row flex flex-wrap items-center gap-x-6 gap-y-2 py-3">
-      <div className="min-w-0 flex-1 basis-80">
-        <p>
-          Mail {whose} is <span className="font-medium">{proposal.labelName}</span> ({outcomeName(proposal.disposition)})
-        </p>
-        <p className="text-muted-foreground">
-          {proposal.kind === 'rule'
-            ? `The last ${count(proposal.agreed)} were. A rule would decide without a model.`
-            : `sift has agreed ${count(proposal.agreed)} times running. It could stop reading each one.`}
-        </p>
-        {error ? <p className="text-destructive">{error}</p> : null}
-      </div>
+    <li className="row flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
+      <p className="min-w-0 flex-1 basis-80">
+        <span className="font-semibold">{proposal.kind === 'rule' ? 'Make a rule?' : 'Stop checking?'}</span>{' '}
+        <span className="text-muted-foreground">
+          The last {count(proposal.agreed)} from {whose.replace(/^from /, '')} were {proposal.labelName}.
+        </span>
+        {error ? <span className="block text-destructive">{error}</span> : null}
+      </p>
       <span className="flex items-center gap-1.5">
         <Button busy={busy} onClick={() => resolve(true)}>
           {proposal.kind === 'rule' ? 'Make the rule' : 'Stop reading them'}
@@ -129,58 +70,59 @@ function ProposalRow({ proposal, onResolved }: { proposal: Proposal; onResolved:
   );
 }
 
-/** One sender's waiting mail, as a row: who, what it is about, what sift says, and agreeing in one press. Pressing the row opens it to answer otherwise. */
+/** One sender's waiting mail, as a row: who, what, what sift says, when. Pointing at it offers Agree, and Change… to say otherwise. */
 function SuggestionRow({ group, onOpen, onAnswered }: { group: SuggestionGroup; onOpen: () => void; onAnswered: (taught: string) => void }) {
   const { busy, error, run } = useAction();
-  const [first, ...rest] = subjects(group.sample);
+  const [first] = subjects(group.sample);
   const mixed = group.guesses > 1;
+  const sure = group.labelId !== null && !mixed;
   const agree = () =>
     run(async () => {
       const result = await api.feedback({ accountId: group.accountId, sender: group.sender, scope: 'sender', label: group.labelId ?? '' });
       onAnswered(result.taught ?? 'Noted.');
     });
+  const subject = (
+    <>
+      <span className="truncate">{first?.subject || '(no subject)'}</span>
+      {group.messages > 1 ? <span className="shrink-0 text-muted-foreground/70 tabular-nums">+{count(group.messages - 1)}</span> : null}
+    </>
+  );
   const verdict = <Verdict labelName={group.labelName} disposition={group.disposition} unsubscribe={group.unsubscribe} />;
 
   return (
     <Tr onOpen={onOpen}>
-      <Td className="max-w-0 md:w-[22%]">
+      <Td className="max-w-0 md:w-[24%]">
         <span className="name block truncate">
           <SenderLink accountId={group.accountId} address={group.sender}>
             {group.senderName ?? group.sender}
           </SenderLink>
         </span>
-        <Sub>{group.senderName ? group.sender : plural(group.messages, 'message')}</Sub>
+        {group.senderName ? <Sub>{group.sender}</Sub> : null}
         <OnPhone>
-          <span className="w-full truncate">{first?.subject || '(no subject)'}</span>
+          <span className="flex w-full min-w-0 items-baseline gap-2 text-foreground">{subject}</span>
           {verdict}
         </OnPhone>
       </Td>
       <Td phone="hide" className="max-w-0 md:w-[36%]">
-        <span className="flex items-baseline gap-2">
-          <span className="truncate">{first?.subject || '(no subject)'}</span>
-          {first && first.times > 1 ? <span className="shrink-0 text-muted-foreground tabular-nums">×{first.times}</span> : null}
-        </span>
-        <Sub>
-          {plural(group.messages, 'message')}
-          {rest.length > 0 ? ` · also “${rest[0]?.subject}”` : ''}
-        </Sub>
+        <span className="flex items-baseline gap-2">{subject}</span>
       </Td>
       <Td phone="hide" className="whitespace-nowrap">
         {verdict}
-        {mixed ? <Sub>for most; open to see the rest</Sub> : null}
+        {mixed ? <span className="text-muted-foreground/70"> · for most</span> : null}
         {error ? <span className="mt-1 block text-destructive">{error}</span> : null}
       </Td>
       <Td phone="hide" num quiet>
         {ago(group.latestReceivedAt)}
       </Td>
-      <RowActions>
-        {/* A sender sift guessed more than one way, or could not place, is worth opening before agreeing. */}
-        {group.labelId === null || mixed ? null : (
+      <RowActions reveal>
+        {sure ? (
           <Button variant="quiet" busy={busy} onClick={agree}>
-            <CheckIcon aria-hidden />
-            Right
+            Agree
           </Button>
-        )}
+        ) : null}
+        <Button variant="quiet" onClick={onOpen}>
+          {sure ? 'Change…' : 'Answer…'}
+        </Button>
       </RowActions>
     </Tr>
   );
@@ -188,15 +130,13 @@ function SuggestionRow({ group, onOpen, onAnswered }: { group: SuggestionGroup; 
 
 const DOES = [['', 'Anything'] as const, ...ACTIONS.filter(([key]) => key !== 'keep'), ['review', outcomeName('review')] as const];
 
-/** The home page: how sift is doing, the rules it proposes, then what it would do, waiting for the user to say right or wrong. */
+/** The home page: what sift would do with waiting mail, sender by sender, for the user to agree with or change. */
 export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
   const [kept, setKept] = useParam('kept');
   const includeKept = kept === '1';
   const setIncludeKept = (on: boolean) => setKept(on ? '1' : '');
-  const [chosen, setChosen] = useParam('days');
-  const days = (PERIODS.some(([key]) => key === chosen) ? Number(chosen) : 7) as Days;
   const { data, error, loading, reload } = useLoaded(`suggestions-${includeKept}`, (signal) => api.suggestions(includeKept, signal));
-  const summary = useLoaded(`summary-${days}`, (signal) => api.summary(days, signal));
+  const summary = useLoaded('summary-7', (signal) => api.summary(7, signal));
   const toast = useToast();
   const [search, setSearch] = useParam('q');
   const [label, setLabel] = useParam('label');
@@ -220,41 +160,25 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
   return (
     <ListView
       title="Suggestions"
-      meta={
-        data ? (
-          data.waiting > 0 ? (
-            <span>
-              <Highlight className="mx-0 font-medium">{count(data.waiting)} waiting</Highlight> from {plural(data.groups.length, 'sender')}
-            </span>
-          ) : (
-            'Nothing waiting on you'
-          )
-        ) : null
-      }
+      count={data ? count(data.waiting) : null}
+      actions={summary.data ? <Week summary={summary.data} /> : null}
       intro={
-        // The figures, the chart and any proposals arrive after the list is drawn, and would push it down.
-        <Reserve id="home" ready={summary.data !== null && data !== null} room={{ narrow: 440, wide: 230 }}>
-          <div className="flex flex-col gap-6">
-            {summary.data ? (
-              <Standing summary={summary.data} accuracy={data?.accuracy} days={days} onDays={(next) => setChosen(next === 7 ? '' : String(next))} />
-            ) : null}
-            {data && data.proposals.length > 0 ? (
-              <Section title="Proposed rules" meta={count(data.proposals.length)}>
-                <ul className="flex flex-col">
-                  {data.proposals.map((proposal) => (
-                    <ProposalRow
-                      key={proposal.id}
-                      proposal={proposal}
-                      onResolved={(line) => {
-                        if (line) toast(line);
-                        reload();
-                      }}
-                    />
-                  ))}
-                </ul>
-              </Section>
-            ) : null}
-          </div>
+        // Proposals arrive after the list is drawn, and would push it down.
+        <Reserve id="home-proposals" ready={data !== null} room={{ narrow: 0, wide: 0 }}>
+          {data && data.proposals.length > 0 ? (
+            <ul className="sheet flex flex-col">
+              {data.proposals.map((proposal) => (
+                <ProposalRow
+                  key={proposal.id}
+                  proposal={proposal}
+                  onResolved={(line) => {
+                    if (line) toast(line);
+                    reload();
+                  }}
+                />
+              ))}
+            </ul>
+          ) : null}
         </Reserve>
       }
       search={{ value: search, onChange: setSearch, placeholder: 'Search senders and subjects' }}
@@ -279,22 +203,16 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
       {loading ? (
         <Loading rows={6} />
       ) : groups.length === 0 ? (
-        <Empty>
-          {data && data.groups.length > 0
-            ? 'Nothing waiting matches.'
-            : 'Nothing is waiting on you. As mail arrives sift says what it would do with it here, and each answer you give becomes a rule that covers later mail too.'}
-        </Empty>
+        <Empty>{data && data.groups.length > 0 ? 'Nothing waiting matches.' : 'Nothing is waiting on you.'}</Empty>
       ) : (
         <Table>
-          <thead>
+          <thead className="sr-only">
             <Tr>
               <Th>Sender</Th>
               <Th phone="hide">Mail</Th>
               <Th phone="hide">sift says</Th>
-              <Th phone="hide" num>
-                Latest
-              </Th>
-              <Th phone="hide" />
+              <Th phone="hide">Latest</Th>
+              <Th phone="hide">Actions</Th>
             </Tr>
           </thead>
           <tbody>

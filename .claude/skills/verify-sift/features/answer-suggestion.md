@@ -23,7 +23,7 @@ Preconditions:
 
 - Fresh seed. The `Suggestions` link reads `Suggestions 3`.
 
-- **Open.** Choose the Deals row. `ab open "$B/suggestions"`, then `ab find text "deals@promo.example.com" click --exact`. The address gains `?message=m4`, a level-2 heading reads `48 hours only: 30% off`, `sift suggests` shows `NOT SURE`, and `Teach sift` is disabled.
+- **Open.** Choose the Deals row. `ab open "$B/suggestions"`, then `ab find text "deals@promo.example.com" click --exact`. The address gains `?message=m4`, a level-2 heading reads `48 hours only: 30% off`, `sift suggests` shows `Not sure`, and `Teach sift` is disabled.
 - **Pick a label.** Choose Marketing. `ab find role radio click --name "7 Marketing"`. The radio is checked, `Teach sift` is enabled, and the sentence above it reads `From now on, mail from deals@promo.example.com is usually Marketing: archived, and unsubscribed from. sift still reads each one and asks about any that is something else.`
 - **Teach.** `ab find role button click --name "Teach sift"`. A toast (a dialog inside the `Notifications` region) repeats the sentence; the panel shows the next waiting message (`?message=m6`, Ada Lovelace).
 - **Back in the list.** `ab find role button click --name "Close"`. The link reads `Suggestions 2` and there is no Deals row.

@@ -1,7 +1,7 @@
 import type { DecisionRow } from '@/lib/api.ts';
 import { type Status, STATUS_NAMES, outcomeName, status, tier } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
-import { Code, Note, Stamp } from '@/system';
+import { Code, Note } from '@/system';
 
 /** A tier's ink swatch and name. The name always accompanies the swatch. */
 export function TierLabel({ stage }: { stage: string }) {
@@ -15,16 +15,16 @@ export function TierLabel({ stage }: { stage: string }) {
 }
 
 /**
- * What sift says mail is and does with it, the same way everywhere: the label's name, then the action as
- * a stamp. With no label and nothing done, sift was not sure, which is the reader's to answer.
+ * What sift says mail is and does with it, the same words everywhere: "Archive as Marketing". With no
+ * label and nothing done, sift was not sure, which is the reader's to answer, so it is the yellow one.
  */
 export function Verdict({ labelName, disposition, unsubscribe }: { labelName: string | null; disposition: string; unsubscribe?: boolean }) {
-  if (labelName === null && disposition === 'review') return <Stamp tone="look">{outcomeName('review')}</Stamp>;
+  if (labelName === null && disposition === 'review') return <span className="font-semibold text-highlight">{outcomeName('review')}</span>;
   return (
-    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-      {labelName ? <span className="font-medium">{labelName}</span> : null}
-      <Stamp>{outcomeName(disposition)}</Stamp>
-      {unsubscribe ? <span className="text-muted-foreground">+ unsubscribe</span> : null}
+    <span>
+      <span className="font-semibold">{outcomeName(disposition)}</span>
+      {labelName ? <span className="text-muted-foreground"> as {labelName}</span> : null}
+      {unsubscribe ? <span className="text-muted-foreground/70"> + unsubscribe</span> : null}
     </span>
   );
 }

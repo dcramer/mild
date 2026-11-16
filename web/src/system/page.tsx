@@ -9,12 +9,28 @@ import { cn } from '@/lib/utils';
  * A page that will have a `meta` line passes `null` until it knows what the line says: the line's room is
  * held, so the page below does not move when it arrives. Leave `meta` out for a page with none.
  */
-export function PageHeader({ title, badge, meta, actions }: { title: string; badge?: ReactNode; meta?: ReactNode; actions?: ReactNode }) {
+export function PageHeader({
+  title,
+  count,
+  badge,
+  meta,
+  actions,
+}: {
+  title: string;
+  /** How many there are, beside the title in a lighter ink. */
+  count?: ReactNode;
+  badge?: ReactNode;
+  meta?: ReactNode;
+  actions?: ReactNode;
+}) {
   return (
     <header className="flex flex-wrap items-end gap-x-6 gap-y-3">
       <div className="min-w-0 flex-1 basis-64">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <h1 className="statement break-words">{title}</h1>
+          <h1 className="statement break-words">
+            {title}
+            {count === undefined || count === null ? null : <span className="ml-3 font-medium text-muted-foreground/80 tabular-nums">{count}</span>}
+          </h1>
           {badge}
         </div>
         {meta === undefined ? null : (
