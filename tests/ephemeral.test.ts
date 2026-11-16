@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { globSync, readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { type Ephemeral, memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { redisEphemeral } from '../src/ephemeral/redis.ts';
@@ -86,7 +86,8 @@ describe('memory reserve', () => {
 
 describe('the Redis client', () => {
   it('is imported only by src/ephemeral', () => {
-    const files = execFileSync('git', ['grep', '-l', '-E', `from '(redis|@redis/[^']*)'`, '--', 'src'], { encoding: 'utf8' }).trim().split('\n');
-    expect(files.filter((file) => !file.startsWith('src/ephemeral/'))).toEqual([]);
+    const importing = globSync('src/**/*.ts').filter((file) => /from '(redis|@redis\/[^']*)'/.test(readFileSync(file, 'utf8')));
+    expect(importing.filter((file) => !file.startsWith('src/ephemeral/'))).toEqual([]);
+    expect(importing).not.toEqual([]);
   });
 });
