@@ -16,7 +16,7 @@ export interface NavItem {
 const ICON_PRESS = 'press flex size-11 shrink-0 cursor-pointer items-center justify-center hover:bg-(--fill)';
 
 /** The sections of the app, in a line. The current one is highlighted, like the name. */
-export function Sections({ items, current }: { items: readonly NavItem[]; current: string }) {
+function Sections({ items, current }: { items: readonly NavItem[]; current: string }) {
   return (
     <nav aria-label="Sections">
       <ul className="flex flex-wrap gap-x-6 gap-y-1">

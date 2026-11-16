@@ -125,3 +125,34 @@ describe('as little chrome as it takes', () => {
     expect(failures, failures.join('\n')).toEqual([]);
   });
 });
+
+describe('yellow means look here', () => {
+  test('a highlighted or ink button is never down a list, and a screen has one highlighted button at most', () => {
+    const failures: string[] = [];
+    for (const path of SCREENS) {
+      const source = readFileSync(path, 'utf8');
+      const file = `web/src/${relative(WEB, path)}`;
+      for (const row of source.matchAll(/<(Tr|RowActions)\b[\s\S]*?<\/\1>/g)) {
+        for (const press of row[0].matchAll(/variant="(mark|ink)"/g)) {
+          const line = source.slice(0, (row.index ?? 0) + (press.index ?? 0)).split('\n').length;
+          failures.push(`${file}:${line} variant="${press[1]}" in a row: a press repeated down a list is quiet.`);
+        }
+      }
+      const marks = [...source.matchAll(/variant="mark"/g)].length;
+      if (marks > 1) failures.push(`${file}: ${marks} buttons with variant="mark"; a screen has one thing waiting on the reader at most.`);
+    }
+    expect(failures, failures.join('\n')).toEqual([]);
+  });
+});
+
+test('every part is on the specimen page', () => {
+  const index = readFileSync(join(WEB, 'system/index.ts'), 'utf8');
+  const parts = [...index.matchAll(/export \{([^}]*)\}/g)]
+    .flatMap((match) => (match[1] ?? '').split(','))
+    .map((name) => name.trim())
+    .filter((name) => /^[A-Z]/.test(name));
+  // Toaster is mounted once by the app; the specimen page shows toasts through useToast.
+  const specimen = readFileSync(join(WEB, 'views/system.tsx'), 'utf8');
+  const missing = parts.filter((name) => name !== 'Toaster' && !new RegExp(`<${name}\\b`).test(specimen));
+  expect(missing, 'add each to web/src/views/system.tsx, in its states (docs/DESIGN.md)').toEqual([]);
+});

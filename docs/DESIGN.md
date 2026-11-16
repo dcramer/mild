@@ -97,7 +97,7 @@ A page is drawn before its data arrives, and what arrives must not push what is 
 - A form that adds or changes something opens in a `Dialog`; it does not unfold inside the list.
 - Opening an item of a list opens the `Panel`, and the same panel wherever that kind of item appears, so it behaves the same everywhere.
 
-- Build screens from these parts. If a screen needs something they cannot do, add or extend a part here, with its states (hover, focus, pressed, disabled, busy, empty, failed), and add it to the specimen page in the same change.
+- Build screens from these parts. If a screen needs something they cannot do, add or extend a part here, with its states (hover, focus, pressed, disabled, busy, empty, failed), and add it to the specimen page in the same change. A part exported from `web/src/system/index.ts` and missing from the specimen page fails the design-system test, as does a `mark` or `ink` button inside a `Tr` or `RowActions`, or a second `mark` in one screen's file.
 - A part says when to use it in its doc comment; that is the line the specimen page shows.
 - No inline styles, no fills, frames, corners, shadows or colours written outside `web/src/system/`; red is `Failure` and yellow comes only from a part's tone. If a value is missing, it is a missing token. `tests/design-system.test.ts` fails on any of these and names the file and line.
 - Behaviour that is hard to get right (a list that opens, a focus trap) comes from an unstyled primitive, today Base UI. Only files in `web/src/system/` import it (a lint error elsewhere), so the library can change without a screen changing.

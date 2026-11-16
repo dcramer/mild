@@ -35,15 +35,16 @@ import {
   OnPhone,
   PageHeader,
   Panel,
+  Reserve,
   RowActions,
   Section,
-  Reserve,
   Select,
   SettingRow,
   Sheet,
   StackedBars,
   Stamp,
   Sub,
+  Swatch,
   Table,
   Td,
   TextArea,
@@ -53,6 +54,7 @@ import {
   TimelineEvent,
   Tr,
   useToast,
+  Wordmark,
 } from '@/system';
 
 const SERIES = TIERS.filter((t) => t.key !== 'sender' && t.key !== 'heuristics').map((t, index) => ({ key: String(index), name: t.name, color: t.color }));
@@ -132,6 +134,12 @@ export function SystemView() {
 
       <Section title="Type">
         <Sheet>
+          <Row label="wordmark" note="The name, and only the name. large on the sign-in screen.">
+            <p className="flex items-baseline gap-6">
+              <Wordmark />
+              <Wordmark size="lg" />
+            </p>
+          </Row>
           <Row label="statement" note="A page’s title, and nothing else.">
             <p className="statement">Suggestions</p>
           </Row>
@@ -157,6 +165,12 @@ export function SystemView() {
           </Row>
           <Row label="slug" note="Column heads and a figure’s label. Not headings.">
             <p className="slug text-muted-foreground">Sender · Messages</p>
+          </Row>
+          <Row label="swatch" note="A series’ or a tier’s colour, beside its name.">
+            <p className="inline-flex items-center gap-2">
+              <Swatch color="var(--tier-sender)" />
+              Sender
+            </p>
           </Row>
         </Sheet>
       </Section>
