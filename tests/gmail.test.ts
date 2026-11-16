@@ -66,7 +66,7 @@ function fakeApi(fake: Fake): GmailApi & { calls: string[] } {
 describe('pullChanges', () => {
   it('only records the current position on first run', async () => {
     const api = fakeApi({ historyId: '500' });
-    expect(await pullChanges(api, null)).toEqual({ messageIds: [], historyId: '500', mode: 'start' });
+    expect(await pullChanges(api, null)).toEqual({ messageIds: [], labelChanges: [], historyId: '500', mode: 'start' });
     expect(api.calls).toEqual(['profile']);
   });
 
@@ -90,13 +90,13 @@ describe('pullChanges', () => {
         },
       },
     });
-    expect(await pullChanges(api, '500')).toEqual({ messageIds: ['a', 'b'], historyId: '520', mode: 'incremental' });
+    expect(await pullChanges(api, '500')).toEqual({ messageIds: ['a', 'b'], labelChanges: [], historyId: '520', mode: 'incremental' });
     expect(api.calls).toEqual(['history:500:', 'history:500:p2']);
   });
 
   it('falls back to a bounded search when the cursor has expired, reading the new cursor first', async () => {
     const api = fakeApi({ expired: true, historyId: '900', search: ['new', 'old'] });
-    expect(await pullChanges(api, '1', { recoveryDays: 3 })).toEqual({ messageIds: ['old', 'new'], historyId: '900', mode: 'recovery' });
+    expect(await pullChanges(api, '1', { recoveryDays: 3 })).toEqual({ messageIds: ['old', 'new'], labelChanges: [], historyId: '900', mode: 'recovery' });
     expect(api.calls).toEqual(['history:1:', 'profile', 'search:newer_than:3d']);
   });
 
@@ -126,7 +126,7 @@ describe('pullChanges', () => {
       searchPages: { '': { ids: ['d', 'c'], nextPageToken: 's2' }, s2: { ids: ['c', 'b', 'a'] } },
     });
     // What the first history page said is dropped: the search covers it, and the cursor is the profile's.
-    expect(await pullChanges(api, '500')).toEqual({ messageIds: ['a', 'b', 'c', 'd'], historyId: '900', mode: 'recovery' });
+    expect(await pullChanges(api, '500')).toEqual({ messageIds: ['a', 'b', 'c', 'd'], labelChanges: [], historyId: '900', mode: 'recovery' });
     expect(api.calls).toEqual(['history:500:', 'history:500:p2', 'profile', 'search:newer_than:7d', 'search:newer_than:7d:s2']);
   });
 
@@ -251,6 +251,48 @@ describe('syncAccount', () => {
     };
     await expect(syncAccount(db, api, listAccounts(db)[0]!)).rejects.toThrow('network');
     expect(listAccounts(db)[0]?.historyId).toBe('500');
+  });
+
+  it('records that the user opened a message, once, whichever page or pass says so', async () => {
+    const db = openDb(':memory:');
+    connectAccount(db, 'me@example.org', '500', 0);
+    const messages = { a: raw('a'), b: raw('b', { labelIds: ['INBOX'] }) };
+    await syncAccount(db, fakeApi({ pages: page(['a'], '510'), messages }), listAccounts(db)[0]!, () => 1000);
+
+    // `a` is opened, `b` arrives and is opened before sift has seen it, and a message sift never recorded is opened.
+    const pages: Record<string, HistoryPage> = {
+      '': { additions: [], labelChanges: [{ messageId: 'a', added: [], removed: ['UNREAD'] }], historyId: '520', nextPageToken: 'p2' },
+      p2: {
+        additions: [{ id: 'b', labelIds: ['INBOX', 'UNREAD'] }],
+        labelChanges: [
+          { messageId: 'b', added: [], removed: ['UNREAD'] },
+          { messageId: 'elsewhere', added: [], removed: ['UNREAD'] },
+          { messageId: 'a', added: ['STARRED'], removed: [] },
+        ],
+        historyId: '530',
+      },
+    };
+    const reads = () => db.prepare('SELECT id, read_at FROM messages ORDER BY id').all();
+    await syncAccount(db, fakeApi({ pages, messages }), listAccounts(db)[0]!, () => 2000);
+    expect(reads()).toEqual([
+      { id: 'a', read_at: 2000 },
+      { id: 'b', read_at: 2000 },
+    ]);
+
+    // The same history again, as after a crash before the cursor moved, and the user marking it unread and reading it again.
+    await syncAccount(db, fakeApi({ pages, messages }), listAccounts(db)[0]!, () => 3000);
+    expect(reads()).toEqual([
+      { id: 'a', read_at: 2000 },
+      { id: 'b', read_at: 2000 },
+    ]);
+  });
+
+  it('learns nothing about reading from a search after an expired cursor', async () => {
+    const db = openDb(':memory:');
+    connectAccount(db, 'me@example.org', '500', 0);
+    const api = fakeApi({ expired: true, search: ['a'], messages: { a: raw('a', { labelIds: ['INBOX'] }) } });
+    await syncAccount(db, api, listAccounts(db)[0]!);
+    expect(db.prepare('SELECT read_at FROM messages').get()).toEqual({ read_at: null });
   });
 
   it('leaves the cursor alone when a fetch fails', async () => {

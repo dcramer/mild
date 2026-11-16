@@ -32,8 +32,16 @@ export interface HistoryAddition {
   labelIds: string[];
 }
 
+/** Labels put on or taken off one message, by anyone: the user, another client, or sift itself. */
+export interface HistoryLabelChange {
+  messageId: string;
+  added: string[];
+  removed: string[];
+}
+
 export interface HistoryPage {
   additions: HistoryAddition[];
+  labelChanges?: HistoryLabelChange[];
   /** The mailbox's current history id; the next cursor once the last page is read. */
   historyId: string;
   nextPageToken?: string;
@@ -87,18 +95,25 @@ export function createGmailApi(auth: OAuth2Client): GmailApi {
         const { data } = await client.users.history.list({
           userId,
           startHistoryId,
-          historyTypes: ['messageAdded'],
-          labelId: 'INBOX',
+          // Not narrowed to the inbox: mail the user takes out of the inbox or out of spam must show up too.
+          historyTypes: ['messageAdded', 'labelAdded', 'labelRemoved'],
           maxResults: 500,
           ...(pageToken ? { pageToken } : {}),
         });
         const additions: HistoryAddition[] = [];
+        const labelChanges: HistoryLabelChange[] = [];
         for (const record of data.history ?? []) {
           for (const added of record.messagesAdded ?? []) {
             if (added.message?.id) additions.push({ id: added.message.id, labelIds: added.message.labelIds ?? [] });
           }
+          for (const change of record.labelsAdded ?? []) {
+            if (change.message?.id) labelChanges.push({ messageId: change.message.id, added: change.labelIds ?? [], removed: [] });
+          }
+          for (const change of record.labelsRemoved ?? []) {
+            if (change.message?.id) labelChanges.push({ messageId: change.message.id, added: [], removed: change.labelIds ?? [] });
+          }
         }
-        return { additions, historyId: data.historyId ?? startHistoryId, ...(data.nextPageToken ? { nextPageToken: data.nextPageToken } : {}) };
+        return { additions, labelChanges, historyId: data.historyId ?? startHistoryId, ...(data.nextPageToken ? { nextPageToken: data.nextPageToken } : {}) };
       } catch (error) {
         if (isNotFound(error)) throw new HistoryExpiredError();
         throw error;

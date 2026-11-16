@@ -48,7 +48,7 @@ export async function runOnce(db: DatabaseSync, options: RunOptions): Promise<Pa
       const { api, mailbox } = options.connect(account);
       const deps = { db, mailbox, ...(options.now ? { now: options.now } : {}) };
       if (options.act) await reconcile(deps);
-      result.sync = await syncAccount(db, api, account);
+      result.sync = await syncAccount(db, api, account, options.now);
       result.triage = await triageAccount(
         {
           ...deps,

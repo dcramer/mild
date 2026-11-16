@@ -1,7 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { GmailApi } from '../gmail/api.ts';
 import { type PullResult, pullChanges, toFacts } from '../gmail/sync.ts';
-import { type Account, recordSync } from '../store/accounts.ts';
+import { userChanges } from '../learn/gmail.ts';
+import { type Account, lastSyncedAt, recordSync } from '../store/accounts.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
 export interface SyncReport {
@@ -16,8 +17,11 @@ export interface SyncReport {
  * Pull one account's new inbox mail into the store. Nothing is persisted until every message has
  * been fetched, so a failure part-way leaves the cursor where it was and the next run retries.
  */
-export async function syncAccount(db: DatabaseSync, api: GmailApi, account: Account): Promise<SyncReport> {
+export async function syncAccount(db: DatabaseSync, api: GmailApi, account: Account, now: () => number = Date.now): Promise<SyncReport> {
+  // Recorded as the sync time, so the next sync knows which of sift's own changes its history can contain: those made since this one began.
+  const startedAt = now();
   const pull = await pullChanges(api, account.historyId);
+  const byUser = userChanges(db, account.id, pull.labelChanges, lastSyncedAt(db, account.id) ?? 0);
   const fetched: MessageFacts[] = [];
   let skipped = 0;
 
@@ -30,6 +34,7 @@ export async function syncAccount(db: DatabaseSync, api: GmailApi, account: Acco
 
   const known = new Set((db.prepare('SELECT id FROM messages WHERE account_id = ?').all(account.id) as { id: string }[]).map((r) => r.id));
   const added = fetched.filter((m) => !known.has(m.messageId));
-  recordSync(db, account.id, fetched, pull.historyId);
+  const read = byUser.filter((c) => c.removed.includes('UNREAD')).map((c) => c.messageId);
+  recordSync(db, account.id, fetched, pull.historyId, startedAt, read);
   return { mode: pull.mode, added, skipped };
 }

@@ -8,6 +8,7 @@ import { applyFeedback } from '../src/learn/feedback.ts';
 import { lastStandingChange } from '../src/store/actions.ts';
 import { connectAccount } from '../src/store/accounts.ts';
 import { openDb } from '../src/store/db.ts';
+import { updateLabel } from '../src/store/labels.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
@@ -43,7 +44,7 @@ function api(): GmailApi {
     getProfile: async () => ({ emailAddress: ACCOUNT, historyId: String(cursor) }),
     listHistory: async () => {
       const additions = inbox.map((m) => ({ id: m.id, labelIds: m.labelIds }));
-      return { additions, historyId: String(++cursor) };
+      return { additions, labelChanges: mailbox.history.splice(0), historyId: String(++cursor) };
     },
     searchInbox: async () => ({ ids: [] }),
     getMetadata: async (id) => inbox.find((m) => m.id === id) ?? null,
@@ -138,6 +139,34 @@ describe('runOnce', () => {
     await runOnce(db, options(true));
     expect(decisions()).toMatchObject([{ message_id: 'news', outcome: 'done' }]);
     expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/newsletters', 'L:sift/did/archived']);
+  });
+});
+
+describe('read state', () => {
+  const readAt = (id: string) => (db.prepare('SELECT read_at FROM messages WHERE id = ?').get(id) as { read_at: number | null }).read_at;
+
+  it('records when the user opened a message, and not when sift marked it read', async () => {
+    updateLabel(db, ACCOUNT, 'newsletter', { markRead: true });
+    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    await runOnce(db, options(true));
+    expect(mailbox.labels.get('news')).not.toContain('UNREAD');
+
+    inbox = [];
+    mailbox.byUser('ada', { remove: ['UNREAD'] });
+    await runOnce(db, { ...options(true), now: () => 6000 });
+    expect(readAt('news')).toBeNull();
+    expect(readAt('ada')).toBe(6000);
+  });
+
+  it('still sees the user open a message sift marked read, undid, and that they then read themselves', async () => {
+    updateLabel(db, ACCOUNT, 'newsletter', { markRead: true });
+    addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    await runOnce(db, options(true));
+    await undo({ db, mailbox, now: () => 5000 }, lastStandingChange(db, ACCOUNT, 'news')!.id);
+    mailbox.byUser('news', { remove: ['UNREAD'] });
+    inbox = [];
+    await runOnce(db, { ...options(true), now: () => 6000 });
+    expect(readAt('news')).toBe(6000);
   });
 });
 

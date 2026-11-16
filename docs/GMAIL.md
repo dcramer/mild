@@ -6,7 +6,7 @@ What sift can use directly, and what it has to do itself. From Google's document
 
 | Need | API | Notes |
 | --- | --- | --- |
-| Find new mail | `users.history.list` | A history id is "typically valid for at least a week", sometimes only hours. A 404 means resync, which sift does with a bounded search. 2 quota units. |
+| Find new mail | `users.history.list` | A history id is "typically valid for at least a week", sometimes only hours. A 404 means resync, which sift does with a bounded search. 2 quota units. Besides new messages it lists labels added and removed, per message; a record has no time and does not say who made the change, and sift's own changes appear like anyone's. |
 | Read a message | `users.messages.get` | 20 units for metadata, 60 for the full message. |
 | Archive, mark spam, mark read, label | `users.messages.modify` | Add or remove label ids: `INBOX`, `SPAM`, `UNREAD`, `STARRED`, `IMPORTANT`, the `CATEGORY_*` tabs and user labels can all be applied. 5 units. |
 | Many at once | `users.messages.batchModify` | Up to 1,000 ids, 50 units. Not used yet: sift changes one message at a time so each has its own audit row. |

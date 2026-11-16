@@ -36,10 +36,25 @@ export class FakeMailbox implements Mailbox {
     return labels ? [...labels] : null;
   }
 
+  /** Every label change, as Gmail's history would report it. A test's fake history can hand these out. */
+  history: { messageId: string; added: string[]; removed: string[] }[] = [];
+
+  /** A change made in Gmail by the user, not through sift. */
+  byUser(id: string, change: { add?: string[]; remove?: string[] }) {
+    const current = this.labels.get(id) ?? [];
+    const add = (change.add ?? []).filter((l) => !current.includes(l));
+    const remove = (change.remove ?? []).filter((l) => current.includes(l));
+    this.labels.set(id, [...current.filter((l) => !remove.includes(l)), ...add]);
+    if (add.length > 0) this.history.push({ messageId: id, added: add, removed: [] });
+    if (remove.length > 0) this.history.push({ messageId: id, added: [], removed: remove });
+  }
+
   async modifyLabels(id: string, change: { add: string[]; remove: string[] }) {
     this.modifyCalls++;
     if (this.failModify === 'before') throw new Error('network down');
     const current = this.labels.get(id) ?? [];
+    if (change.add.length > 0) this.history.push({ messageId: id, added: change.add, removed: [] });
+    if (change.remove.length > 0) this.history.push({ messageId: id, added: [], removed: change.remove });
     this.labels.set(id, [...current.filter((l) => !change.remove.includes(l)), ...change.add.filter((l) => !current.includes(l))]);
     if (this.failModify === 'after') throw new Error('timeout');
   }
