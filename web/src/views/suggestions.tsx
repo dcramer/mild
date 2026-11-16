@@ -3,7 +3,25 @@ import { SenderLink } from '@/components/sender.tsx';
 import { useParam } from '@/lib/route.ts';
 import { type SuggestionGroup, type Suggestions, type Summary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ACTIONS, ago, count, describeMatch, money, outcomeName, percent, plural, willBe } from '@/lib/format.ts';
-import { Button, Check, Empty, Failure, FilterGroup, ListView, Loading, OnPhone, RowActions, Reserve, Sub, Table, TextLink, Td, Th, Tr, useToast } from '@/system';
+import {
+  Button,
+  Check,
+  Empty,
+  Failure,
+  FilterGroup,
+  ListView,
+  Loading,
+  OnPhone,
+  RowActions,
+  Reserve,
+  Sub,
+  Table,
+  TextLink,
+  Td,
+  Th,
+  Tr,
+  useToast,
+} from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 const groupKey = (g: SuggestionGroup) => `${g.accountId}/${g.sender}`;

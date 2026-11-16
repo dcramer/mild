@@ -23,4 +23,4 @@ export { Empty, Loading } from './state.tsx';
 export { OnPhone, RowActions, Sub, Table, Td, Th, Tr } from './table.tsx';
 export { Timeline, TimelineEvent } from './timeline.tsx';
 export { Toaster, type ToastOptions, useToast } from './toast.tsx';
-export { Code, Highlight, Kbd, Marked, Stamp, TextLink, Wordmark } from './type.tsx';
+export { Code, Highlight, Kbd, Look, Marked, Stamp, TextLink, Wordmark } from './type.tsx';

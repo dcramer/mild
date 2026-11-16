@@ -26,6 +26,7 @@ import {
   Input,
   Kbd,
   ListView,
+  Look,
   Loading,
   Marked,
   Masthead,
@@ -165,6 +166,11 @@ export function SystemView() {
           </Row>
           <Row label="slug" note="Column heads and a figure’s label. Not headings.">
             <p className="slug text-muted-foreground">Sender · Messages</p>
+          </Row>
+          <Row label="look" note="What is left to the reader, in a line of text.">
+            <p>
+              <Look>Not sure</Look> <span className="text-muted-foreground">· 3 messages</span>
+            </p>
           </Row>
           <Row label="swatch" note="A series’ or a tier’s colour, beside its name.">
             <p className="inline-flex items-center gap-2">

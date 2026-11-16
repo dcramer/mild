@@ -1,7 +1,7 @@
 import type { DecisionRow } from '@/lib/api.ts';
 import { type Status, STATUS_NAMES, outcomeName, status, tier } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
-import { Code, Failure, Note, Swatch } from '@/system';
+import { Code, Failure, Look, Note, Swatch } from '@/system';
 
 /** A tier's ink swatch and name. The name always accompanies the swatch. */
 export function TierLabel({ stage }: { stage: string }) {
@@ -19,7 +19,7 @@ export function TierLabel({ stage }: { stage: string }) {
  * label and nothing done, sift was not sure, which is the reader's to answer, so it is the yellow one.
  */
 export function Verdict({ labelName, disposition, unsubscribe }: { labelName: string | null; disposition: string; unsubscribe?: boolean }) {
-  if (labelName === null && disposition === 'review') return <span className="font-semibold text-highlight">{outcomeName('review')}</span>;
+  if (labelName === null && disposition === 'review') return <Look>{outcomeName('review')}</Look>;
   return (
     <span>
       <span className="font-semibold">{outcomeName(disposition)}</span>

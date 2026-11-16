@@ -25,7 +25,7 @@ function Sections({ items, current }: { items: readonly NavItem[]; current: stri
             <a
               href={`/${item.to}`}
               aria-current={item.to === current ? 'page' : undefined}
-              className="flex items-baseline gap-1.5 py-1 text-[15px] font-medium text-muted-foreground hover:text-foreground aria-[current=page]:text-foreground aria-[current=page]:shadow-[inset_0_-3px_0_var(--highlight)]"
+              className="relative flex items-baseline gap-1.5 py-1 text-sm leading-normal font-medium text-muted-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] hover:text-foreground aria-[current=page]:text-foreground aria-[current=page]:after:bg-highlight"
             >
               {item.label}
               {item.count ? <span className="text-sm tabular-nums opacity-70">{item.count}</span> : null}

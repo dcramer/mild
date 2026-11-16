@@ -62,3 +62,8 @@ export function TextLink({ href, children, className }: { href: string; children
 export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
   return <kbd className={cn('font-mono text-label font-normal text-muted-foreground', className)}>{children}</kbd>;
 }
+
+/** A word in yellow ink for what is left to the reader, inside a line ("Not sure"). Like every yellow, few on a screen. */
+export function Look({ children }: { children: ReactNode }) {
+  return <span className="font-semibold text-highlight">{children}</span>;
+}

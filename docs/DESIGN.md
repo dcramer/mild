@@ -54,6 +54,7 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Empty`, `Loading` | What a list shows with nothing in it (say what would put something here), and while rows are on their way. |
 | `Stamp` | A verdict in one word from the vocabulary. All stamps weigh the same; `look` only for what is left to the reader. |
 | `Highlight`, `Marked` | A stroke of highlighter; a search term marked in text. |
+| `Look` | A word in yellow ink for what is left to the reader, inside a line: "Not sure" in a list. |
 | `TextLink`, `Code`, `Kbd`, `Copyable` | A link in text; something typed; a key; a value carried somewhere else whole. |
 | `Disclosure` | What most readers never need, folded under the question that leads to it. |
 | `Wordmark` | The name. |

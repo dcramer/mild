@@ -39,6 +39,6 @@ export function Failure({ inline, className, title, children }: { inline?: boole
       {children}
     </span>
   ) : (
-    <p className={cn('text-destructive', className)}>{children}</p>
+    <span className={cn('block text-destructive', className)}>{children}</span>
   );
 }
