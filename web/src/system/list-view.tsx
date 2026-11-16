@@ -57,7 +57,7 @@ export function ListView({
                   <input
                     ref={searchBox}
                     type="search"
-                    className="focus-within-shown min-w-0 flex-1 bg-transparent text-sm placeholder:text-muted-foreground"
+                    className="focus-within-shown min-w-0 flex-1 bg-transparent text-base placeholder:text-muted-foreground"
                     aria-label={search.placeholder}
                     aria-keyshortcuts="/"
                     placeholder={search.placeholder}
@@ -77,7 +77,7 @@ export function ListView({
                   aria-label={on > 0 ? `Filters, ${on} on` : 'Filters'}
                   aria-expanded={open}
                   className={cn(
-                    'flex shrink-0 cursor-pointer items-center gap-2 border-l border-(--frame) px-3 text-sm font-medium',
+                    'flex shrink-0 cursor-pointer items-center gap-2 border-l border-(--frame) px-3 text-sm font-semibold',
                     open ? 'bg-(--fill-strong)' : 'text-muted-foreground hover:bg-(--fill) hover:text-foreground',
                   )}
                   onClick={() => setOpen(!open)}

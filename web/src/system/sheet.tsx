@@ -17,8 +17,8 @@ export function SettingRow({ title, note, children }: { title: string; note?: Re
   return (
     <div className="row flex flex-wrap items-center gap-x-6 gap-y-2.5 px-4 py-3.5">
       <div className="min-w-0 flex-1 basis-64">
-        <p className="font-medium">{title}</p>
-        {note ? <div className="text-muted-foreground">{note}</div> : null}
+        <p className="name">{title}</p>
+        {note ? <div className="mt-0.5 text-muted-foreground">{note}</div> : null}
       </div>
       {children ? <div className="flex flex-wrap items-center gap-2">{children}</div> : null}
     </div>

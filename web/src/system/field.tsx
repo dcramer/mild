@@ -7,14 +7,14 @@ const FIELD =
 
 /** A line of text typed by the reader. Inside a `Field` it takes the field's label; on its own give it an `aria-label`. */
 export function Input({ className, ...props }: ComponentProps<'input'>) {
-  return <input className={cn('field focus-within-shown h-(--control) min-w-0 rounded-(--cut-control) px-3 text-sm', FIELD, className)} {...props} />;
+  return <input className={cn('field focus-within-shown h-(--control) min-w-0 rounded-(--cut-control) px-3 text-base', FIELD, className)} {...props} />;
 }
 
 /** Longer text. */
 export function TextArea({ className, ...props }: ComponentProps<'textarea'>) {
   return (
     <textarea
-      className={cn('block min-h-48 w-full resize-y rounded-[2px] px-3 py-2.5 text-sm leading-relaxed', FIELD, 'focus-within-shown', className)}
+      className={cn('block min-h-48 w-full resize-y rounded-[2px] px-3 py-2.5 text-base leading-relaxed', FIELD, 'focus-within-shown', className)}
       {...props}
     />
   );
@@ -51,7 +51,7 @@ export function Field({
   const id = useId();
   return (
     <div role="group" aria-labelledby={id} className={cn('flex flex-col gap-1.5', inline && 'sm:grid sm:grid-cols-[6rem_minmax(0,1fr)] sm:gap-x-4')}>
-      <span id={id} className={cn('text-sm font-medium', inline && 'sm:flex sm:h-(--control) sm:items-center sm:text-muted-foreground')}>
+      <span id={id} className={cn('text-sm font-semibold', inline && 'sm:flex sm:h-(--control) sm:items-center sm:text-muted-foreground')}>
         {label}
       </span>
       <div className="flex min-w-0 flex-col items-start gap-1.5">

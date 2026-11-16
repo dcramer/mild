@@ -88,7 +88,7 @@ export function Th({ num, phone, className, ...props }: ComponentProps<'th'> & {
   return (
     <th
       scope="col"
-      className={cn('slug h-9 px-3 font-medium whitespace-nowrap text-muted-foreground', EDGES, num && 'text-right', phone && PHONE[phone], className)}
+      className={cn('slug h-9 px-3 whitespace-nowrap text-muted-foreground', EDGES, num && 'text-right', phone && PHONE[phone], className)}
       {...props}
     />
   );

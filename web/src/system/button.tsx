@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { useShortcut } from './keys.tsx';
 
 const BASE =
-  'press inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 border border-transparent font-medium whitespace-nowrap select-none aria-disabled:pointer-events-none aria-disabled:opacity-45 disabled:pointer-events-none disabled:opacity-45 [&_svg]:size-[1.15em] [&_svg]:shrink-0';
+  'press inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 border border-transparent font-semibold whitespace-nowrap select-none aria-disabled:pointer-events-none aria-disabled:opacity-45 disabled:pointer-events-none disabled:opacity-45 [&_svg]:size-[1.15em] [&_svg]:shrink-0';
 
 const VARIANT = {
   /** The one thing on the screen that is waiting on the reader. At most one per screen, and never repeated down a list. */

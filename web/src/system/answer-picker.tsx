@@ -46,7 +46,7 @@ export function AnswerPicker({
       <Base.Root items={all.map((p) => ({ value: p.id, label: p.label }))} value={chosen} onValueChange={(next) => next !== null && setChosen(next)}>
         <Base.Trigger
           aria-label={label}
-          className="press inline-flex h-(--control) min-w-0 flex-1 cursor-pointer items-center gap-2 border border-(--frame) pr-2 pl-3 text-sm font-medium whitespace-nowrap select-none hover:border-foreground/30 data-popup-open:border-foreground/45"
+          className="press inline-flex h-(--control) min-w-0 flex-1 cursor-pointer items-center gap-2 border border-(--frame) pr-2 pl-3 text-sm font-semibold whitespace-nowrap select-none hover:border-foreground/30 data-popup-open:border-foreground/45"
         >
           {current ? (
             <>
