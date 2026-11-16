@@ -110,7 +110,8 @@ Built: one model call per message that names a label; the label's outcome decide
 - [ ] Remove `sift dashboard` (and `Activity.sorting`, which exists only for it), or add it to the commands AGENTS.md allows.
 - [ ] `sift status` does not show the sign-in limit (`dashboard.allow`). An account left off the list is still connected and sorted, with no way to disconnect it short of removing the account.
 - [ ] `init` asks about the model and the sign-in list again on every partial re-run while they are unset: it cannot tell "chose none" from "never asked".
-- [ ] Find out what publishing the Google app requires (branding fields, verification for these scopes) and make that path of `init` exact. Check its Console links and field names against the live console; they were written from memory.
+- [ ] Find out what publishing the Google app requires (branding fields, verification for these scopes) and make that path of `init` exact; the privacy policy and terms links are `<dashboard address>/privacy` and `/terms`. Restricted scopes also need a yearly security assessment (CASA). Check its Console links and field names against the live console; they were written from memory.
+- [ ] A way for a person to delete everything sift holds for them from the dashboard. The privacy policy tells them to ask whoever runs the install.
 - [ ] Run `sift init` inside Docker, where the dashboard address is the host's, not the container's.
 
 ## Verify against real Gmail

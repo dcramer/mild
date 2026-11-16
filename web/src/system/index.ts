@@ -6,6 +6,7 @@ export { ConfirmButton } from './confirm.tsx';
 export { Copyable } from './copyable.tsx';
 export { Dialog } from './dialog.tsx';
 export { Disclosure } from './disclosure.tsx';
+export { Clause, Document } from './document.tsx';
 export { Fact, Facts } from './facts.tsx';
 export { Check, Field, Form, Input, TextArea } from './field.tsx';
 export { Figure, Figures } from './figures.tsx';

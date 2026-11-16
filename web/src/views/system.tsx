@@ -13,7 +13,9 @@ import {
   ConfirmButton,
   Copyable,
   Dialog,
+  Clause,
   Disclosure,
+  Document,
   Empty,
   Fact,
   Facts,
@@ -617,6 +619,20 @@ export function SystemView() {
             aside={<span>Synced just now</span>}
             account={{ name: 'ada@example.org', items: [{ label: 'Sign out', onSelect: () => toast('Signed out.') }] }}
           />
+        </Sheet>
+      </Section>
+
+      <Section title="Document" meta="a page read from top to bottom: /terms, /privacy">
+        <Sheet>
+          <Document title="Terms of service" updated="November 15, 2026">
+            <p>These terms are between you and whoever runs this copy of sift.</p>
+            <Clause title="Your part">
+              <ul>
+                <li>Sign in only with a Gmail account that is yours.</li>
+                <li>Check what sift suggests before letting it act.</li>
+              </ul>
+            </Clause>
+          </Document>
         </Sheet>
       </Section>
 

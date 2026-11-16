@@ -18,6 +18,8 @@ const MessagePanel = lazyView(() => import('@/views/message-panel.tsx').then((m)
 const SignInScreen = lazyView(() => import('@/views/sign-in.tsx').then((m) => m.SignInScreen));
 // The specimen page is the largest screen and no part of using sift, so it is never fetched ahead.
 const SystemView = lazyView(() => import('@/views/system.tsx').then((m) => m.SystemView));
+const PrivacyView = lazyView(() => import('@/views/legal.tsx').then((m) => m.PrivacyView));
+const TermsView = lazyView(() => import('@/views/legal.tsx').then((m) => m.TermsView));
 
 const SCREENS: Record<string, { preload: () => Promise<unknown> }> = {
   activity: ActivityView,
@@ -27,6 +29,8 @@ const SCREENS: Record<string, { preload: () => Promise<unknown> }> = {
   sender: SenderView,
   domain: SenderView,
   system: SystemView,
+  privacy: PrivacyView,
+  terms: TermsView,
 };
 // The screen the address asks for starts loading with the app, not after its first render.
 void SCREENS[window.location.pathname.split('/')[1] ?? '']?.preload().catch(() => {});
@@ -92,11 +96,13 @@ const MOVED: Record<string, string> = { overview: '/suggestions', decisions: '/a
 /** Shows the sign-in screen until the viewer is signed in, then the dashboard. */
 export function App() {
   const route = useRoute();
-  // The specimen page is open to anyone and holds no data. It is rendered outside the gate so it asks the API for nothing, not even who is signed in.
-  if (route[0] === 'system')
+  // These are open to anyone and hold no data, so they are rendered outside the gate and ask the API for nothing, not even who is signed in.
+  // Google reads the privacy policy and the terms before it lets anyone outside a test list sign in.
+  const Open = route[0] === 'system' ? SystemView : route[0] === 'privacy' ? PrivacyView : route[0] === 'terms' ? TermsView : null;
+  if (Open)
     return (
       <Suspense fallback={null}>
-        <SystemView />
+        <Open />
       </Suspense>
     );
   return <Gate route={route} />;

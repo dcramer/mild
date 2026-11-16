@@ -331,6 +331,8 @@ describe('dashboard server', () => {
       '/rules',
       '/settings/accounts',
       '/system',
+      '/privacy',
+      '/terms',
       '/decisions?q=digest&message=a',
       '/sender/me%40example.org/news%40example.com',
       '/domain/me%40example.org/example.com',

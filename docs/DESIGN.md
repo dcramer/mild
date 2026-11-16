@@ -60,6 +60,7 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Look` | A word in yellow ink for what is left to the reader, inside a line: "Not sure" in a list. |
 | `TextLink`, `Code`, `Kbd`, `Copyable` | A link in text; something typed; a key, as a small keycap (see Keys); a value carried somewhere else whole. |
 | `Disclosure` | What most readers never need, folded under the question that leads to it. |
+| `Document`, `Clause` | A page read from top to bottom, outside the dashboard: the terms and the privacy policy. The name linking home, the title, when it last changed, then clauses at the reading size. |
 | `Wordmark` | The name. |
 
 `web/src/components/` holds what is particular to sift and built from these: `Verdict` (what sift does and as which label, in words, the same everywhere), `StatusWord`, `TierLabel`, the decision table that Activity and the sender page share, the answer form, and `SenderLink`, which is how a sender is named anywhere: a link to their page with a preview of their standing.

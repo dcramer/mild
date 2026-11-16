@@ -1,7 +1,7 @@
 import { ArrowRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Session } from '@/lib/api.ts';
-import { Button, Code, Copyable, Disclosure, Note, Sheet, Wordmark } from '@/system';
+import { Button, Code, Copyable, Disclosure, Note, Sheet, TextLink, Wordmark } from '@/system';
 
 /** The only thing an unsigned-in visitor sees. Signing in with Google also connects that Gmail account to sift. */
 export function SignInScreen({ session, error }: { session: Session; error: string | null }) {
@@ -21,6 +21,10 @@ export function SignInScreen({ session, error }: { session: Session; error: stri
           {session.canSignIn ? <Ready session={session} /> : <Blocked session={session} />}
         </Sheet>
       </div>
+      <p className="mt-6 flex gap-4 px-6 text-sm text-muted-foreground">
+        <TextLink href="/terms">Terms</TextLink>
+        <TextLink href="/privacy">Privacy</TextLink>
+      </p>
     </main>
   );
 }
