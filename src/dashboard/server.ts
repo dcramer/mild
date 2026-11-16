@@ -324,7 +324,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
     return {
       settings: controls?.settings() ?? { act: false, interval: 60, model: null },
       guidelines: controls?.guidelines() ?? '',
-      activity: controls?.activity() ?? { sorting: false, lastPassAt: null, problems: [] },
+      activity: controls?.activity() ?? { sorting: false, lastPassAt: null, problems: [], expired: [] },
       accounts: accounts.map((a) => ({ id: a.id, email: a.email, lastSyncedAt: (synced.get(a.id) as { at: number | null } | undefined)?.at ?? null })),
       labels: Object.fromEntries(accounts.map((a) => [a.id, listLabelSummaries(db, a.id)])),
     };

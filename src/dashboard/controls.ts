@@ -40,6 +40,8 @@ export interface Activity {
   lastPassAt: number | null;
   /** What went wrong on the last pass, per account. Empty when it went well. */
   problems: string[];
+  /** Addresses of accounts whose Google sign-in expired, as of the last pass. Each must sign in again. */
+  expired: string[];
 }
 
 /**

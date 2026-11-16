@@ -124,6 +124,25 @@ describe('runOnce', () => {
     expect(mailbox.modifyCalls).toBe(0);
   });
 
+  it('says when the failure is an expired Google sign-in, which no retry fixes', async () => {
+    const [failed] = await runOnce(db, {
+      ...options(false),
+      connect: () => {
+        throw new Error('invalid_grant');
+      },
+    });
+    expect(failed).toMatchObject({ error: 'invalid_grant', expired: true });
+    expect(logs).toEqual([expect.stringContaining('Google sign-in has expired')]);
+
+    const [other] = await runOnce(db, {
+      ...options(false),
+      connect: () => {
+        throw new Error('network down');
+      },
+    });
+    expect(other?.expired).toBeUndefined();
+  });
+
   it('keeps a decision it could not carry out and retries it on the next pass', async () => {
     addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
     inbox = [inbox[0]!];

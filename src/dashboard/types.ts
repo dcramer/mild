@@ -217,7 +217,7 @@ export interface FeedbackRequest {
 export interface ManageState {
   settings: { act: boolean; interval: number; model: string | null };
   guidelines: string;
-  activity: { sorting: boolean; lastPassAt: number | null; problems: string[] };
+  activity: { sorting: boolean; lastPassAt: number | null; problems: string[]; expired: string[] };
   accounts: { id: string; email: string; lastSyncedAt: number | null }[];
   /** Per account, in order. */
   labels: Record<string, LabelSummary[]>;

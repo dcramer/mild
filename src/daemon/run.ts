@@ -30,6 +30,8 @@ export interface PassResult {
   /** Marked messages whose full content was stored this pass. */
   captured?: number;
   error?: string;
+  /** The error is Google refusing sift's sign-in for this account. Retrying will not help; signing in again will. */
+  expired?: true;
 }
 
 /**
@@ -61,8 +63,10 @@ export async function runOnce(db: DatabaseSync, options: RunOptions): Promise<Pa
     } catch (error) {
       result.error = error instanceof Error ? error.message : String(error);
       // Google's answer when a refresh token is no longer good; an app left in Testing does this every 7 days.
-      if (result.error.includes('invalid_grant')) options.log(`${account.email}: Google sign-in has expired. Sign in to the dashboard again.`);
-      else options.log(`${account.email}: pass failed, will retry: ${result.error}`);
+      if (result.error.includes('invalid_grant')) {
+        result.expired = true;
+        options.log(`${account.email}: Google sign-in has expired. Sign in to the dashboard again.`);
+      } else options.log(`${account.email}: pass failed, will retry: ${result.error}`);
     }
     results.push(result);
   }

@@ -75,6 +75,8 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
   const online = useOnline();
   const summary = useLoaded(`summary-${days}`, (signal) => api.summary(days, signal));
   const waiting = useLoaded('suggestions-false', (signal) => api.suggestions(false, signal));
+  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  const expired = manage.data?.activity.expired ?? [];
   const openMessages = (items: MessageRef[], index: number) => {
     setList(items);
     show(items[index], { state: { panel: true } });
@@ -90,7 +92,16 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
       <Masthead
         current={section}
         items={SECTIONS.map((to) => ({ to, label: NAMES[to], ...(to === 'suggestions' && waiting.data?.waiting ? { count: waiting.data.waiting } : {}) }))}
-        status={online ? null : <Notice>Offline</Notice>}
+        status={
+          !online ? (
+            <Notice>Offline</Notice>
+          ) : expired.length > 0 ? (
+            // Signing in again is what renews sift's access; Google asks which account. Named when it is one that is not the viewer's own.
+            <Notice tone="look" href="/auth/login" action="Reconnect">
+              Google sign-in expired{expired.length > 1 ? ` for ${expired.length} accounts` : expired[0] === signedInAs ? '' : ` for ${expired[0]}`}
+            </Notice>
+          ) : null
+        }
         aside={
           summary.data ? (
             <span className="whitespace-nowrap">

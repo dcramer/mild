@@ -50,7 +50,7 @@ const controls: Controls = {
     return true;
   },
   checkNow: () => void calls.push('check'),
-  activity: () => ({ sorting: true, lastPassAt: 5, problems: [] }),
+  activity: () => ({ sorting: true, lastPassAt: 5, problems: [], expired: [ACCOUNT] }),
 };
 
 beforeEach(() => {
@@ -104,7 +104,7 @@ describe('managing sift from the dashboard', () => {
     expect(body).toMatchObject({
       settings: { act: false, interval: 60, model: null },
       guidelines: 'Be careful.',
-      activity: { sorting: true },
+      activity: { sorting: true, expired: [ACCOUNT] },
       accounts: [{ id: ACCOUNT }],
     });
     expect((body['labels'] as Record<string, { id: string; gmailLabel: string; rules: number }[]>)[ACCOUNT]).toContainEqual(
