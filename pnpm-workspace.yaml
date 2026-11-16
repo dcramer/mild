@@ -6,6 +6,8 @@ allowBuilds:
   # Install scripts of transitive pi-ai dependencies; not needed for the providers sift uses.
   '@google/genai': false
   protobufjs: false
+  # `prepare` installs the hook; its own postinstall would do it again.
+  simple-git-hooks: false
 
 # pi-ai depends on the SDK of every provider it has. sift registers three (src/model/models.ts), and
 # pi-ai loads an SDK only when a model that needs it is called, so the rest are left out of the install.
