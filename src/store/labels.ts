@@ -159,6 +159,9 @@ function normalise(disposition: Disposition, block: boolean, markRead: boolean):
  * Add a label of the user's own. Its id and its Gmail label come from the name and never change after.
  * Throws if the name is unusable or already taken.
  */
+/** Labels an account may have. Each is a choice the model weighs on every message and the reader answers with, so a long list makes both worse. */
+export const MAX_LABELS = 12;
+
 export async function addLabel(
   db: Sql,
   accountId: string,
@@ -169,6 +172,7 @@ export async function addLabel(
   const id = slug(name);
   if (id === '' || RESERVED.has(id)) throw new Error(`"${name}" cannot be used as a label name.`);
   const existing = await listLabels(db, accountId, now);
+  if (existing.length >= MAX_LABELS) throw new Error(`sift keeps at most ${MAX_LABELS} labels. Change one that is no longer used instead.`);
   if (existing.some((l) => l.id === id || l.id.replace(/_/g, '-') === id || l.gmailLabel === `sift/${id}` || l.name.toLowerCase() === name.toLowerCase()))
     throw new Error(`There is already a label "${name}".`);
   const extras = normalise(label.disposition, label.block ?? false, label.markRead ?? false);

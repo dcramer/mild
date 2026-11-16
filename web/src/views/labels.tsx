@@ -2,12 +2,13 @@ import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type LabelSummary, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ACTIONS, type ActionKey, EXPLAIN, count, percent } from '@/lib/format.ts';
+import { ACTIONS, type ActionKey, EXPLAIN, count, outcomeName, percent } from '@/lib/format.ts';
 import {
   Button,
   Check,
   Code,
   Dialog,
+  Does,
   Empty,
   Failure,
   Field,
@@ -25,7 +26,6 @@ import {
   TextArea,
   Th,
   Tr,
-  TrGroup,
 } from '@/system';
 
 const canMarkRead = (does: string) => does === 'keep' || does === 'archive';
@@ -139,14 +139,6 @@ function LabelDialog({ accountId, label, onClose, onSaved }: { accountId: string
   );
 }
 
-/** What happens to the mail, as the groups the list is in. Blocking is spam that also turns the sender away. */
-const GROUPS = [
-  ['keep', 'Stay in the inbox'],
-  ['archive', 'Archived'],
-  ['spam', 'Spam'],
-] as const;
-const groupOf = (disposition: string) => (disposition === 'block' ? 'spam' : disposition);
-
 /** Wrong often enough to look at: under 85% right, over at least ten answers. */
 const weak = (label: LabelSummary) => label.record.reviewed >= 10 && label.record.right / label.record.reviewed < 0.85;
 
@@ -157,23 +149,38 @@ function Right({ label }: { label: LabelSummary }) {
   return weak(label) ? <Look>{text}</Look> : <span className="text-muted-foreground">{text}</span>;
 }
 
-/** The labels: what mail can be, grouped by what happens to it, with how much of the mail each is and how often sift has it right. */
+/** The labels: what mail can be and what happens to it, with how much of the mail each is and how often sift has it right. */
 export function LabelsView() {
   const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
   const [editing, setEditing] = useState<{ accountId: string; label: LabelSummary | null } | null>(null);
   const accounts = data?.accounts ?? [];
-  const all = accounts.flatMap((account) => (data?.labels[account.id] ?? []).map((label) => ({ account, label })));
+  // Alphabetical, so a label stays where it is when what it does changes.
+  const all = accounts
+    .flatMap((account) => (data?.labels[account.id] ?? []).map((label) => ({ account, label })))
+    .toSorted((a, b) => a.label.name.localeCompare(b.label.name));
   const mail = all.reduce((sum, { label }) => sum + label.messages, 0);
   const first = accounts[0];
+  const full = first !== undefined && !!data && (data.labels[first.id]?.length ?? 0) >= data.labelLimit;
 
   return (
     <ListView
       title="Labels"
       actions={
-        <Button disabled={!first} onClick={() => first && setEditing({ accountId: first.id, label: null })}>
-          <PlusIcon aria-hidden />
-          Add a label
-        </Button>
+        <>
+          {first && data ? (
+            <span className="text-sm text-muted-foreground tabular-nums">
+              {count(data.labels[first.id]?.length ?? 0)} of {data.labelLimit}
+            </span>
+          ) : null}
+          <Button
+            disabled={!first || full}
+            title={full ? `sift keeps at most ${data?.labelLimit} labels. Change one that is no longer used instead.` : undefined}
+            onClick={() => first && setEditing({ accountId: first.id, label: null })}
+          >
+            <PlusIcon aria-hidden />
+            Add a label
+          </Button>
+        </>
       }
     >
       {error ? <ErrorNote message={error} /> : null}
@@ -186,45 +193,43 @@ export function LabelsView() {
           <thead className="sr-only">
             <Tr>
               <Th>Label</Th>
+              <Th phone="hide">Then</Th>
               <Th phone="hide">Share of mail</Th>
               <Th phone="hide">Messages</Th>
               <Th phone="hide">Right</Th>
             </Tr>
           </thead>
-          {GROUPS.map(([key, title]) => {
-            const group = all.filter(({ label }) => groupOf(label.disposition) === key);
-            return group.length === 0 ? null : (
-              <tbody key={key}>
-                <TrGroup title={title} span={4} />
-                {group.map(({ account, label }) => (
-                  <Tr key={`${account.id}/${label.id}`} onOpen={() => setEditing({ accountId: account.id, label })}>
-                    <Td className="max-w-0 md:w-[28%]">
-                      <span className="name">{label.name}</span>
-                      {label.disposition === 'block' ? <span className="text-muted-foreground"> · blocks the sender</span> : null}
-                      {accounts.length > 1 ? <Sub>{account.email}</Sub> : null}
-                      <OnPhone>
-                        <Right label={label} />
-                      </OnPhone>
-                    </Td>
-                    <Td phone="hide" className="align-middle md:w-full">
-                      <Share part={label.messages} whole={mail} />
-                    </Td>
-                    <Td phone="hide" num quiet className="md:w-36" title={`${percent(label.messages, mail)} of the mail`}>
-                      {count(label.messages)}
-                    </Td>
-                    <Td
-                      phone="hide"
-                      num
-                      className="md:w-32"
-                      title={label.record.reviewed > 0 ? `${count(label.record.right)} of ${count(label.record.reviewed)} you checked` : undefined}
-                    >
-                      <Right label={label} />
-                    </Td>
-                  </Tr>
-                ))}
-              </tbody>
-            );
-          })}
+          <tbody>
+            {all.map(({ account, label }) => (
+              <Tr key={`${account.id}/${label.id}`} onOpen={() => setEditing({ accountId: account.id, label })}>
+                <Td className="max-w-0 md:w-[24%]">
+                  <span className="name">{label.name}</span>
+                  {accounts.length > 1 ? <Sub>{account.email}</Sub> : null}
+                  <OnPhone>
+                    <Does action={label.disposition}>{outcomeName(label.disposition)}</Does>
+                    <Right label={label} />
+                  </OnPhone>
+                </Td>
+                <Td phone="hide" className="whitespace-nowrap md:w-32">
+                  <Does action={label.disposition}>{outcomeName(label.disposition)}</Does>
+                </Td>
+                <Td phone="hide" className="align-middle md:w-full">
+                  <Share part={label.messages} whole={mail} />
+                </Td>
+                <Td phone="hide" num quiet className="md:w-32" title={`${percent(label.messages, mail)} of the mail`}>
+                  {count(label.messages)}
+                </Td>
+                <Td
+                  phone="hide"
+                  num
+                  className="md:w-32"
+                  title={label.record.reviewed > 0 ? `${count(label.record.right)} of ${count(label.record.reviewed)} you checked` : undefined}
+                >
+                  <Right label={label} />
+                </Td>
+              </Tr>
+            ))}
+          </tbody>
         </Table>
       )}
       {editing ? <LabelDialog accountId={editing.accountId} label={editing.label} onClose={() => setEditing(null)} onSaved={reload} /> : null}

@@ -368,6 +368,8 @@ export interface ManageState {
   accounts: { id: string; email: string; lastSyncedAt: number | null }[];
   /** Per account, in order. */
   labels: Record<string, LabelSummary[]>;
+  /** How many labels an account may have. */
+  labelLimit: number;
   /**
    * Per account, waiting suggestions a model judged (or no tier could place) before the guidelines last
    * changed. POST /api/suggestions/rejudge judges a batch of them again, at a model call each.

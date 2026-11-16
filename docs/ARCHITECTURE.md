@@ -10,7 +10,7 @@ Two things are decided about every message, and they are kept apart.
 - **What happens** is the user's to say, never a model's. Usually it is the label's action, one of keep, archive, mark spam, or block; a rule can name an action itself. Beside the outcome a label can carry extras: mark read (with keep and archive) and unsubscribe. A rule can add either for the mail it decides. "Leave it for me" is not an action: sift suggesting instead of acting is a matter of trust, and the only time mail is held for the user is when no tier could place it or a protection stopped sift.
 - **Block** is sift's own, since Gmail's block list is not in its API ([GMAIL.md](GMAIL.md)): the message is marked spam, and once that has happened a rule is written so the sender's later mail is that label without a model. Only when the message passed DMARC, so an impersonated sender is not the one blocked, and never for someone the user has written to. A rule may carry the user's own exception to its label's action ("this one is a newsletter, but keep it").
 
-A label's id and Gmail label never change after it is made, so renaming one orphans nothing.
+A label's id and Gmail label never change after it is made, so renaming one orphans nothing. An account has at most twelve labels (`MAX_LABELS`): each is a choice the model weighs on every message and the user answers with, so a long list makes both worse.
 
 Tiers run cheapest first. A tier either names a label or abstains; the first answer wins.
 

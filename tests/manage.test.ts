@@ -15,7 +15,7 @@ import { people } from '../src/store/people.ts';
 import type { RawMessage } from '../src/gmail/api.ts';
 import { startEval } from '../src/learn/evals.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
-import { listLabels } from '../src/store/labels.ts';
+import { MAX_LABELS, listLabels } from '../src/store/labels.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { FakeMailbox, facts, onePerson, storeExample } from './helpers.ts';
@@ -291,6 +291,12 @@ describe('managing sift from the dashboard', () => {
     expect((await call(port, 'POST', '/api/labels/add', { accountId: 'nobody@example.org', name: 'X', description: '', disposition: 'keep' })).status).toBe(
       404,
     );
+    // Up to the limit, and no further.
+    for (let n = (await listLabels(db, ACCOUNT)).length; n < MAX_LABELS; n++)
+      expect((await call(port, 'POST', '/api/labels/add', { accountId: ACCOUNT, name: `Extra ${n}`, description: '', disposition: 'keep' })).status).toBe(200);
+    const full = await call(port, 'POST', '/api/labels/add', { accountId: ACCOUNT, name: 'One too many', description: '', disposition: 'keep' });
+    expect(full.status).toBe(409);
+    expect((await listLabels(db, ACCOUNT)).length).toBe(MAX_LABELS);
 
     const added = await call(port, 'POST', '/api/rules', {
       accountId: ACCOUNT,
