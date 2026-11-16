@@ -40,7 +40,6 @@ const FRAME_HEADERS = {
 };
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
-const LOCAL_PEERS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { ...HEADERS, 'content-type': 'application/json', 'cache-control': 'no-store', ...headers } });
@@ -115,10 +114,10 @@ export interface Dashboard {
   /** Whether a request with this Host header is for the dashboard. One that is not is refused by `handle`. */
   answers: (host: string | null | undefined) => boolean;
   /**
-   * Everything but the page's own files. `peer` is the address the request came from, when the adapter
-   * knows it: a forwarded scheme is only believed from this machine.
+   * Everything but the page's own files. The scheme is the URL's: the host decides it (`sift run` believes
+   * a forwarded one only from this machine; Vercel's URL is the address the browser used).
    */
-  handle: (request: Request, peer?: string) => Promise<Response>;
+  handle: (request: Request) => Promise<Response>;
 }
 
 const SESSION_DAYS = 30;
@@ -201,7 +200,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     return { status: 404, error: 'There is no such thing here.' };
   };
 
-  const handle = async (request: Request, peer?: string): Promise<Response> => {
+  const handle = async (request: Request): Promise<Response> => {
     // The Host header, not the URL: a `node:http` adapter cannot always build a URL from it.
     const hostHeader = request.headers.get('host');
     if (!answers(hostHeader)) {
@@ -215,9 +214,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     const url = new URL(request.url);
     const query = url.searchParams;
 
-    // The address the browser used. Behind `tailscale serve` the request arrives from this machine over
-    // plain HTTP with the original scheme in a header, which is only believed from this machine.
-    const https = peer !== undefined && LOCAL_PEERS.has(peer) && request.headers.get('x-forwarded-proto') === 'https';
+    const https = url.protocol === 'https:';
     const origin = `${https ? 'https' : 'http'}://${hostHeader ?? ''}`;
     // Google only returns a browser to localhost or to an HTTPS address.
     const googleCanReturnHere = https || LOCAL_HOSTS.has(host);
@@ -359,6 +356,6 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
 
   return {
     answers,
-    handle: (request, peer) => handle(request, peer).catch((error: unknown) => json(500, { error: error instanceof Error ? error.message : String(error) })),
+    handle: (request) => handle(request).catch((error: unknown) => json(500, { error: error instanceof Error ? error.message : String(error) })),
   };
 }

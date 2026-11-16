@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { unsubscribe } from '../actions/unsubscribe.ts';
 import type { Config } from '../config.ts';
 import { type PassResult, type RunOptions, tick } from '../daemon/run.ts';
-import { type Dashboard, createDashboard } from '../dashboard/server.ts';
+import { createDashboard } from '../dashboard/server.ts';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 import { listAccounts, personOf } from '../store/accounts.ts';
 import { people } from '../store/people.ts';
@@ -10,6 +10,7 @@ import type { Sql } from '../store/sql.ts';
 import type { Store } from '../store/store.ts';
 import { buildControls, gmailFor, openModelTier } from './controls.ts';
 import { buildSignIn } from './google-sign-in.ts';
+import { site } from './site.ts';
 
 /** What a host gives sift: `sift run` on a machine, or a function on Vercel (docs/RUNTIME.md). */
 export interface Host {
@@ -22,6 +23,8 @@ export interface Host {
   allowedHosts: readonly string[];
   /** Addresses Google can sign someone in at, suggested when the dashboard is opened at one it cannot. */
   signInAddresses: readonly string[];
+  /** The built page (`web/dist`). */
+  pageDir: string;
   log: (line: string) => void;
   /**
    * Keeps work going after the request that started it is answered: in `sift run` it just runs on, on
@@ -32,11 +35,11 @@ export interface Host {
   tickMs: number;
 }
 
-export interface Sift extends Dashboard {
+export interface Sift {
+  /** Any request to the site: the page, the API, sign-in. */
+  respond: (request: Request) => Promise<Response>;
   /** Do what is due, for these people or everyone, until the host's limit. */
   tick: (people?: readonly number[]) => Promise<PassResult[]>;
-  /** What a pass runs with, for `sift run --once`. */
-  options: RunOptions;
 }
 
 /** The id ChatGPT registers this install's sign-ins under: a UUID, the same on every instance. */
@@ -90,5 +93,5 @@ export async function createSift(host: Host): Promise<Sift> {
     signInAddresses: host.signInAddresses,
     ephemeral,
   });
-  return { ...dashboard, tick: ticking, options };
+  return { respond: site(dashboard, host.pageDir), tick: ticking };
 }

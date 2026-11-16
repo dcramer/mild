@@ -3,10 +3,9 @@ import { loadConfig } from '../../config.ts';
 import { openEphemeral } from '../../ephemeral/open.ts';
 import { openStore } from '../../store/store.ts';
 import { ui } from '../ui.ts';
-import { LOCAL_TICK_MS } from '../../daemon/run.ts';
 import { createSift } from '../../host/sift.ts';
 import { checkSecrets } from '../secrets-check.ts';
-import { dashboardAddresses, portOption, serveDashboard, sessionSecret } from '../serve.ts';
+import { nodeHost, portOption, serveDashboard } from '../serve.ts';
 
 export async function dashboard(args: string[]): Promise<void> {
   const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string' } } });
@@ -18,15 +17,7 @@ export async function dashboard(args: string[]): Promise<void> {
   ui.heading('dashboard');
   secrets();
   const ephemeral = await openEphemeral(config.settings.redisUrl);
-  const sift = await createSift({
-    config,
-    store,
-    ephemeral,
-    sessionSecret: sessionSecret(config),
-    ...dashboardAddresses(config, port),
-    log: (line) => ui.plain(line),
-    tickMs: LOCAL_TICK_MS,
-  });
+  const sift = await createSift(nodeHost(config, store, ephemeral, port, (line) => ui.plain(line)));
   const stop = await serveDashboard(config, sift, { port, ...(values.host ? { host: values.host } : {}) });
   ui.info('Only the dashboard is running. `sift run` also reads and classifies mail.');
   ui.blank();

@@ -1,6 +1,6 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { type RunOptions, askForBackfill, runEveryone, runOnce, tick } from '../src/daemon/run.ts';
+import { type RunOptions, askForBackfill, runOnce, tick } from '../src/daemon/run.ts';
 import type { Store } from '../src/store/store.ts';
 import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
 import { undo } from '../src/actions/executor.ts';
@@ -264,22 +264,28 @@ describe('pass status', () => {
 });
 
 describe('a mailbox removed while a pass runs', () => {
-  it('is skipped, not reported, and the rest of the pass goes on; so is a person deleted meanwhile', async () => {
+  it('is skipped, not reported, and the rest of the tick goes on; so is a person deleted meanwhile', async () => {
     const { store } = await onePerson(ACCOUNT, 'other@example.org');
     const bravo = await connectAccount(store, 'bravo@example.net', '1', 0);
-    const connected: string[] = [];
-    const results = await runEveryone(store, {
-      ...options(),
-      connect: async (_db, account) => {
-        connected.push(account.id);
-        // Removed from the dashboard between listing the mailboxes and reading this one.
-        if (account.id === ACCOUNT) await removeMailbox(store, 1, ACCOUNT);
-        if (account.id === 'other@example.org') await deleteUser(store, bravo);
-        return { api: api(), mailbox };
+    const results = await tick(
+      store,
+      {
+        ...options(),
+        connect: async (_db, account) => {
+          // Removed from the dashboard between listing the mailboxes and reading this one; and someone else deleted meanwhile.
+          if (account.id === ACCOUNT) {
+            await removeMailbox(store, 1, ACCOUNT);
+            await deleteUser(store, bravo);
+          }
+          return { api: api(), mailbox };
+        },
       },
-    });
-    expect(connected).toEqual([ACCOUNT, 'other@example.org']);
-    expect(results.map((r) => [r.email, r.error ?? null])).toEqual([['other@example.org', null]]);
+      Infinity,
+    );
+    // Bravo's pass may have run before the deletion or been skipped after it; neither is a failure.
+    expect(results.map((r) => r.email)).toContain('other@example.org');
+    expect(results.map((r) => r.email)).not.toContain(ACCOUNT);
+    expect(results.filter((r) => r.error)).toEqual([]);
     expect(logs.filter((line) => line.includes('failed'))).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@ import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MAX_BACKFILL, backfill } from '../src/daemon/backfill.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { type RunOptions, runLoop, tick } from '../src/daemon/run.ts';
+import { type RunOptions, tick } from '../src/daemon/run.ts';
 import { signInRefusal } from '../src/host/sign-in.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
@@ -607,16 +607,11 @@ describe('signing in with Google', () => {
     expect((await call('GET', '/api/session', undefined, { host: `homebox:${port}`, 'x-forwarded-proto': 'http' })).body).toMatchObject({
       canSignIn: false,
     });
-    // The handler believes it only from the peer address its adapter gives, and with none given, not at all.
-    const forwarded = async (peer?: string) =>
-      (
-        (await (await handle(new Request('http://homebox/api/session', { headers: { host: 'homebox', 'x-forwarded-proto': 'https' } }), peer)).json()) as {
-          canSignIn: boolean;
-        }
-      ).canSignIn;
-    expect(await forwarded('127.0.0.1')).toBe(true);
-    expect(await forwarded('100.64.0.9')).toBe(false);
-    expect(await forwarded()).toBe(false);
+    // The handler takes the scheme from the URL, which its host builds; a forwarded header alone does nothing.
+    const offered = async (url: string) =>
+      ((await (await handle(new Request(url, { headers: { host: 'homebox', 'x-forwarded-proto': 'https' } }))).json()) as { canSignIn: boolean }).canSignIn;
+    expect(await offered('https://homebox/api/session')).toBe(true);
+    expect(await offered('http://homebox/api/session')).toBe(false);
   });
 });
 
@@ -693,11 +688,9 @@ describe('older mail', () => {
   });
 });
 
-describe('run loop', () => {
-  it('ticks every interval without waiting for the last; ticks that overlap skip work under way', async () => {
-    const stop = new AbortController();
+describe('ticks', () => {
+  it('ticks that overlap skip work another has under way', async () => {
     let passes = 0;
-    let ticks = 0;
     const options: RunOptions = {
       ephemeral: memoryEphemeral(),
       connect: async () => {
@@ -707,11 +700,7 @@ describe('run loop', () => {
       },
       log: () => {},
     };
-    const started: Promise<unknown>[] = [];
-    await runLoop(() => void started.push(tick(store, options, Infinity)), { signal: stop.signal, wait: async () => void (++ticks === 3 && stop.abort()) });
-    await Promise.all(started);
-    // The three overlapped: the first held the mailbox, and the others skipped it.
-    expect(started).toHaveLength(3);
+    await Promise.all([tick(store, options, Infinity), tick(store, options, Infinity), tick(store, options, Infinity)]);
     expect(passes).toBe(1);
   });
 

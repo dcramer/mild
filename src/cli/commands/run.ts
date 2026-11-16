@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util';
 import { loadConfig } from '../../config.ts';
-import { LOCAL_TICK_MS, runEveryone, runLoop } from '../../daemon/run.ts';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { hasClientSecrets } from '../../gmail/auth.ts';
 import { connectedAddresses, listUsers } from '../../store/accounts.ts';
 import { preferences } from '../../store/preferences.ts';
@@ -9,7 +9,10 @@ import { openEphemeral } from '../../ephemeral/open.ts';
 import { paint, ui } from '../ui.ts';
 import { createSift } from '../../host/sift.ts';
 import { checkSecrets } from '../secrets-check.ts';
-import { dashboardAddresses, portOption, serveDashboard, sessionSecret } from '../serve.ts';
+import { nodeHost, portOption, serveDashboard } from '../serve.ts';
+
+/** A minute: new mail is classified soon after it lands, and a quiet pass costs a history read per mailbox. */
+const INTERVAL_MS = 60_000;
 
 export async function run(args: string[]): Promise<void> {
   const { values } = parseArgs({
@@ -40,16 +43,7 @@ export async function run(args: string[]): Promise<void> {
       running.add(held);
     };
     const port = portOption(values.port) ?? config.settings.dashboardPort;
-    const sift = await createSift({
-      config,
-      store,
-      ephemeral,
-      sessionSecret: sessionSecret(config),
-      ...dashboardAddresses(config, port),
-      log,
-      background,
-      tickMs: LOCAL_TICK_MS,
-    });
+    const sift = await createSift({ ...nodeHost(config, store, ephemeral, port, log), background });
 
     const users = await listUsers(store.central);
     const people = users.length;
@@ -63,7 +57,7 @@ export async function run(args: string[]): Promise<void> {
 
     if (values.once) {
       ui.blank();
-      const results = await runEveryone(store, sift.options);
+      const results = await sift.tick();
       if (results.some((r) => r.error)) process.exitCode = 1;
       return;
     }
@@ -77,7 +71,11 @@ export async function run(args: string[]): Promise<void> {
     process.once('SIGINT', () => stop.abort());
     process.once('SIGTERM', () => stop.abort());
     try {
-      await runLoop(() => background(sift.tick()), { signal: stop.signal });
+      // Every minute, without waiting for the last tick: ticks that overlap skip work under way.
+      while (!stop.signal.aborted) {
+        background(sift.tick());
+        await sleep(INTERVAL_MS, undefined, { signal: stop.signal }).catch(() => {});
+      }
     } finally {
       stopDashboard();
       await Promise.all(running);

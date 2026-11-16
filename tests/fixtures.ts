@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { beforeEach, inject, onTestFinished } from 'vitest';
-import { type ListenerOptions, dashboardListener } from '../src/cli/serve.ts';
+import { dashboardListener } from '../src/cli/serve.ts';
+import { site } from '../src/host/site.ts';
 import { type DashboardOptions, createDashboard } from '../src/dashboard/server.ts';
 import type { People } from '../src/store/people.ts';
 import { PARSERS, pglite } from '../src/store/db.ts';
@@ -126,10 +127,10 @@ export type Reply = { status: number; text: string; body: Record<string, unknown
  * a write carries the page's own origin and header unless `headers` says otherwise. A string body is
  * sent as it is.
  */
-export async function startDashboard(people: People, options: DashboardOptions & ListenerOptions = {}) {
+export async function startDashboard(people: People, options: DashboardOptions & { assetsDir?: string; dev?: boolean } = {}) {
   const { assetsDir = builtAssets(), dev = false, ...rest } = options;
   const dashboard = createDashboard(people, { now: () => 77, ephemeral: memoryEphemeral(), ...rest });
-  const server = dashboardListener(dashboard, { assetsDir, dev });
+  const server = dashboardListener(site(dashboard, assetsDir), { dev, pageDir: assetsDir });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   onTestFinished(() => void server.close());
   const port = (server.address() as AddressInfo).port;

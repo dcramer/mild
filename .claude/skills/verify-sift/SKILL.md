@@ -21,7 +21,7 @@ $V up "$RUN"
 
 `up` seeds `$RUN/home`, picks a free port, starts `sift dashboard` on it (as `scripts/serve.ts`: the same command, with a message's HTML answered by the fake) (rebuilding `web/dist` first if the page sources are newer, which can take a minute), runs the doctor, and signs the browser session in. It is ready when it prints `ok  pid …` and `browser session … signed in`. It refuses a directory that already has a `home/`.
 
-What the seed leaves (through three real passes with sift off, `runEveryone`, with a stand-in model that is sure `m8` is Marketing and can place nothing else):
+What the seed leaves (through three real ticks with sift off, `tick`, with a stand-in model that is sure `m8` is Marketing and can place nothing else):
 
 | Id | Sender | What places it | Shows as |
 | --- | --- | --- | --- |

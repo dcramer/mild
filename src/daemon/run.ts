@@ -1,4 +1,3 @@
-import { setTimeout as sleep } from 'node:timers/promises';
 import type { Sql } from '../store/sql.ts';
 import { reconcile } from '../actions/executor.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
@@ -35,8 +34,6 @@ export interface RunOptions {
 }
 
 const DAY_MS = 86_400_000;
-/** A minute: new mail is classified soon after it lands, and a quiet pass costs a history read per mailbox. */
-const PASS_INTERVAL_MS = 60_000;
 /** How long a pass holds its mailbox: longer than a pass should take, and how long one that dies keeps it. */
 const PASS_HOLD_MS = 15 * 60_000;
 /** The same for a slice of a test run, or of pulling in older mail. */
@@ -67,19 +64,6 @@ export interface PassResult {
 
 /** Whether a person is still there: one deleted while a pass ran is skipped, not reported. */
 const stillThere = async (store: Store, id: number) => (await listUsers(store.central)).some((u) => u.id === id);
-
-/** One pass over everyone's mailboxes, a person's database at a time. */
-export async function runEveryone(store: Store, options: RunOptions): Promise<PassResult[]> {
-  const results: PassResult[] = [];
-  for (const user of await listUsers(store.central)) {
-    try {
-      results.push(...(await runOnce(await store.user(user.id), options)));
-    } catch (error) {
-      if (await stillThere(store, user.id)) throw error;
-    }
-  }
-  return results;
-}
 
 /** One pass over each mailbox in one person's database, one after another. A mailbox another pass holds is left out. */
 export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[]> {
@@ -310,16 +294,4 @@ export async function upkeep(db: Sql, options: Pick<RunOptions, 'log' | 'now'>):
     pruned = await pruneOld(db, now);
     if (pruned > 0) options.log(`Forgot ${pruned} message${pruned === 1 ? '' : 's'} with nothing newer than ${RETENTION_DAYS} days`);
   } while (pruned >= PRUNE_PER_RUN);
-}
-
-/** How long a tick in `sift run` may start work: as a host's function would be cut off, so the same path runs. */
-export const LOCAL_TICK_MS = 5 * 60_000;
-
-/** Call `tick` every interval until `signal` aborts, without waiting for one to end: what a host's scheduler does. `wait` is for tests. */
-export async function runLoop(tick: () => void, control: { signal: AbortSignal; wait?: (ms: number) => Promise<void> }): Promise<void> {
-  const wait = control.wait ?? (async (ms: number) => await sleep(ms, undefined, { signal: control.signal }).catch(() => {}));
-  while (!control.signal.aborted) {
-    tick();
-    await wait(PASS_INTERVAL_MS);
-  }
 }
