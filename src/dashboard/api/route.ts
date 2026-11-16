@@ -6,6 +6,7 @@ import type { Scope } from '../scope.ts';
 
 /** What a route is given besides the request: the database, what the process lets the dashboard do, and the clock. */
 export interface Context {
+  /** The database of whoever asked. Nobody else's data is in it. */
   db: Sql;
   /** Absent when the page can look but not manage. */
   controls: Controls | undefined;

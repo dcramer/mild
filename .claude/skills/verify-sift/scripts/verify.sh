@@ -60,7 +60,7 @@ case "$cmd" in
       const { DatabaseSync } = require("node:sqlite");
       const db = new DatabaseSync(process.argv[1], { readOnly: true });
       console.log(JSON.stringify(db.prepare(process.argv[2]).all(), null, 1));
-    ' "$dir/home/sift.db" "$3"
+    ' "$dir/home/users/1.db" "$3"
     ;;
   down)
     ab close > /dev/null 2>&1 || true

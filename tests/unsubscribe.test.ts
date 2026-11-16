@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { undo } from '../src/actions/executor.ts';
 import { RETRY_AFTER_MS, isPublicAddress, unsubscribe } from '../src/actions/unsubscribe.ts';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
-import { connectAccount, recordSync } from '../src/store/accounts.ts';
+import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { getAction } from '../src/store/actions.ts';
-import { openDb } from '../src/store/db.ts';
+import { openUserDb } from '../src/store/db.ts';
 import { everything, facts, FakeMailbox } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -41,8 +41,8 @@ async function message(id: string, headers: Record<string, string>, from = 'news
 }
 
 beforeEach(async () => {
-  db = await openDb(':memory:');
-  await connectAccount(db, ACCOUNT, '1', 0);
+  db = await openUserDb(':memory:');
+  await addMailbox(db, ACCOUNT, '1', 0);
   posts = [];
   status = 200;
   clock = 500;

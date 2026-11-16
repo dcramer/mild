@@ -45,7 +45,7 @@ export const writes: Write[] = [
       if (limit !== undefined && (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > MAX_EVAL_EXAMPLES)) return null;
       if (!(await listAccounts(db)).some((a) => a.id === accountId)) return null;
       if (!controls) throw new Error('This dashboard cannot run the model.');
-      return { id: await controls.startEval({ accountId, fewShot: fewShot ?? controls.settings().fewShot, limit: limit ?? DEFAULT_EVAL_EXAMPLES }) };
+      return { id: await controls.startEval(db, { accountId, fewShot: fewShot ?? controls.settings().fewShot, limit: limit ?? DEFAULT_EVAL_EXAMPLES }) };
     },
   },
 ];

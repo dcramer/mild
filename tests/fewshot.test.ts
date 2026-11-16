@@ -2,8 +2,8 @@ import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { parseSettings, renderSettings } from '../src/config.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
-import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
-import { openDb } from '../src/store/db.ts';
+import { addMailbox, listAccounts, recordSync } from '../src/store/accounts.ts';
+import { openUserDb } from '../src/store/db.ts';
 import { shotCandidates } from '../src/store/examples.ts';
 import { DEFAULT_LABELS } from '../src/store/labels.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
@@ -139,8 +139,8 @@ describe('the model stage', () => {
 describe('stored examples', () => {
   let db: Sql;
   beforeEach(async () => {
-    db = await openDb(':memory:');
-    await connectAccount(db, ACCOUNT, '1', 0);
+    db = await openUserDb(':memory:');
+    await addMailbox(db, ACCOUNT, '1', 0);
     await storeExample(db, ACCOUNT, {
       id: 'e1',
       from: 'news@example.com',

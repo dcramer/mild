@@ -75,11 +75,11 @@ export async function filterVerdicts(db: Sql, accountId: string, now: number = D
 }
 
 export async function filtersCheckedAt(db: Sql, accountId: string): Promise<number | null> {
-  return (await db.get<{ at: number | null }>('SELECT filters_checked_at AS at FROM accounts WHERE id = ?', accountId))?.at ?? null;
+  return (await db.get<{ at: number | null }>('SELECT filters_checked_at AS at FROM mailboxes WHERE id = ?', accountId))?.at ?? null;
 }
 
 export async function markFiltersChecked(db: Sql, accountId: string, now: number): Promise<void> {
-  await db.run('UPDATE accounts SET filters_checked_at = ? WHERE id = ?', now, accountId);
+  await db.run('UPDATE mailboxes SET filters_checked_at = ? WHERE id = ?', now, accountId);
 }
 
 export interface RuleFilterStatus {

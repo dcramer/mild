@@ -4,7 +4,7 @@
  *
  *   node .claude/skills/verify-sift/scripts/seed.ts <home>
  *
- * The mail goes through the real daemon pass (`runOnce`, observing), so decisions, labels, suggestion
+ * The mail goes through the real daemon pass (`runEveryone`, observing), so decisions, labels, suggestion
  * bodies and proposals are what sift itself would record. Only Gmail is faked, at the `GmailApi` and
  * `Mailbox` ports. Prints one line: the `sift_session` cookie value for the connected account.
  */
@@ -12,11 +12,11 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadConfig } from '../../../../src/config.ts';
-import { runOnce } from '../../../../src/daemon/run.ts';
+import { runEveryone } from '../../../../src/daemon/run.ts';
 import type { GmailApi, RawMessage } from '../../../../src/gmail/api.ts';
 import { writeSecret } from '../../../../src/secrets.ts';
 import { connectAccount } from '../../../../src/store/accounts.ts';
-import { openDb } from '../../../../src/store/db.ts';
+import { openStore } from '../../../../src/store/store.ts';
 import { addRule } from '../../../../src/store/rules.ts';
 import { FakeMailbox } from '../../../../tests/helpers.ts';
 
@@ -67,8 +67,9 @@ const inbox = [
   ]),
 ];
 
-const db = await openDb(config.dbPath);
-await connectAccount(db, ACCOUNT, '1', now - 24 * HOUR);
+const store = await openStore(config);
+const user = await connectAccount(store, ACCOUNT, '1', now - 24 * HOUR);
+const db = await store.user(user);
 // One of each kind of rule: a label, an action, and an action for mail that turns out to be a label.
 await addRule(db, ACCOUNT, { match: { fromDomain: 'news.example.com' }, labelId: 'newsletter' }, 'user');
 await addRule(db, ACCOUNT, { match: { from: 'orders@shop.example.com' }, labelId: 'transactional' }, 'user');
@@ -94,10 +95,10 @@ const api: GmailApi = {
   getRaw: async () => null,
 };
 
-const [result] = await runOnce(db, { act: false, heuristics: true, connect: () => ({ api, mailbox }), log: () => {} });
+const [result] = await runEveryone(store, { act: false, heuristics: true, connect: () => ({ api, mailbox }), log: () => {} });
 if (result?.error) throw new Error(`seed pass failed: ${result.error}`);
 if (mailbox.modifyCalls > 0) throw new Error('seed pass changed the fake mailbox while observing');
-db.close();
+store.close();
 
 // The same cookie `/auth/callback` sets (`signSession` in src/dashboard/server.ts), signed with this home's key.
 const secret = randomBytes(32).toString('base64url');

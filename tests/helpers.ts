@@ -2,7 +2,8 @@ import { type Scope, scopeFor } from '../src/dashboard/scope.ts';
 import type { Sql } from '../src/store/sql.ts';
 import type { ExistingFilter, FilterProposal } from '../src/actions/filters.ts';
 import type { Mailbox } from '../src/actions/mailbox.ts';
-import { recordSync, listAccounts } from '../src/store/accounts.ts';
+import { connectAccount, recordSync, listAccounts } from '../src/store/accounts.ts';
+import { type Store, openStore } from '../src/store/store.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import type { MessageFacts } from '../src/triage/types.ts';
 
@@ -129,3 +130,11 @@ export const everything = async (db: Sql): Promise<Scope> =>
     (await listAccounts(db)).map((a) => a.id),
     true,
   );
+
+/** A store whose one person, the owner, has `accounts`; and that person's own database. */
+export async function onePerson(...accounts: string[]): Promise<{ store: Store; db: Sql }> {
+  const store = await openStore(':memory:');
+  let user: number | undefined;
+  for (const account of accounts) user = await connectAccount(store, account, '1', 0, user);
+  return { store, db: await store.user(user ?? 1) };
+}

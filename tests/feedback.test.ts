@@ -13,17 +13,18 @@ import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { summarize } from '../src/dashboard/queries/summary.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
 import { accuracy, applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
-import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
-import { openDb } from '../src/store/db.ts';
+import { listAccounts, recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { listProposals } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import type { Decision, Disposition } from '../src/triage/types.ts';
-import { FakeMailbox, everything, facts } from './helpers.ts';
+import { everything, facts, FakeMailbox, onePerson } from './helpers.ts';
+import type { Store } from '../src/store/store.ts';
 
 const ACCOUNT = 'me@example.org';
 let db: Sql;
+let store: Store;
 let serial = 0;
 
 /** Record a message from `address` and what sift would do with it, while observing. */
@@ -39,8 +40,7 @@ async function suggest(address: string, disposition: Disposition, extra: Partial
 }
 
 beforeEach(async () => {
-  db = await openDb(':memory:');
-  await connectAccount(db, ACCOUNT, '1', 0);
+  ({ store, db } = await onePerson(ACCOUNT));
   serial = 0;
 });
 
@@ -601,7 +601,7 @@ describe('feedback endpoint', () => {
     const assets = mkdtempSync(join(tmpdir(), 'sift-web-'));
     mkdirSync(join(assets, 'assets'));
     writeFileSync(join(assets, 'index.html'), '<!doctype html>');
-    const server = createDashboardServer(db, { assetsDir: assets, allowedHosts: ['homebox'], now: () => 77 });
+    const server = createDashboardServer(store, { assetsDir: assets, allowedHosts: ['homebox'], now: () => 77 });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     close = () => server.close();
     return (server.address() as AddressInfo).port;

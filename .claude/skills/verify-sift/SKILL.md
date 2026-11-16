@@ -21,7 +21,7 @@ $V up "$RUN"
 
 `up` seeds `$RUN/home`, picks a free port, starts `sift dashboard` on it (rebuilding `web/dist` first if the page sources are newer, which can take a minute), runs the doctor, and signs the browser session in. It is ready when it prints `ok  pid …` and `browser session … signed in`. It refuses a directory that already has a `home/`.
 
-What the seed leaves (through a real observing pass, `runOnce`, with heuristics on and no model):
+What the seed leaves (through a real observing pass, `runEveryone`, with heuristics on and no model):
 
 | Id | Sender | What places it | Shows as |
 | --- | --- | --- | --- |
@@ -60,7 +60,7 @@ Find elements by role and accessible name, not refs or CSS: refs change on every
 
 Phone width: `$V ab "$RUN" set viewport 390 844`. AGENTS.md asks what every part does on a phone.
 
-Stored state, read-only: `$V sql "$RUN" "SELECT … FROM rules"`. Tables worth checking: `decisions`, `rules`, `examples`, `actions`, `labels`, `suggestion_bodies`.
+Stored state, read-only: `$V sql "$RUN" "SELECT … FROM rules"`, from the one person's database (`home/users/1.db`); who owns which mailbox is in `home/sift.db`. Tables worth checking: `decisions`, `rules`, `examples`, `actions`, `labels`, `suggestion_bodies`.
 
 ## Evidence
 

@@ -1,22 +1,23 @@
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
-import { openDb, schemaVersion } from '../src/store/db.ts';
+import { migrate, openUserDb } from '../src/store/db.ts';
 import { listLabels } from '../src/store/labels.ts';
 import { listRules } from '../src/store/rules.ts';
+import { openSingle } from '../src/store/split.ts';
+import { sqlite } from '../src/store/sql.ts';
+import { openStore } from '../src/store/store.ts';
 
-const MIGRATIONS = new URL('../src/store/migrations/', import.meta.url);
-const files = readdirSync(MIGRATIONS).toSorted();
+const LEGACY = new URL('../src/store/migrations/legacy/', import.meta.url);
+const files = readdirSync(LEGACY).toSorted();
+const scratch = () => mkdtempSync(join(tmpdir(), 'sift-db-'));
 
-describe('store', () => {
-  it('migrates a fresh database and enforces constraints', async () => {
-    const db = await openDb(':memory:');
-    // Numbers may skip, so the version is the highest one, not how many there are.
-    expect(await schemaVersion(db)).toBe(Number.parseInt(files.at(-1)!, 10));
-    expect(await db.get(`SELECT count(*) AS n FROM sqlite_master WHERE name = 'questions'`)).toEqual({ n: 0 });
-    await db.run('INSERT INTO accounts (id, email, created_at) VALUES (?, ?, ?)', 'acct', 'me@example.org', 0);
+describe('migrations', () => {
+  it("migrates a fresh person's database and enforces constraints", async () => {
+    const db = await openUserDb(':memory:');
+    await db.run('INSERT INTO mailboxes (id, created_at) VALUES (?, ?)', 'acct', 0);
     const insert = (account: string, id: string, disposition: string) =>
       db.run(
         `INSERT INTO labels (account_id, id, name, description, disposition, gmail_label, position, updated_at) VALUES (?, ?, 'N', '', ?, 'sift/n', 0, 0)`,
@@ -31,31 +32,46 @@ describe('store', () => {
   });
 
   it('records each migration by name, and applies one that arrives with a lower number than those already applied', async () => {
-    const db = await openDb(':memory:');
-    expect((await db.all<{ name: string }>('SELECT name FROM schema_migrations ORDER BY name')).map((row) => row.name)).toEqual(files);
-
-    // A database that was migrated while a lower-numbered file did not exist yet: it must still get that file.
-    const late = files.find((f) => f.startsWith('050_'));
-    const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
-    (await openDb(path)).close();
-    const behind = new DatabaseSync(path);
-    behind.exec('DROP TABLE eval_results; DROP TABLE eval_runs;');
-    behind.prepare('DELETE FROM schema_migrations WHERE name = ?').run(late!);
-    behind.close();
-    const caught = await openDb(path);
-    expect(await caught.get(`SELECT count(*) AS n FROM sqlite_master WHERE name IN ('eval_runs', 'eval_results')`)).toEqual({ n: 2 });
-    expect(await schemaVersion(caught)).toBe(Number.parseInt(files.at(-1)!, 10));
-    caught.close();
+    const db = sqlite(new DatabaseSync(':memory:'));
+    const table = (name: string) => ({ name, sql: `CREATE TABLE t_${name.slice(0, 3)} (x)` });
+    await migrate(db, [table('010_a.sql'), table('020_b.sql')]);
+    await migrate(db, [table('010_a.sql'), table('015_late.sql'), table('020_b.sql')]);
+    expect((await db.all<{ name: string }>('SELECT name FROM schema_migrations ORDER BY name')).map((row) => row.name)).toEqual([
+      '010_a.sql',
+      '015_late.sql',
+      '020_b.sql',
+    ]);
+    expect(await db.get(`SELECT 1 AS yes FROM sqlite_master WHERE name = 't_015'`)).toEqual({ yes: 1 });
   });
 
-  it('takes a database from before migrations were named to have had every file up to its version', async () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
-    const old = new DatabaseSync(path);
-    for (const file of files.filter((f) => Number.parseInt(f, 10) <= 41)) old.exec(readFileSync(new URL(file, MIGRATIONS), 'utf8'));
-    old.exec('PRAGMA user_version = 41');
-    old.close();
+  it('refuses a database a newer sift has migrated, and leaves it as it was', async () => {
+    const path = join(scratch(), '1.db');
+    (await openUserDb(path)).close();
+    const newer = new DatabaseSync(path);
+    newer.exec(`INSERT INTO schema_migrations (name, applied_at) VALUES ('999_from_the_future.sql', 1)`);
+    newer.close();
+    await expect(openUserDb(path)).rejects.toThrow(/last opened by a newer sift: it has had 999_from_the_future\.sql/);
+  });
+});
 
-    const db = await openDb(path);
+/** A home's single database from before there was one per person, migrated as far as `upTo`. */
+function single(path: string, upTo = Infinity): DatabaseSync {
+  const old = new DatabaseSync(path);
+  for (const file of files.filter((f) => Number.parseInt(f, 10) <= upTo)) old.exec(readFileSync(new URL(file, LEGACY), 'utf8'));
+  if (upTo !== Infinity) old.exec(`PRAGMA user_version = ${upTo}`);
+  else {
+    old.exec('CREATE TABLE schema_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL) STRICT');
+    for (const file of files) old.prepare('INSERT INTO schema_migrations VALUES (?, 0)').run(file);
+  }
+  return old;
+}
+
+describe('a database from before there was one per person', () => {
+  it('takes a database from before migrations were named to have had every file up to its version', async () => {
+    const path = join(scratch(), 'sift.db');
+    single(path, 41).close();
+
+    const db = await openSingle(path);
     const applied = await db.all<{ name: string; applied_at: number }>('SELECT name, applied_at FROM schema_migrations ORDER BY name');
     expect(applied.map((row) => row.name)).toEqual(files);
     // The ones it already had are marked without a time; the rest ran now.
@@ -63,20 +79,9 @@ describe('store', () => {
     db.close();
   });
 
-  it('refuses a database a newer sift has migrated, and leaves it as it was', async () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
-    (await openDb(path)).close();
-    const newer = new DatabaseSync(path);
-    newer.exec(`INSERT INTO schema_migrations (name, applied_at) VALUES ('999_from_the_future.sql', 1)`);
-    newer.close();
-    await expect(openDb(path)).rejects.toThrow(/last opened by a newer sift: it has had 999_from_the_future\.sql/);
-  });
-
   it('turns a rule the model checked into one that waits for its label', async () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
-    const old = new DatabaseSync(path);
-    for (const file of files.filter((f) => Number.parseInt(f, 10) <= 62)) old.exec(readFileSync(new URL(file, MIGRATIONS), 'utf8'));
-    old.exec('PRAGMA user_version = 62');
+    const path = join(scratch(), 'sift.db');
+    const old = single(path, 62);
     old.exec(`
       INSERT INTO accounts (id, email, created_at) VALUES ('a@example.org', 'a@example.org', 0);
       INSERT INTO labels (account_id, id, name, description, disposition, gmail_label, position, updated_at) VALUES
@@ -89,7 +94,7 @@ describe('store', () => {
     `);
     old.close();
 
-    const db = await openDb(path);
+    const db = await openSingle(path);
     expect((await listRules(db, 'a@example.org')).map(({ source: _source, subscription: _subscription, ...rule }) => rule)).toEqual([
       { id: 'r-usual', match: { from: 'news@example.com' }, whenLabel: 'newsletter', hits: 3 },
       { id: 'r-always', match: { from: 'ada@example.org' }, labelId: 'personal', disposition: 'keep', hits: 0 },
@@ -101,10 +106,8 @@ describe('store', () => {
   });
 
   it('turns the categories, rules and senders of an older database into labels and rules', async () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'sift-db-')), 'sift.db');
-    const old = new DatabaseSync(path);
-    for (const file of files.filter((f) => Number.parseInt(f, 10) <= 6)) old.exec(readFileSync(new URL(file, MIGRATIONS), 'utf8'));
-    old.exec('PRAGMA user_version = 6');
+    const path = join(scratch(), 'sift.db');
+    const old = single(path, 6);
     old.exec(`
       INSERT INTO accounts (id, email, created_at) VALUES ('a@example.org', 'a@example.org', 0), ('b@example.org', 'b@example.org', 0);
       INSERT INTO categories (account_id, key, name, description, disposition, label, position, updated_at) VALUES
@@ -126,7 +129,7 @@ describe('store', () => {
     `);
     old.close();
 
-    const db = await openDb(path);
+    const db = await openSingle(path);
     expect(await listLabels(db, 'a@example.org')).toMatchObject([
       { id: 'personal', disposition: 'keep', gmailLabel: 'sift/personal' },
       { id: 'newsletter', disposition: 'archive', gmailLabel: 'sift/newsletters' },
@@ -156,5 +159,118 @@ describe('store', () => {
     expect(await db.get('SELECT label_id, gmail_label FROM decisions')).toEqual({ label_id: 'newsletter', gmail_label: 'sift/newsletters' });
     await expect(db.get('SELECT 1 FROM senders')).rejects.toThrow();
     db.close();
+  });
+});
+
+describe('splitting a database from before there was one per person', () => {
+  const ALPHA = 'alpha@example.org';
+  const ALPHA_WORK = 'alpha@example.com';
+  const BETA = 'beta@example.net';
+
+  /** A home whose single database has two people's mail in it. */
+  function home() {
+    const dir = scratch();
+    const paths = { dbPath: join(dir, 'sift.db'), usersDir: join(dir, 'users') };
+    const old = single(paths.dbPath);
+    old.exec(`
+      INSERT INTO users (id, owner, created_at) VALUES (1, 1, 1), (2, 0, 2);
+      INSERT INTO accounts (id, email, history_id, created_at, last_synced_at, filters_checked_at, user_id) VALUES
+        ('${ALPHA}', '${ALPHA}', '11', 1, 100, 50, 1), ('${ALPHA_WORK}', '${ALPHA_WORK}', '12', 3, 101, NULL, 1), ('${BETA}', '${BETA}', '21', 2, 102, NULL, 2);
+    `);
+    for (const [account, id] of [
+      [ALPHA, 'a1'],
+      [ALPHA_WORK, 'a2'],
+      [BETA, 'b1'],
+    ] as const) {
+      old.exec(`
+        INSERT INTO messages (account_id, id, thread_id, from_address, from_domain, received_at, subject) VALUES ('${account}', '${id}', 't', 'news@example.com', 'example.com', 5, 'About ${id}');
+        INSERT INTO decisions (account_id, message_id, stage, disposition, subscription, reason, decided_at, label_id) VALUES ('${account}', '${id}', 'agent', 'archive', 'preserve', 'r', 6, 'newsletter');
+        INSERT INTO actions (account_id, message_id, type, payload_json, status, created_at, decision_id) VALUES ('${account}', '${id}', 'archive', '{}', 'done', 7, last_insert_rowid());
+        INSERT INTO rules (id, account_id, position, match_json, disposition, source, created_at) VALUES ('r-${id}', '${account}', 1, '{"from":"news@example.com"}', 'archive', 'user', 8);
+        INSERT INTO examples (account_id, message_id, disposition, suggested, suggested_by, marked_at, status, body_text) VALUES ('${account}', '${id}', 'archive', 'archive', 'agent', 9, 'captured', 'Body ${id}');
+        INSERT INTO eval_runs (account_id, started_at, status, model, prompt_hash, guidelines_hash, labels_hash, labels_json, few_shot, total) VALUES ('${account}', 10, 'done', 'p/m', 'h', 'h', 'h', '[]', 0, 1);
+        INSERT INTO eval_results (run_id, message_id, expected, duration_ms, shots, sender_shots) VALUES (last_insert_rowid(), '${id}', 'newsletter', 1, 0, 0);
+      `);
+    }
+    old.close();
+    return paths;
+  }
+
+  it('gives each person a database holding only their own mail, and keeps the old one beside them', async () => {
+    const paths = home();
+    const store = await openStore(paths);
+    expect(await store.central.all('SELECT id, owner FROM users ORDER BY id')).toEqual([
+      { id: 1, owner: 1 },
+      { id: 2, owner: 0 },
+    ]);
+    expect(await store.central.all('SELECT id, user_id FROM accounts ORDER BY id')).toEqual([
+      { id: ALPHA_WORK, user_id: 1 },
+      { id: ALPHA, user_id: 1 },
+      { id: BETA, user_id: 2 },
+    ]);
+    const alpha = await store.user(1);
+    const beta = await store.user(2);
+    expect(await alpha.all('SELECT id, history_id, last_synced_at, filters_checked_at FROM mailboxes ORDER BY id')).toEqual([
+      { id: ALPHA_WORK, history_id: '12', last_synced_at: 101, filters_checked_at: null },
+      { id: ALPHA, history_id: '11', last_synced_at: 100, filters_checked_at: 50 },
+    ]);
+    for (const [db, ids] of [
+      [alpha, ['a1', 'a2']],
+      [beta, ['b1']],
+    ] as const) {
+      for (const table of ['messages', 'decisions', 'actions', 'examples', 'eval_results'])
+        expect((await db.all<{ id: string }>(`SELECT ${table === 'messages' ? 'id' : 'message_id'} AS id FROM ${table} ORDER BY 1`)).map((r) => r.id)).toEqual(
+          ids,
+        );
+      expect((await db.all<{ id: string }>('SELECT id FROM rules ORDER BY id')).map((r) => r.id)).toEqual(ids.map((id) => `r-${id}`));
+    }
+    // An action still points at the decision it carried out, and a result at its run.
+    expect(await beta.get(`SELECT d.message_id FROM actions a JOIN decisions d ON d.id = a.decision_id`)).toEqual({ message_id: 'b1' });
+    expect(await beta.get(`SELECT r.account_id FROM eval_results e JOIN eval_runs r ON r.id = e.run_id`)).toEqual({ account_id: BETA });
+    expect(await alpha.get(`SELECT body_text FROM examples WHERE message_id = 'a2'`)).toEqual({ body_text: 'Body a2' });
+    store.close();
+
+    expect(existsSync(`${paths.dbPath}.before-split`)).toBe(true);
+    expect(
+      readdirSync(paths.usersDir)
+        .filter((f) => f.endsWith('.db'))
+        .toSorted(),
+    ).toEqual(['1.db', '2.db']);
+    // Opening again finds it split and changes nothing.
+    const again = await openStore(paths);
+    expect(await (await again.user(2)).get('SELECT count(*) AS n FROM messages')).toEqual({ n: 1 });
+    again.close();
+  });
+
+  it('carries every column the old tables had', async () => {
+    const dir = scratch();
+    single(join(dir, 'old.db')).close();
+    const old = new DatabaseSync(join(dir, 'old.db'));
+    const user = await openUserDb(join(dir, 'user.db'));
+    const columns = async (table: string) => (await user.all<{ name: string }>('SELECT name FROM pragma_table_info(?)', table)).map((c) => c.name);
+    const tables = old.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT IN ('accounts', 'users', 'schema_migrations')`).all() as {
+      name: string;
+    }[];
+    for (const { name } of tables) {
+      const had = (old.prepare('SELECT name FROM pragma_table_info(?)').all(name) as { name: string }[]).map((c) => c.name);
+      expect(await columns(name)).toEqual(expect.arrayContaining(had));
+    }
+    old.close();
+    user.close();
+  });
+
+  it('finishes a split that stopped while moving the new databases into place', async () => {
+    const paths = home();
+    (await openStore(paths)).close();
+    // As if it had stopped after setting the old database aside and before moving the new ones in.
+    const work = join(paths.dbPath, '..', 'split-in-progress');
+    mkdirSync(work);
+    renameSync(paths.usersDir, join(work, 'users'));
+    renameSync(paths.dbPath, join(work, 'sift.db'));
+    writeFileSync(join(work, 'marker'), '');
+    const store = await openStore(paths);
+    expect(await (await store.user(1)).get('SELECT count(*) AS n FROM messages')).toEqual({ n: 2 });
+    expect(existsSync(work)).toBe(false);
+    store.close();
   });
 });

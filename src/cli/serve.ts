@@ -4,7 +4,7 @@ import type { Controls } from '../dashboard/controls.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
 import { ensureWebBuilt } from './web-build.ts';
 import { readSecret, writeSecret } from '../secrets.ts';
-import type { Database } from '../store/sql.ts';
+import type { Store } from '../store/store.ts';
 import { listenAddresses, machineNames, tailscaleName } from './network.ts';
 import { paint, ui } from './ui.ts';
 import { buildSignIn } from './google-sign-in.ts';
@@ -30,7 +30,7 @@ export function signInAddresses(port: number): string[] {
  */
 export async function serveDashboard(
   config: Config,
-  db: Database,
+  store: Store,
   options: { port?: number; host?: string; controls: Controls; dev?: boolean },
 ): Promise<() => void> {
   const { settings } = config;
@@ -43,11 +43,11 @@ export async function serveDashboard(
   if (!options.dev) await ensureWebBuilt();
 
   const servers = listen.map(() =>
-    createDashboardServer(db, {
+    createDashboardServer(store, {
       ...(options.dev ? { dev: true } : {}),
       allowedHosts,
       controls: options.controls,
-      signIn: buildSignIn(config, db),
+      signIn: buildSignIn(config, store),
       sessionSecret: sessionSecret(config),
       signInAddresses: signInAddresses(port),
     }),

@@ -167,7 +167,7 @@ Everything sift keeps is in one directory, the home: `~/.config/sift` by default
 
 - `sift.toml`: settings (`model`, `act`, `heuristics`, `interval`, `dashboard.port`, `dashboard.host`, `dashboard.allow`, `retention.days`, `examples.few_shot`, `examples.keep_days`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
 - `guidelines.md`: the user's broad guidance, read on every pass.
-- `sift.db`: everything structured or learned.
+- `sift.db`, `users/`: the databases: who has which mailbox, and each person's mail (see State).
 - `google-client.json`, `google/`, `model-auth.json`, `dashboard-key`: credentials and the session secret, owner-only, kept out of the database.
 - `device-id`: names this installation to a subscription sign-in. Not a secret.
 - `.env`: optional. Read at start, before the one in the working directory; neither replaces a variable already set.
@@ -211,11 +211,22 @@ Code: `src/learn/feedback.ts` (suggestions, answers, accuracy), `src/learn/gmail
 
 ## State
 
-One SQLite database, `sift.db` in the home directory (schema in `src/store/migrations/`). Each migration file is applied once and recorded by name in `schema_migrations`, so a file that lands with a lower number than ones already applied still runs; a database that has had a file this build does not know was opened by a newer sift, and is refused. It is the complete record of what sift saw and did, and everything else (the dashboard, undo, future analytics) reads from it.
+Two kinds of SQLite database, in the home directory (schema in `src/store/migrations/`):
 
-Everything reaches it through `Sql` (`src/store/sql.ts`), whose calls are async so a database outside the process could stand behind it; over `node:sqlite` each is answered at once. A transaction is one call taking a function, and while it is open every other caller on that database waits, so the function awaits nothing but the database: no Gmail or model call inside one. Using the outer handle inside it is refused rather than left to wait on itself.
+- `sift.db`, the install's: who the people are (`users`) and which mailboxes are whose (`accounts`). Migrated by `central/`.
+- `users/<id>.db`, one per person: everything about their mail, below. Migrated by `user/`.
 
-SQLite is the only engine sift will support (decided 2026-11-15). Postgres was declined: without row-level security, which is not acceptable here, it keeps people apart only by a database or schema per user, the same as a file per user, plus a server to run. Hosting is on Cloudflare Durable Objects or a machine with a disk, not Vercel. The plan for a database per user is in TODO.md.
+A request, a pass or a test run holds the database of the person it is for and no other (`src/store/store.ts`), so a query that forgets to filter cannot reach someone else's mail, and a person is backed up, exported or deleted as one file. A person's database keeps its own `mailboxes` with each one's sync state, since foreign keys cannot cross files. The central database is the authority on who owns which: a mailbox is added there first, and opening a person's database adds any it lacks, which is what a crash in between leaves. Ids are numbered within each person's database.
+
+Each database is migrated when it is opened. Each migration file is applied once and recorded by name in `schema_migrations`, so a file that lands with a lower number than ones already applied still runs; a database that has had a file this build does not know was opened by a newer sift, and is refused. No migration may need the other kind of database: moving data between them takes two releases. Defaults (the starting labels) are written by code when a mailbox's labels are first read, never by a migration.
+
+A home from before there was a database per person has one `sift.db` holding everything. The next start splits it (`src/store/split.ts`): it is brought up to its last schema by `legacy/`, which is frozen, copied into the new files, and kept as `sift.db.before-split`. The new files are written to `split-in-progress/` and moved into place last, so a crash leaves either the old layout, done again on the next start, or a move to finish.
+
+Together they are the complete record of what sift saw and did, and everything else (the dashboard, undo, future analytics) reads from them.
+
+Everything reaches them through `Sql` (`src/store/sql.ts`), whose calls are async so a database outside the process could stand behind it; over `node:sqlite` each is answered at once. A transaction is one call taking a function, and while it is open every other caller on that database waits, so the function awaits nothing but the database: no Gmail or model call inside one. Using the outer handle inside it is refused rather than left to wait on itself.
+
+SQLite is the only engine sift will support (decided 2026-11-15). Postgres was declined: without row-level security, which is not acceptable here, it keeps people apart only by a database or schema per user, the same as a file per user, plus a server to run. Hosting is on Cloudflare Durable Objects or a machine with a disk, not Vercel; what that still needs is in TODO.md.
 
 - **messages:** one row per message sift has seen: sender, recipients, subject, the triage headers, the labels at sync time and the facts derived from them. No body. This is enough to triage a message again without refetching it.
 - **feedback, examples:** the user's answers to suggestions, and the full content of each message they answered for, kept as evaluation and training data until deleted (see Teaching).
@@ -223,7 +234,7 @@ SQLite is the only engine sift will support (decided 2026-11-15). Postgres was d
 - **decisions:** an append-only log, each with its mode (observe or act) and outcome. Every triage outcome is recorded, including "keep" and "could not decide", with the tier that made it, the reason, the confidence, and what it cost (model, tokens, dollars, duration). A message can have several decisions; the latest is current.
 - **actions:** the audit log of every mailbox change, with labels before and after, linked to the decision it carried out. Creating and removing a Gmail filter is logged here too, with no message.
 - **eval_runs, eval_results:** each test run of the model over the examples, with its settings, and what the model said for each example. Labels and costs only, no message content.
-- **labels, rules, accounts:** what mail can be, what sift knows without a model, and each account's history cursor and last sync time.
+- **labels, rules, mailboxes:** what mail can be, what sift knows without a model, and each mailbox's history cursor and last sync time.
 
 **Retention.** Everything is kept unless `retention.days` is set in `sift.toml` (30 at least, so sync's 7-day recovery search cannot bring back a message already forgotten). Then `sift run` deletes, on its first pass and once a day, each message that nothing has happened to for that long, with its decisions and actions (`src/daemon/retention.ts`). What it costs: a change older than the window can no longer be undone from sift, and the model is told less about how much a sender has sent. Kept however old:
 
@@ -245,12 +256,11 @@ The dashboard is where the user watches sift, teaches it and manages it. `sift r
 
 - **Someone signed in with Google as a connected account.** One sign-in does both jobs: it gives sift its access to the account (the Gmail scopes and a refresh token) and it proves the viewer owns that account. There is no separate login and no terminal step. The page's static files are public; every `/api/` route needs the session.
 - **Users and their mailboxes.** A user is a person; an account is one of their mailboxes, an identity they signed in with (`users`, `accounts.user_id`). The first sign-in makes the first user, who owns the install. Someone signed in can connect another mailbox (Settings), which becomes theirs. An account never changes hands.
-- **Each person sees only their own.** A request's scope is the mailboxes of whoever is signed in, whichever of them they signed in as (`src/dashboard/scope.ts`). Every query takes it and filters by it; `?mailbox=` on any read narrows it to one of them. Every write says whose data it touches and is refused, as if the thing were not there, when that is someone else's. What applies to the whole install (acting or observing, the model, the interval, the guidelines, pulling in older mail) only the owner may change, and the guidelines only the owner may read. With no sign-in set up (tests, tools) there is one person, who has everything.
+- **Each person sees only their own.** A request is given the database of whoever is signed in, whichever of their mailboxes they signed in as, and no other; its scope is their mailboxes (`src/dashboard/scope.ts`). Every query also takes the scope and filters by it, and `?mailbox=` on any read narrows it to one of them. Every write says whose data it touches and is refused, as if the thing were not there, when that is someone else's; a row named by id is looked for only in the requester's database, so another person's gets the answer one that never existed would. What applies to the whole install (acting or observing, the model, the interval, the guidelines, pulling in older mail) only the owner may change, and the guidelines only the owner may read. With no sign-in set up (tests, tools) the request is the owner's.
 - **An allow list is who the install is for.** When `dashboard.allow` in `sift.toml` lists addresses (a step in `sift init`), no other Google account can sign in, the first included, and a session ends when its address is taken off the list. It is read on every request. A listed address sift does not know may sign in by itself, and is then a person of their own. Without a list only the first account, and mailboxes added by someone signed in, can ever sign in. The list limits the dashboard only: an account left off it stays connected and its mail is still sorted.
 - **Sessions** are a signed cookie (HMAC with a per-install secret in `dashboard-key`), HttpOnly, SameSite=Lax, 30 days, and stop working if the account is removed.
 - **Google's constraint.** It returns a browser only to `localhost` or an HTTPS address on a real domain. So the dashboard is used at `http://localhost:8787`, or over Tailscale at `https://<machine>.<tailnet>.ts.net` (`tailscale serve` proxies to localhost and passes the original scheme in a header, which is believed only from this machine). At a plain hostname or address the page says where to go. The Google client must be a "Web application" one listing `<origin>/auth/callback` for each address. A Desktop client left from an older setup is refused, and `sift init` replaces it.
 - **Host and origin checks.** It answers only to names and addresses that are this machine (blocking DNS rebinding), and every write must come from the dashboard's own page: its Origin, a JSON content type and a custom header.
-- **Not tenants.** Everyone signed in sees every connected account. That suits one person with several addresses, not several people.
 
 **What it may do**
 

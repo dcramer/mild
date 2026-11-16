@@ -2,12 +2,13 @@ import { parseArgs } from 'node:util';
 import { unsubscribe } from '../../actions/unsubscribe.ts';
 import { loadConfig } from '../../config.ts';
 import type { Activity } from '../../dashboard/controls.ts';
-import { type PassResult, createWake, runLoop, runOnce } from '../../daemon/run.ts';
+import { type PassResult, createWake, runEveryone, runLoop } from '../../daemon/run.ts';
 import { createGmailApi } from '../../gmail/api.ts';
 import { clientFor, hasClientSecrets, loadClientSecrets } from '../../gmail/auth.ts';
 import { createGmailMailbox } from '../../gmail/mailbox.ts';
-import { type Account, listAccounts } from '../../store/accounts.ts';
-import { openDb } from '../../store/db.ts';
+import { type Account, connectedAddresses } from '../../store/accounts.ts';
+import { openStore } from '../../store/store.ts';
+import type { Sql } from '../../store/sql.ts';
 import { paint, ui } from '../ui.ts';
 import { openModelTier, buildControls } from '../controls.ts';
 import { checkSecrets } from '../secrets-check.ts';
@@ -34,7 +35,7 @@ export async function run(args: string[]): Promise<void> {
   const config = loadConfig();
   const secrets = checkSecrets(config, true);
 
-  const db = await openDb(config.dbPath);
+  const store = await openStore(config);
   try {
     const log = (line: string) => ui.plain(`${paint.dim(new Date().toLocaleTimeString(undefined, { hour12: false }))}  ${line}`);
 
@@ -62,7 +63,7 @@ export async function run(args: string[]): Promise<void> {
         act,
         heuristics: settings.heuristics,
         ...(tier ? { model: { ...tier, fewShot: settings.fewShot } } : {}),
-        unsubscribe: async (accountId: string, messageId: string) => await unsubscribe({ db }, accountId, messageId),
+        unsubscribe: (db: Sql, accountId: string, messageId: string) => unsubscribe({ db }, accountId, messageId),
         ...(settings.examplesKeepDays ? { examplesKeepDays: settings.examplesKeepDays } : {}),
         connect: (account: Account) => {
           const client = clientFor(config, loadClientSecrets(config), account.email);
@@ -78,12 +79,12 @@ export async function run(args: string[]): Promise<void> {
     ui.heading(first.act ? 'acting' : 'observing', `${config.settings.model ?? 'no model'} · every ${first.intervalMs / 1000}s`);
     secrets();
     if (!hasClientSecrets(config)) ui.warn(`No Google client yet. Run ${paint.cmd('sift init')}.`);
-    else if ((await listAccounts(db)).length === 0) ui.warn('No Gmail account yet. Open the dashboard and sign in with Google.');
+    else if ((await connectedAddresses(store.central)).length === 0) ui.warn('No Gmail account yet. Open the dashboard and sign in with Google.');
     else if (!first.act) ui.info('Gmail is not changed while sift is observing. Switch it in the dashboard, under Settings.');
 
     if (values.once) {
       ui.blank();
-      const results = await runOnce(db, first);
+      const results = await runEveryone(store, first);
       if (results.some((r) => r.error)) process.exitCode = 1;
       return;
     }
@@ -94,8 +95,8 @@ export async function run(args: string[]): Promise<void> {
     const port = portOption(values.port);
     const stopDashboard = values['no-dashboard']
       ? () => {}
-      : await serveDashboard(config, db, {
-          controls: await buildControls(config, db, { wake, activity }),
+      : await serveDashboard(config, store, {
+          controls: await buildControls(config, store, { wake, activity }),
           ...(values.dev ? { dev: true } : {}),
           ...(port === undefined ? {} : { port }),
           ...(values.host ? { host: values.host } : {}),
@@ -105,7 +106,7 @@ export async function run(args: string[]): Promise<void> {
     process.once('SIGINT', () => stop.abort());
     process.once('SIGTERM', () => stop.abort());
     try {
-      await runLoop(db, next, {
+      await runLoop(store, next, {
         signal: stop.signal,
         wake,
         onPass: (results: PassResult[]) => {
@@ -118,6 +119,6 @@ export async function run(args: string[]): Promise<void> {
       stopDashboard();
     }
   } finally {
-    db.close();
+    store.close();
   }
 }

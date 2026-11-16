@@ -10,9 +10,9 @@ import { loadConfig } from '../src/config.ts';
 import { fileCredentialStore } from '../src/model/credentials.ts';
 import { createJudge } from '../src/model/judge.ts';
 import { openModels, resolveModel } from '../src/model/models.ts';
-import { connectAccount, recordSync } from '../src/store/accounts.ts';
+import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts';
-import { openDb } from '../src/store/db.ts';
+import { openUserDb } from '../src/store/db.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { PROPOSE_AFTER, listProposals, proposeForSender, proposeSettled, resolveProposal } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
@@ -187,8 +187,8 @@ describe('judge', () => {
 
 describe('preferences in the database', () => {
   async function seeded() {
-    const db = await openDb(':memory:');
-    await connectAccount(db, ACCOUNT, '1', 0);
+    const db = await openUserDb(':memory:');
+    await addMailbox(db, ACCOUNT, '1', 0);
     return db;
   }
   const modelDecision = async (db: Awaited<ReturnType<typeof seeded>>, id: string, labelId: string, disposition: 'keep' | 'archive' | 'review') => {
@@ -319,8 +319,8 @@ describe('preferences in the database', () => {
 
 describe('standing', () => {
   const db = async () => {
-    const d = await openDb(':memory:');
-    await connectAccount(d, ACCOUNT, '1', 0);
+    const d = await openUserDb(':memory:');
+    await addMailbox(d, ACCOUNT, '1', 0);
     return d;
   };
   const mail = async (d: Awaited<ReturnType<typeof db>>, id: string, address: string, labelId: string | null, at = 1000) => {
@@ -380,8 +380,8 @@ describe('standing', () => {
 
 describe('gatherEvidence', () => {
   it('caches whether the owner has written to a sender and counts history', async () => {
-    const db = await openDb(':memory:');
-    await connectAccount(db, ACCOUNT, '1', 0);
+    const db = await openUserDb(':memory:');
+    await addMailbox(db, ACCOUNT, '1', 0);
     const f = facts({ accountId: ACCOUNT });
     await recordSync(db, ACCOUNT, [f], '2');
     let lookups = 0;
@@ -402,8 +402,8 @@ describe('gatherEvidence', () => {
   });
 
   it('reports unknown instead of failing when a lookup errors', async () => {
-    const db = await openDb(':memory:');
-    await connectAccount(db, ACCOUNT, '1', 0);
+    const db = await openUserDb(':memory:');
+    await addMailbox(db, ACCOUNT, '1', 0);
     const fail = async () => {
       throw new Error('network');
     };

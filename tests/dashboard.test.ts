@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { Database } from '../src/store/sql.ts';
+import type { Sql } from '../src/store/sql.ts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { execute } from '../src/actions/executor.ts';
 import { listDecisions, retryDecision } from '../src/dashboard/queries/decisions.ts';
@@ -12,20 +12,21 @@ import { listRuleSummaries } from '../src/dashboard/queries/rules.ts';
 import { summarize } from '../src/dashboard/queries/summary.ts';
 import type { SenderPage } from '../src/dashboard/types.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
-import { connectAccount, recordSync } from '../src/store/accounts.ts';
+import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
-import { openDb, schemaVersion } from '../src/store/db.ts';
+import { openUserDb } from '../src/store/db.ts';
+import { openSingle } from '../src/store/split.ts';
+import type { Store } from '../src/store/store.ts';
 import { addRule } from '../src/store/rules.ts';
-import { everything, facts } from './helpers.ts';
+import { everything, facts, onePerson } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
 const DAY = 86_400_000;
 const NOW = Date.UTC(2026, 5, 15, 12);
 
-async function seeded(): Promise<Database> {
-  const db = await openDb(':memory:');
-  await connectAccount(db, ACCOUNT, '1', 0);
+async function seededStore(): Promise<{ store: Store; db: Sql }> {
+  const { store, db } = await onePerson(ACCOUNT);
   await recordSync(
     db,
     ACCOUNT,
@@ -66,13 +67,14 @@ async function seeded(): Promise<Database> {
     { now: NOW - 2 * DAY, durationMs: 1500 },
   );
   await recordDecision(db, ACCOUNT, 'old', { ...base, disposition: 'keep', stage: 'rules' }, { now: NOW - 40 * DAY });
-  return db;
+  return { store, db };
 }
+const seeded = async () => (await seededStore()).db;
 
 describe('tracking', () => {
   it('stores the subject and triage headers with each message, and never a body', async () => {
-    const db = await openDb(':memory:');
-    await connectAccount(db, ACCOUNT, '1', 0);
+    const db = await openUserDb(':memory:');
+    await addMailbox(db, ACCOUNT, '1', 0);
     await recordSync(
       db,
       ACCOUNT,
@@ -167,7 +169,7 @@ describe('tracking', () => {
   it('upgrades a version 1 database in place, keeping its messages', async () => {
     const path = join(mkdtempSync(join(tmpdir(), 'sift-test-')), 'sift.db');
     const v1 = new DatabaseSync(path);
-    v1.exec(readFileSync(new URL('../src/store/migrations/001_init.sql', import.meta.url), 'utf8'));
+    v1.exec(readFileSync(new URL('../src/store/migrations/legacy/001_init.sql', import.meta.url), 'utf8'));
     v1.exec('PRAGMA user_version = 1');
     v1.exec(`INSERT INTO accounts (id, email, created_at) VALUES ('${ACCOUNT}', '${ACCOUNT}', 0)`);
     v1.exec(
@@ -175,8 +177,8 @@ describe('tracking', () => {
     );
     v1.close();
 
-    const db = await openDb(path);
-    expect(await schemaVersion(db)).toBeGreaterThan(1);
+    const db = await openSingle(path);
+    expect(await db.get(`SELECT 1 FROM schema_migrations WHERE name = '064_users.sql'`)).toBeDefined();
     expect(await db.get('SELECT id, subject, headers_json, synced_at FROM messages')).toEqual({
       id: 'm',
       subject: '',
@@ -258,7 +260,7 @@ describe('summarize', () => {
   });
 
   it('handles an empty database', async () => {
-    const empty = await openDb(':memory:');
+    const empty = await openUserDb(':memory:');
     const summary = await summarize(empty, await everything(empty), 30, NOW);
     expect(summary.totals.decisions).toBe(0);
     expect(summary.daily).toHaveLength(30);
@@ -284,7 +286,7 @@ describe('dashboard server', () => {
   afterEach(() => close?.());
 
   async function start(assetsDir: string = builtAssets()) {
-    const server = createDashboardServer(await seeded(), { assetsDir, now: () => NOW });
+    const server = createDashboardServer((await seededStore()).store, { assetsDir, now: () => NOW });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     close = () => server.close();
     return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -349,7 +351,7 @@ describe('dashboard server', () => {
 
   it('in dev mode serves the page as it is on disk now, and tells it when to reload', async () => {
     const dir = builtAssets();
-    const server = createDashboardServer(await seeded(), { assetsDir: dir, dev: true, now: () => NOW });
+    const server = createDashboardServer((await seededStore()).store, { assetsDir: dir, dev: true, now: () => NOW });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     close = () => server.close();
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -470,8 +472,8 @@ describe('dashboard server', () => {
   });
 
   it('serves a sender and a domain, and gives them a standing with one write', async () => {
-    const db = await seeded();
-    const server = createDashboardServer(db, { assetsDir: builtAssets(), now: () => NOW });
+    const { store, db } = await seededStore();
+    const server = createDashboardServer(store, { assetsDir: builtAssets(), now: () => NOW });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     close = () => server.close();
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -528,7 +530,11 @@ describe('dashboard server', () => {
     expect(await statusFor(base, '100.64.0.7:8787')).toBe(403);
     close?.();
 
-    const server = createDashboardServer(await seeded(), { assetsDir: builtAssets(), allowedHosts: ['Box.example.ts.net', '100.64.0.7'], now: () => NOW });
+    const server = createDashboardServer((await seededStore()).store, {
+      assetsDir: builtAssets(),
+      allowedHosts: ['Box.example.ts.net', '100.64.0.7'],
+      now: () => NOW,
+    });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     close = () => server.close();
     const configured = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

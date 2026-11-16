@@ -1,7 +1,10 @@
+import type { Sql } from '../store/sql.ts';
+
 /**
  * What the dashboard can ask the rest of sift to do. The dashboard itself may not import Gmail, the
  * action executor or the daemon, so the process that starts it hands these in. Anything that changes
- * the mailbox goes through here and is audited like any other change.
+ * the mailbox goes through here and is audited like any other change. `db` is the database of whoever
+ * asked, which is where the thing named is looked for.
  */
 export interface Controls {
   settings(): ManagedSettings;
@@ -18,26 +21,26 @@ export interface Controls {
    * guidelines last changed. A model call each, so only when the user asks, and at most a batch at a
    * time. Resolves with how many were started and how many are left for another press.
    */
-  rejudge(accountId: string): Promise<{ started: number; remaining: number }>;
+  rejudge(db: Sql, accountId: string): Promise<{ started: number; remaining: number }>;
   /** Reverse one mailbox change. Resolves with a sentence describing what happened. */
-  undo(actionId: number): Promise<string>;
-  /** Pull the last `days` days of the inbox in as suggestions. Resolves with how many messages were new. */
+  undo(db: Sql, actionId: number): Promise<string>;
+  /** Pull the last `days` days of everyone's inbox in as suggestions. Resolves with how many messages were new. */
   backfill(days: number): Promise<number>;
   /**
    * After the user has corrected a decision: take back what sift last did to that message, so the new
    * decision can be carried out from where the message started. Resolves with whether anything was taken back.
    */
-  putBack(accountId: string, messageId: string): Promise<boolean>;
+  putBack(db: Sql, accountId: string, messageId: string): Promise<boolean>;
   /**
    * Replay the model over an account's stored examples, in the background. Every example is a model call
    * that costs money, so this only ever runs because the user asked. Resolves with the run's id.
    */
-  startEval(request: { accountId: string; fewShot: boolean; limit: number }): Promise<number>;
+  startEval(db: Sql, request: { accountId: string; fewShot: boolean; limit: number }): Promise<number>;
   /**
    * Copy a rule to Gmail as a filter (`on`), or take its filter out again. Rejects with a sentence for
    * the user when the rule cannot be a filter or Gmail refused.
    */
-  ruleFilter(ruleId: string, on: boolean): Promise<void>;
+  ruleFilter(db: Sql, ruleId: string, on: boolean): Promise<void>;
   /** Start a pass now instead of waiting for the interval. */
   checkNow(): void;
   activity(): Activity;

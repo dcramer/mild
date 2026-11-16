@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
 import { loadConfig } from '../../config.ts';
 import { hasClientSecrets } from '../../gmail/auth.ts';
-import { listAccounts } from '../../store/accounts.ts';
-import { openDb } from '../../store/db.ts';
+import { connectedAddresses, listUsers } from '../../store/accounts.ts';
+import { openStore } from '../../store/store.ts';
 import { paint, ui } from '../ui.ts';
 import { checkSecrets } from '../secrets-check.ts';
 import { signInAddresses } from '../serve.ts';
@@ -12,15 +12,20 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
 export async function status(): Promise<void> {
   const config = loadConfig();
   const secrets = checkSecrets(config, false);
-  const db = await openDb(config.dbPath);
-  const accounts = await listAccounts(db);
-  const count = async (table: string, where = '') => (await db.get<{ n: number }>(`SELECT count(*) AS n FROM ${table} ${where}`))!.n;
+  const store = await openStore(config);
+  const accounts = await connectedAddresses(store.central);
+  const people = await Promise.all((await listUsers(store.central)).map((u) => store.user(u.id)));
+  const count = async (table: string, where = '') => {
+    let n = 0;
+    for (const db of people) n += (await db.get<{ n: number }>(`SELECT count(*) AS n FROM ${table} ${where}`))!.n;
+    return n;
+  };
   const { settings } = config;
   const ready = hasClientSecrets(config) && accounts.length > 0;
 
   ui.heading('status', paint.path(config.home));
   ui.fields([
-    ['Gmail', accounts.length > 0 ? accounts.map((a) => a.email).join(', ') : paint.dim(hasClientSecrets(config) ? 'not connected' : 'not set up')],
+    ['Gmail', accounts.length > 0 ? accounts.join(', ') : paint.dim(hasClientSecrets(config) ? 'not connected' : 'not set up')],
     ['Model', settings.model ?? paint.dim('none')],
     ['Mode', `${settings.act ? 'acting on decisions' : 'observing only'}${paint.dim(` · every ${settings.interval}s`)}`],
     ['Guidance', existsSync(config.guidelinesPath) ? paint.path(config.guidelinesPath) : paint.dim('none written')],
@@ -40,5 +45,5 @@ export async function status(): Promise<void> {
   if (!ready) ui.warn(`Setup is not finished. Run ${paint.cmd('sift init')}.`);
   secrets();
   if (!ready || !config.keys.current) ui.blank();
-  db.close();
+  store.close();
 }

@@ -1,4 +1,5 @@
 import type { Sql } from './sql.ts';
+import type { Store } from './store.ts';
 import { deriveFacts } from '../triage/facts.ts';
 import { parseListId } from '../triage/features.ts';
 import type { MessageFacts } from '../triage/types.ts';
@@ -20,46 +21,71 @@ export interface User {
  * Add an account, or reset its cursor if it is already connected. The account id is its email address.
  * A new account joins `userId`'s mailboxes when given (someone signed in connected it); otherwise it is
  * a new person's first, and the first person ever owns the install. An account never changes hands.
+ * Returns the person it belongs to.
  */
-export async function connectAccount(db: Sql, email: string, historyId: string, now: number = Date.now(), userId?: number): Promise<void> {
-  if (await db.get('SELECT 1 FROM accounts WHERE id = ?', email)) {
-    await db.run('UPDATE accounts SET history_id = ? WHERE id = ?', historyId, email);
-    return;
-  }
-  await db.transaction(async (tx) => {
-    let user = userId;
-    if (user === undefined) {
+export async function connectAccount(store: Store, email: string, historyId: string, now: number = Date.now(), userId?: number): Promise<number> {
+  const user = await store.central.transaction(async (tx) => {
+    const known = await tx.get<{ user_id: number }>('SELECT user_id FROM accounts WHERE id = ?', email);
+    if (known) return known.user_id;
+    let person = userId;
+    if (person === undefined) {
       const first = (await tx.get('SELECT 1 FROM users LIMIT 1')) === undefined;
-      user = (await tx.run('INSERT INTO users (owner, created_at) VALUES (?, ?)', first ? 1 : 0, now)).lastInsertRowid;
+      person = (await tx.run('INSERT INTO users (owner, created_at) VALUES (?, ?)', first ? 1 : 0, now)).lastInsertRowid;
     }
-    await tx.run('INSERT INTO accounts (id, email, history_id, created_at, user_id) VALUES (?, ?, ?, ?, ?)', email, email, historyId, now, user);
+    await tx.run('INSERT INTO accounts (id, email, user_id, created_at) VALUES (?, ?, ?, ?)', email, email, person, now);
+    return person;
   });
+  await addMailbox(await store.user(user), email, historyId, now);
+  return user;
+}
+
+/** A mailbox in one person's own database, or its cursor reset if it is there already. */
+export async function addMailbox(db: Sql, id: string, historyId: string, now: number = Date.now()): Promise<void> {
+  await db.run(
+    'INSERT INTO mailboxes (id, history_id, created_at) VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET history_id = excluded.history_id',
+    id,
+    historyId,
+    now,
+  );
 }
 
 /** The person an account belongs to, or null if it is not connected. */
-export async function userOf(db: Sql, email: string): Promise<User | null> {
-  const row = await db.get<{ id: number; owner: number }>('SELECT u.id, u.owner FROM accounts a JOIN users u ON u.id = a.user_id WHERE a.email = ?', email);
+export async function userOf(central: Sql, email: string): Promise<User | null> {
+  const row = await central.get<{ id: number; owner: number }>(
+    'SELECT u.id, u.owner FROM accounts a JOIN users u ON u.id = a.user_id WHERE a.email = ?',
+    email,
+  );
   return row ? { id: row.id, owner: row.owner === 1 } : null;
 }
 
-/** A person's mailboxes, by address. */
-export async function accountsOf(db: Sql, userId: number): Promise<Account[]> {
-  const rows = await db.all<{
-    id: string;
-    email: string;
-    history_id: string | null;
-  }>('SELECT id, email, history_id FROM accounts WHERE user_id = ? ORDER BY email', userId);
-  return rows.map((r) => ({ id: r.id, email: r.email, historyId: r.history_id }));
+/** The person who owns the install, once someone has signed in. */
+export async function owner(central: Sql): Promise<User | null> {
+  const row = await central.get<{ id: number }>('SELECT id FROM users WHERE owner = 1 ORDER BY id LIMIT 1');
+  return row ? { id: row.id, owner: true } : null;
+}
+
+export async function listUsers(central: Sql): Promise<User[]> {
+  return (await central.all<{ id: number; owner: number }>('SELECT id, owner FROM users ORDER BY id')).map((r) => ({ id: r.id, owner: r.owner === 1 }));
+}
+
+/** Every connected address, everyone's; or one person's, given `userId`. */
+export async function connectedAddresses(central: Sql, userId?: number): Promise<string[]> {
+  const rows =
+    userId === undefined
+      ? await central.all<{ email: string }>('SELECT email FROM accounts ORDER BY email')
+      : await central.all<{ email: string }>('SELECT email FROM accounts WHERE user_id = ? ORDER BY email', userId);
+  return rows.map((r) => r.email);
 }
 
 /** When the account's last sync began, or null before its first. */
 export async function lastSyncedAt(db: Sql, accountId: string): Promise<number | null> {
-  return (await db.get<{ at: number | null }>('SELECT last_synced_at AS at FROM accounts WHERE id = ?', accountId))?.at ?? null;
+  return (await db.get<{ at: number | null }>('SELECT last_synced_at AS at FROM mailboxes WHERE id = ?', accountId))?.at ?? null;
 }
 
+/** The mailboxes in one person's database. */
 export async function listAccounts(db: Sql): Promise<Account[]> {
-  const rows = await db.all<{ id: string; email: string; history_id: string | null }>('SELECT id, email, history_id FROM accounts ORDER BY email');
-  return rows.map((r) => ({ id: r.id, email: r.email, historyId: r.history_id }));
+  const rows = await db.all<{ id: string; history_id: string | null }>('SELECT id, history_id FROM mailboxes ORDER BY id');
+  return rows.map((r) => ({ id: r.id, email: r.id, historyId: r.history_id }));
 }
 
 const INSERT_MESSAGE = `INSERT OR IGNORE INTO messages
@@ -110,7 +136,7 @@ export async function recordSync(
   return await db.transaction(async (tx) => {
     const added = await insertMessages(tx, accountId, messages, now, false);
     for (const id of read) await tx.run('UPDATE messages SET read_at = ? WHERE account_id = ? AND id = ? AND read_at IS NULL', now, accountId, id);
-    await tx.run('UPDATE accounts SET history_id = ?, last_synced_at = ? WHERE id = ?', historyId, now, accountId);
+    await tx.run('UPDATE mailboxes SET history_id = ?, last_synced_at = ? WHERE id = ?', historyId, now, accountId);
     return added;
   });
 }

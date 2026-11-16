@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, parseSettings } from '../src/config.ts';
 import { type RunOptions, runOnce } from '../src/daemon/run.ts';
 import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
-import { connectAccount } from '../src/store/accounts.ts';
-import { openDb } from '../src/store/db.ts';
+import { addMailbox } from '../src/store/accounts.ts';
+import { openUserDb } from '../src/store/db.ts';
 import { DEFAULT_LABELS } from '../src/store/labels.ts';
 import { heuristicsStage } from '../src/triage/stages/heuristics.ts';
 import type { MessageFacts } from '../src/triage/types.ts';
@@ -95,8 +95,8 @@ describe('heuristics in the cascade', () => {
   };
 
   async function setup() {
-    const db = await openDb(':memory:');
-    await connectAccount(db, ACCOUNT, '1', 0);
+    const db = await openUserDb(':memory:');
+    await addMailbox(db, ACCOUNT, '1', 0);
     const mailbox = new FakeMailbox();
     mailbox.labels.set(raw.id, [...raw.labelIds]);
     const api: GmailApi = {

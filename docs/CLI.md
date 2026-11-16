@@ -42,6 +42,7 @@ Nothing needs an environment variable. Everything sift keeps is in one directory
 | --- | --- |
 | `sift.toml` | Settings: the model, whether to act or only suggest, how often to check, the dashboard's port and address, and who can sign in. Unknown keys are errors. |
 | `guidelines.md` | Your own words about how to sort your mail. The model reads it before each message. |
-| `sift.db` | Labels, rules, the record of every message, decision and change, and the full content of mail you answered for. |
+| `sift.db` | Who has which mailbox. |
+| `users/` | One database per person: labels, rules, the record of every message, decision and change, and the full content of mail they answered for. |
 | `google-client.json`, `google/`, `model-auth.json`, `dashboard-key` | Credentials and the session secret. Owner-only. |
 | `setup.json` | How far `init` has got. |

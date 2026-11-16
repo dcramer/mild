@@ -1,3 +1,4 @@
+import { getAction } from '../../store/actions.ts';
 import { listChanges, listDecisions, retryDecision } from '../queries/decisions.ts';
 import { messageDetail } from '../queries/messages.ts';
 import { summarize } from '../queries/summary.ts';
@@ -53,10 +54,11 @@ export const writes: Write[] = [
   {
     path: '/api/undo',
     touches: ownerOf('actions'),
-    run: async ({ controls }, body) => {
+    run: async ({ db, controls }, body) => {
       if (typeof body['id'] !== 'number' || !Number.isInteger(body['id'])) return null;
       if (!controls) throw new Error('This dashboard cannot undo changes.');
-      return { message: await controls.undo(body['id']) };
+      if (!(await getAction(db, body['id']))) throw new Error(`There is no change #${body['id']}.`);
+      return { message: await controls.undo(db, body['id']) };
     },
   },
   {

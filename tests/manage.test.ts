@@ -15,13 +15,14 @@ import type { RawMessage } from '../src/gmail/api.ts';
 import { startEval } from '../src/learn/evals.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { listLabels } from '../src/store/labels.ts';
-import { openDb } from '../src/store/db.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
-import { FakeMailbox, facts, storeExample } from './helpers.ts';
+import { FakeMailbox, facts, onePerson, storeExample } from './helpers.ts';
+import type { Store } from '../src/store/store.ts';
 
 const ACCOUNT = 'me@example.org';
 let db: Sql;
+let store: Store;
 let close: (() => void) | undefined;
 let calls: string[];
 let settings: ManagedSettings;
@@ -39,39 +40,37 @@ const controls: Controls = {
     guidelines = text;
   },
   guidelinesChangedAt: () => guidelinesChangedAt,
-  rejudge: async (accountId) => {
+  rejudge: async (_db, accountId) => {
     calls.push(`rejudge ${accountId}`);
     return { started: 2, remaining: 0 };
   },
-  undo: async (id) => {
+  undo: async (_db, id) => {
     calls.push(`undo ${id}`);
-    if (id === 404) throw new Error('There is no change #404.');
     return 'Reversed.';
   },
   backfill: async (days) => {
     calls.push(`backfill ${days}`);
     return 12;
   },
-  putBack: async (_account, messageId) => {
+  putBack: async (_db, _account, messageId) => {
     calls.push(`putBack ${messageId}`);
     if (messageId === 'gone') throw new Error('The message no longer exists.');
     return true;
   },
-  startEval: async ({ accountId, fewShot, limit }) => {
+  startEval: async (_db, { accountId, fewShot, limit }) => {
     calls.push(`eval ${accountId} ${fewShot} ${limit}`);
     return 7;
   },
-  ruleFilter: async (ruleId, on) => {
+  ruleFilter: async (target, ruleId, on) => {
     calls.push(`filter ${ruleId} ${on ? 'on' : 'off'}`);
-    await db.run(`UPDATE rules SET filter_id = ?, filter_state = ? WHERE id = ?`, on ? 'f1' : null, on ? 'active' : null, ruleId);
+    await target.run(`UPDATE rules SET filter_id = ?, filter_state = ? WHERE id = ?`, on ? 'f1' : null, on ? 'active' : null, ruleId);
   },
   checkNow: () => void calls.push('check'),
   activity: () => ({ sorting: true, lastPassAt: 5, problems: [], expired: [ACCOUNT] }),
 };
 
 beforeEach(async () => {
-  db = await openDb(':memory:');
-  await connectAccount(db, ACCOUNT, '1', 0);
+  ({ store, db } = await onePerson(ACCOUNT));
   calls = [];
   settings = { act: false, interval: 60, model: null, fewShot: true, examplesKeepDays: null };
   guidelines = 'Be careful.';
@@ -83,7 +82,7 @@ async function start(options: { withControls?: boolean } = {}) {
   const assets = mkdtempSync(join(tmpdir(), 'sift-web-'));
   mkdirSync(join(assets, 'assets'));
   writeFileSync(join(assets, 'index.html'), '<!doctype html>page');
-  const server = createDashboardServer(db, {
+  const server = createDashboardServer(store, {
     assetsDir: assets,
     ...(options.withControls === false ? {} : { controls }),
     now: () => 77,
@@ -179,7 +178,7 @@ describe('managing sift from the dashboard', () => {
     await storeExample(db, ACCOUNT, { id: 'e1', from: 'news@example.com', label: 'newsletter', body: 'Private words.', markedAt: 1, name: 'News' });
     await storeExample(db, ACCOUNT, { id: 'e2', from: 'ada@example.org', label: 'personal', markedAt: 2 });
     await storeExample(db, ACCOUNT, { id: 'e3', from: 'bob@example.org', label: 'personal', markedAt: 3 });
-    await connectAccount(db, 'other@example.org', '1', 0);
+    await connectAccount(store, 'other@example.org', '1', 0, 1);
     await storeExample(db, 'other@example.org', { id: 'o1', from: 'cy@example.org', label: 'personal', markedAt: 4 });
     settings.examplesKeepDays = 90;
 
@@ -375,12 +374,14 @@ describe('managing sift from the dashboard', () => {
 
   it('asks the running sift to undo, pull in older mail and check now', async () => {
     const port = await start();
+    await db.run(`INSERT INTO actions (id, account_id, type, payload_json, status, created_at) VALUES (3, ?, 'archive', '{}', 'done', 1)`, ACCOUNT);
     expect((await call(port, 'POST', '/api/undo', { id: 3 })).body).toEqual({ message: 'Reversed.' });
+    // A change that is not in this person's database is not passed on.
     expect(await call(port, 'POST', '/api/undo', { id: 404 })).toMatchObject({ status: 409, body: { error: 'There is no change #404.' } });
     expect((await call(port, 'POST', '/api/backfill', { days: 7 })).body).toEqual({ added: 12 });
     expect((await call(port, 'POST', '/api/backfill', { days: 400 })).status).toBe(400);
     expect((await call(port, 'POST', '/api/check', {})).status).toBe(200);
-    expect(calls).toEqual(['undo 3', 'undo 404', 'backfill 7', 'check', 'check']);
+    expect(calls).toEqual(['undo 3', 'backfill 7', 'check', 'check']);
   });
 
   it('refuses every write that did not come from its own page', async () => {
@@ -453,7 +454,7 @@ describe('signing in with Google', () => {
       completed.push(`${redirectUri} ${code} addTo=${addTo}`);
       if (code === 'stranger') throw new Error('stranger@example.net is not the account sift is connected to.');
       if (code === 'second') {
-        await connectAccount(db, 'work@example.com', '1', 0);
+        await connectAccount(store, 'work@example.com', '1', 0, 1);
         return 'work@example.com';
       }
       return ACCOUNT;
@@ -467,7 +468,7 @@ describe('signing in with Google', () => {
     writeFileSync(join(assets, 'assets', 'app.js'), '1');
     writeFileSync(join(assets, 'sw.js'), '1');
     writeFileSync(join(assets, 'manifest.webmanifest'), '{}');
-    const server = createDashboardServer(db, {
+    const server = createDashboardServer(store, {
       assetsDir: assets,
       controls,
       signIn,
@@ -600,7 +601,7 @@ describe('signing in with Google', () => {
     const out = await call(port, 'POST', '/api/signout', {}, cookie);
     expect(String(out.headers['set-cookie'])).toContain('Max-Age=0');
 
-    await db.exec('DELETE FROM accounts');
+    await store.central.exec('DELETE FROM accounts');
     expect((await call(port, 'GET', '/api/summary', undefined, cookie)).status).toBe(401);
   });
 
@@ -668,7 +669,8 @@ describe('older mail', () => {
 
 describe('run loop', () => {
   it('asks for its settings before every pass and can be woken early', async () => {
-    await db.exec('DELETE FROM accounts');
+    await store.central.exec('DELETE FROM accounts');
+    await db.exec('DELETE FROM mailboxes');
     const stop = new AbortController();
     const wake = createWake();
     const seen: number[] = [];
@@ -685,7 +687,7 @@ describe('run loop', () => {
       };
     };
     const started = Date.now();
-    await runLoop(db, next, {
+    await runLoop(store, next, {
       signal: stop.signal,
       wake,
       onPass: () => {
@@ -713,7 +715,7 @@ describe('run loop', () => {
       const wake = createWake();
       let pass = 0;
       await runLoop(
-        db,
+        store,
         async () => ({
           act: false,
           connect: () => {

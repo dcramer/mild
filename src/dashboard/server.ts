@@ -4,7 +4,9 @@ import { type IncomingMessage, type Server, type ServerResponse, createServer } 
 import { extname, join, relative, sep } from 'node:path';
 import type { Sql } from '../store/sql.ts';
 import { fileURLToPath } from 'node:url';
-import { accountsOf, listAccounts, userOf } from '../store/accounts.ts';
+import { connectedAddresses, owner, userOf } from '../store/accounts.ts';
+import { openUserDb } from '../store/db.ts';
+import type { Store } from '../store/store.ts';
 import { READS, WRITES } from './api/index.ts';
 import type { Context, Write } from './api/route.ts';
 import type { Controls, SignIn } from './controls.ts';
@@ -149,7 +151,7 @@ const cookie = (req: IncomingMessage, name: string) =>
  * What it may do: change what sift has been taught and how it is set up. It never reaches Gmail itself;
  * the few things that do (signing in, undo, pulling in older mail) are handed in and audited as usual.
  */
-export function createDashboardServer(db: Sql, options: DashboardOptions = {}): Server {
+export function createDashboardServer(store: Store, options: DashboardOptions = {}): Server {
   const assetsDir = options.assetsDir ?? WEB_DIST;
   const builtAssets = listAssets(assetsDir);
   const dev = options.dev ?? false;
@@ -167,11 +169,13 @@ export function createDashboardServer(db: Sql, options: DashboardOptions = {}): 
   // Sign-ins in flight: the state Google echoes back, with the PKCE verifier and where to return to.
   const pending = new Map<string, { verifier: string; redirectUri: string; addTo: string | null; expires: number }>();
 
-  const ctx: Context = { db, controls, now };
+  // What a request with nobody behind it reads: no one's mail.
+  let empty: Promise<Sql> | undefined;
+  const nobody = () => (empty ??= openUserDb(':memory:'));
   const reads = new Map(READS.map((route) => [route.path, route]));
   const writes = new Map(WRITES.map((route) => [route.path, route]));
   /** Why this person may not make this write, or null if they may. Someone else's data is reported as not there. */
-  const refusal = async (route: Write, body: Record<string, unknown>, scope: Scope): Promise<{ status: number; error: string } | null> => {
+  const refusal = async (route: Write, ctx: Context, body: Record<string, unknown>, scope: Scope): Promise<{ status: number; error: string } | null> => {
     const whose = await route.touches(ctx, body);
     if (whose === 'install') return scope.owner ? null : { status: 403, error: 'Only the person who set sift up can change this.' };
     if (whose === null || whose === 'anyone' || sees(scope, whose.account)) return null;
@@ -196,20 +200,13 @@ export function createDashboardServer(db: Sql, options: DashboardOptions = {}): 
     // Google only returns a browser to localhost or to an HTTPS address.
     const googleCanReturnHere = https || LOCAL_HOSTS.has(host);
     const signedInAs = signIn ? readSession(cookie(req, 'sift_session'), secret, now()) : null;
-    const session = signedInAs !== null && signIn?.allowed(signedInAs) && (await listAccounts(db)).some((a) => a.email === signedInAs) ? signedInAs : null;
-    // What this request may see: the mailboxes of whoever is signed in. With no sign-in set up there is one person, who has them all.
-    const person = session === null ? null : await userOf(db, session);
-    const whole: Scope = !signIn
-      ? scopeFor(
-          (await listAccounts(db)).map((a) => a.id),
-          true,
-        )
-      : person
-        ? scopeFor(
-            (await accountsOf(db, person.id)).map((a) => a.id),
-            person.owner,
-          )
-        : scopeFor([], false);
+    const known = signedInAs !== null && signIn?.allowed(signedInAs) ? await userOf(store.central, signedInAs) : null;
+    const session = known ? signedInAs : null;
+    // What this request may see: the mailboxes of whoever is signed in, in their own database and no
+    // one else's. With no sign-in set up (tests, tools) it is the owner's.
+    const person = signIn ? known : await owner(store.central);
+    const whole = person ? scopeFor(await connectedAddresses(store.central, person.id), person.owner) : scopeFor([], !signIn);
+    const ctx: Context = { db: person ? await store.user(person.id) : await nobody(), controls, now };
     const sessionCookie = (value: string, maxAge: number) =>
       `sift_session=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
 
@@ -290,7 +287,7 @@ export function createDashboardServer(db: Sql, options: DashboardOptions = {}): 
       }
       void readJson(req)
         .then(async (body) => {
-          const refused = body && (await refusal(handler, body, whole));
+          const refused = body && (await refusal(handler, ctx, body, whole));
           if (refused) return void json(res, refused.status, { error: refused.error });
           const result = body && (await handler.run(ctx, body, whole));
           if (result === null) json(res, 400, { error: 'That request is not well formed.' });

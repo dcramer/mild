@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
-import { connectAccount, recordSync } from '../src/store/accounts.ts';
-import { openDb } from '../src/store/db.ts';
+import { addMailbox, recordSync } from '../src/store/accounts.ts';
+import { openUserDb } from '../src/store/db.ts';
 import { storedFacts } from '../src/store/messages.ts';
 import { gatherEvidence } from '../src/daemon/evidence.ts';
 import { deriveFacts, describeFacts, matchesFacts, threadFacts } from '../src/triage/facts.ts';
@@ -86,8 +86,8 @@ describe('deriveFacts', () => {
 
 describe('recorded facts', () => {
   it('stores them with the message and returns them with its detail', async () => {
-    const db = await openDb(':memory:');
-    await connectAccount(db, ACCOUNT, '1', 0);
+    const db = await openUserDb(':memory:');
+    await addMailbox(db, ACCOUNT, '1', 0);
     await recordSync(db, ACCOUNT, [campaign], '2');
     expect(JSON.parse((await db.get<{ facts_json: string }>('SELECT facts_json FROM messages'))!.facts_json)).toEqual(deriveFacts(campaign));
     expect((await messageDetail(db, await everything(db), ACCOUNT, campaign.messageId))?.facts).toMatchObject({
@@ -97,8 +97,8 @@ describe('recorded facts', () => {
   });
 
   it('derives them for a message synced before they were recorded', async () => {
-    const db = await openDb(':memory:');
-    await connectAccount(db, ACCOUNT, '1', 0);
+    const db = await openUserDb(':memory:');
+    await addMailbox(db, ACCOUNT, '1', 0);
     await recordSync(db, ACCOUNT, [campaign], '2');
     await db.exec('UPDATE messages SET facts_json = NULL');
     expect(await storedFacts(db, ACCOUNT, campaign.messageId)).toEqual(deriveFacts(campaign));
@@ -144,8 +144,8 @@ describe('thread context', () => {
   });
 
   const setup = async (headers: Record<string, string>) => {
-    const db = await openDb(':memory:');
-    await connectAccount(db, ACCOUNT, '1', 0);
+    const db = await openUserDb(':memory:');
+    await addMailbox(db, ACCOUNT, '1', 0);
     const message = facts({ accountId: ACCOUNT, messageId: 'reply', threadId: 't9', headers });
     await recordSync(db, ACCOUNT, [message], '2');
     const asked: string[] = [];

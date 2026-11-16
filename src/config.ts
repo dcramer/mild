@@ -49,7 +49,10 @@ export interface Config {
   settingsPath: string;
   /** The user's broad guidance for triage, in plain language. */
   guidelinesPath: string;
+  /** Who the people are and which mailboxes are whose. */
   dbPath: string;
+  /** One database per person, `<user id>.db`. */
+  usersDir: string;
   /** The user's own Google OAuth client, as downloaded from Google Cloud Console. */
   googleClientPath: string;
   /** One refresh token per connected account. */
@@ -84,6 +87,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     settingsPath,
     guidelinesPath: join(home, 'guidelines.md'),
     dbPath: join(home, 'sift.db'),
+    usersDir: join(home, 'users'),
     googleClientPath: join(home, 'google-client.json'),
     googleTokenDir: join(home, 'google'),
     modelAuthPath: join(home, 'model-auth.json'),

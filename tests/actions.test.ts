@@ -2,9 +2,9 @@ import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { type ActionDeps, execute, reconcile, undo } from '../src/actions/executor.ts';
 import { planAction } from '../src/actions/plan.ts';
-import { connectAccount, recordSync } from '../src/store/accounts.ts';
+import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { getAction } from '../src/store/actions.ts';
-import { openDb } from '../src/store/db.ts';
+import { openUserDb } from '../src/store/db.ts';
 import { FakeMailbox, facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -14,8 +14,8 @@ let mailbox: FakeMailbox;
 let deps: ActionDeps;
 
 beforeEach(async () => {
-  db = await openDb(':memory:');
-  await connectAccount(db, ACCOUNT, '1', 0);
+  db = await openUserDb(':memory:');
+  await addMailbox(db, ACCOUNT, '1', 0);
   await recordSync(db, ACCOUNT, [facts({ messageId: 'm1' })], '2');
   mailbox = new FakeMailbox();
   mailbox.labels.set('m1', ['INBOX', 'UNREAD', 'L:mine']);

@@ -12,9 +12,9 @@ import { clientFor, loadClientSecrets } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { createJudge } from '../model/judge.ts';
 import { openModels, resolveModel } from '../model/models.ts';
-import { listAccounts } from '../store/accounts.ts';
+import { listAccounts, listUsers } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
-import type { Database } from '../store/sql.ts';
+import type { Store } from '../store/store.ts';
 import { ui } from './ui.ts';
 import { getRuleFilter } from '../store/filters.ts';
 
@@ -33,9 +33,10 @@ export async function openModelTier(config: Config, spec: string) {
 }
 
 /** What the dashboard may ask this process to do. See `Controls`. */
-export async function buildControls(config: Config, db: Database, live: { wake?: Wake; activity: Activity }): Promise<Controls> {
+export async function buildControls(config: Config, store: Store, live: { wake?: Wake; activity: Activity }): Promise<Controls> {
   const current = () => loadConfig().settings;
-  await interruptEvals(db);
+  const everyone = async () => await Promise.all((await listUsers(store.central)).map((u) => store.user(u.id)));
+  for (const db of await everyone()) await interruptEvals(db);
   const guidelinesChangedAt = () => (existsSync(config.guidelinesPath) ? statSync(config.guidelinesPath).mtimeMs : null);
   let rejudging = false;
   return {
@@ -65,7 +66,7 @@ export async function buildControls(config: Config, db: Database, live: { wake?:
       writeFileSync(config.guidelinesPath, text, { mode: 0o600 });
     },
     guidelinesChangedAt,
-    rejudge: async (accountId) => {
+    rejudge: async (db, accountId) => {
       const spec = current().model;
       const account = (await listAccounts(db)).find((a) => a.id === accountId);
       const since = guidelinesChangedAt();
@@ -85,7 +86,7 @@ export async function buildControls(config: Config, db: Database, live: { wake?:
       void done.finally(() => (rejudging = false));
       return { started, remaining };
     },
-    undo: async (actionId) => {
+    undo: async (db, actionId) => {
       const action = await getAction(db, actionId);
       if (!action) throw new Error(`There is no change #${actionId}.`);
       const outcome = await undo({ db, mailbox: mailboxFor(config, action.accountId) }, actionId);
@@ -96,23 +97,24 @@ export async function buildControls(config: Config, db: Database, live: { wake?:
     backfill: async (days) => {
       const secrets = loadClientSecrets(config);
       let added = 0;
-      for (const account of await listAccounts(db)) added += await backfill(db, createGmailApi(clientFor(config, secrets, account.email)), account.id, days);
+      for (const db of await everyone())
+        for (const account of await listAccounts(db)) added += await backfill(db, createGmailApi(clientFor(config, secrets, account.email)), account.id, days);
       return added;
     },
-    putBack: async (accountId, messageId) => {
+    putBack: async (db, accountId, messageId) => {
       const last = await lastStandingChange(db, accountId, messageId);
       if (last) await undo({ db, mailbox: mailboxFor(config, accountId) }, last.id);
       // The corrected decision is waiting to be carried out; do it now, not at the next interval.
       live.wake?.now();
       return last !== null;
     },
-    startEval: async (request) => {
+    startEval: async (db, request) => {
       const spec = current().model;
       if (!spec) throw new Error('Choose a model first.');
       const tier = await openModelTier(config, spec);
       return (await startEval({ db, judge: tier.judge, model: spec, guidelines: tier.guidelines() }, request)).id;
     },
-    ruleFilter: async (ruleId, on) => {
+    ruleFilter: async (db, ruleId, on) => {
       const rule = await getRuleFilter(db, ruleId);
       if (!rule) throw new Error('That rule no longer exists.');
       const deps = { db, mailbox: mailboxFor(config, rule.accountId) };

@@ -4,14 +4,14 @@ import { DEFAULT_SETTINGS, parseSettings, renderSettings } from '../src/config.t
 import { pruneOld } from '../src/daemon/retention.ts';
 import { type RunOptions, createWake, runLoop } from '../src/daemon/run.ts';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
-import { connectAccount, recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/accounts.ts';
 import { finishAction, insertPendingAction, unsubscribedAt } from '../src/store/actions.ts';
-import { openDb } from '../src/store/db.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { addRule } from '../src/store/rules.ts';
 import type { Decision } from '../src/triage/types.ts';
-import { facts } from './helpers.ts';
+import { facts, onePerson } from './helpers.ts';
+import type { Store } from '../src/store/store.ts';
 
 const ACCOUNT = 'me@example.org';
 const DAY = 86_400_000;
@@ -20,6 +20,7 @@ const OLD = 10 * DAY;
 const RECENT = 90 * DAY;
 
 let db: Sql;
+let store: Store;
 
 const archive: Decision = { disposition: 'archive', subscription: 'preserve', labelId: 'newsletter', stage: 'agent', reason: 'test' };
 
@@ -44,8 +45,7 @@ async function acted(id: string, type = 'archive'): Promise<{ decisionId: number
 const left = async (table: string, column = 'message_id') => (await db.all<{ id: string }>(`SELECT ${column} AS id FROM ${table} ORDER BY 1`)).map((r) => r.id);
 
 beforeEach(async () => {
-  db = await openDb(':memory:');
-  await connectAccount(db, ACCOUNT, '1', 0);
+  ({ store, db } = await onePerson(ACCOUNT));
 });
 
 describe('pruneOld', () => {
@@ -132,7 +132,7 @@ describe('retention', () => {
       };
     };
     await acted('first');
-    await runLoop(db, next, {
+    await runLoop(store, next, {
       signal: stop.signal,
       wake,
       onPass: async () => {

@@ -62,7 +62,7 @@ export const writes: Write[] = [
       }
       // The answer is saved whatever happens next; a mailbox that cannot be put right is reported, not hidden.
       try {
-        const undone = await controls.putBack(input.accountId, result.corrected);
+        const undone = await controls.putBack(db, input.accountId, result.corrected);
         return { ...result, fixed: undone ? 'What sift did to this message in Gmail has been taken back.' : null };
       } catch (error) {
         return {
@@ -79,7 +79,7 @@ export const writes: Write[] = [
       const { accountId } = body;
       if (!str(accountId) || !(await listAccounts(db)).some((a) => a.id === accountId)) return null;
       if (!controls) throw new Error('This dashboard cannot run the model.');
-      return await controls.rejudge(accountId);
+      return await controls.rejudge(db, accountId);
     },
   },
   {

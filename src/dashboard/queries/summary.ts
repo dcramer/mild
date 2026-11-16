@@ -18,7 +18,9 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
   const one = async <T>(sql: string, ...params: (string | number)[]) => (await db.get<T>(sql, ...params))!;
   const all = async <T>(sql: string, ...params: (string | number)[]) => await db.all<T>(sql, ...params);
 
-  const accounts = await all<{ email: string; last_synced_at: number | null }>(`SELECT email, last_synced_at FROM accounts WHERE ${mine('id')} ORDER BY email`);
+  const accounts = await all<{ email: string; last_synced_at: number | null }>(
+    `SELECT id AS email, last_synced_at FROM mailboxes WHERE ${mine('id')} ORDER BY id`,
+  );
   const decisionTotals = await one<{ n: number; free: number | null; cost: number | null }>(
     `SELECT count(*) AS n, sum(model IS NULL) AS free, sum(cost_usd) AS cost FROM decisions WHERE decided_at >= ? AND ${mine('account_id')}`,
     since,

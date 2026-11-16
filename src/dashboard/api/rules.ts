@@ -48,7 +48,7 @@ export const writes: Write[] = [
       if (!controls) throw new Error('This dashboard cannot change Gmail filters.');
       // Taking a filter out is always allowed: it only reduces what runs unattended.
       if (on && !controls.settings().act) throw new Error('sift is only observing, so it writes nothing to Gmail. Let it act first, in Settings.');
-      await controls.ruleFilter(id, on);
+      await controls.ruleFilter(db, id, on);
       return { filterId: (await getRuleFilter(db, id))?.filterId ?? null, filter: (await ruleFilterStatus(db, now())).get(id) ?? null };
     },
   },
@@ -61,7 +61,7 @@ export const writes: Write[] = [
       // A filter left behind would keep acting on mail with no rule to explain or remove it.
       if ((await getRuleFilter(db, body['id']))?.filterId) {
         if (!controls) throw new Error('This rule is also a Gmail filter, which this dashboard cannot remove.');
-        await controls.ruleFilter(body['id'], false);
+        await controls.ruleFilter(db, body['id'], false);
       }
       if (!(await removeRule(db, body['id']))) throw new Error('That rule no longer exists.');
       return { ok: true, redecided: await redecide(db, now, owner ?? undefined) };

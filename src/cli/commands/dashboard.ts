@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util';
 import { loadConfig } from '../../config.ts';
-import { openDb } from '../../store/db.ts';
+import { openStore } from '../../store/store.ts';
 import { ui } from '../ui.ts';
 import { buildControls } from '../controls.ts';
 import { checkSecrets } from '../secrets-check.ts';
@@ -11,11 +11,11 @@ export async function dashboard(args: string[]): Promise<void> {
   const port = portOption(values.port);
   const config = loadConfig();
   const secrets = checkSecrets(config, true);
-  const db = await openDb(config.dbPath);
+  const store = await openStore(config);
   ui.heading('dashboard');
   secrets();
-  const controls = await buildControls(config, db, { activity: { sorting: false, lastPassAt: null, problems: [], expired: [] } });
-  const stop = await serveDashboard(config, db, { controls, ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) });
+  const controls = await buildControls(config, store, { activity: { sorting: false, lastPassAt: null, problems: [], expired: [] } });
+  const stop = await serveDashboard(config, store, { controls, ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) });
   ui.info('Only the dashboard is running. `sift run` also sorts mail.');
   ui.blank();
   await new Promise<void>((resolve) => {
@@ -23,5 +23,5 @@ export async function dashboard(args: string[]): Promise<void> {
     process.once('SIGTERM', resolve);
   });
   stop();
-  db.close();
+  store.close();
 }

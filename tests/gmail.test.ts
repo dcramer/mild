@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { syncAccount } from '../src/daemon/sync.ts';
 import { type GmailApi, HistoryExpiredError, type HistoryPage, type RawMessage } from '../src/gmail/api.ts';
 import { pullChanges, toFacts } from '../src/gmail/sync.ts';
-import { connectAccount, listAccounts } from '../src/store/accounts.ts';
-import { openDb } from '../src/store/db.ts';
+import { addMailbox, listAccounts } from '../src/store/accounts.ts';
+import { openUserDb } from '../src/store/db.ts';
 import { parseAddressList } from '../src/triage/features.ts';
 
 function raw(id: string, overrides: Partial<RawMessage> = {}): RawMessage {
@@ -192,8 +192,8 @@ const page = (ids: string[], historyId: string): Record<string, HistoryPage> => 
 
 describe('syncAccount', () => {
   it('records new inbox mail and advances the cursor', async () => {
-    const db = await openDb(':memory:');
-    await connectAccount(db, 'me@example.org', '500', 0);
+    const db = await openUserDb(':memory:');
+    await addMailbox(db, 'me@example.org', '500', 0);
     const api = fakeApi({
       pages: page(['a', 'archived', 'gone', 'nosender'], '520'),
       messages: { a: raw('a'), archived: raw('archived', { labelIds: ['UNREAD'] }), nosender: raw('nosender', { headers: [] }) },
@@ -207,8 +207,8 @@ describe('syncAccount', () => {
   });
 
   it('does not report a redelivered message as new', async () => {
-    const db = await openDb(':memory:');
-    await connectAccount(db, 'me@example.org', '500', 0);
+    const db = await openUserDb(':memory:');
+    await addMailbox(db, 'me@example.org', '500', 0);
     const fake = { pages: page(['a'], '520'), messages: { a: raw('a') } };
     await syncAccount(db, fakeApi(fake), (await listAccounts(db))[0]!);
     const again = await syncAccount(db, fakeApi(fake), (await listAccounts(db))[0]!);
@@ -217,8 +217,8 @@ describe('syncAccount', () => {
   });
 
   it('records every page of a busy day in one pass and leaves the cursor alone if a later page fails', async () => {
-    const db = await openDb(':memory:');
-    await connectAccount(db, 'me@example.org', '500', 0);
+    const db = await openUserDb(':memory:');
+    await addMailbox(db, 'me@example.org', '500', 0);
     const pages: Record<string, HistoryPage> = {
       '': { additions: [{ id: 'a', labelIds: ['INBOX'] }], historyId: '510', nextPageToken: 'p2' },
       p2: { additions: [{ id: 'b', labelIds: ['INBOX'] }], historyId: '520', nextPageToken: 'p3' },
@@ -235,8 +235,8 @@ describe('syncAccount', () => {
   });
 
   it('after an expired cursor, records what the search finds, skips what it already had, and carries on from the new cursor', async () => {
-    const db = await openDb(':memory:');
-    await connectAccount(db, 'me@example.org', '500', 0);
+    const db = await openUserDb(':memory:');
+    await addMailbox(db, 'me@example.org', '500', 0);
     const messages = { a: raw('a'), b: raw('b'), c: raw('c') };
     await syncAccount(db, fakeApi({ pages: page(['a'], '520'), messages }), (await listAccounts(db))[0]!);
 
@@ -255,8 +255,8 @@ describe('syncAccount', () => {
   });
 
   it('leaves the cursor alone when the search after an expired cursor fails', async () => {
-    const db = await openDb(':memory:');
-    await connectAccount(db, 'me@example.org', '500', 0);
+    const db = await openUserDb(':memory:');
+    await addMailbox(db, 'me@example.org', '500', 0);
     const api = fakeApi({ expired: true, historyId: '900' });
     api.searchInbox = async () => {
       throw new Error('network');
@@ -266,8 +266,8 @@ describe('syncAccount', () => {
   });
 
   it('records that the user opened a message, once, whichever page or pass says so', async () => {
-    const db = await openDb(':memory:');
-    await connectAccount(db, 'me@example.org', '500', 0);
+    const db = await openUserDb(':memory:');
+    await addMailbox(db, 'me@example.org', '500', 0);
     const messages = { a: raw('a'), b: raw('b', { labelIds: ['INBOX'] }) };
     await syncAccount(db, fakeApi({ pages: page(['a'], '510'), messages }), (await listAccounts(db))[0]!, () => 1000);
 
@@ -300,16 +300,16 @@ describe('syncAccount', () => {
   });
 
   it('learns nothing about reading from a search after an expired cursor', async () => {
-    const db = await openDb(':memory:');
-    await connectAccount(db, 'me@example.org', '500', 0);
+    const db = await openUserDb(':memory:');
+    await addMailbox(db, 'me@example.org', '500', 0);
     const api = fakeApi({ expired: true, search: ['a'], messages: { a: raw('a', { labelIds: ['INBOX'] }) } });
     await syncAccount(db, api, (await listAccounts(db))[0]!);
     expect(await db.get('SELECT read_at FROM messages')).toEqual({ read_at: null });
   });
 
   it('leaves the cursor alone when a fetch fails', async () => {
-    const db = await openDb(':memory:');
-    await connectAccount(db, 'me@example.org', '500', 0);
+    const db = await openUserDb(':memory:');
+    await addMailbox(db, 'me@example.org', '500', 0);
     const api = fakeApi({ pages: page(['a'], '520') });
     api.getMetadata = async () => {
       throw new Error('network');

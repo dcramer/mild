@@ -7,8 +7,8 @@ import { writeRuleFilter } from '../src/actions/rule-filters.ts';
 import { applyFeedback } from '../src/learn/feedback.ts';
 import { userChanges } from '../src/learn/gmail.ts';
 import { lastStandingChange } from '../src/store/actions.ts';
-import { connectAccount } from '../src/store/accounts.ts';
-import { openDb } from '../src/store/db.ts';
+import { addMailbox } from '../src/store/accounts.ts';
+import { openUserDb } from '../src/store/db.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { listProposals, resolveProposal } from '../src/store/proposals.ts';
@@ -63,8 +63,8 @@ const options = (act: boolean): RunOptions => ({ act, connect: () => ({ api: api
 const decisions = async () => await db.all('SELECT message_id, stage, disposition, mode, outcome, outcome_detail, rule_id FROM decisions ORDER BY id');
 
 beforeEach(async () => {
-  db = await openDb(':memory:');
-  await connectAccount(db, ACCOUNT, '1', 0);
+  db = await openUserDb(':memory:');
+  await addMailbox(db, ACCOUNT, '1', 0);
   mailbox = new FakeMailbox();
   logs = [];
   cursor = 1;
@@ -553,7 +553,7 @@ describe('unsubscribing', () => {
   const asked: string[] = [];
   const withUnsubscribe = (act: boolean, result: 'done' | 'refused' = 'done'): RunOptions => ({
     ...options(act),
-    unsubscribe: async (_account, messageId) => {
+    unsubscribe: async (_db, _account, messageId) => {
       asked.push(messageId);
       return result === 'done' ? { status: 'done', actionId: 1 } : { status: 'refused', reason: 'no way to' };
     },
