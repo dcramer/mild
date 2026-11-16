@@ -1,52 +1,59 @@
-import { ArrowRightIcon } from 'lucide-react';
+import { ArrowRightIcon, PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { StatusWord, TierLabel, Verdict } from '@/components/bits.tsx';
+import { ACTIONS, STANDINGS, STATUS_NAMES, TIERS, outcomeName } from '@/lib/format.ts';
 import {
   Avatar,
   Button,
   Check,
+  ChoiceGroup,
   Code,
+  ConfirmButton,
   Copyable,
-  Disclosure,
-  Card,
-  CardFoot,
-  CardGrid,
-  CardHead,
   Dialog,
-  FilterGroup,
-  ListView,
+  Disclosure,
   Empty,
+  Fact,
+  Facts,
+  Field,
   Figure,
   Figures,
+  FilterGroup,
+  Form,
   Highlight,
   HoverCard,
   Input,
+  Kbd,
+  ListView,
   Loading,
   Marked,
   Masthead,
   Menu,
   Note,
   Notice,
-  Sections,
+  OnPhone,
+  PageHeader,
+  Panel,
+  RowActions,
+  Section,
   Select,
+  SettingRow,
   Sheet,
-  SheetHead,
   StackedBars,
   Stamp,
-  SubNav,
+  Sub,
   Table,
   Td,
   TextArea,
+  TextLink,
   Th,
+  Timeline,
+  TimelineEvent,
   Tr,
-  Wordmark,
+  useToast,
 } from '@/system';
 
-const SERIES = [
-  { key: 'a', name: 'Rules', color: 'var(--tier-rules)' },
-  { key: 'b', name: 'Sender memory', color: 'var(--tier-sender)' },
-  { key: 'c', name: 'Agent', color: 'var(--tier-agent)' },
-  { key: 'd', name: 'Undecided', color: 'var(--tier-fallback)' },
-];
+const SERIES = TIERS.filter((t) => t.key !== 'sender' && t.key !== 'heuristics').map((t, index) => ({ key: String(index), name: t.name, color: t.color }));
 const DAYS = [
   [12, 5, 3, 1],
   [8, 9, 2, 0],
@@ -55,16 +62,27 @@ const DAYS = [
   [9, 11, 1, 0],
   [20, 6, 4, 3],
   [14, 7, 2, 1],
-].map(([a = 0, b = 0, c = 0, d = 0], index) => ({ key: String(index), label: `Nov ${index + 9}`, title: `Nov ${index + 9}`, values: { a, b, c, d } }));
-const CHOICES = [
-  ['keep', 'Keep in inbox'],
-  ['archive', 'Archive'],
-  ['spam', 'Mark spam'],
+].map((counts, index) => ({
+  key: String(index),
+  label: `Nov ${index + 9}`,
+  title: `Nov ${index + 9}`,
+  values: Object.fromEntries(counts.map((n, i) => [String(i), n])),
+}));
+const LABELS = [
+  ['personal', 'Personal'],
+  ['newsletter', 'Newsletters'],
+  ['marketing', 'Marketing'],
+  ['junk', 'Junk'],
 ] as const;
+const ROWS = [
+  { sender: 'Example Weekly', address: 'news@example.com', subject: 'Five things to read', label: 'Newsletters', does: 'archive' },
+  { sender: 'Ada at Example', address: 'ada@example.org', subject: 'Dinner on Saturday?', label: 'Personal', does: 'keep' },
+  { sender: 'founder@example.net', address: 'founder@example.net', subject: 'Quick question', label: null, does: 'review' },
+];
 
 const INKS = [
   ['bg-background', 'background', 'The page.'],
-  ['bg-card', 'card', 'A sheet.'],
+  ['bg-popover', 'popover', 'What floats: a dialog, a menu, a toast.'],
   ['bg-foreground', 'foreground', 'Ink: text, and the main action.'],
   ['bg-muted-foreground', 'muted-foreground', 'Secondary text.'],
   ['bg-(--frame)', '--frame', 'A sheet’s edge.'],
@@ -75,335 +93,425 @@ const INKS = [
 ] as const;
 
 const VARIANTS = [
-  ['mark', 'What the screen is waiting on. One per screen, at most.'],
-  ['ink', 'The main action of a sheet or row.'],
-  ['plain', 'Everything else.'],
-  ['quiet', 'Repeated down a list, and ways out.'],
+  ['mark', 'What the screen is waiting on. One per screen, at most, never down a list.'],
+  ['ink', 'What finishes a dialog or a form. Never down a list.'],
+  ['plain', 'A page’s own action, and everything else said once.'],
+  ['quiet', 'Repeated down a list (firmer when its row is pointed at), and ways out.'],
 ] as const;
 
 /** Every part of the design system in every state, at `/system`. Add to it when the system grows. */
 export function SystemView() {
-  const [choice, setChoice] = useState<(typeof CHOICES)[number][0]>('archive');
+  const [choice, setChoice] = useState<(typeof ACTIONS)[number][0]>('archive');
+  const [label, setLabel] = useState<string | null>('newsletter');
+  const [standing, setStanding] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
-  const [drawer, setDrawer] = useState(false);
+  const [dialog, setDialog] = useState(false);
+  const [panel, setPanel] = useState(false);
   const [search, setSearch] = useState('');
   const [made, setMade] = useState('');
+  const toast = useToast();
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-8">
-      <header className="flex items-baseline gap-4">
-        <Wordmark />
-        <p className="slug text-muted-foreground">Design system</p>
-      </header>
+    <main className="mx-auto flex w-full max-w-5xl flex-col gap-14 px-4 py-8 md:px-6">
+      <PageHeader title="Design system" meta="Every part, in every state. The rules for using them are in docs/DESIGN.md." />
 
-      <Sheet>
-        <SheetHead title="Ink" description="Dark only. Two colours carry meaning; everything else is ink at some strength." />
-        <div className="grid grid-cols-2 gap-px bg-(--rule) sm:grid-cols-4">
-          {INKS.map(([swatch, name, use]) => (
-            <div key={name} className="flex flex-col gap-2 bg-card p-4">
-              <span aria-hidden className={`h-10 border border-(--frame) ${swatch}`} />
-              <span className="font-mono text-[14px]">{name}</span>
-              <span className="text-sm text-muted-foreground">{use}</span>
-            </div>
-          ))}
-        </div>
-      </Sheet>
-
-      <Sheet>
-        <SheetHead title="Type" description="By role, not by size. Display face for what is named or counted, mono capitals for labels." />
-        <Row label="statement">
-          <p className="statement">The one line a screen opens with.</p>
-        </Row>
-        <Row label="figure">
-          <p className="figure">
-            1,284 <Highlight className="mx-0">37</Highlight>
-          </p>
-        </Row>
-        <Row label="title">
-          <p className="title">A sheet’s heading</p>
-        </Row>
-        <Row label="name">
-          <p className="name">A sender, a rule, an account</p>
-        </Row>
-        <Row label="body">
-          <p>
-            Text, 14px. <span className="text-muted-foreground">Secondary text is the same size, lighter.</span> A <Code>command</Code> inline.
-          </p>
-        </Row>
-        <Row label="slug">
-          <p className="slug text-muted-foreground">Column head · label · dateline</p>
-        </Row>
-      </Sheet>
-
-      <Sheet>
-        <SheetHead title="Button" description="Corners cut by hand. Given an address it is a link that looks the same." />
-        {VARIANTS.map(([variant, use]) => (
-          <Row key={variant} label={variant} note={use}>
-            <Button variant={variant}>Standard</Button>
-            <Button variant={variant} size="lg">
-              Large
-              <ArrowRightIcon aria-hidden />
-            </Button>
-            <Button variant={variant} disabled>
-              Disabled
-            </Button>
-            <Button variant={variant} busy>
-              Busy
-            </Button>
-          </Row>
-        ))}
-      </Sheet>
-
-      <Sheet>
-        <SheetHead title="Controls" description="Filled, never outlined. A select is for a short list; anything longer needs a different part." />
-        <Row label="select">
-          <Select label="What sift does" value={choice} options={CHOICES} onChange={setChoice} />
-          <Select label="Disabled" value={choice} options={CHOICES} onChange={setChoice} disabled />
-        </Row>
-        <Row label="input">
-          <Input aria-label="Example" placeholder="example.com" className="w-56" />
-          <Input aria-label="Disabled" placeholder="Disabled" className="w-40" disabled />
-        </Row>
-        <Row label="check">
-          <Check checked={checked} onChange={setChecked}>
-            Include mail sift would keep
-          </Check>
-        </Row>
-        <Row label="text area">
-          <div className="w-full max-w-xl">
-            <TextArea aria-label="Example" className="min-h-20" defaultValue="Anything from my accountant stays in the inbox." />
+      <Section title="Ink">
+        <Sheet>
+          <div className="grid grid-cols-2 gap-px bg-(--rule) sm:grid-cols-3">
+            {INKS.map(([swatch, name, use]) => (
+              <div key={name} className="flex flex-col gap-2 bg-background p-4">
+                <span aria-hidden className={`h-10 border border-(--frame) ${swatch}`} />
+                <span className="font-mono text-[14px]">{name}</span>
+                <span className="text-muted-foreground">{use}</span>
+              </div>
+            ))}
           </div>
-        </Row>
-      </Sheet>
+        </Sheet>
+      </Section>
 
-      <div className="border border-dashed border-(--rule) p-4">
-        <ListView
-          title="List view"
-          count="3 things"
-          description="How every screen shows many of one thing. The filter button opens a panel that pushes the list left; filters that are on stay listed when it is closed."
-          actions={<Button variant="ink">Add one</Button>}
-          search={{ value: search, onChange: setSearch, placeholder: 'Search' }}
-          filters={{
-            active: made === '' ? [] : [{ label: `Made by: ${made}`, clear: () => setMade('') }],
-            panel: (
-              <FilterGroup
-                label="Made by"
-                value={made}
+      <Section title="Type">
+        <Sheet>
+          <Row label="statement" note="A page’s title, and nothing else.">
+            <p className="statement">Suggestions</p>
+          </Row>
+          <Row label="figure">
+            <p className="figure">
+              1,284 <Highlight className="mx-0">37</Highlight>
+            </p>
+          </Row>
+          <Row label="title" note="A dialog’s or a panel’s title.">
+            <p className="title">Add a rule</p>
+          </Row>
+          <Row label="heading" note="A section of a page or a panel.">
+            <p className="heading">Proposed rules</p>
+          </Row>
+          <Row label="name">
+            <p className="name">A sender, a label, an account</p>
+          </Row>
+          <Row label="body">
+            <p>
+              Text, 16px; 15px beside it. <span className="text-muted-foreground">Secondary text is lighter, not smaller.</span> A <Code>command</Code> inline,
+              a <TextLink href="/system">link</TextLink>, a key <Kbd>Enter</Kbd>.
+            </p>
+          </Row>
+          <Row label="slug" note="Column heads and a figure’s label. Not headings.">
+            <p className="slug text-muted-foreground">Sender · Messages</p>
+          </Row>
+        </Sheet>
+      </Section>
+
+      <Section title="Words" meta="lib/format.ts: one name for each thing, everywhere">
+        <Sheet>
+          <Row label="sift does" note="A stamp, the same word whether suggested, done or a setting.">
+            {ACTIONS.map(([key]) => (
+              <Stamp key={key}>{outcomeName(key)}</Stamp>
+            ))}
+            <Stamp tone="look">{outcomeName('review')}</Stamp>
+          </Row>
+          <Row label="verdict" note="What sift says mail is and does: the label, then the stamp.">
+            <Verdict labelName="Newsletters" disposition="archive" unsubscribe />
+            <Verdict labelName={null} disposition="review" />
+          </Row>
+          <Row label="status" note="Where a decision got to in Gmail. Only a failure is red.">
+            {(['suggested', 'done', 'undone'] as const).map((s) => (
+              <span key={s} className="text-muted-foreground">
+                {STATUS_NAMES[s]}
+              </span>
+            ))}
+            <StatusWord row={{ mode: 'act', outcome: 'failed', actionStatus: null, outcomeDetail: 'Gmail answered 503' }} />
+          </Row>
+          <Row label="standing">
+            {Object.values(STANDINGS).map((name) => (
+              <Stamp key={name}>{name}</Stamp>
+            ))}
+          </Row>
+          <Row label="tier">
+            {TIERS.map((t) => (
+              <TierLabel key={t.key} stage={t.key} />
+            ))}
+          </Row>
+        </Sheet>
+      </Section>
+
+      <Section title="Button" meta="corners cut by hand; given an address it is a link">
+        <Sheet>
+          {VARIANTS.map(([variant, use]) => (
+            <Row key={variant} label={variant} note={use}>
+              <Button variant={variant}>Standard</Button>
+              <Button variant={variant} size="lg">
+                Large
+                <ArrowRightIcon aria-hidden />
+              </Button>
+              <Button variant={variant} disabled>
+                Disabled
+              </Button>
+              <Button variant={variant} busy>
+                Busy
+              </Button>
+            </Row>
+          ))}
+          <Row label="confirm" note="A press that cannot be taken back asks first, in place.">
+            <ConfirmButton question="Remove this rule?" onConfirm={() => toast('Removed the rule.')}>
+              Remove
+            </ConfirmButton>
+          </Row>
+        </Sheet>
+      </Section>
+
+      <Section title="Controls">
+        <Sheet>
+          <Row label="select" note="A short list.">
+            <Select label="What sift does" value={choice} options={ACTIONS} onChange={setChoice} />
+            <Select label="Disabled" value={choice} options={ACTIONS} onChange={setChoice} disabled />
+          </Row>
+          <Row label="choice group" note="A few choices seen at once, one on. Numbered where keys pick them; clearable where none is a choice too.">
+            <ChoiceGroup label="What this is" value={label} options={LABELS} onChange={setLabel} numbered />
+            <ChoiceGroup
+              label="Standing"
+              value={standing}
+              options={[
+                ['trusted', 'Trust'],
+                ['blocked', 'Block'],
+              ]}
+              onChange={setStanding}
+              clearable
+            />
+          </Row>
+          <Row label="input">
+            <Input aria-label="Example" placeholder="example.com" className="w-56" />
+            <Input aria-label="Disabled" placeholder="Disabled" className="w-40" disabled />
+          </Row>
+          <Row label="check">
+            <Check checked={checked} onChange={setChecked}>
+              Mark it read
+            </Check>
+          </Row>
+          <Row label="text area">
+            <div className="w-full max-w-xl">
+              <TextArea aria-label="Example" className="min-h-20" defaultValue="Anything from my accountant stays in the inbox." />
+            </div>
+          </Row>
+        </Sheet>
+      </Section>
+
+      <Section title="Form" meta="fields, one under another, the action last">
+        <div className="grid gap-10 md:grid-cols-2">
+          <Form onSubmit={() => toast('Saved.')}>
+            <Field label="Name" hint="In Gmail it stays sift/newsletters.">
+              <Input aria-label="Name" className="w-full" defaultValue="Newsletters" />
+            </Field>
+            <Field label="Then" hint="It leaves the inbox and stays findable under its label.">
+              <Select label="Then" value={choice} options={ACTIONS} onChange={setChoice} />
+            </Field>
+            <Field label="Words" error="The subject must contain something.">
+              <Input aria-label="Words" className="w-full" />
+            </Field>
+            <div>
+              <Button type="submit" variant="ink">
+                Save
+              </Button>
+            </div>
+          </Form>
+          <div className="flex flex-col gap-2.5">
+            <p className="text-muted-foreground">Inline, for a short form in a narrow column:</p>
+            <Field inline label="Covers">
+              <Select
+                label="Covers"
+                value="sender"
                 options={[
-                  ['', 'Anyone'],
-                  ['you', 'You'],
-                  ['sift', 'sift'],
+                  ['sender', 'Everything from this sender'],
+                  ['once', 'Only this message'],
                 ]}
-                onChange={setMade}
+                onChange={() => {}}
               />
-            ),
-          }}
-        >
-          <CardGrid>
-            {['Example Weekly', 'Shop', 'Ada Lovelace']
-              .filter((name) => name.toLowerCase().includes(search.toLowerCase()))
-              .map((name) => (
-                <Card key={name}>
-                  <CardHead title={name} note="A card stands for one thing" aside="12" onOpen={() => setDrawer(true)} />
-                  <p className="text-sm text-muted-foreground">Head, body, foot. Pressing the card opens it; the foot holds what needs no opening.</p>
-                  <CardFoot>
-                    <Button variant="ink">Right</Button>
-                    <Button>Something else</Button>
-                  </CardFoot>
-                </Card>
-              ))}
-          </CardGrid>
-        </ListView>
+            </Field>
+            <Field inline label="Then">
+              <Select label="Then" value={choice} options={ACTIONS} onChange={setChoice} />
+            </Field>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Page header and section" meta="the top of every page, and the parts under it">
+        <Sheet className="gap-8 p-5">
+          <PageHeader
+            title="Rules"
+            meta="12 · the most specific one wins"
+            actions={
+              <Button>
+                <PlusIcon aria-hidden />
+                Add a rule
+              </Button>
+            }
+          />
+          <Section title="Proposed rules" meta="2" action={<TextLink href="/system">See all</TextLink>}>
+            <p className="text-muted-foreground">A section’s content. No rule or box sets it apart, only space.</p>
+          </Section>
+        </Sheet>
+      </Section>
+
+      <Section title="List view" meta="how every screen shows many of one thing">
+        <Sheet className="p-5">
+          <ListView
+            title="Suggestions"
+            meta={
+              <span>
+                <Highlight className="mx-0 font-medium">3 waiting</Highlight> from 3 senders
+              </span>
+            }
+            search={{ value: search, onChange: setSearch, placeholder: 'Search' }}
+            filters={{
+              active: made === '' ? [] : [{ label: `Then: ${outcomeName(made)}`, clear: () => setMade('') }],
+              panel: <FilterGroup label="Then" value={made} options={[['', 'Anything'], ...ACTIONS]} onChange={setMade} />,
+            }}
+          >
+            <Table>
+              <thead>
+                <Tr>
+                  <Th>Sender</Th>
+                  <Th phone="hide">Mail</Th>
+                  <Th phone="hide">sift says</Th>
+                  <Th phone="hide" />
+                </Tr>
+              </thead>
+              <tbody>
+                {ROWS.filter((row) => (made === '' || row.does === made) && `${row.sender} ${row.subject}`.toLowerCase().includes(search.toLowerCase())).map(
+                  (row) => (
+                    <Tr key={row.address} onOpen={() => setPanel(true)}>
+                      <Td className="max-w-0 md:w-1/3">
+                        <span className="name block truncate">{row.sender}</span>
+                        <Sub>{row.address}</Sub>
+                        <OnPhone>
+                          <span className="w-full truncate">{row.subject}</span>
+                          <Verdict labelName={row.label} disposition={row.does} />
+                        </OnPhone>
+                      </Td>
+                      <Td phone="hide" className="max-w-0">
+                        <span className="block truncate">
+                          <Marked text={row.subject} term={search} />
+                        </span>
+                      </Td>
+                      <Td phone="hide" className="whitespace-nowrap">
+                        <Verdict labelName={row.label} disposition={row.does} />
+                      </Td>
+                      <RowActions>
+                        {row.label ? (
+                          <Button variant="quiet" onClick={() => toast(`From now on, mail from ${row.address} is ${row.label}.`)}>
+                            Right
+                          </Button>
+                        ) : null}
+                      </RowActions>
+                    </Tr>
+                  ),
+                )}
+              </tbody>
+            </Table>
+          </ListView>
+        </Sheet>
+        <p className="text-muted-foreground">
+          On a phone the table keeps its first column; what the others said moves under it, and the row opens for the rest.
+        </p>
+      </Section>
+
+      <div className="grid gap-14 lg:grid-cols-2">
+        <Section title="Facts">
+          <Facts>
+            <Fact term="Standing">
+              <span className="inline-flex items-center gap-2">
+                <Stamp>Known</Stamp>
+                <span className="text-muted-foreground">their mail is consistently one kind</span>
+              </span>
+            </Fact>
+            <Fact term="Mail">14 messages since Oct 20, 2026</Fact>
+            <Fact term="Domain">
+              <TextLink href="/system">example.com</TextLink>
+            </Fact>
+          </Facts>
+        </Section>
+        <Section title="Timeline">
+          <Timeline>
+            <TimelineEvent at="Nov 13, 3:21 PM" title={<Verdict labelName="Marketing" disposition="archive" />}>
+              <p>Reads as a promotion.</p>
+            </TimelineEvent>
+            <TimelineEvent at="Nov 13, 3:22 PM" title={<span className="font-medium">Archived in Gmail</span>} action={<Button>Undo</Button>} />
+          </Timeline>
+        </Section>
       </div>
 
-      <Sheet>
-        <SheetHead
-          title="Navigation"
-          description="Sections are highlighted when current. Pages within a section are quieter: a stroke beside the current one."
-        />
-        <div className="row px-4">
+      <Section title="Figures and chart">
+        <div className="grid items-start gap-x-12 gap-y-8 lg:grid-cols-[auto_minmax(0,1fr)]">
+          <Figures className="gap-x-8">
+            <Figure label="No model needed" value="84%" note="1,079 of 1,284" />
+            <Figure label="Waiting on you" value="23" tone="look" />
+            <Figure label="Needs a look" value="2" note="in Activity" tone="failure" href="/system" />
+          </Figures>
+          <StackedBars compact unit="decisions" series={SERIES} rows={DAYS} />
+        </div>
+      </Section>
+
+      <div className="grid gap-14 lg:grid-cols-2">
+        <Section title="Settings in a sheet">
+          <Sheet>
+            <SettingRow title="Observing" note="sift only suggests. Nothing in Gmail changes until you let it act.">
+              <Button>Start acting</Button>
+            </SettingRow>
+            <SettingRow title="Check for mail" note="Last checked 1 min ago.">
+              <Select
+                label="How often"
+                value="60"
+                options={[
+                  ['60', 'Every minute'],
+                  ['300', 'Every 5 minutes'],
+                ]}
+                onChange={() => {}}
+              />
+            </SettingRow>
+          </Sheet>
+        </Section>
+        <Section title="Empty and loading">
+          <Empty>Nothing is waiting on you.</Empty>
+          <Loading rows={3} />
+        </Section>
+      </div>
+
+      <div className="grid gap-14 lg:grid-cols-2">
+        <Section title="Toast" meta="what a press did, after the list moved on">
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => toast('From now on, mail from news@example.com is Newsletters: archived.')}>Plain</Button>
+            <Button onClick={() => toast('Put back in the inbox', { action: { label: 'Undo', onPress: () => toast('Archived again.') } })}>
+              With an action
+            </Button>
+            <Button onClick={() => toast('Could not undo', { tone: 'failure', description: 'Gmail answered 503.' })}>Failure</Button>
+          </div>
+        </Section>
+        <Section title="Menu, notice and hover card">
+          <div className="flex flex-wrap items-center gap-6">
+            <Menu
+              label="Account, ada@example.org"
+              trigger={<Avatar name="ada@example.org" />}
+              heading={
+                <>
+                  <p className="text-muted-foreground">Signed in</p>
+                  <p className="mt-1 font-medium">ada@example.org</p>
+                </>
+              }
+              items={[
+                { label: 'Sign out', onSelect: () => toast('Signed out.') },
+                { label: 'Disabled', note: 'With the reason under it.', disabled: true, onSelect: () => {} },
+              ]}
+            />
+            <Notice>Offline</Notice>
+            <Notice tone="look" href="/system" action="Reconnect">
+              Google sign-in expired
+            </Notice>
+            <p>
+              Mail from{' '}
+              <HoverCard
+                href="/system"
+                className="font-medium"
+                card={
+                  <div className="flex flex-col gap-2">
+                    <p className="name">Example News</p>
+                    <Facts>
+                      <Fact term="Standing">
+                        <Stamp>Trusted</Stamp>
+                      </Fact>
+                      <Fact term="Mail">42 messages</Fact>
+                    </Facts>
+                  </div>
+                }
+              >
+                news@example.com
+              </HoverCard>
+            </p>
+          </div>
+        </Section>
+      </div>
+
+      <Section title="Navigation">
+        <Sheet className="px-4">
           <Masthead
             current="system"
             items={[
               { to: 'system', label: 'Suggestions', count: 12 },
-              { to: 'system/overview', label: 'Overview' },
+              { to: 'system/activity', label: 'Activity' },
               { to: 'system/rules', label: 'Rules' },
             ]}
             status={<Notice>Offline</Notice>}
-            aside={<span>Synced 2 min ago</span>}
-            account={{ name: 'ada@example.org', items: [{ label: 'Sign out', onSelect: () => {} }] }}
+            aside={<span>Synced just now</span>}
+            account={{ name: 'ada@example.org', items: [{ label: 'Sign out', onSelect: () => toast('Signed out.') }] }}
           />
+        </Sheet>
+      </Section>
+
+      <Section title="Dialog and panel" meta="a form or a question; one item of a list">
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setDialog(true)}>Open a dialog</Button>
+          <Button onClick={() => setPanel(true)}>Open the panel</Button>
         </div>
-        <Row
-          label="menu"
-          note="A few things to do behind one button. Under an avatar it is who is signed in; on a narrow screen the masthead lists the same things in its panel instead."
-        >
-          <Menu
-            label="Account, ada@example.org"
-            trigger={<Avatar name="ada@example.org" />}
-            heading={
-              <>
-                <p className="slug text-muted-foreground">Signed in</p>
-                <p className="mt-1 font-medium">ada@example.org</p>
-              </>
-            }
-            items={[
-              { label: 'Sign out', onSelect: () => {} },
-              { label: 'Disabled', note: 'With the reason under it.', disabled: true, onSelect: () => {} },
-            ]}
-          />
-          <Avatar name="grace@example.com" />
-        </Row>
-        <Row label="notice" note="A state of sift itself, in the masthead. Plain mends itself; highlighted needs the reader.">
-          <Notice>Offline</Notice>
-          <Notice tone="look" href="/system" action="Reconnect">
-            Google sign-in expired
-          </Notice>
-        </Row>
-        <Row label="sections">
-          <Sections
-            current="system"
-            items={[
-              { to: 'system', label: 'Suggestions', count: 12 },
-              { to: 'system/overview', label: 'Overview' },
-              { to: 'system/rules', label: 'Rules' },
-            ]}
-          />
-        </Row>
-        <div className="row px-4 py-4">
-          <SubNav
-            label="Example pages"
-            current="system"
-            items={[
-              { to: 'system', label: 'Running' },
-              { to: 'system/accounts', label: 'Accounts' },
-              { to: 'system/kinds', label: 'Kinds of mail' },
-            ]}
-          >
-            <p className="text-muted-foreground">The current page goes here. One page shows at a time.</p>
-          </SubNav>
-        </div>
-      </Sheet>
+      </Section>
 
-      <Figures>
-        <Figure label="No model needed" value="84%" note="1,079 of 1,284" tone="look" />
-        <Figure label="Decisions" value="1,284" note="1,301 received" />
-        <Figure label="Model cost" value="$0.42" />
-        <Figure label="Changes to check" value="2" tone="failure" />
-      </Figures>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Sheet>
-          <SheetHead title="Chart" description="Point at a column, or tab to it, and the legend reads it out." />
-          <StackedBars unit="decisions" series={SERIES} rows={DAYS} />
-        </Sheet>
-        <Sheet>
-          <SheetHead title="Table" description="A row with somewhere to go is pressable as a whole." />
-          <Table>
-            <thead>
-              <Tr>
-                <Th>Sender</Th>
-                <Th num>Messages</Th>
-                <Th>Outcome</Th>
-              </Tr>
-            </thead>
-            <tbody>
-              <Tr onOpen={() => setDrawer(true)}>
-                <Td>news@example.com</Td>
-                <Td num>16</Td>
-                <Td>
-                  <Stamp tone="tint">Archived</Stamp>
-                </Td>
-              </Tr>
-              <Tr onOpen={() => setDrawer(true)}>
-                <Td>founder@example.org</Td>
-                <Td num>3</Td>
-                <Td>
-                  <Stamp tone="look">Left for review</Stamp>
-                </Td>
-              </Tr>
-            </tbody>
-          </Table>
-        </Sheet>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Sheet>
-          <SheetHead title="Empty" description="One plain sentence." />
-          <Empty>None yet. Answering a suggestion adds one.</Empty>
-        </Sheet>
-        <Sheet>
-          <SheetHead title="Loading" description="Stands in for rows on their way." />
-          <Loading rows={3} />
-        </Sheet>
-      </div>
-      <Dialog
-        open={drawer}
-        onClose={() => setDrawer(false)}
-        title="Dialog: one thing, opened from the page"
-        footer={
-          <Button variant="ink" onClick={() => setDrawer(false)}>
-            Done
-          </Button>
-        }
-      >
-        <p className="text-muted-foreground">
-          Read or answered without leaving the page. Escape or a press outside closes it; on a phone it covers the screen.
-        </p>
-      </Dialog>
-
-      <Sheet>
-        <SheetHead
-          title="Stamp and highlight"
-          description="A stamp is a verdict; its weight is its meaning. Highlighter marks what the reader should look at."
-        />
-        <Row label="stamp">
-          <Stamp>Keep</Stamp>
-          <Stamp tone="tint">Archive</Stamp>
-          <Stamp tone="ink">Spam</Stamp>
-          <Stamp tone="look">Review</Stamp>
-        </Row>
-        <Row label="highlight">
-          <p>
-            Three senders are <Highlight>waiting on you</Highlight>.
-          </p>
-        </Row>
-        <Row label="marked">
-          <p>
-            <Marked text="Your invoice for November is ready" term="invoice" />
-          </p>
-        </Row>
-      </Sheet>
-
-      <Sheet>
-        <SheetHead
-          title="Hover card"
-          description="A link that previews where it goes, on hover or focus. A touch screen never shows it, so the page it opens must say the same."
-        />
-        <p className="px-4 pb-4">
-          Mail from{' '}
-          <HoverCard
-            href="/system"
-            className="font-medium"
-            card={
-              <div className="flex flex-col gap-2">
-                <p className="name">Example News</p>
-                <p className="flex items-center gap-2">
-                  <Stamp tone="ink">Trusted</Stamp>
-                  <span className="text-muted-foreground">a rule keeps their mail</span>
-                </p>
-                <p>42 messages since Oct 16, 2026.</p>
-              </div>
-            }
-          >
-            news@example.com
-          </HoverCard>{' '}
-          is kept.
-        </p>
-      </Sheet>
-
-      <Sheet>
-        <SheetHead title="Note" description="Said to the reader outside the flow of the page. No box; the label sets it apart." />
-        <div className="grid gap-4 p-4 sm:grid-cols-3">
+      <Section title="Note">
+        <div className="grid gap-6 sm:grid-cols-3">
           <Note title="Plain">
             <p>Something worth knowing that needs nothing done.</p>
           </Note>
@@ -414,30 +522,61 @@ export function SystemView() {
             <p>What went wrong, and what to try.</p>
           </Note>
         </div>
-      </Sheet>
+      </Section>
 
-      <Sheet>
-        <SheetHead title="Copyable and disclosure" description="A value carried somewhere else whole; and what most readers never need." />
-        <div className="grid gap-4 p-4 sm:grid-cols-2">
+      <Section title="Copyable and disclosure">
+        <div className="grid gap-6 sm:grid-cols-2">
           <Copyable value="sudo tailscale serve --bg 8787" label="command" />
           <Disclosure summary="Google says redirect_uri_mismatch">
             <p>Shown only to the reader who went looking.</p>
           </Disclosure>
         </div>
-      </Sheet>
+      </Section>
+
+      <Dialog
+        open={dialog}
+        onClose={() => setDialog(false)}
+        title="Add a rule"
+        footer={
+          <>
+            <Button variant="ink" onClick={() => setDialog(false)}>
+              Add rule
+            </Button>
+            <Button variant="quiet" onClick={() => setDialog(false)}>
+              Cancel
+            </Button>
+          </>
+        }
+      >
+        <Form onSubmit={() => setDialog(false)}>
+          <Field label="Mail">
+            <Input aria-label="Mail" className="w-full" placeholder="name@example.com" />
+          </Field>
+        </Form>
+      </Dialog>
+      <Panel
+        open={panel}
+        onClose={() => setPanel(false)}
+        title="Five things to read"
+        subtitle="Example Weekly · Nov 13, 3:21 PM"
+        position="1 of 3"
+        onNext={() => {}}
+      >
+        <p className="max-w-[68ch] text-[17px] leading-relaxed">
+          The message on the left; on the right what sift said, the answer, the sender and the history.
+        </p>
+      </Panel>
     </main>
   );
 }
 
 function Row({ label, note, children }: { label: string; note?: string; children: ReactNode }) {
   return (
-    <div className="row grid items-center gap-x-4 gap-y-2 px-4 py-4 sm:grid-cols-[7rem_1fr]">
-      <div>
-        <p className="slug text-muted-foreground">{label}</p>
-      </div>
+    <div className="row grid items-center gap-x-4 gap-y-2 px-4 py-4 sm:grid-cols-[8rem_1fr]">
+      <p className="slug text-muted-foreground">{label}</p>
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-3">{children}</div>
-        {note ? <p className="text-sm text-muted-foreground">{note}</p> : null}
+        {note ? <p className="text-muted-foreground">{note}</p> : null}
       </div>
     </div>
   );

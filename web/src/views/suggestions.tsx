@@ -1,14 +1,33 @@
 import { CheckIcon } from 'lucide-react';
-import { useState } from 'react';
-import { DispositionBadge, ErrorNote, Sub } from '@/components/bits.tsx';
+import { ErrorNote, Verdict } from '@/components/bits.tsx';
 import { SenderLink } from '@/components/sender.tsx';
-import { type SuggestionGroup, type Suggestions, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ACTIONS, ago, count, percent, willBe } from '@/lib/format.ts';
 import { useParam } from '@/lib/route.ts';
-import { Button, Check, Empty, FilterGroup, Highlight, ListView, Loading, Note, Select, Stamp, Table, Td, Th, Tr } from '@/system';
+import { type Days, type SuggestionGroup, type Suggestions, type Summary, api, useAction, useLoaded } from '@/lib/api.ts';
+import { ACTIONS, PERIODS, TIERS, ago, count, describeMatch, longDay, money, outcomeName, percent, plural, shortDay, willBe } from '@/lib/format.ts';
+import {
+  Button,
+  Check,
+  Empty,
+  Figure,
+  Figures,
+  FilterGroup,
+  Highlight,
+  ListView,
+  Loading,
+  OnPhone,
+  RowActions,
+  Section,
+  Select,
+  StackedBars,
+  Sub,
+  Table,
+  Td,
+  Th,
+  Tr,
+  useToast,
+} from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
-type Label = Suggestions['labels'][string][number];
 const groupKey = (g: SuggestionGroup) => `${g.accountId}/${g.sender}`;
 const UNSURE = '-';
 
@@ -23,159 +42,161 @@ function subjects(sample: SuggestionGroup['sample']) {
   return [...seen.values()];
 }
 
-/** What sift says a group is and would do, as two things side by side. */
-function Guess({ labelName, disposition }: { labelName: string | null; disposition: string }) {
-  if (labelName === null && disposition === 'review') return <Stamp tone="look">Not sure</Stamp>;
-  return (
-    <>
-      {labelName ? <span className="font-medium">{labelName}</span> : null}
-      <DispositionBadge would disposition={disposition} />
-    </>
-  );
-}
-
-/** One sender's waiting mail, as a row: who, what it is about, what sift says, and the answers that need no reading. Pressing the row opens it. */
-function SuggestionRow({
-  group,
-  labels,
-  onOpen,
-  onAnswered,
+/** How sift is doing over the period: what it decided without a model, how often it was right, what it cost, and decisions per day by tier. */
+function Standing({
+  summary,
+  accuracy,
+  days,
+  onDays,
 }: {
-  group: SuggestionGroup;
-  labels: readonly Label[];
-  onOpen: () => void;
-  onAnswered: (taught: string) => void;
+  summary: Summary;
+  accuracy: Suggestions['accuracy'] | undefined;
+  days: Days;
+  onDays: (days: Days) => void;
 }) {
-  const { busy, error, run } = useAction();
-  const [first, ...rest] = subjects(group.sample);
-  const mixed = group.guesses > 1;
-  const answer = (label: string) =>
-    run(async () => {
-      const result = await api.feedback({ accountId: group.accountId, sender: group.sender, scope: 'sender', label });
-      onAnswered(result.taught ?? 'Noted.');
-    });
-
+  const t = summary.totals;
+  // Before senders were folded into rules they were a tier of their own. It is shown only where that history exists.
+  const used = (stage: string) => stage !== 'sender' || summary.byStage.some((row) => row.stage === stage && row.decisions > 0);
   return (
-    <Tr onOpen={onOpen}>
-      <Td className="max-w-0 w-full md:w-64 md:max-w-64">
-        <span className="name block truncate">
-          <SenderLink accountId={group.accountId} address={group.sender}>
-            {group.senderName ?? group.sender}
-          </SenderLink>
-        </span>
-        {group.senderName ? <Sub>{group.sender}</Sub> : null}
-        {/* On a phone the mail and the answers have no column: the subject sits here and the row opens to answer. */}
-        <span className="mt-1 block truncate text-sm text-muted-foreground md:hidden">
-          {count(group.messages)} · {first?.subject || '(no subject)'}
-        </span>
-      </Td>
-      <Td className="hidden max-w-0 md:table-cell md:w-full">
-        <span className="flex items-baseline gap-2">
-          <span className="truncate">{first?.subject || '(no subject)'}</span>
-          {first && first.times > 1 ? <span className="shrink-0 text-sm text-muted-foreground tabular-nums">×{first.times}</span> : null}
-        </span>
-        <Sub>
-          {count(group.messages)} {group.messages === 1 ? 'message' : 'messages'}
-          {rest.length > 0 ? ` · also “${rest[0]?.subject}”` : ''}
-        </Sub>
-      </Td>
-      <Td className="whitespace-nowrap">
-        <span className="flex items-center gap-2">
-          <Guess labelName={group.labelName} disposition={group.disposition} />
-          {group.unsubscribe ? <span className="text-sm text-muted-foreground">and unsubscribe</span> : null}
-        </span>
-        {mixed ? <Sub>for most of them; mixed</Sub> : null}
-        {error ? <span className="mt-1 block text-sm text-destructive">{error}</span> : null}
-      </Td>
-      <Td quiet className="hidden text-right whitespace-nowrap tabular-nums md:table-cell">
-        {ago(group.latestReceivedAt)}
-      </Td>
-      {/* Presses here answer; they do not open the row. */}
-      <Td className="hidden py-1.5 md:table-cell" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-        <span className="flex items-center justify-end gap-1.5">
-          {/* A sender sift guessed more than one way is worth opening before agreeing. */}
-          {group.labelId === null || mixed ? null : (
-            <Button variant="ink" busy={busy} onClick={() => answer(group.labelId ?? '')}>
-              <CheckIcon aria-hidden />
-              Right
-            </Button>
-          )}
-          <Select
-            label={`What mail from ${group.sender} is`}
-            value=""
-            disabled={busy}
-            options={[
-              ['', group.labelId === null || mixed ? 'It is…' : 'No, it is…'] as const,
-              ...labels.filter((l) => mixed || l.id !== group.labelId).map((l) => [l.id, `${l.name} (${willBe(l.disposition)})`] as const),
-            ]}
-            onChange={(key) => key !== '' && answer(key)}
+    <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-x-12 gap-y-6 lg:grid-cols-[auto_minmax(0,1fr)]">
+      <Figures className="gap-x-8">
+        <Figure
+          label="No model needed"
+          value={percent(t.withoutInference, t.decisions)}
+          note={t.decisions ? `${count(t.withoutInference)} of ${count(t.decisions)}` : null}
+        />
+        {accuracy && accuracy.reviewed > 0 ? (
+          <Figure label="sift was right" value={percent(accuracy.right, accuracy.reviewed)} note={`of ${count(accuracy.reviewed)} you checked`} />
+        ) : null}
+        <Figure label="Model cost" value={money(t.costUsd)} note={t.decisions ? plural(t.decisions, 'decision') : null} />
+        {t.troubledActions > 0 ? (
+          <Figure label="Needs a look" value={count(t.troubledActions)} note="in Activity" tone="failure" href="/activity?status=trouble&days=30" />
+        ) : null}
+      </Figures>
+      <div className="flex min-w-0 flex-col gap-2">
+        <div className="flex justify-end">
+          <Select label="Period" value={String(days) as (typeof PERIODS)[number][0]} options={PERIODS} onChange={(value) => onDays(Number(value) as Days)} />
+        </div>
+        {t.decisions === 0 ? (
+          <p className="pt-10 text-muted-foreground">Nothing decided in this period.</p>
+        ) : (
+          <StackedBars
+            compact
+            unit="decisions"
+            series={TIERS.filter((tier) => used(tier.key))}
+            rows={summary.daily.map((d) => ({ key: d.day, label: shortDay(d.day), title: longDay(d.day), values: d.counts }))}
           />
-        </span>
-      </Td>
-    </Tr>
+        )}
+      </div>
+    </div>
   );
 }
 
 type Proposal = Suggestions['proposals'][number];
-const CONDITIONS: Record<string, string> = {
-  from: 'from',
-  fromDomain: 'anyone at',
-  to: 'to',
-  listId: 'the list',
-  subjectContains: 'with the subject containing',
-};
 
 /** A rule sift thinks is worth having. Nothing changes until it is accepted. */
 function ProposalRow({ proposal, onResolved }: { proposal: Proposal; onResolved: (line: string | null) => void }) {
   const { busy, error, run } = useAction();
-  const whose = Object.entries(proposal.match)
-    .map(([key, value]) => `${CONDITIONS[key] ?? key} ${value}`)
-    .join(', ');
+  const whose = describeMatch(proposal.match);
   const resolve = (accept: boolean) =>
     run(async () => {
       await api.resolveProposal(proposal.id, accept);
       onResolved(accept ? `From now on, mail ${whose} is ${proposal.labelName}: ${willBe(proposal.disposition)}, without sift reading it.` : null);
     });
   return (
-    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2">
-      <p className="min-w-0 flex-1">
-        {proposal.kind === 'rule' ? (
-          <>
-            The last {count(proposal.agreed)} messages {whose} were all <span className="font-medium">{proposal.labelName}</span>. Make it a rule?
-          </>
-        ) : (
-          <>
-            sift has agreed {count(proposal.agreed)} times running that mail {whose} is <span className="font-medium">{proposal.labelName}</span>. Stop reading
-            each one?
-          </>
-        )}
-        <Sub>
-          Mail {whose} would be {willBe(proposal.disposition)} without a model.
-        </Sub>
-        {error ? <span className="mt-1 block text-sm text-destructive">{error}</span> : null}
-      </p>
+    <li className="row flex flex-wrap items-center gap-x-6 gap-y-2 py-3">
+      <div className="min-w-0 flex-1 basis-80">
+        <p>
+          Mail {whose} is <span className="font-medium">{proposal.labelName}</span> ({outcomeName(proposal.disposition)})
+        </p>
+        <p className="text-muted-foreground">
+          {proposal.kind === 'rule'
+            ? `The last ${count(proposal.agreed)} were. A rule would decide without a model.`
+            : `sift has agreed ${count(proposal.agreed)} times running. It could stop reading each one.`}
+        </p>
+        {error ? <p className="text-destructive">{error}</p> : null}
+      </div>
       <span className="flex items-center gap-1.5">
-        <Button variant="ink" busy={busy} onClick={() => resolve(true)}>
-          <CheckIcon aria-hidden />
+        <Button busy={busy} onClick={() => resolve(true)}>
           {proposal.kind === 'rule' ? 'Make the rule' : 'Stop reading them'}
         </Button>
         <Button variant="quiet" disabled={busy} onClick={() => resolve(false)}>
-          No
+          Dismiss
         </Button>
       </span>
     </li>
   );
 }
 
-const DOES = [['', 'Anything'] as const, ...ACTIONS.filter(([key]) => key !== 'keep'), ['review', 'Hold it for you'] as const];
+/** One sender's waiting mail, as a row: who, what it is about, what sift says, and agreeing in one press. Pressing the row opens it to answer otherwise. */
+function SuggestionRow({ group, onOpen, onAnswered }: { group: SuggestionGroup; onOpen: () => void; onAnswered: (taught: string) => void }) {
+  const { busy, error, run } = useAction();
+  const [first, ...rest] = subjects(group.sample);
+  const mixed = group.guesses > 1;
+  const agree = () =>
+    run(async () => {
+      const result = await api.feedback({ accountId: group.accountId, sender: group.sender, scope: 'sender', label: group.labelId ?? '' });
+      onAnswered(result.taught ?? 'Noted.');
+    });
+  const verdict = <Verdict labelName={group.labelName} disposition={group.disposition} unsubscribe={group.unsubscribe} />;
 
-/** What sift would do, waiting for the user to say right or wrong. */
+  return (
+    <Tr onOpen={onOpen}>
+      <Td className="max-w-0 md:w-[22%]">
+        <span className="name block truncate">
+          <SenderLink accountId={group.accountId} address={group.sender}>
+            {group.senderName ?? group.sender}
+          </SenderLink>
+        </span>
+        <Sub>{group.senderName ? group.sender : plural(group.messages, 'message')}</Sub>
+        <OnPhone>
+          <span className="w-full truncate">{first?.subject || '(no subject)'}</span>
+          {verdict}
+        </OnPhone>
+      </Td>
+      <Td phone="hide" className="max-w-0 md:w-[36%]">
+        <span className="flex items-baseline gap-2">
+          <span className="truncate">{first?.subject || '(no subject)'}</span>
+          {first && first.times > 1 ? <span className="shrink-0 text-muted-foreground tabular-nums">×{first.times}</span> : null}
+        </span>
+        <Sub>
+          {plural(group.messages, 'message')}
+          {rest.length > 0 ? ` · also “${rest[0]?.subject}”` : ''}
+        </Sub>
+      </Td>
+      <Td phone="hide" className="whitespace-nowrap">
+        {verdict}
+        {mixed ? <Sub>for most; open to see the rest</Sub> : null}
+        {error ? <span className="mt-1 block text-destructive">{error}</span> : null}
+      </Td>
+      <Td phone="hide" num quiet>
+        {ago(group.latestReceivedAt)}
+      </Td>
+      <RowActions>
+        {/* A sender sift guessed more than one way, or could not place, is worth opening before agreeing. */}
+        {group.labelId === null || mixed ? null : (
+          <Button variant="quiet" busy={busy} onClick={agree}>
+            <CheckIcon aria-hidden />
+            Right
+          </Button>
+        )}
+      </RowActions>
+    </Tr>
+  );
+}
+
+const DOES = [['', 'Anything'] as const, ...ACTIONS.filter(([key]) => key !== 'keep'), ['review', outcomeName('review')] as const];
+
+/** The home page: how sift is doing, the rules it proposes, then what it would do, waiting for the user to say right or wrong. */
 export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
   const [kept, setKept] = useParam('kept');
   const includeKept = kept === '1';
   const setIncludeKept = (on: boolean) => setKept(on ? '1' : '');
+  const [chosen, setChosen] = useParam('days');
+  const days = (PERIODS.some(([key]) => key === chosen) ? Number(chosen) : 7) as Days;
   const { data, error, loading, reload } = useLoaded(`suggestions-${includeKept}`, (signal) => api.suggestions(includeKept, signal));
-  const [taught, setTaught] = useState<string[]>([]);
+  const summary = useLoaded(`summary-${days}`, (signal) => api.summary(days, signal));
+  const toast = useToast();
   const [search, setSearch] = useParam('q');
   const [label, setLabel] = useParam('label');
   const [does, setDoes] = useParam('does', DOES);
@@ -190,112 +211,95 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
   );
   // A row opens on the newest message waiting from that sender.
   const items = groups.map((g) => ({ accountId: g.accountId, messageId: g.sample[0]?.messageId ?? '', subject: g.sample[0]?.subject ?? '' }));
-  const answered = (line: string) => {
-    setTaught((lines) => [line, ...lines].slice(0, 3));
+  const learned = (line: string) => {
+    toast(line);
     reload();
   };
-  const examples = data ? data.examples.captured + data.examples.pending : 0;
-  const facts = data
-    ? [
-        data.accuracy.reviewed > 0
-          ? `sift was right on ${percent(data.accuracy.right, data.accuracy.reviewed)} of the ${count(data.accuracy.reviewed)} you checked`
-          : null,
-        examples > 0 ? `${count(examples)} kept as examples` : null,
-      ].filter(Boolean)
-    : [];
 
   return (
     <ListView
       title="Suggestions"
-      count={
+      meta={
         data ? (
           data.waiting > 0 ? (
-            <>
-              <Highlight className="mx-0 font-medium">{count(data.waiting)}</Highlight> waiting from {count(data.groups.length)} senders
-            </>
+            <span>
+              <Highlight className="mx-0 font-medium">{count(data.waiting)} waiting</Highlight> from {plural(data.groups.length, 'sender')}
+            </span>
           ) : (
-            'Nothing waiting'
+            'Nothing waiting on you'
           )
         ) : null
       }
-      description="An answer makes a rule, so it covers what arrives later too. Open a row to read the mail and choose how far the answer reaches."
+      intro={
+        <>
+          {summary.data ? (
+            <Standing summary={summary.data} accuracy={data?.accuracy} days={days} onDays={(next) => setChosen(next === 7 ? '' : String(next))} />
+          ) : null}
+          {data && data.proposals.length > 0 ? (
+            <Section title="Proposed rules" meta={count(data.proposals.length)}>
+              <ul className="flex flex-col">
+                {data.proposals.map((proposal) => (
+                  <ProposalRow
+                    key={proposal.id}
+                    proposal={proposal}
+                    onResolved={(line) => {
+                      if (line) toast(line);
+                      reload();
+                    }}
+                  />
+                ))}
+              </ul>
+            </Section>
+          ) : null}
+        </>
+      }
       search={{ value: search, onChange: setSearch, placeholder: 'Search senders and subjects' }}
       filters={{
         active: [
-          ...(label === '' ? [] : [{ label: `Label: ${label === UNSURE ? 'Not sure' : (names.get(label) ?? label)}`, clear: () => setLabel('') }]),
-          ...(does === '' ? [] : [{ label: `sift would: ${DOES.find(([key]) => key === does)?.[1].toLowerCase()}`, clear: () => setDoes('') }]),
-          ...(includeKept ? [{ label: 'Including mail sift would keep', clear: () => setIncludeKept(false) }] : []),
+          ...(label === '' ? [] : [{ label: `Label: ${label === UNSURE ? outcomeName('review') : (names.get(label) ?? label)}`, clear: () => setLabel('') }]),
+          ...(does === '' ? [] : [{ label: `Then: ${DOES.find(([key]) => key === does)?.[1]}`, clear: () => setDoes('') }]),
+          ...(includeKept ? [{ label: 'With mail sift would keep', clear: () => setIncludeKept(false) }] : []),
         ],
         panel: (
           <>
-            <FilterGroup label="Label" value={label} options={[['', 'Any'] as const, [UNSURE, 'Not sure'] as const, ...names]} onChange={setLabel} />
-            <FilterGroup label="sift would" value={does} options={DOES} onChange={setDoes} />
+            <FilterGroup label="Label" value={label} options={[['', 'Any'] as const, [UNSURE, outcomeName('review')] as const, ...names]} onChange={setLabel} />
+            <FilterGroup label="Then" value={does} options={DOES} onChange={setDoes} />
             <Check checked={includeKept} onChange={setIncludeKept}>
-              Include mail sift would keep
+              With mail sift would keep
             </Check>
           </>
         ),
       }}
     >
       {error ? <ErrorNote message={error} /> : null}
-      {taught.length > 0 ? (
-        <Note title="Learned">
-          <ul aria-live="polite" className="flex flex-col gap-0.5">
-            {taught.map((line, index) => (
-              <li key={index} className={index === 0 ? undefined : 'text-muted-foreground'}>
-                {line}
-              </li>
+      {loading ? (
+        <Loading rows={6} />
+      ) : groups.length === 0 ? (
+        <Empty>
+          {data && data.groups.length > 0
+            ? 'Nothing waiting matches.'
+            : 'Nothing is waiting on you. As mail arrives sift says what it would do with it here, and each answer you give becomes a rule that covers later mail too.'}
+        </Empty>
+      ) : (
+        <Table>
+          <thead>
+            <Tr>
+              <Th>Sender</Th>
+              <Th phone="hide">Mail</Th>
+              <Th phone="hide">sift says</Th>
+              <Th phone="hide" num>
+                Latest
+              </Th>
+              <Th phone="hide" />
+            </Tr>
+          </thead>
+          <tbody>
+            {groups.map((group, index) => (
+              <SuggestionRow key={groupKey(group)} group={group} onOpen={() => onOpen(items, index)} onAnswered={learned} />
             ))}
-          </ul>
-        </Note>
-      ) : null}
-      {data && data.proposals.length > 0 ? (
-        <Note title="sift proposes">
-          <ul className="flex flex-col divide-y divide-(--rule)">
-            {data.proposals.map((proposal) => (
-              <ProposalRow
-                key={proposal.id}
-                proposal={proposal}
-                onResolved={(line) => {
-                  if (line) setTaught((lines) => [line, ...lines].slice(0, 3));
-                  reload();
-                }}
-              />
-            ))}
-          </ul>
-        </Note>
-      ) : null}
-      <div>
-        {loading ? (
-          <Loading rows={6} />
-        ) : groups.length === 0 ? (
-          <Empty>{data && data.groups.length > 0 ? 'Nothing waiting matches.' : 'Nothing is waiting on you. New mail shows up here as sift decides it.'}</Empty>
-        ) : (
-          <Table>
-            <thead>
-              <Tr>
-                <Th>Sender</Th>
-                <Th className="hidden md:table-cell">Mail</Th>
-                <Th>sift says</Th>
-                <Th className="hidden text-right md:table-cell">Latest</Th>
-                <Th className="hidden md:table-cell" />
-              </Tr>
-            </thead>
-            <tbody>
-              {groups.map((group, index) => (
-                <SuggestionRow
-                  key={groupKey(group)}
-                  group={group}
-                  labels={data?.labels[group.accountId] ?? []}
-                  onOpen={() => onOpen(items, index)}
-                  onAnswered={answered}
-                />
-              ))}
-            </tbody>
-          </Table>
-        )}
-      </div>
-      {facts.length > 0 ? <p className="text-sm text-muted-foreground tabular-nums">{facts.join(' · ')}</p> : null}
+          </tbody>
+        </Table>
+      )}
     </ListView>
   );
 }

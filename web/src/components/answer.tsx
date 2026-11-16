@@ -2,7 +2,7 @@ import { ArrowRightIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { FeedbackRequest } from '@/lib/api.ts';
 import { willBe } from '@/lib/format.ts';
-import { Button, Check, Input, Select } from '@/system';
+import { Button, Check, ChoiceGroup, Field, Form, Input, Kbd, Select } from '@/system';
 
 export interface AnswerLabel {
   id: string;
@@ -19,10 +19,10 @@ type Exception = '' | 'keep' | 'archive' | 'spam';
 export type AnswerValue = Pick<FeedbackRequest, 'label' | 'scope' | 'contains' | 'disposition' | 'unsubscribe' | 'tier' | 'when'>;
 
 const EXCEPTIONS = [
-  ['', 'as the label says'],
-  ['keep', 'but keep it'],
-  ['archive', 'but archive it'],
-  ['spam', 'but mark it spam'],
+  ['', 'As the label says'],
+  ['keep', 'Keep it instead'],
+  ['archive', 'Archive it instead'],
+  ['spam', 'Spam it instead'],
 ] as const;
 
 /**
@@ -100,31 +100,31 @@ export function Answer({
             : `mail from ${sender}`;
   const does = label ? willBe(exception || label.disposition) : '';
 
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <p className="slug text-muted-foreground">It is</p>
-        <div className="flex flex-wrap gap-1.5">
-          {labels.map((l, index) => (
-            <Button key={l.id} variant={chosen === l.id ? 'ink' : 'plain'} aria-pressed={chosen === l.id} onClick={() => setChosen(l.id)}>
-              {index < 9 ? <span className="hidden font-mono text-[13px] font-normal opacity-60 md:inline">{index + 1}</span> : null}
-              {l.name}
-            </Button>
-          ))}
-        </div>
-      </div>
+  const right = label !== undefined && label.id === guess && scope === 'sender' && !exception && tierChoice === null;
+  const sentence = !label
+    ? 'Choose what this is.'
+    : scope === 'once'
+      ? `Only ${whose}: ${label.name}, ${does}. No rule is made.`
+      : `From now on, ${whose} is ${tier === 'usually' && scope !== 'when' ? 'usually ' : ''}${label.name}: ${does}${label.unsubscribe || unsubscribe ? ', and unsubscribed from' : ''}.${
+          tier === 'usually' ? ' sift still reads each one and asks about any that is something else.' : ''
+        }`;
 
-      <div className="flex flex-col gap-2">
-        <p className="slug text-muted-foreground">For</p>
-        <div className="flex flex-wrap items-center gap-1.5">
+  return (
+    <Form onSubmit={() => ready && answer && onSubmit(answer)}>
+      <Field label="It is">
+        <ChoiceGroup label="What this message is" value={chosen} options={labels.map((l) => [l.id, l.name] as const)} onChange={setChosen} numbered />
+      </Field>
+
+      <div className="flex flex-col gap-2.5">
+        <Field inline label="Covers">
           <Select
             label="How far this answer reaches"
             value={scope}
             options={[
               ['sender', 'Everything from this sender'],
               ['domain', `Anyone at ${domain}`],
-              ['subject', 'This sender, when the subject contains…'],
-              ['when', 'This sender, when it is… (in your words)'],
+              ['subject', 'This sender, subject contains…'],
+              ['when', 'This sender, when it is…'],
               ['once', 'Only this message'],
             ]}
             onChange={setScope}
@@ -134,7 +134,7 @@ export function Answer({
               autoFocus
               aria-label="Words the subject must contain"
               placeholder="words in the subject"
-              className="w-48"
+              className="w-full"
               value={contains}
               onChange={(event) => setContains(event.target.value)}
             />
@@ -144,51 +144,51 @@ export function Answer({
               autoFocus
               aria-label="What the mail must be, in your words"
               placeholder="a notice for a lot I did not bid on"
-              className="w-72"
+              className="w-full"
               value={condition}
               onChange={(event) => setCondition(event.target.value)}
             />
           ) : null}
-          {/* The default depends on what the label does, so there is nothing to show before one is chosen. */}
-          {!label || scope === 'once' || scope === 'when' ? null : (
+        </Field>
+        {/* The default depends on what the label does, so there is nothing to show before one is chosen. */}
+        {!label || scope === 'once' || scope === 'when' ? null : (
+          <Field inline label="Reading">
             <Select
               label="Whether sift checks each message"
               value={tier}
               options={[
-                ['usually', 'usually: sift reads each one'],
-                ['always', 'always: without reading'],
+                ['usually', 'sift reads each one to check'],
+                ['always', 'sift does not read them'],
               ]}
               onChange={setTier}
             />
-          )}
+          </Field>
+        )}
+        <Field inline label="Then">
           <Select label="Exception to the label's action" value={exception} options={EXCEPTIONS} onChange={setException} />
-        </div>
-        {/* A rule can carry this itself; for a label that already unsubscribes there is nothing to add. */}
-        {label && !label.unsubscribe && scope !== 'once' ? (
-          <Check checked={unsubscribe} onChange={setUnsubscribe}>
-            and unsubscribe, when the sender offers a safe way
-          </Check>
-        ) : null}
+          {/* A rule can carry this itself; for a label that already unsubscribes there is nothing to add. */}
+          {label && !label.unsubscribe && scope !== 'once' ? (
+            <Check checked={unsubscribe} onChange={setUnsubscribe}>
+              and unsubscribe
+            </Check>
+          ) : null}
+        </Field>
       </div>
 
       <div className="flex flex-col gap-3">
-        <p className={label ? undefined : 'text-muted-foreground'}>
-          {!label
-            ? 'Choose what this is.'
-            : scope === 'once'
-              ? `Only ${whose}: ${label.name}, ${does}. No rule is made.`
-              : `From now on, ${whose} is ${tier === 'usually' && scope !== 'when' ? 'usually ' : ''}${label.name}: ${does}${label.unsubscribe || unsubscribe ? ', and unsubscribed from' : ''}.${tier === 'usually' ? ' sift still reads each one and asks about any that is something else.' : ''}`}
-        </p>
-        {acted && label && label.id !== guess ? <p className="text-sm text-muted-foreground">This message is put right in Gmail too.</p> : null}
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        <p className={label ? undefined : 'text-muted-foreground'}>{sentence}</p>
+        {acted && label && label.id !== guess ? <p className="text-muted-foreground">This message is put right in Gmail too.</p> : null}
+        {error ? <p className="text-destructive">{error}</p> : null}
         <div className="flex flex-wrap items-center gap-3">
-          <Button variant="mark" busy={busy} disabled={!ready} onClick={() => answer && onSubmit(answer)}>
-            {label && label.id === guess && scope === 'sender' && !exception && tierChoice === null ? 'Right' : 'Teach sift'}
+          <Button type="submit" variant="mark" busy={busy} disabled={!ready}>
+            {right ? 'Right' : 'Teach sift'}
             <ArrowRightIcon aria-hidden />
           </Button>
-          <p className="slug hidden text-muted-foreground md:block">Enter · 1–{Math.min(labels.length, 9)} label</p>
+          <span className="hidden text-muted-foreground md:inline">
+            <Kbd>Enter</Kbd> to send · <Kbd>1</Kbd>–<Kbd>{Math.min(labels.length, 9)}</Kbd> to choose
+          </span>
         </div>
       </div>
-    </div>
+    </Form>
   );
 }

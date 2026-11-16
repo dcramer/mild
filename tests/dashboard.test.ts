@@ -116,9 +116,17 @@ describe('tracking', () => {
     const db = seeded();
     const base = { subscription: 'preserve', reason: 'test', stage: 'rules' } as const;
     const done = recordDecision(db, ACCOUNT, 'a', { ...base, disposition: 'archive' }, { mode: 'act', now: NOW });
-    const archived = insertPendingAction(db, { accountId: ACCOUNT, messageId: 'a', type: 'archive', payload: {}, originalLabels: ['INBOX'], decisionId: done }, NOW);
+    const archived = insertPendingAction(
+      db,
+      { accountId: ACCOUNT, messageId: 'a', type: 'archive', payload: { add: [], remove: ['INBOX'] }, originalLabels: ['INBOX'], decisionId: done },
+      NOW,
+    );
     finishAction(db, archived, 'done', [], null, NOW);
-    const unsubscribed = insertPendingAction(db, { accountId: ACCOUNT, messageId: 'a', type: 'unsubscribe', payload: {}, originalLabels: [], decisionId: done }, NOW);
+    const unsubscribed = insertPendingAction(
+      db,
+      { accountId: ACCOUNT, messageId: 'a', type: 'unsubscribe', payload: { add: [], remove: [] }, originalLabels: [], decisionId: done },
+      NOW,
+    );
     finishAction(db, unsubscribed, 'done', null, null, NOW);
     settleDecision(db, done, 'done');
     const failed = recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'archive' }, { mode: 'act', now: NOW });

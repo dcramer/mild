@@ -19,7 +19,7 @@ export function Note({
   return (
     <div role={tone === 'failure' ? 'alert' : undefined} className={cn('flex flex-col gap-1.5 text-sm', className)}>
       {title ? (
-        <p className="slug">
+        <p className="font-semibold">
           <span className={cn(tone === 'look' && 'hl', tone === 'failure' && 'text-destructive')}>{title}</span>
         </p>
       ) : null}

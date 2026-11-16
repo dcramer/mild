@@ -1,14 +1,11 @@
-import { useState } from 'react';
-import { ErrorNote } from '@/components/bits.tsx';
-import { type Days, api, useLoaded, useOnline } from '@/lib/api.ts';
+import { useEffect, useState } from 'react';
+import { api, useLoaded, useOnline } from '@/lib/api.ts';
 import { ago } from '@/lib/format.ts';
-import { setParams, useParam, useRoute } from '@/lib/route.ts';
-import { Loading, Masthead, Note, Notice, Select, Wordmark } from '@/system';
-import { ChangesView } from '@/views/changes.tsx';
-import { Decisions, PERIODS } from '@/views/decisions.tsx';
-import { MessagePanel, type MessageRef } from '@/views/message-panel.tsx';
-import { Overview } from '@/views/overview.tsx';
+import { navigate, setParams, useParam, useRoute } from '@/lib/route.ts';
+import { Masthead, Note, Notice, Wordmark } from '@/system';
+import { ActivityView } from '@/views/activity.tsx';
 import { LabelsView } from '@/views/labels.tsx';
+import { MessagePanel, type MessageRef } from '@/views/message-panel.tsx';
 import { Rules } from '@/views/rules.tsx';
 import { SenderView } from '@/views/sender.tsx';
 import { SettingsView } from '@/views/settings.tsx';
@@ -16,16 +13,16 @@ import { SignInScreen } from '@/views/sign-in.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
 import { SystemView } from '@/views/system.tsx';
 
-const SECTIONS = ['suggestions', 'overview', 'decisions', 'labels', 'rules', 'changes', 'settings'] as const;
+const SECTIONS = ['suggestions', 'activity', 'labels', 'rules', 'settings'] as const;
 const NAMES: Record<(typeof SECTIONS)[number], string> = {
   suggestions: 'Suggestions',
-  overview: 'Overview',
-  decisions: 'Decisions',
+  activity: 'Activity',
   labels: 'Labels',
   rules: 'Rules',
-  changes: 'Changes',
   settings: 'Settings',
 };
+/** Sections that were folded into others, so links to them still land somewhere. */
+const MOVED: Record<string, string> = { overview: '/suggestions', decisions: '/activity', changes: '/activity', 'settings/running': '/settings' };
 
 /** Shows the sign-in screen until the viewer is signed in, then the dashboard. */
 export function App() {
@@ -62,15 +59,16 @@ function Gate({ route }: { route: string[] }) {
 }
 
 function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: string[] }) {
+  const moved = MOVED[route.join('/')] ?? MOVED[route[0] ?? ''];
+  useEffect(() => {
+    if (moved) navigate(moved + window.location.search, { replace: true });
+  }, [moved]);
   const section = SECTIONS.find((s) => s === route[0]) ?? 'suggestions';
   // A sender's or a domain's own page: `/sender/<account>/<address>`.
   const profile =
     (route[0] === 'sender' || route[0] === 'domain') && route[1] && route[2]
       ? { kind: route[0], accountId: decodeURIComponent(route[1]), key: decodeURIComponent(route[2]) }
       : null;
-  const [period, setPeriod] = useParam('days');
-  const days = (PERIODS.some(([key]) => key === period) ? Number(period) : 7) as Days;
-  const setDays = (next: Days) => setPeriod(next === 7 ? '' : String(next));
   // The message panel. Which message is open is in the address, so it can be linked to and Back closes
   // it; the list it was opened from, for previous and next, is only known when it was opened from one here.
   const [list, setList] = useState<MessageRef[]>([]);
@@ -80,7 +78,6 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
   const open = messageId === '' ? null : listed === -1 ? { items: [{ accountId, messageId, subject: '' }], index: 0 } : { items: list, index: listed };
   const show = (item: MessageRef | undefined, push?: { state: unknown }) => setParams({ message: item?.messageId ?? '', account: item?.accountId ?? '' }, push);
   const online = useOnline();
-  const summary = useLoaded(`summary-${days}`, (signal) => api.summary(days, signal));
   const waiting = useLoaded('suggestions-false', (signal) => api.suggestions(false, signal));
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const expired = manage.data?.activity.expired ?? [];
@@ -88,14 +85,11 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
     setList(items);
     show(items[index], { state: { panel: true } });
   };
-  const accounts = summary.data?.accounts ?? [];
+  const accounts = manage.data?.accounts ?? [];
   const synced = accounts.map((a) => a.lastSyncedAt).filter((at) => at !== null);
-  const periodSelect = (
-    <Select label="Period" value={String(days) as (typeof PERIODS)[number][0]} options={PERIODS} onChange={(value) => setDays(Number(value) as Days)} />
-  );
 
   return (
-    <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col px-4">
+    <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col px-4 md:px-6">
       <Masthead
         current={profile ? '' : section}
         items={SECTIONS.map((to) => ({ to, label: NAMES[to], ...(to === 'suggestions' && waiting.data?.waiting ? { count: waiting.data.waiting } : {}) }))}
@@ -110,7 +104,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
           ) : null
         }
         aside={
-          summary.data ? (
+          manage.data ? (
             <span className="whitespace-nowrap">
               {accounts.length === 0 ? 'No account connected' : synced.length > 0 ? `Synced ${ago(Math.min(...synced))}` : 'Not synced yet'}
             </span>
@@ -132,7 +126,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
         }
       />
 
-      <main className="pb-10">
+      <main className="pb-16">
         {profile ? (
           <SenderView
             accountId={profile.accountId}
@@ -141,21 +135,14 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
           />
         ) : section === 'suggestions' ? (
           <SuggestionsView onOpen={openMessages} />
-        ) : section === 'overview' ? (
-          <div className="flex flex-col gap-4">
-            {summary.error ? <ErrorNote message={summary.error} /> : null}
-            {summary.data ? <Overview data={summary.data} period={periodSelect} onOpen={openMessages} /> : summary.loading ? <Loading rows={6} /> : null}
-          </div>
-        ) : section === 'decisions' ? (
-          <Decisions days={days} onDays={setDays} onOpen={openMessages} />
+        ) : section === 'activity' ? (
+          <ActivityView onOpen={openMessages} />
         ) : section === 'labels' ? (
           <LabelsView />
         ) : section === 'rules' ? (
           <Rules />
-        ) : section === 'changes' ? (
-          <ChangesView onOpen={openMessages} />
         ) : (
-          <SettingsView page={route[1]} />
+          <SettingsView />
         )}
       </main>
       {open ? (

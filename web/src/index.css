@@ -137,6 +137,7 @@
   /* Headings, names and figures are set in the display face, bold; everything read is in the text face.
      The wordmark has a face of its own. */
   .title,
+  .heading,
   .name,
   .figure,
   .statement {
@@ -157,6 +158,11 @@
     font-size: 20px;
     line-height: 1.3;
   }
+  /* A section's heading, on a page or in a panel: a step above a name, well below a title. */
+  .heading {
+    font-size: 17px;
+    line-height: 1.3;
+  }
   .name {
     font-size: 16px;
     line-height: 1.35;
@@ -169,7 +175,7 @@
     letter-spacing: -0.02em;
   }
 
-  /* Small capitals in the mono face, for labels and column heads. */
+  /* Small capitals in the mono face: column heads and a figure's label, nothing else. A heading is a `.heading`. */
   .slug {
     font-family: var(--font-mono);
     font-size: 12.5px;

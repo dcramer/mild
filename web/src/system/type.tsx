@@ -40,19 +40,25 @@ export function Code({ children }: { children: ReactNode }) {
   return <code className="rounded-[2px] bg-foreground/8 px-[0.35em] py-[0.1em] font-mono text-[0.9em]">{children}</code>;
 }
 
-/** A rubber stamp: a short verdict. Weight carries the meaning, from outline to solid ink; `look` is for what is left to the reader. */
-export function Stamp({ tone = 'outline', children }: { tone?: 'outline' | 'tint' | 'ink' | 'look'; children: ReactNode }) {
+/**
+ * A rubber stamp: a short verdict in a word, from the fixed vocabulary in `lib/format.ts` (what sift does,
+ * where a sender stands). All stamps weigh the same, so the word carries the meaning; `look` is only for
+ * what is left to the reader.
+ */
+export function Stamp({ tone = 'plain', children }: { tone?: 'plain' | 'look'; children: ReactNode }) {
+  return <span className={cn('stamp', tone === 'look' ? 'bg-highlight text-highlight-ink' : 'border border-foreground/30')}>{children}</span>;
+}
+
+/** A link inside text or a cell: underlined, so it reads as one without colour. */
+export function TextLink({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
   return (
-    <span
-      className={cn(
-        'stamp',
-        tone === 'outline' && 'border border-foreground/30',
-        tone === 'tint' && 'bg-secondary text-secondary-foreground',
-        tone === 'ink' && 'bg-foreground text-background',
-        tone === 'look' && 'bg-highlight text-highlight-ink',
-      )}
-    >
+    <a href={href} className={cn('underline decoration-foreground/35 underline-offset-[0.2em] hover:decoration-foreground', className)}>
       {children}
-    </span>
+    </a>
   );
+}
+
+/** A key on the keyboard, where it works: beside the button it presses, or in a hint. */
+export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
+  return <kbd className={cn('font-mono text-[12px] font-normal text-muted-foreground', className)}>{children}</kbd>;
 }

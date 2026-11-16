@@ -1,6 +1,5 @@
-import type { ReactNode } from 'react';
 import type { DecisionRow } from '@/lib/api.ts';
-import { ACTIONS, dispositionName, money, outcomeName, tier } from '@/lib/format.ts';
+import { type Status, STATUS_NAMES, outcomeName, status, tier } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
 import { Code, Note, Stamp } from '@/system';
 
@@ -15,46 +14,29 @@ export function TierLabel({ stage }: { stage: string }) {
   );
 }
 
-const STAMP = { review: 'look', spam: 'ink', block: 'ink', archive: 'tint' } as const;
-
-/** What sift did with a message; with `would`, what it would do or is set to do, in the present tense. */
-export function DispositionBadge({ disposition, would }: { disposition: string; would?: boolean }) {
-  const name = would && disposition !== 'review' ? (ACTIONS.find(([key]) => key === disposition)?.[1] ?? disposition) : dispositionName(disposition);
-  return <Stamp tone={STAMP[disposition as keyof typeof STAMP] ?? 'outline'}>{name}</Stamp>;
-}
-
-/** A second line under the point of a cell. */
-export function Sub({ children, mono }: { children: ReactNode; mono?: boolean }) {
-  return <span className={cn('mt-0.5 block truncate text-[14px] text-muted-foreground', mono && 'font-mono')}>{children}</span>;
-}
-
-/** What became of a decision in the mailbox. */
-export function Result({ row }: { row: Pick<DecisionRow, 'actionId' | 'actionType' | 'actionStatus' | 'outcome' | 'outcomeDetail'> }) {
-  if (row.actionId !== null) {
-    const bad = row.actionStatus !== 'done' && row.actionStatus !== 'undone';
-    return (
-      <span className={bad ? 'font-medium text-destructive' : undefined}>
-        {row.actionType} {row.actionStatus}
-        <Sub mono>#{row.actionId}</Sub>
-      </span>
-    );
-  }
+/**
+ * What sift says mail is and does with it, the same way everywhere: the label's name, then the action as
+ * a stamp. With no label and nothing done, sift was not sure, which is the reader's to answer.
+ */
+export function Verdict({ labelName, disposition, unsubscribe }: { labelName: string | null; disposition: string; unsubscribe?: boolean }) {
+  if (labelName === null && disposition === 'review') return <Stamp tone="look">{outcomeName('review')}</Stamp>;
   return (
-    <span className="text-muted-foreground">
-      {outcomeName(row.outcome)}
-      {row.outcomeDetail ? <Sub>{row.outcomeDetail}</Sub> : null}
+    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+      {labelName ? <span className="font-medium">{labelName}</span> : null}
+      <Stamp>{outcomeName(disposition)}</Stamp>
+      {unsubscribe ? <span className="text-muted-foreground">+ unsubscribe</span> : null}
     </span>
   );
 }
 
-/** Which tier decided, and what the model cost if one was used. */
-export function DecidedBy({ row }: { row: Pick<DecisionRow, 'stage' | 'model' | 'costUsd' | 'confidence'> }) {
-  const facts = [
-    tier(row.stage).name,
-    row.model ? `${row.model} · ${money(row.costUsd)}` : null,
-    row.confidence === null ? null : `confidence ${row.confidence.toFixed(2)}`,
-  ];
-  return <Sub>{facts.filter(Boolean).join(' · ')}</Sub>;
+/** Where a decision has got to in Gmail, in a word. A failure is the only one in red. */
+export function StatusWord({ row, className }: { row: Pick<DecisionRow, 'mode' | 'outcome' | 'actionStatus' | 'outcomeDetail'>; className?: string }) {
+  const s: Status = status(row);
+  return (
+    <span className={cn(s === 'failed' ? 'font-medium text-destructive' : 'text-muted-foreground', className)} title={row.outcomeDetail ?? undefined}>
+      {STATUS_NAMES[s]}
+    </span>
+  );
 }
 
 /** The server could not be reached or refused; what was on screen stays. */
@@ -66,10 +48,4 @@ export function ErrorNote({ message }: { message: string }) {
       </p>
     </Note>
   );
-}
-
-/** Something a change just did or failed to do, under the control that caused it. */
-export function Outcome({ error, done }: { error?: string | null; done?: string | null }) {
-  if (error) return <p className="px-(--gutter) pb-3 text-sm text-destructive">{error}</p>;
-  return done ? <p className="px-(--gutter) pb-3 text-sm text-muted-foreground">{done}</p> : null;
 }

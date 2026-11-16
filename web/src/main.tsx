@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import { App } from './App.tsx';
 import { queryClient } from './lib/api.ts';
+import { Toaster } from './system/index.ts';
 
 // Installed, the app opens from files the service worker kept, even when sift cannot be reached. Not
 // under `sift dev`, where the page must always be the latest build: there, one left by `sift run` is removed.
@@ -23,7 +24,9 @@ createRoot(root).render(
     {/* The dashboard's content security policy forbids inline <style>; index.css carries the one rule Base UI would inject. */}
     <CSPProvider disableStyleElements>
       <QueryClientProvider client={queryClient}>
-        <App />
+        <Toaster>
+          <App />
+        </Toaster>
       </QueryClientProvider>
     </CSPProvider>
   </StrictMode>,

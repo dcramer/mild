@@ -1,12 +1,33 @@
 import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
-import { DispositionBadge, ErrorNote, Outcome, Sub } from '@/components/bits.tsx';
+import { ErrorNote } from '@/components/bits.tsx';
 import { api, useAction, useLoaded } from '@/lib/api.ts';
-import { ago, count, extras } from '@/lib/format.ts';
 import { useParam } from '@/lib/route.ts';
-import { Button, Check, Code, Dialog, Empty, FilterGroup, Input, ListView, Loading, Select, Table, Td, Th, Tr } from '@/system';
+import { ago, count, describeMatch, extras, outcomeName } from '@/lib/format.ts';
+import {
+  Button,
+  Check,
+  ConfirmButton,
+  Dialog,
+  Empty,
+  Field,
+  FilterGroup,
+  Form,
+  Input,
+  ListView,
+  Loading,
+  OnPhone,
+  RowActions,
+  Select,
+  Stamp,
+  Sub,
+  Table,
+  Td,
+  Th,
+  Tr,
+  useToast,
+} from '@/system';
 
-const CONDITIONS: Record<string, string> = { from: 'from', fromDomain: 'from domain', to: 'to', listId: 'list', subjectContains: 'subject contains' };
 const SOURCES = [
   ['', 'Anyone'],
   ['user', 'You'],
@@ -14,33 +35,18 @@ const SOURCES = [
   ['agent', 'sift, by blocking'],
 ] as const;
 
-function Conditions({ match }: { match: Record<string, string> }) {
-  return (
-    <span className="flex flex-wrap gap-x-3 gap-y-1">
-      {Object.entries(match).map(([key, value]) => (
-        <span key={key} className="inline-flex max-w-72 items-baseline gap-1.5">
-          <span className="text-muted-foreground">{CONDITIONS[key] ?? key}</span>
-          <span className="truncate">
-            <Code>{value}</Code>
-          </span>
-        </span>
-      ))}
-    </span>
-  );
-}
-
 const WHEN = [
-  ['from', 'From address'],
-  ['fromDomain', 'From domain'],
-  ['listId', 'Mailing list id'],
+  ['from', 'From the address'],
+  ['fromDomain', 'From anyone at'],
+  ['listId', 'On the list'],
   ['to', 'Sent to'],
   ['subjectContains', 'Subject contains'],
 ] as const;
 const EXCEPTION = [
-  ['', 'What the label does'],
-  ['keep', 'Keep in inbox instead'],
-  ['archive', 'Archive instead'],
-  ['spam', 'Mark spam instead'],
+  ['', 'As the label says'],
+  ['keep', 'Keep it instead'],
+  ['archive', 'Archive it instead'],
+  ['spam', 'Spam it instead'],
 ] as const;
 
 function AddRuleDialog({
@@ -86,7 +92,6 @@ function AddRuleDialog({
       open
       onClose={onClose}
       title="Add a rule"
-      subtitle="A rule says what mail is, without asking a model."
       footer={
         <>
           <Button variant="ink" busy={busy} disabled={!ready} onClick={add}>
@@ -95,73 +100,61 @@ function AddRuleDialog({
           <Button variant="quiet" onClick={onClose}>
             Cancel
           </Button>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? <p className="text-destructive">{error}</p> : null}
         </>
       }
     >
-      <form
-        className="flex flex-col gap-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (ready) add();
-        }}
-      >
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">When mail is</span>
-          <div className="flex flex-wrap items-center gap-2">
-            <Select label="Condition" value={when} options={WHEN} onChange={setWhen} />
-            <Input
-              autoFocus
-              className="min-w-48 flex-1"
-              aria-label="Value to match"
-              placeholder={when === 'fromDomain' ? 'example.com' : when === 'from' ? 'name@example.com' : ''}
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-            />
-          </div>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">And it is, in your words (optional)</span>
+      <Form onSubmit={() => ready && add()}>
+        <Field label="Mail">
+          <Select label="Condition" value={when} options={WHEN} onChange={setWhen} />
+          <Input
+            autoFocus
+            className="min-w-48 flex-1"
+            aria-label="Value to match"
+            placeholder={when === 'fromDomain' ? 'example.com' : when === 'from' ? 'name@example.com' : ''}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+          />
+        </Field>
+        <Field label="When it is (optional)" hint="In your words. Only a model can apply this, so sift reads each message the rule matches.">
           <Input
             aria-label="What the mail must be, in your words"
+            className="w-full"
             placeholder="a notice for a lot I did not bid on"
             value={condition}
             onChange={(event) => setCondition(event.target.value)}
           />
-          <p className="text-sm text-muted-foreground">Only a model can apply this, so sift reads each message the rule matches.</p>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">It is</span>
-          <div>
-            <Select label="Label" value={label} options={[['', 'Choose a label'] as const, ...labels]} onChange={setLabel} />
+        </Field>
+        <Field label="Is">
+          <Select label="Label" value={label} options={[['', 'Choose a label'] as const, ...labels]} onChange={setLabel} />
+        </Field>
+        {condition.trim() === '' ? (
+          <Field label="Reading" hint={tier === 'usually' ? 'sift asks about any that is something else.' : 'The rule decides alone, with no model.'}>
+            <Select
+              label="Whether sift reads each message"
+              value={tier}
+              options={[
+                ['always', 'sift does not read them'],
+                ['usually', 'sift reads each one to check'],
+              ]}
+              onChange={setTier}
+            />
+          </Field>
+        ) : null}
+        <Field label="Then">
+          <Select label="What sift does" value={exception} options={EXCEPTION} onChange={setException} />
+        </Field>
+        <Field label="Also">
+          <div className="flex flex-col gap-2">
+            <Check checked={markRead} onChange={setMarkRead}>
+              Mark it read
+            </Check>
+            <Check checked={unsubscribe} onChange={setUnsubscribe}>
+              Unsubscribe, when the sender offers a safe way
+            </Check>
           </div>
-          {condition.trim() === '' ? (
-            <div>
-              <Select
-                label="Whether sift checks each message"
-                value={tier}
-                options={[
-                  ['always', 'Always: without reading the message'],
-                  ['usually', 'Usually: sift reads each one, and asks about any that is something else'],
-                ]}
-                onChange={setTier}
-              />
-            </div>
-          ) : null}
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">sift does</span>
-          <div>
-            <Select label="What sift does" value={exception} options={EXCEPTION} onChange={setException} />
-          </div>
-          <Check checked={markRead} onChange={setMarkRead}>
-            Also mark it read
-          </Check>
-          <Check checked={unsubscribe} onChange={setUnsubscribe}>
-            Also unsubscribe, when the sender offers a safe way
-          </Check>
-        </div>
-      </form>
+        </Field>
+      </Form>
     </Dialog>
   );
 }
@@ -171,6 +164,7 @@ export function Rules() {
   const { data, error, loading, reload } = useLoaded('rules', (signal) => api.rules(signal));
   const manage = useLoaded('rule-accounts', (signal) => api.manage(signal), 60_000);
   const remove = useAction();
+  const toast = useToast();
   const [search, setSearch] = useParam('q');
   const [label, setLabel] = useParam('label');
   const [source, setSource] = useParam('by', SOURCES);
@@ -189,11 +183,10 @@ export function Rules() {
   return (
     <ListView
       title="Rules"
-      count={data ? count(data.rules.length) : null}
-      description="A rule says what mail is; its label decides what happens. The most specific one wins, and one that keeps mail always does."
+      meta={data ? `${count(data.rules.length)} · the most specific one wins` : null}
       actions={
         accountId ? (
-          <Button variant="ink" onClick={() => setAdding(true)}>
+          <Button onClick={() => setAdding(true)}>
             <PlusIcon aria-hidden />
             Add a rule
           </Button>
@@ -203,7 +196,7 @@ export function Rules() {
       filters={{
         active: [
           ...(label === '' ? [] : [{ label: `Label: ${labels.find(([id]) => id === label)?.[1] ?? label}`, clear: () => setLabel('') }]),
-          ...(source === '' ? [] : [{ label: `From: ${SOURCES.find(([key]) => key === source)?.[1]}`, clear: () => setSource('') }]),
+          ...(source === '' ? [] : [{ label: `Made by: ${SOURCES.find(([key]) => key === source)?.[1]}`, clear: () => setSource('') }]),
         ],
         panel: (
           <>
@@ -214,65 +207,91 @@ export function Rules() {
       }}
     >
       {error ? <ErrorNote message={error} /> : null}
-      <div>
-        <Outcome error={remove.error} />
-        {loading ? (
-          <Loading />
-        ) : rules.length === 0 ? (
-          <Empty>{data && data.rules.length > 0 ? 'No rule matches.' : 'No rules yet. Answering a suggestion makes one.'}</Empty>
-        ) : (
-          <Table>
-            <thead>
-              <Tr>
-                <Th>When mail is</Th>
-                <Th>It is</Th>
-                <Th>sift does</Th>
-                <Th>Made by</Th>
-                <Th num>Matches</Th>
-                <Th>Last matched</Th>
-                <Th />
-              </Tr>
-            </thead>
-            <tbody>
-              {rules.map((rule) => (
+      {remove.error ? <p className="text-destructive">{remove.error}</p> : null}
+      {loading ? (
+        <Loading />
+      ) : rules.length === 0 ? (
+        <Empty>
+          {data && data.rules.length > 0
+            ? 'No rule matches.'
+            : 'No rules yet. A rule says what mail is without asking a model; answering a suggestion makes one.'}
+        </Empty>
+      ) : (
+        <Table>
+          <thead>
+            <Tr>
+              <Th>Mail</Th>
+              <Th phone="hide">Is</Th>
+              <Th phone="hide">Then</Th>
+              <Th phone="hide">Made by</Th>
+              <Th phone="hide" num>
+                Used
+              </Th>
+              <Th />
+            </Tr>
+          </thead>
+          <tbody>
+            {rules.map((rule) => {
+              const then = rule.disposition ? (
+                <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <Stamp>{outcomeName(rule.disposition)}</Stamp>
+                  {extras(rule) ? <span className="text-muted-foreground">+ {extras(rule)}</span> : null}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">Nothing</span>
+              );
+              return (
                 <Tr key={rule.id}>
-                  <Td>
-                    <Conditions match={rule.match} />
+                  <Td className="max-w-0 md:w-[40%]">
+                    <span className="block break-words">{describeMatch(rule.match)}</span>
                     {rule.except.map((except, index) => (
-                      <span key={index} className="mt-1 flex items-baseline gap-1.5 text-muted-foreground">
-                        unless <Conditions match={except} />
-                      </span>
+                      <Sub key={index}>unless {describeMatch(except)}</Sub>
                     ))}
-                    {rule.when ? <span className="mt-1 block text-muted-foreground">when it is {rule.when}</span> : null}
+                    {rule.when ? <Sub className="whitespace-normal">when it is {rule.when}</Sub> : null}
                     {multipleAccounts ? <Sub>{rule.accountId}</Sub> : null}
+                    <OnPhone>
+                      <span className="font-medium text-foreground">{rule.labelName ?? 'A removed label'}</span>
+                      {then}
+                    </OnPhone>
                   </Td>
-                  <Td className="font-medium whitespace-nowrap">
-                    {rule.labelName ?? <span className="font-normal text-destructive">A label that was removed</span>}
-                    {rule.tier === 'usually' || rule.when ? <Sub>{rule.when ? 'sift reads each one' : 'usually; sift reads each one'}</Sub> : null}
+                  <Td phone="hide" className="whitespace-nowrap">
+                    {rule.labelName ? <span className="font-medium">{rule.labelName}</span> : <span className="text-destructive">A removed label</span>}
+                    {rule.tier === 'usually' || rule.when ? <Sub>sift reads each one</Sub> : null}
                   </Td>
-                  <Td className="whitespace-nowrap">
-                    {rule.disposition ? <DispositionBadge would disposition={rule.disposition} /> : <span className="text-muted-foreground">Nothing</span>}
-                    {rule.override ? <Sub>exception to the label</Sub> : null}
-                    {extras(rule) ? <Sub>and {extras(rule)}</Sub> : null}
+                  <Td phone="hide" className="whitespace-nowrap">
+                    {then}
+                    {rule.override ? <Sub>instead of the label’s</Sub> : null}
                   </Td>
-                  <Td quiet className="whitespace-nowrap">
+                  <Td phone="hide" quiet className="whitespace-nowrap">
                     {SOURCES.find(([key]) => key === rule.source)?.[1] ?? rule.source}
                   </Td>
-                  <Td num>{count(rule.hits)}</Td>
-                  <Td quiet className="whitespace-nowrap">
-                    {rule.lastHitAt ? ago(rule.lastHitAt) : 'Never'}
+                  <Td phone="hide" num quiet={rule.hits === 0}>
+                    {rule.hits === 0 ? 'Never' : count(rule.hits)}
+                    {rule.lastHitAt ? <Sub>{ago(rule.lastHitAt)}</Sub> : null}
                   </Td>
-                  <Td className="py-1 text-right">
-                    <Button variant="quiet" disabled={remove.busy} onClick={() => remove.run(() => api.removeRule(rule.id), reload)}>
+                  <RowActions phone="keep">
+                    <ConfirmButton
+                      question="Remove this rule?"
+                      disabled={remove.busy}
+                      onConfirm={() =>
+                        remove.run(
+                          () => api.removeRule(rule.id),
+                          () => {
+                            toast(`Removed the rule for mail ${describeMatch(rule.match)}.`);
+                            reload();
+                          },
+                        )
+                      }
+                    >
                       Remove
-                    </Button>
-                  </Td>
+                    </ConfirmButton>
+                  </RowActions>
                 </Tr>
-              ))}
-            </tbody>
-          </Table>
-        )}
-      </div>
+              );
+            })}
+          </tbody>
+        </Table>
+      )}
       {adding && accountId ? <AddRuleDialog accountId={accountId} labels={labels} onClose={() => setAdding(false)} onAdded={reload} /> : null}
     </ListView>
   );

@@ -1,45 +1,81 @@
 import type { ReactNode } from 'react';
 import { type SenderProfile, type Standing, api, useLoaded } from '@/lib/api.ts';
-import { count, shortDate } from '@/lib/format.ts';
-import { HoverCard, Stamp } from '@/system';
+import { STANDINGS, describeMatch, outcomeName, plural, shortDate } from '@/lib/format.ts';
+import { Fact, Facts, HoverCard, Stamp, TextLink } from '@/system';
 
 export const senderHref = (accountId: string, address: string) => `/sender/${encodeURIComponent(accountId)}/${encodeURIComponent(address)}`;
 export const domainHref = (accountId: string, domain: string) => `/domain/${encodeURIComponent(accountId)}/${encodeURIComponent(domain)}`;
 
-const NAMES: Record<Standing, string> = { trusted: 'Trusted', known: 'Known', new: 'New', unwanted: 'Unwanted', blocked: 'Blocked' };
-
-/** Where a sender stands. Only what the owner decided is inked; the rest is quiet. */
+/** Where a sender stands, in a word. */
 export function StandingStamp({ standing }: { standing: Standing }) {
-  return <Stamp tone={standing === 'trusted' || standing === 'blocked' ? 'ink' : standing === 'unwanted' ? 'tint' : 'outline'}>{NAMES[standing]}</Stamp>;
+  return <Stamp>{STANDINGS[standing]}</Stamp>;
 }
 
-/** What is known about a sender or a domain, in a few lines. */
-export function StandingLines({ profile }: { profile: SenderProfile }) {
-  const top = profile.labels[0];
+/** What sift's rules say about a sender, one per line. */
+function Rules({ rules }: { rules: SenderProfile['rules'] }) {
   return (
-    <ul className="flex flex-col gap-1 text-sm">
-      <li className="flex flex-wrap items-center gap-2">
-        <StandingStamp standing={profile.standing} />
-        <span className="text-muted-foreground">{profile.why}</span>
-      </li>
-      <li>
-        {profile.messages === 0
-          ? 'No mail recorded.'
-          : `${count(profile.messages)} ${profile.messages === 1 ? 'message' : 'messages'}${profile.firstSeenAt ? ` since ${shortDate(profile.firstSeenAt)}` : ''}${
-              profile.senders > 1 ? `, from ${count(profile.senders)} addresses` : ''
-            }.`}
-      </li>
-      {top ? (
-        <li className="text-muted-foreground">
-          {profile.labels.length === 1
-            ? `All ${top.name}.`
-            : `Mostly ${top.name}; also ${profile.labels
-                .slice(1, 3)
-                .map((l) => l.name)
-                .join(', ')}.`}
+    <ul className="flex flex-col gap-1">
+      {rules.map((rule) => (
+        <li key={rule.id}>
+          Mail {describeMatch(rule.match)} is {rule.tier === 'usually' && !rule.when ? 'usually ' : ''}
+          <span className="font-medium">{rule.labelName ?? 'a removed label'}</span>
+          {rule.when ? `, when it is ${rule.when}` : ''}
+          {rule.disposition ? ` (${outcomeName(rule.disposition)})` : ''}
         </li>
-      ) : null}
+      ))}
     </ul>
+  );
+}
+
+/**
+ * What sift knows about a sender or a domain, as facts: where they stand and why, how much they send and
+ * what it is, whether the owner writes to them, and the rules about them. `brief` leaves out the rules
+ * and the domain, for a preview.
+ */
+export function SenderFacts({ accountId, profile, brief }: { accountId: string; profile: SenderProfile; brief?: boolean }) {
+  const [top, ...others] = profile.labels;
+  return (
+    <Facts>
+      <Fact term="Standing">
+        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+          <StandingStamp standing={profile.standing} />
+          <span className="text-muted-foreground">{profile.why}</span>
+        </span>
+      </Fact>
+      <Fact term="Mail">
+        {profile.messages === 0
+          ? 'None recorded'
+          : `${plural(profile.messages, 'message')}${profile.firstSeenAt ? ` since ${shortDate(profile.firstSeenAt)}` : ''}${
+              profile.senders > 1 ? `, from ${plural(profile.senders, 'address', 'addresses')}` : ''
+            }`}
+      </Fact>
+      {top ? (
+        <Fact term="Mostly">
+          {top.name}
+          {others.length > 0 ? (
+            <span className="text-muted-foreground">
+              ; also{' '}
+              {others
+                .slice(0, 2)
+                .map((l) => l.name)
+                .join(', ')}
+            </span>
+          ) : null}
+        </Fact>
+      ) : null}
+      {profile.userHasWritten === null ? null : <Fact term="You wrote">{profile.userHasWritten ? 'Yes, you have written to them' : 'Never'}</Fact>}
+      {!brief && profile.domain ? (
+        <Fact term="Domain">
+          <TextLink href={domainHref(accountId, profile.domain.name)}>{profile.domain.name}</TextLink>
+          <span className="text-muted-foreground"> · {STANDINGS[profile.domain.standing]}</span>
+        </Fact>
+      ) : null}
+      {!brief && profile.rules.length > 0 ? (
+        <Fact term={profile.rules.length === 1 ? 'Rule' : 'Rules'}>
+          <Rules rules={profile.rules} />
+        </Fact>
+      ) : null}
+    </Facts>
   );
 }
 
@@ -53,7 +89,7 @@ function Preview({ accountId, address }: { accountId: string; address: string })
         <p className="name truncate">{data.name ?? address}</p>
         {data.name ? <p className="truncate text-muted-foreground">{address}</p> : null}
       </div>
-      <StandingLines profile={data.profile} />
+      <SenderFacts accountId={accountId} profile={data.profile} brief />
     </div>
   );
 }

@@ -1,19 +1,26 @@
 import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-/** A group of things that belong together, set apart by a frame alone: it has no fill of its own, so the page shows through. */
+/**
+ * A group of settings that belong together, set apart by a frame alone: it has no fill of its own, so
+ * the page shows through. Its heading is a `Section` above it. Not for a list (that is a `Table`).
+ */
 export function Sheet({ className, ...props }: ComponentProps<'div'>) {
   return <div className={cn('sheet flex flex-col text-sm', className)} {...props} />;
 }
 
-export function SheetHead({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
+/**
+ * One thing that can be set, as a row of a sheet: what it is, what follows from it (`note`, said before it
+ * is changed), and the control. The control wraps under the text on a narrow screen.
+ */
+export function SettingRow({ title, note, children }: { title: string; note?: ReactNode; children?: ReactNode }) {
   return (
-    <div className="flex items-start gap-4 px-4 pt-4 pb-2">
-      <div className="min-w-0 flex-1">
-        <h2 className="title">{title}</h2>
-        {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+    <div className="row flex flex-wrap items-center gap-x-6 gap-y-2.5 px-4 py-3.5">
+      <div className="min-w-0 flex-1 basis-64">
+        <p className="font-medium">{title}</p>
+        {note ? <div className="text-muted-foreground">{note}</div> : null}
       </div>
-      {action}
+      {children ? <div className="flex flex-wrap items-center gap-2">{children}</div> : null}
     </div>
   );
 }

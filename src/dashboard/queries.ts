@@ -223,9 +223,7 @@ export function listDecisions(db: DatabaseSync, filter: DecisionFilter, now: num
   const limit = Math.min(Math.max(Math.trunc(filter.limit ?? 50), 1), 200);
   const offset = Math.max(Math.trunc(filter.offset ?? 0), 0);
 
-  const { total } = db
-    .prepare(`SELECT count(*) AS total FROM (${DECISION_SELECT} WHERE ${clause})`)
-    .get(...params) as { total: number };
+  const { total } = db.prepare(`SELECT count(*) AS total FROM (${DECISION_SELECT} WHERE ${clause})`).get(...params) as { total: number };
   const rows = db
     .prepare(`${DECISION_SELECT} WHERE ${clause} ORDER BY d.id DESC LIMIT ? OFFSET ?`)
     .all(...params, limit, offset) as unknown as DecisionSqlRow[];
