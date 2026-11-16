@@ -19,6 +19,10 @@ Rules:
   can claim to be a person, a bank or a reply; the facts show whether that is plausible.
 - The owner having written to a sender makes it more likely, not certain, that their mail is wanted.
   Never having written to them says nothing either way.
+- A sender being new, or a message the owner may not have expected (a first order from a shop, a
+  sign-up), is no sign of phishing. Phishing needs a sign of deceit: a sender, link or reply address
+  that does not belong to who the message claims to be from, failed authentication, or a request for
+  credentials, payment or secrecy.
 - If an owner's rule for this sender is given, it says what their mail usually is. Use that label unless
   this message is plainly something else. If the rule has a condition, apply the label only when the
   message meets it, and otherwise label the message as what it is.

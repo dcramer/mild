@@ -60,6 +60,19 @@ describe('model stage', () => {
     expect(await stage({ label: 'transactional', reason: 'r' }, evidence({ userHasWritten: true })).decide(facts())).toMatchObject({ disposition: 'keep' });
   });
 
+  it('marks spam on its word only when very sure, and otherwise asks', async () => {
+    const unsure = await stage({ label: 'phishing', reason: 'an unexpected order confirmation', confidence: 0.82 }).decide(facts());
+    expect(unsure).toMatchObject({ disposition: 'review', labelId: 'phishing', reason: expect.stringContaining('not sure enough to mark it spam') });
+    expect(unsure).not.toHaveProperty('block');
+    expect(await stage({ label: 'junk', reason: 'r' }).decide(facts())).toMatchObject({ disposition: 'review' });
+    expect(await stage({ label: 'phishing', reason: 'a fake sign-in page', confidence: 0.95 }).decide(facts())).toMatchObject({
+      disposition: 'spam',
+      block: true,
+    });
+    // Hiding without spam keeps its bar.
+    expect(await stage({ label: 'marketing', reason: 'r', confidence: 0.6 }).decide(facts())).toMatchObject({ disposition: 'archive' });
+  });
+
   it('never hides a reply in a thread the owner has written in', async () => {
     const ev = evidence();
     const inThread = { ...ev, known: { ...ev.known, earlierInThread: 2, ownerInThread: true } };

@@ -861,7 +861,7 @@ describe('blocking', () => {
     const m = message(id, 'Bank <alerts@example.net>', 'Verify your account');
     return { ...m, headers: [...m.headers, { name: 'Authentication-Results', value: `mx.google.com; dmarc=${authenticated ? 'pass' : 'fail'}` }] };
   };
-  const phishing = async () => ({ model: 'test/model', judge: async () => ({ label: 'phishing', reason: 'asks for a password' }) });
+  const phishing = async () => ({ model: 'test/model', judge: async () => ({ label: 'phishing', reason: 'asks for a password', confidence: 0.95 }) });
 
   it('marks the message spam and makes a rule for the sender, so their later mail needs no model', async () => {
     inbox = [phish('p1', true)];

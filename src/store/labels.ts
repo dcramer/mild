@@ -27,7 +27,7 @@ export const DEFAULT_LABELS: readonly Label[] = [
     id: 'transactional',
     name: 'Receipts and transactions',
     description:
-      'Receipts, invoices, orders, shipping, bookings, statements, tax, payment or renewal notices for something the owner did or owes, even from a company that also sends promotions.',
+      'Receipts, invoices, orders, shipping, bookings, statements, tax, payment or renewal notices for something the owner did or owes, even from a company that also sends promotions or one they have not had mail from before.',
     disposition: 'keep',
     gmailLabel: 'sift/receipts',
   },
@@ -84,7 +84,7 @@ export const DEFAULT_LABELS: readonly Label[] = [
     id: 'phishing',
     name: 'Phishing',
     description:
-      'An attempt to trick the owner: a fake sign-in, invoice, delivery or security notice, a request for credentials, payment or gift cards, or a sender pretending to be a person or company they are not.',
+      'An attempt to trick the owner: a fake sign-in, invoice, delivery or security notice, a request for credentials, payment or gift cards, or a sender pretending to be a person or company they are not. Being unexpected or from a new sender is not enough.',
     disposition: 'spam',
     gmailLabel: 'sift/phishing',
     block: true,

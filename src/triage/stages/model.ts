@@ -31,6 +31,9 @@ export interface Evidence {
 
 export const UNSURE = 'unsure';
 
+/** How sure the model must say it is before its label alone sends mail to spam. */
+export const SURE_FOR_SPAM = 0.9;
+
 /** What a call cost, as the provider reported it. */
 export interface Usage {
   model: string;
@@ -163,6 +166,17 @@ export function modelStage(deps: ModelStageDeps): Stage<Decision | Unfinished> {
           reason: `${unusual}${label.name}, but ${why}: ${verdict.reason}`,
         };
       }
+
+      // Spam (and a block, which some labels add) is the one outcome that is hard to notice and undo, so the
+      // model's word alone reaches it only when it is very sure.
+      if (outcome.disposition === 'spam' && (verdict.confidence ?? 0) < SURE_FOR_SPAM)
+        return {
+          ...base,
+          disposition: 'review',
+          labelId: label.id,
+          gmailLabel: label.gmailLabel,
+          reason: `${unusual}${label.name}, but not sure enough to mark it spam: ${verdict.reason}`,
+        };
 
       // Nor is a reply in a conversation the owner has taken part in, whoever sent it.
       if (hides && evidence.known.ownerInThread)
