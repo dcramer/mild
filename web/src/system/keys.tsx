@@ -102,6 +102,9 @@ export function KeyLayer({ moves = false, children }: { moves?: boolean; childre
 /** Whether the layer this is in keeps J and K for itself. */
 export const useLayerMoves = () => useContext(Layer).moves;
 
+/** Whether this is on the page itself rather than in something floating over it. */
+export const useOnPage = () => useContext(Layer).layer === 0;
+
 /**
  * Bind `key` to `run` for as long as the caller is on the page, and get back the hint to draw beside
  * the control (nothing when shortcuts are off or the screen is a touch screen). `label` says what the

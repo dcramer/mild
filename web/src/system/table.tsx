@@ -1,6 +1,6 @@
 import { type ComponentProps, type ReactNode, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { RowActive, useLayerMoves, useShortcut } from './keys.tsx';
+import { RowActive, useLayerMoves, useOnPage, useShortcut } from './keys.tsx';
 import { Control, ControlBar } from './controls.tsx';
 
 /**
@@ -17,6 +17,8 @@ export function Table({ children }: { children: ReactNode }) {
   const last = useRef(0);
   // In a panel J and K step through the panel's own list.
   const moves = !useLayerMoves();
+  // The page's controls bar is the page's: a short list in a dialog keeps its keys and shows no bar.
+  const onPage = useOnPage();
   const rows = () => [...(element.current?.querySelectorAll<HTMLElement>('tbody > tr[tabindex="0"]') ?? [])];
   const within = () => element.current;
   const step = (by: number) => {
@@ -39,7 +41,7 @@ export function Table({ children }: { children: ReactNode }) {
       <div className="overflow-x-auto">
         <table className="w-full text-left">{children}</table>
       </div>
-      {down || up ? (
+      {onPage && (down || up) ? (
         // The page's controls, held at the bottom of the screen while the table is on it.
         <ControlBar className="sticky bottom-0 z-10 mt-3 hidden border-t border-(--rule) bg-background px-(--bleed) py-1.5 md:flex">
           <Control keys={['j', 'k']} label="Move" />
