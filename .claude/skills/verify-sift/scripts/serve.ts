@@ -12,6 +12,7 @@ import { buildControls } from '../../../../src/cli/controls.ts';
 import { serveDashboard } from '../../../../src/cli/serve.ts';
 import { ui } from '../../../../src/cli/ui.ts';
 import { loadConfig } from '../../../../src/config.ts';
+import { memoryEphemeral } from '../../../../src/ephemeral/ephemeral.ts';
 import { openStore } from '../../../../src/store/store.ts';
 
 /**
@@ -42,7 +43,7 @@ if (!home || !port) throw new Error('usage: serve.ts <home> <port>');
 process.env['SIFT_HOME'] = resolve(home);
 const config = loadConfig();
 const store = await openStore(config);
-const built = await buildControls(config, store, { activity: { running: false, lastPassAt: null, problems: [], expired: [] } });
+const built = await buildControls(config, store, { ephemeral: memoryEphemeral(), running: false });
 const stop = await serveDashboard(config, store, { port: Number(port), controls: { ...built, messageHtml: async (_db, _account, id) => HTML[id] ?? null } });
 ui.info('Only the dashboard is running. `sift run` also reads and classifies mail.');
 await new Promise<void>((done) => {

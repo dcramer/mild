@@ -12,13 +12,14 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadConfig } from '../../../../src/config.ts';
+import { modelSignIns } from '../../../../src/cli/controls.ts';
 import { runEveryone } from '../../../../src/daemon/run.ts';
+import { memoryEphemeral } from '../../../../src/ephemeral/ephemeral.ts';
 import { applyFeedback, pendingSuggestions } from '../../../../src/learn/feedback.ts';
 import type { GmailApi, RawMessage } from '../../../../src/gmail/api.ts';
 import { saveApiKey } from '../../../../src/model/models.ts';
 import { writeSecret } from '../../../../src/secrets.ts';
 import { connectAccount } from '../../../../src/store/accounts.ts';
-import { credentials } from '../../../../src/store/credentials.ts';
 import { setModel } from '../../../../src/store/preferences.ts';
 import { listProposals } from '../../../../src/store/proposals.ts';
 import { openStore } from '../../../../src/store/store.ts';
@@ -130,8 +131,9 @@ const standIn = async () => ({
         : { label: 'unsure', reason: 'synthetic: cannot tell', confidence: 0.3 },
 });
 // Three passes, so the Ops alerts have used up their tries.
+const ephemeral = memoryEphemeral();
 for (let pass = 0; pass < 3; pass++) {
-  const [result] = await runEveryone(store, { model: standIn, connect: () => ({ api, mailbox }), log: () => {} });
+  const [result] = await runEveryone(store, { ephemeral, jobs: { send: () => {} }, model: standIn, connect: () => ({ api, mailbox }), log: () => {} });
   if (result?.error) throw new Error(`seed pass failed: ${result.error}`);
 }
 if (mailbox.modifyCalls > 0) throw new Error('seed pass changed the fake mailbox while sift was off');
@@ -157,7 +159,7 @@ await connectAccount(store, WORK, '1', now - 23 * HOUR, user);
 await connectAccount(store, OTHER, '1', now - 22 * HOUR);
 // A model in use, so the dashboard is not behind its connect-a-model wall. The key is made up, and this
 // instance runs no passes, so nothing ever calls Anthropic with it.
-await saveApiKey(await credentials(db, 'model', config.keys), 'anthropic', 'sk-ant-synthetic-seed');
+await saveApiKey(await modelSignIns(config, ephemeral, db), 'anthropic', 'sk-ant-synthetic-seed');
 await setModel(db, 'anthropic/claude-haiku-4-5');
 await store.close();
 
