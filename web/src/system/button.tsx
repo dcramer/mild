@@ -1,4 +1,4 @@
-import { type ComponentProps, type ReactNode, useRef } from 'react';
+import { type ComponentProps, type ReactNode, useId, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { useShortcut } from './keys.tsx';
 
@@ -39,15 +39,21 @@ interface Own {
    * shown, only on the row the reader is on.
    */
   shortcut?: string | { key: string; label: string };
+  /**
+   * Why it cannot be pressed now, shown on hover and read with the button. Given only with `disabled`. A
+   * disabled button takes no pointer, so the reason sits on what holds it.
+   */
+  why?: string;
   children: ReactNode;
 }
 
 type Props = Own & (({ href: string } & Omit<ComponentProps<'a'>, 'children'>) | ({ href?: undefined } & Omit<ComponentProps<'button'>, 'children'>));
 
 /** Something you press. Given `href` it is a link that looks the same. */
-export function Button({ variant = 'plain', size = 'md', busy = false, shortcut, className, children, ...rest }: Props) {
+export function Button({ variant = 'plain', size = 'md', busy = false, shortcut, why, className, children, ...rest }: Props) {
   const classes = cn(BASE, VARIANT[variant], SIZE[size], busy && 'pointer-events-none', className);
   const element = useRef<HTMLButtonElement & HTMLAnchorElement>(null);
+  const reason = useId();
   const key = typeof shortcut === 'string' ? shortcut : shortcut?.key;
   const hint = useShortcut(
     key,
@@ -70,17 +76,28 @@ export function Button({ variant = 'plain', size = 'md', busy = false, shortcut,
     );
   }
   const { type = 'button', disabled, ...button } = rest;
-  return (
+  const explained = disabled && why !== undefined;
+  const pressable = (
     <button
       ref={element}
       type={type}
       className={classes}
       disabled={disabled || busy}
       aria-busy={busy || undefined}
+      {...(explained ? { 'aria-describedby': reason } : {})}
       {...(key ? { 'aria-keyshortcuts': key } : {})}
       {...button}
     >
       {content}
     </button>
+  );
+  if (!explained) return pressable;
+  return (
+    <span title={why} className="inline-flex cursor-not-allowed">
+      {pressable}
+      <span id={reason} className="sr-only">
+        {why}
+      </span>
+    </span>
   );
 }

@@ -99,7 +99,7 @@ describe('one type scale', () => {
 
   test('nothing is set under 12px', () => {
     const small = [...css.matchAll(/font-size:\s*([\d.]+)px/g)].map((match) => Number(match[1])).filter((px) => px < 12);
-    expect(small, 'docs/DESIGN.md: only labels and stamps go under 15px, and nothing under 12px.').toEqual([]);
+    expect(small, 'docs/DESIGN.md: nothing under 12px.').toEqual([]);
   });
 });
 

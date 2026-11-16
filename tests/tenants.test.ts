@@ -405,8 +405,13 @@ describe('removing a mailbox and deleting an account', () => {
     expect((await call('GET', '/api/manage', BRAVO)).body).toMatchObject({ owner: true });
   });
 
-  it('deletes the person whose last mailbox is removed, and with nobody left the next sign-in owns the install', async () => {
-    expect((await call('POST', '/api/mailbox/remove', BRAVO, { address: BRAVO })).body).toEqual({ notRevoked: [], signedOut: true });
+  it("never removes a person's only mailbox on its own, and with nobody left the next sign-in owns the install", async () => {
+    const before = await rowsBy('user_id');
+    const refused = await call('POST', '/api/mailbox/remove', BRAVO, { address: BRAVO });
+    expect(refused.status).toBe(409);
+    expect(refused.text).toContain('only remaining mailbox');
+    expect(await rowsBy('user_id')).toEqual(before);
+    expect((await call('POST', '/api/account/delete', BRAVO, { address: BRAVO })).status).toBe(200);
     expect((await call('POST', '/api/account/delete', ALPHA, { address: ALPHA })).status).toBe(200);
     expect(await listUsers(store.central)).toEqual([]);
     expect(Object.values(await rowsBy('user_id')).every((counts) => Object.keys(counts).length === 0)).toBe(true);

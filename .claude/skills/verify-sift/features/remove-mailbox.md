@@ -5,7 +5,7 @@ A person removes one of their mailboxes, or deletes their whole account, from Se
 ## Sub-features
 
 - `remove-mailbox` is the trash can on a mailbox's row, then typing its address. Removing the one signed in as signs out.
-- `remove-last` is the trash can on a person's only mailbox, which is the account deletion dialog.
+- `remove-last`: on a person's only mailbox the trash can is disabled, and hovering it says `You cannot delete your only remaining mailbox.` The account is deleted from its own row.
 - `delete-account` is `Delete account…` under Your account, then typing one of their addresses.
 - `delete-handover` is the earliest person left becoming the owner when the owner deletes their account.
 

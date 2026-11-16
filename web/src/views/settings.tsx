@@ -223,32 +223,35 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
 }
 
 /**
- * A person's last mailbox is how they sign in, so removing it is deleting their account, and asks the
- * same way. Removing the one they are signed in as, with others left, ends their session.
+ * A person's only mailbox is how they sign in, so it is never removed on its own: that is deleting the
+ * account. Removing the one they are signed in as, with others left, ends their session.
  */
 function RemoveMailbox({ email, signedIn, last, reload }: { email: string; signedIn: boolean; last: boolean; reload: () => void }) {
   const [removing, setRemoving] = useState(false);
   return (
     <>
-      <Button variant="quiet" size="icon" aria-label={`Remove ${email}`} title="Remove" onClick={() => setRemoving(true)}>
+      <Button
+        variant="quiet"
+        size="icon"
+        aria-label={`Remove ${email}`}
+        disabled={last}
+        {...(last ? { why: 'You cannot delete your only remaining mailbox.' } : { title: 'Remove' })}
+        onClick={() => setRemoving(true)}
+      >
         <Trash2Icon />
       </Button>
       {removing ? (
-        last ? (
-          <DeleteAccount email={email} onClose={() => setRemoving(false)} />
-        ) : (
-          <ConfirmRemoval
-            title={`Remove ${email}`}
-            confirm={email}
-            action="Remove mailbox"
-            send={() => api.removeMailbox(email)}
-            onDone={reload}
-            onClose={() => setRemoving(false)}
-          >
-            sift stops reading it, revokes its access at Google, and deletes everything it recorded about its mail: decisions, answers, rules and labels.
-            {signedIn ? ' You are signed in as it, so you will be signed out.' : ''}
-          </ConfirmRemoval>
-        )
+        <ConfirmRemoval
+          title={`Remove ${email}`}
+          confirm={email}
+          action="Remove mailbox"
+          send={() => api.removeMailbox(email)}
+          onDone={reload}
+          onClose={() => setRemoving(false)}
+        >
+          sift stops reading it, revokes its access at Google, and deletes everything it recorded about its mail: decisions, answers, rules and labels.
+          {signedIn ? ' You are signed in as it, so you will be signed out.' : ''}
+        </ConfirmRemoval>
       ) : null}
     </>
   );

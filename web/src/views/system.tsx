@@ -261,6 +261,11 @@ export function SystemView() {
               </Button>
             </Row>
           ))}
+          <Row label="why" note="Disabled with its reason, shown on hover and read with the button.">
+            <Button variant="quiet" size="icon" aria-label="Remove" disabled why="You cannot delete your only remaining mailbox.">
+              <Trash2Icon />
+            </Button>
+          </Row>
           <Row label="confirm" note="A press that cannot be taken back asks first, in place.">
             <ConfirmButton question="Remove this rule?" onConfirm={() => toast('Removed the rule.')}>
               Remove

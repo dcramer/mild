@@ -31,10 +31,10 @@ export const writes: Write[] = [
     body: confirmed,
     reply: Removed,
     touches: (_ctx, { address }) => ({ account: address }),
-    // A person's last mailbox is how they sign in, so removing it deletes them.
+    // A person's only mailbox is how they sign in: removing it would be deleting the account, which is its own write.
     run: async (ctx, { address }) => {
       const person = someone(ctx);
-      if (person.accounts.length === 1) return await deleteAccount(ctx, person);
+      if (person.accounts.length === 1) throw new Error('You cannot delete your only remaining mailbox. Delete your account instead.');
       const notRevoked = await revoke(ctx, [address]);
       await person.removeMailbox(address);
       return { notRevoked, signedOut: address === ctx.signedInAs };
