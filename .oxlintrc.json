@@ -30,6 +30,15 @@
   },
   "overrides": [
     {
+      "files": ["src/**/*.ts"],
+      "rules": { "no-console": "error" }
+    },
+    {
+      // Everything the CLI prints goes through its ui, which handles colour, the gutter and piped output.
+      "files": ["src/cli/ui.ts"],
+      "rules": { "no-console": "off" }
+    },
+    {
       "files": ["src/triage/**/*.ts"],
       "rules": {
         "no-restricted-imports": [
