@@ -56,7 +56,7 @@ describe('migrations', () => {
 
 /** A home's single database from before there was one per person, migrated as far as `upTo`. */
 function single(path: string, upTo = Infinity): DatabaseSync {
-  const old = new DatabaseSync(path);
+  const old = new DatabaseSync(path, { defensive: false });
   for (const file of files.filter((f) => Number.parseInt(f, 10) <= upTo)) old.exec(readFileSync(new URL(file, LEGACY), 'utf8'));
   if (upTo !== Infinity) old.exec(`PRAGMA user_version = ${upTo}`);
   else {

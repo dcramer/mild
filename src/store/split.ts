@@ -112,7 +112,8 @@ function isSingle(path: string): boolean {
  */
 export async function openSingle(path: string): Promise<Database> {
   const migrations = readMigrations('legacy');
-  const file = new DatabaseSync(path);
+  // 041 edits `sqlite_schema`, which Node's SQLite refuses by default from 24.2x on.
+  const file = new DatabaseSync(path, { defensive: false });
   // Before `schema_migrations`, what had run was `PRAGMA user_version`, a highest number.
   if (file.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'`).get() === undefined) {
     const before = (file.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
