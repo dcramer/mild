@@ -17,7 +17,7 @@ Package manager is **pnpm**. Node 24 (`.nvmrc`). Node runs the `.ts` sources dir
 
 | Command | Use |
 | --- | --- |
-| `pnpm install` | First thing in a fresh checkout or worktree. |
+| `pnpm install` | First thing in a fresh checkout or worktree. Points git at `.githooks/`, whose pre-commit runs lint, knip and the format check. |
 | `pnpm check` | The gate: typecheck + lint + unused code (knip) + format check + tests. Must pass before every commit. |
 | `pnpm check:fast` | All of it but the tests. |
 | `pnpm vitest run tests/foo.test.ts` | One test file. Add `-t "name"` for one test. |

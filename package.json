@@ -8,6 +8,7 @@
     "sift": "src/cli/main.ts"
   },
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
     "sift": "node --disable-warning=ExperimentalWarning src/cli/main.ts",
     "typecheck": "tsc --noEmit && pnpm --filter sift-web typecheck",
     "lint": "oxlint",
