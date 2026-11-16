@@ -7,6 +7,7 @@ import type { Judge } from '../triage/stages/model.ts';
 import { type Account, listAccounts } from '../store/accounts.ts';
 import { keepSuggestionBodies } from './bodies.ts';
 import { captureExamples } from './examples.ts';
+import { PRUNE_PER_RUN, pruneOld } from './retention.ts';
 import { type SyncReport, syncAccount } from './sync.ts';
 import { type TriageReport, triageAccount } from './triage.ts';
 
@@ -22,6 +23,8 @@ export interface RunOptions {
   log: (line: string) => void;
   now?: () => number;
 }
+
+const DAY_MS = 86_400_000;
 
 export interface PassResult {
   email: string;
@@ -119,15 +122,29 @@ export function createWake(): Wake {
 /**
  * Run passes until `signal` aborts. `next` is asked before every pass, so a change to the settings
  * (acting or observing, the model, the interval) takes effect on the following pass without a restart.
+ * With `retentionDays`, old records are pruned on the first pass and then once a day.
  */
 export async function runLoop(
   db: DatabaseSync,
-  next: () => Promise<RunOptions & { intervalMs: number }>,
+  next: () => Promise<RunOptions & { intervalMs: number; retentionDays?: number }>,
   control: { signal: AbortSignal; wake: Wake; onPass?: (results: PassResult[]) => void },
 ): Promise<void> {
+  let prunedAt = -Infinity;
   while (!control.signal.aborted) {
     const options = await next();
     control.onPass?.(await runOnce(db, options));
+    const now = (options.now ?? Date.now)();
+    if (options.retentionDays !== undefined && now - prunedAt >= DAY_MS) {
+      try {
+        const pruned = pruneOld(db, options.retentionDays, now);
+        if (pruned > 0) options.log(`Forgot ${pruned} message${pruned === 1 ? '' : 's'} with nothing newer than ${options.retentionDays} days`);
+        // A backlog goes a piece per pass.
+        if (pruned < PRUNE_PER_RUN) prunedAt = now;
+      } catch (error) {
+        prunedAt = now;
+        options.log(`Could not prune old records, will retry tomorrow: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
     await control.wake.wait(options.intervalMs, control.signal);
   }
 }

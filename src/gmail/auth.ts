@@ -1,7 +1,8 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CodeChallengeMethod, OAuth2Client } from 'google-auth-library';
 import type { Config } from '../config.ts';
+import { readSecret, writeSecret } from '../secrets.ts';
 import { createGmailApi } from './api.ts';
 import { GMAIL_SCOPES } from './scopes.ts';
 
@@ -29,8 +30,7 @@ export function installClient(config: Config, input: string): void {
   const text = trimmed.startsWith('{') ? trimmed : readFileSync(trimmed.replace(/^~(?=\/)/, process.env['HOME'] ?? '~'), 'utf8');
   const { kind } = parseClientFile(text, trimmed.startsWith('{') ? 'What you pasted' : trimmed);
   if (kind === 'desktop') throw new Error('That is a Desktop app client. sift needs a Web application one.');
-  writeFileSync(config.googleClientPath, text, { mode: 0o600 });
-  chmodSync(config.googleClientPath, 0o600);
+  writeSecret(config.googleClientPath, text, config.keys);
 }
 
 function parseClientFile(text: string, path: string): ClientSecrets {
@@ -54,23 +54,23 @@ export function loadClientSecrets(config: Config, env: NodeJS.ProcessEnv = proce
   const clientId = env['SIFT_GOOGLE_CLIENT_ID'];
   const clientSecret = env['SIFT_GOOGLE_CLIENT_SECRET'];
   if (clientId && clientSecret) return { clientId, clientSecret, kind: 'web' };
-  if (!existsSync(config.googleClientPath)) throw new Error('No Google OAuth client is set up yet. Run `sift init`.');
-  return parseClientFile(readFileSync(config.googleClientPath, 'utf8'), config.googleClientPath);
+  const text = readSecret(config.googleClientPath, config.keys);
+  if (text === null) throw new Error('No Google OAuth client is set up yet. Run `sift init`.');
+  return parseClientFile(text, config.googleClientPath);
 }
 
 /** Tokens live in files, not the database, so the database can be copied or inspected without exposing them. */
 export function saveRefreshToken(config: Config, email: string, refreshToken: string): void {
   const path = tokenFile(config, email);
   mkdirSync(config.googleTokenDir, { recursive: true, mode: 0o700 });
-  writeFileSync(path, JSON.stringify({ refresh_token: refreshToken }), { mode: 0o600 });
-  chmodSync(path, 0o600);
+  writeSecret(path, JSON.stringify({ refresh_token: refreshToken }), config.keys);
 }
 
 /** An authenticated client for a connected account. Access tokens are refreshed automatically. */
 export function clientFor(config: Config, secrets: ClientSecrets, email: string): OAuth2Client {
-  const path = tokenFile(config, email);
-  if (!existsSync(path)) throw new Error(`sift has no access to ${email}. Sign in to the dashboard with that account.`);
-  const { refresh_token } = JSON.parse(readFileSync(path, 'utf8')) as { refresh_token?: string };
+  const stored = readSecret(tokenFile(config, email), config.keys);
+  if (stored === null) throw new Error(`sift has no access to ${email}. Sign in to the dashboard with that account.`);
+  const { refresh_token } = JSON.parse(stored) as { refresh_token?: string };
   if (!refresh_token) throw new Error(`The stored access for ${email} is unreadable. Sign in to the dashboard with that account again.`);
   const client = new OAuth2Client({ clientId: secrets.clientId, clientSecret: secrets.clientSecret });
   client.setCredentials({ refresh_token });

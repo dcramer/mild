@@ -117,10 +117,6 @@ Observe mode has run for real on the owner's inbox: sync, the model, suggestions
 
 ## Deployment and isolation
 
-- [ ] **Encrypt credentials and tokens with a key from the environment.** The Gmail refresh tokens, model credentials, Google client secret and session secret are plain files today. Encrypt them with a key the operator supplies, which means:
-  - **The key comes from the environment**, so sift needs `.env` support (read from the home directory or the working directory). This is a deliberate exception to "no setting may require an environment variable": a key stored beside what it protects protects nothing. Without a key sift should still run, unencrypted, and say so.
-  - **Rotation, thought through before building.** Probably: every encrypted value records which key encrypted it; sift accepts a current key and any number of old ones; values are re-encrypted with the current key as they are next written, plus a command to re-encrypt everything so an old key can be retired; and a wrong or missing key fails loudly at start, not as a sign-in that mysteriously stops working.
-  - What a lost key costs (signing in to Google and the model provider again) and how that is explained.
 - [ ] **Seal stored mail to a key only the user holds.** Decided 2026-11-15: message content sift keeps (`suggestion_bodies`, `examples`) is encrypted so the server cannot read it back. The cost is accepted: sift cannot re-analyse stored mail by itself.
   - **How.** The browser makes a key pair when the user sets a passphrase in the dashboard. The server keeps the public key and seals each body to it as it arrives (it has the text at that moment, from Gmail, and never again). The private key stays in the browser, and a copy wrapped with the passphrase is kept on the server so a second device can unlock with the passphrase. Reading a message decrypts in the page.
   - **What it changes.** Search over message text is not possible. Replaying examples through a model (the evals) and using them as few-shot examples need the page to be open and unlocked to hand the text over for that run, or use only what is not sealed (sender, subject, headers, label).
@@ -132,13 +128,13 @@ Observe mode has run for real on the owner's inbox: sync, the model, suggestions
   - **Setup in the browser.** No `sift init`: the Google client, the model sign-in and settings all entered in the dashboard, with the first visitor claiming the install safely.
   - **A public address.** It would no longer sit behind a tailnet, so sign-in is the only gate; review the session and write protections with that in mind, and decide on encryption at rest first.
   - **Runtime differences.** Cloudflare Workers are not Node: check what sift uses (`node:sqlite`, `node:https`, the model library) against each platform.
-- [ ] Retention: prune old message rows and decisions on a configurable schedule.
-- [ ] Register only the model providers sift supports instead of `pi-ai/providers/all`, which pulls in the AWS and Google SDKs and makes up most of the image's dependencies.
-- [ ] Keep the core image light: measure it and trim it (base image, production dependencies only).
-- [ ] Restrict the core container's egress to Google and the model providers. The unsubscribe request is the one call to an arbitrary host and needs its own path.
-- [ ] Publish the image (registry, tags, multi-arch) and document upgrade and backup of the data volume.
+- [ ] **Sentry, with tracing.** Errors and OpenTelemetry spans for a pass, each message's triage (one span per tier, the model call with tokens and cost), each mailbox change and each dashboard request. Nothing that identifies mail leaves the machine: no message content, subjects, sender names or sender addresses; only the connected account's own address identifies a span. Everything else is referred to by a keyed hash (sender, domain, message id), the same hash everywhere so traces can be joined to each other and looked up locally; decide whether to store the hashes in the database to make that lookup cheap. A scrubber on the way out as a second line of defence, the DSN in `sift.toml`, and off unless set.
+- [ ] Restrict the core container's egress to Google and the model providers. The unsubscribe request is the one call to an arbitrary host and needs a relay container of its own first; the plan is in [docs/DEPLOY.md](docs/DEPLOY.md).
+- [ ] `migrate` runs an older sift against a newer database without complaint after a downgrade; refuse when the database's version is higher than the newest migration known.
+- [ ] Retention (`[retention] days`) is only in `sift.toml`; give it a control in Settings. `pruneOld` in `src/daemon/retention.ts` lists the tables it deletes from, so a new table that references `messages` or `decisions` must be added there or the prune fails.
+- [ ] `.env` cannot set `SIFT_HOME`: the home is resolved before `.env` is read. `sift status` says nothing about plain credential files when a key is set.
+- [ ] Publish the image (registry, tags, multi-arch). It is 337 MB, most of it Node itself.
 - [ ] Optional Pub/Sub push for lower latency, keeping polling as the fallback. It needs a Google Cloud topic, so it is a lot of setup for a self-hosted tool.
-- [ ] The `questions` table predates suggestions and nothing writes to it. Remove it, or use it for things only the user can answer.
 
 Decided 2026-11-15: no shell or filesystem for triage. The model runs in-process in the core container and has no tools at all, so there is no model-written code to sandbox. A sandbox container is deferred until an operator-facing agent exists (one you talk to: "why did you archive that", "clean up my rules"). If one is built:
 

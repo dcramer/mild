@@ -1,9 +1,10 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parse } from 'smol-toml';
+import { type Keyring, loadKeyring } from './secrets.ts';
 
-/** What the user chooses, kept in `sift.toml`. Nothing here is required to be set through the environment. */
+/** What the user chooses, kept in `sift.toml`. None of it is set through the environment; only the encryption key is. */
 export interface Settings {
   /** `provider/model-id` for mail no rule or learned sender covers. Unset keeps the model tier off. */
   model?: string;
@@ -22,7 +23,12 @@ export interface Settings {
    * Unset: the first account to sign in connects itself, and after that only connected accounts can.
    */
   dashboardAllow?: string[];
+  /** Days to keep the record of a message, its decisions and changes. Unset: forever. */
+  retentionDays?: number;
 }
+
+/** Shorter, and sync's 7-day recovery search could bring back a message already forgotten and decide it twice. */
+const MIN_RETENTION_DAYS = 30;
 
 export const DEFAULT_SETTINGS: Settings = { act: false, interval: 60, dashboardPort: 8787 };
 
@@ -48,6 +54,8 @@ export interface Config {
   setupStatePath: string;
   /** The secret in the dashboard's access link. */
   dashboardKeyPath: string;
+  /** From `SIFT_KEY` and `SIFT_OLD_KEYS`: what the credentials above are encrypted with. */
+  keys: Keyring;
   settings: Settings;
 }
 
@@ -75,11 +83,25 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     deviceIdPath: join(home, 'device-id'),
     setupStatePath: join(home, 'setup.json'),
     dashboardKeyPath: join(home, 'dashboard-key'),
+    keys: loadKeyring(env),
     settings: existsSync(settingsPath) ? parseSettings(readFileSync(settingsPath, 'utf8'), settingsPath) : { ...DEFAULT_SETTINGS },
   };
 }
 
 export const isAddress = (value: string) => /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(value);
+/**
+ * Read `.env` from the home directory, then from the working directory. A variable already set is never
+ * replaced, so the real environment wins, then the home's file.
+ */
+export function loadEnvFiles(home: string, cwd: string = process.cwd()): void {
+  for (const path of new Set([join(home, '.env'), join(cwd, '.env')])) if (existsSync(path)) process.loadEnvFile(path);
+}
+
+/** Every file that holds a credential, for checking and re-encrypting them together. */
+export function secretPaths(config: Config): string[] {
+  const tokens = existsSync(config.googleTokenDir) ? readdirSync(config.googleTokenDir).filter((f) => f.endsWith('.json')) : [];
+  return [config.googleClientPath, ...tokens.map((f) => join(config.googleTokenDir, f)), config.modelAuthPath, config.dashboardKeyPath];
+}
 
 /** Parse `sift.toml`. Unknown keys and wrong types are errors, so a typo is not silently ignored. */
 export function parseSettings(text: string, path = 'sift.toml'): Settings {
@@ -118,6 +140,14 @@ export function parseSettings(text: string, path = 'sift.toml'): Settings {
           settings.dashboardAllow = list.map((address) => address.toLowerCase());
         } else throw new Error(`${path}: unknown setting dashboard.${sub}.`);
       }
+    } else if (key === 'retention') {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) throw bad('retention', 'a table');
+      for (const [sub, days] of Object.entries(value as Record<string, unknown>)) {
+        if (sub !== 'days') throw new Error(`${path}: unknown setting retention.${sub}.`);
+        if (typeof days !== 'number' || !Number.isInteger(days) || days < MIN_RETENTION_DAYS)
+          throw bad('retention.days', `a whole number of days, at least ${MIN_RETENTION_DAYS}`);
+        settings.retentionDays = days;
+      }
     } else {
       throw new Error(`${path}: unknown setting ${key}.`);
     }
@@ -144,6 +174,12 @@ ${settings.dashboardHost ? `host = ${JSON.stringify(settings.dashboardHost)}` : 
 # The only Google accounts that may sign in. Unset: the first to sign in connects itself, and after that
 # only connected accounts can.
 ${settings.dashboardAllow ? `allow = ${JSON.stringify(settings.dashboardAllow)}` : '# allow = ["you@example.com"]'}
+
+[retention]
+# Days to keep the record of a message, its decisions and changes, counted from the last thing that happened
+# to it. After that the change can no longer be undone from sift. Suggestions still waiting on you, mail you
+# answered for and what sift learned are kept regardless. Unset: keep everything.
+${settings.retentionDays ? `days = ${settings.retentionDays}` : '# days = 365'}
 `;
 }
 

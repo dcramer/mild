@@ -66,7 +66,7 @@ Everything it prints goes through `src/cli/ui.ts`, never `console.log`. The look
 
 ## Configuration
 
-No setting may require an environment variable. Settings go in `sift.toml` (`Settings` in `src/config.ts`, parsed strictly) and get a step in `sift init` if the user must choose them. Everything sift stores lives under the one home directory; add new paths to `Config`, never beside the working directory.
+No setting may require an environment variable, with one exception: the key that encrypts stored credentials (`SIFT_KEY`, `SIFT_OLD_KEYS`; [docs/SECRETS.md](docs/SECRETS.md)), since a key kept beside what it protects protects nothing. sift must still run without it. Credential files are read and written only through `src/secrets.ts`. Settings go in `sift.toml` (`Settings` in `src/config.ts`, parsed strictly) and get a step in `sift init` if the user must choose them. Everything sift stores lives under the one home directory; add new paths to `Config`, never beside the working directory.
 
 ## Record everything
 

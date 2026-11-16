@@ -38,5 +38,7 @@ Open the address it prints and sign in with Google. Signing in is what connects 
 - [docs/DASHBOARD.md](docs/DASHBOARD.md): what each screen is for, what sift leaves in Gmail, and working on the page.
 - [docs/CLI.md](docs/CLI.md): the commands, their options, and the files sift keeps.
 - [docs/DOCKER.md](docs/DOCKER.md): running it in a container.
+- [docs/DEPLOY.md](docs/DEPLOY.md): upgrading, backing up and restoring.
+- [docs/SECRETS.md](docs/SECRETS.md): encrypting stored credentials with a key you supply.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it decides, and why it is built this way.
 - [AGENTS.md](AGENTS.md): the rules for changing it. `pnpm check` is the gate.

@@ -4,6 +4,9 @@ web/dist
 data
 .git
 .env
+.env.*
 auth.json
 tests
 docs
+.claude
+.github

@@ -48,6 +48,7 @@ Decisions flow back down so the same mail is cheaper next time.
 src/
   cli/        entry point: sift init | run | status | dev
   config.ts   data directory and paths
+  secrets.ts  encrypts the credential files with a key from the environment
   store/      SQLite (node:sqlite) and numbered SQL migrations
   triage/     pure pipeline: types, header features, stages
   actions/    the only mutation path: executor, undo, decision-to-action planning, Mailbox port, filter validation
@@ -57,7 +58,7 @@ src/
   model/      the only module that talks to model providers (pi-ai): login, credentials, the classifier call
 web/          the dashboard page: React, Tailwind, its own design system on Base UI; builds to web/dist
 tests/        synthetic fixtures only
-docker/       Dockerfile and compose file
+docker/       Dockerfile and compose file; upgrade, backup and restore are in docs/DEPLOY.md
 ```
 
 Planned, not yet created: `src/learn/` (correction detection, rule promotion), `evals/` (a labelled set for measuring each tier).
@@ -67,7 +68,7 @@ Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 ## Gmail
 
 - **Scopes:** `gmail.modify` and `gmail.settings.basic` (`src/gmail/scopes.ts`). Both are restricted scopes, so each user brings their own Google Cloud project with a Web application OAuth client; sign-in is the authorisation-code flow with PKCE, started from the dashboard. Left in "Testing", Google limits sign-in to listed test users and ends it every 7 days.
-- **Tokens:** the refresh token is stored per account in `google/` in the home directory, owner-only, outside the database.
+- **Tokens:** the refresh token is stored per account in `google/` in the home directory, owner-only, outside the database, encrypted when a key is set ([SECRETS.md](SECRETS.md)).
 - **First connect:** sift records the current history id and handles mail from then on. It never sweeps the existing inbox unasked.
 - **Sync is separate from triage:** a sync pass records message metadata and advances the cursor in one transaction; triage will work from recorded messages that have no decision yet. A failed fetch leaves the cursor in place.
 - **Change detection:** poll `users.history.list` from the stored `historyId` (2 quota units per call, against 6,000 per user per minute). A 404 means the cursor expired: read the new cursor, then search the last 7 days of the inbox. Pub/Sub push is a possible opt-in; it still needs the polling fallback.
@@ -120,7 +121,7 @@ When no rule or sender record decides a message, one model call does. It is deli
 - **The prompt marks the email as untrusted** and keeps it apart from the guidelines and the header facts. The worst an injected email can do is get itself given the wrong label, which the audit log can undo.
 - **Learning:** after three consecutive model decisions give a sender the same label, and each ended the way that label says, sift writes a rule for the sender and later mail from them is decided without inference. A rule the user made for that sender is left alone. (Next: propose the rule to the user instead of saving it; see TODO.md.)
 
-Models are reached through pi-ai (`src/model/`, the only module that imports it). The model step of `sift init` signs in, including with a ChatGPT subscription, and stores the credential in `model-auth.json`. The `model` setting in `sift.toml` turns the tier on; without it, mail no rule covers is left for review. pi-durable is not used: a triage run is one call, and the message queue in SQLite already gives retry and decide-once.
+Models are reached through pi-ai (`src/model/`, the only module that imports it). Only the providers `sift init` offers are registered (OpenAI by key or ChatGPT subscription, Anthropic by key); adding one means adding it in `openModels` and to `MODEL_CHOICES`. pi-ai depends on every provider's SDK; the ones sift cannot call (AWS, Google) are removed from the install by `overrides` in `pnpm-workspace.yaml`, so a new provider may also need its SDK put back there. The model step of `sift init` signs in, including with a ChatGPT subscription, and stores the credential in `model-auth.json`. The `model` setting in `sift.toml` turns the tier on; without it, mail no rule covers is left for review. pi-durable is not used: a triage run is one call, and the message queue in SQLite already gives retry and decide-once.
 
 There is no shell and no filesystem here. A sandboxed agent with those is planned only for a possible operator-facing assistant that does open-ended analysis.
 
@@ -130,12 +131,22 @@ Four commands: `init` sets sift up, `run` sorts mail and serves the dashboard, `
 
 ## Home directory
 
-Everything sift keeps is in one directory, the home: `~/.config/sift` by default (`$XDG_CONFIG_HOME/sift`), or wherever `--home` or `SIFT_HOME` points (the Docker image uses `/data`). Keeping settings, guidance, the database and credentials together means it can be backed up or moved as a unit. No setting requires an environment variable.
+Everything sift keeps is in one directory, the home: `~/.config/sift` by default (`$XDG_CONFIG_HOME/sift`), or wherever `--home` or `SIFT_HOME` points (the Docker image uses `/data`). Keeping settings, guidance, the database and credentials together means it can be backed up or moved as a unit. No setting requires an environment variable, with one exception: the key that encrypts the credentials.
 
-- `sift.toml`: settings (`model`, `act`, `interval`, `dashboard.port`, `dashboard.host`, `dashboard.allow`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
+- `sift.toml`: settings (`model`, `act`, `interval`, `dashboard.port`, `dashboard.host`, `dashboard.allow`, `retention.days`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
 - `guidelines.md`: the user's broad guidance, read on every pass.
 - `sift.db`: everything structured or learned.
-- `google-client.json`, `google/`, `model-auth.json`, `device-id`, `dashboard-key`: credentials and the session secret, owner-only, kept out of the database.
+- `google-client.json`, `google/`, `model-auth.json`, `dashboard-key`: credentials and the session secret, owner-only, kept out of the database.
+- `device-id`: names this installation to a subscription sign-in. Not a secret.
+- `.env`: optional. Read at start, before the one in the working directory; neither replaces a variable already set.
+
+**Credentials are encrypted with a key from the environment** (`SIFT_KEY`), because a key stored beside them would protect nothing. See [SECRETS.md](SECRETS.md).
+
+- Every reader and writer of those four goes through `src/secrets.ts`, which knows ciphertext and nothing about what is inside. `src/gmail/` and `src/model/` still own their contents.
+- Each file records the id of the key that encrypted it. `SIFT_OLD_KEYS` are accepted for reading; a value is re-encrypted with the current key whenever it is written, and `sift run` re-encrypts all of them at start, and encrypts any still plain, so an old key can be retired.
+- A file whose key is missing stops `run`, `dashboard` and `status` at start, naming it. The alternative is a sign-in that stops working for no visible reason.
+- Without a key sift runs as before, plain files, and says so at start.
+- The database is not encrypted; see TODO.md.
 - `setup.json`: how far `sift init` has got, so it resumes.
 
 `sift init` (`src/cli/init.ts`) sets all of this up. A first run walks through every step, and one stopped part-way carries on with what is missing. Once the dashboard has an address and the Google client is finished, it instead lists the steps with what each is set to and redoes the one the user picks. The model and the sign-in list are optional, so leaving them unset does not bring the walk-through back.
@@ -163,7 +174,17 @@ One SQLite database, `sift.db` in the home directory (schema in `src/store/migra
 - **suggestion_bodies:** the readable text of mail still waiting on the user, so a suggestion can be judged by reading it. Held only for mail sift would move or could not place, and deleted when the message is answered or stops being a suggestion, and after 30 days regardless (`src/daemon/bodies.ts`). These two tables are the only places message content is stored.
 - **decisions:** an append-only log, each with its mode (observe or act) and outcome. Every triage outcome is recorded, including "keep" and "could not decide", with the tier that made it, the reason, the confidence, and what it cost (model, tokens, dollars, duration). A message can have several decisions; the latest is current.
 - **actions:** the audit log of every mailbox change, with labels before and after, linked to the decision it carried out.
-- **labels, rules, questions, accounts:** what mail can be, what sift knows without a model, questions waiting on the user, and each account's history cursor and last sync time.
+- **labels, rules, accounts:** what mail can be, what sift knows without a model, and each account's history cursor and last sync time.
+
+**Retention.** Everything is kept unless `retention.days` is set in `sift.toml` (30 at least, so sync's 7-day recovery search cannot bring back a message already forgotten). Then `sift run` deletes, on its first pass and once a day, each message that nothing has happened to for that long, with its decisions and actions (`src/daemon/retention.ts`). What it costs: a change older than the window can no longer be undone from sift, and the model is told less about how much a sender has sent. Kept however old:
+
+- a suggestion still waiting on the user, and a message not yet decided;
+- anything the user answered for (`feedback`, `examples`), and so the accuracy figures;
+- a decision not yet carried out, and a change never confirmed;
+- the record of an unsubscribe, which is how sift knows not to ask that sender again;
+- rules, labels and correspondents, which are not per message.
+
+The file does not shrink; SQLite reuses the freed space.
 
 OAuth tokens are kept in files beside the database, not in it. pi-durable keeps its own database alongside.
 
@@ -208,5 +229,5 @@ Gmail has no API for it, so sift makes the request a mail client would: the send
 
 - Using a ChatGPT subscription from a third-party harness is unofficial; whether OpenAI permits it is unconfirmed. An API key works as a fallback.
 - The model tier has only run against a scripted test provider.
-- Docker egress is not yet restricted to Google and the model providers.
-- How questions reach the user beyond the dashboard (a digest would need a send path, which sift does not have).
+- Docker egress is not yet restricted to Google and the model providers. [DEPLOY.md](DEPLOY.md) says what it would take; unsubscribing needs a relay of its own first.
+- How suggestions reach the user beyond the dashboard (a digest would need a send path, which sift does not have).

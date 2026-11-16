@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
 import { undo } from '../actions/executor.ts';
 import { unsubscribe } from '../actions/unsubscribe.ts';
-import { type Config, loadConfig, saveSettings } from '../config.ts';
+import { type Config, loadConfig, loadEnvFiles, resolveHome, saveSettings, secretPaths } from '../config.ts';
 import { backfill } from '../daemon/backfill.ts';
 import type { Activity, Controls, SignIn } from '../dashboard/controls.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
@@ -20,6 +20,7 @@ import { createJudge } from '../model/judge.ts';
 import { login, openModels, resolveModel } from '../model/models.ts';
 import { type Account, connectAccount, listAccounts } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
+import { readSecret, rekeySecrets, writeSecret } from '../secrets.ts';
 import { openDb } from '../store/db.ts';
 import { type SetupState, runInit } from './init.ts';
 import { signInRefusal } from './sign-in.ts';
@@ -52,8 +53,23 @@ function help(): void {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 
+/**
+ * Fails if a stored credential cannot be opened with the keys given. `rekey` also brings every one under
+ * the current key. Returns what to tell the user once the heading is up.
+ */
+function checkSecrets(config: Config, rekey: boolean): () => void {
+  const { encrypted, rotated } = rekeySecrets(secretPaths(config), config.keys, rekey);
+  return () => {
+    if (!config.keys.current) ui.warn(`Credentials are stored unencrypted. Set ${paint.cmd('SIFT_KEY')} to encrypt them.`);
+    if (!rekey) return;
+    for (const path of encrypted) ui.ok(`Encrypted ${paint.path(path)}`);
+    for (const path of rotated) ui.ok(`Re-encrypted ${paint.path(path)} with the current key`);
+  };
+}
+
 function status(): void {
   const config = loadConfig();
+  const secrets = checkSecrets(config, false);
   const db = openDb(config.dbPath);
   const accounts = listAccounts(db);
   const count = (table: string, where = '') => (db.prepare(`SELECT count(*) AS n FROM ${table} ${where}`).get() as { n: number }).n;
@@ -69,19 +85,16 @@ function status(): void {
     ['Dashboard', signInAddresses(settings.dashboardPort).join(paint.dim('  or  '))],
   ]);
   ui.blank();
-  const questions = count('questions', 'WHERE answered_at IS NULL');
   const troubled = count('actions', `WHERE status IN ('failed', 'unknown', 'pending')`);
   ui.fields([
     ['Recorded', `${plural(count('messages'), 'message')} · ${plural(count('decisions'), 'decision')} · ${plural(count('actions'), 'change')}`],
     ['Rules', plural(count('rules'), 'rule')],
-    ...(questions > 0 ? [['Waiting', paint.mark(` ${plural(questions, 'question')} for you `)] as const] : []),
     ...(troubled > 0 ? [['Check', paint.bad(`${plural(troubled, 'change')} failed or unconfirmed; see Changes in the dashboard`)] as const] : []),
   ]);
   ui.blank();
-  if (!ready) {
-    ui.warn(`Setup is not finished. Run ${paint.cmd('sift init')}.`);
-    ui.blank();
-  }
+  if (!ready) ui.warn(`Setup is not finished. Run ${paint.cmd('sift init')}.`);
+  secrets();
+  if (!ready || !config.keys.current) ui.blank();
   db.close();
 }
 
@@ -136,9 +149,10 @@ const mailboxFor = (config: Config, email: string) => createGmailMailbox(clientF
 
 /** The secret in the dashboard's access link, created the first time it is needed. */
 function sessionSecret(config: Config): string {
-  if (existsSync(config.dashboardKeyPath)) return readFileSync(config.dashboardKeyPath, 'utf8').trim();
+  const stored = readSecret(config.dashboardKeyPath, config.keys);
+  if (stored !== null) return stored.trim();
   const key = randomBytes(32).toString('base64url');
-  writeFileSync(config.dashboardKeyPath, key, { mode: 0o600 });
+  writeSecret(config.dashboardKeyPath, key, config.keys);
   return key;
 }
 
@@ -283,8 +297,10 @@ async function dashboard(args: string[]): Promise<void> {
   const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string' } } });
   const port = portOption(values.port);
   const config = loadConfig();
+  const secrets = checkSecrets(config, true);
   const db = openDb(config.dbPath);
   ui.heading('dashboard');
+  secrets();
   const controls = buildControls(config, db, { activity: { sorting: false, lastPassAt: null, problems: [] } });
   const stop = await serveDashboard(config, db, { controls, ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) });
   ui.info('Only the dashboard is running. `sift run` also sorts mail.');
@@ -328,6 +344,7 @@ async function run(args: string[]): Promise<void> {
   const intervalFlag = values.interval === undefined ? undefined : Number(values.interval);
   if (intervalFlag !== undefined && (!Number.isFinite(intervalFlag) || intervalFlag < 5)) throw new Error('--interval must be at least 5 seconds.');
   const config = loadConfig();
+  const secrets = checkSecrets(config, true);
 
   const db = openDb(config.dbPath);
   try {
@@ -363,11 +380,13 @@ async function run(args: string[]): Promise<void> {
         },
         log,
         intervalMs: (intervalFlag ?? settings.interval) * 1000,
+        ...(settings.retentionDays === undefined ? {} : { retentionDays: settings.retentionDays }),
       };
     };
 
     const first = await next();
     ui.heading(first.act ? 'acting' : 'observing', `${config.settings.model ?? 'no model'} · every ${first.intervalMs / 1000}s`);
+    secrets();
     if (!hasClientSecrets(config)) ui.warn(`No Google client yet. Run ${paint.cmd('sift init')}.`);
     else if (listAccounts(db).length === 0) ui.warn('No Gmail account yet. Open the dashboard and sign in with Google.');
     else if (!first.act) ui.info('Gmail is not changed while sift is observing. Switch it in the dashboard, under Settings.');
@@ -467,6 +486,7 @@ async function main(): Promise<void> {
     if (!home) throw new Error('--home needs a directory.');
     process.env['SIFT_HOME'] = home;
   }
+  loadEnvFiles(resolveHome());
   const [command, ...args] = argv;
   if (command === 'status') status();
   else if (command === 'init') await init();
