@@ -3,11 +3,12 @@ import { cn } from '@/lib/utils';
 
 /**
  * Rows of the same kind of thing. It has no surface of its own: on the page it sits flush with the
- * heading above it, and inside a sheet it takes the sheet's gutter. Scrolls sideways when too narrow.
+ * heading above it, and inside a sheet it takes the sheet's gutter. On the page its rows reach a little
+ * past the text on both sides, so a row's hover has room around what it holds. Scrolls sideways when too narrow.
  */
 export function Table({ children }: { children: ReactNode }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="-mx-(--bleed) overflow-x-auto">
       <table className="w-full text-left">{children}</table>
     </div>
   );
@@ -36,7 +37,11 @@ export function Th({ num, className, ...props }: ComponentProps<'th'> & { num?: 
   return (
     <th
       scope="col"
-      className={cn('slug h-9 px-3 font-medium whitespace-nowrap text-muted-foreground first:pl-(--gutter) last:pr-(--gutter)', num && 'text-right', className)}
+      className={cn(
+        'slug h-9 px-3 font-medium whitespace-nowrap text-muted-foreground first:pl-[calc(var(--gutter)+var(--bleed))] last:pr-[calc(var(--gutter)+var(--bleed))]',
+        num && 'text-right',
+        className,
+      )}
       {...props}
     />
   );
@@ -47,7 +52,7 @@ export function Td({ num, quiet, className, ...props }: ComponentProps<'td'> & {
   return (
     <td
       className={cn(
-        'px-3 py-2.5 align-top first:pl-(--gutter) last:pr-(--gutter)',
+        'px-3 py-2.5 align-top first:pl-[calc(var(--gutter)+var(--bleed))] last:pr-[calc(var(--gutter)+var(--bleed))]',
         num && 'text-right tabular-nums',
         quiet && 'text-muted-foreground',
         className,

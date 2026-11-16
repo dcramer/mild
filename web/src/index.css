@@ -94,6 +94,9 @@
 
   /* How far a table, an empty state or a loading state stands in from its container: nothing on the page, a sheet's padding inside one. */
   --gutter: 0px;
+  /* How far a row's hover reaches past its text when the table sits straight on the page, so the text is
+     never flush against the edge of the highlight. Inside a sheet or panel the gutter already does this. */
+  --bleed: 0.75rem;
 
   /* One height for everything pressed or typed into in a row or a toolbar, so they line up. */
   --control: 2rem;
@@ -125,6 +128,7 @@
   /* A sheet: square, framed in faint ink, with the edge of the sheet beneath showing. */
   .sheet {
     --gutter: 1rem;
+    --bleed: 0px;
     border: 1px solid var(--frame);
     border-radius: 2px;
     box-shadow: 3px 3px 0 0 var(--edge);

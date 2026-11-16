@@ -37,7 +37,7 @@ export function Panel({
     <Base.Root open={open} onOpenChange={(next) => !next && onClose()}>
       <Base.Portal>
         <Base.Backdrop className="fixed inset-0 z-40 bg-background/60 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none" />
-        <Base.Popup className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-(--frame) bg-card text-sm outline-none transition-transform duration-150 ease-out [--gutter:1rem] data-ending-style:translate-x-full data-starting-style:translate-x-full motion-reduce:transition-none md:w-[min(75vw,80rem)] md:border-l">
+        <Base.Popup className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-(--frame) bg-card text-sm outline-none transition-transform duration-150 ease-out [--gutter:1rem] [--bleed:0px] data-ending-style:translate-x-full data-starting-style:translate-x-full motion-reduce:transition-none md:w-[min(75vw,80rem)] md:border-l">
           <header className="flex items-start gap-3 px-5 pt-4 pb-4 md:px-7">
             <div className="min-w-0 flex-1 pt-1">
               <Base.Title className="title break-words">{title}</Base.Title>
