@@ -62,7 +62,7 @@ function Connect({ state, lost, reload, onConnected }: { state: ManageState; los
       <p className="statement">{was ? 'No model connected.' : 'Connect a model.'}</p>
       <p className="text-muted-foreground">
         {was
-          ? `${was} is signed out, so nothing new is sorted or suggested. Rules still sort what they cover.`
+          ? `${was} is signed out, so nothing new is classified or suggested. Rules still label what they cover.`
           : 'It reads the mail no rule covers and says which of your labels it is. Nothing in Gmail changes until you let it.'}
       </p>
       <ProviderList choices={state.model.choices} inUse={null} onChoose={setPicked} />

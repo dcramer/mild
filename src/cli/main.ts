@@ -11,17 +11,17 @@ import { status } from './commands/status.ts';
 /** sift is set up and started from here; looking at and steering it happens in the dashboard. */
 const MAIN_COMMANDS: readonly (readonly [string, string])[] = [
   ['init', 'Set sift up, or finish setting it up'],
-  ['run', 'Sort your mail continuously, and serve the dashboard'],
+  ['run', 'Read and classify your mail continuously, and serve the dashboard'],
   ['status', 'What is set up and how much sift has recorded'],
 ];
 
 const OTHER_COMMANDS: readonly (readonly [string, string])[] = [
-  ['dashboard', 'serve the dashboard without sorting mail'],
+  ['dashboard', 'serve the dashboard without reading mail'],
   ['dev', 'for working on sift: run, restarting and reloading as the code changes'],
 ];
 
 function help(): void {
-  ui.heading('sorts your Gmail inbox for you');
+  ui.heading('helps you manage your Gmail inbox');
   const width = Math.max(...[...MAIN_COMMANDS, ...OTHER_COMMANDS].map(([name]) => name.length));
   for (const [name, what] of MAIN_COMMANDS) ui.plain(`${paint.cmd(`sift ${name.padEnd(width)}`)}  ${what}`);
   ui.blank();

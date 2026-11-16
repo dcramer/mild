@@ -90,7 +90,7 @@ beforeEach(async () => {
     startEval: async (_db, { accountId }) => (calls.push(`eval ${accountId}`), 1),
     checkNow: () => void calls.push('check'),
     activity: () => ({
-      sorting: true,
+      running: true,
       lastPassAt: 5,
       problems: [`${ALPHA}: pass failed alpha-home-secret`, `${BRAVO}: pass failed bravo-secret`],
       expired: [ALPHA_WORK, BRAVO],

@@ -51,7 +51,7 @@ const controls: Controls = {
     await raw(target).run(`UPDATE rules SET filter_id = ?, filter_state = ? WHERE id = ?`, on ? 'f1' : null, on ? 'active' : null, ruleId);
   },
   checkNow: () => void calls.push('check'),
-  activity: () => ({ sorting: true, lastPassAt: 5, problems: [], expired: [ACCOUNT] }),
+  activity: () => ({ running: true, lastPassAt: 5, problems: [], expired: [ACCOUNT] }),
 };
 
 beforeEach(async () => {
@@ -70,7 +70,7 @@ describe('managing sift from the dashboard', () => {
     expect(body).toMatchObject({
       act: false,
       model: { chosen: null, signedIn: ['openai-codex'], pending: null },
-      activity: { sorting: true, expired: [ACCOUNT] },
+      activity: { running: true, expired: [ACCOUNT] },
       accounts: [{ id: ACCOUNT }],
     });
     expect((body['labels'] as Record<string, { id: string; gmailLabel: string; rules: number }[]>)[ACCOUNT]).toContainEqual(
@@ -350,7 +350,7 @@ describe('managing sift from the dashboard', () => {
 
     const observing = await call('POST', '/api/rules/filter', { id, on: true });
     expect(observing.status).toBe(409);
-    expect(observing.body['error']).toMatch(/only observing/);
+    expect(observing.body['error']).toMatch(/sift is off/);
     expect(calls).toEqual([]);
 
     await setAct(db, true);
@@ -369,7 +369,7 @@ describe('managing sift from the dashboard', () => {
   it('can only look, not manage, when no controls are given', async () => {
     const { call } = await start({ withControls: false });
     expect((await call('POST', '/api/undo', { id: 1 })).status).toBe(409);
-    expect((await call('GET', '/api/manage')).body).toMatchObject({ activity: { sorting: false } });
+    expect((await call('GET', '/api/manage')).body).toMatchObject({ activity: { running: false } });
   });
 });
 

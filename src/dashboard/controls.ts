@@ -42,7 +42,7 @@ export interface Controls {
 
 export interface Activity {
   /** False when only the dashboard is running, with nothing sorting mail. */
-  sorting: boolean;
+  running: boolean;
   lastPassAt: number | null;
   /** What went wrong on the last pass, per account. Empty when it went well. */
   problems: string[];

@@ -14,9 +14,9 @@ export async function dashboard(args: string[]): Promise<void> {
   const secrets = await checkSecrets(config, store, true);
   ui.heading('dashboard');
   secrets();
-  const controls = await buildControls(config, store, { activity: { sorting: false, lastPassAt: null, problems: [], expired: [] } });
+  const controls = await buildControls(config, store, { activity: { running: false, lastPassAt: null, problems: [], expired: [] } });
   const stop = await serveDashboard(config, store, { controls, ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) });
-  ui.info('Only the dashboard is running. `sift run` also sorts mail.');
+  ui.info('Only the dashboard is running. `sift run` also reads and classifies mail.');
   ui.blank();
   await new Promise<void>((resolve) => {
     process.once('SIGINT', resolve);

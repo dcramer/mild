@@ -35,13 +35,13 @@ const DAYS = [
 ] as const;
 
 /** Whether sift acts on the reader's own mail: what they come to Settings for first. */
-function Sorting({ state, reload }: { state: ManageState; reload: () => void }) {
+function Active({ state, reload }: { state: ManageState; reload: () => void }) {
   const { busy, error, run } = useAction();
   const { act, activity } = state;
   const save = (act: boolean) => run(() => api.setAct(act), reload);
 
   return (
-    <SettingsGroup title="Sorting" note="Whether sift changes your Gmail.">
+    <SettingsGroup title="Active" note="Whether sift changes your Gmail.">
       {activity.problems.length > 0 ? (
         <Note tone="failure" title="Not working">
           {activity.problems.map((problem) => (
@@ -51,7 +51,7 @@ function Sorting({ state, reload }: { state: ManageState; reload: () => void }) 
       ) : null}
       <Sheet>
         <SettingRow
-          title={act ? 'Acting' : 'Observing'}
+          title={act ? 'On' : 'Off'}
           note={
             act ? (
               <>
@@ -64,15 +64,15 @@ function Sorting({ state, reload }: { state: ManageState; reload: () => void }) 
         >
           {act ? (
             <Button busy={busy} onClick={() => save(false)}>
-              Go back to observing
+              Turn off
             </Button>
           ) : (
             <ConfirmButton variant="plain" question="Archive, label and mark spam on new mail by itself?" busy={busy} onConfirm={() => save(true)}>
-              Start acting
+              Turn on
             </ConfirmButton>
           )}
         </SettingRow>
-        {activity.sorting ? (
+        {activity.running ? (
           <SettingRow title="Check for mail" note={activity.lastPassAt ? `Last checked ${ago(activity.lastPassAt)}.` : 'Starting.'}>
             <Button disabled={busy} onClick={() => run(() => api.checkNow(), reload)}>
               Check now
@@ -85,7 +85,7 @@ function Sorting({ state, reload }: { state: ManageState; reload: () => void }) 
   );
 }
 
-/** Change the provider: choose, sign in, try a model, switch. Until the switch, the one in use goes on sorting. */
+/** Change the provider: choose, sign in, try a model, switch. Until the switch, the one in use goes on classifying. */
 function ChangeProvider({ state, reload, onClose }: { state: ManageState; reload: () => void; onClose: () => void }) {
   const { choices, chosen } = state.model;
   const inUse = chosen?.split('/')[0] ?? null;
@@ -93,7 +93,7 @@ function ChangeProvider({ state, reload, onClose }: { state: ManageState; reload
   const subtitle = `${providerName(
     choices.find((c) => c.provider === inUse),
     inUse ?? '',
-  )} keeps sorting until you switch.`;
+  )} stays in use until you switch.`;
   if (!picked)
     return (
       <Dialog open onClose={onClose} title="Change provider" subtitle={subtitle}>
@@ -129,7 +129,7 @@ function Switch({
       // The new model first, so something always sorts; the old sign-in goes once nothing uses it.
       await api.setModel(ready);
       if (old && old !== choice.provider) await api.signOutModel(old);
-      toast(`Now sorting with ${name}.`);
+      toast(`Now classifying with ${name}.`);
       reload();
       onClose();
     });
@@ -168,9 +168,9 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
   // Connecting a model is the wall under this panel.
   if (chosen === null || provider === null || !signedIn.includes(provider))
     return (
-      <SettingsGroup title="Model" note="Sorts what no rule covers.">
+      <SettingsGroup title="Model" note="Classifies what no rule covers.">
         <Sheet>
-          <SettingRow title="No model connected" note="Nothing new is sorted or suggested. Rules still sort what they cover.">
+          <SettingRow title="No model connected" note="Nothing new is classified or suggested. Rules still label what they cover.">
             <Button onClick={onConnect}>Connect a model</Button>
           </SettingRow>
         </Sheet>
@@ -184,8 +184,8 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
       title="Model"
       note={
         spent && spent.decisions > 0
-          ? `Sorts what no rule covers. ${money(spent.costUsd)} in the last 30 days, for ${plural(spent.decisions - spent.withoutInference, 'message')}.`
-          : 'Sorts what no rule covers.'
+          ? `Classifies what no rule covers. ${money(spent.costUsd)} in the last 30 days, for ${plural(spent.decisions - spent.withoutInference, 'message')}.`
+          : 'Classifies what no rule covers.'
       }
     >
       <Sheet>
@@ -244,7 +244,7 @@ function RemoveMailbox({ email, signedIn, last }: { email: string; signedIn: boo
   return (
     <ConfirmButton
       icon={<Trash2Icon />}
-      question={`Stop sorting ${email}, and delete what sift recorded about its mail?${signedIn ? ' You are signed in as it, so you will be signed out.' : ''}`}
+      question={`Remove ${email}, and delete what sift recorded about its mail?${signedIn ? ' You are signed in as it, so you will be signed out.' : ''}`}
       onConfirm={() => toast(NOT_BUILT)}
     >
       Remove
@@ -297,7 +297,7 @@ function DeleteAccount({ email, onClose }: { email: string; onClose: () => void 
     >
       <Form onSubmit={() => {}}>
         <p className="text-base">
-          Every mailbox stops being sorted, and everything sift recorded is deleted: decisions, answers, rules, labels and your model sign-in. The filters sift
+          sift stops reading every mailbox, and everything it recorded is deleted: decisions, answers, rules, labels and your model sign-in. The filters sift
           made in Gmail are removed; the changes it made to mail, and its labels on it, stay. This cannot be undone.
         </p>
         <Field label={`Type ${email} to confirm`}>
@@ -316,7 +316,7 @@ function Account({ state, signedInAs }: { state: ManageState; signedInAs: string
       <Sheet>
         <SettingRow
           title="Delete your account"
-          note={`Every mailbox stops being sorted, and everything sift recorded is deleted.${state.owner ? ' Others signed in to this sift keep theirs.' : ''}`}
+          note={`sift stops reading every mailbox, and everything it recorded is deleted.${state.owner ? ' Others signed in to this sift keep theirs.' : ''}`}
         >
           <Button onClick={() => setDeleting(true)}>Delete account…</Button>
         </SettingRow>
@@ -396,8 +396,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           <Loading rows={6} />
         ) : data ? (
           <>
-            {/* Acting or observing, the model and its sign-in are each person's own. */}
-            <Sorting state={data} reload={reload} />
+            {/* Whether sift is on, the model and its sign-in are each person's own. */}
+            <Active state={data} reload={reload} />
             <Model state={data} reload={reload} onConnect={onClose} />
             <Mailboxes state={data} signedInAs={signedInAs} />
             <Keys />

@@ -17,7 +17,7 @@ Signing in with Google is what connects a Gmail account, and only someone signed
 - **Activity:** every decision, searchable by subject or sender and filterable by where it got to (suggested, done, undone, needs a look), what sift did and which tier decided. Undo what sift changed in Gmail from the row; open it for that message's whole history, with each decision's reason and cost and each mailbox change.
 - **Labels:** what mail can be, and what sift does with each. Open one to change it; add your own.
 - **Rules:** what mail is, without asking a model. Add and remove them; see how often and how recently each matched. When the model has given a sender's mail the same label five times running, sift proposes the rule on Suggestions.
-- **Settings:** whether sift is observing or acting on your mail, the model and what it has cost, the connected accounts, and pulling in older mail to teach with. Changes apply to the running sift straight away.
+- **Settings:** whether sift is on (changes your Gmail) or off (only suggests), the model and what it has cost, the connected accounts, and pulling in older mail to teach with. Changes apply to the running sift straight away.
 
 A sender's name anywhere is a link to their page: where they stand and why, what sift knows about them, the standing you give them, and all their mail.
 

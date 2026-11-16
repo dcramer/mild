@@ -12,9 +12,9 @@ export function PrivacyView() {
     <main>
       <Document title="Privacy policy" updated={UPDATED}>
         <p>
-          sift sorts a Gmail inbox: it labels mail, and, as you tell it to, archives it, marks it as spam or unsubscribes from it. Each copy of sift is run by
-          the person or organisation that set it up (“we”), on a machine of their own. There is no sift company, and nothing you give this copy is sent to the
-          people who write sift.
+          sift helps manage a Gmail inbox: it classifies mail, and, as you tell it to, archives it, marks it as spam or unsubscribes from it. Each copy of sift
+          is run by the person or organisation that set it up (“we”), on a machine of their own. There is no sift company, and nothing you give this copy is
+          sent to the people who write sift.
         </p>
 
         <Clause title="What sift reads">
@@ -56,8 +56,8 @@ export function PrivacyView() {
 
         <Clause title="How it is used">
           <p>
-            Only to sort your inbox the way you set it up, and to show you what sift did and what it would do. It is not used for advertising, not sold, and not
-            used to train AI models beyond teaching your own copy of sift, through your examples, what your mail is.
+            Only to classify your mail the way you set it up, and to show you what sift did and what it would do. It is not used for advertising, not sold, and
+            not used to train AI models beyond teaching your own copy of sift, through your examples, what your mail is.
           </p>
           <p>
             No person reads your mail through sift but you, unless you ask us to (to look into a problem, say), it is needed to keep sift secure, or the law
@@ -129,8 +129,8 @@ export function TermsView() {
         <Clause title="What sift does">
           <p>
             sift decides what each message in your Gmail inbox is, from rules you write, from what it has learned from your answers and, when those do not
-            decide, from a language model. What happens to a label’s mail is yours to choose. Until acting is turned on, sift only suggests: nothing in Gmail
-            changes but the messages you answer for in the dashboard.
+            decide, from a language model. What happens to a label’s mail is yours to choose. Until you turn sift on, it only suggests: nothing in Gmail changes
+            but the messages you answer for in the dashboard.
           </p>
           <p>
             When it acts, it only labels, archives, marks as read or as spam, and unsubscribes, and only mail still in your inbox. It never sends, replies,
@@ -155,7 +155,7 @@ export function TermsView() {
 
         <Clause title="No warranty">
           <p>
-            sift is provided as it is, without warranties of any kind. We do not promise it will sort every message correctly, be available all the time, or
+            sift is provided as it is, without warranties of any kind. We do not promise it will classify every message correctly, be available all the time, or
             keep every record.
           </p>
         </Clause>

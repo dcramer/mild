@@ -20,7 +20,7 @@ export function SignInScreen({ session, error }: { session: Session; error: stri
 function Ready() {
   return (
     <>
-      <p className="statement">Sign in with the Gmail account you want sorted.</p>
+      <p className="statement">Sign in with the Gmail account you want sift to manage.</p>
       <p className="text-muted-foreground">Google will ask you to let sift read, label and archive that account's mail. sift cannot send, and never deletes.</p>
       <Button variant="mark" size="lg" href="/auth/login" className="mt-1 justify-between">
         Sign in with Google

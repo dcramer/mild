@@ -55,8 +55,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
       (failure: unknown) => toast('That did not work', { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) }),
     );
   const undo = (row: DecisionRow) => report(api.undo(row.actionId ?? 0), ({ message }) => message);
-  const retry = (row: DecisionRow) =>
-    report(api.retry(row.id), ({ waiting }) => (waiting ? 'It will be tried again once sift is acting.' : 'Trying again now.'));
+  const retry = (row: DecisionRow) => report(api.retry(row.id), ({ waiting }) => (waiting ? 'It will be tried again once sift is on.' : 'Trying again now.'));
 
   return (
     <ListView

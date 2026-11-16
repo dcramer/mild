@@ -554,10 +554,10 @@ export function SystemView() {
 
       <div className="grid gap-14 lg:grid-cols-2">
         <Section title="Settings in a sheet" meta="a settings page is groups: what each governs on the left, its sheet on the right">
-          <SettingsGroup title="Sorting" note="Whether sift changes Gmail, and how often it looks.">
+          <SettingsGroup title="Active" note="Whether sift changes your Gmail.">
             <Sheet>
-              <SettingRow title="Observing" note="Nothing in Gmail changes. sift suggests, and learns from your answers.">
-                <Button>Start acting</Button>
+              <SettingRow title="Off" note="Nothing in Gmail changes. sift suggests, and learns from your answers.">
+                <Button>Turn on</Button>
               </SettingRow>
               <SettingRow title="Check for mail" note="Last checked 1 min ago.">
                 <Select

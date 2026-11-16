@@ -41,8 +41,7 @@ export async function run(args: string[]): Promise<void> {
       for (const user of await listUsers(store.central)) {
         const db = await store.user(user.id);
         const { act } = await preferences(db);
-        if (acting.has(user.id) && acting.get(user.id) !== act)
-          log(`${(await listAccounts(db)).map((a) => a.email).join(', ')}: now ${act ? 'acting' : 'observing'}`);
+        if (acting.has(user.id) && acting.get(user.id) !== act) log(`${(await listAccounts(db)).map((a) => a.email).join(', ')}: now ${act ? 'on' : 'off'}`);
         acting.set(user.id, act);
       }
     };
@@ -76,11 +75,11 @@ export async function run(args: string[]): Promise<void> {
     const first = await next();
     const people = acting.size;
     const actingFor = [...acting.values()].filter(Boolean).length;
-    ui.heading(actingFor === 0 ? 'observing' : actingFor === people ? 'acting' : `acting for ${actingFor} of ${people}`);
+    ui.heading(actingFor === 0 ? 'off' : actingFor === people ? 'on' : `on for ${actingFor} of ${people}`);
     secrets();
     if (!hasClientSecrets(config)) ui.warn(`No Google client yet. Run ${paint.cmd('sift init')}.`);
     else if ((await connectedAddresses(store.central)).length === 0) ui.warn('No Gmail account yet. Open the dashboard and sign in with Google.');
-    else if (actingFor === 0) ui.info('Gmail is not changed while sift is observing. Each person switches it in the dashboard, under Settings.');
+    else if (actingFor === 0) ui.info('Gmail is not changed while sift is off. Each person turns it on in the dashboard, under Settings.');
 
     if (values.once) {
       ui.blank();
@@ -91,7 +90,7 @@ export async function run(args: string[]): Promise<void> {
 
     // One process keeps sift online: the same one that sorts mail serves the dashboard.
     const wake = createWake();
-    const activity: Activity = { sorting: true, lastPassAt: null, problems: [], expired: [] };
+    const activity: Activity = { running: true, lastPassAt: null, problems: [], expired: [] };
     const port = portOption(values.port);
     const stopDashboard = values['no-dashboard']
       ? () => {}

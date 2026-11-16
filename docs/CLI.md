@@ -7,10 +7,10 @@ From a checkout, `pnpm sift <command>` runs it from source.
 | Command | What it does |
 | --- | --- |
 | `sift init` | Set sift up. A first run walks through every step; one stopped part-way carries on from where it stopped. Once setup is finished it lists the steps with what each is set to and redoes the one you pick. |
-| `sift run` | Sort mail and serve the dashboard. The one process to keep running. |
+| `sift run` | Read and classify mail, and serve the dashboard. The one process to keep running. |
 | `sift status` | What is set up, and how much sift has recorded. |
 | `sift dev` | `run` for working on sift: restarts when server code changes, rebuilds and reloads the page when page code changes. Takes `run`'s options. |
-| `sift dashboard` | Serve the dashboard without sorting mail. Takes `--port` and `--host`. |
+| `sift dashboard` | Serve the dashboard without reading mail. Takes `--port` and `--host`. |
 
 `--home <dir>` works with every command and says where sift keeps its files. When working on sift, give it a scratch directory so your real mail is left alone.
 
@@ -23,9 +23,9 @@ From a checkout, `pnpm sift <command>` runs it from source.
 | `--once` | One pass over every account, then exit, without serving the dashboard. Exits 1 if an account failed. |
 | `--port <port>` | The dashboard's port for this run. |
 | `--host <address>` | Listen on this address instead of what `sift.toml` says. A container uses `0.0.0.0` and lets its port mapping decide who can reach it. |
-| `--no-dashboard` | Sort mail without serving the dashboard. |
+| `--no-dashboard` | Read and classify mail without serving the dashboard. |
 
-A pass runs every minute, each person's mailboxes acting or observing as that person chose under Settings in the dashboard. A change there applies from the next pass, without a restart; a change to `sift.toml` needs one.
+A pass runs every minute, each person's mailboxes changed in Gmail only if that person turned sift on under Settings in the dashboard. A change there applies from the next pass, without a restart; a change to `sift.toml` needs one.
 
 ## Models
 
@@ -37,7 +37,7 @@ Nothing needs an environment variable. Everything sift keeps is in one directory
 
 | File | What it is |
 | --- | --- |
-| `sift.toml` | Settings: the dashboard's port and address, who can sign in, and a Postgres server's address. Unknown keys are errors. Acting or observing is each person's, under Settings in the dashboard. |
+| `sift.toml` | Settings: the dashboard's port and address, who can sign in, and a Postgres server's address. Unknown keys are errors. Whether sift is on is each person's, under Settings in the dashboard. |
 | `database/` | The database (PGlite), unless `DATABASE_URL` or `database.url` names a Postgres server: who has which mailbox, and for each person their sign-ins (encrypted), model, labels, rules, the record of every message, decision and change, and the full content of mail they answered for. |
 | `database.lock` | Which process has the database open. |
 | `google-client.json`, `dashboard-key` | The Google client and the session secret. Owner-only. |

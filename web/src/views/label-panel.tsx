@@ -58,7 +58,7 @@ export function LabelFields({ draft, onChange, gmailLabel }: { draft: LabelDraft
         label="Also"
         hint={
           draft.unsubscribe
-            ? `Only while sift is acting, never from someone you have written to, and it cannot be undone from here.${
+            ? `Only while sift is on, never from someone you have written to, and it cannot be undone from here.${
                 draft.disposition === 'spam' || draft.disposition === 'block'
                   ? ' Answering a spammer’s link tells them the address is read, so sift only does it when the message proves who sent it.'
                   : ''

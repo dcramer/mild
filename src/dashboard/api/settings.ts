@@ -11,7 +11,7 @@ import { type Context, type Read, type Write, done, ok, read, text, write } from
 async function manageState({ db, controls }: Context, scope: Scope): Promise<ManageState> {
   const accounts = (await listAccounts(db)).filter((a) => sees(scope, a.id));
   const own = await preferences(db);
-  const activity = controls?.activity() ?? { sorting: false, lastPassAt: null, problems: [], expired: [] };
+  const activity = controls?.activity() ?? { running: false, lastPassAt: null, problems: [], expired: [] };
   return {
     owner: scope.owner,
     act: own.act,
@@ -127,7 +127,7 @@ export const writes: Write[] = [
     reply: done,
     touches: () => 'anyone',
     run: ({ controls }) => {
-      if (!controls) throw new Error('Nothing is sorting mail from this dashboard.');
+      if (!controls) throw new Error('Only the dashboard is running here, so there is nothing to check with.');
       controls.checkNow();
       return { ok: true as const };
     },

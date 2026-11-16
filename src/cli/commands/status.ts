@@ -39,7 +39,7 @@ export async function status(): Promise<void> {
   ui.heading('status', paint.path(config.home));
   ui.fields([
     ['Gmail', accounts.length > 0 ? accounts.join(', ') : paint.dim(hasClientSecrets(config) ? 'not connected' : 'not set up')],
-    ['Mode', acting === 0 ? 'observing only' : acting === people.length ? 'acting on decisions' : `acting for ${acting} of ${people.length} people`],
+    ['Active', acting === 0 ? 'off' : acting === people.length ? 'on' : `on for ${acting} of ${people.length} people`],
     ['Dashboard', signInAddresses(settings.dashboardPort).join(paint.dim('  or  '))],
   ]);
   ui.blank();

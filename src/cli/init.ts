@@ -227,7 +227,7 @@ async function chooseAllowed(deps: InitDeps): Promise<void> {
     if (entered.length === 0) return ui.skip('No limit');
     ui.ok(`Only ${paint.bold(entered.join(', '))}`);
     const shut = (await deps.connectedAccounts()).filter((account) => !entered.includes(account.toLowerCase()));
-    if (shut.length > 0) ui.warn(`${shut.join(', ')} ${shut.length === 1 ? 'is' : 'are'} connected but can no longer sign in. sift still sorts that mail.`);
+    if (shut.length > 0) ui.warn(`${shut.join(', ')} ${shut.length === 1 ? 'is' : 'are'} connected but can no longer sign in. sift still reads that mail.`);
     return;
   }
 }

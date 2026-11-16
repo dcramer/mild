@@ -34,7 +34,7 @@ This is about storage at rest. Plaintext passes through the server at the moment
 
 ## What it does not cover
 
-- **Mail while it is being sorted.** sift reads it from Gmail, and the model provider is sent what the model needs.
+- **Mail while it is being classified.** sift reads it from Gmail, and the model provider is sent what the model needs.
 - **A server under someone else's control.** It holds the credentials, and a Gmail token reads the whole mailbox. It also serves the page that unlocks the person's key, and could serve one that takes it.
 - **What the person writes.** Rules' conditions other than addresses, and labels, are plain.
 
@@ -43,7 +43,7 @@ This is about storage at rest. Plaintext passes through the server at the moment
 - The dashboard shows senders and subjects only once the browser has unlocked the person's key: a passkey prompt on each new device.
 - Showing the model a few of the person's earlier answers, test runs and re-judging need stored text, so they run only while the person has the page open and unlocked.
 - A person who loses their passkey and their recovery code loses what was sealed. Rules keep working: they match by hash.
-- The key pair exists before anything is stored: sign in with Google, make the passkey, then sorting starts.
+- The key pair exists before anything is stored: sign in with Google, make the passkey, then sift starts reading mail.
 - The server's own logs may name a mailbox, never a sender.
 - Nobody running sift reads a person's mail, and no tool is built that would show it (Google's Limited Use).
 - Deleting a person deletes their rows; backups keep them no longer than the stated retention.

@@ -158,7 +158,7 @@ There is no shell and no filesystem here. A sandboxed agent with those is planne
 
 ## The command line
 
-Four commands: `init` sets sift up, `run` sorts mail and serves the dashboard, `status` says what is set up, and `dev` is `run` for working on sift. `dashboard` serves the dashboard without sorting. Everything else (rules, labels, the log of changes, undo, choosing a model) is in the dashboard and has no command; `sync`, `apply`, `undo`, `log`, `rules`, `labels`, `login` and `models` were removed on 2026-11-15. Options are in [CLI.md](CLI.md).
+Four commands: `init` sets sift up, `run` reads and classifies mail and serves the dashboard, `status` says what is set up, and `dev` is `run` for working on sift. `dashboard` serves the dashboard without sorting. Everything else (rules, labels, the log of changes, undo, choosing a model) is in the dashboard and has no command; `sync`, `apply`, `undo`, `log`, `rules`, `labels`, `login` and `models` were removed on 2026-11-15. Options are in [CLI.md](CLI.md).
 
 ## Home directory
 
