@@ -64,9 +64,11 @@ interface DecisionQuery {
 /** The server answered, and refused. */
 class Refused extends Error {
   status: number;
+  explained: boolean;
   constructor(status: number, message?: string) {
     super(message ?? `The server answered ${status}.`);
     this.status = status;
+    this.explained = message !== undefined;
   }
 }
 
@@ -112,8 +114,17 @@ async function get<T>(path: string, params: Record<string, string | number>, sig
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) if (value !== '') query.set(key, String(value));
   const response = await send(`${path}?${query}`, { signal }, 'Sift cannot be reached.');
-  if (!response.ok) throw new Refused(response.status);
+  if (!response.ok) throw new Refused(response.status, await reason(response));
   return (await response.json()) as T;
+}
+
+/** What Sift said when it refused. A gateway's or a crash's page says nothing of the kind. */
+async function reason(response: Response): Promise<string | undefined> {
+  try {
+    return ((await response.json()) as { error?: string }).error;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -222,8 +233,9 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 5000,
-      // Unreachable is retried for as long as it takes; a query waits, paused, while offline. A refusal will not change by asking again.
-      retry: (failures, error) => error instanceof Unreachable || (error instanceof Refused && error.status >= 500 && failures < 3),
+      // Unreachable is retried for as long as it takes; a query waits, paused, while offline. A refusal will not change by asking
+      // again, nor will an error Sift explained (a setting missing); one only a gateway answered for might.
+      retry: (failures, error) => error instanceof Unreachable || (error instanceof Refused && error.status >= 500 && !error.explained && failures < 3),
     },
   },
 });
@@ -239,6 +251,8 @@ export function useOnline(): boolean {
 export interface Loaded<T> {
   data: T | null;
   error: string | null;
+  /** 503 is Sift saying it is not set up yet. */
+  status: number | null;
   /** Load again now. */
   reload: () => void;
   /** True only before the first result; refreshes keep showing the previous data. */
@@ -255,6 +269,7 @@ export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Prom
   return {
     data: query.data ?? null,
     error: query.error?.message ?? null,
+    status: query.error instanceof Refused ? query.error.status : null,
     loading: query.isPending,
     reload: () => void query.refetch({ cancelRefetch: false }),
   };

@@ -3,7 +3,7 @@ import { api, useLoaded, useOnline } from '@/lib/api.ts';
 import { ago } from '@/lib/format.ts';
 import { setParams, useParam, useRoute } from '@/lib/route.ts';
 import { lazyView } from '@/lib/lazy.tsx';
-import { ListView, Loading, Masthead, Note, Notice, PageHeader, Wordmark } from '@/system';
+import { Entry, ListView, Loading, Masthead, Note, Notice, PageHeader } from '@/system';
 import type { MessageRef } from '@/views/message-panel.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
 import { ModelWall } from '@/components/model-wall.tsx';
@@ -121,21 +121,36 @@ function Gate({ route }: { route: string[] }) {
   const [settings] = useParam('settings');
   const session = useLoaded('session', (signal) => api.session(signal), 300_000);
   const online = useOnline();
+  const slow = useLater(400);
   if (!session.data) {
     // Nothing is kept between visits, so opened while sift is unreachable there is only this to show.
-    return session.error || !online ? (
-      <div className="flex flex-col items-start gap-6 p-6">
-        <Wordmark />
-        {session.error ? (
+    if (session.status === 503 && session.error)
+      return (
+        <Entry>
+          <p className="statement">Sift isn't set up yet.</p>
+          <p className="text-muted-foreground">{session.error}</p>
+        </Entry>
+      );
+    if (session.error)
+      return (
+        <Entry>
           <Note tone="failure" title="Sift answered with an error">
             <p>{session.error}</p>
           </Note>
-        ) : (
-          <Note title="Offline">
-            <p>Sift cannot be reached. This page opens by itself when it can.</p>
-          </Note>
-        )}
-      </div>
+        </Entry>
+      );
+    if (!online)
+      return (
+        <Entry>
+          <p className="statement">Sift cannot be reached.</p>
+          <p className="text-muted-foreground">This page opens by itself when it can.</p>
+        </Entry>
+      );
+    // Most loads finish before this would show; a cold start on Vercel may not.
+    return slow ? (
+      <Entry>
+        <Loading rows={3} />
+      </Entry>
     ) : null;
   }
   if (session.data.required && session.data.email === null) {
@@ -157,6 +172,15 @@ function Gate({ route }: { route: string[] }) {
       ) : null}
     </>
   );
+}
+
+function useLater(ms: number): boolean {
+  const [later, setLater] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setLater(true), ms);
+    return () => clearTimeout(timer);
+  }, [ms]);
+  return later;
 }
 
 function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: string[] }) {
