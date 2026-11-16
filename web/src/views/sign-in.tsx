@@ -1,7 +1,7 @@
 import { ArrowRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Session } from '@/lib/api.ts';
-import { Button, Code, Copyable, Disclosure, Entry, Note } from '@/system';
+import { Button, Code, Copyable, Entry, Note } from '@/system';
 
 /** The only thing an unsigned-in visitor sees. Signing in with Google also connects that Gmail account to sift. */
 export function SignInScreen({ session, error }: { session: Session; error: string | null }) {
@@ -12,12 +12,12 @@ export function SignInScreen({ session, error }: { session: Session; error: stri
           <p>{error}</p>
         </Note>
       ) : null}
-      {session.canSignIn ? <Ready session={session} /> : <Blocked session={session} />}
+      {session.canSignIn ? <Ready /> : <Blocked session={session} />}
     </Entry>
   );
 }
 
-function Ready({ session }: { session: Session }) {
+function Ready() {
   return (
     <>
       <p className="statement">Sign in with the Gmail account you want sorted.</p>
@@ -26,12 +26,6 @@ function Ready({ session }: { session: Session }) {
         Sign in with Google
         <ArrowRightIcon aria-hidden />
       </Button>
-      <div className="mt-2">
-        <Disclosure summary="Google says redirect_uri_mismatch">
-          <p>Add this to the client's authorised redirect URIs, in Google Cloud:</p>
-          <Copyable value={session.redirectUri} label="redirect URI" />
-        </Disclosure>
-      </div>
     </>
   );
 }

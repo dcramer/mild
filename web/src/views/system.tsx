@@ -715,7 +715,7 @@ export function SystemView() {
       <Section title="Copyable and disclosure">
         <div className="grid gap-6 sm:grid-cols-2">
           <Copyable value="sudo tailscale serve --bg 8787" label="command" />
-          <Disclosure summary="Google says redirect_uri_mismatch">
+          <Disclosure summary="What sift saw in it">
             <p>Shown only to the reader who went looking.</p>
           </Disclosure>
         </div>
