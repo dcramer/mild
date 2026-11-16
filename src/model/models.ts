@@ -37,7 +37,7 @@ export function modelChoices(chatgpt: ChatGPTSignIn): ModelChoice[] {
 const RESELLERS = new Set(['openrouter', 'vercel-ai-gateway']);
 
 /**
- * Whether to offer a model at all. A reseller lists hundreds; sorting mail wants a small, fast one, so
+ * Whether to offer a model at all. A reseller lists hundreds; classifying mail wants a small, fast one, so
  * only the major labs' small families are offered, and not a batch variant or a moving "latest" alias.
  */
 export function offerModel(provider: string, id: string): boolean {

@@ -56,7 +56,7 @@ export function ProviderList({ choices, inUse, onChoose }: { choices: readonly C
 }
 
 /**
- * Signing in to one provider and choosing its model. Nothing about what sorts mail changes here:
+ * Signing in to one provider and choosing its model. Nothing about what classifies mail changes here:
  * `ready` is the model to switch to.
  */
 export function useProviderConnect(choice: Choice, model: ManageState['model'], reload: () => void) {

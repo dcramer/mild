@@ -92,7 +92,7 @@ export async function run(args: string[]): Promise<void> {
       return;
     }
 
-    // One process keeps sift online: the same one that sorts mail serves the dashboard.
+    // One process keeps sift online: the same one that classifies mail serves the dashboard.
     const wake = createWake();
     const activity: Activity = { running: true, lastPassAt: null, problems: [], expired: [] };
     const port = portOption(values.port);

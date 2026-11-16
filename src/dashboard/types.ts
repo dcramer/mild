@@ -650,7 +650,7 @@ export type EvalDetail = z.infer<typeof EvalDetail>;
 /** The body of POST /api/evals/run. Answers `{ id }`; the run goes on in the background. */
 export const EvalRequest = z.strictObject({
   accountId: text(),
-  /** Show the model the other stored examples, as sorting always does. Default: true. */
+  /** Show the model the other stored examples, as a pass always does. Default: true. */
   fewShot: z.boolean().optional(),
   /** How many examples, newest answers first. At most `Evals.maxLimit`. */
   limit: z.int().min(1).optional(),

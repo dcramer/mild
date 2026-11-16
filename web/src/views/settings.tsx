@@ -126,7 +126,7 @@ function Switch({
   const doSwitch = () =>
     run(async () => {
       if (!ready) return;
-      // The new model first, so something always sorts; the old sign-in goes once nothing uses it.
+      // The new model first, so something always classifies; the old sign-in goes once nothing uses it.
       await api.setModel(ready);
       if (old && old !== choice.provider) await api.signOutModel(old);
       toast(`Now classifying with ${name}.`);
@@ -156,7 +156,7 @@ function Switch({
   );
 }
 
-/** The reader's own way to a model and which one sorts their mail: each person signs in for themselves. */
+/** The reader's own way to a model and which one classifies their mail: each person signs in for themselves. */
 function Model({ state, reload, onConnect }: { state: ManageState; reload: () => void; onConnect: () => void }) {
   const { busy, error, run } = useAction();
   const { chosen, choices, signedIn } = state.model;
@@ -408,7 +408,7 @@ function OlderMail() {
   );
 }
 
-/** Kept in this browser, not in sift: it is about how this reader works, not how mail is sorted. */
+/** Kept in this browser, not in sift: it is about how this reader works, not how mail is classified. */
 function Keys() {
   const on = useShortcutsOn();
   return (

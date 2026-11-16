@@ -1,6 +1,6 @@
 # docker compose -f docker/compose.yaml up
 services:
-  # One process: sorts mail and serves the dashboard.
+  # One process: classifies mail and serves the dashboard.
   sift:
     build:
       context: ..

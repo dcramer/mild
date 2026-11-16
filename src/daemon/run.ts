@@ -29,7 +29,7 @@ export interface RunOptions {
 }
 
 const DAY_MS = 86_400_000;
-/** A minute: new mail is sorted soon after it lands, and a quiet pass costs a history read per mailbox. */
+/** A minute: new mail is classified soon after it lands, and a quiet pass costs a history read per mailbox. */
 const PASS_INTERVAL_MS = 60_000;
 
 export interface PassResult {

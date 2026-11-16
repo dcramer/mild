@@ -62,7 +62,7 @@ Real addresses, domains, subjects, message ids and policy never go in the reposi
 
 ## The command line
 
-The CLI exists to set sift up and start it: `init`, `run`, `status`, and `dev` for working on it. It does not connect Gmail accounts; the dashboard's Google sign-in does. `run` is the only process to keep online: it sorts mail and serves the dashboard. Don't add a second daemon. Everything else is managed from the dashboard: when you add something the user can change, add it there, not as a command. Looking at what sift did, and steering it, belongs in the dashboard, so think twice before adding a command.
+The CLI exists to set sift up and start it: `init`, `run`, `status`, and `dev` for working on it. It does not connect Gmail accounts; the dashboard's Google sign-in does. `run` is the only process to keep online: it classifies mail and serves the dashboard. Don't add a second daemon. Everything else is managed from the dashboard: when you add something the user can change, add it there, not as a command. Looking at what sift did, and steering it, belongs in the dashboard, so think twice before adding a command.
 
 Everything it prints goes through `src/cli/ui.ts`, never `console.log`. The look matches the dashboard: plain ink, dim secondary text, and one colour, the yellow highlighter (`paint.mark`), for the name and for what needs the reader. Red is only for failures. Symbols sit in a two-space gutter and text starts at column four. Motion is limited to a spinner while waiting on the network and finished sections folding into one line. It must still read correctly as plain text when piped (no colour, no cursor movement, numbered menus).
 
@@ -107,5 +107,5 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | Nothing unused: no export, file or dependency nothing imports, no parameter nothing reads. An `_` prefix does not excuse one; remove it from the callers too | `knip` and `no-unused-vars` (no `_` exception), both in `pnpm check` |
 | One way to do each thing: use the mechanism David named, and remove the old path when a new one replaces it | Nothing: judgment |
 | One answer about one message does not become a rule about its sender, and a weak signal (having written to someone) is not trust | Nothing: judgment |
-| sift classifies mail and helps the user sift through it; it is never described as sorting. Whether it changes Gmail is whether it is on (Settings: Active, On/Off), not "acting" or "observing" | Nothing: judgment |
+| sift classifies mail and helps the user sift through it, never "sorts" it. Whether it changes Gmail is whether it is on (Settings: Active, On/Off), not "acting" or "observing" | `tests/vocabulary.test.ts` ("sort" and "observe" in any tracked file); "acting" as a mode is judgment, since the verb is plain English elsewhere |
 | What sift does is shown as the action alone ("Archive"), never with its extras ("+ unsubscribe") | `Does` takes no extras and there is no helper that formats them |

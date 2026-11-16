@@ -41,7 +41,7 @@ Built: labels with defaults and the user's own; outcomes keep, archive, mark spa
 
 ## Beyond triage
 
-- [ ] **Manage the inbox from sift.** With message text, sender facts and actions already here, sift is most of the way to being where mail is dealt with, not only where it is sorted: read, archive, reply-later, search, bulk actions by sender or label. Decide whether that is the direction, and what the first step would be (probably an inbox view of what sift kept, with the same row and panel as Suggestions). Replying would need permission to send.
+- [ ] **Manage the inbox from sift.** With message text, sender facts and actions already here, sift is most of the way to being where mail is dealt with, not only where it is classified: read, archive, reply-later, search, bulk actions by sender or label. Decide whether that is the direction, and what the first step would be (probably an inbox view of what sift kept, with the same row and panel as Suggestions). Replying would need permission to send.
 
 ## Teaching loop
 
@@ -99,8 +99,8 @@ Built: one model call per message that names a label; the label's outcome decide
 
 ## Setup
 
-- [ ] Remove `sift dashboard` (and `Activity.sorting`, which exists only for it), or add it to the commands AGENTS.md allows.
-- [ ] `sift status` does not show the sign-in limit (`dashboard.allow`). An account left off the list is still connected and sorted, with no way to disconnect it short of removing the account.
+- [ ] Remove `sift dashboard` (and `Activity.running`, which exists only for it), or add it to the commands AGENTS.md allows.
+- [ ] `sift status` does not show the sign-in limit (`dashboard.allow`). An account left off the list is still connected and classified, with no way to disconnect it short of removing the account.
 - [ ] `init` asks about the model and the sign-in list again on every partial re-run while they are unset: it cannot tell "chose none" from "never asked".
 - [ ] Find out what publishing the Google app requires (branding fields, verification for these scopes) and make that path of `init` exact; the privacy policy and terms links are `<dashboard address>/privacy` and `/terms`. Restricted scopes also need a yearly security assessment (CASA). Check its Console links and field names against the live console; they were written from memory.
 - [ ] Run `sift init` inside Docker, where the dashboard address is the host's, not the container's.
@@ -122,7 +122,7 @@ sift has run for real, off, on the owner's inbox: sync, the model, suggestions a
 - [ ] **Hash and seal what comes from mail**, as [docs/SECURITY.md](docs/SECURITY.md) says.
   - **Keys.** One master key (`SIFT_KEY`, or the platform's key service), never stored. Per person, derived with HKDF: the HMAC key for hashes, and the key credentials are encrypted with. Nothing derived is stored.
   - **Hashes.** Every sender address and domain, lowercased, as an HMAC per person: in mail records, cached correspondents and rule conditions. Rules match by comparing hashes; finding "the rule for exactly this sender" and the sender pages look up by hash; dashboard search is by exact address or domain.
-  - **Sealing.** The page makes a key pair (WebCrypto) before anything is stored, so setup is: sign in with Google, make the passkey, then sorting starts. The private key is kept on the server only wrapped: by a passkey through the WebAuthn PRF extension, or a passphrase stretched in the page with Argon2id, and by a recovery code shown once. The server seals with the public key whenever it holds plaintext: addresses (beside their hash), names, subjects, recipients, stored headers, message text. The page unwraps the key, remembered on a device the person trusts, and decrypts every sender and subject it shows.
+  - **Sealing.** The page makes a key pair (WebCrypto) before anything is stored, so setup is: sign in with Google, make the passkey, then classifying starts. The private key is kept on the server only wrapped: by a passkey through the WebAuthn PRF extension, or a passphrase stretched in the page with Argon2id, and by a recovery code shown once. The server seals with the public key whenever it holds plaintext: addresses (beside their hash), names, subjects, recipients, stored headers, message text. The page unwraps the key, remembered on a device the person trusts, and decrypts every sender and subject it shows.
   - **Gmail filters** are written while the server has the address from the browser; replacing an outdated one reads the address back from the filter Gmail holds and checks it against the rule's hash.
   - **What needs the page open:** few-shot examples and test runs, which read stored text.
   - **Shared sender reputation**, if ever wanted, is a table of its own with an install-wide hash, written only from what people reported (blocked, marked spam), from senders that passed DMARC, counted only past several different people, and stated in the privacy policy. The per-person hashes are never joined across people.

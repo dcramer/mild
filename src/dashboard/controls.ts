@@ -56,7 +56,7 @@ export interface Controls {
 }
 
 export interface Activity {
-  /** False when only the dashboard is running, with nothing sorting mail. */
+  /** False when only the dashboard is running, with nothing classifying mail. */
   running: boolean;
   lastPassAt: number | null;
   /** What went wrong on the last pass, per account. Empty when it went well. */
