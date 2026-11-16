@@ -34,7 +34,7 @@ Each person signs in to a model and chooses one under Settings in the dashboard:
 ChatGPT is signed in to one way per install, set by `[chatgpt] sign_in` in `sift.toml` or `SIFT_CHATGPT_SIGN_IN`:
 
 - `device-code`, the default: a code entered at OpenAI. It reaches ChatGPT through Codex's backend, which OpenAI does not document for other tools.
-- `redirect`: OpenAI's Sign in with ChatGPT, on its documented API. OpenAI sends the browser back only to `127.0.0.1` on the person's own machine, so when sift is on a server they land on a page that will not load and paste its address into the dashboard. Only one person can be signing in at a time.
+- `redirect`: OpenAI's Sign in with ChatGPT, on its documented API. OpenAI sends the browser back only to `127.0.0.1` on the person's own machine, so they land on a page that will not load and paste its address into the dashboard.
 
 Changing it signs everyone out of ChatGPT.
 

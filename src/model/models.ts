@@ -162,67 +162,105 @@ export async function startChatGPTSignIn(models: Models, deviceId: string, now: 
   return { ...(await Promise.race([code, done.then(() => Promise.reject(new Error('ChatGPT finished signing in before giving a code.')))])), done };
 }
 
-/** How long a Sign in with ChatGPT waits for the person, holding port 1455 on this machine meanwhile. */
+/** Sign in with ChatGPT, as OpenAI documents it for open-source apps: no client secret, and a client registered by each sign-in. */
+const SIGN_IN = {
+  authorize: 'https://auth.openai.com/api/accounts/authorize',
+  token: 'https://auth.openai.com/api/accounts/oauth/token',
+  /** The only address OpenAI sends the browser back to. Nothing listens there: the person pastes it. */
+  redirect: 'http://127.0.0.1:1455/auth/callback',
+  resource: 'https://api.openai.com/v1',
+  scope: 'openid profile email offline_access resource.invoke chatgpt.tokens.use.direct',
+};
+/** How long a Sign in with ChatGPT waits for the address. */
 const REDIRECT_WAIT_MS = 10 * 60_000;
+/** pi-ai refreshes a token this long before it expires; a credential stored here keeps to the same. */
+const EXPIRY_MARGIN_MS = 3 * 60_000;
+
+const randomText = () => Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
 
 /** A Sign in with ChatGPT waiting on the person: where to sign in, and what takes the address they land on. */
 export interface PendingRedirect {
   url: string;
   expiresAt: number;
-  /** Give it the address the browser was sent back to. */
-  finish(address: string): void;
-  /** End it unfinished. */
-  cancel(): void;
-  /** Settles when the credential is stored, or rejects when the address was wrong, it expired or OpenAI refused. */
-  done: Promise<void>;
+  /**
+   * Finish with the address the browser was sent back to, storing the sign-in. Rejects with what to do
+   * when the address is not the one, or OpenAI refused; until it expires, opening `url` again gives a
+   * new address this sign-in takes.
+   */
+  finish(address: string): Promise<void>;
 }
 
 /**
  * Start a Sign in with ChatGPT. OpenAI sends the browser back only to 127.0.0.1:1455 on the person's own
- * machine. pi-ai listens there on this one, which finishes it where the browser runs beside sift;
- * anywhere else that page fails to load, and the person pastes its address into the dashboard.
+ * machine, and sift listens on no port for it: wherever the browser is, that page fails to load, and the
+ * person pastes its address. The sign-in is stored as pi-ai's own would be, so pi-ai refreshes it.
  */
-export async function startChatGPTRedirect(models: Models, deviceId: string, now: () => number = Date.now): Promise<PendingRedirect> {
+export async function startChatGPTRedirect(signIns: SignIns, deviceId: string, now: () => number = Date.now): Promise<PendingRedirect> {
+  const verifier = randomText();
+  const challenge = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))).toString('base64url');
+  const state = randomText();
   const expiresAt = now() + REDIRECT_WAIT_MS;
-  const cancelled = new AbortController();
-  let finish = (_: string) => {};
-  const pasted = new Promise<string>((resolve) => (finish = resolve));
-  let opened = (_: string) => {};
-  const url = new Promise<string>((resolve) => (opened = resolve));
-  const done = models
-    .login(
-      CHATGPT,
-      'oauth',
-      {
-        signal: AbortSignal.any([AbortSignal.timeout(REDIRECT_WAIT_MS), cancelled.signal]),
-        // pi-ai races this against its listener and lets go of the port only once both have ended.
-        prompt: (prompt) => {
-          if (prompt.type !== 'manual_code') return Promise.reject(new Error('ChatGPT asked for something sift cannot answer from the dashboard.'));
-          return new Promise<string>((resolve, reject) => {
-            prompt.signal?.addEventListener('abort', () => reject(new Error('Login cancelled')), { once: true });
-            void pasted.then(resolve);
-          });
-        },
-        notify: (event) => {
-          if (event.type === 'auth_url') opened(event.url);
-        },
-      },
-      { getDeviceId: () => deviceId, agentName: 'sift' },
-    )
-    .then(
-      () => undefined,
-      (error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(message === 'OAuth state mismatch' ? 'That address is from an earlier sign-in. Start again.' : message, { cause: error });
-      },
-    );
-  return {
-    url: await Promise.race([url, done.then(() => Promise.reject(new Error('ChatGPT finished signing in before giving an address.')))]),
-    expiresAt,
-    finish,
-    cancel: () => cancelled.abort(),
-    done,
+  const url = new URL(SIGN_IN.authorize);
+  url.search = new URLSearchParams({
+    client_id: 'dynamic_agent_client',
+    agent_name_hint: 'sift',
+    ext_agent_host_id: `urn:uuid:${deviceId.toLowerCase()}`,
+    response_type: 'code',
+    redirect_uri: SIGN_IN.redirect,
+    resource: SIGN_IN.resource,
+    scope: SIGN_IN.scope,
+    state,
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+    nonce: randomText(),
+  }).toString();
+
+  const finish = async (address: string) => {
+    if (now() > expiresAt) throw new Error('That sign-in expired. Start again.');
+    let back: URL;
+    try {
+      back = new URL(address);
+    } catch {
+      throw new Error("Paste the whole address from the browser's address bar.");
+    }
+    if (`${back.origin}${back.pathname}` !== SIGN_IN.redirect)
+      throw new Error(`That is not the address ChatGPT sent you to, which starts ${SIGN_IN.redirect}.`);
+    const refused = back.searchParams.get('error');
+    if (refused) throw new Error(`ChatGPT did not sign you in (${refused}).`);
+    if (back.searchParams.get('state') !== state) throw new Error('That address is from an earlier sign-in. Open ChatGPT from here again.');
+    const code = back.searchParams.get('code');
+    const clientId = back.searchParams.get('client_id');
+    if (!code || !clientId) throw new Error('That address is missing part of what ChatGPT sent. Copy all of it.');
+
+    const response = await fetch(SIGN_IN.token, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: clientId,
+        code,
+        code_verifier: verifier,
+        redirect_uri: SIGN_IN.redirect,
+        resource: SIGN_IN.resource,
+      }),
+    });
+    if (!response.ok) throw new Error(`OpenAI refused the sign-in (${response.status}). Open ChatGPT again.`);
+    const token = (await response.json()) as Record<string, unknown>;
+    const scopes = typeof token['scope'] === 'string' ? token['scope'].split(/\s+/).filter(Boolean) : [];
+    const { access_token: access, refresh_token: refresh, expires_in: expiresIn } = token;
+    if (typeof access !== 'string' || typeof refresh !== 'string' || typeof expiresIn !== 'number')
+      throw new Error('OpenAI answered the sign-in with something sift cannot use.');
+    if (!scopes.includes('chatgpt.tokens.use.direct')) throw new Error('ChatGPT did not allow sift to use your plan. Open ChatGPT again and allow it.');
+    await credentialStore(signIns).modify(CHATGPT, async () => ({
+      type: 'oauth',
+      access,
+      refresh,
+      expires: now() + expiresIn * 1000 - EXPIRY_MARGIN_MS,
+      clientId,
+      scopes,
+    }));
   };
+  return { url: url.toString(), expiresAt, finish };
 }
 
 /** Store an API key for `provider`. */

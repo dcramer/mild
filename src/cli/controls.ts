@@ -4,7 +4,7 @@ import { undo } from '../actions/executor.ts';
 import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
 import type { Config } from '../config.ts';
 import { backfill } from '../daemon/backfill.ts';
-import type { Activity, Controls, ModelSignIns, PendingChatGPT } from '../dashboard/controls.ts';
+import type { Activity, Controls, ModelSignIns } from '../dashboard/controls.ts';
 import type { Wake } from '../daemon/run.ts';
 import { createGmailApi } from '../gmail/api.ts';
 import { interruptEvals, startEval } from '../learn/evals.ts';
@@ -99,26 +99,15 @@ export async function buildControls(config: Config, store: Store, live: { wake?:
     },
     signInChatGPT: async (db) => {
       const person = await personOf(db);
-      const models = await modelsFor(config, db);
-      let started: { done: Promise<void> };
-      let shown: PendingChatGPT;
       if (choices[0]!.how === 'redirect') {
-        // The one before holds port 1455 until it ends.
-        const before = redirects.get(person);
-        if (before) {
-          before.cancel();
-          await before.done.catch(() => {});
-        }
-        const redirect = await startChatGPTRedirect(models, deviceId(config));
+        const redirect = await startChatGPTRedirect(await credentials(db, 'model', config.keys), deviceId(config));
         redirects.set(person, redirect);
-        void redirect.done.catch(() => {}).finally(() => redirects.get(person) === redirect && redirects.delete(person));
-        started = redirect;
-        shown = { url: redirect.url, expiresAt: redirect.expiresAt };
-      } else {
-        const code = await startChatGPTSignIn(models, deviceId(config));
-        started = code;
-        shown = { code: code.code, url: code.url, expiresAt: code.expiresAt };
+        const shown = { url: redirect.url, expiresAt: redirect.expiresAt };
+        pending.set(person, shown);
+        return shown;
       }
+      const started = await startChatGPTSignIn(await modelsFor(config, db), deviceId(config));
+      const shown = { code: started.code, url: started.url, expiresAt: started.expiresAt };
       pending.set(person, shown);
       started.done.then(
         () => {
@@ -132,10 +121,15 @@ export async function buildControls(config: Config, store: Store, live: { wake?:
       return shown;
     },
     finishChatGPT: async (db, address) => {
-      const redirect = redirects.get(await personOf(db));
+      const person = await personOf(db);
+      const redirect = redirects.get(person);
       if (!redirect) throw new Error('No ChatGPT sign-in is waiting. Start again.');
-      redirect.finish(address);
-      await redirect.done;
+      await redirect.finish(address);
+      if (redirects.get(person) === redirect) {
+        redirects.delete(person);
+        pending.delete(person);
+      }
+      live.wake?.now();
     },
     saveModelKey: async (db, provider, key) => {
       if (!choices.some((c) => c.provider === provider && c.how === 'key')) throw new Error('That provider does not take an API key.');
@@ -146,7 +140,7 @@ export async function buildControls(config: Config, store: Store, live: { wake?:
       await (await credentials(db, 'model', config.keys)).remove(provider);
       const person = await personOf(db);
       pending.delete(person);
-      redirects.get(person)?.cancel();
+      redirects.delete(person);
     },
     undo: async (db, actionId) => {
       const action = await getAction(db, actionId);
