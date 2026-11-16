@@ -674,7 +674,7 @@ export function SystemView() {
                 { label: 'Disabled', note: 'With the reason under it.', disabled: true, onSelect: () => {} },
               ]}
             />
-            <Notice>Offline</Notice>
+            <Notice>Sift cannot be reached</Notice>
             <Notice tone="look" href="/system" action="Reconnect">
               Google sign-in expired
             </Notice>
@@ -711,7 +711,7 @@ export function SystemView() {
               { to: 'system/activity', label: 'Activity' },
               { to: 'system/rules', label: 'Rules' },
             ]}
-            status={<Notice>Offline</Notice>}
+            status={<Notice>Sift cannot be reached</Notice>}
             aside={<span>Synced just now</span>}
             account={{ name: 'ada@example.org', items: [{ label: 'Sign out', onSelect: () => toast('Signed out') }] }}
           />

@@ -64,11 +64,9 @@ interface DecisionQuery {
 /** The server answered, and refused. */
 class Refused extends Error {
   status: number;
-  explained: boolean;
   constructor(status: number, message?: string) {
     super(message ?? `The server answered ${status}.`);
     this.status = status;
-    this.explained = message !== undefined;
   }
 }
 
@@ -88,7 +86,11 @@ function lost() {
   const ask = (wait: number) =>
     setTimeout(() => {
       fetch('/api/session', { cache: 'no-store' }).then(
-        () => {
+        (response) => {
+          if (!fromSift(response)) {
+            ask(Math.min(wait * 2, 30_000));
+            return;
+          }
           probing = false;
           onlineManager.setOnline(true);
         },
@@ -98,16 +100,29 @@ function lost() {
   ask(2000);
 }
 
+/**
+ * Sift answers every request itself, in JSON. A failure that is not (a proxy's 502 page, Vercel's
+ * crashed function) is something in front of Sift saying it is not there.
+ */
+function fromSift(response: Response): boolean {
+  return response.status < 500 || (response.headers.get('content-type') ?? '').startsWith('application/json');
+}
+
 async function send(path: string, init: RequestInit, unreachable: string): Promise<Response> {
+  let response: Response;
   try {
-    const response = await fetch(path, init);
-    onlineManager.setOnline(true);
-    return response;
+    response = await fetch(path, init);
   } catch (error) {
     if (init.signal?.aborted) throw error;
     lost();
     throw new Unreachable(unreachable, { cause: error });
   }
+  if (!fromSift(response)) {
+    lost();
+    throw new Unreachable(unreachable);
+  }
+  onlineManager.setOnline(true);
+  return response;
 }
 
 async function get<T>(path: string, params: Record<string, string | number>, signal: AbortSignal): Promise<T> {
@@ -233,9 +248,8 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 5000,
-      // Unreachable is retried for as long as it takes; a query waits, paused, while offline. A refusal will not change by asking
-      // again, nor will an error Sift explained (a setting missing); one only a gateway answered for might.
-      retry: (failures, error) => error instanceof Unreachable || (error instanceof Refused && error.status >= 500 && !error.explained && failures < 3),
+      // Unreachable is retried for as long as it takes; a query waits, paused, while offline. Anything Sift answered will not change by asking again.
+      retry: (_, error) => error instanceof Unreachable,
     },
   },
 });

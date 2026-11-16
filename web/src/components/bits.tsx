@@ -1,7 +1,7 @@
 import type { DecisionRow } from '@/lib/api.ts';
 import { type Status, STATUS_NAMES, outcomeName, status, tier } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
-import { Code, Does, Failure, Note, Sub, Swatch } from '@/system';
+import { Does, Failure, Note, Sub, Swatch } from '@/system';
 
 /** A tier's ink swatch and name. The name always accompanies the swatch. */
 export function TierLabel({ stage }: { stage: string }) {
@@ -53,13 +53,11 @@ export function StatusWord({ row, className }: { row: Pick<DecisionRow, 'carryOu
   );
 }
 
-/** The server could not be reached or refused; what was on screen stays. */
+/** Sift refused or failed; what was on screen stays. Sift not answering at all is the masthead's. */
 export function ErrorNote({ message }: { message: string }) {
   return (
     <Note tone="failure" title="Could not refresh">
-      <p>
-        {message} Is <Code>sift run</Code> still going?
-      </p>
+      <p>{message}</p>
     </Note>
   );
 }

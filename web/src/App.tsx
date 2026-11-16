@@ -217,7 +217,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
         items={SECTIONS.map((to) => ({ to, label: NAMES[to], ...(to === 'suggestions' && waiting.data?.waiting ? { count: waiting.data.waiting } : {}) }))}
         status={
           !online ? (
-            <Notice>Offline</Notice>
+            <Notice>Sift cannot be reached</Notice>
           ) : expired.length > 0 ? (
             // Signing in again is what renews sift's access; Google asks which account. Named when it is one that is not the viewer's own.
             <Notice tone="look" href="/auth/login" action="Reconnect">
