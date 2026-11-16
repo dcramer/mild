@@ -22,7 +22,7 @@ export async function init(): Promise<void> {
     try {
       return await work(store);
     } finally {
-      store.close();
+      await store.close();
     }
   };
   await runInit({

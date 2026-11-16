@@ -98,7 +98,7 @@ const api: GmailApi = {
 const [result] = await runEveryone(store, { act: false, heuristics: true, connect: () => ({ api, mailbox }), log: () => {} });
 if (result?.error) throw new Error(`seed pass failed: ${result.error}`);
 if (mailbox.modifyCalls > 0) throw new Error('seed pass changed the fake mailbox while observing');
-store.close();
+await store.close();
 
 // The same cookie `/auth/callback` sets (`signSession` in src/dashboard/server.ts), signed with this home's key.
 const secret = randomBytes(32).toString('base64url');

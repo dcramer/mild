@@ -119,6 +119,6 @@ export async function run(args: string[]): Promise<void> {
       stopDashboard();
     }
   } finally {
-    store.close();
+    await store.close();
   }
 }

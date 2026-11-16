@@ -203,7 +203,7 @@ describe('users and their mailboxes', () => {
     const migrated = await openStore({ dbPath: join(dir, 'sift.db'), usersDir: join(dir, 'users') });
     expect(await userOf(migrated.central, ALPHA)).toEqual({ id: 1, owner: true });
     expect(await listAccountsOf(await migrated.user(1))).toEqual([ALPHA, ALPHA_WORK]);
-    migrated.close();
+    await migrated.close();
   });
 });
 

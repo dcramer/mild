@@ -45,5 +45,5 @@ export async function status(): Promise<void> {
   if (!ready) ui.warn(`Setup is not finished. Run ${paint.cmd('sift init')}.`);
   secrets();
   if (!ready || !config.keys.current) ui.blank();
-  store.close();
+  await store.close();
 }

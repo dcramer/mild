@@ -23,5 +23,5 @@ export async function dashboard(args: string[]): Promise<void> {
     process.once('SIGTERM', resolve);
   });
   stop();
-  store.close();
+  await store.close();
 }

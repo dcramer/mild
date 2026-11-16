@@ -12,7 +12,7 @@ export interface Store {
   central: Sql;
   /** One person's database, migrated. Opened once and kept. */
   user(id: number): Promise<Sql>;
-  close(): void;
+  close(): Promise<void>;
 }
 
 /** Where the databases are. `:memory:` keeps them all in memory, for tests. */
@@ -30,13 +30,14 @@ export async function openStore(paths: StorePaths): Promise<Store> {
   const central = await openFile(paths === ':memory:' ? ':memory:' : paths.dbPath, readMigrations('central'));
   const users = new Map<number, Promise<Database>>();
   const open = async (id: number) => {
-    const db = await openFile(paths === ':memory:' ? ':memory:' : join(paths.usersDir, `${id}.db`), readMigrations('user'));
-    // Mailboxes are added to the central database first, so one can be missing here after a crash in between.
-    for (const { id: mailbox, created_at } of await central.all<{ id: string; created_at: number }>(
-      'SELECT id, created_at FROM accounts WHERE user_id = ?',
-      id,
-    ))
-      await db.run('INSERT OR IGNORE INTO mailboxes (id, created_at) VALUES (?, ?)', mailbox, created_at);
+    const path = paths === ':memory:' ? ':memory:' : join(paths.usersDir, `${id}.db`);
+    const db = await openFile(path, readMigrations('user'));
+    try {
+      await claim(db, central, id, path);
+    } catch (error) {
+      db.close();
+      throw error;
+    }
     return db;
   };
   return {
@@ -46,9 +47,24 @@ export async function openStore(paths: StorePaths): Promise<Store> {
       if (!db) users.set(id, (db = open(id)));
       return db;
     },
-    close: () => {
+    close: async () => {
       central.close();
-      for (const db of users.values()) void db.then((d) => d.close());
+      for (const db of await Promise.allSettled(users.values())) if (db.status === 'fulfilled') db.value.close();
     },
   };
+}
+
+/**
+ * Make sure `db` is person `id`'s, or throw: it must say so (a new one is marked theirs), and every
+ * mailbox in it must be one the central database gives them. Then add any of theirs it lacks: mailboxes
+ * are added to the central database first, so one can be missing here after a crash in between.
+ */
+async function claim(db: Sql, central: Sql, id: number, path: string): Promise<void> {
+  const marked = await db.get<{ id: number }>('SELECT id FROM person');
+  if (marked === undefined) await db.run('INSERT INTO person (one, id) VALUES (1, ?)', id);
+  else if (marked.id !== id) throw new Error(`${path} is person ${marked.id}'s database, not person ${id}'s. It was moved or restored to the wrong place.`);
+  const theirs = await central.all<{ id: string; created_at: number }>('SELECT id, created_at FROM accounts WHERE user_id = ?', id);
+  const stray = (await db.all<{ id: string }>('SELECT id FROM mailboxes')).filter((m) => !theirs.some((a) => a.id === m.id));
+  if (stray.length > 0) throw new Error(`${path} holds ${stray.map((m) => m.id).join(', ')}, which person ${id} does not have.`);
+  for (const mailbox of theirs) await db.run('INSERT OR IGNORE INTO mailboxes (id, created_at) VALUES (?, ?)', mailbox.id, mailbox.created_at);
 }

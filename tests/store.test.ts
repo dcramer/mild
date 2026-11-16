@@ -228,7 +228,7 @@ describe('splitting a database from before there was one per person', () => {
     expect(await beta.get(`SELECT d.message_id FROM actions a JOIN decisions d ON d.id = a.decision_id`)).toEqual({ message_id: 'b1' });
     expect(await beta.get(`SELECT r.account_id FROM eval_results e JOIN eval_runs r ON r.id = e.run_id`)).toEqual({ account_id: BETA });
     expect(await alpha.get(`SELECT body_text FROM examples WHERE message_id = 'a2'`)).toEqual({ body_text: 'Body a2' });
-    store.close();
+    await store.close();
 
     expect(existsSync(`${paths.dbPath}.before-split`)).toBe(true);
     expect(
@@ -239,7 +239,7 @@ describe('splitting a database from before there was one per person', () => {
     // Opening again finds it split and changes nothing.
     const again = await openStore(paths);
     expect(await (await again.user(2)).get('SELECT count(*) AS n FROM messages')).toEqual({ n: 1 });
-    again.close();
+    await again.close();
   });
 
   it('carries every column the old tables had', async () => {
@@ -259,9 +259,38 @@ describe('splitting a database from before there was one per person', () => {
     user.close();
   });
 
+  it("refuses a person's database that is someone else's, or holds a mailbox that is not theirs", async () => {
+    const paths = home();
+    const first = await openStore(paths);
+    await first.user(1);
+    await first.user(2);
+    await first.close();
+    // Swapped, as a restore to the wrong place would leave them.
+    renameSync(join(paths.usersDir, '1.db'), join(paths.usersDir, 'swap.db'));
+    renameSync(join(paths.usersDir, '2.db'), join(paths.usersDir, '1.db'));
+    renameSync(join(paths.usersDir, 'swap.db'), join(paths.usersDir, '2.db'));
+    const swapped = await openStore(paths);
+    await expect(swapped.user(1)).rejects.toThrow("is person 2's database, not person 1's");
+    await expect(swapped.user(2)).rejects.toThrow("is person 1's database, not person 2's");
+    // Refused once, refused for as long as this store is open.
+    await expect(swapped.user(1)).rejects.toThrow();
+    await swapped.close();
+
+    const again = home();
+    const before = await openStore(again);
+    await before.user(1);
+    await before.close();
+    const file = new DatabaseSync(join(again.usersDir, '1.db'));
+    file.prepare('INSERT INTO mailboxes (id, created_at) VALUES (?, 0)').run(BETA);
+    file.close();
+    const stray = await openStore(again);
+    await expect(stray.user(1)).rejects.toThrow(`holds ${BETA}, which person 1 does not have`);
+    await stray.close();
+  });
+
   it('finishes a split that stopped while moving the new databases into place', async () => {
     const paths = home();
-    (await openStore(paths)).close();
+    await (await openStore(paths)).close();
     // As if it had stopped after setting the old database aside and before moving the new ones in.
     const work = join(paths.dbPath, '..', 'split-in-progress');
     mkdirSync(work);
@@ -271,6 +300,6 @@ describe('splitting a database from before there was one per person', () => {
     const store = await openStore(paths);
     expect(await (await store.user(1)).get('SELECT count(*) AS n FROM messages')).toEqual({ n: 2 });
     expect(existsSync(work)).toBe(false);
-    store.close();
+    await store.close();
   });
 });
