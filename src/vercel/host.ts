@@ -60,15 +60,24 @@ function required(name: string): string {
 }
 
 /** Open the store as sift would anywhere else. There is no home directory to keep anything in, only `/tmp`. */
-export async function openVercelStore() {
-  process.env['SIFT_HOME'] ??= '/tmp/sift';
-  const config = loadConfig();
+export async function openVercelStore(config = loadVercelConfig()) {
   required('DATABASE_URL');
   return { config, store: await openStore(config) };
 }
 
+/** The settings, all from the environment, refused before anything is opened when one a public address needs is missing. */
+function loadVercelConfig() {
+  process.env['SIFT_HOME'] ??= '/tmp/sift';
+  const config = loadConfig();
+  // At a public address, without a list whoever signs in first would own the install.
+  if (!config.settings.dashboardAllow) throw new Error('Set SIFT_DASHBOARD_ALLOW to the Google accounts that may sign in.');
+  required('SIFT_GOOGLE_CLIENT_ID');
+  required('SIFT_GOOGLE_CLIENT_SECRET');
+  return config;
+}
+
 async function open(): Promise<Sift> {
-  const { config, store } = await openVercelStore();
+  const { config, store } = await openVercelStore(loadVercelConfig());
   const ephemeral = await openEphemeral(required('REDIS_URL'));
   const production = process.env['VERCEL_PROJECT_PRODUCTION_URL'];
   return await createSift({

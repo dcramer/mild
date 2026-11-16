@@ -54,24 +54,11 @@ Memory is right for one `sift run` process only. Two processes, or any host with
 
 ### On Vercel
 
-What the project needs: the Pro plan (Hobby crons run once a day), Neon and Redis from the marketplace, and in the environment:
-
-| Variable | |
-| --- | --- |
-| `DATABASE_URL` | Neon's pooled address. `DATABASE_MIGRATION_URL`: the owner's unpooled one, so sift runs as a role that owns nothing. |
-| `REDIS_URL` | |
-| `SIFT_KEY` | Encrypts the credentials in the database ([SECRETS.md](SECRETS.md)). |
-| `SIFT_SESSION_SECRET` | Signs sessions. Changing it signs everyone out. |
-| `CRON_SECRET` | Vercel sends it with each cron call, and sift with each piece it hands out. `api/cron` and `api/work` refuse any call without it, and everything while it is unset. |
-| `VERCEL_AUTOMATION_BYPASS_SECRET` | Only with Deployment Protection on previews: what lets a preview reach its own `api/work`. Production calls its production domain. |
-| `SIFT_GOOGLE_CLIENT_ID`, `SIFT_GOOGLE_CLIENT_SECRET` | A Web application client listing `https://<domain>/auth/callback`. |
-| `SIFT_DASHBOARD_HOST` | The project's own domain, when it has one besides `*.vercel.app`. |
-
-A preview deployment must have a database of its own: its build migrates whatever `DATABASE_URL` it is given, and production refuses a database a newer sift migrated.
+Setting it up, and every variable it needs: [VERCEL.md](VERCEL.md). It refuses to start without an allow list (`SIFT_DASHBOARD_ALLOW`): at a public address, whoever signed in first would otherwise own it. Vercel compiles `api/*.ts` with the project's own TypeScript, extending `tsconfig.json` and rewriting the `.ts` in imports (`@vercel/node` 31), and keeps each file's place, so `src/store/migrations` (in `includeFiles`) is where `src/store/db.ts` looks.
 
 A piece handed to `api/work` names a person and their mailbox by id; sift opens that person's database and finds the mailbox among their own, so even a forged piece cannot reach across people. `api/site` keeps the dashboard's own checks: a session for every `/api/` route, the Host one of the deployment's names, writes only from the page.
 
-Not yet tried on Vercel itself: that its builder takes imports that name `.ts` files, that a rewrite keeps the address the browser asked for in `request.url`, and `waitUntil` keeping a piece going past the reply.
+Not yet tried on Vercel itself: that a rewrite keeps the address the browser asked for in `request.url` (Vercel's guide for Express relies on it), and `waitUntil` keeping a piece going past the reply.
 
 ## Many mailboxes on Vercel
 

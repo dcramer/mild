@@ -8,7 +8,9 @@
  * Everything else is the real command's parts: the same store, controls, server, sign-in and policy.
  */
 import { resolve } from 'node:path';
-import { dashboardAddresses, serveDashboard, sessionSecret } from '../../../../src/cli/host.ts';
+import { nodeHost, serveDashboard } from '../../../../src/cli/host.ts';
+import { WEB_DIST } from '../../../../src/cli/web-build.ts';
+import { site } from '../../../../src/app/site.ts';
 import { ui } from '../../../../src/cli/ui.ts';
 import { loadConfig } from '../../../../src/config.ts';
 import { memoryEphemeral } from '../../../../src/ephemeral/ephemeral.ts';
@@ -47,16 +49,22 @@ process.env['SIFT_HOME'] = resolve(home);
 const config = loadConfig();
 const store = await openStore(config);
 const ephemeral = memoryEphemeral();
-const secret = sessionSecret(config);
+const host = nodeHost(config, store, ephemeral, Number(port), (line) => ui.plain(line));
 const built = await buildControls(config, store, { ephemeral, deviceId: 'verify-sift', running: false });
 // What createSift puts together for `sift dashboard`, with the one thing it asks Gmail for while it runs answered here.
-const sift = createDashboard(people(store), {
-  ...dashboardAddresses(config, Number(port)),
-  controls: { ...built, messageHtml: async (_db, _account, id) => HTML[id] ?? null },
-  signIn: buildSignIn(config, store),
-  sessionSecret: secret,
-  ephemeral,
-});
+const sift = {
+  respond: site(
+    createDashboard(people(store), {
+      allowedHosts: host.allowedHosts,
+      signInAddresses: host.signInAddresses,
+      controls: { ...built, messageHtml: async (_db, _account, id) => HTML[id] ?? null },
+      signIn: buildSignIn(config, store),
+      sessionSecret: host.sessionSecret,
+      ephemeral,
+    }),
+    WEB_DIST,
+  ),
+};
 const stop = await serveDashboard(config, sift, { port: Number(port) });
 ui.info('Only the dashboard is running. `sift run` also reads and classifies mail.');
 await new Promise<void>((done) => {

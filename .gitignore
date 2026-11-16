@@ -15,6 +15,7 @@ coverage/
 client_secret*.json
 google-client.json
 dashboard-key
-device-id
 setup.json
-sift.toml
+
+# What the Vercel CLI keeps when a checkout is linked to a project.
+.vercel/

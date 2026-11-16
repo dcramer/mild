@@ -1,9 +1,11 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HEADERS } from '../src/dashboard/server.ts';
 import { READS, WRITES } from '../src/dashboard/api/index.ts';
 import type { Work } from '../src/work/run.ts';
-import { MAX_DURATION_S, admit, cron, fanOut, work } from '../src/vercel/host.ts';
+import { MAX_DURATION_S, admit, cron, fanOut, respond, work } from '../src/vercel/host.ts';
 
 /** `vercel.json`: what Vercel does without sift seeing the request. */
 const vercel = JSON.parse(readFileSync('vercel.json', 'utf8')) as {
@@ -73,6 +75,21 @@ describe('the Vercel host', () => {
     // The same call without the deployment's secret, as anyone who saw its shape could make it.
     const stranger = new Request(sent[0]!.url, { method: 'POST', body: JSON.stringify(pieces[0]) });
     expect(((await admit(stranger)) as Response).status).toBe(401);
+  });
+
+  it('will not start at a public address without an allow list or a Google client, before opening anything', async () => {
+    const home = process.env['SIFT_HOME'];
+    process.env['SIFT_HOME'] = mkdtempSync(join(tmpdir(), 'sift-vercel-'));
+    process.env['DATABASE_URL'] = 'postgres://nobody@db.invalid/sift';
+    try {
+      await expect(respond(new Request('https://sift.example.com/api/session'))).rejects.toThrow('SIFT_DASHBOARD_ALLOW');
+      process.env['SIFT_DASHBOARD_ALLOW'] = 'me@example.org';
+      await expect(respond(new Request('https://sift.example.com/api/session'))).rejects.toThrow('SIFT_GOOGLE_CLIENT_ID');
+    } finally {
+      for (const name of ['DATABASE_URL', 'SIFT_DASHBOARD_ALLOW']) delete process.env[name];
+      if (home === undefined) delete process.env['SIFT_HOME'];
+      else process.env['SIFT_HOME'] = home;
+    }
   });
 
   it("names no dashboard route as one of Vercel's own functions, which would answer it instead", () => {
