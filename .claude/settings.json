@@ -9,5 +9,19 @@
         "repo": "cursor/plugins"
       }
     }
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/skills/verify-sift/scripts/maintain-check.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   }
 }
