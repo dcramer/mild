@@ -19,28 +19,34 @@ import { type Evidence, type Judge, type JudgeFailure, describeFailure, modelSta
 import type { Decision, Disposition, MessageFacts, Stage, Unfinished } from '../triage/types.ts';
 import { type EvidenceSources, gatherEvidence } from './evidence.ts';
 
-interface TriageDeps {
+/** Read access to the account's mail, for the model's evidence and for rules on what only the whole message shows. It never changes the mailbox. */
+type Sources = Omit<EvidenceSources, 'db' | 'now'>;
+
+type TriageDeps = {
   db: Sql;
   /** Null while sift is off: decisions are recorded and nothing in the mailbox changes. */
   mailbox: Mailbox | null;
   /** While sift is off: the mailbox to carry out the user's own answers in. Nothing else is done with it. */
   answers?: Mailbox | null;
-  /** The inference tier. Omitted when no model is configured: mail no rule covers waits, undecided, for one. */
-  model?: ModelTier;
   /**
    * Leaves a mailing list. Called for a decision that says to unsubscribe, after its mailbox change has
    * gone through. Omitted in tests and tools that must not reach the network.
    */
   unsubscribe?: (accountId: string, messageId: string) => Promise<UnsubscribeOutcome>;
   now?: () => number;
-}
+} & (
+  | {
+      /** The inference tier. Omitted when no model is configured: mail no rule covers waits, undecided, for one. */
+      model: ModelTier;
+      sources: Sources;
+    }
+  | { model?: undefined; sources?: Sources }
+);
 
 interface ModelTier {
   judge: Judge;
   /** As each run records it. */
   model: string;
-  /** Read access for evidence. Used while sift is off too; it never changes the mailbox. */
-  sources: Omit<EvidenceSources, 'db' | 'now'>;
 }
 
 export interface TriageReport {
@@ -71,15 +77,14 @@ const FAILURES_IN_A_ROW = 3;
  * The cascade for one account, as a function that decides one message: the tiers cheapest first, then
  * the rules that wait for a label. Once `asking` turns false, mail that needs the model is left unfinished
  * without asking, rather than given to a rule that would have deferred to it. When a rule asks what only
- * the whole message shows (an attachment), each message is read before the rules, through the model's
- * sources: with no model, nothing is read and such a condition never holds.
+ * the whole message shows (an attachment), each message is read before the rules, model or not.
  */
 async function cascadeFor(
   deps: TriageDeps,
   accountId: string,
   asking: () => boolean = () => true,
 ): Promise<(facts: MessageFacts) => Promise<Decision | Unfinished>> {
-  const { db, model } = deps;
+  const { db, model, sources } = deps;
   const labels = await listLabels(db, accountId);
   const rules = await listRules(db, accountId);
   // The rules ask whether the owner has written to the sender as they rank; the answer is read before
@@ -90,7 +95,7 @@ async function cascadeFor(
   const stages: Stage<Decision | Unfinished>[] = [rulesStage(rules, labels, { ...options, judged: model !== undefined })];
   // Gathered at most once per message, whether the rules or the model needed it first.
   let evidence: Promise<Evidence> | undefined;
-  const gather = model && ((facts: MessageFacts) => (evidence ??= gatherEvidence({ db, ...model.sources, ...(deps.now ? { now: deps.now } : {}) }, facts)));
+  const gather = sources && ((facts: MessageFacts) => (evidence ??= gatherEvidence({ db, ...sources, ...(deps.now ? { now: deps.now } : {}) }, facts)));
   const reading = rules.some(readsMessage);
   if (model && gather) {
     const stage = modelStage({

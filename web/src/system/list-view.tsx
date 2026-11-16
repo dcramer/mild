@@ -134,7 +134,7 @@ export function ListView({
         <div className={cn('grid grid-cols-[minmax(0,1fr)] gap-4', open && 'md:grid-cols-[minmax(0,1fr)_15rem]')}>
           <div className="flex min-w-0 flex-col gap-3 md:order-1">{children}</div>
           {open && filters ? (
-            <aside aria-label="Filters" className="flex flex-col gap-5 md:order-2 md:border-l md:border-dashed md:border-(--rule) md:pl-4">
+            <aside aria-label="Filters" className="order-first flex flex-col gap-5 md:order-2 md:border-l md:border-dashed md:border-(--rule) md:pl-4">
               <div className="flex items-center justify-between">
                 <p className="slug text-muted-foreground">Filters</p>
                 {on > 0 ? (

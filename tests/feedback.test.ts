@@ -217,12 +217,12 @@ describe('teaching', () => {
 
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'later' })], '4');
     let modelCalls = 0;
+    const sources = { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } };
     const model = {
       judge: async () => (modelCalls++, { failed: 'not expected' }),
       model: 'test/model',
-      sources: { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } },
     };
-    await triageAccount({ db, mailbox: null, model }, (await listAccounts(db))[0]!);
+    await triageAccount({ db, mailbox: null, model, sources }, (await listAccounts(db))[0]!);
     expect(await raw(db).get(`SELECT stage, disposition, label_id FROM decisions WHERE message_id = 'later'`)).toEqual({
       stage: 'rules',
       disposition: 'keep',

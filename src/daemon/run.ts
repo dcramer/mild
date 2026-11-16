@@ -84,7 +84,8 @@ export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[
           mailbox: active ? mailbox : null,
           answers: mailbox,
           ...(leave ? { unsubscribe: (accountId: string, messageId: string) => leave(db, accountId, messageId) } : {}),
-          ...(tier ? { model: { judge: tier.judge, model: tier.model, sources: { api, mailbox } } } : {}),
+          sources: { api, mailbox },
+          ...(tier ? { model: { judge: tier.judge, model: tier.model } } : {}),
         },
         account,
       );

@@ -176,14 +176,14 @@ describe('stored examples', () => {
         seen.push(input);
         return { label: 'newsletter', reason: 'r' };
       },
-      sources: {
-        api: { getContent: async () => ({ text: 'text', facts: { hasAttachments: false } }), getThread: async () => null },
-        mailbox: new FakeMailbox(),
-      },
+    };
+    const sources = {
+      api: { getContent: async () => ({ text: 'text', facts: { hasAttachments: false } }), getThread: async () => null },
+      mailbox: new FakeMailbox(),
     };
     const [account] = await listAccounts(db);
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'new1' })], '3');
-    await triageAccount({ db, mailbox: null, model }, account!);
+    await triageAccount({ db, mailbox: null, model, sources }, account!);
 
     expect(seen.map((s) => s.evidence.facts.messageId)).toEqual(['new1']);
     expect(seen[0]?.examples?.[0]).toMatchObject({ messageId: 'e1', labelId: 'newsletter' });

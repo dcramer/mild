@@ -4,9 +4,10 @@ On the Rules screen the user writes a rule directly: a condition, then what it s
 
 ## Sub-features
 
-- `rule-condition` chooses what to match: `From the address`, `From anyone at`, `On the list`, `Sent to`, `Subject contains`.
-- `rule-kind` chooses what the rule says: `Always do this to it`, `It is always this label`, `When sift says it is this label`.
-- `rule-action` chooses `Keep it`, `Archive it` or `Spam it`, with `Mark it read` and `Unsubscribe, when the sender offers a safe way`.
+- `rule-mail` chooses what to match (`Match mail`: `from`, `on the list`, `sent to`, `with a subject containing`) and the value (`Value to match`). `from` takes an address or a domain; the hint says `Anyone at …` or `Only this address`.
+- `rule-facts` adds conditions on what sift saw in the message (`Add a condition`, then `Condition 1`, …); see message-facts.md.
+- `rule-label` chooses `Label it as` (`No label, just act`, or a label); `Only when it is, in your words` narrows a label rule.
+- `rule-action` chooses `What happens to it` (`Archive`, `Spam`, `Keep`).
 - `rule-add` adds it to the list; waiting suggestions it covers are re-decided.
 - `rule-remove` removes a rule from its row.
 
@@ -19,17 +20,15 @@ On the Rules screen the user writes a rule directly: a condition, then what it s
 
 Preconditions:
 
-- Fresh seed. Rules shows 3 rules; Suggestions shows 4 waiting, one from `deals@promo.example.com`.
+- Fresh seed. Suggestions shows 4 waiting, one from `deals@promo.example.com`.
 
-- **Open the dialog.** `ab open "$B/rules"`, then `ab find role button click --name "Add a rule"`. A level-2 heading `Add a rule` appears with `Add rule` disabled.
-- **Condition.** `ab find role combobox click --name "Condition"`, then `ab find role option click --name "From anyone at"`.
-- **Value.** `ab find role textbox fill "promo.example.com" --name "Value to match"`. `Add rule` is enabled. `What the rule says` stays `Always do this to it` and `What sift does` stays `Archive it`.
-- **Add.** `ab find role button click --name "Add rule"`. The dialog closes and a row reads `from anyone at promo.example.com`; the heading meta reads `4 · the most specific one wins`.
+- **Open the dialog.** `ab open "$B/rules"`, then `ab find role button click --name "Add a rule"`. A level-2 heading `Add a rule` appears with `Add rule` disabled; `Match mail` reads `from`, `Label it as` reads `No label, just act`, `What happens to it` reads `Archive`.
+- **Value.** `ab find role textbox fill "promo.example.com" --name "Value to match"`. `Add rule` is enabled.
+- **Add.** `ab find role button click --name "Add rule"`. The dialog closes and a row reads `anyone at promo.example.com` with `Archive`.
 - **Effect on what is waiting.** `ab open "$B/suggestions"`. The link reads `Suggestions 3` and there is no Deals row.
-- **Stored.** `verify.sh sql "$RUN" "SELECT match_json, disposition, source FROM rules WHERE match_json LIKE '%promo%'"` returns `{"fromDomain":"promo.example.com"}`, `archive`, `user`. `actions` is empty.
+- **Stored.** `verify.sh sql "$RUN" "SELECT match, disposition, label_id, source FROM rules WHERE match->>'fromDomain' = 'promo.example.com'"` returns `{"fromDomain":"promo.example.com"}`, `archive`, null, `user`. `actions` is empty.
 
 ## Gotchas
 
-- `What sift does` only appears for `Always do this to it` and `When sift says it is this label`; `It is always this label` shows a label picker instead.
 - `Escape` may not close the dialog; use `Cancel`.
 - Writing a rule to Gmail as a filter needs Google and sift on, so it cannot be shown here.

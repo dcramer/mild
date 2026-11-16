@@ -567,6 +567,20 @@ describe('inference tier', () => {
     expect(await raw(db).get(`SELECT facts->>'hasAttachments' AS has FROM messages WHERE id = 'news'`)).toEqual({ has: 'true' });
   });
 
+  it('reads a message for a rule on what only the whole message shows with no model connected too', async () => {
+    await addRule(db, ACCOUNT, { match: { facts: { hasAttachments: true } }, labelId: 'transactional' }, 'user');
+    const read: string[] = [];
+    const reading = (): GmailApi => ({
+      ...api(),
+      getContent: async (id) => (read.push(id), { text: `Body ${id}`, facts: { hasAttachments: id === 'news' } }),
+    });
+    await runOnce(await active(false), { ...options(), connect: () => ({ api: reading(), mailbox }) });
+    expect(read.toSorted()).toEqual(['ada', 'news']);
+    expect(await raw(db).get(`SELECT stage, label_id FROM decisions WHERE message_id = 'news'`)).toEqual({ stage: 'rules', label_id: 'transactional' });
+    // Nothing else covers it, and with no model it waits.
+    expect(await raw(db).get(`SELECT count(*)::integer AS n FROM decisions WHERE message_id = 'ada'`)).toEqual({ n: 0 });
+  });
+
   it('archives what an action rule covers without asking the model or naming a label', async () => {
     judged.length = 0;
     const ruleId = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, disposition: 'archive' }, 'user');
