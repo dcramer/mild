@@ -112,7 +112,7 @@ function Sorting({ state, reload }: { state: ManageState; reload: () => void }) 
             onChange={(value) => value !== '' && save({ interval: Number(value) })}
           />
           {activity.sorting ? (
-            <Button variant="quiet" disabled={busy} onClick={() => run(() => api.checkNow(), reload)}>
+            <Button disabled={busy} onClick={() => run(() => api.checkNow(), reload)}>
               Check now
             </Button>
           ) : null}
