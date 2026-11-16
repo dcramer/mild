@@ -31,8 +31,7 @@ export function threadFacts(messages: readonly { id: string; labelIds: readonly 
 }
 
 /**
- * What is known about one message, by name. The prompt, the heuristics tier, the dashboard and rule
- * conditions all read these instead of re-reading headers. Only what can be checked is here: whether
+ * What is known about one message, by name. The prompt, the dashboard and rule conditions all read these instead of re-reading headers. Only what can be checked is here: whether
  * mail "reads as AI-generated" or what language it is in are judgements, and belong to a model.
  */
 export interface Facts extends Partial<ContentFacts>, Partial<ThreadFacts> {

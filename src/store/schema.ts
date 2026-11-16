@@ -130,6 +130,8 @@ export const preferences = pgTable(
   'preferences',
   {
     userId: userId().primaryKey(),
+    // false: their decisions are only suggestions. true: sift carries them out in their mailboxes.
+    act: boolean('act').notNull().default(false),
     model: text('model'),
   },
   () => [own()],

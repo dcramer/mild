@@ -13,7 +13,7 @@ export const reads: Read[] = [
     path: '/api/examples',
     query: z.object({ account: z.string().optional() }),
     reply: Examples,
-    run: async ({ db, controls }, scope, { account: one }) => {
+    run: async ({ db }, scope, { account: one }) => {
       if (one && !sees(scope, one)) return missing('No such mailbox');
       const held = await Promise.all(
         scope.accounts.map(async (id) => [id, (await db.select({ n: count() }).from(exampleRows).where(eq(exampleRows.accountId, id)))[0]!.n] as const),
@@ -21,7 +21,6 @@ export const reads: Read[] = [
       const examples: Examples = {
         examples: (await Promise.all((one ? [one] : scope.accounts).map(async (id) => await listExamples(db, id)))).flat(),
         held: Object.fromEntries(held.filter(([, n]) => n > 0)),
-        keepDays: controls?.settings().examplesKeepDays ?? null,
       };
       return ok(examples);
     },

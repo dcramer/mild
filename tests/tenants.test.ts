@@ -78,8 +78,6 @@ beforeEach(async () => {
   await setModel(await dbOf(ALPHA), 'alpha-own-words/model');
 
   const controls: Controls = {
-    settings: () => ({ act: false, interval: 60, fewShot: true, examplesKeepDays: null }),
-    saveSettings: () => void calls.push('settings'),
     models: async () => ({ models: [], recommended: {} }),
     modelSignIns: async (db) => ({ choices: [], signedIn: [`signed-in-${await personOf(db)}`], pending: null }),
     signInChatGPT: async (db) => (calls.push(`chatgpt ${await personOf(db)}`), { code: 'C', url: 'https://auth.example/device', expiresAt: 1 }),
@@ -250,9 +248,10 @@ describe("nobody sees or changes another person's mail", () => {
     expect((await call('POST', '/api/undo', ALPHA_WORK, { id: theirs.action })).status).toBe(200);
   });
 
-  it('lets each person change their own model and sign-ins, and only their own', async () => {
+  it('lets each person change their own mode, model and sign-ins, and only their own', async () => {
     const bravo = (await userOf(store.central, BRAVO))!.id;
     for (const [path, body] of [
+      ['/api/act', { act: true }],
       ['/api/model', { model: 'openai/small' }],
       ['/api/model/chatgpt', {}],
       ['/api/model/key', { provider: 'openai', key: 'k' }],
@@ -260,20 +259,17 @@ describe("nobody sees or changes another person's mail", () => {
     ] as const)
       expect((await call('POST', path, BRAVO, body)).status, path).toBe(200);
     expect(calls.filter((c) => c !== 'check')).toEqual([`chatgpt ${bravo}`, `key openai ${bravo}`, `signout openai ${bravo}`]);
-    expect(await preferences(await dbOf(BRAVO))).toMatchObject({ model: 'openai/small' });
-    expect(await preferences(await dbOf(ALPHA))).toMatchObject({ model: 'alpha-own-words/model' });
+    expect(await preferences(await dbOf(BRAVO))).toMatchObject({ act: true, model: 'openai/small' });
+    expect(await preferences(await dbOf(ALPHA))).toMatchObject({ act: false, model: 'alpha-own-words/model' });
+    expect((await call('GET', '/api/manage', BRAVO)).body).toMatchObject({ act: true });
+    expect((await call('GET', '/api/manage', ALPHA)).body).toMatchObject({ act: false });
     expect((await call('POST', '/api/model', null, { model: 'nobody/model' })).status).toBe(401);
   });
 
   it('lets only the person who set sift up change what applies to everyone', async () => {
-    for (const [path, body] of [
-      ['/api/settings', { act: true }],
-      ['/api/backfill', { days: 1 }],
-    ] as const) {
-      expect((await call('POST', path, BRAVO, body)).status, `${path} as a guest`).toBe(403);
-      expect((await call('POST', path, ALPHA_WORK, body)).status, `${path} as the owner`).toBe(200);
-    }
-    expect(calls.filter((c) => c !== 'check')).toEqual(['settings', 'backfill']);
+    expect((await call('POST', '/api/backfill', BRAVO, { days: 1 })).status, 'as a guest').toBe(403);
+    expect((await call('POST', '/api/backfill', ALPHA_WORK, { days: 1 })).status, 'as the owner').toBe(200);
+    expect(calls.filter((c) => c !== 'check')).toEqual(['backfill']);
     // Asking sift to look now is nobody's secret.
     expect((await call('POST', '/api/check', BRAVO, {})).status).toBe(200);
   });

@@ -20,11 +20,17 @@ import {
   suggestionBodies,
 } from '../store/query.ts';
 
+/**
+ * A year: long enough to look back over and undo a change from, and well past sync's 7-day recovery search,
+ * which could otherwise bring back a message already forgotten and decide it twice.
+ */
+export const RETENTION_DAYS = 365;
+
 /** Deleting is synchronous and the dashboard is served from the same process, so a backlog goes in pieces. */
 export const PRUNE_PER_RUN = 5000;
 
 /**
- * Forget messages nothing has happened to for `days`, with their decisions and changes. A message is
+ * Forget messages nothing has happened to for `RETENTION_DAYS`, with their decisions and changes. A message is
  * kept, however old, while anything still depends on its record:
  *
  * - it is a suggestion waiting on the user, or has not been decided at all;
@@ -35,8 +41,8 @@ export const PRUNE_PER_RUN = 5000;
  *
  * Returns how many messages went. `PRUNE_PER_RUN` means there may be more.
  */
-export async function pruneOld(db: Sql, days: number, now: number = Date.now()): Promise<number> {
-  const cutoff = now - days * 86_400_000;
+export async function pruneOld(db: Sql, now: number = Date.now()): Promise<number> {
+  const cutoff = now - RETENTION_DAYS * 86_400_000;
   const decided = and(eq(decisions.accountId, messages.accountId), eq(decisions.messageId, messages.id));
   const old = await db
     .select({ accountId: messages.accountId, id: messages.id })

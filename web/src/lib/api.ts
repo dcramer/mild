@@ -146,7 +146,8 @@ export const api = {
   /** The models the reader's own sign-ins offer, and the one to suggest first. */
   models: (signal: AbortSignal) => get<Models>('/api/models', {}, signal),
   changes: (signal: AbortSignal) => get<{ changes: ChangeRow[] }>('/api/changes', {}, signal),
-  saveSettings: (change: { act?: boolean; interval?: number }) => post('/api/settings', change),
+  /** The reader's own: true, sift carries out its decisions in their Gmail. */
+  setAct: (act: boolean) => post('/api/act', { act }),
   /** The reader's own model, `provider/model-id`, or null for none. */
   setModel: (model: string | null) => post('/api/model', { model }),
   /** Start a ChatGPT sign-in: resolves with the code to enter at OpenAI. It finishes in the background. */

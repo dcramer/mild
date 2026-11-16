@@ -6,7 +6,7 @@
 import { z } from 'zod';
 import { DECIDED } from '../triage/types.ts';
 
-export const STAGES = ['rules', 'sender', 'heuristics', 'classifier', 'agent', 'fallback'] as const;
+export const STAGES = ['rules', 'sender', 'classifier', 'agent', 'fallback'] as const;
 export type StageKey = (typeof STAGES)[number];
 const stage = z.enum(STAGES);
 
@@ -452,9 +452,10 @@ export type SignInCode = z.infer<typeof SignInCode>;
 
 /** GET /api/manage: everything the Settings view shows. */
 export const ManageState = z.object({
-  /** Whether the viewer owns the install, and so may change the settings that apply to all of it. */
+  /** Whether the viewer owns the install, and so may change what applies to all of it. */
   owner: z.boolean(),
-  settings: z.object({ act: z.boolean(), interval: z.number(), fewShot: z.boolean(), examplesKeepDays: z.number().nullable() }),
+  /** The viewer's own choice: false, sift only suggests for their mail; true, it carries its decisions out in Gmail. */
+  act: z.boolean(),
   /** The viewer's own model: which one they chose, how they can reach one, and a ChatGPT sign-in under way. */
   model: z.object({
     chosen: z.string().nullable(),
@@ -598,7 +599,7 @@ export type EvalDetail = z.infer<typeof EvalDetail>;
 /** The body of POST /api/evals/run. Answers `{ id }`; the run goes on in the background. */
 export const EvalRequest = z.strictObject({
   accountId: text(),
-  /** Show the model the other stored examples. Default: the `fewShot` setting. */
+  /** Show the model the other stored examples, as sorting always does. Default: true. */
   fewShot: z.boolean().optional(),
   /** How many examples, newest answers first. At most `Evals.maxLimit`. */
   limit: z.int().min(1).optional(),
@@ -624,7 +625,5 @@ export const Examples = z.object({
   ),
   /** How many are held per account, including any beyond the list. */
   held: z.record(z.string(), z.number()),
-  /** Days an example is kept after its answer, or null when they are kept until deleted. */
-  keepDays: z.number().nullable(),
 });
 export type Examples = z.infer<typeof Examples>;

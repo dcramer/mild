@@ -36,7 +36,7 @@ export const writes: Write[] = [
         ...(unsubscribe ? { unsubscribe } : {}),
         ...(when !== undefined && when.trim() !== '' ? { when } : {}),
       };
-      // An answer pressed here is carried out on its message whether or not sift is acting.
+      // An answer pressed here is carried out on its message whether or not they have sift acting.
       const result = await applyFeedback(db, { ...input, act: true }, now());
       if (result.corrected === null || !controls) {
         if (result.carrying > 0) controls?.checkNow();

@@ -102,12 +102,15 @@ export async function deleteExamples(db: Sql, accountId: string, messageId?: str
   return deleted.length;
 }
 
-/** Delete examples the user answered for more than `keepDays` days ago. Returns how many were deleted. */
-export async function pruneExamples(db: Sql, keepDays: number, now: number = Date.now()): Promise<number> {
+/** An example holds a whole message, so it is not kept for ever; a year of answers is plenty to learn from. */
+export const EXAMPLE_KEEP_DAYS = 365;
+
+/** Delete examples the user answered for more than `EXAMPLE_KEEP_DAYS` ago. Returns how many were deleted. */
+export async function pruneExamples(db: Sql, now: number = Date.now()): Promise<number> {
   return (
     await db
       .delete(examples)
-      .where(lt(examples.markedAt, now - keepDays * 86_400_000))
+      .where(lt(examples.markedAt, now - EXAMPLE_KEEP_DAYS * 86_400_000))
       .returning({ messageId: examples.messageId })
   ).length;
 }

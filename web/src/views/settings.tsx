@@ -26,12 +26,6 @@ import {
   useToast,
 } from '@/system';
 
-const INTERVALS = [
-  ['30', 'Every 30 seconds'],
-  ['60', 'Every minute'],
-  ['300', 'Every 5 minutes'],
-  ['900', 'Every 15 minutes'],
-] as const;
 const DAYS = [
   ['1', 'The last day'],
   ['3', 'The last 3 days'],
@@ -40,15 +34,14 @@ const DAYS = [
   ['30', 'The last month'],
 ] as const;
 
-/** Whether sift is running and acting, and how often: what the owner comes to Settings for first. */
+/** Whether sift acts on the reader's own mail: what they come to Settings for first. */
 function Sorting({ state, reload }: { state: ManageState; reload: () => void }) {
   const { busy, error, run } = useAction();
-  const { settings, activity } = state;
-  const save = (change: Parameters<typeof api.saveSettings>[0]) => run(() => api.saveSettings(change), reload);
-  const interval = INTERVALS.some(([value]) => Number(value) === settings.interval) ? String(settings.interval) : '';
+  const { act, activity } = state;
+  const save = (act: boolean) => run(() => api.setAct(act), reload);
 
   return (
-    <SettingsGroup title="Sorting" note="Whether sift changes Gmail, and how often it looks.">
+    <SettingsGroup title="Sorting" note="Whether sift changes your Gmail.">
       {activity.problems.length > 0 ? (
         <Note tone="failure" title="Not working">
           {activity.problems.map((problem) => (
@@ -58,9 +51,9 @@ function Sorting({ state, reload }: { state: ManageState; reload: () => void }) 
       ) : null}
       <Sheet>
         <SettingRow
-          title={settings.act ? 'Acting' : 'Observing'}
+          title={act ? 'Acting' : 'Observing'}
           note={
-            settings.act ? (
+            act ? (
               <>
                 sift carries out its decisions in Gmail as each label says. Each change can be undone from <TextLink href="/activity">Activity</TextLink>.
               </>
@@ -69,33 +62,23 @@ function Sorting({ state, reload }: { state: ManageState; reload: () => void }) 
             )
           }
         >
-          {settings.act ? (
-            <Button busy={busy} onClick={() => save({ act: false })}>
+          {act ? (
+            <Button busy={busy} onClick={() => save(false)}>
               Go back to observing
             </Button>
           ) : (
-            <ConfirmButton variant="plain" question="Archive, label and mark spam on new mail by itself?" busy={busy} onConfirm={() => save({ act: true })}>
+            <ConfirmButton variant="plain" question="Archive, label and mark spam on new mail by itself?" busy={busy} onConfirm={() => save(true)}>
               Start acting
             </ConfirmButton>
           )}
         </SettingRow>
-        <SettingRow
-          title="Check for mail"
-          note={activity.sorting ? (activity.lastPassAt ? `Last checked ${ago(activity.lastPassAt)}.` : 'Starting.') : undefined}
-        >
-          <Select
-            label="How often"
-            value={interval}
-            disabled={busy}
-            options={interval === '' ? [['', `Every ${settings.interval} seconds`] as const, ...INTERVALS] : INTERVALS}
-            onChange={(value) => value !== '' && save({ interval: Number(value) })}
-          />
-          {activity.sorting ? (
+        {activity.sorting ? (
+          <SettingRow title="Check for mail" note={activity.lastPassAt ? `Last checked ${ago(activity.lastPassAt)}.` : 'Starting.'}>
             <Button disabled={busy} onClick={() => run(() => api.checkNow(), reload)}>
               Check now
             </Button>
-          ) : null}
-        </SettingRow>
+          </SettingRow>
+        ) : null}
       </Sheet>
       <Failure>{error}</Failure>
     </SettingsGroup>
@@ -413,9 +396,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           <Loading rows={6} />
         ) : data ? (
           <>
-            {/* How sift runs applies to everyone it sorts for, so it is the owner's to change. The server refuses anyone else. */}
-            {data.owner ? <Sorting state={data} reload={reload} /> : null}
-            {/* The model and its sign-in are each person's own. */}
+            {/* Acting or observing, the model and its sign-in are each person's own. */}
+            <Sorting state={data} reload={reload} />
             <Model state={data} reload={reload} onConnect={onClose} />
             <Mailboxes state={data} signedInAs={signedInAs} />
             <Keys />

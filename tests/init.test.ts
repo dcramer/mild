@@ -1,9 +1,7 @@
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
-import { buildControls } from '../src/cli/controls.ts';
-import { freshStore } from './fixtures.ts';
+import { describe, expect, it } from 'vitest';
 import { type InitDeps, type SetupState, runInit } from '../src/cli/init.ts';
 import { dashboardUrls, listenAddresses, localAddresses, machineNames, resolveHere } from '../src/cli/network.ts';
 import type { Ui } from '../src/cli/ui.ts';
@@ -334,26 +332,34 @@ describe('settings', () => {
 
   it('round-trips through sift.toml', () => {
     const settings = {
-      act: true,
-      heuristics: true,
-      interval: 120,
       dashboardPort: 9000,
       dashboardHost: 'box.example.ts.net',
       dashboardAllow: ['me@example.org', 'work@example.com'],
-      fewShot: false,
-      examplesKeepDays: 90,
+      databaseUrl: 'postgres://app@db.example.com/sift',
+      databaseMigrationUrl: 'postgres://owner@db.example.com/sift',
     };
     expect(parseSettings(renderSettings(settings))).toEqual(settings);
     expect(parseSettings(renderSettings(DEFAULT_SETTINGS))).toEqual(DEFAULT_SETTINGS);
     expect(parseSettings('')).toEqual(DEFAULT_SETTINGS);
   });
 
+  it('refuses a key that is no longer a setting, saying where it went', () => {
+    expect(() => parseSettings('model = "openai/x"')).toThrow(
+      "sift.toml: the model is now each person's own, chosen in the dashboard under Settings. Remove model from here.",
+    );
+    expect(() => parseSettings('act = true')).toThrow(
+      "sift.toml: acting or observing is now each person's own, switched in the dashboard under Settings. Remove act from here.",
+    );
+    expect(() => parseSettings('heuristics = true')).toThrow('sift.toml: heuristics is no longer a setting. Remove heuristics from here.');
+    expect(() => parseSettings('interval = 60')).toThrow('sift.toml: interval is no longer a setting. Remove interval from here.');
+    expect(() => parseSettings('[retention]\ndays = 90')).toThrow('sift.toml: [retention] is no longer a setting. Remove retention from here.');
+    expect(() => parseSettings('[examples]\nfew_shot = false')).toThrow('sift.toml: [examples] is no longer a setting. Remove examples from here.');
+    expect(() => parseSettings('constructor = 1')).toThrow('unknown setting constructor');
+  });
+
   it('rejects typos and wrong types with the setting named', () => {
     expect(() => parseSettings('modle = "a/b"')).toThrow('unknown setting modle');
-    expect(() => parseSettings('[examples]\nkeep_days = 0')).toThrow('examples.keep_days must be a whole number of days, at least 1');
-    expect(() => parseSettings('act = "yes"')).toThrow('act must be true or false');
-    expect(() => parseSettings('model = "openai/x"')).toThrow("the model is now each person's own");
-    expect(() => parseSettings('interval = 1')).toThrow('at least 5');
+    expect(() => parseSettings('[dashboard]\nport = 0')).toThrow('dashboard.port must be a port number');
     expect(() => parseSettings('[dashboard]\nbind = "x"')).toThrow('unknown setting dashboard.bind');
     expect(() => parseSettings('[dashboard]\nhost = "http://x/"')).toThrow('dashboard.host must be a hostname or IP address');
     expect(() => parseSettings('[dashboard]\nallow = "me@example.org"')).toThrow('dashboard.allow must be a list of email addresses');
@@ -426,19 +432,17 @@ describe('settings from the environment', () => {
 
   it('wins over sift.toml, and says which variable gave each', () => {
     const home = freshHome();
-    writeFileSync(join(home, 'sift.toml'), 'act = false\ninterval = 60\n[dashboard]\nport = 9000\n');
+    writeFileSync(join(home, 'sift.toml'), '[dashboard]\nport = 9000\nhost = "box.example.ts.net"\n');
     const config = loadConfig({
       SIFT_HOME: home,
-      SIFT_ACT: 'true',
-      SIFT_INTERVAL: '300',
+      SIFT_DASHBOARD_PORT: '9100',
       SIFT_DASHBOARD_ALLOW: 'Me@example.org, work@example.com',
       ...DATABASE,
     });
-    expect(config.settings).toMatchObject({ act: true, interval: 300, dashboardPort: 9000, dashboardAllow: ['me@example.org', 'work@example.com'] });
+    expect(config.settings).toMatchObject({ dashboardPort: 9100, dashboardHost: 'box.example.ts.net', dashboardAllow: ['me@example.org', 'work@example.com'] });
     expect([config.databaseUrl, config.databaseMigrationUrl]).toEqual([DATABASE.DATABASE_URL, DATABASE.DATABASE_MIGRATION_URL]);
     expect(config.environment).toEqual({
-      act: 'SIFT_ACT',
-      interval: 'SIFT_INTERVAL',
+      dashboardPort: 'SIFT_DASHBOARD_PORT',
       dashboardAllow: 'SIFT_DASHBOARD_ALLOW',
       databaseUrl: 'DATABASE_URL',
       databaseMigrationUrl: 'DATABASE_MIGRATION_URL',
@@ -447,28 +451,16 @@ describe('settings from the environment', () => {
 
   it('refuses a value by the variable it came from', () => {
     const home = freshHome();
-    expect(() => loadConfig({ SIFT_HOME: home, SIFT_INTERVAL: 'soon' })).toThrow('SIFT_INTERVAL must be a number of seconds, at least 5.');
-    expect(() => loadConfig({ SIFT_HOME: home, SIFT_ACT: 'yes' })).toThrow('SIFT_ACT must be true or false.');
+    expect(() => loadConfig({ SIFT_HOME: home, SIFT_DASHBOARD_PORT: 'soon' })).toThrow('SIFT_DASHBOARD_PORT must be a port number.');
     expect(() => loadConfig({ SIFT_HOME: home, DATABASE_URL: 'mysql://x' })).toThrow('DATABASE_URL must be an address starting postgres://');
   });
 
   it('never copies a variable into sift.toml', () => {
     const home = freshHome();
-    const config = loadConfig({ SIFT_HOME: home, SIFT_ACT: 'true', ...DATABASE });
-    saveSettings(config, { ...config.settings, interval: 120 });
+    const config = loadConfig({ SIFT_HOME: home, ...DATABASE });
+    saveSettings(config, { ...config.settings, dashboardPort: 9100 });
     const written = parseSettings(readFileSync(config.settingsPath, 'utf8'));
-    expect(written).toEqual({ ...DEFAULT_SETTINGS, interval: 120 });
+    expect(written).toEqual({ ...DEFAULT_SETTINGS, dashboardPort: 9100 });
     expect(readFileSync(config.settingsPath, 'utf8')).not.toContain('secret');
-  });
-
-  it('is not changed from the dashboard', async () => {
-    const home = freshHome();
-    vi.stubEnv('SIFT_HOME', home);
-    vi.stubEnv('SIFT_ACT', 'true');
-    onTestFinished(() => void vi.unstubAllEnvs());
-    const controls = await buildControls(loadConfig(), await freshStore(), { activity: { sorting: false, lastPassAt: null, problems: [], expired: [] } });
-    expect(() => controls.saveSettings({ act: false })).toThrow('SIFT_ACT in the environment sets this; change it there.');
-    controls.saveSettings({ interval: 120 });
-    expect(controls.settings()).toMatchObject({ act: true, interval: 120 });
   });
 });

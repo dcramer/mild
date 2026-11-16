@@ -319,7 +319,6 @@ describe('accuracy', () => {
     expect(summary.accuracy.byStage).toEqual([
       { stage: 'rules', reviewed: 1, right: 1 },
       { stage: 'sender', reviewed: 0, right: 0 },
-      { stage: 'heuristics', reviewed: 0, right: 0 },
       { stage: 'classifier', reviewed: 0, right: 0 },
       { stage: 'agent', reviewed: 3, right: 2 },
       { stage: 'fallback', reviewed: 0, right: 0 },

@@ -7,32 +7,29 @@ import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
 import { type Account, listAccounts, listUsers } from '../store/accounts.ts';
 import type { Store } from '../store/store.ts';
-import { pruneExamples } from '../store/examples.ts';
+import { EXAMPLE_KEEP_DAYS, pruneExamples } from '../store/examples.ts';
+import { preferences } from '../store/preferences.ts';
 import { keepSuggestionBodies } from './bodies.ts';
 import { captureExamples } from './examples.ts';
-import { PRUNE_PER_RUN, pruneOld } from './retention.ts';
+import { PRUNE_PER_RUN, RETENTION_DAYS, pruneOld } from './retention.ts';
 import { checkFiltersWhenDue } from './filters.ts';
 import { type SyncReport, syncAccount } from './sync.ts';
 import { type TriageReport, triageAccount } from './triage.ts';
 
 export interface RunOptions {
-  /** False observes: mail is synced and decisions recorded, but the mailbox is never changed. */
-  act: boolean;
   /** Opens a provider connection for an account, with the sign-in kept in `db`, its person's database. */
   connect: (db: Sql, account: Account) => { api: GmailApi; mailbox: Mailbox } | Promise<{ api: GmailApi; mailbox: Mailbox }>;
   /** The inference tier of the person whose database `db` is: null when they have no model, or it cannot be reached. */
-  model?: (db: Sql) => Promise<{ judge: Judge; fewShot?: boolean } | null>;
-  /** Label plainly bulk mail by its headers before the model. Off unless set. */
-  heuristics?: boolean;
+  model?: (db: Sql) => Promise<{ judge: Judge } | null>;
   /** Leaves a mailing list, for decisions that say to. Without it sift never unsubscribes. */
   unsubscribe?: (db: Sql, accountId: string, messageId: string) => Promise<UnsubscribeOutcome>;
-  /** Delete examples this many days after the user answered for them. Unset keeps them. */
-  examplesKeepDays?: number;
   log: (line: string) => void;
   now?: () => number;
 }
 
 const DAY_MS = 86_400_000;
+/** A minute: new mail is sorted soon after it lands, and a quiet pass costs a history read per mailbox. */
+const PASS_INTERVAL_MS = 60_000;
 
 export interface PassResult {
   email: string;
@@ -55,49 +52,42 @@ export async function runEveryone(store: Store, options: RunOptions): Promise<Pa
 }
 
 /**
- * One pass over the mailboxes in one person's database: settle unconfirmed actions, sync, triage. An
- * account that fails is reported and the others still run; the next pass picks up where it stopped.
+ * One pass over the mailboxes in one person's database, acting or observing as they chose: settle
+ * unconfirmed actions, sync, triage. An account that fails is reported and the others still run; the
+ * next pass picks up where it stopped.
  */
 export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[]> {
   const results: PassResult[] = [];
   const leave = options.unsubscribe;
+  const { act } = await preferences(db);
   const tier = options.model ? await options.model(db) : null;
   for (const account of await listAccounts(db)) {
     const result: PassResult = { email: account.email };
     try {
       const { api, mailbox } = await options.connect(db, account);
       const deps = { db, mailbox, ...(options.now ? { now: options.now } : {}) };
-      if (options.act) await reconcile(deps);
+      if (act) await reconcile(deps);
       result.sync = await syncAccount(db, api, account, options.now);
       result.triage = await triageAccount(
         {
           ...deps,
-          mailbox: options.act ? mailbox : null,
+          mailbox: act ? mailbox : null,
           answers: mailbox,
           ...(leave ? { unsubscribe: (accountId: string, messageId: string) => leave(db, accountId, messageId) } : {}),
-          ...(options.heuristics ? { heuristics: { mailbox } } : {}),
-          ...(tier
-            ? {
-                model: {
-                  judge: tier.judge,
-                  sources: { api, mailbox },
-                  ...(tier.fewShot === undefined ? {} : { fewShot: tier.fewShot }),
-                },
-              }
-            : {}),
+          ...(tier ? { model: { judge: tier.judge, sources: { api, mailbox } } } : {}),
         },
         account,
       );
       result.captured = await captureExamples(db, api, account.id, options.now);
       await keepSuggestionBodies(db, api, account.id, options.now);
       try {
-        const filters = await checkFiltersWhenDue(deps, account.id, options.act);
+        const filters = await checkFiltersWhenDue(deps, account.id, act);
         if (filters) result.filters = filters;
       } catch (error) {
         // Mail was still sorted; the filters are looked at again next pass.
         options.log(`${account.email}: could not check Gmail filters: ${error instanceof Error ? error.message : String(error)}`);
       }
-      const line = describe(result, options.act);
+      const line = describe(result, act);
       if (line) options.log(`${account.email}: ${line}`);
     } catch (error) {
       result.error = error instanceof Error ? error.message : String(error);
@@ -166,24 +156,21 @@ export function createWake(): Wake {
 }
 
 /** Upkeep that runs when sift starts and once a day after. */
-export async function daily(store: Store, options: Pick<RunOptions, 'examplesKeepDays' | 'log' | 'now'>): Promise<void> {
-  for (const user of await listUsers(store.central)) await dropOldExamples(await store.user(user.id), options);
-}
-
-async function dropOldExamples(db: Sql, options: Pick<RunOptions, 'examplesKeepDays' | 'log' | 'now'>): Promise<void> {
-  if (options.examplesKeepDays === undefined) return;
-  const dropped = await pruneExamples(db, options.examplesKeepDays, (options.now ?? Date.now)());
-  if (dropped > 0) options.log(`Deleted ${dropped} example${dropped === 1 ? '' : 's'} older than ${options.examplesKeepDays} days`);
+export async function daily(store: Store, options: Pick<RunOptions, 'log' | 'now'>): Promise<void> {
+  for (const user of await listUsers(store.central)) {
+    const dropped = await pruneExamples(await store.user(user.id), (options.now ?? Date.now)());
+    if (dropped > 0) options.log(`Deleted ${dropped} example${dropped === 1 ? '' : 's'} older than ${EXAMPLE_KEEP_DAYS} days`);
+  }
 }
 
 /**
- * Run passes until `signal` aborts. `next` is asked before every pass, so a change to the settings
- * (acting or observing, the model, the interval) takes effect on the following pass without a restart.
- * With `retentionDays`, old records are pruned on the first pass and then once a day.
+ * Run passes until `signal` aborts. `next` is asked before every pass, and each person's choices are read
+ * as their mail is, so a change takes effect on the following pass without a restart. Old records are
+ * pruned on the first pass and then once a day.
  */
 export async function runLoop(
   store: Store,
-  next: () => Promise<RunOptions & { intervalMs: number; retentionDays?: number }>,
+  next: () => Promise<RunOptions>,
   control: { signal: AbortSignal; wake: Wake; onPass?: (results: PassResult[]) => void | Promise<void> },
 ): Promise<void> {
   let prunedAt = -Infinity;
@@ -191,19 +178,19 @@ export async function runLoop(
   while (!control.signal.aborted) {
     const options = await next();
     const now = (options.now ?? Date.now)();
-    if (now - lastDaily >= 86_400_000) {
+    if (now - lastDaily >= DAY_MS) {
       lastDaily = now;
       await daily(store, options);
     }
     await control.onPass?.(await runEveryone(store, options));
     // After the pass, which may have taken a while.
     const after = (options.now ?? Date.now)();
-    if (options.retentionDays !== undefined && after - prunedAt >= DAY_MS) {
+    if (after - prunedAt >= DAY_MS) {
       try {
         let backlog = false;
         for (const user of await listUsers(store.central)) {
-          const pruned = await pruneOld(await store.user(user.id), options.retentionDays, after);
-          if (pruned > 0) options.log(`Forgot ${pruned} message${pruned === 1 ? '' : 's'} with nothing newer than ${options.retentionDays} days`);
+          const pruned = await pruneOld(await store.user(user.id), after);
+          if (pruned > 0) options.log(`Forgot ${pruned} message${pruned === 1 ? '' : 's'} with nothing newer than ${RETENTION_DAYS} days`);
           // A backlog goes a piece per pass.
           backlog ||= pruned >= PRUNE_PER_RUN;
         }
@@ -213,6 +200,6 @@ export async function runLoop(
         options.log(`Could not prune old records, will retry tomorrow: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
-    await control.wake.wait(options.intervalMs, control.signal);
+    await control.wake.wait(PASS_INTERVAL_MS, control.signal);
   }
 }

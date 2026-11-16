@@ -13,11 +13,10 @@ import { blockSender, countRuleHit, listRules } from '../store/rules.ts';
 import { cachedCorrespondent } from '../store/senders.ts';
 import { passedDmarc } from '../triage/features.ts';
 import { triage } from '../triage/pipeline.ts';
-import { heuristicsStage } from '../triage/stages/heuristics.ts';
 import { priorRule, rulesStage, settle } from '../triage/stages/rules.ts';
 import { type Judge, modelStage } from '../triage/stages/model.ts';
 import type { Decision, Disposition, MessageFacts, Stage } from '../triage/types.ts';
-import { type EvidenceSources, gatherEvidence, ownerHasWritten } from './evidence.ts';
+import { type EvidenceSources, gatherEvidence } from './evidence.ts';
 
 export interface TriageDeps {
   db: Sql;
@@ -27,8 +26,6 @@ export interface TriageDeps {
   answers?: Mailbox | null;
   /** The inference tier. Omitted when no model is configured: mail no rule covers waits, undecided, for one. */
   model?: ModelTier;
-  /** The heuristics tier, when the user has turned it on. The mailbox is only searched, for whether the owner has written to a sender. */
-  heuristics?: { mailbox: Pick<Mailbox, 'hasSentTo'> };
   /**
    * Leaves a mailing list. Called for a decision that says to unsubscribe, after its mailbox change has
    * gone through. Omitted in tests and tools that must not reach the network.
@@ -41,8 +38,6 @@ export interface ModelTier {
   judge: Judge;
   /** Read access for evidence. Used in observe mode too; it never changes the mailbox. */
   sources: Omit<EvidenceSources, 'db' | 'now'>;
-  /** False: mail the user labelled before is not shown to the model as examples. */
-  fewShot?: boolean;
 }
 
 export interface TriageReport {
@@ -64,7 +59,7 @@ export interface TriageReport {
 
 /**
  * The cascade for one account, as a function that decides one message: the tiers cheapest first, then
- * the rules that wait for a label. The decision-model tier would slot in after the heuristics.
+ * the rules that wait for a label.
  */
 export async function cascadeFor(deps: TriageDeps, accountId: string): Promise<(facts: MessageFacts) => Promise<Decision>> {
   const { db, model } = deps;
@@ -76,19 +71,6 @@ export async function cascadeFor(deps: TriageDeps, accountId: string): Promise<(
   const options = { hasWritten: () => written };
   const read = async (facts: MessageFacts) => (written = await cachedCorrespondent(db, facts.accountId, facts.from.address));
   const stages: Stage[] = [rulesStage(rules, labels, { ...options, judged: model !== undefined })];
-  if (deps.heuristics) {
-    const sources = { db, mailbox: deps.heuristics.mailbox, ...(deps.now ? { now: deps.now } : {}) };
-    stages.push(
-      heuristicsStage({
-        labels,
-        hasWritten: async (facts) => {
-          const known = await ownerHasWritten(sources, facts);
-          written = known ?? undefined;
-          return known;
-        },
-      }),
-    );
-  }
   if (model) {
     stages.push(
       modelStage({
@@ -99,7 +81,7 @@ export async function cascadeFor(deps: TriageDeps, accountId: string): Promise<(
           const hit = priorRule(rules, labels, facts, options);
           return hit?.label ? { rule: hit.rule, label: hit.label } : null;
         },
-        ...(model.fewShot === false ? {} : { examples: async (facts) => await shotCandidates(db, facts) }),
+        examples: async (facts) => await shotCandidates(db, facts),
       }),
     );
   }

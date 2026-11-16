@@ -14,7 +14,6 @@ beforeEach(async () => {
 /** Controls whose `models` and ChatGPT sign-in answer with whatever a test gives them. */
 const answering = (models: unknown, signIn: unknown = { code: 'C', url: 'https://auth.example/device', expiresAt: 1 }) =>
   ({
-    settings: () => ({ act: false, interval: 60, fewShot: true, examplesKeepDays: null }),
     models: async () => models,
     signInChatGPT: async () => signIn,
     checkNow: () => {},

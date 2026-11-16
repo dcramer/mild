@@ -6,7 +6,8 @@ import { type PassResult, createWake, runEveryone, runLoop } from '../../daemon/
 import { createGmailApi } from '../../gmail/api.ts';
 import { hasClientSecrets } from '../../gmail/auth.ts';
 import { createGmailMailbox } from '../../gmail/mailbox.ts';
-import { type Account, connectedAddresses, listAccounts, personOf } from '../../store/accounts.ts';
+import { type Account, connectedAddresses, listAccounts, listUsers, personOf } from '../../store/accounts.ts';
+import { preferences } from '../../store/preferences.ts';
 import { openStore } from '../../store/store.ts';
 import type { Sql } from '../../store/sql.ts';
 import { paint, ui } from '../ui.ts';
@@ -18,10 +19,7 @@ export async function run(args: string[]): Promise<void> {
   const { values } = parseArgs({
     args,
     options: {
-      act: { type: 'boolean', default: false },
-      observe: { type: 'boolean', default: false },
       once: { type: 'boolean', default: false },
-      interval: { type: 'string' },
       port: { type: 'string' },
       host: { type: 'string' },
       'no-dashboard': { type: 'boolean', default: false },
@@ -29,30 +27,34 @@ export async function run(args: string[]): Promise<void> {
       dev: { type: 'boolean', default: false },
     },
   });
-  if (values.act && values.observe) throw new Error('Choose one of --act and --observe.');
-  const intervalFlag = values.interval === undefined ? undefined : Number(values.interval);
-  if (intervalFlag !== undefined && (!Number.isFinite(intervalFlag) || intervalFlag < 5)) throw new Error('--interval must be at least 5 seconds.');
   const config = loadConfig();
   const store = await openStore(config);
   try {
     const secrets = await checkSecrets(config, store, true);
     const log = (line: string) => ui.plain(`${paint.dim(new Date().toLocaleTimeString(undefined, { hour12: false }))}  ${line}`);
 
-    // Settings are read again before every pass, so changes made in the dashboard or sift.toml apply
-    // without a restart. A flag given here wins for as long as this process runs.
     // Why each person's model could not be reached, so it is said once and not on every pass.
     const unreachable = new Map<number, string>();
-    let announced = '';
+    // Whether each person had sift acting at the last pass, to say when they switch.
+    const acting = new Map<number, boolean>();
+    const announce = async () => {
+      for (const user of await listUsers(store.central)) {
+        const db = await store.user(user.id);
+        const { act } = await preferences(db);
+        if (acting.has(user.id) && acting.get(user.id) !== act)
+          log(`${(await listAccounts(db)).map((a) => a.email).join(', ')}: now ${act ? 'acting' : 'observing'}`);
+        acting.set(user.id, act);
+      }
+    };
     const next = async () => {
-      const { settings } = loadConfig();
-      const act = values.observe ? false : values.act || settings.act;
+      await announce();
       // Each person's own model, from their choice and sign-in, read on every pass.
       const model = async (db: Sql) => {
         const person = await personOf(db);
         try {
           const tier = await openModelTier(config, db);
           unreachable.delete(person);
-          return tier && { judge: tier.judge, fewShot: settings.fewShot };
+          return tier && { judge: tier.judge };
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           if (unreachable.get(person) !== message) ui.fail(`${(await listAccounts(db)).map((a) => a.email).join(', ')}: ${message}`);
@@ -60,31 +62,25 @@ export async function run(args: string[]): Promise<void> {
           return null;
         }
       };
-      const state = act ? 'acting' : 'observing';
-      if (announced !== '' && announced !== state) log(`Now ${state}`);
-      announced = state;
       return {
-        act,
-        heuristics: settings.heuristics,
         model,
         unsubscribe: (db: Sql, accountId: string, messageId: string) => unsubscribe({ db }, accountId, messageId),
-        ...(settings.examplesKeepDays ? { examplesKeepDays: settings.examplesKeepDays } : {}),
         connect: async (db: Sql, account: Account) => {
           const client = await gmailClient(config, db, account.email);
           return { api: createGmailApi(client), mailbox: createGmailMailbox(client) };
         },
         log,
-        intervalMs: (intervalFlag ?? settings.interval) * 1000,
-        ...(settings.retentionDays === undefined ? {} : { retentionDays: settings.retentionDays }),
       };
     };
 
     const first = await next();
-    ui.heading(first.act ? 'acting' : 'observing', `every ${first.intervalMs / 1000}s`);
+    const people = acting.size;
+    const actingFor = [...acting.values()].filter(Boolean).length;
+    ui.heading(actingFor === 0 ? 'observing' : actingFor === people ? 'acting' : `acting for ${actingFor} of ${people}`);
     secrets();
     if (!hasClientSecrets(config)) ui.warn(`No Google client yet. Run ${paint.cmd('sift init')}.`);
     else if ((await connectedAddresses(store.central)).length === 0) ui.warn('No Gmail account yet. Open the dashboard and sign in with Google.');
-    else if (!first.act) ui.info('Gmail is not changed while sift is observing. Switch it in the dashboard, under Settings.');
+    else if (actingFor === 0) ui.info('Gmail is not changed while sift is observing. Each person switches it in the dashboard, under Settings.');
 
     if (values.once) {
       ui.blank();

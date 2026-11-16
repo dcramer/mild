@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { getRuleFilter, ruleFilterStatus } from '../../store/filters.ts';
+import { preferences } from '../../store/preferences.ts';
 import { addRule, removeRule } from '../../store/rules.ts';
 import { listRuleSummaries } from '../queries/rules.ts';
 import { rules } from '../../store/query.ts';
@@ -73,7 +74,7 @@ export const writes: Write[] = [
     run: async ({ db, controls, now }, { id, on }) => {
       if (!controls) throw new Error('This dashboard cannot change Gmail filters.');
       // Taking a filter out is always allowed: it only reduces what runs unattended.
-      if (on && !controls.settings().act) throw new Error('sift is only observing, so it writes nothing to Gmail. Let it act first, in Settings.');
+      if (on && !(await preferences(db)).act) throw new Error('sift is only observing, so it writes nothing to Gmail. Let it act first, in Settings.');
       await controls.ruleFilter(db, id, on);
       return { filterId: (await getRuleFilter(db, id))?.filterId ?? null, filter: (await ruleFilterStatus(db, now())).get(id) ?? null };
     },

@@ -1,6 +1,5 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { parseSettings, renderSettings } from '../src/config.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
 import { addMailbox, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { openUserDb, raw } from './fixtures.ts';
@@ -169,37 +168,23 @@ describe('stored examples', () => {
     });
   });
 
-  it('reach the judge during a pass unless the setting is off', async () => {
+  it('reach the judge during every pass', async () => {
     const seen: JudgeInput[] = [];
-    const model = (fewShot: boolean) => ({
+    const model = {
       judge: async (input: JudgeInput) => {
         seen.push(input);
         return { label: 'newsletter', reason: 'r' };
       },
-      fewShot,
       sources: {
         api: { getContent: async () => ({ text: 'text', facts: { hasAttachments: false } }), getThread: async () => null },
         mailbox: new FakeMailbox(),
       },
-    });
+    };
     const [account] = await listAccounts(db);
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'new1' })], '3');
-    await triageAccount({ db, mailbox: null, model: model(true) }, account!);
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'new2' })], '4');
-    await triageAccount({ db, mailbox: null, model: model(false) }, account!);
+    await triageAccount({ db, mailbox: null, model }, account!);
 
-    expect(seen.map((s) => s.evidence.facts.messageId)).toEqual(['new1', 'new2']);
+    expect(seen.map((s) => s.evidence.facts.messageId)).toEqual(['new1']);
     expect(seen[0]?.examples?.[0]).toMatchObject({ messageId: 'e1', labelId: 'newsletter' });
-    expect(seen[1]).not.toHaveProperty('examples');
-  });
-});
-
-describe('the setting', () => {
-  it('is on unless sift.toml turns it off', () => {
-    expect(parseSettings('').fewShot).toBe(true);
-    expect(parseSettings('[examples]\nfew_shot = false').fewShot).toBe(false);
-    expect(parseSettings(renderSettings({ ...parseSettings(''), fewShot: false })).fewShot).toBe(false);
-    expect(() => parseSettings('[examples]\nfew_shot = "no"')).toThrow('examples.few_shot must be true or false');
-    expect(() => parseSettings('[examples]\nshots = 3')).toThrow('unknown setting examples.shots');
   });
 });

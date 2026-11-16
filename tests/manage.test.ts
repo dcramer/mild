@@ -4,14 +4,15 @@ import { MAX_BACKFILL, backfill } from '../src/daemon/backfill.ts';
 import { type RunOptions, createWake, runLoop } from '../src/daemon/run.ts';
 import { signInRefusal } from '../src/cli/sign-in.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
-import type { Controls, ManagedSettings, SignIn } from '../src/dashboard/controls.ts';
+import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { people } from '../src/store/people.ts';
 import type { RawMessage } from '../src/gmail/api.ts';
 import { startEval } from '../src/learn/evals.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { MAX_LABELS, listLabels } from '../src/store/labels.ts';
 import { recordDecision } from '../src/store/decisions.ts';
-import { preferences } from '../src/store/preferences.ts';
+import { EXAMPLE_KEEP_DAYS } from '../src/store/examples.ts';
+import { preferences, setAct } from '../src/store/preferences.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { FakeMailbox, facts, storeExample } from './helpers.ts';
 import { builtAssets, raw, startDashboard, onePerson } from './fixtures.ts';
@@ -21,13 +22,8 @@ const ACCOUNT = 'me@example.org';
 let db: Sql;
 let store: Store;
 let calls: string[];
-let settings: ManagedSettings;
 
 const controls: Controls = {
-  settings: () => settings,
-  saveSettings: (change) => {
-    settings = { ...settings, ...change };
-  },
   models: async () => ({ models: ['p/small', 'p/large'], recommended: { p: 'p/small' } }),
   modelSignIns: async () => ({ choices: [{ provider: 'openai-codex', label: 'ChatGPT', how: 'chatgpt' }], signedIn: ['openai-codex'], pending: null }),
   signInChatGPT: async () => (calls.push('chatgpt'), { code: 'ABCD-1234', url: 'https://auth.example/device', expiresAt: 900 }),
@@ -61,7 +57,6 @@ const controls: Controls = {
 beforeEach(async () => {
   ({ store, db } = await onePerson(ACCOUNT));
   calls = [];
-  settings = { act: false, interval: 60, fewShot: true, examplesKeepDays: null };
 });
 
 async function start(options: { withControls?: boolean } = {}) {
@@ -73,7 +68,7 @@ describe('managing sift from the dashboard', () => {
     const { call } = await start();
     const { body } = await call('GET', '/api/manage');
     expect(body).toMatchObject({
-      settings: { act: false, interval: 60 },
+      act: false,
       model: { chosen: null, signedIn: ['openai-codex'], pending: null },
       activity: { sorting: true, expired: [ACCOUNT] },
       accounts: [{ id: ACCOUNT }],
@@ -84,18 +79,15 @@ describe('managing sift from the dashboard', () => {
     expect((await call('GET', '/api/models')).body).toEqual({ models: ['p/small', 'p/large'], recommended: { p: 'p/small' } });
   });
 
-  it('changes settings, and refuses values that make no sense', async () => {
+  it("switches the person's own mail between observing and acting, and starts a pass in the new mode", async () => {
     const { call } = await start();
-    expect((await call('POST', '/api/settings', { act: true })).body).toEqual({
-      settings: { act: true, interval: 60, fewShot: true, examplesKeepDays: null },
-    });
-    expect((await call('POST', '/api/settings', { interval: 300 })).body).toEqual({
-      settings: { act: true, interval: 300, fewShot: true, examplesKeepDays: null },
-    });
-    expect((await call('POST', '/api/settings', { fewShot: false })).body).toMatchObject({ settings: { fewShot: false } });
-    for (const bad of [{ act: 'yes' }, { interval: 1 }, { interval: '60' }, { fewShot: 'no' }])
-      expect((await call('POST', '/api/settings', bad)).status).toBe(400);
-    expect(settings).toEqual({ act: true, interval: 300, fewShot: false, examplesKeepDays: null });
+    expect((await call('POST', '/api/act', { act: true })).status).toBe(200);
+    expect((await preferences(db)).act).toBe(true);
+    expect((await call('GET', '/api/manage')).body).toMatchObject({ act: true });
+    for (const bad of [{}, { act: 'yes' }, { act: true, interval: 60 }]) expect((await call('POST', '/api/act', bad)).status).toBe(400);
+    expect((await call('POST', '/api/act', { act: false })).status).toBe(200);
+    expect((await preferences(db)).act).toBe(false);
+    expect(calls).toEqual(['check', 'check']);
   });
 
   it("keeps the model and its sign-in the person's own", async () => {
@@ -149,10 +141,9 @@ describe('managing sift from the dashboard', () => {
     await storeExample(db, ACCOUNT, { id: 'e3', from: 'bob@example.org', label: 'personal', markedAt: 3 });
     await connectAccount(store, 'other@example.org', '1', 0, 1);
     await storeExample(db, 'other@example.org', { id: 'o1', from: 'cy@example.org', label: 'personal', markedAt: 4 });
-    settings.examplesKeepDays = 90;
 
     const listed = await call('GET', `/api/examples?account=${encodeURIComponent(ACCOUNT)}`);
-    expect(listed.body).toMatchObject({ held: { [ACCOUNT]: 3, 'other@example.org': 1 }, keepDays: 90 });
+    expect(listed.body).toMatchObject({ held: { [ACCOUNT]: 3, 'other@example.org': 1 } });
     expect((listed.body['examples'] as { messageId: string }[]).map((e) => e.messageId)).toEqual(['e3', 'e2', 'e1']);
     expect((listed.body['examples'] as unknown[])[2]).toEqual({
       accountId: ACCOUNT,
@@ -174,13 +165,6 @@ describe('managing sift from the dashboard', () => {
     expect(await raw(db).all('SELECT account_id, message_id FROM examples')).toEqual([{ account_id: 'other@example.org', message_id: 'o1' }]);
     // The message row and its decision are sift's record of what it saw and did; only the stored content goes.
     expect(await raw(db).get(`SELECT count(*) AS n FROM messages WHERE id = 'e1'`)).toEqual({ n: 1 });
-  });
-
-  it('sets how long examples are kept', async () => {
-    const { call } = await start();
-    expect((await call('POST', '/api/settings', { examplesKeepDays: 30 })).body).toMatchObject({ settings: { examplesKeepDays: 30 } });
-    expect((await call('POST', '/api/settings', { examplesKeepDays: null })).body).toMatchObject({ settings: { examplesKeepDays: null } });
-    for (const bad of [0, 1.5, '30', 40_000]) expect((await call('POST', '/api/settings', { examplesKeepDays: bad })).status).toBe(400);
   });
 
   it('decides waiting suggestions again when a rule or a label changes, and says how many', async () => {
@@ -337,7 +321,7 @@ describe('managing sift from the dashboard', () => {
   it('refuses every write that did not come from its own page', async () => {
     const { call } = await start();
     for (const path of [
-      '/api/settings',
+      '/api/act',
       '/api/labels',
       '/api/labels/add',
       '/api/rules',
@@ -352,7 +336,7 @@ describe('managing sift from the dashboard', () => {
       expect((await call('POST', path, { act: true }, { 'x-sift': '' })).status).toBe(403);
     }
     expect((await call('POST', '/api/nope', {})).status).toBe(405);
-    expect(settings.act).toBe(false);
+    expect((await preferences(db)).act).toBe(false);
     expect(calls).toEqual([]);
   });
 
@@ -369,14 +353,14 @@ describe('managing sift from the dashboard', () => {
     expect(observing.body['error']).toMatch(/only observing/);
     expect(calls).toEqual([]);
 
-    settings.act = true;
+    await setAct(db, true);
     const written = await call('POST', '/api/rules/filter', { id, on: true });
     expect(written.body).toMatchObject({ filterId: 'f1', filter: { state: 'active', possible: true } });
     expect((await call('POST', '/api/rules/filter', { id })).status).toBe(400);
     expect((await call('POST', '/api/rules/filter', { id: 7, on: true })).status).toBe(400);
 
     // Taking the filter out does not need sift to be acting.
-    settings.act = false;
+    await setAct(db, false);
     expect((await call('POST', '/api/rules/remove', { id })).status).toBe(200);
     expect(calls).toEqual([`filter ${id} on`, `filter ${id} off`]);
     expect((await listRules(db, ACCOUNT)).map((r) => r.id)).toEqual([spam]);
@@ -384,7 +368,6 @@ describe('managing sift from the dashboard', () => {
 
   it('can only look, not manage, when no controls are given', async () => {
     const { call } = await start({ withControls: false });
-    expect((await call('POST', '/api/settings', { act: true })).status).toBe(409);
     expect((await call('POST', '/api/undo', { id: 1 })).status).toBe(409);
     expect((await call('GET', '/api/manage')).body).toMatchObject({ activity: { sorting: false } });
   });
@@ -437,10 +420,10 @@ describe('signing in with Google', () => {
     // What installs the page as an app holds no data, and a browser fetches the manifest without cookies.
     for (const path of ['/sw.js', '/manifest.webmanifest', '/rules', '/system']) expect((await call('GET', path)).status).toBe(200);
     for (const path of ['/api/summary', '/api/manage', '/api/suggestions', '/api/senders']) expect((await call('GET', path)).status).toBe(401);
-    expect((await call('POST', '/api/settings', { act: true })).status).toBe(401);
+    expect((await call('POST', '/api/act', { act: true })).status).toBe(401);
     expect((await call('GET', '/api/summary', undefined, { cookie: 'sift_session=forged.signature' })).status).toBe(401);
     expect((await call('GET', '/api/session')).body).toMatchObject({ required: true, email: null, canSignIn: true, reason: null });
-    expect(settings.act).toBe(false);
+    expect((await preferences(db)).act).toBe(false);
   });
 
   it('signs in through Google and returns to the address the browser used', async () => {
@@ -458,7 +441,7 @@ describe('signing in with Google', () => {
     const cookie = { cookie: cookieFrom(back.headers) };
     expect((await call('GET', '/api/session', undefined, cookie)).body).toMatchObject({ email: ACCOUNT });
     expect((await call('GET', '/api/manage', undefined, cookie)).status).toBe(200);
-    expect((await call('POST', '/api/settings', { act: true }, cookie)).status).toBe(200);
+    expect((await call('POST', '/api/act', { act: true }, cookie)).status).toBe(200);
 
     // The same state cannot be used twice, and an unknown one is refused.
     expect(String((await call('GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`)).headers['location'])).toContain('expired');
@@ -613,22 +596,20 @@ describe('older mail', () => {
 });
 
 describe('run loop', () => {
-  it('asks for its settings before every pass and can be woken early', async () => {
+  it('asks for its options before every pass and can be woken early', async () => {
     await raw(store.central).run('DELETE FROM accounts');
     await raw(db).run('DELETE FROM mailboxes');
     const stop = new AbortController();
     const wake = createWake();
     const seen: number[] = [];
     let pass = 0;
-    const next = async (): Promise<RunOptions & { intervalMs: number }> => {
+    const next = async (): Promise<RunOptions> => {
       seen.push(++pass);
       return {
-        act: pass > 1,
         connect: () => {
           throw new Error('no accounts');
         },
         log: () => {},
-        intervalMs: 60_000,
       };
     };
     const started = Date.now();
@@ -645,7 +626,7 @@ describe('run loop', () => {
     expect(Date.now() - started).toBeLessThan(2000);
   });
 
-  it('deletes examples past their keep time when it starts and once a day after, and keeps them all by default', async () => {
+  it('deletes examples a year after their answer, when it starts and once a day after', async () => {
     const DAY = 86_400_000;
     await storeExample(db, ACCOUNT, { id: 'old', from: 'a@example.org', label: 'personal', markedAt: 0 });
     await storeExample(db, ACCOUNT, { id: 'soon', from: 'd@example.org', label: 'personal', markedAt: 2 * DAY + DAY / 5 });
@@ -654,22 +635,19 @@ describe('run loop', () => {
     const held = async () => (await raw(db).all<{ message_id: string }>('SELECT message_id FROM examples ORDER BY marked_at')).map((r) => r.message_id);
     const logs: string[] = [];
 
-    /** Run passes at the given times, with the given keep time. */
-    const passesAt = async (times: number[], examplesKeepDays?: number) => {
+    /** Run passes at the given times. */
+    const passesAt = async (times: number[]) => {
       const stop = new AbortController();
       const wake = createWake();
       let pass = 0;
       await runLoop(
         store,
         async () => ({
-          act: false,
           connect: () => {
             throw new Error('offline');
           },
           log: (line) => logs.push(line),
           now: () => times[Math.min(pass, times.length - 1)]!,
-          intervalMs: 60_000,
-          ...(examplesKeepDays === undefined ? {} : { examplesKeepDays }),
         }),
         {
           signal: stop.signal,
@@ -685,10 +663,11 @@ describe('run loop', () => {
     await passesAt([12 * DAY]);
     expect(await held()).toEqual(['old', 'soon', 'mid', 'new']);
 
-    // Ten days kept. At day 12 only `old` is past it. Half a day later `soon` is too, but upkeep has run
+    // A year and two days on, only `old` is past it. Half a day later `soon` is too, but upkeep has run
     // today, so it waits; three days on, it goes with `mid`.
-    await passesAt([12 * DAY, 12.5 * DAY, 15.5 * DAY], 10);
-    expect(logs.filter((l) => l.startsWith('Deleted'))).toEqual(['Deleted 1 example older than 10 days', 'Deleted 2 examples older than 10 days']);
+    const year = EXAMPLE_KEEP_DAYS * DAY;
+    await passesAt([year + 2 * DAY, year + 2.5 * DAY, year + 5.5 * DAY]);
+    expect(logs.filter((l) => l.startsWith('Deleted'))).toEqual(['Deleted 1 example older than 365 days', 'Deleted 2 examples older than 365 days']);
     expect(await held()).toEqual(['new']);
   });
 });

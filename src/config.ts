@@ -6,12 +6,6 @@ import { type Keyring, loadKeyring } from './secrets.ts';
 
 /** What the user chooses: in `sift.toml`, or each in its environment variable (`ENVIRONMENT`), which wins. */
 export interface Settings {
-  /** false: record what sift would do. true: carry decisions out in Gmail. */
-  act: boolean;
-  /** true: mail that is plainly bulk by its headers is labelled before any model is asked. */
-  heuristics: boolean;
-  /** Seconds between passes. */
-  interval: number;
   dashboardPort: number;
   /**
    * Where the dashboard listens besides localhost, when sift runs on a server: one of this machine's
@@ -24,12 +18,6 @@ export interface Settings {
    * A listed account that signs in by itself is a person of their own, and sees only their own mail.
    */
   dashboardAllow?: string[];
-  /** Days to keep the record of a message, its decisions and changes. Unset: forever. */
-  retentionDays?: number;
-  /** Show the model a few messages the user labelled before, chosen for the message it is judging. */
-  fewShot: boolean;
-  /** Delete an example this many days after the user answered for it. Unset: examples are kept. */
-  examplesKeepDays?: number;
   /** A Postgres server's address. Unset: PGlite, in the home directory. */
   databaseUrl?: string;
   /**
@@ -44,32 +32,32 @@ export interface Settings {
  * for you (Vercel, Cloudflare) configure it only this way.
  */
 export const ENVIRONMENT = {
-  SIFT_ACT: { setting: 'act', key: ['act'], as: 'boolean' },
-  SIFT_HEURISTICS: { setting: 'heuristics', key: ['heuristics'], as: 'boolean' },
-  SIFT_INTERVAL: { setting: 'interval', key: ['interval'], as: 'number' },
   SIFT_DASHBOARD_PORT: { setting: 'dashboardPort', key: ['dashboard', 'port'], as: 'number' },
   SIFT_DASHBOARD_HOST: { setting: 'dashboardHost', key: ['dashboard', 'host'], as: 'string' },
   SIFT_DASHBOARD_ALLOW: { setting: 'dashboardAllow', key: ['dashboard', 'allow'], as: 'list' },
-  SIFT_RETENTION_DAYS: { setting: 'retentionDays', key: ['retention', 'days'], as: 'number' },
-  SIFT_FEW_SHOT: { setting: 'fewShot', key: ['examples', 'few_shot'], as: 'boolean' },
-  SIFT_EXAMPLES_KEEP_DAYS: { setting: 'examplesKeepDays', key: ['examples', 'keep_days'], as: 'number' },
   DATABASE_URL: { setting: 'databaseUrl', key: ['database', 'url'], as: 'string' },
   DATABASE_MIGRATION_URL: { setting: 'databaseMigrationUrl', key: ['database', 'migration_url'], as: 'string' },
-} as const satisfies Record<string, { setting: keyof Settings; key: readonly string[]; as: 'boolean' | 'number' | 'string' | 'list' }>;
+} as const satisfies Record<string, { setting: keyof Settings; key: readonly string[]; as: 'number' | 'string' | 'list' }>;
 type Variable = keyof typeof ENVIRONMENT;
 
 /** Text that is not what its setting takes is left as text, so the setting's own check refuses it by name. */
-function fromText(text: string, as: 'boolean' | 'number' | 'string' | 'list'): unknown {
-  if (as === 'boolean') return text === 'true' ? true : text === 'false' ? false : text;
+function fromText(text: string, as: 'number' | 'string' | 'list'): unknown {
   if (as === 'number') return text.trim() !== '' && Number.isFinite(Number(text)) ? Number(text) : text;
   if (as === 'list') return text.split(',').map((item) => item.trim());
   return text;
 }
 
-/** Shorter, and sync's 7-day recovery search could bring back a message already forgotten and decide it twice. */
-const MIN_RETENTION_DAYS = 30;
+export const DEFAULT_SETTINGS: Settings = { dashboardPort: 8787 };
 
-export const DEFAULT_SETTINGS: Settings = { act: false, heuristics: false, interval: 60, dashboardPort: 8787, fewShot: true };
+/** Keys that were settings once, and where each went. One left in `sift.toml` is refused with this, not ignored. */
+const REMOVED: Record<string, string> = {
+  model: "the model is now each person's own, chosen in the dashboard under Settings",
+  act: "acting or observing is now each person's own, switched in the dashboard under Settings",
+  heuristics: 'heuristics is no longer a setting',
+  interval: 'interval is no longer a setting',
+  retention: '[retention] is no longer a setting',
+  examples: '[examples] is no longer a setting',
+};
 
 /**
  * Everything sift keeps lives in one directory, the home: settings, guidance, the database and
@@ -190,17 +178,8 @@ export function parseSettings(text: string, path = 'sift.toml', environment: rea
   const settings: Settings = { ...DEFAULT_SETTINGS };
 
   for (const [key, value] of Object.entries(raw)) {
-    if (key === 'model') throw new Error(`${path}: the model is now each person's own, chosen in the dashboard under Settings. Remove model from here.`);
-    else if (key === 'act') {
-      if (typeof value !== 'boolean') throw bad('act', 'true or false');
-      settings.act = value;
-    } else if (key === 'heuristics') {
-      if (typeof value !== 'boolean') throw bad('heuristics', 'true or false');
-      settings.heuristics = value;
-    } else if (key === 'interval') {
-      if (typeof value !== 'number' || !Number.isFinite(value) || value < 5) throw bad('interval', 'a number of seconds, at least 5');
-      settings.interval = value;
-    } else if (key === 'dashboard') {
+    if (Object.hasOwn(REMOVED, key)) throw new Error(`${path}: ${REMOVED[key]}. Remove ${key} from here.`);
+    else if (key === 'dashboard') {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) throw bad('dashboard', 'a table');
       for (const [sub, port] of Object.entries(value as Record<string, unknown>)) {
         if (sub === 'port') {
@@ -224,25 +203,6 @@ export function parseSettings(text: string, path = 'sift.toml', environment: rea
         if (sub === 'url') settings.databaseUrl = url;
         else settings.databaseMigrationUrl = url;
       }
-    } else if (key === 'retention') {
-      if (typeof value !== 'object' || value === null || Array.isArray(value)) throw bad('retention', 'a table');
-      for (const [sub, days] of Object.entries(value as Record<string, unknown>)) {
-        if (sub !== 'days') throw new Error(`${path}: unknown setting retention.${sub}.`);
-        if (typeof days !== 'number' || !Number.isInteger(days) || days < MIN_RETENTION_DAYS)
-          throw bad('retention.days', `a whole number of days, at least ${MIN_RETENTION_DAYS}`);
-        settings.retentionDays = days;
-      }
-    } else if (key === 'examples') {
-      if (typeof value !== 'object' || value === null || Array.isArray(value)) throw bad('examples', 'a table');
-      for (const [sub, given] of Object.entries(value as Record<string, unknown>)) {
-        if (sub === 'few_shot') {
-          if (typeof given !== 'boolean') throw bad('examples.few_shot', 'true or false');
-          settings.fewShot = given;
-        } else if (sub === 'keep_days') {
-          if (typeof given !== 'number' || !Number.isInteger(given) || given < 1) throw bad('examples.keep_days', 'a whole number of days, at least 1');
-          settings.examplesKeepDays = given;
-        } else throw new Error(`${path}: unknown setting examples.${sub}.`);
-      }
     } else {
       throw new Error(`${path}: unknown setting ${key}.`);
     }
@@ -252,18 +212,7 @@ export function parseSettings(text: string, path = 'sift.toml', environment: rea
 
 /** `sift.toml` with every setting and what it does. The comments are sift's; hand edits to values are kept. */
 export function renderSettings(settings: Settings): string {
-  return `# false: record what sift would do. true: carry it out in Gmail (each change can be undone in the dashboard).
-act = ${settings.act}
-
-# true: mail that is plainly bulk by its headers (a mailing list with a one-click unsubscribe, sent through
-# a bulk mail service, from a sender you have never written to) is labelled Marketing or Newsletters
-# without asking the model. Anything less clear still goes to the model.
-heuristics = ${settings.heuristics}
-
-# Seconds between checks for new mail.
-interval = ${settings.interval}
-
-[dashboard]
+  return `[dashboard]
 port = ${settings.dashboardPort}
 # Where else the dashboard listens: one of this machine's addresses (a Tailscale one, say), or "all" for
 # every network it is on. Unset: localhost only.
@@ -275,22 +224,7 @@ ${settings.dashboardAllow ? `allow = ${JSON.stringify(settings.dashboardAllow)}`
 
 # A Postgres server to keep everything in. Unset: sift keeps it in this directory itself (PGlite).
 # migration_url: the role that owns the tables, if sift should run as one that owns nothing.
-${settings.databaseUrl ? `[database]\nurl = ${JSON.stringify(settings.databaseUrl)}\n${settings.databaseMigrationUrl ? `migration_url = ${JSON.stringify(settings.databaseMigrationUrl)}\n` : ''}` : '# [database]\n# url = "postgres://user:password@host/sift"\n'}
-[retention]
-# Days to keep the record of a message, its decisions and changes, counted from the last thing that happened
-# to it. After that the change can no longer be undone from sift. Suggestions still waiting on you, mail you
-# answered for and what sift learned are kept regardless. Unset: keep everything.
-${settings.retentionDays ? `days = ${settings.retentionDays}` : '# days = 365'}
-
-# Examples are the messages you answered for in the dashboard, kept whole.
-[examples]
-# true: the model is shown a few of them (sender, subject, the first lines, your label) beside each
-# message it judges. It learns from your answers and each call costs a little more.
-few_shot = ${settings.fewShot}
-# Delete an example this many days after you answered for it. They hold the whole message. Unset: kept
-# until you delete them in the dashboard.
-${settings.examplesKeepDays ? `keep_days = ${settings.examplesKeepDays}` : '# keep_days = 365'}
-`;
+${settings.databaseUrl ? `[database]\nurl = ${JSON.stringify(settings.databaseUrl)}\n${settings.databaseMigrationUrl ? `migration_url = ${JSON.stringify(settings.databaseMigrationUrl)}\n` : ''}` : '# [database]\n# url = "postgres://user:password@host/sift"\n'}`;
 }
 
 /**

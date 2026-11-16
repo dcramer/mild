@@ -7,10 +7,6 @@ import type { Sql } from '../store/sql.ts';
  * asked, which is where the thing named is looked for.
  */
 export interface Controls {
-  settings(): ManagedSettings;
-  /** Save a change to `sift.toml`. A running sift picks it up on its next pass. */
-  saveSettings(change: Partial<ManagedSettings>): void;
-  /** `provider/model-id` for every model this person's sign-ins offer, and the one to suggest first. */
   /** The models this person's sign-ins offer, and for each provider the one to suggest first. */
   models(db: Sql): Promise<{ models: string[]; recommended: Record<string, string> }>;
   /** The ways to reach a model, which of them this person has signed in to, and a ChatGPT sign-in under way. */
@@ -42,17 +38,6 @@ export interface Controls {
   /** Start a pass now instead of waiting for the interval. */
   checkNow(): void;
   activity(): Activity;
-}
-
-export interface ManagedSettings {
-  /** False: sift only suggests. True: it carries decisions out in Gmail. */
-  act: boolean;
-  /** Seconds between passes. */
-  interval: number;
-  /** Whether the model is shown messages the user labelled before as examples. */
-  fewShot: boolean;
-  /** Days an example is kept after the user answered for it, or null to keep them. */
-  examplesKeepDays: number | null;
 }
 
 export interface Activity {

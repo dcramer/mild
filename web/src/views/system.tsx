@@ -68,7 +68,7 @@ import {
   Wordmark,
 } from '@/system';
 
-const SERIES = TIERS.filter((t) => t.key !== 'sender' && t.key !== 'heuristics').map((t, index) => ({ key: String(index), name: t.name, color: t.color }));
+const SERIES = TIERS.filter((t) => t.key !== 'sender').map((t, index) => ({ key: String(index), name: t.name, color: t.color }));
 const DAYS = [
   [12, 5, 3, 1],
   [8, 9, 2, 0],

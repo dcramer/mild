@@ -1,7 +1,6 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, parseSettings, renderSettings } from '../src/config.ts';
-import { pruneOld } from '../src/daemon/retention.ts';
+import { RETENTION_DAYS, pruneOld } from '../src/daemon/retention.ts';
 import { type RunOptions, createWake, runLoop } from '../src/daemon/run.ts';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { recordSync } from '../src/store/accounts.ts';
@@ -16,9 +15,9 @@ import type { Store } from '../src/store/store.ts';
 
 const ACCOUNT = 'me@example.org';
 const DAY = 86_400_000;
-const NOW = 100 * DAY;
 const OLD = 10 * DAY;
-const RECENT = 90 * DAY;
+const NOW = OLD + (RETENTION_DAYS + 1) * DAY;
+const RECENT = NOW - 10 * DAY;
 
 let db: Sql;
 let store: Store;
@@ -58,11 +57,11 @@ describe('pruneOld', () => {
     await recordDecision(db, ACCOUNT, 'new', archive, { mode: 'act', now: RECENT });
     await raw(db).run(`UPDATE actions SET created_at = ? WHERE message_id = 'fresh'`, RECENT);
 
-    expect(await pruneOld(db, 30, NOW)).toBe(1);
+    expect(await pruneOld(db, NOW)).toBe(1);
     expect(await left('messages', 'id')).toEqual(['fresh', 'new']);
     expect(await left('decisions')).toEqual(['fresh', 'new']);
     expect(await left('actions')).toEqual(['fresh']);
-    expect(await pruneOld(db, 30, NOW)).toBe(0);
+    expect(await pruneOld(db, NOW)).toBe(0);
   });
 
   it('keeps a suggestion that is still waiting, and forgets it once it is not', async () => {
@@ -73,7 +72,7 @@ describe('pruneOld', () => {
     await recordDecision(db, ACCOUNT, 'told', { ...archive, stage: 'rules', ruleId }, { now: OLD });
     expect((await pendingSuggestions(db)).map((s) => s.messageId)).toEqual(['waiting']);
 
-    expect(await pruneOld(db, 30, NOW)).toBe(1);
+    expect(await pruneOld(db, NOW)).toBe(1);
     expect(await left('messages', 'id')).toEqual(['waiting']);
   });
 
@@ -82,7 +81,7 @@ describe('pruneOld', () => {
     await recordDecision(db, ACCOUNT, 'answered', archive, { now: OLD });
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'answered@example.com', label: 'newsletter', scope: 'once' }, OLD);
 
-    expect(await pruneOld(db, 30, NOW)).toBe(0);
+    expect(await pruneOld(db, NOW)).toBe(0);
     expect(await left('examples')).toEqual(['answered']);
     expect(await left('feedback')).toEqual(['answered']);
   });
@@ -94,43 +93,32 @@ describe('pruneOld', () => {
     const { actionId } = await acted('unconfirmed');
     await finishAction(db, actionId, 'unknown', null, 'timeout', OLD);
 
-    expect(await pruneOld(db, 30, NOW)).toBe(0);
+    expect(await pruneOld(db, NOW)).toBe(0);
     expect((await listUndecided(db, ACCOUNT, 10)).map((m) => m.facts.messageId)).toEqual(['undecided']);
   });
 
   it('keeps the record of an unsubscribe, so the sender is not asked twice', async () => {
     await acted('list', 'unsubscribe');
-    expect(await pruneOld(db, 30, NOW)).toBe(0);
+    expect(await pruneOld(db, NOW)).toBe(0);
     expect(await unsubscribedAt(db, ACCOUNT, 'list@example.com')).toBe(OLD);
   });
 });
 
 describe('retention', () => {
-  it('is off unless sift.toml sets it, and refuses a window sync could reach back into', () => {
-    expect(DEFAULT_SETTINGS.retentionDays).toBeUndefined();
-    expect(parseSettings('[retention]\ndays = 90').retentionDays).toBe(90);
-    expect(parseSettings(renderSettings({ ...DEFAULT_SETTINGS, retentionDays: 365 })).retentionDays).toBe(365);
-    expect(() => parseSettings('[retention]\ndays = 7')).toThrow('retention.days must be a whole number of days, at least 30');
-    expect(() => parseSettings('[retention]\nday = 90')).toThrow('unknown setting retention.day');
-  });
-
   it('runs on the first pass and then once a day', async () => {
     const logs: string[] = [];
     const stop = new AbortController();
     const wake = createWake();
     let now = NOW;
     let pass = 0;
-    const next = async (): Promise<RunOptions & { intervalMs: number; retentionDays?: number }> => {
+    const next = async (): Promise<RunOptions> => {
       pass++;
       return {
-        act: false,
         connect: () => {
           throw new Error('not connected');
         },
         log: (line) => logs.push(line),
         now: () => now,
-        intervalMs: 60_000,
-        ...(pass === 1 ? {} : { retentionDays: 30 }),
       };
     };
     await acted('first');
@@ -146,8 +134,8 @@ describe('retention', () => {
       },
     });
     expect(logs.filter((line) => line.startsWith('Forgot'))).toEqual([
-      'Forgot 1 message with nothing newer than 30 days',
-      'Forgot 1 message with nothing newer than 30 days',
+      'Forgot 1 message with nothing newer than 365 days',
+      'Forgot 1 message with nothing newer than 365 days',
     ]);
     expect(await left('messages', 'id')).toEqual([]);
   });

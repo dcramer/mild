@@ -27,5 +27,5 @@ Preconditions:
 ## Gotchas
 
 - An answer makes no rule; three alike for one sender propose one, shown on Suggestions as `Make a rule?`.
-- Only a row sift placed starts on a label. In the seed that is `m8` alone, placed by the header heuristics; nothing reaches the model, so `Unsure` and `Fairly sure` meters cannot be shown here, and the dropdown's likely group holds only the label itself.
+- Only a row sift placed starts on a label. In the seed that is `m8` alone, placed by the stand-in model as sure; it is unsure of everything else, so `Unsure` and `Fairly sure` meters cannot be shown here, and the dropdown's likely group holds only the label itself.
 - The check has no key of its own; Enter on a focused check presses it.

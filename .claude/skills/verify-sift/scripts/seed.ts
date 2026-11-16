@@ -21,6 +21,7 @@ import { credentials } from '../../../../src/store/credentials.ts';
 import { setModel } from '../../../../src/store/preferences.ts';
 import { openStore } from '../../../../src/store/store.ts';
 import { addRule } from '../../../../src/store/rules.ts';
+import type { JudgeInput } from '../../../../src/triage/stages/model.ts';
 import { FakeMailbox } from '../../../../tests/helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -64,10 +65,8 @@ const inbox = [
   mail('CI <builds@ci.example.org>', 'Build failed on main', 'The build failed at step 3.'),
   mail('Ada Lovelace <ada@example.org>', 'Lunch on Thursday?', 'Are you free for lunch on Thursday?'),
   mail('Grace Hopper <grace@example.net>', 'Notes from the review', 'Attached are my notes.'),
-  // Plainly bulk by its headers (list, one-click, a bulk service, Promotions), so the heuristics tier places it as Marketing.
-  mail('Store <sale@store.example.com>', 'Winter sale starts now', 'Up to half off.', [...list('store.example.com'), { name: 'X-Mailgun-Sid', value: 'seed' }], [
-    'CATEGORY_PROMOTIONS',
-  ]),
+  // The one the stand-in model places, as Marketing.
+  mail('Store <sale@store.example.com>', 'Winter sale starts now', 'Up to half off.', list('store.example.com')),
 ];
 
 const store = await openStore(config);
@@ -98,10 +97,16 @@ const api: GmailApi = {
   getRaw: async () => null,
 };
 
-// A stand-in model that can place nothing, so what no rule covers becomes a question ("Which label?"):
-// with no model at all it would wait, undecided, and never be asked about. It calls no provider.
-const unsure = async () => ({ judge: async () => ({ label: 'unsure', reason: 'synthetic: cannot tell', confidence: 0.3 }) });
-const [result] = await runEveryone(store, { act: false, heuristics: true, model: unsure, connect: () => ({ api, mailbox }), log: () => {} });
+// A stand-in model that calls no provider. It is sure the Store's sale is Marketing and can place nothing
+// else, so what no rule covers becomes a question ("Which label?"): with no model at all it would wait,
+// undecided, and never be asked about.
+const standIn = async () => ({
+    judge: async ({ evidence }: JudgeInput) =>
+    evidence.facts.from.address === 'sale@store.example.com'
+      ? { label: 'marketing', reason: 'synthetic: a sale sent to a list', confidence: 0.95 }
+      : { label: 'unsure', reason: 'synthetic: cannot tell', confidence: 0.3 },
+});
+const [result] = await runEveryone(store, { model: standIn, connect: () => ({ api, mailbox }), log: () => {} });
 if (result?.error) throw new Error(`seed pass failed: ${result.error}`);
 if (mailbox.modifyCalls > 0) throw new Error('seed pass changed the fake mailbox while observing');
 // A model in use, so the dashboard is not behind its connect-a-model wall. The key is made up, and this

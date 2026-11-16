@@ -64,7 +64,7 @@ export async function gatherEvidence(sources: EvidenceSources, facts: MessageFac
 }
 
 /** Whether the owner has ever written to the sender: the cached answer, or one search of sent mail, remembered. Null if that failed. */
-export async function ownerHasWritten(sources: Pick<EvidenceSources, 'db' | 'mailbox' | 'now'>, facts: MessageFacts): Promise<boolean | null> {
+async function ownerHasWritten(sources: Pick<EvidenceSources, 'db' | 'mailbox' | 'now'>, facts: MessageFacts): Promise<boolean | null> {
   const { db } = sources;
   const now = (sources.now ?? Date.now)();
   const cached = await cachedCorrespondent(db, facts.accountId, facts.from.address, now);

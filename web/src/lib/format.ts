@@ -8,7 +8,6 @@ import type { StageKey } from './api.ts';
 /** Tiers in cascade order, cheapest first. Each has a fixed ink (see index.css); mail no tier decided is highlighted. */
 export const TIERS: { key: StageKey; name: string; color: string }[] = [
   { key: 'rules', name: 'Rule', color: 'var(--tier-rules)' },
-  { key: 'heuristics', name: 'Header checks', color: 'var(--tier-sender)' },
   { key: 'sender', name: 'Sender (old)', color: 'var(--tier-sender)' },
   { key: 'classifier', name: 'Model', color: 'var(--tier-classifier)' },
   { key: 'agent', name: 'Agent', color: 'var(--tier-agent)' },
@@ -23,11 +22,10 @@ export const HANDLED = [
 export const tier = (key: string) => TIERS.find((t) => t.key === key) ?? { key, name: key, color: 'var(--muted-foreground)' };
 
 /**
- * How sure sift is of a label, in three steps for a meter. A rule or the header checks decided it, so it
- * is sure; a model says how sure it was. Thresholds are a first guess until real mail calibrates them.
+ * How sure sift is of a label, in three steps for a meter. A rule decided it, so it is sure; a model says how sure it was. Thresholds are a first guess until real mail calibrates them.
  */
 export function sureness(stage: string, confidence: number | null): 1 | 2 | 3 {
-  if (stage === 'rules' || stage === 'heuristics' || stage === 'sender') return 3;
+  if (stage === 'rules' || stage === 'sender') return 3;
   if (confidence === null) return 2;
   return confidence >= 0.9 ? 3 : confidence >= 0.7 ? 2 : 1;
 }

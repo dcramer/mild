@@ -2,6 +2,7 @@ import { loadConfig } from '../../config.ts';
 import { hasClientSecrets } from '../../gmail/auth.ts';
 import { connectedAddresses, listUsers } from '../../store/accounts.ts';
 import { DatabaseInUse } from '../../store/db.ts';
+import { preferences } from '../../store/preferences.ts';
 import { type SQL, actions, count, decisions, inArray, messages, rules } from '../../store/query.ts';
 import { openStore } from '../../store/store.ts';
 import { paint, ui } from '../ui.ts';
@@ -32,12 +33,13 @@ export async function status(): Promise<void> {
     return n;
   };
   const { settings } = config;
+  const acting = (await Promise.all(people.map(async (db) => (await preferences(db)).act))).filter(Boolean).length;
   const ready = hasClientSecrets(config) && accounts.length > 0;
 
   ui.heading('status', paint.path(config.home));
   ui.fields([
     ['Gmail', accounts.length > 0 ? accounts.join(', ') : paint.dim(hasClientSecrets(config) ? 'not connected' : 'not set up')],
-    ['Mode', `${settings.act ? 'acting on decisions' : 'observing only'}${paint.dim(` · every ${settings.interval}s`)}`],
+    ['Mode', acting === 0 ? 'observing only' : acting === people.length ? 'acting on decisions' : `acting for ${acting} of ${people.length} people`],
     ['Dashboard', signInAddresses(settings.dashboardPort).join(paint.dim('  or  '))],
   ]);
   ui.blank();

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { undo } from '../actions/executor.ts';
 import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
-import { type Config, loadConfig, saveSettings } from '../config.ts';
+import type { Config } from '../config.ts';
 import { backfill } from '../daemon/backfill.ts';
 import type { Activity, Controls, ModelSignIns } from '../dashboard/controls.ts';
 import type { Wake } from '../daemon/run.ts';
@@ -56,32 +56,11 @@ function deviceId(config: Config): string {
 
 /** What the dashboard may ask this process to do. See `Controls`. */
 export async function buildControls(config: Config, store: Store, live: { wake?: Wake; activity: Activity }): Promise<Controls> {
-  const current = () => loadConfig().settings;
   const everyone = async () => await Promise.all((await listUsers(store.central)).map((u) => store.user(u.id)));
   for (const db of await everyone()) await interruptEvals(db);
   // By person: suggestions being judged again, and a ChatGPT sign-in waiting on them.
   const pending = new Map<number, NonNullable<ModelSignIns['pending']>>();
   return {
-    settings: () => {
-      const s = current();
-      return { act: s.act, interval: s.interval, fewShot: s.fewShot, examplesKeepDays: s.examplesKeepDays ?? null };
-    },
-    saveSettings: (change) => {
-      const { environment } = loadConfig();
-      for (const [setting, value] of Object.entries(change))
-        if (value !== undefined && environment[setting as keyof typeof environment])
-          throw new Error(`${environment[setting as keyof typeof environment]} in the environment sets this; change it there.`);
-      const { examplesKeepDays: _kept, ...rest } = current();
-      const keepDays = change.examplesKeepDays === undefined ? current().examplesKeepDays : (change.examplesKeepDays ?? undefined);
-      saveSettings(config, {
-        ...rest,
-        ...(change.act === undefined ? {} : { act: change.act }),
-        ...(change.interval === undefined ? {} : { interval: change.interval }),
-        ...(change.fewShot === undefined ? {} : { fewShot: change.fewShot }),
-        ...(keepDays ? { examplesKeepDays: keepDays } : {}),
-      });
-      live.wake?.now();
-    },
     models: async (db) => {
       const available = (await (await modelsFor(config, db)).getAvailable())
         .filter((m) => offerModel(m.provider, m.id))

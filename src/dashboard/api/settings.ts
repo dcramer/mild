@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { lastSyncedAt, listAccounts } from '../../store/accounts.ts';
 import { MAX_LABELS } from '../../store/labels.ts';
-import { preferences, setModel } from '../../store/preferences.ts';
+import { preferences, setAct, setModel } from '../../store/preferences.ts';
 import { listLabelSummaries } from '../queries/labels.ts';
 import { type Scope, sees } from '../scope.ts';
 import { ManageState, Models, SignInCode } from '../types.ts';
@@ -14,7 +14,7 @@ async function manageState({ db, controls }: Context, scope: Scope): Promise<Man
   const activity = controls?.activity() ?? { sorting: false, lastPassAt: null, problems: [], expired: [] };
   return {
     owner: scope.owner,
-    settings: controls?.settings() ?? { act: false, interval: 60, fewShot: true, examplesKeepDays: null },
+    act: own.act,
     model: { chosen: own.model, ...(controls ? await controls.modelSignIns(db) : { choices: [], signedIn: [], pending: null }) },
     activity: {
       ...activity,
@@ -52,24 +52,14 @@ export const reads: Read[] = [
 
 export const writes: Write[] = [
   write({
-    path: '/api/settings',
-    body: z.strictObject({
-      act: z.boolean().optional(),
-      interval: z.number().min(5).max(86_400).optional(),
-      fewShot: z.boolean().optional(),
-      examplesKeepDays: z.int().min(1).max(36_500).nullable().optional(),
-    }),
-    reply: z.object({ settings: ManageState.shape.settings }),
-    touches: install,
-    run: ({ controls }, { act, interval, fewShot, examplesKeepDays }) => {
-      if (!controls) throw new Error('This dashboard cannot change settings.');
-      controls.saveSettings({
-        ...(act === undefined ? {} : { act }),
-        ...(interval === undefined ? {} : { interval }),
-        ...(fewShot === undefined ? {} : { fewShot }),
-        ...(examplesKeepDays === undefined ? {} : { examplesKeepDays }),
-      });
-      return { settings: controls.settings() };
+    path: '/api/act',
+    body: z.strictObject({ act: z.boolean() }),
+    reply: done,
+    touches: self,
+    run: async ({ db, controls }, { act }) => {
+      await setAct(db, act);
+      controls?.checkNow();
+      return { ok: true as const };
     },
   }),
   write({
