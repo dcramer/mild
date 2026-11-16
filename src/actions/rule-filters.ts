@@ -34,7 +34,7 @@ export async function writeRuleFilter(deps: ActionDeps, ruleId: string): Promise
   if (!found) throw new Error('That rule no longer exists.');
   await settleRuleFilters(deps, found.accountId);
   const row = (await getRuleFilter(deps.db, ruleId))!;
-  const verdict = (await filterVerdicts(deps.db, row.accountId, clock(deps))).get(ruleId);
+  const verdict = (await filterVerdicts(deps.db, row.accountId)).get(ruleId);
   if (!verdict?.possible) throw new Error(verdict?.reason ?? 'That rule cannot be a Gmail filter.');
   if (row.filterId) await removeRuleFilter(deps, ruleId);
 
@@ -141,7 +141,7 @@ async function settleRuleFilters(deps: ActionDeps, accountId: string): Promise<v
     }
     const owned = (await listRuleFilters(deps.db, accountId)).some((r) => r.filterId === landed.id);
     if (!owned) {
-      const verdict = rule && !rule.filterId ? (await filterVerdicts(deps.db, accountId, clock(deps))).get(ruleId) : undefined;
+      const verdict = rule && !rule.filterId ? (await filterVerdicts(deps.db, accountId)).get(ruleId) : undefined;
       if (verdict?.possible && sameFilter(landed, await proposal(deps, verdict.plan)))
         await setRuleFilter(
           deps.db,
@@ -192,7 +192,7 @@ export async function checkRuleFilters(deps: ActionDeps, accountId: string, fix:
       continue;
     }
     // Asked afresh each time: removing or replacing one filter can clear the way for another rule.
-    const verdict = (await filterVerdicts(deps.db, accountId, clock(deps))).get(row.ruleId);
+    const verdict = (await filterVerdicts(deps.db, accountId)).get(row.ruleId);
     if (verdict?.possible && samePlan(verdict.plan, written.plan)) {
       await setRuleFilter(deps.db, row.ruleId, { ...row, state: 'active' }, clock(deps));
       continue;

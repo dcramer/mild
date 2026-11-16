@@ -58,7 +58,7 @@ export async function setRuleFilter(
 }
 
 /** For each of the account's rules, whether it can be a Gmail filter as things stand. `_now` is unused; src/actions/rule-filters.ts still passes it. */
-export async function filterVerdicts(db: Sql, accountId: string, _now?: number): Promise<Map<string, FilterVerdict>> {
+export async function filterVerdicts(db: Sql, accountId: string): Promise<Map<string, FilterVerdict>> {
   const rules = await listRules(db, accountId);
   const labels = await listLabels(db, accountId);
   return new Map(rules.map((rule) => [rule.id, filterFor(rule, labels, rules)]));
