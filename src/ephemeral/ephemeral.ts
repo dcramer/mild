@@ -20,6 +20,25 @@ export interface Ephemeral {
   close(): Promise<void>;
 }
 
+/** How long one holder may keep a key in `holding`, and how long another waits for it. */
+const HOLD_MS = 60_000;
+
+/** Run `work` while holding `key`, waiting for whoever holds it now: one at a time across every process. */
+export async function holding<T>(ephemeral: Ephemeral, key: string, work: () => Promise<T>): Promise<T> {
+  const giveUp = Date.now() + HOLD_MS;
+  let token = await ephemeral.claim(key, HOLD_MS);
+  while (token === null) {
+    if (Date.now() > giveUp) throw new Error('Something else held this too long. Try again.');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    token = await ephemeral.claim(key, HOLD_MS);
+  }
+  try {
+    return await work();
+  } finally {
+    await ephemeral.release(key, token);
+  }
+}
+
 interface Bucket {
   burst: number;
   perMinute: number;

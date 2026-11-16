@@ -9,20 +9,15 @@ export interface SignIns {
   write(provider: string, text: string): Promise<void>;
   remove(provider: string): Promise<void>;
   keys(): Promise<string[]>;
+  /**
+   * Run `work` while nothing else changes this person's sign-ins, in this process or any other: an OAuth
+   * refresh token works once, and two refreshing it at once would leave the person signed out.
+   */
+  exclusive<T>(work: () => Promise<T>): Promise<T>;
 }
 
-/**
- * pi-ai's credential store over `SignIns`. An OAuth refresh token rotates each time it is used, so the
- * new one has to be stored, and writes are serialised within this process: run one sift process per
- * home, or two would race to refresh the same token.
- */
+/** pi-ai's credential store over `SignIns`. Every change, a token refresh included, is made under `exclusive`. */
 export function credentialStore(signIns: SignIns): CredentialStore {
-  let queue: Promise<unknown> = Promise.resolve();
-  const exclusive = <T>(work: () => Promise<T>): Promise<T> => {
-    const run = queue.then(work, work);
-    queue = run.catch(() => undefined);
-    return run;
-  };
   const read = async (provider: string) => {
     const text = await signIns.read(provider);
     return text === null ? undefined : (JSON.parse(text) as Credential);
@@ -34,12 +29,12 @@ export function credentialStore(signIns: SignIns): CredentialStore {
         ({ providerId, credential }) => (credential ? [{ providerId, type: credential.type }] : []),
       ),
     modify: (provider, fn) =>
-      exclusive(async () => {
+      signIns.exclusive(async () => {
         const next = await fn(await read(provider));
         if (next === undefined) await signIns.remove(provider);
         else await signIns.write(provider, JSON.stringify(next));
         return next;
       }),
-    delete: (provider) => exclusive(() => signIns.remove(provider)),
+    delete: (provider) => signIns.exclusive(() => signIns.remove(provider)),
   };
 }

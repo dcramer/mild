@@ -10,9 +10,8 @@ import { openStore } from '../../store/store.ts';
 import { openEphemeral } from '../../ephemeral/open.ts';
 import type { Sql } from '../../store/sql.ts';
 import { paint, ui } from '../ui.ts';
-import { buildControls, gmailFor, openModelTier } from '../controls.ts';
+import { buildControls, gmailFor, modelSignIns, openModelTier } from '../controls.ts';
 import { checkChatGPT } from '../chatgpt.ts';
-import { credentials } from '../../store/credentials.ts';
 import { checkSecrets } from '../secrets-check.ts';
 import { serveDashboard, portOption } from '../serve.ts';
 
@@ -56,7 +55,7 @@ export async function run(args: string[]): Promise<void> {
     const model = async (db: Sql) => {
       const person = await personOf(db);
       try {
-        const tier = await openModelTier(config, db);
+        const tier = await openModelTier(config, ephemeral, db);
         unreachable.delete(person);
         return tier && { judge: tier.judge, model: tier.spec };
       } catch (error) {
@@ -84,7 +83,7 @@ export async function run(args: string[]): Promise<void> {
         const { api, mailbox } = await gmailFor(config, ephemeral, db, account.email);
         return { api, mailbox };
       },
-      checkChatGPT: async (db: Sql) => await checkChatGPT(ephemeral, await personOf(db), await credentials(db, 'model', config.keys)),
+      checkChatGPT: async (db: Sql) => await checkChatGPT(ephemeral, await personOf(db), await modelSignIns(config, ephemeral, db)),
       log,
     };
 

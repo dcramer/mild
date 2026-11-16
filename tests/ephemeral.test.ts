@@ -1,6 +1,6 @@
 import { globSync, readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
-import { type Ephemeral, memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
+import { type Ephemeral, holding, memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { redisEphemeral } from '../src/ephemeral/redis.ts';
 
 /** Set to a disposable Redis to run these against it as well (CI does). */
@@ -15,7 +15,7 @@ afterEach(async () => {
   open = [];
 });
 
-describe.each(stores)('%s', (_name, make) => {
+describe.each(stores)('%s', (name, make) => {
   const fresh = async () => {
     const store = await make();
     open.push(store);
@@ -58,6 +58,22 @@ describe.each(stores)('%s', (_name, make) => {
     expect(await store.claim(k, 30)).not.toBeNull();
     await new Promise((resolve) => setTimeout(resolve, 60));
     expect(await store.claim(k, 30)).not.toBeNull();
+  });
+
+  it('runs work holding a key one at a time, whichever handle asks', async () => {
+    const [one, two] = [await fresh(), await fresh()];
+    const k = key('holding');
+    const order: string[] = [];
+    const work = (name: string) => async () => {
+      order.push(`${name} in`);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      order.push(`${name} out`);
+      return name;
+    };
+    // Two handles on one Redis stand for two instances; memory's are separate, so only one is used there.
+    const other = name === 'redis' ? two : one;
+    expect(await Promise.all([holding(one, k, work('a')), holding(other, k, work('b'))])).toEqual(['a', 'b']);
+    expect(order).toEqual(['a in', 'a out', 'b in', 'b out']);
   });
 
   it('lets a burst through and then makes callers wait', async () => {

@@ -119,10 +119,16 @@ describe('credentials', () => {
     const { store, stored } = await people();
     const alpha = await store.user(1);
     await (await credentials(alpha, 'gmail', A)).write('alpha@example.org', 'refresh-token-value');
-    await credentialStore(await credentials(alpha, 'model', A)).modify('openai', async () => ({ type: 'api_key', key: 'api-key-value' }));
+    await credentialStore({ ...(await credentials(alpha, 'model', A)), exclusive: (work) => work() }).modify('openai', async () => ({
+      type: 'api_key',
+      key: 'api-key-value',
+    }));
     for (const row of await stored(1)) expect(row.value).toMatch(/^sift-secret:v1:/);
     expect(await (await credentials(alpha, 'gmail', A)).read('alpha@example.org')).toBe('refresh-token-value');
-    expect(await credentialStore(await credentials(alpha, 'model', A)).read('openai')).toEqual({ type: 'api_key', key: 'api-key-value' });
+    expect(await credentialStore({ ...(await credentials(alpha, 'model', A)), exclusive: (work) => work() }).read('openai')).toEqual({
+      type: 'api_key',
+      key: 'api-key-value',
+    });
     await expect((await credentials(alpha, 'gmail', B)).read('alpha@example.org')).rejects.toThrow('SIFT_KEY');
   });
 

@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { undo } from '../actions/executor.ts';
 import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
 import type { Config } from '../config.ts';
-import type { Ephemeral } from '../ephemeral/ephemeral.ts';
+import { type Ephemeral, holding } from '../ephemeral/ephemeral.ts';
 import type { Controls } from '../dashboard/controls.ts';
 import { forgetPassStatus, passStatus } from '../daemon/status.ts';
 import type { Jobs } from '../daemon/jobs.ts';
@@ -13,6 +13,7 @@ import { clientFor, loadClientSecrets, revokeGrant } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { pacer } from '../gmail/quota.ts';
 import { chatgptPending, finishChatGPT, forgetChatGPT, startChatGPT } from './chatgpt.ts';
+import type { SignIns } from '../model/credentials.ts';
 import { createJudge } from '../model/judge.ts';
 import { modelChoices, offerModel, openModels, recommendModel, resolveModel, saveApiKey } from '../model/models.ts';
 import { listAccounts, listUsers, personOf } from '../store/accounts.ts';
@@ -37,17 +38,24 @@ export async function gmailFor(config: Config, ephemeral: Ephemeral, db: Sql, em
   return { client, pace, api: createGmailApi(client, pace), mailbox: createGmailMailbox(client, pace) };
 }
 
+/** One person's model sign-ins, kept in their database and changed by one process at a time. */
+export async function modelSignIns(config: Config, ephemeral: Ephemeral, db: Sql): Promise<SignIns> {
+  const person = await personOf(db);
+  return { ...(await credentials(db, 'model', config.keys)), exclusive: (work) => holding(ephemeral, `lock:signin:${person}`, work) };
+}
+
 /** One person's model providers, signed in with what is kept in their database. */
-const modelsFor = async (config: Config, db: Sql) => openModels(await credentials(db, 'model', config.keys), config.settings.chatgptSignIn ?? 'device-code');
+const modelsFor = async (config: Config, ephemeral: Ephemeral, db: Sql) =>
+  openModels(await modelSignIns(config, ephemeral, db), config.settings.chatgptSignIn ?? 'device-code');
 
 /**
  * The model tier of the person whose database `db` is, from their own choice and sign-in.
  * Null when they have chosen no model. Throws, with what to do, when they have chosen one they cannot reach.
  */
-export async function openModelTier(config: Config, db: Sql) {
+export async function openModelTier(config: Config, ephemeral: Ephemeral, db: Sql) {
   const { model: spec } = await preferences(db);
   if (!spec) return null;
-  const models = await modelsFor(config, db);
+  const models = await modelsFor(config, ephemeral, db);
   const model = resolveModel(models, spec);
   if (!(await models.getAuth(model))) throw new Error(`Not signed in to ${model.provider}. Sign in under Settings in the dashboard.`);
   return { spec, judge: createJudge(models, model) };
@@ -72,7 +80,7 @@ export async function buildControls(config: Config, store: Store, live: { epheme
   };
   return {
     models: async (db) => {
-      const available = (await (await modelsFor(config, db)).getAvailable())
+      const available = (await (await modelsFor(config, live.ephemeral, db)).getAvailable())
         .filter((m) => offerModel(m.provider, m.id))
         .map((m) => ({ provider: m.provider, id: m.id }));
       const recommended: Record<string, string> = {};
@@ -87,7 +95,7 @@ export async function buildControls(config: Config, store: Store, live: { epheme
     },
     modelSignIns: async (db) => ({
       choices: choices.map((c) => ({ ...c })),
-      signedIn: await (await credentials(db, 'model', config.keys)).keys(),
+      signedIn: await (await modelSignIns(config, live.ephemeral, db)).keys(),
       pending: await chatgptPending(live.ephemeral, await personOf(db)),
     }),
     signInChatGPT: async (db) => {
@@ -98,16 +106,16 @@ export async function buildControls(config: Config, store: Store, live: { epheme
       return shown;
     },
     finishChatGPT: async (db, address) => {
-      await finishChatGPT(live.ephemeral, await personOf(db), await credentials(db, 'model', config.keys), address);
+      await finishChatGPT(live.ephemeral, await personOf(db), await modelSignIns(config, live.ephemeral, db), address);
       await passNow(db);
     },
     saveModelKey: async (db, provider, key) => {
       if (!choices.some((c) => c.provider === provider && c.how === 'key')) throw new Error('That provider does not take an API key.');
-      await saveApiKey(await credentials(db, 'model', config.keys), provider, key);
+      await saveApiKey(await modelSignIns(config, live.ephemeral, db), provider, key);
       await passNow(db);
     },
     signOutModel: async (db, provider) => {
-      await (await credentials(db, 'model', config.keys)).remove(provider);
+      await (await modelSignIns(config, live.ephemeral, db)).remove(provider);
       await forgetChatGPT(live.ephemeral, await personOf(db));
     },
     undo: async (db, actionId) => {
@@ -131,7 +139,7 @@ export async function buildControls(config: Config, store: Store, live: { epheme
       return last !== null;
     },
     startEval: async (db, request) => {
-      const tier = await openModelTier(config, db);
+      const tier = await openModelTier(config, live.ephemeral, db);
       if (!tier) throw new Error('Choose a model first.');
       const run = await startEval({ db, model: tier.spec }, request);
       live.jobs?.send({ kind: 'eval', person: await personOf(db), run });

@@ -14,6 +14,7 @@ function memorySignIns(): SignIns & { stored: Map<string, string> } {
     write: async (provider, text) => void stored.set(provider, text),
     remove: async (provider) => void stored.delete(provider),
     keys: async () => [...stored.keys()],
+    exclusive: (work) => work(),
   };
 }
 
