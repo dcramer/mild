@@ -81,7 +81,15 @@ Closes this run's browser session, stops the process by the pid `up` recorded, d
 
 ## Upkeep
 
-`scripts/maintain-daily.sh` runs from cron on the machine that installed it, in its own clone (`~/.cache/sift-verify-maint/repo`). When `web/src`, `src/dashboard`, `src/cli`, `src/store`, `src/daemon` or this skill changed on `origin/main` since the last audit, it has a headless Claude run pstack's `maintain-verification-skill` against this skill. Fixes arrive as a PR from `verify-sift/maintain-<date>`; product gaps, a blocked pass or a failed run go to the open `verify-sift maintenance` issue. `--check` prints what it would audit, `--force` runs without churn. The cron entry lives in the user's crontab between `# BEGIN sift verify-sift maintenance` markers, not in this repository.
+A SessionStart hook (`.claude/settings.json`) runs `scripts/maintain-check.sh`. When `web/src`, `src/dashboard`, `src/cli`, `src/store`, `src/daemon` or `tests/helpers.ts` changed on `origin/main` since the last audit, the session is told to offer `/pstack:maintain-verification-skill`. It speaks at most once a day per machine, and never runs the pass itself. It reads local refs only, so it knows only as much of main as the last fetch.
+
+After a maintenance pass ends clean or changed, record it, or tomorrow's first session asks again:
+
+```bash
+.claude/skills/verify-sift/scripts/maintain-check.sh --audited <the origin/main commit the pass covered>
+```
+
+State is in `~/.cache/sift-verify-maint/`. Delete `suggested-on` there to see today's prompt again.
 
 ## What this cannot show
 

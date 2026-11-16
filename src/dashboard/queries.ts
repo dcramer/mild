@@ -17,7 +17,7 @@ import {
   type SuggestionDetail,
   STAGES,
   type StageKey,
-  type SuggestionGroup,
+  type SuggestionItem,
   type Suggestions,
   type Summary,
 } from './types.ts';
@@ -527,8 +527,7 @@ export function listLabelSummaries(db: DatabaseSync, accountId: string): LabelSu
   }));
 }
 
-const SAMPLE = 4;
-const MAX_GROUPS = 100;
+const MAX_ITEMS = 500;
 
 /**
  * What is waiting on the user, one group per sender, since an answer is about a sender. A group shows
@@ -538,55 +537,22 @@ export function listSuggestions(db: DatabaseSync, options: { includeKept?: boole
   const accounts = db.prepare('SELECT id FROM accounts').all() as { id: string }[];
   const labels = new Map(accounts.map(({ id }) => [id, listLabels(db, id)] as const));
   const names = new Map([...labels].flatMap(([account, list]) => list.map((l) => [`${account}\n${l.id}`, l.name] as const)));
-  const groups = new Map<string, SuggestionGroup>();
-  // Per sender, how many waiting messages got each guess. The commonest is the one the group shows.
-  const tallies = new Map<string, Map<string, { n: number; suggestion: (typeof all)[number] }>>();
-  const all = pendingSuggestions(db);
-  let waiting = 0;
-  for (const s of all) {
-    if (s.disposition === 'keep' && !options.includeKept) continue;
-    waiting++;
-    const key = `${s.accountId}\n${s.fromAddress}`;
-    let group = groups.get(key);
-    if (!group) {
-      group = {
-        accountId: s.accountId,
-        sender: s.fromAddress,
-        senderName: s.fromName,
-        disposition: s.block ? 'block' : s.disposition,
-        labelId: s.labelId,
-        labelName: null,
-        stage: s.stage,
-        unsubscribe: s.unsubscribe,
-        guesses: 1,
-        messages: 0,
-        latestAt: s.decidedAt,
-        latestReceivedAt: s.receivedAt,
-        sample: [],
-      };
-      groups.set(key, group);
-      tallies.set(key, new Map());
-    }
-    group.messages++;
-    group.latestReceivedAt = Math.max(group.latestReceivedAt, s.receivedAt);
-    const tally = tallies.get(key)!;
-    const guess = `${s.labelId ?? ''}\n${s.disposition}\n${s.block}`;
-    const entry = tally.get(guess);
-    if (entry) entry.n++;
-    else tally.set(guess, { n: 1, suggestion: s });
-    if (group.sample.length < SAMPLE)
-      group.sample.push({ decisionId: s.decisionId, messageId: s.messageId, subject: s.subject, reason: s.reason, decidedAt: s.decidedAt });
-  }
-  for (const [key, group] of groups) {
-    const tally = [...tallies.get(key)!.values()];
-    const top = tally.reduce((best, entry) => (entry.n > best.n ? entry : best));
-    group.guesses = tally.length;
-    group.disposition = top.suggestion.block ? 'block' : top.suggestion.disposition;
-    group.labelId = top.suggestion.labelId;
-    group.labelName = (top.suggestion.labelId && names.get(`${group.accountId}\n${top.suggestion.labelId}`)) ?? null;
-    group.stage = top.suggestion.stage;
-    group.unsubscribe = top.suggestion.unsubscribe;
-  }
+  const waitingNow = pendingSuggestions(db).filter((s) => options.includeKept || s.disposition !== 'keep');
+  const items = waitingNow.slice(0, MAX_ITEMS).map((s): SuggestionItem => ({
+    accountId: s.accountId,
+    messageId: s.messageId,
+    decisionId: s.decisionId,
+    sender: s.fromAddress,
+    senderName: s.fromName,
+    subject: s.subject,
+    receivedAt: s.receivedAt,
+    disposition: s.block ? 'block' : s.disposition,
+    labelId: s.labelId,
+    labelName: (s.labelId && names.get(`${s.accountId}\n${s.labelId}`)) ?? null,
+    unsubscribe: s.unsubscribe,
+    stage: s.stage,
+    confidence: s.confidence,
+  }));
   const { reviewed, right } = accuracy(db);
   const examples = db.prepare(`SELECT sum(status = 'captured') AS captured, sum(status = 'pending') AS pending FROM examples`).get() as {
     captured: number | null;
@@ -612,8 +578,8 @@ export function listSuggestions(db: DatabaseSync, options: { includeKept?: boole
         },
       ];
     }),
-    groups: [...groups.values()].toSorted((a, b) => b.messages - a.messages || b.latestAt - a.latestAt).slice(0, MAX_GROUPS),
-    waiting,
+    items,
+    waiting: waitingNow.length,
     accuracy: { reviewed, right },
   };
 }

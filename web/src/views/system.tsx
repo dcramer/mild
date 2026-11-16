@@ -31,6 +31,7 @@ import {
   Marked,
   Masthead,
   Menu,
+  Meter,
   Note,
   Notice,
   OnPhone,
@@ -192,6 +193,19 @@ export function SystemView() {
           <Row label="verdict" note="What sift says mail is and does: the label, then the stamp.">
             <Verdict labelName="Newsletters" disposition="archive" unsubscribe />
             <Verdict labelName={null} disposition="review" />
+          </Row>
+          <Row label="meter" note="How sure sift is about a label, in three steps. A suggestion's label is its answer button, meter first.">
+            <Meter level={1} />
+            <Meter level={2} />
+            <Meter level={3} />
+            <Button>
+              <Meter level={3} />
+              Marketing
+            </Button>
+            <Button>
+              <Meter level={1} />
+              Receipts
+            </Button>
           </Row>
           <Row label="status" note="Where a decision got to in Gmail. Only a failure is red.">
             {(['suggested', 'done', 'undone'] as const).map((s) => (

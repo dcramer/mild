@@ -87,7 +87,7 @@ describe('suggestions', () => {
     expect(pendingSuggestions(db).map((s) => s.fromAddress)).toEqual(['learned@example.com']);
   });
 
-  it('are grouped by sender, showing the commonest guess, biggest first, without kept mail unless asked', () => {
+  it('are listed one per message, newest first, with the label named, without kept mail unless asked', () => {
     suggest('a@example.com', 'archive', NEWS);
     suggest('b@example.com', 'archive', NEWS);
     suggest('b@example.com', 'archive', NEWS);
@@ -95,13 +95,15 @@ describe('suggestions', () => {
     suggest('b@example.com', 'review');
     suggest('c@example.com', 'keep', { labelId: 'personal' });
 
-    const { groups, waiting, labels } = listSuggestions(db);
+    const { items, waiting, labels } = listSuggestions(db);
     expect(waiting).toBe(5);
-    expect(groups.map((g) => [g.sender, g.labelName, g.disposition, g.messages, g.guesses])).toEqual([
-      ['b@example.com', 'Newsletters', 'archive', 4, 3],
-      ['a@example.com', 'Newsletters', 'archive', 1, 1],
+    expect(items.map((i) => [i.sender, i.subject, i.labelName, i.disposition])).toEqual([
+      ['b@example.com', 'Subject m5', null, 'review'],
+      ['b@example.com', 'Subject m4', 'Marketing', 'archive'],
+      ['b@example.com', 'Subject m3', 'Newsletters', 'archive'],
+      ['b@example.com', 'Subject m2', 'Newsletters', 'archive'],
+      ['a@example.com', 'Subject m1', 'Newsletters', 'archive'],
     ]);
-    expect(groups[0]?.sample.map((m) => m.subject)).toEqual(['Subject m5', 'Subject m4', 'Subject m3', 'Subject m2']);
     expect(labels[ACCOUNT]).toContainEqual({ id: 'newsletter', name: 'Newsletters', disposition: 'archive' });
     expect(listSuggestions(db, { includeKept: true }).waiting).toBe(6);
   });

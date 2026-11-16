@@ -16,6 +16,16 @@ export const TIERS: { key: StageKey; name: string; color: string }[] = [
 ];
 export const tier = (key: string) => TIERS.find((t) => t.key === key) ?? { key, name: key, color: 'var(--muted-foreground)' };
 
+/**
+ * How sure sift is of a label, in three steps for a meter. A rule or the header checks decided it, so it
+ * is sure; a model says how sure it was. Thresholds are a first guess until real mail calibrates them.
+ */
+export function sureness(stage: string, confidence: number | null): 1 | 2 | 3 {
+  if (stage === 'rules' || stage === 'heuristics' || stage === 'sender') return 3;
+  if (confidence === null) return 2;
+  return confidence >= 0.9 ? 3 : confidence >= 0.7 ? 2 : 1;
+}
+
 /** What a label can be set to do, and so what sift does with mail. The same word whether it is suggested, done or a setting. */
 export const ACTIONS = [
   ['keep', 'Keep'],
