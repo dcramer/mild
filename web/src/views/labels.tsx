@@ -117,7 +117,7 @@ export function LabelsView() {
                 <Td phone="hide" className="whitespace-nowrap md:w-32">
                   <Does action={label.disposition}>{outcomeName(label.disposition)}</Does>
                 </Td>
-                <Td phone="hide" className="align-middle md:w-full">
+                <Td phone="hide" className="md:w-full">
                   <Share part={label.messages} whole={mail} />
                 </Td>
                 <Td phone="hide" num quiet className="md:w-32" title={`${percent(label.messages, mail)} of the mail`}>

@@ -101,7 +101,7 @@ export function Td({ num, quiet, phone, className, ...props }: ComponentProps<'t
   return (
     <td
       className={cn(
-        'px-3 py-2.5 align-top',
+        'px-3 py-2.5 align-middle',
         EDGES,
         num && 'text-right tabular-nums whitespace-nowrap',
         quiet && 'text-muted-foreground',
@@ -145,7 +145,7 @@ export function OnPhone({ children }: { children: ReactNode }) {
 export function RowActions({ phone, children }: { phone?: 'keep'; children: ReactNode }) {
   return (
     <td
-      className={cn('w-px py-1.5 pl-3 text-right whitespace-nowrap align-top', phone !== 'keep' && PHONE.hide, EDGES)}
+      className={cn('w-px py-1.5 pl-3 text-right whitespace-nowrap align-middle', phone !== 'keep' && PHONE.hide, EDGES)}
       onClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => event.stopPropagation()}
     >
