@@ -4,29 +4,11 @@ import { type IncomingMessage, type Server, type ServerResponse, createServer } 
 import { extname, join, relative, sep } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_EVAL_EXAMPLES, MAX_EVAL_EXAMPLES, getEvalRun, listEvalRuns } from '../learn/evals.ts';
-import { type FeedbackInput, applyFeedback } from '../learn/feedback.ts';
-import { predatingGuidelines, redecideWaiting } from '../learn/redecide.ts';
 import { accountsOf, listAccounts, userOf } from '../store/accounts.ts';
-import { deleteExamples, listExamples } from '../store/examples.ts';
-import { addLabel, updateLabel } from '../store/labels.ts';
-import { resolveProposal } from '../store/proposals.ts';
-import { addRule, removeRule, setStanding } from '../store/rules.ts';
-import { getRuleFilter, ruleFilterStatus } from '../store/filters.ts';
+import { READS, WRITES } from './api/index.ts';
+import type { Context, Write } from './api/route.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { type Scope, narrow, scopeFor, sees } from './scope.ts';
-import {
-  listChanges,
-  listDecisions,
-  listLabelSummaries,
-  listRuleSummaries,
-  listSuggestions,
-  messageDetail,
-  senderPage,
-  suggestionDetail,
-  summarize,
-} from './queries.ts';
-import type { EvalDetail, Evals, Examples, ManageState } from './types.ts';
 
 /** Where `pnpm build:web` puts the built web app. */
 export const WEB_DIST = fileURLToPath(new URL('../../web/dist/', import.meta.url));
@@ -56,7 +38,6 @@ const HEADERS = {
 };
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
-const ALLOWED_DAYS = new Set([1, 7, 30, 90]);
 
 /** Every file under `dir`, keyed by its URL path. Built once: requests can only ever name a file that was listed. */
 function listAssets(dir: string): Map<string, { file: string; type: string }> {
@@ -84,7 +65,6 @@ const DEV_BUILDING = `<!doctype html><html class="dark"><head><meta charset="UTF
 const json = (res: ServerResponse, status: number, body: unknown) =>
   res.writeHead(status, { ...HEADERS, 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(body));
 
-const LABEL_ID = /^[a-z0-9_-]{1,40}$/;
 const MAX_BODY = 20_000;
 
 /** Read a small JSON body. Null if it is too large or not a JSON object. */
@@ -100,38 +80,6 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown> |
   } catch {
     return null;
   }
-}
-
-const SCOPES = new Set(['label', 'sender', 'domain', 'subject', 'once']);
-
-/** Check an answer to a suggestion field by field. Null if it is not well formed. */
-function parseFeedback(body: Record<string, unknown>): FeedbackInput | null {
-  const { accountId, sender, label, disposition, scope, contains, decisionId, messageId, unsubscribe, when } = body;
-  if (typeof accountId !== 'string' || typeof sender !== 'string') return null;
-  if (label !== undefined && (typeof label !== 'string' || !LABEL_ID.test(label))) return null;
-  if (typeof scope !== 'string' || !SCOPES.has(scope)) return null;
-  if (disposition !== undefined && disposition !== 'keep' && disposition !== 'archive' && disposition !== 'spam') return null;
-  // An answer says what the mail is, what should happen to it, or both.
-  if (label === undefined && disposition === undefined) return null;
-  if (label === undefined && (scope === 'label' || when !== undefined)) return null;
-  if (contains !== undefined && (typeof contains !== 'string' || contains.length > 200)) return null;
-  if (scope === 'subject' && (typeof contains !== 'string' || contains.trim() === '')) return null;
-  if (decisionId !== undefined && (typeof decisionId !== 'number' || !Number.isInteger(decisionId))) return null;
-  if (messageId !== undefined && !str(messageId)) return null;
-  if (unsubscribe !== undefined && typeof unsubscribe !== 'boolean') return null;
-  if (when !== undefined && (typeof when !== 'string' || when.length > 200)) return null;
-  return {
-    accountId,
-    sender,
-    ...(typeof label === 'string' ? { label } : {}),
-    scope: scope as FeedbackInput['scope'],
-    ...(disposition === undefined ? {} : { disposition }),
-    ...(typeof contains === 'string' ? { contains } : {}),
-    ...(decisionId === undefined ? {} : { decisionId }),
-    ...(messageId === undefined ? {} : { messageId }),
-    ...(unsubscribe ? { unsubscribe } : {}),
-    ...(typeof when === 'string' && when.trim() !== '' ? { when } : {}),
-  };
 }
 
 export interface DashboardOptions {
@@ -158,14 +106,6 @@ export interface DashboardOptions {
   dev?: boolean;
   now?: () => number;
 }
-
-const RULE_KEYS = new Set(['from', 'fromDomain', 'to', 'listId', 'subjectContains']);
-const str = (value: unknown, max = 200): value is string => typeof value === 'string' && value.length > 0 && value.length <= max;
-const decided = (value: unknown): value is 'keep' | 'archive' | 'spam' => value === 'keep' || value === 'archive' || value === 'spam';
-/** What a label can be set to do. `block` is spam plus blocking the sender. */
-const outcome = (value: unknown): value is 'keep' | 'archive' | 'spam' | 'block' => decided(value) || value === 'block';
-const fromOutcome = (value: 'keep' | 'archive' | 'spam' | 'block') =>
-  value === 'block' ? { disposition: 'spam' as const, block: true } : { disposition: value, block: false };
 
 const SESSION_DAYS = 30;
 const b64 = (value: string | Buffer) => Buffer.from(value).toString('base64url');
@@ -227,258 +167,15 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
   // Sign-ins in flight: the state Google echoes back, with the PKCE verifier and where to return to.
   const pending = new Map<string, { verifier: string; redirectUri: string; addTo: string | null; expires: number }>();
 
-  /** After a rule or label changed: waiting suggestions they now decide differently get a new decision. No model is called. */
-  const redecide = async (accountId?: string) => {
-    let recorded = 0;
-    for (const account of listAccounts(db)) if (accountId === undefined || account.id === accountId) recorded += await redecideWaiting(db, account.id, now());
-    return recorded;
-  };
-
-  /** POST handlers. Each validates its own body and returns the response, or null for a malformed body. */
-  const writes: Record<string, (body: Record<string, unknown>, scope: Scope) => unknown> = {
-    '/api/feedback': async (body) => {
-      const input = parseFeedback(body);
-      if (!input) return null;
-      const result = applyFeedback(db, { ...input, mode: controls?.settings().act ? 'act' : 'observe' }, now());
-      if (result.corrected === null || !controls) return { ...result, fixed: null };
-      // The answer is saved whatever happens next; a mailbox that cannot be put right is reported, not hidden.
-      try {
-        const undone = await controls.putBack(input.accountId, result.corrected);
-        return { ...result, fixed: undone ? 'What sift did to this message in Gmail has been taken back.' : null };
-      } catch (error) {
-        return {
-          ...result,
-          fixed: `The answer is saved, but the message could not be put back in Gmail: ${error instanceof Error ? error.message : String(error)}`,
-        };
-      }
-    },
-    '/api/labels': async (body) => {
-      const { accountId, id, name, description, disposition, markRead, unsubscribe } = body;
-      if (!str(accountId) || !str(id, 40)) return null;
-      if (name !== undefined && !str(name, 60)) return null;
-      if (description !== undefined && (typeof description !== 'string' || description.length > 600)) return null;
-      if (disposition !== undefined && !outcome(disposition)) return null;
-      if (markRead !== undefined && typeof markRead !== 'boolean') return null;
-      if (unsubscribe !== undefined && typeof unsubscribe !== 'boolean') return null;
-      const change: Parameters<typeof updateLabel>[3] = {};
-      if (name !== undefined) change.name = name;
-      if (description !== undefined) change.description = description;
-      if (disposition !== undefined) Object.assign(change, fromOutcome(disposition));
-      if (markRead !== undefined) change.markRead = markRead;
-      if (unsubscribe !== undefined) change.unsubscribe = unsubscribe;
-      if (!updateLabel(db, accountId, id, change, now())) throw new Error(`There is no label "${id}".`);
-      return { ok: true, redecided: await redecide(accountId) };
-    },
-    '/api/labels/add': (body) => {
-      const { accountId, name, description, disposition, markRead, unsubscribe } = body;
-      if (!str(accountId) || !str(name, 60) || typeof description !== 'string' || description.length > 600) return null;
-      if (!outcome(disposition) || (markRead !== undefined && typeof markRead !== 'boolean')) return null;
-      if (unsubscribe !== undefined && typeof unsubscribe !== 'boolean') return null;
-      if (!listAccounts(db).some((a) => a.id === accountId)) return null;
-      return {
-        id: addLabel(
-          db,
-          accountId,
-          { name, description, ...fromOutcome(disposition), ...(markRead ? { markRead } : {}), ...(unsubscribe ? { unsubscribe } : {}) },
-          now(),
-        ).id,
-      };
-    },
-    '/api/rules': async (body) => {
-      const { accountId, match, label, whenLabel, disposition, markRead, unsubscribe, when } = body;
-      if (when !== undefined && (typeof when !== 'string' || when.length > 200)) return null;
-      if (!str(accountId) || typeof match !== 'object' || match === null) return null;
-      for (const id of [label, whenLabel]) if (id !== undefined && (typeof id !== 'string' || !LABEL_ID.test(id))) return null;
-      if (disposition !== undefined && !decided(disposition)) return null;
-      // A rule says what mail is, what happens to it, or what happens when it is a given label.
-      if (label === undefined && whenLabel === undefined && disposition === undefined) return null;
-      if (label !== undefined && whenLabel !== undefined) return null;
-      if ((markRead !== undefined && typeof markRead !== 'boolean') || (unsubscribe !== undefined && typeof unsubscribe !== 'boolean')) return null;
-      const conditions = Object.entries(match).filter(([, value]) => value !== '');
-      if (conditions.length === 0 || !conditions.every(([key, value]) => RULE_KEYS.has(key) && str(value))) return null;
-      const id = addRule(
-        db,
-        accountId,
-        {
-          match: Object.fromEntries(conditions),
-          ...(typeof label === 'string' ? { labelId: label } : {}),
-          ...(typeof whenLabel === 'string' ? { whenLabel } : {}),
-          ...(disposition ? { disposition } : {}),
-          ...(markRead ? { markRead } : {}),
-          ...(unsubscribe ? { subscription: 'unsubscribe' as const } : {}),
-          ...(typeof when === 'string' && when.trim() !== '' ? { when } : {}),
-        },
-        'user',
-        now(),
-      );
-      return { id, redecided: await redecide(accountId) };
-    },
-    '/api/standing': (body) => {
-      const { accountId, address, domain, standing } = body;
-      if (!str(accountId) || (standing !== 'trusted' && standing !== 'unwanted' && standing !== 'blocked' && standing !== 'none')) return null;
-      // Exactly one of the two, and an address must look like one.
-      if ((address === undefined) === (domain === undefined)) return null;
-      if (address !== undefined && (!str(address) || !/^[^@\s]+@[^@\s]+$/.test(address))) return null;
-      if (domain !== undefined && (!str(domain) || /[@\s]/.test(domain))) return null;
-      if (!listAccounts(db).some((a) => a.id === accountId)) return null;
-      const who = typeof address === 'string' ? address.toLowerCase() : (domain as string).toLowerCase();
-      setStanding(db, accountId, typeof address === 'string' ? { from: who } : { fromDomain: who }, standing, now());
-      return { ok: true };
-    },
-    '/api/rules/filter': async (body) => {
-      const { id, on } = body;
-      if (!str(id, 40) || typeof on !== 'boolean') return null;
-      if (!controls) throw new Error('This dashboard cannot change Gmail filters.');
-      // Taking a filter out is always allowed: it only reduces what runs unattended.
-      if (on && !controls.settings().act) throw new Error('sift is only observing, so it writes nothing to Gmail. Let it act first, in Settings.');
-      await controls.ruleFilter(id, on);
-      return { filterId: getRuleFilter(db, id)?.filterId ?? null, filter: ruleFilterStatus(db, now()).get(id) ?? null };
-    },
-    '/api/proposals': (body) => {
-      const { id, accept } = body;
-      if (typeof id !== 'number' || !Number.isInteger(id) || typeof accept !== 'boolean') return null;
-      if (!resolveProposal(db, id, accept, now())) throw new Error('That proposal is no longer open.');
-      return { ok: true };
-    },
-    '/api/rules/remove': async (body) => {
-      if (!str(body['id'], 40)) return null;
-      const owner = getRuleFilter(db, body['id'])?.accountId ?? null;
-      // A filter left behind would keep acting on mail with no rule to explain or remove it.
-      if (getRuleFilter(db, body['id'])?.filterId) {
-        if (!controls) throw new Error('This rule is also a Gmail filter, which this dashboard cannot remove.');
-        await controls.ruleFilter(body['id'], false);
-      }
-      if (!removeRule(db, body['id'])) throw new Error('That rule no longer exists.');
-      return { ok: true, redecided: await redecide(owner ?? undefined) };
-    },
-    '/api/settings': (body) => {
-      const { act, interval, model, fewShot, examplesKeepDays: keep } = body;
-      if (keep !== undefined && keep !== null && (typeof keep !== 'number' || !Number.isInteger(keep) || keep < 1 || keep > 36_500)) return null;
-      if (act !== undefined && typeof act !== 'boolean') return null;
-      if (fewShot !== undefined && typeof fewShot !== 'boolean') return null;
-      if (interval !== undefined && (typeof interval !== 'number' || !Number.isFinite(interval) || interval < 5 || interval > 86_400)) return null;
-      if (model !== undefined && model !== null && (!str(model) || !/^[^/\s]+\/\S+$/.test(model))) return null;
-      if (!controls) throw new Error('This dashboard cannot change settings.');
-      controls.saveSettings({
-        ...(act === undefined ? {} : { act }),
-        ...(interval === undefined ? {} : { interval }),
-        ...(model === undefined ? {} : { model }),
-        ...(fewShot === undefined ? {} : { fewShot }),
-        ...(keep === undefined ? {} : { examplesKeepDays: keep }),
-      });
-      return { settings: controls.settings() };
-    },
-    '/api/guidelines': (body) => {
-      if (typeof body['text'] !== 'string' || body['text'].length > 8000) return null;
-      if (!controls) throw new Error('This dashboard cannot change the guidelines.');
-      controls.saveGuidelines(body['text']);
-      return { ok: true };
-    },
-    '/api/undo': async (body) => {
-      if (typeof body['id'] !== 'number' || !Number.isInteger(body['id'])) return null;
-      if (!controls) throw new Error('This dashboard cannot undo changes.');
-      return { message: await controls.undo(body['id']) };
-    },
-    '/api/backfill': async (body) => {
-      const days = body['days'];
-      if (typeof days !== 'number' || !Number.isInteger(days) || days < 1 || days > 30) return null;
-      if (!controls) throw new Error('This dashboard cannot pull in mail.');
-      const added = await controls.backfill(days);
-      controls.checkNow();
-      return { added };
-    },
-    '/api/suggestions/rejudge': async (body) => {
-      const { accountId } = body;
-      if (!str(accountId) || !listAccounts(db).some((a) => a.id === accountId)) return null;
-      if (!controls) throw new Error('This dashboard cannot run the model.');
-      return await controls.rejudge(accountId);
-    },
-    '/api/examples/delete': (body) => {
-      const { accountId, messageId } = body;
-      if (!str(accountId) || !str(messageId)) return null;
-      return { deleted: deleteExamples(db, accountId, messageId) };
-    },
-    '/api/examples/delete-all': (body) => {
-      const { accountId } = body;
-      if (!str(accountId) || !listAccounts(db).some((a) => a.id === accountId)) return null;
-      return { deleted: deleteExamples(db, accountId) };
-    },
-    '/api/evals/run': async (body) => {
-      const { accountId, fewShot, limit } = body;
-      if (!str(accountId) || (fewShot !== undefined && typeof fewShot !== 'boolean')) return null;
-      if (limit !== undefined && (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > MAX_EVAL_EXAMPLES)) return null;
-      if (!listAccounts(db).some((a) => a.id === accountId)) return null;
-      if (!controls) throw new Error('This dashboard cannot run the model.');
-      return { id: await controls.startEval({ accountId, fewShot: fewShot ?? controls.settings().fewShot, limit: limit ?? DEFAULT_EVAL_EXAMPLES }) };
-    },
-    '/api/check': () => {
-      if (!controls) throw new Error('Nothing is sorting mail from this dashboard.');
-      controls.checkNow();
-      return { ok: true };
-    },
-  };
-
-  type Touches = { account: string } | 'install' | 'anyone' | null;
-  const accountOf = (table: 'rules' | 'proposals' | 'actions', id: unknown): Touches => {
-    if (typeof id !== 'string' && typeof id !== 'number') return null;
-    const row = db.prepare(`SELECT account_id FROM ${table} WHERE id = ?`).get(id) as { account_id: string } | undefined;
-    return row ? { account: row.account_id } : null;
-  };
-  const named = (body: Record<string, unknown>): Touches => (typeof body['accountId'] === 'string' ? { account: body['accountId'] } : null);
-  /**
-   * Whose data each write touches, so that it can be refused before its handler runs. An account: only
-   * someone who has that mailbox. `install`: what applies to everyone, so only the install's owner.
-   * `anyone`: nothing of anybody's. Null: the body names nothing that exists, which the handler reports.
-   * Every write must be listed: the server refuses to start with one that is not.
-   */
-  const touches: Record<string, (body: Record<string, unknown>) => Touches> = {
-    '/api/feedback': named,
-    '/api/labels': named,
-    '/api/labels/add': named,
-    '/api/rules': named,
-    '/api/standing': named,
-    '/api/suggestions/rejudge': named,
-    '/api/examples/delete': named,
-    '/api/examples/delete-all': named,
-    '/api/evals/run': named,
-    '/api/rules/filter': (body) => accountOf('rules', body['id']),
-    '/api/rules/remove': (body) => accountOf('rules', body['id']),
-    '/api/proposals': (body) => accountOf('proposals', body['id']),
-    '/api/undo': (body) => accountOf('actions', body['id']),
-    '/api/settings': () => 'install',
-    '/api/guidelines': () => 'install',
-    '/api/backfill': () => 'install',
-    '/api/check': () => 'anyone',
-  };
-  for (const path of Object.keys(writes)) if (!touches[path]) throw new Error(`${path} does not say whose data it touches.`);
+  const ctx: Context = { db, controls, now };
+  const reads = new Map(READS.map((route) => [route.path, route]));
+  const writes = new Map(WRITES.map((route) => [route.path, route]));
   /** Why this person may not make this write, or null if they may. Someone else's data is reported as not there. */
-  const refusal = (path: string, body: Record<string, unknown>, scope: Scope): { status: number; error: string } | null => {
-    const whose = touches[path]?.(body) ?? null;
+  const refusal = (route: Write, body: Record<string, unknown>, scope: Scope): { status: number; error: string } | null => {
+    const whose = route.touches(ctx, body);
     if (whose === 'install') return scope.owner ? null : { status: 403, error: 'Only the person who set sift up can change this.' };
     if (whose === null || whose === 'anyone' || sees(scope, whose.account)) return null;
     return { status: 404, error: 'There is no such thing here.' };
-  };
-
-  const manageState = (scope: Scope): ManageState => {
-    const accounts = listAccounts(db).filter((a) => sees(scope, a.id));
-    const synced = db.prepare('SELECT last_synced_at AS at FROM accounts WHERE id = ?');
-    const changedAt = controls?.guidelinesChangedAt() ?? null;
-    const activity = controls?.activity() ?? { sorting: false, lastPassAt: null, problems: [], expired: [] };
-    return {
-      owner: scope.owner,
-      settings: controls?.settings() ?? { act: false, interval: 60, model: null, fewShot: true, examplesKeepDays: null },
-      // The guidelines are the owner's own words about their mail.
-      guidelines: scope.owner ? (controls?.guidelines() ?? '') : '',
-      activity: {
-        ...activity,
-        // Each problem starts with the address it is about.
-        problems: activity.problems.filter((line) => accounts.some((a) => line.startsWith(`${a.email}: `))),
-        expired: activity.expired.filter((email) => accounts.some((a) => a.email === email)),
-      },
-      accounts: accounts.map((a) => ({ id: a.id, email: a.email, lastSyncedAt: (synced.get(a.id) as { at: number | null } | undefined)?.at ?? null })),
-      labels: Object.fromEntries(accounts.map((a) => [a.id, listLabelSummaries(db, scope, a.id)])),
-      predateGuidelines: Object.fromEntries(accounts.map((a) => [a.id, changedAt === null ? 0 : predatingGuidelines(db, changedAt, a.id).length])),
-    };
   };
 
   return createServer((req, res) => {
@@ -576,7 +273,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       return void json(res, 200, { required: false, email: null, canSignIn: false, reason: null, addresses: [], redirectUri: '' });
 
     if (req.method === 'POST') {
-      const handler = writes[url.pathname];
+      const handler = writes.get(url.pathname);
       // A write must come from the dashboard's own page: a browser sends Origin on every cross-site
       // request, and another site cannot set a custom header or a JSON content type without a preflight
       // this server never approves.
@@ -593,9 +290,9 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       }
       void readJson(req)
         .then(async (body) => {
-          const refused = body && refusal(url.pathname, body, whole);
+          const refused = body && refusal(handler, body, whole);
           if (refused) return void json(res, refused.status, { error: refused.error });
-          const result = body && (await handler(body, whole));
+          const result = body && (await handler.run(ctx, body, whole));
           if (result === null) json(res, 400, { error: 'That request is not well formed.' });
           else json(res, 200, result);
         })
@@ -608,89 +305,17 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
     }
 
     if (url.pathname.startsWith('/api/')) {
-      const days = Number(query.get('days') ?? 7);
-      if (!ALLOWED_DAYS.has(days)) return void json(res, 400, { error: 'days must be 1, 7, 30 or 90' });
+      const route = reads.get(url.pathname);
+      if (!route) return void json(res, 404, { error: 'Not found' });
       // `mailbox` narrows any read to one of the person's own mailboxes.
       const mailbox = query.get('mailbox');
       const scope = mailbox ? narrow(whole, mailbox) : whole;
       if (!scope) return void json(res, 404, { error: 'No such mailbox' });
-
-      if (url.pathname === '/api/summary') return void json(res, 200, summarize(db, scope, days, now()));
-      if (url.pathname === '/api/decisions') {
-        const text = (name: string) => query.get(name) || undefined;
-        const stage = text('stage');
-        const disposition = text('disposition');
-        const status = text('status');
-        const search = text('q');
-        const result = listDecisions(
-          db,
-          scope,
-          {
-            days,
-            ...(stage ? { stage } : {}),
-            ...(disposition ? { disposition } : {}),
-            ...(status ? { status } : {}),
-            ...(search ? { search } : {}),
-            limit: Number(query.get('limit') ?? 50) || 50,
-            offset: Number(query.get('offset') ?? 0) || 0,
-          },
-          now(),
-        );
-        return void json(res, 200, result);
-      }
-      if (url.pathname === '/api/message') {
-        const detail = messageDetail(db, scope, query.get('account') ?? '', query.get('id') ?? '');
-        return void json(res, detail ? 200 : 404, detail ?? { error: 'No such message' });
-      }
-      if (url.pathname === '/api/suggestion') {
-        const detail = suggestionDetail(db, scope, query.get('account') ?? '', query.get('sender') ?? '');
-        return void json(res, detail ? 200 : 404, detail ?? { error: 'No such mailbox' });
-      }
-      if (url.pathname === '/api/sender' || url.pathname === '/api/domain') {
-        const account = query.get('account') ?? '';
-        const page =
-          url.pathname === '/api/sender'
-            ? senderPage(db, scope, account, { address: (query.get('address') ?? '').toLowerCase() }, now())
-            : senderPage(db, scope, account, { domain: (query.get('domain') ?? '').toLowerCase() }, now());
-        return void json(res, page ? 200 : 404, page ?? { error: 'Anyone can get an address at that domain, so it has no standing of its own.' });
-      }
-      if (url.pathname === '/api/rules') return void json(res, 200, { rules: listRuleSummaries(db, scope) });
-      if (url.pathname === '/api/suggestions') return void json(res, 200, listSuggestions(db, scope, { includeKept: query.get('kept') === '1' }));
-      if (url.pathname === '/api/manage') return void json(res, 200, manageState(scope));
-      if (url.pathname === '/api/changes') return void json(res, 200, { changes: listChanges(db, scope, 200) });
-      if (url.pathname === '/api/examples') {
-        const one = query.get('account');
-        if (one && !sees(scope, one)) return void json(res, 404, { error: 'No such mailbox' });
-        const held = db.prepare('SELECT count(*) AS n FROM examples WHERE account_id = ?');
-        const examples: Examples = {
-          examples: (one ? [one] : scope.accounts).flatMap((id) => listExamples(db, id)),
-          held: Object.fromEntries(scope.accounts.map((id) => [id, (held.get(id) as { n: number }).n] as const).filter(([, n]) => n > 0)),
-          keepDays: controls?.settings().examplesKeepDays ?? null,
-        };
-        return void json(res, 200, examples);
-      }
-      if (url.pathname === '/api/evals') {
-        const counts = db.prepare(`SELECT count(*) AS n FROM examples WHERE account_id = ? AND status = 'captured' AND label_id IS NOT NULL`);
-        const evals: Evals = {
-          runs: listEvalRuns(db).filter((run) => sees(scope, run.accountId)),
-          examples: Object.fromEntries(scope.accounts.map((id) => [id, (counts.get(id) as { n: number }).n] as const).filter(([, n]) => n > 0)),
-          defaultLimit: DEFAULT_EVAL_EXAMPLES,
-          maxLimit: MAX_EVAL_EXAMPLES,
-        };
-        return void json(res, 200, evals);
-      }
-      if (url.pathname === '/api/eval') {
-        const found: EvalDetail | null = getEvalRun(db, Number(query.get('id')));
-        const detail = found && sees(scope, found.run.accountId) ? found : null;
-        return void json(res, detail ? 200 : 404, detail ?? { error: 'No such run' });
-      }
-      if (url.pathname === '/api/models') {
-        void (controls ? controls.models() : Promise.resolve([]))
-          .then((models) => json(res, 200, { models }))
-          .catch((error: unknown) => json(res, 200, { models: [], error: error instanceof Error ? error.message : String(error) }));
-        return;
-      }
-      return void json(res, 404, { error: 'Not found' });
+      void Promise.resolve()
+        .then(() => route.run(ctx, scope, query))
+        .then((reply) => json(res, reply.status, reply.body))
+        .catch((error: unknown) => json(res, 500, { error: error instanceof Error ? error.message : String(error) }));
+      return;
     }
 
     if (dev && url.pathname === '/dev/reload.js') {
