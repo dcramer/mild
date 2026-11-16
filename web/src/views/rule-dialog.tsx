@@ -2,7 +2,7 @@ import { PlusIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { type LabelSummary, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
 import { type By, type RuleStart, replacedBy } from '@/lib/rule-start.ts';
-import { FACTS, type FactAnswer, type FactKey, describeMatch, factConditions, factParam, factWords, outcomeName } from '@/lib/format.ts';
+import { FACTS, type FactAnswer, type FactKey, factConditions, factParam, factWords, outcomeName } from '@/lib/format.ts';
 import { Button, Check, Dialog, Does, Failure, Field, Form, Input, Select, useToast } from '@/system';
 
 const BY = [
@@ -77,7 +77,6 @@ export function AddRuleDialog({
   const unused = (except: FactKey | null) => ANSWERS.filter((a) => a.key === except || !facts.some((f) => f.key === a.key));
   const add = () => {
     let added: { id: string; replaced: boolean } | null = null;
-    const outcome = waitsFor ? `${outcomeName(action || 'archive')} when ${waitsFor.name}` : chosen ? chosen.name : outcomeName(action || 'archive');
     const takeBack = (id: string) =>
       later.run(
         () =>
@@ -104,7 +103,8 @@ export function AddRuleDialog({
       () => {
         // Removing a rule that replaced another would not bring the other back, so only a new one can be undone.
         const fresh = added?.replaced === false ? added.id : null;
-        toast(`Rule added: ${describeMatch(match)} → ${outcome}`, fresh === null ? {} : { undo: () => takeBack(fresh) });
+        // The dialog just showed the rule, so the toast need not say it again.
+        toast('Rule added', fresh === null ? {} : { undo: () => takeBack(fresh) });
         onAdded?.(match, { ...(waitsFor ? { whenLabel: waitsFor.id } : {}), ...(action ? { disposition: action } : {}) });
         onClose();
       },

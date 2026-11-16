@@ -15,10 +15,11 @@ interface Own {
 
 /**
  * What a press did, said once in one line, after the list it changed has moved on: "Archive as Marketing",
- * "Rule added: …". A new one replaces the last, so Undo (and Z, Gmail's key for it) always takes back the
- * latest. It is set in ink on the dark page, the one light thing there, and sits clear of the bottom edge
- * so a panel's footer stays pressable. A failure is the page's own dark with a red frame and title, and
- * stays until dismissed. Wrap the app in `Toaster` once; call `useToast()` where something is done.
+ * "Rule added". A new one replaces the last, so Undo (and Z, Gmail's key for it) always takes back the
+ * latest. It floats as a menu does, framed with the one shadow, and Undo is in the highlighter: it is the
+ * one thing on it waiting on the reader. It sits clear of the bottom edge so a panel's footer stays
+ * pressable. A failure has a red frame and title, and stays until dismissed. Wrap the app in `Toaster`
+ * once; call `useToast()` where something is done.
  */
 export function Toaster({ children }: { children: ReactNode }) {
   return (
@@ -40,47 +41,43 @@ function Receipts() {
   return toasts.map((toast) => <Receipt key={toast.id} toast={toast} front={toast.id === front} />);
 }
 
-/** On the ink ground a press darkens, and its focus ring is the page's dark: the yellow ring would not show on it. */
-const PRESS = 'press inline-flex h-(--control) shrink-0 cursor-pointer items-center gap-1.5 px-3 text-sm font-semibold whitespace-nowrap';
-const ON_INK = 'hover:bg-background/10 focus-visible:outline-background!';
-const ON_DARK = 'text-foreground/75 hover:bg-(--fill) hover:text-foreground';
+const PRESS = 'press inline-flex h-(--control) shrink-0 cursor-pointer items-center gap-1.5 px-2.5 text-sm font-semibold whitespace-nowrap hover:bg-(--fill)';
+const QUIET = 'text-foreground/75 hover:text-foreground';
 
 function Receipt({ toast, front }: { toast: Base.Root.ToastObject<Own>; front: boolean }) {
   const { undo, action } = toast.data ?? {};
   const failed = toast.type === 'failure';
-  const key = useShortcut('z', 'Undo', () => undo?.(), { enabled: front && undo !== undefined, everywhere: true, tone: 'ink' });
-  const press = cn(PRESS, failed ? ON_DARK : ON_INK);
+  const key = useShortcut('z', 'Undo', () => undo?.(), { enabled: front && undo !== undefined, everywhere: true });
   return (
     <Base.Root
       toast={toast}
       swipeDirection="down"
       className={cn(
-        'sheet pointer-events-auto flex min-h-11 w-full flex-wrap items-center justify-end gap-x-2 py-1.5 pl-4 md:w-auto md:max-w-2xl md:flex-nowrap',
+        'sheet pointer-events-auto flex min-h-10 w-full flex-wrap items-center justify-end gap-x-1 bg-popover py-1 pl-3.5 text-sm md:w-auto md:max-w-2xl md:flex-nowrap',
         // A press brings its own padding to the right edge; words alone need the same room as on the left.
-        undo || action || failed ? 'pr-1.5' : 'pr-4',
+        undo || action || failed ? 'pr-1' : 'pr-3.5',
         'transition-[opacity,translate] duration-150 ease-out data-ending-style:opacity-0 data-limited:hidden data-starting-style:translate-y-2 data-starting-style:opacity-0 motion-reduce:transition-none',
-        // Red cannot be read on ink (2.2:1), so a failure keeps the dark ground and says so in red (6.6:1).
-        failed ? 'border-destructive bg-popover' : 'border-foreground bg-foreground text-background',
+        failed && 'border-destructive',
       )}
     >
-      {/* Title and description run on as one sentence, wrapping rather than cut short; on a phone the presses take the next row. */}
-      <div className={cn('min-w-0 flex-1 py-1', (undo || action) && 'max-md:basis-full')}>
-        <Base.Title render={<span />} className={cn('font-semibold', failed && 'text-destructive')} />
-        <Base.Description render={<span />} className={cn('ml-2', failed ? 'text-muted-foreground' : 'text-background/70')} />
+      {/* Title and description run on as one sentence, wrapping rather than cut short; on a phone the presses take the next row only when they do not fit. */}
+      <div className="min-w-[min(13rem,100%)] grow py-1 md:min-w-0">
+        <Base.Title render={<span />} className={cn(failed && 'font-semibold text-destructive')} />
+        <Base.Description render={<span />} className="ml-2 text-muted-foreground" />
       </div>
       {action ? (
-        <button type="button" className={press} onClick={action.onPress}>
+        <button type="button" className={cn(PRESS, QUIET)} onClick={action.onPress}>
           {action.label}
         </button>
       ) : null}
       {undo ? (
-        <button type="button" aria-keyshortcuts="z" className={press} onClick={undo}>
+        <button type="button" aria-keyshortcuts="z" className={cn(PRESS, 'text-highlight')} onClick={undo}>
           Undo
           {key}
         </button>
       ) : null}
       {failed ? (
-        <Base.Close aria-label="Dismiss" className={cn(PRESS, ON_DARK, 'w-(--control) justify-center px-0')}>
+        <Base.Close aria-label="Dismiss" className={cn(PRESS, QUIET, 'w-(--control) justify-center px-0')}>
           <XIcon className="size-4" />
         </Base.Close>
       ) : null}
