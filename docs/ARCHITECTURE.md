@@ -58,7 +58,7 @@ src/
   model/      the only module that talks to model providers (pi-ai): login, credentials, the classifier call
 web/          the dashboard page: React, Tailwind, its own design system on Base UI; builds to web/dist
 tests/        synthetic fixtures only
-docker/       Dockerfile and compose file
+docker/       Dockerfile and compose file; upgrade, backup and restore are in docs/DEPLOY.md
 ```
 
 Planned, not yet created: `src/learn/` (correction detection, rule promotion), `evals/` (a labelled set for measuring each tier).
@@ -224,5 +224,5 @@ Gmail has no API for it, so sift makes the request a mail client would: the send
 
 - Using a ChatGPT subscription from a third-party harness is unofficial; whether OpenAI permits it is unconfirmed. An API key works as a fallback.
 - The model tier has only run against a scripted test provider.
-- Docker egress is not yet restricted to Google and the model providers.
+- Docker egress is not yet restricted to Google and the model providers. [DEPLOY.md](DEPLOY.md) says what it would take; unsubscribing needs a relay of its own first.
 - How suggestions reach the user beyond the dashboard (a digest would need a send path, which sift does not have).

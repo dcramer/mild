@@ -119,4 +119,4 @@ docker compose -f docker/compose.yaml run --rm -it sift init
 docker compose -f docker/compose.yaml up
 ```
 
-This starts sift, with the dashboard at http://localhost:8787. The compose file says how to reach it from other devices.
+This starts sift, with the dashboard at http://localhost:8787. The compose file says how to reach it from other devices. Upgrading and backing up the volume: [docs/DEPLOY.md](docs/DEPLOY.md).
