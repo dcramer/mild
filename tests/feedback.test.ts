@@ -114,6 +114,22 @@ describe('suggestions', () => {
     expect(labels[ACCOUNT]).toContainEqual({ id: 'newsletter', name: 'Newsletters', disposition: 'archive' });
     expect((await listSuggestions(db, await everything(db), { includeKept: true })).waiting).toBe(6);
   });
+
+  it('carry the start of the text sift holds for each, on one line', async () => {
+    await suggest('a@example.com', 'archive', NEWS);
+    await suggest('b@example.com', 'archive', NEWS);
+    await db.run(
+      'INSERT INTO suggestion_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, ?, ?, 0)',
+      ACCOUNT,
+      'm1',
+      'Five stories\n\n  about   widgets.',
+    );
+    const { items } = await listSuggestions(db, await everything(db));
+    expect(items.map((i) => [i.messageId, i.preview])).toEqual([
+      ['m2', null],
+      ['m1', 'Five stories about widgets.'],
+    ]);
+  });
 });
 
 describe('teaching', () => {

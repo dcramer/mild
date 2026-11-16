@@ -16,6 +16,7 @@ import {
   Loading,
   Meter,
   OnPhone,
+  Sub,
   RowActions,
   Reserve,
   Table,
@@ -102,12 +103,14 @@ function SuggestionRow({
 
   return (
     <Tr onOpen={onOpen}>
-      <Td className="max-w-0 md:w-[22%] md:min-w-48">
+      {/* Who sent it, by name and address: a name alone could be anyone. */}
+      <Td className="max-w-0 md:w-[24%] md:min-w-52">
         <span className="name block truncate">
           <SenderLink accountId={item.accountId} address={item.sender}>
             {item.senderName ?? item.sender}
           </SenderLink>
         </span>
+        {item.senderName ? <Sub>{item.sender}</Sub> : null}
         {/* On a phone the row only says what sift thinks; it opens the message, where the answer is. */}
         <OnPhone>
           <span className="w-full truncate text-foreground">{item.subject || '(no subject)'}</span>
@@ -121,8 +124,10 @@ function SuggestionRow({
           )}
         </OnPhone>
       </Td>
+      {/* What it is about, and as much of what it says as fits: enough to answer without opening it. */}
       <Td phone="hide" className="max-w-0 md:w-full">
         <span className="block truncate">{item.subject || '(no subject)'}</span>
+        {item.preview ? <Sub>{item.preview}</Sub> : null}
         <Failure className="mt-1">{error}</Failure>
       </Td>
       <Td phone="hide" num quiet>

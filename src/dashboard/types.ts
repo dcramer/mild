@@ -303,6 +303,8 @@ export interface SuggestionItem {
    * of it each had. Until the model ranks its own guesses, this is the best second opinion sift holds.
    */
   alternatives: { id: string; name: string; share: number }[];
+  /** The start of the message's text, on one line, where sift holds it: enough to tell what it is without opening it. */
+  preview: string | null;
 }
 
 /** A rule sift thinks is worth having, for the user to accept or dismiss. */

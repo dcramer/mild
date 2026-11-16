@@ -70,6 +70,14 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
         return name ? [{ id, name, share: n / total }] : [];
       });
   };
+  // The text is held only while a message waits on the user, which every one shown here does.
+  const previews = new Map(
+    (
+      await db.all<{ account_id: string; message_id: string; text: string }>(
+        `SELECT account_id, message_id, substr(body_text, 1, 400) AS text FROM suggestion_bodies WHERE ${within(scope, 'account_id')}`,
+      )
+    ).map((r) => [`${r.account_id}\n${r.message_id}`, r.text.replace(/\s+/g, ' ').trim()] as const),
+  );
   const items = shown.map((s): SuggestionItem => ({
     accountId: s.accountId,
     messageId: s.messageId,
@@ -85,6 +93,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
     stage: s.stage,
     confidence: s.confidence,
     alternatives: alternatives(s),
+    preview: previews.get(`${s.accountId}\n${s.messageId}`) || null,
   }));
   const { reviewed, right } = await accuracy(db, 0, scope.accounts);
   const examples = (await db.get<{
