@@ -6,6 +6,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_EVAL_EXAMPLES, MAX_EVAL_EXAMPLES, getEvalRun, listEvalRuns } from '../learn/evals.ts';
 import { type FeedbackInput, applyFeedback } from '../learn/feedback.ts';
+import { predatingGuidelines, redecideWaiting } from '../learn/redecide.ts';
 import { listAccounts } from '../store/accounts.ts';
 import { deleteExamples, listExamples } from '../store/examples.ts';
 import { addLabel, updateLabel } from '../store/labels.ts';
@@ -204,6 +205,13 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
   // Sign-ins in flight: the state Google echoes back, with the PKCE verifier and where to return to.
   const pending = new Map<string, { verifier: string; redirectUri: string; allowNew: boolean; expires: number }>();
 
+  /** After a rule or label changed: waiting suggestions they now decide differently get a new decision. No model is called. */
+  const redecide = async (accountId?: string) => {
+    let recorded = 0;
+    for (const account of listAccounts(db)) if (accountId === undefined || account.id === accountId) recorded += await redecideWaiting(db, account.id, now());
+    return recorded;
+  };
+
   /** POST handlers. Each validates its own body and returns the response, or null for a malformed body. */
   const writes: Record<string, (body: Record<string, unknown>) => unknown> = {
     '/api/feedback': async (body) => {
@@ -222,7 +230,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
         };
       }
     },
-    '/api/labels': (body) => {
+    '/api/labels': async (body) => {
       const { accountId, id, name, description, disposition, markRead, unsubscribe } = body;
       if (!str(accountId) || !str(id, 40)) return null;
       if (name !== undefined && !str(name, 60)) return null;
@@ -237,7 +245,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       if (markRead !== undefined) change.markRead = markRead;
       if (unsubscribe !== undefined) change.unsubscribe = unsubscribe;
       if (!updateLabel(db, accountId, id, change, now())) throw new Error(`There is no label "${id}".`);
-      return { ok: true };
+      return { ok: true, redecided: await redecide(accountId) };
     },
     '/api/labels/add': (body) => {
       const { accountId, name, description, disposition, markRead, unsubscribe } = body;
@@ -254,7 +262,7 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
         ).id,
       };
     },
-    '/api/rules': (body) => {
+    '/api/rules': async (body) => {
       const { accountId, match, label, disposition, markRead, unsubscribe } = body;
       if (!str(accountId) || typeof label !== 'string' || !LABEL_ID.test(label) || typeof match !== 'object' || match === null) return null;
       if (disposition !== undefined && !decided(disposition)) return null;
@@ -262,20 +270,19 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       const conditions = Object.entries(match).filter(([, value]) => value !== '');
       if (conditions.length === 0 || !conditions.every(([key, value]) => RULE_KEYS.has(key) && str(value))) return null;
       const extras = { ...(markRead ? { markRead } : {}), ...(unsubscribe ? { subscription: 'unsubscribe' as const } : {}) };
-      return {
-        id: addRule(
-          db,
-          accountId,
-          { match: Object.fromEntries(conditions), labelId: label, ...(disposition ? { disposition } : {}), ...extras },
-          'user',
-          now(),
-        ),
-      };
+      const id = addRule(
+        db,
+        accountId,
+        { match: Object.fromEntries(conditions), labelId: label, ...(disposition ? { disposition } : {}), ...extras },
+        'user',
+        now(),
+      );
+      return { id, redecided: await redecide(accountId) };
     },
-    '/api/rules/remove': (body) => {
+    '/api/rules/remove': async (body) => {
       if (!str(body['id'], 40)) return null;
       if (!removeRule(db, body['id'])) throw new Error('That rule no longer exists.');
-      return { ok: true };
+      return { ok: true, redecided: await redecide() };
     },
     '/api/settings': (body) => {
       const { act, interval, model, fewShot, examplesKeepDays: keep } = body;
@@ -313,6 +320,12 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       controls.checkNow();
       return { added };
     },
+    '/api/suggestions/rejudge': async (body) => {
+      const { accountId } = body;
+      if (!str(accountId) || !listAccounts(db).some((a) => a.id === accountId)) return null;
+      if (!controls) throw new Error('This dashboard cannot run the model.');
+      return await controls.rejudge(accountId);
+    },
     '/api/examples/delete': (body) => {
       const { accountId, messageId } = body;
       if (!str(accountId) || !str(messageId)) return null;
@@ -341,12 +354,14 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
   const manageState = (): ManageState => {
     const accounts = listAccounts(db);
     const synced = db.prepare('SELECT last_synced_at AS at FROM accounts WHERE id = ?');
+    const changedAt = controls?.guidelinesChangedAt() ?? null;
     return {
       settings: controls?.settings() ?? { act: false, interval: 60, model: null, fewShot: true, examplesKeepDays: null },
       guidelines: controls?.guidelines() ?? '',
       activity: controls?.activity() ?? { sorting: false, lastPassAt: null, problems: [] },
       accounts: accounts.map((a) => ({ id: a.id, email: a.email, lastSyncedAt: (synced.get(a.id) as { at: number | null } | undefined)?.at ?? null })),
       labels: Object.fromEntries(accounts.map((a) => [a.id, listLabelSummaries(db, a.id)])),
+      predateGuidelines: Object.fromEntries(accounts.map((a) => [a.id, changedAt === null ? 0 : predatingGuidelines(db, changedAt, a.id).length])),
     };
   };
 

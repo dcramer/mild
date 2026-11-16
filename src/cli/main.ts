@@ -1,7 +1,7 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
@@ -12,6 +12,7 @@ import { backfill } from '../daemon/backfill.ts';
 import type { Activity, Controls, SignIn } from '../dashboard/controls.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
 import { ensureWebBuilt } from './web-build.ts';
+import { rejudgeWaiting } from '../daemon/rejudge.ts';
 import { type PassResult, type Wake, createWake, runLoop, runOnce } from '../daemon/run.ts';
 import { syncAccount } from '../daemon/sync.ts';
 import { createGmailApi } from '../gmail/api.ts';
@@ -284,6 +285,8 @@ function buildSignIn(config: Config, db: ReturnType<typeof openDb>): SignIn {
 function buildControls(config: Config, db: ReturnType<typeof openDb>, live: { wake?: Wake; activity: Activity }): Controls {
   const current = () => loadConfig().settings;
   interruptEvals(db);
+  const guidelinesChangedAt = () => (existsSync(config.guidelinesPath) ? statSync(config.guidelinesPath).mtimeMs : null);
+  let rejudging = false;
   return {
     settings: () => {
       const s = current();
@@ -305,7 +308,32 @@ function buildControls(config: Config, db: ReturnType<typeof openDb>, live: { wa
     },
     models: async () => (await openModels(config).getAvailable()).map((m) => `${m.provider}/${m.id}`),
     guidelines: () => (existsSync(config.guidelinesPath) ? readFileSync(config.guidelinesPath, 'utf8') : ''),
-    saveGuidelines: (text) => writeFileSync(config.guidelinesPath, text, { mode: 0o600 }),
+    saveGuidelines: (text) => {
+      // Saving the same text must not make every waiting suggestion look out of date.
+      if (existsSync(config.guidelinesPath) && readFileSync(config.guidelinesPath, 'utf8') === text) return;
+      writeFileSync(config.guidelinesPath, text, { mode: 0o600 });
+    },
+    guidelinesChangedAt,
+    rejudge: async (accountId) => {
+      const spec = current().model;
+      const account = listAccounts(db).find((a) => a.id === accountId);
+      const since = guidelinesChangedAt();
+      if (!spec) throw new Error('Choose a model first.');
+      if (!account || since === null) return { started: 0, remaining: 0 };
+      if (rejudging) throw new Error('Suggestions are already being judged again. Wait for that to finish.');
+      const tier = await openModelTier(config, spec);
+      const client = clientFor(config, loadClientSecrets(config), account.email);
+      const model = {
+        judge: tier.judge,
+        guidelines: tier.guidelines(),
+        fewShot: current().fewShot,
+        sources: { api: createGmailApi(client), mailbox: createGmailMailbox(client) },
+      };
+      const { started, remaining, done } = rejudgeWaiting({ db, mailbox: null, model }, account, since);
+      rejudging = true;
+      void done.finally(() => (rejudging = false));
+      return { started, remaining };
+    },
     undo: async (actionId) => {
       const action = getAction(db, actionId);
       if (!action) throw new Error(`There is no change #${actionId}.`);

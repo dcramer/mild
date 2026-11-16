@@ -59,7 +59,7 @@ export interface TriageReport {
 }
 
 /** The cascade for one account, cheapest first. The decision-model tier would slot in before the model. */
-function stagesFor(deps: TriageDeps, accountId: string): Stage[] {
+export function stagesFor(deps: TriageDeps, accountId: string): Stage[] {
   const { db, model } = deps;
   const labels = listLabels(db, accountId);
   const stages = [rulesStage(listRules(db, accountId), labels, { hasWritten: (facts) => cachedCorrespondent(db, facts.accountId, facts.from.address) })];

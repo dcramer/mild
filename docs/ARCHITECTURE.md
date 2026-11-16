@@ -82,7 +82,7 @@ Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 
 - **Observe is the default.** Decisions are recorded with `mode = observe` and the mailbox is not touched. `--act` carries them out. Observed decisions are never acted on later.
 - **Decide, record, then act.** The decision row is written before any mailbox change. Its `outcome` then records what happened: `none` (nothing needed doing), `done`, `skipped` with the reason (left the inbox, spam refused), `failed` or `unknown`.
-- **Nothing is dropped.** If the change cannot even be attempted (a provider error), the decision stays unsettled and the next pass retries it. Each message is decided once.
+- **Nothing is dropped.** If the change cannot even be attempted (a provider error), the decision stays unsettled and the next pass retries it. A pass decides each message once; a waiting suggestion gets a further decision only when a rule, a label or (on request) the guidelines change (see Teaching).
 - **One account failing does not stop the others.**
 
 ## Actions
@@ -147,6 +147,8 @@ sift suggests first and acts second. While it only observes, every decision is a
 - **Every answer is scored.** `feedback` records right, wrong, or "answered" (sift had no suggestion, which is not a mistake), per decision. The summary the Overview reads reports it for the window per tier and per label, with which labels sift took for which.
 - **An answer says how far it reaches:** everything from the sender, anyone at the sender's domain, the sender when the subject contains some words, or only the mail waiting now. All but the last make a rule with those conditions.
 - **Any decision can be answered, not only a suggestion.** Every list opens a message in the same panel: its text where held, what sift decided and why, what it knows about the sender, and the answer. Answering a message sift had already decided records the user's answer as a new decision for it, makes the rule, and, if sift had changed the message in Gmail, takes that change back so the new decision is carried out from where the message started.
+- **A waiting suggestion follows the rules and labels as they are now.** When a rule or a label changes in the dashboard, each waiting suggestion is run through the rules again, with no model (`src/learn/redecide.ts`), and a new decision is recorded where the answer differs: a rule of the user's now decides it, so it stops being a suggestion; its label now does something else, so the same label is recorded with the new outcome (and mail is never newly hidden from a sender who was not checked); or the rule that had decided it is gone, so it goes back to what a tier said before, or to review. Mail the user answered for is never touched, and mail a rule decided when it arrived stays as history.
+- **A change to the guidelines does not run the model.** It would cost a call per waiting message. The dashboard is told how many waiting suggestions were judged before `guidelines.md` last changed, and judges them again, a hundred at a time in the background, only when the user asks (`src/daemon/rejudge.ts`). Nothing is learned from a second judgement of the same message.
 - **Every marked message becomes an example.** The answer creates an `examples` row; the next pass of `sift run` fetches the whole message (raw RFC 822, all headers, readable text) into it. These are the evaluation and training set. A message that has since been deleted keeps its answer and is marked gone.
 
 - **Examples are kept until the user deletes them**, one at a time or all of an account's, or for `examples.keep_days` days after the answer if that is set; `sift run` deletes the ones past it when it starts and once a day. Deleting an example removes the stored message only: the answer stays in `feedback`, and any rule it made stays a rule.
@@ -186,7 +188,7 @@ The dashboard is where the user watches sift, teaches it and manages it. `sift r
 Everything that manages sift: answer suggestions, switch between observing and acting, choose the model and interval, edit the guidelines, add and edit labels and what happens to each, add and remove rules, undo a mailbox change, pull in older mail, and trigger a check.
 
 - It changes the database and `sift.toml` directly. A running sift re-reads its settings before every pass, and a change wakes it, so nothing needs restarting.
-- It never imports Gmail, the executor or the daemon (lint enforces this). The few things that need them (signing in, undo, pulling in older mail, check now) are passed in by the process as `SignIn` and `Controls` (`src/dashboard/controls.ts`), so every mailbox change still goes through the executor and the audit log.
+- It never imports Gmail, the executor or the daemon (lint enforces this). The few things that need them (signing in, undo, pulling in older mail, check now, a test run of the model, judging suggestions again) are passed in by the process as `SignIn` and `Controls` (`src/dashboard/controls.ts`), so every mailbox change still goes through the executor and the audit log.
 - Signing in to a model provider is still done with `sift init`.
 
 **Older mail.** Pulling in the last N days records those messages as suggest-only. They are decided on the next pass and are never acted on, even when sift is acting on new mail.

@@ -25,6 +25,7 @@ let close: (() => void) | undefined;
 let calls: string[];
 let settings: ManagedSettings;
 let guidelines: string;
+let guidelinesChangedAt: number | null;
 
 const controls: Controls = {
   settings: () => settings,
@@ -35,6 +36,11 @@ const controls: Controls = {
   guidelines: () => guidelines,
   saveGuidelines: (text) => {
     guidelines = text;
+  },
+  guidelinesChangedAt: () => guidelinesChangedAt,
+  rejudge: async (accountId) => {
+    calls.push(`rejudge ${accountId}`);
+    return { started: 2, remaining: 0 };
   },
   undo: async (id) => {
     calls.push(`undo ${id}`);
@@ -64,6 +70,7 @@ beforeEach(() => {
   calls = [];
   settings = { act: false, interval: 60, model: null, fewShot: true, examplesKeepDays: null };
   guidelines = 'Be careful.';
+  guidelinesChangedAt = null;
 });
 afterEach(() => close?.());
 
@@ -205,6 +212,48 @@ describe('managing sift from the dashboard', () => {
     expect((await call(port, 'POST', '/api/settings', { examplesKeepDays: 30 })).body).toMatchObject({ settings: { examplesKeepDays: 30 } });
     expect((await call(port, 'POST', '/api/settings', { examplesKeepDays: null })).body).toMatchObject({ settings: { examplesKeepDays: null } });
     for (const bad of [0, 1.5, '30', 40_000]) expect((await call(port, 'POST', '/api/settings', { examplesKeepDays: bad })).status).toBe(400);
+  });
+
+  it('decides waiting suggestions again when a rule or a label changes, and says how many', async () => {
+    const port = await start();
+    const from = { address: 'sales@example.com', domain: 'example.com' };
+    recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'w1', from }), facts({ accountId: ACCOUNT, messageId: 'w2', from })], '2');
+    const marketing = { disposition: 'archive', subscription: 'unsubscribe', stage: 'agent', reason: 'Marketing: a sale', labelId: 'marketing' } as const;
+    recordDecision(db, ACCOUNT, 'w1', marketing, { now: 10 });
+    recordDecision(db, ACCOUNT, 'w2', marketing, { now: 20 });
+    const latest = (id: string) => db.prepare('SELECT stage, disposition, label_id FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1').get(id);
+
+    const label = await call(port, 'POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'keep' });
+    expect(label.body).toEqual({ ok: true, redecided: 2 });
+    expect(latest('w1')).toEqual({ stage: 'agent', disposition: 'keep', label_id: 'marketing' });
+
+    const rule = await call(port, 'POST', '/api/rules', { accountId: ACCOUNT, match: { from: from.address }, label: 'newsletter' });
+    expect(rule.body).toMatchObject({ redecided: 2 });
+    expect(latest('w2')).toEqual({ stage: 'rules', disposition: 'archive', label_id: 'newsletter' });
+    expect(((await call(port, 'GET', '/api/suggestions')).body as { waiting: number }).waiting).toBe(0);
+
+    expect((await call(port, 'POST', '/api/rules/remove', { id: rule.body['id'] })).body).toEqual({ ok: true, redecided: 2 });
+    expect(latest('w2')).toEqual({ stage: 'agent', disposition: 'keep', label_id: 'marketing' });
+    expect(((await call(port, 'GET', '/api/suggestions?kept=1')).body as { waiting: number }).waiting).toBe(2);
+  });
+
+  it('says how many waiting suggestions predate the guidelines, and judges them again only when asked', async () => {
+    const port = await start();
+    recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'w1' }), facts({ accountId: ACCOUNT, messageId: 'w2' })], '2');
+    const agent = { disposition: 'archive', subscription: 'preserve', stage: 'agent', reason: 'r', labelId: 'marketing' } as const;
+    recordDecision(db, ACCOUNT, 'w1', agent, { now: 10 });
+    recordDecision(db, ACCOUNT, 'w2', agent, { now: 30 });
+
+    expect((await call(port, 'GET', '/api/manage')).body['predateGuidelines']).toEqual({ [ACCOUNT]: 0 });
+    guidelinesChangedAt = 20;
+    expect((await call(port, 'GET', '/api/manage')).body['predateGuidelines']).toEqual({ [ACCOUNT]: 1 });
+    await call(port, 'POST', '/api/guidelines', { text: 'Recruiters are cold outreach.' });
+    expect(calls).toEqual([]);
+
+    expect((await call(port, 'POST', '/api/suggestions/rejudge', { accountId: ACCOUNT })).body).toEqual({ started: 2, remaining: 0 });
+    expect(calls).toEqual([`rejudge ${ACCOUNT}`]);
+    expect((await call(port, 'POST', '/api/suggestions/rejudge', { accountId: 'nobody@example.org' })).status).toBe(400);
+    expect((await call(port, 'POST', '/api/suggestions/rejudge', {})).status).toBe(400);
   });
 
   it('edits the guidelines, labels and rules', async () => {

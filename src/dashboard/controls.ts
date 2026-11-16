@@ -11,6 +11,14 @@ export interface Controls {
   models(): Promise<string[]>;
   guidelines(): string;
   saveGuidelines(text: string): void;
+  /** When the guidelines last changed, or null if there are none. */
+  guidelinesChangedAt(): number | null;
+  /**
+   * Judge again, in the background, an account's waiting suggestions that were judged before the
+   * guidelines last changed. A model call each, so only when the user asks, and at most a batch at a
+   * time. Resolves with how many were started and how many are left for another press.
+   */
+  rejudge(accountId: string): Promise<{ started: number; remaining: number }>;
   /** Reverse one mailbox change. Resolves with a sentence describing what happened. */
   undo(actionId: number): Promise<string>;
   /** Pull the last `days` days of the inbox in as suggestions. Resolves with how many messages were new. */
