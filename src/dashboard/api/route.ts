@@ -111,6 +111,12 @@ export const days = z.enum(['1', '7', '30', '90'], { error: 'must be 1, 7, 30 or
 /** What most writes answer. */
 export const done = z.object({ ok: z.literal(true) });
 
+/** What a write touches, for `touches`: the install's own settings, or only the signed-in person's own data. */
+export const install = () => 'install' as const;
+export const self = () => 'self' as const;
+/** A write that takes nothing. */
+export const nothing = z.strictObject({});
+
 /** After a rule or label changed: waiting suggestions they now decide differently get a new decision. No model is called. */
 export async function redecide(db: Sql, now: () => number, accountId?: string): Promise<number> {
   let recorded = 0;
