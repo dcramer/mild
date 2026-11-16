@@ -58,9 +58,22 @@ export function TextLink({ href, children, className }: { href: string; children
   );
 }
 
-/** A key on the keyboard, where it works: beside the button it presses, or in a hint. */
-export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
-  return <kbd className={cn('font-mono text-label font-normal text-muted-foreground', className)}>{children}</kbd>;
+/**
+ * A key on the keyboard, drawn as a small keycap beside the control it presses. `ink` is for a cap on a
+ * filled control (the highlighted button, the choice that is on), where it takes the control's own ink.
+ */
+export function Kbd({ children, tone, className }: { children: ReactNode; tone?: 'ink'; className?: string }) {
+  return (
+    <kbd
+      className={cn(
+        'inline-flex h-[1.5em] min-w-[1.5em] items-center justify-center rounded-(--cut) border px-[0.35em] font-mono text-label leading-none font-normal',
+        tone === 'ink' ? 'border-current/40 opacity-80' : 'border-(--frame) text-muted-foreground',
+        className,
+      )}
+    >
+      {children}
+    </kbd>
+  );
 }
 
 /** A word in yellow ink for what is left to the reader, inside a line ("Not sure"). Like every yellow, few on a screen. */

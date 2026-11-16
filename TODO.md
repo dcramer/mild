@@ -10,7 +10,7 @@ sift is a better Gmail filter and spam filter: models work out what mail is, and
 
 In this order.
 
-1. **Keyboard shortcuts in the design system** (under Dashboard).
+1. Nothing queued: pick from the sections below.
 
 ## Labels and rules
 
@@ -69,7 +69,7 @@ The dashboard manages sift, behind Google sign-in. That sign-in also connects th
 - [ ] **Sign in to ChatGPT (and other model providers) from the dashboard**, as Gmail already is, so setup in the terminal ends at the Google client. The device-code flow suits a page: show the code and the link, wait, then offer the models.
 - [ ] Dashboard plumbing, the rest. Built: paths instead of fragments, with filters and the open message in the address; an offline state that keeps the last data and refuses writes; an avatar menu; installable, with a service worker that never caches `/api/`; an expired Google sign-in shown in the masthead. Still to do: after Google sign-in the browser returns to `/`, not where it started; an account with no token at all gets no masthead notice; the expired notice clears only after the next pass; the Activity page offset is not in the address; a focused menu or select popup draws the yellow outline around the whole popup; push notifications; switching account from the menu; whether `/system` stays in the production build.
 - [ ] `/system` scrolls sideways on a phone (the chart's legend).
-- [ ] **Keyboard shortcuts as part of the design system.** Obvious things get the keys people already know (J and K or the arrows for next and previous in the panel and down a list, Enter to open, Escape to close, / to search, the number keys for a label), and each shortcut is shown on the page where it applies, so it is learned by looking. To design before building: one part that both binds a key and draws its hint, so the two cannot drift apart; how the hint looks beside a button, in a row and in a menu without adding clutter; what happens to hints on a touch screen; and a switch in Settings that turns shortcuts and their hints off. The panel has previous and next buttons and the answer has number keys and Enter today, each done by hand.
+- [ ] **Keyboard shortcuts, the rest.** Built: one part binds a key and draws its keycap; Gmail's keys (J, K, Enter or O, Esc, /, E, !, ?) plus I to keep, A to agree and 1 to 9 for what a message is; a row's keys live only on the row the reader is on; a panel or dialog silences the page under it; no hints on a touch screen; off in Settings, remembered in the browser. Still to do: keys to go between sections (Gmail's G then a letter); keys on Rules and Labels rows (remove, edit); Undo by key after an answer; the Activity list's own actions.
 - [ ] Design system parts still missing: a select for a long list (the model select has no search), and a filter that narrows by sender or label by typing rather than from a fixed list.
 - [ ] Activity lists decisions, so a change with no decision behind it (an unsubscribe, putting a message back after a correction) shows only in that message's history. Decide whether Activity should list those as rows of their own.
 - [ ] Undo from a toast: undoing a change from Activity says what it did in a toast, but nothing offers to redo it, and answering a suggestion cannot be taken back from the toast that reports it. The toast part already takes an action; the server needs a way to take an answer back.

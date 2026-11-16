@@ -1,8 +1,8 @@
 import { ArrowRightIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { FeedbackRequest } from '@/lib/api.ts';
 import { willBe } from '@/lib/format.ts';
-import { Button, Check, ChoiceGroup, Failure, Field, Form, Input, Kbd, Select } from '@/system';
+import { Button, Check, ChoiceGroup, Failure, Field, Form, Input, Select } from '@/system';
 
 export interface AnswerLabel {
   id: string;
@@ -22,6 +22,8 @@ const DOES = [
   ['archive', 'Archive'],
   ['spam', 'Spam'],
 ] as const;
+// Gmail's own keys where it has one: E archives, ! is spam. I for the inbox.
+const DOES_KEYS = ['i', 'e', '!'] as const;
 const does = (action: string | undefined): Does | null =>
   action === 'keep' || action === 'archive' || action === 'spam' ? action : action === 'block' ? 'spam' : null;
 
@@ -31,7 +33,7 @@ const does = (action: string | undefined): Does | null =>
  * reaches decides what is learned: the sender's mail of this kind (a rule that waits for the label),
  * all their mail (a rule that names no label), or this message alone (no rule; correcting what a message
  * is teaches the model by example). The sentence above the button is what sift will be taught, word for
- * word. Labels can be chosen with the number keys and the answer sent with Enter.
+ * word.
  */
 export function Answer({
   labels,
@@ -89,19 +91,6 @@ export function Answer({
           ...(unsubscribe && scope !== 'once' ? { unsubscribe } : {}),
         };
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target;
-      const typing = target instanceof HTMLElement && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.getAttribute('role') === 'option');
-      if (typing || event.metaKey || event.ctrlKey || event.altKey) return;
-      const numbered = labels[Number(event.key) - 1];
-      if (numbered) setChosen(numbered.id);
-      else if (event.key === 'Enter' && ready && answer && !busy && !(target instanceof HTMLButtonElement)) onSubmit(answer);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  });
-
   const whose =
     scope === 'domain'
       ? `mail from anyone at ${domain}`
@@ -129,7 +118,7 @@ export function Answer({
   return (
     <Form onSubmit={() => ready && answer && onSubmit(answer)}>
       <Field label="Do">
-        <ChoiceGroup label="What should happen to it" value={action} options={DOES} onChange={setPicked} />
+        <ChoiceGroup label="What should happen to it" value={action} options={DOES} onChange={setPicked} keys={DOES_KEYS} />
       </Field>
 
       <Field label="For">
@@ -185,13 +174,10 @@ export function Answer({
         ) : null}
         <Failure>{error}</Failure>
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" variant="mark" busy={busy} disabled={!ready}>
+          <Button type="submit" variant="mark" busy={busy} disabled={!ready} shortcut={{ key: 'Enter', label: 'Save this answer' }}>
             {agreeing ? 'Agree' : 'Save answer'}
             <ArrowRightIcon aria-hidden />
           </Button>
-          <span className="hidden text-muted-foreground md:inline">
-            <Kbd>Enter</Kbd> to send · <Kbd>1</Kbd>–<Kbd>{Math.min(labels.length, 9)}</Kbd> for what it is
-          </span>
         </div>
       </div>
     </Form>

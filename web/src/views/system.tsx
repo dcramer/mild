@@ -245,6 +245,20 @@ export function SystemView() {
             <Select label="What sift does" value={choice} options={ACTIONS} onChange={setChoice} />
             <Select label="Disabled" value={choice} options={ACTIONS} onChange={setChoice} disabled />
           </Row>
+          <Row
+            label="shortcut"
+            note="A control asks for its key and draws the keycap itself, so a key shown always works. Off in Settings, and never drawn on a touch screen. In a row, live only on the row you are on."
+          >
+            <Button shortcut="g" onClick={() => toast('G was pressed')}>
+              Press me
+            </Button>
+            <Button variant="mark" shortcut={{ key: 'Enter', label: 'Send' }} onClick={() => toast('Enter was pressed')}>
+              Send
+            </Button>
+            <span className="text-muted-foreground">
+              <Kbd>?</Kbd> lists every key that works here
+            </span>
+          </Row>
           <Row label="choice group" note="A few choices seen at once, one on. Numbered where keys pick them; clearable where none is a choice too.">
             <ChoiceGroup label="What this is" value={label} options={LABELS} onChange={setLabel} numbered />
             <ChoiceGroup

@@ -1,5 +1,6 @@
-import type { ComponentProps, ReactNode } from 'react';
+import { type ComponentProps, type ReactNode, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { useShortcut } from './keys.tsx';
 
 const BASE =
   'press inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 border border-transparent font-medium whitespace-nowrap select-none aria-disabled:pointer-events-none aria-disabled:opacity-45 disabled:pointer-events-none disabled:opacity-45 [&_svg]:size-[1.15em] [&_svg]:shrink-0';
@@ -26,30 +27,53 @@ interface Own {
   size?: keyof typeof SIZE;
   /** Waiting on something this press started. Stops further presses. */
   busy?: boolean;
+  /**
+   * The key that presses this, drawn beside its label. A string when the button's label is plain text;
+   * otherwise the key with a few words for the list of all keys. Inside a table row it is live, and
+   * shown, only on the row the reader is on.
+   */
+  shortcut?: string | { key: string; label: string };
   children: ReactNode;
 }
 
 type Props = Own & (({ href: string } & Omit<ComponentProps<'a'>, 'children'>) | ({ href?: undefined } & Omit<ComponentProps<'button'>, 'children'>));
 
 /** Something you press. Given `href` it is a link that looks the same. */
-export function Button({ variant = 'plain', size = 'md', busy = false, className, children, ...rest }: Props) {
+export function Button({ variant = 'plain', size = 'md', busy = false, shortcut, className, children, ...rest }: Props) {
   const classes = cn(BASE, VARIANT[variant], SIZE[size], busy && 'pointer-events-none', className);
+  const element = useRef<HTMLButtonElement & HTMLAnchorElement>(null);
+  const key = typeof shortcut === 'string' ? shortcut : shortcut?.key;
+  const hint = useShortcut(
+    key,
+    typeof shortcut === 'object' ? shortcut.label : typeof children === 'string' ? children : '',
+    () => element.current?.click(),
+    variant === 'mark' || variant === 'ink' ? { tone: 'ink' as const } : {},
+  );
   const content = (
     <>
       {children}
+      {hint}
       {busy ? <span aria-hidden className="busy-dots" /> : null}
     </>
   );
   if (rest.href !== undefined) {
     return (
-      <a className={classes} aria-busy={busy || undefined} {...rest}>
+      <a ref={element} className={classes} aria-busy={busy || undefined} {...(key ? { 'aria-keyshortcuts': key } : {})} {...rest}>
         {content}
       </a>
     );
   }
   const { type = 'button', disabled, ...button } = rest;
   return (
-    <button type={type} className={classes} disabled={disabled || busy} aria-busy={busy || undefined} {...button}>
+    <button
+      ref={element}
+      type={type}
+      className={classes}
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
+      {...(key ? { 'aria-keyshortcuts': key } : {})}
+      {...button}
+    >
       {content}
     </button>
   );

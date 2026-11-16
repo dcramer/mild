@@ -1,7 +1,8 @@
 import { CheckIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useState, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from './button.tsx';
+import { useShortcut } from './keys.tsx';
 import { PageHeader } from './page.tsx';
 
 export interface ActiveFilter {
@@ -43,6 +44,8 @@ export function ListView({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const searchBox = useRef<HTMLInputElement>(null);
+  const slash = useShortcut('/', 'Search', () => searchBox.current?.focus(), { enabled: search !== undefined });
   const on = filters?.active.length ?? 0;
   return (
     <section className="flex flex-col gap-6">
@@ -58,13 +61,18 @@ export function ListView({
                 <label className="flex min-w-0 flex-1 items-center gap-2.5 px-3">
                   <SearchIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
                   <input
+                    ref={searchBox}
                     type="search"
                     className="focus-within-shown min-w-0 flex-1 bg-transparent text-sm placeholder:text-muted-foreground"
                     aria-label={search.placeholder}
+                    aria-keyshortcuts="/"
                     placeholder={search.placeholder}
                     value={search.value}
                     onChange={(event) => search.onChange(event.target.value)}
+                    // Escape hands the keys back to the list.
+                    onKeyDown={(event) => event.key === 'Escape' && event.currentTarget.blur()}
                   />
+                  {slash}
                 </label>
               ) : (
                 <span className="flex-1" />

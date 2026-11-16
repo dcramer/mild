@@ -55,7 +55,7 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Stamp` | A verdict in one word from the vocabulary. All stamps weigh the same; `look` only for what is left to the reader. |
 | `Highlight`, `Marked` | A stroke of highlighter; a search term marked in text. |
 | `Look` | A word in yellow ink for what is left to the reader, inside a line: "Not sure" in a list. |
-| `TextLink`, `Code`, `Kbd`, `Copyable` | A link in text; something typed; a key; a value carried somewhere else whole. |
+| `TextLink`, `Code`, `Kbd`, `Copyable` | A link in text; something typed; a key, as a small keycap (see Keys); a value carried somewhere else whole. |
 | `Disclosure` | What most readers never need, folded under the question that leads to it. |
 | `Wordmark` | The name. |
 
@@ -79,6 +79,17 @@ Every part has an answer for a phone, and a new part needs one before it is adde
 | Anything pressed | At least 40px tall on a touch screen (`pointer: coarse`), whatever its size on a desktop. |
 
 The page itself never scrolls sideways.
+
+## Keys
+
+A control asks for its key and draws the keycap itself (`shortcut` on a `Button`, `keys` on a `ChoiceGroup`, `useShortcut` anywhere else), so a key that is shown always works and a key that works is always shown. Never bind a key with a listener of your own.
+
+- **The keys are Gmail's** where it has one: `J` and `K` to move, `Enter` or `O` to open, `Esc` to close, `/` to search, `E` archive, `!` spam, `?` for the list of every key live where the reader is. `I` keeps (the inbox), `A` agrees with sift, `1` to `9` say what a message is.
+- **A keycap** (`Kbd`) sits after the label, outlined; on a filled control it takes that control's ink.
+- **Down a list** only the row the reader is on shows and answers to its keys. A table says how to move in one quiet line under it.
+- **What floats is a layer.** With a panel or dialog open the page under it hears nothing; `?` alone works everywhere.
+- **Nothing happens while typing** in a field, and Enter never presses a second thing when a button or row already has the focus. A panel takes the focus itself when it opens, so Enter answers.
+- **No hints on a touch screen**, and the reader can turn keys and hints off in Settings. That choice is kept in the browser, not in `sift.toml`: it is about the reader, not the mail.
 
 ## Nothing moves after it is drawn
 

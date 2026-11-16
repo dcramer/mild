@@ -134,7 +134,7 @@ function SuggestionRow({ group, onOpen, onAnswered }: { group: SuggestionGroup; 
       </Td>
       <RowActions>
         {sure ? (
-          <Button variant="quiet" busy={busy} onClick={agree}>
+          <Button variant="quiet" busy={busy} onClick={agree} shortcut="a">
             Agree
           </Button>
         ) : null}

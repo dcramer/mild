@@ -1,5 +1,7 @@
-import type { ComponentProps, ReactNode } from 'react';
+import { type ComponentProps, type ReactNode, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { RowActive, keyName, useLayerMoves, useShortcut } from './keys.tsx';
+import { Kbd } from './type.tsx';
 
 /**
  * Rows of the same kind of thing. It has no surface of its own: on the page it sits flush with the
@@ -10,29 +12,71 @@ import { cn } from '@/lib/utils';
  * under the first column in an `OnPhone`, and the row opens for the rest. A table not given that scrolls sideways.
  */
 export function Table({ children }: { children: ReactNode }) {
+  const element = useRef<HTMLDivElement>(null);
+  // Where the reader was, so that after a row is answered and gone the next key carries on from there.
+  const last = useRef(0);
+  // In a panel J and K step through the panel's own list.
+  const moves = !useLayerMoves();
+  const rows = () => [...(element.current?.querySelectorAll<HTMLElement>('tbody > tr[tabindex="0"]') ?? [])];
+  const within = () => element.current;
+  const step = (by: number) => {
+    const all = rows();
+    if (all.length === 0) return;
+    const at = all.indexOf(document.activeElement as HTMLElement);
+    const next = at === -1 ? Math.min(last.current, all.length - 1) : Math.min(Math.max(at + by, 0), all.length - 1);
+    last.current = next;
+    all[next]?.focus();
+    all[next]?.scrollIntoView({ block: 'nearest' });
+  };
+  const [openable, setOpenable] = useState(false);
+  useEffect(() => setOpenable(rows().length > 0));
+  const live = { enabled: moves && openable, within };
+  const down = useShortcut('j', 'Next row', () => step(1), live);
+  const up = useShortcut('k', 'Previous row', () => step(-1), live);
   return (
-    <div className="-mx-(--bleed) overflow-x-auto">
+    <div ref={element} className="-mx-(--bleed) overflow-x-auto">
       <table className="w-full text-left">{children}</table>
+      {down ? (
+        <p className="hidden items-center gap-1.5 px-(--bleed) pt-3 text-label text-muted-foreground md:flex">
+          {down}
+          {up}
+          <span>to move</span>
+          <Kbd className="ml-2">{keyName('Enter')}</Kbd>
+          <span>to open</span>
+          <Kbd className="ml-2">?</Kbd>
+          <span>for every key</span>
+        </p>
+      ) : null}
     </div>
   );
 }
 
-/** A row. With `onOpen` the whole row is pressable, by pointer or keyboard. */
+/**
+ * A row. With `onOpen` the whole row is pressable, by pointer or keyboard, and it is a stop for J and K.
+ * The keys of the buttons in a row are live, and drawn, only while the reader is on that row.
+ */
 export function Tr({ onOpen, className, ...props }: ComponentProps<'tr'> & { onOpen?: () => void }) {
+  const [active, setActive] = useState(false);
   if (!onOpen) return <tr className={cn('row group/row', className)} {...props} />;
   return (
-    <tr
-      tabIndex={0}
-      className={cn('row group/row cursor-pointer hover:bg-(--fill) focus-visible:bg-(--fill)', className)}
-      onClick={onOpen}
-      onKeyDown={(event) => {
-        if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
-          event.preventDefault();
-          onOpen();
-        }
-      }}
-      {...props}
-    />
+    <RowActive value={active}>
+      <tr
+        tabIndex={0}
+        className={cn('row group/row cursor-pointer hover:bg-(--fill) focus-visible:bg-(--fill) focus-within:bg-(--fill)', className)}
+        onClick={onOpen}
+        onFocus={() => setActive(true)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setActive(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ' || event.key === 'o')) {
+            event.preventDefault();
+            onOpen();
+          }
+        }}
+        {...props}
+      />
+    </RowActive>
   );
 }
 

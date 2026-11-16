@@ -9,6 +9,7 @@ export { Fact, Facts } from './facts.tsx';
 export { Check, Field, Form, Input, TextArea } from './field.tsx';
 export { Figure, Figures } from './figures.tsx';
 export { HoverCard } from './hover-card.tsx';
+export { setShortcutsOn, useShortcut, useShortcutsOn } from './keys.tsx';
 export { type ActiveFilter, FilterGroup, ListView } from './list-view.tsx';
 export { Avatar, Menu, type MenuItem } from './menu.tsx';
 export { Masthead, type NavItem } from './nav.tsx';

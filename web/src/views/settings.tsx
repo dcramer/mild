@@ -2,7 +2,24 @@ import { useEffect, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, money, plural } from '@/lib/format.ts';
-import { Button, Code, ConfirmButton, Failure, Loading, Note, PageHeader, Section, Select, SettingRow, Sheet, TextArea, useToast } from '@/system';
+import {
+  Button,
+  Code,
+  ConfirmButton,
+  Failure,
+  Kbd,
+  Loading,
+  Note,
+  PageHeader,
+  Section,
+  Select,
+  SettingRow,
+  Sheet,
+  TextArea,
+  setShortcutsOn,
+  useShortcutsOn,
+  useToast,
+} from '@/system';
 
 const INTERVALS = [
   ['30', 'Every 30 seconds'],
@@ -187,6 +204,28 @@ function OlderMail() {
 }
 
 /** How sift runs, most used first. What it does with mail is under Labels and Rules. */
+/** Kept in this browser, not in sift: it is about how this reader works, not how mail is sorted. */
+function Keys() {
+  const on = useShortcutsOn();
+  return (
+    <Section title="Keyboard">
+      <Sheet>
+        <SettingRow
+          title="Shortcuts"
+          note={
+            <>
+              Keys for moving through lists and answering, each shown beside what it presses. <Kbd>?</Kbd> lists the ones that work where you are. Remembered in
+              this browser.
+            </>
+          }
+        >
+          <Button onClick={() => setShortcutsOn(!on)}>{on ? 'Turn off' : 'Turn on'}</Button>
+        </SettingRow>
+      </Sheet>
+    </Section>
+  );
+}
+
 export function SettingsView() {
   const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
   return (
@@ -201,6 +240,7 @@ export function SettingsView() {
           <Accounts state={data} />
           <Guidelines saved={data.guidelines} />
           <OlderMail />
+          <Keys />
         </>
       ) : null}
     </div>

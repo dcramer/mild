@@ -1,13 +1,13 @@
 import { cn } from '@/lib/utils';
-import { Kbd } from './type.tsx';
+import { useShortcut } from './keys.tsx';
 
 const CHOICE =
   'press inline-flex h-(--control) cursor-pointer items-center gap-1.5 px-3 text-sm font-medium whitespace-nowrap select-none disabled:pointer-events-none disabled:opacity-45 aria-checked:bg-foreground aria-checked:text-background aria-pressed:bg-foreground aria-pressed:text-background';
 
 /**
  * A few choices laid out to be seen at once, one of them on (inked), where a `Select` would hide them:
- * what a message is, where a sender stands. `numbered` shows the number key that picks each of the first
- * nine; the view binds the keys. With `clearable` pressing the one that is on turns it off, so none is on.
+ * what a message is, where a sender stands. `keys` gives each choice, in order, the key that picks it;
+ * `numbered` is the keys 1 to 9. With `clearable` pressing the one that is on turns it off, so none is on.
  */
 export function ChoiceGroup<T extends string>({
   label,
@@ -15,6 +15,7 @@ export function ChoiceGroup<T extends string>({
   options,
   onChange,
   numbered,
+  keys = numbered ? NUMBERS : undefined,
   clearable,
   disabled,
 }: {
@@ -23,27 +24,56 @@ export function ChoiceGroup<T extends string>({
   options: readonly (readonly [T, string])[];
   onChange: (value: T | null) => void;
   numbered?: boolean;
+  keys?: readonly string[] | undefined;
   clearable?: boolean;
   disabled?: boolean;
 }) {
   return (
     <div role={clearable ? 'group' : 'radiogroup'} aria-label={label} className="flex flex-wrap gap-1.5">
-      {options.map(([key, text], index) => {
-        const on = key === value;
-        return (
-          <button
-            key={key}
-            type="button"
-            disabled={disabled}
-            {...(clearable ? { 'aria-pressed': on } : { role: 'radio', 'aria-checked': on })}
-            className={cn(CHOICE, !on && 'bg-(--fill) hover:bg-(--fill-strong)')}
-            onClick={() => onChange(clearable && on ? null : key)}
-          >
-            {numbered && index < 9 ? <Kbd className={cn('hidden md:inline', on && 'text-background/60')}>{index + 1}</Kbd> : null}
-            {text}
-          </button>
-        );
-      })}
+      {options.map(([key, text], index) => (
+        <Choice
+          key={key}
+          text={text}
+          on={key === value}
+          shortcut={disabled ? undefined : keys?.[index]}
+          clearable={clearable ?? false}
+          disabled={disabled ?? false}
+          onPress={() => onChange(clearable && key === value ? null : key)}
+        />
+      ))}
     </div>
+  );
+}
+
+const NUMBERS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'] as const;
+
+function Choice({
+  text,
+  on,
+  shortcut,
+  clearable,
+  disabled,
+  onPress,
+}: {
+  text: string;
+  on: boolean;
+  shortcut: string | undefined;
+  clearable: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  const hint = useShortcut(shortcut, text, onPress, on ? { tone: 'ink' } : {});
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      {...(clearable ? { 'aria-pressed': on } : { role: 'radio', 'aria-checked': on })}
+      {...(shortcut ? { 'aria-keyshortcuts': shortcut } : {})}
+      className={cn(CHOICE, !on && 'bg-(--fill) hover:bg-(--fill-strong)')}
+      onClick={onPress}
+    >
+      {text}
+      {hint}
+    </button>
   );
 }

@@ -6,6 +6,7 @@ import './index.css';
 import { App } from './App.tsx';
 import { queryClient } from './lib/api.ts';
 import { Toaster } from './system/index.ts';
+import { ShortcutList } from './system/keys-help.tsx';
 
 // Installed, the app opens from files the service worker kept, even when sift cannot be reached. Not
 // under `sift dev`, where the page must always be the latest build: there, one left by `sift run` is removed.
@@ -26,6 +27,7 @@ createRoot(root).render(
       <QueryClientProvider client={queryClient}>
         <Toaster>
           <App />
+          <ShortcutList />
         </Toaster>
       </QueryClientProvider>
     </CSPProvider>

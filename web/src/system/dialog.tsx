@@ -2,6 +2,7 @@ import { Dialog as Base } from '@base-ui/react/dialog';
 import { XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { KeyLayer } from './keys.tsx';
 
 /**
  * Something opened from the page and read or answered without leaving it: one message, one sender, a
@@ -49,8 +50,10 @@ export function Dialog({
               <XIcon className="size-4" />
             </Base.Close>
           </header>
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 md:px-6">{children}</div>
-          {footer ? <footer className="flex flex-wrap items-center gap-2 border-t border-dashed border-(--rule) px-5 py-4 md:px-6">{footer}</footer> : null}
+          <KeyLayer>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 md:px-6">{children}</div>
+            {footer ? <footer className="flex flex-wrap items-center gap-2 border-t border-dashed border-(--rule) px-5 py-4 md:px-6">{footer}</footer> : null}
+          </KeyLayer>
         </Base.Popup>
       </Base.Portal>
     </Base.Root>
