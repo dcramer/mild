@@ -16,9 +16,9 @@ const DAYS = [
 /**
  * Nothing of the dashboard shows until a model is in use: without one, only rules sort, and there is
  * nothing to suggest. The same steps come back, under another heading, when the model in use is lost
- * (its sign-in removed or expired).
+ * (its sign-in removed or expired). Settings opens over it.
  */
-export function ModelWall({ signedInAs, children }: { signedInAs: string | null; children: ReactNode }) {
+export function ModelWall({ signedInAs, onSettings, children }: { signedInAs: string | null; onSettings: () => void; children: ReactNode }) {
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   // Connecting a model lifts the wall at the next load, so the step after it is held here.
   const [teaching, setTeaching] = useState(false);
@@ -27,7 +27,7 @@ export function ModelWall({ signedInAs, children }: { signedInAs: string | null;
   const inUse = state.model.chosen?.split('/')[0] ?? null;
   const walled = inUse === null || !state.model.signedIn.includes(inUse);
   if (!walled && !teaching) return children;
-  const account = signedInAs ? { name: signedInAs, onSignOut: () => void api.signOut().then(() => window.location.assign('/')) } : undefined;
+  const account = signedInAs ? { name: signedInAs, onSettings, onSignOut: () => void api.signOut().then(() => window.location.assign('/')) } : undefined;
   return (
     <Entry {...(account ? { account } : {})}>
       {teaching ? (

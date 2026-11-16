@@ -17,7 +17,7 @@ Preconditions:
 
 - Fresh seed. There is no `$RUN/home/guidelines.md`.
 
-- **Open.** `ab open "$B/settings"`. A level-2 heading `Guidelines`, an empty `Guidelines` textbox, and `Saved` disabled.
+- **Open.** `ab open "$B/suggestions?settings=1"`: the Settings panel. A level-2 heading `Guidelines`, an empty `Guidelines` textbox, and `Saved` disabled.
 - **Write.** `ab find role textbox fill "Keep anything from my bank." --name "Guidelines"`. The button reads `Save` and is enabled.
 - **Save.** `ab find role button click --name "Save"`. The button reads `Saved` and is disabled again.
 - **Second view.** `ab reload`. The textbox still holds `Keep anything from my bank.`

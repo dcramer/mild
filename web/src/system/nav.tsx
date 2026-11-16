@@ -129,7 +129,16 @@ export function Masthead({
                   <>
                     <span className="break-all">{account.name}</span>
                     {account.items.map((item) => (
-                      <Button key={item.label} variant="quiet" disabled={item.disabled} title={item.note} onClick={item.onSelect}>
+                      <Button
+                        key={item.label}
+                        variant="quiet"
+                        disabled={item.disabled}
+                        title={item.note}
+                        onClick={() => {
+                          setOpen(false);
+                          item.onSelect();
+                        }}
+                      >
                         {item.label}
                       </Button>
                     ))}

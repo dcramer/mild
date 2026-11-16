@@ -13,7 +13,7 @@ import { ModelWall } from '@/components/model-wall.tsx';
 const ActivityView = lazyView(() => import('@/views/activity.tsx').then((m) => m.ActivityView));
 const LabelsView = lazyView(() => import('@/views/labels.tsx').then((m) => m.LabelsView));
 const Rules = lazyView(() => import('@/views/rules.tsx').then((m) => m.Rules));
-const SettingsView = lazyView(() => import('@/views/settings.tsx').then((m) => m.SettingsView));
+const SettingsPanel = lazyView(() => import('@/views/settings.tsx').then((m) => m.SettingsPanel));
 const SenderView = lazyView(() => import('@/views/sender.tsx').then((m) => m.SenderView));
 const MessagePanel = lazyView(() => import('@/views/message-panel.tsx').then((m) => m.MessagePanel));
 const SignInScreen = lazyView(() => import('@/views/sign-in.tsx').then((m) => m.SignInScreen));
@@ -26,7 +26,6 @@ const SCREENS: Record<string, { preload: () => Promise<unknown> }> = {
   activity: ActivityView,
   labels: LabelsView,
   rules: Rules,
-  settings: SettingsView,
   sender: SenderView,
   domain: SenderView,
   system: SystemView,
@@ -41,7 +40,7 @@ if (new URLSearchParams(window.location.search).has('message')) void MessagePane
 function useScreensAhead() {
   useEffect(() => {
     const ahead = () => {
-      for (const screen of [ActivityView, LabelsView, Rules, SettingsView, SenderView, MessagePanel]) void screen.preload().catch(() => {});
+      for (const screen of [ActivityView, LabelsView, Rules, SettingsPanel, SenderView, MessagePanel]) void screen.preload().catch(() => {});
     };
     if ('requestIdleCallback' in window) {
       const id = window.requestIdleCallback(ahead, { timeout: 4000 });
@@ -83,16 +82,25 @@ class ScreenBoundary extends Component<{ at: string; children: ReactNode }, { fa
   }
 }
 
-const SECTIONS = ['suggestions', 'activity', 'labels', 'rules', 'settings'] as const;
+const SECTIONS = ['suggestions', 'activity', 'labels', 'rules'] as const;
 const NAMES: Record<(typeof SECTIONS)[number], string> = {
   suggestions: 'Suggestions',
   activity: 'Activity',
   labels: 'Labels',
   rules: 'Rules',
-  settings: 'Settings',
 };
-/** Sections that were folded into others, so links to them still land somewhere. */
-const MOVED: Record<string, string> = { overview: '/suggestions', decisions: '/activity', changes: '/activity', 'settings/running': '/settings' };
+/** Sections that were folded into others, so links to them still land somewhere. Settings was a page; it is a panel over any. */
+const MOVED: Record<string, string> = {
+  overview: '/suggestions',
+  decisions: '/activity',
+  changes: '/activity',
+  settings: '/suggestions?settings=1',
+  'settings/running': '/suggestions?settings=1',
+};
+
+/** Settings opens over whatever is showing, the model wall included, so nothing has to be finished to reach it. */
+const openSettings = () => setParams({ settings: '1' }, { state: { panel: true } });
+const closeSettings = () => ((window.history.state as { panel?: boolean } | null)?.panel ? window.history.back() : setParams({ settings: '' }));
 
 /** Shows the sign-in screen until the viewer is signed in, then the dashboard. */
 export function App() {
@@ -110,6 +118,11 @@ export function App() {
 }
 
 function Gate({ route }: { route: string[] }) {
+  const moved = MOVED[route.join('/')] ?? MOVED[route[0] ?? ''];
+  useEffect(() => {
+    if (moved) navigate(moved.includes('?') ? moved : moved + window.location.search, { replace: true });
+  }, [moved]);
+  const [settings] = useParam('settings');
   const session = useLoaded('session', (signal) => api.session(signal), 300_000);
   const online = useOnline();
   if (!session.data) {
@@ -137,18 +150,21 @@ function Gate({ route }: { route: string[] }) {
     );
   }
   return (
-    <ModelWall signedInAs={session.data.email}>
-      <Dashboard signedInAs={session.data.email} route={route} />
-    </ModelWall>
+    <>
+      <ModelWall signedInAs={session.data.email} onSettings={openSettings}>
+        <Dashboard signedInAs={session.data.email} route={route} />
+      </ModelWall>
+      {settings === '1' ? (
+        <Suspense fallback={null}>
+          <SettingsPanel onClose={closeSettings} />
+        </Suspense>
+      ) : null}
+    </>
   );
 }
 
 function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: string[] }) {
   useScreensAhead();
-  const moved = MOVED[route.join('/')] ?? MOVED[route[0] ?? ''];
-  useEffect(() => {
-    if (moved) navigate(moved + window.location.search, { replace: true });
-  }, [moved]);
   const section = SECTIONS.find((s) => s === route[0]) ?? 'suggestions';
   // A sender's or a domain's own page: `/sender/<account>/<address>`.
   const profile =
@@ -201,6 +217,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
             ? {
                 name: signedInAs,
                 items: [
+                  { label: 'Settings', onSelect: openSettings },
                   {
                     label: 'Sign out',
                     onSelect: () => void api.signOut().then(() => window.location.assign('/')),
@@ -227,10 +244,8 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
               <ActivityView onOpen={openMessages} />
             ) : section === 'labels' ? (
               <LabelsView />
-            ) : section === 'rules' ? (
-              <Rules />
             ) : (
-              <SettingsView />
+              <Rules />
             )}
           </Suspense>
         </ScreenBoundary>

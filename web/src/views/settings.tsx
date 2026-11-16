@@ -12,7 +12,7 @@ import {
   Kbd,
   Loading,
   Note,
-  PageHeader,
+  Panel,
   Select,
   SettingRow,
   SettingsGroup,
@@ -179,16 +179,25 @@ function Switch({
 }
 
 /** The reader's own way to a model and which one sorts their mail: each person signs in for themselves. */
-function Model({ state, reload }: { state: ManageState; reload: () => void }) {
+function Model({ state, reload, onConnect }: { state: ManageState; reload: () => void; onConnect: () => void }) {
   const { busy, error, run } = useAction();
   const { chosen, choices, signedIn } = state.model;
   const [changing, setChanging] = useState(false);
   const models = useLoaded(`models ${signedIn.join(' ')}`, (signal) => api.models(signal), 300_000);
   const month = useLoaded('summary-30', (signal) => api.summary(30, signal), 300_000);
-  // Behind the model wall there is always a model in use, and it is signed in.
-  if (chosen === null) return null;
-  const provider = chosen.split('/')[0] ?? '';
+  const provider = chosen?.split('/')[0] ?? null;
   const choice = choices.find((c) => c.provider === provider);
+  // Connecting a model is the wall under this panel.
+  if (chosen === null || provider === null || !signedIn.includes(provider))
+    return (
+      <SettingsGroup title="Model" note="Sorts what no rule covers.">
+        <Sheet>
+          <SettingRow title="No model connected" note="Nothing new is sorted or suggested. Rules still sort what they cover.">
+            <Button onClick={onConnect}>Connect a model</Button>
+          </SettingRow>
+        </Sheet>
+      </SettingsGroup>
+    );
   const offered = [...new Set([chosen, ...(models.data?.models ?? []).filter((m) => m.startsWith(`${provider}/`))])];
   const others = signedIn.filter((p) => p !== provider);
   const spent = month.data?.totals;
@@ -339,25 +348,27 @@ function Keys() {
 }
 
 /** How sift runs, most used first. What it does with mail is under Labels and Rules. */
-export function SettingsView() {
+/** Settings, over whatever is showing. Opened from the account menu, or from under the model wall, so nothing has to be set up first. */
+export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
   return (
-    <div className="flex max-w-5xl flex-col gap-10">
-      <PageHeader title="Settings" />
-      {error ? <ErrorNote message={error} /> : null}
-      {loading ? (
-        <Loading rows={6} />
-      ) : data ? (
-        <>
-          {/* How sift runs applies to everyone it sorts for, so it is the owner's to change. The server refuses anyone else. */}
-          {data.owner ? <Sorting state={data} reload={reload} /> : null}
-          {/* The model, its sign-in and the guidelines are each person's own. */}
-          <Model state={data} reload={reload} />
-          <Guidelines saved={data.guidelines} />
-          <Mailboxes state={data} />
-          <Keys />
-        </>
-      ) : null}
-    </div>
+    <Panel open onClose={onClose} title="Settings">
+      <div className="flex flex-col gap-10">
+        {error ? <ErrorNote message={error} /> : null}
+        {loading ? (
+          <Loading rows={6} />
+        ) : data ? (
+          <>
+            {/* How sift runs applies to everyone it sorts for, so it is the owner's to change. The server refuses anyone else. */}
+            {data.owner ? <Sorting state={data} reload={reload} /> : null}
+            {/* The model, its sign-in and the guidelines are each person's own. */}
+            <Model state={data} reload={reload} onConnect={onClose} />
+            <Guidelines saved={data.guidelines} />
+            <Mailboxes state={data} />
+            <Keys />
+          </>
+        ) : null}
+      </div>
+    </Panel>
   );
 }

@@ -2,8 +2,7 @@ import { Dialog as Base } from '@base-ui/react/dialog';
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from 'lucide-react';
 import { type ReactNode, useRef } from 'react';
 import { Control, ControlBar } from './controls.tsx';
-import { KeyLayer, keyName, useHintsShown, useShortcut } from './keys.tsx';
-import { Kbd } from './type.tsx';
+import { KeyLayer, useShortcut } from './keys.tsx';
 
 const ICON =
   'press flex h-(--control) min-w-(--control) shrink-0 gap-1.5 px-2 cursor-pointer items-center justify-center text-muted-foreground hover:bg-(--fill) hover:text-foreground disabled:pointer-events-none disabled:opacity-35';
@@ -39,7 +38,6 @@ export function Panel({
   narrow?: boolean;
   children: ReactNode;
 }) {
-  const shortcuts = useHintsShown();
   const popup = useRef<HTMLDivElement>(null);
   const stepping = onPrevious !== undefined || onNext !== undefined;
   return (
@@ -62,7 +60,6 @@ export function Panel({
               {/* Closing has a control in the footer; the corner keeps one for a panel with no footer, and on a phone, where the footer steps. */}
               <Base.Close aria-label="Close" aria-keyshortcuts="Escape" className={stepping ? `${ICON} md:hidden` : ICON}>
                 <XIcon className="size-4" />
-                {shortcuts && !stepping ? <Kbd className="hidden md:inline-flex">{keyName('Escape')}</Kbd> : null}
               </Base.Close>
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8 md:px-7">{children}</div>

@@ -671,7 +671,7 @@ export function SystemView() {
 
       <Section title="Entry" meta="the page in place of the dashboard: signing in, then connecting a model; centred in the window">
         <div className="sheet [&>main]:min-h-0">
-          <Entry account={{ name: 'me@example.org', onSignOut: () => {} }}>
+          <Entry account={{ name: 'me@example.org', onSettings: () => {}, onSignOut: () => {} }}>
             <p className="statement">Connect a model.</p>
             <p className="text-muted-foreground">It reads the mail no rule covers and says which of your labels it is.</p>
             <Button variant="mark" size="lg" className="justify-between">
