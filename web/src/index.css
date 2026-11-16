@@ -47,6 +47,8 @@
   --foreground: #f0eee8;
   --card: #181816;
   --popover: #1d1d1a;
+  /* What the nearest layer is drawn on: the page, or a panel or dialog, which set it to theirs. Something laid over its own layer (a question covering a row) takes it. */
+  --surface: var(--background);
   --muted-foreground: #b5b3aa;
   --destructive: #ff7a6b;
   --border: #2b2b27;

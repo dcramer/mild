@@ -44,7 +44,10 @@ export function ConfirmButton({
       role="group"
       aria-label={question}
       className={
-        icon ? 'absolute top-1/2 right-0 z-10 inline-flex -translate-y-1/2 items-center gap-1.5 bg-background pl-3' : 'inline-flex items-center gap-1.5'
+        icon
+          ? // It covers the row it is in, so it takes the row's ground: the layer's surface, with the row's own fill while the row is pointed at or holds the focus.
+            'absolute top-1/2 right-0 z-10 inline-flex -translate-y-1/2 items-center gap-1.5 bg-(--surface) pl-3 group-hover/row:[background-image:linear-gradient(var(--fill),var(--fill))] group-focus-within/row:[background-image:linear-gradient(var(--fill),var(--fill))]'
+          : 'inline-flex items-center gap-1.5'
       }
       onKeyDown={(event) => event.key === 'Escape' && setAsking(false)}
     >

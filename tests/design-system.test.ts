@@ -107,6 +107,7 @@ describe('as little chrome as it takes', () => {
   // What floats over the page is filled so it can cover what is under it. Nothing else is.
   const FLOATING = new Set([
     'dialog.tsx',
+    'layer.tsx',
     'panel.tsx',
     'menu.tsx',
     'answer-picker.tsx',

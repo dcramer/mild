@@ -1,11 +1,9 @@
 import { Dialog as Base } from '@base-ui/react/dialog';
-import { ChevronLeftIcon, ChevronRightIcon, XIcon } from 'lucide-react';
+import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { type ReactNode, useRef } from 'react';
 import { Control, ControlBar } from './controls.tsx';
 import { KeyLayer, useShortcut } from './keys.tsx';
-
-const ICON =
-  'press flex h-(--control) min-w-(--control) shrink-0 gap-1.5 px-2 cursor-pointer items-center justify-center text-muted-foreground hover:bg-(--fill) hover:text-foreground disabled:pointer-events-none disabled:opacity-35';
+import { Backdrop, LayerBody, LayerHeader } from './layer.tsx';
 
 /**
  * One thing from a list, opened beside the list: it slides over from the right, as wide as three
@@ -24,6 +22,7 @@ export function Panel({
   onPrevious,
   onNext,
   narrow,
+  keys = false,
   children,
 }: {
   open: boolean;
@@ -36,6 +35,8 @@ export function Panel({
   onNext?: (() => void) | undefined;
   /** For one item that is a few facts and a short form (a label), rather than something to read beside the list. */
   narrow?: boolean;
+  /** K and J step through the list, and the footer shows them. Only for a list someone works through (docs/DESIGN.md, Keys). */
+  keys?: boolean;
   children: ReactNode;
 }) {
   const popup = useRef<HTMLDivElement>(null);
@@ -43,38 +44,28 @@ export function Panel({
   return (
     <Base.Root open={open} onOpenChange={(next) => !next && onClose()}>
       <Base.Portal>
-        <Base.Backdrop className="fixed inset-0 z-40 bg-background/60 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none" />
+        <Backdrop />
         {/* The panel takes the focus itself, not its first button, so Enter answers and does not press Next. */}
         <Base.Popup
           ref={popup}
           tabIndex={-1}
           initialFocus={popup}
-          className={`focus-within-shown fixed inset-y-0 right-0 z-50 flex w-full flex-col border-(--frame) bg-card text-sm outline-none transition-transform duration-150 ease-out [--gutter:1rem] [--bleed:0px] data-ending-style:translate-x-full data-starting-style:translate-x-full motion-reduce:transition-none md:border-l ${narrow ? 'md:w-[min(44rem,100vw)]' : 'md:w-[min(75vw,80rem)]'}`}
+          className={`focus-within-shown fixed inset-y-0 right-0 z-50 flex w-full flex-col border-(--frame) bg-card [--surface:var(--card)] text-sm outline-none transition-transform duration-150 ease-out [--gutter:1rem] [--bleed:0px] data-ending-style:translate-x-full data-starting-style:translate-x-full motion-reduce:transition-none md:border-l ${narrow ? 'md:w-[min(44rem,100vw)]' : 'md:w-[min(75vw,80rem)]'}`}
         >
           <KeyLayer moves>
-            <header className="flex items-start gap-3 px-5 pt-4 pb-4 md:px-7">
-              <div className="min-w-0 flex-1 pt-1">
-                <Base.Title className="title break-words">{title}</Base.Title>
-                {subtitle ? <div className="mt-0.5 text-sm text-muted-foreground">{subtitle}</div> : null}
-              </div>
-              {/* Closing has a control in the footer; the corner keeps one for a panel with no footer, and on a phone, where the footer steps. */}
-              <Base.Close aria-label="Close" aria-keyshortcuts="Escape" className={stepping ? `${ICON} md:hidden` : ICON}>
-                <XIcon className="size-4" />
-              </Base.Close>
-            </header>
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8 md:px-7">{children}</div>
+            <LayerHeader title={title} subtitle={subtitle} />
+            <LayerBody>{children}</LayerBody>
             {stepping ? (
-              <ControlBar start={position} className="border-t border-(--rule) px-3 py-1.5 md:px-5">
-                <Step label="Previous" shortcut="k" onPress={onPrevious} icon={<ChevronLeftIcon aria-hidden className="size-4" />} />
+              <ControlBar start={position} className="border-t border-(--rule) px-3 py-1.5 md:px-4">
+                <Step label="Previous" shortcut={keys ? 'k' : undefined} onPress={onPrevious} icon={<ChevronLeftIcon aria-hidden className="size-4" />} />
                 <Step
                   label="Next"
-                  shortcut="j"
+                  shortcut={keys ? 'j' : undefined}
                   onPress={onNext}
                   icon={<ChevronRightIcon aria-hidden className="size-4" />}
                   iconAfter
                   className="max-md:order-3"
                 />
-                <Base.Close render={<Control keys={['Escape']} label="Close" className="max-md:hidden" />} />
               </ControlBar>
             ) : null}
           </KeyLayer>
@@ -94,7 +85,7 @@ function Step({
   className,
 }: {
   label: string;
-  shortcut: string;
+  shortcut: string | undefined;
   onPress: (() => void) | undefined;
   icon: ReactNode;
   iconAfter?: boolean;
@@ -103,7 +94,7 @@ function Step({
   void useShortcut(shortcut, label, () => onPress?.(), { enabled: onPress !== undefined });
   return (
     <Control
-      keys={[shortcut]}
+      keys={shortcut ? [shortcut] : []}
       label={label}
       icon={icon}
       iconAfter={iconAfter ?? false}

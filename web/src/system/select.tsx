@@ -44,7 +44,7 @@ export function Select<T extends string>({
                 <Base.Item
                   key={item.value}
                   value={item.value}
-                  className="relative flex cursor-pointer data-disabled:cursor-default items-center py-1.5 pr-8 pl-2 whitespace-nowrap outline-none select-none data-highlighted:bg-(--fill-strong)"
+                  className="relative flex cursor-pointer data-disabled:cursor-default items-center py-1.5 pr-8 pl-2 whitespace-nowrap outline-none select-none data-highlighted:bg-(--fill-strong) pointer-coarse:min-h-11"
                 >
                   {icons?.[item.value] ? <span className="mr-2 flex">{icons[item.value]}</span> : null}
                   <Base.ItemText>{item.label}</Base.ItemText>

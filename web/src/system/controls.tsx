@@ -35,12 +35,12 @@ export function Control({
 }: {
   keys: readonly string[];
   label: string;
-  /** Drawn in place of the keys while they are not: on a touch screen, or with keys turned off. */
+  /** Drawn in place of the keys while they are not: on a touch screen, with keys turned off, or with none. */
   icon?: ReactNode;
   /** The icon follows the label, as Next's arrow does. */
   iconAfter?: boolean;
 } & Omit<ComponentProps<'button'>, 'children'>) {
-  const hints = useHintsShown();
+  const hints = useHintsShown() && keys.length > 0;
   const body = hints ? (
     <>
       <span className="inline-flex items-center gap-1">
@@ -59,7 +59,7 @@ export function Control({
   );
   if (!button.onClick) return <span className={cn('inline-flex items-center gap-2 px-2 text-sm whitespace-nowrap', className)}>{body}</span>;
   return (
-    <button type="button" aria-keyshortcuts={keys.join(' ')} className={cn(PRESS, className)} {...button}>
+    <button type="button" {...(keys.length > 0 ? { 'aria-keyshortcuts': keys.join(' ') } : {})} className={cn(PRESS, className)} {...button}>
       {body}
     </button>
   );

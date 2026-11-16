@@ -279,6 +279,7 @@ export function MessagePanel({
   return (
     <Panel
       open
+      keys
       onClose={onClose}
       title={(data?.subject ?? (picked ? '' : item.subject)) || '(no subject)'}
       subtitle={
