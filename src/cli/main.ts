@@ -58,7 +58,8 @@ async function main(): Promise<void> {
 try {
   await main();
 } catch (error) {
-  ui.fail(error instanceof Error ? error.message : String(error));
+  // A driver's error (Drizzle's "Failed query") says what failed only in its cause.
+  ui.fail(error instanceof Error ? (error.cause instanceof Error ? `${error.message}: ${error.cause.message}` : error.message) : String(error));
   process.exitCode = 1;
 } finally {
   closeTerminal();

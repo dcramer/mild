@@ -1,6 +1,7 @@
 import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { PGlite, type PGliteInterface } from '@electric-sql/pglite';
+import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { drizzle as overPg } from 'drizzle-orm/node-postgres';
 import { migrate as migratePg } from 'drizzle-orm/node-postgres/migrator';
 import { drizzle as overPglite } from 'drizzle-orm/pglite';
@@ -34,7 +35,7 @@ export async function openDatabase(where: Where): Promise<Driver> {
     const owner = new Pool({ connectionString: where.migrateWith ?? where.url });
     let bypass: string | null = null;
     try {
-      refuseNewer(await latestApplied(async (text) => (await owner.query<Record<string, unknown>>(text)).rows));
+      await refuseForeign(async (text) => (await owner.query<Record<string, unknown>>(text)).rows, 'Give sift an empty database.');
       await migratePg(overPg(owner), { migrationsFolder: MIGRATIONS });
       if (where.migrateWith) {
         const role = decodeURIComponent(new URL(where.url).username);
@@ -62,7 +63,7 @@ export async function openDatabase(where: Where): Promise<Driver> {
   const release = lock(where.dir);
   const file = new PGlite(where.dir, { parsers: PARSERS });
   try {
-    refuseNewer(await latestApplied(async (text) => (await file.query<Record<string, unknown>>(text)).rows));
+    await refuseForeign(async (text) => (await file.query<Record<string, unknown>>(text)).rows, `Move ${where.dir} aside and sift makes a new one.`);
     await migratePglite(overPglite(file), { migrationsFolder: MIGRATIONS });
   } catch (error) {
     await file.close();
@@ -171,23 +172,23 @@ function server(pool: Pool): Driver {
   };
 }
 
-/** When the newest migration this database has had was made, or null for a new database. */
-async function latestApplied(query: (text: string) => Promise<Record<string, unknown>[]>): Promise<number | null> {
-  const [table] = await query(`SELECT to_regclass('drizzle.__drizzle_migrations') AS t`);
-  if (!table?.['t']) return null;
-  const [row] = await query('SELECT max(created_at) AS at FROM drizzle.__drizzle_migrations');
-  return row?.['at'] === null || row?.['at'] === undefined ? null : Number(row['at']);
-}
-
 /**
- * Throws if the database has had a migration made after the newest this build has: a newer sift last
- * opened it, and running older code against it would misread it.
+ * Throws unless every migration the database has had is one of this build's. One made after our newest
+ * means a newer sift opened it, and older code would misread it. Any other is from before the migrations
+ * were last started over: Drizzle compares only when each was made, so it would run ours again over the
+ * tables already there. `fresh` says how to start over.
  */
-function refuseNewer(applied: number | null): void {
-  const { entries } = JSON.parse(readFileSync(`${MIGRATIONS}meta/_journal.json`, 'utf8')) as { entries: { when: number }[] };
-  const ours = Math.max(...entries.map((e) => e.when));
-  if (applied !== null && applied > ours)
+async function refuseForeign(query: (text: string) => Promise<Record<string, unknown>[]>, fresh: string): Promise<void> {
+  const [table] = await query(`SELECT to_regclass('drizzle.__drizzle_migrations') AS t`);
+  if (!table?.['t']) return;
+  const ours = readMigrationFiles({ migrationsFolder: MIGRATIONS });
+  const known = new Set(ours.map((m) => m.hash));
+  const latest = Math.max(...ours.map((m) => m.folderMillis));
+  const foreign = (await query('SELECT hash, created_at FROM drizzle.__drizzle_migrations')).filter((row) => !known.has(String(row['hash'])));
+  if (foreign.some((row) => Number(row['created_at']) > latest))
     throw new Error(
       'This database was last opened by a newer sift, with migrations this version does not have. Upgrade sift, or restore a backup from before the upgrade.',
     );
+  if (foreign.length)
+    throw new Error(`This database was made by an earlier sift whose migrations have since been replaced, so it cannot be brought up to date. ${fresh}`);
 }

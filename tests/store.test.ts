@@ -51,6 +51,15 @@ describe('migrations', () => {
     await raw.close();
     await expect(openStore(paths)).rejects.toThrow('last opened by a newer sift');
   });
+
+  it('refuse a database made by migrations since replaced, rather than run them again over it', async () => {
+    const paths = { databaseDir: scratch() };
+    await (await openStore(paths)).close();
+    const raw = new PGlite(paths.databaseDir);
+    await raw.query(`UPDATE drizzle.__drizzle_migrations SET hash = 'replaced' WHERE id = 1`);
+    await raw.close();
+    await expect(openStore(paths)).rejects.toThrow(`Move ${paths.databaseDir} aside`);
+  });
 });
 
 describe("a person's data", () => {
