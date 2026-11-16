@@ -6,7 +6,8 @@ import { promisify } from 'node:util';
 import { WEB_DIST } from '../dashboard/server.ts';
 import { spin } from './ui.ts';
 
-const ROOT = fileURLToPath(new URL('../../', import.meta.url));
+/** The checkout sift runs from. */
+export const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const WEB = join(ROOT, 'web');
 
 function newest(path: string): number {

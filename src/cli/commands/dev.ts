@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { paint, ui } from '../ui.ts';
+import { ROOT } from '../web-build.ts';
 
 /**
  * For working on sift itself: `sift run`, restarted whenever the server's code changes, beside a build
@@ -10,18 +10,17 @@ import { paint, ui } from '../ui.ts';
  * Arguments are passed on to `run`.
  */
 export async function dev(args: string[]): Promise<void> {
-  const root = fileURLToPath(new URL('../../', import.meta.url));
-  if (!existsSync(join(root, 'web/src'))) throw new Error('`sift dev` needs a checkout of the source. Use `sift run` here.');
+  if (!existsSync(join(ROOT, 'web/src'))) throw new Error('`sift dev` needs a checkout of the source. Use `sift run` here.');
   ui.heading('dev', 'restarts on server changes, reloads on page changes');
   ui.blank();
 
   const server = spawn(
     process.execPath,
-    ['--watch', '--watch-preserve-output', '--disable-warning=ExperimentalWarning', fileURLToPath(import.meta.url), 'run', '--dev', ...args],
+    ['--watch', '--watch-preserve-output', '--disable-warning=ExperimentalWarning', join(ROOT, 'src/cli/main.ts'), 'run', '--dev', ...args],
     { stdio: 'inherit' },
   );
   const page = spawn('pnpm', ['--filter', 'sift-web', 'exec', 'vite', 'build', '--watch', '--logLevel', 'warn'], {
-    cwd: root,
+    cwd: ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   // The page build is quiet unless it has something to say, which is then an error or a warning.
