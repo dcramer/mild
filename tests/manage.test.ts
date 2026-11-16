@@ -293,6 +293,8 @@ describe('signing in with Google', () => {
     mkdirSync(join(assets, 'assets'));
     writeFileSync(join(assets, 'index.html'), '<!doctype html>page');
     writeFileSync(join(assets, 'assets', 'app.js'), '1');
+    writeFileSync(join(assets, 'sw.js'), '1');
+    writeFileSync(join(assets, 'manifest.webmanifest'), '{}');
     const server = createDashboardServer(db, {
       assetsDir: assets,
       controls,
@@ -318,6 +320,8 @@ describe('signing in with Google', () => {
     const port = await startWithSignIn();
     expect((await call(port, 'GET', '/')).status).toBe(200);
     expect((await call(port, 'GET', '/assets/app.js')).status).toBe(200);
+    // What installs the page as an app holds no data, and a browser fetches the manifest without cookies.
+    for (const path of ['/sw.js', '/manifest.webmanifest', '/rules', '/system']) expect((await call(port, 'GET', path)).status).toBe(200);
     for (const path of ['/api/summary', '/api/manage', '/api/suggestions', '/api/senders']) expect((await call(port, 'GET', path)).status).toBe(401);
     expect((await call(port, 'POST', '/api/settings', { act: true })).status).toBe(401);
     expect((await call(port, 'GET', '/api/summary', undefined, { cookie: 'sift_session=forged.signature' })).status).toBe(401);

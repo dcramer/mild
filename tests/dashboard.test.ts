@@ -222,6 +222,21 @@ describe('dashboard server', () => {
     expect((await fetch(`${base}/assets/app-abc123.css`)).status).toBe(200);
   });
 
+  it('serves the app manifest and the service worker, which the policy allows from this server only', async () => {
+    const dir = builtAssets();
+    writeFileSync(join(dir, 'manifest.webmanifest'), '{}');
+    writeFileSync(join(dir, 'sw.js'), 'self');
+    const base = await start(dir);
+    const csp = (await fetch(base)).headers.get('content-security-policy') ?? '';
+    expect(csp).toContain("manifest-src 'self'");
+    expect(csp).toContain("worker-src 'self'");
+    expect((await fetch(`${base}/manifest.webmanifest`)).headers.get('content-type')).toBe('application/manifest+json');
+    const worker = await fetch(`${base}/sw.js`);
+    expect(worker.headers.get('content-type')).toContain('javascript');
+    // Never from a cache: a browser must see a new build's worker to replace the old one.
+    expect(worker.headers.get('cache-control')).toBe('no-store');
+  });
+
   it('serves the page for the paths it reads itself, and nothing else in place of a missing file', async () => {
     const base = await start();
     const home = await (await fetch(base)).text();
