@@ -8,7 +8,7 @@ What sift can use directly, and what it has to do itself. From Google's document
 | --- | --- | --- |
 | Find new mail | `users.history.list` | A history id is "typically valid for at least a week", sometimes only hours. A 404 means resync, which sift does with a bounded search. 2 quota units. Besides new messages it lists labels added and removed, per message; a record has no time and does not say who made the change, and sift's own changes appear like anyone's. |
 | Read a message | `users.messages.get` | 20 units for metadata, 60 for the full message. Metadata is headers and labels only: whether a message has attachments needs the full message, whose parts carry a `filename`. |
-| Who took part in a thread | `users.threads.get` | `format=minimal` gives each message's id and labels; one the owner sent carries `SENT`. Asked only for a reply the model is about to judge. 10 units. |
+| Who took part in a thread | `users.threads.get` | `format=minimal` gives each message's id and labels; one the owner sent carries `SENT`. Asked only for a reply the model is about to judge. 40 units (120 for `full`). |
 | Archive, mark spam, mark read, label | `users.messages.modify` | Add or remove label ids: `INBOX`, `SPAM`, `UNREAD`, `STARRED`, `IMPORTANT`, the `CATEGORY_*` tabs and user labels can all be applied. 5 units. |
 | Many at once | `users.messages.batchModify` | Up to 1,000 ids, 50 units. Not used yet: sift changes one message at a time so each has its own audit row. |
 | Labels | `users.labels.*` | Nested names (`sift/newsletters`) are ordinary labels with a slash. |
@@ -16,7 +16,13 @@ What sift can use directly, and what it has to do itself. From Google's document
 | The owner's other addresses | `users.settings.sendAs.list` | With `gmail.settings.basic`. Lists the account's own address and every send-as alias; one still `pending` was never confirmed from its own inbox, so sift does not count it. 1 unit. |
 | Put a message in the mailbox | `users.messages.insert` | Works with `gmail.modify`. "Does not send a message." This is how a daily digest can arrive without sift being able to send. 25 units. |
 
-Rate limit: 6,000 quota units a minute per user, which is about 300 metadata reads.
+Quotas (projects created since 2026-05-01; older ones keep their old quotas):
+
+| Per | Units | |
+| --- | --- | --- |
+| User, minute | 6,000 | 100 full reads. One pass's bodies and examples (50 each) use it all. |
+| Project, minute | 1,200,000 | Per install. |
+| Project, day | 80,000,000 | Not raisable; Google plans to bill above it. A 200-messages-a-day mailbox uses ~33,000. |
 
 ## Available, not used yet
 
