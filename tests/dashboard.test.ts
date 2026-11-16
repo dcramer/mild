@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { execute } from '../src/actions/executor.ts';
 import { listRuleSummaries, summarize } from '../src/dashboard/queries.ts';
+import type { SenderPage } from '../src/dashboard/types.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
@@ -333,6 +334,44 @@ describe('dashboard server', () => {
         createdAt: NOW,
       },
     ]);
+  });
+
+  it('serves a sender and a domain, and gives them a standing with one write', async () => {
+    const db = seeded();
+    const server = createDashboardServer(db, { assetsDir: builtAssets(), now: () => NOW });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    close = () => server.close();
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const sender = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
+    expect(sender).toMatchObject({ kind: 'sender', name: 'Example News', profile: { address: 'news@example.com', messages: 4, standing: 'new' } });
+    expect(sender.profile.domain).toMatchObject({ name: 'example.com', senders: 1 });
+    expect(sender.decisions.every((d) => d.fromAddress === 'news@example.com')).toBe(true);
+    expect(sender.decisions.map((d) => d.messageId)).toContain('a');
+
+    const write = (body: object) =>
+      fetch(`${base}/api/standing`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' },
+        body: JSON.stringify(body),
+      });
+    expect((await write({ accountId: ACCOUNT, address: 'news@example.com', standing: 'trusted' })).status).toBe(200);
+    // Trust is a rule for exactly them that keeps their mail, under the label it has had.
+    expect(listRuleSummaries(db).filter((r) => r.match['from'] === 'news@example.com')).toMatchObject([
+      { labelId: 'newsletter', override: 'keep', disposition: 'keep', tier: 'always', source: 'user' },
+    ]);
+    const trusted = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
+    expect(trusted.profile).toMatchObject({ standing: 'trusted', why: 'a rule keeps their mail' });
+
+    expect((await write({ accountId: ACCOUNT, domain: 'example.net', standing: 'blocked' })).status).toBe(200);
+    const domain = (await (await fetch(`${base}/api/domain?account=${ACCOUNT}&domain=example.net`)).json()) as SenderPage;
+    expect(domain).toMatchObject({ kind: 'domain', profile: { standing: 'blocked' }, senders: [{ address: 'cold@example.net', standing: 'new' }] });
+
+    expect((await write({ accountId: ACCOUNT, address: 'news@example.com', standing: 'none' })).status).toBe(200);
+    expect(listRuleSummaries(db).filter((r) => r.match['from'] === 'news@example.com')).toEqual([]);
+
+    expect((await write({ accountId: ACCOUNT, address: 'news@example.com', domain: 'example.com', standing: 'trusted' })).status).toBe(400);
+    expect((await write({ accountId: ACCOUNT, address: 'not an address', standing: 'trusted' })).status).toBe(400);
+    expect((await fetch(`${base}/api/domain?account=${ACCOUNT}&domain=gmail.com`)).status).toBe(404);
   });
 
   it('rejects bad input, other methods and unknown paths', async () => {

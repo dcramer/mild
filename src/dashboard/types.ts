@@ -105,9 +105,26 @@ export interface MessageDetail {
   }[];
 }
 
-/** What sift knows about one sender, to judge their mail by. */
+export type Standing = 'trusted' | 'known' | 'new' | 'unwanted' | 'blocked';
+
+/** What sift knows about one sender, or about everyone at one domain, to judge their mail by. */
 export interface SenderProfile {
+  /** An address, or for a domain's profile the domain. */
   address: string;
+  /** How the owner regards them, and the reason in a few words. */
+  standing: Standing;
+  why: string;
+  lastSeenAt: number | null;
+  /** Messages in the last 30 days. */
+  recent: number;
+  /** For a domain: how many addresses have written from it. */
+  senders: number;
+  /** Share of their labelled mail that got the commonest label, 0 to 1. Null with too little to say. */
+  consistency: number | null;
+  /** The owner's answers about their mail. */
+  answers: { right: number; wrong: number };
+  /** The sender's domain, with its own standing. Null for a domain's own profile and for a domain anyone can get an address at. */
+  domain: { name: string; standing: Standing; why: string; messages: number; senders: number } | null;
   /** Messages recorded from this address. */
   messages: number;
   firstSeenAt: number | null;
@@ -116,7 +133,30 @@ export interface SenderProfile {
   /** What this sender's mail currently is, by label, most first. */
   labels: { id: string; name: string; messages: number }[];
   /** Rules that name this sender or their domain. */
-  rules: { id: string; match: Record<string, string>; labelName: string | null; disposition: string | null; source: string }[];
+  rules: {
+    id: string;
+    match: Record<string, string>;
+    labelName: string | null;
+    disposition: string | null;
+    source: string;
+    tier: 'always' | 'usually';
+    when: string | null;
+  }[];
+}
+
+/** GET /api/sender and /api/domain. */
+export interface SenderPage {
+  accountId: string;
+  kind: 'sender' | 'domain';
+  /** The name the sender last used. */
+  name: string | null;
+  profile: SenderProfile;
+  /** For a domain: who writes from it, most mail first. */
+  senders: { address: string; name: string | null; messages: number; lastSeenAt: number; standing: Standing }[];
+  /** Their mail, newest first. */
+  decisions: DecisionRow[];
+  /** How much of it is waiting on the owner. */
+  waiting: number;
 }
 
 /** One sender's mail that is waiting on the user. GET /api/suggestion. */

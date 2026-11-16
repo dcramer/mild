@@ -1,4 +1,5 @@
 import type { BulkSignals } from '../features.ts';
+import type { Standing } from '../standing.ts';
 import { type RuleHit, describeRule, ruleOutcome } from './rules.ts';
 import { type DecisionUsage, type Disposition, type Label, type MessageFacts, type Stage, labelled } from '../types.ts';
 
@@ -15,7 +16,14 @@ export interface Evidence {
     userHasWritten: boolean | null;
     /** What sift did with earlier mail from this address. */
     pastDispositions: Partial<Record<Disposition, number>>;
+    /** How the owner regards them, and why. Absent when it was not worked out. */
+    standing?: { standing: Standing; why: string };
+    /** What their earlier mail was, by label id, most first. */
+    pastLabels?: { id: string; messages: number }[];
+    firstSeenAt?: number | null;
   };
+  /** The same for everyone at the sender's domain. Absent for a domain anyone can get an address at. */
+  domain?: { messages: number; senders: number; standing: Standing; why: string; pastLabels: { id: string; messages: number }[] };
   /** What the owner's rule says this sender's mail usually is. The model may find this message is something else. */
   prior?: { labelId: string; labelName: string; when?: string };
 }

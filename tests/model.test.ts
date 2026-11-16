@@ -13,6 +13,7 @@ import { openDb } from '../src/store/db.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { PROPOSE_AFTER, listProposals, proposeForSender, proposeSettled, resolveProposal } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
+import { domainFacts, rememberCorrespondent, senderFacts } from '../src/store/senders.ts';
 import { bulkSignals } from '../src/triage/features.ts';
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../src/triage/prompt.ts';
 import { type Evidence, type Verdict, modelStage } from '../src/triage/stages/model.ts';
@@ -294,6 +295,67 @@ describe('preferences in the database', () => {
     updateLabel(db, ACCOUNT, 'junk', { disposition: 'archive', markRead: true });
     expect(listLabels(db, ACCOUNT).find((l) => l.id === 'junk')).toEqual(expect.objectContaining({ disposition: 'archive', markRead: true }));
     expect(listLabels(db, ACCOUNT).find((l) => l.id === 'junk')).not.toHaveProperty('block');
+  });
+});
+
+describe('standing', () => {
+  const db = () => {
+    const d = openDb(':memory:');
+    connectAccount(d, ACCOUNT, '1', 0);
+    return d;
+  };
+  const mail = (d: ReturnType<typeof db>, id: string, address: string, labelId: string | null, at = 1000) => {
+    const domain = address.split('@')[1]!;
+    recordSync(d, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id, from: { address, domain }, receivedAt: at })], '2');
+    recordDecision(d, ACCOUNT, id, { disposition: 'keep', subscription: 'preserve', stage: 'agent', ...(labelId ? { labelId } : {}), reason: 'r' });
+  };
+
+  it('is new until enough mail has come, then known, and says how consistent the mail is', () => {
+    const d = db();
+    mail(d, 'a', 'news@example.com', 'newsletter');
+    expect(senderFacts(d, ACCOUNT, 'news@example.com', 2000)).toMatchObject({ messages: 1, standing: 'new', consistency: null, userHasWritten: null });
+    for (const id of ['b', 'c', 'd']) mail(d, id, 'news@example.com', 'newsletter');
+    mail(d, 'e', 'news@example.com', 'transactional');
+    expect(senderFacts(d, ACCOUNT, 'news@example.com', 2000)).toMatchObject({
+      messages: 5,
+      recent: 5,
+      labels: [
+        { id: 'newsletter', messages: 4 },
+        { id: 'transactional', messages: 1 },
+      ],
+      consistency: 0.8,
+      standing: 'known',
+    });
+  });
+
+  it('takes trust only from a rule of the owner: having written to someone makes them known, not trusted', () => {
+    const d = db();
+    mail(d, 'a', 'ada@example.org', 'personal');
+    rememberCorrespondent(d, ACCOUNT, 'ada@example.org', true);
+    expect(senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'known', why: 'you have written to them' });
+
+    addRule(d, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'personal' }, 'user');
+    expect(senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'trusted', why: 'a rule keeps their mail' });
+  });
+
+  it('is unwanted or blocked by a rule that hides their mail, but not by one the model still checks', () => {
+    const d = db();
+    mail(d, 'a', 'promo@example.com', 'marketing');
+    addRule(d, ACCOUNT, { match: { from: 'promo@example.com' }, labelId: 'marketing', tier: 'usually' }, 'user');
+    expect(senderFacts(d, ACCOUNT, 'promo@example.com').standing).toBe('new');
+    addRule(d, ACCOUNT, { match: { from: 'promo@example.com' }, labelId: 'marketing' }, 'user');
+    expect(senderFacts(d, ACCOUNT, 'promo@example.com').standing).toBe('unwanted');
+    addRule(d, ACCOUNT, { match: { from: 'scam@example.net' }, labelId: 'junk' }, 'user');
+    expect(senderFacts(d, ACCOUNT, 'scam@example.net').standing).toBe('blocked');
+  });
+
+  it('gives a domain a standing of its own, except one anyone can get an address at', () => {
+    const d = db();
+    mail(d, 'a', 'one@example.com', 'newsletter');
+    mail(d, 'b', 'two@example.com', 'newsletter');
+    addRule(d, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'personal' }, 'user');
+    expect(domainFacts(d, ACCOUNT, 'example.com')).toMatchObject({ messages: 2, senders: 2, standing: 'trusted' });
+    expect(domainFacts(d, ACCOUNT, 'gmail.com')).toBeNull();
   });
 });
 

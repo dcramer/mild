@@ -137,3 +137,32 @@ export function blockSender(db: DatabaseSync, accountId: string, address: string
   addRule(db, accountId, { match: { from: address }, labelId }, 'agent', now);
   return true;
 }
+
+/** A standing the owner can give by hand. `none` takes back whatever rule said so. */
+export type GivenStanding = 'trusted' | 'unwanted' | 'blocked' | 'none';
+
+/**
+ * Give a sender or a domain a standing, which is a rule for exactly them that decides by itself:
+ * trusted keeps their mail, unwanted archives it, blocked marks it spam. The rule names the label their
+ * mail has mostly had (`usual`), so it stays labelled as what it is. Throws if the account has no labels.
+ */
+export function setStanding(
+  db: DatabaseSync,
+  accountId: string,
+  match: { from: string } | { fromDomain: string },
+  standing: GivenStanding,
+  usual: string | null,
+  now: number = Date.now(),
+): void {
+  if (standing === 'none') {
+    const existing = ruleMatching(db, accountId, match);
+    if (existing) removeRule(db, existing.id);
+    return;
+  }
+  const labels = listLabels(db, accountId, now);
+  const disposition = standing === 'trusted' ? 'keep' : standing === 'unwanted' ? 'archive' : 'spam';
+  // Their usual label if it still exists, else the first label that already does this, else any.
+  const label = labels.find((l) => l.id === usual) ?? labels.find((l) => l.disposition === disposition) ?? labels[0];
+  if (!label) throw new Error('There are no labels to give this mail.');
+  setRule(db, accountId, match, { labelId: label.id, ...(label.disposition === disposition ? {} : { disposition }) }, 'user', now);
+}

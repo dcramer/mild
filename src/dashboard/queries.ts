@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { accuracy, pendingSuggestions } from '../learn/feedback.ts';
 import { unsubscribedAt } from '../store/actions.ts';
+import { domainFacts, senderFacts } from '../store/senders.ts';
 import { listLabels } from '../store/labels.ts';
 import { listProposals } from '../store/proposals.ts';
 import { bulkSignals, passedDmarc } from '../triage/features.ts';
@@ -9,6 +10,7 @@ import {
   type LabelSummary,
   type MessageDetail,
   type RuleSummary,
+  type SenderPage,
   type SenderProfile,
   type SuggestionDetail,
   STAGES,
@@ -160,6 +162,11 @@ export interface DecisionFilter {
   disposition?: string;
   /** Case-insensitive substring of the subject, sender address or sender name. */
   search?: string;
+  accountId?: string;
+  /** Exact sender address. */
+  sender?: string;
+  /** Exact sender domain. */
+  domain?: string;
   limit?: number;
   offset?: number;
 }
@@ -177,6 +184,15 @@ export function listDecisions(db: DatabaseSync, filter: DecisionFilter, now: num
     if (!(DISPOSITIONS as readonly string[]).includes(filter.disposition)) return { total: 0, rows: [] };
     where.push('d.disposition = ?');
     params.push(filter.disposition);
+  }
+  for (const [column, value] of [
+    ['d.account_id', filter.accountId],
+    ['m.from_address', filter.sender],
+    ['m.from_domain', filter.domain],
+  ] as const) {
+    if (value === undefined) continue;
+    where.push(`${column} = ?`);
+    params.push(value);
   }
   const search = filter.search?.trim();
   if (search) {
@@ -310,32 +326,77 @@ function canUnsubscribe(db: DatabaseSync, accountId: string, sender: string, hea
 }
 
 /** What sift knows about one sender. */
-export function senderProfile(db: DatabaseSync, accountId: string, address: string): SenderProfile {
-  const seen = db
-    .prepare('SELECT count(*) AS n, min(received_at) AS first FROM messages WHERE account_id = ? AND from_address = ?')
-    .get(accountId, address) as {
-    n: number;
-    first: number | null;
-  };
-  const written = db.prepare('SELECT user_has_written AS yes FROM correspondents WHERE account_id = ? AND address = ?').get(accountId, address) as
-    | { yes: number }
-    | undefined;
-  const labels = db
-    .prepare(
-      `SELECT d.label_id AS id, coalesce(l.name, d.label_id) AS name, count(*) AS messages
-       FROM decisions d
-       JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
-       LEFT JOIN labels l ON l.account_id = d.account_id AND l.id = d.label_id
-       WHERE d.account_id = ? AND m.from_address = ? AND d.label_id IS NOT NULL
-         AND d.id = (SELECT max(id) FROM decisions x WHERE x.account_id = d.account_id AND x.message_id = d.message_id)
-       GROUP BY d.label_id ORDER BY messages DESC`,
-    )
-    .all(accountId, address) as unknown as SenderProfile['labels'];
-  const domain = address.split('@')[1] ?? '';
+function profileOf(db: DatabaseSync, accountId: string, who: { address: string } | { domain: string }, now: number): SenderProfile | null {
+  const known = 'address' in who ? senderFacts(db, accountId, who.address, now) : domainFacts(db, accountId, who.domain, now);
+  if (!known) return null;
+  const names = new Map(listLabels(db, accountId, now).map((l) => [l.id, l.name]));
+  const domainName = 'address' in who ? (who.address.split('@')[1] ?? '') : who.domain;
+  const ofDomain = 'address' in who ? domainFacts(db, accountId, domainName, now) : null;
   const rules = listRuleSummaries(db)
-    .filter((r) => r.accountId === accountId && (r.match['from'] === address || (r.match['fromDomain'] === domain && r.match['from'] === undefined)))
-    .map((r) => ({ id: r.id, match: r.match, labelName: r.labelName, disposition: r.disposition, source: r.source }));
-  return { address, messages: seen.n, firstSeenAt: seen.first, userHasWritten: written ? written.yes === 1 : null, labels, rules };
+    .filter(
+      (r) =>
+        r.accountId === accountId &&
+        ('address' in who
+          ? r.match['from'] === who.address || (r.match['fromDomain'] === domainName && r.match['from'] === undefined)
+          : r.match['fromDomain'] === domainName || r.match['from']?.endsWith(`@${domainName}`)),
+    )
+    .map((r) => ({ id: r.id, match: r.match, labelName: r.labelName, disposition: r.disposition, source: r.source, tier: r.tier, when: r.when }));
+  return {
+    address: 'address' in who ? who.address : who.domain,
+    standing: known.standing,
+    why: known.why,
+    messages: known.messages,
+    firstSeenAt: known.firstSeenAt,
+    lastSeenAt: known.lastSeenAt,
+    recent: known.recent,
+    senders: known.senders,
+    consistency: known.consistency,
+    answers: known.answers,
+    userHasWritten: known.userHasWritten,
+    labels: known.labels.map((l) => ({ id: l.id, name: names.get(l.id) ?? l.id, messages: l.messages })),
+    domain: ofDomain ? { name: domainName, standing: ofDomain.standing, why: ofDomain.why, messages: ofDomain.messages, senders: ofDomain.senders } : null,
+    rules,
+  };
+}
+
+/** What sift knows about a sender, the rules that apply to them and where they stand. */
+export function senderProfile(db: DatabaseSync, accountId: string, address: string, now: number = Date.now()): SenderProfile {
+  return profileOf(db, accountId, { address }, now)!;
+}
+
+/** A sender's page, or a domain's. Null for a domain anyone can get an address at. */
+export function senderPage(db: DatabaseSync, accountId: string, who: { address: string } | { domain: string }, now: number = Date.now()): SenderPage | null {
+  const profile = profileOf(db, accountId, who, now);
+  if (!profile) return null;
+  const filter = 'address' in who ? { sender: who.address } : { domain: who.domain };
+  const name =
+    'address' in who
+      ? ((
+          db
+            .prepare('SELECT from_name FROM messages WHERE account_id = ? AND from_address = ? AND from_name IS NOT NULL ORDER BY received_at DESC LIMIT 1')
+            .get(accountId, who.address) as { from_name: string } | undefined
+        )?.from_name ?? null)
+      : null;
+  const senders =
+    'domain' in who
+      ? (
+          db
+            .prepare(
+              `SELECT from_address AS address, max(from_name) AS name, count(*) AS messages, max(received_at) AS lastSeenAt
+               FROM messages WHERE account_id = ? AND from_domain = ? GROUP BY from_address ORDER BY messages DESC, address LIMIT 100`,
+            )
+            .all(accountId, who.domain) as unknown as { address: string; name: string | null; messages: number; lastSeenAt: number }[]
+        ).map((s) => ({ ...s, standing: senderFacts(db, accountId, s.address, now).standing }))
+      : [];
+  return {
+    accountId,
+    kind: 'address' in who ? 'sender' : 'domain',
+    name,
+    profile,
+    senders,
+    decisions: listDecisions(db, { days: 36_500, limit: 50, accountId, ...filter }, now).rows,
+    waiting: pendingSuggestions(db, { accountId, ...filter }).length,
+  };
 }
 
 /** One sender's waiting mail, newest first, with what sift knows about them. */

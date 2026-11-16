@@ -8,9 +8,20 @@ import { type FeedbackInput, applyFeedback } from '../learn/feedback.ts';
 import { listAccounts } from '../store/accounts.ts';
 import { addLabel, updateLabel } from '../store/labels.ts';
 import { resolveProposal } from '../store/proposals.ts';
-import { addRule, removeRule } from '../store/rules.ts';
+import { addRule, removeRule, setStanding } from '../store/rules.ts';
+import { senderFacts } from '../store/senders.ts';
 import type { Controls, SignIn } from './controls.ts';
-import { listChanges, listDecisions, listLabelSummaries, listRuleSummaries, listSuggestions, messageDetail, suggestionDetail, summarize } from './queries.ts';
+import {
+  listChanges,
+  listDecisions,
+  listLabelSummaries,
+  listRuleSummaries,
+  listSuggestions,
+  messageDetail,
+  senderPage,
+  suggestionDetail,
+  summarize,
+} from './queries.ts';
 import type { ManageState } from './types.ts';
 
 /** Where `pnpm build:web` puts the built web app. */
@@ -282,6 +293,19 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
         ),
       };
     },
+    '/api/standing': (body) => {
+      const { accountId, address, domain, standing } = body;
+      if (!str(accountId) || (standing !== 'trusted' && standing !== 'unwanted' && standing !== 'blocked' && standing !== 'none')) return null;
+      // Exactly one of the two, and an address must look like one.
+      if ((address === undefined) === (domain === undefined)) return null;
+      if (address !== undefined && (!str(address) || !/^[^@\s]+@[^@\s]+$/.test(address))) return null;
+      if (domain !== undefined && (!str(domain) || /[@\s]/.test(domain))) return null;
+      if (!listAccounts(db).some((a) => a.id === accountId)) return null;
+      const who = typeof address === 'string' ? address.toLowerCase() : (domain as string).toLowerCase();
+      const usual = typeof address === 'string' ? (senderFacts(db, accountId, who, now()).labels[0]?.id ?? null) : null;
+      setStanding(db, accountId, typeof address === 'string' ? { from: who } : { fromDomain: who }, standing, usual, now());
+      return { ok: true };
+    },
     '/api/proposals': (body) => {
       const { id, accept } = body;
       if (typeof id !== 'number' || !Number.isInteger(id) || typeof accept !== 'boolean') return null;
@@ -484,6 +508,14 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
         return void json(res, detail ? 200 : 404, detail ?? { error: 'No such message' });
       }
       if (url.pathname === '/api/suggestion') return void json(res, 200, suggestionDetail(db, query.get('account') ?? '', query.get('sender') ?? ''));
+      if (url.pathname === '/api/sender' || url.pathname === '/api/domain') {
+        const account = query.get('account') ?? '';
+        const page =
+          url.pathname === '/api/sender'
+            ? senderPage(db, account, { address: (query.get('address') ?? '').toLowerCase() }, now())
+            : senderPage(db, account, { domain: (query.get('domain') ?? '').toLowerCase() }, now());
+        return void json(res, page ? 200 : 404, page ?? { error: 'Anyone can get an address at that domain, so it has no standing of its own.' });
+      }
       if (url.pathname === '/api/rules') return void json(res, 200, { rules: listRuleSummaries(db) });
       if (url.pathname === '/api/suggestions') return void json(res, 200, listSuggestions(db, { includeKept: query.get('kept') === '1' }));
       if (url.pathname === '/api/manage') return void json(res, 200, manageState());
