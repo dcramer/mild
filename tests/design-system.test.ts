@@ -102,3 +102,26 @@ describe('one type scale', () => {
     expect(small, 'docs/DESIGN.md: only labels and stamps go under 15px, and nothing under 12px.').toEqual([]);
   });
 });
+
+describe('as little chrome as it takes', () => {
+  // What floats over the page is filled so it can cover what is under it. Nothing else is.
+  const FLOATING = new Set(['dialog.tsx', 'panel.tsx', 'menu.tsx', 'select.tsx', 'toast.tsx', 'hover-card.tsx', 'nav.tsx']);
+
+  test('only a part that floats has a surface', () => {
+    const grounded = [...SYSTEM].filter((path) => !FLOATING.has(relative(join(WEB, 'system'), path)));
+    const failures = check(grounded, [
+      [/^bg-(card|popover|background)\b/, 'only what floats (a panel, a dialog, a menu, a toast) is filled; a sheet, a table or a list sits on the page.'],
+    ]);
+    expect(failures, failures.join('\n')).toEqual([]);
+  });
+
+  test('one shadow: the edge of the sheet beneath', () => {
+    const css = readFileSync(join(WEB, 'index.css'), 'utf8');
+    const shadows = [...css.matchAll(/box-shadow:\s*([^;]+);/g)]
+      .map((match) => match[1])
+      .filter((value) => !/^\S+px \S+px 0 0 var\(--edge\)$/.test(value ?? ''));
+    expect(shadows, 'docs/DESIGN.md: --edge, hard and offset, on a sheet and what floats. Buttons have none.').toEqual([]);
+    const failures = check(ALL, [[/^shadow(-|$)/, 'the one shadow is the .sheet edge in web/src/index.css.']]);
+    expect(failures, failures.join('\n')).toEqual([]);
+  });
+});

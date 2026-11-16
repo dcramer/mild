@@ -23,30 +23,13 @@
   --color-highlight: var(--highlight);
   --color-highlight-ink: var(--highlight-ink);
   --color-ring: var(--ring);
-  --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 :root {
@@ -62,22 +45,11 @@
   --background: #111110;
   --foreground: #f0eee8;
   --card: #181816;
-  --card-foreground: #f0eee8;
   --popover: #1d1d1a;
-  --popover-foreground: #f0eee8;
-  --primary: #f0eee8;
-  --primary-foreground: #111110;
-  --secondary: #252521;
-  --secondary-foreground: #f0eee8;
-  --muted: #20201d;
   --muted-foreground: #b5b3aa;
-  --accent: #252521;
-  --accent-foreground: #f0eee8;
   --destructive: #ff7a6b;
   --border: #2b2b27;
-  --input: #3a3a35;
   --ring: #f0eee8;
-  --radius: 0.2rem;
 
   /* The one colour: a highlighter pen, for what the reader should look at. Text on it is always dark. */
   --highlight: #ffe033;
@@ -91,7 +63,6 @@
 
   /* The edge of the sheet beneath: the only shadow, always hard and offset down-right. */
   --edge: color-mix(in oklab, var(--foreground) 9%, transparent);
-  --edge-strong: color-mix(in oklab, var(--foreground) 30%, transparent);
 
   /* Lines are drawn in the ink colour at low strength, never a separate grey. */
   --rule: color-mix(in oklab, var(--foreground) 8%, transparent);
