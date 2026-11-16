@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { KEEP_BODY_DAYS, keepSuggestionBodies } from '../src/daemon/bodies.ts';
 import { captureExamples, parseHeaders } from '../src/daemon/examples.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
-import { listSuggestions, messageDetail, suggestionDetail } from '../src/dashboard/queries.ts';
+import { listSuggestions, messageDetail, suggestionDetail, summarize } from '../src/dashboard/queries.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
 import { accuracy, applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
@@ -196,6 +196,49 @@ describe('teaching', () => {
     expect(() => applyFeedback(db, { accountId: ACCOUNT, sender: 'nobody@example.com', label: 'newsletter', scope: 'sender' })).toThrow('no longer waiting');
     expect(db.prepare('SELECT count(*) AS n FROM feedback').get()).toEqual({ n: 0 });
     expect(listRules(db, ACCOUNT)).toEqual([]);
+  });
+});
+
+describe('accuracy', () => {
+  it('is reported per tier and per label, with what was mixed up, for answers in the window', () => {
+    suggest('news@example.com', 'archive', NEWS);
+    suggest('news@example.com', 'archive', NEWS);
+    suggest('sales@example.com', 'archive', NEWS);
+    suggest('shop@example.com', 'archive', { labelId: 'marketing', stage: 'rules' });
+    suggest('ada@example.org', 'review');
+    const answer = (sender: string, label: string, at: number, messageId?: string) =>
+      applyFeedback(db, { accountId: ACCOUNT, sender, label, scope: 'once', ...(messageId ? { messageId } : {}) }, at);
+    answer('news@example.com', 'newsletter', 100);
+    answer('sales@example.com', 'marketing', 200);
+    // Decided by a rule of the user's, so it is not waiting; it is answered by naming the message.
+    answer('shop@example.com', 'marketing', 200, 'm4');
+    answer('ada@example.org', 'personal', 200);
+
+    expect(accuracy(db)).toEqual({
+      reviewed: 4,
+      right: 3,
+      byStage: [
+        { stage: 'agent', reviewed: 3, right: 2 },
+        { stage: 'rules', reviewed: 1, right: 1 },
+      ],
+      byLabel: [
+        { labelId: 'newsletter', labelName: 'Newsletters', reviewed: 3, right: 2 },
+        { labelId: 'marketing', labelName: 'Marketing', reviewed: 1, right: 1 },
+      ],
+      confusion: [{ suggested: 'newsletter', correct: 'marketing', count: 1 }],
+    });
+    expect(accuracy(db, 150)).toMatchObject({ reviewed: 2, right: 1, byLabel: [{ labelId: 'marketing' }, { labelId: 'newsletter', reviewed: 1, right: 0 }] });
+
+    const summary = summarize(db, 7, 200);
+    expect(summary.accuracy).toMatchObject({ reviewed: 4, right: 3, confusion: [{ suggested: 'newsletter', correct: 'marketing', count: 1 }] });
+    expect(summary.accuracy.byStage).toEqual([
+      { stage: 'rules', reviewed: 1, right: 1 },
+      { stage: 'sender', reviewed: 0, right: 0 },
+      { stage: 'classifier', reviewed: 0, right: 0 },
+      { stage: 'agent', reviewed: 3, right: 2 },
+      { stage: 'fallback', reviewed: 0, right: 0 },
+    ]);
+    expect(summarize(db, 7, 200 + 30 * 86_400_000).accuracy).toMatchObject({ reviewed: 0, right: 0, byLabel: [] });
   });
 });
 

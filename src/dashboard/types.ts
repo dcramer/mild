@@ -30,6 +30,20 @@ export interface Summary {
   topSenders: { address: string; messages: number; lastDisposition: string | null }[];
   /** The ten latest decisions in the window. */
   recent: DecisionRow[];
+  /**
+   * How often sift's suggestion was what the user wanted, from the answers given in the window. Answers
+   * to mail sift could not place are not counted.
+   */
+  accuracy: {
+    reviewed: number;
+    right: number;
+    /** Every tier, in cascade order. */
+    byStage: { stage: StageKey; reviewed: number; right: number }[];
+    /** Per label sift gave, most answers first. The name is null if the label has gone. */
+    byLabel: { labelId: string; labelName: string | null; reviewed: number; right: number }[];
+    /** What sift called one label when the user said another, commonest first. */
+    confusion: { suggested: string; correct: string; count: number }[];
+  };
 }
 
 export interface DecisionRow {
