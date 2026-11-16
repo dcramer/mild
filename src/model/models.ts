@@ -4,7 +4,12 @@ import { openaiProvider } from '@earendil-works/pi-ai/providers/openai';
 import { openaiCodexProvider } from '@earendil-works/pi-ai/providers/openai-codex';
 import { openrouterProvider } from '@earendil-works/pi-ai/providers/openrouter';
 import { vercelAIGatewayProvider } from '@earendil-works/pi-ai/providers/vercel-ai-gateway';
+import { registerLazyOAuthFlows } from '@earendil-works/pi-ai/lazy-oauth';
 import { type SignIns, credentialStore } from './credentials.ts';
+
+// Without this pi-ai imports its OAuth flows through a variable specifier, which Vercel's file
+// tracing cannot follow, so the function is deployed without them and every refresh fails.
+registerLazyOAuthFlows();
 
 /** How an install signs people in to ChatGPT (`chatgptSignIn` in `Settings`). */
 export type ChatGPTSignIn = 'device-code' | 'redirect';
