@@ -2,7 +2,8 @@ import { parseArgs } from 'node:util';
 import { unsubscribe } from '../../actions/unsubscribe.ts';
 import { loadConfig } from '../../config.ts';
 import type { Activity } from '../../dashboard/controls.ts';
-import { type PassResult, createWake, runEveryone, runLoop } from '../../daemon/run.ts';
+import { localJobs } from '../../daemon/jobs.ts';
+import { type PassResult, type RunOptions, createWake, runEveryone, runJob, runLoop } from '../../daemon/run.ts';
 import { createGmailApi } from '../../gmail/api.ts';
 import { hasClientSecrets } from '../../gmail/auth.ts';
 import { createGmailMailbox } from '../../gmail/mailbox.ts';
@@ -36,47 +37,45 @@ export async function run(args: string[]): Promise<void> {
 
     // Why each person's model could not be reached, so it is said once and not on every pass.
     const unreachable = new Map<number, string>();
-    // Whether each person had sift on at the last pass, to say when they switch.
+    // Whether each person had sift on at their last pass, to say when they switch.
     const active = new Map<number, boolean>();
-    const announce = async () => {
-      const users = await listUsers(store.central);
-      // Someone deleted since the last pass.
-      for (const map of [unreachable, active]) for (const id of map.keys()) if (!users.some((u) => u.id === id)) map.delete(id);
-      for (const user of users) {
-        const db = await store.user(user.id);
-        const on = (await preferences(db)).active;
-        if (active.has(user.id) && active.get(user.id) !== on) log(`${(await listAccounts(db)).map((a) => a.email).join(', ')}: now ${on ? 'on' : 'off'}`);
-        active.set(user.id, on);
+    const announce = async (person: number) => {
+      const accounts = await listAccounts(await store.user(person));
+      // Deleted since.
+      if (accounts.length === 0) {
+        unreachable.delete(person);
+        active.delete(person);
+        return;
+      }
+      const on = (await preferences(await store.user(person))).active;
+      if (active.has(person) && active.get(person) !== on) log(`${accounts.map((a) => a.email).join(', ')}: now ${on ? 'on' : 'off'}`);
+      active.set(person, on);
+    };
+    // Each person's own model, from their choice and sign-in, read on every pass.
+    const model = async (db: Sql) => {
+      const person = await personOf(db);
+      try {
+        const tier = await openModelTier(config, db);
+        unreachable.delete(person);
+        return tier && { judge: tier.judge, model: tier.spec };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (unreachable.get(person) !== message) ui.fail(`${(await listAccounts(db)).map((a) => a.email).join(', ')}: ${message}`);
+        unreachable.set(person, message);
+        return null;
       }
     };
-    const next = async () => {
-      await announce();
-      // Each person's own model, from their choice and sign-in, read on every pass.
-      const model = async (db: Sql) => {
-        const person = await personOf(db);
-        try {
-          const tier = await openModelTier(config, db);
-          unreachable.delete(person);
-          return tier && { judge: tier.judge, model: tier.spec };
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          if (unreachable.get(person) !== message) ui.fail(`${(await listAccounts(db)).map((a) => a.email).join(', ')}: ${message}`);
-          unreachable.set(person, message);
-          return null;
-        }
-      };
-      return {
-        model,
-        unsubscribe: (db: Sql, accountId: string, messageId: string) => unsubscribe({ db }, accountId, messageId),
-        connect: async (db: Sql, account: Account) => {
-          const client = await gmailClient(config, db, account.email);
-          return { api: createGmailApi(client, account.email), mailbox: createGmailMailbox(client, account.email) };
-        },
-        log,
-      };
+    const options: RunOptions = {
+      model,
+      unsubscribe: (db: Sql, accountId: string, messageId: string) => unsubscribe({ db }, accountId, messageId),
+      connect: async (db: Sql, account: Account) => {
+        const client = await gmailClient(config, db, account.email);
+        return { api: createGmailApi(client, account.email), mailbox: createGmailMailbox(client, account.email) };
+      },
+      log,
     };
 
-    const first = await next();
+    for (const user of await listUsers(store.central)) await announce(user.id);
     const people = active.size;
     const on = [...active.values()].filter(Boolean).length;
     ui.heading(on === 0 ? 'off' : on === people ? 'on' : `on for ${on} of ${people}`);
@@ -87,7 +86,7 @@ export async function run(args: string[]): Promise<void> {
 
     if (values.once) {
       ui.blank();
-      const results = await runEveryone(store, first);
+      const results = await runEveryone(store, options);
       if (results.some((r) => r.error)) process.exitCode = 1;
       return;
     }
@@ -108,17 +107,28 @@ export async function run(args: string[]): Promise<void> {
     const stop = new AbortController();
     process.once('SIGINT', () => stop.abort());
     process.once('SIGTERM', () => stop.abort());
+    const report = (result: PassResult) => {
+      activity.lastPassAt = Date.now();
+      activity.problems = [
+        ...activity.problems.filter((line) => !line.startsWith(`${result.email}: `)),
+        ...(result.error ? [`${result.email}: ${result.error}`] : []),
+      ];
+      activity.expired = [...activity.expired.filter((email) => email !== result.email), ...(result.expired ? [result.email] : [])];
+    };
+    const jobs = localJobs(async (job) => {
+      try {
+        const result = await runJob(store, job, options);
+        if (result) report(result);
+        if (job.kind === 'pass') await announce(job.person);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(job.kind === 'pass' ? `${job.account}: pass failed, will retry: ${message}` : `Could not delete old records, will retry tomorrow: ${message}`);
+      }
+    });
     try {
-      await runLoop(store, next, {
-        signal: stop.signal,
-        wake,
-        onPass: (results: PassResult[]) => {
-          activity.lastPassAt = Date.now();
-          activity.problems = results.flatMap((r) => (r.error ? [`${r.email}: ${r.error}`] : []));
-          activity.expired = results.filter((r) => r.expired).map((r) => r.email);
-        },
-      });
+      await runLoop(store, jobs, { signal: stop.signal, wake });
     } finally {
+      await jobs.stop();
       stopDashboard();
     }
   } finally {

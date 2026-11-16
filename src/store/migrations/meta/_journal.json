@@ -29,6 +29,13 @@
       "when": 1794847314573,
       "tag": "0003_mailbox_aliases",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794854250574,
+      "tag": "0004_bitter_mandrill",
+      "breakpoints": true
     }
   ]
 }

@@ -1,13 +1,14 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { type RunOptions, runEveryone, runOnce } from '../src/daemon/run.ts';
+import { localJobs, type Job } from '../src/daemon/jobs.ts';
+import { type RunOptions, runEveryone, runJob, runOnce } from '../src/daemon/run.ts';
 import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
 import { undo } from '../src/actions/executor.ts';
 import { writeRuleFilter } from '../src/actions/rule-filters.ts';
 import { applyFeedback } from '../src/learn/feedback.ts';
 import { userChanges } from '../src/learn/gmail.ts';
 import { lastStandingChange } from '../src/store/actions.ts';
-import { addMailbox, connectAccount, deleteUser, recordSync, removeMailbox } from '../src/store/accounts.ts';
+import { addMailbox, claimMailbox, connectAccount, deleteUser, recordSync, releaseMailbox, removeMailbox } from '../src/store/accounts.ts';
 import { onePerson, openUserDb, raw } from './fixtures.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { listUndecided } from '../src/store/messages.ts';
@@ -185,6 +186,76 @@ describe('runOnce', () => {
     await runOnce(await active(true), options());
     expect(await decisions()).toMatchObject([{ message_id: 'news', outcome: 'done' }]);
     expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/newsletters', 'L:sift/did/archived']);
+  });
+});
+
+describe('one pass at a time per mailbox', () => {
+  it('a claim holds until it is released or runs out', async () => {
+    expect(await claimMailbox(db, ACCOUNT, 1000, 2000)).toBe(true);
+    expect(await claimMailbox(db, ACCOUNT, 1500, 2500)).toBe(false);
+    expect(await claimMailbox(db, ACCOUNT, 2001, 3000)).toBe(true);
+    await releaseMailbox(db, ACCOUNT);
+    expect(await claimMailbox(db, ACCOUNT, 2002, 3000)).toBe(true);
+  });
+
+  it('a pass for a mailbox another pass holds does nothing, and a finished pass lets go', async () => {
+    const { store, db: own } = await onePerson(ACCOUNT);
+    const person = (await raw(store.central).get<{ id: number }>('SELECT id FROM users'))!.id;
+    const pass: Job = { kind: 'pass', person, account: ACCOUNT };
+    let connected = 0;
+    const counting: RunOptions = { ...options(), connect: () => (connected++, { api: api(), mailbox }) };
+    await claimMailbox(own, ACCOUNT, 0, 10_000);
+    expect(await runJob(store, pass, counting)).toBeNull();
+    expect(connected).toBe(0);
+    await releaseMailbox(own, ACCOUNT);
+    expect(await runJob(store, pass, counting)).toMatchObject({ email: ACCOUNT });
+    expect(await runJob(store, pass, counting)).toMatchObject({ email: ACCOUNT });
+    expect(connected).toBe(2);
+  });
+});
+
+describe('local jobs', () => {
+  const pass = (account: string): Job => ({ kind: 'pass', person: 1, account });
+
+  it('queues a job once while it waits, and never runs two alike at once', async () => {
+    const log: string[] = [];
+    const gates = new Map<string, () => void>();
+    const jobs = localJobs(async (job) => {
+      const name = job.kind === 'pass' ? job.account : 'upkeep';
+      log.push(`start ${name}`);
+      await new Promise<void>((resolve) => gates.set(name, resolve));
+      log.push(`end ${name}`);
+    });
+    jobs.send(pass('a'));
+    // Running: one more may wait behind it, and no third.
+    jobs.send(pass('a'));
+    jobs.send(pass('a'));
+    jobs.send(pass('b'));
+    await Promise.resolve();
+    expect(log).toEqual(['start a', 'start b']);
+    gates.get('a')!();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(log).toEqual(['start a', 'start b', 'end a', 'start a']);
+    gates.get('a')!();
+    gates.get('b')!();
+    await jobs.stop();
+    expect(log.filter((line) => line === 'start a')).toHaveLength(2);
+  });
+
+  it('stops: drops what waits and waits for what runs', async () => {
+    const ran: string[] = [];
+    let open!: () => void;
+    const jobs = localJobs(async (job) => {
+      if (job.kind === 'pass' && job.account === 'slow') await new Promise<void>((resolve) => (open = resolve));
+      ran.push(job.kind === 'pass' ? job.account : 'upkeep');
+    });
+    for (const account of ['slow', 'b', 'c', 'd']) jobs.send(pass(account));
+    jobs.send(pass('e'));
+    const stopped = jobs.stop();
+    open();
+    await stopped;
+    jobs.send(pass('f'));
+    expect(ran.toSorted()).toEqual(['b', 'c', 'd', 'slow']);
   });
 });
 

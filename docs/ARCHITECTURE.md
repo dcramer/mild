@@ -101,7 +101,9 @@ Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 
 ## The run loop
 
-`sift run` is the one long-running process: it serves the dashboard and repeats one pass per account: settle unconfirmed actions, sync, then triage every recorded message that has no decision.
+`sift run` is the one long-running process: it serves the dashboard and, every minute or when woken, sends a pass job for each mailbox: settle unconfirmed actions, sync, then triage every recorded message that has no decision. Upkeep (old examples, message text and messages) is a job per person, sent at start and once a day.
+
+- **Jobs** (`src/daemon/jobs.ts`) are shaped for a hosted queue such as Vercel Queues: ids only, never mail, and safe to deliver twice. Locally they run in-process, four at a time, a job never queued twice while it waits. A pass first claims its mailbox in the database (`mailboxes.pass_until`, 15 minutes); one that cannot does nothing, so duplicate deliveries, overlapping sends and `sift run --once` never act on the same mail at once.
 
 - **Off is the default.** Whether sift is on is each person's own (`preferences.active`), switched under Settings, and a pass changes a person's mailboxes only while it is on. While it is off, decisions are recorded as suggestions (`carry_out` false) and the mailbox is not touched; a suggestion is never carried out later. The one exception is the user's own answer from the dashboard: it is recorded with `carry_out` and `by_user` and carried out on the next pass whether or not they have sift on, since they pressed it. Nothing else is carried out while sift is off, not even a decision left over from when it was on.
 - **Decide, record, then act.** The decision row is written before any mailbox change. Its `outcome` then records what happened: `none` (nothing needed doing), `done`, `skipped` with the reason (left the inbox, spam refused), `failed` or `unknown`.

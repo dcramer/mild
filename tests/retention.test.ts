@@ -2,7 +2,7 @@ import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { RETENTION_DAYS, pruneOld } from '../src/daemon/retention.ts';
 import { KEEP_BODY_DAYS } from '../src/daemon/bodies.ts';
-import { type RunOptions, createWake, daily, runLoop } from '../src/daemon/run.ts';
+import { type RunOptions, type Wake, runJob, runLoop, upkeep } from '../src/daemon/run.ts';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { recordSync } from '../src/store/accounts.ts';
 import { type ActionType, finishAction, insertPendingAction, unsubscribedAt } from '../src/store/actions.ts';
@@ -146,40 +146,36 @@ describe('daily upkeep', () => {
       ACCOUNT,
       NOW - DAY,
     );
-    await daily(store, { log: () => {}, now: () => NOW });
+    await upkeep(db, { log: () => {}, now: () => NOW });
     expect(await left('suggestion_bodies')).toEqual(['young']);
   });
 });
 
 describe('retention', () => {
-  it('runs on the first pass and then once a day', async () => {
+  it('runs when sift starts and then once a day', async () => {
     const logs: string[] = [];
+    const times = [NOW, NOW, NOW + DAY];
+    let tick = 0;
     const stop = new AbortController();
-    const wake = createWake();
-    let now = NOW;
-    let pass = 0;
-    const next = async (): Promise<RunOptions> => {
-      pass++;
-      return {
-        connect: () => {
-          throw new Error('not connected');
-        },
-        log: (line) => logs.push(line),
-        now: () => now,
-      };
+    const running: Promise<unknown>[] = [];
+    const options: RunOptions = {
+      connect: () => {
+        throw new Error('not connected');
+      },
+      log: (line) => logs.push(line),
+      now: () => times[tick]!,
+    };
+    const ticks: Wake = {
+      now: () => {},
+      wait: async () => {
+        await Promise.all(running.splice(0));
+        // Something else grows old after the first prune: it stays until a day has passed.
+        if (tick === 0) await acted('second');
+        if (++tick === times.length) stop.abort();
+      },
     };
     await acted('first');
-    await runLoop(store, next, {
-      signal: stop.signal,
-      wake,
-      onPass: async () => {
-        // Something else grows old after the first prune: it stays until a day has passed.
-        if (pass === 3) await acted('second');
-        if (pass === 4) now += DAY;
-        if (pass < 4) setTimeout(() => wake.now(), 1);
-        else setTimeout(() => stop.abort(), 1);
-      },
-    });
+    await runLoop(store, { send: (job) => void running.push(runJob(store, job, options)) }, { signal: stop.signal, wake: ticks, now: () => times[tick]! });
     expect(logs.filter((line) => line.startsWith('Forgot'))).toEqual([
       'Forgot 1 message with nothing newer than 365 days',
       'Forgot 1 message with nothing newer than 365 days',

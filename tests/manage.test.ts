@@ -1,7 +1,8 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MAX_BACKFILL, backfill } from '../src/daemon/backfill.ts';
-import { type RunOptions, createWake, runLoop } from '../src/daemon/run.ts';
+import type { Job } from '../src/daemon/jobs.ts';
+import { type RunOptions, type Wake, createWake, runJob, runLoop } from '../src/daemon/run.ts';
 import { signInRefusal } from '../src/cli/sign-in.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
@@ -673,33 +674,25 @@ describe('older mail', () => {
 });
 
 describe('run loop', () => {
-  it('asks for its options before every pass and can be woken early', async () => {
-    await raw(store.central).run('DELETE FROM accounts');
-    await raw(db).run('DELETE FROM mailboxes');
+  it('sends a pass for each mailbox every interval, and sooner when woken', async () => {
     const stop = new AbortController();
     const wake = createWake();
-    const seen: number[] = [];
-    let pass = 0;
-    const next = async (): Promise<RunOptions> => {
-      seen.push(++pass);
-      return {
-        connect: () => {
-          throw new Error('no accounts');
-        },
-        log: () => {},
-      };
-    };
+    const passes: Job[] = [];
     const started = Date.now();
-    await runLoop(store, next, {
-      signal: stop.signal,
-      wake,
-      onPass: () => {
-        // Wake during the wait that follows; stop after the third pass.
-        if (pass < 3) setTimeout(() => wake.now(), 5);
-        else setTimeout(() => stop.abort(), 5);
+    await runLoop(
+      store,
+      {
+        send: (job) => {
+          if (job.kind !== 'pass') return;
+          passes.push(job);
+          // Wake during the wait that follows; stop after the third.
+          if (passes.length < 3) setTimeout(() => wake.now(), 5);
+          else setTimeout(() => stop.abort(), 5);
+        },
       },
-    });
-    expect(seen).toEqual([1, 2, 3]);
+      { signal: stop.signal, wake },
+    );
+    expect(passes.map((job) => job.kind === 'pass' && job.account)).toEqual([ACCOUNT, ACCOUNT, ACCOUNT]);
     expect(Date.now() - started).toBeLessThan(2000);
   });
 
@@ -712,38 +705,35 @@ describe('run loop', () => {
     const held = async () => (await raw(db).all<{ message_id: string }>('SELECT message_id FROM examples ORDER BY marked_at')).map((r) => r.message_id);
     const logs: string[] = [];
 
-    /** Run passes at the given times. */
-    const passesAt = async (times: number[]) => {
+    /** Run the loop once at each of the given times. */
+    const ticksAt = async (times: number[]) => {
       const stop = new AbortController();
-      const wake = createWake();
-      let pass = 0;
-      await runLoop(
-        store,
-        async () => ({
-          connect: () => {
-            throw new Error('offline');
-          },
-          log: (line) => logs.push(line),
-          now: () => times[Math.min(pass, times.length - 1)]!,
-        }),
-        {
-          signal: stop.signal,
-          wake,
-          onPass: () => {
-            if (++pass < times.length) setTimeout(() => wake.now(), 1);
-            else setTimeout(() => stop.abort(), 1);
-          },
+      const running: Promise<unknown>[] = [];
+      let tick = 0;
+      const options: RunOptions = {
+        connect: () => {
+          throw new Error('offline');
         },
-      );
+        log: (line) => logs.push(line),
+        now: () => times[tick]!,
+      };
+      const ticks: Wake = {
+        now: () => {},
+        wait: async () => {
+          await Promise.all(running.splice(0));
+          if (++tick === times.length) stop.abort();
+        },
+      };
+      await runLoop(store, { send: (job) => void running.push(runJob(store, job, options)) }, { signal: stop.signal, wake: ticks, now: () => times[tick]! });
     };
 
-    await passesAt([12 * DAY]);
+    await ticksAt([12 * DAY]);
     expect(await held()).toEqual(['old', 'soon', 'mid', 'new']);
 
     // A year and two days on, only `old` is past it. Half a day later `soon` is too, but upkeep has run
     // today, so it waits; three days on, it goes with `mid`.
     const year = EXAMPLE_KEEP_DAYS * DAY;
-    await passesAt([year + 2 * DAY, year + 2.5 * DAY, year + 5.5 * DAY]);
+    await ticksAt([year + 2 * DAY, year + 2.5 * DAY, year + 5.5 * DAY]);
     expect(logs.filter((l) => l.startsWith('Deleted'))).toEqual(['Deleted 1 example older than 365 days', 'Deleted 2 examples older than 365 days']);
     expect(await held()).toEqual(['new']);
   });

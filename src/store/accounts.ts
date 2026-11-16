@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, accounts, credentials, labels, mailboxes, messages as messageRows, users } from './query.ts';
+import { and, asc, eq, isNull, lt, or, accounts, credentials, labels, mailboxes, messages as messageRows, users } from './query.ts';
 import { defaultLabelRows } from './labels.ts';
 import type { Sql } from './sql.ts';
 import type { Store } from './store.ts';
@@ -132,6 +132,23 @@ export async function personOf(db: Sql): Promise<number> {
 export async function lastSyncedAt(db: Sql, accountId: string): Promise<number | null> {
   const [row] = await db.select({ at: mailboxes.lastSyncedAt }).from(mailboxes).where(eq(mailboxes.id, accountId));
   return row?.at ?? null;
+}
+
+/**
+ * Claim the mailbox for one pass, until `until`. False when another pass holds it: a job can be
+ * delivered twice, and two at once would act on the same mail.
+ */
+export async function claimMailbox(db: Sql, accountId: string, now: number, until: number): Promise<boolean> {
+  const claimed = await db
+    .update(mailboxes)
+    .set({ passUntil: until })
+    .where(and(eq(mailboxes.id, accountId), or(isNull(mailboxes.passUntil), lt(mailboxes.passUntil, now))))
+    .returning({ id: mailboxes.id });
+  return claimed.length > 0;
+}
+
+export async function releaseMailbox(db: Sql, accountId: string): Promise<void> {
+  await db.update(mailboxes).set({ passUntil: null }).where(eq(mailboxes.id, accountId));
 }
 
 /** The mailboxes in one person's database. */

@@ -5,7 +5,7 @@ import type { GmailApi } from '../gmail/api.ts';
 import type { FilterCheck } from '../actions/rule-filters.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
-import { type Account, listAccounts, listUsers } from '../store/accounts.ts';
+import { type Account, claimMailbox, listAccounts, listUsers, releaseMailbox } from '../store/accounts.ts';
 import type { Store } from '../store/store.ts';
 import { EXAMPLE_KEEP_DAYS, pruneExamples } from '../store/examples.ts';
 import { purgeSuggestionBodies } from '../store/messages.ts';
@@ -14,6 +14,7 @@ import { KEEP_BODY_DAYS, keepSuggestionBodies } from './bodies.ts';
 import { captureExamples } from './examples.ts';
 import { PRUNE_PER_RUN, RETENTION_DAYS, pruneOld } from './retention.ts';
 import { checkFiltersWhenDue } from './filters.ts';
+import type { Job, Jobs } from './jobs.ts';
 import { type SyncReport, syncAccount } from './sync.ts';
 import { type TriageReport, triageAccount } from './triage.ts';
 
@@ -31,6 +32,8 @@ export interface RunOptions {
 const DAY_MS = 86_400_000;
 /** A minute: new mail is classified soon after it lands, and a quiet pass costs a history read per mailbox. */
 const PASS_INTERVAL_MS = 60_000;
+/** How long a pass holds its mailbox: longer than a pass should take, and how long one that dies keeps it. */
+const PASS_HOLD_MS = 15 * 60_000;
 
 export interface PassResult {
   email: string;
@@ -61,58 +64,86 @@ export async function runEveryone(store: Store, options: RunOptions): Promise<Pa
   return results;
 }
 
-/**
- * One pass over the mailboxes in one person's database, changing Gmail only if they have sift on: settle
- * unconfirmed actions, sync, triage. An account that fails is reported and the others still run; the
- * next pass picks up where it stopped.
- */
+/** One pass over each mailbox in one person's database, one after another. A mailbox another pass holds is left out. */
 export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[]> {
   const results: PassResult[] = [];
+  for (const account of await listAccounts(db)) {
+    const result = await passMailbox(db, account, options);
+    if (result) results.push(result);
+  }
+  return results;
+}
+
+/** Run one job. One for a person or mailbox that is gone does nothing. */
+export async function runJob(store: Store, job: Job, options: RunOptions): Promise<PassResult | null> {
+  if (!(await stillThere(store, job.person))) return null;
+  const db = await store.user(job.person);
+  if (job.kind === 'upkeep') {
+    await upkeep(db, options);
+    return null;
+  }
+  const account = (await listAccounts(db)).find((a) => a.id === job.account);
+  return account ? await passMailbox(db, account, options) : null;
+}
+
+/** Null when another pass holds the mailbox, or it was removed while this one ran. */
+async function passMailbox(db: Sql, account: Account, options: RunOptions): Promise<PassResult | null> {
+  const now = (options.now ?? Date.now)();
+  if (!(await claimMailbox(db, account.id, now, now + PASS_HOLD_MS))) return null;
+  try {
+    return await runMailbox(db, account, options);
+  } finally {
+    await releaseMailbox(db, account.id);
+  }
+}
+
+/**
+ * One pass over one mailbox, changing Gmail only if its person has sift on: settle unconfirmed actions,
+ * sync, triage. A failure is reported; the next pass picks up where this one stopped.
+ */
+async function runMailbox(db: Sql, account: Account, options: RunOptions): Promise<PassResult | null> {
   const leave = options.unsubscribe;
   const { active } = await preferences(db);
   const tier = options.model ? await options.model(db) : null;
-  for (const account of await listAccounts(db)) {
-    const result: PassResult = { email: account.email };
+  const result: PassResult = { email: account.email };
+  try {
+    const { api, mailbox } = await options.connect(db, account);
+    const deps = { db, mailbox, ...(options.now ? { now: options.now } : {}) };
+    if (active) await reconcile(deps);
+    result.sync = await syncAccount(db, api, account, options.now);
+    result.triage = await triageAccount(
+      {
+        ...deps,
+        mailbox: active ? mailbox : null,
+        answers: mailbox,
+        ...(leave ? { unsubscribe: (accountId: string, messageId: string) => leave(db, accountId, messageId) } : {}),
+        sources: { api, mailbox },
+        ...(tier ? { model: { judge: tier.judge, model: tier.model } } : {}),
+      },
+      account,
+    );
+    result.captured = await captureExamples(db, api, account.id, options.now);
+    await keepSuggestionBodies(db, api, account.id, options.now);
     try {
-      const { api, mailbox } = await options.connect(db, account);
-      const deps = { db, mailbox, ...(options.now ? { now: options.now } : {}) };
-      if (active) await reconcile(deps);
-      result.sync = await syncAccount(db, api, account, options.now);
-      result.triage = await triageAccount(
-        {
-          ...deps,
-          mailbox: active ? mailbox : null,
-          answers: mailbox,
-          ...(leave ? { unsubscribe: (accountId: string, messageId: string) => leave(db, accountId, messageId) } : {}),
-          sources: { api, mailbox },
-          ...(tier ? { model: { judge: tier.judge, model: tier.model } } : {}),
-        },
-        account,
-      );
-      result.captured = await captureExamples(db, api, account.id, options.now);
-      await keepSuggestionBodies(db, api, account.id, options.now);
-      try {
-        const filters = await checkFiltersWhenDue(deps, account.id, active);
-        if (filters) result.filters = filters;
-      } catch (error) {
-        // The mail was still triaged; the filters are looked at again next pass.
-        options.log(`${account.email}: could not check Gmail filters: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      const line = describe(result, active);
-      if (line) options.log(`${account.email}: ${line}`);
+      const filters = await checkFiltersWhenDue(deps, account.id, active);
+      if (filters) result.filters = filters;
     } catch (error) {
-      // Removed while the pass ran: there is nothing left to report about.
-      if (!(await listAccounts(db)).some((a) => a.id === account.id)) continue;
-      result.error = error instanceof Error ? error.message : String(error);
-      // Google's answer when a refresh token is no longer good; an app left in Testing does this every 7 days.
-      if (result.error.includes('invalid_grant')) {
-        result.expired = true;
-        options.log(`${account.email}: Google sign-in has expired. Sign in to the dashboard again.`);
-      } else options.log(`${account.email}: pass failed, will retry: ${result.error}`);
+      // The mail was still triaged; the filters are looked at again next pass.
+      options.log(`${account.email}: could not check Gmail filters: ${error instanceof Error ? error.message : String(error)}`);
     }
-    results.push(result);
+    const line = describe(result, active);
+    if (line) options.log(`${account.email}: ${line}`);
+  } catch (error) {
+    // Removed while the pass ran: there is nothing left to report about.
+    if (!(await listAccounts(db)).some((a) => a.id === account.id)) return null;
+    result.error = error instanceof Error ? error.message : String(error);
+    // Google's answer when a refresh token is no longer good; an app left in Testing does this every 7 days.
+    if (result.error.includes('invalid_grant')) {
+      result.expired = true;
+      options.log(`${account.email}: Google sign-in has expired. Sign in to the dashboard again.`);
+    } else options.log(`${account.email}: pass failed, will retry: ${result.error}`);
   }
-  return results;
+  return result;
 }
 
 /** A one-line summary of a pass, or null when nothing happened. */
@@ -169,58 +200,32 @@ export function createWake(): Wake {
   };
 }
 
-/** Upkeep that runs when sift starts and once a day after, for everyone, whether or not Gmail can be reached. */
-export async function daily(store: Store, options: Pick<RunOptions, 'log' | 'now'>): Promise<void> {
+/** One person's upkeep, sent when sift starts and once a day after: old examples, message text and messages go. */
+export async function upkeep(db: Sql, options: Pick<RunOptions, 'log' | 'now'>): Promise<void> {
   const now = (options.now ?? Date.now)();
-  for (const user of await listUsers(store.central)) {
-    try {
-      const db = await store.user(user.id);
-      const dropped = await pruneExamples(db, now);
-      if (dropped > 0) options.log(`Deleted ${dropped} example${dropped === 1 ? '' : 's'} older than ${EXAMPLE_KEEP_DAYS} days`);
-      await purgeSuggestionBodies(db, now - KEEP_BODY_DAYS * DAY_MS);
-    } catch (error) {
-      if (await stillThere(store, user.id))
-        options.log(`Could not delete old examples and message text, will retry tomorrow: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
+  const dropped = await pruneExamples(db, now);
+  if (dropped > 0) options.log(`Deleted ${dropped} example${dropped === 1 ? '' : 's'} older than ${EXAMPLE_KEEP_DAYS} days`);
+  await purgeSuggestionBodies(db, now - KEEP_BODY_DAYS * DAY_MS);
+  let pruned: number;
+  do {
+    pruned = await pruneOld(db, now);
+    if (pruned > 0) options.log(`Forgot ${pruned} message${pruned === 1 ? '' : 's'} with nothing newer than ${RETENTION_DAYS} days`);
+  } while (pruned >= PRUNE_PER_RUN);
 }
 
 /**
- * Run passes until `signal` aborts. `next` is asked before every pass, and each person's choices are read
- * as their mail is, so a change takes effect on the following pass without a restart. Old records are
- * pruned on the first pass and then once a day.
+ * Until `signal` aborts, send a pass for every mailbox each interval, or sooner when woken, and upkeep for
+ * everyone when it starts and once a day after. Whoever is added or removed is seen at the next send.
  */
-export async function runLoop(
-  store: Store,
-  next: () => Promise<RunOptions>,
-  control: { signal: AbortSignal; wake: Wake; onPass?: (results: PassResult[]) => void | Promise<void> },
-): Promise<void> {
-  let prunedAt = -Infinity;
-  let lastDaily = -Infinity;
+export async function runLoop(store: Store, jobs: Jobs, control: { signal: AbortSignal; wake: Wake; now?: () => number }): Promise<void> {
+  const now = control.now ?? Date.now;
+  let upkeepAt = -Infinity;
   while (!control.signal.aborted) {
-    const options = await next();
-    const now = (options.now ?? Date.now)();
-    if (now - lastDaily >= DAY_MS) {
-      lastDaily = now;
-      await daily(store, options);
-    }
-    await control.onPass?.(await runEveryone(store, options));
-    // After the pass, which may have taken a while.
-    const after = (options.now ?? Date.now)();
-    if (after - prunedAt >= DAY_MS) {
-      try {
-        let backlog = false;
-        for (const user of await listUsers(store.central)) {
-          const pruned = await pruneOld(await store.user(user.id), after);
-          if (pruned > 0) options.log(`Forgot ${pruned} message${pruned === 1 ? '' : 's'} with nothing newer than ${RETENTION_DAYS} days`);
-          // A backlog goes a piece per pass.
-          backlog ||= pruned >= PRUNE_PER_RUN;
-        }
-        if (!backlog) prunedAt = after;
-      } catch (error) {
-        prunedAt = after;
-        options.log(`Could not prune old records, will retry tomorrow: ${error instanceof Error ? error.message : String(error)}`);
-      }
+    const due = now() - upkeepAt >= DAY_MS;
+    if (due) upkeepAt = now();
+    for (const user of await listUsers(store.central)) {
+      if (due) jobs.send({ kind: 'upkeep', person: user.id });
+      for (const account of await listAccounts(await store.user(user.id))) jobs.send({ kind: 'pass', person: user.id, account: account.id });
     }
     await control.wake.wait(PASS_INTERVAL_MS, control.signal);
   }
