@@ -14,7 +14,7 @@ const DAYS = [
 ] as const;
 
 /**
- * Nothing of the dashboard shows until a model is in use: without one, only rules sort, and there is
+ * Nothing of the dashboard shows until a model is in use: without one, only rules label mail, and there is
  * nothing to suggest. The same steps come back, under another heading, when the model in use is lost
  * (its sign-in removed or expired). Settings opens over it.
  */

@@ -674,6 +674,9 @@ export function SystemView() {
           <Entry account={{ name: 'me@example.org', onSettings: () => {}, onSignOut: () => {} }}>
             <p className="statement">Connect a model.</p>
             <p className="text-muted-foreground">It reads the mail no rule covers and says which of your labels it is.</p>
+            <Field label="How far back" hint="Up to 300 messages, one model call each.">
+              <Select label="How far back" value="7" options={[['7', 'The last week']] as const} onChange={() => {}} />
+            </Field>
             <Button variant="mark" size="lg" className="justify-between">
               Continue
               <ArrowRightIcon aria-hidden />

@@ -15,7 +15,7 @@ export function Entry({ children, account }: { children: ReactNode; account?: { 
         <h1 className="absolute -top-5 left-6 z-10">
           <Wordmark size="lg" />
         </h1>
-        <Sheet className="gap-5 px-6 pt-12 pb-6">{children}</Sheet>
+        <Sheet className="entry gap-5 px-6 pt-12 pb-6">{children}</Sheet>
       </div>
       <p className="mt-6 flex flex-wrap items-baseline gap-x-4 gap-y-1 px-6 text-sm text-muted-foreground">
         {account ? (
