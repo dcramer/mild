@@ -89,11 +89,9 @@
   --tier-agent: #4e4c46;
   --tier-fallback: var(--highlight);
 
-  /* What a change did, in Activity's chart: an ordered ramp of the ink, with a failure in red. */
-  --change-archive: #a8a69d;
-  --change-spam: #f0eee8;
-  --change-keep: #74726a;
-  --change-cost: #74726a;
+  /* What became of mail sift handled, in Activity's chart: ink at two strengths, with a failure in red. */
+  --handled-changed: #a8a69d;
+  --handled-left: #4e4c46;
 }
 
 @layer components {

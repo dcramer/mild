@@ -1,7 +1,7 @@
 import { ArrowRightIcon, PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { StatusWord, TierLabel, Verdict } from '@/components/bits.tsx';
-import { ACTIONS, STANDINGS, STATUS_NAMES, TIERS, money, outcomeName } from '@/lib/format.ts';
+import { ACTIONS, STANDINGS, STATUS_NAMES, TIERS, money, moneyTick, outcomeName } from '@/lib/format.ts';
 import {
   Does,
   AnswerPicker,
@@ -509,10 +509,9 @@ export function SystemView() {
           </Figures>
           <StackedBars
             compact
-            unit="decisions"
             series={SERIES}
             rows={DAYS}
-            strip={{ name: 'Model cost', values: [0.04, 0.02, 0.06, 0, 0.03, 0.08, 0.05], format: money, color: 'var(--change-cost)' }}
+            line={{ name: 'Model cost', values: [0.04, 0.02, 0.06, 0, 0.03, 0.08, 0.05], format: money, tick: moneyTick }}
           />
         </div>
       </Section>

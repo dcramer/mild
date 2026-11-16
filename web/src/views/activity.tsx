@@ -4,7 +4,7 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { MailLog } from '@/components/mail-log.tsx';
 import { type Days, type DecisionRow, api, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/route.ts';
-import { CHANGES, PERIODS, count, longDay, money, plural, shortDay } from '@/lib/format.ts';
+import { HANDLED, PERIODS, count, longDay, money, moneyTick, plural, shortDay } from '@/lib/format.ts';
 import { Button, Empty, Failure, ListView, Loading, Select, StackedBars, TextLink, useToast } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
@@ -44,7 +44,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
   const summary = useLoaded(`summary-${days}`, (signal) => api.summary(days, signal));
   const daily = summary.data?.daily ?? [];
   // A day's column is worth drawing only beside others, and only once something happened.
-  const charted = daily.length > 1 && daily.some((day) => day.costUsd > 0 || CHANGES.some((c) => day.changes[c.key] > 0));
+  const charted = daily.length > 1 && daily.some((day) => day.costUsd > 0 || Object.values(day.counts).some((n) => n > 0));
 
   const report = <T,>(work: Promise<T>, line: (result: T) => string) =>
     void work.then(
@@ -80,11 +80,18 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
         <>
           {charted ? (
             <StackedBars
-              compact
-              unit="changes"
-              series={CHANGES}
-              rows={daily.map((day) => ({ key: day.day, label: shortDay(day.day), title: longDay(day.day), values: { ...day.changes } }))}
-              strip={{ name: 'Model cost', values: daily.map((day) => day.costUsd), format: money, color: 'var(--change-cost)' }}
+              series={HANDLED}
+              rows={daily.map((day) => {
+                const handled = Object.values(day.counts).reduce((a, b) => a + b, 0);
+                const changed = day.changes.archive + day.changes.spam + day.changes.keep;
+                return {
+                  key: day.day,
+                  label: shortDay(day.day),
+                  title: longDay(day.day),
+                  values: { changed, left: Math.max(0, handled - changed - day.changes.failed), failed: day.changes.failed },
+                };
+              })}
+              line={{ name: 'Model cost', values: daily.map((day) => day.costUsd), format: money, tick: moneyTick }}
             />
           ) : null}
           {failed > 0 && view !== 'trouble' ? (

@@ -43,7 +43,7 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Timeline`, `TimelineEvent` | What happened to one thing, oldest first, each with at most one press (Undo). |
 | `Sheet`, `SettingRow` | A group of settings, framed. Each row says what it is, what follows from changing it, and holds its control. Not for a list. |
 | `Figures`, `Figure` | Headline numbers, straight on the page. `look` for the one to see first, `failure` for a count of things gone wrong; `href` links to the list it counts. |
-| `StackedBars` | Counts over time, stacked by series. Its legend lists the series that occur and reads out the column pointed at or focused. `compact` beside figures. `strip` is a second measure of another scale (model cost) in a short row of its own under the same days, with its total: two measures are never drawn on one chart with two axes. |
+| `StackedBars` | Counts over time, stacked by series, on the left axis. `line` adds a second measure (model cost) on its own right axis; both start at zero and share their gridlines. No legend: pointing at or focusing a column opens a tooltip with that day's figures, the segment under the pointer in bold. `compact` beside figures. |
 | `Swatch` | A series' or a tier's colour, always beside its name. |
 | `Panel` | One item from a list, opened beside the list: it slides over from the right, up to three quarters of the screen, with previous and next to step through the list. Every list opens a message in the same panel (`views/message-panel.tsx`). |
 | `Dialog` | A form or a question: adding or changing a label or a rule. Centred. `footer` for the actions that finish it. |

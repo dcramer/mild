@@ -16,132 +16,137 @@ export interface ChartRow {
   values: Record<string, number>;
 }
 
-/** The next round number at or above `n`, so the scale ends on a figure worth reading. */
-function ceiling(n: number): number {
-  const power = 10 ** Math.floor(Math.log10(Math.max(n, 1)));
-  return ([1, 2, 5, 10].find((step) => step * power >= n) ?? 10) * power;
-}
-
 /** A series' or a tier's colour, always beside its name. */
 export function Swatch({ color }: { color: string }) {
   return <span aria-hidden className="size-2.5 shrink-0 rounded-[1px] ring-1 ring-foreground/20" style={{ background: color }} />;
 }
 
-/** A second measure under the columns, scaled to its own largest day and labelled with its total: the same days, never a second axis on one chart. */
-export interface Strip {
+/** The next round number at or above `n`, under 1 too, so a scale ends on a figure worth reading. */
+function ceiling(n: number): number {
+  if (n <= 0) return 1;
+  const power = 10 ** Math.floor(Math.log10(n));
+  return ([1, 2, 5, 10].find((step) => step * power >= n) ?? 10) * power;
+}
+
+/** A second measure over the columns, as a line on the right-hand axis: model cost over mail handled. */
+export interface Line {
   name: string;
   /** One value per row, in the same order. */
   values: readonly number[];
   format: (value: number) => string;
-  color: string;
+  /** For the right-hand axis, where a figure may need more precision than in the tooltip. */
+  tick: (value: number) => string;
 }
 
 /**
- * Counts over time, stacked by series. `compact` for a chart beside figures rather than one of its own.
- * `strip` draws a second measure in a short row of its own under the columns, sharing their days, so two
- * measures of different scale are read together without a second axis. The line above is the legend
- * of the series that occur until a column is pointed at or focused; then it reads out that day, the strip's value included.
+ * Counts over time, stacked by series, on the left axis; `line` adds a second measure on its own right
+ * axis. Both start at zero and share their gridlines. No legend: pointing at or focusing a column opens a
+ * tooltip with that day's figures (none that are zero), the segment under the pointer first in weight.
  */
-export function StackedBars({
-  series,
-  rows,
-  unit,
-  compact,
-  strip,
-}: {
-  series: readonly Series[];
-  rows: readonly ChartRow[];
-  unit: string;
-  compact?: boolean;
-  strip?: Strip;
-}) {
+export function StackedBars({ series, rows, line, compact }: { series: readonly Series[]; rows: readonly ChartRow[]; line?: Line; compact?: boolean }) {
   const [at, setAt] = useState<number | null>(null);
+  const [under, setUnder] = useState<string | null>(null);
   const total = (row: ChartRow) => series.reduce((sum, s) => sum + (row.values[s.key] ?? 0), 0);
   const max = ceiling(Math.max(...rows.map(total), 1));
-  const stripMax = strip ? Math.max(...strip.values, 0) || 1 : 1;
+  const lineMax = line ? ceiling(Math.max(...line.values, 0)) : 1;
   const shown = at === null ? undefined : rows[at];
-  const every = Math.ceil(rows.length / 8);
-  const point = (index: number) => ({
-    onMouseEnter: () => setAt(index),
-    onFocus: () => setAt(index),
-    onBlur: () => setAt(null),
-  });
+  const every = Math.ceil(rows.length / 6);
+  const x = (index: number) => ((index + 0.5) / rows.length) * 100;
+  const y = (n: number) => 100 - (n / lineMax) * 100;
+  const points = line?.values.map((n, index) => `${x(index)},${y(n)}`).join(' ');
+  const gutters = line ? 'mr-12 ml-10' : 'ml-10';
+  const leave = () => {
+    setAt(null);
+    setUnder(null);
+  };
 
   return (
-    <div className="flex flex-col gap-3">
-      <p className="flex min-h-6 flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground tabular-nums">
-        {shown ? <span className="font-medium text-foreground">{shown.title}</span> : null}
-        {series
-          .filter((s) => (shown ? (shown.values[s.key] ?? 0) > 0 : rows.some((row) => (row.values[s.key] ?? 0) > 0)))
-          .map((s) => (
-            <span key={s.key} className="inline-flex items-center gap-1.5 whitespace-nowrap">
-              <Swatch color={s.color} />
-              {shown ? <span className="font-medium text-foreground">{shown.values[s.key]}</span> : null}
-              {s.name}
+    <div className="flex flex-col gap-2" onMouseLeave={leave}>
+      <div className={`relative ${gutters} ${compact ? 'h-28' : 'h-44'}`}>
+        {[1, 0.5, 0].map((share) => (
+          <div key={share} className="absolute inset-x-0 border-t border-(--rule)" style={{ bottom: `${share * 100}%` }}>
+            <span className="absolute right-full -translate-y-1/2 pr-2 text-label text-muted-foreground tabular-nums">
+              {Number.isInteger(max * share) ? (max * share).toLocaleString() : ''}
             </span>
-          ))}
-        {shown && total(shown) === 0 ? <span>No {unit}</span> : null}
-        {shown && strip && at !== null ? (
-          <span className="whitespace-nowrap">
-            <span className="font-medium text-foreground">{strip.format(strip.values[at] ?? 0)}</span> {strip.name.toLowerCase()}
-          </span>
+            {line ? (
+              <span className="absolute left-full -translate-y-1/2 pl-2 text-label whitespace-nowrap text-muted-foreground tabular-nums">
+                {line.tick(lineMax * share)}
+              </span>
+            ) : null}
+          </div>
+        ))}
+        <ol className="relative flex h-full items-stretch">
+          {rows.map((row, index) => {
+            const drawn = series.filter((s) => (row.values[s.key] ?? 0) > 0);
+            return (
+              <li
+                key={row.key}
+                tabIndex={0}
+                aria-label={`${row.title}: ${series.map((s) => `${row.values[s.key] ?? 0} ${s.name.toLowerCase()}`).join(', ')}${line ? `, ${line.format(line.values[index] ?? 0)} ${line.name.toLowerCase()}` : ''}`}
+                className={`flex min-w-0 flex-1 flex-col-reverse items-center gap-0.5 px-px outline-none ${at === index ? 'bg-(--fill)' : ''}`}
+                onMouseEnter={() => setAt(index)}
+                onFocus={() => setAt(index)}
+                onBlur={leave}
+              >
+                {drawn.map((s, position) => (
+                  <span
+                    key={s.key}
+                    className={`w-full max-w-6 ${position === drawn.length - 1 ? 'rounded-t-[4px]' : ''}`}
+                    style={{ height: `${((row.values[s.key] ?? 0) / max) * 100}%`, minHeight: 2, background: s.color }}
+                    onMouseEnter={() => setUnder(s.key)}
+                    onMouseLeave={() => setUnder(null)}
+                  />
+                ))}
+              </li>
+            );
+          })}
+        </ol>
+        {line && points ? (
+          <svg aria-hidden className="pointer-events-none absolute inset-0 size-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+            {/* Drawn twice: a stroke of the page under the ink keeps the line apart from the columns it crosses. */}
+            <polyline points={points} fill="none" stroke="var(--background)" strokeWidth={5} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+            <polyline points={points} fill="none" stroke="var(--foreground)" strokeWidth={2} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+          </svg>
         ) : null}
-      </p>
-
-      <div className="flex flex-col gap-4" onMouseLeave={() => setAt(null)}>
-        <div className={`relative ml-12 ${compact ? 'h-28' : 'h-52'}`}>
-          {(Number.isInteger(max / 2) ? [1, 0.5, 0] : [1, 0]).map((share) => (
-            <div key={share} className="absolute inset-x-0 border-t border-(--rule)" style={{ bottom: `${share * 100}%` }}>
-              <span className="absolute right-full -translate-y-1/2 pr-2 text-label text-muted-foreground tabular-nums">{Math.round(max * share)}</span>
-            </div>
-          ))}
-          <ol className="relative flex h-full items-stretch">
-            {rows.map((row, index) => {
-              const drawn = series.filter((s) => (row.values[s.key] ?? 0) > 0);
-              return (
-                <li
-                  key={row.key}
-                  tabIndex={0}
-                  aria-label={`${row.title}: ${total(row)} ${unit}${strip ? `, ${strip.format(strip.values[index] ?? 0)} ${strip.name.toLowerCase()}` : ''}`}
-                  className="flex min-w-0 flex-1 flex-col-reverse items-center gap-0.5 px-px hover:bg-(--fill) focus-visible:bg-(--fill) aria-[current=true]:bg-(--fill)"
-                  aria-current={at === index ? true : undefined}
-                  {...point(index)}
-                >
-                  {drawn.map((s, position) => (
-                    <span
-                      key={s.key}
-                      className={`w-full max-w-6 ${position === drawn.length - 1 ? 'rounded-t-[4px]' : ''}`}
-                      style={{ height: `${((row.values[s.key] ?? 0) / max) * 100}%`, minHeight: 2, background: s.color }}
-                    />
-                  ))}
-                </li>
-              );
-            })}
-          </ol>
-        </div>
-
-        {strip ? (
-          <div className="ml-12 flex flex-col gap-1">
-            <p className="text-label text-muted-foreground tabular-nums">
-              {strip.name} <span className="text-foreground">{strip.format(strip.values.reduce((sum, value) => sum + value, 0))}</span>
-            </p>
-            <ol aria-hidden className="flex h-8 items-stretch border-b border-(--rule)">
-              {rows.map((row, index) => (
-                <li key={row.key} className={`flex min-w-0 flex-1 items-end justify-center px-px ${at === index ? 'bg-(--fill)' : ''}`} {...point(index)}>
-                  {(strip.values[index] ?? 0) > 0 ? (
-                    <span
-                      className="w-full max-w-6 rounded-t-[4px]"
-                      style={{ height: `${((strip.values[index] ?? 0) / stripMax) * 100}%`, minHeight: 2, background: strip.color }}
-                    />
-                  ) : null}
-                </li>
+        {line && at !== null ? (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute size-2.5 -translate-x-1/2 translate-y-1/2 rounded-full bg-foreground ring-2 ring-background"
+            style={{ left: `${x(at)}%`, bottom: `${100 - y(line.values[at] ?? 0)}%` }}
+          />
+        ) : null}
+        {shown && at !== null ? (
+          <div
+            aria-hidden
+            className="sheet pointer-events-none absolute top-0 z-10 flex w-max flex-col gap-1 bg-popover px-3 py-2 text-sm tabular-nums"
+            style={
+              at < rows.length / 2
+                ? { left: `calc(${((at + 1) / rows.length) * 100}% + 8px)` }
+                : { right: `calc(${((rows.length - at) / rows.length) * 100}% + 8px)` }
+            }
+          >
+            <p className="font-medium">{shown.title}</p>
+            {[...series]
+              .reverse()
+              .filter((s) => (shown.values[s.key] ?? 0) > 0)
+              .map((s) => (
+                <p key={s.key} className={`flex items-center gap-2 ${under === null || under === s.key ? '' : 'text-muted-foreground'}`}>
+                  <Swatch color={s.color} />
+                  <span className={under === s.key ? 'font-medium' : ''}>{s.name}</span>
+                  <span className="ml-auto pl-4">{(shown.values[s.key] ?? 0).toLocaleString()}</span>
+                </p>
               ))}
-            </ol>
+            {line ? (
+              <p className={`flex items-center gap-2 ${under === null ? '' : 'text-muted-foreground'}`}>
+                <span className="h-0.5 w-2.5 rounded-full bg-foreground" />
+                <span>{line.name}</span>
+                <span className="ml-auto pl-4">{line.format(line.values[at] ?? 0)}</span>
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>
-
-      <ol aria-hidden className="ml-12 flex text-label text-muted-foreground">
+      <ol aria-hidden className={`${gutters} flex text-label text-muted-foreground`}>
         {rows.map((row, index) => (
           <li key={row.key} className="min-w-0 flex-1 text-center whitespace-nowrap">
             {index % every === 0 ? row.label : ''}

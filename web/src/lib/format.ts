@@ -14,13 +14,12 @@ export const TIERS: { key: StageKey; name: string; color: string }[] = [
   { key: 'agent', name: 'Agent', color: 'var(--tier-agent)' },
   { key: 'fallback', name: 'Not sure', color: 'var(--tier-fallback)' },
 ];
-/** What a change in Gmail did, for Activity's chart, bottom to top. */
-export const CHANGES = [
-  { key: 'archive', name: 'Archived', color: 'var(--change-archive)' },
-  { key: 'spam', name: 'Marked spam', color: 'var(--change-spam)' },
-  { key: 'keep', name: 'Kept', color: 'var(--change-keep)' },
+/** What became of the mail sift handled in a day, for Activity's chart, bottom to top. */
+export const HANDLED = [
+  { key: 'changed', name: 'Changed in Gmail', color: 'var(--handled-changed)' },
+  { key: 'left', name: 'Left alone', color: 'var(--handled-left)' },
   { key: 'failed', name: 'Failed', color: 'var(--destructive)' },
-] as const;
+];
 export const tier = (key: string) => TIERS.find((t) => t.key === key) ?? { key, name: key, color: 'var(--muted-foreground)' };
 
 /**
@@ -108,6 +107,8 @@ const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumF
 export const count = (n: number) => (n >= 10_000 ? compact.format(n) : int.format(n));
 export const percent = (part: number, whole: number) => (whole === 0 ? '–' : `${Math.round((part / whole) * 100)}%`);
 export const money = (usd: number) => (usd === 0 ? '$0' : usd < 0.01 ? '<$0.01' : `$${usd.toFixed(2)}`);
+/** A round amount on an axis, which may be under a cent: $0.025. */
+export const moneyTick = (usd: number) => (usd === 0 ? '$0' : `$${usd >= 0.1 ? usd.toFixed(2) : Number(usd.toPrecision(2))}`);
 
 export const shortDay = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 export const longDay = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });

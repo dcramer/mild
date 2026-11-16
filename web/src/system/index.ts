@@ -1,6 +1,6 @@
 export { AnswerPicker, type Pick } from './answer-picker.tsx';
 export { Button } from './button.tsx';
-export { type ChartRow, type Series, StackedBars, type Strip, Swatch } from './chart.tsx';
+export { type ChartRow, type Line, type Series, StackedBars, Swatch } from './chart.tsx';
 export { ChoiceGroup } from './choice.tsx';
 export { ConfirmButton } from './confirm.tsx';
 export { Copyable } from './copyable.tsx';
