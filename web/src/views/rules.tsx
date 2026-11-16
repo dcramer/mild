@@ -3,26 +3,21 @@ import { type ReactNode, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/route.ts';
+import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { ago, count, outcomeName, plural, shortDate } from '@/lib/format.ts';
 import {
   Button,
-  Check,
   ConfirmButton,
-  Dialog,
   Does,
   Empty,
   Fact,
   Facts,
   Failure,
-  Field,
   FilterGroup,
-  Form,
-  Input,
   ListView,
   Loading,
   Panel,
   RowActions,
-  Select,
   Sub,
   Table,
   Td,
@@ -37,135 +32,6 @@ const SOURCES = [
   ['correction', 'You, correcting sift'],
   ['agent', 'sift, by blocking'],
 ] as const;
-
-const WHEN = [
-  ['from', 'From the address'],
-  ['fromDomain', 'From anyone at'],
-  ['listId', 'On the list'],
-  ['to', 'Sent to'],
-  ['subjectContains', 'Subject contains'],
-] as const;
-const KINDS = [
-  ['action', 'Always do this to it'],
-  ['label', 'It is always this label'],
-  ['when-label', 'When sift says it is this label'],
-] as const;
-type Kind = (typeof KINDS)[number][0];
-const DOES = [
-  ['keep', 'Keep it'],
-  ['archive', 'Archive it'],
-  ['spam', 'Spam it'],
-] as const;
-const AS_LABEL = ['', 'As the label says'] as const;
-type Does = '' | (typeof DOES)[number][0];
-const READING: Record<Kind, string> = {
-  action: 'No model reads this mail, and sift does not say what it is.',
-  label: 'No model reads this mail.',
-  'when-label': 'sift still reads each message. Mail from here that is something else is judged as usual.',
-};
-
-function AddRuleDialog({
-  accountId,
-  labels,
-  from,
-  onClose,
-  onAdded,
-}: {
-  accountId: string;
-  labels: readonly (readonly [string, string])[];
-  /** A sender to start from, when the dialog was opened from one of their messages. */
-  from?: string;
-  onClose: () => void;
-  onAdded: () => void;
-}) {
-  const { busy, error, run } = useAction();
-  const [when, setWhen] = useState<(typeof WHEN)[number][0]>('from');
-  const [value, setValue] = useState(from ?? '');
-  const [kind, setKind] = useState<Kind>('action');
-  const [label, setLabel] = useState('');
-  const [does, setDoes] = useState<Does>('archive');
-  const [markRead, setMarkRead] = useState(false);
-  const [unsubscribe, setUnsubscribe] = useState(false);
-  const [condition, setCondition] = useState('');
-  // An action rule has no label to take its action from.
-  const action = kind === 'action' && does === '' ? 'archive' : does;
-  const ready = value.trim() !== '' && (kind === 'action' || label !== '');
-  const add = () =>
-    run(
-      () =>
-        api.addRule({
-          accountId,
-          match: { [when]: value.trim() },
-          ...(kind === 'label' ? { label } : kind === 'when-label' ? { whenLabel: label } : {}),
-          ...(action === '' ? {} : { disposition: action }),
-          ...(markRead ? { markRead } : {}),
-          ...(unsubscribe ? { unsubscribe } : {}),
-          ...(kind === 'label' && condition.trim() !== '' ? { when: condition.trim() } : {}),
-        }),
-      () => {
-        onAdded();
-        onClose();
-      },
-    );
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="Add a rule"
-      footer={
-        <>
-          <Button variant="ink" busy={busy} disabled={!ready} onClick={add}>
-            Add rule
-          </Button>
-          <Button variant="quiet" onClick={onClose}>
-            Cancel
-          </Button>
-          <Failure>{error}</Failure>
-        </>
-      }
-    >
-      <Form onSubmit={() => ready && add()}>
-        <Field label="Mail">
-          <Select label="Condition" value={when} options={WHEN} onChange={setWhen} />
-          <Input
-            autoFocus
-            className="min-w-48 flex-1"
-            aria-label="Value to match"
-            placeholder={when === 'fromDomain' ? 'example.com' : when === 'from' ? 'name@example.com' : ''}
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-          />
-        </Field>
-        <Field label="Then" hint={READING[kind]}>
-          <Select label="What the rule says" value={kind} options={KINDS} onChange={setKind} />
-          {kind === 'action' ? null : <Select label="Label" value={label} options={[['', 'Choose a label'] as const, ...labels]} onChange={setLabel} />}
-          <Select label="What sift does" value={action} options={kind === 'action' ? DOES : [AS_LABEL, ...DOES]} onChange={setDoes} />
-        </Field>
-        {kind === 'label' ? (
-          <Field label="Only when it is (optional)" hint="In your words. Only a model can apply this, so sift reads each message the rule matches.">
-            <Input
-              aria-label="What the mail must be, in your words"
-              className="w-full"
-              placeholder="a notice for a lot I did not bid on"
-              value={condition}
-              onChange={(event) => setCondition(event.target.value)}
-            />
-          </Field>
-        ) : null}
-        <Field label="Also">
-          <div className="flex flex-col gap-2">
-            <Check checked={markRead} onChange={setMarkRead}>
-              Mark it read
-            </Check>
-            <Check checked={unsubscribe} onChange={setUnsubscribe}>
-              Unsubscribe, when the sender offers a safe way
-            </Check>
-          </div>
-        </Field>
-      </Form>
-    </Dialog>
-  );
-}
 
 const MADE_BY: Record<string, string> = { user: 'You', correction: 'Your answers', agent: 'sift, when it blocked them' };
 const QUIET: Record<string, string> = { fromDomain: 'anyone at', to: 'sent to', listId: 'the list', subjectContains: 'subject has' };
@@ -389,7 +255,7 @@ export function Rules() {
       {(adding || from !== '') && accountId ? (
         <AddRuleDialog
           accountId={accountId}
-          labels={labels}
+          labels={manage.data?.labels[accountId] ?? []}
           {...(from === '' ? {} : { from })}
           onClose={() => {
             setAdding(false);
