@@ -120,13 +120,13 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
     .where(
       and(
         decidedSince,
-        eq(decisions.mode, 'act'),
+        eq(decisions.carryOut, true),
         eq(
           decisions.id,
           db
             .select({ id: max(first.id) })
             .from(first)
-            .where(and(eq(first.accountId, decisions.accountId), eq(first.messageId, decisions.messageId), eq(first.mode, 'act'))),
+            .where(and(eq(first.accountId, decisions.accountId), eq(first.messageId, decisions.messageId), eq(first.carryOut, true))),
         ),
       ),
     )) {

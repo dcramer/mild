@@ -5,15 +5,15 @@ import { PGlite } from '@electric-sql/pglite';
 import { generateDrizzleJson, generateMigration } from 'drizzle-kit/api';
 import { describe, expect, it } from 'vitest';
 import * as schema from '../src/store/schema.ts';
-import { connectAccount, recordSync } from '../src/store/accounts.ts';
+import { addMailbox, connectAccount, connectedAddresses, deleteUser, recordSync, removeMailbox } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
-import { listLabels } from '../src/store/labels.ts';
-import { addRule } from '../src/store/rules.ts';
-import { rememberCorrespondent } from '../src/store/senders.ts';
-import { accounts, labels, mailboxes } from '../src/store/query.ts';
-import { openStore } from '../src/store/store.ts';
+import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts';
+import { addRule, removeRule } from '../src/store/rules.ts';
+import { accounts, labels } from '../src/store/query.ts';
+import { pglite, roleBypass } from '../src/store/db.ts';
+import { openStore, storeOn } from '../src/store/store.ts';
 import type { Disposition } from '../src/triage/types.ts';
-import { freshStore, openUserDb, raw, superuser } from './fixtures.ts';
+import { freshStore, onePerson, openUserDb, raw, recordEverything, rowsBy, superuser } from './fixtures.ts';
 import { facts } from './helpers.ts';
 
 const MIGRATIONS = new URL('../src/store/migrations/', import.meta.url);
@@ -29,8 +29,7 @@ describe('migrations', () => {
   });
 
   it('enforce what the schema says', async () => {
-    const db = await openUserDb();
-    await db.insert(mailboxes).values({ id: 'acct', createdAt: 0 });
+    const db = await openUserDb('acct');
     const insert = (account: string, id: string, disposition: Disposition) =>
       db.insert(labels).values({ accountId: account, id, name: 'N', description: '', disposition, gmailLabel: 'sift/n', position: 0, updatedAt: 0 }).execute();
     await insert('acct', 'n', 'archive');
@@ -97,80 +96,109 @@ describe("a person's data", () => {
 
   it("goes with them when they are deleted, and no one else's does", async () => {
     const store = await freshStore();
-    const people: number[] = [];
-    for (const account of ['alpha@example.org', 'bravo@example.net']) {
-      const id = await connectAccount(store, account, '1', 0);
-      people.push(id);
-      const db = await store.user(id);
-      await recordSync(db, account, [facts({ accountId: account, messageId: 'm1' })], '2', 0);
-      const decision = await recordDecision(db, account, 'm1', {
-        disposition: 'archive',
-        subscription: 'preserve',
-        stage: 'agent',
-        labelId: 'newsletter',
-        reason: 'r',
-      });
-      await listLabels(db, account, 0);
-      await addRule(db, account, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user', 0);
-      await rememberCorrespondent(db, account, 'news@example.com', true, 0);
-      const { id: run } = (await raw(db).get<{ id: number }>(
-        `INSERT INTO eval_runs (account_id, started_at, status, model, prompt_hash, labels_hash, labels, few_shot, total)
-         VALUES (?, 0, 'done', 'p/m', 'h', 'h', '[]', false, 1) RETURNING id`,
-        account,
-      ))!;
-      for (const [statement, ...params] of [
-        [`INSERT INTO credentials (kind, key, value, updated_at) VALUES ('model', 'openai', 'x', 0)`],
-        [
-          `INSERT INTO actions (account_id, message_id, type, payload, status, created_at, decision_id) VALUES (?, 'm1', 'archive', '{}', 'done', 0, ?)`,
-          account,
-          decision,
-        ],
-        [
-          `INSERT INTO proposals (account_id, kind, match, label_id, agreed, created_at) VALUES (?, 'rule', '{"from": "a@example.com"}', 'newsletter', 5, 0)`,
-          account,
-        ],
-        [
-          `INSERT INTO feedback (account_id, decision_id, message_id, verdict, scope, created_at) VALUES (?, ?, 'm1', 'right', 'message', 0)`,
-          account,
-          decision,
-        ],
-        [
-          `INSERT INTO examples (account_id, message_id, disposition, label_id, suggested, suggested_by, marked_at) VALUES (?, 'm1', 'archive', 'newsletter', 'archive', 'agent', 0)`,
-          account,
-        ],
-        [`INSERT INTO suggestion_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, 'm1', 'Hello.', 0)`, account],
-        [`INSERT INTO model_runs (account_id, message_id, model, started_at, outcome, error) VALUES (?, 'm1', 'p/m', 0, 'failed', 'e')`, account],
-        [
-          `INSERT INTO eval_results (run_id, message_id, expected, got, duration_ms, shots, sender_shots) VALUES (?, 'm1', 'newsletter', 'newsletter', 1, 0, 0)`,
-          run,
-        ],
-      ] as [string, ...(string | number)[]][])
-        await raw(db).run(statement, ...params);
-    }
-    const [alpha, bravo] = people as [number, number];
-    const pg = await superuser();
-    const { rows: tables } = await pg.query<{ name: string }>(
-      `SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-       WHERE n.nspname = 'public' AND c.relkind = 'r' AND EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'user_id')
+    const alpha = await connectAccount(store, 'alpha@example.org', '1', 0);
+    const bravo = await connectAccount(store, 'bravo@example.net', '1', 0);
+    await recordEverything(await store.user(alpha), 'alpha@example.org');
+    await recordEverything(await store.user(bravo), 'bravo@example.net');
+    const before = await rowsBy('user_id');
+    expect(Object.keys(before).length).toBeGreaterThan(10);
+    for (const [name, counts] of Object.entries(before)) expect(Object.keys(counts), name).toEqual([String(alpha), String(bravo)]);
+
+    await deleteUser(store, alpha);
+    const after = await rowsBy('user_id');
+    for (const [name, counts] of Object.entries(before)) expect(after[name], name).toEqual({ [bravo]: counts[bravo] });
+    expect((await (await superuser()).query('SELECT id, owner FROM users')).rows).toEqual([{ id: bravo, owner: true }]);
+  });
+});
+
+describe("a mailbox's data", () => {
+  it('is in tables that each have a key to the mailbox that deletes the row with it', async () => {
+    const { rows } = await (
+      await superuser()
+    ).query<{ name: string; cascades: boolean }>(
+      `SELECT c.relname AS name,
+              EXISTS (SELECT 1 FROM pg_constraint k
+                      WHERE k.conrelid = c.oid AND k.contype = 'f' AND k.confrelid = 'mailboxes'::regclass AND k.confdeltype = 'c'
+                        AND (SELECT array_agg(a.attname::text ORDER BY a.attname) FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attnum = ANY (k.conkey))
+                            = ARRAY['account_id', 'user_id']) AS cascades
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public' AND c.relkind = 'r' AND EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'account_id')
        ORDER BY 1`,
     );
-    const rows = async () =>
-      Object.fromEntries(
-        await Promise.all(
-          tables.map(async ({ name }) => {
-            const { rows: counts } = await pg.query<{ user_id: number; n: number }>(`SELECT user_id, count(*)::int AS n FROM "${name}" GROUP BY user_id`);
-            return [name, Object.fromEntries(counts.map((r) => [r.user_id, r.n]))] as const;
-          }),
-        ),
-      );
-    const before = await rows();
-    expect(tables.length).toBeGreaterThan(10);
-    for (const { name } of tables) expect(Object.keys(before[name]!), name).toEqual([String(alpha), String(bravo)]);
+    expect(rows.length).toBeGreaterThan(10);
+    for (const row of rows) expect(row, row.name).toEqual({ name: row.name, cascades: true });
+  });
 
-    await raw(store.central).run('DELETE FROM users WHERE id = ?', alpha);
-    const after = await rows();
-    for (const { name } of tables) expect(after[name], name).toEqual({ [bravo]: before[name]![bravo] });
-    expect((await pg.query('SELECT id FROM users')).rows).toEqual([{ id: bravo }]);
+  it('goes with it when it is removed, with its sign-in, and nothing of another mailbox does', async () => {
+    const { store } = await onePerson('alpha@example.org', 'alpha@work.example.com');
+    const bravo = await connectAccount(store, 'bravo@example.net', '1', 0);
+    const alpha = await store.user(1);
+    await recordEverything(alpha, 'alpha@example.org');
+    await recordEverything(alpha, 'alpha@work.example.com');
+    await recordEverything(await store.user(bravo), 'bravo@example.net');
+    const before = await rowsBy('account_id');
+    expect(Object.keys(before).length).toBeGreaterThan(10);
+
+    expect(await removeMailbox(store, bravo, 'alpha@work.example.com')).toBe(false);
+    expect(await rowsBy('account_id')).toEqual(before);
+    expect(await removeMailbox(store, 1, 'alpha@work.example.com')).toBe(true);
+    const after = await rowsBy('account_id');
+    for (const [name, counts] of Object.entries(before)) {
+      const { ['alpha@work.example.com']: gone, ...rest } = counts;
+      expect(gone, name).toBeGreaterThan(0);
+      expect(after[name], name).toEqual(rest);
+    }
+    expect(await raw(alpha).all(`SELECT key FROM credentials WHERE kind = 'gmail' ORDER BY key`)).toEqual([{ key: 'alpha@example.org' }]);
+    expect(await connectedAddresses(store.central)).toEqual(['alpha@example.org', 'bravo@example.net']);
+  });
+});
+
+describe('a proposal', () => {
+  it('to stop checking a rule goes with the rule, and only that kind names one', async () => {
+    const { db } = await onePerson('alpha@example.org');
+    const rule = await addRule(db, 'alpha@example.org', { match: { from: 'news@example.com' }, whenLabel: 'newsletter' }, 'user', 0);
+    const propose = (kind: string, ruleId: string | null) =>
+      raw(db).run(
+        `INSERT INTO proposals (account_id, kind, match, label_id, rule_id, agreed, created_at) VALUES ('alpha@example.org', ?, ?, 'newsletter', ?, 1, 0)`,
+        kind,
+        JSON.stringify({ from: `${kind}@example.com` }),
+        ruleId,
+      );
+    await expect(propose('rule', rule)).rejects.toThrow();
+    await expect(propose('always', null)).rejects.toThrow();
+    await propose('always', rule);
+    await removeRule(db, rule);
+    expect(await raw(db).all('SELECT id FROM proposals')).toEqual([]);
+  });
+});
+
+describe('a new mailbox', () => {
+  it('starts with the default labels, once, and keeps them when connected again', async () => {
+    const { store, db } = await onePerson('alpha@example.org');
+    const ids = DEFAULT_LABELS.map((l) => l.id);
+    expect((await listLabels(db, 'alpha@example.org')).map((l) => l.id)).toEqual(ids);
+    await updateLabel(db, 'alpha@example.org', 'newsletter', { name: 'Reading' });
+    await connectAccount(store, 'alpha@example.org', '9', 5);
+    await addMailbox(db, 'alpha@example.org', '10', 6);
+    expect((await listLabels(db, 'alpha@example.org')).map((l) => l.name)).toContain('Reading');
+    // A store opened afresh puts back a mailbox missing from a person's database, labels and all.
+    await raw(db).run('DELETE FROM mailboxes');
+    expect(await listLabels(db, 'alpha@example.org')).toEqual([]);
+    const reopened = await storeOn(pglite(await superuser())).user(1);
+    expect((await listLabels(reopened, 'alpha@example.org')).map((l) => l.id)).toEqual(ids);
+  });
+
+  it('needs its labels to exist for anything that names one', async () => {
+    const { db } = await onePerson('alpha@example.org');
+    await recordSync(db, 'alpha@example.org', [facts({ accountId: 'alpha@example.org', messageId: 'm1' })], '2', 0);
+    await expect(
+      recordDecision(db, 'alpha@example.org', 'm1', { disposition: 'archive', subscription: 'preserve', stage: 'model', labelId: 'nonsense', reason: 'r' }),
+    ).rejects.toThrow();
+    await expect(
+      raw(db).run(
+        `INSERT INTO rules (id, account_id, position, match, when_label, source, created_at) VALUES ('r', 'alpha@example.org', 0, '{}', 'nonsense', 'user', 0)`,
+      ),
+    ).rejects.toThrow();
   });
 });
 
@@ -181,5 +209,33 @@ describe('the database in the home directory', () => {
     await expect(openStore(paths)).rejects.toThrow(`Another sift (process ${process.pid}) has the database open`);
     await first.close();
     await (await openStore(paths)).close();
+  });
+});
+
+describe('the role sift connects to a server as', () => {
+  it('is named when it could pass row-level security', async () => {
+    const pg = await superuser();
+    // In a transaction rolled back after, so the roles and table go with it.
+    const as = async (setup: string, role: string | null) =>
+      await pg.transaction(async (tx) => {
+        await tx.exec(setup);
+        if (role) await tx.exec(`SET LOCAL ROLE ${role}`);
+        const found = await roleBypass(async (text) => (await tx.query<Record<string, unknown>>(text)).rows);
+        await tx.rollback();
+        return found;
+      });
+    expect(await as('', 'sift_app')).toBeNull();
+    expect(await as('CREATE ROLE runner; GRANT sift_app TO runner', 'runner')).toBeNull();
+    expect(await as('', null)).toMatch(/^The database role \w+ is a superuser$/);
+    expect(await as('CREATE ROLE runner BYPASSRLS', 'runner')).toBe('The database role runner can bypass row-level security');
+    expect(await as('CREATE ROLE wide BYPASSRLS; CREATE ROLE runner; GRANT wide TO runner', 'runner')).toMatch(/runner can bypass/);
+    const owned = 'CREATE ROLE owner; CREATE TABLE held (x int); ALTER TABLE held ENABLE ROW LEVEL SECURITY; ALTER TABLE held OWNER TO owner';
+    expect(await as(`${owned}; CREATE ROLE runner; GRANT owner TO runner`, 'runner')).toBe("The database role runner can act as the tables' owner");
+  });
+
+  it('is warned about by the store, for whoever starts sift to be told', async () => {
+    const driver = pglite(await superuser());
+    expect(storeOn(driver).warning).toBeUndefined();
+    expect(storeOn({ ...driver, warning: 'The database role x is a superuser' }).warning).toBe('The database role x is a superuser');
   });
 });

@@ -8,8 +8,8 @@ import type { StageKey } from './api.ts';
 /** Tiers in cascade order, cheapest first. Each has a fixed ink (see index.css); mail no tier decided is highlighted. */
 export const TIERS: { key: StageKey; name: string; color: string }[] = [
   { key: 'rules', name: 'Rule', color: 'var(--tier-rules)' },
-  { key: 'classifier', name: 'Model', color: 'var(--tier-classifier)' },
-  { key: 'agent', name: 'Agent', color: 'var(--tier-agent)' },
+  { key: 'classifier', name: 'Classifier', color: 'var(--tier-classifier)' },
+  { key: 'model', name: 'Model', color: 'var(--tier-model)' },
   { key: 'fallback', name: 'Undecided', color: 'var(--tier-fallback)' },
 ];
 /** What became of the mail sift handled in a day, for Activity's chart, bottom to top. */
@@ -71,8 +71,8 @@ export const STATUS_NAMES: Record<Status, string> = {
   skipped: 'Skipped',
   failed: 'Failed',
 };
-export function status(d: { mode: string; outcome: string | null; actionStatus: string | null }): Status {
-  if (d.mode === 'observe') return 'suggested';
+export function status(d: { carryOut: boolean; outcome: string | null; actionStatus: string | null }): Status {
+  if (!d.carryOut) return 'suggested';
   if (d.actionStatus === 'undone') return 'undone';
   if (d.outcome === null || d.actionStatus === 'pending') return 'waiting';
   if (d.outcome === 'failed' || d.outcome === 'unknown' || d.actionStatus === 'failed' || d.actionStatus === 'unknown') return 'failed';
@@ -132,7 +132,7 @@ const DOING: Record<string, string> = { archive: 'archive', spam: 'mark spam', b
  * What happened to a message, as a log says it: "Archived", "Archive failed", "Waiting to archive". `tone`
  * says how to show it: a failure is red, an undone change is struck through, the rest are plain.
  */
-export function happened(d: { mode: string; outcome: string | null; actionStatus: string | null; disposition: string }): {
+export function happened(d: { carryOut: boolean; outcome: string | null; actionStatus: string | null; disposition: string }): {
   text: string;
   tone: 'plain' | 'failed' | 'undone' | 'quiet';
 } {

@@ -29,6 +29,7 @@ export async function run(args: string[]): Promise<void> {
   });
   const config = loadConfig();
   const store = await openStore(config);
+  if (store.warning) ui.warn(store.warning);
   try {
     const secrets = await checkSecrets(config, store, true);
     const log = (line: string) => ui.plain(`${paint.dim(new Date().toLocaleTimeString(undefined, { hour12: false }))}  ${line}`);
@@ -38,7 +39,10 @@ export async function run(args: string[]): Promise<void> {
     // Whether each person had sift on at the last pass, to say when they switch.
     const active = new Map<number, boolean>();
     const announce = async () => {
-      for (const user of await listUsers(store.central)) {
+      const users = await listUsers(store.central);
+      // Someone deleted since the last pass.
+      for (const map of [unreachable, active]) for (const id of map.keys()) if (!users.some((u) => u.id === id)) map.delete(id);
+      for (const user of users) {
         const db = await store.user(user.id);
         const on = (await preferences(db)).active;
         if (active.has(user.id) && active.get(user.id) !== on) log(`${(await listAccounts(db)).map((a) => a.email).join(', ')}: now ${on ? 'on' : 'off'}`);

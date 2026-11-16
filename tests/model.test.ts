@@ -37,7 +37,7 @@ describe('model stage', () => {
       subscription: 'unsubscribe',
       labelId: 'marketing',
       gmailLabel: 'sift/marketing',
-      stage: 'agent',
+      stage: 'model',
       confidence: 0.9,
       reason: 'Marketing: a sale announcement',
     });
@@ -195,14 +195,14 @@ describe('judge', () => {
 
 describe('preferences in the database', () => {
   async function seeded() {
-    const db = await openUserDb();
+    const db = await openUserDb(ACCOUNT);
     await addMailbox(db, ACCOUNT, '1', 0);
     return db;
   }
   const modelDecision = async (db: Awaited<ReturnType<typeof seeded>>, id: string, labelId: string, disposition: 'keep' | 'archive' | 'review') => {
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id })], '2');
     const runId = await startRun(db, { accountId: ACCOUNT, messageId: id, model: 'p/m', now: 0 });
-    await recordDecision(db, ACCOUNT, id, { disposition, subscription: 'preserve', stage: 'agent', labelId, reason: 'r' }, { runId });
+    await recordDecision(db, ACCOUNT, id, { disposition, subscription: 'preserve', stage: 'model', labelId, reason: 'r' }, { runId });
     return await proposeForSender(db, ACCOUNT, 'news@example.com');
   };
 
@@ -272,7 +272,7 @@ describe('preferences in the database', () => {
       await recordDecision(db, ACCOUNT, i % 2 ? 'a' : 'b', {
         disposition: 'archive',
         subscription: 'preserve',
-        stage: 'agent',
+        stage: 'model',
         labelId: 'newsletter',
         reason: 'r',
       });
@@ -318,7 +318,7 @@ describe('preferences in the database', () => {
       await recordDecision(db, ACCOUNT, id, {
         disposition: 'archive',
         subscription: 'preserve',
-        stage: 'agent',
+        stage: 'model',
         labelId: agreed ? 'newsletter' : 'transactional',
         priorRuleId: ruleId,
         ...(agreed ? { ruleId } : {}),
@@ -356,14 +356,14 @@ describe('preferences in the database', () => {
 
 describe('standing', () => {
   const db = async () => {
-    const d = await openUserDb();
+    const d = await openUserDb(ACCOUNT);
     await addMailbox(d, ACCOUNT, '1', 0);
     return d;
   };
   const mail = async (d: Awaited<ReturnType<typeof db>>, id: string, address: string, labelId: string | null, at = 1000) => {
     const domain = address.split('@')[1]!;
     await recordSync(d, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id, from: { address, domain }, receivedAt: at })], '2');
-    await recordDecision(d, ACCOUNT, id, { disposition: 'keep', subscription: 'preserve', stage: 'agent', ...(labelId ? { labelId } : {}), reason: 'r' });
+    await recordDecision(d, ACCOUNT, id, { disposition: 'keep', subscription: 'preserve', stage: 'model', ...(labelId ? { labelId } : {}), reason: 'r' });
   };
 
   it('is new until enough mail has come, then known, and says how consistent the mail is', async () => {
@@ -417,7 +417,7 @@ describe('standing', () => {
 
 describe('gatherEvidence', () => {
   it('caches whether the owner has written to a sender and counts history', async () => {
-    const db = await openUserDb();
+    const db = await openUserDb(ACCOUNT);
     await addMailbox(db, ACCOUNT, '1', 0);
     const f = facts({ accountId: ACCOUNT });
     await recordSync(db, ACCOUNT, [f], '2');
@@ -439,7 +439,7 @@ describe('gatherEvidence', () => {
   });
 
   it('reports unknown instead of failing when a lookup errors', async () => {
-    const db = await openUserDb();
+    const db = await openUserDb(ACCOUNT);
     await addMailbox(db, ACCOUNT, '1', 0);
     const fail = async () => {
       throw new Error('network');

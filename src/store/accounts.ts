@@ -1,4 +1,5 @@
-import { and, asc, eq, isNull, accounts, mailboxes, messages as messageRows, users } from './query.ts';
+import { and, asc, eq, isNull, accounts, credentials, labels, mailboxes, messages as messageRows, users } from './query.ts';
+import { defaultLabelRows } from './labels.ts';
 import type { Sql } from './sql.ts';
 import type { Store } from './store.ts';
 import { deriveFacts } from '../triage/facts.ts';
@@ -40,12 +41,55 @@ export async function connectAccount(store: Store, email: string, historyId: str
   return user;
 }
 
+/**
+ * A mailbox in one person's own database, with the starting labels, unless it is there already. Its
+ * `accounts` row must exist. Returns whether it was new.
+ */
+export async function ensureMailbox(db: Sql, mailbox: { id: string; historyId?: string | null; createdAt: number }): Promise<boolean> {
+  return await db.transaction(async (tx) => {
+    const added = await tx.insert(mailboxes).values(mailbox).onConflictDoNothing().returning({ id: mailboxes.id });
+    if (added.length > 0) await tx.insert(labels).values(defaultLabelRows(mailbox.id, mailbox.createdAt));
+    return added.length > 0;
+  });
+}
+
 /** A mailbox in one person's own database, or its cursor reset if it is there already. */
 export async function addMailbox(db: Sql, id: string, historyId: string, now: number = Date.now()): Promise<void> {
-  await db
-    .insert(mailboxes)
-    .values({ id, historyId, createdAt: now })
-    .onConflictDoUpdate({ target: [mailboxes.userId, mailboxes.id], set: { historyId } });
+  await db.transaction(async (tx) => {
+    if (!(await ensureMailbox(tx, { id, historyId, createdAt: now }))) await tx.update(mailboxes).set({ historyId }).where(eq(mailboxes.id, id));
+  });
+}
+
+/**
+ * Remove one of a person's mailboxes: its Gmail sign-in, then its account, which takes its mailbox and every
+ * row of it along. Revoking the sign-in at Google is the caller's, before this. Returns false if the mailbox
+ * is not theirs.
+ */
+export async function removeMailbox(store: Store, userId: number, email: string): Promise<boolean> {
+  const [theirs] = await store.central
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(and(eq(accounts.id, email), eq(accounts.userId, userId)));
+  if (!theirs) return false;
+  // The token first: a crash in between leaves a mailbox sift cannot read, not a token for one it no longer has.
+  await (await store.user(userId)).delete(credentials).where(and(eq(credentials.kind, 'gmail'), eq(credentials.key, email)));
+  await store.central.delete(accounts).where(and(eq(accounts.id, email), eq(accounts.userId, userId)));
+  return true;
+}
+
+/**
+ * Delete a person and everything of theirs, their sign-ins included. Revoking their Gmail sign-ins is the
+ * caller's, before this. When they owned the install, the earliest person left owns it; with nobody left,
+ * whoever signs in next does.
+ */
+export async function deleteUser(store: Store, userId: number): Promise<void> {
+  await store.central.transaction(async (tx) => {
+    const [gone] = await tx.delete(users).where(eq(users.id, userId)).returning({ owner: users.owner });
+    if (!gone?.owner) return;
+    const [next] = await tx.select({ id: users.id }).from(users).orderBy(asc(users.createdAt), asc(users.id)).limit(1);
+    if (next) await tx.update(users).set({ owner: true }).where(eq(users.id, next.id));
+  });
+  store.forget(userId);
 }
 
 /** The person an account belongs to, or null if it is not connected. */
@@ -96,7 +140,7 @@ export async function listAccounts(db: Sql): Promise<Account[]> {
   return rows.map((r) => ({ id: r.id, email: r.id, historyId: r.historyId }));
 }
 
-async function insertMessages(db: Sql, accountId: string, messages: readonly MessageFacts[], now: number, observeOnly: boolean): Promise<number> {
+async function insertMessages(db: Sql, accountId: string, messages: readonly MessageFacts[], now: number, suggestOnly: boolean): Promise<number> {
   if (messages.length === 0) return 0;
   const added = await db
     .insert(messageRows)
@@ -116,7 +160,7 @@ async function insertMessages(db: Sql, accountId: string, messages: readonly Mes
         headers: m.headers,
         labelIds: m.labelIds,
         syncedAt: now,
-        observeOnly,
+        suggestOnly,
         facts: deriveFacts(m),
       })),
     )

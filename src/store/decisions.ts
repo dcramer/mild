@@ -1,25 +1,23 @@
-import { type DECISION_MODES, type DECISION_OUTCOMES, and, asc, decisions, eq, isNull } from './query.ts';
+import { type DECISION_OUTCOMES, and, asc, decisions, eq, isNull } from './query.ts';
 import type { Sql } from './sql.ts';
 import type { Decision, Disposition } from '../triage/types.ts';
 
-type DecisionMode = (typeof DECISION_MODES)[number];
 type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
 
 /**
  * Append a decision to the log. Every triage outcome is recorded, including "leave it alone" and
  * "could not decide", so the log is a complete account of what sift did and what it cost.
  *
- * In `observe` mode (the default) the decision is final as recorded. In `act` mode it stays
- * unsettled until `settleDecision` records what happened in the mailbox.
+ * A suggestion (the default) is final as recorded. One to `carryOut` stays unsettled until
+ * `settleDecision` records what happened in the mailbox. `byUser`: it is the user's own answer.
  */
 export async function recordDecision(
   db: Sql,
   accountId: string,
   messageId: string,
   decision: Decision,
-  options: { mode?: DecisionMode; durationMs?: number; now?: number; byUser?: boolean; runId?: number } = {},
+  options: { carryOut?: boolean; durationMs?: number; now?: number; byUser?: boolean; runId?: number } = {},
 ): Promise<number> {
-  const mode = options.mode ?? 'observe';
   const [row] = await db
     .insert(decisions)
     .values({
@@ -35,8 +33,7 @@ export async function recordDecision(
       runId: options.runId ?? null,
       durationMs: options.durationMs ?? null,
       decidedAt: options.now ?? Date.now(),
-      mode,
-      outcome: mode === 'observe' ? 'observed' : null,
+      carryOut: options.carryOut ?? false,
       labelId: decision.labelId ?? null,
       block: decision.block ?? false,
       markRead: decision.markRead ?? false,
@@ -60,7 +57,7 @@ interface UnsettledDecision {
 }
 
 /**
- * `act` decisions that were recorded but not yet carried out (an answer waiting for the next pass, a crash,
+ * Decisions to carry out that were recorded but not yet carried out (an answer waiting for the next pass, a crash,
  * a provider error), oldest first. `byUserOnly` keeps only the user's own answers, which are carried out
  * even while sift is off.
  */
@@ -77,8 +74,8 @@ export async function listUnsettledDecisions(db: Sql, accountId: string, options
     .where(
       and(
         eq(decisions.accountId, accountId),
+        eq(decisions.carryOut, true),
         isNull(decisions.outcome),
-        eq(decisions.mode, 'act'),
         options.byUserOnly ? eq(decisions.byUser, true) : undefined,
       ),
     )

@@ -47,7 +47,6 @@ const COLUMNS = {
 
 const fromRow = ({
   messageId,
-  originalLabels,
   ...r
 }: {
   id: number;
@@ -55,12 +54,12 @@ const fromRow = ({
   messageId: string | null;
   type: ActionType;
   payload: ActionPayload;
-  originalLabels: string[] | null;
+  originalLabels: string[];
   finalLabels: string[] | null;
   status: ActionStatus;
   error: string | null;
   createdAt: number;
-}): ActionRecord => ({ ...r, messageId: messageId!, originalLabels: originalLabels! });
+}): ActionRecord => ({ ...r, messageId: messageId! });
 
 /** Write the intent before touching the provider. Returns the action id. */
 export async function insertPendingAction(
@@ -136,12 +135,14 @@ export async function unsubscribedAt(db: Sql, accountId: string, sender: string)
   return row!.at;
 }
 
-/** When an unsubscribe request to this sender last failed, or null. */
+/** When an unsubscribe request to this sender last failed or was cut short, or null. */
 export async function lastUnsubscribeFailure(db: Sql, accountId: string, sender: string): Promise<number | null> {
   const [row] = await db
     .select({ at: max(actions.createdAt) })
     .from(actions)
     .innerJoin(messages, and(eq(messages.accountId, actions.accountId), eq(messages.id, actions.messageId)))
-    .where(and(eq(actions.accountId, accountId), eq(actions.type, 'unsubscribe'), eq(actions.status, 'failed'), eq(messages.fromAddress, sender)));
+    .where(
+      and(eq(actions.accountId, accountId), eq(actions.type, 'unsubscribe'), inArray(actions.status, ['failed', 'unknown']), eq(messages.fromAddress, sender)),
+    );
   return row!.at;
 }

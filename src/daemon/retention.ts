@@ -1,5 +1,4 @@
 import type { Sql } from '../store/sql.ts';
-import { pendingSuggestions } from '../learn/feedback.ts';
 import { outOfTries } from '../store/runs.ts';
 import {
   actions,
@@ -32,22 +31,23 @@ export const RETENTION_DAYS = 365;
 export const PRUNE_PER_RUN = 5000;
 
 /**
- * Forget messages nothing has happened to for `RETENTION_DAYS`, with their decisions and changes. A message is
- * kept, however old, while anything still depends on its record:
+ * Forget messages nothing has happened to for `RETENTION_DAYS`, with their decisions, changes, model calls
+ * and answers. A message is kept, however old, while anything still depends on its record:
  *
- * - it is a suggestion waiting on the user, or is waiting in the queue to be decided (mail the model ran out
- *   of tries on is not waiting, and goes like the rest);
- * - the user answered for it (`feedback`, `examples`): that is what sift learned from;
+ * - it is waiting in the queue to be decided (mail the model ran out of tries on is not waiting, and goes
+ *   like the rest);
+ * - its example is kept: what the user answered, with the message it was about;
  * - a decision for it has not been carried out, or a change to it was never confirmed;
  * - sift unsubscribed through it, which is how it knows not to ask that sender again;
- * - any decision, change or model call for it is newer than the cutoff, so a recent change can still be undone.
+ * - any decision, change or model call for it is newer than the cutoff, so a recent change can still be
+ *   undone. A suggestion still waiting on the user is spared this long, and no longer.
  *
  * Returns how many messages went. `PRUNE_PER_RUN` means there may be more.
  */
 export async function pruneOld(db: Sql, now: number = Date.now()): Promise<number> {
   const cutoff = now - RETENTION_DAYS * 86_400_000;
   const decided = and(eq(decisions.accountId, messages.accountId), eq(decisions.messageId, messages.id));
-  const old = await db
+  const going = await db
     .select({ accountId: messages.accountId, id: messages.id })
     .from(messages)
     .where(
@@ -76,7 +76,7 @@ export async function pruneOld(db: Sql, now: number = Date.now()): Promise<numbe
             db
               .select({ one: sql`1` })
               .from(decisions)
-              .where(and(decided, or(gte(decisions.decidedAt, cutoff), isNull(decisions.outcome)))),
+              .where(and(decided, or(gte(decisions.decidedAt, cutoff), and(eq(decisions.carryOut, true), isNull(decisions.outcome))))),
           ),
         ),
         not(
@@ -105,27 +105,21 @@ export async function pruneOld(db: Sql, now: number = Date.now()): Promise<numbe
               .where(and(eq(examples.accountId, messages.accountId), eq(examples.messageId, messages.id))),
           ),
         ),
-        not(
-          exists(
-            db
-              .select({ one: sql`1` })
-              .from(feedback)
-              .where(and(eq(feedback.accountId, messages.accountId), eq(feedback.messageId, messages.id))),
-          ),
-        ),
       ),
     )
-    .orderBy(asc(messages.receivedAt));
-  if (old.length === 0) return 0;
-
-  const key = (accountId: string, messageId: string) => `${accountId}\n${messageId}`;
-  const waiting = new Set((await pendingSuggestions(db, { limit: Number.MAX_SAFE_INTEGER })).map((s) => key(s.accountId, s.messageId)));
-  const going = old.filter((m) => !waiting.has(key(m.accountId, m.id))).slice(0, PRUNE_PER_RUN);
+    .orderBy(asc(messages.receivedAt))
+    .limit(PRUNE_PER_RUN);
+  if (going.length === 0) return 0;
 
   await db.transaction(async (tx) => {
     for (const m of going) {
-      for (const table of [suggestionBodies, actions, decisions, modelRuns])
-        await tx.delete(table).where(and(eq(table.accountId, m.accountId), eq(table.messageId, m.id)));
+      const of = (t: typeof suggestionBodies | typeof actions | typeof decisions | typeof modelRuns) =>
+        and(eq(t.accountId, m.accountId), eq(t.messageId, m.id));
+      await tx.delete(suggestionBodies).where(of(suggestionBodies));
+      await tx.delete(actions).where(of(actions));
+      await tx.delete(feedback).where(inArray(feedback.decisionId, tx.select({ id: decisions.id }).from(decisions).where(of(decisions))));
+      await tx.delete(decisions).where(of(decisions));
+      await tx.delete(modelRuns).where(of(modelRuns));
       await tx.delete(messages).where(and(eq(messages.accountId, m.accountId), eq(messages.id, m.id)));
     }
   });

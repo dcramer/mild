@@ -4,7 +4,7 @@ import type { Sql } from './sql.ts';
 import type { Rule, RuleMatch } from '../triage/stages/rules.ts';
 import { listLabels } from './labels.ts';
 
-/** `user`: the user wrote it. `correction`: it came from the user correcting sift. `agent`: sift learned it. */
+/** `user`: the user wrote it. `correction`: it came from the user correcting sift. `learned`: sift made it when it blocked the sender. */
 type RuleSource = (typeof RULE_SOURCES)[number];
 
 interface StoredRule extends Rule {
@@ -41,7 +41,7 @@ export async function listRules(db: Sql, accountId: string): Promise<StoredRule[
     subscription: r.subscription,
     ...(r.markRead ? { markRead: true } : {}),
     ...(r.condition ? { when: r.condition } : {}),
-    ...(r.source === 'agent' ? { learned: true } : {}),
+    ...(r.source === 'learned' ? { learned: true } : {}),
     source: r.source,
     hits: r.hits,
   }));
@@ -51,19 +51,19 @@ export async function listRules(db: Sql, accountId: string): Promise<StoredRule[
 export type RuleSays = Pick<Rule, 'labelId' | 'whenLabel' | 'disposition' | 'subscription' | 'markRead' | 'when'>;
 
 /** Throws, with a sentence for the user, unless `rule` says something sift can act on with the account's labels. */
-async function check(db: Sql, accountId: string, rule: RuleSays, now: number): Promise<void> {
+async function check(db: Sql, accountId: string, rule: RuleSays): Promise<void> {
   if (rule.labelId === undefined && rule.whenLabel === undefined && rule.disposition === undefined)
     throw new Error('A rule needs a label, an action, or both.');
   if (rule.labelId !== undefined && rule.whenLabel !== undefined) throw new Error('A rule either says what mail is or waits for a label, not both.');
   if (rule.when?.trim() && rule.labelId === undefined) throw new Error('A condition in your own words needs a label for the mail it describes.');
   const named = rule.labelId ?? rule.whenLabel;
-  if (named !== undefined && !(await listLabels(db, accountId, now)).some((l) => l.id === named)) throw new Error(`There is no label "${named}".`);
+  if (named !== undefined && !(await listLabels(db, accountId)).some((l) => l.id === named)) throw new Error(`There is no label "${named}".`);
 }
 
 /** Append a rule after the account's existing ones. Returns its id. Throws if it has no condition, says nothing, or names no label of the account's. */
 export async function addRule(db: Sql, accountId: string, rule: Omit<Rule, 'id' | 'learned'>, source: RuleSource, now: number = Date.now()): Promise<string> {
   if (Object.values(rule.match).every((v) => v === undefined || v === '')) throw new Error('A rule needs at least one condition.');
-  await check(db, accountId, rule, now);
+  await check(db, accountId, rule);
   const id = `r-${randomBytes(4).toString('hex')}`;
   const [{ next }] = (await db
     .select({ next: sql<number>`coalesce(max(${rules.position}), 0) + 1`.mapWith(Number) })
@@ -141,7 +141,7 @@ export async function setRule(db: Sql, accountId: string, match: RuleMatch, rule
     .where(and(eq(proposals.accountId, accountId), eq(proposals.match, match), eq(proposals.status, 'open')));
   const existing = await ruleMatching(db, accountId, match, rule.whenLabel ?? null);
   if (!existing) return await addRule(db, accountId, { match, ...rule }, source, now);
-  await check(db, accountId, rule, now);
+  await check(db, accountId, rule);
   await db
     .update(rules)
     .set({
@@ -162,7 +162,7 @@ export async function setRule(db: Sql, accountId: string, match: RuleMatch, rule
  */
 export async function blockSender(db: Sql, accountId: string, address: string, labelId: string, now: number = Date.now()): Promise<boolean> {
   if (await ruleMatching(db, accountId, { from: address })) return false;
-  await addRule(db, accountId, { match: { from: address }, labelId }, 'agent', now);
+  await addRule(db, accountId, { match: { from: address }, labelId }, 'learned', now);
   return true;
 }
 

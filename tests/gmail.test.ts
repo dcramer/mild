@@ -69,9 +69,6 @@ function fakeApi(fake: Fake): GmailApi & { calls: string[] } {
     async getThread() {
       return null;
     },
-    async getRaw() {
-      return null;
-    },
   };
 }
 
@@ -192,7 +189,7 @@ const page = (ids: string[], historyId: string): Record<string, HistoryPage> => 
 
 describe('syncAccount', () => {
   it('records new inbox mail and advances the cursor', async () => {
-    const db = await openUserDb();
+    const db = await openUserDb('me@example.org');
     await addMailbox(db, 'me@example.org', '500', 0);
     const api = fakeApi({
       pages: page(['a', 'archived', 'gone', 'nosender'], '520'),
@@ -207,7 +204,7 @@ describe('syncAccount', () => {
   });
 
   it('does not report a redelivered message as new', async () => {
-    const db = await openUserDb();
+    const db = await openUserDb('me@example.org');
     await addMailbox(db, 'me@example.org', '500', 0);
     const fake = { pages: page(['a'], '520'), messages: { a: gmailMessage('a') } };
     await syncAccount(db, fakeApi(fake), (await listAccounts(db))[0]!);
@@ -217,7 +214,7 @@ describe('syncAccount', () => {
   });
 
   it('records every page of a busy day in one pass and leaves the cursor alone if a later page fails', async () => {
-    const db = await openUserDb();
+    const db = await openUserDb('me@example.org');
     await addMailbox(db, 'me@example.org', '500', 0);
     const pages: Record<string, HistoryPage> = {
       '': { additions: [{ id: 'a', labelIds: ['INBOX'] }], historyId: '510', nextPageToken: 'p2' },
@@ -235,7 +232,7 @@ describe('syncAccount', () => {
   });
 
   it('after an expired cursor, records what the search finds, skips what it already had, and carries on from the new cursor', async () => {
-    const db = await openUserDb();
+    const db = await openUserDb('me@example.org');
     await addMailbox(db, 'me@example.org', '500', 0);
     const messages = { a: gmailMessage('a'), b: gmailMessage('b'), c: gmailMessage('c') };
     await syncAccount(db, fakeApi({ pages: page(['a'], '520'), messages }), (await listAccounts(db))[0]!);
@@ -255,7 +252,7 @@ describe('syncAccount', () => {
   });
 
   it('leaves the cursor alone when the search after an expired cursor fails', async () => {
-    const db = await openUserDb();
+    const db = await openUserDb('me@example.org');
     await addMailbox(db, 'me@example.org', '500', 0);
     const api = fakeApi({ expired: true, historyId: '900' });
     api.searchInbox = async () => {
@@ -266,7 +263,7 @@ describe('syncAccount', () => {
   });
 
   it('records that the user opened a message, once, whichever page or pass says so', async () => {
-    const db = await openUserDb();
+    const db = await openUserDb('me@example.org');
     await addMailbox(db, 'me@example.org', '500', 0);
     const messages = { a: gmailMessage('a'), b: gmailMessage('b', { labelIds: ['INBOX'] }) };
     await syncAccount(db, fakeApi({ pages: page(['a'], '510'), messages }), (await listAccounts(db))[0]!, () => 1000);
@@ -300,7 +297,7 @@ describe('syncAccount', () => {
   });
 
   it('learns nothing about reading from a search after an expired cursor', async () => {
-    const db = await openUserDb();
+    const db = await openUserDb('me@example.org');
     await addMailbox(db, 'me@example.org', '500', 0);
     const api = fakeApi({ expired: true, search: ['a'], messages: { a: gmailMessage('a', { labelIds: ['INBOX'] }) } });
     await syncAccount(db, api, (await listAccounts(db))[0]!);
@@ -308,7 +305,7 @@ describe('syncAccount', () => {
   });
 
   it('leaves the cursor alone when a fetch fails', async () => {
-    const db = await openUserDb();
+    const db = await openUserDb('me@example.org');
     await addMailbox(db, 'me@example.org', '500', 0);
     const api = fakeApi({ pages: page(['a'], '520') });
     api.getMetadata = async () => {

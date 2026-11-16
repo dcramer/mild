@@ -69,7 +69,7 @@ async function seededStore(): Promise<{ store: Store; db: Sql }> {
     db,
     ACCOUNT,
     'c',
-    { ...base, disposition: 'review', stage: 'agent', confidence: 0.4 },
+    { ...base, disposition: 'review', stage: 'model', confidence: 0.4 },
     { now: NOW - 2 * DAY, durationMs: 1500, runId: await judged('c', 0.02) },
   );
   // A call that failed costs too, and decided nothing.
@@ -81,7 +81,7 @@ const seeded = async () => (await seededStore()).db;
 
 describe('tracking', () => {
   it('stores the subject and triage headers with each message, and never a body', async () => {
-    const db = await openUserDb();
+    const db = await openUserDb(ACCOUNT);
     await addMailbox(db, ACCOUNT, '1', 0);
     await recordSync(
       db,
@@ -109,7 +109,7 @@ describe('tracking', () => {
       `SELECT d.stage, d.disposition, r.model, r.cost_usd, r.input_tokens, d.duration_ms FROM decisions d LEFT JOIN model_runs r ON r.id = d.run_id WHERE d.message_id = 'c' ORDER BY d.id`,
     );
     expect(rows).toEqual([
-      { stage: 'agent', disposition: 'review', model: 'test-model', cost_usd: 0.02, input_tokens: 900, duration_ms: 1500 },
+      { stage: 'model', disposition: 'review', model: 'test-model', cost_usd: 0.02, input_tokens: 900, duration_ms: 1500 },
       { stage: 'rules', disposition: 'keep', model: null, cost_usd: null, input_tokens: null, duration_ms: null },
     ]);
   });
@@ -140,7 +140,7 @@ describe('tracking', () => {
   it('groups decisions by where they got to, and shows the mailbox change rather than an unsubscribe', async () => {
     const db = await seeded();
     const base = { subscription: 'preserve', reason: 'test', stage: 'rules' } as const;
-    const done = await recordDecision(db, ACCOUNT, 'a', { ...base, disposition: 'archive' }, { mode: 'act', now: NOW });
+    const done = await recordDecision(db, ACCOUNT, 'a', { ...base, disposition: 'archive' }, { carryOut: true, now: NOW });
     const archived = await insertPendingAction(
       db,
       { accountId: ACCOUNT, messageId: 'a', type: 'archive', payload: { add: [], remove: ['INBOX'] }, originalLabels: ['INBOX'], decisionId: done },
@@ -154,7 +154,7 @@ describe('tracking', () => {
     );
     await finishAction(db, unsubscribed, 'done', null, null, NOW);
     await settleDecision(db, done, 'done');
-    const failed = await recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'archive' }, { mode: 'act', now: NOW });
+    const failed = await recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'archive' }, { carryOut: true, now: NOW });
     await settleDecision(db, failed, 'failed', 'Gmail answered 503');
     const ids = async (status: string) => (await listDecisions(db, await everything(db), { days: 7, status }, NOW)).rows.map((r) => r.id);
 
@@ -175,7 +175,7 @@ describe('tracking', () => {
     expect(await ids('changed')).toEqual([failed, done]);
 
     // An answer waiting for the next pass is not a failure, but it is shown among the changes.
-    const answer = await recordDecision(db, ACCOUNT, 'c', { ...base, disposition: 'archive' }, { mode: 'act', byUser: true, now: NOW });
+    const answer = await recordDecision(db, ACCOUNT, 'c', { ...base, disposition: 'archive' }, { carryOut: true, byUser: true, now: NOW });
     expect(await ids('trouble')).toEqual([failed]);
     expect(await ids('changed')).toEqual([answer, failed, done]);
 
@@ -193,10 +193,10 @@ describe('tracking', () => {
     expect(summary.byStage.map((s) => [s.stage, s.decisions])).toEqual([
       ['rules', 1],
       ['classifier', 1],
-      ['agent', 1],
+      ['model', 1],
       ['fallback', 0],
     ]);
-    expect(summary.byStage.find((s) => s.stage === 'agent')).toMatchObject({ costUsd: 0.02, tokens: 1000 });
+    expect(summary.byStage.find((s) => s.stage === 'model')).toMatchObject({ costUsd: 0.02, tokens: 1000 });
     expect(summary.byDisposition).toEqual([
       { disposition: 'archive', decisions: 2 },
       { disposition: 'review', decisions: 1 },
@@ -208,14 +208,14 @@ describe('tracking', () => {
     const db = await seeded();
     const base = { subscription: 'preserve', reason: 'test' } as const;
     // The user answers 'a' and 'c'; a label change decides 'b' again.
-    await recordDecision(db, ACCOUNT, 'a', { ...base, disposition: 'keep', stage: 'rules' }, { mode: 'act', byUser: true, now: NOW });
-    await recordDecision(db, ACCOUNT, 'c', { ...base, disposition: 'archive', stage: 'rules' }, { mode: 'act', byUser: true, now: NOW });
+    await recordDecision(db, ACCOUNT, 'a', { ...base, disposition: 'keep', stage: 'rules' }, { carryOut: true, byUser: true, now: NOW });
+    await recordDecision(db, ACCOUNT, 'c', { ...base, disposition: 'archive', stage: 'rules' }, { carryOut: true, byUser: true, now: NOW });
     await recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'keep', stage: 'classifier' }, { now: NOW });
     // A message the model could not judge, answered by the user: no model decided it, but neither did sift.
     await recordSync(db, ACCOUNT, [facts({ messageId: 'failed', receivedAt: NOW })], '3', NOW);
     await modelRun(db, 'failed', 0.005, 'failed');
     await modelRun(db, 'failed', 0.005, 'failed');
-    await recordDecision(db, ACCOUNT, 'failed', { ...base, disposition: 'archive', stage: 'rules' }, { mode: 'act', byUser: true, now: NOW });
+    await recordDecision(db, ACCOUNT, 'failed', { ...base, disposition: 'archive', stage: 'rules' }, { carryOut: true, byUser: true, now: NOW });
 
     const summary = await summarize(db, await everything(db), 7, NOW);
     expect(summary.totals).toMatchObject({ decided: 3, withoutInference: 2, judged: 3, costUsd: expect.closeTo(0.04) });
@@ -228,13 +228,13 @@ describe('tracking', () => {
     const { daily } = await summarize(db, await everything(db), 7, NOW);
     expect(daily).toHaveLength(7);
     expect(daily.reduce((sum, d) => sum + Object.values(d.counts).reduce((a, b) => a + b, 0), 0)).toBe(3);
-    expect(daily.at(-1)?.counts).toEqual({ rules: 0, classifier: 0, agent: 0, fallback: 0 });
+    expect(daily.at(-1)?.counts).toEqual({ rules: 0, classifier: 0, model: 0, fallback: 0 });
   });
 
   it('says per day what was done in Gmail, what failed, and what the model cost', async () => {
     const db = await seeded();
     const base = { subscription: 'preserve', reason: 'test', stage: 'rules' } as const;
-    const archived = await recordDecision(db, ACCOUNT, 'a', { ...base, disposition: 'archive' }, { mode: 'act', now: NOW });
+    const archived = await recordDecision(db, ACCOUNT, 'a', { ...base, disposition: 'archive' }, { carryOut: true, now: NOW });
     const change = await insertPendingAction(
       db,
       { accountId: ACCOUNT, messageId: 'a', type: 'archive', payload: { add: [], remove: ['INBOX'] }, originalLabels: ['INBOX'], decisionId: archived },
@@ -244,7 +244,7 @@ describe('tracking', () => {
     await settleDecision(db, archived, 'done');
     await settleDecision(
       db,
-      await recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'spam' }, { mode: 'act', now: NOW }),
+      await recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'spam' }, { carryOut: true, now: NOW }),
       'failed',
       'Gmail answered 503',
     );
@@ -416,7 +416,7 @@ describe('dashboard server', () => {
     const base = await start();
     type Page = { total: number; rows: { id: number; messageId: string; subject: string }[] };
     expect((await get<Page>(`${base}/api/decisions?days=7`)).rows.map((r) => r.id)).toEqual([3, 2, 1]);
-    expect((await get<Page>(`${base}/api/decisions?days=7&stage=agent`)).rows.map((r) => r.messageId)).toEqual(['c']);
+    expect((await get<Page>(`${base}/api/decisions?days=7&stage=model`)).rows.map((r) => r.messageId)).toEqual(['c']);
     expect((await get<Page>(`${base}/api/decisions?days=7&disposition=archive`)).total).toBe(2);
     expect((await get<Page>(`${base}/api/decisions?days=7&q=EXAMPLE+news`)).rows.map((r) => r.messageId)).toEqual(['a']);
     expect((await get<Page>(`${base}/api/decisions?days=7&q=${encodeURIComponent('%')}`)).total).toBe(0);
@@ -433,7 +433,7 @@ describe('dashboard server', () => {
       `${base}/api/message?account=${encodeURIComponent(ACCOUNT)}&id=c`,
     );
     expect(detail.subject).toBe('<img src=x onerror=alert(1)>');
-    expect(detail.decisions).toMatchObject([{ stage: 'agent', inputTokens: 900, durationMs: 1500 }]);
+    expect(detail.decisions).toMatchObject([{ stage: 'model', inputTokens: 900, durationMs: 1500 }]);
     expect(detail.actions).toEqual([]);
     expect((await fetch(`${base}/api/message?account=${encodeURIComponent(ACCOUNT)}&id=nope`)).status).toBe(404);
   });
@@ -456,7 +456,6 @@ describe('dashboard server', () => {
         unsubscribe: true,
         kind: 'label',
         whenLabel: null,
-        labelGone: false,
         when: null,
         source: 'user',
         hits: 0,

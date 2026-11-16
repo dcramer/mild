@@ -1,5 +1,6 @@
 import { type actions, type decisions, eq, type proposals, type rules } from '../../store/query.ts';
 import { z } from 'zod';
+import type { Person } from '../../store/people.ts';
 import type { Sql } from '../../store/sql.ts';
 import { DECIDED } from '../../triage/types.ts';
 import { text } from '../types.ts';
@@ -14,6 +15,10 @@ export interface Context {
   db: Sql;
   /** Another person's database, for a view that merges several: refused unless whoever asked may read it. */
   open: (id: number) => Promise<Sql>;
+  /** Whoever asked; null with nobody signed in. */
+  person: Person | null;
+  /** The mailbox their session is for; null without sign-in (tests, tools). */
+  signedInAs: string | null;
   /** Absent when the page can look but not manage. */
   controls: Controls | undefined;
   now: () => number;
@@ -56,6 +61,8 @@ export interface Write<B extends z.ZodType = z.ZodType, R extends z.ZodType = z.
   reply: R;
   touches(ctx: Context, body: z.output<B>): Touches | Promise<Touches>;
   run(ctx: Context, body: z.output<B>, scope: Scope): z.input<R> | null | Promise<z.input<R> | null>;
+  /** The reply means the session has ended: the server clears its cookie. */
+  endsSession?(reply: z.output<R>): boolean;
 }
 
 /** A read, with its query and reply typed from its schemas. */

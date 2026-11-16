@@ -6,7 +6,7 @@
 import { z } from 'zod';
 import { DECIDED } from '../triage/types.ts';
 
-export const STAGES = ['rules', 'classifier', 'agent', 'fallback'] as const;
+export const STAGES = ['rules', 'classifier', 'model', 'fallback'] as const;
 export type StageKey = (typeof STAGES)[number];
 const stage = z.enum(STAGES);
 
@@ -35,7 +35,7 @@ export const DecisionRow = z.object({
   decidedAt: z.number(),
   stage,
   disposition: z.string(),
-  /** What sift said the mail is, or null if it could not place it. The name is null if that label has since gone. */
+  /** What sift said the mail is, or null if it could not place it. */
   labelId: z.string().nullable(),
   labelName: z.string().nullable(),
   gmailLabel: z.string().nullable(),
@@ -48,9 +48,9 @@ export const DecisionRow = z.object({
   fromAddress: z.string(),
   fromName: z.string().nullable(),
   subject: z.string(),
-  /** `observe`: recorded only. `act`: meant to be carried out. */
-  mode: z.string(),
-  /** Null while an `act` decision is still waiting to be carried out. */
+  /** To be carried out in Gmail. Otherwise a suggestion, recorded only. */
+  carryOut: z.boolean(),
+  /** Null for a suggestion, and while a decision to carry out is waiting for a pass. */
   outcome: z.string().nullable(),
   outcomeDetail: z.string().nullable(),
   actionId: z.number().nullable(),
@@ -96,8 +96,8 @@ export const Summary = z.object({
     right: z.number(),
     /** Every tier, in cascade order. */
     byStage: z.array(z.object({ stage, reviewed: z.number(), right: z.number() })),
-    /** Per label sift gave, most answers first. The name is null if the label has gone. */
-    byLabel: z.array(z.object({ labelId: z.string(), labelName: z.string().nullable(), reviewed: z.number(), right: z.number() })),
+    /** Per label sift gave, most answers first. */
+    byLabel: z.array(z.object({ labelId: z.string(), labelName: z.string(), reviewed: z.number(), right: z.number() })),
     /** What sift called one label when the user said another, commonest first. */
     confusion: z.array(z.object({ suggested: z.string(), correct: z.string(), count: z.number() })),
   }),
@@ -296,10 +296,8 @@ export const RuleSummary = z.object({
   kind: ruleKind,
   labelId: z.string().nullable(),
   whenLabel: z.string().nullable(),
-  /** The name of the label the rule names or waits for. Null for an `action` rule, and when that label has been removed. */
+  /** The name of the label the rule names or waits for. Null for an `action` rule. */
   labelName: z.string().nullable(),
-  /** The label the rule names or waits for has been removed; the rule then does nothing. */
-  labelGone: z.boolean(),
   /** The rule's own action. For a `label` rule it is an exception to the label's. */
   override: z.string().nullable(),
   /** What happens to mail the rule decides: its own action, else its label's. */
@@ -309,7 +307,7 @@ export const RuleSummary = z.object({
   unsubscribe: z.boolean(),
   /** A plain-language condition only the model can apply. */
   when: z.string().nullable(),
-  /** `user`: written by the user. `correction`: made by correcting sift. `agent`: made by sift when it blocked the sender. */
+  /** `user`: written by the user. `correction`: made by correcting sift. `learned`: made by sift when it blocked the sender. */
   source: z.string(),
   hits: z.number(),
   lastHitAt: z.number().nullable(),
@@ -597,6 +595,8 @@ export const EvalDetail = z.object({
       expected: z.string(),
       /** A label id, `unsure`, or null when the call failed. */
       got: z.string().nullable(),
+      /** Why the call failed: its status and kind. */
+      error: z.string().nullable(),
       confidence: z.number().nullable(),
       inputTokens: z.number(),
       outputTokens: z.number(),
@@ -641,3 +641,12 @@ export const Examples = z.object({
   held: z.record(z.string(), z.number()),
 });
 export type Examples = z.infer<typeof Examples>;
+
+/** What POST /api/mailbox/remove and /api/account/delete answer. */
+export const Removed = z.object({
+  /** Mailboxes whose access Google could not be reached to revoke. Removed all the same. */
+  notRevoked: z.array(z.string()),
+  /** Their session has ended. */
+  signedOut: z.boolean(),
+});
+export type Removed = z.infer<typeof Removed>;

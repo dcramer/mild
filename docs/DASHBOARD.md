@@ -13,17 +13,17 @@ Signing in with Google is what connects a Gmail account, and only someone signed
 
 ## Screens
 
-- **Suggestions,** the home page: how sift is doing (how much it decided without a model, how often it was right, what the model cost, decisions per day by tier), the rules it proposes, then one row per sender for what sift would do. Agree in one press, or open the row to read the mail, see what sift knows about the sender, and choose how far your answer reaches (the sender, their domain, only when the subject contains something, or just this mail). Each message you answer for is stored whole, as an example to test and train sift with.
+- **Suggestions,** the home page: how sift is doing (how much it decided without a model, how often it was right, what the model cost, decisions per day by tier), the rules it proposes, then one row per sender for what sift would do. Agree in one press, or open the row to read the mail, see what sift knows about the sender, and choose how far your answer reaches (the sender, their domain, only when the subject contains something, or just this mail). The text of each message you answer for is stored, as an example to test and train sift with.
 - **Activity:** every decision, searchable by subject or sender and filterable by where it got to (suggested, done, undone, needs a look), what sift did and which tier decided. Undo what sift changed in Gmail from the row; open it for that message's whole history, with each decision's reason and cost and each mailbox change.
 - **Labels:** what mail can be, and what sift does with each. Open one to change it; add your own.
 - **Rules:** what mail is, without asking a model. Add and remove them; see how often and how recently each matched. When the model has given a sender's mail the same label five times running, sift proposes the rule on Suggestions.
-- **Settings:** whether sift is on (changes your Gmail) or off (only suggests), the model and what it has cost, the connected accounts, and pulling in older mail to teach with. Changes apply to the running sift straight away.
+- **Settings:** whether sift is on (changes your Gmail) or off (only suggests), the model and what it has cost, the connected accounts, and pulling in older mail to teach with. Changes apply to the running sift straight away. Removing a mailbox, or deleting your account, is confirmed by typing the address: sift revokes its access at Google and deletes everything it recorded about that mail. Your last mailbox is how you sign in, so removing it deletes your account.
 
 A sender's name anywhere is a link to their page: where they stand and why, what sift knows about them, the standing you give them, and all their mail.
 
 ## What sift leaves in Gmail
 
-Mail sift acts on gets its label (`sift/newsletters`) and, if sift moved it, a second one for what sift did (`sift/did/archived`, `sift/did/spam`). Mail it could not place gets `sift/review` and stays in the inbox. So everything sift touched can be found in Gmail itself.
+Mail sift acts on gets its label (`sift/newsletters`) and, if sift moved it, a second one for what sift did (`sift/did/archived`, `sift/did/spam`). Mail it could not place gets `sift/review` and stays in the inbox. So everything sift touched can be found in Gmail itself. Removing a mailbox from sift leaves these labels, and the filters it wrote; delete the filters in Gmail's settings if you no longer want them.
 
 ## Working on the page
 

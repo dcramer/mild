@@ -83,14 +83,12 @@ export interface GmailApi {
   getLabelIds(messageId: string): Promise<string[] | null>;
   /** Every label in the account with its name, to tell which label an id in history is. */
   listLabels(): Promise<{ id: string; name: string }[]>;
-  /** The message's readable text, truncated; null when the message no longer exists. Does not mark it read. Never stored. */
+  /** The message's readable text, truncated; null when the message no longer exists. Does not mark it read. */
   getBodyText(messageId: string): Promise<string | null>;
   /** The same text with the facts only the whole message shows (attachments, tracking); null when the message no longer exists. Does not mark it read. */
   getContent(messageId: string): Promise<MessageContent | null>;
   /** A thread's messages, oldest first, with their labels and nothing else. Null when the thread no longer exists. */
   getThread(threadId: string): Promise<{ id: string; labelIds: string[] }[] | null>;
-  /** The whole message as received (RFC 822); null when it no longer exists. Does not mark it read. */
-  getRaw(messageId: string): Promise<Buffer | null>;
 }
 
 export const isNotFound = (error: unknown) => {
@@ -181,16 +179,6 @@ export function createGmailApi(auth: OAuth2Client): GmailApi {
           .filter((m) => typeof m.id === 'string')
           .toSorted((a, b) => Number(a.internalDate ?? 0) - Number(b.internalDate ?? 0))
           .map((m) => ({ id: m.id as string, labelIds: m.labelIds ?? [] }));
-      } catch (error) {
-        if (isNotFound(error)) return null;
-        throw error;
-      }
-    },
-
-    async getRaw(messageId) {
-      try {
-        const { data } = await client.users.messages.get({ userId, id: messageId, format: 'raw' });
-        return data.raw ? Buffer.from(data.raw, 'base64url') : null;
       } catch (error) {
         if (isNotFound(error)) return null;
         throw error;

@@ -97,7 +97,7 @@ describe('readContent', () => {
 describe('content facts', () => {
   it('are recorded with the message and shown to the model once it has been read', async () => {
     const ACCOUNT = 'me@example.org';
-    const db = await openUserDb();
+    const db = await openUserDb(ACCOUNT);
     await addMailbox(db, ACCOUNT, '1', 0);
     const f = facts({ accountId: ACCOUNT });
     await recordSync(db, ACCOUNT, [f], '2');

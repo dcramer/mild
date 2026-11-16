@@ -23,23 +23,41 @@ export const PARSERS = { [INT8]: Number, [NUMERIC]: Number };
  */
 export type Where = { url: string; migrateWith?: string } | { dir: string };
 
+/**
+ * On a server, `warning` is set when the role sift runs as could pass row-level security; with
+ * `migrateWith` set, such a role is refused instead. PGlite is not checked: it runs inside this process as
+ * its superuser, with no other role to connect as, and whoever could run a statement on it could read its
+ * folder anyway. sift's own queries still become sift_app there, so the policies hold them.
+ */
 export async function openDatabase(where: Where): Promise<Driver> {
   if ('url' in where) {
     const owner = new Pool({ connectionString: where.migrateWith ?? where.url });
+    let bypass: string | null = null;
     try {
       refuseNewer(await latestApplied(async (text) => (await owner.query<Record<string, unknown>>(text)).rows));
       await migratePg(overPg(owner), { migrationsFolder: MIGRATIONS });
       if (where.migrateWith) {
         const role = decodeURIComponent(new URL(where.url).username);
         await owner.query(`GRANT sift_app TO "${role.replaceAll('"', '""')}"`);
-      }
+      } else bypass = await roleBypass(async (text) => (await owner.query<Record<string, unknown>>(text)).rows);
     } catch (error) {
       await owner.end();
       throw error;
     }
-    if (!where.migrateWith) return server(owner);
+    if (!where.migrateWith) {
+      const warning = `${bypass}, so row-level security does not hold sift. Set DATABASE_MIGRATION_URL to that role, and DATABASE_URL to one that owns nothing.`;
+      return bypass ? { ...server(owner), warning } : server(owner);
+    }
     await owner.end();
-    return server(new Pool({ connectionString: where.url }));
+    const pool = new Pool({ connectionString: where.url });
+    try {
+      bypass = await roleBypass(async (text) => (await pool.query<Record<string, unknown>>(text)).rows);
+      if (bypass) throw new Error(`${bypass}, so row-level security would not hold sift. Give DATABASE_URL a role that owns nothing and cannot bypass it.`);
+    } catch (error) {
+      await pool.end();
+      throw error;
+    }
+    return server(pool);
   }
   const release = lock(where.dir);
   const file = new PGlite(where.dir, { parsers: PARSERS });
@@ -53,6 +71,20 @@ export async function openDatabase(where: Where): Promise<Driver> {
   }
   const driver = pglite(file);
   return { ...driver, close: async () => (await driver.close(), release()) };
+}
+
+/**
+ * Why the role connected as could pass row-level security, or null. Each transaction becomes sift_app,
+ * but a statement can `RESET ROLE` back, so the role itself must be held too: it may not be, or be able to
+ * become, a superuser, a role with BYPASSRLS, or the owner of a table under a policy.
+ */
+export async function roleBypass(query: (text: string) => Promise<Record<string, unknown>[]>): Promise<string | null> {
+  const [row] = await query(`SELECT current_user AS role,
+    EXISTS (SELECT 1 FROM pg_roles r WHERE r.rolsuper AND pg_has_role(current_user, r.oid, 'MEMBER')) AS super,
+    EXISTS (SELECT 1 FROM pg_roles r WHERE r.rolbypassrls AND pg_has_role(current_user, r.oid, 'MEMBER')) AS bypass,
+    EXISTS (SELECT 1 FROM pg_class c WHERE c.relrowsecurity AND pg_has_role(current_user, c.relowner, 'MEMBER')) AS owns`);
+  const reason = row?.['super'] ? 'is a superuser' : row?.['bypass'] ? 'can bypass row-level security' : row?.['owns'] ? "can act as the tables' owner" : null;
+  return reason && `The database role ${String(row!['role'])} ${reason}`;
 }
 
 /** Another sift process has the database open. */

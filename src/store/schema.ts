@@ -7,7 +7,11 @@
  * are read before anyone is known. Every other table holds one person's data: it carries their
  * `user_id`, which the handle sets (src/store/own.ts), and row-level security lets a transaction see and
  * write only that person's rows (src/store/sql.ts). Every key and foreign key between them includes
- * `user_id`, so no row can point at another person's. Deleting a person deletes everything of theirs.
+ * `user_id`, so no row can point at another person's.
+ *
+ * Deleting is one statement. Deleting a `users` row deletes everything of theirs; deleting an `accounts`
+ * row deletes its mailbox and, through it, every row with that `account_id`. Keys into `messages`,
+ * `decisions` and `model_runs` do not cascade, so retention has to delete those rows on purpose.
  */
 import { sql } from 'drizzle-orm';
 import {
@@ -15,7 +19,6 @@ import {
   bigint,
   boolean,
   check,
-  customType,
   doublePrecision,
   foreignKey,
   index,
@@ -35,12 +38,11 @@ import { type Address, DECIDED, DISPOSITIONS, STAGE_NAMES, SUBSCRIPTION_ACTIONS 
 import type { ActionPayload } from './actions.ts';
 
 export const CREDENTIAL_KINDS = ['gmail', 'model'] as const;
-/** `observe`: recorded only. `act`: to be carried out; outcome is null until it has been. */
-export const DECISION_MODES = ['act', 'observe'] as const;
-export const DECISION_OUTCOMES = ['observed', 'none', 'done', 'skipped', 'failed', 'unknown'] as const;
+export const DECISION_OUTCOMES = ['none', 'done', 'skipped', 'failed', 'unknown'] as const;
 export const ACTION_TYPES = ['archive', 'spam', 'label', 'undo', 'unsubscribe', 'filter', 'unfilter'] as const;
 export const ACTION_STATUSES = ['pending', 'done', 'failed', 'unknown', 'undone'] as const;
-export const RULE_SOURCES = ['user', 'agent', 'correction'] as const;
+/** `learned`: sift made it (blocking a sender). */
+export const RULE_SOURCES = ['user', 'learned', 'correction'] as const;
 /** `changed`: edited in Gmail. `gone`: deleted there. `outdated`: the rule no longer says what the filter does. */
 export const FILTER_STATES = ['active', 'changed', 'gone', 'outdated'] as const;
 /** `rule`: make one for its match. `always`: stop checking a judged rule the model has agreed with every time. */
@@ -48,7 +50,6 @@ export const PROPOSAL_KINDS = ['rule', 'always'] as const;
 const PROPOSAL_STATUSES = ['open', 'accepted', 'dismissed'] as const;
 /** right: sift's suggestion was what they wanted. wrong: it was not. answered: sift had no suggestion. */
 export const VERDICTS = ['right', 'wrong', 'answered'] as const;
-const FEEDBACK_SCOPES = ['sender', 'message'] as const;
 const FEEDBACK_VIA = ['dashboard', 'gmail'] as const;
 export const EXAMPLE_STATUSES = ['pending', 'captured', 'gone'] as const;
 /** interrupted: sift stopped while it ran. */
@@ -69,7 +70,6 @@ const oneOf = (name: string, column: AnyPgColumn, values: readonly string[]): Re
 
 /** Milliseconds since the epoch. */
 const time = (name: string) => bigint(name, { mode: 'number' });
-const bytea = customType<{ data: Uint8Array }>({ dataType: () => 'bytea' });
 const id = () => integer('id').primaryKey().generatedByDefaultAsIdentity();
 const userId = () =>
   integer('user_id')
@@ -104,7 +104,7 @@ export const accounts = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     createdAt: time('created_at').notNull(),
   },
-  (t) => [index('accounts_user').on(t.userId)],
+  (t) => [unique('accounts_own').on(t.userId, t.id)],
 );
 
 // One person's data.
@@ -120,11 +120,16 @@ export const mailboxes = pgTable(
     filtersCheckedAt: time('filters_checked_at'),
     createdAt: time('created_at').notNull(),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.id] }), own()],
+  (t) => [
+    primaryKey({ columns: [t.userId, t.id] }),
+    foreignKey({ columns: [t.userId, t.id], foreignColumns: [accounts.userId, accounts.id] }).onDelete('cascade'),
+    own(),
+  ],
 ).enableRLS();
 
+/** Every table with an `account_id` has this key, so removing a mailbox removes its rows. */
 const mailbox = (t: { userId: AnyPgColumn; accountId: AnyPgColumn }) =>
-  foreignKey({ columns: [t.userId, t.accountId], foreignColumns: [mailboxes.userId, mailboxes.id] });
+  foreignKey({ columns: [t.userId, t.accountId], foreignColumns: [mailboxes.userId, mailboxes.id] }).onDelete('cascade');
 
 /** Their own choices: the model their mail is judged with (`provider/model-id`). */
 export const preferences = pgTable(
@@ -173,15 +178,46 @@ export const messages = pgTable(
     headers: jsonb('headers').$type<Record<string, string>>().notNull().default({}), // the triage headers only (see METADATA_HEADERS)
     labelIds: jsonb('label_ids').$type<string[]>().notNull().default([]), // when synced; a snapshot, not current state
     syncedAt: time('synced_at').notNull(),
-    observeOnly: boolean('observe_only').notNull().default(false), // pulled in from before sift was connected: suggest, never act
+    suggestOnly: boolean('suggest_only').notNull().default(false), // pulled in from before sift was connected: suggest, never carry out
     facts: jsonb('facts').$type<Facts>().notNull(),
     readAt: time('read_at'), // when a sync saw the user had opened it
   },
-  (t) => [primaryKey({ columns: [t.userId, t.accountId, t.id] }), mailbox(t), index('messages_sender').on(t.accountId, t.fromAddress), own()],
+  (t) => [
+    primaryKey({ columns: [t.userId, t.accountId, t.id] }),
+    mailbox(t),
+    index('messages_sender').on(t.accountId, t.fromAddress),
+    index('messages_domain').on(t.accountId, t.fromDomain),
+    index('messages_received').on(t.accountId, t.receivedAt),
+    own(),
+  ],
 ).enableRLS();
 
 const message = (t: { userId: AnyPgColumn; accountId: AnyPgColumn; messageId: AnyPgColumn }) =>
   foreignKey({ columns: [t.userId, t.accountId, t.messageId], foreignColumns: [messages.userId, messages.accountId, messages.id] });
+
+/** What mail can be, and what sift does with each. */
+export const labels = pgTable(
+  'labels',
+  {
+    userId: userId(),
+    accountId: text('account_id').notNull(),
+    id: text('id').notNull(), // stable; the name can change without orphaning history
+    name: text('name').notNull(),
+    description: text('description').notNull(), // how to recognise it; shown to the model
+    disposition: text('disposition', { enum: DISPOSITIONS }).notNull(),
+    block: boolean('block').notNull().default(false),
+    markRead: boolean('mark_read').notNull().default(false),
+    unsubscribe: boolean('unsubscribe').notNull().default(false),
+    gmailLabel: text('gmail_label').notNull(),
+    position: integer('position').notNull(),
+    updatedAt: time('updated_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.accountId, t.id] }), mailbox(t), oneOf('labels_disposition', t.disposition, DISPOSITIONS), own()],
+).enableRLS();
+
+/** What a row says mail is: one of its mailbox's labels. Labels are never deleted. */
+const label = (name: string, t: { userId: AnyPgColumn; accountId: AnyPgColumn }, column: AnyPgColumn) =>
+  foreignKey({ name, columns: [t.userId, t.accountId, column], foreignColumns: [labels.userId, labels.accountId, labels.id] });
 
 /** Every call to the model about a message, with what it cost. One that failed reached no decision, so the message is asked about again on a later pass. */
 export const modelRuns = pgTable(
@@ -203,10 +239,11 @@ export const modelRuns = pgTable(
   },
   (t) => [
     unique('model_runs_own').on(t.userId, t.id),
+    mailbox(t),
     message(t),
     oneOf('model_runs_outcome', t.outcome, RUN_OUTCOMES),
     index('model_runs_message').on(t.accountId, t.messageId),
-    index('model_runs_time').on(t.startedAt),
+    index('model_runs_time').on(t.accountId, t.startedAt),
     own(),
   ],
 ).enableRLS();
@@ -233,25 +270,33 @@ export const decisions = pgTable(
     runId: integer('run_id'), // the model call that reached it; null when no model was asked
     durationMs: integer('duration_ms'),
     decidedAt: time('decided_at').notNull(),
-    mode: text('mode', { enum: DECISION_MODES }).notNull().default('observe'),
+    // false: a suggestion, recorded only. true: to be carried out in Gmail; outcome is null until it has been.
+    carryOut: boolean('carry_out').notNull().default(false),
     outcome: text('outcome', { enum: DECISION_OUTCOMES }),
     outcomeDetail: text('outcome_detail'),
-    byUser: boolean('by_user').notNull().default(false), // the user's own answer, carried out even while sift is off
+    // The user's own answer, from the dashboard or from what they did in Gmail. Carried out even while sift is off.
+    byUser: boolean('by_user').notNull().default(false),
   },
   (t) => [
     unique('decisions_own').on(t.userId, t.id),
+    mailbox(t),
     message(t),
+    label('decisions_label', t, t.labelId),
     foreignKey({ columns: [t.userId, t.runId], foreignColumns: [modelRuns.userId, modelRuns.id] }),
     oneOf('decisions_stage', t.stage, STAGE_NAMES),
     oneOf('decisions_disposition', t.disposition, DISPOSITIONS),
     oneOf('decisions_subscription', t.subscription, SUBSCRIPTION_ACTIONS),
-    oneOf('decisions_mode', t.mode, DECISION_MODES),
     oneOf('decisions_outcome', t.outcome, DECISION_OUTCOMES),
+    check('decisions_settled_if_carried_out', sql`${t.carryOut} OR ${t.outcome} IS NULL`),
     index('decisions_message').on(t.accountId, t.messageId, t.id),
-    index('decisions_time').on(t.decidedAt),
+    index('decisions_time').on(t.accountId, t.decidedAt),
+    index('decisions_run').on(t.userId, t.runId),
+    index('decisions_rule')
+      .on(t.accountId, t.ruleId, t.decidedAt)
+      .where(sql`${t.ruleId} IS NOT NULL`),
     index('decisions_unsettled')
       .on(t.accountId)
-      .where(sql`${t.outcome} IS NULL`),
+      .where(sql`${t.carryOut} AND ${t.outcome} IS NULL`),
     index('decisions_prior')
       .on(t.priorRuleId, t.id)
       .where(sql`${t.priorRuleId} IS NOT NULL`),
@@ -273,7 +318,7 @@ export const actions = pgTable(
     decisionId: integer('decision_id'), // null for changes made by hand and for undos
     type: text('type', { enum: ACTION_TYPES }).notNull(),
     payload: jsonb('payload').$type<ActionPayload>().notNull(),
-    originalLabels: jsonb('original_labels').$type<string[]>(), // as read immediately before
+    originalLabels: jsonb('original_labels').$type<string[]>().notNull(), // as read immediately before
     finalLabels: jsonb('final_labels').$type<string[]>(), // as read back afterwards
     status: text('status', { enum: ACTION_STATUSES }).notNull(),
     error: text('error'),
@@ -282,36 +327,18 @@ export const actions = pgTable(
   },
   (t) => [
     mailbox(t),
+    message(t),
     decision(t),
     oneOf('actions_type', t.type, ACTION_TYPES),
     oneOf('actions_status', t.status, ACTION_STATUSES),
     index('actions_message').on(t.accountId, t.messageId),
+    index('actions_time').on(t.accountId, t.createdAt),
     index('actions_open')
       .on(t.status)
       .where(sql`${t.status} IN ('pending', 'unknown')`),
     index('actions_decision').on(t.decisionId),
     own(),
   ],
-).enableRLS();
-
-/** What mail can be, and what sift does with each. */
-export const labels = pgTable(
-  'labels',
-  {
-    userId: userId(),
-    accountId: text('account_id').notNull(),
-    id: text('id').notNull(), // stable; the name can change without orphaning history
-    name: text('name').notNull(),
-    description: text('description').notNull(), // how to recognise it; shown to the model
-    disposition: text('disposition', { enum: DISPOSITIONS }).notNull(),
-    block: boolean('block').notNull().default(false),
-    markRead: boolean('mark_read').notNull().default(false),
-    unsubscribe: boolean('unsubscribe').notNull().default(false),
-    gmailLabel: text('gmail_label').notNull(),
-    position: integer('position').notNull(),
-    updatedAt: time('updated_at').notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.userId, t.accountId, t.id] }), mailbox(t), oneOf('labels_disposition', t.disposition, DISPOSITIONS), own()],
 ).enableRLS();
 
 /**
@@ -346,6 +373,8 @@ export const rules = pgTable(
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),
     mailbox(t),
+    label('rules_label', t, t.labelId),
+    label('rules_when_label', t, t.whenLabel),
     oneOf('rules_disposition', t.disposition, DECIDED),
     oneOf('rules_subscription', t.subscription, SUBSCRIPTION_ACTIONS),
     oneOf('rules_source', t.source, RULE_SOURCES),
@@ -368,7 +397,7 @@ export const proposals = pgTable(
     kind: text('kind', { enum: PROPOSAL_KINDS }).notNull(),
     match: jsonb('match').$type<RuleMatch>().notNull(),
     labelId: text('label_id').notNull(),
-    ruleId: text('rule_id'),
+    ruleId: text('rule_id'), // the judged rule an `always` would stop checking
     agreed: integer('agreed').notNull(), // how many decisions in a row it rests on
     status: text('status', { enum: PROPOSAL_STATUSES }).notNull().default('open'),
     createdAt: time('created_at').notNull(),
@@ -376,9 +405,12 @@ export const proposals = pgTable(
   },
   (t) => [
     mailbox(t),
+    label('proposals_label', t, t.labelId),
+    foreignKey({ columns: [t.userId, t.ruleId], foreignColumns: [rules.userId, rules.id] }).onDelete('cascade'),
     unique('proposals_once').on(t.userId, t.accountId, t.kind, t.match),
     oneOf('proposals_kind', t.kind, PROPOSAL_KINDS),
     oneOf('proposals_status', t.status, PROPOSAL_STATUSES),
+    check('proposals_always_has_rule', sql`(${t.kind} = 'always') = (${t.ruleId} IS NOT NULL)`),
     own(),
   ],
 ).enableRLS();
@@ -396,7 +428,7 @@ export const correspondents = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.accountId, t.address] }), mailbox(t), own()],
 ).enableRLS();
 
-/** What the user said about a suggestion, one answer per decision. `correct` is what should have happened. */
+/** What the user said about a decision, one answer per decision: what the mail is, and what should happen to it. */
 export const feedback = pgTable(
   'feedback',
   {
@@ -404,21 +436,19 @@ export const feedback = pgTable(
     userId: userId(),
     accountId: text('account_id').notNull(),
     decisionId: integer('decision_id').notNull(),
-    messageId: text('message_id').notNull(),
     verdict: text('verdict', { enum: VERDICTS }).notNull(),
-    correct: text('correct', { enum: DECIDED }),
+    disposition: text('disposition', { enum: DECIDED }).notNull(),
     labelId: text('label_id'),
-    scope: text('scope', { enum: FEEDBACK_SCOPES }).notNull(),
-    via: text('via', { enum: FEEDBACK_VIA }).notNull().default('dashboard'),
+    via: text('via', { enum: FEEDBACK_VIA }).notNull(),
     createdAt: time('created_at').notNull(),
   },
   (t) => [
     unique('feedback_once').on(t.userId, t.decisionId),
     mailbox(t),
     decision(t),
+    label('feedback_label', t, t.labelId),
     oneOf('feedback_verdict', t.verdict, VERDICTS),
-    oneOf('feedback_correct', t.correct, DECIDED),
-    oneOf('feedback_scope', t.scope, FEEDBACK_SCOPES),
+    oneOf('feedback_disposition', t.disposition, DECIDED),
     oneOf('feedback_via', t.via, FEEDBACK_VIA),
     index('feedback_account').on(t.accountId, t.createdAt),
     own(),
@@ -437,18 +467,16 @@ export const examples = pgTable(
     messageId: text('message_id').notNull(),
     disposition: text('disposition', { enum: DECIDED }).notNull(),
     labelId: text('label_id'),
-    suggested: text('suggested', { enum: DISPOSITIONS }).notNull(), // what sift had suggested, for scoring
-    suggestedBy: text('suggested_by', { enum: STAGE_NAMES }).notNull(),
     markedAt: time('marked_at').notNull(),
     status: text('status', { enum: EXAMPLE_STATUSES }).notNull().default('pending'),
-    raw: bytea('raw'), // the whole message as received (RFC 822)
-    headers: jsonb('headers').$type<[string, string][]>(), // every header, in order
     bodyText: text('body_text'), // the readable text, as the model would be shown it
     capturedAt: time('captured_at'),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.accountId, t.messageId] }),
+    mailbox(t),
     message(t),
+    label('examples_label', t, t.labelId),
     oneOf('examples_disposition', t.disposition, DECIDED),
     oneOf('examples_status', t.status, EXAMPLE_STATUSES),
     index('examples_pending')
@@ -468,7 +496,7 @@ export const suggestionBodies = pgTable(
     bodyText: text('body_text').notNull(), // as the model is shown it: plain text, truncated
     fetchedAt: time('fetched_at').notNull(),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.accountId, t.messageId] }), message(t), own()],
+  (t) => [primaryKey({ columns: [t.userId, t.accountId, t.messageId] }), mailbox(t), message(t), own()],
 ).enableRLS();
 
 /** A replay of the model over stored examples, with the settings it ran with: the same hashes mean the model was asked the same way. */
@@ -501,6 +529,7 @@ export const evalResults = pgTable(
     messageId: text('message_id').notNull(),
     expected: text('expected').notNull(), // the owner's label
     got: text('got'), // a label id or 'unsure'; null when the call failed
+    error: text('error'), // why the call failed: its status and kind, never the provider's text
     confidence: doublePrecision('confidence'),
     inputTokens: integer('input_tokens').notNull().default(0),
     outputTokens: integer('output_tokens').notNull().default(0),

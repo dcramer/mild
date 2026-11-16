@@ -1,9 +1,9 @@
-import { connectedAddresses, owner, userOf } from './accounts.ts';
+import { connectedAddresses, deleteUser, owner, removeMailbox, userOf } from './accounts.ts';
 import type { Sql } from './sql.ts';
 import type { Store } from './store.ts';
 
 /** Someone a request is from. */
-interface Person {
+export interface Person {
   id: number;
   owner: boolean;
   /** Their mailboxes, by address. */
@@ -13,6 +13,10 @@ interface Person {
    * today is everyone's but their own. A view that needs several opens each.
    */
   open: (id: number) => Promise<Sql>;
+  /** Remove one of their mailboxes and everything recorded about its mail. False if it is not theirs. */
+  removeMailbox: (email: string) => Promise<boolean>;
+  /** Delete them and everything of theirs. */
+  remove: () => Promise<void>;
 }
 
 /**
@@ -40,6 +44,8 @@ export function people(store: Store): People {
         if (!readable.has(id)) throw new Error(`Person ${user.id} may not open person ${id}'s database.`);
         return await store.user(id);
       },
+      removeMailbox: async (email) => await removeMailbox(store, user.id, email),
+      remove: async () => await deleteUser(store, user.id),
     };
   };
   return {

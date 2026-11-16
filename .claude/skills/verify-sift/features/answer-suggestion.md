@@ -24,7 +24,7 @@ Preconditions:
 - **Choose and save.** `ab find role combobox click --name "What this message is"`, `ab find role option click --name "Marketing"`, then `ab find role button click --name "Save: Marketing"`. A toast reads `Archived as Marketing`; the panel shows the next waiting message (`?message=m6`, `Lunch on Thursday?`).
 - **A rule, on purpose.** On m6, `ab find role link click --name "Make a rule…"`. Rules opens with the rule dialog's value reading `ada@example.org`.
 - **Second view.** `ab open "$B/rules"`. Still 3 rules: answering made none.
-- **Stored.** `verify.sh sql "$RUN" "SELECT label_id, mode, by_user FROM decisions WHERE message_id = 'm4' ORDER BY id DESC LIMIT 1"` returns `marketing`, `act`, `1`. `SELECT message_id, label_id FROM examples` returns `m4` with `marketing`.
+- **Stored.** `verify.sh sql "$RUN" "SELECT label_id, carry_out, by_user FROM decisions WHERE message_id = 'm4' ORDER BY id DESC LIMIT 1"` returns `marketing`, `true`, `true`. `SELECT message_id, label_id FROM examples` returns `m4` with `marketing`.
 
 ## Gotchas
 

@@ -16,12 +16,13 @@ import {
   labels,
   max,
   messages,
+  min,
   ne,
   not,
   notExists,
-  or,
   rules,
   sql,
+  suggestionBodies,
 } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import { listLabels } from '../store/labels.ts';
@@ -80,8 +81,9 @@ const toSuggestion = ({ subscription, ...r }: Omit<Suggestion, 'unsubscribe'> & 
 
 /**
  * Suggestions waiting on the user, newest first: the current decision for a message, recorded as
- * a suggestion, with no answer yet. Decisions that only repeat what the user already told sift (rules they
- * wrote or made by correcting it) are not suggestions and are left out; ones from a rule sift learned are.
+ * a suggestion, with no answer yet. Decisions that only repeat what the user already told sift (their
+ * answers, and rules they wrote or made by correcting it) are not suggestions and are left out; ones
+ * from a rule sift learned are.
  */
 export async function pendingSuggestions(
   db: Sql,
@@ -101,14 +103,15 @@ export async function pendingSuggestions(
             .from(x)
             .where(and(eq(x.accountId, decisions.accountId), eq(x.messageId, decisions.messageId))),
         ),
-        eq(decisions.mode, 'observe'),
+        eq(decisions.carryOut, false),
+        eq(decisions.byUser, false),
         notExists(
           db
             .select({ one: sql`1` })
             .from(feedback)
             .where(eq(feedback.decisionId, decisions.id)),
         ),
-        not(and(or(eq(decisions.stage, 'rules'), isNotNull(decisions.ruleId)), ne(sql`coalesce(${rules.source}, 'user')`, 'agent'))!),
+        not(and(isNotNull(decisions.ruleId), ne(sql`coalesce(${rules.source}, 'user')`, 'learned'))!),
         filter.accounts === undefined ? undefined : inArray(decisions.accountId, filter.accounts),
         filter.accountId === undefined ? undefined : eq(decisions.accountId, filter.accountId),
         filter.sender === undefined ? undefined : eq(messages.fromAddress, filter.sender),
@@ -184,16 +187,17 @@ export interface FeedbackInput {
   /**
    * The message the answer was given on. It need not be waiting: this is how a decision sift already
    * made, or mail it kept, is corrected, and how mail the model could not judge is answered. Either gets
-   * a new decision in `mode`.
+   * a new decision.
    */
   messageId?: string;
-  /** The corrected message's new decision: `act` (sift is on) to carry it out, `observe` to only record it. */
-  mode?: 'act' | 'observe';
   /**
-   * The user pressed this in the dashboard: each message it settles gets the answer as a decision of its
-   * own, carried out in Gmail on the next pass even while sift is off.
+   * Each message the answer settles gets it as a decision of its own, carried out in Gmail on the next
+   * pass even while sift is off. Without it (an answer read from Gmail, where the mail already is) only
+   * the corrected message's decision is recorded, and nothing is carried out.
    */
   carryOut?: boolean;
+  /** Where the answer was given. Default: the dashboard. */
+  via?: 'dashboard' | 'gmail';
 }
 
 interface FeedbackResult {
@@ -224,7 +228,7 @@ const DO: Record<DecidedDisposition, string> = { keep: 'keep it', archive: 'arch
  * or it refers to nothing that is waiting.
  */
 export async function applyFeedback(db: Sql, input: FeedbackInput, now: number = Date.now()): Promise<FeedbackResult> {
-  const labels = await listLabels(db, input.accountId, now);
+  const labels = await listLabels(db, input.accountId);
   const label = input.label === undefined ? undefined : labels.find((l) => l.id === input.label);
   if (input.label !== undefined && !label) throw new Error(`There is no label "${input.label}".`);
   const outcome = input.disposition ?? label?.disposition;
@@ -296,9 +300,7 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
   const verdictFor = (target: Pick<Suggestion, 'labelId' | 'disposition'>): (typeof VERDICTS)[number] =>
     target.labelId === null ? 'answered' : (label ? target.labelId === label.id : target.disposition === wanted) ? 'right' : 'wrong';
   await db.transaction(async (tx) => {
-    const settled: Pick<Suggestion, 'accountId' | 'decisionId' | 'messageId' | 'labelId' | 'disposition' | 'stage'>[] = given
-      ? [...targets, given]
-      : [...targets];
+    const settled: Pick<Suggestion, 'accountId' | 'decisionId' | 'messageId' | 'labelId' | 'disposition'>[] = given ? [...targets, given] : [...targets];
     const ruleId =
       match && says
         ? await setRule(tx, input.accountId, match, says, !fresh && settled.every((t) => verdictFor(t) === 'right') ? 'user' : 'correction', now)
@@ -314,41 +316,27 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
         reason: label ? `you said this is ${label.name}` : `you said to ${DO[wanted]}`,
       };
     };
-    const carried = input.carryOut ? { mode: 'act' as const, byUser: true, now } : { mode: input.mode ?? ('observe' as const), now };
+    const carried = { carryOut: input.carryOut ?? false, byUser: true, now };
     if (fresh && input.messageId !== undefined) {
       const decisionId = await recordDecision(tx, input.accountId, input.messageId, answer({ labelId: null }), carried);
-      settled.push({ accountId: input.accountId, decisionId, messageId: input.messageId, labelId: null, disposition: 'review', stage: 'fallback' });
+      settled.push({ accountId: input.accountId, decisionId, messageId: input.messageId, labelId: null, disposition: 'review' });
     }
     for (const target of settled) {
-      const verdict = verdictFor(target);
       const is = standing(target)?.id ?? null;
-      const answered = {
-        verdict,
-        correct: verdict === 'right' ? null : wanted,
-        scope: match ? ('sender' as const) : ('message' as const),
-        createdAt: now,
-        labelId: is,
-      };
+      const answered = { verdict: verdictFor(target), disposition: wanted, labelId: is, via: input.via ?? 'dashboard', createdAt: now };
       await tx
         .insert(feedback)
-        .values({ accountId: target.accountId, decisionId: target.decisionId, messageId: target.messageId, ...answered })
+        .values({ accountId: target.accountId, decisionId: target.decisionId, ...answered })
         .onConflictDoUpdate({ target: [feedback.userId, feedback.decisionId], set: answered });
       // Every marked message is kept whole as an example; `sift run` fetches it on its next pass.
       await tx
         .insert(examples)
-        .values({
-          accountId: target.accountId,
-          messageId: target.messageId,
-          disposition: wanted,
-          labelId: is,
-          suggested: target.disposition,
-          suggestedBy: target.stage,
-          markedAt: now,
-        })
+        .values({ accountId: target.accountId, messageId: target.messageId, disposition: wanted, labelId: is, markedAt: now })
         .onConflictDoUpdate({ target: [examples.userId, examples.accountId, examples.messageId], set: { disposition: wanted, labelId: is, markedAt: now } });
+      // Its text was kept only while it waited on the user.
+      await tx.delete(suggestionBodies).where(and(eq(suggestionBodies.accountId, target.accountId), eq(suggestionBodies.messageId, target.messageId)));
     }
-    if (input.carryOut)
-      for (const target of targets) await recordDecision(tx, input.accountId, target.messageId, answer(target), { mode: 'act', byUser: true, now });
+    if (input.carryOut) for (const target of targets) await recordDecision(tx, input.accountId, target.messageId, answer(target), carried);
     // The corrected message gets a decision of its own, so the log shows what the user said and, when
     // it is carried out, the mailbox is brought into line with it.
     if (given && changes) await recordDecision(tx, input.accountId, given.messageId, answer(given), carried);
@@ -376,8 +364,8 @@ export interface Accuracy {
   right: number;
   /** Per tier that made the suggestion. Tiers with no answers are absent. */
   byStage: { stage: StageName; reviewed: number; right: number }[];
-  /** Per label sift gave, most answers first. The name is null if the label has gone. */
-  byLabel: { labelId: string; labelName: string | null; reviewed: number; right: number }[];
+  /** Per label sift gave, most answers first. */
+  byLabel: { labelId: string; labelName: string; reviewed: number; right: number }[];
   /** What sift called one label when the user said another, commonest first. */
   confusion: { suggested: string; correct: string; count: number }[];
 }
@@ -403,14 +391,15 @@ export async function accuracy(db: Sql, since = 0, accounts?: readonly string[])
     .where(scored())
     .groupBy(decisions.stage)
     .orderBy(asc(decisions.stage));
-  const name = db.select({ name: labels.name }).from(labels).where(eq(labels.id, decisions.labelId)).orderBy(asc(labels.accountId)).limit(1);
+  // Each mailbox names its own labels; across several, the same id shows one of its names.
   const byLabel = (await db
-    .select({ labelId: decisions.labelId, labelName: sql<string | null>`${name}`, reviewed: count(), right })
+    .select({ labelId: decisions.labelId, labelName: min(labels.name), reviewed: count(), right })
     .from(feedback)
     .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
-    .where(scored(isNotNull(decisions.labelId)))
+    .innerJoin(labels, and(eq(labels.accountId, decisions.accountId), eq(labels.id, decisions.labelId)))
+    .where(scored())
     .groupBy(decisions.labelId)
-    .orderBy(desc(count()), asc(decisions.labelId))) as { labelId: string; labelName: string | null; reviewed: number; right: number }[];
+    .orderBy(desc(count()), asc(decisions.labelId))) as { labelId: string; labelName: string; reviewed: number; right: number }[];
   const confusion = (await db
     .select({ suggested: decisions.labelId, correct: feedback.labelId, count: count() })
     .from(feedback)

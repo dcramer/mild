@@ -85,7 +85,7 @@ export async function proposeForSender(db: Sql, accountId: string, address: stri
             .from(later)
             .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
         ),
-        eq(decisions.stage, 'agent'),
+        eq(decisions.stage, 'model'),
         isNotNull(decisions.runId),
       ),
     )
@@ -93,9 +93,9 @@ export async function proposeForSender(db: Sql, accountId: string, address: stri
     .limit(PROPOSE_AFTER);
   const [first] = recent;
   if (!first || recent.length < PROPOSE_AFTER || first.labelId === null) return false;
-  const label = (await listLabels(db, accountId, now)).find((l) => l.id === first.labelId);
+  const label = (await listLabels(db, accountId)).find((l) => l.id === first.labelId)!;
   // One where a protection held sift back, or a wider rule already spoke, is not settled.
-  if (!label || !recent.every((r) => r.labelId === first.labelId && r.disposition === label.disposition && r.priorRuleId === null)) return false;
+  if (!recent.every((r) => r.labelId === first.labelId && r.disposition === label.disposition && r.priorRuleId === null)) return false;
   return await propose(db, { accountId, kind: 'rule', match: { from: address }, labelId: first.labelId, ruleId: null, agreed: recent.length }, now);
 }
 
@@ -111,13 +111,13 @@ export async function proposeFromAnswers(db: Sql, accountId: string, address: st
   const recent = await db
     .select({ labelId: feedback.labelId })
     .from(feedback)
-    .innerJoin(messages, and(eq(messages.accountId, feedback.accountId), eq(messages.id, feedback.messageId)))
+    .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
+    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
     .where(and(eq(feedback.accountId, accountId), eq(messages.fromAddress, address)))
     .orderBy(desc(feedback.createdAt), desc(feedback.decisionId))
     .limit(PROPOSE_AFTER_ANSWERS);
   const [first] = recent;
   if (!first || recent.length < PROPOSE_AFTER_ANSWERS || first.labelId === null || !recent.every((r) => r.labelId === first.labelId)) return false;
-  if (!(await listLabels(db, accountId, now)).some((l) => l.id === first.labelId)) return false;
   return await propose(db, { accountId, kind: 'rule', match: { from: address }, labelId: first.labelId, ruleId: null, agreed: recent.length }, now);
 }
 
@@ -150,7 +150,8 @@ export async function resolveProposal(db: Sql, id: number, accept: boolean, now:
     const existing = p.ruleId ? (await listRules(db, p.accountId)).find((r) => r.id === p.ruleId) : undefined;
     if (existing) {
       // What the rule did when the mail was that label, it now does to all of it, without waiting to be told.
-      const does = existing.disposition ?? (await listLabels(db, p.accountId, now)).find((l) => l.id === p.labelId)?.disposition ?? 'keep';
+      const does = existing.disposition ?? (await listLabels(db, p.accountId)).find((l) => l.id === p.labelId)!.disposition;
+      // Takes this proposal with it.
       await removeRule(db, existing.id);
       await setRule(
         db,

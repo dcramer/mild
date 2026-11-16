@@ -2,7 +2,8 @@ CREATE ROLE "sift_app";--> statement-breakpoint
 CREATE TABLE "accounts" (
 	"id" text PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
-	"created_at" bigint NOT NULL
+	"created_at" bigint NOT NULL,
+	CONSTRAINT "accounts_own" UNIQUE("user_id","id")
 );
 --> statement-breakpoint
 CREATE TABLE "actions" (
@@ -13,7 +14,7 @@ CREATE TABLE "actions" (
 	"decision_id" integer,
 	"type" text NOT NULL,
 	"payload" jsonb NOT NULL,
-	"original_labels" jsonb,
+	"original_labels" jsonb NOT NULL,
 	"final_labels" jsonb,
 	"status" text NOT NULL,
 	"error" text,
@@ -64,16 +65,16 @@ CREATE TABLE "decisions" (
 	"run_id" integer,
 	"duration_ms" integer,
 	"decided_at" bigint NOT NULL,
-	"mode" text DEFAULT 'observe' NOT NULL,
+	"carry_out" boolean DEFAULT false NOT NULL,
 	"outcome" text,
 	"outcome_detail" text,
 	"by_user" boolean DEFAULT false NOT NULL,
 	CONSTRAINT "decisions_own" UNIQUE("user_id","id"),
-	CONSTRAINT "decisions_stage" CHECK ("decisions"."stage" IN ('rules', 'classifier', 'agent', 'fallback')),
+	CONSTRAINT "decisions_stage" CHECK ("decisions"."stage" IN ('rules', 'classifier', 'model', 'fallback')),
 	CONSTRAINT "decisions_disposition" CHECK ("decisions"."disposition" IN ('keep', 'archive', 'spam', 'review')),
 	CONSTRAINT "decisions_subscription" CHECK ("decisions"."subscription" IN ('preserve', 'unsubscribe')),
-	CONSTRAINT "decisions_mode" CHECK ("decisions"."mode" IN ('act', 'observe')),
-	CONSTRAINT "decisions_outcome" CHECK ("decisions"."outcome" IN ('observed', 'none', 'done', 'skipped', 'failed', 'unknown'))
+	CONSTRAINT "decisions_outcome" CHECK ("decisions"."outcome" IN ('none', 'done', 'skipped', 'failed', 'unknown')),
+	CONSTRAINT "decisions_settled_if_carried_out" CHECK ("decisions"."carry_out" OR "decisions"."outcome" IS NULL)
 );
 --> statement-breakpoint
 ALTER TABLE "decisions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
@@ -83,6 +84,7 @@ CREATE TABLE "eval_results" (
 	"message_id" text NOT NULL,
 	"expected" text NOT NULL,
 	"got" text,
+	"error" text,
 	"confidence" double precision,
 	"input_tokens" integer DEFAULT 0 NOT NULL,
 	"output_tokens" integer DEFAULT 0 NOT NULL,
@@ -119,12 +121,8 @@ CREATE TABLE "examples" (
 	"message_id" text NOT NULL,
 	"disposition" text NOT NULL,
 	"label_id" text,
-	"suggested" text NOT NULL,
-	"suggested_by" text NOT NULL,
 	"marked_at" bigint NOT NULL,
 	"status" text DEFAULT 'pending' NOT NULL,
-	"raw" "bytea",
-	"headers" jsonb,
 	"body_text" text,
 	"captured_at" bigint,
 	CONSTRAINT "examples_user_id_account_id_message_id_pk" PRIMARY KEY("user_id","account_id","message_id"),
@@ -138,17 +136,14 @@ CREATE TABLE "feedback" (
 	"user_id" integer DEFAULT current_setting('sift.user')::integer NOT NULL,
 	"account_id" text NOT NULL,
 	"decision_id" integer NOT NULL,
-	"message_id" text NOT NULL,
 	"verdict" text NOT NULL,
-	"correct" text,
+	"disposition" text NOT NULL,
 	"label_id" text,
-	"scope" text NOT NULL,
-	"via" text DEFAULT 'dashboard' NOT NULL,
+	"via" text NOT NULL,
 	"created_at" bigint NOT NULL,
 	CONSTRAINT "feedback_once" UNIQUE("user_id","decision_id"),
 	CONSTRAINT "feedback_verdict" CHECK ("feedback"."verdict" IN ('right', 'wrong', 'answered')),
-	CONSTRAINT "feedback_correct" CHECK ("feedback"."correct" IN ('keep', 'archive', 'spam')),
-	CONSTRAINT "feedback_scope" CHECK ("feedback"."scope" IN ('sender', 'message')),
+	CONSTRAINT "feedback_disposition" CHECK ("feedback"."disposition" IN ('keep', 'archive', 'spam')),
 	CONSTRAINT "feedback_via" CHECK ("feedback"."via" IN ('dashboard', 'gmail'))
 );
 --> statement-breakpoint
@@ -198,7 +193,7 @@ CREATE TABLE "messages" (
 	"headers" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"label_ids" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"synced_at" bigint NOT NULL,
-	"observe_only" boolean DEFAULT false NOT NULL,
+	"suggest_only" boolean DEFAULT false NOT NULL,
 	"facts" jsonb NOT NULL,
 	"read_at" bigint,
 	CONSTRAINT "messages_user_id_account_id_id_pk" PRIMARY KEY("user_id","account_id","id")
@@ -245,7 +240,8 @@ CREATE TABLE "proposals" (
 	"resolved_at" bigint,
 	CONSTRAINT "proposals_once" UNIQUE("user_id","account_id","kind","match"),
 	CONSTRAINT "proposals_kind" CHECK ("proposals"."kind" IN ('rule', 'always')),
-	CONSTRAINT "proposals_status" CHECK ("proposals"."status" IN ('open', 'accepted', 'dismissed'))
+	CONSTRAINT "proposals_status" CHECK ("proposals"."status" IN ('open', 'accepted', 'dismissed')),
+	CONSTRAINT "proposals_always_has_rule" CHECK (("proposals"."kind" = 'always') = ("proposals"."rule_id" IS NOT NULL))
 );
 --> statement-breakpoint
 ALTER TABLE "proposals" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
@@ -272,7 +268,7 @@ CREATE TABLE "rules" (
 	CONSTRAINT "rules_user_id_id_pk" PRIMARY KEY("user_id","id"),
 	CONSTRAINT "rules_disposition" CHECK ("rules"."disposition" IN ('keep', 'archive', 'spam')),
 	CONSTRAINT "rules_subscription" CHECK ("rules"."subscription" IN ('preserve', 'unsubscribe')),
-	CONSTRAINT "rules_source" CHECK ("rules"."source" IN ('user', 'agent', 'correction')),
+	CONSTRAINT "rules_source" CHECK ("rules"."source" IN ('user', 'learned', 'correction')),
 	CONSTRAINT "rules_filter_state" CHECK ("rules"."filter_state" IN ('active', 'changed', 'gone', 'outdated')),
 	CONSTRAINT "rules_says_something" CHECK ("rules"."label_id" IS NOT NULL OR "rules"."when_label" IS NOT NULL OR "rules"."disposition" IS NOT NULL),
 	CONSTRAINT "rules_label_or_wait" CHECK ("rules"."label_id" IS NULL OR "rules"."when_label" IS NULL),
@@ -298,50 +294,67 @@ CREATE TABLE "users" (
 --> statement-breakpoint
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "actions" ADD CONSTRAINT "actions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "actions" ADD CONSTRAINT "actions_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "actions" ADD CONSTRAINT "actions_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "actions" ADD CONSTRAINT "actions_user_id_account_id_message_id_messages_user_id_account_id_id_fk" FOREIGN KEY ("user_id","account_id","message_id") REFERENCES "public"."messages"("user_id","account_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "actions" ADD CONSTRAINT "actions_user_id_decision_id_decisions_user_id_id_fk" FOREIGN KEY ("user_id","decision_id") REFERENCES "public"."decisions"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "correspondents" ADD CONSTRAINT "correspondents_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "correspondents" ADD CONSTRAINT "correspondents_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "correspondents" ADD CONSTRAINT "correspondents_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "credentials" ADD CONSTRAINT "credentials_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "decisions" ADD CONSTRAINT "decisions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "decisions" ADD CONSTRAINT "decisions_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "decisions" ADD CONSTRAINT "decisions_user_id_account_id_message_id_messages_user_id_account_id_id_fk" FOREIGN KEY ("user_id","account_id","message_id") REFERENCES "public"."messages"("user_id","account_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "decisions" ADD CONSTRAINT "decisions_label" FOREIGN KEY ("user_id","account_id","label_id") REFERENCES "public"."labels"("user_id","account_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "decisions" ADD CONSTRAINT "decisions_user_id_run_id_model_runs_user_id_id_fk" FOREIGN KEY ("user_id","run_id") REFERENCES "public"."model_runs"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "eval_results" ADD CONSTRAINT "eval_results_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "eval_results" ADD CONSTRAINT "eval_results_user_id_run_id_eval_runs_user_id_id_fk" FOREIGN KEY ("user_id","run_id") REFERENCES "public"."eval_runs"("user_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "eval_runs" ADD CONSTRAINT "eval_runs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "eval_runs" ADD CONSTRAINT "eval_runs_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "eval_runs" ADD CONSTRAINT "eval_runs_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "examples" ADD CONSTRAINT "examples_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "examples" ADD CONSTRAINT "examples_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "examples" ADD CONSTRAINT "examples_user_id_account_id_message_id_messages_user_id_account_id_id_fk" FOREIGN KEY ("user_id","account_id","message_id") REFERENCES "public"."messages"("user_id","account_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "examples" ADD CONSTRAINT "examples_label" FOREIGN KEY ("user_id","account_id","label_id") REFERENCES "public"."labels"("user_id","account_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "feedback" ADD CONSTRAINT "feedback_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "feedback" ADD CONSTRAINT "feedback_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "feedback" ADD CONSTRAINT "feedback_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "feedback" ADD CONSTRAINT "feedback_user_id_decision_id_decisions_user_id_id_fk" FOREIGN KEY ("user_id","decision_id") REFERENCES "public"."decisions"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "feedback" ADD CONSTRAINT "feedback_label" FOREIGN KEY ("user_id","account_id","label_id") REFERENCES "public"."labels"("user_id","account_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "labels" ADD CONSTRAINT "labels_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "labels" ADD CONSTRAINT "labels_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "labels" ADD CONSTRAINT "labels_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "mailboxes" ADD CONSTRAINT "mailboxes_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "mailboxes" ADD CONSTRAINT "mailboxes_user_id_id_accounts_user_id_id_fk" FOREIGN KEY ("user_id","id") REFERENCES "public"."accounts"("user_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "messages" ADD CONSTRAINT "messages_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "messages" ADD CONSTRAINT "messages_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "messages" ADD CONSTRAINT "messages_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "model_runs" ADD CONSTRAINT "model_runs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "model_runs" ADD CONSTRAINT "model_runs_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "model_runs" ADD CONSTRAINT "model_runs_user_id_account_id_message_id_messages_user_id_account_id_id_fk" FOREIGN KEY ("user_id","account_id","message_id") REFERENCES "public"."messages"("user_id","account_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "preferences" ADD CONSTRAINT "preferences_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "proposals" ADD CONSTRAINT "proposals_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "proposals" ADD CONSTRAINT "proposals_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "proposals" ADD CONSTRAINT "proposals_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "proposals" ADD CONSTRAINT "proposals_label" FOREIGN KEY ("user_id","account_id","label_id") REFERENCES "public"."labels"("user_id","account_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "proposals" ADD CONSTRAINT "proposals_user_id_rule_id_rules_user_id_id_fk" FOREIGN KEY ("user_id","rule_id") REFERENCES "public"."rules"("user_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "rules" ADD CONSTRAINT "rules_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "rules" ADD CONSTRAINT "rules_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "rules" ADD CONSTRAINT "rules_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "rules" ADD CONSTRAINT "rules_label" FOREIGN KEY ("user_id","account_id","label_id") REFERENCES "public"."labels"("user_id","account_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "rules" ADD CONSTRAINT "rules_when_label" FOREIGN KEY ("user_id","account_id","when_label") REFERENCES "public"."labels"("user_id","account_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "suggestion_bodies" ADD CONSTRAINT "suggestion_bodies_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "suggestion_bodies" ADD CONSTRAINT "suggestion_bodies_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "suggestion_bodies" ADD CONSTRAINT "suggestion_bodies_user_id_account_id_message_id_messages_user_id_account_id_id_fk" FOREIGN KEY ("user_id","account_id","message_id") REFERENCES "public"."messages"("user_id","account_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "accounts_user" ON "accounts" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "actions_message" ON "actions" USING btree ("account_id","message_id");--> statement-breakpoint
+CREATE INDEX "actions_time" ON "actions" USING btree ("account_id","created_at");--> statement-breakpoint
 CREATE INDEX "actions_open" ON "actions" USING btree ("status") WHERE "actions"."status" IN ('pending', 'unknown');--> statement-breakpoint
 CREATE INDEX "actions_decision" ON "actions" USING btree ("decision_id");--> statement-breakpoint
 CREATE INDEX "decisions_message" ON "decisions" USING btree ("account_id","message_id","id");--> statement-breakpoint
-CREATE INDEX "decisions_time" ON "decisions" USING btree ("decided_at");--> statement-breakpoint
-CREATE INDEX "decisions_unsettled" ON "decisions" USING btree ("account_id") WHERE "decisions"."outcome" IS NULL;--> statement-breakpoint
+CREATE INDEX "decisions_time" ON "decisions" USING btree ("account_id","decided_at");--> statement-breakpoint
+CREATE INDEX "decisions_run" ON "decisions" USING btree ("user_id","run_id");--> statement-breakpoint
+CREATE INDEX "decisions_rule" ON "decisions" USING btree ("account_id","rule_id","decided_at") WHERE "decisions"."rule_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX "decisions_unsettled" ON "decisions" USING btree ("account_id") WHERE "decisions"."carry_out" AND "decisions"."outcome" IS NULL;--> statement-breakpoint
 CREATE INDEX "decisions_prior" ON "decisions" USING btree ("prior_rule_id","id") WHERE "decisions"."prior_rule_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "examples_pending" ON "examples" USING btree ("account_id") WHERE "examples"."status" = 'pending';--> statement-breakpoint
 CREATE INDEX "feedback_account" ON "feedback" USING btree ("account_id","created_at");--> statement-breakpoint
 CREATE INDEX "messages_sender" ON "messages" USING btree ("account_id","from_address");--> statement-breakpoint
+CREATE INDEX "messages_domain" ON "messages" USING btree ("account_id","from_domain");--> statement-breakpoint
+CREATE INDEX "messages_received" ON "messages" USING btree ("account_id","received_at");--> statement-breakpoint
 CREATE INDEX "model_runs_message" ON "model_runs" USING btree ("account_id","message_id");--> statement-breakpoint
-CREATE INDEX "model_runs_time" ON "model_runs" USING btree ("started_at");--> statement-breakpoint
+CREATE INDEX "model_runs_time" ON "model_runs" USING btree ("account_id","started_at");--> statement-breakpoint
 CREATE INDEX "rules_account" ON "rules" USING btree ("account_id","position");--> statement-breakpoint
 CREATE UNIQUE INDEX "users_one_owner" ON "users" USING btree ("owner") WHERE "users"."owner";--> statement-breakpoint
 CREATE POLICY "own" ON "actions" AS PERMISSIVE FOR ALL TO "sift_app" USING (user_id = nullif(current_setting('sift.user', true), '')::integer) WITH CHECK (user_id = nullif(current_setting('sift.user', true), '')::integer);--> statement-breakpoint

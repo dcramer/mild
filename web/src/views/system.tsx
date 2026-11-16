@@ -229,7 +229,7 @@ export function SystemView() {
                 {STATUS_NAMES[s]}
               </span>
             ))}
-            <StatusWord row={{ mode: 'act', outcome: 'failed', actionStatus: null, outcomeDetail: 'Gmail answered 503' }} />
+            <StatusWord row={{ carryOut: true, outcome: 'failed', actionStatus: null, outcomeDetail: 'Gmail answered 503' }} />
           </Row>
           <Row label="standing">
             {Object.values(STANDINGS).map((name) => (

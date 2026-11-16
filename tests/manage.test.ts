@@ -51,6 +51,7 @@ const controls: Controls = {
     calls.push(`filter ${ruleId} ${on ? 'on' : 'off'}`);
     await raw(target).run(`UPDATE rules SET filter_id = ?, filter_state = ? WHERE id = ?`, on ? 'f1' : null, on ? 'active' : null, ruleId);
   },
+  revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), true),
   checkNow: () => void calls.push('check'),
   activity: () => ({ running: true, lastPassAt: 5, problems: [], expired: [ACCOUNT] }),
 };
@@ -173,7 +174,7 @@ describe('managing sift from the dashboard', () => {
     const { call } = await start();
     const from = { address: 'sales@example.com', domain: 'example.com' };
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'w1', from }), facts({ accountId: ACCOUNT, messageId: 'w2', from })], '2');
-    const marketing = { disposition: 'archive', subscription: 'unsubscribe', stage: 'agent', reason: 'Marketing: a sale', labelId: 'marketing' } as const;
+    const marketing = { disposition: 'archive', subscription: 'unsubscribe', stage: 'model', reason: 'Marketing: a sale', labelId: 'marketing' } as const;
     await recordDecision(db, ACCOUNT, 'w1', marketing, { now: 10 });
     await recordDecision(db, ACCOUNT, 'w2', marketing, { now: 20 });
     const latest = async (id: string) =>
@@ -181,7 +182,7 @@ describe('managing sift from the dashboard', () => {
 
     const label = await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'keep' });
     expect(label.body).toEqual({ ok: true, redecided: 2 });
-    expect(await latest('w1')).toEqual({ stage: 'agent', disposition: 'keep', label_id: 'marketing' });
+    expect(await latest('w1')).toEqual({ stage: 'model', disposition: 'keep', label_id: 'marketing' });
 
     const rule = await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: from.address }, label: 'newsletter' });
     expect(rule.body).toMatchObject({ redecided: 2 });
@@ -189,7 +190,7 @@ describe('managing sift from the dashboard', () => {
     expect(((await call('GET', '/api/suggestions')).body as { waiting: number }).waiting).toBe(0);
 
     expect((await call('POST', '/api/rules/remove', { id: rule.body['id'] })).body).toEqual({ ok: true, redecided: 2 });
-    expect(await latest('w2')).toEqual({ stage: 'agent', disposition: 'keep', label_id: 'marketing' });
+    expect(await latest('w2')).toEqual({ stage: 'model', disposition: 'keep', label_id: 'marketing' });
     expect(((await call('GET', '/api/suggestions?kept=1')).body as { waiting: number }).waiting).toBe(2);
   });
 
@@ -250,7 +251,9 @@ describe('managing sift from the dashboard', () => {
     expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: 'a@example.com' }, label: 'marketing', disposition: 'review' })).status).toBe(
       400,
     );
+    // With no filter recorded, Gmail is still asked: one sift wrote and lost track of goes with the rule.
     expect((await call('POST', '/api/rules/remove', { id: added.body['id'] })).status).toBe(200);
+    expect(calls).toContain(`filter ${String(added.body['id'])} off`);
     expect((await call('POST', '/api/rules/remove', { id: added.body['id'] })).status).toBe(409);
   });
 
@@ -292,8 +295,8 @@ describe('managing sift from the dashboard', () => {
         db,
         ACCOUNT,
         id,
-        { disposition: 'archive', subscription: 'preserve', stage: 'agent', reason: 'r', labelId: 'marketing' },
-        { mode: 'act' },
+        { disposition: 'archive', subscription: 'preserve', stage: 'model', reason: 'r', labelId: 'marketing' },
+        { carryOut: true },
       );
     const { call } = await start();
     const answer = { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', scope: 'once' };
@@ -310,7 +313,10 @@ describe('managing sift from the dashboard', () => {
 
   it('asks the running sift to undo, pull in older mail and check now', async () => {
     const { call } = await start();
-    await raw(db).run(`INSERT INTO actions (id, account_id, type, payload, status, created_at) VALUES (3, ?, 'archive', '{}', 'done', 1)`, ACCOUNT);
+    await raw(db).run(
+      `INSERT INTO actions (id, account_id, type, payload, original_labels, status, created_at) VALUES (3, ?, 'archive', '{}', '[]', 'done', 1)`,
+      ACCOUNT,
+    );
     expect((await call('POST', '/api/undo', { id: 3 })).body).toEqual({ message: 'Reversed.' });
     // A change that is not in this person's database is not passed on.
     expect(await call('POST', '/api/undo', { id: 404 })).toMatchObject({ status: 409, body: { error: 'There is no change #404.' } });
@@ -583,9 +589,9 @@ describe('older mail', () => {
     expect(await backfill(db, api, ACCOUNT, 7)).toBe(0);
     expect(calls).toEqual(['newer_than:7d', 'newer_than:7d']);
     expect((await listAccounts(db))[0]?.historyId).toBe('1');
-    expect(await raw(db).all('SELECT id, observe_only FROM messages ORDER BY id')).toEqual([
-      { id: 'a', observe_only: true },
-      { id: 'b', observe_only: true },
+    expect(await raw(db).all('SELECT id, suggest_only FROM messages ORDER BY id')).toEqual([
+      { id: 'a', suggest_only: true },
+      { id: 'b', suggest_only: true },
     ]);
   });
 
@@ -612,9 +618,9 @@ describe('older mail', () => {
       sources: { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } },
     };
     await triageAccount({ db, mailbox, model }, (await listAccounts(db))[0]!);
-    expect(await raw(db).all('SELECT message_id, mode, outcome FROM decisions ORDER BY message_id')).toEqual([
-      { message_id: 'new', mode: 'act', outcome: 'done' },
-      { message_id: 'old', mode: 'observe', outcome: 'observed' },
+    expect(await raw(db).all('SELECT message_id, carry_out, outcome FROM decisions ORDER BY message_id')).toEqual([
+      { message_id: 'new', carry_out: true, outcome: 'done' },
+      { message_id: 'old', carry_out: false, outcome: null },
     ]);
     expect(mailbox.labels.get('old')).toEqual(['INBOX']);
   });

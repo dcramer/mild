@@ -1,4 +1,4 @@
-import { type Keyring, openSecret, sealSecret, staleSecret } from '../secrets.ts';
+import { type Keyring, openSecret, openToRekey, sealSecret, staleSecret } from '../secrets.ts';
 import { personOf } from './accounts.ts';
 import { type CREDENTIAL_KINDS, and, asc, credentials as credentialRows, eq, sql } from './query.ts';
 import type { Sql } from './sql.ts';
@@ -59,7 +59,7 @@ export async function credentials(db: Sql, kind: CredentialKind, keys: Keyring):
 export async function rekeyCredentials(db: Sql, keys: Keyring, write = true): Promise<string[]> {
   const name = await nameFor(db);
   const rows = await db.select({ kind: credentialRows.kind, key: credentialRows.key, value: credentialRows.value }).from(credentialRows);
-  const opened = rows.map((row) => ({ ...row, text: openSecret(name(row.kind, row.key), row.value, keys) }));
+  const opened = rows.map((row) => ({ ...row, text: openToRekey(name(row.kind, row.key), row.value, keys) }));
   const stale = opened.filter((row) => staleSecret(row.value, keys));
   if (write)
     await db.transaction(async (tx) => {

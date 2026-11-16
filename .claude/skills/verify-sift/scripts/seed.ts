@@ -25,6 +25,8 @@ import type { JudgeInput } from '../../../../src/triage/stages/model.ts';
 import { FakeMailbox } from '../../../../tests/helpers.ts';
 
 const ACCOUNT = 'me@example.org';
+const WORK = 'me@work.example.org';
+const OTHER = 'bravo@example.net';
 
 const home = process.argv[2];
 if (!home) throw new Error('usage: seed.ts <home>');
@@ -45,7 +47,7 @@ const mail = (from: string, subject: string, body: string, extra: { name: string
       { name: 'From', value: from },
       { name: 'To', value: `Me <${ACCOUNT}>` },
       { name: 'Subject', value: subject },
-      { name: 'Authentication-Results', value: `mx.example.org; dmarc=pass header.from=${from.replace(/.*@|>.*/g, '')}` },
+      { name: 'Authentication-Results', value: `mx.google.com; dmarc=pass header.from=${from.replace(/.*@|>.*/g, '')}` },
       ...extra,
     ],
   } satisfies RawMessage,
@@ -97,7 +99,6 @@ const api: GmailApi = {
     return m ? { text: m.body, facts: { hasAttachments: false } } : null;
   },
   getThread: async () => null,
-  getRaw: async () => null,
 };
 
 // A stand-in model that calls no provider. It is sure the Store's sale is Marketing, answers unusably about
@@ -118,6 +119,10 @@ for (let pass = 0; pass < 3; pass++) {
   if (result?.error) throw new Error(`seed pass failed: ${result.error}`);
 }
 if (mailbox.modifyCalls > 0) throw new Error('seed pass changed the fake mailbox while sift was off');
+// A second mailbox of the same person, with no mail (connected after the passes, so none comes to it), to remove; and a second person, who owns nothing yet and
+// takes over the install when the first deletes their account. Neither can be signed in to here.
+await connectAccount(store, WORK, '1', now - 23 * HOUR, user);
+await connectAccount(store, OTHER, '1', now - 22 * HOUR);
 // A model in use, so the dashboard is not behind its connect-a-model wall. The key is made up, and this
 // instance runs no passes, so nothing ever calls Anthropic with it.
 await saveApiKey(await credentials(db, 'model', config.keys), 'anthropic', 'sk-ant-synthetic-seed');
@@ -127,5 +132,5 @@ await store.close();
 // The same cookie `/auth/callback` sets (`signSession` in src/dashboard/server.ts), signed with this home's key.
 const secret = randomBytes(32).toString('base64url');
 writeSecret(config.dashboardKeyPath, secret, config.keys);
-const body = Buffer.from(JSON.stringify({ e: ACCOUNT, x: now + 86_400_000 })).toString('base64url');
+const body = Buffer.from(JSON.stringify({ e: ACCOUNT, p: user, x: now + 86_400_000 })).toString('base64url');
 console.log(`${body}.${createHmac('sha256', secret).update(body).digest('base64url')}`);

@@ -87,7 +87,7 @@
      Mail no tier could decide gets the highlighter. Checked as an ordinal ramp against the card. */
   --tier-rules: #f0eee8;
   --tier-classifier: #74726a;
-  --tier-agent: #4e4c46;
+  --tier-model: #4e4c46;
   --tier-fallback: var(--highlight);
 
   /* What became of mail sift handled, in Activity's chart: ink at two strengths, with a failure in red. */

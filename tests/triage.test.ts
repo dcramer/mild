@@ -123,7 +123,7 @@ describe('the three kinds of rule', () => {
   const decide = (rules: Rule[], options = {}) => rulesStage(rules, LABELS, options).decide(mail);
   const label = (id: string) => LABELS.find((l) => l.id === id)!;
   // What a model tier would say about the message.
-  const said = (labelId: string) => ({ ...labelled(label(labelId)), stage: 'agent' as const, reason: 'looks like one' });
+  const said = (labelId: string) => ({ ...labelled(label(labelId)), stage: 'model' as const, reason: 'looks like one' });
 
   it('takes an action without saying what the mail is', async () => {
     const archive: Rule = { id: 'a', match: { from: from.address }, disposition: 'archive' };
@@ -160,7 +160,7 @@ describe('the three kinds of rule', () => {
     expect(settle([whenMarketing], LABELS, mail, said('marketing'))).toMatchObject({
       disposition: 'keep',
       labelId: 'marketing',
-      stage: 'agent',
+      stage: 'model',
       ruleId: 'w',
       reason: 'rule: from notifications@example.com, when it is Marketing: keep it. looks like one',
     });
@@ -190,7 +190,7 @@ describe('the three kinds of rule', () => {
 
   it('does not touch a decision with no label, or one a rule made', () => {
     const archive: Rule = { id: 'a', match: { from: from.address }, disposition: 'archive' };
-    const unsure = { disposition: 'review' as const, subscription: 'preserve' as const, stage: 'agent' as const, reason: 'unsure' };
+    const unsure = { disposition: 'review' as const, subscription: 'preserve' as const, stage: 'model' as const, reason: 'unsure' };
     expect(settle([archive], LABELS, mail, unsure)).toEqual(unsure);
     const ruled = { ...said('marketing'), stage: 'rules' as const, ruleId: 'x' };
     expect(settle([archive], LABELS, mail, ruled)).toEqual(ruled);

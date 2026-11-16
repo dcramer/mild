@@ -1,7 +1,7 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { KEEP_BODY_DAYS, keepSuggestionBodies } from '../src/daemon/bodies.ts';
-import { captureExamples, parseHeaders } from '../src/daemon/examples.ts';
+import { captureExamples } from '../src/daemon/examples.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
 import { listSuggestions, suggestionDetail } from '../src/dashboard/queries/suggestions.ts';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
@@ -34,7 +34,7 @@ async function suggest(address: string, disposition: Disposition, extra: Partial
     [facts({ accountId: ACCOUNT, messageId: id, from: { address, domain: address.split('@')[1] ?? '' }, subject: `Subject ${id}` })],
     '2',
   );
-  return await recordDecision(db, ACCOUNT, id, { disposition, subscription: 'preserve', stage: 'agent', reason: 'looks like it', ...extra }, { now: serial });
+  return await recordDecision(db, ACCOUNT, id, { disposition, subscription: 'preserve', stage: 'model', reason: 'looks like it', ...extra }, { now: serial });
 }
 
 beforeEach(async () => {
@@ -63,11 +63,11 @@ describe('suggestions', () => {
       db,
       ACCOUNT,
       'm2',
-      { disposition: 'keep', subscription: 'preserve', stage: 'agent', reason: 'changed its mind', labelId: 'personal' },
+      { disposition: 'keep', subscription: 'preserve', stage: 'model', reason: 'changed its mind', labelId: 'personal' },
       { now: 9 },
     );
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'acted' })], '3');
-    await recordDecision(db, ACCOUNT, 'acted', { disposition: 'archive', subscription: 'preserve', stage: 'agent', reason: 'r' }, { mode: 'act' });
+    await recordDecision(db, ACCOUNT, 'acted', { disposition: 'archive', subscription: 'preserve', stage: 'model', reason: 'r' }, { carryOut: true });
 
     const pending = await pendingSuggestions(db);
     expect(pending.map((s) => [s.messageId, s.disposition, s.labelId])).toEqual([
@@ -80,7 +80,7 @@ describe('suggestions', () => {
   it("leave out what a rule of the user's decided, but not what a rule sift learned did", async () => {
     const mine = await addRule(db, ACCOUNT, { match: { from: 'rule@example.com' }, labelId: 'newsletter' }, 'user');
     const corrected = await addRule(db, ACCOUNT, { match: { from: 'taught@example.com' }, labelId: 'newsletter' }, 'correction');
-    const learned = await addRule(db, ACCOUNT, { match: { from: 'learned@example.com' }, labelId: 'newsletter' }, 'agent');
+    const learned = await addRule(db, ACCOUNT, { match: { from: 'learned@example.com' }, labelId: 'newsletter' }, 'learned');
     await suggest('rule@example.com', 'archive', { ...NEWS, stage: 'rules', ruleId: mine });
     await suggest('taught@example.com', 'archive', { ...NEWS, stage: 'rules', ruleId: corrected });
     await suggest('learned@example.com', 'archive', { ...NEWS, stage: 'rules', ruleId: learned });
@@ -160,13 +160,9 @@ describe('teaching', () => {
 
     expect(result).toEqual({ reviewed: 1, corrected: null, taught: null, carrying: 0, proposed: false });
     expect(await listRules(db, ACCOUNT)).toEqual([]);
-    expect(await raw(db).all('SELECT verdict, correct, label_id FROM feedback')).toEqual([{ verdict: 'wrong', correct: 'keep', label_id: 'personal' }]);
+    expect(await raw(db).all('SELECT verdict, disposition, label_id FROM feedback')).toEqual([{ verdict: 'wrong', disposition: 'keep', label_id: 'personal' }]);
     // The message itself is what the model is shown next time.
-    expect(await raw(db).get('SELECT disposition, label_id, suggested FROM examples')).toEqual({
-      disposition: 'keep',
-      label_id: 'personal',
-      suggested: 'archive',
-    });
+    expect(await raw(db).get('SELECT disposition, label_id FROM examples')).toEqual({ disposition: 'keep', label_id: 'personal' });
     expect(await accuracy(db)).toMatchObject({ reviewed: 1, right: 0 });
   });
 
@@ -176,7 +172,7 @@ describe('teaching', () => {
     expect(result.taught).toBe('From now on, mail from digest@example.com is kept in your inbox, whatever it is. sift will not ask about it again.');
     expect(await ruleFor('digest@example.com')).toEqual([{ disposition: 'keep', source: 'correction' }]);
     // sift would have archived it, so this counts against it; what it said the mail is stands.
-    expect(await raw(db).get('SELECT verdict, correct, label_id FROM feedback')).toEqual({ verdict: 'wrong', correct: 'keep', label_id: 'newsletter' });
+    expect(await raw(db).get('SELECT verdict, disposition, label_id FROM feedback')).toEqual({ verdict: 'wrong', disposition: 'keep', label_id: 'newsletter' });
     expect(await accuracy(db)).toMatchObject({ reviewed: 1, right: 0 });
   });
 
@@ -191,7 +187,7 @@ describe('teaching', () => {
   it('answering mail sift could not place says what happens to it without counting as a mistake or needing a label', async () => {
     await suggest('cold@example.net', 'review');
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'cold@example.net', disposition: 'archive', scope: 'sender' });
-    expect(await raw(db).get('SELECT verdict, correct, label_id FROM feedback')).toEqual({ verdict: 'answered', correct: 'archive', label_id: null });
+    expect(await raw(db).get('SELECT verdict, disposition, label_id FROM feedback')).toEqual({ verdict: 'answered', disposition: 'archive', label_id: null });
     expect(await accuracy(db)).toMatchObject({ reviewed: 0, right: 0 });
     expect(await ruleFor('cold@example.net')).toEqual([{ disposition: 'archive', source: 'correction' }]);
   });
@@ -212,7 +208,7 @@ describe('teaching', () => {
   });
 
   it("the user's answer replaces a rule sift made for the sender, and decides later mail without a model", async () => {
-    const learned = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'agent');
+    const learned = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'learned');
     await suggest('news@example.com', 'archive', { ...NEWS, stage: 'rules', ruleId: learned });
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', disposition: 'keep', scope: 'sender' });
     expect(await listRules(db, ACCOUNT)).toMatchObject([{ id: learned, disposition: 'keep', source: 'correction' }]);
@@ -252,7 +248,13 @@ describe('an answer pressed in the dashboard', () => {
     const decisionId = await suggest('news@example.com', 'archive', NEWS);
     // sift's own decision, left over from when it was on: while off it must still be left alone.
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'left', from: { address: 'other@example.com', domain: 'example.com' } })], '3');
-    await recordDecision(db, ACCOUNT, 'left', { disposition: 'archive', subscription: 'preserve', stage: 'agent', reason: 'looks like it' }, { mode: 'act' });
+    await recordDecision(
+      db,
+      ACCOUNT,
+      'left',
+      { disposition: 'archive', subscription: 'preserve', stage: 'model', reason: 'looks like it' },
+      { carryOut: true },
+    );
 
     const result = await applyFeedback(
       db,
@@ -268,9 +270,9 @@ describe('an answer pressed in the dashboard', () => {
     await triageAccount({ db, mailbox: null, answers: mailbox }, (await listAccounts(db))[0]!);
     expect(mailbox.labels.get('m1')).not.toContain('INBOX');
     expect(mailbox.labels.get('left')).toEqual(['INBOX']);
-    expect(await raw(db).get(`SELECT by_user, mode, outcome FROM decisions WHERE message_id = 'm1' ORDER BY id DESC LIMIT 1`)).toEqual({
+    expect(await raw(db).get(`SELECT by_user, carry_out, outcome FROM decisions WHERE message_id = 'm1' ORDER BY id DESC LIMIT 1`)).toEqual({
       by_user: true,
-      mode: 'act',
+      carry_out: true,
       outcome: 'done',
     });
   });
@@ -290,17 +292,17 @@ describe('an answer pressed in the dashboard', () => {
       50,
     );
     expect(result).toMatchObject({ reviewed: 1, carrying: 1, corrected: null, taught: null });
-    expect(await raw(db).all(`SELECT stage, disposition, label_id, by_user, mode, run_id FROM decisions WHERE message_id = 'stuck'`)).toEqual([
-      { stage: 'rules', disposition: 'archive', label_id: 'newsletter', by_user: true, mode: 'act', run_id: null },
+    expect(await raw(db).all(`SELECT stage, disposition, label_id, by_user, carry_out, run_id FROM decisions WHERE message_id = 'stuck'`)).toEqual([
+      { stage: 'rules', disposition: 'archive', label_id: 'newsletter', by_user: true, carry_out: true, run_id: null },
     ]);
-    expect(await raw(db).get(`SELECT verdict, correct, label_id FROM feedback WHERE message_id = 'stuck'`)).toEqual({
+    expect(await raw(db).get(`SELECT verdict, disposition, label_id, via FROM feedback`)).toEqual({
       verdict: 'answered',
-      correct: 'archive',
+      disposition: 'archive',
       label_id: 'newsletter',
+      via: 'dashboard',
     });
-    expect(await raw(db).get(`SELECT suggested, suggested_by, label_id FROM examples WHERE message_id = 'stuck'`)).toEqual({
-      suggested: 'review',
-      suggested_by: 'fallback',
+    expect(await raw(db).get(`SELECT disposition, label_id FROM examples WHERE message_id = 'stuck'`)).toEqual({
+      disposition: 'archive',
       label_id: 'newsletter',
     });
     expect(await listUnjudged(db, scope, 10)).toEqual([]);
@@ -345,7 +347,7 @@ describe('accuracy', () => {
       reviewed: 4,
       right: 3,
       byStage: [
-        { stage: 'agent', reviewed: 3, right: 2 },
+        { stage: 'model', reviewed: 3, right: 2 },
         { stage: 'rules', reviewed: 1, right: 1 },
       ],
       byLabel: [
@@ -365,7 +367,7 @@ describe('accuracy', () => {
     expect(summary.accuracy.byStage).toEqual([
       { stage: 'rules', reviewed: 1, right: 1 },
       { stage: 'classifier', reviewed: 0, right: 0 },
-      { stage: 'agent', reviewed: 3, right: 2 },
+      { stage: 'model', reviewed: 3, right: 2 },
       { stage: 'fallback', reviewed: 0, right: 0 },
     ]);
     expect((await summarize(db, await everything(db), 7, 200 + 30 * 86_400_000)).accuracy).toMatchObject({ reviewed: 0, right: 0, byLabel: [] });
@@ -386,37 +388,37 @@ describe('correcting a decision that is not waiting', () => {
       db,
       ACCOUNT,
       id,
-      { disposition: 'archive', subscription: 'preserve', stage: 'agent', reason: 'r', labelId },
-      { mode: 'act', now: serial },
+      { disposition: 'archive', subscription: 'preserve', stage: 'model', reason: 'r', labelId },
+      { carryOut: true, now: serial },
     );
     return id;
   }
   const decisionsFor = async (id: string) =>
-    await raw(db).all('SELECT stage, disposition, label_id, mode, outcome, reason FROM decisions WHERE message_id = ? ORDER BY id', id);
+    await raw(db).all('SELECT stage, disposition, label_id, carry_out, outcome, reason FROM decisions WHERE message_id = ? ORDER BY id', id);
 
   it('records what the user said as a new decision, makes the rule, and names the message to put right', async () => {
     const id = await acted('bids@example.com', 'marketing');
     expect(await pendingSuggestions(db)).toEqual([]);
     const result = await applyFeedback(
       db,
-      { accountId: ACCOUNT, sender: 'bids@example.com', label: 'personal', scope: 'sender', messageId: id, mode: 'act' },
+      { accountId: ACCOUNT, sender: 'bids@example.com', label: 'personal', scope: 'sender', messageId: id, carryOut: true },
       50,
     );
     expect(result).toEqual({
-      carrying: 0,
+      carrying: 1,
       proposed: false,
       reviewed: 1,
       corrected: id,
       taught: 'From now on, mail from bids@example.com is kept in your inbox, whatever it is. sift will not ask about it again.',
     });
     expect(await decisionsFor(id)).toEqual([
-      { stage: 'agent', disposition: 'archive', label_id: 'marketing', mode: 'act', outcome: null, reason: 'r' },
+      { stage: 'model', disposition: 'archive', label_id: 'marketing', carry_out: true, outcome: null, reason: 'r' },
       // Waiting to be carried out, which the next pass does once the earlier change has been taken back.
-      { stage: 'rules', disposition: 'keep', label_id: 'personal', mode: 'act', outcome: null, reason: 'you said this is Personal' },
+      { stage: 'rules', disposition: 'keep', label_id: 'personal', carry_out: true, outcome: null, reason: 'you said this is Personal' },
     ]);
     // The rule says what happens to their mail; what this message is was corrected on the message alone.
     expect(await ruleFor('bids@example.com')).toEqual([{ disposition: 'keep', source: 'correction' }]);
-    expect(await raw(db).get('SELECT verdict, correct, label_id FROM feedback')).toEqual({ verdict: 'wrong', correct: 'keep', label_id: 'personal' });
+    expect(await raw(db).get('SELECT verdict, disposition, label_id FROM feedback')).toEqual({ verdict: 'wrong', disposition: 'keep', label_id: 'personal' });
     expect(await raw(db).get('SELECT disposition, label_id FROM examples')).toEqual({ disposition: 'keep', label_id: 'personal' });
     expect(await accuracy(db)).toMatchObject({ reviewed: 1, right: 0 });
   });
@@ -431,13 +433,20 @@ describe('correcting a decision that is not waiting', () => {
     });
     expect((await decisionsFor(id)).map((d) => (d as { label_id: string }).label_id)).toEqual(['marketing', 'personal', 'newsletter']);
     // While sift is off, the new decision is a record, not something to carry out.
-    expect((await decisionsFor(id)).at(-1)).toMatchObject({ mode: 'observe', outcome: 'observed' });
+    expect((await decisionsFor(id)).at(-1)).toMatchObject({ carry_out: false, outcome: null });
     expect(await pendingSuggestions(db)).toEqual([]);
   });
 
   it('agreeing with a decision makes the rule and leaves the message alone', async () => {
     const id = await acted('news@example.com', 'newsletter');
-    const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'label', messageId: id, mode: 'act' });
+    const result = await applyFeedback(db, {
+      accountId: ACCOUNT,
+      sender: 'news@example.com',
+      label: 'newsletter',
+      scope: 'label',
+      messageId: id,
+      carryOut: true,
+    });
     expect(result).toMatchObject({ reviewed: 1, corrected: null });
     expect(await decisionsFor(id)).toHaveLength(1);
     expect(await ruleFor('news@example.com')).toEqual([{ whenLabel: 'newsletter', source: 'user' }]);
@@ -472,14 +481,14 @@ describe('how far an answer reaches', () => {
       [facts({ accountId: ACCOUNT, messageId: 'bid', from: { address: 'bids@example.com', domain: 'example.com' }, subject: 'You have been OUTBID on lot 2' })],
       '2',
     );
-    await recordDecision(db, ACCOUNT, 'bid', { disposition: 'archive', subscription: 'preserve', stage: 'agent', reason: 'r', labelId: 'marketing' });
+    await recordDecision(db, ACCOUNT, 'bid', { disposition: 'archive', subscription: 'preserve', stage: 'model', reason: 'r', labelId: 'marketing' });
     await recordSync(
       db,
       ACCOUNT,
       [facts({ accountId: ACCOUNT, messageId: 'promo', from: { address: 'bids@example.com', domain: 'example.com' }, subject: 'Featured lots' })],
       '3',
     );
-    await recordDecision(db, ACCOUNT, 'promo', { disposition: 'archive', subscription: 'preserve', stage: 'agent', reason: 'r', labelId: 'marketing' });
+    await recordDecision(db, ACCOUNT, 'promo', { disposition: 'archive', subscription: 'preserve', stage: 'model', reason: 'r', labelId: 'marketing' });
 
     const answer = { accountId: ACCOUNT, sender: 'bids@example.com', label: 'personal', scope: 'subject' as const };
     await expect(applyFeedback(db, { ...answer, contains: ' ' })).rejects.toThrow('which words');
@@ -537,7 +546,10 @@ describe('how far an answer reaches', () => {
       taught: null,
     });
     expect(await matches()).toEqual([]);
-    expect(await raw(db).all('SELECT DISTINCT scope FROM feedback')).toEqual([{ scope: 'message' }]);
+    expect(await raw(db).all('SELECT verdict, disposition, label_id FROM feedback')).toEqual([
+      { verdict: 'wrong', disposition: 'keep', label_id: 'personal' },
+      { verdict: 'wrong', disposition: 'keep', label_id: 'personal' },
+    ]);
   });
 });
 
@@ -562,8 +574,9 @@ describe('reading a suggestion', () => {
     expect((await messageDetail(db, await everything(db), ACCOUNT, 'm1'))?.body).toBe('Text of m1');
     expect((await messageDetail(db, await everything(db), ACCOUNT, 'm3'))?.body).toBeNull();
 
-    // Answered: the temporary copy goes. (The example keeps the message for good once it is captured.)
+    // Answered: the temporary copy goes at once. (The example keeps the message's text once it is captured.)
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' });
+    expect((await stored()).map((r) => (r as { message_id: string }).message_id)).toEqual(['m2', 'm4']);
     await keepSuggestionBodies(db, api, ACCOUNT, () => 1000);
     expect((await stored()).map((r) => (r as { message_id: string }).message_id)).toEqual(['m2', 'm4']);
 
@@ -599,27 +612,17 @@ describe('reading a suggestion', () => {
 });
 
 describe('examples', () => {
-  const RAW = Buffer.from('From: News <news@example.com>\r\nSubject: A long\r\n subject line\r\nX-Thing: a: b\r\n\r\nHello there.\r\nFrom: not a header\r\n');
-
-  it('reads every header of a raw message, joining folded lines', () => {
-    expect(parseHeaders(RAW)).toEqual([
-      ['From', 'News <news@example.com>'],
-      ['Subject', 'A long subject line'],
-      ['X-Thing', 'a: b'],
-    ]);
-  });
-
-  it('queues each marked message with the answer and what sift had suggested', async () => {
+  it('queues each marked message with the answer', async () => {
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'keep', { labelId: 'personal' });
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' }, 50);
-    expect(await raw(db).all('SELECT message_id, disposition, label_id, suggested, suggested_by, status, raw FROM examples ORDER BY message_id')).toEqual([
-      { message_id: 'm1', disposition: 'archive', label_id: 'newsletter', suggested: 'archive', suggested_by: 'agent', status: 'pending', raw: null },
-      { message_id: 'm2', disposition: 'archive', label_id: 'newsletter', suggested: 'keep', suggested_by: 'agent', status: 'pending', raw: null },
+    expect(await raw(db).all('SELECT message_id, disposition, label_id, status, body_text FROM examples ORDER BY message_id')).toEqual([
+      { message_id: 'm1', disposition: 'archive', label_id: 'newsletter', status: 'pending', body_text: null },
+      { message_id: 'm2', disposition: 'archive', label_id: 'newsletter', status: 'pending', body_text: null },
     ]);
   });
 
-  it('stores the whole message on the next pass, and keeps the answer when the message is gone', async () => {
+  it('stores the text on the next pass, and keeps the answer when the message is gone', async () => {
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'archive', NEWS);
@@ -627,18 +630,17 @@ describe('examples', () => {
 
     let failing = true;
     const api = {
-      getRaw: async (id: string) => {
+      getBodyText: async (id: string) => {
         if (id === 'm3' && failing) throw new Error('network');
-        return id === 'm2' ? null : RAW;
+        return id === 'm2' ? null : 'Hello there.';
       },
-      getBodyText: async () => 'Hello there.',
     };
     await expect(captureExamples(db, api, ACCOUNT, () => 99)).rejects.toThrow('network');
-    const stored = await raw(db).all('SELECT message_id, status, body_text, headers, captured_at, length(raw) AS bytes FROM examples ORDER BY message_id');
+    const stored = await raw(db).all('SELECT message_id, status, body_text, captured_at FROM examples ORDER BY message_id');
     expect(stored).toEqual([
-      { message_id: 'm1', status: 'captured', body_text: 'Hello there.', headers: parseHeaders(RAW), captured_at: 99, bytes: RAW.length },
-      { message_id: 'm2', status: 'gone', body_text: null, headers: null, captured_at: 99, bytes: null },
-      { message_id: 'm3', status: 'pending', body_text: null, headers: null, captured_at: null, bytes: null },
+      { message_id: 'm1', status: 'captured', body_text: 'Hello there.', captured_at: 99 },
+      { message_id: 'm2', status: 'gone', body_text: null, captured_at: 99 },
+      { message_id: 'm3', status: 'pending', body_text: null, captured_at: null },
     ]);
 
     failing = false;

@@ -1,4 +1,4 @@
-import { actions, and, decisions, desc, eq, examples, feedback, gte, isNotNull, messages, ne } from '../store/query.ts';
+import { actions, and, decisions, desc, eq, feedback, gte, isNotNull, messages, ne } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import { listLabels } from '../store/labels.ts';
 import type { DecidedDisposition } from '../triage/types.ts';
@@ -74,7 +74,7 @@ const moves = (labels: string[]) => labels.includes('INBOX') || labels.includes(
  * Returns how many answers were recorded.
  */
 export async function learnFromGmail(db: Sql, accountId: string, changes: readonly MessageChange[], gmail: GmailState, now: number): Promise<number> {
-  const labels = await listLabels(db, accountId, now);
+  const labels = await listLabels(db, accountId);
   let names: Map<string, string> | undefined;
   let learned = 0;
 
@@ -84,9 +84,8 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
         id: decisions.id,
         labelId: decisions.labelId,
         disposition: decisions.disposition,
-        mode: decisions.mode,
-        stage: decisions.stage,
-        ruleId: decisions.ruleId,
+        carryOut: decisions.carryOut,
+        byUser: decisions.byUser,
         fromAddress: messages.fromAddress,
       })
       .from(decisions)
@@ -113,11 +112,10 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
     const agrees = decision.labelId === label.id && (decision.disposition === 'review' ? 'keep' : decision.disposition) === place;
     if (agrees) {
       // Doing what sift only suggested confirms it, once. Anything else here is sift's own work or the user's earlier answer, seen again.
-      const saidByUser = decision.stage === 'rules' && decision.ruleId === null;
       if (
         !moved ||
-        decision.mode !== 'observe' ||
-        saidByUser ||
+        decision.carryOut ||
+        decision.byUser ||
         (await db.select({ id: feedback.id }).from(feedback).where(eq(feedback.decisionId, decision.id)).limit(1)).length > 0
       )
         continue;
@@ -126,8 +124,7 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
         await db
           .select({ id: feedback.id })
           .from(feedback)
-          .innerJoin(examples, and(eq(examples.accountId, feedback.accountId), eq(examples.messageId, feedback.messageId)))
-          .where(and(eq(feedback.decisionId, decision.id), eq(feedback.labelId, label.id), eq(examples.disposition, place)))
+          .where(and(eq(feedback.decisionId, decision.id), eq(feedback.labelId, label.id), eq(feedback.disposition, place)))
           .limit(1)
       ).length > 0
     )
@@ -143,14 +140,10 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
         scope: 'once',
         decisionId: decision.id,
         messageId: change.messageId,
-        mode: 'observe',
+        via: 'gmail',
       },
       now,
     );
-    await db
-      .update(feedback)
-      .set({ via: 'gmail' })
-      .where(and(eq(feedback.accountId, accountId), eq(feedback.messageId, change.messageId), eq(feedback.createdAt, now)));
     learned++;
   }
   return learned;

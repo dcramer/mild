@@ -1,11 +1,13 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { RETENTION_DAYS, pruneOld } from '../src/daemon/retention.ts';
-import { type RunOptions, createWake, runLoop } from '../src/daemon/run.ts';
+import { KEEP_BODY_DAYS } from '../src/daemon/bodies.ts';
+import { type RunOptions, createWake, daily, runLoop } from '../src/daemon/run.ts';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { recordSync } from '../src/store/accounts.ts';
 import { type ActionType, finishAction, insertPendingAction, unsubscribedAt } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
+import { deleteExamples } from '../src/store/examples.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { addRule } from '../src/store/rules.ts';
 import { MAX_ATTEMPTS, finishRun, startRun } from '../src/store/runs.ts';
@@ -23,7 +25,7 @@ const RECENT = NOW - 10 * DAY;
 let db: Sql;
 let store: Store;
 
-const archive: Decision = { disposition: 'archive', subscription: 'preserve', labelId: 'newsletter', stage: 'agent', reason: 'test' };
+const archive: Decision = { disposition: 'archive', subscription: 'preserve', labelId: 'newsletter', stage: 'model', reason: 'test' };
 
 async function message(id: string, at = OLD, from = `${id}@example.com`): Promise<void> {
   await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id, receivedAt: at, from: { address: from, domain: 'example.com' } })], '1', at);
@@ -32,7 +34,7 @@ async function message(id: string, at = OLD, from = `${id}@example.com`): Promis
 /** A message sift decided and changed long ago. */
 async function acted(id: string, type: ActionType = 'archive'): Promise<{ decisionId: number; actionId: number }> {
   await message(id);
-  const decisionId = await recordDecision(db, ACCOUNT, id, archive, { mode: 'act', now: OLD });
+  const decisionId = await recordDecision(db, ACCOUNT, id, archive, { carryOut: true, now: OLD });
   await settleDecision(db, decisionId, 'done');
   const actionId = await insertPendingAction(
     db,
@@ -56,7 +58,7 @@ describe('pruneOld', () => {
     await finishRun(db, await startRun(db, { accountId: ACCOUNT, messageId: 'gone', model: 'p/m', now: OLD }), { outcome: 'judged', now: OLD });
     await acted('fresh');
     await message('new', RECENT);
-    await recordDecision(db, ACCOUNT, 'new', archive, { mode: 'act', now: RECENT });
+    await recordDecision(db, ACCOUNT, 'new', archive, { carryOut: true, now: RECENT });
     await raw(db).run(`UPDATE actions SET created_at = ? WHERE message_id = 'fresh'`, RECENT);
 
     expect(await pruneOld(db, NOW)).toBe(1);
@@ -67,32 +69,42 @@ describe('pruneOld', () => {
     expect(await pruneOld(db, NOW)).toBe(0);
   });
 
-  it('keeps a suggestion that is still waiting, and forgets it once it is not', async () => {
+  it('spares a suggestion still waiting for a year from its decision, and no longer, whatever it would do', async () => {
     await message('waiting');
-    await recordDecision(db, ACCOUNT, 'waiting', archive, { now: OLD });
+    await recordDecision(db, ACCOUNT, 'waiting', archive, { now: RECENT });
+    await message('forgotten');
+    await recordDecision(db, ACCOUNT, 'forgotten', archive, { now: OLD });
+    await message('kept');
+    await recordDecision(db, ACCOUNT, 'kept', { ...archive, disposition: 'keep', labelId: 'personal' }, { now: OLD });
     await message('told');
     const ruleId = await addRule(db, ACCOUNT, { match: { from: 'told@example.com' }, labelId: 'newsletter' }, 'user');
     await recordDecision(db, ACCOUNT, 'told', { ...archive, stage: 'rules', ruleId }, { now: OLD });
-    expect((await pendingSuggestions(db)).map((s) => s.messageId)).toEqual(['waiting']);
+    expect((await pendingSuggestions(db)).map((s) => s.messageId).toSorted()).toEqual(['forgotten', 'kept', 'waiting']);
 
-    expect(await pruneOld(db, NOW)).toBe(1);
+    expect(await pruneOld(db, NOW)).toBe(3);
     expect(await left('messages', 'id')).toEqual(['waiting']);
   });
 
-  it('keeps what the user answered for', async () => {
+  it('keeps a message the user answered while its example is kept, then forgets it with the answer', async () => {
     await message('answered');
     await recordDecision(db, ACCOUNT, 'answered', archive, { now: OLD });
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'answered@example.com', label: 'newsletter', scope: 'once' }, OLD);
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'answered@example.com', label: 'newsletter', scope: 'once', carryOut: true }, OLD);
+    await raw(db).run(`UPDATE decisions SET outcome = 'done' WHERE carry_out`);
 
     expect(await pruneOld(db, NOW)).toBe(0);
     expect(await left('examples')).toEqual(['answered']);
-    expect(await left('feedback')).toEqual(['answered']);
+    expect(await left('feedback', 'decision_id')).toHaveLength(1);
+
+    await deleteExamples(db, ACCOUNT, 'answered');
+    expect(await pruneOld(db, NOW)).toBe(1);
+    for (const table of ['messages', 'decisions', 'feedback', 'actions', 'model_runs'])
+      expect(await left(table, table === 'messages' ? 'id' : 'user_id'), table).toEqual([]);
   });
 
   it('keeps a message that is undecided, not yet carried out, or changed without confirmation', async () => {
     await message('undecided');
     await message('unsettled');
-    await recordDecision(db, ACCOUNT, 'unsettled', archive, { mode: 'act', now: OLD });
+    await recordDecision(db, ACCOUNT, 'unsettled', archive, { carryOut: true, now: OLD });
     const { actionId } = await acted('unconfirmed');
     await finishAction(db, actionId, 'unknown', null, 'timeout', OLD);
 
@@ -120,6 +132,22 @@ describe('pruneOld', () => {
     await acted('list', 'unsubscribe');
     expect(await pruneOld(db, NOW)).toBe(0);
     expect(await unsubscribedAt(db, ACCOUNT, 'list@example.com')).toBe(OLD);
+  });
+});
+
+describe('daily upkeep', () => {
+  it('deletes the text of waiting mail after 30 days for everyone, whether or not Gmail can be reached', async () => {
+    await message('old');
+    await message('young');
+    await raw(db).run(
+      `INSERT INTO suggestion_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, 'old', 'Old text.', ?), (?, 'young', 'Young text.', ?)`,
+      ACCOUNT,
+      NOW - (KEEP_BODY_DAYS + 1) * DAY,
+      ACCOUNT,
+      NOW - DAY,
+    );
+    await daily(store, { log: () => {}, now: () => NOW });
+    expect(await left('suggestion_bodies')).toEqual(['young']);
   });
 });
 

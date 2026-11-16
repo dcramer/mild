@@ -62,7 +62,7 @@ describe('replaying the model over stored examples', () => {
   });
 
   beforeEach(async () => {
-    db = await openUserDb();
+    db = await openUserDb(ACCOUNT);
     await addMailbox(db, ACCOUNT, '1', 0);
     seen = [];
     await storeExample(db, ACCOUNT, { id: 'e1', from: 'news@example.com', label: 'newsletter', body: 'Issue 12.', markedAt: 1 });
@@ -119,15 +119,15 @@ describe('replaying the model over stored examples', () => {
       '4',
     );
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'later', from: news, receivedAt: 30 })], '5');
-    const agent = { subscription: 'preserve', stage: 'agent', reason: 'r' } as const;
+    const agent = { subscription: 'preserve', stage: 'model', reason: 'r' } as const;
     await recordDecision(db, ACCOUNT, 'old', { ...agent, disposition: 'archive' });
     await recordDecision(db, ACCOUNT, 'judged', { ...agent, disposition: 'review' });
     // After the user answered: the earlier message was corrected and a later one arrived.
     await recordDecision(db, ACCOUNT, 'old', { ...agent, stage: 'rules', disposition: 'keep' });
     await recordDecision(db, ACCOUNT, 'later', { ...agent, stage: 'rules', disposition: 'keep' });
     await raw(db).run(
-      `INSERT INTO examples (account_id, message_id, disposition, label_id, suggested, suggested_by, marked_at, status, body_text)
-       VALUES (?, 'judged', 'keep', 'personal', 'review', 'agent', 9, 'captured', 'Hello.')`,
+      `INSERT INTO examples (account_id, message_id, disposition, label_id, marked_at, status, body_text)
+       VALUES (?, 'judged', 'keep', 'personal', 9, 'captured', 'Hello.')`,
       ACCOUNT,
     );
     await rememberCorrespondent(db, ACCOUNT, news.address, true);
@@ -183,14 +183,15 @@ describe('replaying the model over stored examples', () => {
     await expect(startEval(deps({}), { accountId: ACCOUNT, fewShot: false })).rejects.toThrow('no stored examples');
   });
 
-  it('leaves out an example whose label has gone, and counts a judge that throws as a failed call', async () => {
-    await raw(db).run(`UPDATE examples SET label_id = 'removed' WHERE message_id = 'e4'`);
+  it('counts a judge that throws as a failed call, and keeps why as a status and kind, not what the provider said', async () => {
     const throwing = async () => {
-      throw new Error('provider down');
+      throw Object.assign(new Error('503 upstream: cannot read "Your invoice from example.com"'), { status: 503 });
     };
     const { id, done } = await startEval({ db, judge: throwing, model: 'test/model' }, { accountId: ACCOUNT, fewShot: false });
     await done;
-    expect((await getEvalRun(db, id))?.run).toMatchObject({ status: 'done', total: 3, score: { total: 3, failed: 3 } });
+    const { run, results } = (await getEvalRun(db, id))!;
+    expect(run).toMatchObject({ status: 'done', total: 4, score: { total: 4, failed: 4 } });
+    expect(new Set(results.map((r) => r.error))).toEqual(new Set(['HTTP 503 unavailable']));
   });
 
   it('keeps the cost of a call that was billed but answered unusably', async () => {
@@ -199,7 +200,7 @@ describe('replaying the model over stored examples', () => {
     await done;
     const { run, results } = (await getEvalRun(db, id))!;
     expect(run.score).toMatchObject({ failed: 4, costUsd: 0.004, inputTokens: 4000 });
-    expect(results.every((r) => r.got === null && r.costUsd === 0.001)).toBe(true);
+    expect(results.every((r) => r.got === null && r.costUsd === 0.001 && r.error === 'the model did not return a usable verdict')).toBe(true);
   });
 
   it('records settings that tell two runs apart', async () => {

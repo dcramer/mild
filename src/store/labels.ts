@@ -3,8 +3,8 @@ import type { Sql } from './sql.ts';
 import type { Disposition, Label } from '../triage/types.ts';
 
 /**
- * The starting set for a new account, with what most people want done with each. They are only acted
- * on once the user turns sift on; until then every one is a suggestion.
+ * The starting set for a new mailbox, with what most people want done with each. They are only carried
+ * out once the user turns sift on; until then every one is a suggestion.
  */
 export const DEFAULT_LABELS: readonly Label[] = [
   {
@@ -105,28 +105,25 @@ const toRow = (accountId: string, l: Label, position: number, now: number) => ({
   unsubscribe: l.unsubscribe ?? false,
 });
 
-/** An account's labels in order, seeding the defaults the first time. */
-export async function listLabels(db: Sql, accountId: string, now: number = Date.now()): Promise<Label[]> {
-  const select = () =>
-    db
-      .select({
-        id: labels.id,
-        name: labels.name,
-        description: labels.description,
-        disposition: labels.disposition,
-        gmailLabel: labels.gmailLabel,
-        block: labels.block,
-        markRead: labels.markRead,
-        unsubscribe: labels.unsubscribe,
-      })
-      .from(labels)
-      .where(eq(labels.accountId, accountId))
-      .orderBy(asc(labels.position), asc(labels.id));
-  let rows = await select();
-  if (rows.length === 0) {
-    await db.insert(labels).values(DEFAULT_LABELS.map((l, index) => toRow(accountId, l, index, now)));
-    rows = await select();
-  }
+/** A new mailbox's labels, written with it (`ensureMailbox`). */
+export const defaultLabelRows = (accountId: string, now: number) => DEFAULT_LABELS.map((l, index) => toRow(accountId, l, index, now));
+
+/** An account's labels in order. */
+export async function listLabels(db: Sql, accountId: string): Promise<Label[]> {
+  const rows = await db
+    .select({
+      id: labels.id,
+      name: labels.name,
+      description: labels.description,
+      disposition: labels.disposition,
+      gmailLabel: labels.gmailLabel,
+      block: labels.block,
+      markRead: labels.markRead,
+      unsubscribe: labels.unsubscribe,
+    })
+    .from(labels)
+    .where(eq(labels.accountId, accountId))
+    .orderBy(asc(labels.position), asc(labels.id));
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
@@ -173,7 +170,7 @@ export async function addLabel(
   const name = label.name.trim();
   const id = slug(name);
   if (id === '' || RESERVED.has(id)) throw new Error(`"${name}" cannot be used as a label name.`);
-  const existing = await listLabels(db, accountId, now);
+  const existing = await listLabels(db, accountId);
   if (existing.length >= MAX_LABELS) throw new Error(`sift keeps at most ${MAX_LABELS} labels. Change one that is no longer used instead.`);
   if (existing.some((l) => l.id === id || l.id.replace(/_/g, '-') === id || l.gmailLabel === `sift/${id}` || l.name.toLowerCase() === name.toLowerCase()))
     throw new Error(`There is already a label "${name}".`);
@@ -202,7 +199,7 @@ export async function updateLabel(
   change: { name?: string; description?: string; disposition?: Disposition; block?: boolean; markRead?: boolean; unsubscribe?: boolean },
   now: number = Date.now(),
 ): Promise<boolean> {
-  const current = (await listLabels(db, accountId, now)).find((l) => l.id === id);
+  const current = (await listLabels(db, accountId)).find((l) => l.id === id);
   if (!current) return false;
   const disposition = change.disposition ?? current.disposition;
   // Changing what a label does drops a block unless the change asks for one.

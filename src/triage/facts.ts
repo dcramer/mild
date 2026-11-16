@@ -1,4 +1,4 @@
-import { bulkSignals, parseAddress, parseAddressList } from './features.ts';
+import { bulkSignals, parseAddress, parseAddressList, receivedResults } from './features.ts';
 import type { HtmlFacts } from './html.ts';
 import type { MessageFacts } from './types.ts';
 
@@ -89,12 +89,12 @@ function authResult(results: string, method: string): AuthResult {
 }
 
 /**
- * The domains that handled the message, as the receiver recorded them: who signed it (DKIM), and the
+ * The domains that handled the message, as Gmail recorded them: who signed it (DKIM), and the
  * envelope sender (SPF, Return-Path). A service that sends on behalf of a customer shows up here even
  * when From is the customer's own address.
  */
 function sendingDomains(headers: Record<string, string>): string[] {
-  const results = headers['authentication-results'] ?? '';
+  const results = receivedResults(headers);
   const domains = [...results.matchAll(/\b(?:header\.[id]|smtp\.mailfrom)=(?:[^\s;@]*@)?([a-z0-9.-]+)/gi)].map((m) => m[1]!.toLowerCase());
   const returnPath = parseAddress(headers['return-path'] ?? '');
   return returnPath ? [...domains, returnPath.domain] : domains;
@@ -132,7 +132,7 @@ export function deriveFacts(
 ): Facts {
   const { headers } = message;
   const signals = bulkSignals(headers);
-  const results = headers['authentication-results'] ?? '';
+  const results = receivedResults(headers);
   const owner = message.accountId.toLowerCase();
   const isOwner = (a: { address: string }) => untagged(a.address) === owner;
   const replyTo = parseAddressList(headers['reply-to']);

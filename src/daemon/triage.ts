@@ -15,7 +15,7 @@ import { cachedCorrespondent } from '../store/senders.ts';
 import { passedDmarc } from '../triage/features.ts';
 import { triage } from '../triage/pipeline.ts';
 import { priorRule, rulesStage, settle } from '../triage/stages/rules.ts';
-import { type Judge, type JudgeFailure, modelStage } from '../triage/stages/model.ts';
+import { type Judge, type JudgeFailure, describeFailure, modelStage } from '../triage/stages/model.ts';
 import type { Decision, Disposition, MessageFacts, Stage, Unfinished } from '../triage/types.ts';
 import { type EvidenceSources, gatherEvidence } from './evidence.ts';
 
@@ -138,7 +138,7 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     judge: async (input) => {
       const { accountId, messageId } = input.evidence.facts;
       const run = await startRun(db, { accountId, messageId, model: tier.model, now: now() });
-      const verdict = await tier.judge(input).catch((error: unknown): JudgeFailure => ({ failed: error instanceof Error ? error.message : String(error) }));
+      const verdict = await tier.judge(input).catch((error: unknown): JudgeFailure => ({ failed: describeFailure(error) }));
       const usage = verdict.usage ? { usage: verdict.usage } : {};
       if ('failed' in verdict) await finishRun(db, run, { outcome: 'failed', error: verdict.failed, ...usage, now: now() });
       else await finishRun(db, run, { outcome: 'judged', ...usage, now: now() });
@@ -176,8 +176,8 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
 
   const { model: _given, ...modelless } = deps;
   const decide = await cascadeFor(model ? { ...deps, model } : modelless, account.id, () => asking);
-  for (const { facts, observeOnly } of await listUndecided(db, account.id, limit)) {
-    const act = mailbox !== null && !observeOnly;
+  for (const { facts, suggestOnly } of await listUndecided(db, account.id, limit)) {
+    const act = mailbox !== null && !suggestOnly;
     const started = performance.now();
     runId = undefined;
     const decision = await decide(facts);
@@ -197,13 +197,13 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     // model once one is connected, or a rule added meanwhile. A model's own "unsure" is recorded and asked about.
     if (decision.stage === 'fallback' && !model) continue;
     const decisionId = await recordDecision(db, account.id, facts.messageId, decision, {
-      mode: act ? 'act' : 'observe',
+      carryOut: act,
       durationMs: Math.round(performance.now() - started),
       now: now(),
       ...(runId === undefined ? {} : { runId }),
     });
     if (decision.ruleId) await countRuleHit(db, decision.ruleId);
-    if (decision.stage === 'agent') {
+    if (decision.stage === 'model') {
       const proposed = decision.priorRuleId
         ? await proposeSettled(db, account.id, decision.priorRuleId, now())
         : await proposeForSender(db, account.id, facts.from.address, now());

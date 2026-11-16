@@ -2,10 +2,10 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { people } from '../src/store/people.ts';
-import { connectAccount, connectedAddresses, personOf, recordSync, userOf } from '../src/store/accounts.ts';
+import { connectAccount, connectedAddresses, listUsers, personOf, recordSync, userOf } from '../src/store/accounts.ts';
 import { preferences, setModel } from '../src/store/preferences.ts';
 import type { Store } from '../src/store/store.ts';
-import { freshStore, raw, startDashboard } from './fixtures.ts';
+import { freshStore, raw, rowsBy, startDashboard } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { MAX_ATTEMPTS, finishRun, startRun } from '../src/store/runs.ts';
@@ -22,6 +22,8 @@ let store: Store;
 const dbOf = async (account: string) => await store.user((await userOf(store.central, account))!.id);
 let dashboard: Awaited<ReturnType<typeof startDashboard>>;
 let calls: string[];
+/** Mailboxes Google cannot be reached to revoke. */
+let unreachable: string[];
 const cookies: Record<string, string> = {};
 const ids: Record<string, { rule: string; action: number; proposal: number }> = {};
 
@@ -34,12 +36,12 @@ async function seed(account: string): Promise<void> {
     db,
     account,
     `m-${mark}`,
-    { disposition: 'archive', subscription: 'preserve', stage: 'agent', labelId: 'newsletter', reason: `because ${mark}` },
+    { disposition: 'archive', subscription: 'preserve', stage: 'model', labelId: 'newsletter', reason: `because ${mark}` },
     { now: 1000 },
   );
   const rule = await addRule(db, account, { match: { from: sender.address }, disposition: 'archive' }, 'user', 1000);
   const { id: action } = (await raw(db).get<{ id: number }>(
-    `INSERT INTO actions (account_id, message_id, type, payload, status, created_at, decision_id) VALUES (?, ?, 'archive', '{}', 'done', 1000, ?) RETURNING id`,
+    `INSERT INTO actions (account_id, message_id, type, payload, original_labels, status, created_at, decision_id) VALUES (?, ?, 'archive', '{}', '[]', 'done', 1000, ?) RETURNING id`,
     account,
     `m-${mark}`,
     decision,
@@ -50,7 +52,7 @@ async function seed(account: string): Promise<void> {
     JSON.stringify({ from: `proposed@${mark}.example.com` }),
   ))!;
   await raw(db).run(
-    `INSERT INTO examples (account_id, message_id, disposition, label_id, suggested, suggested_by, marked_at, status, body_text) VALUES (?, ?, 'archive', 'newsletter', 'archive', 'agent', 1000, 'captured', ?)`,
+    `INSERT INTO examples (account_id, message_id, disposition, label_id, marked_at, status, body_text) VALUES (?, ?, 'archive', 'newsletter', 1000, 'captured', ?)`,
     account,
     `m-${mark}`,
     `Body ${mark}`,
@@ -78,6 +80,7 @@ const signIn: SignIn = {
 beforeEach(async () => {
   store = await freshStore();
   calls = [];
+  unreachable = [];
   const alpha = await connectAccount(store, ALPHA, '1', 0);
   await connectAccount(store, ALPHA_WORK, '1', 1, alpha);
   await connectAccount(store, BRAVO, '1', 2);
@@ -96,6 +99,7 @@ beforeEach(async () => {
     ruleFilter: async (_db, id) => void calls.push(`filter ${id}`),
     backfill: async () => (calls.push('backfill'), 0),
     startEval: async (_db, { accountId }) => (calls.push(`eval ${accountId}`), 1),
+    revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), !unreachable.includes(email)),
     checkNow: () => void calls.push('check'),
     activity: () => ({
       running: true,
@@ -249,6 +253,7 @@ describe("nobody sees or changes another person's mail", () => {
       ['/api/examples/delete', { accountId: ALPHA, messageId: `m-${MARK[ALPHA]}` }, { accountId: NOBODY, messageId: `m-${MARK[ALPHA]}` }],
       ['/api/examples/delete-all', { accountId: ALPHA }, { accountId: NOBODY }],
       ['/api/evals/run', { accountId: ALPHA }, { accountId: NOBODY }],
+      ['/api/mailbox/remove', { address: ALPHA }, { address: NOBODY }],
     ];
     for (const [path, body, nobody] of writes) {
       const answer = await call('POST', path, BRAVO, body);
@@ -303,6 +308,14 @@ describe("nobody sees or changes another person's mail", () => {
     expect((await call('POST', '/api/check', BRAVO, {})).status).toBe(200);
   });
 
+  it("will not delete someone else's account, even given their address", async () => {
+    const before = await rowsBy('user_id');
+    expect((await call('POST', '/api/account/delete', BRAVO, { address: ALPHA })).status).toBe(409);
+    expect((await call('POST', '/api/account/delete', null, { address: ALPHA })).status).toBe(401);
+    expect(await rowsBy('user_id')).toEqual(before);
+    expect(calls).toEqual([]);
+  });
+
   it('requires every query the dashboard runs to be given a scope', () => {
     const dir = new URL('../src/dashboard/queries/', import.meta.url);
     const files = readdirSync(dir).filter((name) => name.endsWith('.ts'));
@@ -314,5 +327,86 @@ describe("nobody sees or changes another person's mail", () => {
         .map((match) => `${name}: ${match[1]}`),
     );
     expect(unscoped, 'every exported query under src/dashboard/queries/ takes `scope: Scope`').toEqual([]);
+  });
+});
+
+describe('removing a mailbox and deleting an account', () => {
+  const alpha = 1;
+  const signedOut = (reply: { headers: Record<string, string | string[] | undefined> }) =>
+    String(reply.headers['set-cookie'] ?? '').startsWith('sift_session=;');
+  /** Every row anywhere that is about `account`, by table. */
+  const about = async (account: string) =>
+    Object.fromEntries(Object.entries(await rowsBy('account_id')).flatMap(([table, counts]) => (counts[account] ? [[table, counts[account]]] : [])));
+
+  beforeEach(async () => {
+    for (const account of [ALPHA, ALPHA_WORK, BRAVO])
+      await raw(await dbOf(account)).run(`INSERT INTO credentials (kind, key, value, updated_at) VALUES ('gmail', ?, 'token', 0)`, account);
+  });
+
+  it('removes a mailbox, revoking its access first, and leaves the rest of the person and everyone else', async () => {
+    const bravoBefore = await about(BRAVO);
+    const alphaBefore = await about(ALPHA);
+    expect(Object.keys(await about(ALPHA_WORK)).length).toBeGreaterThan(5);
+    // Typed wrong, or not theirs: nothing happens.
+    expect((await call('POST', '/api/mailbox/remove', ALPHA, { address: 'alpha@work.example.co' })).status).toBe(404);
+
+    const removed = await call('POST', '/api/mailbox/remove', ALPHA, { address: ALPHA_WORK });
+    expect(removed.status).toBe(200);
+    expect(removed.body).toEqual({ notRevoked: [], signedOut: false });
+    expect(signedOut(removed)).toBe(false);
+    expect(calls).toEqual([`revoke ${ALPHA_WORK}`]);
+    expect(await about(ALPHA_WORK)).toEqual({});
+    expect(await about(ALPHA)).toEqual(alphaBefore);
+    expect(await about(BRAVO)).toEqual(bravoBefore);
+    expect(await raw(await dbOf(ALPHA)).all(`SELECT key FROM credentials WHERE kind = 'gmail'`)).toEqual([{ key: ALPHA }]);
+    expect(await connectedAddresses(store.central)).toEqual([ALPHA, BRAVO]);
+    // Still signed in as the one left, and still the owner.
+    expect((await call('GET', '/api/manage', ALPHA)).body).toMatchObject({ owner: true, accounts: [{ email: ALPHA }] });
+    // The one removed signs no one in any more.
+    expect((await call('GET', '/api/manage', ALPHA_WORK)).status).toBe(401);
+  });
+
+  it('signs out whoever removes the mailbox they are signed in as, and says when Google could not be reached', async () => {
+    unreachable = [ALPHA_WORK];
+    const removed = await call('POST', '/api/mailbox/remove', ALPHA_WORK, { address: ALPHA_WORK });
+    expect(removed.body).toEqual({ notRevoked: [ALPHA_WORK], signedOut: true });
+    expect(signedOut(removed)).toBe(true);
+    expect(await about(ALPHA_WORK)).toEqual({});
+    expect((await call('GET', '/api/manage', ALPHA_WORK)).status).toBe(401);
+    expect((await call('GET', '/api/manage', ALPHA)).status).toBe(200);
+  });
+
+  it('deletes everything of the person, hands the install to the earliest left, and signs them out', async () => {
+    const before = await rowsBy('user_id');
+    const bravo = (await userOf(store.central, BRAVO))!.id;
+    expect((await call('POST', '/api/account/delete', ALPHA, { address: 'someone@example.com' })).status).toBe(409);
+    expect(await rowsBy('user_id')).toEqual(before);
+
+    const deleted = await call('POST', '/api/account/delete', ALPHA, { address: ALPHA_WORK });
+    expect(deleted.body).toEqual({ notRevoked: [], signedOut: true });
+    expect(signedOut(deleted)).toBe(true);
+    expect(calls).toEqual([`revoke ${ALPHA}`, `revoke ${ALPHA_WORK}`]);
+    const after = await rowsBy('user_id');
+    for (const [table, counts] of Object.entries(before)) expect(after[table], table).toEqual(counts[bravo] ? { [bravo]: counts[bravo] } : {});
+    expect(await listUsers(store.central)).toEqual([{ id: bravo, owner: true }]);
+    for (const who of [ALPHA, ALPHA_WORK]) expect((await call('GET', '/api/manage', who)).status).toBe(401);
+    expect((await call('GET', '/api/manage', BRAVO)).body).toMatchObject({ owner: true });
+  });
+
+  it('deletes the person whose last mailbox is removed, and with nobody left the next sign-in owns the install', async () => {
+    expect((await call('POST', '/api/mailbox/remove', BRAVO, { address: BRAVO })).body).toEqual({ notRevoked: [], signedOut: true });
+    expect((await call('POST', '/api/account/delete', ALPHA, { address: ALPHA })).status).toBe(200);
+    expect(await listUsers(store.central)).toEqual([]);
+    expect(Object.values(await rowsBy('user_id')).every((counts) => Object.keys(counts).length === 0)).toBe(true);
+    await connectAccount(store, 'carol@example.com', '1', 3);
+    expect(await userOf(store.central, 'carol@example.com')).toMatchObject({ owner: true });
+  });
+
+  it("refuses a session whose address has since become someone else's", async () => {
+    expect((await call('POST', '/api/mailbox/remove', ALPHA, { address: ALPHA_WORK })).status).toBe(200);
+    // Someone new signs in as the address: it is a new person, and the old session is not theirs.
+    await connectAccount(store, ALPHA_WORK, '1', 9);
+    expect((await userOf(store.central, ALPHA_WORK))!.id).not.toBe(alpha);
+    expect((await call('GET', '/api/manage', ALPHA_WORK)).status).toBe(401);
   });
 });

@@ -131,22 +131,22 @@ export interface DashboardOptions {
 const SESSION_DAYS = 30;
 const b64 = (value: string | Buffer) => Buffer.from(value).toString('base64url');
 
-/** A session cookie value: who, until when, signed so it cannot be forged or altered. */
-function signSession(email: string, secret: string, now: number): string {
-  const body = b64(JSON.stringify({ e: email, x: now + SESSION_DAYS * 86_400_000 }));
+/** A session cookie value: which mailbox, whose, until when, signed so it cannot be forged or altered. */
+function signSession(session: { email: string; person: number }, secret: string, now: number): string {
+  const body = b64(JSON.stringify({ e: session.email, p: session.person, x: now + SESSION_DAYS * 86_400_000 }));
   return `${body}.${createHmac('sha256', secret).update(body).digest('base64url')}`;
 }
 
-/** The address a session cookie was issued to, or null if it is missing, forged or expired. */
-function readSession(value: string | undefined, secret: string, now: number): string | null {
+/** The mailbox and person a session cookie was issued to, or null if it is missing, forged or expired. */
+function readSession(value: string | undefined, secret: string, now: number): { email: string; person: number } | null {
   const [body, signature] = (value ?? '').split('.');
   if (!body || !signature) return null;
   const expected = Buffer.from(createHmac('sha256', secret).update(body).digest('base64url'));
   const given = Buffer.from(signature);
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
   try {
-    const { e, x } = JSON.parse(Buffer.from(body, 'base64url').toString()) as { e?: unknown; x?: unknown };
-    return typeof e === 'string' && typeof x === 'number' && x > now ? e : null;
+    const { e, p, x } = JSON.parse(Buffer.from(body, 'base64url').toString()) as { e?: unknown; p?: unknown; x?: unknown };
+    return typeof e === 'string' && typeof p === 'number' && typeof x === 'number' && x > now ? { email: e, person: p } : null;
   } catch {
     return null;
   }
@@ -227,14 +227,23 @@ export function createDashboardServer(people: People, options: DashboardOptions 
     const origin = `${https ? 'https' : 'http'}://${req.headers.host ?? ''}`;
     // Google only returns a browser to localhost or to an HTTPS address.
     const googleCanReturnHere = https || LOCAL_HOSTS.has(host);
-    const signedInAs = signIn ? readSession(cookie(req, 'sift_session'), secret, now()) : null;
-    const known = signedInAs !== null && signIn?.allowed(signedInAs) ? await people.signedIn(signedInAs) : null;
-    const session = known ? signedInAs : null;
+    const issued = signIn ? readSession(cookie(req, 'sift_session'), secret, now()) : null;
+    // A session is for one person: once its mailbox has been removed, and perhaps signed in to again by someone new, it is no one's.
+    const found = issued !== null && signIn?.allowed(issued.email) ? await people.signedIn(issued.email) : null;
+    const known = found?.id === issued?.person ? found : null;
+    const session = known ? issued!.email : null;
     // What this request may see: the mailboxes of whoever is signed in, in their own database and no
     // one else's. With no sign-in set up (tests, tools) it is the owner's.
     const person = signIn ? known : await people.owner();
     const whole = person ? scopeFor(person.accounts, person.owner) : scopeFor([], !signIn);
-    const ctx: Context = { db: person ? await person.open(person.id) : people.nobody, open: person ? person.open : refuse, controls, now };
+    const ctx: Context = {
+      db: person ? await person.open(person.id) : people.nobody,
+      open: person ? person.open : refuse,
+      person,
+      signedInAs: session,
+      controls,
+      now,
+    };
     const sessionCookie = (value: string, maxAge: number) =>
       `sift_session=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
     // The sign-in under way in this browser. Google's return carries the state; only the browser that
@@ -286,15 +295,17 @@ export function createDashboardServer(people: People, options: DashboardOptions 
       if (!code) return void fail(query.get('error') === 'access_denied' ? 'Google did not grant access.' : 'Google did not complete the sign-in.');
       signIn
         .complete(entry.redirectUri, code, entry.verifier, entry.addTo)
-        .then((email) =>
+        .then(async (email) => {
+          const who = await people.signedIn(email);
+          if (!who) return void fail('Google did not complete the sign-in.');
           res
             .writeHead(303, {
               location: '/',
-              'set-cookie': [sessionCookie(signSession(email, secret, now()), SESSION_DAYS * 86_400), signInCookie('', 0)],
+              'set-cookie': [sessionCookie(signSession({ email, person: who.id }, secret, now()), SESSION_DAYS * 86_400), signInCookie('', 0)],
               'cache-control': 'no-store',
             })
-            .end(),
-        )
+            .end();
+        })
         .catch((error: unknown) => fail(error instanceof Error ? error.message : String(error)));
       return;
     }
@@ -334,6 +345,10 @@ export function createDashboardServer(people: People, options: DashboardOptions 
           const result: unknown = await handler.run(ctx, body.data, whole);
           if (result === null) return void json(res, 400, { error: 'That request is not well formed.' });
           const reply = replied(handler.reply, result);
+          if (reply.status === 200 && handler.endsSession?.(reply.body))
+            return void res
+              .writeHead(200, { ...HEADERS, 'content-type': 'application/json', 'set-cookie': sessionCookie('', 0), 'cache-control': 'no-store' })
+              .end(JSON.stringify(reply.body));
           json(res, reply.status, reply.body);
         })
         .catch((error: unknown) => json(res, 409, { error: error instanceof Error ? error.message : String(error) }));

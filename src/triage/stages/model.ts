@@ -48,8 +48,43 @@ export interface Verdict {
   usage?: Usage;
 }
 
+const STATUS: Record<number, string> = {
+  400: 'bad request',
+  401: 'not signed in',
+  402: 'payment required',
+  403: 'forbidden',
+  404: 'not found',
+  408: 'timeout',
+  413: 'request too large',
+  429: 'rate limited',
+  500: 'server error',
+  502: 'bad gateway',
+  503: 'unavailable',
+  504: 'gateway timeout',
+  529: 'overloaded',
+};
+
+/**
+ * What went wrong with a call to the model, as a status and a kind. Never the provider's own words, which
+ * are kept out of run records and logs: they can quote the request, and the request is the mail.
+ */
+export function describeFailure(error: unknown): string {
+  const fields = (error ?? {}) as { status?: unknown; statusCode?: unknown };
+  const text = error instanceof Error ? error.message : String(error);
+  const status =
+    [fields.statusCode, fields.status].find((s): s is number => typeof s === 'number') ??
+    Number(/^(\d{3})\b|\((\d{3})\)|\bstatus(?: code)?:? (\d{3})\b/i.exec(text)?.slice(1).find(Boolean));
+  if (status >= 400 && status < 600) return `HTTP ${status} ${STATUS[status] ?? (status < 500 ? 'refused' : 'server error')}`;
+  if (/timed? ?out|ETIMEDOUT/i.test(text)) return 'timeout';
+  if (/abort/i.test(text)) return 'aborted';
+  if (/ECONN|ENOTFOUND|EAI_AGAIN|fetch failed|network|connection error|socket/i.test(text)) return 'network error';
+  if (/content.?filter|sensitive|refus/i.test(text)) return 'refused by the provider';
+  return 'provider error';
+}
+
 /** The call failed or its answer was unusable. Not the model's `unsure`: the message is asked about again later. */
 export interface JudgeFailure {
+  /** A status and kind (`describeFailure`), never the provider's text. */
   failed: string;
   /** A call that answered unusably was still billed. */
   usage?: Usage;
@@ -83,7 +118,7 @@ interface ModelStageDeps {
  */
 export function modelStage(deps: ModelStageDeps): Stage<Decision | Unfinished> {
   return {
-    name: 'agent',
+    name: 'model',
     async decide(facts) {
       const prior = deps.prior?.(facts) ?? null;
       const gathered = await deps.gather(facts);
@@ -96,7 +131,7 @@ export function modelStage(deps: ModelStageDeps): Stage<Decision | Unfinished> {
 
       const base = {
         subscription: 'preserve' as const,
-        stage: 'agent' as const,
+        stage: 'model' as const,
         ...(prior ? { priorRuleId: prior.rule.id } : {}),
         ...(verdict.confidence === undefined ? {} : { confidence: verdict.confidence }),
       };

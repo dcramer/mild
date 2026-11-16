@@ -28,7 +28,7 @@ import { deriveFacts } from '../triage/facts.ts';
 import { pickShots } from '../triage/fewshot.ts';
 import { PROMPT_TEMPLATE } from '../triage/prompt.ts';
 import { type Scorecard, score } from '../triage/score.ts';
-import type { Evidence, Judge } from '../triage/stages/model.ts';
+import { type Evidence, type Judge, type JudgeFailure, describeFailure } from '../triage/stages/model.ts';
 import type { Label, MessageFacts } from '../triage/types.ts';
 
 /** Every example judged is a model call the user pays for, so one run is bounded. */
@@ -116,18 +116,14 @@ export async function startEval(deps: EvalDeps, request: EvalRequest): Promise<{
   const now = deps.now ?? Date.now;
   if ((await db.select({ id: evalRuns.id }).from(evalRuns).where(eq(evalRuns.status, 'running')).limit(1)).length > 0)
     throw new Error('A test run is already going. Wait for it to finish.');
-  const labels = await listLabels(db, request.accountId, now());
+  const labels = await listLabels(db, request.accountId);
   const limit = Math.min(Math.max(1, Math.trunc(request.limit ?? DEFAULT_EVAL_EXAMPLES)), MAX_EVAL_EXAMPLES);
-  // An example whose label has since gone cannot be answered correctly, so it is left out.
-  const examples = (
-    await db
-      .select({ messageId: exampleRows.messageId, labelId: exampleRows.labelId, bodyText: exampleRows.bodyText })
-      .from(exampleRows)
-      .where(and(eq(exampleRows.accountId, request.accountId), eq(exampleRows.status, 'captured'), isNotNull(exampleRows.labelId)))
-      .orderBy(desc(exampleRows.markedAt), exampleRows.messageId)
-  )
-    .filter((e): e is typeof e & { labelId: string } => labels.some((l) => l.id === e.labelId))
-    .slice(0, limit);
+  const examples = (await db
+    .select({ messageId: exampleRows.messageId, labelId: exampleRows.labelId, bodyText: exampleRows.bodyText })
+    .from(exampleRows)
+    .where(and(eq(exampleRows.accountId, request.accountId), eq(exampleRows.status, 'captured'), isNotNull(exampleRows.labelId)))
+    .orderBy(desc(exampleRows.markedAt), exampleRows.messageId)
+    .limit(limit)) as { messageId: string; labelId: string; bodyText: string | null }[];
   if (examples.length === 0) throw new Error('There are no stored examples to test against yet. Answer some suggestions first.');
 
   const shown = labels.map((l) => ({ id: l.id, name: l.name, description: l.description }));
@@ -158,18 +154,19 @@ export async function startEval(deps: EvalDeps, request: EvalRequest): Promise<{
         labels,
         ...(shots.length > 0 ? { examples: shots } : {}),
       })
-      .catch(() => null);
+      .catch((error: unknown): JudgeFailure => ({ failed: describeFailure(error) }));
     // An unusable answer was still billed.
-    const verdict = answer && !('failed' in answer) ? answer : null;
+    const verdict = 'failed' in answer ? null : answer;
     await db.insert(evalResults).values({
       runId: id,
       messageId: example.messageId,
       expected: example.labelId,
       got: verdict?.label ?? null,
+      error: 'failed' in answer ? answer.failed : null,
       confidence: verdict?.confidence ?? null,
-      inputTokens: answer?.usage?.inputTokens ?? 0,
-      outputTokens: answer?.usage?.outputTokens ?? 0,
-      costUsd: answer?.usage?.costUsd ?? 0,
+      inputTokens: answer.usage?.inputTokens ?? 0,
+      outputTokens: answer.usage?.outputTokens ?? 0,
+      costUsd: answer.usage?.costUsd ?? 0,
       durationMs: Math.round(performance.now() - started),
       shots: shots.length,
       senderShots: shots.filter((s) => s.fromAddress === facts.from.address).length,
@@ -224,6 +221,8 @@ interface EvalResult {
   subject: string;
   expected: string;
   got: string | null;
+  /** Why the call failed, when `got` is null. */
+  error: string | null;
   confidence: number | null;
   inputTokens: number;
   outputTokens: number;
@@ -256,6 +255,7 @@ async function results(db: Sql, runId: number): Promise<EvalResult[]> {
       subject: sql<string>`coalesce(${messages.subject}, '')`,
       expected: evalResults.expected,
       got: evalResults.got,
+      error: evalResults.error,
       confidence: evalResults.confidence,
       inputTokens: evalResults.inputTokens,
       outputTokens: evalResults.outputTokens,

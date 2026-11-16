@@ -30,10 +30,10 @@ const SOURCES = [
   ['', 'Anyone'],
   ['user', 'You'],
   ['correction', 'You, correcting sift'],
-  ['agent', 'sift, by blocking'],
+  ['learned', 'sift, by blocking'],
 ] as const;
 
-const MADE_BY: Record<string, string> = { user: 'You', correction: 'Your answers', agent: 'sift, when it blocked them' };
+const MADE_BY: Record<string, string> = { user: 'You', correction: 'Your answers', learned: 'sift, when it blocked them' };
 const QUIET: Record<string, string> = { fromDomain: 'anyone at', to: 'sent to', listId: 'the list', subjectContains: 'subject has' };
 
 /** What a rule matches: an address alone, or a quiet word and the value. */
@@ -64,7 +64,7 @@ function Result({ rule }: { rule: RuleSummary }) {
   const action = own(rule);
   return (
     <>
-      {rule.labelGone ? <Failure inline>A removed label</Failure> : rule.kind === 'label' ? <span>{rule.labelName}</span> : null}
+      {rule.kind === 'label' ? <span>{rule.labelName}</span> : null}
       {rule.kind === 'label' && action ? <span className="text-muted-foreground"> · </span> : null}
       {action ? <Does action={action}>{outcomeName(action)}</Does> : null}
     </>
@@ -91,9 +91,7 @@ function RulePanel({
     <Panel open onClose={onClose} title={whoText(rule.match)} position={position} onPrevious={onPrevious} onNext={onNext}>
       <div className="flex flex-col gap-8">
         <Facts>
-          {rule.kind === 'action' ? null : (
-            <Fact term={rule.kind === 'when-label' ? 'When it is' : 'Is'}>{rule.labelGone ? <Failure inline>A removed label</Failure> : rule.labelName}</Fact>
-          )}
+          {rule.kind === 'action' ? null : <Fact term={rule.kind === 'when-label' ? 'When it is' : 'Is'}>{rule.labelName}</Fact>}
           {action ? (
             <Fact term="Then">
               <Does action={action}>{outcomeName(action)}</Does>

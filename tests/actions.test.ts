@@ -14,7 +14,7 @@ let mailbox: FakeMailbox;
 let deps: ActionDeps;
 
 beforeEach(async () => {
-  db = await openUserDb();
+  db = await openUserDb(ACCOUNT);
   await addMailbox(db, ACCOUNT, '1', 0);
   await recordSync(db, ACCOUNT, [facts({ messageId: 'm1' })], '2');
   mailbox = new FakeMailbox();

@@ -21,7 +21,7 @@ const campaign = facts({
     precedence: 'bulk',
     'reply-to': 'Support <support@example.com>',
     'authentication-results':
-      'mx.example.org; dkim=fail header.i=@old.example.com; dkim=pass header.i=@example.com header.s=k1; spf=softfail smtp.mailfrom=bounce@mail7.mcsv.net; dmarc=pass (p=NONE) header.from=example.com',
+      'mx.google.com; dkim=fail header.i=@old.example.com; dkim=pass header.i=@example.com header.s=k1; spf=softfail smtp.mailfrom=bounce@mail7.mcsv.net; dmarc=pass (p=NONE) header.from=example.com',
   },
 });
 
@@ -72,9 +72,19 @@ describe('deriveFacts', () => {
     const via = (headers: Record<string, string>) => deriveFacts(facts({ headers })).bulkService;
     expect(via({ 'x-sg-eid': 'abc' })).toBe('SendGrid');
     expect(via({ 'return-path': '<bounces+123@em.sparkpostmail.com>' })).toBe('SparkPost');
-    expect(via({ 'authentication-results': 'mx.example.org; dkim=pass header.d=amazonses.com' })).toBe('Amazon SES');
+    expect(via({ 'authentication-results': 'mx.google.com; dkim=pass header.d=amazonses.com' })).toBe('Amazon SES');
     expect(via({ 'feedback-id': '1.us-east-1.abc:AmazonSES' })).toBe('Amazon SES');
     expect(via({ 'return-path': '<ada@notmcsv.net>', 'x-mailer': 'Apple Mail' })).toBeNull();
+  });
+
+  it('reads authentication results only from the header Gmail wrote, not one the sender put in', () => {
+    const forged = 'mx.example.org; dkim=pass header.d=amazonses.com; spf=pass smtp.mailfrom=example.com; dmarc=pass header.from=example.com';
+    expect(deriveFacts(facts({ accountId: ACCOUNT, headers: { 'authentication-results': forged } }))).toMatchObject({
+      dmarc: 'none',
+      spf: 'none',
+      dkim: 'none',
+      bulkService: null,
+    });
   });
 
   it('sees a reply, a reply-to that is the sender, and an automatic message', () => {
@@ -86,7 +96,7 @@ describe('deriveFacts', () => {
 
 describe('recorded facts', () => {
   it('stores them with the message and returns them with its detail', async () => {
-    const db = await openUserDb();
+    const db = await openUserDb(ACCOUNT);
     await addMailbox(db, ACCOUNT, '1', 0);
     await recordSync(db, ACCOUNT, [campaign], '2');
     expect((await raw(db).get<{ facts: unknown }>('SELECT facts FROM messages'))!.facts).toEqual(deriveFacts(campaign));
@@ -136,7 +146,7 @@ describe('thread context', () => {
   });
 
   const setup = async (headers: Record<string, string>) => {
-    const db = await openUserDb();
+    const db = await openUserDb(ACCOUNT);
     await addMailbox(db, ACCOUNT, '1', 0);
     const message = facts({ accountId: ACCOUNT, messageId: 'reply', threadId: 't9', headers });
     await recordSync(db, ACCOUNT, [message], '2');

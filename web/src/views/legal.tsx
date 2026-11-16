@@ -43,7 +43,7 @@ export function PrivacyView() {
             <li>Your labels, rules and answers.</li>
             <li>The text of mail waiting for your answer. It is deleted when you answer, when the message stops waiting, and after 30 days in any case.</li>
             <li>
-              The whole of each message you answered for, kept as an example that teaches sift your preferences, until you delete it in the dashboard or the
+              The text of each message you answered for, kept as an example that teaches sift your preferences, until you delete it in the dashboard or the
               period we set for examples ends.
             </li>
             <li>Google’s access token for your account, stored apart from your mail, readable only by sift, and encrypted when we have set a key.</li>
@@ -98,7 +98,10 @@ export function PrivacyView() {
               Remove sift’s access at any time in your <TextLink href={PERMISSIONS}>Google account’s permissions</TextLink>. sift then cannot read or change
               your mail.
             </li>
-            <li>Ask us to delete everything sift holds for you. Your mail is in one database of its own, so it is deleted whole.</li>
+            <li>
+              Remove a mailbox, or delete your account, under Settings. sift revokes its access at Google and deletes everything it holds about that mail. The
+              Gmail filters it wrote stay in Gmail until you delete them there.
+            </li>
           </ul>
         </Clause>
 
@@ -169,8 +172,8 @@ export function TermsView() {
 
         <Clause title="Ending">
           <p>
-            You can stop at any time by removing sift’s access in your <TextLink href={PERMISSIONS}>Google account</TextLink> and asking us to delete your data.
-            We may end your access to this copy of sift at any time.
+            You can stop at any time by deleting your account under Settings, which deletes your data, or by removing sift’s access in your{' '}
+            <TextLink href={PERMISSIONS}>Google account</TextLink>. We may end your access to this copy of sift at any time.
           </p>
         </Clause>
 

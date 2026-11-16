@@ -10,7 +10,10 @@ import type { People } from '../src/store/people.ts';
 import { PARSERS, pglite } from '../src/store/db.ts';
 import type { Sql } from '../src/store/sql.ts';
 import { type Store, storeOn } from '../src/store/store.ts';
-import { connectAccount } from '../src/store/accounts.ts';
+import { connectAccount, recordSync } from '../src/store/accounts.ts';
+import { recordDecision } from '../src/store/decisions.ts';
+import { addRule } from '../src/store/rules.ts';
+import { rememberCorrespondent } from '../src/store/senders.ts';
 
 /*
  * One database per test file, loaded from the image global-setup.ts migrated once for the whole run,
@@ -96,11 +99,14 @@ export function raw(db: Sql) {
   };
 }
 
-/** A new person's own database, with no mailbox yet. */
-export async function openUserDb(store?: Store): Promise<Sql> {
-  const on = store ?? (await freshStore());
-  const created = await raw(on.central).get<{ id: number }>('INSERT INTO users (owner, created_at) VALUES (false, 0) RETURNING id');
-  return await on.user(created!.id);
+/** A new person's own database, with these mailboxes connected as they would be by signing in. */
+export async function openUserDb(...accounts: string[]): Promise<Sql> {
+  const store = await freshStore();
+  if (accounts.length === 0) {
+    const created = await raw(store.central).get<{ id: number }>('INSERT INTO users (owner, created_at) VALUES (false, 0) RETURNING id');
+    return await store.user(created!.id);
+  }
+  return (await onePerson(...accounts)).db;
 }
 
 /** A stand-in for the built web app: `files` by path, and a page unless they give one. */
@@ -151,4 +157,97 @@ export async function onePerson(...accounts: string[]): Promise<{ store: Store; 
   let user: number | undefined;
   for (const account of accounts) user = await connectAccount(store, account, '1', 0, user);
   return { store, db: await store.user(user ?? 1) };
+}
+
+/**
+ * A row in every table of a person's data that a mailbox can have one in, for `account` (connected, in
+ * `db`): what deleting a mailbox or a person must take with it. Its message is `m-<account>`.
+ */
+export async function recordEverything(db: Sql, account: string): Promise<void> {
+  const message = `m-${account}`;
+  await recordSync(
+    db,
+    account,
+    [
+      {
+        accountId: account,
+        messageId: message,
+        threadId: 't1',
+        from: { address: 'news@example.com', domain: 'example.com' },
+        to: [],
+        cc: [],
+        subject: 'Weekly digest',
+        labelIds: ['INBOX'],
+        headers: {},
+        receivedAt: 0,
+      },
+    ],
+    '2',
+    0,
+  );
+  const decision = await recordDecision(db, account, message, {
+    disposition: 'archive',
+    subscription: 'preserve',
+    stage: 'model',
+    labelId: 'newsletter',
+    reason: 'r',
+  });
+  const rule = await addRule(db, account, { match: { from: 'news@example.com' }, whenLabel: 'newsletter' }, 'user', 0);
+  await rememberCorrespondent(db, account, 'news@example.com', true, 0);
+  const { id: run } = (await raw(db).get<{ id: number }>(
+    `INSERT INTO eval_runs (account_id, started_at, status, model, prompt_hash, labels_hash, labels, few_shot, total)
+     VALUES (?, 0, 'done', 'p/m', 'h', 'h', '[]', false, 1) RETURNING id`,
+    account,
+  ))!;
+  for (const [statement, ...params] of [
+    [`INSERT INTO credentials (kind, key, value, updated_at) VALUES ('gmail', ?, 'x', 0)`, account],
+    [
+      `INSERT INTO actions (account_id, message_id, type, payload, original_labels, status, created_at, decision_id) VALUES (?, ?, 'archive', '{}', '[]', 'done', 0, ?)`,
+      account,
+      message,
+      decision,
+    ],
+    [
+      `INSERT INTO proposals (account_id, kind, match, label_id, agreed, created_at) VALUES (?, 'rule', '{"from": "a@example.com"}', 'newsletter', 5, 0)`,
+      account,
+    ],
+    [
+      `INSERT INTO proposals (account_id, kind, match, label_id, rule_id, agreed, created_at) VALUES (?, 'always', '{"from": "news@example.com"}', 'newsletter', ?, 10, 0)`,
+      account,
+      rule,
+    ],
+    [
+      `INSERT INTO feedback (account_id, decision_id, verdict, disposition, label_id, via, created_at) VALUES (?, ?, 'right', 'archive', 'newsletter', 'dashboard', 0)`,
+      account,
+      decision,
+    ],
+    [`INSERT INTO examples (account_id, message_id, disposition, label_id, marked_at) VALUES (?, ?, 'archive', 'newsletter', 0)`, account, message],
+    [`INSERT INTO suggestion_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, ?, 'Hello.', 0)`, account, message],
+    [`INSERT INTO model_runs (account_id, message_id, model, started_at, outcome, error) VALUES (?, ?, 'p/m', 0, 'failed', 'e')`, account, message],
+    [
+      `INSERT INTO eval_results (run_id, message_id, expected, got, duration_ms, shots, sender_shots) VALUES (?, ?, 'newsletter', 'newsletter', 1, 0, 0)`,
+      run,
+      message,
+    ],
+  ] as [string, ...(string | number)[]][])
+    await raw(db).run(statement, ...params);
+}
+
+/** How many rows each table holds, by `column`'s value, for every table that has the column; read past row-level security. */
+export async function rowsBy(column: 'user_id' | 'account_id'): Promise<Record<string, Record<string, number>>> {
+  const pg = await loaded();
+  const { rows: tables } = await pg.query<{ name: string }>(
+    `SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public' AND c.relkind = 'r' AND EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = $1)
+     ORDER BY 1`,
+    [column],
+  );
+  return Object.fromEntries(
+    await Promise.all(
+      tables.map(async ({ name }) => {
+        const { rows } = await pg.query<{ key: string; n: number }>(`SELECT ${column}::text AS key, count(*)::int AS n FROM "${name}" GROUP BY 1 ORDER BY 1`);
+        return [name, Object.fromEntries(rows.map((r) => [r.key, r.n]))] as const;
+      }),
+    ),
+  );
 }

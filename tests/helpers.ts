@@ -43,12 +43,9 @@ export async function storeExample(
     messageId: example.id,
     disposition: 'keep',
     labelId: example.label,
-    suggested: 'review',
-    suggestedBy: 'fallback',
     markedAt: example.markedAt ?? 0,
     status: 'captured',
     bodyText: example.body ?? `Body of ${example.id}`,
-    headers: [],
     capturedAt: example.markedAt ?? 0,
   });
 }

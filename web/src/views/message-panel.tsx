@@ -53,7 +53,7 @@ function DecisionEvent({ d }: { d: Decision }) {
       at={dateTime(d.decidedAt)}
       title={
         <>
-          <span className="font-medium">{d.mode === 'observe' ? 'Suggested' : 'Decided'}</span>
+          <span className="font-medium">{d.carryOut ? 'Decided' : 'Suggested'}</span>
           <Verdict labelName={d.labelName} disposition={d.disposition} />
         </>
       }
@@ -204,7 +204,7 @@ function Body({
         {current ? (
           <p className="text-muted-foreground">
             {current.reason}
-            {current.mode !== 'observe' ? (
+            {current.carryOut ? (
               <>
                 {' · '}
                 <StatusWord row={current} />

@@ -86,3 +86,16 @@ export async function completeBrowserSignIn(
   const profile = await createGmailApi(client).getProfile();
   return { email: profile.emailAddress, historyId: profile.historyId, refreshToken: tokens.refresh_token };
 }
+
+/**
+ * Revoke a sign-in's grant at Google, which ends sift's access to the mailbox. A token Google no longer
+ * honours counts as revoked. False when Google could not be reached or refused for another reason.
+ */
+export async function revokeGrant(refreshToken: string): Promise<boolean> {
+  try {
+    await new OAuth2Client().revokeToken(refreshToken);
+    return true;
+  } catch (error) {
+    return (error as { response?: { status?: number } }).response?.status === 400;
+  }
+}

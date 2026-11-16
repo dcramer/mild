@@ -1,4 +1,4 @@
-import { eq, messages } from '../store/query.ts';
+import { and, eq, inArray, messages } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { type PullResult, pullChanges, toFacts } from '../gmail/sync.ts';
@@ -35,7 +35,17 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
     else skipped++;
   }
 
-  const known = new Set((await db.select({ id: messages.id }).from(messages).where(eq(messages.accountId, account.id))).map((r) => r.id));
+  const ids = fetched.map((m) => m.messageId);
+  const known = new Set(
+    ids.length === 0
+      ? []
+      : (
+          await db
+            .select({ id: messages.id })
+            .from(messages)
+            .where(and(eq(messages.accountId, account.id), inArray(messages.id, ids)))
+        ).map((r) => r.id),
+  );
   const added = fetched.filter((m) => !known.has(m.messageId));
   // Before the cursor moves: a failure here means the same history is read again, which this tolerates.
   const corrections = await learnFromGmail(db, account.id, byUser, api, startedAt);

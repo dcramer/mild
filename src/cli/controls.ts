@@ -8,7 +8,7 @@ import type { Activity, Controls, ModelSignIns } from '../dashboard/controls.ts'
 import type { Wake } from '../daemon/run.ts';
 import { createGmailApi } from '../gmail/api.ts';
 import { interruptEvals, startEval } from '../learn/evals.ts';
-import { clientFor, loadClientSecrets } from '../gmail/auth.ts';
+import { clientFor, loadClientSecrets, revokeGrant } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { createJudge } from '../model/judge.ts';
 import {
@@ -175,6 +175,13 @@ export async function buildControls(config: Config, store: Store, live: { wake?:
       const deps = { db, mailbox: await mailboxFor(config, db, rule.accountId) };
       if (on) await writeRuleFilter(deps, ruleId);
       else await removeRuleFilter(deps, ruleId);
+    },
+    revokeGmail: async (db, email) => {
+      live.activity.problems = live.activity.problems.filter((line) => !line.startsWith(`${email}: `));
+      live.activity.expired = live.activity.expired.filter((address) => address !== email);
+      // A token that no longer opens (the key changed) cannot be revoked from here, and must not stop the removal.
+      const token = await (await credentials(db, 'gmail', config.keys)).read(email).catch(() => undefined);
+      return token === null || (token !== undefined && (await revokeGrant(token)));
     },
     checkNow: () => live.wake?.now(),
     activity: () => live.activity,

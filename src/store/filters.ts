@@ -54,10 +54,10 @@ export async function setRuleFilter(
     .where(eq(ruleRows.id, ruleId));
 }
 
-/** For each of the account's rules, whether it can be a Gmail filter as things stand. */
-export async function filterVerdicts(db: Sql, accountId: string, now: number = Date.now()): Promise<Map<string, FilterVerdict>> {
+/** For each of the account's rules, whether it can be a Gmail filter as things stand. `_now` is unused; src/actions/rule-filters.ts still passes it. */
+export async function filterVerdicts(db: Sql, accountId: string, _now?: number): Promise<Map<string, FilterVerdict>> {
   const rules = await listRules(db, accountId);
-  const labels = await listLabels(db, accountId, now);
+  const labels = await listLabels(db, accountId);
   return new Map(rules.map((rule) => [rule.id, filterFor(rule, labels, rules)]));
 }
 
@@ -79,10 +79,10 @@ interface RuleFilterStatus {
 }
 
 /** Every rule's standing as a Gmail filter, by rule id, for the dashboard. */
-export async function ruleFilterStatus(db: Sql, now: number = Date.now()): Promise<Map<string, RuleFilterStatus>> {
+export async function ruleFilterStatus(db: Sql): Promise<Map<string, RuleFilterStatus>> {
   const status = new Map<string, RuleFilterStatus>();
   for (const account of await listAccounts(db)) {
-    for (const [ruleId, verdict] of await filterVerdicts(db, account.id, now)) {
+    for (const [ruleId, verdict] of await filterVerdicts(db, account.id)) {
       const [row] = await db.select({ state: ruleRows.filterState, checkedAt: ruleRows.filterCheckedAt }).from(ruleRows).where(eq(ruleRows.id, ruleId));
       status.set(ruleId, {
         state: row!.state ?? 'none',

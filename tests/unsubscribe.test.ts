@@ -1,10 +1,10 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { undo } from '../src/actions/executor.ts';
+import { reconcile, undo } from '../src/actions/executor.ts';
 import { RETRY_AFTER_MS, isPublicAddress, unsubscribe } from '../src/actions/unsubscribe.ts';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
-import { addMailbox, recordSync } from '../src/store/accounts.ts';
-import { getAction } from '../src/store/actions.ts';
+import { recordSync } from '../src/store/accounts.ts';
+import { getAction, insertPendingAction } from '../src/store/actions.ts';
 import { openUserDb, raw } from './fixtures.ts';
 import { everything, facts, FakeMailbox } from './helpers.ts';
 
@@ -13,7 +13,7 @@ const ONE_CLICK = {
   'list-unsubscribe': '<mailto:leave@example.com>, <https://lists.example.com/u/token123>',
   'list-unsubscribe-post': 'List-Unsubscribe=One-Click',
 };
-const PROVEN = { 'authentication-results': 'mx.example.org; dkim=pass; dmarc=pass' };
+const PROVEN = { 'authentication-results': 'mx.google.com; dkim=pass; dmarc=pass' };
 
 let db: Sql;
 let posts: { url: string; address: string }[];
@@ -41,8 +41,7 @@ async function message(id: string, headers: Record<string, string>, from = 'news
 }
 
 beforeEach(async () => {
-  db = await openUserDb();
-  await addMailbox(db, ACCOUNT, '1', 0);
+  db = await openUserDb(ACCOUNT);
   posts = [];
   status = 200;
   clock = 500;
@@ -83,10 +82,48 @@ describe('unsubscribe', () => {
   });
 
   it('does not trust the address in a message that did not prove who sent it', async () => {
-    await message('m', { ...ONE_CLICK, 'authentication-results': 'mx.example.org; dkim=pass; dmarc=fail' });
+    await message('m', { ...ONE_CLICK, 'authentication-results': 'mx.google.com; dkim=pass; dmarc=fail' });
     expect(await unsubscribe(deps(), ACCOUNT, 'm')).toMatchObject({ status: 'refused', reason: expect.stringContaining('did not prove who sent it') });
     expect((await messageDetail(db, await everything(db), ACCOUNT, 'm'))?.unsubscribe).toBe('manual');
     expect(posts).toEqual([]);
+  });
+
+  it("trusts only Gmail's own result, not one the sender wrote", async () => {
+    for (const [id, results] of [
+      ['forged', 'mail.example.com; dkim=pass; dmarc=pass'],
+      ['lookalike', 'mx.google.com.example.com; dmarc=pass'],
+      ['in-a-comment', '(mx.google.com) mail.example.com; dmarc=pass'],
+    ] as const) {
+      await message(id, { ...ONE_CLICK, 'authentication-results': results }, `${id}@example.com`);
+      expect(await unsubscribe(deps(), ACCOUNT, id), results).toMatchObject({
+        status: 'refused',
+        reason: expect.stringContaining('did not prove who sent it'),
+      });
+    }
+    await message('versioned', { ...ONE_CLICK, 'authentication-results': ' (received) MX.Google.com 1; dkim=pass; dmarc=pass' }, 'v@example.com');
+    expect(await unsubscribe(deps(), ACCOUNT, 'versioned')).toMatchObject({ status: 'done' });
+  });
+
+  it('cut short by sift stopping, is settled as unknown and waits a week like a failure, never taken as done', async () => {
+    await message('m', { ...ONE_CLICK, ...PROVEN });
+    const mailbox = new FakeMailbox();
+    mailbox.labels.set('m', ['INBOX']);
+    // What unsubscribe() leaves behind when the process ends during the request.
+    await insertPendingAction(
+      db,
+      { accountId: ACCOUNT, messageId: 'm', type: 'unsubscribe', payload: { add: [], remove: [], unsubscribe: 'lists.example.com' }, originalLabels: [] },
+      clock,
+    );
+    expect(await reconcile({ db, mailbox, now: () => clock })).toBe(1);
+    expect(await getAction(db, 1)).toMatchObject({ status: 'unknown' });
+    expect(await reconcile({ db, mailbox }, { accountId: ACCOUNT, messageId: 'm' })).toBe(0);
+    expect(await getAction(db, 1)).toMatchObject({ status: 'unknown' });
+
+    expect(await unsubscribe(deps(), ACCOUNT, 'm')).toMatchObject({ status: 'refused' });
+    expect(posts).toHaveLength(0);
+    clock += RETRY_AFTER_MS;
+    expect(await unsubscribe(deps(), ACCOUNT, 'm')).toMatchObject({ status: 'done' });
+    expect(posts).toHaveLength(1);
   });
 
   it('will not be pointed at this machine or its network', async () => {

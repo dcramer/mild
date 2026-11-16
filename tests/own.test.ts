@@ -47,7 +47,7 @@ beforeEach(async () => {
     await recordSync(db, account, [facts({ accountId: account, messageId: `m-${id}`, subject: `Subject ${id}` })], '2', 1);
     await recordDecision(db, account, `m-${id}`, { disposition: 'review', subscription: 'preserve', stage: 'fallback', reason: id });
     await raw(db).run(
-      `INSERT INTO rules (id, account_id, position, match, label_id, source, created_at) VALUES (?, ?, 0, '{}', 'x', 'user', 0)`,
+      `INSERT INTO rules (id, account_id, position, match, label_id, source, created_at) VALUES (?, ?, 0, '{}', 'personal', 'user', 0)`,
       `rule-${id}`,
       account,
     );
@@ -103,6 +103,12 @@ describe("a person's handle, without row-level security", () => {
     ).toThrow('left or inner join');
   });
 
+  it('refuses a second table in a change, which its where would not hold', () => {
+    expect(() => alpha.update(rules).set({ hits: 1 }).from(decisions)).toThrow('from is not held to one person');
+    const remove = alpha.delete(rules) as unknown as { using: (table: unknown) => unknown };
+    expect(() => remove.using(decisions)).toThrow('using is not held to one person');
+  });
+
   it('holds a subquery to them as well', async () => {
     const theirs = alpha.select({ id: decisions.messageId }).from(decisions);
     expect(await bravo.select({ id: messages.id }).from(messages).where(inArray(messages.id, theirs))).toEqual([]);
@@ -128,7 +134,8 @@ describe("a person's handle, without row-level security", () => {
     await alpha
       .insert(labels)
       .values({ accountId: ALPHA, id: 'l', name: 'L', description: '', disposition: 'keep', gmailLabel: 'sift/l', position: 0, updatedAt: 0 });
-    expect((await everyone('labels')).map((r) => r['user_id'])).toEqual([1]);
+    // Each mailbox starts with the default labels; the one added here is the only 'l'.
+    expect((await everyone('labels')).filter((r) => r['id'] === 'l').map((r) => r['user_id'])).toEqual([1]);
     const forged = {
       accountId: BRAVO,
       id: 'l',
@@ -219,24 +226,88 @@ describe('the central handle', () => {
 describe('raw sql', () => {
   it('refuses a person’s table written into it', () => {
     expect(() => sql`SELECT * FROM ${messages}`).toThrow('not held to one person');
+    expect(() => sql`SELECT * FROM ${[sql`x`, [alias(messages, 'm')]]}`).toThrow('messages written into');
     expect(() => sql`${messages.id} = 'x'`).not.toThrow();
   });
+
+  it('has no helper that writes SQL text or names unchecked', () => {
+    for (const helper of ['raw', 'identifier', 'join', 'fromList']) expect(sql, helper).not.toHaveProperty(helper);
+  });
 });
+
+/** The text of every string and template literal in TypeScript source, comments left out. */
+function literals(source: string): string[] {
+  const found: string[] = [];
+  // How many braces deep each template's `${` is, innermost last.
+  const templates: number[] = [];
+  let depth = 0;
+  let last = '';
+  const template = (from: number): number => {
+    let text = '';
+    let i = from;
+    for (; i < source.length && source[i] !== '`'; i++) {
+      if (source[i] === '\\') text += source[i++]! + (source[i] ?? '');
+      else if (source[i] === '$' && source[i + 1] === '{') {
+        templates.push(depth++);
+        found.push(text);
+        return i + 1;
+      } else text += source[i];
+    }
+    found.push(text);
+    return i;
+  };
+  for (let i = 0; i < source.length; i++) {
+    const c = source[i]!;
+    if (c === '/' && source[i + 1] === '/') i = source.indexOf('\n', i) === -1 ? source.length : source.indexOf('\n', i);
+    else if (c === '/' && source[i + 1] === '*') i = source.indexOf('*/', i + 2) + 1;
+    else if (c === "'" || c === '"') {
+      let text = '';
+      for (i++; i < source.length && source[i] !== c; i++) text += source[i] === '\\' ? source[i++]! + source[i] : source[i];
+      found.push(text);
+    } else if (c === '`') i = template(i + 1);
+    else if (c === '}' && templates.at(-1) === depth - 1) {
+      templates.pop();
+      depth--;
+      i = template(i + 1);
+    } else if (c === '/' && (last === '' || /[(,=:[!&|?{};+\-*%<>~^]$/.test(last) || /\b(?:return|typeof|case|in|of|throw|yield|await)$/.test(last))) {
+      // A regular expression, not a division.
+      let inClass = false;
+      for (i++; i < source.length && (source[i] !== '/' || inClass); i++) {
+        if (source[i] === '\\') i++;
+        else if (source[i] === '[') inClass = true;
+        else if (source[i] === ']') inClass = false;
+      }
+    } else if (c === '{') depth++;
+    else if (c === '}') depth--;
+    if (!/\s/.test(c)) last = /[\w$]/.test(c) ? `${/[\w$]$/.test(last) ? last : ''}${c}` : c;
+  }
+  return found;
+}
 
 describe('the source', () => {
   it('names no table in SQL text: every query is built, so the handle can hold it to one person', () => {
     const names = Object.values(schema as Record<string, unknown>)
       .filter((t) => is(t, PgTable))
       .map((t) => getTableConfig(t).name);
-    const table = `"?(?:${names.join('|')})"?\\b`;
-    const anywhere = new RegExp(`\\b(?:FROM|JOIN|INTO|UPDATE)\\s+${table}`, 'g');
-    const inSql = new RegExp(`\\b(?:from|join|into|update)\\s+${table}`, 'i');
+    const inSql = new RegExp(`\\b(?:from|join|into|update|using)\\s+"?(?:${names.join('|')})"?\\b`, 'i');
     const found: string[] = [];
     for (const file of readdirSync('src', { recursive: true, encoding: 'utf8' }).filter((f) => f.endsWith('.ts'))) {
       const text = readFileSync(join('src', file), 'utf8');
-      for (const m of text.matchAll(anywhere)) found.push(`src/${file}:${text.slice(0, m.index).split('\n').length}`);
-      for (const m of text.matchAll(/\bsql(?:<[^>]*>)?`([^`]*)`/g)) if (inSql.test(m[1]!)) found.push(`src/${file}: sql\`${m[1]!.slice(0, 60)}\``);
+      for (const literal of literals(text)) if (inSql.test(literal)) found.push(`src/${file}: ${literal.slice(0, 60)}`);
+      // Drizzle's own, for CHECK constraints built from constants when the schema is generated.
+      if (file !== join('store', 'schema.ts'))
+        for (const m of text.matchAll(/\bsql\s*\.\s*(?:raw|identifier|join|fromList)\b/g))
+          found.push(`src/${file}:${text.slice(0, m.index).split('\n').length}: ${m[0]}`);
     }
     expect(found).toEqual([]);
+  });
+
+  it('reads string and template text, whatever its case, and not comments', () => {
+    const source = [
+      "const a = 'select * from Messages'; // from rules",
+      'const b = sql`x ${y ? `in ${"Update Labels"}` : 1} z`;',
+      '/* into users */ const c = /from decisions/.test(d) ? e / f : g / h;',
+    ].join('\n');
+    expect(literals(source)).toEqual(['select * from Messages', 'x ', 'in ', 'Update Labels', '', ' z']);
   });
 });

@@ -78,12 +78,7 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
     unsubscribe: await canUnsubscribe(db, accountId, m.fromAddress, m.headers),
     sender: (await senderProfile(db, scope, accountId, m.fromAddress))!,
     decisions: shown.map((r) => ({ ...toDecisionRow(r), ...costs.get(r.id)! })),
-    actions: changes.map(({ payload, originalLabels, ...a }) => ({
-      ...a,
-      added: payload.add,
-      removed: payload.remove,
-      originalLabels: originalLabels ?? [],
-    })),
+    actions: changes.map(({ payload, ...a }) => ({ ...a, added: payload.add, removed: payload.remove })),
   };
 }
 

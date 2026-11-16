@@ -26,6 +26,8 @@ interface Connection {
 export interface Driver {
   transaction<T>(work: (connection: Connection) => Promise<T>): Promise<T>;
   close(): Promise<void>;
+  /** For whoever runs sift: the role it connects as is not held by row-level security (`openDatabase`). */
+  readonly warning?: string;
 }
 
 // A call on any handle from inside a transaction would wait for that transaction to end (PGlite has one connection).

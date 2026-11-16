@@ -24,6 +24,7 @@ export async function status(): Promise<void> {
     ui.blank();
     return;
   }
+  if (store.warning) ui.warn(store.warning);
   const secrets = await checkSecrets(config, store, false);
   const accounts = await connectedAddresses(store.central);
   const people = await Promise.all((await listUsers(store.central)).map((u) => store.user(u.id)));

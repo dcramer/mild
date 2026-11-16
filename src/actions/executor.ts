@@ -98,10 +98,19 @@ async function applyChange(
  * Settle actions whose outcome was never confirmed (a crash or a provider error mid-change) by reading
  * the mailbox. A label change on one message is atomic, so it either fully applied or did not happen.
  * Never replays the change. Returns how many actions were settled.
+ *
+ * An unsubscribe changes no label, so the mailbox cannot say whether it took: one cut short is `unknown`,
+ * which leaves the sender to be tried again, and never `done`, which would leave them alone for good.
  */
 export async function reconcile(deps: ActionDeps, scope?: { accountId: string; messageId: string }): Promise<number> {
   let settled = 0;
   for (const action of await listOpenActions(deps.db, scope)) {
+    if (action.type === 'unsubscribe') {
+      if (action.status === 'unknown') continue;
+      await finishAction(deps.db, action.id, 'unknown', null, 'sift stopped before the answer was recorded', clock(deps));
+      settled++;
+      continue;
+    }
     const labels = await deps.mailbox.getLabelIds(action.messageId);
     if (labels === null) await finishAction(deps.db, action.id, 'failed', null, 'message no longer exists', clock(deps));
     else if (applied(labels, action.payload)) await finishAction(deps.db, action.id, 'done', labels, null, clock(deps));

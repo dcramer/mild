@@ -38,7 +38,7 @@ export function Verdict({ labelName, disposition, stacked }: { labelName: string
 }
 
 /** Where a decision has got to in Gmail, in a word. A failure is the only one in red. */
-export function StatusWord({ row, className }: { row: Pick<DecisionRow, 'mode' | 'outcome' | 'actionStatus' | 'outcomeDetail'>; className?: string }) {
+export function StatusWord({ row, className }: { row: Pick<DecisionRow, 'carryOut' | 'outcome' | 'actionStatus' | 'outcomeDetail'>; className?: string }) {
   const s: Status = status(row);
   if (s === 'failed')
     return (

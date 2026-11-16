@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { loadConfig, loadEnvFiles, saveKeyFile, secretPaths } from '../src/config.ts';
 import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
 import { credentialStore } from '../src/model/credentials.ts';
-import { loadKeyring, readSecret, rekeySecrets, writeSecret } from '../src/secrets.ts';
+import { loadKeyring, openSecret, openToRekey, readSecret, rekeySecrets, writeSecret } from '../src/secrets.ts';
 import { connectAccount } from '../src/store/accounts.ts';
 import { credentials, rekeyCredentials } from '../src/store/credentials.ts';
 import { freshStore, raw } from './fixtures.ts';
@@ -135,6 +135,16 @@ describe('credentials', () => {
     await expect((await credentials(beta, 'gmail', A)).read('alpha@example.org')).rejects.toThrow('person 2 gmail alpha@example.org');
     await raw(alpha).run(`INSERT INTO credentials (kind, key, value, updated_at) VALUES ('model', 'openai', ?, 0)`, stolen!.value);
     await expect((await credentials(alpha, 'model', A)).read('openai')).rejects.toThrow('person 1 model openai');
+  });
+
+  it('refuses a plain value once there is a key, so none can be put in place of a sealed one', async () => {
+    const { store } = await people();
+    const alpha = await store.user(1);
+    await raw(alpha).run(`INSERT INTO credentials (kind, key, value, updated_at) VALUES ('model', 'openai', ?, 0)`, '{"type":"api_key","key":"planted"}');
+    await expect((await credentials(alpha, 'model', A)).read('openai')).rejects.toThrow('person 1 model openai is stored unencrypted');
+    expect(await (await credentials(alpha, 'model', NONE)).read('openai')).toBe('{"type":"api_key","key":"planted"}');
+    expect(openToRekey('x', 'plain', A)).toBe('plain');
+    expect(() => openSecret('x', 'plain', A)).toThrow('SIFT_KEY is set');
   });
 
   it('brings plain and old-key values under the current key, and refuses ones no key opens', async () => {

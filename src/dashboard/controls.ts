@@ -40,6 +40,11 @@ export interface Controls {
    * the user when the rule cannot be a filter or Gmail refused.
    */
   ruleFilter(db: Sql, ruleId: string, on: boolean): Promise<void>;
+  /**
+   * Revoke sift's Gmail access to one of this person's mailboxes at Google, before it is removed, and stop
+   * reporting on it. Resolves false when Google could not be reached; the mailbox is removed anyway.
+   */
+  revokeGmail(db: Sql, email: string): Promise<boolean>;
   /** Start a pass now instead of waiting for the interval. */
   checkNow(): void;
   activity(): Activity;

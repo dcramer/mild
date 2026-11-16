@@ -1,6 +1,6 @@
 import type { Api, Context, Model, Models, Tool } from '@earendil-works/pi-ai';
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../triage/prompt.ts';
-import { type Judge, UNSURE } from '../triage/stages/model.ts';
+import { type Judge, UNSURE, describeFailure as failure } from '../triage/stages/model.ts';
 
 const MAX_REASON = 300;
 /**
@@ -42,7 +42,7 @@ export function createJudge(models: Models, model: Model<Api>): Judge {
     try {
       message = await models.complete(model, context, CALL);
     } catch (error) {
-      return { failed: error instanceof Error ? error.message : String(error) };
+      return { failed: failure(error) };
     }
     const usage = {
       model: `${model.provider}/${model.id}`,
@@ -50,8 +50,7 @@ export function createJudge(models: Models, model: Model<Api>): Judge {
       outputTokens: message.usage.output,
       costUsd: message.usage.cost.total,
     };
-    if (message.stopReason === 'error' || message.stopReason === 'aborted')
-      return { failed: message.errorMessage ?? `model stopped: ${message.stopReason}`, usage };
+    if (message.stopReason === 'error' || message.stopReason === 'aborted') return { failed: failure(message.errorMessage ?? message.stopReason), usage };
 
     const call = message.content.find((block) => block.type === 'toolCall' && block.name === VERDICT_TOOL);
     const args = call?.type === 'toolCall' ? call.arguments : undefined;

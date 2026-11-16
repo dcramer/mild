@@ -8,8 +8,9 @@ import type { Judge } from '../triage/stages/model.ts';
 import { type Account, listAccounts, listUsers } from '../store/accounts.ts';
 import type { Store } from '../store/store.ts';
 import { EXAMPLE_KEEP_DAYS, pruneExamples } from '../store/examples.ts';
+import { purgeSuggestionBodies } from '../store/messages.ts';
 import { preferences } from '../store/preferences.ts';
-import { keepSuggestionBodies } from './bodies.ts';
+import { KEEP_BODY_DAYS, keepSuggestionBodies } from './bodies.ts';
 import { captureExamples } from './examples.ts';
 import { PRUNE_PER_RUN, RETENTION_DAYS, pruneOld } from './retention.ts';
 import { checkFiltersWhenDue } from './filters.ts';
@@ -44,10 +45,19 @@ export interface PassResult {
   expired?: true;
 }
 
+/** Whether a person is still there: one deleted while a pass ran is skipped, not reported. */
+const stillThere = async (store: Store, id: number) => (await listUsers(store.central)).some((u) => u.id === id);
+
 /** One pass over everyone's mailboxes, a person's database at a time. */
 export async function runEveryone(store: Store, options: RunOptions): Promise<PassResult[]> {
   const results: PassResult[] = [];
-  for (const user of await listUsers(store.central)) results.push(...(await runOnce(await store.user(user.id), options)));
+  for (const user of await listUsers(store.central)) {
+    try {
+      results.push(...(await runOnce(await store.user(user.id), options)));
+    } catch (error) {
+      if (await stillThere(store, user.id)) throw error;
+    }
+  }
   return results;
 }
 
@@ -90,6 +100,8 @@ export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[
       const line = describe(result, active);
       if (line) options.log(`${account.email}: ${line}`);
     } catch (error) {
+      // Removed while the pass ran: there is nothing left to report about.
+      if (!(await listAccounts(db)).some((a) => a.id === account.id)) continue;
       result.error = error instanceof Error ? error.message : String(error);
       // Google's answer when a refresh token is no longer good; an app left in Testing does this every 7 days.
       if (result.error.includes('invalid_grant')) {
@@ -156,11 +168,19 @@ export function createWake(): Wake {
   };
 }
 
-/** Upkeep that runs when sift starts and once a day after. */
+/** Upkeep that runs when sift starts and once a day after, for everyone, whether or not Gmail can be reached. */
 export async function daily(store: Store, options: Pick<RunOptions, 'log' | 'now'>): Promise<void> {
+  const now = (options.now ?? Date.now)();
   for (const user of await listUsers(store.central)) {
-    const dropped = await pruneExamples(await store.user(user.id), (options.now ?? Date.now)());
-    if (dropped > 0) options.log(`Deleted ${dropped} example${dropped === 1 ? '' : 's'} older than ${EXAMPLE_KEEP_DAYS} days`);
+    try {
+      const db = await store.user(user.id);
+      const dropped = await pruneExamples(db, now);
+      if (dropped > 0) options.log(`Deleted ${dropped} example${dropped === 1 ? '' : 's'} older than ${EXAMPLE_KEEP_DAYS} days`);
+      await purgeSuggestionBodies(db, now - KEEP_BODY_DAYS * DAY_MS);
+    } catch (error) {
+      if (await stillThere(store, user.id))
+        options.log(`Could not delete old examples and message text, will retry tomorrow: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }
 

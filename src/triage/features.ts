@@ -27,13 +27,27 @@ export function bulkSignals(headers: Record<string, string>): BulkSignals {
   };
 }
 
+/** The authserv-id Gmail writes its `Authentication-Results` under. */
+const GMAIL = 'mx.google.com';
+
 /**
- * Whether the message passed DMARC, as the receiving server recorded it: the sender address is who it
- * says it is. Without this the From address proves nothing, and acting on it (blocking the sender,
- * following their unsubscribe link) could be turned against a sender who was only impersonated.
+ * The `Authentication-Results` header Gmail wrote, or '' when the topmost one is anyone else's. A sender
+ * can put the header in their own message with any result in it; only the receiver's own is evidence.
+ * RFC 8601: the authserv-id comes first, after any comment, and may be followed by a version number.
+ */
+export function receivedResults(headers: Record<string, string>): string {
+  const results = headers['authentication-results'] ?? '';
+  const authserv = /^\s*(?:\([^)]*\)\s*)*"?([^\s;"()]+)"?(?:\s+\d+)?\s*(?:\([^)]*\)\s*)*;/.exec(results)?.[1];
+  return authserv?.toLowerCase() === GMAIL ? results : '';
+}
+
+/**
+ * Whether the message passed DMARC, as Gmail recorded it: the sender address is who it says it is.
+ * Without this the From address proves nothing, and acting on it (blocking the sender, following their
+ * unsubscribe link) could be turned against a sender who was only impersonated.
  */
 export function passedDmarc(headers: Record<string, string>): boolean {
-  return /\bdmarc=pass\b/i.test(headers['authentication-results'] ?? '');
+  return /\bdmarc=pass\b/i.test(receivedResults(headers));
 }
 
 export function parseListId(raw: string | undefined): string | null {

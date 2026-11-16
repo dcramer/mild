@@ -45,7 +45,7 @@ Built: labels with defaults and the user's own; outcomes keep, archive, mark spa
 
 ## Teaching loop
 
-Built: Suggestions as one row per sender with a one-press answer; opening a row shows the mail, what sift knows about the sender, and an answer with a scope; accuracy from answers, per tier and per label; answered messages stored whole as examples, shown to the model a few at a time (same sender first), deletable, and kept for a year after the answer; test runs that replay the model over the examples and score it; waiting suggestions re-decided when a rule or label changes; and what the user does in Gmail (moving mail back, out of spam, relabelling) recorded as an answer for that one message. In use on real mail in observe mode.
+Built: Suggestions as one row per sender with a one-press answer; opening a row shows the mail, what sift knows about the sender, and an answer with a scope; accuracy from answers, per tier and per label; the text of answered messages stored as examples, shown to the model a few at a time (same sender first), deletable, and kept for a year after the answer; test runs that replay the model over the examples and score it; waiting suggestions re-decided when a rule or label changes; and what the user does in Gmail (moving mail back, out of spam, relabelling) recorded as an answer for that one message. In use on real mail with sift off.
 
 - [ ] **Screens for what the teaching loop now has.** All of this is in the API and nowhere on a page: test runs (start one, watch it, compare two), stored examples (list, delete, how long they are kept), accuracy per tier and label on the Overview, and how many suggestions changed after a rule or label edit.
 - [ ] Test runs: leave out every example from the same sender (today the same sender's other examples flatter the score), replay the whole cascade and not only the model, cancel a run, prune old runs.
@@ -80,12 +80,7 @@ The dashboard manages sift, behind Google sign-in. That sign-in also connects th
 - [ ] Suggestion bodies are fetched once per waiting message; reuse the text the model tier already fetched instead of asking Gmail twice. `getContent` returns the text from the model's one read, which makes this straightforward.
 - [ ] Per-rule detail: the messages matched, hits over time.
 - [ ] **Users and mailboxes, the rest.** Built: a user owns their mailboxes; every dashboard query and write is scoped to the signed-in user's; `?mailbox=` narrows any read to one; the first user owns the install and alone changes what applies to all of it; each person has their own model and turns sift on or off for themselves. Still to do: a mailbox switcher in the page (one, or all); the Rules and Labels screens still use the first mailbox when adding; a way to hand over or leave an install.
-- [ ] **Delete a user, and disconnect a mailbox.** Disconnecting one mailbox and deleting a whole user are the same act at two sizes, and both wipe everything sift holds about what is removed:
-  - **Everything means everything.** The Gmail token (revoked at Google, then deleted), the account row, and every row keyed to it: messages, decisions, actions, rules, labels, feedback, examples, suggestion text, proposals, correspondents, test runs. Deleting a user also removes the user and, for the owner, either hands the install to someone or resets it.
-  - **Nothing left behind elsewhere.** Gmail filters sift wrote for that mailbox are removed; the `sift/…` labels on mail are left (they are the user's mail) and the page says so. Backups and retention cannot be reached from here, and that is said too.
-  - **One list of what holds account data**, used by this, by retention and by a test that fails when a new table keyed by account is not on it, so a table added later cannot be forgotten.
-  - It is confirmed by typing the address, cannot be undone, and works while sift is running without the daemon tripping over a mailbox that has gone.
-  - The page is built and says "Not built yet" when pressed (Settings: a trash can on each mailbox; Delete account). A person's last mailbox is how they sign in, so removing it is deleting the account, through the same dialog. Removing the one they are signed in as, with others left, signs them out.
+- [ ] Removing a mailbox or deleting an account (built) leaves the Gmail filters sift wrote, and the confirm says so. Offer to remove them, which needs the mailbox's access before it is revoked. The page does not yet say that backups keep data for their own retention.
 - [ ] Try a second account end to end.
 - [ ] Use Tailscale's identity headers to skip the Google round trip for viewers on the tailnet.
 - [ ] Try a label's description, or a rule's "only when", on recent mail before saving it: what the model would now say about a few messages, beside what it said. Not when changing provider: there it tells the reader nothing they can act on.
@@ -112,7 +107,6 @@ Built: one model call per message that names a label; the label's outcome decide
 - [ ] `sift status` does not show the sign-in limit (`dashboard.allow`). An account left off the list is still connected and sorted, with no way to disconnect it short of removing the account.
 - [ ] `init` asks about the model and the sign-in list again on every partial re-run while they are unset: it cannot tell "chose none" from "never asked".
 - [ ] Find out what publishing the Google app requires (branding fields, verification for these scopes) and make that path of `init` exact; the privacy policy and terms links are `<dashboard address>/privacy` and `/terms`. Restricted scopes also need a yearly security assessment (CASA). Check its Console links and field names against the live console; they were written from memory.
-- [ ] A way for a person to delete everything sift holds for them from the dashboard. The privacy policy tells them to ask whoever runs the install.
 - [ ] Run `sift init` inside Docker, where the dashboard address is the host's, not the container's.
 
 ## Verify against real Gmail

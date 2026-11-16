@@ -61,7 +61,14 @@ const settled = (start: Any, receiver: unknown) => (ok?: (v: unknown) => unknown
     .then(ok, fail);
 
 const JOINS = new Set(['leftJoin', 'innerJoin']);
-const REFUSED = new Set(['rightJoin', 'fullJoin', 'crossJoin', 'leftJoinLateral', 'innerJoinLateral', 'crossJoinLateral']);
+const JOIN_INSTEAD = 'is not held to one person; write it as a left or inner join.';
+const SELECT_FIRST = 'is not held to one person; select the rows from an owned builder, then change them by key.';
+const REFUSED = new Map([
+  ...['rightJoin', 'fullJoin', 'crossJoin', 'leftJoinLateral', 'innerJoinLateral', 'crossJoinLateral'].map((join) => [join, JOIN_INSTEAD] as const),
+  // `update … from` and `delete … using`: a second table the where would not hold.
+  ['from', SELECT_FIRST],
+  ['using', SELECT_FIRST],
+]);
 
 /**
  * `query` with `base` kept on its where, and every table it joins held to `person` in the join. Some of
@@ -71,6 +78,11 @@ const REFUSED = new Set(['rightJoin', 'fullJoin', 'crossJoin', 'leftJoinLateral'
 function held<T extends object>(query: T, base: SQL | undefined, person: number | null): T {
   return new Proxy(query, {
     get(target, prop, receiver) {
+      const refused = typeof prop === 'string' ? REFUSED.get(prop) : undefined;
+      if (refused)
+        return () => {
+          throw new Error(`${String(prop)} ${refused}`);
+        };
       const value = Reflect.get(target, prop, receiver) as unknown;
       if (typeof value !== 'function' || typeof prop !== 'string') return value;
       if (prop === 'constructor') return value;
@@ -85,10 +97,6 @@ function held<T extends object>(query: T, base: SQL | undefined, person: number 
         return (table: unknown, on: SQL | ((...a: never[]) => SQL)) => {
           const own = condition(table, person);
           return call(table, typeof on === 'function' ? (...a: never[]) => and(on(...a), own) : and(on, own));
-        };
-      if (REFUSED.has(prop))
-        return () => {
-          throw new Error(`${prop} is not held to one person; write it as a left or inner join.`);
         };
       return call;
     },
@@ -179,11 +187,18 @@ export function owned(db: PgRemoteDatabase, person: number | null): Builder {
   };
 }
 
+const personTable = (param: unknown): PgTable | undefined =>
+  Array.isArray(param) ? param.map(personTable).find(Boolean) : isPersonTable(param) ? param : undefined;
+
 /**
- * Drizzle's `sql`, refusing a person's table written into it: a table named in raw SQL would not be
- * held to anyone. Select from an owned builder and use that as the subquery instead.
+ * Drizzle's `sql` template, refusing a person's table written into it: a table named in raw SQL would not
+ * be held to anyone. Select from an owned builder and use that as the subquery instead. Its helpers that
+ * write SQL text or names unchecked (`raw`, `identifier`, `join`, `fromList`) are left out.
  */
-export const sql: typeof drizzleSql = Object.assign((strings: TemplateStringsArray, ...params: unknown[]) => {
-  for (const param of params) if (isPersonTable(param)) throw new Error(`${nameOf(param)} written into sql\`\` is not held to one person.`);
-  return drizzleSql(strings, ...(params as never[]));
-}, drizzleSql);
+export function sql<T = unknown>(strings: TemplateStringsArray, ...params: unknown[]): SQL<T> {
+  for (const param of params) {
+    const table = personTable(param);
+    if (table) throw new Error(`${nameOf(table)} written into sql\`\` is not held to one person.`);
+  }
+  return drizzleSql<T>(strings, ...params);
+}

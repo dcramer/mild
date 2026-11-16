@@ -71,12 +71,12 @@ export const writes: Write[] = [
     body: z.strictObject({ id: ruleId, on: z.boolean() }),
     reply: z.object({ filterId: z.string().nullable(), filter: RuleFilter.nullable() }),
     touches: ownerOf(rules),
-    run: async ({ db, controls, now }, { id, on }) => {
+    run: async ({ db, controls }, { id, on }) => {
       if (!controls) throw new Error('This dashboard cannot change Gmail filters.');
       // Taking a filter out is always allowed: it only reduces what runs unattended.
       if (on && !(await preferences(db)).active) throw new Error('sift is off, so it writes nothing to Gmail. Turn it on first, in Settings.');
       await controls.ruleFilter(db, id, on);
-      return { filterId: (await getRuleFilter(db, id))?.filterId ?? null, filter: (await ruleFilterStatus(db, now())).get(id) ?? null };
+      return { filterId: (await getRuleFilter(db, id))?.filterId ?? null, filter: (await ruleFilterStatus(db)).get(id) ?? null };
     },
   }),
   write({
@@ -85,14 +85,14 @@ export const writes: Write[] = [
     reply: z.object({ ok: z.literal(true), redecided: z.number() }),
     touches: ownerOf(rules),
     run: async ({ db, controls, now }, { id }) => {
-      const owner = (await getRuleFilter(db, id))?.accountId ?? null;
-      // A filter left behind would keep acting on mail with no rule to explain or remove it.
-      if ((await getRuleFilter(db, id))?.filterId) {
-        if (!controls) throw new Error('This rule is also a Gmail filter, which this dashboard cannot remove.');
-        await controls.ruleFilter(db, id, false);
-      }
+      const rule = await getRuleFilter(db, id);
+      if (!rule) throw new Error('That rule no longer exists.');
+      // A filter left behind would keep acting on mail with no rule to explain or remove it. Asked even
+      // with no filter recorded: one sift wrote and lost track of is found and removed there too.
+      if (controls) await controls.ruleFilter(db, id, false);
+      else if (rule.filterId) throw new Error('This rule is also a Gmail filter, which this dashboard cannot remove.');
       if (!(await removeRule(db, id))) throw new Error('That rule no longer exists.');
-      return { ok: true as const, redecided: await redecide(db, now, owner ?? undefined) };
+      return { ok: true as const, redecided: await redecide(db, now, rule.accountId) };
     },
   }),
 ];

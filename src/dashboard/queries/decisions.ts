@@ -51,7 +51,7 @@ const DECISION_FIELDS = {
   fromAddress: messages.fromAddress,
   fromName: messages.fromName,
   subject: messages.subject,
-  mode: decisions.mode,
+  carryOut: decisions.carryOut,
   outcome: decisions.outcome,
   outcomeDetail: decisions.outcomeDetail,
   byUser: decisions.byUser,
@@ -84,17 +84,17 @@ export const decisionsJoined = (db: Sql) =>
  * still waiting for a pass (an answer, or anything left while sift was off) is not trouble.
  */
 const STATUS_WHERE: Record<string, SQL | undefined> = {
-  suggested: eq(decisions.mode, 'observe'),
-  done: and(eq(decisions.mode, 'act'), inArray(decisions.outcome, ['done', 'none']), sql`coalesce(${actions.status}, 'done') = 'done'`),
+  suggested: eq(decisions.carryOut, false),
+  done: and(eq(decisions.carryOut, true), inArray(decisions.outcome, ['done', 'none']), sql`coalesce(${actions.status}, 'done') = 'done'`),
   undone: eq(actions.status, 'undone'),
   trouble: and(
-    eq(decisions.mode, 'act'),
+    eq(decisions.carryOut, true),
     isNotNull(decisions.outcome),
     sql`coalesce(${actions.status}, '') NOT IN ('pending', 'undone')`,
     or(inArray(decisions.outcome, ['failed', 'unknown']), inArray(actions.status, ['failed', 'unknown'])),
   ),
   // What was done to mail in Gmail, tried, or waiting to be: suggestions and mail left alone are not.
-  changed: and(eq(decisions.mode, 'act'), or(isNotNull(actions.id), isNull(decisions.outcome), inArray(decisions.outcome, ['failed', 'unknown']))),
+  changed: and(eq(decisions.carryOut, true), or(isNotNull(actions.id), isNull(decisions.outcome), inArray(decisions.outcome, ['failed', 'unknown']))),
 };
 
 /**
@@ -106,7 +106,7 @@ export async function retryDecision(db: Sql, scope: Scope, id: number): Promise<
   const [row] = await db
     .select({ byUser: decisions.byUser })
     .from(decisions)
-    .where(and(eq(decisions.id, id), eq(decisions.mode, 'act'), inArray(decisions.outcome, ['failed', 'unknown']), within(scope, decisions.accountId)));
+    .where(and(eq(decisions.id, id), eq(decisions.carryOut, true), inArray(decisions.outcome, ['failed', 'unknown']), within(scope, decisions.accountId)));
   if (!row) return { retried: false, waiting: false };
   await db.update(decisions).set({ outcome: null, outcomeDetail: null }).where(eq(decisions.id, id));
   return { retried: true, waiting: !row.byUser };

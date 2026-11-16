@@ -1,8 +1,8 @@
 import { Trash2Icon } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
-import { type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type ManageState, type Removed, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, money, plural } from '@/lib/format.ts';
 import {
   Button,
@@ -222,37 +222,39 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
   );
 }
 
-// There is no API to remove a mailbox or delete an account yet (TODO.md); these say so when pressed.
-const NOT_BUILT = 'Not built yet: there is no API for this.';
-
 /**
  * A person's last mailbox is how they sign in, so removing it is deleting their account, and asks the
  * same way. Removing the one they are signed in as, with others left, ends their session.
  */
-function RemoveMailbox({ email, signedIn, last }: { email: string; signedIn: boolean; last: boolean }) {
-  const toast = useToast();
-  const [deleting, setDeleting] = useState(false);
-  if (last)
-    return (
-      <>
-        <Button variant="quiet" size="icon" aria-label="Remove" title="Remove" onClick={() => setDeleting(true)}>
-          <Trash2Icon />
-        </Button>
-        {deleting ? <DeleteAccount email={email} onClose={() => setDeleting(false)} /> : null}
-      </>
-    );
+function RemoveMailbox({ email, signedIn, last, reload }: { email: string; signedIn: boolean; last: boolean; reload: () => void }) {
+  const [removing, setRemoving] = useState(false);
   return (
-    <ConfirmButton
-      icon={<Trash2Icon />}
-      question={`Remove ${email}, and delete what sift recorded about its mail?${signedIn ? ' You are signed in as it, so you will be signed out.' : ''}`}
-      onConfirm={() => toast(NOT_BUILT)}
-    >
-      Remove
-    </ConfirmButton>
+    <>
+      <Button variant="quiet" size="icon" aria-label={`Remove ${email}`} title="Remove" onClick={() => setRemoving(true)}>
+        <Trash2Icon />
+      </Button>
+      {removing ? (
+        last ? (
+          <DeleteAccount email={email} onClose={() => setRemoving(false)} />
+        ) : (
+          <ConfirmRemoval
+            title={`Remove ${email}`}
+            confirm={email}
+            action="Remove mailbox"
+            send={() => api.removeMailbox(email)}
+            onDone={reload}
+            onClose={() => setRemoving(false)}
+          >
+            sift stops reading it, revokes its access at Google, and deletes everything it recorded about its mail: decisions, answers, rules and labels.
+            {signedIn ? ' You are signed in as it, so you will be signed out.' : ''}
+          </ConfirmRemoval>
+        )
+      ) : null}
+    </>
   );
 }
 
-function Mailboxes({ state, signedInAs }: { state: ManageState; signedInAs: string | null }) {
+function Mailboxes({ state, signedInAs, reload }: { state: ManageState; signedInAs: string | null; reload: () => void }) {
   return (
     <SettingsGroup title="Mailboxes" note="Anyone signed in as one of these sees all of them.">
       <Sheet>
@@ -262,7 +264,7 @@ function Mailboxes({ state, signedInAs }: { state: ManageState; signedInAs: stri
             title={account.email}
             note={`${account.lastSyncedAt ? `Synced ${ago(account.lastSyncedAt)}` : 'Not synced yet'}${account.email === signedInAs ? ' · Signed in as this one' : ''}`}
           >
-            <RemoveMailbox email={account.email} signedIn={account.email === signedInAs} last={state.accounts.length === 1} />
+            <RemoveMailbox email={account.email} signedIn={account.email === signedInAs} last={state.accounts.length === 1} reload={reload} />
           </SettingRow>
         ))}
         <SettingRow title="Another Gmail account">
@@ -274,19 +276,51 @@ function Mailboxes({ state, signedInAs }: { state: ManageState; signedInAs: stri
   );
 }
 
-/** Everything sift holds for this person goes, and they are signed out. Typing the address is the confirmation, since nothing brings it back. */
-function DeleteAccount({ email, onClose }: { email: string; onClose: () => void }) {
+/** Said after a removal when Google could not be reached: sift's access there stays until they take it away. */
+const notRevoked = (reply: Removed) =>
+  reply.notRevoked.length === 0
+    ? null
+    : `Google could not be reached, so ${reply.notRevoked.join(' and ')} still lists sift as having access. Remove it under Third-party connections in your Google Account.`;
+
+/** Typing the address is the confirmation, since nothing brings it back. */
+function ConfirmRemoval({
+  title,
+  confirm,
+  action,
+  send,
+  onDone,
+  onClose,
+  children,
+}: {
+  title: string;
+  confirm: string;
+  action: string;
+  send: () => Promise<Removed>;
+  onDone?: () => void;
+  onClose: () => void;
+  children: ReactNode;
+}) {
   const [typed, setTyped] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, run } = useAction();
+  const toast = useToast();
+  const submit = () =>
+    run(async () => {
+      const reply = await send();
+      const note = notRevoked(reply);
+      if (reply.signedOut) return window.location.assign(note ? `/?signin=${encodeURIComponent(note)}` : '/');
+      toast(`${confirm} removed`, note ? { description: note } : {});
+      onClose();
+      onDone?.();
+    });
   return (
     <Dialog
       open
       onClose={onClose}
-      title="Delete your account"
+      title={title}
       footer={
         <>
-          <Button variant="ink" disabled={typed.trim() !== email} onClick={() => setError(NOT_BUILT)}>
-            Delete everything
+          <Button variant="ink" busy={busy} disabled={typed.trim() !== confirm} onClick={submit}>
+            {action}
           </Button>
           <Button variant="quiet" onClick={onClose}>
             Cancel
@@ -295,16 +329,26 @@ function DeleteAccount({ email, onClose }: { email: string; onClose: () => void 
         </>
       }
     >
-      <Form onSubmit={() => {}}>
+      <Form onSubmit={() => typed.trim() === confirm && submit()}>
         <p className="text-base">
-          sift stops reading every mailbox, and everything it recorded is deleted: decisions, answers, rules, labels and your model sign-in. The filters sift
-          made in Gmail are removed; the changes it made to mail, and its labels on it, stay. This cannot be undone.
+          {children} The filters sift made in Gmail stay there, as do its labels on your mail; delete the filters in Gmail’s settings if you no longer want
+          them. This cannot be undone.
         </p>
-        <Field label={`Type ${email} to confirm`}>
-          <Input aria-label="Your address" autoComplete="off" value={typed} onChange={(event) => setTyped(event.target.value)} />
+        <Field label={`Type ${confirm} to confirm`}>
+          <Input aria-label="The address" autoComplete="off" value={typed} onChange={(event) => setTyped(event.target.value)} />
         </Field>
       </Form>
     </Dialog>
+  );
+}
+
+/** Everything sift holds for this person goes, and they are signed out. */
+function DeleteAccount({ email, onClose }: { email: string; onClose: () => void }) {
+  return (
+    <ConfirmRemoval title="Delete your account" confirm={email} action="Delete everything" send={() => api.deleteAccount(email)} onClose={onClose}>
+      sift stops reading every mailbox, revokes its access at Google, and deletes everything it recorded: decisions, answers, rules, labels and your model
+      sign-in.
+    </ConfirmRemoval>
   );
 }
 
@@ -399,7 +443,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             {/* Whether sift is on, the model and its sign-in are each person's own. */}
             <Active state={data} reload={reload} />
             <Model state={data} reload={reload} onConnect={onClose} />
-            <Mailboxes state={data} signedInAs={signedInAs} />
+            <Mailboxes state={data} signedInAs={signedInAs} reload={reload} />
             <Keys />
             <Account state={data} signedInAs={signedInAs} />
           </>

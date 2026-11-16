@@ -25,7 +25,7 @@ function Rules({ rules }: { rules: SenderProfile['rules'] }) {
           ) : (
             <>
               {rule.kind === 'when-label' ? ', when it is ' : ' is '}
-              <span className="font-medium">{rule.labelName ?? 'a removed label'}</span>
+              <span className="font-medium">{rule.labelName}</span>
               {rule.when ? `, when it is ${rule.when}` : ''}
               {rule.disposition ? ` (${outcomeName(rule.disposition)})` : ''}
             </>

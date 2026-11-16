@@ -14,7 +14,7 @@ async function profileOf(db: Sql, scope: Scope, accountId: string, who: { addres
   if (!here) return null;
   const known = 'address' in who ? await senderFacts(db, accountId, who.address, now) : await domainFacts(db, accountId, who.domain, now);
   if (!known) return null;
-  const names = new Map((await listLabels(db, accountId, now)).map((l) => [l.id, l.name]));
+  const names = new Map((await listLabels(db, accountId)).map((l) => [l.id, l.name]));
   const domainName = 'address' in who ? (who.address.split('@')[1] ?? '') : who.domain;
   const ofDomain = 'address' in who ? await domainFacts(db, accountId, domainName, now) : null;
   const rules = (await listRuleSummaries(db, here))

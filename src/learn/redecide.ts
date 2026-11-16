@@ -25,6 +25,7 @@ const STANDING = {
 
 const x = alias(decisions, 'x');
 const p = alias(decisions, 'p');
+const answeredDecision = alias(decisions, 'answered');
 const WILL: Record<Disposition, string> = { keep: 'kept', archive: 'archived', spam: 'marked as spam', review: 'left for you' };
 const hides = (disposition: Disposition) => disposition === 'archive' || disposition === 'spam';
 
@@ -70,7 +71,7 @@ async function stillWaiting(db: Sql, accountId: string, messageId: string, decis
 }
 
 async function redecide(db: Sql, accountId: string, now: number): Promise<number> {
-  const labels = await listLabels(db, accountId, now);
+  const labels = await listLabels(db, accountId);
   const stored = await listRules(db, accountId);
   let known: boolean | undefined;
   const rules = rulesStage(stored, labels, { hasWritten: () => known });
@@ -81,7 +82,7 @@ async function redecide(db: Sql, accountId: string, now: number): Promise<number
     .where(
       and(
         eq(decisions.accountId, accountId),
-        eq(decisions.mode, 'observe'),
+        eq(decisions.carryOut, false),
         eq(decisions.stage, 'rules'),
         isNotNull(decisions.ruleId),
         eq(
@@ -101,7 +102,8 @@ async function redecide(db: Sql, accountId: string, now: number): Promise<number
           db
             .select({ one: sql`1` })
             .from(feedback)
-            .where(and(eq(feedback.accountId, decisions.accountId), eq(feedback.messageId, decisions.messageId))),
+            .innerJoin(answeredDecision, eq(answeredDecision.id, feedback.decisionId))
+            .where(and(eq(answeredDecision.accountId, decisions.accountId), eq(answeredDecision.messageId, decisions.messageId))),
         ),
         exists(
           db
@@ -163,7 +165,7 @@ async function redecide(db: Sql, accountId: string, now: number): Promise<number
       }
     }
     if (!next || !(await stillWaiting(db, accountId, messageId, decisionId))) continue;
-    await recordDecision(db, accountId, messageId, next, { mode: 'observe', now, ...(runId === null ? {} : { runId }) });
+    await recordDecision(db, accountId, messageId, next, { now, ...(runId === null ? {} : { runId }) });
     if (next.ruleId) await countRuleHit(db, next.ruleId);
     recorded++;
   }

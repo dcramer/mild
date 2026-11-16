@@ -47,7 +47,7 @@ async function decided(address: string, decision: Partial<Decision> = {}, at = +
     db,
     ACCOUNT,
     id,
-    { disposition: 'review', subscription: 'preserve', stage: 'agent', reason: 'Marketing: a sale', ...decision },
+    { disposition: 'review', subscription: 'preserve', stage: 'model', reason: 'Marketing: a sale', ...decision },
     { now: at },
   );
   return id;
@@ -55,14 +55,14 @@ async function decided(address: string, decision: Partial<Decision> = {}, at = +
 
 const current = async (messageId: string) =>
   await raw(db).get(
-    'SELECT stage, disposition, label_id, rule_id, subscription, reason, run_id, mode FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1',
+    'SELECT stage, disposition, label_id, rule_id, subscription, reason, run_id, carry_out FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1',
     messageId,
   );
 const count = async () => (await raw(db).get<{ n: number }>('SELECT count(*) AS n FROM decisions'))!.n;
 const waiting = async () => (await pendingSuggestions(db)).map((s) => s.messageId).toSorted();
 
 beforeEach(async () => {
-  db = await openUserDb();
+  db = await openUserDb(ACCOUNT);
   await addMailbox(db, ACCOUNT, '1', 0);
   serial = 0;
 });
@@ -80,7 +80,7 @@ describe('when a rule changes', () => {
       label_id: 'newsletter',
       rule_id: ruleId,
       run_id: null,
-      mode: 'observe',
+      carry_out: false,
     });
     expect(await waiting()).toEqual([other]);
     expect((await listRules(db, ACCOUNT))[0]?.hits).toBe(1);
@@ -100,7 +100,7 @@ describe('when a rule changes', () => {
     await removeRule(db, arrivedUnderRule.ruleId);
     expect(await redecideWaiting(db, ACCOUNT)).toBe(1);
     expect(await current(sale)).toMatchObject({
-      stage: 'agent',
+      stage: 'model',
       disposition: 'archive',
       label_id: 'marketing',
       rule_id: null,
@@ -125,13 +125,15 @@ describe('when a rule changes', () => {
     const sale = await decided('sales@example.com', MARKETING);
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'sales@example.com', label: 'newsletter', scope: 'sender' });
     const answered = await decided('shop@example.com', { stage: 'rules', disposition: 'keep', labelId: 'transactional' });
+    // An earlier answer of the user's, corrected again.
+    await raw(db).run('UPDATE decisions SET by_user = true WHERE message_id = ?', answered);
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'shop@example.com', label: 'marketing', scope: 'sender', messageId: answered });
     for (const rule of await listRules(db, ACCOUNT)) await removeRule(db, rule.id);
 
     const before = await count();
     expect(await redecideWaiting(db, ACCOUNT)).toBe(0);
     expect(await count()).toBe(before);
-    expect(await current(sale)).toMatchObject({ stage: 'agent', label_id: 'marketing' });
+    expect(await current(sale)).toMatchObject({ stage: 'model', label_id: 'marketing' });
     expect(await current(answered)).toMatchObject({ stage: 'rules', label_id: 'marketing' });
   });
 
@@ -146,12 +148,12 @@ describe('when a rule changes', () => {
         70,
       ));
     expect(await redecideWaiting(db, ACCOUNT, 70)).toBe(0);
-    expect(await current(sale)).toMatchObject({ stage: 'rules', label_id: 'personal', mode: 'act' });
+    expect(await current(sale)).toMatchObject({ stage: 'rules', label_id: 'personal', carry_out: true });
   });
 
   it('a rule sift learned changes a suggestion only when the outcome differs', async () => {
     const sale = await decided('sales@example.com', MARKETING);
-    await addRule(db, ACCOUNT, { match: { from: 'sales@example.com' }, labelId: 'marketing' }, 'agent');
+    await addRule(db, ACCOUNT, { match: { from: 'sales@example.com' }, labelId: 'marketing' }, 'learned');
     expect(await redecideWaiting(db, ACCOUNT)).toBe(0);
 
     await updateLabel(db, ACCOUNT, 'marketing', { disposition: 'keep' });
@@ -178,7 +180,7 @@ describe("when a label's outcome changes", () => {
 
     expect(await redecideWaiting(db, ACCOUNT, 80)).toBe(1);
     expect(await current(sale)).toEqual({
-      stage: 'agent',
+      stage: 'model',
       disposition: 'keep',
       label_id: 'marketing',
       rule_id: null,
@@ -186,7 +188,7 @@ describe("when a label's outcome changes", () => {
       reason: 'Marketing is now kept. Before: Marketing: a sale',
       // Still what that model call decided, with the rule it was shown.
       run_id: run,
-      mode: 'observe',
+      carry_out: false,
     });
     expect(await raw(db).get('SELECT prior_rule_id FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1', sale)).toEqual({ prior_rule_id: 'r-prior' });
     expect(await current(other)).toMatchObject({ disposition: 'archive', reason: 'Marketing: a sale' });
@@ -218,7 +220,7 @@ describe("when a label's outcome changes", () => {
 
   it('leaves mail sift could not place alone', async () => {
     await decided('who@example.com', { stage: 'fallback' });
-    await decided('unsure@example.com', { stage: 'agent', reason: 'could be either' });
+    await decided('unsure@example.com', { stage: 'model', reason: 'could be either' });
     await updateLabel(db, ACCOUNT, 'marketing', { disposition: 'keep' });
     expect(await redecideWaiting(db, ACCOUNT)).toBe(0);
   });

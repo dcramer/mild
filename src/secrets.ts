@@ -89,8 +89,19 @@ export function sealSecret(name: string, text: string, keys: Keyring): string {
   return keys.current ? encrypt(keys.current, name, text) : text;
 }
 
-/** A stored secret, decrypted if it was encrypted. Throws, naming `name`, if its key is not on the ring or it was stored for another name. */
+/**
+ * A stored secret, decrypted. Throws, naming `name`, if its key is not on the ring or it was stored for
+ * another name. Plain text is accepted only while there is no key: once there is, every value was sealed
+ * at start, so a plain one is a credential someone else put in this person's place.
+ */
 export function openSecret(name: string, stored: string, keys: Keyring): string {
+  if (keyIdOf(stored) === null && keys.current)
+    throw new Error(`${name} is stored unencrypted though SIFT_KEY is set, so it is not used. Sign in again to replace it.`);
+  return openToRekey(name, stored, keys);
+}
+
+/** As `openSecret`, but plain text is returned as it is: only for sealing what was stored before there was a key. */
+export function openToRekey(name: string, stored: string, keys: Keyring): string {
   if (keyIdOf(stored) === null) return stored;
   const text = decrypt(keys, name, stored);
   if (text === null) throw lost([name]);

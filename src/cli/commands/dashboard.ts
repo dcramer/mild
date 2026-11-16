@@ -11,6 +11,7 @@ export async function dashboard(args: string[]): Promise<void> {
   const port = portOption(values.port);
   const config = loadConfig();
   const store = await openStore(config);
+  if (store.warning) ui.warn(store.warning);
   const secrets = await checkSecrets(config, store, true);
   ui.heading('dashboard');
   secrets();

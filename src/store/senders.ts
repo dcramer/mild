@@ -17,7 +17,7 @@ const current = (db: Sql) =>
       .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
   );
 
-const ofMessage = (t: typeof decisions | typeof feedback) => and(eq(messages.accountId, t.accountId), eq(messages.id, t.messageId));
+const ofMessage = (t: typeof decisions) => and(eq(messages.accountId, t.accountId), eq(messages.id, t.messageId));
 
 /** What sift has recorded about mail from an address: how much, and what was done with it. */
 export async function senderHistory(
@@ -113,7 +113,8 @@ async function facts(db: Sql, accountId: string, who: { address: string } | { do
       wrong: sql<number>`count(*) FILTER (WHERE ${feedback.verdict} = 'wrong')`.mapWith(Number),
     })
     .from(feedback)
-    .innerJoin(messages, ofMessage(feedback))
+    .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
+    .innerJoin(messages, ofMessage(decisions))
     .where(and(eq(feedback.accountId, accountId), eq(column, value)))) as [{ right: number; wrong: number }];
   const [written] =
     'address' in who
@@ -128,7 +129,7 @@ async function facts(db: Sql, accountId: string, who: { address: string } | { do
   const userHasWritten = written?.yes ?? null;
 
   // Only a rule for exactly this sender or domain that decides by itself says how the owner regards them.
-  const dispositions = new Map((await listLabels(db, accountId, now)).map((l) => [l.id, l.disposition]));
+  const dispositions = new Map((await listLabels(db, accountId)).map((l) => [l.id, l.disposition]));
   const rule = (await listRules(db, accountId)).find((r) => {
     const keys = Object.keys(r.match);
     return keys.length === 1 && r.whenLabel === undefined && r.when === undefined && ('address' in who ? r.match.from === value : r.match.fromDomain === value);

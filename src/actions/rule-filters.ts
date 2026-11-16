@@ -1,5 +1,6 @@
-import { finishAction, insertPendingAction } from '../store/actions.ts';
+import { type ActionPayload, finishAction, insertPendingAction } from '../store/actions.ts';
 import { filterVerdicts, getRuleFilter, listRuleFilters, setRuleFilter } from '../store/filters.ts';
+import { actions, and, asc, eq, inArray } from '../store/query.ts';
 import type { FilterPlan } from '../triage/filter.ts';
 import type { ActionDeps } from './executor.ts';
 import { type ExistingFilter, type FilterProposal, sameFilter, validateFilter } from './filters.ts';
@@ -29,18 +30,16 @@ const NONE = { filterId: null, state: null, written: null };
  * does exactly this is taken over instead of duplicated, which Gmail would refuse.
  */
 export async function writeRuleFilter(deps: ActionDeps, ruleId: string): Promise<void> {
-  const row = await getRuleFilter(deps.db, ruleId);
-  if (!row) throw new Error('That rule no longer exists.');
+  const found = await getRuleFilter(deps.db, ruleId);
+  if (!found) throw new Error('That rule no longer exists.');
+  await settleRuleFilters(deps, found.accountId);
+  const row = (await getRuleFilter(deps.db, ruleId))!;
   const verdict = (await filterVerdicts(deps.db, row.accountId, clock(deps))).get(ruleId);
   if (!verdict?.possible) throw new Error(verdict?.reason ?? 'That rule cannot be a Gmail filter.');
   if (row.filterId) await removeRuleFilter(deps, ruleId);
 
   const { plan } = verdict;
-  const add = plan.gmailLabel === undefined ? [] : [await deps.mailbox.ensureLabel(plan.gmailLabel)];
-  const filter: FilterProposal = {
-    criteria: plan.criteria,
-    action: { ...(add.length > 0 ? { addLabelIds: add } : {}), ...(plan.archive ? { removeLabelIds: ['INBOX'] } : {}) },
-  };
+  const filter = await proposal(deps, plan);
   const problems = validateFilter(filter);
   if (problems.length > 0) throw new Error(`Refusing to create filter: ${problems.join('; ')}`);
   const before = await deps.mailbox.listFilters();
@@ -57,7 +56,7 @@ export async function writeRuleFilter(deps: ActionDeps, ruleId: string): Promise
     const id = twin?.id ?? (await deps.mailbox.createFilter(filter));
     got = (await deps.mailbox.listFilters()).find((f) => f.id === id);
   } catch (error) {
-    // It may exist in Gmail all the same. Asking again finds it there and takes it over.
+    // It may exist in Gmail all the same: settleRuleFilters finds it there.
     await finishAction(deps.db, actionId, 'unknown', null, message(error), clock(deps));
     throw error;
   }
@@ -71,16 +70,27 @@ export async function writeRuleFilter(deps: ActionDeps, ruleId: string): Promise
 
 /** Take a rule's filter out of Gmail. Returns false if it had none. Throws if Gmail still has it afterwards. */
 export async function removeRuleFilter(deps: ActionDeps, ruleId: string): Promise<boolean> {
-  const row = await getRuleFilter(deps.db, ruleId);
-  if (!row) throw new Error('That rule no longer exists.');
-  const { filterId } = row;
-  if (!filterId) {
-    await setRuleFilter(deps.db, ruleId, NONE, clock(deps));
-    return false;
-  }
+  const found = await getRuleFilter(deps.db, ruleId);
+  if (!found) throw new Error('That rule no longer exists.');
+  await settleRuleFilters(deps, found.accountId);
+  const { accountId, filterId } = (await getRuleFilter(deps.db, ruleId))!;
+  if (filterId) await takeOut(deps, accountId, ruleId, filterId);
+  await setRuleFilter(deps.db, ruleId, NONE, clock(deps));
+  return filterId !== null;
+}
+
+async function proposal(deps: ActionDeps, plan: FilterPlan): Promise<FilterProposal> {
+  const add = plan.gmailLabel === undefined ? [] : [await deps.mailbox.ensureLabel(plan.gmailLabel)];
+  return {
+    criteria: plan.criteria,
+    action: { ...(add.length > 0 ? { addLabelIds: add } : {}), ...(plan.archive ? { removeLabelIds: ['INBOX'] } : {}) },
+  };
+}
+
+async function takeOut(deps: ActionDeps, accountId: string, ruleId: string, filterId: string): Promise<void> {
   const actionId = await insertPendingAction(
     deps.db,
-    { accountId: row.accountId, messageId: null, type: 'unfilter', payload: { add: [], remove: [], filter: { ruleId, id: filterId } }, originalLabels: [] },
+    { accountId, messageId: null, type: 'unfilter', payload: { add: [], remove: [], filter: { ruleId, id: filterId } }, originalLabels: [] },
     clock(deps),
   );
   let still: boolean;
@@ -96,8 +106,53 @@ export async function removeRuleFilter(deps: ActionDeps, ruleId: string): Promis
     throw new Error('Gmail still has the filter.');
   }
   await finishAction(deps.db, actionId, 'done', null, null, clock(deps));
-  await setRuleFilter(deps.db, ruleId, NONE, clock(deps));
-  return true;
+}
+
+/**
+ * Settle the account's filter changes that were never read back (Gmail errored after the call, or sift
+ * stopped), by finding them in Gmail. A filter that landed goes on its rule if the rule has none and still
+ * asks for exactly it; otherwise it is taken out, since a filter with no rule keeps acting on mail with
+ * nothing in sift to show or remove it. An action stays open until that is done, so it is tried again.
+ */
+async function settleRuleFilters(deps: ActionDeps, accountId: string): Promise<void> {
+  const open = await deps.db
+    .select({ id: actions.id, type: actions.type, payload: actions.payload })
+    .from(actions)
+    .where(and(eq(actions.accountId, accountId), inArray(actions.type, ['filter', 'unfilter']), inArray(actions.status, ['pending', 'unknown'])))
+    .orderBy(asc(actions.id));
+  if (open.length === 0) return;
+  const existing = await deps.mailbox.listFilters();
+  for (const { id, type, payload } of open as { id: number; type: 'filter' | 'unfilter'; payload: ActionPayload }[]) {
+    const { ruleId, id: filterId, criteria = {}, action = {} } = payload.filter!;
+    const rule = await getRuleFilter(deps.db, ruleId);
+    if (type === 'unfilter') {
+      if (existing.some((f) => f.id === filterId)) {
+        await finishAction(deps.db, id, 'failed', null, 'the filter was still there when read back', clock(deps));
+        continue;
+      }
+      if (rule?.filterId === filterId) await setRuleFilter(deps.db, ruleId, NONE, clock(deps));
+      await finishAction(deps.db, id, 'done', null, null, clock(deps));
+      continue;
+    }
+    const landed = existing.find((f) => sameFilter(f, { criteria, action }));
+    if (!landed) {
+      await finishAction(deps.db, id, 'failed', null, 'the filter was not there when read back', clock(deps));
+      continue;
+    }
+    const owned = (await listRuleFilters(deps.db, accountId)).some((r) => r.filterId === landed.id);
+    if (!owned) {
+      const verdict = rule && !rule.filterId ? (await filterVerdicts(deps.db, accountId, clock(deps))).get(ruleId) : undefined;
+      if (verdict?.possible && sameFilter(landed, await proposal(deps, verdict.plan)))
+        await setRuleFilter(
+          deps.db,
+          ruleId,
+          { filterId: landed.id, state: 'active', written: { plan: verdict.plan, got: landed } satisfies Written },
+          clock(deps),
+        );
+      else await takeOut(deps, accountId, ruleId, landed.id);
+    }
+    await finishAction(deps.db, id, 'done', null, null, clock(deps));
+  }
 }
 
 export interface FilterCheck {
@@ -113,9 +168,11 @@ export interface FilterCheck {
  * Compare the filters sift wrote with what Gmail holds now, and record on each rule what was found.
  * A filter whose rule has since changed would keep doing what the rule used to say, so when `fix` is
  * set it is replaced, or removed if the rule can no longer be a filter. Counts are of what changed
- * since the last check. Null when the account has no such rules, in which case Gmail is not asked.
+ * since the last check. Null when the account has no such rules, in which case Gmail is asked only if a
+ * change to its filters was never read back.
  */
 export async function checkRuleFilters(deps: ActionDeps, accountId: string, fix: boolean): Promise<FilterCheck | null> {
+  await settleRuleFilters(deps, accountId);
   const rows = await listRuleFilters(deps.db, accountId);
   if (rows.length === 0) return null;
   const existing = await deps.mailbox.listFilters();

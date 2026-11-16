@@ -9,6 +9,7 @@ export type {
   LabelSummary,
   ManageState,
   MessageDetail,
+  Removed,
   RuleSummary,
   SenderPage,
   SenderProfile,
@@ -29,6 +30,7 @@ import type {
   ManageState,
   MessageDetail,
   Models,
+  Removed,
   RuleSummary,
   SenderPage,
   Session,
@@ -190,6 +192,9 @@ export const api = {
   checkNow: () => post('/api/check', {}),
   session: (signal: AbortSignal) => get<Session>('/api/session', {}, signal),
   signOut: () => post('/api/signout', {}),
+  /** `address` is what the person typed to confirm. */
+  removeMailbox: (address: string) => post<Removed>('/api/mailbox/remove', { address }),
+  deleteAccount: (address: string) => post<Removed>('/api/account/delete', { address }),
 };
 
 export const queryClient = new QueryClient({

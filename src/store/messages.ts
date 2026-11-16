@@ -1,4 +1,4 @@
-import { and, asc, decisions, desc, eq, messages, not, notExists } from './query.ts';
+import { and, asc, decisions, desc, eq, lt, messages, not, notExists, suggestionBodies } from './query.ts';
 import { outOfTries } from './runs.ts';
 import type { Sql } from './sql.ts';
 import type { Facts } from '../triage/facts.ts';
@@ -16,7 +16,7 @@ const COLUMNS = {
   cc: messages.cc,
   headers: messages.headers,
   labelIds: messages.labelIds,
-  observeOnly: messages.observeOnly,
+  suggestOnly: messages.suggestOnly,
 };
 
 interface Row {
@@ -31,7 +31,7 @@ interface Row {
   cc: Address[];
   headers: Record<string, string>;
   labelIds: string[];
-  observeOnly: boolean;
+  suggestOnly: boolean;
 }
 
 const toMessage = (accountId: string, r: Row): MessageFacts => ({
@@ -50,7 +50,7 @@ const toMessage = (accountId: string, r: Row): MessageFacts => ({
 interface QueuedMessage {
   facts: MessageFacts;
   /** Pulled in from before sift was connected: suggest, never act. */
-  observeOnly: boolean;
+  suggestOnly: boolean;
 }
 
 /**
@@ -76,7 +76,7 @@ export async function listUndecided(db: Sql, accountId: string, limit: number): 
     )
     .orderBy(desc(messages.receivedAt), asc(messages.id))
     .limit(limit);
-  return rows.map((r) => ({ observeOnly: r.observeOnly, facts: toMessage(accountId, r) }));
+  return rows.map((r) => ({ suggestOnly: r.suggestOnly, facts: toMessage(accountId, r) }));
 }
 
 /** The facts recorded for a message, or null if sift has not seen it. */
@@ -103,4 +103,9 @@ export async function getFacts(db: Sql, accountId: string, messageId: string): P
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
   return row ? toMessage(accountId, row) : null;
+}
+
+/** Delete the text of waiting mail fetched before `cutoff`, every mailbox's. Returns how many went. */
+export async function purgeSuggestionBodies(db: Sql, cutoff: number): Promise<number> {
+  return (await db.delete(suggestionBodies).where(lt(suggestionBodies.fetchedAt, cutoff)).returning({ id: suggestionBodies.messageId })).length;
 }
