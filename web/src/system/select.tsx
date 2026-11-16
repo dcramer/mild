@@ -1,19 +1,25 @@
 import { Select as Base } from '@base-ui/react/select';
 import { CheckIcon, ChevronDownIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 
-/** One choice from a short list. `options` are `[value, label]` pairs; `label` names the control for screen readers. */
+/**
+ * One choice from a short list. `options` are `[value, label]` pairs; `label` names the control for screen readers.
+ * `icons` gives a choice its icon, before its label in the list and once chosen (an action's).
+ */
 export function Select<T extends string>({
   label,
   value,
   options,
   onChange,
   disabled,
+  icons,
 }: {
   label: string;
   value: T;
   options: readonly (readonly [T, string])[];
   onChange: (value: T) => void;
   disabled?: boolean;
+  icons?: Partial<Record<T, ReactNode>>;
 }) {
   const items = options.map(([v, l]) => ({ value: v, label: l }));
   return (
@@ -22,8 +28,11 @@ export function Select<T extends string>({
         aria-label={label}
         className="press inline-flex h-(--control) max-w-full cursor-pointer items-center justify-between gap-1.5 pr-2 pl-3 text-sm whitespace-nowrap select-none data-disabled:pointer-events-none data-disabled:opacity-45 border border-transparent bg-(--fill) hover:bg-(--fill-strong) data-popup-open:bg-(--fill-strong)"
       >
-        <span className="truncate">
-          <Base.Value />
+        <span className="flex min-w-0 items-center gap-2">
+          {icons?.[value] ?? null}
+          <span className="truncate">
+            <Base.Value />
+          </span>
         </span>
         <Base.Icon render={<ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />} />
       </Base.Trigger>
@@ -37,6 +46,7 @@ export function Select<T extends string>({
                   value={item.value}
                   className="relative flex cursor-pointer data-disabled:cursor-default items-center py-1.5 pr-8 pl-2 whitespace-nowrap outline-none select-none data-highlighted:bg-(--fill-strong)"
                 >
+                  {icons?.[item.value] ? <span className="mr-2 flex">{icons[item.value]}</span> : null}
                   <Base.ItemText>{item.label}</Base.ItemText>
                   <Base.ItemIndicator className="absolute right-2 flex items-center">
                     <CheckIcon className="size-3.5" />

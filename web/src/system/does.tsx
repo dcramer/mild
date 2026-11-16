@@ -4,6 +4,12 @@ import { cn } from '@/lib/utils';
 
 const ICONS = { keep: InboxIcon, archive: ArchiveIcon, spam: ShieldAlertIcon, block: BanIcon, review: CircleHelpIcon } as const;
 
+/** An action's icon alone, where its word is said beside it by something else, such as an option in a `Select`. */
+export function ActionIcon({ action }: { action: string }) {
+  const Icon = ICONS[action as keyof typeof ICONS] ?? CircleHelpIcon;
+  return <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />;
+}
+
 /**
  * What sift does with mail, as its icon and its word: the action alone, never what comes with it
  * (unsubscribing, marking read), which is said where the label or rule is edited. `action` is a key of

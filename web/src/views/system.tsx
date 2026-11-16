@@ -5,6 +5,7 @@ import { ACTIONS, STANDINGS, STATUS_NAMES, TIERS, money, moneyTick, outcomeName 
 import {
   Does,
   AnswerPicker,
+  ActionIcon,
   Avatar,
   Button,
   Check,
@@ -269,6 +270,13 @@ export function SystemView() {
         <Sheet>
           <Row label="select" note="A short list.">
             <Select label="What sift does" value={choice} options={ACTIONS} onChange={setChoice} />
+            <Select
+              label="With icons"
+              value={choice}
+              options={ACTIONS}
+              icons={Object.fromEntries(ACTIONS.map(([key]) => [key, <ActionIcon action={key} />]))}
+              onChange={setChoice}
+            />
             <Select label="Disabled" value={choice} options={ACTIONS} onChange={setChoice} disabled />
           </Row>
           <Row
