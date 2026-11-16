@@ -323,18 +323,19 @@ export interface Suggestions {
 export interface FeedbackRequest {
   accountId: string;
   sender: string;
-  /** What the mail is: a label's id. Agreeing with sift sends the label it gave. */
-  label: string;
-  /** An exception to the label's action, for this rule only. */
+  /** What the mail is: a label's id. Left out when the answer says only what should happen. */
+  label?: string;
+  /** What should happen to it. Left out: what the label does. */
   disposition?: string;
   /** Also unsubscribe, whether or not the label does. */
   unsubscribe?: boolean;
-  /** Left out, sift picks: `usually` for a rule that hides everything from a sender or domain. */
-  tier?: 'always' | 'usually';
-  /** A plain-language condition that narrows the rule. */
+  /** A plain-language condition that narrows a rule for the sender. Needs `label`. */
   when?: string;
-  /** How far the answer reaches. Everything but `once` makes a rule. */
-  scope: 'sender' | 'domain' | 'subject' | 'once';
+  /**
+   * How far the answer reaches, and so what rule it makes. `label`: the sender's mail of this kind (what
+   * agreeing means). `sender`, `domain`, `subject`: that mail whatever it is. `once`: no rule.
+   */
+  scope: 'label' | 'sender' | 'domain' | 'subject' | 'once';
   /** For `subject`: the words the subject must contain. */
   contains?: string;
   decisionId?: number;

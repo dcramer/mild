@@ -78,7 +78,7 @@ function SuggestionRow({ group, onOpen, onAnswered }: { group: SuggestionGroup; 
   const sure = group.labelId !== null && !mixed;
   const agree = () =>
     run(async () => {
-      const result = await api.feedback({ accountId: group.accountId, sender: group.sender, scope: 'sender', label: group.labelId ?? '' });
+      const result = await api.feedback({ accountId: group.accountId, sender: group.sender, scope: 'label', label: group.labelId ?? '' });
       onAnswered(result.taught ?? 'Noted.');
     });
   const subject = (

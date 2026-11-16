@@ -197,6 +197,7 @@ function Body({
               key={detail.messageId}
               labels={labels}
               guess={current.labelId}
+              proposed={current.disposition}
               sender={detail.fromAddress}
               acted={acted}
               busy={busy}

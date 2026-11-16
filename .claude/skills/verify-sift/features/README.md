@@ -12,7 +12,7 @@ The maintained recipes for proving what a dashboard user sees and does. Read thi
 ## Driving conventions
 
 - Start each recipe from a fresh seed unless it says otherwise. Recipes change rules and labels, so two in one run interact: answering one suggestion re-decides the others.
-- Find by role and accessible name (`ab find role button click --name "Teach sift"`). Table rows have no useful name; open one with `ab find text "<sender or label name>" click --exact`.
+- Find by role and accessible name (`ab find role button click --name "Save answer"`). Table rows have no useful name; open one with `ab find text "<sender or label name>" click --exact`.
 - Pick from a combobox with two steps: `ab find role combobox click --name "<combobox>"`, then `ab find role option click --name "<option>"`.
 - After every action, wait for the result you expect to see, not a fixed time.
 

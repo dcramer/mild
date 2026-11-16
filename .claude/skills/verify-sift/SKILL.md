@@ -49,7 +49,7 @@ Read-only. Passes only if this run's process is alive, the port answers as `me@e
 ```bash
 $V ab "$RUN" open "http://127.0.0.1:$(cat "$RUN/port")/suggestions"
 $V ab "$RUN" snapshot -i          # interactive elements with refs (@e12)
-$V ab "$RUN" find role button click --name "Teach sift"
+$V ab "$RUN" find role button click --name "Save answer"
 ```
 
 `ab` is agent-browser (`npx agent-browser@0.39.2`) in this run's own browser session; any agent-browser command works after it (`agent-browser skills get core` for the full set). Use `127.0.0.1`, which is where the cookie was set, not `localhost`.

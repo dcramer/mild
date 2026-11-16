@@ -101,33 +101,34 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown> |
   }
 }
 
-const SCOPES = new Set(['sender', 'domain', 'subject', 'once']);
+const SCOPES = new Set(['label', 'sender', 'domain', 'subject', 'once']);
 
 /** Check an answer to a suggestion field by field. Null if it is not well formed. */
 function parseFeedback(body: Record<string, unknown>): FeedbackInput | null {
-  const { accountId, sender, label, disposition, scope, contains, decisionId, messageId, unsubscribe, tier, when } = body;
+  const { accountId, sender, label, disposition, scope, contains, decisionId, messageId, unsubscribe, when } = body;
   if (typeof accountId !== 'string' || typeof sender !== 'string') return null;
-  if (typeof label !== 'string' || !LABEL_ID.test(label)) return null;
+  if (label !== undefined && (typeof label !== 'string' || !LABEL_ID.test(label))) return null;
   if (typeof scope !== 'string' || !SCOPES.has(scope)) return null;
   if (disposition !== undefined && disposition !== 'keep' && disposition !== 'archive' && disposition !== 'spam') return null;
+  // An answer says what the mail is, what should happen to it, or both.
+  if (label === undefined && disposition === undefined) return null;
+  if (label === undefined && (scope === 'label' || when !== undefined)) return null;
   if (contains !== undefined && (typeof contains !== 'string' || contains.length > 200)) return null;
   if (scope === 'subject' && (typeof contains !== 'string' || contains.trim() === '')) return null;
   if (decisionId !== undefined && (typeof decisionId !== 'number' || !Number.isInteger(decisionId))) return null;
   if (messageId !== undefined && !str(messageId)) return null;
   if (unsubscribe !== undefined && typeof unsubscribe !== 'boolean') return null;
-  if (tier !== undefined && tier !== 'always' && tier !== 'usually') return null;
   if (when !== undefined && (typeof when !== 'string' || when.length > 200)) return null;
   return {
     accountId,
     sender,
-    label,
+    ...(typeof label === 'string' ? { label } : {}),
     scope: scope as FeedbackInput['scope'],
     ...(disposition === undefined ? {} : { disposition }),
     ...(typeof contains === 'string' ? { contains } : {}),
     ...(decisionId === undefined ? {} : { decisionId }),
     ...(messageId === undefined ? {} : { messageId }),
     ...(unsubscribe ? { unsubscribe } : {}),
-    ...(tier === undefined ? {} : { tier }),
     ...(typeof when === 'string' && when.trim() !== '' ? { when } : {}),
   };
 }

@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { listLabels } from '../store/labels.ts';
 import { recordDecision } from '../store/decisions.ts';
-import { replaceRules } from '../store/rules.ts';
+import { type RuleSays, setRule } from '../store/rules.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
 import { type DecidedDisposition, type Disposition, type StageName, labelled } from '../triage/types.ts';
 
@@ -101,15 +101,17 @@ export function pendingSuggestions(db: DatabaseSync, filter: { accountId?: strin
   return rows.map(toSuggestion);
 }
 
-/** How far an answer reaches. Everything but `once` makes a rule. */
+/** How far an answer reaches, which is also what kind of rule it makes. `once` makes none. */
 export type FeedbackScope =
-  /** Everything from the sender. */
+  /** Mail from the sender that is this label: a rule that waits for the label. What "agree" means. */
+  | 'label'
+  /** Everything from the sender, whatever it is: a rule that only says what happens. */
   | 'sender'
-  /** Everything from anyone at the sender's domain. */
+  /** Everything from anyone at the sender's domain, likewise. */
   | 'domain'
-  /** Mail from the sender whose subject contains `contains`. */
+  /** Mail from the sender whose subject contains `contains`, likewise. */
   | 'subject'
-  /** Only the mail that is waiting (or the one decision given). Nothing lasting is learned. */
+  /** Only the mail that is waiting (or the one decision given). No rule: the answer is kept as an example for the model. */
   | 'once';
 
 const SUGGESTION_COLUMNS = `d.id, d.account_id, d.message_id, d.stage, d.disposition, d.block, d.subscription, d.label_id, d.reason, d.confidence, d.decided_at,
@@ -126,26 +128,17 @@ function currentDecision(db: DatabaseSync, accountId: string, messageId: string)
   return row ? toSuggestion(row) : null;
 }
 
-/** `always`: the rule says what the mail is. `usually`: it applies only when a tier has said so of each message. */
-export type RuleTier = 'always' | 'usually';
-
 export interface FeedbackInput {
   accountId: string;
   sender: string;
-  /** What the mail is: a label's id. Confirming a suggestion sends the label sift gave it. */
-  label: string;
-  /** An exception to the label's action, for this rule only. */
+  /** What the mail is: a label's id. Left out when the user says only what should happen to it. */
+  label?: string;
+  /** What should happen to it. Left out: what the label does. */
   disposition?: DecidedDisposition;
-  /** Also unsubscribe from this mail, whether or not the label does. Carried by the rule. */
+  /** Also unsubscribe from this mail. Carried by the rule. */
   unsubscribe?: boolean;
   scope: FeedbackScope;
-  /**
-   * Whether the rule decides by itself or is a prior the model still checks. Left out, a rule that would
-   * hide everything from a sender or domain is `usually`, so the odd message that matters is still read;
-   * anything narrower, anything that keeps mail, and a block are `always`.
-   */
-  tier?: RuleTier;
-  /** A condition in plain language that narrows the rule. Only a model can apply it. */
+  /** A condition in plain language that narrows a rule for the sender. Only a model can apply it, and it needs `label`. */
   when?: string;
   /** For `subject`: the words the subject must contain. */
   contains?: string;
@@ -170,30 +163,42 @@ export interface FeedbackResult {
 }
 
 const WILL: Record<Disposition, string> = { keep: 'kept in your inbox', archive: 'archived', spam: 'marked as spam', review: 'left for you' };
-const BLOCKED = 'marked as spam, and the sender blocked';
+const DO: Record<DecidedDisposition, string> = { keep: 'keep it', archive: 'archive it', spam: 'mark it as spam' };
 
 /**
- * Record the user's answer to a suggestion and, unless it is for the waiting mail only, make a rule at
- * the scope they chose so that mail gets the label from now on without a model. Throws if the label does not exist or
- * the answer refers to nothing that is waiting.
+ * Record the user's answer about a sender's mail and make the rule its scope calls for:
+ *
+ * - `label`: mail from the sender that is this label gets this action. sift still reads each message.
+ * - `sender`, `domain`, `subject`: that mail gets this action whatever it is, with no model.
+ * - `once`: no rule. Saying only what a message is teaches the model through the example, and ties
+ *   nothing to the sender.
+ *
+ * Throws if the label does not exist, the answer says neither what the mail is nor what should happen,
+ * or it refers to nothing that is waiting.
  */
 export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: number = Date.now()): FeedbackResult {
-  const label = listLabels(db, input.accountId, now).find((l) => l.id === input.label);
-  if (!label) throw new Error(`There is no label "${input.label}".`);
-  const outcome = input.disposition ?? label.disposition;
+  const labels = listLabels(db, input.accountId, now);
+  const label = input.label === undefined ? undefined : labels.find((l) => l.id === input.label);
+  if (input.label !== undefined && !label) throw new Error(`There is no label "${input.label}".`);
+  const outcome = input.disposition ?? label?.disposition;
+  if (outcome === undefined) throw new Error('Say what this is, or what should happen to it.');
   // A label set to "leave it for me" keeps the mail in the inbox.
   const wanted: DecidedDisposition = outcome === 'review' ? 'keep' : outcome;
 
   const contains = input.contains?.trim() ?? '';
+  const when = input.when?.trim() ?? '';
   if (input.scope === 'subject' && contains === '') throw new Error('Say which words the subject must contain.');
+  if ((input.scope === 'label' || when !== '') && !label) throw new Error('Say what kind of mail this is for.');
   const domain = input.sender.split('@')[1] ?? '';
   const waiting = pendingSuggestions(db, { accountId: input.accountId, ...(input.scope === 'domain' ? { domain } : { sender: input.sender }) });
   const targets = waiting.filter((s) =>
     input.scope === 'subject'
       ? s.subject.toLowerCase().includes(contains.toLowerCase())
-      : input.scope === 'once' && input.decisionId !== undefined
-        ? s.decisionId === input.decisionId
-        : true,
+      : input.scope === 'label'
+        ? s.labelId === label?.id
+        : input.scope === 'once' && input.decisionId !== undefined
+          ? s.decisionId === input.decisionId
+          : true,
   );
   // A message that is not waiting (sift already acted on it, a rule decided it, or it was answered before)
   // is corrected through its current decision.
@@ -205,7 +210,7 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
       input.scope === 'subject' ? `Nothing waiting from ${input.sender} has "${contains}" in the subject.` : 'That suggestion is no longer waiting.',
     );
   const match: RuleMatch | null =
-    input.scope === 'sender'
+    input.scope === 'sender' || input.scope === 'label'
       ? { from: input.sender }
       : input.scope === 'domain'
         ? { fromDomain: domain }
@@ -218,14 +223,20 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
       : input.scope === 'subject'
         ? `mail from ${input.sender} with "${contains}" in the subject`
         : `mail from ${input.sender}`;
+  const extra = input.unsubscribe ? { subscription: 'unsubscribe' as const } : {};
+  // What the rule says, by how far the answer reaches.
+  const says: RuleSays | null = !match
+    ? null
+    : when !== '' && label
+      ? { labelId: label.id, when, ...(input.disposition ? { disposition: input.disposition } : {}), ...extra }
+      : input.scope === 'label' && label
+        ? { whenLabel: label.id, ...(input.disposition && input.disposition !== label.disposition ? { disposition: input.disposition } : {}), ...extra }
+        : { disposition: wanted, ...extra };
 
-  const when = input.when?.trim() ?? '';
-  const hides = outcome === 'archive' || outcome === 'spam';
-  const blocks = label.block === true && !input.disposition;
-  const tier: RuleTier = input.tier ?? (when !== '' || (hides && !blocks && (input.scope === 'sender' || input.scope === 'domain')) ? 'usually' : 'always');
-
+  // The label a corrected message ends with: the one given, else the one it had.
+  const standing = (target: Suggestion) => label ?? labels.find((l) => l.id === target.labelId);
   // Agreeing with a decision that already stands changes nothing about the message itself.
-  const changes = given !== null && (given.labelId !== label.id || given.disposition !== outcome);
+  const changes = given !== null && ((label !== undefined && given.labelId !== label.id) || given.disposition !== outcome);
 
   const insert = db.prepare(
     `INSERT INTO feedback (account_id, decision_id, message_id, verdict, correct, scope, created_at, label_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -237,54 +248,34 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
     `INSERT INTO examples (account_id, message_id, disposition, label_id, suggested, suggested_by, marked_at) VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (account_id, message_id) DO UPDATE SET disposition = excluded.disposition, label_id = excluded.label_id, marked_at = excluded.marked_at`,
   );
-  // sift having no suggestion is not sift being wrong; otherwise it was right if it gave the same label.
-  const verdictFor = (target: Suggestion) => (target.labelId === null ? 'answered' : target.labelId === label.id ? 'right' : 'wrong');
+  // sift having no suggestion is not sift being wrong. Otherwise it was right if it gave the same label,
+  // or, when the user said only what should happen, if it would have done the same.
+  const verdictFor = (target: Suggestion) =>
+    target.labelId === null ? 'answered' : (label ? target.labelId === label.id : target.disposition === wanted) ? 'right' : 'wrong';
   db.exec('BEGIN');
   try {
-    for (const target of given ? [...targets, given] : targets) {
-      const verdict = verdictFor(target);
-      insert.run(
-        target.accountId,
-        target.decisionId,
-        target.messageId,
-        verdict,
-        verdict === 'right' ? null : wanted,
-        match ? 'sender' : 'message',
-        now,
-        label.id,
-      );
-      example.run(target.accountId, target.messageId, wanted, label.id, target.disposition, target.stage, now);
-    }
     const all = given ? [...targets, given] : targets;
-    const ruleId = match
-      ? replaceRules(
-          db,
-          input.accountId,
-          match,
-          {
-            // `usually` waits for a tier to say the mail is this label; otherwise the rule says it is.
-            ...(tier === 'usually' && when === '' ? { whenLabel: label.id } : { labelId: label.id }),
-            ...(input.disposition ? { disposition: input.disposition } : {}),
-            ...(input.unsubscribe ? { subscription: 'unsubscribe' as const } : {}),
-            ...(when === '' ? {} : { when }),
-          },
-          all.every((t) => verdictFor(t) === 'right') ? 'user' : 'correction',
-          now,
-        )
-      : null;
+    for (const target of all) {
+      const verdict = verdictFor(target);
+      const is = standing(target)?.id ?? null;
+      insert.run(target.accountId, target.decisionId, target.messageId, verdict, verdict === 'right' ? null : wanted, match ? 'sender' : 'message', now, is);
+      example.run(target.accountId, target.messageId, wanted, is, target.disposition, target.stage, now);
+    }
+    const ruleId = match && says ? setRule(db, input.accountId, match, says, all.every((t) => verdictFor(t) === 'right') ? 'user' : 'correction', now) : null;
     // The corrected message gets a decision of its own, so the log shows what the user said and, when
     // sift is acting, the mailbox is brought into line with it.
     if (given && changes) {
+      const is = standing(given);
       recordDecision(
         db,
         input.accountId,
         given.messageId,
         {
-          ...labelled(label, input.disposition),
-          ...(input.unsubscribe ? { subscription: 'unsubscribe' as const } : {}),
+          ...(is ? labelled(is, wanted === is.disposition ? undefined : wanted) : { disposition: wanted, subscription: 'preserve' as const }),
+          ...extra,
           stage: 'rules',
           ...(ruleId ? { ruleId } : {}),
-          reason: `you said this is ${label.name}`,
+          reason: label ? `you said this is ${label.name}` : `you said to ${DO[wanted]}`,
         },
         { mode: input.mode ?? 'observe', now },
       );
@@ -294,14 +285,17 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
     db.exec('ROLLBACK');
     throw error;
   }
+  const unsubscribed = (fromLabel: boolean) => ((fromLabel && label?.unsubscribe) || input.unsubscribe ? ', and unsubscribed from' : '');
   return {
     reviewed: targets.length + (given ? 1 : 0),
     corrected: given && changes ? given.messageId : null,
-    taught: match
-      ? `From now on, ${whose}${when === '' ? '' : `, when it is ${when},`} is ${tier === 'usually' && when === '' ? 'usually ' : ''}${label.name}: ${blocks ? BLOCKED : WILL[outcome]}${
-          label.unsubscribe || input.unsubscribe ? ', and unsubscribed from' : ''
-        }.${tier === 'usually' ? ' sift still reads each one and asks about any that is something else.' : ''}`
-      : null,
+    taught: !says
+      ? null
+      : says.when && label
+        ? `From now on, ${whose}, when it is ${when}, is ${label.name}: ${WILL[outcome]}${unsubscribed(true)}. sift reads each one to tell.`
+        : says.whenLabel && label
+          ? `From now on, mail from ${input.sender} that is ${label.name} is ${WILL[outcome]}${unsubscribed(true)}. sift still reads each message, and asks about anything else from them.`
+          : `From now on, ${whose} is ${WILL[wanted]}${unsubscribed(false)}, whatever it is. sift will not ask about it again.`,
   };
 }
 

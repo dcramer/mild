@@ -151,16 +151,6 @@ export function setRule(db: DatabaseSync, accountId: string, match: RuleMatch, r
 }
 
 /**
- * As `setRule`, and the only rule left with exactly these conditions: an answer about a sender replaces
- * whatever was said about them before, of any kind.
- */
-export function replaceRules(db: DatabaseSync, accountId: string, match: RuleMatch, rule: RuleSays, source: RuleSource, now: number = Date.now()): string {
-  const id = setRule(db, accountId, match, rule, source, now);
-  db.prepare(`DELETE FROM rules WHERE account_id = ? AND match_json = ? AND except_json = '[]' AND id != ?`).run(accountId, JSON.stringify(match), id);
-  return id;
-}
-
-/**
  * Block a sender: from now on their mail is `labelId` without being judged, whatever that label does.
  * A rule already made for exactly that sender is left alone. Returns true if a rule was written.
  */
