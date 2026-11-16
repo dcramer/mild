@@ -17,11 +17,11 @@ const CACHES: Record<string, string[]> = {
 };
 
 describe('nothing is kept in module memory between calls', () => {
-  it('outside the `sift run` adapter, no module holds a variable or an empty collection to fill', () => {
+  it('outside the hosts, no module holds a variable or an empty collection to fill', () => {
     const unexpected: string[] = [];
     for (const file of globSync('src/**/*.ts')) {
-      // The CLI is the adapter for one long-lived process: its terminal and its own caches.
-      if (file.startsWith('src/cli/')) continue;
+      // The hosts: `sift run` is one long-lived process with its terminal; a Vercel instance keeps its connections.
+      if (file.startsWith('src/cli/') || file.startsWith('src/vercel/')) continue;
       const held = /^(?:export )?(?:let|var) (\w+)|^(?:export )?const (\w+) = new (?:Map|Set|WeakMap|WeakSet)(?:<[^\n]*>)?\(\)/gm;
       for (const match of readFileSync(file, 'utf8').matchAll(held)) {
         const name = match[1] ?? match[2]!;

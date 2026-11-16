@@ -23,8 +23,8 @@ export interface Host {
   allowedHosts: readonly string[];
   /** Addresses Google can sign someone in at, suggested when the dashboard is opened at one it cannot. */
   signInAddresses: readonly string[];
-  /** The built page (`web/dist`). */
-  pageDir: string;
+  /** The built page (`web/dist`), when sift serves it; absent where the host does (Vercel's CDN). */
+  pageDir?: string;
   log: (line: string) => void;
   /**
    * Keeps work going after the request that started it is answered: in `sift run` it just runs on, on
@@ -93,5 +93,5 @@ export async function createSift(host: Host): Promise<Sift> {
     signInAddresses: host.signInAddresses,
     ephemeral,
   });
-  return { respond: site(dashboard, host.pageDir), tick: ticking };
+  return { respond: host.pageDir ? site(dashboard, host.pageDir) : dashboard.handle, tick: ticking };
 }

@@ -44,6 +44,7 @@
     "@earendil-works/pi-ai": "^1.5.2",
     "@electric-sql/pglite": "0.5.16",
     "@googleapis/gmail": "^22.1.0",
+    "@vercel/functions": "^3.11.3",
     "drizzle-orm": "0.45.4",
     "google-auth-library": "^11.3.4",
     "pg": "8.23.1",

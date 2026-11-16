@@ -33,17 +33,37 @@ Work a tick leaves unfinished is due again at the next. Ticks may overlap; a loc
 
 ## Hosts
 
-| | `sift run` | Vercel |
+Each host builds a `Host` and calls `createSift`, which returns `respond(Request)` and `tick()`.
+
+| | `sift run` (`src/cli/`) | Vercel (`src/vercel/`, `api/`, `vercel.json`) |
 | --- | --- | --- |
-| Requests | `node:http` turned into `Request` | a catch-all function |
-| Ticks | a timer, each with a 5-minute limit | Vercel Cron each minute (Pro; Hobby crons run daily), limited by the function's time |
-| Started by a person | a tick for them, at once | the same, kept running past the reply with `waitUntil` |
+| Requests | `node:http` turned into a `Request`; a forwarded scheme believed only from this machine | `api/site.ts`, for `/api/*` and `/auth/*` |
+| The page | served by sift (`site`, `src/host/site.ts`) | Vercel's CDN, with the same headers (`vercel.json`, held equal by `tests/vercel.test.ts`) |
+| Ticks | every minute, each with a 5-minute limit, not waiting for the last | `api/cron.ts`, Vercel Cron each minute, with the function's limit less a minute |
+| Started by a person | runs on in this process | runs on under `waitUntil` |
 | `Ephemeral` | memory, or Redis when `REDIS_URL` is set | Redis |
-| Database | PGlite, or Postgres | Neon |
-| Static files | from `web/dist` | built at deploy |
-| Settings, keys | `sift.toml` and the home directory | environment |
+| Database | PGlite, or Postgres; migrated when opened | Postgres (Neon); migrated by the deploy's build |
+| Settings, keys | `sift.toml` and the home directory | the environment |
 
 Memory is right for one `sift run` process only. Two processes, or any host with instances, need Redis.
+
+### On Vercel
+
+What the project needs: the Pro plan (Hobby crons run once a day), Neon and Redis from the marketplace, and in the environment:
+
+| Variable | |
+| --- | --- |
+| `DATABASE_URL` | Neon's pooled address. `DATABASE_MIGRATION_URL`: the owner's unpooled one, so sift runs as a role that owns nothing. |
+| `REDIS_URL` | |
+| `SIFT_KEY` | Encrypts the credentials in the database ([SECRETS.md](SECRETS.md)). |
+| `SIFT_SESSION_SECRET` | Signs sessions. Changing it signs everyone out. |
+| `CRON_SECRET` | Vercel sends it with each cron call; nothing else may start a tick. |
+| `SIFT_GOOGLE_CLIENT_ID`, `SIFT_GOOGLE_CLIENT_SECRET` | A Web application client listing `https://<domain>/auth/callback`. |
+| `SIFT_DASHBOARD_HOST` | The project's own domain, when it has one besides `*.vercel.app`. |
+
+A preview deployment must have a database of its own: its build migrates whatever `DATABASE_URL` it is given, and production refuses a database a newer sift migrated.
+
+Not yet tried on Vercel itself: that its builder takes imports that name `.ts` files, that a rewrite keeps the address the browser asked for in `request.url`, and `waitUntil` running a tick past the reply.
 
 ## Many mailboxes on Vercel
 
@@ -53,6 +73,7 @@ How much a minute holds: a quiet pass is a history read and a few dozen queries,
 
 ## Code
 
-- `src/host/sift.ts`: `createSift(host)`, used by `sift run`, `sift dashboard` and, to come, a Vercel entry. `src/host/` holds the wiring every host shares; `src/cli/` is the commands and the Node listener (`src/cli/serve.ts`).
+- `src/host/`: what every host shares. `createSift(host)` (`sift.ts`), the controls the dashboard is given, the sign-ins, and serving the page (`site.ts`).
+- `src/cli/`: the commands and the Node host (`serve.ts`: `nodeHost`, the listener).
+- `src/vercel/host.ts`, `api/`, `vercel.json`: the Vercel host. `src/vercel/migrate.ts` runs in its build.
 - `tests/runtime.test.ts`: no module state outside `src/cli/`, and flows whose steps reach different instances.
-- What is left for Vercel itself (the Neon driver, the two routes, the session secret and Google client from the environment) is in TODO.md.
