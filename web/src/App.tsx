@@ -3,10 +3,11 @@ import { api, useLoaded, useOnline } from '@/lib/api.ts';
 import { ago } from '@/lib/format.ts';
 import { setParams, useParam, useRoute } from '@/lib/route.ts';
 import { lazyView } from '@/lib/lazy.tsx';
-import { Entry, ListView, Loading, Masthead, Note, Notice, PageHeader } from '@/system';
+import { ListView, Loading, Masthead, Note, Notice, PageHeader } from '@/system';
 import type { MessageRef } from '@/views/message-panel.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
 import { ModelWall } from '@/components/model-wall.tsx';
+import { Boot } from '@/views/boot.tsx';
 
 // The home page comes with the app. Every other screen is its own file, fetched when first needed and,
 // once the page is idle, ahead of need, so that going to one does not wait on the network.
@@ -122,37 +123,10 @@ function Gate({ route }: { route: string[] }) {
   const session = useLoaded('session', (signal) => api.session(signal), 300_000);
   const online = useOnline();
   const slow = useLater(400);
-  if (!session.data) {
-    // Nothing is kept between visits, so opened while sift is unreachable there is only this to show.
-    if (session.status === 503 && session.error)
-      return (
-        <Entry>
-          <p className="statement">Sift isn't set up yet.</p>
-          <p className="text-muted-foreground">{session.error}</p>
-        </Entry>
-      );
-    if (session.error)
-      return (
-        <Entry>
-          <Note tone="failure" title="Sift answered with an error">
-            <p>{session.error}</p>
-          </Note>
-        </Entry>
-      );
-    if (!online)
-      return (
-        <Entry>
-          <p className="statement">Sift cannot be reached.</p>
-          <p className="text-muted-foreground">This page opens by itself when it can.</p>
-        </Entry>
-      );
-    // Most loads finish before this would show; a cold start on Vercel may not.
-    return slow ? (
-      <Entry>
-        <Loading rows={3} />
-      </Entry>
-    ) : null;
-  }
+  // Nothing is kept between visits, so opened while sift is unreachable there is only this to show. Most loads finish
+  // before 400ms and show nothing in between; a cold start on Vercel may not.
+  if (!session.data)
+    return session.missing || session.error || !online || slow ? <Boot missing={session.missing} error={session.error} online={online} /> : null;
   if (session.data.required && session.data.email === null) {
     return (
       <Suspense fallback={null}>

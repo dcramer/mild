@@ -5,7 +5,7 @@ import { TextLink, Wordmark } from './type.tsx';
  * The first page of someone not signed in: the name, one line set as large as anything gets, then what
  * shows sift at work and the one action. No sheet: it is the whole page. The terms and privacy at its foot.
  */
-export function Splash({ title, children }: { title: string; children: ReactNode }) {
+export function Splash({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
     <div className="entry mx-auto flex min-h-svh w-full max-w-[64rem] flex-col px-5 md:px-10">
       <header className="pt-8 md:pt-10">

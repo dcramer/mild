@@ -65,10 +65,13 @@ interface DecisionQuery {
 class Refused extends Error {
   status: number;
   explained: boolean;
-  constructor(status: number, message?: string) {
-    super(message ?? `The server answered ${status}.`);
+  /** The settings a deploy still needs, when that is why. */
+  missing: string[] | null;
+  constructor(status: number, said: Said = {}) {
+    super(said.error ?? `The server answered ${status}.`);
     this.status = status;
-    this.explained = message !== undefined;
+    this.explained = said.error !== undefined;
+    this.missing = said.missing ?? null;
   }
 }
 
@@ -118,12 +121,17 @@ async function get<T>(path: string, params: Record<string, string | number>, sig
   return (await response.json()) as T;
 }
 
+interface Said {
+  error?: string;
+  missing?: string[];
+}
+
 /** What Sift said when it refused. A gateway's or a crash's page says nothing of the kind. */
-async function reason(response: Response): Promise<string | undefined> {
+async function reason(response: Response): Promise<Said> {
   try {
-    return ((await response.json()) as { error?: string }).error;
+    return (await response.json()) as Said;
   } catch {
-    return undefined;
+    return {};
   }
 }
 
@@ -138,8 +146,8 @@ async function post<T = unknown>(path: string, body: unknown): Promise<T> {
     { method: 'POST', headers: { 'content-type': 'application/json', 'x-sift': '1' }, body: JSON.stringify(body) },
     'Sift stopped answering, so this may not have been saved. Check when it is back.',
   );
-  const result = (await response.json()) as T & { error?: string };
-  if (!response.ok) throw new Refused(response.status, result.error);
+  const result = (await response.json()) as T & Said;
+  if (!response.ok) throw new Refused(response.status, result);
   return result;
 }
 
@@ -251,8 +259,8 @@ export function useOnline(): boolean {
 export interface Loaded<T> {
   data: T | null;
   error: string | null;
-  /** 503 is Sift saying it is not set up yet. */
-  status: number | null;
+  /** The settings a deploy still needs, when that is why it failed. */
+  missing: string[] | null;
   /** Load again now. */
   reload: () => void;
   /** True only before the first result; refreshes keep showing the previous data. */
@@ -269,7 +277,7 @@ export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Prom
   return {
     data: query.data ?? null,
     error: query.error?.message ?? null,
-    status: query.error instanceof Refused ? query.error.status : null,
+    missing: query.error instanceof Refused ? query.error.missing : null,
     loading: query.isPending,
     reload: () => void query.refetch({ cancelRefetch: false }),
   };

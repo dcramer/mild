@@ -77,13 +77,13 @@ describe('the Vercel host', () => {
     expect(((await admit(stranger)) as Response).status).toBe(401);
   });
 
-  it('until it is set up, says to whoever opens it which variable is next, before opening anything', async () => {
+  it('until it is set up, says to whoever opens it every variable still missing, before opening anything', async () => {
     const home = process.env['SIFT_HOME'];
     process.env['SIFT_HOME'] = mkdtempSync(join(tmpdir(), 'sift-vercel-'));
     const missing = async () => {
       const reply = await respond(new Request('https://sift.example.com/api/session'));
       expect(reply.status).toBe(503);
-      return ((await reply.json()) as { error: string }).error;
+      return ((await reply.json()) as { missing: string[] }).missing;
     };
     const given = {
       DATABASE_URL: 'postgres://nobody@db.invalid/sift',
@@ -91,16 +91,17 @@ describe('the Vercel host', () => {
       SIFT_GOOGLE_CLIENT_ID: 'id',
       SIFT_GOOGLE_CLIENT_SECRET: 'secret',
       SIFT_SESSION_SECRET: 'synthetic',
+      SIFT_DASHBOARD_ALLOW: 'me@example.org',
     };
+    const saved = process.env['CRON_SECRET'];
+    delete process.env['CRON_SECRET'];
     try {
-      for (const [name, value] of Object.entries(given)) {
-        expect(await missing()).toContain(name);
-        process.env[name] = value;
-      }
-      // At a public address, without a list whoever signed in first would own it.
-      expect(await missing()).toContain('SIFT_DASHBOARD_ALLOW');
+      expect(await missing()).toEqual([...Object.keys(given), 'CRON_SECRET']);
+      Object.assign(process.env, given);
+      expect(await missing()).toEqual(['CRON_SECRET']);
     } finally {
       for (const name of Object.keys(given)) delete process.env[name];
+      if (saved !== undefined) process.env['CRON_SECRET'] = saved;
       if (home === undefined) delete process.env['SIFT_HOME'];
       else process.env['SIFT_HOME'] = home;
     }

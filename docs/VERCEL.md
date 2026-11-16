@@ -18,7 +18,7 @@ Upstash is expected to set `REDIS_URL`; if the site says it is missing, copy the
 
 Import this repository as a Vercel project and deploy it as it is: Vercel adds databases only to a project that exists. Root Directory: `./`, the repository root (Vercel offers `web/` because it finds Vite there, and a build from there knows nothing of `vercel.json` or the functions). Framework Preset: Other. `vercel.json` sets the build, the functions (`api/`), the minute's cron and the page's headers, and Node comes from `package.json` (24.x).
 
-This first deploy builds without a database. Until steps 2 and 3 are done, the site says which variable it needs next.
+This first deploy builds without a database. Until steps 2 and 3 are done, the site lists the variables it still needs.
 
 Then, from the project's Storage tab, add Neon and a Redis database. Each sets variables of its own; Sift reads the ones in step 3.
 
@@ -50,7 +50,7 @@ In the project's Environment Variables, for Production:
 | `SIFT_DASHBOARD_HOST` | Only with a domain of your own: that domain. |
 | `SIFT_CHATGPT_SIGN_IN` | Only to change how people sign in to ChatGPT ([CLI.md](CLI.md#models)). |
 
-Sift refuses to start without the required ones and says which is missing.
+Until every required one is set, the site lists those still missing; `CRON_SECRET` is among them, since without it nothing runs.
 
 ## 4. Deploy again
 

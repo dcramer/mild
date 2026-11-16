@@ -52,28 +52,41 @@ export async function fanOut(due: Sift['due'], people?: readonly number[]): Prom
   if (refused > 0) process.stdout.write(`${refused} of ${taken.length} pieces of work were not taken\n`);
 }
 
-/** What a deploy must give, in the environment: nothing is kept in files. */
-function required(name: string): string {
+/**
+ * What a deploy must give, in the environment: nothing is kept in files. `SIFT_DASHBOARD_ALLOW` because at a
+ * public address whoever signed in first would own the install; `CRON_SECRET` because without it nothing runs.
+ */
+const REQUIRED = [
+  'DATABASE_URL',
+  'REDIS_URL',
+  'SIFT_GOOGLE_CLIENT_ID',
+  'SIFT_GOOGLE_CLIENT_SECRET',
+  'SIFT_SESSION_SECRET',
+  'SIFT_DASHBOARD_ALLOW',
+  'CRON_SECRET',
+] as const;
+
+function required(name: (typeof REQUIRED)[number] | 'VERCEL_URL'): string {
   const value = process.env[name];
-  if (!value) throw new NotSetUp(`Set ${name} in the Vercel project's environment, then deploy again.`);
+  if (!value) throw new NotSetUp([name]);
   return value;
 }
 
-/** A setting the project still needs: said to whoever opens the site, since it names nothing secret. */
-class NotSetUp extends Error {}
+/** The settings the project still needs: said to whoever opens the site, since they are names and nothing secret. */
+class NotSetUp extends Error {
+  missing: string[];
+  constructor(missing: string[]) {
+    super(`Set ${missing.join(', ')} in the Vercel project's environment, then deploy again.`);
+    this.missing = missing;
+  }
+}
 
-/** The settings, all from the environment, refused before anything is opened when one a public address needs is missing. */
+/** The settings, all from the environment, refused before anything is opened while any is missing. */
 function loadVercelConfig() {
+  const missing = REQUIRED.filter((name) => !process.env[name]);
+  if (missing.length > 0) throw new NotSetUp(missing);
   process.env['SIFT_HOME'] ??= '/tmp/sift';
-  const config = loadConfig();
-  required('DATABASE_URL');
-  required('REDIS_URL');
-  required('SIFT_GOOGLE_CLIENT_ID');
-  required('SIFT_GOOGLE_CLIENT_SECRET');
-  required('SIFT_SESSION_SECRET');
-  // At a public address, without a list whoever signs in first would own the install.
-  if (!config.settings.dashboardAllow) throw new NotSetUp('Set SIFT_DASHBOARD_ALLOW to the Google accounts that may sign in, then deploy again.');
-  return config;
+  return loadConfig();
 }
 
 async function open(): Promise<Sift> {
@@ -106,7 +119,7 @@ export async function respond(request: Request): Promise<Response> {
     opened = await sift();
   } catch (error) {
     if (!(error instanceof NotSetUp)) throw error;
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: error.message, missing: error.missing }), {
       status: 503,
       headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
     });
