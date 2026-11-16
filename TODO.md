@@ -81,7 +81,11 @@ The dashboard manages sift, behind Google sign-in. That sign-in also connects th
 - [ ] Suggestion bodies are fetched once per waiting message; reuse the text the model tier already fetched instead of asking Gmail twice. `getContent` now returns the text from the model's one read, which makes this straightforward.
 - [ ] Per-rule detail: the messages matched, hits over time.
 - [ ] **Users and mailboxes, the rest.** Built: a user owns their mailboxes; every dashboard query and write is scoped to the signed-in user's; `?mailbox=` narrows any read to one; the first user owns the install and alone changes what applies to all of it. Still to do: a mailbox switcher in the page (one, or all); the daemon, models, guidelines and acting are still one setting for everyone, so a second person's mail is sorted by the owner's model and guidelines; the Rules and Labels screens still use the first mailbox when adding; a way to hand over or leave an install.
-- [ ] Remove an account, and its token and data, from the dashboard.
+- [ ] **Delete a user, and disconnect a mailbox.** Disconnecting one mailbox and deleting a whole user are the same act at two sizes, and both wipe everything sift holds about what is removed:
+  - **Everything means everything.** The Gmail token (revoked at Google, then deleted), the account row, and every row keyed to it: messages, decisions, actions, rules, labels, feedback, examples, suggestion text, proposals, correspondents, test runs. Deleting a user also removes the user and, for the owner, either hands the install to someone or resets it.
+  - **Nothing left behind elsewhere.** Gmail filters sift wrote for that mailbox are removed; the `sift/…` labels on mail are left (they are the user's mail) and the page says so. Backups and retention cannot be reached from here, and that is said too.
+  - **One list of what holds account data**, used by this, by retention and by a test that fails when a new table keyed by account is not on it, so a table added later cannot be forgotten.
+  - It is confirmed by typing the address, cannot be undone, and works while sift is running without the daemon tripping over a mailbox that has gone.
 - [ ] Try a second account end to end.
 - [ ] Use Tailscale's identity headers to skip the Google round trip for viewers on the tailnet.
 - [ ] Revisit Vercel's UI SDK as the behaviour layer under `web/src/system` once it is past beta and works under the content security policy (evaluated 2026-11-15; see docs/ARCHITECTURE.md).
