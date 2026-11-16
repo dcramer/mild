@@ -27,7 +27,7 @@ export interface AnswerLabel {
 export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answerable[], onDone: () => void) {
   const { busy, error, run } = useAction();
   const toast = useToast();
-  const say = (target: Answerable, labelId: string) =>
+  const say = (target: Answerable, labelId: string, disposition?: 'keep') =>
     api.feedback({
       accountId: target.accountId,
       sender: target.sender,
@@ -35,17 +35,19 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
       ...(target.decisionId === undefined ? {} : { decisionId: target.decisionId }),
       scope: 'once',
       label: labelId,
+      ...(disposition ? { disposition } : {}),
     });
 
-  const answer = (target: Answerable, labelId: string) =>
+  /** `disposition` keeps the message although its label would move it: it is that label, and wanted all the same. */
+  const answer = (target: Answerable, labelId: string, disposition?: 'keep') =>
     run(async () => {
-      const reply = await say(target, labelId);
+      const reply = await say(target, labelId, disposition);
       // The answer is saved; what sift itself did to the message could not be taken back in Gmail.
       if (reply.notFixed !== null) toast('Could not put the message back in Gmail', { tone: 'failure', description: reply.notFixed });
       const label = labels.find((l) => l.id === labelId);
       const alike = waiting.filter((w) => w.messageId !== target.messageId && w.sender === target.sender && w.labelId === target.labelId);
       // The verdict, as every list says it: "Archive as Marketing".
-      const said = label ? `${outcomeName(label.disposition)} as ${label.name}` : 'Answered';
+      const said = label ? `${outcomeName(disposition ?? label.disposition)} as ${label.name}` : 'Answered';
       toast(
         said,
         alike.length > 0
@@ -53,7 +55,7 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
               action: {
                 label: `Same for ${alike.length} more`,
                 onPress: () =>
-                  void Promise.all(alike.map((w) => say(w, labelId))).then(
+                  void Promise.all(alike.map((w) => say(w, labelId, disposition))).then(
                     () => {
                       toast(`${said}: ${alike.length} more`);
                       onDone();

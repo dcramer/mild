@@ -183,6 +183,9 @@ function Body({
     .slice(0, 2)
     .map((l) => ({ id: l.id, name: l.name, share: total ? l.messages / total : 0 }));
   const groups = choices(target, current ? sureness(current.stage, current.confidence) : 1, alternatives);
+  // Mail that is what Sift says but matters anyway: the label stands and the message stays in the inbox.
+  const given = labels.find((l) => l.id === current?.labelId);
+  const keepable = given && current?.disposition !== 'keep' && given.disposition !== 'keep' && given.disposition !== 'review' ? given : null;
 
   return (
     <div className="flex flex-col gap-8">
@@ -199,6 +202,11 @@ function Body({
             onSubmit={(id) => answer(target, id)}
             extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
           />
+          {keepable ? (
+            <Button variant="quiet" busy={busy} onClick={() => answer(target, keepable.id, 'keep')}>
+              Keep as {keepable.name}
+            </Button>
+          ) : null}
           {adding ? <AddLabelDialog accountId={detail.accountId} onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
           <span className="flex-1" />
           <Button variant="quiet" onClick={() => setRuling(messageStart(detail.fromAddress, current?.labelId ?? null))}>

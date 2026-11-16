@@ -55,6 +55,12 @@ export interface Facts extends Partial<ContentFacts>, Partial<ThreadFacts> {
   isReply: boolean;
   /** The inbox tab Gmail filed it under, from its `CATEGORY_*` label. Null: none recorded. */
   category: 'personal' | 'social' | 'promotions' | 'updates' | 'forums' | null;
+  /**
+   * Gmail's importance marker, as it stood when sift recorded the message. Gmail sets it from how the owner
+   * treats mail like it, and the owner can set it by hand; the API does not say which. Absent for mail
+   * recorded before sift read it.
+   */
+  important?: boolean;
 }
 
 const SERVICES: { name: string; domains?: string[]; headers?: string[]; mailer?: RegExp; feedbackId?: RegExp }[] = [
@@ -162,6 +168,7 @@ export function deriveFacts(
     addressed: message.to.some(isOwner) ? 'to' : message.cc.some(isOwner) ? 'cc' : 'neither',
     isReply: (headers['in-reply-to'] ?? headers['references'] ?? '').trim() !== '',
     category: category ?? null,
+    important: message.labelIds.includes('IMPORTANT'),
     ...read,
   };
 }
@@ -184,6 +191,7 @@ export function describeFacts(facts: Facts): string[] {
     `Sender authentication: DMARC ${facts.dmarc}, SPF ${facts.spf}, DKIM ${facts.dkim}`,
     `Replies go to a different address: ${yesNo(facts.replyToDiffers)}`,
     `Gmail's category: ${facts.category ?? '(none)'}`,
+    ...(facts.important === undefined ? [] : [`Gmail marked it important: ${yesNo(facts.important)}`]),
     ...(facts.hasAttachments === undefined ? [] : [`Has attachments: ${yesNo(facts.hasAttachments)}`]),
     ...(facts.trackingPixel === undefined ? [] : [`Has a tracking pixel: ${yesNo(facts.trackingPixel)}`]),
     ...(facts.trackedLinks === undefined ? [] : [`Links pass through click tracking: ${yesNo(facts.trackedLinks)}`]),
@@ -249,6 +257,10 @@ export const RULE_FACTS = {
     ['social', 'is in Social'],
     ['updates', 'is in Updates'],
     ['forums', 'is in Forums'],
+  ],
+  important: [
+    [true, 'Gmail marked important'],
+    [false, 'Gmail did not mark important'],
   ],
   hasAttachments: [
     [true, 'has attachments'],

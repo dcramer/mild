@@ -157,6 +157,10 @@ export const FACTS = {
     ['updates', 'is in Updates'],
     ['forums', 'is in Forums'],
   ],
+  important: [
+    [true, 'Gmail marked important'],
+    [false, 'Gmail did not mark important'],
+  ],
   hasAttachments: [
     [true, 'has attachments'],
     [false, 'has no attachments'],

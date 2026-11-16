@@ -326,6 +326,37 @@ describe('an answer pressed in the dashboard', () => {
     expect(await ruleFor('news@example.com')).toEqual([]);
     expect(await listProposals(db, ACCOUNT)).toMatchObject([{ kind: 'rule', match: { from: 'news@example.com' }, labelId: 'newsletter', agreed: 3 }]);
   });
+
+  it('can keep a message under the label that would move it: the label counts as right, and nothing is unsubscribed', async () => {
+    const decisionId = await suggest('news@example.com', 'archive', { ...NEWS, subscription: 'unsubscribe' });
+    await applyFeedback(
+      db,
+      { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', disposition: 'keep', scope: 'once', decisionId, carryOut: true },
+      50,
+    );
+    expect(
+      await raw(db).get(`SELECT disposition, subscription, label_id, by_user, reason FROM decisions WHERE message_id = 'm1' ORDER BY id DESC LIMIT 1`),
+    ).toEqual({ disposition: 'keep', subscription: 'preserve', label_id: 'newsletter', by_user: true, reason: 'you said this is Newsletters, and to keep it' });
+    expect(await raw(db).get(`SELECT verdict, disposition, label_id FROM feedback`)).toEqual({ verdict: 'right', disposition: 'keep', label_id: 'newsletter' });
+
+    const mailbox = new FakeMailbox();
+    mailbox.labels.set('m1', ['INBOX']);
+    await triageAccount({ db, mailbox: null, answers: mailbox }, (await listAccounts(db))[0]!);
+    expect(mailbox.labels.get('m1')).toContain('INBOX');
+  });
+
+  it('answers that keep mail its label would move propose no rule that would move it', async () => {
+    for (let i = 0; i < 3; i++) {
+      const decisionId = await suggest('news@example.com', 'archive', NEWS);
+      const reply = await applyFeedback(
+        db,
+        { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', disposition: 'keep', scope: 'once', decisionId, carryOut: true },
+        50 + i,
+      );
+      expect(reply.proposed).toBe(false);
+    }
+    expect(await listProposals(db, ACCOUNT)).toEqual([]);
+  });
 });
 
 describe('accuracy', () => {

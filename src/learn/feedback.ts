@@ -316,7 +316,11 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
         ...extra,
         stage: 'rules',
         ...(ruleId ? { ruleId } : {}),
-        reason: label ? `you said this is ${label.name}` : `you said to ${DO[wanted]}`,
+        reason: !label
+          ? `you said to ${DO[wanted]}`
+          : input.disposition !== undefined && input.disposition !== label.disposition
+            ? `you said this is ${label.name}, and to ${DO[wanted]}`
+            : `you said this is ${label.name}`,
       };
     };
     const carried = { carryOut: input.carryOut ?? false, byUser: true, now };

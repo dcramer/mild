@@ -162,6 +162,8 @@ const MessageFactSet = z.object({
   addressed: z.enum(['to', 'cc', 'neither']),
   isReply: z.boolean(),
   category: z.enum(['personal', 'social', 'promotions', 'updates', 'forums']).nullable(),
+  /** Absent for mail recorded before sift read it. */
+  important: z.boolean().optional(),
   /** These five are known only once a model has been asked about the message; the last four only for mail with HTML. */
   hasAttachments: z.boolean().optional(),
   trackingPixel: z.boolean().optional(),

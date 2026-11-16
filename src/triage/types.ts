@@ -84,14 +84,16 @@ export function labelled(
   override?: DecidedDisposition,
 ): Pick<Decision, 'disposition' | 'subscription' | 'labelId' | 'gmailLabel' | 'block' | 'markRead'> {
   const disposition = override ?? label.disposition;
+  // Keeping mail its label would move says it is wanted, so the label's unsubscribe and mark read do not come with it.
+  const wanted = override === 'keep' && label.disposition !== 'keep';
   return {
     disposition,
-    subscription: label.unsubscribe ? 'unsubscribe' : 'preserve',
+    subscription: label.unsubscribe && !wanted ? 'unsubscribe' : 'preserve',
     labelId: label.id,
     gmailLabel: label.gmailLabel,
     // An exception replaces the label's action, so it does not inherit the block.
     ...(label.block && override === undefined && disposition === 'spam' ? { block: true } : {}),
-    ...(label.markRead && (disposition === 'keep' || disposition === 'archive') ? { markRead: true } : {}),
+    ...(label.markRead && !wanted && (disposition === 'keep' || disposition === 'archive') ? { markRead: true } : {}),
   };
 }
 

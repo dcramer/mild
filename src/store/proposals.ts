@@ -104,13 +104,15 @@ export async function proposeForSender(db: Sql, accountId: string, address: stri
 const PROPOSE_AFTER_ANSWERS = 3;
 
 /**
- * Propose a rule for a sender whose last few answers all said the same label. Answering one message makes
- * no rule; this is how answers turn into one, with the user's say-so.
+ * Propose a rule for a sender whose last few answers all said the same label, and each let the label do what
+ * it does. Answering one message makes no rule; this is how answers turn into one, with the user's say-so.
+ * An answer that kept the label but not its action ("Marketing, but keep it") breaks the run: the rule
+ * proposed would do what the user just said not to.
  */
 export async function proposeFromAnswers(db: Sql, accountId: string, address: string, now: number = Date.now()): Promise<boolean> {
   if (await hasRuleFor(db, accountId, { from: address })) return false;
   const recent = await db
-    .select({ labelId: feedback.labelId })
+    .select({ labelId: feedback.labelId, disposition: feedback.disposition })
     .from(feedback)
     .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
     .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
@@ -118,7 +120,11 @@ export async function proposeFromAnswers(db: Sql, accountId: string, address: st
     .orderBy(desc(feedback.createdAt), desc(feedback.decisionId))
     .limit(PROPOSE_AFTER_ANSWERS);
   const [first] = recent;
-  if (!first || recent.length < PROPOSE_AFTER_ANSWERS || first.labelId === null || !recent.every((r) => r.labelId === first.labelId)) return false;
+  if (!first || recent.length < PROPOSE_AFTER_ANSWERS || first.labelId === null) return false;
+  const label = (await listLabels(db, accountId)).find((l) => l.id === first.labelId);
+  if (!label) return false;
+  const does = label.disposition === 'review' ? 'keep' : label.disposition;
+  if (!recent.every((r) => r.labelId === first.labelId && r.disposition === does)) return false;
   return await propose(db, { accountId, kind: 'rule', match: { from: address }, labelId: first.labelId, ruleId: null, agreed: recent.length }, now);
 }
 

@@ -336,7 +336,7 @@ describe('teaching from Gmail', () => {
       carry_out: false,
       by_user: true,
       rule_id: null,
-      reason: 'you said this is Newsletters',
+      reason: 'you said this is Newsletters, and to keep it',
     });
     expect(await raw(db).all('SELECT message_id, disposition FROM examples')).toEqual([{ message_id: 'news', disposition: 'keep' }]);
     expect(await listRules(db, ACCOUNT)).toHaveLength(2);

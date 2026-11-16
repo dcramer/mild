@@ -42,6 +42,7 @@ describe('deriveFacts', () => {
       addressed: 'to',
       isReply: false,
       category: 'promotions',
+      important: false,
     });
   });
 
@@ -59,7 +60,20 @@ describe('deriveFacts', () => {
       addressed: 'to',
       isReply: false,
       category: null,
+      important: false,
     });
+  });
+
+  it("reads Gmail's importance marker from its label", () => {
+    const marked = deriveFacts(facts({ labelIds: ['INBOX', 'IMPORTANT', 'CATEGORY_PROMOTIONS'] }));
+    expect(marked).toMatchObject({ important: true, category: 'promotions' });
+    expect(describeFacts(marked)).toContain('Gmail marked it important: yes');
+    expect(matchesFacts({ important: true, category: 'promotions' }, marked)).toBe(true);
+    // Mail recorded before sift read the marker has no answer, so a rule asking either way passes it by.
+    const before = { ...marked };
+    delete before.important;
+    expect(describeFacts(before).some((line) => line.includes('important'))).toBe(false);
+    expect(matchesFacts({ important: false }, before)).toBe(false);
   });
 
   it('tells direct mail from a copy from a list or blind copy, counting a tagged address as the owner', () => {
