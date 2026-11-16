@@ -39,5 +39,17 @@ export default defineConfig({
     // The dashboard is served under a content security policy with no inline script or style.
     modulePreload: { polyfill: false },
     assetsInlineLimit: 0,
+    rolldownOptions: {
+      output: {
+        // Libraries change far less often than sift does, so they get files of their own: a new build of
+        // sift leaves them cached. Screens are split off where the app asks for them (see App.tsx).
+        codeSplitting: {
+          groups: [
+            { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/, priority: 2 },
+            { name: 'vendor', test: /node_modules/, priority: 1 },
+          ],
+        },
+      },
+    },
   },
 });

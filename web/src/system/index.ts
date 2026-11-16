@@ -16,6 +16,7 @@ export { Note } from './note.tsx';
 export { Notice } from './notice.tsx';
 export { PageHeader, Section } from './page.tsx';
 export { Panel } from './panel.tsx';
+export { Reserve } from './reserve.tsx';
 export { Select } from './select.tsx';
 export { SettingRow, Sheet } from './sheet.tsx';
 export { Empty, Loading } from './state.tsx';

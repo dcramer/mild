@@ -48,6 +48,7 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Menu`, `Avatar` | A few things to do, behind one button: under the avatar, who is signed in and Sign out. An item that cannot be pressed says why under its label. An avatar is the initial of an address, never a picture: the page loads nothing from another origin. Choosing one value is a `Select`, not a menu. |
 | `HoverCard` | A link that previews where it goes when the pointer rests on it or it takes focus. Only a preview: a touch screen never shows it, so everything in it is also on the page the link opens. |
 | `Note` | Said to the reader outside the flow, about the whole page: `plain`, `look` (needs them), `failure`. No box. |
+| `Reserve` | Holds the room for something above other content that arrives late and whose height depends on what loads (figures, a chart, a notice that may not be there), so the page below does not move. It remembers the height the part last had in this browser, per width; `room` is the usual height until then. |
 | `Empty`, `Loading` | What a list shows with nothing in it (say what would put something here), and while rows are on their way. |
 | `Stamp` | A verdict in one word from the vocabulary. All stamps weigh the same; `look` only for what is left to the reader. |
 | `Highlight`, `Marked` | A stroke of highlighter; a search term marked in text. |
@@ -75,6 +76,16 @@ Every part has an answer for a phone, and a new part needs one before it is adde
 | Anything pressed | At least 40px tall on a touch screen (`pointer: coarse`), whatever its size on a desktop. |
 
 The page itself never scrolls sideways.
+
+## Nothing moves after it is drawn
+
+A page is drawn before its data arrives, and what arrives must not push what is already there. Measured as layout shift on a cold load, at desktop and phone widths; keep every page under 0.05.
+
+- A page header that will have a status line passes `meta={null}` until it knows it: the line's room is held.
+- A page's action button is shown from the start and disabled until it can work. It does not appear late.
+- Anything above other content whose height depends on data goes in a `Reserve`.
+- A list's rows may grow downward: nothing is below them.
+- Every screen but the home page is fetched when first needed (`lazyView` in `web/src/lib/lazy.tsx`) and, once the page is idle, ahead of need. While one is on its way the page shows that screen's own header and row placeholders.
 
 ## Rules for adding to it
 

@@ -160,12 +160,10 @@ export function LabelsView() {
       title="Labels"
       meta={data ? `${count(all.length)} kinds of mail` : null}
       actions={
-        first ? (
-          <Button onClick={() => setEditing({ accountId: first.id, label: null })}>
-            <PlusIcon aria-hidden />
-            Add a label
-          </Button>
-        ) : null
+        <Button disabled={!first} onClick={() => first && setEditing({ accountId: first.id, label: null })}>
+          <PlusIcon aria-hidden />
+          Add a label
+        </Button>
       }
       search={{ value: search, onChange: setSearch, placeholder: 'Search labels' }}
       filters={{

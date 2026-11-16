@@ -36,6 +36,7 @@ import {
   Panel,
   RowActions,
   Section,
+  Reserve,
   Select,
   SettingRow,
   Sheet,
@@ -430,6 +431,12 @@ export function SystemView() {
         <Section title="Empty and loading">
           <Empty>Nothing is waiting on you.</Empty>
           <Loading rows={3} />
+        </Section>
+        <Section title="Reserve" meta="holds the room for what arrives late, so nothing below moves">
+          <Reserve id="specimen" ready={false} room={{ narrow: 96, wide: 96 }} placeholder={<Loading rows={2} />}>
+            <span />
+          </Reserve>
+          <p className="text-muted-foreground">This line stays where it is when the part above fills in.</p>
         </Section>
       </div>
 

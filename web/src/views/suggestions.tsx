@@ -16,6 +16,7 @@ import {
   Loading,
   OnPhone,
   RowActions,
+  Reserve,
   Section,
   Select,
   StackedBars,
@@ -231,27 +232,30 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
         ) : null
       }
       intro={
-        <>
-          {summary.data ? (
-            <Standing summary={summary.data} accuracy={data?.accuracy} days={days} onDays={(next) => setChosen(next === 7 ? '' : String(next))} />
-          ) : null}
-          {data && data.proposals.length > 0 ? (
-            <Section title="Proposed rules" meta={count(data.proposals.length)}>
-              <ul className="flex flex-col">
-                {data.proposals.map((proposal) => (
-                  <ProposalRow
-                    key={proposal.id}
-                    proposal={proposal}
-                    onResolved={(line) => {
-                      if (line) toast(line);
-                      reload();
-                    }}
-                  />
-                ))}
-              </ul>
-            </Section>
-          ) : null}
-        </>
+        // The figures, the chart and any proposals arrive after the list is drawn, and would push it down.
+        <Reserve id="home" ready={summary.data !== null && data !== null} room={{ narrow: 440, wide: 230 }}>
+          <div className="flex flex-col gap-6">
+            {summary.data ? (
+              <Standing summary={summary.data} accuracy={data?.accuracy} days={days} onDays={(next) => setChosen(next === 7 ? '' : String(next))} />
+            ) : null}
+            {data && data.proposals.length > 0 ? (
+              <Section title="Proposed rules" meta={count(data.proposals.length)}>
+                <ul className="flex flex-col">
+                  {data.proposals.map((proposal) => (
+                    <ProposalRow
+                      key={proposal.id}
+                      proposal={proposal}
+                      onResolved={(line) => {
+                        if (line) toast(line);
+                        reload();
+                      }}
+                    />
+                  ))}
+                </ul>
+              </Section>
+            ) : null}
+          </div>
+        </Reserve>
       }
       search={{ value: search, onChange: setSearch, placeholder: 'Search senders and subjects' }}
       filters={{

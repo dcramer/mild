@@ -22,6 +22,19 @@ At the next `sift run`, everything stored plain is encrypted, and says so. Witho
 
 Each file records the id of the key that encrypted it (a short hash, the `2cac0b47` in `sift-secret:v1:2cac0b47:…`), which is how sift picks the key and how you can tell which files an old one still covers.
 
+## If the key was exposed
+
+Rotating the key (above) is enough only if nobody who had the key could also have read the files. If a copy of the home directory or a backup may be out with it, treat what the files hold as exposed too, and replace it at its source:
+
+| What | Do |
+| --- | --- |
+| Gmail access (`google/*.json`) | In your Google Account, remove sift's access under third-party apps; that ends every token sift was given. Then sign in to the dashboard again. |
+| The Google client (`google-client.json`) | In Google Cloud Console, reset the client's secret, then `sift init` and paste the new JSON. |
+| Model keys and sign-ins (`model-auth.json`) | Revoke the API key, or sign out other sessions, at the provider. Then `sift init`, the model step. |
+| Dashboard sessions (`dashboard-key`) | Delete the file. sift makes a new one and everyone is signed out. |
+
+Then rotate the key itself. The database is not encrypted by this key, so a copied home also carries its mail records.
+
 ## Losing the key
 
 sift refuses to start, and names the files it cannot open. Nothing in them can be recovered. Delete them and set up again:

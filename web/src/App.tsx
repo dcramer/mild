@@ -1,17 +1,82 @@
-import { useEffect, useState } from 'react';
+import { Component, type ReactNode, Suspense, useEffect, useState } from 'react';
 import { api, useLoaded, useOnline } from '@/lib/api.ts';
 import { ago } from '@/lib/format.ts';
 import { navigate, setParams, useParam, useRoute } from '@/lib/route.ts';
-import { Masthead, Note, Notice, Wordmark } from '@/system';
-import { ActivityView } from '@/views/activity.tsx';
-import { LabelsView } from '@/views/labels.tsx';
-import { MessagePanel, type MessageRef } from '@/views/message-panel.tsx';
-import { Rules } from '@/views/rules.tsx';
-import { SenderView } from '@/views/sender.tsx';
-import { SettingsView } from '@/views/settings.tsx';
-import { SignInScreen } from '@/views/sign-in.tsx';
+import { lazyView } from '@/lib/lazy.tsx';
+import { Loading, Masthead, Note, Notice, PageHeader, Wordmark } from '@/system';
+import type { MessageRef } from '@/views/message-panel.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
-import { SystemView } from '@/views/system.tsx';
+
+// The home page comes with the app. Every other screen is its own file, fetched when first needed and,
+// once the page is idle, ahead of need, so that going to one does not wait on the network.
+const ActivityView = lazyView(() => import('@/views/activity.tsx').then((m) => m.ActivityView));
+const LabelsView = lazyView(() => import('@/views/labels.tsx').then((m) => m.LabelsView));
+const Rules = lazyView(() => import('@/views/rules.tsx').then((m) => m.Rules));
+const SettingsView = lazyView(() => import('@/views/settings.tsx').then((m) => m.SettingsView));
+const SenderView = lazyView(() => import('@/views/sender.tsx').then((m) => m.SenderView));
+const MessagePanel = lazyView(() => import('@/views/message-panel.tsx').then((m) => m.MessagePanel));
+const SignInScreen = lazyView(() => import('@/views/sign-in.tsx').then((m) => m.SignInScreen));
+// The specimen page is the largest screen and no part of using sift, so it is never fetched ahead.
+const SystemView = lazyView(() => import('@/views/system.tsx').then((m) => m.SystemView));
+
+const SCREENS: Record<string, { preload: () => Promise<unknown> }> = {
+  activity: ActivityView,
+  labels: LabelsView,
+  rules: Rules,
+  settings: SettingsView,
+  sender: SenderView,
+  domain: SenderView,
+  system: SystemView,
+};
+// The screen the address asks for starts loading with the app, not after its first render.
+void SCREENS[window.location.pathname.split('/')[1] ?? '']?.preload().catch(() => {});
+if (new URLSearchParams(window.location.search).has('message')) void MessagePanel.preload().catch(() => {});
+
+/** Fetch the rest once the first screen is up and the browser has nothing better to do. */
+function useScreensAhead() {
+  useEffect(() => {
+    const ahead = () => {
+      for (const screen of [ActivityView, LabelsView, Rules, SettingsView, SenderView, MessagePanel]) void screen.preload().catch(() => {});
+    };
+    if ('requestIdleCallback' in window) {
+      const id = window.requestIdleCallback(ahead, { timeout: 4000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const timer = setTimeout(ahead, 1500);
+    return () => clearTimeout(timer);
+  }, []);
+}
+
+/** What a screen shows while its code is on its way: its own header and the rows it will fill, so nothing moves when it arrives. */
+function ScreenLoading({ title }: { title: string }) {
+  return (
+    <section className="flex flex-col gap-6">
+      <PageHeader title={title} meta={null} />
+      <Loading rows={6} />
+    </section>
+  );
+}
+
+/** A screen whose code could not be fetched says so in place, and the rest of the page keeps working. */
+class ScreenBoundary extends Component<{ at: string; children: ReactNode }, { failedAt: string | null }> {
+  override state: { failedAt: string | null } = { failedAt: null };
+  static getDerivedStateFromError() {
+    return { failedAt: '' };
+  }
+  override componentDidCatch() {
+    this.setState({ failedAt: this.props.at });
+  }
+  override render() {
+    // Going somewhere else tries again.
+    if (this.state.failedAt !== null && (this.state.failedAt === '' || this.state.failedAt === this.props.at))
+      return (
+        <Note tone="failure" title="This screen could not be loaded">
+          <p>sift may be unreachable, or it was updated while this page was open. Reload the page.</p>
+        </Note>
+      );
+    return this.props.children;
+  }
+}
 
 const SECTIONS = ['suggestions', 'activity', 'labels', 'rules', 'settings'] as const;
 const NAMES: Record<(typeof SECTIONS)[number], string> = {
@@ -28,7 +93,12 @@ const MOVED: Record<string, string> = { overview: '/suggestions', decisions: '/a
 export function App() {
   const route = useRoute();
   // The specimen page is open to anyone and holds no data. It is rendered outside the gate so it asks the API for nothing, not even who is signed in.
-  if (route[0] === 'system') return <SystemView />;
+  if (route[0] === 'system')
+    return (
+      <Suspense fallback={null}>
+        <SystemView />
+      </Suspense>
+    );
   return <Gate route={route} />;
 }
 
@@ -53,12 +123,17 @@ function Gate({ route }: { route: string[] }) {
     ) : null;
   }
   if (session.data.required && session.data.email === null) {
-    return <SignInScreen session={session.data} error={new URLSearchParams(window.location.search).get('signin')} />;
+    return (
+      <Suspense fallback={null}>
+        <SignInScreen session={session.data} error={new URLSearchParams(window.location.search).get('signin')} />
+      </Suspense>
+    );
   }
   return <Dashboard signedInAs={session.data.email} route={route} />;
 }
 
 function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: string[] }) {
+  useScreensAhead();
   const moved = MOVED[route.join('/')] ?? MOVED[route[0] ?? ''];
   useEffect(() => {
     if (moved) navigate(moved + window.location.search, { replace: true });
@@ -127,32 +202,39 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
       />
 
       <main className="pb-16">
-        {profile ? (
-          <SenderView
-            accountId={profile.accountId}
-            who={profile.kind === 'sender' ? { address: profile.key } : { domain: profile.key }}
-            onOpen={openMessages}
-          />
-        ) : section === 'suggestions' ? (
-          <SuggestionsView onOpen={openMessages} />
-        ) : section === 'activity' ? (
-          <ActivityView onOpen={openMessages} />
-        ) : section === 'labels' ? (
-          <LabelsView />
-        ) : section === 'rules' ? (
-          <Rules />
-        ) : (
-          <SettingsView />
-        )}
+        <ScreenBoundary at={route.join('/')}>
+          <Suspense fallback={<ScreenLoading title={profile ? profile.key : NAMES[section]} />}>
+            {profile ? (
+              <SenderView
+                accountId={profile.accountId}
+                who={profile.kind === 'sender' ? { address: profile.key } : { domain: profile.key }}
+                onOpen={openMessages}
+              />
+            ) : section === 'suggestions' ? (
+              <SuggestionsView onOpen={openMessages} />
+            ) : section === 'activity' ? (
+              <ActivityView onOpen={openMessages} />
+            ) : section === 'labels' ? (
+              <LabelsView />
+            ) : section === 'rules' ? (
+              <Rules />
+            ) : (
+              <SettingsView />
+            )}
+          </Suspense>
+        </ScreenBoundary>
       </main>
       {open ? (
-        <MessagePanel
-          items={open.items}
-          index={open.index}
-          onIndex={(index) => show(open.items[index])}
-          // Opened from a list here, the entry before this one is that list: go back to it, so Back and Close agree.
-          onClose={() => ((window.history.state as { panel?: boolean } | null)?.panel ? window.history.back() : show(undefined))}
-        />
+        // The panel lies over the page, so nothing moves while its code arrives.
+        <Suspense fallback={null}>
+          <MessagePanel
+            items={open.items}
+            index={open.index}
+            onIndex={(index) => show(open.items[index])}
+            // Opened from a list here, the entry before this one is that list: go back to it, so Back and Close agree.
+            onClose={() => ((window.history.state as { panel?: boolean } | null)?.panel ? window.history.back() : show(undefined))}
+          />
+        </Suspense>
       ) : null}
     </div>
   );

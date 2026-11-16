@@ -187,12 +187,11 @@ export function Rules() {
       title="Rules"
       meta={data ? `${count(data.rules.length)} · the most specific one wins` : null}
       actions={
-        accountId ? (
-          <Button onClick={() => setAdding(true)}>
-            <PlusIcon aria-hidden />
-            Add a rule
-          </Button>
-        ) : null
+        // Shown from the start and enabled once the account is known, so it does not arrive late and move the page.
+        <Button disabled={!accountId} onClick={() => setAdding(true)}>
+          <PlusIcon aria-hidden />
+          Add a rule
+        </Button>
       }
       search={{ value: search, onChange: setSearch, placeholder: 'Search senders, domains and labels' }}
       filters={{

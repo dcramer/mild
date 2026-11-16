@@ -43,7 +43,7 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
       <PageHeader
         title={data.name ?? key}
         badge={<StandingStamp standing={profile.standing} />}
-        meta={data.name ? key : data.kind === 'domain' ? 'Everyone writing from this domain' : null}
+        meta={data.name ? key : data.kind === 'domain' ? 'Everyone writing from this domain' : undefined}
       />
 
       <Figures>
