@@ -1,7 +1,7 @@
 import type { DecisionRow } from '@/lib/api.ts';
 import { type Status, STATUS_NAMES, outcomeName, status, tier } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
-import { Code, Does, Failure, Note, Swatch } from '@/system';
+import { Code, Does, Failure, Note, Sub, Swatch } from '@/system';
 
 /** A tier's ink swatch and name. The name always accompanies the swatch. */
 export function TierLabel({ stage }: { stage: string }) {
@@ -15,14 +15,23 @@ export function TierLabel({ stage }: { stage: string }) {
 }
 
 /**
- * What sift says mail is and does with it, the same words everywhere: "Archive as Marketing". With no
- * label and nothing done, sift was not sure, which is the reader's to answer, so it is the yellow one.
+ * What sift says mail is and does with it, the same words everywhere: "Archive as Marketing". In a table
+ * cell (`stacked`) the label goes on a quieter second line. With no label and nothing done, sift was not
+ * sure, which is the reader's to answer, so it is the yellow one.
  */
-export function Verdict({ labelName, disposition }: { labelName: string | null; disposition: string }) {
+export function Verdict({ labelName, disposition, stacked }: { labelName: string | null; disposition: string; stacked?: boolean }) {
   if (labelName === null && disposition === 'review') return <Does action="review">{outcomeName('review')}</Does>;
+  const does = <Does action={disposition}>{outcomeName(disposition)}</Does>;
+  if (stacked)
+    return (
+      <>
+        {does}
+        {labelName ? <Sub>{labelName}</Sub> : null}
+      </>
+    );
   return (
     <span>
-      <Does action={disposition}>{outcomeName(disposition)}</Does>
+      {does}
       {labelName ? <span className="text-muted-foreground"> as {labelName}</span> : null}
     </span>
   );

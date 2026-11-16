@@ -59,7 +59,7 @@ export function DecisionTable({
               </OnPhone>
             </Td>
             <Td phone="hide" className="whitespace-nowrap">
-              <Verdict labelName={row.labelName} disposition={row.disposition} />
+              <Verdict labelName={row.labelName} disposition={row.disposition} stacked />
             </Td>
             <Td phone="hide" quiet className="max-w-0 md:w-[38%]">
               <span className="line-clamp-2" title={row.reason}>

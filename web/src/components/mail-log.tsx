@@ -1,24 +1,28 @@
 import { SenderLink } from '@/components/sender.tsx';
 import type { DecisionRow } from '@/lib/api.ts';
 import { clock, dateTime, dayName, happened, status } from '@/lib/format.ts';
-import { Button, Failure, Marked, OnPhone, RowActions, Table, Td, Th, Tr, TrGroup } from '@/system';
+import { Button, Failure, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
-/** What happened to a message, with the label and whether it was the user's own answer. */
-function Happened({ row }: { row: DecisionRow }) {
+/**
+ * What happened to a message, with the label and whether it was the user's own answer. In its own cell
+ * (`stacked`) the label goes on a quieter second line.
+ */
+function Happened({ row, stacked }: { row: DecisionRow; stacked?: boolean }) {
   const { text, tone } = happened(row);
+  const label = row.labelName ? stacked ? <Sub>{row.labelName}</Sub> : <span className="text-muted-foreground"> · {row.labelName}</span> : null;
   const what = (
     <>
       <span className="font-semibold">{text}</span>
-      {row.labelName ? <span className="text-muted-foreground"> · {row.labelName}</span> : null}
       {row.byUser ? <span className="text-muted-foreground/70"> · you</span> : null}
+      {label}
     </>
   );
   if (tone === 'failed')
     return (
       <span title={row.outcomeDetail ?? undefined}>
         <Failure inline>{text}</Failure>
-        {row.labelName ? <span className="text-muted-foreground"> · {row.labelName}</span> : null}
+        {label}
       </span>
     );
   if (tone === 'undone') return <span className="text-muted-foreground line-through">{what}</span>;
@@ -87,7 +91,7 @@ export function MailLog({
                 </Td>
                 <Td phone="hide" className="max-w-0 md:min-w-60">
                   <span className="block truncate">
-                    <Happened row={row} />
+                    <Happened row={row} stacked />
                   </span>
                 </Td>
                 <Td phone="hide" num quiet title={dateTime(row.decidedAt)}>
