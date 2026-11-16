@@ -1,6 +1,6 @@
 # Design system
 
-The dashboard is built from one small set of parts, in `web/src/system/`. Every part, in every state, is on the specimen page: open the dashboard at `/system`.
+The dashboard is built from one small set of parts, in `web/src/system/`. Every part, in every state, is on the specimen page: open the dashboard at `/system`. It needs no sign-in: it shows only made-up examples and asks the server for no data.
 
 ![The specimen page](images/design-system.png)
 

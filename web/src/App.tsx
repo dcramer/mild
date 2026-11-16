@@ -29,6 +29,7 @@ const NAMES: Record<(typeof SECTIONS)[number], string> = {
 /** Shows the sign-in screen until the viewer is signed in, then the dashboard. */
 export function App() {
   const route = useRoute();
+  // The specimen page is open to anyone and holds no data. It is rendered outside the gate so it asks the API for nothing, not even who is signed in.
   if (route[0] === 'system') return <SystemView />;
   return <Gate route={route} />;
 }
