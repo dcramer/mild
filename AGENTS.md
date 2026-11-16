@@ -98,6 +98,7 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | Only what floats has a surface; one shadow, the `--edge` | `tests/design-system.test.ts`, and the theme has no grey tokens to reach for |
 | Keys only where someone works through a list one item after another (Suggestions, Activity, and the panel they open); no other list, form or step gets shortcuts or key hints | `Table` has none unless given `keys`; `tests/design-system.test.ts` |
 | `mark` and `ink` buttons are never down a list; one `mark` per screen | `tests/design-system.test.ts` (inside `Tr` / `RowActions` in the same file) |
+| The same thing looks the same on every page: a sender in a list is `SenderCell` (name, then address under it) | `tests/design-system.test.ts` (only `components/sender.tsx` and the message panel's header use `SenderLink`) |
 | Every part is on the specimen page | `tests/design-system.test.ts` |
 | Every Gmail filter passes `validateFilter` | `tests/filters.test.ts` |
 | Before visual work, load the `design` skill. Consistency with the system is not the same as a page that reads well. | Nothing: judgment |

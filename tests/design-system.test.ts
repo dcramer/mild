@@ -165,6 +165,15 @@ test('whatever can be pressed shows the pointer', () => {
   expect(failures, failures.join('\n')).toEqual([]);
 });
 
+test('a sender in a list is a SenderCell, name over address, the same on every page', () => {
+  // The message panel names the sender in its header, not in a row.
+  const own = new Set(['components/sender.tsx', 'views/message-panel.tsx']);
+  const failures = SCREENS.filter((path) => !own.has(relative(WEB, path)) && /<SenderLink\b/.test(readFileSync(path, 'utf8'))).map(
+    (path) => `web/src/${relative(WEB, path)}: a row names its sender with SenderCell (web/src/components/sender.tsx).`,
+  );
+  expect(failures).toEqual([]);
+});
+
 test('every part is on the specimen page', () => {
   const index = readFileSync(join(WEB, 'system/index.ts'), 'utf8');
   const parts = [...index.matchAll(/export \{([^}]*)\}/g)]

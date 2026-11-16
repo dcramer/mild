@@ -2,7 +2,7 @@ import { MegaphoneIcon, ReplyIcon, SparkleIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { type Contact, type SenderProfile, api, useLoaded } from '@/lib/api.ts';
 import { CONTACT_SAYS, describeMatch, outcomeName, plural, shortDate } from '@/lib/format.ts';
-import { Fact, Facts, Failure, Hint, HoverCard, TextLink } from '@/system';
+import { Blank, Fact, Facts, Failure, Hint, HoverCard, Marked, Sub, Td, TextLink } from '@/system';
 
 export const senderHref = (accountId: string, address: string) => `/sender/${encodeURIComponent(accountId)}/${encodeURIComponent(address)}`;
 const domainHref = (accountId: string, domain: string) => `/domain/${encodeURIComponent(accountId)}/${encodeURIComponent(domain)}`;
@@ -117,5 +117,64 @@ export function SenderLink({ accountId, address, children, className }: { accoun
         {children ?? address}
       </HoverCard>
     </span>
+  );
+}
+
+const SENDER_CELL = 'max-w-0 md:w-[24%] md:min-w-52';
+
+/**
+ * The first cell of a row of mail: who sent it, by name and address, since a name alone could be anyone.
+ * The same in every list of mail. The address drops on a phone; `aside` ends the name's line there, and
+ * `children` go under it (an `OnPhone`). `term` marks a search match.
+ */
+export function SenderCell({
+  accountId,
+  address,
+  name,
+  contact,
+  term,
+  aside,
+  children,
+}: {
+  accountId: string;
+  address: string;
+  name: string | null;
+  contact?: Contact;
+  term?: string;
+  aside?: ReactNode;
+  children?: ReactNode;
+}) {
+  const marked = (text: string) => <Marked text={text} {...(term ? { term } : {})} />;
+  return (
+    <Td className={SENDER_CELL}>
+      <span className="flex items-baseline gap-3">
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="name min-w-0 truncate">
+            <SenderLink accountId={accountId} address={address}>
+              {marked(name ?? address)}
+            </SenderLink>
+          </span>
+          {contact ? <ContactHint contact={contact} /> : null}
+        </span>
+        {aside}
+      </span>
+      {name ? <Sub className="hidden md:block">{marked(address)}</Sub> : null}
+      {children}
+    </Td>
+  );
+}
+
+/** `SenderCell` while its row is on its way. */
+export function SenderCellLoading({ children }: { children?: ReactNode }) {
+  return (
+    <Td className={SENDER_CELL}>
+      <span className="name">
+        <Blank />
+      </span>
+      <Sub className="hidden md:block">
+        <Blank />
+      </Sub>
+      {children}
+    </Td>
   );
 }

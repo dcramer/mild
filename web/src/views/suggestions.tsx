@@ -2,7 +2,7 @@ import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
-import { ContactHint, SenderLink } from '@/components/sender.tsx';
+import { SenderCell, SenderCellLoading } from '@/components/sender.tsx';
 import { useParam } from '@/lib/route.ts';
 import { type SuggestionItem, type Suggestions, type Summary, api, useAction, useLoaded } from '@/lib/api.ts';
 import {
@@ -180,18 +180,13 @@ function SuggestionRow({
 
   return (
     <Tr onOpen={onOpen}>
-      {/* Who sent it, by name and address: a name alone could be anyone. */}
-      <Td className="max-w-0 md:w-[24%] md:min-w-52">
-        {/* On a phone the row reads like a mail app's: who and what sift thinks, the subject, a line of the text. It opens to answer. */}
-        <span className="flex items-baseline gap-3">
-          <span className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="name min-w-0 truncate">
-              <SenderLink accountId={item.accountId} address={item.sender}>
-                {item.senderName ?? item.sender}
-              </SenderLink>
-            </span>
-            <ContactHint contact={item.contact} />
-          </span>
+      {/* On a phone the row reads like a mail app's: who and what sift thinks, the subject, a line of the text. It opens to answer. */}
+      <SenderCell
+        accountId={item.accountId}
+        address={item.sender}
+        name={item.senderName}
+        contact={item.contact}
+        aside={
           <span className="shrink-0 text-sm md:hidden">
             {item.labelId !== null ? (
               <span className="inline-flex items-center gap-2 text-muted-foreground">
@@ -202,13 +197,13 @@ function SuggestionRow({
               <Look>Which label?</Look>
             )}
           </span>
-        </span>
-        {item.senderName ? <Sub className="hidden md:block">{item.sender}</Sub> : null}
+        }
+      >
         <OnPhone>
           <span className="w-full truncate text-base text-foreground">{item.subject || '(no subject)'}</span>
           {item.preview ? <span className="w-full truncate">{item.preview}</span> : null}
         </OnPhone>
-      </Td>
+      </SenderCell>
       {/* What it is about, and as much of what it says as fits: enough to answer without opening it. */}
       <Td phone="hide" className="max-w-0 md:w-full">
         <span className="block truncate">{item.subject || '(no subject)'}</span>
@@ -311,20 +306,14 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
       {error ? <ErrorNote message={error} /> : null}
       {loading ? (
         <Loading>
-          <Td className="max-w-0 md:w-[24%] md:min-w-52">
-            <span className="name">
-              <Blank />
-            </span>
-            <Sub className="hidden md:block">
-              <Blank />
-            </Sub>
+          <SenderCellLoading>
             <OnPhone>
               <span className="w-full text-base">
                 <Blank />
               </span>
               <Blank />
             </OnPhone>
-          </Td>
+          </SenderCellLoading>
           <Td phone="hide" className="max-w-0 md:w-full">
             <Blank />
             <Sub>

@@ -1,4 +1,4 @@
-import { ContactHint, SenderLink } from '@/components/sender.tsx';
+import { SenderCell, SenderCellLoading } from '@/components/sender.tsx';
 import type { DecisionRow, ListedDecision, UnjudgedRow } from '@/lib/api.ts';
 import { ago, clock, dateTime, dayName, happened, status } from '@/lib/format.ts';
 import { Blank, Button, Does, Failure, Loading, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from '@/system';
@@ -84,19 +84,14 @@ export function MailLog({
             );
             return (
               <Tr key={`${row.accountId}/${row.messageId}`} onOpen={() => onOpen(items, index)}>
-                <Td className="max-w-0 md:w-[20%] md:min-w-44">
-                  <span className="name block truncate">
-                    <SenderLink accountId={row.accountId} address={row.fromAddress}>
-                      <Marked text={row.fromName ?? row.fromAddress} {...term} />
-                    </SenderLink>
-                  </span>
+                <SenderCell accountId={row.accountId} address={row.fromAddress} name={row.fromName} {...term}>
                   <OnPhone>
                     <span className="w-full truncate text-foreground">{row.subject || '(no subject)'}</span>
                     {failed}
                     <span>{ago(row.triedAt)}</span>
                   </OnPhone>
-                </Td>
-                <Td phone="hide" quiet className="max-w-0 md:w-full">
+                </SenderCell>
+                <Td phone="hide" className="max-w-0 md:w-full">
                   <span className="block truncate">{row.subject ? <Marked text={row.subject} {...term} /> : '(no subject)'}</span>
                 </Td>
                 <Td phone="hide" className="max-w-0 md:min-w-60">
@@ -123,22 +118,14 @@ export function MailLog({
             const s = status(row);
             return (
               <Tr key={row.id} onOpen={() => onOpen(items, index)}>
-                <Td className="max-w-0 md:w-[20%] md:min-w-44">
-                  <span className="flex items-center gap-2">
-                    <span className="name min-w-0 truncate">
-                      <SenderLink accountId={row.accountId} address={row.fromAddress}>
-                        <Marked text={row.fromName ?? row.fromAddress} {...term} />
-                      </SenderLink>
-                    </span>
-                    <ContactHint contact={row.contact} />
-                  </span>
+                <SenderCell accountId={row.accountId} address={row.fromAddress} name={row.fromName} contact={row.contact} {...term}>
                   <OnPhone>
                     <span className="w-full truncate text-foreground">{row.subject || '(no subject)'}</span>
                     <Happened row={row} />
                     <span>{clock(row.decidedAt)}</span>
                   </OnPhone>
-                </Td>
-                <Td phone="hide" quiet className="max-w-0 md:w-full">
+                </SenderCell>
+                <Td phone="hide" className="max-w-0 md:w-full">
                   <span className="block truncate">{row.subject ? <Marked text={row.subject} {...term} /> : '(no subject)'}</span>
                 </Td>
                 <Td phone="hide" className="max-w-0 md:min-w-60">
@@ -173,10 +160,7 @@ export function MailLog({
 export function MailLogLoading() {
   return (
     <Loading rows={8}>
-      <Td className="max-w-0 md:w-[20%] md:min-w-44">
-        <span className="name">
-          <Blank />
-        </span>
+      <SenderCellLoading>
         <OnPhone>
           <span className="w-full">
             <Blank />
@@ -184,7 +168,7 @@ export function MailLogLoading() {
           <Blank word />
           <Blank word />
         </OnPhone>
-      </Td>
+      </SenderCellLoading>
       <Td phone="hide" className="max-w-0 md:w-full">
         <Blank />
       </Td>

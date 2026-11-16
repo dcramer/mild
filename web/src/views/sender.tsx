@@ -1,6 +1,6 @@
 import { type ReactNode, useState } from 'react';
 import { ErrorNote, StatusWord, Verdict } from '@/components/bits.tsx';
-import { ContactHint, SenderLink } from '@/components/sender.tsx';
+import { ContactHint, SenderCell } from '@/components/sender.tsx';
 import { type ListedDecision, type SenderPage, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, dateTime, describeMatch, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
 import { type RuleStart, messageStart, standingStart } from '@/lib/rule-start.ts';
@@ -17,7 +17,6 @@ import {
   Section,
   Share,
   StackedBars,
-  Sub,
   Table,
   Td,
   TextLink,
@@ -159,14 +158,15 @@ function Labels({ data, onStart }: { data: SenderPage; onStart: (s: RuleStart) =
   );
 }
 
-/** Their mail, one row per message: what it is, what Sift said, where it got to, when it came. */
+/** Their mail, one row per message: what it is, what Sift said, where it got to, when it came. On a domain's page, who sent each first, as in every list of mail. */
 function Mail({ rows, onOpen, oneSender }: { rows: ListedDecision[]; onOpen: OpenMessages; oneSender: boolean }) {
   const items = rows.map((r) => ({ accountId: r.accountId, messageId: r.messageId, subject: r.subject }));
   return (
     <Table>
       <thead>
         <Tr>
-          <Th>Message</Th>
+          {oneSender ? null : <Th>Sender</Th>}
+          <Th {...(oneSender ? {} : { phone: 'hide' as const })}>Message</Th>
           <Th phone="hide">Sift said</Th>
           <Th phone="hide">Status</Th>
           <Th phone="hide" num>
@@ -175,33 +175,44 @@ function Mail({ rows, onOpen, oneSender }: { rows: ListedDecision[]; onOpen: Ope
         </Tr>
       </thead>
       <tbody>
-        {rows.map((row, index) => (
-          <Tr key={row.id} onOpen={() => onOpen(items, index)}>
-            <Td className="max-w-0 md:w-1/2">
-              <span className="block truncate font-medium">{row.subject || '(no subject)'}</span>
-              {oneSender ? null : (
-                <Sub>
-                  <SenderLink accountId={row.accountId} address={row.fromAddress}>
-                    {row.fromName ?? row.fromAddress}
-                  </SenderLink>
-                </Sub>
-              )}
-              <OnPhone>
-                <Verdict labelName={row.labelName} disposition={row.disposition} />
-                <span>{ago(row.receivedAt)}</span>
-              </OnPhone>
-            </Td>
-            <Td phone="hide" className="whitespace-nowrap">
+        {rows.map((row, index) => {
+          const subject = row.subject || '(no subject)';
+          const onPhone = (
+            <OnPhone>
+              {oneSender ? null : <span className="w-full truncate text-base text-foreground">{subject}</span>}
               <Verdict labelName={row.labelName} disposition={row.disposition} />
-            </Td>
-            <Td phone="hide" className="whitespace-nowrap">
-              <StatusWord row={row} />
-            </Td>
-            <Td phone="hide" num quiet title={dateTime(row.receivedAt)}>
-              {ago(row.receivedAt)}
-            </Td>
-          </Tr>
-        ))}
+              <span>{ago(row.receivedAt)}</span>
+            </OnPhone>
+          );
+          return (
+            <Tr key={row.id} onOpen={() => onOpen(items, index)}>
+              {oneSender ? (
+                <Td className="max-w-0 md:w-1/2">
+                  <span className="block truncate font-medium">{subject}</span>
+                  {onPhone}
+                </Td>
+              ) : (
+                <>
+                  <SenderCell accountId={row.accountId} address={row.fromAddress} name={row.fromName} contact={row.contact}>
+                    {onPhone}
+                  </SenderCell>
+                  <Td phone="hide" className="max-w-0 md:w-full">
+                    <span className="block truncate">{subject}</span>
+                  </Td>
+                </>
+              )}
+              <Td phone="hide" className="whitespace-nowrap">
+                <Verdict labelName={row.labelName} disposition={row.disposition} />
+              </Td>
+              <Td phone="hide" className="whitespace-nowrap">
+                <StatusWord row={row} />
+              </Td>
+              <Td phone="hide" num quiet title={dateTime(row.receivedAt)}>
+                {ago(row.receivedAt)}
+              </Td>
+            </Tr>
+          );
+        })}
       </tbody>
     </Table>
   );
@@ -321,17 +332,7 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
             <tbody>
               {data.senders.map((sender) => (
                 <Tr key={sender.address}>
-                  <Td className="max-w-0 md:w-1/2">
-                    <span className="flex items-center gap-2">
-                      <span className="min-w-0 truncate">
-                        <SenderLink accountId={accountId} address={sender.address} className="font-medium">
-                          {sender.name ?? sender.address}
-                        </SenderLink>
-                      </span>
-                      <ContactHint contact={sender.contact} />
-                    </span>
-                    {sender.name ? <Sub>{sender.address}</Sub> : null}
-                  </Td>
+                  <SenderCell accountId={accountId} address={sender.address} name={sender.name} contact={sender.contact} />
                   <Td num>{count(sender.messages)}</Td>
                   <Td phone="hide" num quiet>
                     {ago(sender.lastSeenAt)}
