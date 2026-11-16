@@ -16,11 +16,12 @@ export interface Store {
 }
 
 /** Where the database is: a Postgres server's address, or else PGlite in `databaseDir`. */
-export type StorePaths = { databaseUrl?: string | undefined; databaseDir: string };
+export type StorePaths = { databaseUrl?: string | undefined; databaseMigrationUrl?: string | undefined; databaseDir: string };
 
 /** Open the database, migrating it first. */
 export async function openStore(paths: StorePaths): Promise<Store> {
-  return storeOn(await openDatabase(paths.databaseUrl ? { url: paths.databaseUrl } : { dir: paths.databaseDir }));
+  const { databaseUrl: url, databaseMigrationUrl: migrateWith, databaseDir: dir } = paths;
+  return storeOn(await openDatabase(url ? { url, ...(migrateWith ? { migrateWith } : {}) } : { dir }));
 }
 
 /** The store over a database that is open and migrated. */

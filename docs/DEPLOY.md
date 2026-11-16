@@ -28,6 +28,8 @@ C start
 
 With a Postgres server (`DATABASE_URL`), back the database up with the server's own tools (`pg_dump`, or the host's backups), and the home directory as above for the rest.
 
+On a Postgres server, give sift two roles: one that owns the database, as `DATABASE_MIGRATION_URL`, and a login that owns nothing (`CREATE ROLE sift LOGIN PASSWORD '…'`), as `DATABASE_URL`. sift migrates as the first and runs as the second, which cannot alter the tables or switch their row-level security off. With only `DATABASE_URL`, that role must own the database, and so could.
+
 This writes the archive as the container's user (uid 1000), so the current directory must be writable by it.
 
 What the archive is:

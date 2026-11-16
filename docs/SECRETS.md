@@ -2,7 +2,7 @@
 
 Four kinds of thing would let someone else act as you, and sift encrypts each when you give it a key:
 
-- in the home directory, the install's own: `google-client.json` (your Google OAuth client) and `dashboard-key` (signs dashboard sessions);
+- in the home directory, the install's own: `google-client.json` (your Google OAuth client) and `dashboard-key` (signs dashboard sessions, unless `SIFT_SESSION_SECRET` gives the key: a host that keeps no files between starts needs that);
 - in the database, as each person's own rows (`credentials`), theirs: a Gmail refresh token per mailbox, and their model sign-ins (API keys, a ChatGPT sign-in).
 
 A person's sign-ins are their own rows, which row-level security keeps from everyone else. The rest of the database is not encrypted.

@@ -16,20 +16,30 @@ types.setTypeParser(INT8, Number);
 types.setTypeParser(NUMERIC, Number);
 export const PARSERS = { [INT8]: Number, [NUMERIC]: Number };
 
-/** Where the database is: a Postgres server, or PGlite in a folder of the home directory. */
-export type Where = { url: string } | { dir: string };
+/**
+ * Where the database is: a Postgres server, or PGlite in a folder of the home directory. `migrateWith`:
+ * the same server as the role that owns the tables. sift migrates as it, lets the role in `url` act as
+ * sift_app, and then runs as that role, which owns nothing and so cannot change the tables or their policies.
+ */
+export type Where = { url: string; migrateWith?: string } | { dir: string };
 
 export async function openDatabase(where: Where): Promise<Driver> {
   if ('url' in where) {
-    const pool = new Pool({ connectionString: where.url });
+    const owner = new Pool({ connectionString: where.migrateWith ?? where.url });
     try {
-      refuseNewer(await latestApplied(async (text) => (await pool.query<Record<string, unknown>>(text)).rows));
-      await migratePg(overPg(pool), { migrationsFolder: MIGRATIONS });
+      refuseNewer(await latestApplied(async (text) => (await owner.query<Record<string, unknown>>(text)).rows));
+      await migratePg(overPg(owner), { migrationsFolder: MIGRATIONS });
+      if (where.migrateWith) {
+        const role = decodeURIComponent(new URL(where.url).username);
+        await owner.query(`GRANT sift_app TO "${role.replaceAll('"', '""')}"`);
+      }
     } catch (error) {
-      await pool.end();
+      await owner.end();
       throw error;
     }
-    return server(pool);
+    if (!where.migrateWith) return server(owner);
+    await owner.end();
+    return server(new Pool({ connectionString: where.url }));
   }
   const release = lock(where.dir);
   const file = new PGlite(where.dir, { parsers: PARSERS });

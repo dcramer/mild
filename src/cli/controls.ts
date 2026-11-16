@@ -69,6 +69,10 @@ export async function buildControls(config: Config, store: Store, live: { wake?:
       return { act: s.act, interval: s.interval, fewShot: s.fewShot, examplesKeepDays: s.examplesKeepDays ?? null };
     },
     saveSettings: (change) => {
+      const { environment } = loadConfig();
+      for (const [setting, value] of Object.entries(change))
+        if (value !== undefined && environment[setting as keyof typeof environment])
+          throw new Error(`${environment[setting as keyof typeof environment]} in the environment sets this; change it there.`);
       const { examplesKeepDays: _kept, ...rest } = current();
       const keepDays = change.examplesKeepDays === undefined ? current().examplesKeepDays : (change.examplesKeepDays ?? undefined);
       saveSettings(config, {

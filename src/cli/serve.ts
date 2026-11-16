@@ -10,8 +10,12 @@ import { listenAddresses, machineNames, tailscaleName } from './network.ts';
 import { paint, ui } from './ui.ts';
 import { buildSignIn } from './google-sign-in.ts';
 
-/** The secret in the dashboard's access link, created the first time it is needed. */
-function sessionSecret(config: Config): string {
+/**
+ * What signs dashboard sessions: `SIFT_SESSION_SECRET`, for a host that keeps no files between starts;
+ * otherwise made the first time it is needed and kept in the home directory.
+ */
+function sessionSecret(config: Config, env: NodeJS.ProcessEnv = process.env): string {
+  if (env['SIFT_SESSION_SECRET']) return env['SIFT_SESSION_SECRET'];
   const stored = readSecret(config.dashboardKeyPath, config.keys);
   if (stored !== null) return stored.trim();
   const key = randomBytes(32).toString('base64url');

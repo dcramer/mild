@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { parse } from 'smol-toml';
 import { type Keyring, loadKeyring } from './secrets.ts';
 
-/** What the user chooses, kept in `sift.toml`. From the environment so far: only the encryption key and `DATABASE_URL`. */
+/** What the user chooses: in `sift.toml`, or each in its environment variable (`ENVIRONMENT`), which wins. */
 export interface Settings {
   /** false: record what sift would do. true: carry decisions out in Gmail. */
   act: boolean;
@@ -32,6 +32,38 @@ export interface Settings {
   examplesKeepDays?: number;
   /** A Postgres server's address. Unset: PGlite, in the home directory. */
   databaseUrl?: string;
+  /**
+   * The same server as the role that owns the tables, for migrating them: sift migrates with it and
+   * then runs as `databaseUrl`, which then needs to own nothing. Unset: `databaseUrl` migrates too.
+   */
+  databaseMigrationUrl?: string;
+}
+
+/**
+ * Each setting's variable, where it goes in `sift.toml`, and how its text is read. Hosts that run sift
+ * for you (Vercel, Cloudflare) configure it only this way.
+ */
+export const ENVIRONMENT = {
+  SIFT_ACT: { setting: 'act', key: ['act'], as: 'boolean' },
+  SIFT_HEURISTICS: { setting: 'heuristics', key: ['heuristics'], as: 'boolean' },
+  SIFT_INTERVAL: { setting: 'interval', key: ['interval'], as: 'number' },
+  SIFT_DASHBOARD_PORT: { setting: 'dashboardPort', key: ['dashboard', 'port'], as: 'number' },
+  SIFT_DASHBOARD_HOST: { setting: 'dashboardHost', key: ['dashboard', 'host'], as: 'string' },
+  SIFT_DASHBOARD_ALLOW: { setting: 'dashboardAllow', key: ['dashboard', 'allow'], as: 'list' },
+  SIFT_RETENTION_DAYS: { setting: 'retentionDays', key: ['retention', 'days'], as: 'number' },
+  SIFT_FEW_SHOT: { setting: 'fewShot', key: ['examples', 'few_shot'], as: 'boolean' },
+  SIFT_EXAMPLES_KEEP_DAYS: { setting: 'examplesKeepDays', key: ['examples', 'keep_days'], as: 'number' },
+  DATABASE_URL: { setting: 'databaseUrl', key: ['database', 'url'], as: 'string' },
+  DATABASE_MIGRATION_URL: { setting: 'databaseMigrationUrl', key: ['database', 'migration_url'], as: 'string' },
+} as const satisfies Record<string, { setting: keyof Settings; key: readonly string[]; as: 'boolean' | 'number' | 'string' | 'list' }>;
+type Variable = keyof typeof ENVIRONMENT;
+
+/** Text that is not what its setting takes is left as text, so the setting's own check refuses it by name. */
+function fromText(text: string, as: 'boolean' | 'number' | 'string' | 'list'): unknown {
+  if (as === 'boolean') return text === 'true' ? true : text === 'false' ? false : text;
+  if (as === 'number') return text.trim() !== '' && Number.isFinite(Number(text)) ? Number(text) : text;
+  if (as === 'list') return text.split(',').map((item) => item.trim());
+  return text;
 }
 
 /** Shorter, and sync's 7-day recovery search could bring back a message already forgotten and decide it twice. */
@@ -51,6 +83,8 @@ export interface Config {
   databaseDir: string;
   /** A Postgres server to use instead: `DATABASE_URL`, or `database.url` in `sift.toml`. */
   databaseUrl: string | undefined;
+  /** The address to migrate it with, when that is another role's. */
+  databaseMigrationUrl: string | undefined;
   /** The user's own Google OAuth client, as downloaded from Google Cloud Console. */
   googleClientPath: string;
   deviceIdPath: string;
@@ -60,7 +94,10 @@ export interface Config {
   dashboardKeyPath: string;
   /** From `SIFT_KEY` and `SIFT_OLD_KEYS`: what the credentials above are encrypted with. */
   keys: Keyring;
+  /** In effect: `sift.toml` with the environment over it. */
   settings: Settings;
+  /** Which settings the environment gives, by the variable that gives each. The dashboard cannot change those. */
+  environment: Partial<Record<keyof Settings, Variable>>;
 }
 
 /**
@@ -76,18 +113,29 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const home = resolveHome(env);
   mkdirSync(home, { recursive: true, mode: 0o700 });
   const settingsPath = join(home, 'sift.toml');
-  const settings = existsSync(settingsPath) ? parseSettings(readFileSync(settingsPath, 'utf8'), settingsPath) : { ...DEFAULT_SETTINGS };
+  const file = existsSync(settingsPath) ? readFileSync(settingsPath, 'utf8') : '';
+  const environment: Config['environment'] = {};
+  const given: [string[], unknown][] = [];
+  for (const [variable, { setting, key, as }] of Object.entries(ENVIRONMENT) as [Variable, (typeof ENVIRONMENT)[Variable]][]) {
+    const text = env[variable];
+    if (text === undefined || text === '') continue;
+    environment[setting] = variable;
+    given.push([[...key], fromText(text, as)]);
+  }
+  const settings = parseSettings(file, settingsPath, given);
   return {
     home,
     settingsPath,
     databaseDir: join(home, 'database'),
-    databaseUrl: env['DATABASE_URL'] || settings.databaseUrl,
+    databaseUrl: settings.databaseUrl,
+    databaseMigrationUrl: settings.databaseMigrationUrl,
     googleClientPath: join(home, 'google-client.json'),
     deviceIdPath: join(home, 'device-id'),
     setupStatePath: join(home, 'setup.json'),
     dashboardKeyPath: join(home, 'dashboard-key'),
     keys: loadKeyring(env),
     settings,
+    environment,
   };
 }
 
@@ -114,15 +162,31 @@ export function secretPaths(config: Config): string[] {
   return [config.googleClientPath, config.dashboardKeyPath];
 }
 
-/** Parse `sift.toml`. Unknown keys and wrong types are errors, so a typo is not silently ignored. */
-export function parseSettings(text: string, path = 'sift.toml'): Settings {
+/**
+ * Parse `sift.toml`, with `environment` (each a `sift.toml` key and its value) over it. Unknown keys and
+ * wrong types are errors, so a typo is not silently ignored; an error names the variable when the value
+ * came from one.
+ */
+export function parseSettings(text: string, path = 'sift.toml', environment: readonly [string[], unknown][] = []): Settings {
   let raw: Record<string, unknown>;
   try {
     raw = parse(text);
   } catch (error) {
     throw new Error(`${path} is not valid TOML: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`, { cause: error });
   }
-  const bad = (key: string, expected: string) => new Error(`${path}: ${key} must be ${expected}.`);
+  const fromEnvironment = new Set<string>();
+  for (const [key, value] of environment) {
+    let table = raw;
+    for (const part of key.slice(0, -1)) {
+      const inner = table[part];
+      table = (table[part] = typeof inner === 'object' && inner !== null && !Array.isArray(inner) ? inner : {}) as Record<string, unknown>;
+    }
+    table[key.at(-1)!] = value;
+    fromEnvironment.add(key.join('.'));
+  }
+  const variable = (key: string) => Object.entries(ENVIRONMENT).find(([, v]) => v.key.join('.') === key)?.[0];
+  const bad = (key: string, expected: string) =>
+    new Error(fromEnvironment.has(key) ? `${variable(key)} must be ${expected}.` : `${path}: ${key} must be ${expected}.`);
   const settings: Settings = { ...DEFAULT_SETTINGS };
 
   for (const [key, value] of Object.entries(raw)) {
@@ -155,9 +219,10 @@ export function parseSettings(text: string, path = 'sift.toml'): Settings {
     } else if (key === 'database') {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) throw bad('database', 'a table');
       for (const [sub, url] of Object.entries(value as Record<string, unknown>)) {
-        if (sub !== 'url') throw new Error(`${path}: unknown setting database.${sub}.`);
-        if (typeof url !== 'string' || !/^postgres(ql)?:\/\//.test(url)) throw bad('database.url', 'an address starting postgres://');
-        settings.databaseUrl = url;
+        if (sub !== 'url' && sub !== 'migration_url') throw new Error(`${path}: unknown setting database.${sub}.`);
+        if (typeof url !== 'string' || !/^postgres(ql)?:\/\//.test(url)) throw bad(`database.${sub}`, 'an address starting postgres://');
+        if (sub === 'url') settings.databaseUrl = url;
+        else settings.databaseMigrationUrl = url;
       }
     } else if (key === 'retention') {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) throw bad('retention', 'a table');
@@ -209,8 +274,8 @@ ${settings.dashboardHost ? `host = ${JSON.stringify(settings.dashboardHost)}` : 
 ${settings.dashboardAllow ? `allow = ${JSON.stringify(settings.dashboardAllow)}` : '# allow = ["you@example.com"]'}
 
 # A Postgres server to keep everything in. Unset: sift keeps it in this directory itself (PGlite).
-# DATABASE_URL in the environment wins over this.
-${settings.databaseUrl ? `[database]\nurl = ${JSON.stringify(settings.databaseUrl)}\n` : '# [database]\n# url = "postgres://user:password@host/sift"\n'}
+# migration_url: the role that owns the tables, if sift should run as one that owns nothing.
+${settings.databaseUrl ? `[database]\nurl = ${JSON.stringify(settings.databaseUrl)}\n${settings.databaseMigrationUrl ? `migration_url = ${JSON.stringify(settings.databaseMigrationUrl)}\n` : ''}` : '# [database]\n# url = "postgres://user:password@host/sift"\n'}
 [retention]
 # Days to keep the record of a message, its decisions and changes, counted from the last thing that happened
 # to it. After that the change can no longer be undone from sift. Suggestions still waiting on you, mail you
@@ -228,8 +293,18 @@ ${settings.examplesKeepDays ? `keep_days = ${settings.examplesKeepDays}` : '# ke
 `;
 }
 
+/**
+ * Write `settings` to `sift.toml`. What the environment gives stays as the file had it, so a variable's
+ * value (a database password, say) is never copied into the file.
+ */
 export function saveSettings(config: Config, settings: Settings): void {
-  writeFileSync(config.settingsPath, renderSettings(settings), { mode: 0o600 });
+  const file = existsSync(config.settingsPath) ? parseSettings(readFileSync(config.settingsPath, 'utf8'), config.settingsPath) : { ...DEFAULT_SETTINGS };
+  const kept: Record<string, unknown> = { ...settings };
+  for (const setting of Object.keys(config.environment) as (keyof Settings)[]) {
+    if (file[setting] === undefined) delete kept[setting];
+    else kept[setting] = file[setting];
+  }
+  writeFileSync(config.settingsPath, renderSettings(kept as unknown as Settings), { mode: 0o600 });
   chmodSync(config.settingsPath, 0o600);
   config.settings = settings;
 }

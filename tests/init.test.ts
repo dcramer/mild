@@ -1,7 +1,9 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
+import { buildControls } from '../src/cli/controls.ts';
+import { freshStore } from './fixtures.ts';
 import { type InitDeps, type SetupState, runInit } from '../src/cli/init.ts';
 import { dashboardUrls, listenAddresses, localAddresses, machineNames, resolveHere } from '../src/cli/network.ts';
 import type { Ui } from '../src/cli/ui.ts';
@@ -422,5 +424,60 @@ describe('network', () => {
     expect(dashboardUrls(DEFAULT_SETTINGS)).toEqual(['http://localhost:8787']);
     expect(dashboardUrls({ ...DEFAULT_SETTINGS, dashboardHost: '192.0.2.9' }, 9000)).toEqual(['http://192.0.2.9:9000']);
     for (const url of dashboardUrls({ ...DEFAULT_SETTINGS, dashboardHost: 'all' })) expect(url).toMatch(/^http:\/\/[^/]+:8787$/);
+  });
+});
+
+describe('settings from the environment', () => {
+  const DATABASE = {
+    DATABASE_URL: 'postgres://app:app-secret@db.example.com/sift',
+    DATABASE_MIGRATION_URL: 'postgres://owner:owner-secret@db.example.com/sift',
+  };
+
+  it('wins over sift.toml, and says which variable gave each', () => {
+    const home = freshHome();
+    writeFileSync(join(home, 'sift.toml'), 'act = false\ninterval = 60\n[dashboard]\nport = 9000\n');
+    const config = loadConfig({
+      SIFT_HOME: home,
+      SIFT_ACT: 'true',
+      SIFT_INTERVAL: '300',
+      SIFT_DASHBOARD_ALLOW: 'Me@example.org, work@example.com',
+      ...DATABASE,
+    });
+    expect(config.settings).toMatchObject({ act: true, interval: 300, dashboardPort: 9000, dashboardAllow: ['me@example.org', 'work@example.com'] });
+    expect([config.databaseUrl, config.databaseMigrationUrl]).toEqual([DATABASE.DATABASE_URL, DATABASE.DATABASE_MIGRATION_URL]);
+    expect(config.environment).toEqual({
+      act: 'SIFT_ACT',
+      interval: 'SIFT_INTERVAL',
+      dashboardAllow: 'SIFT_DASHBOARD_ALLOW',
+      databaseUrl: 'DATABASE_URL',
+      databaseMigrationUrl: 'DATABASE_MIGRATION_URL',
+    });
+  });
+
+  it('refuses a value by the variable it came from', () => {
+    const home = freshHome();
+    expect(() => loadConfig({ SIFT_HOME: home, SIFT_INTERVAL: 'soon' })).toThrow('SIFT_INTERVAL must be a number of seconds, at least 5.');
+    expect(() => loadConfig({ SIFT_HOME: home, SIFT_ACT: 'yes' })).toThrow('SIFT_ACT must be true or false.');
+    expect(() => loadConfig({ SIFT_HOME: home, DATABASE_URL: 'mysql://x' })).toThrow('DATABASE_URL must be an address starting postgres://');
+  });
+
+  it('never copies a variable into sift.toml', () => {
+    const home = freshHome();
+    const config = loadConfig({ SIFT_HOME: home, SIFT_ACT: 'true', ...DATABASE });
+    saveSettings(config, { ...config.settings, interval: 120 });
+    const written = parseSettings(readFileSync(config.settingsPath, 'utf8'));
+    expect(written).toEqual({ ...DEFAULT_SETTINGS, interval: 120 });
+    expect(readFileSync(config.settingsPath, 'utf8')).not.toContain('secret');
+  });
+
+  it('is not changed from the dashboard', async () => {
+    const home = freshHome();
+    vi.stubEnv('SIFT_HOME', home);
+    vi.stubEnv('SIFT_ACT', 'true');
+    onTestFinished(() => void vi.unstubAllEnvs());
+    const controls = await buildControls(loadConfig(), await freshStore(), { activity: { sorting: false, lastPassAt: null, problems: [], expired: [] } });
+    expect(() => controls.saveSettings({ act: false })).toThrow('SIFT_ACT in the environment sets this; change it there.');
+    controls.saveSettings({ interval: 120 });
+    expect(controls.settings()).toMatchObject({ act: true, interval: 120 });
   });
 });
