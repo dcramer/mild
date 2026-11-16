@@ -149,7 +149,7 @@ export const api = {
   models: (signal: AbortSignal) => get<Models>('/api/models', {}, signal),
   changes: (signal: AbortSignal) => get<{ changes: ChangeRow[] }>('/api/changes', {}, signal),
   /** The reader's own: true, sift carries out its decisions in their Gmail. */
-  setAct: (act: boolean) => post('/api/act', { act }),
+  setActive: (active: boolean) => post('/api/active', { active }),
   unjudged: (signal: AbortSignal) => get<{ rows: UnjudgedRow[] }>('/api/unjudged', {}, signal),
   /** The reader's own model, `provider/model-id`, or null for none. */
   setModel: (model: string | null) => post('/api/model', { model }),
@@ -180,7 +180,7 @@ export const api = {
   removeRule: (id: string) => post('/api/rules/remove', { id }),
   resolveProposal: (id: number, accept: boolean) => post('/api/proposals', { id, accept }),
   undo: (id: number) => post<{ message: string }>('/api/undo', { id }),
-  /** Try a failed change again. `waiting`: it is sift's own, and waits for sift to be acting. */
+  /** Try a failed change again. `waiting`: it is sift's own, and waits for sift to be on. */
   retry: (id: number) => post<{ retried: boolean; waiting: boolean }>('/api/decisions/retry', { id }),
   requeue: (accountId: string, messageId: string) => post<{ ok: true }>('/api/unjudged/retry', { accountId, messageId }),
   backfill: (days: number) => post<{ added: number }>('/api/backfill', { days }),

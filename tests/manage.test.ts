@@ -12,7 +12,7 @@ import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.
 import { MAX_LABELS, listLabels } from '../src/store/labels.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { EXAMPLE_KEEP_DAYS } from '../src/store/examples.ts';
-import { preferences, setAct } from '../src/store/preferences.ts';
+import { preferences, setActive } from '../src/store/preferences.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { FakeMailbox, facts, storeExample } from './helpers.ts';
 import { builtAssets, raw, startDashboard, onePerson } from './fixtures.ts';
@@ -68,7 +68,7 @@ describe('managing sift from the dashboard', () => {
     const { call } = await start();
     const { body } = await call('GET', '/api/manage');
     expect(body).toMatchObject({
-      act: false,
+      active: false,
       model: { chosen: null, signedIn: ['openai-codex'], pending: null },
       activity: { running: true, expired: [ACCOUNT] },
       accounts: [{ id: ACCOUNT }],
@@ -79,14 +79,14 @@ describe('managing sift from the dashboard', () => {
     expect((await call('GET', '/api/models')).body).toEqual({ models: ['p/small', 'p/large'], recommended: { p: 'p/small' } });
   });
 
-  it("switches the person's own mail between observing and acting, and starts a pass in the new mode", async () => {
+  it("turns sift on and off for the person's own mail, and starts a pass each time", async () => {
     const { call } = await start();
-    expect((await call('POST', '/api/act', { act: true })).status).toBe(200);
-    expect((await preferences(db)).act).toBe(true);
-    expect((await call('GET', '/api/manage')).body).toMatchObject({ act: true });
-    for (const bad of [{}, { act: 'yes' }, { act: true, interval: 60 }]) expect((await call('POST', '/api/act', bad)).status).toBe(400);
-    expect((await call('POST', '/api/act', { act: false })).status).toBe(200);
-    expect((await preferences(db)).act).toBe(false);
+    expect((await call('POST', '/api/active', { active: true })).status).toBe(200);
+    expect((await preferences(db)).active).toBe(true);
+    expect((await call('GET', '/api/manage')).body).toMatchObject({ active: true });
+    for (const bad of [{}, { active: 'yes' }, { active: true, interval: 60 }]) expect((await call('POST', '/api/active', bad)).status).toBe(400);
+    expect((await call('POST', '/api/active', { active: false })).status).toBe(200);
+    expect((await preferences(db)).active).toBe(false);
     expect(calls).toEqual(['check', 'check']);
   });
 
@@ -321,7 +321,7 @@ describe('managing sift from the dashboard', () => {
   it('refuses every write that did not come from its own page', async () => {
     const { call } = await start();
     for (const path of [
-      '/api/act',
+      '/api/active',
       '/api/labels',
       '/api/labels/add',
       '/api/rules',
@@ -332,15 +332,15 @@ describe('managing sift from the dashboard', () => {
       '/api/check',
       '/api/feedback',
     ]) {
-      expect((await call('POST', path, { act: true }, { origin: 'https://evil.example' })).status).toBe(403);
-      expect((await call('POST', path, { act: true }, { 'x-sift': '' })).status).toBe(403);
+      expect((await call('POST', path, { active: true }, { origin: 'https://evil.example' })).status).toBe(403);
+      expect((await call('POST', path, { active: true }, { 'x-sift': '' })).status).toBe(403);
     }
     expect((await call('POST', '/api/nope', {})).status).toBe(405);
-    expect((await preferences(db)).act).toBe(false);
+    expect((await preferences(db)).active).toBe(false);
     expect(calls).toEqual([]);
   });
 
-  it('writes a rule to Gmail as a filter only while acting, and removes the filter with the rule', async () => {
+  it('writes a rule to Gmail as a filter only while sift is on, and removes the filter with the rule', async () => {
     const { call } = await start();
     const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
     const spam = await addRule(db, ACCOUNT, { match: { from: 'junk@example.com' }, labelId: 'junk' }, 'user');
@@ -348,19 +348,19 @@ describe('managing sift from the dashboard', () => {
     expect(listed.find((r) => r.id === id)?.filter).toMatchObject({ state: 'none', possible: true, reason: null });
     expect(listed.find((r) => r.id === spam)?.filter).toMatchObject({ state: 'none', possible: false, reason: 'Gmail filters cannot mark mail as spam.' });
 
-    const observing = await call('POST', '/api/rules/filter', { id, on: true });
-    expect(observing.status).toBe(409);
-    expect(observing.body['error']).toMatch(/sift is off/);
+    const off = await call('POST', '/api/rules/filter', { id, on: true });
+    expect(off.status).toBe(409);
+    expect(off.body['error']).toMatch(/sift is off/);
     expect(calls).toEqual([]);
 
-    await setAct(db, true);
+    await setActive(db, true);
     const written = await call('POST', '/api/rules/filter', { id, on: true });
     expect(written.body).toMatchObject({ filterId: 'f1', filter: { state: 'active', possible: true } });
     expect((await call('POST', '/api/rules/filter', { id })).status).toBe(400);
     expect((await call('POST', '/api/rules/filter', { id: 7, on: true })).status).toBe(400);
 
-    // Taking the filter out does not need sift to be acting.
-    await setAct(db, false);
+    // Taking the filter out does not need sift to be on.
+    await setActive(db, false);
     expect((await call('POST', '/api/rules/remove', { id })).status).toBe(200);
     expect(calls).toEqual([`filter ${id} on`, `filter ${id} off`]);
     expect((await listRules(db, ACCOUNT)).map((r) => r.id)).toEqual([spam]);
@@ -420,10 +420,10 @@ describe('signing in with Google', () => {
     // What installs the page as an app holds no data, and a browser fetches the manifest without cookies.
     for (const path of ['/sw.js', '/manifest.webmanifest', '/rules', '/system']) expect((await call('GET', path)).status).toBe(200);
     for (const path of ['/api/summary', '/api/manage', '/api/suggestions', '/api/senders']) expect((await call('GET', path)).status).toBe(401);
-    expect((await call('POST', '/api/act', { act: true })).status).toBe(401);
+    expect((await call('POST', '/api/active', { active: true })).status).toBe(401);
     expect((await call('GET', '/api/summary', undefined, { cookie: 'sift_session=forged.signature' })).status).toBe(401);
     expect((await call('GET', '/api/session')).body).toMatchObject({ required: true, email: null, canSignIn: true, reason: null });
-    expect((await preferences(db)).act).toBe(false);
+    expect((await preferences(db)).active).toBe(false);
   });
 
   it('signs in through Google and returns to the address the browser used', async () => {
@@ -441,7 +441,7 @@ describe('signing in with Google', () => {
     const cookie = { cookie: cookieFrom(back.headers) };
     expect((await call('GET', '/api/session', undefined, cookie)).body).toMatchObject({ email: ACCOUNT });
     expect((await call('GET', '/api/manage', undefined, cookie)).status).toBe(200);
-    expect((await call('POST', '/api/act', { act: true }, cookie)).status).toBe(200);
+    expect((await call('POST', '/api/active', { active: true }, cookie)).status).toBe(200);
 
     // The same state cannot be used twice, and an unknown one is refused.
     expect(String((await call('GET', `/auth/callback?state=${stateFrom(login.headers)}&code=abc`)).headers['location'])).toContain('expired');
@@ -575,7 +575,7 @@ describe('older mail', () => {
     expect(page).toBe(2);
   });
 
-  it('is only ever suggested about, even while sift acts on new mail', async () => {
+  it('is only ever suggested about, even while sift is on', async () => {
     await backfill(db, { searchInbox: async () => ({ ids: ['old'] }), getMetadata: async (id) => gmailMessage(id) }, ACCOUNT, 7);
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'new' })], '2');
     const mailbox = new FakeMailbox();

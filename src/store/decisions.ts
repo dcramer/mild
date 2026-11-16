@@ -62,7 +62,7 @@ export interface UnsettledDecision {
 /**
  * `act` decisions that were recorded but not yet carried out (an answer waiting for the next pass, a crash,
  * a provider error), oldest first. `byUserOnly` keeps only the user's own answers, which are carried out
- * even while sift only observes.
+ * even while sift is off.
  */
 export async function listUnsettledDecisions(db: Sql, accountId: string, options: { byUserOnly?: boolean } = {}): Promise<UnsettledDecision[]> {
   const rows = await db

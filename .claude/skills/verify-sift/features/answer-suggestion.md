@@ -1,6 +1,6 @@
 # Answer a suggestion
 
-A message sift could not place, or placed wrongly, waits in Suggestions. The user opens it, chooses what it is, and presses the check. sift records the label, carries out that label's action on the message on the next pass (even while only observing), keeps the message as an example, makes no rule, and moves on to the next one.
+A message sift could not place, or placed wrongly, waits in Suggestions. The user opens it, chooses what it is, and presses the check. sift records the label, carries out that label's action on the message on the next pass (even while sift is off), keeps the message as an example, makes no rule, and moves on to the next one.
 
 ## Sub-features
 

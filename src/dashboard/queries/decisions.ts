@@ -94,8 +94,8 @@ const STATUS_WHERE: Record<string, SQL | undefined> = {
 
 /**
  * Try a failed or unconfirmed change again: the decision goes back to waiting, and the next pass carries it
- * out through the executor as it would any other. The user's own answer is retried even while sift only
- * observes; anything else waits for sift to be acting. False if there was nothing to retry.
+ * out through the executor as it would any other. The user's own answer is retried even while sift is
+ * off; anything else waits for sift to be on. False if there was nothing to retry.
  */
 export async function retryDecision(db: Sql, scope: Scope, id: number): Promise<{ retried: boolean; waiting: boolean }> {
   const [row] = await db

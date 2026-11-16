@@ -5,43 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1794806864363,
+      "when": 1794811087106,
       "tag": "0000_init",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1794806865429,
+      "when": 1794811088457,
       "tag": "0001_sift_app",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1794808624418,
-      "tag": "0002_drop_guidelines",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1794809970860,
-      "tag": "0003_act_per_person",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1794810588044,
-      "tag": "0004_model_runs",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1794810592344,
-      "tag": "0005_force_model_runs",
       "breakpoints": true
     }
   ]

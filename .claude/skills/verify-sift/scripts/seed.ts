@@ -4,7 +4,7 @@
  *
  *   node .claude/skills/verify-sift/scripts/seed.ts <home>
  *
- * The mail goes through the real daemon pass (`runEveryone`, observing), so decisions, labels, suggestion
+ * The mail goes through the real daemon pass (`runEveryone`, with sift off), so decisions, labels, suggestion
  * bodies and proposals are what sift itself would record. Only Gmail is faked, at the `GmailApi` and
  * `Mailbox` ports. Prints one line: the `sift_session` cookie value for the connected account.
  */
@@ -116,7 +116,7 @@ for (let pass = 0; pass < 3; pass++) {
   const [result] = await runEveryone(store, { model: standIn, connect: () => ({ api, mailbox }), log: () => {} });
   if (result?.error) throw new Error(`seed pass failed: ${result.error}`);
 }
-if (mailbox.modifyCalls > 0) throw new Error('seed pass changed the fake mailbox while observing');
+if (mailbox.modifyCalls > 0) throw new Error('seed pass changed the fake mailbox while sift was off');
 // A model in use, so the dashboard is not behind its connect-a-model wall. The key is made up, and this
 // instance runs no passes, so nothing ever calls Anthropic with it.
 await saveApiKey(await credentials(db, 'model', config.keys), 'anthropic', 'sk-ant-synthetic-seed');

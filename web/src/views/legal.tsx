@@ -141,7 +141,7 @@ export function TermsView() {
         <Clause title="Your part">
           <ul>
             <li>Sign in only with a Gmail account that is yours, or that you are allowed to manage.</li>
-            <li>Check what sift suggests before letting it act. A model can be wrong, and a rule does what it says even when that is not what you meant.</li>
+            <li>Check what sift suggests before turning it on. A model can be wrong, and a rule does what it says even when that is not what you meant.</li>
             <li>Don’t use sift to break the law, to reach anyone else’s mail, or to interfere with this copy of sift or the machine it runs on.</li>
           </ul>
         </Clause>

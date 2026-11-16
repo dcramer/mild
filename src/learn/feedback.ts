@@ -31,7 +31,7 @@ import { type RuleSays, setRule } from '../store/rules.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
 import { type DecidedDisposition, type Decision, type Disposition, type StageName, type SubscriptionAction, labelled } from '../triage/types.ts';
 
-/** A decision sift made while only observing, that the user has not yet confirmed or corrected. */
+/** A decision sift only suggested, that the user has not yet confirmed or corrected. */
 export interface Suggestion {
   decisionId: number;
   accountId: string;
@@ -79,8 +79,8 @@ const toSuggestion = ({ subscription, ...r }: Omit<Suggestion, 'unsubscribe'> & 
 });
 
 /**
- * Suggestions waiting on the user, newest first: the current decision for a message, made while
- * observing, with no answer yet. Decisions that only repeat what the user already told sift (rules they
+ * Suggestions waiting on the user, newest first: the current decision for a message, recorded as
+ * a suggestion, with no answer yet. Decisions that only repeat what the user already told sift (rules they
  * wrote or made by correcting it) are not suggestions and are left out; ones from a rule sift learned are.
  */
 export async function pendingSuggestions(
@@ -166,13 +166,13 @@ export interface FeedbackInput {
    * made, or mail it kept, is corrected. A corrected message gets a new decision in `mode`.
    */
   messageId?: string;
-  /** Whether sift is acting, which decides whether the corrected message's new decision is to be carried out. */
+  /** The corrected message's new decision: `act` (sift is on) to carry it out, `observe` to only record it. */
   mode?: 'act' | 'observe';
   /**
    * The user pressed this in the dashboard: each message it settles gets the answer as a decision of its
-   * own, carried out in Gmail on the next pass even while sift only observes.
+   * own, carried out in Gmail on the next pass even while sift is off.
    */
-  act?: boolean;
+  carryOut?: boolean;
 }
 
 export interface FeedbackResult {
@@ -311,17 +311,17 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
         reason: label ? `you said this is ${label.name}` : `you said to ${DO[wanted]}`,
       };
     };
-    if (input.act)
+    if (input.carryOut)
       for (const target of targets) await recordDecision(tx, input.accountId, target.messageId, answer(target), { mode: 'act', byUser: true, now });
     // The corrected message gets a decision of its own, so the log shows what the user said and, when
-    // sift is acting, the mailbox is brought into line with it.
+    // it is carried out, the mailbox is brought into line with it.
     if (given && changes)
       await recordDecision(
         tx,
         input.accountId,
         given.messageId,
         answer(given),
-        input.act ? { mode: 'act', byUser: true, now } : { mode: input.mode ?? 'observe', now },
+        input.carryOut ? { mode: 'act', byUser: true, now } : { mode: input.mode ?? 'observe', now },
       );
   });
   const unsubscribed = (fromLabel: boolean) => ((fromLabel && label?.unsubscribe) || input.unsubscribe ? ', and unsubscribed from' : '');
@@ -330,7 +330,7 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
   return {
     reviewed: targets.length + (given ? 1 : 0),
     corrected: given && changes ? given.messageId : null,
-    carrying: input.act ? targets.length + (given && changes ? 1 : 0) : 0,
+    carrying: input.carryOut ? targets.length + (given && changes ? 1 : 0) : 0,
     proposed,
     taught: !says
       ? null

@@ -34,11 +34,11 @@ const DAYS = [
   ['30', 'The last month'],
 ] as const;
 
-/** Whether sift acts on the reader's own mail: what they come to Settings for first. */
+/** Whether sift is on for the reader's own mail: what they come to Settings for first. */
 function Active({ state, reload }: { state: ManageState; reload: () => void }) {
   const { busy, error, run } = useAction();
-  const { act, activity } = state;
-  const save = (act: boolean) => run(() => api.setAct(act), reload);
+  const { active, activity } = state;
+  const save = (active: boolean) => run(() => api.setActive(active), reload);
 
   return (
     <SettingsGroup title="Active" note="Whether sift changes your Gmail.">
@@ -51,9 +51,9 @@ function Active({ state, reload }: { state: ManageState; reload: () => void }) {
       ) : null}
       <Sheet>
         <SettingRow
-          title={act ? 'On' : 'Off'}
+          title={active ? 'On' : 'Off'}
           note={
-            act ? (
+            active ? (
               <>
                 sift carries out its decisions in Gmail as each label says. Each change can be undone from <TextLink href="/activity">Activity</TextLink>.
               </>
@@ -62,7 +62,7 @@ function Active({ state, reload }: { state: ManageState; reload: () => void }) {
             )
           }
         >
-          {act ? (
+          {active ? (
             <Button busy={busy} onClick={() => save(false)}>
               Turn off
             </Button>

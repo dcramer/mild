@@ -105,17 +105,17 @@ export interface FilterCheck {
   gone: number;
   /** Filters the user edited in Gmail. sift leaves them as they are. */
   changed: number;
-  /** Filters that no longer did what their rule says. Replaced or removed when acting, only marked otherwise. */
+  /** Filters that no longer did what their rule says. Replaced or removed when fixing, only marked otherwise. */
   outdated: number;
 }
 
 /**
  * Compare the filters sift wrote with what Gmail holds now, and record on each rule what was found.
- * A filter whose rule has since changed would keep doing what the rule used to say, so when `act` is
+ * A filter whose rule has since changed would keep doing what the rule used to say, so when `fix` is
  * set it is replaced, or removed if the rule can no longer be a filter. Counts are of what changed
  * since the last check. Null when the account has no such rules, in which case Gmail is not asked.
  */
-export async function checkRuleFilters(deps: ActionDeps, accountId: string, act: boolean): Promise<FilterCheck | null> {
+export async function checkRuleFilters(deps: ActionDeps, accountId: string, fix: boolean): Promise<FilterCheck | null> {
   const rows = await listRuleFilters(deps.db, accountId);
   if (rows.length === 0) return null;
   const existing = await deps.mailbox.listFilters();
@@ -141,7 +141,7 @@ export async function checkRuleFilters(deps: ActionDeps, accountId: string, act:
       continue;
     }
     if (row.state !== 'outdated') check.outdated++;
-    if (!act) await setRuleFilter(deps.db, row.ruleId, { ...row, state: 'outdated' }, clock(deps));
+    if (!fix) await setRuleFilter(deps.db, row.ruleId, { ...row, state: 'outdated' }, clock(deps));
     else if (verdict?.possible) await writeRuleFilter(deps, row.ruleId);
     else {
       await removeRuleFilter(deps, row.ruleId);

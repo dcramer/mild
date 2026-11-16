@@ -18,7 +18,7 @@ let serial: number;
 
 const MARKETING = { disposition: 'archive', labelId: 'marketing', gmailLabel: 'sift/marketing', subscription: 'unsubscribe' } as const;
 
-/** A message from `address` with the decision sift made for it while observing. Returns the message id. */
+/** A message from `address` with the decision sift suggested for it. Returns the message id. */
 async function decided(address: string, decision: Partial<Decision> = {}, at = ++serial): Promise<string> {
   const id = `m${++serial}`;
   await recordSync(

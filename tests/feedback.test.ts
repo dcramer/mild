@@ -23,7 +23,7 @@ let db: Sql;
 let store: Store;
 let serial = 0;
 
-/** Record a message from `address` and what sift would do with it, while observing. */
+/** Record a message from `address` and what sift would do with it, as a suggestion. */
 async function suggest(address: string, disposition: Disposition, extra: Partial<Decision> = {}): Promise<number> {
   const id = `m${++serial}`;
   await recordSync(
@@ -54,7 +54,7 @@ const ruleFor = async (address: string) =>
 const NEWS = { labelId: 'newsletter', gmailLabel: 'sift/newsletters' } as const;
 
 describe('suggestions', () => {
-  it('are the current decision for each message made while observing, newest first', async () => {
+  it('are the current decision for each message recorded as a suggestion, newest first', async () => {
     await suggest('news@example.com', 'archive', NEWS);
     const second = await suggest('news@example.com', 'archive', NEWS);
     await recordDecision(
@@ -246,13 +246,17 @@ describe('teaching', () => {
 });
 
 describe('an answer pressed in the dashboard', () => {
-  it('is carried out on its message even while sift only observes, and makes no rule', async () => {
+  it('is carried out on its message even while sift is off, and makes no rule', async () => {
     const decisionId = await suggest('news@example.com', 'archive', NEWS);
-    // sift's own decision, left over from when it was acting: observing must still leave it alone.
+    // sift's own decision, left over from when it was on: while off it must still be left alone.
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'left', from: { address: 'other@example.com', domain: 'example.com' } })], '3');
     await recordDecision(db, ACCOUNT, 'left', { disposition: 'archive', subscription: 'preserve', stage: 'agent', reason: 'looks like it' }, { mode: 'act' });
 
-    const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'once', decisionId, act: true }, 50);
+    const result = await applyFeedback(
+      db,
+      { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'once', decisionId, carryOut: true },
+      50,
+    );
     expect(result).toMatchObject({ reviewed: 1, carrying: 1, taught: null, proposed: false });
     expect(await ruleFor('news@example.com')).toEqual([]);
 
@@ -274,7 +278,9 @@ describe('an answer pressed in the dashboard', () => {
     for (let i = 0; i < 3; i++) answers.push(await suggest('news@example.com', 'archive', NEWS));
     const said = [];
     for (const [i, decisionId] of answers.entries())
-      said.push(await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'once', decisionId, act: true }, 50 + i));
+      said.push(
+        await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'once', decisionId, carryOut: true }, 50 + i),
+      );
     expect(said.map((r) => r.proposed)).toEqual([false, false, true]);
     expect(await ruleFor('news@example.com')).toEqual([]);
     expect(await listProposals(db, ACCOUNT)).toMatchObject([{ kind: 'rule', match: { from: 'news@example.com' }, labelId: 'newsletter', agreed: 3 }]);
@@ -386,7 +392,7 @@ describe('correcting a decision that is not waiting', () => {
       taught: null,
     });
     expect((await decisionsFor(id)).map((d) => (d as { label_id: string }).label_id)).toEqual(['marketing', 'personal', 'newsletter']);
-    // While only observing, the new decision is a record, not something to carry out.
+    // While sift is off, the new decision is a record, not something to carry out.
     expect((await decisionsFor(id)).at(-1)).toMatchObject({ mode: 'observe', outcome: 'observed' });
     expect(await pendingSuggestions(db)).toEqual([]);
   });

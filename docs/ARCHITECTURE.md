@@ -19,7 +19,7 @@ Tiers run cheapest first. A tier either names a label or abstains; the first ans
 | 1. Gmail filters | Gmail itself; runs even when sift is down | none | built: a rule is copied there when the user asks ([Rules as Gmail filters](#rules-as-gmail-filters)) |
 | 2. Rules | `src/triage/stages/rules.ts` | none | built and wired |
 | 3. Decision model (Jev / Clef via pi-ai `classify`) | `src/triage/stages/classifier.ts` | ~$0.0001 per message | stage built, provider not wired |
-| 4. Model | `src/triage/stages/model.ts`, `src/model/` | one model call | built; in use while observing, with a ChatGPT subscription model |
+| 4. Model | `src/triage/stages/model.ts`, `src/model/` | one model call | built; in use with sift off, with a ChatGPT subscription model |
 | Fallback | `src/triage/pipeline.ts` | none | built |
 
 Every message is meant to be one of the labels. When the model cannot tell which (its "unsure"), the answer is `review`: the message stays where it is, gets the review label, and the user is asked which label it is, or adds one. A model call that fails (a provider error, or an answer that is not a usable verdict) is not "unsure" and decides nothing: the message stays in the triage queue and is asked about again on the next pass. After three failed calls it leaves the queue (`MAX_ATTEMPTS`, `src/store/runs.ts`) and shows in Activity's Failed view as not judged, with the last error, until the user puts it back; it never becomes a suggestion. Three failures in a row within one pass stop that pass asking the model, since the provider is likely down: the rest of the queue keeps its tries, and mail a rule covers is still decided. A call is recorded as started before it is made, so one a stopped pass never finished counts as failed. With no model connected, mail no rule covers is not decided at all: it stays in the triage queue (newest first, so it never holds up new mail) and is neither a suggestion nor changed, until a model is connected or a rule comes to cover it.
@@ -101,7 +101,7 @@ Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 
 `sift run` is the one long-running process: it serves the dashboard and repeats one pass per account: settle unconfirmed actions, sync, then triage every recorded message that has no decision.
 
-- **Observe is the default.** Acting or observing is each person's own (`preferences.act`), switched under Settings, and a pass runs a person's mailboxes in their mode. While observing, decisions are recorded with `mode = observe` and the mailbox is not touched. Observed decisions are never acted on later. The one exception is the user's own answer from the dashboard: it is recorded as an `act` decision marked `by_user` and carried out on the next pass whether or not they have sift acting, since they pressed it. Nothing else is carried out while observing, not even a decision left over from when sift was acting.
+- **Off is the default.** Whether sift is on is each person's own (`preferences.active`), switched under Settings, and a pass changes a person's mailboxes only while it is on. While it is off, decisions are recorded with `mode = observe` and the mailbox is not touched. Observed decisions are never acted on later. The one exception is the user's own answer from the dashboard: it is recorded as an `act` decision marked `by_user` and carried out on the next pass whether or not they have sift on, since they pressed it. Nothing else is carried out while sift is off, not even a decision left over from when it was on.
 - **Decide, record, then act.** The decision row is written before any mailbox change. Its `outcome` then records what happened: `none` (nothing needed doing), `done`, `skipped` with the reason (left the inbox, spam refused), `failed` or `unknown`.
 - **Nothing is dropped.** If the change cannot even be attempted (a provider error), the decision stays unsettled and the next pass retries it. A pass decides each message once; a waiting suggestion gets a further decision only when a rule or a label changes (see Teaching).
 - **One account failing does not stop the others.**
@@ -122,19 +122,19 @@ Undo reverses exactly what the action changed, keeps anything the user changed a
 
 ## Rules as Gmail filters
 
-A rule can also be written to Gmail as a filter, so it applies when sift is not running. Only when the user asks, per rule, and only while sift is acting.
+A rule can also be written to Gmail as a filter, so it applies when sift is not running. Only when the user asks, per rule, and only while sift is on.
 
 - **Which rules.** `filterFor` (`src/triage/filter.ts`, pure) says whether a rule can be one, and why not. A filter runs before sift sees the message and knows none of sift's other rules or protections, so a rule qualifies only if the filter could never do what sift itself would not have done. Refused: a rule that is judged (`usually`, or with a `when`); one whose outcome is spam (not documented for filters) or that marks read (`validateFilter` does not allow it); one matching a list id or carrying exceptions; one sift learned that archives, since a filter cannot spare people the user has written to; one whose values could change the meaning of a Gmail search; and one that another rule could overrule for the same mail (a keep rule, a judged rule, or a narrower one).
 - **Where Gmail differs.** A recipient condition also matches Cc and Bcc; subject words match whole words, not substrings; a domain is written `@domain`. The verdict lists these (`differs`) so they can be shown before the user asks.
 - **Archived by a filter means unseen by sift.** Sync records mail that arrives in the inbox. Mail a filter archives is not recorded, counted against the rule, or unsubscribed from.
 - **Writing and removing** go through `src/actions/rule-filters.ts`: validated, written to `actions` first (`filter`, `unfilter`, with no message), then read back from Gmail's list. A filter the account already has that does exactly the same is taken over, since Gmail refuses a duplicate. Removing a rule removes its filter first.
-- **Keeping track.** At most every 15 minutes a pass lists the account's filters and records on each rule (`filter_state`) what it found: `active`; `changed` (edited in Gmail: left alone); `gone` (deleted in Gmail: not put back); `outdated` (the rule, its label or another rule changed, so the filter no longer does what sift would). An outdated filter is replaced, or removed if the rule can no longer be one, while sift is acting; while observing it is only marked, and keeps running in Gmail.
+- **Keeping track.** At most every 15 minutes a pass lists the account's filters and records on each rule (`filter_state`) what it found: `active`; `changed` (edited in Gmail: left alone); `gone` (deleted in Gmail: not put back); `outdated` (the rule, its label or another rule changed, so the filter no longer does what sift would). An outdated filter is replaced, or removed if the rule can no longer be one, while sift is on; while it is off it is only marked, and keeps running in Gmail.
 
 ## Preferences
 
 Everything a person prefers is in their own database.
 
-- **Their mode and model** (`preferences`, `src/store/preferences.ts`): whether sift acts on their mail or only suggests, and which model judges it, both set under Settings. What they want is said by their labels' descriptions and their rules; there are no free-form guidelines beside them (removed 2026-11-15), since the system's intent is the same for everyone and a label's description already says what belongs in it. The default labels' descriptions carry what the old default guidelines said about telling them apart.
+- **Whether sift is on, and their model** (`preferences`, `src/store/preferences.ts`): whether sift changes their Gmail or only suggests, and which model judges it, both set under Settings. What they want is said by their labels' descriptions and their rules; there are no free-form guidelines beside them (removed 2026-11-15), since the system's intent is the same for everyone and a label's description already says what belongs in it. The default labels' descriptions carry what the old default guidelines said about telling them apart.
 - **What is structured or learned:**
   - `labels`: what mail can be and what to do with each. Seeded with cautious defaults (nothing is marked spam); changed and added to in the dashboard, under Labels.
   - `rules`: what the user has said happens to mail, or what it is; and a rule for each sender sift blocked.
@@ -183,11 +183,11 @@ Everything sift keeps is in one directory, the home: `~/.config/sift` by default
 
 ## Teaching
 
-sift suggests first and acts second. While it only observes, every decision is a suggestion, and the dashboard's Suggestions view is where the user teaches it.
+sift suggests first and acts second. While it is off, every decision is a suggestion, and the dashboard's Suggestions view is where the user teaches it.
 
-- **A suggestion** is the current decision for a message, made while observing, that the user has not answered. Decisions that only repeat what the user already said (a rule they wrote, or made by correcting sift) are not suggestions; ones from a rule sift learned are.
+- **A suggestion** is the current decision for a message, recorded as a suggestion, that the user has not answered. Decisions that only repeat what the user already said (a rule they wrote, or made by correcting sift) are not suggestions; ones from a rule sift learned are.
 - **Suggestions are listed one per message**, newest first. The answer is a dropdown that starts on the label sift gave, with a meter for how sure it is (a rule is sure; a model gives a number), and a check that commits it. The dropdown lists what else it might be first: the labels the sender's other mail has had, most first, then every other label. The model gives one label today, so the sender's history stands in for its runners-up.
-- **An answer says what one message is, and that is all it says.** Like a spam button with more outcomes: sift records the label, does what that label does to the message in Gmail (see Observe is the default), and keeps the message as an example the model is shown next time. It makes no rule. When the sender has other mail waiting that sift guessed the same way, the dashboard offers the same answer for those in one press.
+- **An answer says what one message is, and that is all it says.** Like a spam button with more outcomes: sift records the label, does what that label does to the message in Gmail (see Off is the default), and keeps the message as an example the model is shown next time. It makes no rule. When the sender has other mail waiting that sift guessed the same way, the dashboard offers the same answer for those in one press.
 - **Every answer is scored.** `feedback` records right, wrong, or "answered" (sift had no suggestion, which is not a mistake), per decision. The summary the home page reads reports it for the window per tier and per label, with which labels sift took for which.
 - **Rules come from proposals and the Rules page, not from answers.** After three answers in a row giving a sender's mail the same label, sift proposes a rule for that sender (`proposeFromAnswers`), as it already does after five model decisions that agree. The panel's "Make a rule…" opens the rule dialog on that sender. The answer endpoint still takes the wider scopes (`label`, `sender`, `domain`, `subject`), which make rules; the dashboard sends only `once`.
 - **Any decision can be answered, not only a suggestion.** Every list opens a message in the same panel: sift's label as the answer to agree with, what else it might be, its reason, the message, and what sift knows about the sender. Answering a message sift had already decided records the user's answer as a new decision for it and, if sift had changed the message in Gmail, takes that change back so the new decision is carried out from where the message started.
@@ -195,8 +195,8 @@ sift suggests first and acts second. While it only observes, every decision is a
 - **Every marked message becomes an example.** The answer creates an `examples` row; the next pass of `sift run` fetches the whole message (raw RFC 822, all headers, readable text) into it. These are the evaluation and training set. A message that has since been deleted keeps its answer and is marked gone.
 - **Gmail teaches too.** Each sync reads what the user did to messages sift has decided (`learnFromGmail`, `src/learn/gmail.ts`), and records it as the "only this one" answer is recorded, marked `via = gmail` in `feedback`:
   - Where the message is now, read fresh, is the outcome the user wants. A move does not say what the mail is, so the label sift gave stands (and counts as right) and the outcome is recorded as the exception; a different `sift/…` label put on it is a correction of the label.
-  - The new decision is recorded in observe mode whatever sift is doing, so sift does not then move a message the user has just placed.
-  - While observing, the user doing in Gmail what sift suggested counts as agreeing.
+  - The new decision is recorded with `mode = observe` whether or not sift is on, so sift does not then move a message the user has just placed.
+  - While sift is off, the user doing in Gmail what sift suggested counts as agreeing.
   - Skipped: mail sift could not place and the user did not label (there is no label to record), trashed or deleted mail, and mail sift never recorded.
   - The same history read twice records nothing new: an answer is only recorded when the message's place and label differ from its current decision and from the answer already on it.
   - Not seen: anything done while the history cursor was expired.
@@ -254,12 +254,12 @@ The dashboard is where the user watches sift, teaches it and manages it. `sift r
 
 **What it may do**
 
-Everything that manages sift: answer suggestions, switch the viewer's own mail between observing and acting, choose the model, add and edit labels and what happens to each, add and remove rules, write a rule to Gmail as a filter or take it out, undo a mailbox change, try a failed change again (the decision's outcome is cleared and the next pass acts on it, `POST /api/decisions/retry`), put mail the model could not judge back in the queue (`POST /api/unjudged/retry`), pull in older mail, and trigger a check.
+Everything that manages sift: answer suggestions, turn sift on or off for the viewer's own mail, choose the model, add and edit labels and what happens to each, add and remove rules, write a rule to Gmail as a filter or take it out, undo a mailbox change, try a failed change again (the decision's outcome is cleared and the next pass acts on it, `POST /api/decisions/retry`), put mail the model could not judge back in the queue (`POST /api/unjudged/retry`), pull in older mail, and trigger a check.
 
 - It changes the database directly, never `sift.toml`. A pass reads each person's choices as it reaches their mail, and a change wakes it, so nothing needs restarting.
 - It never imports Gmail, the executor or the daemon (lint enforces this). The few things that need them (signing in, undo, Gmail filters, pulling in older mail, check now, a test run of the model, judging suggestions again) are passed in by the process as `SignIn` and `Controls` (`src/dashboard/controls.ts`), so every mailbox change still goes through the executor and the audit log.
 
-**Older mail.** Pulling in the last N days records those messages as suggest-only. They are decided on the next pass and are never acted on, even when sift is acting on new mail.
+**Older mail.** Pulling in the last N days records those messages as suggest-only. They are decided on the next pass and are never acted on, even when sift is on.
 
 **The page**
 
@@ -277,11 +277,11 @@ Everything that manages sift: answer suggestions, switch the viewer's own mail b
 
 ## Unsubscribing
 
-Gmail has no API for it, so sift makes the request a mail client would: the sender's one-click address (RFC 8058), a single POST. Unsubscribing is an extra a label or a rule carries, like marking read; the default labels for bulk mail have it on. It is never a button. The daemon makes the request after the decision's mailbox change has gone through, only while acting, and never for a sender the user has written to. It is recorded as an action before the request, never repeated for a sender it worked for, and not retried for a week for one it failed for. The address comes from the email, so it is used only if the message passed DMARC, the address is plain HTTPS on the standard port, and it resolves to the public internet; the connection is made to the address that was checked, and a redirect is not followed. Lists that can only be left by sending an email are refused, since sift cannot send. Code: `src/actions/unsubscribe.ts`.
+Gmail has no API for it, so sift makes the request a mail client would: the sender's one-click address (RFC 8058), a single POST. Unsubscribing is an extra a label or a rule carries, like marking read; the default labels for bulk mail have it on. It is never a button. The daemon makes the request after the decision's mailbox change has gone through, only while sift is on, and never for a sender the user has written to. It is recorded as an action before the request, never repeated for a sender it worked for, and not retried for a week for one it failed for. The address comes from the email, so it is used only if the message passed DMARC, the address is plain HTTPS on the standard port, and it resolves to the public internet; the connection is made to the address that was checked, and a redirect is not followed. Lists that can only be left by sending an email are refused, since sift cannot send. Code: `src/actions/unsubscribe.ts`.
 
 ## Open questions
 
 - Using a ChatGPT subscription from a third-party harness is unofficial; whether OpenAI permits it is unconfirmed. An API key works as a fallback.
-- The model tier has run on real mail only while observing; nothing it decided has been carried out in Gmail yet.
+- The model tier has run on real mail only with sift off; nothing it decided has been carried out in Gmail yet.
 - Docker egress is not yet restricted to Google and the model providers. [DEPLOY.md](DEPLOY.md) says what it would take; unsubscribing needs a relay of its own first.
 - How suggestions reach the user beyond the dashboard (a digest would need a send path, which sift does not have).

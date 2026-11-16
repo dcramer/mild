@@ -21,9 +21,9 @@ import { type EvidenceSources, gatherEvidence } from './evidence.ts';
 
 export interface TriageDeps {
   db: Sql;
-  /** Null means observe: decisions are recorded and nothing in the mailbox changes. */
+  /** Null while sift is off: decisions are recorded and nothing in the mailbox changes. */
   mailbox: Mailbox | null;
-  /** While sift only observes: the mailbox to carry out the user's own answers in. Nothing else is done with it. */
+  /** While sift is off: the mailbox to carry out the user's own answers in. Nothing else is done with it. */
   answers?: Mailbox | null;
   /** The inference tier. Omitted when no model is configured: mail no rule covers waits, undecided, for one. */
   model?: ModelTier;
@@ -39,7 +39,7 @@ export interface ModelTier {
   judge: Judge;
   /** As each run records it. */
   model: string;
-  /** Read access for evidence. Used in observe mode too; it never changes the mailbox. */
+  /** Read access for evidence. Used while sift is off too; it never changes the mailbox. */
   sources: Omit<EvidenceSources, 'db' | 'now'>;
 }
 

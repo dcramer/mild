@@ -1,5 +1,5 @@
 {
-  "id": "d55e9389-fbaa-4282-b661-74ac7ec9a5e3",
+  "id": "5723d8ff-5975-4770-a205-53dc77b7373d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -521,32 +521,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "model": {
-          "name": "model",
-          "type": "text",
+        "run_id": {
+          "name": "run_id",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
-        },
-        "input_tokens": {
-          "name": "input_tokens",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "output_tokens": {
-          "name": "output_tokens",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "cost_usd": {
-          "name": "cost_usd",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
         },
         "duration_ms": {
           "name": "duration_ms",
@@ -687,6 +666,15 @@
           "columnsTo": ["user_id", "account_id", "id"],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "decisions_user_id_run_id_model_runs_user_id_id_fk": {
+          "name": "decisions_user_id_run_id_model_runs_user_id_id_fk",
+          "tableFrom": "decisions",
+          "tableTo": "model_runs",
+          "columnsFrom": ["user_id", "run_id"],
+          "columnsTo": ["user_id", "id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -710,7 +698,7 @@
       "checkConstraints": {
         "decisions_stage": {
           "name": "decisions_stage",
-          "value": "\"decisions\".\"stage\" IN ('rules', 'sender', 'heuristics', 'classifier', 'agent', 'fallback')"
+          "value": "\"decisions\".\"stage\" IN ('rules', 'sender', 'classifier', 'agent', 'fallback')"
         },
         "decisions_disposition": {
           "name": "decisions_disposition",
@@ -919,12 +907,6 @@
         },
         "prompt_hash": {
           "name": "prompt_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "guidelines_hash": {
-          "name": "guidelines_hash",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -1711,6 +1693,188 @@
       "checkConstraints": {},
       "isRLSEnabled": true
     },
+    "public.model_runs": {
+      "name": "model_runs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "byDefault",
+            "name": "model_runs_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "current_setting('sift.user')::integer"
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "input_tokens": {
+          "name": "input_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "output_tokens": {
+          "name": "output_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "cost_usd": {
+          "name": "cost_usd",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "retried_at": {
+          "name": "retried_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "model_runs_message": {
+          "name": "model_runs_message",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "message_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "model_runs_time": {
+          "name": "model_runs_time",
+          "columns": [
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "model_runs_user_id_users_id_fk": {
+          "name": "model_runs_user_id_users_id_fk",
+          "tableFrom": "model_runs",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "model_runs_user_id_account_id_message_id_messages_user_id_account_id_id_fk": {
+          "name": "model_runs_user_id_account_id_message_id_messages_user_id_account_id_id_fk",
+          "tableFrom": "model_runs",
+          "tableTo": "messages",
+          "columnsFrom": ["user_id", "account_id", "message_id"],
+          "columnsTo": ["user_id", "account_id", "id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "model_runs_own": {
+          "name": "model_runs_own",
+          "nullsNotDistinct": false,
+          "columns": ["user_id", "id"]
+        }
+      },
+      "policies": {
+        "own": {
+          "name": "own",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["sift_app"],
+          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
+          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
+        }
+      },
+      "checkConstraints": {
+        "model_runs_outcome": {
+          "name": "model_runs_outcome",
+          "value": "\"model_runs\".\"outcome\" IN ('judged', 'failed')"
+        }
+      },
+      "isRLSEnabled": true
+    },
     "public.preferences": {
       "name": "preferences",
       "schema": "",
@@ -1722,21 +1886,16 @@
           "notNull": true,
           "default": "current_setting('sift.user')::integer"
         },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "model": {
           "name": "model",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "guidelines": {
-          "name": "guidelines",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "guidelines_changed_at": {
-          "name": "guidelines_changed_at",
-          "type": "bigint",
           "primaryKey": false,
           "notNull": false
         }

@@ -35,14 +35,14 @@ export async function run(args: string[]): Promise<void> {
 
     // Why each person's model could not be reached, so it is said once and not on every pass.
     const unreachable = new Map<number, string>();
-    // Whether each person had sift acting at the last pass, to say when they switch.
-    const acting = new Map<number, boolean>();
+    // Whether each person had sift on at the last pass, to say when they switch.
+    const active = new Map<number, boolean>();
     const announce = async () => {
       for (const user of await listUsers(store.central)) {
         const db = await store.user(user.id);
-        const { act } = await preferences(db);
-        if (acting.has(user.id) && acting.get(user.id) !== act) log(`${(await listAccounts(db)).map((a) => a.email).join(', ')}: now ${act ? 'on' : 'off'}`);
-        acting.set(user.id, act);
+        const on = (await preferences(db)).active;
+        if (active.has(user.id) && active.get(user.id) !== on) log(`${(await listAccounts(db)).map((a) => a.email).join(', ')}: now ${on ? 'on' : 'off'}`);
+        active.set(user.id, on);
       }
     };
     const next = async () => {
@@ -73,13 +73,13 @@ export async function run(args: string[]): Promise<void> {
     };
 
     const first = await next();
-    const people = acting.size;
-    const actingFor = [...acting.values()].filter(Boolean).length;
-    ui.heading(actingFor === 0 ? 'off' : actingFor === people ? 'on' : `on for ${actingFor} of ${people}`);
+    const people = active.size;
+    const on = [...active.values()].filter(Boolean).length;
+    ui.heading(on === 0 ? 'off' : on === people ? 'on' : `on for ${on} of ${people}`);
     secrets();
     if (!hasClientSecrets(config)) ui.warn(`No Google client yet. Run ${paint.cmd('sift init')}.`);
     else if ((await connectedAddresses(store.central)).length === 0) ui.warn('No Gmail account yet. Open the dashboard and sign in with Google.');
-    else if (actingFor === 0) ui.info('Gmail is not changed while sift is off. Each person turns it on in the dashboard, under Settings.');
+    else if (on === 0) ui.info('Gmail is not changed while sift is off. Each person turns it on in the dashboard, under Settings.');
 
     if (values.once) {
       ui.blank();

@@ -131,8 +131,8 @@ export const preferences = pgTable(
   'preferences',
   {
     userId: userId().primaryKey(),
-    // false: their decisions are only suggestions. true: sift carries them out in their mailboxes.
-    act: boolean('act').notNull().default(false),
+    // false (off): their decisions are only suggestions. true (on): sift carries them out in their mailboxes.
+    active: boolean('active').notNull().default(false),
     model: text('model'),
   },
   () => [own()],
@@ -236,7 +236,7 @@ export const decisions = pgTable(
     mode: text('mode', { enum: DECISION_MODES }).notNull().default('observe'),
     outcome: text('outcome', { enum: DECISION_OUTCOMES }),
     outcomeDetail: text('outcome_detail'),
-    byUser: boolean('by_user').notNull().default(false), // the user's own answer, carried out even while observing
+    byUser: boolean('by_user').notNull().default(false), // the user's own answer, carried out even while sift is off
   },
   (t) => [
     unique('decisions_own').on(t.userId, t.id),

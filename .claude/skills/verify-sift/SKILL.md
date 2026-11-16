@@ -21,7 +21,7 @@ $V up "$RUN"
 
 `up` seeds `$RUN/home`, picks a free port, starts `sift dashboard` on it (rebuilding `web/dist` first if the page sources are newer, which can take a minute), runs the doctor, and signs the browser session in. It is ready when it prints `ok  pid …` and `browser session … signed in`. It refuses a directory that already has a `home/`.
 
-What the seed leaves (through three real observing passes, `runEveryone`, with a stand-in model that is sure `m8` is Marketing and can place nothing else):
+What the seed leaves (through three real passes with sift off, `runEveryone`, with a stand-in model that is sure `m8` is Marketing and can place nothing else):
 
 | Id | Sender | What places it | Shows as |
 | --- | --- | --- | --- |
@@ -34,7 +34,7 @@ What the seed leaves (through three real observing passes, `runEveryone`, with a
 | `m8` | `sale@store.example.com` | stand-in model → Marketing, confidence 0.95 | Suggestions, `Marketing` (sure), the only row with a label to agree with |
 | `m9` | `alerts@ops.example.com` | the stand-in model fails on it, three passes running | Activity › Failed, under `Not judged`, with Retry |
 
-The connected account is `me@example.org`, observing (`preferences.act` false), default labels, 3 user rules. Its model is Anthropic, `claude-haiku-4-5`, with a made-up key, so the dashboard is not behind the connect-a-model wall; nothing calls Anthropic, since no pass runs. To see the wall, sign it out from the page: `ab eval "fetch('/api/model/signout',{method:'POST',headers:{'content-type':'application/json','x-sift':'1'},body:JSON.stringify({provider:'anthropic'})})"`. Every message carries `dmarc=pass`; the three lists (news, promo, store) carry one-click unsubscribe headers.
+The connected account is `me@example.org`, with sift off (`preferences.active` false), default labels, 3 user rules. Its model is Anthropic, `claude-haiku-4-5`, with a made-up key, so the dashboard is not behind the connect-a-model wall; nothing calls Anthropic, since no pass runs. To see the wall, sign it out from the page: `ab eval "fetch('/api/model/signout',{method:'POST',headers:{'content-type':'application/json','x-sift':'1'},body:JSON.stringify({provider:'anthropic'})})"`. Every message carries `dmarc=pass`; the three lists (news, promo, store) carry one-click unsubscribe headers.
 
 The dashboard does not pick up code changes. After editing `src/` or `web/src`, `down` and `up` a new directory.
 
@@ -70,7 +70,7 @@ Write everything into `$RUN/evidence/`; `down` keeps it. For each feature proved
 1. A snapshot or screenshot before the action and after it (`$V ab "$RUN" screenshot "$RUN/evidence/<feature>-after.png"`, `$V ab "$RUN" snapshot > "$RUN/evidence/<feature>-after.txt"`).
 2. `$V ab "$RUN" console` and `$V ab "$RUN" errors`, both empty. A content security policy violation appears only here, never in the build.
 3. The stored side effect, from `sql`, and a second view that reads it back (the Rules screen after an answer, the Labels screen after a label edit).
-4. `SELECT count(*) FROM actions` is still `0`. This instance observes; a row there means something tried to change a mailbox.
+4. `SELECT count(*) FROM actions` is still `0`. sift is off here; a row there means something tried to change a mailbox.
 
 Do the action the way a user does: press the control, not a POST with curl. The API is the page's private contract; calling it directly proves the server, not the screen. Seeding is the only place internals are used, and it uses the daemon's own pass.
 
@@ -98,5 +98,5 @@ State is in `~/.cache/sift-verify-maint/`. Delete `suggested-on` there to see to
 
 - Anything that talks to Google: sign-in itself, connecting another account, Pull in (older mail), Gmail filters, undo of a real change. They fail here; that failure is not the change's fault.
 - The model tier: the seed's stand-in model never calls a provider and places only `m8`, so every other unmatched message is "Which label?". With no model at all such mail would wait undecided and not be a suggestion, and every screen would be the connect-a-model wall.
-- Acting. Settings can be switched to acting (`preferences.act`), but `sift dashboard` never runs a pass, so nothing is acted on. Prove the executor with tests (`tests/actions.test.ts`, `tests/run.test.ts`).
+- Changing Gmail. Settings can turn sift on (`preferences.active`), but `sift dashboard` never runs a pass, so nothing is carried out. Prove the executor with tests (`tests/actions.test.ts`, `tests/run.test.ts`).
 - `examples` rows stay `pending`: the body is captured on the next pass, which never comes.

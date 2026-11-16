@@ -52,26 +52,26 @@ export async function runEveryone(store: Store, options: RunOptions): Promise<Pa
 }
 
 /**
- * One pass over the mailboxes in one person's database, acting or observing as they chose: settle
+ * One pass over the mailboxes in one person's database, changing Gmail only if they have sift on: settle
  * unconfirmed actions, sync, triage. An account that fails is reported and the others still run; the
  * next pass picks up where it stopped.
  */
 export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[]> {
   const results: PassResult[] = [];
   const leave = options.unsubscribe;
-  const { act } = await preferences(db);
+  const { active } = await preferences(db);
   const tier = options.model ? await options.model(db) : null;
   for (const account of await listAccounts(db)) {
     const result: PassResult = { email: account.email };
     try {
       const { api, mailbox } = await options.connect(db, account);
       const deps = { db, mailbox, ...(options.now ? { now: options.now } : {}) };
-      if (act) await reconcile(deps);
+      if (active) await reconcile(deps);
       result.sync = await syncAccount(db, api, account, options.now);
       result.triage = await triageAccount(
         {
           ...deps,
-          mailbox: act ? mailbox : null,
+          mailbox: active ? mailbox : null,
           answers: mailbox,
           ...(leave ? { unsubscribe: (accountId: string, messageId: string) => leave(db, accountId, messageId) } : {}),
           ...(tier ? { model: { judge: tier.judge, model: tier.model, sources: { api, mailbox } } } : {}),
@@ -81,13 +81,13 @@ export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[
       result.captured = await captureExamples(db, api, account.id, options.now);
       await keepSuggestionBodies(db, api, account.id, options.now);
       try {
-        const filters = await checkFiltersWhenDue(deps, account.id, act);
+        const filters = await checkFiltersWhenDue(deps, account.id, active);
         if (filters) result.filters = filters;
       } catch (error) {
-        // Mail was still sorted; the filters are looked at again next pass.
+        // The mail was still triaged; the filters are looked at again next pass.
         options.log(`${account.email}: could not check Gmail filters: ${error instanceof Error ? error.message : String(error)}`);
       }
-      const line = describe(result, act);
+      const line = describe(result, active);
       if (line) options.log(`${account.email}: ${line}`);
     } catch (error) {
       result.error = error instanceof Error ? error.message : String(error);
@@ -103,7 +103,7 @@ export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[
 }
 
 /** A one-line summary of a pass, or null when nothing happened. */
-function describe(result: PassResult, act: boolean): string | null {
+function describe(result: PassResult, active: boolean): string | null {
   const parts: string[] = [];
   const { sync, triage } = result;
   if (sync?.mode === 'recovery') parts.push('history cursor had expired, searched the last 7 days');
@@ -111,7 +111,7 @@ function describe(result: PassResult, act: boolean): string | null {
   if (sync?.corrections) parts.push(`learned from ${sync.corrections} message${sync.corrections === 1 ? '' : 's'} you moved or relabelled in Gmail`);
   if (triage) {
     const decided = Object.entries(triage.decided).filter(([, n]) => n > 0);
-    if (decided.length > 0) parts.push(`${act ? 'decided' : 'would'} ${decided.map(([d, n]) => `${d} ${n}`).join(', ')}`);
+    if (decided.length > 0) parts.push(`${active ? 'decided' : 'would'} ${decided.map(([d, n]) => `${d} ${n}`).join(', ')}`);
     if (triage.acted > 0) parts.push(`${triage.acted} changed`);
     if (triage.skipped > 0) parts.push(`${triage.skipped} skipped`);
     if (triage.proposed > 0) parts.push(`proposed ${triage.proposed} rule${triage.proposed === 1 ? '' : 's'}`);
@@ -125,7 +125,7 @@ function describe(result: PassResult, act: boolean): string | null {
   if (filters?.gone) parts.push(`${filters.gone} filter${filters.gone === 1 ? '' : 's'} deleted in Gmail`);
   if (filters?.changed) parts.push(`${filters.changed} filter${filters.changed === 1 ? '' : 's'} changed in Gmail`);
   if (filters?.outdated)
-    parts.push(`${filters.outdated} filter${filters.outdated === 1 ? '' : 's'} ${act ? 'brought into line with' : 'no longer match'} their rules`);
+    parts.push(`${filters.outdated} filter${filters.outdated === 1 ? '' : 's'} ${active ? 'brought into line with' : 'no longer match'} their rules`);
   return parts.length > 0 ? parts.join('; ') : null;
 }
 

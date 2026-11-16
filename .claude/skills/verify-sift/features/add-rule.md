@@ -32,4 +32,4 @@ Preconditions:
 
 - `What sift does` only appears for `Always do this to it` and `When sift says it is this label`; `It is always this label` shows a label picker instead.
 - `Escape` may not close the dialog; use `Cancel`.
-- Writing a rule to Gmail as a filter needs Google and acting, so it cannot be shown here.
+- Writing a rule to Gmail as a filter needs Google and sift on, so it cannot be shown here.

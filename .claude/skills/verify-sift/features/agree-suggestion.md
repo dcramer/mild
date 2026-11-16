@@ -1,6 +1,6 @@
 # Agree with a suggestion
 
-A message sift placed shows the label it gave in the row's answer: a dropdown starting on that label, after a meter of how sure sift is, and a check. Pressing the check agrees: sift records the answer, keeps the message as an example, and carries out what the label does to that message in Gmail on the next pass, even while only observing. No rule is made.
+A message sift placed shows the label it gave in the row's answer: a dropdown starting on that label, after a meter of how sure sift is, and a check. Pressing the check agrees: sift records the answer, keeps the message as an example, and carries out what the label does to that message in Gmail on the next pass, even while sift is off. No rule is made.
 
 ## Sub-features
 

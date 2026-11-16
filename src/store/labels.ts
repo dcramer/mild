@@ -4,7 +4,7 @@ import type { Disposition, Label } from '../triage/types.ts';
 
 /**
  * The starting set for a new account, with what most people want done with each. They are only acted
- * on once the user lets sift act; until then every one is a suggestion.
+ * on once the user turns sift on; until then every one is a suggestion.
  */
 export const DEFAULT_LABELS: readonly Label[] = [
   {

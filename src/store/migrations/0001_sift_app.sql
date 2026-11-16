@@ -19,6 +19,7 @@ ALTER TABLE "feedback" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "labels" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "mailboxes" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "messages" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "model_runs" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "preferences" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "proposals" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "rules" FORCE ROW LEVEL SECURITY;--> statement-breakpoint

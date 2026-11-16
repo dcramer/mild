@@ -33,13 +33,13 @@ export async function status(): Promise<void> {
     return n;
   };
   const { settings } = config;
-  const acting = (await Promise.all(people.map(async (db) => (await preferences(db)).act))).filter(Boolean).length;
+  const on = (await Promise.all(people.map(async (db) => (await preferences(db)).active))).filter(Boolean).length;
   const ready = hasClientSecrets(config) && accounts.length > 0;
 
   ui.heading('status', paint.path(config.home));
   ui.fields([
     ['Gmail', accounts.length > 0 ? accounts.join(', ') : paint.dim(hasClientSecrets(config) ? 'not connected' : 'not set up')],
-    ['Active', acting === 0 ? 'off' : acting === people.length ? 'on' : `on for ${acting} of ${people.length} people`],
+    ['Active', on === 0 ? 'off' : on === people.length ? 'on' : `on for ${on} of ${people.length} people`],
     ['Dashboard', signInAddresses(settings.dashboardPort).join(paint.dim('  or  '))],
   ]);
   ui.blank();

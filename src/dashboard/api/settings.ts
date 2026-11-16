@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { lastSyncedAt, listAccounts } from '../../store/accounts.ts';
 import { MAX_LABELS } from '../../store/labels.ts';
-import { preferences, setAct, setModel } from '../../store/preferences.ts';
+import { preferences, setActive, setModel } from '../../store/preferences.ts';
 import { listLabelSummaries } from '../queries/labels.ts';
 import { type Scope, sees } from '../scope.ts';
 import { ManageState, Models, SignInCode } from '../types.ts';
@@ -14,7 +14,7 @@ async function manageState({ db, controls }: Context, scope: Scope): Promise<Man
   const activity = controls?.activity() ?? { running: false, lastPassAt: null, problems: [], expired: [] };
   return {
     owner: scope.owner,
-    act: own.act,
+    active: own.active,
     model: { chosen: own.model, ...(controls ? await controls.modelSignIns(db) : { choices: [], signedIn: [], pending: null }) },
     activity: {
       ...activity,
@@ -52,12 +52,12 @@ export const reads: Read[] = [
 
 export const writes: Write[] = [
   write({
-    path: '/api/act',
-    body: z.strictObject({ act: z.boolean() }),
+    path: '/api/active',
+    body: z.strictObject({ active: z.boolean() }),
     reply: done,
     touches: self,
-    run: async ({ db, controls }, { act }) => {
-      await setAct(db, act);
+    run: async ({ db, controls }, { active }) => {
+      await setActive(db, active);
       controls?.checkNow();
       return { ok: true as const };
     },

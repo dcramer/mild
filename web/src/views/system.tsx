@@ -662,7 +662,7 @@ export function SystemView() {
             <Clause title="Your part">
               <ul>
                 <li>Sign in only with a Gmail account that is yours.</li>
-                <li>Check what sift suggests before letting it act.</li>
+                <li>Check what sift suggests before turning it on.</li>
               </ul>
             </Clause>
           </Document>

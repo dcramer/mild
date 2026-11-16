@@ -268,7 +268,7 @@ export const RuleFilter = z.object({
   /**
    * `none`: not in Gmail. `active`: sift wrote it and it is still there. `changed`: it was edited in Gmail,
    * and sift leaves it alone. `gone`: it was deleted in Gmail. `outdated`: the rule no longer says what the
-   * filter does; sift replaces or removes it once it is acting. `RuleSummary.filterId` says whether Gmail still has one.
+   * filter does; sift replaces or removes it once it is on. `RuleSummary.filterId` says whether Gmail still has one.
    */
   state: z.enum(['none', 'active', 'changed', 'gone', 'outdated']),
   /** Whether the rule as it stands can be written as a filter. */
@@ -454,8 +454,8 @@ export type SignInCode = z.infer<typeof SignInCode>;
 export const ManageState = z.object({
   /** Whether the viewer owns the install, and so may change what applies to all of it. */
   owner: z.boolean(),
-  /** The viewer's own choice: false, sift only suggests for their mail; true, it carries its decisions out in Gmail. */
-  act: z.boolean(),
+  /** Whether sift is on for the viewer. Off, it only suggests for their mail; on, it carries its decisions out in Gmail. */
+  active: z.boolean(),
   /** The viewer's own model: which one they chose, how they can reach one, and a ChatGPT sign-in under way. */
   model: z.object({
     chosen: z.string().nullable(),

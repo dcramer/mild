@@ -348,7 +348,7 @@ describe('settings', () => {
       "sift.toml: the model is now each person's own, chosen in the dashboard under Settings. Remove model from here.",
     );
     expect(() => parseSettings('act = true')).toThrow(
-      "sift.toml: acting or observing is now each person's own, switched in the dashboard under Settings. Remove act from here.",
+      "sift.toml: whether sift is on is now each person's own, switched in the dashboard under Settings. Remove act from here.",
     );
     expect(() => parseSettings('heuristics = true')).toThrow('sift.toml: heuristics is no longer a setting. Remove heuristics from here.');
     expect(() => parseSettings('interval = 60')).toThrow('sift.toml: interval is no longer a setting. Remove interval from here.');

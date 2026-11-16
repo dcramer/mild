@@ -246,7 +246,7 @@ describe('checking filters against Gmail', () => {
     expect(await getRuleFilter(db, id)).toMatchObject({ state: 'active' });
   });
 
-  it('replaces a filter whose rule now says something else, but only marks it while observing', async () => {
+  it('replaces a filter whose rule now says something else, or only marks it while sift is off', async () => {
     await setRule(db, ACCOUNT, { from: 'news@example.com' }, { labelId: 'personal' }, 'user');
     expect(await checkRuleFilters(deps(), ACCOUNT, false)).toEqual({ gone: 0, changed: 0, outdated: 1 });
     expect(await getRuleFilter(db, id)).toMatchObject({ state: 'outdated' });

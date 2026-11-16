@@ -52,7 +52,7 @@ export const DEFAULT_SETTINGS: Settings = { dashboardPort: 8787 };
 /** Keys that were settings once, and where each went. One left in `sift.toml` is refused with this, not ignored. */
 const REMOVED: Record<string, string> = {
   model: "the model is now each person's own, chosen in the dashboard under Settings",
-  act: "acting or observing is now each person's own, switched in the dashboard under Settings",
+  act: "whether sift is on is now each person's own, switched in the dashboard under Settings",
   heuristics: 'heuristics is no longer a setting',
   interval: 'interval is no longer a setting',
   retention: '[retention] is no longer a setting',

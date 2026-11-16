@@ -2,9 +2,9 @@
 
 sift helps you manage a Gmail inbox, on a machine you own. Each new message gets a label (Newsletters, Receipts, Cold outreach, or one of your own), and the label decides what happens: keep, archive, mark spam or block the sender. A language model is asked only about mail no rule covers, and what it answers consistently becomes a rule, so it is asked less over time.
 
-It suggests before it acts. Every decision appears in a dashboard, you correct the wrong ones, and nothing in Gmail changes until you switch sift to acting. It never deletes mail and cannot send any. Every change it makes can be undone.
+It suggests before it acts. Every decision appears in a dashboard, you correct the wrong ones, and nothing in Gmail changes until you turn sift on. It never deletes mail and cannot send any. Every change it makes can be undone.
 
-**Status: early.** In use on one real inbox, suggesting only; acting has not been run against a real mailbox. Open work is in [TODO.md](TODO.md).
+**Status: early.** In use on one real inbox, with sift off; it has not yet been turned on against a real mailbox. Open work is in [TODO.md](TODO.md).
 
 ![Suggestions](docs/images/suggestions.png)
 

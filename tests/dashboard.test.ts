@@ -172,7 +172,7 @@ describe('tracking', () => {
     // What changed in Gmail, or was tried: not the suggestions, which never touched it.
     expect(await ids('changed')).toEqual([failed, done]);
 
-    // A failed change goes back to waiting; sift's own waits for sift to act, and only a failure can be retried.
+    // A failed change goes back to waiting; sift's own waits for sift to be on, and only a failure can be retried.
     expect(await retryDecision(db, scopeFor(['someone@example.net'], false), failed)).toEqual({ retried: false, waiting: false });
     expect(await retryDecision(db, await everything(db), failed)).toEqual({ retried: true, waiting: true });
     expect(await raw(db).get('SELECT outcome FROM decisions WHERE id = ?', failed)).toEqual({ outcome: null });

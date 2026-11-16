@@ -270,7 +270,7 @@ describe("nobody sees or changes another person's mail", () => {
   it('lets each person change their own mode, model and sign-ins, and only their own', async () => {
     const bravo = (await userOf(store.central, BRAVO))!.id;
     for (const [path, body] of [
-      ['/api/act', { act: true }],
+      ['/api/active', { active: true }],
       ['/api/model', { model: 'openai/small' }],
       ['/api/model/chatgpt', {}],
       ['/api/model/key', { provider: 'openai', key: 'k' }],
@@ -278,10 +278,10 @@ describe("nobody sees or changes another person's mail", () => {
     ] as const)
       expect((await call('POST', path, BRAVO, body)).status, path).toBe(200);
     expect(calls.filter((c) => c !== 'check')).toEqual([`chatgpt ${bravo}`, `key openai ${bravo}`, `signout openai ${bravo}`]);
-    expect(await preferences(await dbOf(BRAVO))).toMatchObject({ act: true, model: 'openai/small' });
-    expect(await preferences(await dbOf(ALPHA))).toMatchObject({ act: false, model: 'alpha-own-words/model' });
-    expect((await call('GET', '/api/manage', BRAVO)).body).toMatchObject({ act: true });
-    expect((await call('GET', '/api/manage', ALPHA)).body).toMatchObject({ act: false });
+    expect(await preferences(await dbOf(BRAVO))).toMatchObject({ active: true, model: 'openai/small' });
+    expect(await preferences(await dbOf(ALPHA))).toMatchObject({ active: false, model: 'alpha-own-words/model' });
+    expect((await call('GET', '/api/manage', BRAVO)).body).toMatchObject({ active: true });
+    expect((await call('GET', '/api/manage', ALPHA)).body).toMatchObject({ active: false });
     expect((await call('POST', '/api/model', null, { model: 'nobody/model' })).status).toBe(401);
   });
 
