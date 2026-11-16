@@ -133,7 +133,7 @@ const standIn = async () => ({
 // Three passes, so the Ops alerts have used up their tries.
 const ephemeral = memoryEphemeral();
 for (let pass = 0; pass < 3; pass++) {
-  const [result] = await runEveryone(store, { ephemeral, jobs: { send: () => {} }, model: standIn, connect: () => ({ api, mailbox }), log: () => {} });
+  const [result] = await runEveryone(store, { ephemeral, model: standIn, connect: () => ({ api, mailbox }), log: () => {} });
   if (result?.error) throw new Error(`seed pass failed: ${result.error}`);
 }
 if (mailbox.modifyCalls > 0) throw new Error('seed pass changed the fake mailbox while sift was off');
