@@ -489,12 +489,12 @@ describe('dashboard server', () => {
     ]);
   });
 
-  it('serves a sender and a domain, whose standing is a rule made in the dialog and taken back in one press', async () => {
+  it('serves a sender and a domain, whose given standing is a rule made in the dialog and taken back in one press', async () => {
     const { store, db } = await seededStore();
     const base = await start({}, store);
     const sender = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
-    expect(sender).toMatchObject({ kind: 'sender', name: 'Example News', profile: { address: 'news@example.com', messages: 4, standing: 'new' } });
-    expect(sender.profile.domain).toMatchObject({ name: 'example.com', senders: 1 });
+    expect(sender).toMatchObject({ kind: 'sender', name: 'Example News', profile: { address: 'news@example.com', messages: 4, contact: null, given: null } });
+    expect(sender.profile.domain).toMatchObject({ name: 'example.com', contact: null });
     expect(sender.decisions.every((d) => d.fromAddress === 'news@example.com')).toBe(true);
     expect(sender.decisions.map((d) => d.messageId)).toContain('a');
 
@@ -510,11 +510,11 @@ describe('dashboard server', () => {
     expect((await write('/api/rules', { accountId: ACCOUNT, match: { from: 'news@example.com' }, disposition: 'keep' })).status).toBe(200);
     expect(await theirs()).toMatchObject([{ kind: 'action', labelId: null, override: 'keep', disposition: 'keep', source: 'user' }]);
     const trusted = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
-    expect(trusted.profile).toMatchObject({ standing: 'trusted', why: 'a rule keeps their mail' });
+    expect(trusted.profile).toMatchObject({ given: 'trusted' });
 
     expect((await write('/api/rules', { accountId: ACCOUNT, match: { fromDomain: 'example.net' }, disposition: 'spam' })).status).toBe(200);
     const domain = (await (await fetch(`${base}/api/domain?account=${ACCOUNT}&domain=example.net`)).json()) as SenderPage;
-    expect(domain).toMatchObject({ kind: 'domain', profile: { standing: 'blocked' }, senders: [{ address: 'cold@example.net', standing: 'new' }] });
+    expect(domain).toMatchObject({ kind: 'domain', profile: { given: 'blocked' }, senders: [{ address: 'cold@example.net', contact: 'new' }] });
 
     // Taking it back is one press.
     expect((await write('/api/standing/clear', { accountId: ACCOUNT, address: 'news@example.com' })).status).toBe(200);

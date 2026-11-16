@@ -219,8 +219,12 @@ export function describeMatch({ facts, ...match }: RuleMatch): string {
   return [...named, ...(asked.length > 0 ? [`that ${asked.join(' and ')}`] : [])].join(', ');
 }
 
-/** Where a sender stands, in a word. */
-export const STANDINGS = { trusted: 'Trusted', known: 'Known', new: 'New', unwanted: 'Unwanted', blocked: 'Blocked' } as const;
+/** How the owner and a sender (or a domain) know each other, as pointing at its icon says it. */
+export const CONTACT_SAYS = {
+  new: 'The first time Sift has seen them',
+  mutual: 'You have written to them',
+  'one-way': 'They write often and you have never written back',
+} as const;
 
 const DID: Record<string, string> = { archive: 'Archived', spam: 'Marked spam', block: 'Blocked', keep: 'Kept' };
 const DOING: Record<string, string> = { archive: 'archive', spam: 'mark spam', block: 'block', keep: 'keep' };

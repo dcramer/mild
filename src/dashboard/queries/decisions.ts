@@ -23,8 +23,9 @@ import {
 import type { Sql } from '../../store/sql.ts';
 import { DISPOSITIONS } from '../../triage/types.ts';
 import { type Scope, within } from '../scope.ts';
-import { type DecisionRow, FACT_FILTERS, FACT_FILTER_KEYS, STAGES, type ChangeRow } from '../types.ts';
+import { type DecisionRow, FACT_FILTERS, FACT_FILTER_KEYS, type ListedDecision, STAGES, type ChangeRow } from '../types.ts';
 import { factsWhere } from '../../store/messages.ts';
+import { contacts } from '../../store/senders.ts';
 
 export const DAY_MS = 86_400_000;
 
@@ -141,7 +142,12 @@ interface DecisionFilter {
 }
 
 /** Decisions in the window, newest first, with the total number that match the filter. Unknown filter values match nothing. */
-export async function listDecisions(db: Sql, scope: Scope, filter: DecisionFilter, now: number = Date.now()): Promise<{ total: number; rows: DecisionRow[] }> {
+export async function listDecisions(
+  db: Sql,
+  scope: Scope,
+  filter: DecisionFilter,
+  now: number = Date.now(),
+): Promise<{ total: number; rows: ListedDecision[] }> {
   const where: (SQL | undefined)[] = [within(scope, decisions.accountId), gte(decisions.decidedAt, now - filter.days * DAY_MS)];
   if (filter.stage !== undefined) {
     if (!isOneOf(STAGES, filter.stage)) return { total: 0, rows: [] };
@@ -174,8 +180,12 @@ export async function listDecisions(db: Sql, scope: Scope, filter: DecisionFilte
   const offset = Math.max(Math.trunc(filter.offset ?? 0), 0);
 
   const [{ total }] = (await db.select({ total: count() }).from(decisionsJoined(db).where(clause).as('matching'))) as [{ total: number }];
-  const rows = await decisionsJoined(db).where(clause).orderBy(desc(decisions.id)).limit(limit).offset(offset);
-  return { total, rows: rows.map(toDecisionRow) };
+  const rows = (await decisionsJoined(db).where(clause).orderBy(desc(decisions.id)).limit(limit).offset(offset)).map(toDecisionRow);
+  const known = await contacts(
+    db,
+    rows.map((r) => ({ accountId: r.accountId, address: r.fromAddress })),
+  );
+  return { total, rows: rows.map((r) => ({ ...r, contact: known.get(`${r.accountId}\n${r.fromAddress}`) ?? null })) };
 }
 
 /** Changes sift made to the mailbox, newest first, with the message each was about. */

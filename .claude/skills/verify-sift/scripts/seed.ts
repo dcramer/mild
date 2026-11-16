@@ -97,6 +97,8 @@ await addRule(db, ACCOUNT, { match: { fromDomain: 'ci.example.org' }, dispositio
 
 const mailbox = new FakeMailbox();
 for (const { raw } of inbox) mailbox.labels.set(raw.id, [...raw.labelIds]);
+// Ada's mail is a reply: the owner has written to her.
+mailbox.sentTo.add('ada@example.org');
 let cursor = 1;
 const find = (id: string) => inbox.find((m) => m.raw.id === id);
 const api: GmailApi = {

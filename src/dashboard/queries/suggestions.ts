@@ -17,6 +17,7 @@ import { listLabels } from '../../store/labels.ts';
 import type { Label } from '../../triage/types.ts';
 import { listProposals, settledAction } from '../../store/proposals.ts';
 import { listRules } from '../../store/rules.ts';
+import { contacts } from '../../store/senders.ts';
 import { type Scope, sees, within } from '../scope.ts';
 import { FACT_FILTERS, type FactFilter, type SuggestionDetail, type SuggestionItem, type Suggestions } from '../types.ts';
 import { outcomeOf } from './labels.ts';
@@ -114,12 +115,17 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
         .where(within(scope, suggestionBodies.accountId))
     ).map((r) => [`${r.accountId}\n${r.messageId}`, r.text.replace(/\s+/g, ' ').trim()] as const),
   );
+  const known = await contacts(
+    db,
+    shown.map((s) => ({ accountId: s.accountId, address: s.fromAddress })),
+  );
   const items = shown.map((s): SuggestionItem => ({
     accountId: s.accountId,
     messageId: s.messageId,
     decisionId: s.decisionId,
     sender: s.fromAddress,
     senderName: s.fromName,
+    contact: known.get(`${s.accountId}\n${s.fromAddress}`) ?? null,
     subject: s.subject,
     receivedAt: s.receivedAt,
     disposition: s.block ? 'block' : s.disposition,

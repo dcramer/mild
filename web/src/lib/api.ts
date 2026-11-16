@@ -3,11 +3,13 @@ import { useState, useSyncExternalStore } from 'react';
 
 export type {
   ChangeRow,
+  Contact,
   DecisionPage,
   DecisionRow,
   FactFilter,
   FeedbackRequest,
   LabelSummary,
+  ListedDecision,
   ManageState,
   MessageDetail,
   Removed,
@@ -18,7 +20,6 @@ export type {
   SenderProfile,
   Session,
   StageKey,
-  Standing,
   SuggestionDetail,
   SuggestionItem,
   Suggestions,

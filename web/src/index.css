@@ -67,7 +67,7 @@
   /* Corners cut by hand, not by a compass: the highlighter's shape, and only the highlighter's. */
   --cut: 0.5em 0.2em 0.55em 0.25em / 0.25em 0.5em 0.2em 0.45em;
 
-  /* Everything else that has a corner (a control, a field, a stamp): small and even. */
+  /* Everything else that has a corner (a control, a field): small and even. */
   --corner: 3px;
 
   /* The edge of the sheet beneath: the only shadow, always hard and offset down-right. */
@@ -195,18 +195,6 @@
     font-size: var(--text-sm);
     font-weight: 400;
     line-height: 1.4;
-  }
-
-  /* A rubber stamp: what sift did, or would do, with a message. */
-  .stamp {
-    display: inline-flex;
-    align-items: center;
-    height: 1.5rem;
-    padding-inline: 0.5rem;
-    border-radius: var(--corner);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    white-space: nowrap;
   }
 }
 

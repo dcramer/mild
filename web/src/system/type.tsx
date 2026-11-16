@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -40,9 +41,14 @@ export function Code({ children }: { children: ReactNode }) {
   return <code className="rounded-[2px] bg-foreground/8 px-[0.35em] py-[0.1em] font-mono text-[0.9em]">{children}</code>;
 }
 
-/** Where a sender stands, in one word from the vocabulary in `lib/format.ts`, framed. All stamps weigh the same. */
-export function Stamp({ children }: { children: ReactNode }) {
-  return <span className="stamp border border-foreground/30">{children}</span>;
+/** One thing about what it follows, as a small icon after it, said in words when pointed at. `look` is yellow. */
+export function Hint({ icon: Icon, says, tone = 'plain' }: { icon: LucideIcon; says: string; tone?: 'plain' | 'look' }) {
+  return (
+    <span title={says} className={cn('inline-flex shrink-0', tone === 'look' ? 'text-highlight' : 'text-muted-foreground')}>
+      <Icon aria-hidden className="size-3.5" strokeWidth={2.25} />
+      <span className="sr-only">{says}</span>
+    </span>
+  );
 }
 
 /**

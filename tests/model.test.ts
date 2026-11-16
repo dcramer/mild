@@ -24,7 +24,7 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { startRun } from '../src/store/runs.ts';
 import { PROPOSE_AFTER, listProposals, madeFromProposal, proposeForSender, proposeSettled, resolveProposal } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
-import { domainFacts, rememberCorrespondent, senderFacts } from '../src/store/senders.ts';
+import { contactOf, contacts, domainFacts, rememberCorrespondent, senderFacts } from '../src/store/senders.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../src/triage/prompt.ts';
 import { type Evidence, type JudgeFailure, type Verdict, modelStage } from '../src/triage/stages/model.ts';
@@ -378,6 +378,47 @@ describe('preferences in the database', () => {
     await updateLabel(db, ACCOUNT, 'junk', { disposition: 'archive', markRead: true });
     expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'junk')).toEqual(expect.objectContaining({ disposition: 'archive', markRead: true }));
     expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'junk')).not.toHaveProperty('block');
+  });
+});
+
+describe('contact', () => {
+  it('is new on the first message, mutual once the owner has written, one-way after five unanswered, and nothing in between', () => {
+    expect(contactOf(1, null)).toBe('new');
+    expect(contactOf(1, true)).toBe('mutual');
+    expect(contactOf(3, false)).toBeNull();
+    expect(contactOf(5, false)).toBe('one-way');
+    // Unchecked is not unanswered.
+    expect(contactOf(40, null)).toBeNull();
+    expect(contactOf(40, true)).toBe('mutual');
+  });
+
+  it('is read for many senders at once, each in their own account', async () => {
+    const d = await openUserDb(ACCOUNT);
+    await addMailbox(d, ACCOUNT, '1', 0);
+    const from = (address: string) => ({ address, domain: address.split('@')[1]! });
+    await recordSync(
+      d,
+      ACCOUNT,
+      [
+        facts({ accountId: ACCOUNT, messageId: 'a', from: from('new@example.com') }),
+        ...['b', 'c', 'd', 'e', 'f'].map((id) => facts({ accountId: ACCOUNT, messageId: id, from: from('deals@example.com') })),
+        facts({ accountId: ACCOUNT, messageId: 'g', from: from('ada@example.org') }),
+        facts({ accountId: ACCOUNT, messageId: 'h', from: from('ada@example.org') }),
+      ],
+      '2',
+    );
+    await rememberCorrespondent(d, ACCOUNT, 'deals@example.com', false);
+    await rememberCorrespondent(d, ACCOUNT, 'ada@example.org', true);
+    const known = await contacts(
+      d,
+      ['new@example.com', 'deals@example.com', 'ada@example.org'].map((address) => ({ accountId: ACCOUNT, address })),
+    );
+    expect(Object.fromEntries(known)).toEqual({
+      [`${ACCOUNT}\nnew@example.com`]: 'new',
+      [`${ACCOUNT}\ndeals@example.com`]: 'one-way',
+      [`${ACCOUNT}\nada@example.org`]: 'mutual',
+    });
+    expect(await senderFacts(d, ACCOUNT, 'deals@example.com')).toMatchObject({ contact: 'one-way' });
   });
 });
 

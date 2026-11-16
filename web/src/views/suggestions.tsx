@@ -2,7 +2,7 @@ import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
-import { SenderLink } from '@/components/sender.tsx';
+import { ContactHint, SenderLink } from '@/components/sender.tsx';
 import { useParam } from '@/lib/route.ts';
 import { type SuggestionItem, type Suggestions, type Summary, api, useAction, useLoaded } from '@/lib/api.ts';
 import {
@@ -186,10 +186,13 @@ function SuggestionRow({
       <Td className="max-w-0 md:w-[24%] md:min-w-52">
         {/* On a phone the row reads like a mail app's: who and what sift thinks, the subject, a line of the text. It opens to answer. */}
         <span className="flex items-baseline gap-3">
-          <span className="name min-w-0 flex-1 truncate">
-            <SenderLink accountId={item.accountId} address={item.sender}>
-              {item.senderName ?? item.sender}
-            </SenderLink>
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="name min-w-0 truncate">
+              <SenderLink accountId={item.accountId} address={item.sender}>
+                {item.senderName ?? item.sender}
+              </SenderLink>
+            </span>
+            <ContactHint contact={item.contact} />
           </span>
           <span className="shrink-0 text-sm md:hidden">
             {item.labelId !== null ? (

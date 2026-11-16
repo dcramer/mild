@@ -6,7 +6,7 @@ import { MessageBody, SeenFacts } from '@/components/message-parts.tsx';
 import { AddLabelDialog } from '@/views/label-panel.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { type RuleStart, keepStart, messageStart } from '@/lib/rule-start.ts';
-import { SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
+import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { type MessageDetail, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, dateTime, describeMatch, money, sureness, tier } from '@/lib/format.ts';
 import {
@@ -335,6 +335,7 @@ export function MessagePanel({
             <SenderLink accountId={data.accountId} address={data.fromAddress} className="text-foreground">
               {data.fromName ?? data.fromAddress}
             </SenderLink>
+            <ContactHint contact={data.sender.contact} />
             {data.fromName ? <span>{data.fromAddress}</span> : null}
             <span aria-hidden>·</span>
             <span className="tabular-nums">{dateTime(data.receivedAt)}</span>

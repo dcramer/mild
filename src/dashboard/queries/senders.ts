@@ -1,7 +1,7 @@
 import { and, asc, count, desc, eq, isNotNull, max, messages } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import { pendingSuggestions } from '../../learn/feedback.ts';
-import { domainFacts, senderFacts } from '../../store/senders.ts';
+import { contacts, domainFacts, senderFacts } from '../../store/senders.ts';
 import { listLabels } from '../../store/labels.ts';
 import { type Scope, narrow } from '../scope.ts';
 import type { SenderPage, SenderProfile } from '../types.ts';
@@ -28,8 +28,8 @@ async function profileOf(db: Sql, scope: Scope, accountId: string, who: { addres
     .map((r) => ({ id: r.id, match: r.match, labelName: r.labelName, disposition: r.disposition, source: r.source, kind: r.kind, when: r.when }));
   return {
     address: 'address' in who ? who.address : who.domain,
-    standing: known.standing,
-    why: known.why,
+    contact: known.contact,
+    given: known.standing === 'trusted' || known.standing === 'unwanted' || known.standing === 'blocked' ? known.standing : null,
     messages: known.messages,
     firstSeenAt: known.firstSeenAt,
     lastSeenAt: known.lastSeenAt,
@@ -39,7 +39,7 @@ async function profileOf(db: Sql, scope: Scope, accountId: string, who: { addres
     answers: known.answers,
     userHasWritten: known.userHasWritten,
     labels: known.labels.map((l) => ({ id: l.id, name: names.get(l.id) ?? l.id, messages: l.messages })),
-    domain: ofDomain ? { name: domainName, standing: ofDomain.standing, why: ofDomain.why, messages: ofDomain.messages, senders: ofDomain.senders } : null,
+    domain: ofDomain ? { name: domainName, contact: ofDomain.contact } : null,
     rules,
   };
 }
@@ -71,20 +71,21 @@ export async function senderPage(
             .limit(1)
         )[0]?.fromName ?? null)
       : null;
-  const senders =
+  const writing =
     'domain' in who
-      ? await Promise.all(
-          (
-            await db
-              .select({ address: messages.fromAddress, name: max(messages.fromName), messages: count(), lastSeenAt: max(messages.receivedAt) })
-              .from(messages)
-              .where(and(eq(messages.accountId, accountId), eq(messages.fromDomain, who.domain)))
-              .groupBy(messages.fromAddress)
-              .orderBy(desc(count()), asc(messages.fromAddress))
-              .limit(100)
-          ).map(async (s) => ({ ...s, lastSeenAt: s.lastSeenAt!, standing: (await senderFacts(db, accountId, s.address, now)).standing })),
-        )
+      ? await db
+          .select({ address: messages.fromAddress, name: max(messages.fromName), messages: count(), lastSeenAt: max(messages.receivedAt) })
+          .from(messages)
+          .where(and(eq(messages.accountId, accountId), eq(messages.fromDomain, who.domain)))
+          .groupBy(messages.fromAddress)
+          .orderBy(desc(count()), asc(messages.fromAddress))
+          .limit(100)
       : [];
+  const known = await contacts(
+    db,
+    writing.map((s) => ({ accountId, address: s.address })),
+  );
+  const senders = writing.map((s) => ({ ...s, lastSeenAt: s.lastSeenAt!, contact: known.get(`${accountId}\n${s.address}`) ?? null }));
   return {
     accountId,
     kind: 'address' in who ? 'sender' : 'domain',

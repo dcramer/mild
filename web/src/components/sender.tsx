@@ -1,14 +1,18 @@
+import { MegaphoneIcon, ReplyIcon, SparkleIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { type SenderProfile, type Standing, api, useLoaded } from '@/lib/api.ts';
-import { STANDINGS, describeMatch, outcomeName, plural, shortDate } from '@/lib/format.ts';
-import { Fact, Facts, Failure, HoverCard, Stamp, TextLink } from '@/system';
+import { type Contact, type SenderProfile, api, useLoaded } from '@/lib/api.ts';
+import { CONTACT_SAYS, describeMatch, outcomeName, plural, shortDate } from '@/lib/format.ts';
+import { Fact, Facts, Failure, Hint, HoverCard, TextLink } from '@/system';
 
 export const senderHref = (accountId: string, address: string) => `/sender/${encodeURIComponent(accountId)}/${encodeURIComponent(address)}`;
 const domainHref = (accountId: string, domain: string) => `/domain/${encodeURIComponent(accountId)}/${encodeURIComponent(domain)}`;
 
-/** Where a sender stands, in a word. */
-export function StandingStamp({ standing }: { standing: Standing }) {
-  return <Stamp>{STANDINGS[standing]}</Stamp>;
+const CONTACT_ICONS = { new: SparkleIcon, mutual: ReplyIcon, 'one-way': MegaphoneIcon } as const;
+
+/** How the owner and a sender know each other, after their name. Someone new is yellow: look at them first. */
+export function ContactHint({ contact }: { contact: Contact }) {
+  if (!contact) return null;
+  return <Hint icon={CONTACT_ICONS[contact]} says={CONTACT_SAYS[contact]} tone={contact === 'new' ? 'look' : 'plain'} />;
 }
 
 /** What sift's rules say about a sender, one per line. */
@@ -37,7 +41,7 @@ function Rules({ rules }: { rules: SenderProfile['rules'] }) {
 }
 
 /**
- * What sift knows about a sender or a domain, as facts: where they stand and why, how much they send and
+ * What sift knows about a sender or a domain, as facts: how much they send and
  * what it is, whether the owner writes to them, and the rules about them. `brief` leaves out the rules
  * and the domain, for a preview.
  */
@@ -45,12 +49,6 @@ export function SenderFacts({ accountId, profile, brief }: { accountId: string; 
   const [top, ...others] = profile.labels;
   return (
     <Facts>
-      <Fact term="Standing">
-        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-          <StandingStamp standing={profile.standing} />
-          <span className="text-muted-foreground">{profile.why}</span>
-        </span>
-      </Fact>
       <Fact term="Mail">
         {profile.messages === 0
           ? 'None recorded'
@@ -75,8 +73,10 @@ export function SenderFacts({ accountId, profile, brief }: { accountId: string; 
       {profile.userHasWritten === null ? null : <Fact term="You wrote">{profile.userHasWritten ? 'Yes, you have written to them' : 'Never'}</Fact>}
       {!brief && profile.domain ? (
         <Fact term="Domain">
-          <TextLink href={domainHref(accountId, profile.domain.name)}>{profile.domain.name}</TextLink>
-          <span className="text-muted-foreground"> · {STANDINGS[profile.domain.standing]}</span>
+          <span className="inline-flex items-center gap-2">
+            <TextLink href={domainHref(accountId, profile.domain.name)}>{profile.domain.name}</TextLink>
+            <ContactHint contact={profile.domain.contact} />
+          </span>
         </Fact>
       ) : null}
       {!brief && profile.rules.length > 0 ? (
@@ -95,7 +95,10 @@ function Preview({ accountId, address }: { accountId: string; address: string })
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <p className="name truncate">{data.name ?? address}</p>
+        <p className="flex items-center gap-2">
+          <span className="name truncate">{data.name ?? address}</span>
+          <ContactHint contact={data.profile.contact} />
+        </p>
         {data.name ? <p className="truncate text-muted-foreground">{address}</p> : null}
       </div>
       <SenderFacts accountId={accountId} profile={data.profile} brief />
@@ -104,7 +107,7 @@ function Preview({ accountId, address }: { accountId: string; address: string })
 }
 
 /**
- * A sender, wherever one is named: a link to their page, with a preview of where they stand. Inside a row
+ * A sender, wherever one is named: a link to their page, with a preview of what Sift knows. Inside a row
  * that opens on a press, the link takes the press itself.
  */
 export function SenderLink({ accountId, address, children, className }: { accountId: string; address: string; children?: ReactNode; className?: string }) {

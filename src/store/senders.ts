@@ -1,4 +1,22 @@
-import { alias, and, asc, correspondents, count, countDistinct, decisions, desc, eq, feedback, ilike, isNotNull, max, messages, min, sql } from './query.ts';
+import {
+  alias,
+  and,
+  asc,
+  correspondents,
+  count,
+  countDistinct,
+  decisions,
+  desc,
+  eq,
+  feedback,
+  ilike,
+  inArray,
+  isNotNull,
+  max,
+  messages,
+  min,
+  sql,
+} from './query.ts';
 import type { Sql } from './sql.ts';
 import { type Standing, isSharedDomain, standingOf } from '../triage/standing.ts';
 import type { Disposition } from '../triage/types.ts';
@@ -62,6 +80,51 @@ export async function rememberCorrespondent(db: Sql, accountId: string, address:
     });
 }
 
+/**
+ * How the owner and a sender know each other, from the mail alone: their first message, someone the owner
+ * writes to, or someone who keeps writing and has never been written back to. Null for everyone else.
+ */
+export type Contact = 'new' | 'mutual' | 'one-way';
+
+/** Messages from someone never written to before they count as one-way. */
+const ONE_WAY_AFTER = 5;
+
+export function contactOf(messages: number, userHasWritten: boolean | null): Contact | null {
+  if (userHasWritten) return 'mutual';
+  if (messages <= 1) return 'new';
+  return messages >= ONE_WAY_AFTER && userHasWritten === false ? 'one-way' : null;
+}
+
+/** `contactOf` for many senders at once, keyed by account and address (`account\naddress`). */
+export async function contacts(db: Sql, senders: { accountId: string; address: string }[]): Promise<Map<string, Contact | null>> {
+  if (senders.length === 0) return new Map();
+  const accounts = [...new Set(senders.map((s) => s.accountId))];
+  const addresses = [...new Set(senders.map((s) => s.address))];
+  const seen = new Map<string, number>(
+    (
+      await db
+        .select({ accountId: messages.accountId, address: messages.fromAddress, n: count() })
+        .from(messages)
+        .where(and(inArray(messages.accountId, accounts), inArray(messages.fromAddress, addresses)))
+        .groupBy(messages.accountId, messages.fromAddress)
+    ).map((r) => [`${r.accountId}\n${r.address}`, r.n] as const),
+  );
+  const written = new Map<string, boolean>(
+    (
+      await db
+        .select({ accountId: correspondents.accountId, address: correspondents.address, yes: correspondents.userHasWritten })
+        .from(correspondents)
+        .where(and(inArray(correspondents.accountId, accounts), inArray(correspondents.address, addresses)))
+    ).map((r) => [`${r.accountId}\n${r.address}`, r.yes] as const),
+  );
+  return new Map(
+    senders.map(({ accountId, address }) => {
+      const key = `${accountId}\n${address}`;
+      return [key, contactOf(seen.get(key) ?? 0, written.get(key) ?? null)] as const;
+    }),
+  );
+}
+
 /** What sift knows about a sender, or about everyone at a domain. */
 export interface SenderFacts {
   messages: number;
@@ -79,6 +142,7 @@ export interface SenderFacts {
   answers: { right: number; wrong: number };
   /** Whether the owner has written to them (for a domain: to anyone there). Null if not checked. */
   userHasWritten: boolean | null;
+  contact: Contact | null;
   standing: Standing;
   why: string;
 }
@@ -147,6 +211,7 @@ async function facts(db: Sql, accountId: string, who: { address: string } | { do
     consistency,
     answers,
     userHasWritten,
+    contact: contactOf(seen.n, userHasWritten),
     ...standingOf({ userHasWritten, ruled: does === undefined || does === 'review' ? null : does, messages: seen.n, consistency }),
   };
 }

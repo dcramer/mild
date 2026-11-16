@@ -1,5 +1,5 @@
-import { SenderLink } from '@/components/sender.tsx';
-import type { DecisionRow, UnjudgedRow } from '@/lib/api.ts';
+import { ContactHint, SenderLink } from '@/components/sender.tsx';
+import type { DecisionRow, ListedDecision, UnjudgedRow } from '@/lib/api.ts';
 import { ago, clock, dateTime, dayName, happened, status } from '@/lib/format.ts';
 import { Blank, Button, Does, Failure, Loading, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
@@ -44,7 +44,7 @@ export function MailLog({
   onRequeue,
   search,
 }: {
-  rows: DecisionRow[];
+  rows: ListedDecision[];
   unjudged?: UnjudgedRow[];
   onOpen: OpenMessages;
   onUndo: (row: DecisionRow) => void;
@@ -54,7 +54,7 @@ export function MailLog({
 }) {
   const items = [...unjudged, ...rows].map((row) => ({ accountId: row.accountId, messageId: row.messageId, subject: row.subject }));
   const term = search ? { term: search } : {};
-  const days: { name: string; rows: { row: DecisionRow; index: number }[] }[] = [];
+  const days: { name: string; rows: { row: ListedDecision; index: number }[] }[] = [];
   rows.forEach((row, index) => {
     const name = dayName(row.decidedAt);
     const last = days.at(-1);
@@ -124,10 +124,13 @@ export function MailLog({
             return (
               <Tr key={row.id} onOpen={() => onOpen(items, index)}>
                 <Td className="max-w-0 md:w-[20%] md:min-w-44">
-                  <span className="name block truncate">
-                    <SenderLink accountId={row.accountId} address={row.fromAddress}>
-                      <Marked text={row.fromName ?? row.fromAddress} {...term} />
-                    </SenderLink>
+                  <span className="flex items-center gap-2">
+                    <span className="name min-w-0 truncate">
+                      <SenderLink accountId={row.accountId} address={row.fromAddress}>
+                        <Marked text={row.fromName ?? row.fromAddress} {...term} />
+                      </SenderLink>
+                    </span>
+                    <ContactHint contact={row.contact} />
                   </span>
                   <OnPhone>
                     <span className="w-full truncate text-foreground">{row.subject || '(no subject)'}</span>

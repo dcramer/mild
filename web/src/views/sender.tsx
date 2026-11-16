@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { DecisionTable } from '@/components/decision-table.tsx';
-import { SenderFacts, SenderLink, StandingStamp } from '@/components/sender.tsx';
+import { ContactHint, SenderFacts, SenderLink } from '@/components/sender.tsx';
 import { api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, percent } from '@/lib/format.ts';
 import { standingStart } from '@/lib/rule-start.ts';
@@ -45,7 +45,7 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
     );
 
   const { profile } = data;
-  const given: Given | null = profile.standing === 'trusted' || profile.standing === 'unwanted' || profile.standing === 'blocked' ? profile.standing : null;
+  const { given } = profile;
   const top = profile.labels[0];
   const labelled = profile.labels.reduce((sum, l) => sum + l.messages, 0);
   const answered = profile.answers.right + profile.answers.wrong;
@@ -54,7 +54,7 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
     <div className="flex flex-col gap-10">
       <PageHeader
         title={data.name ?? key}
-        badge={<StandingStamp standing={profile.standing} />}
+        badge={<ContactHint contact={profile.contact} />}
         meta={data.name ? key : data.kind === 'domain' ? 'Everyone writing from this domain' : undefined}
       />
 
@@ -100,7 +100,6 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
             <thead>
               <Tr>
                 <Th>Sender</Th>
-                <Th>Standing</Th>
                 <Th num>Messages</Th>
                 <Th phone="hide" num>
                   Latest
@@ -111,13 +110,15 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
               {data.senders.map((sender) => (
                 <Tr key={sender.address}>
                   <Td className="max-w-0 md:w-1/2">
-                    <SenderLink accountId={accountId} address={sender.address} className="font-medium">
-                      {sender.name ?? sender.address}
-                    </SenderLink>
+                    <span className="flex items-center gap-2">
+                      <span className="min-w-0 truncate">
+                        <SenderLink accountId={accountId} address={sender.address} className="font-medium">
+                          {sender.name ?? sender.address}
+                        </SenderLink>
+                      </span>
+                      <ContactHint contact={sender.contact} />
+                    </span>
                     {sender.name ? <Sub>{sender.address}</Sub> : null}
-                  </Td>
-                  <Td>
-                    <StandingStamp standing={sender.standing} />
                   </Td>
                   <Td num>{count(sender.messages)}</Td>
                   <Td phone="hide" num quiet>

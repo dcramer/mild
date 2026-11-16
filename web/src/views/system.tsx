@@ -1,7 +1,8 @@
-import { ArrowRightIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import { ArrowRightIcon, MegaphoneIcon, PlusIcon, ReplyIcon, SparkleIcon, Trash2Icon } from 'lucide-react';
 import { Fragment, type ReactNode, useState } from 'react';
 import { StatusWord, TierLabel, Verdict } from '@/components/bits.tsx';
-import { ACTIONS, STANDINGS, STATUS_NAMES, TIERS, money, moneyTick, outcomeName } from '@/lib/format.ts';
+import { ContactHint } from '@/components/sender.tsx';
+import { ACTIONS, STATUS_NAMES, TIERS, money, moneyTick, outcomeName } from '@/lib/format.ts';
 import {
   Blank,
   Does,
@@ -34,6 +35,7 @@ import {
   Input,
   Kbd,
   ListView,
+  Hint,
   Look,
   Loading,
   MailFrame,
@@ -55,7 +57,6 @@ import {
   SettingsGroup,
   Sheet,
   StackedBars,
-  Stamp,
   Sub,
   Swatch,
   Table,
@@ -240,10 +241,19 @@ export function SystemView() {
             ))}
             <StatusWord row={{ carryOut: true, outcome: 'failed', actionStatus: null, outcomeDetail: 'Gmail answered 503' }} />
           </Row>
-          <Row label="standing">
-            {Object.values(STANDINGS).map((name) => (
-              <Stamp key={name}>{name}</Stamp>
-            ))}
+          <Row label="hint" note="An icon after a name; pointing at it says what it means. Look is yellow.">
+            <span className="flex items-center gap-2 font-medium">
+              Store
+              <Hint icon={SparkleIcon} says="The first time Sift has seen them" tone="look" />
+            </span>
+            <span className="flex items-center gap-2 font-medium">
+              Deals
+              <Hint icon={MegaphoneIcon} says="They write often and you have never written back" />
+            </span>
+            <span className="flex items-center gap-2 font-medium">
+              Ada Lovelace
+              <Hint icon={ReplyIcon} says="You have written to them" />
+            </span>
           </Row>
           <Row label="tier">
             {TIERS.map((t) => (
@@ -532,15 +542,12 @@ export function SystemView() {
       <div className="grid gap-14 lg:grid-cols-2">
         <Section title="Facts">
           <Facts>
-            <Fact term="Standing">
-              <span className="inline-flex items-center gap-2">
-                <Stamp>Known</Stamp>
-                <span className="text-muted-foreground">their mail is consistently one kind</span>
-              </span>
-            </Fact>
             <Fact term="Mail">14 messages since Oct 20, 2026</Fact>
             <Fact term="Domain">
-              <TextLink href="/system">example.com</TextLink>
+              <span className="inline-flex items-center gap-2">
+                <TextLink href="/system">example.com</TextLink>
+                <ContactHint contact="one-way" />
+              </span>
             </Fact>
           </Facts>
         </Section>
@@ -678,11 +685,11 @@ export function SystemView() {
                 className="font-medium"
                 card={
                   <div className="flex flex-col gap-2">
-                    <p className="name">Example News</p>
+                    <p className="flex items-center gap-2">
+                      <span className="name">Example News</span>
+                      <ContactHint contact="one-way" />
+                    </p>
                     <Facts>
-                      <Fact term="Standing">
-                        <Stamp>Trusted</Stamp>
-                      </Fact>
                       <Fact term="Mail">42 messages</Fact>
                     </Facts>
                   </div>

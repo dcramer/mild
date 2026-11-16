@@ -96,6 +96,14 @@ export const DecisionRow = z.object({
 });
 export type DecisionRow = z.infer<typeof DecisionRow>;
 
+/** How the owner and a sender know each other (`contactOf`, src/store/senders.ts). Null for everyone in between. */
+const Contact = z.enum(['new', 'mutual', 'one-way']).nullable();
+export type Contact = z.infer<typeof Contact>;
+
+/** A decision in a list, with how its sender and the owner know each other. */
+const ListedDecision = DecisionRow.extend({ contact: Contact });
+export type ListedDecision = z.infer<typeof ListedDecision>;
+
 export const Summary = z.object({
   days: z.number(),
   accounts: z.array(z.object({ email: z.string(), lastSyncedAt: z.number().nullable() })),
@@ -121,7 +129,7 @@ export const Summary = z.object({
   daily: z.array(z.object({ day: z.string(), counts: z.record(stage, z.number()), changes: DayChanges, costUsd: z.number() })),
   topSenders: z.array(z.object({ address: z.string(), messages: z.number(), lastDisposition: z.string().nullable() })),
   /** The ten latest decisions in the window. */
-  recent: z.array(DecisionRow),
+  recent: z.array(ListedDecision),
   /**
    * How often sift's suggestion was what the user wanted, from the answers given in the window. Answers
    * to mail sift could not place are not counted.
@@ -140,11 +148,8 @@ export const Summary = z.object({
 export type Summary = z.infer<typeof Summary>;
 
 /** GET /api/decisions: a page of decisions, and how many match in all. */
-export const DecisionPage = z.object({ total: z.number(), rows: z.array(DecisionRow) });
+export const DecisionPage = z.object({ total: z.number(), rows: z.array(ListedDecision) });
 export type DecisionPage = z.infer<typeof DecisionPage>;
-
-export const Standing = z.enum(['trusted', 'known', 'new', 'unwanted', 'blocked']);
-export type Standing = z.infer<typeof Standing>;
 
 const authentication = z.enum(['pass', 'fail', 'none']);
 
@@ -180,9 +185,9 @@ type MessageFactSet = z.infer<typeof MessageFactSet>;
 export const SenderProfile = z.object({
   /** An address, or for a domain's profile the domain. */
   address: z.string(),
-  /** How the owner regards them, and the reason in a few words. */
-  standing: Standing,
-  why: z.string(),
+  contact: Contact,
+  /** What the owner's own rule for exactly them says, given on their page. */
+  given: z.enum(['trusted', 'unwanted', 'blocked']).nullable(),
   lastSeenAt: z.number().nullable(),
   /** Messages in the last 30 days. */
   recent: z.number(),
@@ -192,8 +197,8 @@ export const SenderProfile = z.object({
   consistency: z.number().nullable(),
   /** The owner's answers about their mail. */
   answers: z.object({ right: z.number(), wrong: z.number() }),
-  /** The sender's domain, with its own standing. Null for a domain's own profile and for a domain anyone can get an address at. */
-  domain: z.object({ name: z.string(), standing: Standing, why: z.string(), messages: z.number(), senders: z.number() }).nullable(),
+  /** The sender's domain. Null for a domain's own profile and for a domain anyone can get an address at. */
+  domain: z.object({ name: z.string(), contact: Contact }).nullable(),
   /** Messages recorded from this address. */
   messages: z.number(),
   firstSeenAt: z.number().nullable(),
@@ -276,9 +281,9 @@ export const SenderPage = z.object({
   name: z.string().nullable(),
   profile: SenderProfile,
   /** For a domain: who writes from it, most mail first. */
-  senders: z.array(z.object({ address: z.string(), name: z.string().nullable(), messages: z.number(), lastSeenAt: z.number(), standing: Standing })),
+  senders: z.array(z.object({ address: z.string(), name: z.string().nullable(), messages: z.number(), lastSeenAt: z.number(), contact: Contact })),
   /** Their mail, newest first. */
-  decisions: z.array(DecisionRow),
+  decisions: z.array(ListedDecision),
   /** How much of it is waiting on the owner. */
   waiting: z.number(),
 });
@@ -364,6 +369,7 @@ export const SuggestionItem = z.object({
   decisionId: z.number(),
   sender: z.string(),
   senderName: z.string().nullable(),
+  contact: Contact,
   subject: z.string(),
   receivedAt: z.number(),
   /** What sift would do. `review` without a label means it could not place the mail. */
