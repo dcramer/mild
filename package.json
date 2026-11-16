@@ -21,7 +21,8 @@
     "build:web": "pnpm --filter sift-web build",
     "start": "pnpm sift run",
     "dev": "pnpm sift dev",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "db:reset": "pnpm sift reset-db"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

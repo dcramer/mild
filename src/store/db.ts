@@ -1,4 +1,4 @@
-import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { PGlite, type PGliteInterface } from '@electric-sql/pglite';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
@@ -63,7 +63,7 @@ export async function openDatabase(where: Where): Promise<Driver> {
   const release = lock(where.dir);
   const file = new PGlite(where.dir, { parsers: PARSERS });
   try {
-    await refuseForeign(async (text) => (await file.query<Record<string, unknown>>(text)).rows, `Move ${where.dir} aside and sift makes a new one.`);
+    await refuseForeign(async (text) => (await file.query<Record<string, unknown>>(text)).rows, 'Run sift reset-db to move it aside and start a new one.');
     await migratePglite(overPglite(file), { migrationsFolder: MIGRATIONS });
   } catch (error) {
     await file.close();
@@ -130,6 +130,18 @@ function lock(dir: string): () => void {
   };
   process.on('exit', release);
   return release;
+}
+
+/** Move a PGlite folder aside, so the next open makes a new one. Refused while a sift has it open. Returns where it went. */
+export function moveAside(dir: string): string {
+  const release = lock(dir);
+  const to = `${dir}.${new Date().toISOString().replaceAll(':', '-')}`;
+  try {
+    renameSync(dir, to);
+  } finally {
+    release();
+  }
+  return to;
 }
 
 export function pglite(db: PGliteInterface): Driver {

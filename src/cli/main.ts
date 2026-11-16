@@ -5,6 +5,7 @@ import { paint, ui } from './ui.ts';
 import { dashboard } from './commands/dashboard.ts';
 import { dev } from './commands/dev.ts';
 import { init } from './commands/init.ts';
+import { resetDb } from './commands/reset-db.ts';
 import { run } from './commands/run.ts';
 import { status } from './commands/status.ts';
 
@@ -18,6 +19,7 @@ const MAIN_COMMANDS: readonly (readonly [string, string])[] = [
 const OTHER_COMMANDS: readonly (readonly [string, string])[] = [
   ['dashboard', 'serve the dashboard without reading mail'],
   ['dev', 'for working on sift: run, restarting and reloading as the code changes'],
+  ['reset-db', 'move the database aside, so sift starts a new one'],
 ];
 
 function help(): void {
@@ -48,6 +50,7 @@ async function main(): Promise<void> {
   else if (command === 'dashboard') await dashboard(args);
   else if (command === 'run') await run(args);
   else if (command === 'dev') await dev(args);
+  else if (command === 'reset-db') resetDb();
   else if (command === undefined || command === 'help' || command === '--help' || command === '-h') help();
   else {
     ui.fail(`There is no ${paint.cmd(`sift ${command}`)} command. ${paint.cmd('sift help')} lists them.`);

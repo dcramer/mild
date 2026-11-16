@@ -62,7 +62,7 @@ Real addresses, domains, subjects, message ids and policy never go in the reposi
 
 ## The command line
 
-The CLI exists to set sift up and start it: `init`, `run`, `status`, and `dev` for working on it. It does not connect Gmail accounts; the dashboard's Google sign-in does. `run` is the only process to keep online: it classifies mail and serves the dashboard. Don't add a second daemon. Everything else is managed from the dashboard: when you add something the user can change, add it there, not as a command. Looking at what sift did, and steering it, belongs in the dashboard, so think twice before adding a command.
+The CLI exists to set sift up and start it: `init`, `run`, `status`, and `dev` and `reset-db` for working on it. It does not connect Gmail accounts; the dashboard's Google sign-in does. `run` is the only process to keep online: it classifies mail and serves the dashboard. Don't add a second daemon. Everything else is managed from the dashboard: when you add something the user can change, add it there, not as a command. Looking at what sift did, and steering it, belongs in the dashboard, so think twice before adding a command.
 
 Everything it prints goes through `src/cli/ui.ts`, never `console.log`. The look matches the dashboard: plain ink, dim secondary text, and one colour, the yellow highlighter (`paint.mark`), for the name and for what needs the reader. Red is only for failures. Symbols sit in a two-space gutter and text starts at column four. Motion is limited to a spinner while waiting on the network and finished sections folding into one line. It must still read correctly as plain text when piped (no colour, no cursor movement, numbered menus).
 

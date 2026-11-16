@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
@@ -10,7 +10,7 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts';
 import { addRule, removeRule } from '../src/store/rules.ts';
 import { accounts, labels } from '../src/store/query.ts';
-import { pglite, roleBypass } from '../src/store/db.ts';
+import { DatabaseInUse, moveAside, pglite, roleBypass } from '../src/store/db.ts';
 import { openStore, storeOn } from '../src/store/store.ts';
 import type { Disposition } from '../src/triage/types.ts';
 import { freshStore, onePerson, openUserDb, raw, recordEverything, rowsBy, superuser } from './fixtures.ts';
@@ -52,13 +52,26 @@ describe('migrations', () => {
     await expect(openStore(paths)).rejects.toThrow('last opened by a newer sift');
   });
 
+  it('start over in a new database once the old one is moved aside, which is refused while it is open', async () => {
+    const paths = { databaseDir: scratch() };
+    const first = await openStore(paths);
+    await connectAccount(first, 'me@example.org', '1', 0);
+    expect(() => moveAside(paths.databaseDir)).toThrow(DatabaseInUse);
+    await first.close();
+    const old = moveAside(paths.databaseDir);
+    expect(existsSync(old)).toBe(true);
+    const fresh = await openStore(paths);
+    expect(await fresh.central.select({ id: accounts.id }).from(accounts)).toEqual([]);
+    await fresh.close();
+  });
+
   it('refuse a database made by migrations since replaced, rather than run them again over it', async () => {
     const paths = { databaseDir: scratch() };
     await (await openStore(paths)).close();
     const raw = new PGlite(paths.databaseDir);
     await raw.query(`UPDATE drizzle.__drizzle_migrations SET hash = 'replaced' WHERE id = 1`);
     await raw.close();
-    await expect(openStore(paths)).rejects.toThrow(`Move ${paths.databaseDir} aside`);
+    await expect(openStore(paths)).rejects.toThrow('sift reset-db');
   });
 });
 
