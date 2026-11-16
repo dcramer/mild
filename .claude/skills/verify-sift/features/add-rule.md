@@ -19,13 +19,13 @@ On the Rules screen the user writes a rule directly: a condition, then what it s
 
 Preconditions:
 
-- Fresh seed. Rules shows 3 rules; Suggestions shows 3 waiting, one from `deals@promo.example.com`.
+- Fresh seed. Rules shows 3 rules; Suggestions shows 4 waiting, one from `deals@promo.example.com`.
 
 - **Open the dialog.** `ab open "$B/rules"`, then `ab find role button click --name "Add a rule"`. A level-2 heading `Add a rule` appears with `Add rule` disabled.
 - **Condition.** `ab find role combobox click --name "Condition"`, then `ab find role option click --name "From anyone at"`.
 - **Value.** `ab find role textbox fill "promo.example.com" --name "Value to match"`. `Add rule` is enabled. `What the rule says` stays `Always do this to it` and `What sift does` stays `Archive it`.
 - **Add.** `ab find role button click --name "Add rule"`. The dialog closes and a row reads `from anyone at promo.example.com`; the heading meta reads `4 · the most specific one wins`.
-- **Effect on what is waiting.** `ab open "$B/suggestions"`. The link reads `Suggestions 2` and there is no Deals row.
+- **Effect on what is waiting.** `ab open "$B/suggestions"`. The link reads `Suggestions 3` and there is no Deals row.
 - **Stored.** `verify.sh sql "$RUN" "SELECT match_json, disposition, source FROM rules WHERE match_json LIKE '%promo%'"` returns `{"fromDomain":"promo.example.com"}`, `archive`, `user`. `actions` is empty.
 
 ## Gotchas

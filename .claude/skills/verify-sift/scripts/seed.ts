@@ -31,11 +31,11 @@ if (existsSync(config.dbPath)) throw new Error(`${config.dbPath} already exists.
 const HOUR = 3_600_000;
 const now = Date.now();
 let n = 0;
-const mail = (from: string, subject: string, body: string, extra: { name: string; value: string }[] = []) => ({
+const mail = (from: string, subject: string, body: string, extra: { name: string; value: string }[] = [], labelIds: string[] = []) => ({
   raw: {
     id: `m${++n}`,
     threadId: `t${n}`,
-    labelIds: ['INBOX', 'UNREAD'],
+    labelIds: ['INBOX', 'UNREAD', ...labelIds],
     internalDate: now - n * HOUR,
     headers: [
       { name: 'From', value: from },
@@ -61,6 +61,10 @@ const inbox = [
   mail('CI <builds@ci.example.org>', 'Build failed on main', 'The build failed at step 3.'),
   mail('Ada Lovelace <ada@example.org>', 'Lunch on Thursday?', 'Are you free for lunch on Thursday?'),
   mail('Grace Hopper <grace@example.net>', 'Notes from the review', 'Attached are my notes.'),
+  // Plainly bulk by its headers (list, one-click, a bulk service, Promotions), so the heuristics tier places it as Marketing.
+  mail('Store <sale@store.example.com>', 'Winter sale starts now', 'Up to half off.', [...list('store.example.com'), { name: 'X-Mailgun-Sid', value: 'seed' }], [
+    'CATEGORY_PROMOTIONS',
+  ]),
 ];
 
 const db = openDb(config.dbPath);

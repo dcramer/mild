@@ -23,16 +23,17 @@ $V up "$RUN"
 
 What the seed leaves (through a real observing pass, `runOnce`, with heuristics on and no model):
 
-| Id | Sender | Rule it meets | Shows as |
+| Id | Sender | What places it | Shows as |
 | --- | --- | --- | --- |
 | `m1`, `m2` | `digest@news.example.com` | label rule → Newsletters | Activity only |
 | `m3` | `orders@shop.example.com` | label rule → Receipts and transactions | Activity only |
-| `m4` | `deals@promo.example.com` | none | Suggestions, "Not sure" |
+| `m4` | `deals@promo.example.com` | nothing | Suggestions, `Not sure…` |
 | `m5` | `builds@ci.example.org` | action rule → archive | Activity only |
-| `m6` | `ada@example.org` | none | Suggestions, "Not sure" |
-| `m7` | `grace@example.net` | none | Suggestions, "Not sure" |
+| `m6` | `ada@example.org` | nothing | Suggestions, `Not sure…` |
+| `m7` | `grace@example.net` | nothing | Suggestions, `Not sure…` |
+| `m8` | `sale@store.example.com` | header heuristics → Marketing | Suggestions, `Marketing` (sure), the only row with a label to agree with |
 
-The connected account is `me@example.org`, observing, no model, default labels, 3 user rules. Every message carries `dmarc=pass`; the two lists carry one-click unsubscribe headers.
+The connected account is `me@example.org`, observing, no model, default labels, 3 user rules. Every message carries `dmarc=pass`; the three lists (news, promo, store) carry one-click unsubscribe headers. `m8` also has a Mailgun header and Gmail's Promotions category, which is what the heuristics need.
 
 The dashboard does not pick up code changes. After editing `src/` or `web/src`, `down` and `up` a new directory.
 
@@ -50,11 +51,12 @@ Read-only. Passes only if this run's process is alive, the port answers as `me@e
 $V ab "$RUN" open "http://127.0.0.1:$(cat "$RUN/port")/suggestions"
 $V ab "$RUN" snapshot -i          # interactive elements with refs (@e12)
 $V ab "$RUN" find role button click --name "Save answer"
+$V ab "$RUN" press j               # page keys work: J/K move, A agrees, 1–9 pick a label
 ```
 
 `ab` is agent-browser (`npx agent-browser@0.39.2`) in this run's own browser session; any agent-browser command works after it (`agent-browser skills get core` for the full set). Use `127.0.0.1`, which is where the cookie was set, not `localhost`.
 
-Find elements by role and accessible name, not refs or CSS: refs change on every snapshot. The names the page uses are in [features/](features/README.md). Routes: `/suggestions`, `/activity`, `/labels`, `/rules`, `/settings`, `/sender/<account>/<address>`, `/domain/<account>/<domain>`, and `/system` (the design-system specimen, no sign-in). An open message is `?message=<id>&account=me%40example.org` on any route.
+Find elements by role and accessible name, not refs or CSS: refs change on every snapshot. A control with a shortcut has its keycap in its name (`Save answer ↵`, `Archive E`); `--name` matches part of a name, so the words alone find it. The names the page uses are in [features/](features/README.md). Routes: `/suggestions`, `/activity`, `/labels`, `/rules`, `/settings`, `/sender/<account>/<address>`, `/domain/<account>/<domain>`, and `/system` (the design-system specimen, no sign-in). An open message is `?message=<id>&account=me%40example.org` on any route.
 
 Phone width: `$V ab "$RUN" set viewport 390 844`. AGENTS.md asks what every part does on a phone.
 
