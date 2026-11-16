@@ -33,17 +33,17 @@ const UNSURE = '-';
 /** How sift did this week, as one quiet line beside the title; changes that went wrong are the only thing in it that asks for anything. */
 function Week({ summary }: { summary: Summary }) {
   const t = summary.totals;
+  // On a phone only what went wrong is said here; the week's figures are on Activity.
   return (
-    <p className="text-right text-sm text-muted-foreground tabular-nums">
+    <p className="flex flex-col gap-0.5 text-sm text-muted-foreground tabular-nums md:items-end">
       {t.troubledActions > 0 ? (
-        <>
-          <Failure inline>
-            <TextLink href="/activity?status=trouble&days=30">{plural(t.troubledActions, 'change')} went wrong</TextLink>
-          </Failure>
-          <br />
-        </>
+        <Failure inline>
+          <TextLink href="/activity?show=trouble&days=30">{plural(t.troubledActions, 'change')} went wrong</TextLink>
+        </Failure>
       ) : null}
-      This week {percent(t.withoutInference, t.decisions)} without a model · {money(t.costUsd)} · <TextLink href="/activity">Activity</TextLink>
+      <span className="hidden md:inline">
+        This week {percent(t.withoutInference, t.decisions)} without a model · {money(t.costUsd)} · <TextLink href="/activity">Activity</TextLink>
+      </span>
     </p>
   );
 }
@@ -105,23 +105,28 @@ function SuggestionRow({
     <Tr onOpen={onOpen}>
       {/* Who sent it, by name and address: a name alone could be anyone. */}
       <Td className="max-w-0 md:w-[24%] md:min-w-52">
-        <span className="name block truncate">
-          <SenderLink accountId={item.accountId} address={item.sender}>
-            {item.senderName ?? item.sender}
-          </SenderLink>
+        {/* On a phone the row reads like a mail app's: who and what sift thinks, the subject, a line of the text. It opens to answer. */}
+        <span className="flex items-baseline gap-3">
+          <span className="name min-w-0 flex-1 truncate">
+            <SenderLink accountId={item.accountId} address={item.sender}>
+              {item.senderName ?? item.sender}
+            </SenderLink>
+          </span>
+          <span className="shrink-0 text-sm md:hidden">
+            {item.labelId !== null ? (
+              <span className="inline-flex items-center gap-2 text-muted-foreground">
+                <Meter level={sureness(item.stage, item.confidence)} />
+                {item.labelName ?? outcomeName(item.disposition)}
+              </span>
+            ) : (
+              <Look>{outcomeName('review')}</Look>
+            )}
+          </span>
         </span>
-        {item.senderName ? <Sub>{item.sender}</Sub> : null}
-        {/* On a phone the row only says what sift thinks; it opens the message, where the answer is. */}
+        {item.senderName ? <Sub className="hidden md:block">{item.sender}</Sub> : null}
         <OnPhone>
-          <span className="w-full truncate text-foreground">{item.subject || '(no subject)'}</span>
-          {item.labelId !== null ? (
-            <span className="inline-flex items-center gap-2">
-              <Meter level={sureness(item.stage, item.confidence)} />
-              {item.labelName ?? outcomeName(item.disposition)}
-            </span>
-          ) : (
-            <Look>{outcomeName('review')}</Look>
-          )}
+          <span className="w-full truncate text-base text-foreground">{item.subject || '(no subject)'}</span>
+          {item.preview ? <span className="w-full truncate">{item.preview}</span> : null}
         </OnPhone>
       </Td>
       {/* What it is about, and as much of what it says as fits: enough to answer without opening it. */}
