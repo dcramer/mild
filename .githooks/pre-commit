@@ -1,3 +1,0 @@
-#!/bin/sh
-# The quick part of `pnpm check`; typecheck and tests stay there and in CI.
-pnpm --silent lint && pnpm --silent knip && pnpm --silent format:check
