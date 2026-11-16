@@ -11,20 +11,20 @@ const VIEWS = [
   ['text', 'Text'],
   ['html', 'HTML'],
 ] as const;
-/** How this reader last chose to read a message, kept in their browser. */
+/** How this reader last chose to read a message, kept in their browser. HTML until they choose text, as a mail client shows it. */
 const VIEW_KEY = 'sift:message-view';
 
 function storedView(): View {
   try {
-    return window.localStorage.getItem(VIEW_KEY) === 'html' ? 'html' : 'text';
+    return window.localStorage.getItem(VIEW_KEY) === 'text' ? 'text' : 'html';
   } catch {
-    return 'text';
+    return 'html';
   }
 }
 
 /**
- * A message's text as far as sift holds it, under who it went to; or, when it has HTML, that instead,
- * fetched from Gmail while it is shown. Who sent it and when are in the panel's header.
+ * A message under who it went to: its HTML, fetched from Gmail while it is shown, or its text as far as sift
+ * holds it when it has no HTML or the reader chose text. Who sent it and when are in the panel's header.
  */
 export function MessageBody({ detail }: { detail: MessageDetail }) {
   const [view, setView] = useState(storedView);
