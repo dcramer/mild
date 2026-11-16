@@ -27,7 +27,6 @@ export interface Context {
 export type Reply<T = unknown> = { status: 200; body: T } | { status: 400 | 404; body: { error: string } };
 export const ok = <T>(body: T): Reply<T> => ({ status: 200, body });
 export const missing = (error: string): Reply<never> => ({ status: 404, body: { error } });
-export const malformed = (error: string): Reply<never> => ({ status: 400, body: { error } });
 
 /**
  * A GET. It is given the scope of whoever asked and must show nothing outside it. `query` parses the

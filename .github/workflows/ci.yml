@@ -40,6 +40,10 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm oxlint --format=github
 
+      - name: Unused code
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm knip
+
       - name: Format
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm format:check

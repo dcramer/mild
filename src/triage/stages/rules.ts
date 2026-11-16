@@ -56,7 +56,7 @@ export interface Rule {
   learned?: boolean;
 }
 
-export function matches(match: RuleMatch, facts: MessageFacts): boolean {
+function matches(match: RuleMatch, facts: MessageFacts): boolean {
   const checks: boolean[] = [];
   if (match.from !== undefined) checks.push(facts.from.address === match.from.toLowerCase());
   if (match.fromDomain !== undefined) checks.push(facts.from.domain === match.fromDomain.toLowerCase());

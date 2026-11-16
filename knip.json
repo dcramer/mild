@@ -1,0 +1,9 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": [".claude/**"],
+  "ignoreBinaries": ["tailscale"],
+  "workspaces": {
+    ".": {},
+    "web": { "entry": ["src/sw.js"] }
+  }
+}

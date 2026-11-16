@@ -18,8 +18,8 @@ Package manager is **pnpm**. Node 24 (`.nvmrc`). Node runs the `.ts` sources dir
 | Command | Use |
 | --- | --- |
 | `pnpm install` | First thing in a fresh checkout or worktree. |
-| `pnpm check` | The gate: typecheck + lint + format check + tests. Must pass before every commit. |
-| `pnpm check:fast` | Typecheck + lint + format check. |
+| `pnpm check` | The gate: typecheck + lint + unused code (knip) + format check + tests. Must pass before every commit. |
+| `pnpm check:fast` | All of it but the tests. |
 | `pnpm vitest run tests/foo.test.ts` | One test file. Add `-t "name"` for one test. |
 | `pnpm format` | `oxlint --fix` then `oxfmt`. |
 | `pnpm sift <command>` | Run the CLI from source. `pnpm start` is `pnpm sift run`. |
@@ -104,6 +104,7 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | Redesign one page at a time, offering a few directions built from the real parts in `web/src/system` (not redrawn in a mock), and get David's pick before the next page. Don't carry over a part he has not approved. | Nothing: judgment |
 | Every line on a screen says something the reader can use; a page needs intent, not a heading over every field it has | Nothing: judgment (see "Don't state the obvious") |
 | sift runs on a headless server reached by hostname or Tailscale, not at localhost: check every URL, listener and sign-in step from another machine | Nothing: judgment |
+| Nothing unused: no export, file or dependency nothing imports, no parameter nothing reads. An `_` prefix does not excuse one; remove it from the callers too | `knip` and `no-unused-vars` (no `_` exception), both in `pnpm check` |
 | One way to do each thing: use the mechanism David named, and remove the old path when a new one replaces it | Nothing: judgment |
 | One answer about one message does not become a rule about its sender, and a weak signal (having written to someone) is not trust | Nothing: judgment |
 | sift classifies mail and helps the user sift through it; it is never described as sorting. Whether it changes Gmail is whether it is on (Settings: Active, On/Off), not "acting" or "observing" | Nothing: judgment |

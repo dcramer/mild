@@ -139,8 +139,7 @@ interface PendingSignIn {
  * wherever the dashboard is opened. Resolves once OpenAI has issued the code.
  */
 export async function startChatGPTSignIn(models: Models, deviceId: string, now: () => number = Date.now): Promise<PendingSignIn> {
-  let issued = (_: { code: string; url: string; expiresAt: number }) => {};
-  const code = new Promise<{ code: string; url: string; expiresAt: number }>((resolve) => (issued = resolve));
+  const code = Promise.withResolvers<{ code: string; url: string; expiresAt: number }>();
   const done = models
     .login(
       'openai-codex',
@@ -153,13 +152,13 @@ export async function startChatGPTSignIn(models: Models, deviceId: string, now: 
         },
         notify: (event) => {
           if (event.type === 'device_code')
-            issued({ code: event.userCode, url: event.verificationUri, expiresAt: now() + (event.expiresInSeconds ?? 900) * 1000 });
+            code.resolve({ code: event.userCode, url: event.verificationUri, expiresAt: now() + (event.expiresInSeconds ?? 900) * 1000 });
         },
       },
       { getDeviceId: () => deviceId },
     )
     .then(() => undefined);
-  return { ...(await Promise.race([code, done.then(() => Promise.reject(new Error('ChatGPT finished signing in before giving a code.')))])), done };
+  return { ...(await Promise.race([code.promise, done.then(() => Promise.reject(new Error('ChatGPT finished signing in before giving a code.')))])), done };
 }
 
 /** Sign in with ChatGPT, as OpenAI documents it for open-source apps: no client secret, and a client registered by each sign-in. */

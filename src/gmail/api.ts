@@ -3,7 +3,7 @@ import type { OAuth2Client } from 'google-auth-library';
 import { type MessageContent, findHtml, readContent } from './body.ts';
 
 /** Headers fetched for triage. Bodies are never requested here. */
-export const METADATA_HEADERS = [
+const METADATA_HEADERS = [
   'From',
   'To',
   'Cc',

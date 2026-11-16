@@ -4,7 +4,7 @@ import { type Config, type Settings, isAddress } from '../config.ts';
 import { type Ui, paint } from './ui.ts';
 
 /** Who may sign in to the user's Google app. Decides the last tasks of the Google setup. */
-export type Access = 'test' | 'publish';
+type Access = 'test' | 'publish';
 
 export interface SetupState {
   /** Google setup tasks finished, counted along the path `access` selects. */

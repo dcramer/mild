@@ -32,7 +32,7 @@ export interface Evidence {
 export const UNSURE = 'unsure';
 
 /** How sure the model must say it is before its label alone sends mail to spam. */
-export const SURE_FOR_SPAM = 0.9;
+const SURE_FOR_SPAM = 0.9;
 
 /** What a call cost, as the provider reported it. */
 export interface Usage {

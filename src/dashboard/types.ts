@@ -587,7 +587,7 @@ const EvalScore = EvalTally.extend({
 type EvalScore = z.infer<typeof EvalScore>;
 
 /** One replay of the model over stored examples. */
-export const EvalRun = z.object({
+const EvalRun = z.object({
   id: z.number(),
   accountId: z.string(),
   startedAt: z.number(),
@@ -607,7 +607,7 @@ export const EvalRun = z.object({
   /** Of the answers, those given with an example from the same sender in the prompt, which makes them easy. */
   withSenderExample: z.object({ answered: z.number(), right: z.number() }),
 });
-export type EvalRun = z.infer<typeof EvalRun>;
+type EvalRun = z.infer<typeof EvalRun>;
 
 /** GET /api/evals. */
 export const Evals = z.object({

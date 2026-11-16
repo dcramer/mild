@@ -46,7 +46,7 @@ const HEADERS = {
  * Its own inline styles are all it may have. Links open in a new tab, which is not sandboxed so the site
  * linked to works, and learns nothing of where it was opened from.
  */
-export const FRAME_HEADERS = {
+const FRAME_HEADERS = {
   'content-security-policy':
     "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox allow-popups allow-popups-to-escape-sandbox",
   'x-content-type-options': 'nosniff',

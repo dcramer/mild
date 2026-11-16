@@ -92,7 +92,7 @@ export interface ModelSignIns {
 }
 
 /** Where to sign in to ChatGPT, until when, and by device code the code to enter there. */
-export interface PendingChatGPT {
+interface PendingChatGPT {
   code?: string;
   url: string;
   expiresAt: number;

@@ -10,7 +10,7 @@ import { ask, readLine, suspendReader } from './terminal.ts';
  * Red is only for failures. Colour and motion switch off by themselves when output is not a
  * terminal (picocolors honours NO_COLOR and pipes), so everything here still reads as plain text.
  */
-export const interactive = process.stdout.isTTY && process.stdin.isTTY;
+const interactive = process.stdout.isTTY && process.stdin.isTTY;
 
 // Rows written since `mark()`, so a finished section can be folded away. Counts wrapped rows too.
 let tracking = false;
@@ -45,13 +45,13 @@ const PAD = '  ';
 const TEXT = '    ';
 
 /** `sift` in highlighter, then what this screen is. */
-export function heading(title: string, detail?: string): void {
+function heading(title: string, detail?: string): void {
   line();
   line(`${PAD}${paint.mark(' sift ')} ${pc.bold(title)}${detail ? `  ${pc.dim(detail)}` : ''}`);
   line();
 }
 
-export const say = {
+const say = {
   ok: (text: string) => line(`${PAD}${SYMBOL.ok} ${text}`),
   skip: (text: string) => line(`${PAD}${SYMBOL.skip} ${pc.dim(text)}`),
   /** Something the reader should act on. */
@@ -63,26 +63,26 @@ export const say = {
 };
 
 /** A numbered section of a longer flow. */
-export function step(n: number, total: number, title: string): void {
+function step(n: number, total: number, title: string): void {
   line();
   line(`${PAD}${pc.bold(title)}  ${pc.dim(`${n} of ${total}`)}`);
 }
 
 /** Start of a section that `collapse` can later fold into one line. */
-export function mark(): void {
+function mark(): void {
   tracking = true;
   rows = 0;
 }
 
 /** Fold everything since `mark()` into a single done line. In a pipe nothing is erased; the line is just added. */
-export function collapse(summary: string): void {
+function collapse(summary: string): void {
   if (interactive && tracking && rows > 0) out(`\u001B[${rows}A\u001B[0J`);
   tracking = false;
   say.ok(summary);
 }
 
 /** Label and value pairs, aligned, with quiet labels. */
-export function fields(pairs: readonly (readonly [string, string])[]): void {
+function fields(pairs: readonly (readonly [string, string])[]): void {
   const width = Math.max(...pairs.map(([label]) => label.length));
   for (const [label, value] of pairs) line(`${TEXT}${pc.dim(label.padEnd(width))}  ${value}`);
 }
@@ -92,7 +92,7 @@ const shown = (text: string) => stripVTControlCharacters(text).length;
 const padTo = (text: string, width: number) => text + ' '.repeat(Math.max(0, width - shown(text)));
 
 /** An aligned table with a quiet header row. */
-export function table(headers: readonly string[], body: readonly (readonly string[])[]): void {
+function table(headers: readonly string[], body: readonly (readonly string[])[]): void {
   const widths = headers.map((header, column) => Math.max(header.length, ...body.map((row) => shown(row[column] ?? ''))));
   line(`${TEXT}${headers.map((header, column) => pc.dim(padTo(header, widths[column] ?? 0))).join('  ')}`.trimEnd());
   for (const row of body) line(`${TEXT}${row.map((cell, column) => padTo(cell, widths[column] ?? 0)).join('  ')}`.trimEnd());
@@ -128,7 +128,7 @@ const VISIBLE = 9;
  * Choose one option. In a terminal: arrow keys (or j/k) and Enter. In a pipe: a numbered list and a
  * typed number. Returns the chosen value.
  */
-export async function select<T>(question: string, options: readonly Option<T>[]): Promise<T> {
+async function select<T>(question: string, options: readonly Option<T>[]): Promise<T> {
   const first = options[0];
   if (first === undefined) throw new Error('select needs at least one option');
   if (!interactive) {
@@ -191,14 +191,14 @@ export async function select<T>(question: string, options: readonly Option<T>[])
 }
 
 /** Ask for a line of text. An empty answer is allowed. */
-export function text(question: string, signal?: AbortSignal): Promise<string> {
+function text(question: string, signal?: AbortSignal): Promise<string> {
   return ask(`${TEXT}${question}`, signal);
 }
 
 /**
  * Wait for the reader to do something elsewhere and come back. Returns false if they chose to skip.
  */
-export async function pause(hint = 'Enter when done, s to stop'): Promise<boolean> {
+async function pause(hint = 'Enter when done, s to stop'): Promise<boolean> {
   const answer = await ask(`${TEXT}${pc.dim(`${hint}:`)}`);
   if (tracking) rows += 1;
   return !/^s(kip)?$/i.test(answer);
@@ -208,7 +208,7 @@ export async function pause(hint = 'Enter when done, s to stop'): Promise<boolea
  * Read pasted JSON without showing it, since it holds a secret. It may arrive as one line or many:
  * reading stops when it parses, or at an empty line. Returns what was entered, trimmed.
  */
-export async function pasteJson(question: string): Promise<string> {
+async function pasteJson(question: string): Promise<string> {
   if (!interactive) {
     let pasted = await ask(`${TEXT}${question}`);
     while (pasted.startsWith('{') && !parses(pasted)) {
@@ -262,7 +262,7 @@ function parses(json: string): boolean {
 }
 
 /** A URL the reader has to open, set apart so it is easy to find and copy. */
-export function link(url: string): void {
+function link(url: string): void {
   line(`${TEXT}${pc.underline(url)}`);
 }
 
