@@ -1,6 +1,6 @@
 # Runtime
 
-One core that runs as `sift run` on a machine and as two functions on Vercel. Decided 2026-11-16; the table at the end says what is left.
+One core that runs as `sift run` on a machine and as two functions on Vercel. Decided 2026-11-16.
 
 ## The rule
 
@@ -45,11 +45,14 @@ Work a tick leaves unfinished is due again at the next. Ticks may overlap; a loc
 
 Memory is right for one `sift run` process only. Two processes, or any host with instances, need Redis.
 
-## Left to do
+## Many mailboxes on Vercel
 
-| Today | Becomes |
-| --- | --- |
-| Google sign-in's `pending` map (`src/dashboard/server.ts`) | `signin:google:<state>`, taken once |
-| `device-id`, `dashboard-key` files | settings in the environment; files only for `sift run` |
-| `src/cli/` wiring `Controls` and the loop | `createSift(host)` returning `handle` and `tick`; `src/cli/` and a Vercel entry are the hosts |
-| No test that a flow survives a new instance per step | each multi-step flow run with a new core per step, sharing only Postgres and `Ephemeral` |
+A tick never runs into the function's time limit: it starts nothing after `until`, a pass checks it between messages, and a model call gives up after 60 seconds, so `until` is the limit less a minute. What it does not finish is due at the next tick, which starts a minute later whether or not the last has ended; locks keep two off the same work. So more mailboxes cost latency, never a timeout.
+
+How much a minute holds: a quiet pass is a history read and a few dozen queries, a second or two, so four at a time get through roughly a hundred quiet mailboxes a minute. Mail that needs the model costs a few seconds a message, and older mail being pulled in waits on Gmail's quota (about 240 messages a minute per mailbox). Overlapping ticks add to the four. If a minute stops being enough, raise `AT_ONCE` (the work is mostly waiting on the network), and past that have the cron route send each mailbox its own request, so each gets a function and a time limit of its own. Neither is needed for dozens.
+
+## Code
+
+- `src/host/sift.ts`: `createSift(host)`, used by `sift run`, `sift dashboard` and, to come, a Vercel entry. `src/host/` holds the wiring every host shares; `src/cli/` is the commands and the Node listener (`src/cli/serve.ts`).
+- `tests/runtime.test.ts`: no module state outside `src/cli/`, and flows whose steps reach different instances.
+- What is left for Vercel itself (the Neon driver, the two routes, the session secret and Google client from the environment) is in TODO.md.

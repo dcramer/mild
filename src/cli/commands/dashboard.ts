@@ -3,22 +3,31 @@ import { loadConfig } from '../../config.ts';
 import { openEphemeral } from '../../ephemeral/open.ts';
 import { openStore } from '../../store/store.ts';
 import { ui } from '../ui.ts';
-import { buildControls } from '../controls.ts';
+import { LOCAL_TICK_MS } from '../../daemon/run.ts';
+import { createSift } from '../../host/sift.ts';
 import { checkSecrets } from '../secrets-check.ts';
-import { serveDashboard, portOption } from '../serve.ts';
+import { dashboardAddresses, portOption, serveDashboard, sessionSecret } from '../serve.ts';
 
 export async function dashboard(args: string[]): Promise<void> {
   const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string' } } });
-  const port = portOption(values.port);
   const config = loadConfig();
+  const port = portOption(values.port) ?? config.settings.dashboardPort;
   const store = await openStore(config);
   if (store.warning) ui.warn(store.warning);
   const secrets = await checkSecrets(config, store, true);
   ui.heading('dashboard');
   secrets();
   const ephemeral = await openEphemeral(config.settings.redisUrl);
-  const controls = await buildControls(config, store, { ephemeral, running: false });
-  const stop = await serveDashboard(config, store, { controls, ...(port === undefined ? {} : { port }), ...(values.host ? { host: values.host } : {}) });
+  const sift = await createSift({
+    config,
+    store,
+    ephemeral,
+    sessionSecret: sessionSecret(config),
+    ...dashboardAddresses(config, port),
+    log: (line) => ui.plain(line),
+    tickMs: LOCAL_TICK_MS,
+  });
+  const stop = await serveDashboard(config, sift, { port, ...(values.host ? { host: values.host } : {}) });
   ui.info('Only the dashboard is running. `sift run` also reads and classifies mail.');
   ui.blank();
   await new Promise<void>((resolve) => {

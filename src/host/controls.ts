@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { undo } from '../actions/executor.ts';
 import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
 import type { Config } from '../config.ts';
@@ -61,19 +59,11 @@ export async function openModelTier(config: Config, ephemeral: Ephemeral, db: Sq
   return { spec, judge: createJudge(models, model) };
 }
 
-/** A stable id for this installation, created on first use. ChatGPT registers the device under it. */
-function deviceId(config: Config): string {
-  if (existsSync(config.deviceIdPath)) return readFileSync(config.deviceIdPath, 'utf8').trim();
-  const id = randomUUID();
-  writeFileSync(config.deviceIdPath, id, { mode: 0o600 });
-  return id;
-}
-
 /** What the dashboard may ask this process to do. See `Controls`. */
 export async function buildControls(
   config: Config,
   store: Store,
-  live: { ephemeral: Ephemeral; kick?: (person?: number) => void; running: boolean },
+  live: { ephemeral: Ephemeral; deviceId: string; kick?: (person?: number) => void; running: boolean },
 ): Promise<Controls> {
   const choices = modelChoices(config.settings.chatgptSignIn ?? 'device-code');
   /** Pass the person's mailboxes now, not at the next tick. Nothing does while only the dashboard runs. */
@@ -103,7 +93,7 @@ export async function buildControls(
     signInChatGPT: async (db) => {
       const person = await personOf(db);
       const how = choices[0]!.how === 'redirect' ? 'redirect' : 'device-code';
-      return await startChatGPT(live.ephemeral, person, how, deviceId(config));
+      return await startChatGPT(live.ephemeral, person, how, live.deviceId);
     },
     finishChatGPT: async (db, address) => {
       await finishChatGPT(live.ephemeral, await personOf(db), await modelSignIns(config, live.ephemeral, db), address);

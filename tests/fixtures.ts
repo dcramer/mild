@@ -1,3 +1,4 @@
+import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -127,7 +128,7 @@ export type Reply = { status: number; text: string; body: Record<string, unknown
  */
 export async function startDashboard(people: People, options: DashboardOptions & ListenerOptions = {}) {
   const { assetsDir = builtAssets(), dev = false, ...rest } = options;
-  const dashboard = createDashboard(people, { now: () => 77, ...rest });
+  const dashboard = createDashboard(people, { now: () => 77, ephemeral: memoryEphemeral(), ...rest });
   const server = dashboardListener(dashboard, { assetsDir, dev });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   onTestFinished(() => void server.close());

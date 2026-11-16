@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { People } from '../store/people.ts';
 import type { z } from 'zod';
+import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 import { FRAMES, READS, WRITES } from './api/index.ts';
 import type { Context, Write } from './api/route.ts';
 import { frameNote } from './mail-html.ts';
@@ -101,6 +102,8 @@ export interface DashboardOptions {
   signIn?: SignIn;
   /** Signs session cookies. Required with `signIn`. */
   sessionSecret?: string;
+  /** Where a sign-in waits between leaving for Google and coming back, which may reach another instance. Required with `signIn`. */
+  ephemeral?: Ephemeral;
   /** Addresses Google can sign the user in at, to suggest when they opened the dashboard at one it cannot. */
   signInAddresses?: readonly string[];
   /** What the dashboard can ask the rest of sift to do. Without it the page can look but not manage. */
@@ -178,8 +181,10 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
   const { controls, signIn } = options;
   const secret = options.sessionSecret ?? '';
   if (signIn && secret === '') throw new Error('signIn needs a sessionSecret');
-  // Sign-ins in flight: the state Google echoes back, with the PKCE verifier and where to return to.
-  const pending = new Map<string, { verifier: string; redirectUri: string; addTo: string | null; expires: number }>();
+  const { ephemeral } = options;
+  if (signIn && !ephemeral) throw new Error('signIn needs an ephemeral store');
+  /** A sign-in in flight, by the state Google echoes back: the PKCE verifier and where to return to. */
+  const pendingKey = (state: string) => `signin:google:${state}`;
 
   const refuse = async (id: number): Promise<never> => {
     throw new Error(`Nobody is signed in to open person ${id}'s database.`);
@@ -247,18 +252,21 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     }
     if (signIn && method === 'GET' && url.pathname === '/auth/login') {
       if (!signIn.hasClient() || !googleCanReturnHere) return redirect('/');
-      for (const [key, entry] of pending) if (entry.expires < now()) pending.delete(key);
       const state = randomBytes(16).toString('hex');
       const verifier = randomBytes(32).toString('base64url');
       const redirectUri = `${origin}/auth/callback`;
       // Adding a second account is only for someone already signed in.
-      pending.set(state, { verifier, redirectUri, addTo: query.get('add') === '1' ? session : null, expires: now() + SIGN_IN_MS });
+      await ephemeral!.set(
+        pendingKey(state),
+        { verifier, redirectUri, addTo: query.get('add') === '1' ? session : null, expires: now() + SIGN_IN_MS },
+        SIGN_IN_MS,
+      );
       return redirect(signIn.url(redirectUri, state, createHash('sha256').update(verifier).digest('base64url')), signInCookie(state, SIGN_IN_MS / 1000));
     }
     if (signIn && method === 'GET' && url.pathname === '/auth/callback') {
       const state = query.get('state') ?? '';
-      const entry = pending.get(state);
-      pending.delete(state);
+      // Taken, so it completes once.
+      const entry = state ? await ephemeral!.take<{ verifier: string; redirectUri: string; addTo: string | null; expires: number }>(pendingKey(state)) : null;
       const fail = (message: string) => redirect(`/?signin=${encodeURIComponent(message)}`, signInCookie('', 0));
       const code = query.get('code');
       if (!entry || entry.expires < now()) return fail('That sign-in expired. Try again.');

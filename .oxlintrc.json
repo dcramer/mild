@@ -149,8 +149,8 @@
       }
     },
     {
-      // What starts sift wires the store up, and the daemon's loop hands each pass one person's database.
-      "files": ["src/cli/**/*.ts", "src/daemon/run.ts"],
+      // What starts sift wires the store up (the commands, and the hosts' shared wiring in src/host), and the daemon's loop hands each pass one person's database.
+      "files": ["src/cli/**/*.ts", "src/host/**/*.ts", "src/daemon/run.ts"],
       "rules": {
         "no-restricted-imports": [
           "error",

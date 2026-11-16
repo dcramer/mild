@@ -79,7 +79,6 @@ export interface Config {
   databaseMigrationUrl: string | undefined;
   /** The user's own Google OAuth client, as downloaded from Google Cloud Console. */
   googleClientPath: string;
-  deviceIdPath: string;
   /** How far `sift init` has got. */
   setupStatePath: string;
   /** The secret in the dashboard's access link. */
@@ -122,7 +121,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseUrl: settings.databaseUrl,
     databaseMigrationUrl: settings.databaseMigrationUrl,
     googleClientPath: join(home, 'google-client.json'),
-    deviceIdPath: join(home, 'device-id'),
     setupStatePath: join(home, 'setup.json'),
     dashboardKeyPath: join(home, 'dashboard-key'),
     keys: loadKeyring(env),

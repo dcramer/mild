@@ -4,15 +4,11 @@ import { type IncomingMessage, type Server, type ServerResponse, createServer } 
 import { extname, join, relative, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import type { Config } from '../config.ts';
-import type { Controls } from '../dashboard/controls.ts';
-import { type Dashboard, HEADERS, createDashboard } from '../dashboard/server.ts';
+import { type Dashboard, HEADERS } from '../dashboard/server.ts';
 import { WEB_DIST, ensureWebBuilt } from './web-build.ts';
 import { readSecret, writeSecret } from '../secrets.ts';
-import { people } from '../store/people.ts';
-import type { Store } from '../store/store.ts';
 import { listenAddresses, machineNames, tailscaleName } from './network.ts';
 import { paint, ui } from './ui.ts';
-import { buildSignIn } from './google-sign-in.ts';
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -154,7 +150,7 @@ export function dashboardListener(dashboard: Dashboard, options: ListenerOptions
  * What signs dashboard sessions: `SIFT_SESSION_SECRET`, for a host that keeps no files between starts;
  * otherwise made the first time it is needed and kept in the home directory.
  */
-function sessionSecret(config: Config, env: NodeJS.ProcessEnv = process.env): string {
+export function sessionSecret(config: Config, env: NodeJS.ProcessEnv = process.env): string {
   if (env['SIFT_SESSION_SECRET']) return env['SIFT_SESSION_SECRET'];
   const stored = readSecret(config.dashboardKeyPath, config.keys);
   if (stored !== null) return stored.trim();
@@ -170,30 +166,24 @@ export function signInAddresses(port: number): string[] {
 }
 
 /**
- * Start serving the dashboard from this process and say where it is. Used by `run`, so one process
- * keeps sift online, and by `dashboard` on its own.
+ * What the dashboard answers to on this machine: any name or address that is this machine, and the one
+ * set in sift.toml; and where Google can sign someone in.
  */
-export async function serveDashboard(
-  config: Config,
-  store: Store,
-  options: { port?: number; host?: string; controls: Controls; dev?: boolean },
-): Promise<() => void> {
-  const { settings } = config;
-  const port = options.port ?? settings.dashboardPort;
+export function dashboardAddresses(config: Config, port: number) {
+  const host = config.settings.dashboardHost;
+  return { allowedHosts: [...machineNames(), ...(host && host !== 'all' ? [host] : [])], signInAddresses: signInAddresses(port) };
+}
+
+/**
+ * Serve the dashboard from this process and say where it is. Used by `run`, so one process keeps sift
+ * online, and by `dashboard` on its own.
+ */
+export async function serveDashboard(config: Config, dashboard: Dashboard, options: { port: number; host?: string; dev?: boolean }): Promise<() => void> {
+  const { port } = options;
   // --host replaces the setting: a container listens on every interface and its port mapping decides who can reach it.
-  const listen = options.host ? [options.host] : await listenAddresses(settings);
-  // Answer to any name or address that is this machine and to nothing else.
-  const allowedHosts = [...machineNames(), ...(settings.dashboardHost && settings.dashboardHost !== 'all' ? [settings.dashboardHost] : [])];
+  const listen = options.host ? [options.host] : await listenAddresses(config.settings);
   // In dev the page is rebuilt alongside, and served as it changes.
   if (!options.dev) await ensureWebBuilt();
-
-  const dashboard = createDashboard(people(store), {
-    allowedHosts,
-    controls: options.controls,
-    signIn: buildSignIn(config, store),
-    sessionSecret: sessionSecret(config),
-    signInAddresses: signInAddresses(port),
-  });
   const servers = listen.map(() => dashboardListener(dashboard, options.dev ? { dev: true } : {}));
   await Promise.all(
     servers.map(

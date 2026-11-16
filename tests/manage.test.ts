@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { MAX_BACKFILL, backfill } from '../src/daemon/backfill.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { type RunOptions, runLoop, tick } from '../src/daemon/run.ts';
-import { signInRefusal } from '../src/cli/sign-in.ts';
+import { signInRefusal } from '../src/host/sign-in.ts';
 import { triageAccount } from '../src/daemon/triage.ts';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { people } from '../src/store/people.ts';
@@ -694,7 +694,7 @@ describe('older mail', () => {
 });
 
 describe('run loop', () => {
-  it('ticks every interval without waiting for the last, and returns once those still running end', async () => {
+  it('ticks every interval without waiting for the last; ticks that overlap skip work under way', async () => {
     const stop = new AbortController();
     let passes = 0;
     let ticks = 0;
@@ -707,8 +707,11 @@ describe('run loop', () => {
       },
       log: () => {},
     };
-    await runLoop(store, options, { signal: stop.signal, wait: async () => void (++ticks === 3 && stop.abort()) });
+    const started: Promise<unknown>[] = [];
+    await runLoop(() => void started.push(tick(store, options, Infinity)), { signal: stop.signal, wait: async () => void (++ticks === 3 && stop.abort()) });
+    await Promise.all(started);
     // The three overlapped: the first held the mailbox, and the others skipped it.
+    expect(started).toHaveLength(3);
     expect(passes).toBe(1);
   });
 

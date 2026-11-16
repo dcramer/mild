@@ -315,17 +315,11 @@ export async function upkeep(db: Sql, options: Pick<RunOptions, 'log' | 'now'>):
 /** How long a tick in `sift run` may start work: as a host's function would be cut off, so the same path runs. */
 export const LOCAL_TICK_MS = 5 * 60_000;
 
-/**
- * Tick every interval until `signal` aborts, without waiting for the last tick to end, then wait for those
- * still running. What a host's scheduler does; `wait` is for tests.
- */
-export async function runLoop(store: Store, options: RunOptions, control: { signal: AbortSignal; wait?: (ms: number) => Promise<void> }): Promise<void> {
+/** Call `tick` every interval until `signal` aborts, without waiting for one to end: what a host's scheduler does. `wait` is for tests. */
+export async function runLoop(tick: () => void, control: { signal: AbortSignal; wait?: (ms: number) => Promise<void> }): Promise<void> {
   const wait = control.wait ?? (async (ms: number) => await sleep(ms, undefined, { signal: control.signal }).catch(() => {}));
-  const running = new Set<Promise<unknown>>();
   while (!control.signal.aborted) {
-    const ticking: Promise<unknown> = tick(store, options, (options.now ?? Date.now)() + LOCAL_TICK_MS).finally(() => running.delete(ticking));
-    running.add(ticking);
+    tick();
     await wait(PASS_INTERVAL_MS);
   }
-  await Promise.all(running);
 }

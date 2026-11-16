@@ -170,8 +170,7 @@ Everything sift keeps is in one directory, the home: `~/.config/sift` by default
 
 - `sift.toml`: settings, only what a deploy must say (`dashboard.port`, `dashboard.host`, `dashboard.allow`, `database.url`, `database.migration_url`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run. What a person chooses is in their `preferences`; how often sift looks and how long it keeps things are constants in the code.
 - `database/`, `database.lock`: the database, when it is PGlite (see State).
-- `google-client.json`, `dashboard-key`: the install's Google client and the session secret, owner-only. People's sign-ins are in their databases.
-- `device-id`: names this installation to a subscription sign-in. Not a secret.
+- `google-client.json`, `dashboard-key`: the install's Google client and the session secret, owner-only. People's sign-ins are in their databases. Where no file is kept (Vercel), the session secret is `SIFT_SESSION_SECRET`; the id ChatGPT knows the install by is derived from it.
 - `.env`: optional. Read at start, before the one in the working directory; neither replaces a variable already set.
 
 **Credentials are encrypted with a key from the environment** (`SIFT_KEY`), because a key stored beside them would protect nothing. See [SECRETS.md](SECRETS.md).

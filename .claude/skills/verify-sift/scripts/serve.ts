@@ -5,14 +5,17 @@
  *
  *   node .claude/skills/verify-sift/scripts/serve.ts <home> <port>
  *
- * Everything else is the real command: the same store, controls, server, sign-in and policy.
+ * Everything else is the real command's parts: the same store, controls, server, sign-in and policy.
  */
 import { resolve } from 'node:path';
-import { buildControls } from '../../../../src/cli/controls.ts';
-import { serveDashboard } from '../../../../src/cli/serve.ts';
+import { dashboardAddresses, serveDashboard, sessionSecret } from '../../../../src/cli/serve.ts';
 import { ui } from '../../../../src/cli/ui.ts';
 import { loadConfig } from '../../../../src/config.ts';
 import { memoryEphemeral } from '../../../../src/ephemeral/ephemeral.ts';
+import { createDashboard } from '../../../../src/dashboard/server.ts';
+import { buildControls } from '../../../../src/host/controls.ts';
+import { buildSignIn } from '../../../../src/host/google-sign-in.ts';
+import { people } from '../../../../src/store/people.ts';
 import { openStore } from '../../../../src/store/store.ts';
 
 /**
@@ -43,8 +46,18 @@ if (!home || !port) throw new Error('usage: serve.ts <home> <port>');
 process.env['SIFT_HOME'] = resolve(home);
 const config = loadConfig();
 const store = await openStore(config);
-const built = await buildControls(config, store, { ephemeral: memoryEphemeral(), running: false });
-const stop = await serveDashboard(config, store, { port: Number(port), controls: { ...built, messageHtml: async (_db, _account, id) => HTML[id] ?? null } });
+const ephemeral = memoryEphemeral();
+const secret = sessionSecret(config);
+const built = await buildControls(config, store, { ephemeral, deviceId: 'verify-sift', running: false });
+// What createSift puts together for `sift dashboard`, with the one thing it asks Gmail for while it runs answered here.
+const sift = createDashboard(people(store), {
+  ...dashboardAddresses(config, Number(port)),
+  controls: { ...built, messageHtml: async (_db, _account, id) => HTML[id] ?? null },
+  signIn: buildSignIn(config, store),
+  sessionSecret: secret,
+  ephemeral,
+});
+const stop = await serveDashboard(config, sift, { port: Number(port) });
 ui.info('Only the dashboard is running. `sift run` also reads and classifies mail.');
 await new Promise<void>((done) => {
   process.once('SIGINT', done);
