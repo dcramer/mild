@@ -11,7 +11,7 @@ sift is a better Gmail filter and spam filter: models work out what mail is, and
 In this order.
 
 1. **Settings designed with intent** (under Dashboard).
-2. **Figures and a chart above Suggestions** (under Dashboard).
+2. **Fold Overview into the home page** (under Dashboard).
 3. **Keyboard shortcuts in the design system** (under Dashboard).
 
 ## Labels and rules
@@ -27,13 +27,16 @@ Built: labels with defaults and the user's own; outcomes keep, archive, mark spa
 - [ ] **Blocking is the costliest mistake.** A real security notice labelled Phishing gets its sender blocked. Show blocked senders plainly (they are rules sift made) and make unblocking one press.
 - [ ] **Batch into a daily digest.** An outcome for a label: take the mail out of the inbox as it arrives, then once a day put one message in the inbox covering what came in, written by a separate agent with its own prompt whose job is to pull out what might matter (a failed build among forty passed ones, a review request among notifications). Service notifications such as GitHub's are the obvious first use. To design: the digest agent and what it may read; when it runs and what an empty day does; how a digest item links back to its message. Inserting the digest works with the access sift already has (`users.messages.insert`), so it needs no permission to send.
 - [ ] **Rethink the default labels.** They should be kinds of mail someone would treat differently, and "Newsletters" is too broad a home for bulk mail: automated notifications from a service you use (GitHub, CI, alerts) are not newsletters and want different handling, probably a digest. Go through the defaults against real mail, sharpen each description so the model can tell them apart, and say what each does by default.
-- [ ] **Hard rules as Gmail filters.** Where a rule can be written as a Gmail filter (it can match sender, recipient, subject or a search query, and archive, mark read or label; marking spam is not documented), offer to write it there too so it runs when sift is off. Track which rules really exist in Gmail: created by sift, changed or deleted there by the user, or not expressible as a filter at all.
+- [ ] **Rules as Gmail filters, the rest.** Built: a rule that decides by itself and that Gmail can express (sender, recipient or subject; archive or label; never spam) can be written to Gmail as a filter when the user asks and sift is acting, removed with the rule, and checked every 15 minutes for having been changed or deleted in Gmail. The API says for each rule whether it can be a filter and why not. Still to do:
+  - The control on the Rules screen, with what will differ in Gmail shown before the press, and filter changes in the Changes list.
+  - Whether a filter may mark mail read (refused today).
+  - Mail a filter archives never reaches sift, so it has no record, no hit count and no unsubscribe: record mail that arrives outside the inbox already carrying a `sift/` label.
 - [ ] **Soft rules, the rest.** Built: a rule can carry a condition in the user's words, which the model applies. Still to decide: what it costs to show, and proposing a hard rule when a soft one always goes the same way.
-- [ ] **Teach from Gmail.** Notice in Gmail's history when the user moves labelled mail back to the inbox or out of spam, or changes its sift label, and treat that as a correction.
-- [ ] **Audit rules.** Flag a rule the user contradicts, one that never fires, and one a spot-check by the model disagrees with.
+- [ ] **Audit rules.** Flag a rule the user contradicts (answers made in Gmail are marked as such and can feed this), one that never fires, and one a spot-check by the model disagrees with.
 - [ ] More scopes for an answer: this mailing list, this recipient address.
 - [ ] Rules with more than one condition and with exceptions, from the dashboard; reorder rules.
 - [ ] Remove a label, and say what becomes of its rules and of mail already labelled; reorder labels.
+- [ ] **Apply a new rule to what is already in the inbox.** A rule covers mail that arrives from then on (and re-decides what is waiting as a suggestion). When one is made, ask whether to apply it to matching mail already sitting in the inbox, saying how many messages that is before anything moves. To think through: whether a setting makes that the default; that sift only knows mail it has synced, so older mail needs a search of the inbox first; that it must go through the executor like any change, with undo; and that it should never apply to a `usually` rule without the model reading each one.
 - [ ] **Rules for one inbox.** Someone with a personal and a work account wants a rule to apply to one and not the other. Rules already belong to an account, but the Rules screen always uses the first, and nothing lets a rule be shared or kept apart on purpose. Decide: whether a rule is made for one account, several or all; how that is chosen when answering a suggestion (default: the account the mail came to); the same for labels; and matching on which of the user's own addresses the mail was sent to, for aliases within one account (the `to` condition exists but is not offered when answering).
 
 ## Beyond triage
@@ -42,30 +45,29 @@ Built: labels with defaults and the user's own; outcomes keep, archive, mark spa
 
 ## Teaching loop
 
-Built: Suggestions as one row per sender with a one-press answer; opening a row shows the mail, what sift knows about the sender, and an answer with a scope; accuracy from answers; answered messages stored whole as examples. In use on real mail in observe mode.
+Built: Suggestions as one row per sender with a one-press answer; opening a row shows the mail, what sift knows about the sender, and an answer with a scope; accuracy from answers, per tier and per label; answered messages stored whole as examples, shown to the model a few at a time (same sender first), deletable, and kept for as long as `examples.keep_days` says; test runs that replay the model over the examples and score it; waiting suggestions re-decided when a rule or label changes; and what the user does in Gmail (moving mail back, out of spam, relabelling) recorded as an answer for that one message. In use on real mail in observe mode.
 
-- [ ] Use examples to test sift: replay the model over `examples` and report accuracy per label, how often it answers "unsure", and cost per message (`evals/`), so a change to the prompt, model or labels can be checked before it ships.
-- [ ] Use examples to teach the model: pick relevant ones as few-shot examples in the prompt.
+- [ ] **Screens for what the teaching loop now has.** All of this is in the API and nowhere on a page: test runs (start one, watch it, compare two), stored examples (list, delete, how long they are kept), accuracy per tier and label on the Overview, "N suggestions predate your guidelines, judge them again", and how many suggestions changed after a rule or label edit.
+- [ ] Test runs: leave out every example from the same sender (today the same sender's other examples flatter the score), replay the whole cascade and not only the model, cancel a run, prune old runs.
+- [ ] Few-shot: skip the same-domain step for domains anyone can get an address at; measure with test runs whether six examples is the right number.
+- [ ] A removed rule sift made leaves its mail looking as if the user's rule decided it, so it never returns to Suggestions.
+- [ ] From Gmail: snooze may read as archive then un-archive (two answers); `sift/did/*` stays on mail the user moved back; mail sift could not place that the user archives without labelling is skipped.
+- [ ] Use when the user read a message (`messages.read_at`, recorded from Gmail's history) in a sender's standing; it is not known for mail pulled in from before sift was connected.
 - [ ] **Learn from mistakes, by proposing.** A regular review pass (once a day, away from triage) over what the user corrected: where the model keeps getting the same kind of mail wrong, it proposes a change (a rule for the sender, a condition on an existing rule, a line for the guidelines, a sharper label description) and the user accepts or dismisses it. Nothing changes by itself. Proposals already exist for "this sender is always X"; this widens what can be proposed and adds a model that reads the corrections to write them.
-- [ ] Re-decide waiting suggestions when a label's outcome, a rule or the guidelines change.
-- [ ] Accuracy per tier on the Overview.
 - [ ] Let a Chrome extension call the API: it cannot use the page's cookie or Origin, so it needs its own token, issued to a signed-in user.
-- [ ] Decide how long examples are kept and add a way to delete them; they hold full message content.
 
 ## Dashboard
 
 The dashboard manages sift, behind Google sign-in. That sign-in also connects the Gmail account.
 
 - [ ] **Page headers with intent.** The top of each page reads as filler: on Suggestions the title repeats the nav item beside it, the count appears twice (in the nav and in a badge), and two lines of explanation sit under it every visit. Decide what the top of a page is for (what needs the reader now, and the one thing they can do about it), make it one part in the design system, and move explanation to where it is needed (the empty state, the first visit). Do it together with the figures below.
-- [ ] **Figures above Suggestions.** Suggestions is the home page. Between the header and the list, show a few quick data points (how much was decided without a model, how often sift was right, what is waiting, cost) and a small chart of decisions over time, so the page says how sift is doing before it asks for anything.
-- [ ] **The message panel, the rest.** Built: one side panel opened from every list, with the message, what sift decided, the sender, and an answer that confirms or changes the decision for this message or for the future; a correction also takes back what sift did to that message in Gmail; answering moves to the next row. Still to do: the text of mail sift already acted on or kept is not held, so those open without it; correcting one message does not go back and fix the sender's other mail sift already moved; the panel has no address of its own to link to.
+- [ ] **Fold Overview into the home page, and remove the tab.** Suggestions is the home page. Between the header and the list, show the key indicators and a small chart in a compressed band (how much was decided without a model, how often sift was right, what is waiting, cost, decisions over time), so the page says how sift is doing before it asks for anything. The rest of Overview already has a better home: latest decisions are the Decisions tab, and who sends what belongs with senders and domains (which need a list to browse). Then the Overview tab goes.
+- [ ] **The message panel, the rest.** Built: one side panel opened from every list, at its own address, with the message, what sift decided, the sender, and an answer that confirms or changes the decision for this message or for the future; a correction also takes back what sift did to that message in Gmail; answering moves to the next row. Still to do: the text of mail sift already acted on or kept is not held, so those open without it; correcting one message does not go back and fix the sender's other mail sift already moved.
 - [ ] **Settings needs designing with intent.** What is there is a list of whatever was built, in the order it was built. Decide what a person comes to Settings to do and order it by that: whether sift is working and acting, which accounts, the model and what it costs, then the rarely touched. Each page should say what changing it will do before it is changed.
-- [ ] **A working PWA.** Installable on a phone and a desktop: a manifest, icons, a service worker that serves the shell, and sensible behaviour offline (this goes with knowing when the API is unreachable). Check each against the content security policy. Later, push notifications for mail waiting on the user.
 - [ ] **Server-handled routes, then a server-rendered app.** The page is a client-rendered app whose sections are fragments (`#rules`), which the server never sees. First step, in progress: plain paths (`/rules`, `/settings/accounts`, a sender or a message at its own address) that the server answers and the page reads. Then decide how far to take rendering on the server: what it would buy here (a first paint with data in it, pages that work before the script loads, links that can be checked for access on the server), what it costs under the strict content security policy and with mail sealed to a key only the browser holds (the server cannot render what it cannot read), and whether that means a framework or the current server growing a renderer.
-- [ ] **A user menu in the header.** The right of the header is three loose things today: when sift last synced, the signed-in address, and Sign out. Replace the address and Sign out with an avatar that opens a menu (who is signed in, Sign out, later switching account). "Synced just now" can stay beside it. It needs a menu part in the design system, and an answer for the phone, where these already live in the full-screen menu.
-- [ ] **Know when the API is unreachable.** On a bad connection the page should say it is offline, keep showing what it last loaded, retry by itself, hold or refuse writes clearly, and never look broken. The page is a plain React app with a small `useLoaded` hook; replace that with a data layer built for this (TanStack Query: caching, retry with backoff, refetch on reconnect, optimistic writes) and add an offline indicator to the masthead.
 - [ ] **Sign in to ChatGPT (and other model providers) from the dashboard**, as Gmail already is, so setup in the terminal ends at the Google client. The device-code flow suits a page: show the code and the link, wait, then offer the models.
-- [ ] Show an expired Google sign-in where it will be seen: it is in Settings and the `run` log today, not in the masthead or `sift status`. Test users are signed out every 7 days.
+- [ ] Dashboard plumbing, the rest. Built: paths instead of fragments, with filters and the open message in the address; an offline state that keeps the last data and refuses writes; an avatar menu; installable, with a service worker that never caches `/api/`; an expired Google sign-in shown in the masthead. Still to do: after Google sign-in the browser returns to `/`, not where it started; an account with no token at all gets no masthead notice; the expired notice clears only after the next pass; the Decisions page offset is not in the address; a focused menu or select popup draws the yellow outline around the whole popup; the JS bundle is over 500 kB; push notifications; switching account from the menu; whether `/system` stays in the production build.
+- [ ] `/overview` and `/system` scroll sideways on a phone (the chart's legend).
 - [ ] Labels are cards and everything else is rows. Decide whether labels should be rows too.
 - [ ] Narrow screens: Suggestions has a phone layout; Rules, Decisions, Changes and the Overview tables still scroll sideways.
 - [ ] **Keyboard shortcuts as part of the design system.** Obvious things get the keys people already know (J and K or the arrows for next and previous in the panel and down a list, Enter to open, Escape to close, / to search, the number keys for a label), and each shortcut is shown on the page where it applies, so it is learned by looking. To design before building: one part that both binds a key and draws its hint, so the two cannot drift apart; how the hint looks beside a button, in a row and in a menu without adding clutter; what happens to hints on a touch screen; and a switch in Settings that turns shortcuts and their hints off. The panel has previous and next buttons and the answer has number keys and Enter today, each done by hand.
@@ -74,11 +76,9 @@ The dashboard manages sift, behind Google sign-in. That sign-in also connects th
 - [ ] Suggestion bodies are fetched once per waiting message; reuse the text the model tier already fetched instead of asking Gmail twice. `getContent` now returns the text from the model's one read, which makes this straightforward.
 - [ ] Per-rule detail: the messages matched, hits over time.
 - [ ] Merge Decisions and Changes into one activity view.
-- [ ] Keep filters and the open message in the URL so a view can be bookmarked (the section and settings page already are).
 - [ ] Keep people apart: today everyone signed in sees every connected account. Scope each session to its own account before more than one person uses an install. Filter every view by account once there is more than one.
 - [ ] Remove an account, and its token and data, from the dashboard.
 - [ ] Try a second account end to end.
-- [ ] The specimen page (`/#system`) is reachable without signing in. It holds no data; decide whether to keep it in the production build.
 - [ ] Use Tailscale's identity headers to skip the Google round trip for viewers on the tailnet.
 - [ ] Revisit Vercel's UI SDK as the behaviour layer under `web/src/system` once it is past beta and works under the content security policy (evaluated 2026-11-15; see docs/ARCHITECTURE.md).
 
@@ -113,6 +113,9 @@ Observe mode has run for real on the owner's inbox: sync, the model, suggestions
 - [ ] Mark read, mark spam and block on real messages; confirm the spam refusal for people the user has written to.
 - [ ] History paging on a busy day, and recovery from an expired cursor.
 - [ ] The unsubscribe request against a real list.
+- [ ] Gmail filters: whether `from:@domain` leaves out subdomains, whether Gmail rewrites a filter's criteria after it is created, and whether editing a filter in Gmail keeps its id.
+- [ ] History is no longer narrowed to the inbox (label changes are read too): check the volume on a busy account.
+- [ ] Encrypted credentials, the installed app and offline state, and the sign-in allow list, on the real install.
 
 ## Deployment and isolation
 
@@ -134,6 +137,7 @@ Observe mode has run for real on the owner's inbox: sync, the model, suggestions
   - **Runtime differences.** Cloudflare Workers are not Node: check what sift uses (`node:sqlite`, `node:https`, the model library) against each platform.
 - [ ] **Sentry, with tracing.** Errors and OpenTelemetry spans for a pass, each message's triage (one span per tier, the model call with tokens and cost), each mailbox change and each dashboard request. Nothing that identifies mail leaves the machine: no message content, subjects, sender names or sender addresses; only the connected account's own address identifies a span. Everything else is referred to by a keyed hash (sender, domain, message id), the same hash everywhere so traces can be joined to each other and looked up locally; decide whether to store the hashes in the database to make that lookup cheap. A scrubber on the way out as a second line of defence, the DSN in `sift.toml`, and off unless set.
 - [ ] Restrict the core container's egress to Google and the model providers. The unsubscribe request is the one call to an arbitrary host and needs a relay container of its own first; the plan is in [docs/DEPLOY.md](docs/DEPLOY.md).
+- [ ] **Migrations are tracked by highest number**, and numbers now have gaps (011, 030, 040, 050, 060 ranges), so a new migration must be numbered above every existing one or databases already past it will skip it. Track applied files by name instead.
 - [ ] `migrate` runs an older sift against a newer database without complaint after a downgrade; refuse when the database's version is higher than the newest migration known.
 - [ ] Retention (`[retention] days`) is only in `sift.toml`; give it a control in Settings. `pruneOld` in `src/daemon/retention.ts` lists the tables it deletes from, so a new table that references `messages` or `decisions` must be added there or the prune fails.
 - [ ] `.env` cannot set `SIFT_HOME`: the home is resolved before `.env` is read. `sift status` says nothing about plain credential files when a key is set.

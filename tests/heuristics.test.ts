@@ -108,6 +108,8 @@ describe('heuristics in the cascade', () => {
       getContent: async () => null,
       getThread: async () => null,
       getRaw: async () => null,
+      getLabelIds: async (id) => mailbox.labels.get(id) ?? null,
+      listLabels: async () => [],
     };
     const options = (heuristics: boolean): RunOptions => ({ act: false, heuristics, connect: () => ({ api, mailbox }), log: () => {} });
     const decisions = () => db.prepare('SELECT stage, disposition, label_id FROM decisions').all();

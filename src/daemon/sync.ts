@@ -1,7 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { GmailApi } from '../gmail/api.ts';
 import { type PullResult, pullChanges, toFacts } from '../gmail/sync.ts';
-import { type Account, recordSync } from '../store/accounts.ts';
+import { learnFromGmail, userChanges } from '../learn/gmail.ts';
+import { type Account, lastSyncedAt, recordSync } from '../store/accounts.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
 export interface SyncReport {
@@ -10,14 +11,19 @@ export interface SyncReport {
   added: MessageFacts[];
   /** Arrivals that had already left the inbox, been deleted, or had no usable sender. */
   skipped: number;
+  /** Answers read from what the user did to messages in Gmail. */
+  corrections: number;
 }
 
 /**
  * Pull one account's new inbox mail into the store. Nothing is persisted until every message has
  * been fetched, so a failure part-way leaves the cursor where it was and the next run retries.
  */
-export async function syncAccount(db: DatabaseSync, api: GmailApi, account: Account): Promise<SyncReport> {
+export async function syncAccount(db: DatabaseSync, api: GmailApi, account: Account, now: () => number = Date.now): Promise<SyncReport> {
+  // Recorded as the sync time, so the next sync knows which of sift's own changes its history can contain: those made since this one began.
+  const startedAt = now();
   const pull = await pullChanges(api, account.historyId);
+  const byUser = userChanges(db, account.id, pull.labelChanges, lastSyncedAt(db, account.id) ?? 0);
   const fetched: MessageFacts[] = [];
   let skipped = 0;
 
@@ -30,6 +36,9 @@ export async function syncAccount(db: DatabaseSync, api: GmailApi, account: Acco
 
   const known = new Set((db.prepare('SELECT id FROM messages WHERE account_id = ?').all(account.id) as { id: string }[]).map((r) => r.id));
   const added = fetched.filter((m) => !known.has(m.messageId));
-  recordSync(db, account.id, fetched, pull.historyId);
-  return { mode: pull.mode, added, skipped };
+  // Before the cursor moves: a failure here means the same history is read again, which this tolerates.
+  const corrections = await learnFromGmail(db, account.id, byUser, api, startedAt);
+  const read = byUser.filter((c) => c.removed.includes('UNREAD')).map((c) => c.messageId);
+  recordSync(db, account.id, fetched, pull.historyId, startedAt, read);
+  return { mode: pull.mode, added, skipped, corrections };
 }

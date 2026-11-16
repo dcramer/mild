@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { reconcile } from '../actions/executor.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
+import type { FilterCheck } from '../actions/rule-filters.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
 import { type Account, listAccounts } from '../store/accounts.ts';
@@ -9,6 +10,7 @@ import { pruneExamples } from '../store/examples.ts';
 import { keepSuggestionBodies } from './bodies.ts';
 import { captureExamples } from './examples.ts';
 import { PRUNE_PER_RUN, pruneOld } from './retention.ts';
+import { checkFiltersWhenDue } from './filters.ts';
 import { type SyncReport, syncAccount } from './sync.ts';
 import { type TriageReport, triageAccount } from './triage.ts';
 
@@ -37,6 +39,8 @@ export interface PassResult {
   triage?: TriageReport;
   /** Marked messages whose full content was stored this pass. */
   captured?: number;
+  /** What a look at the account's Gmail filters found, on the passes that looked. */
+  filters?: FilterCheck;
   error?: string;
   /** The error is Google refusing sift's sign-in for this account. Retrying will not help; signing in again will. */
   expired?: true;
@@ -54,7 +58,7 @@ export async function runOnce(db: DatabaseSync, options: RunOptions): Promise<Pa
       const { api, mailbox } = options.connect(account);
       const deps = { db, mailbox, ...(options.now ? { now: options.now } : {}) };
       if (options.act) await reconcile(deps);
-      result.sync = await syncAccount(db, api, account);
+      result.sync = await syncAccount(db, api, account, options.now);
       result.triage = await triageAccount(
         {
           ...deps,
@@ -76,6 +80,13 @@ export async function runOnce(db: DatabaseSync, options: RunOptions): Promise<Pa
       );
       result.captured = await captureExamples(db, api, account.id, options.now);
       await keepSuggestionBodies(db, api, account.id, options.now);
+      try {
+        const filters = await checkFiltersWhenDue(deps, account.id, options.act);
+        if (filters) result.filters = filters;
+      } catch (error) {
+        // Mail was still sorted; the filters are looked at again next pass.
+        options.log(`${account.email}: could not check Gmail filters: ${error instanceof Error ? error.message : String(error)}`);
+      }
       const line = describe(result, options.act);
       if (line) options.log(`${account.email}: ${line}`);
     } catch (error) {
@@ -97,6 +108,7 @@ function describe(result: PassResult, act: boolean): string | null {
   const { sync, triage } = result;
   if (sync?.mode === 'recovery') parts.push('history cursor had expired, searched the last 7 days');
   if (sync && sync.added.length > 0) parts.push(`${sync.added.length} new`);
+  if (sync?.corrections) parts.push(`learned from ${sync.corrections} message${sync.corrections === 1 ? '' : 's'} you moved or relabelled in Gmail`);
   if (triage) {
     const decided = Object.entries(triage.decided).filter(([, n]) => n > 0);
     if (decided.length > 0) parts.push(`${act ? 'decided' : 'would'} ${decided.map(([d, n]) => `${d} ${n}`).join(', ')}`);
@@ -108,6 +120,11 @@ function describe(result: PassResult, act: boolean): string | null {
     if (triage.troubled > 0) parts.push(`${triage.troubled} need attention (see Changes in the dashboard)`);
   }
   if (result.captured) parts.push(`stored ${result.captured} marked message${result.captured === 1 ? '' : 's'} as examples`);
+  const { filters } = result;
+  if (filters?.gone) parts.push(`${filters.gone} filter${filters.gone === 1 ? '' : 's'} deleted in Gmail`);
+  if (filters?.changed) parts.push(`${filters.changed} filter${filters.changed === 1 ? '' : 's'} changed in Gmail`);
+  if (filters?.outdated)
+    parts.push(`${filters.outdated} filter${filters.outdated === 1 ? '' : 's'} ${act ? 'brought into line with' : 'no longer match'} their rules`);
   return parts.length > 0 ? parts.join('; ') : null;
 }
 

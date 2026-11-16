@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
 import { undo } from '../actions/executor.ts';
+import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
 import { unsubscribe } from '../actions/unsubscribe.ts';
 import { type Config, loadConfig, loadEnvFiles, resolveHome, saveSettings, secretPaths } from '../config.ts';
 import { backfill } from '../daemon/backfill.ts';
@@ -29,6 +30,7 @@ import { signInRefusal } from './sign-in.ts';
 import { listenAddresses, machineNames, tailscaleName } from './network.ts';
 import { closeTerminal } from './terminal.ts';
 import { paint, ui } from './ui.ts';
+import { getRuleFilter } from '../store/filters.ts';
 
 /** sift is set up and started from here; looking at and steering it happens in the dashboard. */
 const MAIN_COMMANDS: readonly (readonly [string, string])[] = [
@@ -264,6 +266,13 @@ function buildControls(config: Config, db: ReturnType<typeof openDb>, live: { wa
       if (!spec) throw new Error('Choose a model first.');
       const tier = await openModelTier(config, spec);
       return startEval({ db, judge: tier.judge, model: spec, guidelines: tier.guidelines() }, request).id;
+    },
+    ruleFilter: async (ruleId, on) => {
+      const rule = getRuleFilter(db, ruleId);
+      if (!rule) throw new Error('That rule no longer exists.');
+      const deps = { db, mailbox: mailboxFor(config, rule.accountId) };
+      if (on) await writeRuleFilter(deps, ruleId);
+      else await removeRuleFilter(deps, ruleId);
     },
     checkNow: () => live.wake?.now(),
     activity: () => live.activity,

@@ -57,7 +57,33 @@ export function createGmailMailbox(auth: OAuth2Client): Mailbox {
     },
 
     async deleteFilter(filterId) {
-      await client.users.settings.filters.delete({ userId, id: filterId });
+      try {
+        await client.users.settings.filters.delete({ userId, id: filterId });
+      } catch (error) {
+        if (!isNotFound(error)) throw error;
+      }
+    },
+
+    async listFilters() {
+      const { data } = await client.users.settings.filters.list({ userId });
+      return (data.filter ?? []).flatMap((f) => {
+        if (!f.id) return [];
+        const criteria: Record<string, string | number | boolean> = {};
+        for (const [key, value] of Object.entries(f.criteria ?? {})) {
+          if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') criteria[key] = value;
+        }
+        return [
+          {
+            id: f.id,
+            criteria,
+            action: {
+              addLabelIds: f.action?.addLabelIds ?? [],
+              removeLabelIds: f.action?.removeLabelIds ?? [],
+              ...(f.action?.forward ? { forward: f.action.forward } : {}),
+            },
+          },
+        ];
+      });
     },
   };
 }

@@ -13,6 +13,7 @@ import { addLabel, updateLabel } from '../store/labels.ts';
 import { resolveProposal } from '../store/proposals.ts';
 import { addRule, removeRule, setStanding } from '../store/rules.ts';
 import { senderFacts } from '../store/senders.ts';
+import { getRuleFilter, ruleFilterStatus } from '../store/filters.ts';
 import type { Controls, SignIn } from './controls.ts';
 import {
   listChanges,
@@ -319,6 +320,15 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       setStanding(db, accountId, typeof address === 'string' ? { from: who } : { fromDomain: who }, standing, usual, now());
       return { ok: true };
     },
+    '/api/rules/filter': async (body) => {
+      const { id, on } = body;
+      if (!str(id, 40) || typeof on !== 'boolean') return null;
+      if (!controls) throw new Error('This dashboard cannot change Gmail filters.');
+      // Taking a filter out is always allowed: it only reduces what runs unattended.
+      if (on && !controls.settings().act) throw new Error('sift is only observing, so it writes nothing to Gmail. Let it act first, in Settings.');
+      await controls.ruleFilter(id, on);
+      return { filterId: getRuleFilter(db, id)?.filterId ?? null, filter: ruleFilterStatus(db, now()).get(id) ?? null };
+    },
     '/api/proposals': (body) => {
       const { id, accept } = body;
       if (typeof id !== 'number' || !Number.isInteger(id) || typeof accept !== 'boolean') return null;
@@ -327,6 +337,11 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
     },
     '/api/rules/remove': async (body) => {
       if (!str(body['id'], 40)) return null;
+      // A filter left behind would keep acting on mail with no rule to explain or remove it.
+      if (getRuleFilter(db, body['id'])?.filterId) {
+        if (!controls) throw new Error('This rule is also a Gmail filter, which this dashboard cannot remove.');
+        await controls.ruleFilter(body['id'], false);
+      }
       if (!removeRule(db, body['id'])) throw new Error('That rule no longer exists.');
       return { ok: true, redecided: await redecide() };
     },

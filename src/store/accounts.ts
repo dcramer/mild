@@ -17,6 +17,11 @@ export function connectAccount(db: DatabaseSync, email: string, historyId: strin
   ).run(email, email, historyId, now);
 }
 
+/** When the account's last sync began, or null before its first. */
+export function lastSyncedAt(db: DatabaseSync, accountId: string): number | null {
+  return (db.prepare('SELECT last_synced_at AS at FROM accounts WHERE id = ?').get(accountId) as { at: number | null } | undefined)?.at ?? null;
+}
+
 export function listAccounts(db: DatabaseSync): Account[] {
   const rows = db.prepare('SELECT id, email, history_id FROM accounts ORDER BY email').all() as { id: string; email: string; history_id: string | null }[];
   return rows.map((r) => ({ id: r.id, email: r.email, historyId: r.history_id }));
@@ -56,12 +61,22 @@ function insertMessages(db: DatabaseSync, accountId: string, messages: readonly 
 /**
  * Record newly synced messages and advance the cursor atomically, so a crash can neither lose a
  * message nor skip one. Stores the subject and triage headers, no body.
+ * `read` are messages the user was seen to have opened, these or earlier ones; the first sighting stands.
  * Returns how many messages were not already known.
  */
-export function recordSync(db: DatabaseSync, accountId: string, messages: readonly MessageFacts[], historyId: string, now: number = Date.now()): number {
+export function recordSync(
+  db: DatabaseSync,
+  accountId: string,
+  messages: readonly MessageFacts[],
+  historyId: string,
+  now: number = Date.now(),
+  read: readonly string[] = [],
+): number {
   db.exec('BEGIN');
   try {
     const added = insertMessages(db, accountId, messages, now, false);
+    const opened = db.prepare('UPDATE messages SET read_at = ? WHERE account_id = ? AND id = ? AND read_at IS NULL');
+    for (const id of read) opened.run(now, accountId, id);
     db.prepare('UPDATE accounts SET history_id = ?, last_synced_at = ? WHERE id = ?').run(historyId, now, accountId);
     db.exec('COMMIT');
     return added;

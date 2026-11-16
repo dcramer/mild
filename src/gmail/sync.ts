@@ -1,10 +1,15 @@
 import { parseAddress, parseAddressList } from '../triage/features.ts';
 import type { MessageFacts } from '../triage/types.ts';
-import { type GmailApi, HistoryExpiredError, type RawMessage } from './api.ts';
+import { type GmailApi, HistoryExpiredError, type HistoryLabelChange, type RawMessage } from './api.ts';
 
 export interface PullResult {
   /** Ids of messages that arrived in the inbox since the cursor, oldest first, deduplicated. */
   messageIds: string[];
+  /**
+   * Label changes to any message since the cursor, sift's own among them. Empty after `recovery`: what
+   * changed while the cursor was expired cannot be read back.
+   */
+  labelChanges: HistoryLabelChange[];
   /** Store this as the new cursor, in the same transaction that records the messages. */
   historyId: string;
   /** How the ids were found. `recovery` means the cursor had expired and a bounded search was used instead. */
@@ -25,21 +30,23 @@ export interface PullOptions {
 export async function pullChanges(api: GmailApi, cursor: string | null, options: PullOptions = {}): Promise<PullResult> {
   if (cursor === null) {
     const profile = await api.getProfile();
-    return { messageIds: [], historyId: profile.historyId, mode: 'start' };
+    return { messageIds: [], labelChanges: [], historyId: profile.historyId, mode: 'start' };
   }
 
   try {
     const ids = new Set<string>();
+    const labelChanges: HistoryLabelChange[] = [];
     let historyId = cursor;
     let pageToken: string | undefined;
     do {
       const page = await api.listHistory(cursor, pageToken);
       // A message can be added outside the inbox (sent, filtered) and still appear; keep only inbox arrivals.
       for (const added of page.additions) if (added.labelIds.includes('INBOX')) ids.add(added.id);
+      labelChanges.push(...(page.labelChanges ?? []));
       historyId = page.historyId;
       pageToken = page.nextPageToken;
     } while (pageToken);
-    return { messageIds: [...ids], historyId, mode: 'incremental' };
+    return { messageIds: [...ids], labelChanges, historyId, mode: 'incremental' };
   } catch (error) {
     if (!(error instanceof HistoryExpiredError)) throw error;
   }
@@ -54,7 +61,7 @@ export async function pullChanges(api: GmailApi, cursor: string | null, options:
     pageToken = page.nextPageToken;
   } while (pageToken);
   // Search returns newest first.
-  return { messageIds: [...ids].toReversed(), historyId: profile.historyId, mode: 'recovery' };
+  return { messageIds: [...ids].toReversed(), labelChanges: [], historyId: profile.historyId, mode: 'recovery' };
 }
 
 /** Convert Gmail metadata to triage input. Null when there is no usable From address. */

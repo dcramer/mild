@@ -104,6 +104,7 @@ describe('tracking', () => {
       hasSentTo: async () => false,
       createFilter: async () => 'f',
       deleteFilter: async () => {},
+      listFilters: async () => [],
     };
     await execute({ db, mailbox, now: () => NOW }, ACCOUNT, 'a', { type: 'archive' }, 1);
     expect(db.prepare('SELECT decision_id, status FROM actions').get()).toEqual({ decision_id: 1, status: 'done' });
@@ -373,6 +374,13 @@ describe('dashboard server', () => {
         hits: 0,
         lastHitAt: NOW,
         filterId: null,
+        filter: {
+          state: 'none',
+          possible: true,
+          reason: null,
+          differs: ['Mail the filter archives never reaches sift: it is not recorded, counted or unsubscribed from.'],
+          checkedAt: null,
+        },
         createdAt: NOW,
       },
     ]);

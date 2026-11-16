@@ -33,6 +33,11 @@ export interface Controls {
    * that costs money, so this only ever runs because the user asked. Resolves with the run's id.
    */
   startEval(request: { accountId: string; fewShot: boolean; limit: number }): Promise<number>;
+  /**
+   * Copy a rule to Gmail as a filter (`on`), or take its filter out again. Rejects with a sentence for
+   * the user when the rule cannot be a filter or Gmail refused.
+   */
+  ruleFilter(ruleId: string, on: boolean): Promise<void>;
   /** Start a pass now instead of waiting for the interval. */
   checkNow(): void;
   activity(): Activity;
