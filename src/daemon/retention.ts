@@ -51,7 +51,7 @@ export async function pruneOld(db: Sql, now: number = Date.now()): Promise<numbe
     .where(
       and(
         lt(messages.receivedAt, cutoff),
-        lt(sql`coalesce(${messages.syncedAt}, 0)`, cutoff),
+        lt(messages.syncedAt, cutoff),
         exists(
           db
             .select({ one: sql`1` })

@@ -1,7 +1,7 @@
 import { type ACTION_STATUSES, type ACTION_TYPES, actions, and, asc, desc, eq, inArray, isNotNull, max, messages, min, notInArray } from './query.ts';
 import type { Sql } from './sql.ts';
 
-export type ActionStatus = (typeof ACTION_STATUSES)[number];
+type ActionStatus = (typeof ACTION_STATUSES)[number];
 export type ActionType = (typeof ACTION_TYPES)[number];
 
 /** The label change an action made (or tried to make), as provider label ids. */

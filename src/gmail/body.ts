@@ -3,7 +3,7 @@ import { parseAddress } from '../triage/features.ts';
 import { htmlFacts } from '../triage/html.ts';
 
 /** The shape of a Gmail message payload that body extraction needs. */
-export interface BodyPart {
+interface BodyPart {
   mimeType?: string | null;
   filename?: string | null;
   headers?: { name?: string | null; value?: string | null }[] | null;

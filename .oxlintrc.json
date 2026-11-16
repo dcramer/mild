@@ -66,7 +66,7 @@
                 "group": ["**/gmail/**", "**/actions/**", "**/store/**", "**/daemon/**", "@googleapis/*", "googleapis", "google-auth-library"],
                 "message": "model/ only turns evidence into a verdict. It never reaches Gmail, the database or anything that acts."
               },
-              { "group": ["node:sqlite", "pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }
+              { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }
             ]
           }
         ]
@@ -83,8 +83,8 @@
                 "group": ["**/gmail/**", "**/actions/**", "**/agent/**", "**/daemon/**", "@googleapis/*", "googleapis", "google-auth-library"],
                 "message": "dashboard/ shows the database and records what the user teaches sift (src/learn). It never reaches Gmail or changes the mailbox."
               },
-              { "group": ["node:sqlite", "pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
-              { "group": ["**/store/store.ts", "**/store/db.ts", "**/store/split.ts"], "message": "Only src/cli and src/daemon/run.ts open databases. Take the Sql you are given; the dashboard asks People (src/store/people.ts)." }
+              { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
+              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only src/cli and src/daemon/run.ts open databases. Take the Sql you are given; the dashboard asks People (src/store/people.ts)." }
             ]
           }
         ]
@@ -119,7 +119,7 @@
               { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." },
               { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
               {
-                "group": ["node:sqlite", "pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"],
+                "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"],
                 "message": "Write queries with ./query.ts on the Sql you are given: the handle holds its builder to one person, and its sql refuses a person's table. Only db.ts opens a database."
               }
             ]
@@ -141,8 +141,8 @@
             "patterns": [
               { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." },
               { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
-              { "group": ["node:sqlite", "pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
-              { "group": ["**/store/store.ts", "**/store/db.ts", "**/store/split.ts"], "message": "Only src/cli and src/daemon/run.ts open databases. Take the Sql you are given; the dashboard asks People (src/store/people.ts)." }
+              { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
+              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only src/cli and src/daemon/run.ts open databases. Take the Sql you are given; the dashboard asks People (src/store/people.ts)." }
             ]
           }
         ]
@@ -158,7 +158,7 @@
             "patterns": [
               { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." },
               { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
-              { "group": ["node:sqlite", "pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }
+              { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }
             ]
           }
         ]
@@ -166,8 +166,8 @@
     },
     {
       "files": ["src/gmail/**/*.ts", "src/*.ts"],
-      "rules": { "no-restricted-imports": ["error", { "patterns": [{ "group": ["node:sqlite", "pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }] }] }
+      "rules": { "no-restricted-imports": ["error", { "patterns": [{ "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }] }] }
     }
   ],
-  "ignorePatterns": [".claude/**", "node_modules/**", "data/**", "web/dist/**"]
+  "ignorePatterns": [".claude/**", "node_modules/**", "web/dist/**"]
 }

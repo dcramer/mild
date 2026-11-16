@@ -41,7 +41,7 @@ import type {
 
 export type Days = 1 | 7 | 30 | 90;
 
-export interface DecisionQuery {
+interface DecisionQuery {
   days: Days;
   stage: string;
   disposition: string;

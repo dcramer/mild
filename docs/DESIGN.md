@@ -65,7 +65,7 @@ Tokens and the role classes are in `web/src/index.css`.
 | `Document`, `Clause` | A page read from top to bottom, outside the dashboard: the terms and the privacy policy. The name linking home, the title, when it last changed, then clauses at the reading size. |
 | `Wordmark` | The name. |
 
-`web/src/components/` holds what is particular to sift and built from these: `Verdict` (what sift does and as which label, in words, the same everywhere), `StatusWord`, `TierLabel`, the decision table that Activity and the sender page share, the answer form, and `SenderLink`, which is how a sender is named anywhere: a link to their page with a preview of their standing.
+`web/src/components/` holds what is particular to sift and built from these: `Verdict` (what sift does and as which label, in words, the same everywhere), `StatusWord`, `TierLabel`, the decision table on a sender's page, the answer form, and `SenderLink`, which is how a sender is named anywhere: a link to their page with a preview of their standing.
 
 ## Narrow screens
 

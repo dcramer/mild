@@ -8,7 +8,7 @@ const canMarkRead = (does: string) => does === 'keep' || does === 'archive';
 export const weak = (label: LabelSummary) => label.record.reviewed >= 10 && label.record.right / label.record.reviewed < 0.85;
 const ICONS = Object.fromEntries(ACTIONS.map(([key]) => [key, <ActionIcon action={key} />])) as Record<ActionKey, ReactNode>;
 
-export interface LabelDraft {
+interface LabelDraft {
   name: string;
   description: string;
   disposition: ActionKey;
@@ -17,7 +17,7 @@ export interface LabelDraft {
 }
 
 /** What a label is and what happens to it: the fields for adding one and for changing one. */
-export function LabelFields({ draft, onChange, gmailLabel }: { draft: LabelDraft; onChange: (draft: LabelDraft) => void; gmailLabel?: string }) {
+function LabelFields({ draft, onChange, gmailLabel }: { draft: LabelDraft; onChange: (draft: LabelDraft) => void; gmailLabel?: string }) {
   return (
     <>
       <Field

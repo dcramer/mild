@@ -22,8 +22,6 @@ export interface InitDeps {
   /** Save the key as SIFT_KEY where sift will read it, and use it from now on. Returns the file. Throws if it cannot be written. */
   saveKey(key: string): string;
   hasGoogleClient(): boolean;
-  /** `desktop` is a client from an older setup, which has to be replaced. */
-  googleClientKind(): 'web' | 'desktop' | null;
   /** How far setup has got, so a later run resumes where this one stopped. */
   setupState(): SetupState;
   saveSetupState(state: SetupState): void;
@@ -70,14 +68,10 @@ const steps = (deps: InitDeps): Step[] => [
   },
   {
     title: 'Google OAuth client',
-    missing: () => !googleReady(deps) || deps.googleClientKind() === 'desktop',
+    missing: () => !googleReady(deps),
     value: () => `Client in place${paint.dim(deps.setupState().access === 'test' ? ' · for test users' : ' · published')}`,
     run: async () => {
       if (!googleReady(deps)) return googleClient(deps);
-      if (deps.googleClientKind() === 'desktop') {
-        deps.ui.warn('Your client is a Desktop app client. Signing in from the dashboard needs a Web application one.');
-        return replaceClient(deps);
-      }
       const { location } = deps.setupState();
       deps.saveSetupState({ googleTasks: 0, ...(location ? { location } : {}) });
       return googleClient(deps);
@@ -249,18 +243,6 @@ function redirectUris(deps: InitDeps): string[] {
   return [`http://localhost:${deps.config.settings.dashboardPort}/auth/callback`, ...(name ? [`https://${name}/auth/callback`] : [])];
 }
 
-const clientTask = (deps: InitDeps): Task => ({
-  title: 'Create the client',
-  url: 'https://console.cloud.google.com/auth/clients',
-  todo: ['Create the client with the redirect URIs below, then choose "Download JSON".'],
-  collectsClient: true,
-  values: [
-    ['Application type', 'Web application'],
-    ['Name', 'sift'],
-    ...redirectUris(deps).map((uri, index) => [index === 0 ? 'Authorised redirect URIs' : '', uri] as const),
-  ],
-});
-
 /** Creating the Google client, one page at a time. Google renames these screens now and then; the links go straight to each. */
 const googleTasks = (deps: InitDeps): Task[] => [
   {
@@ -284,7 +266,17 @@ const googleTasks = (deps: InitDeps): Task[] => [
       ['Contact information', 'your own address'],
     ],
   },
-  clientTask(deps),
+  {
+    title: 'Create the client',
+    url: 'https://console.cloud.google.com/auth/clients',
+    todo: ['Create the client with the redirect URIs below, then choose "Download JSON".'],
+    collectsClient: true,
+    values: [
+      ['Application type', 'Web application'],
+      ['Name', 'sift'],
+      ...redirectUris(deps).map((uri, index) => [index === 0 ? 'Authorised redirect URIs' : '', uri] as const),
+    ],
+  },
   {
     title: 'Allow access to Gmail',
     url: 'https://console.cloud.google.com/auth/scopes',
@@ -382,11 +374,6 @@ async function googleClient(deps: InitDeps): Promise<void> {
     state.googleTasks += 1;
     deps.saveSetupState({ ...state });
   }
-}
-
-/** Swap the client for a new one in the same project. The project's other settings carry over. */
-async function replaceClient(deps: InitDeps): Promise<void> {
-  await doTask(deps, clientTask(deps), 'replacing the client');
 }
 
 /** Ask for the client JSON until it is accepted. False if the user stops. */

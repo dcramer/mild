@@ -16,10 +16,8 @@ export interface PullResult {
   mode: 'start' | 'incremental' | 'recovery';
 }
 
-export interface PullOptions {
-  /** How far back to search when the cursor has expired. Gmail keeps history for about a week. */
-  recoveryDays?: number;
-}
+/** How far back to search when the cursor has expired. Gmail keeps history for about a week. */
+const RECOVERY_DAYS = 7;
 
 /**
  * Find messages added to the inbox since `cursor`.
@@ -27,7 +25,7 @@ export interface PullOptions {
  * With no cursor this only records the current position: sift handles mail that arrives after it
  * is connected and never sweeps the existing inbox on its own.
  */
-export async function pullChanges(api: GmailApi, cursor: string | null, options: PullOptions = {}): Promise<PullResult> {
+export async function pullChanges(api: GmailApi, cursor: string | null): Promise<PullResult> {
   if (cursor === null) {
     const profile = await api.getProfile();
     return { messageIds: [], labelChanges: [], historyId: profile.historyId, mode: 'start' };
@@ -56,7 +54,7 @@ export async function pullChanges(api: GmailApi, cursor: string | null, options:
   const ids = new Set<string>();
   let pageToken: string | undefined;
   do {
-    const page = await api.searchInbox(`newer_than:${options.recoveryDays ?? 7}d`, pageToken);
+    const page = await api.searchInbox(`newer_than:${RECOVERY_DAYS}d`, pageToken);
     for (const id of page.ids) ids.add(id);
     pageToken = page.nextPageToken;
   } while (pageToken);

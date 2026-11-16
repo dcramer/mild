@@ -5,7 +5,7 @@ import type { DecidedDisposition } from '../triage/types.ts';
 import { applyFeedback } from './feedback.ts';
 
 /** Labels put on or taken off one message in Gmail. */
-export interface MessageChange {
+interface MessageChange {
   messageId: string;
   added: string[];
   removed: string[];
@@ -54,7 +54,7 @@ export async function userChanges(db: Sql, accountId: string, history: readonly 
 }
 
 /** What correction detection reads from Gmail. Nothing here changes the mailbox. */
-export interface GmailState {
+interface GmailState {
   getLabelIds(messageId: string): Promise<string[] | null>;
   listLabels(): Promise<{ id: string; name: string }[]>;
 }

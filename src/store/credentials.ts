@@ -3,7 +3,7 @@ import { personOf } from './accounts.ts';
 import { type CREDENTIAL_KINDS, and, asc, credentials as credentialRows, eq, sql } from './query.ts';
 import type { Sql } from './sql.ts';
 
-export type CredentialKind = (typeof CREDENTIAL_KINDS)[number];
+type CredentialKind = (typeof CREDENTIAL_KINDS)[number];
 
 /** One kind of sign-in in a person's database, decrypted on the way out and encrypted on the way in. */
 export interface Credentials {

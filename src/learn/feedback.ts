@@ -121,7 +121,7 @@ export async function pendingSuggestions(
 }
 
 /** How far an answer reaches, which is also what kind of rule it makes. `once` makes none. */
-export type FeedbackScope =
+type FeedbackScope =
   /** Mail from the sender that is this label: a rule that waits for the label. What "agree" means. */
   | 'label'
   /** Everything from the sender, whatever it is: a rule that only says what happens. */
@@ -175,7 +175,7 @@ export interface FeedbackInput {
   carryOut?: boolean;
 }
 
-export interface FeedbackResult {
+interface FeedbackResult {
   /** Suggestions this answer settled. */
   reviewed: number;
   /** What sift will do differently from now on, in a sentence. Null if nothing lasting was learned. */

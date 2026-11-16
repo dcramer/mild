@@ -5,22 +5,15 @@ dist
 *.tsbuildinfo
 .claude/worktrees/
 CLAUDE.local.md
-
-# Private runtime state: mail metadata, tokens, policy. Never commit.
-data/
-.env
-auth.json
-*.db
-*.db-wal
-*.db-shm
-*.sqlite
-.env.*
 coverage/
+
+# The key that encrypts stored credentials. Never commit.
+.env
+.env.*
 
 # Credentials, in case one is ever copied into the checkout. They belong in sift's home directory.
 client_secret*.json
 google-client.json
-model-auth.json
 dashboard-key
 device-id
 setup.json

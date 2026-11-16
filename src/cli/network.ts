@@ -4,35 +4,6 @@ import { isIP } from 'node:net';
 import { hostname, networkInterfaces } from 'node:os';
 import type { Settings } from '../config.ts';
 
-export interface LocalAddress {
-  address: string;
-  /** What kind of network it is on, for the person choosing. */
-  label: string;
-  tailscale: boolean;
-}
-
-// Tailscale hands out addresses from the carrier-grade NAT range, 100.64.0.0/10.
-const isTailscale = (address: string, name: string) => {
-  const [a = 0, b = 0] = address.split('.').map(Number);
-  return name.startsWith('tailscale') || (a === 100 && b >= 64 && b <= 127);
-};
-// Bridges and virtual pairs that containers create; nobody opens a dashboard through these.
-const isContainerPlumbing = (name: string) => /^(docker|br-|veth|virbr|cni|flannel|podman)/.test(name);
-
-/** This machine's IPv4 addresses that another machine could reach, Tailscale first. */
-export function localAddresses(): LocalAddress[] {
-  const found: LocalAddress[] = [];
-  for (const [name, addresses] of Object.entries(networkInterfaces())) {
-    if (isContainerPlumbing(name)) continue;
-    for (const entry of addresses ?? []) {
-      if (entry.family !== 'IPv4' || entry.internal) continue;
-      const tailscale = isTailscale(entry.address, name);
-      found.push({ address: entry.address, label: tailscale ? 'Tailscale' : `local network, ${name}`, tailscale });
-    }
-  }
-  return found.toSorted((x, y) => Number(y.tailscale) - Number(x.tailscale));
-}
-
 /**
  * The address on this machine that `host` (a name or an IP) refers to, or null if it does not point
  * here. The dashboard only listens on addresses this machine actually has.
@@ -77,7 +48,7 @@ export function machineNames(): string[] {
   const host = hostname().toLowerCase();
   const short = host.split('.')[0] ?? host;
   const name = tailscaleName();
-  // Every address, including container bridges that `localAddresses` leaves out of menus: a request to any of them is still a request to this machine.
+  // Every address, container bridges included: a request to any of them is still a request to this machine.
   // IPv6 addresses appear in a Host header in brackets.
   const addresses = Object.values(networkInterfaces())
     .flatMap((entries) => entries ?? [])
@@ -95,21 +66,4 @@ export async function listenAddresses(settings: Settings): Promise<string[]> {
   const address = await resolveHere(dashboardHost);
   if (!address) throw new Error(`dashboard.host is ${dashboardHost}, which does not point at this machine.`);
   return address === '127.0.0.1' ? ['127.0.0.1'] : ['127.0.0.1', address];
-}
-
-/** Where a browser can find the dashboard, best first: the Tailscale name, then addresses. */
-export function dashboardUrls(settings: Settings, port: number = settings.dashboardPort): string[] {
-  const { dashboardHost } = settings;
-  if (dashboardHost === undefined) return [`http://localhost:${port}`];
-  const name = tailscaleName();
-  const short = hostname().split('.')[0] ?? hostname();
-  const addresses = localAddresses();
-  let hosts: string[];
-  if (dashboardHost === 'all') hosts = [short, ...(name ? [name] : []), ...addresses.map((a) => a.address)];
-  else {
-    // The Tailscale name only applies if the chosen address is the Tailscale one.
-    const viaTailscale = addresses.some((a) => a.tailscale && a.address === dashboardHost);
-    hosts = [...(name && viaTailscale ? [name] : []), dashboardHost];
-  }
-  return (hosts.length > 0 ? hosts : ['localhost']).map((host) => `http://${host}:${port}`);
 }

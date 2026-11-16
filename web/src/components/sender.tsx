@@ -4,7 +4,7 @@ import { STANDINGS, describeMatch, outcomeName, plural, shortDate } from '@/lib/
 import { Fact, Facts, Failure, HoverCard, Stamp, TextLink } from '@/system';
 
 export const senderHref = (accountId: string, address: string) => `/sender/${encodeURIComponent(accountId)}/${encodeURIComponent(address)}`;
-export const domainHref = (accountId: string, domain: string) => `/domain/${encodeURIComponent(accountId)}/${encodeURIComponent(domain)}`;
+const domainHref = (accountId: string, domain: string) => `/domain/${encodeURIComponent(accountId)}/${encodeURIComponent(domain)}`;
 
 /** Where a sender stands, in a word. */
 export function StandingStamp({ standing }: { standing: Standing }) {

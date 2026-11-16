@@ -15,7 +15,6 @@ C up -d
 - **Back up first.** The database is migrated when sift starts, each migration in its own transaction, and there is no way back down: an older sift refuses a database a newer one migrated.
 - The few seconds sift is down cost nothing. It picks up from its Gmail history cursor.
 - Without Docker: `git pull`, `pnpm install`, restart `sift run`.
-- An upgrade that drops a setting refuses to start while `sift.toml` still has it, and says where it went.
 
 ## Back up
 

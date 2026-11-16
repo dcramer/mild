@@ -94,14 +94,6 @@ describe('recorded facts', () => {
       bulkService: 'Mailchimp',
       category: 'promotions',
     });
-  });
-
-  it('derives them for a message synced before they were recorded', async () => {
-    const db = await openUserDb();
-    await addMailbox(db, ACCOUNT, '1', 0);
-    await recordSync(db, ACCOUNT, [campaign], '2');
-    await raw(db).run('UPDATE messages SET facts = NULL');
-    expect(await storedFacts(db, ACCOUNT, campaign.messageId)).toEqual(deriveFacts(campaign));
     expect(await storedFacts(db, ACCOUNT, 'missing')).toBeNull();
   });
 });

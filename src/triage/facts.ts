@@ -3,7 +3,7 @@ import type { HtmlFacts } from './html.ts';
 import type { MessageFacts } from './types.ts';
 
 /** `fail` is anything recorded that is not a pass (softfail, neutral, an error). `none`: the receiver recorded no result. */
-export type AuthResult = 'pass' | 'fail' | 'none';
+type AuthResult = 'pass' | 'fail' | 'none';
 
 /**
  * What only the whole message shows. It is read when a model is about to judge the message, so these are
@@ -188,7 +188,7 @@ export function describeFacts(facts: Facts): string[] {
  * the fact, a list must contain it, and `true` or `false` against a fact that is a name or null
  * (`listId`, `bulkService`, `category`) asks whether there is one.
  */
-export type FactConditions = {
+type FactConditions = {
   [K in keyof Facts]?: NonNullable<Facts[K]> | readonly NonNullable<Facts[K]>[] | (null extends Facts[K] ? boolean : never);
 };
 

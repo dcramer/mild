@@ -86,7 +86,6 @@
   /* Tiers are an ordered cascade, cheapest first, so they share one ink that thins as cost rises.
      Mail no tier could decide gets the highlighter. Checked as an ordinal ramp against the card. */
   --tier-rules: #f0eee8;
-  --tier-sender: #a8a69d;
   --tier-classifier: #74726a;
   --tier-agent: #4e4c46;
   --tier-fallback: var(--highlight);

@@ -1,6 +1,6 @@
 # Build from the repository root: docker build -f docker/Dockerfile .
 
-# Alpine works because sift has no native dependencies; SQLite is the one built into Node.
+# Alpine works because sift has no native dependencies; PGlite is WebAssembly.
 FROM node:24-alpine AS base
 WORKDIR /app
 

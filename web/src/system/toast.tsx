@@ -46,7 +46,7 @@ function Toasts() {
   ));
 }
 
-export interface ToastOptions {
+interface ToastOptions {
   description?: string;
   tone?: 'failure';
   /** One press that follows from what was done, such as undoing it. */

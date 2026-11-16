@@ -15,9 +15,9 @@ export type UnsubscribeOutcome =
   | { status: 'failed'; actionId: number; reason: string };
 
 /** Sends the one-click request. Resolves with the HTTP status. Replaceable in tests. */
-export type PostOneClick = (url: URL, address: string) => Promise<number>;
+type PostOneClick = (url: URL, address: string) => Promise<number>;
 
-export interface UnsubscribeDeps {
+interface UnsubscribeDeps {
   db: Sql;
   now?: () => number;
   /** Resolve a hostname to its addresses. */

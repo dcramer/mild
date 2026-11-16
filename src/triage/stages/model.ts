@@ -65,7 +65,7 @@ export interface JudgeInput {
   examples?: readonly Shot[];
 }
 
-export interface ModelStageDeps {
+interface ModelStageDeps {
   gather: (facts: MessageFacts) => Promise<Evidence>;
   /** The judged rule that speaks for a message, if any. It always has a label. */
   prior?: (facts: MessageFacts) => (RuleHit & { label: Label }) | null;

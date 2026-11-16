@@ -9,9 +9,9 @@ import type { Disposition } from './types.ts';
 export type Standing = 'trusted' | 'known' | 'new' | 'unwanted' | 'blocked';
 
 /** Messages before an unruled sender counts as known. */
-export const KNOWN_AFTER = 5;
+const KNOWN_AFTER = 5;
 
-export interface StandingInput {
+interface StandingInput {
   /** Whether the owner has written to them. Null if that is not known. */
   userHasWritten: boolean | null;
   /** What the owner's own always-rule for exactly this sender or domain does, if there is one. */

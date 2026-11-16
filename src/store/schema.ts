@@ -45,11 +45,11 @@ export const RULE_SOURCES = ['user', 'agent', 'correction'] as const;
 export const FILTER_STATES = ['active', 'changed', 'gone', 'outdated'] as const;
 /** `rule`: make one for its match. `always`: stop checking a judged rule the model has agreed with every time. */
 export const PROPOSAL_KINDS = ['rule', 'always'] as const;
-export const PROPOSAL_STATUSES = ['open', 'accepted', 'dismissed'] as const;
+const PROPOSAL_STATUSES = ['open', 'accepted', 'dismissed'] as const;
 /** right: sift's suggestion was what they wanted. wrong: it was not. answered: sift had no suggestion. */
 export const VERDICTS = ['right', 'wrong', 'answered'] as const;
-export const FEEDBACK_SCOPES = ['sender', 'message'] as const;
-export const FEEDBACK_VIA = ['dashboard', 'gmail'] as const;
+const FEEDBACK_SCOPES = ['sender', 'message'] as const;
+const FEEDBACK_VIA = ['dashboard', 'gmail'] as const;
 export const EXAMPLE_STATUSES = ['pending', 'captured', 'gone'] as const;
 /** interrupted: sift stopped while it ran. */
 export const EVAL_STATUSES = ['running', 'done', 'failed', 'interrupted'] as const;
@@ -172,9 +172,9 @@ export const messages = pgTable(
     cc: jsonb('cc_addresses').$type<Address[]>().notNull().default([]),
     headers: jsonb('headers').$type<Record<string, string>>().notNull().default({}), // the triage headers only (see METADATA_HEADERS)
     labelIds: jsonb('label_ids').$type<string[]>().notNull().default([]), // when synced; a snapshot, not current state
-    syncedAt: time('synced_at'),
+    syncedAt: time('synced_at').notNull(),
     observeOnly: boolean('observe_only').notNull().default(false), // pulled in from before sift was connected: suggest, never act
-    facts: jsonb('facts').$type<Facts>(), // null: derive from headers
+    facts: jsonb('facts').$type<Facts>().notNull(),
     readAt: time('read_at'), // when a sync saw the user had opened it
   },
   (t) => [primaryKey({ columns: [t.userId, t.accountId, t.id] }), mailbox(t), index('messages_sender').on(t.accountId, t.fromAddress), own()],

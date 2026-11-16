@@ -68,7 +68,7 @@ const call = (method: 'GET' | 'POST', path: string, who: string | null, body?: u
   dashboard.call(method, path, body, who ? { cookie: cookies[who]! } : {});
 
 const signIn: SignIn = {
-  client: () => 'web',
+  hasClient: () => true,
   allowed: () => true,
   url: (_redirect, state) => `https://accounts.example/auth?state=${state}`,
   // The code stands in for the Google account that came back.

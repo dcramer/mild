@@ -2,7 +2,7 @@ import type { Decision } from '../triage/types.ts';
 import type { MessageAction } from './executor.ts';
 
 /** Marks mail left for the user because no tier could place it, or a protection held sift back. It stays in the inbox. */
-export const REVIEW_LABEL = 'sift/review';
+const REVIEW_LABEL = 'sift/review';
 
 /**
  * Turn a triage decision into the mailbox action that carries it out. The message gets its label's

@@ -26,7 +26,7 @@ export interface MessageAction {
  * What sift did, as a second Gmail label beside the one for what the mail is. Applied here to every
  * archived or spammed message whatever the caller passes, so anything sift moved can be found in Gmail itself.
  */
-export const AUDIT_LABELS = { archive: 'sift/did/archived', spam: 'sift/did/spam' } as const;
+const AUDIT_LABELS = { archive: 'sift/did/archived', spam: 'sift/did/spam' } as const;
 
 export type Outcome =
   | { status: 'done'; actionId: number; finalLabels: string[] }

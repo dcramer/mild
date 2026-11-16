@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { loadConfig, saveKeyFile, saveSettings } from '../../config.ts';
-import { hasClientSecrets, installClient, loadClientSecrets } from '../../gmail/auth.ts';
+import { hasClientSecrets, installClient } from '../../gmail/auth.ts';
 import { connectedAddresses } from '../../store/accounts.ts';
 import { loadKeyring } from '../../secrets.ts';
 import { type Store, openStore } from '../../store/store.ts';
@@ -35,17 +35,10 @@ export async function init(): Promise<void> {
       return path;
     },
     hasGoogleClient: () => hasClientSecrets(config),
-    // A home set up before progress was recorded has a client and no state file: treat it as finished.
-    setupState: () =>
-      existsSync(config.setupStatePath)
-        ? (JSON.parse(readFileSync(config.setupStatePath, 'utf8')) as SetupState)
-        : hasClientSecrets(config)
-          ? { googleTasks: 99, access: 'publish' }
-          : { googleTasks: 0 },
+    setupState: () => (existsSync(config.setupStatePath) ? (JSON.parse(readFileSync(config.setupStatePath, 'utf8')) as SetupState) : { googleTasks: 0 }),
     saveSetupState: (state) => writeFileSync(config.setupStatePath, JSON.stringify(state), { mode: 0o600 }),
     installGoogleClient: (json) => installClient(config, json),
     connectedAccounts: () => withStore((store) => connectedAddresses(store.central)),
-    googleClientKind: () => (hasClientSecrets(config) ? loadClientSecrets(config).kind : null),
     tailscaleName,
     enableTailscaleServe: async (servePort) => {
       let out: string;

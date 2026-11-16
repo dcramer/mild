@@ -7,7 +7,7 @@ export const MAX_ATTEMPTS = 3;
 /** Enough for what a provider says went wrong. */
 const MAX_ERROR = 500;
 
-export type RunOutcome = (typeof RUN_OUTCOMES)[number];
+type RunOutcome = (typeof RUN_OUTCOMES)[number];
 
 /** A failure that still counts against its message: one cut short counts, one the user put back does not. */
 export const counted = and(or(isNull(modelRuns.outcome), eq(modelRuns.outcome, 'failed')), isNull(modelRuns.retriedAt));

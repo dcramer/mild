@@ -68,7 +68,7 @@ import {
   Wordmark,
 } from '@/system';
 
-const SERIES = TIERS.filter((t) => t.key !== 'sender').map((t, index) => ({ key: String(index), name: t.name, color: t.color }));
+const SERIES = TIERS.map((t, index) => ({ key: String(index), name: t.name, color: t.color }));
 const DAYS = [
   [12, 5, 3, 1],
   [8, 9, 2, 0],
@@ -189,8 +189,8 @@ export function SystemView() {
           </Row>
           <Row label="swatch" note="A series’ or a tier’s colour, beside its name.">
             <p className="inline-flex items-center gap-2">
-              <Swatch color="var(--tier-sender)" />
-              Sender
+              <Swatch color="var(--tier-classifier)" />
+              Model
             </p>
           </Row>
         </Sheet>

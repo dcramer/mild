@@ -26,7 +26,7 @@ const line = (text = '') => {
 };
 
 /** A path with the home directory written as ~. */
-export const tilde = (path: string) => (path.startsWith(homedir()) ? `~${path.slice(homedir().length)}` : path);
+const tilde = (path: string) => (path.startsWith(homedir()) ? `~${path.slice(homedir().length)}` : path);
 
 export const paint = {
   /** The highlighter. */
@@ -116,7 +116,7 @@ export async function spin<T>(label: string, work: () => Promise<T>): Promise<T>
   }
 }
 
-export interface Option<T> {
+interface Option<T> {
   label: string;
   hint?: string;
   value: T;

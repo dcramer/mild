@@ -62,7 +62,7 @@ async function seededStore(): Promise<{ store: Store; db: Sql }> {
     { ...base, disposition: 'archive', stage: 'rules', ruleId: 'r1', labelId: 'newsletter', gmailLabel: 'sift/newsletters' },
     { now: NOW - DAY },
   );
-  await recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'archive', stage: 'sender' }, { now: NOW - DAY });
+  await recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'archive', stage: 'classifier' }, { now: NOW - DAY });
   await recordDecision(
     db,
     ACCOUNT,
@@ -185,8 +185,7 @@ describe('tracking', () => {
     expect(summary.totals).toEqual({ messages: 4, decisions: 3, withoutInference: 2, costUsd: 0.03, awaitingTriage: 1, troubledActions: 0 });
     expect(summary.byStage.map((s) => [s.stage, s.decisions])).toEqual([
       ['rules', 1],
-      ['sender', 1],
-      ['classifier', 0],
+      ['classifier', 1],
       ['agent', 1],
       ['fallback', 0],
     ]);
@@ -203,7 +202,7 @@ describe('tracking', () => {
     const { daily } = await summarize(db, await everything(db), 7, NOW);
     expect(daily).toHaveLength(7);
     expect(daily.reduce((sum, d) => sum + Object.values(d.counts).reduce((a, b) => a + b, 0), 0)).toBe(3);
-    expect(daily.at(-1)?.counts).toEqual({ rules: 0, sender: 0, classifier: 0, agent: 0, fallback: 0 });
+    expect(daily.at(-1)?.counts).toEqual({ rules: 0, classifier: 0, agent: 0, fallback: 0 });
   });
 
   it('says per day what was done in Gmail, what failed, and what the model cost', async () => {

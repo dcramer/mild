@@ -5,11 +5,9 @@ import { readSecret, writeSecret } from '../secrets.ts';
 import { createGmailApi } from './api.ts';
 import { GMAIL_SCOPES } from './scopes.ts';
 
-export interface ClientSecrets {
+interface ClientSecrets {
   clientId: string;
   clientSecret: string;
-  /** `desktop` is a client from before sign-in moved to the dashboard: its tokens still work, but it cannot sign anyone in and `sift init` replaces it. */
-  kind: 'web' | 'desktop';
 }
 
 /** True if the user's Google OAuth client is available, from the home directory or the environment. */
@@ -25,21 +23,21 @@ export function hasClientSecrets(config: Config, env: NodeJS.ProcessEnv = proces
 export function installClient(config: Config, input: string): void {
   const trimmed = input.trim();
   const text = trimmed.startsWith('{') ? trimmed : readFileSync(trimmed.replace(/^~(?=\/)/, process.env['HOME'] ?? '~'), 'utf8');
-  const { kind } = parseClientFile(text, trimmed.startsWith('{') ? 'What you pasted' : trimmed);
-  if (kind === 'desktop') throw new Error('That is a Desktop app client. sift needs a Web application one.');
+  parseClientFile(text, trimmed.startsWith('{') ? 'What you pasted' : trimmed);
   writeSecret(config.googleClientPath, text, config.keys);
 }
 
 function parseClientFile(text: string, path: string): ClientSecrets {
-  let parsed: { installed?: { client_id?: string; client_secret?: string }; web?: { client_id?: string; client_secret?: string } };
+  let parsed: { installed?: unknown; web?: { client_id?: string; client_secret?: string } };
   try {
     parsed = JSON.parse(text) as typeof parsed;
   } catch {
     throw new Error(`${path} is not valid JSON.`);
   }
-  const entry = parsed.web ?? parsed.installed;
-  if (!entry?.client_id || !entry.client_secret) throw new Error(`${path} is not a Google OAuth client (it has no "web" or "installed" entry).`);
-  return { clientId: entry.client_id, clientSecret: entry.client_secret, kind: parsed.web ? 'web' : 'desktop' };
+  if (parsed.installed) throw new Error(`${path} is a Desktop app client. sift needs a Web application one.`);
+  const entry = parsed.web;
+  if (!entry?.client_id || !entry.client_secret) throw new Error(`${path} is not a Google OAuth client (it has no "web" entry).`);
+  return { clientId: entry.client_id, clientSecret: entry.client_secret };
 }
 
 /**
@@ -50,7 +48,7 @@ function parseClientFile(text: string, path: string): ClientSecrets {
 export function loadClientSecrets(config: Config, env: NodeJS.ProcessEnv = process.env): ClientSecrets {
   const clientId = env['SIFT_GOOGLE_CLIENT_ID'];
   const clientSecret = env['SIFT_GOOGLE_CLIENT_SECRET'];
-  if (clientId && clientSecret) return { clientId, clientSecret, kind: 'web' };
+  if (clientId && clientSecret) return { clientId, clientSecret };
   const text = readSecret(config.googleClientPath, config.keys);
   if (text === null) throw new Error('No Google OAuth client is set up yet. Run `sift init`.');
   return parseClientFile(text, config.googleClientPath);

@@ -1,31 +1,25 @@
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { SenderLink } from '@/components/sender.tsx';
 import type { DecisionRow } from '@/lib/api.ts';
-import { ago, dateTime, status } from '@/lib/format.ts';
-import { Button, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr } from '@/system';
+import { ago, dateTime } from '@/lib/format.ts';
+import { OnPhone, Sub, Table, Td, Th, Tr } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 /**
  * Decisions, newest first: the message, what sift said, why, where it got to, and when. Choosing a row
- * opens that message with its full history; model, cost and ids are there, not here. `search` marks
- * matching text; `onUndo` offers to undo a change that is done.
+ * opens that message with its full history; model, cost and ids are there, not here.
  */
 export function DecisionTable({
   rows,
   onOpen,
-  onUndo,
-  search,
   oneSender,
 }: {
   rows: DecisionRow[];
   onOpen: OpenMessages;
-  onUndo?: (row: DecisionRow) => void;
-  search?: string;
   /** Every row is from the same sender, named above the table, so the rows do not repeat it. */
   oneSender?: boolean;
 }) {
   const items = rows.map((row) => ({ accountId: row.accountId, messageId: row.messageId, subject: row.subject }));
-  const term = search ? { term: search } : {};
   return (
     <Table>
       <thead>
@@ -37,18 +31,17 @@ export function DecisionTable({
           <Th phone="hide" num>
             When
           </Th>
-          {onUndo ? <Th phone="hide" /> : null}
         </Tr>
       </thead>
       <tbody>
         {rows.map((row, index) => (
           <Tr key={row.id} onOpen={() => onOpen(items, index)}>
             <Td className="max-w-0 md:w-[32%]">
-              <span className="block truncate font-medium">{row.subject ? <Marked text={row.subject} {...term} /> : '(no subject)'}</span>
+              <span className="block truncate font-medium">{row.subject || '(no subject)'}</span>
               {oneSender ? null : (
                 <Sub>
                   <SenderLink accountId={row.accountId} address={row.fromAddress}>
-                    <Marked text={row.fromName ?? row.fromAddress} {...term} />
+                    {row.fromName ?? row.fromAddress}
                   </SenderLink>
                 </Sub>
               )}
@@ -72,15 +65,6 @@ export function DecisionTable({
             <Td phone="hide" num quiet title={dateTime(row.decidedAt)}>
               {ago(row.decidedAt)}
             </Td>
-            {onUndo ? (
-              <RowActions>
-                {status(row) === 'done' && row.actionId !== null ? (
-                  <Button variant="quiet" onClick={() => onUndo(row)}>
-                    Undo
-                  </Button>
-                ) : null}
-              </RowActions>
-            ) : null}
           </Tr>
         ))}
       </tbody>

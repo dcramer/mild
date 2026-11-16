@@ -126,7 +126,7 @@ export function resolveModel(models: Models, spec: string): Model<Api> {
 }
 
 /** A ChatGPT sign-in waiting on the person: the code to enter, and where. */
-export interface PendingSignIn {
+interface PendingSignIn {
   code: string;
   url: string;
   expiresAt: number;

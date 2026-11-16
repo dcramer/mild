@@ -5,7 +5,7 @@ import { Button } from './button.tsx';
 import { useShortcut } from './keys.tsx';
 import { PageHeader } from './page.tsx';
 
-export interface ActiveFilter {
+interface ActiveFilter {
   /** What is being narrowed and to what: "Label: Newsletters". */
   label: string;
   clear: () => void;

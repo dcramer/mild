@@ -1,7 +1,7 @@
 import type { Address } from './types.ts';
 
 /** Header-derived signals that a message is bulk or automated mail. */
-export interface BulkSignals {
+interface BulkSignals {
   /** The identifier inside the angle brackets of `List-Id`, lowercased. */
   listId: string | null;
   hasListUnsubscribe: boolean;

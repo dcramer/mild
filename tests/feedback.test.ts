@@ -325,7 +325,6 @@ describe('accuracy', () => {
     expect(summary.accuracy).toMatchObject({ reviewed: 4, right: 3, confusion: [{ suggested: 'newsletter', correct: 'marketing', count: 1 }] });
     expect(summary.accuracy.byStage).toEqual([
       { stage: 'rules', reviewed: 1, right: 1 },
-      { stage: 'sender', reviewed: 0, right: 0 },
       { stage: 'classifier', reviewed: 0, right: 0 },
       { stage: 'agent', reviewed: 3, right: 2 },
       { stage: 'fallback', reviewed: 0, right: 0 },

@@ -60,8 +60,7 @@ export interface Activity {
  * Gmail account, and it proves the viewer owns that account, which is what lets them use the dashboard.
  */
 export interface SignIn {
-  /** The kind of Google client that is set up, or null if none is. */
-  client(): 'web' | 'desktop' | null;
+  hasClient(): boolean;
   /** Google's sign-in address for a browser that should come back to `redirectUri`. */
   url(redirectUri: string, state: string, challenge: string): string;
   /** False for an address the user's allow list leaves out. Asked on every request, so a session ends when its address is taken off the list. */

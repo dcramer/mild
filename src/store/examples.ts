@@ -58,7 +58,7 @@ export async function shotCandidates(db: Sql, facts: Pick<MessageFacts, 'account
   }));
 }
 
-export interface StoredExample {
+interface StoredExample {
   accountId: string;
   messageId: string;
   fromAddress: string;

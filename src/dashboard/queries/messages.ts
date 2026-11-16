@@ -21,7 +21,6 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
       subject: messages.subject,
       listId: messages.listId,
       receivedAt: messages.receivedAt,
-      syncedAt: messages.syncedAt,
       headers: messages.headers,
     })
     .from(messages)
@@ -73,7 +72,6 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
     subject: m.subject,
     listId: m.listId,
     receivedAt: m.receivedAt,
-    syncedAt: m.syncedAt,
     headers: m.headers,
     body: await storedBody(db, accountId, messageId),
     facts,

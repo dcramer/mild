@@ -69,7 +69,7 @@ CREATE TABLE "decisions" (
 	"outcome_detail" text,
 	"by_user" boolean DEFAULT false NOT NULL,
 	CONSTRAINT "decisions_own" UNIQUE("user_id","id"),
-	CONSTRAINT "decisions_stage" CHECK ("decisions"."stage" IN ('rules', 'sender', 'classifier', 'agent', 'fallback')),
+	CONSTRAINT "decisions_stage" CHECK ("decisions"."stage" IN ('rules', 'classifier', 'agent', 'fallback')),
 	CONSTRAINT "decisions_disposition" CHECK ("decisions"."disposition" IN ('keep', 'archive', 'spam', 'review')),
 	CONSTRAINT "decisions_subscription" CHECK ("decisions"."subscription" IN ('preserve', 'unsubscribe')),
 	CONSTRAINT "decisions_mode" CHECK ("decisions"."mode" IN ('act', 'observe')),
@@ -197,9 +197,9 @@ CREATE TABLE "messages" (
 	"cc_addresses" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"headers" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"label_ids" jsonb DEFAULT '[]'::jsonb NOT NULL,
-	"synced_at" bigint,
+	"synced_at" bigint NOT NULL,
 	"observe_only" boolean DEFAULT false NOT NULL,
-	"facts" jsonb,
+	"facts" jsonb NOT NULL,
 	"read_at" bigint,
 	CONSTRAINT "messages_user_id_account_id_id_pk" PRIMARY KEY("user_id","account_id","id")
 );

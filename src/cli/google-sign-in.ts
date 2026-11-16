@@ -11,7 +11,7 @@ export function buildSignIn(config: Config, store: Store): SignIn {
   // Read each time, so a change to sift.toml applies without a restart.
   const allowed = () => loadConfig().settings.dashboardAllow;
   return {
-    client: () => (hasClientSecrets(config) ? loadClientSecrets(config).kind : null),
+    hasClient: () => hasClientSecrets(config),
     url: (redirectUri, state, challenge) => browserSignInUrl(loadClientSecrets(config), { redirectUri, state, challenge }),
     allowed: (email) => signInRefusal(email, { connected: [email], allowNew: false, allowed: allowed() }) === null,
     complete: async (redirectUri, code, verifier, addTo) => {

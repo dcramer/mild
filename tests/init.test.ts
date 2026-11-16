@@ -1,9 +1,9 @@
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { networkInterfaces, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { type InitDeps, type SetupState, runInit } from '../src/cli/init.ts';
-import { dashboardUrls, listenAddresses, localAddresses, machineNames, resolveHere } from '../src/cli/network.ts';
+import { listenAddresses, machineNames, resolveHere } from '../src/cli/network.ts';
 import type { Ui } from '../src/cli/ui.ts';
 import { DEFAULT_SETTINGS, loadConfig, parseSettings, renderSettings, resolveHome, saveSettings } from '../src/config.ts';
 import { loadKeyring } from '../src/secrets.ts';
@@ -19,7 +19,7 @@ const freshHome = () => mkdtempSync(join(tmpdir(), 'sift-home-'));
 function wizard(
   answers: (string | number)[],
   state: {
-    client?: 'web' | 'desktop';
+    client?: boolean;
     accounts?: string[];
     progress?: number;
     access?: 'test' | 'publish';
@@ -40,10 +40,10 @@ function wizard(
   const asked: string[] = [];
   const calls: string[] = [];
   // With no progress given, a home that has a client is one that finished setup as a test user.
-  const finished = state.client !== undefined && state.progress === undefined;
+  const finished = state.client === true && state.progress === undefined;
   const access = state.access ?? (finished ? 'test' : undefined);
-  const world: { client: 'web' | 'desktop' | null; accounts: string[]; setup: SetupState } = {
-    client: state.client ?? null,
+  const world: { client: boolean; accounts: string[]; setup: SetupState } = {
+    client: state.client ?? false,
     accounts: [...(state.accounts ?? [])],
     setup: {
       googleTasks: state.progress ?? (finished ? 6 : 0),
@@ -53,7 +53,7 @@ function wizard(
   };
   // The first question is where sift runs (a home with no answer yet) or which step to change (a finished one).
   // Unless a test is about that, answer with the first option: this machine, or none.
-  if (finished && state.client === 'web') answers.unshift(state.change ?? 0);
+  if (finished) answers.unshift(state.change ?? 0);
   else if (state.location === undefined) answers.unshift(0);
   const next = (question: string) => {
     asked.push(question);
@@ -98,8 +98,7 @@ function wizard(
       Object.assign(config.keys, loadKeyring({ SIFT_KEY: key }));
       return '/work/sift/.env';
     },
-    hasGoogleClient: () => world.client !== null,
-    googleClientKind: () => world.client,
+    hasGoogleClient: () => world.client,
     setupState: () => world.setup,
     saveSetupState: (next) => {
       world.setup = next;
@@ -107,7 +106,7 @@ function wizard(
     installGoogleClient: (json) => {
       calls.push(`install ${json}`);
       if (json.includes('nonsense')) throw new Error('What you pasted is not a Google OAuth client');
-      world.client = json.includes('web') ? 'web' : 'desktop';
+      world.client = true;
     },
     connectedAccounts: async () => world.accounts,
     tailscaleName: () => (state.tailscale === undefined ? 'box.example.ts.net' : state.tailscale),
@@ -182,20 +181,20 @@ describe('sift init', () => {
     expect(first.text()).toContain('skip: Needs step 3 finished');
     expect(first.text()).toContain('warn: Still needed: the Google client');
 
-    const later = wizard(['done', TEST_USER, 'done'], { client: 'web', progress: 4 });
+    const later = wizard(['done', TEST_USER, 'done'], { client: true, progress: 4 });
     await runInit(later.deps);
     expect(links(later.said)).toEqual(['/auth/scopes', '/auth/audience']);
     expect(later.text()).toContain('Ready');
 
     // Stopped after choosing to publish: the choice is remembered.
-    const chosen = wizard(['done', 'done'], { client: 'web', progress: 5, access: 'publish' });
+    const chosen = wizard(['done', 'done'], { client: true, progress: 5, access: 'publish' });
     await runInit(chosen.deps);
     expect(links(chosen.said)).toEqual(['/auth/branding', '/auth/audience']);
     expect(chosen.asked).not.toContain('Who signs in to this app?');
   });
 
   it('lists the steps of a finished setup with what each is set to, and changes nothing unless asked', async () => {
-    const w = wizard([], { client: 'web', accounts: ['me@example.org'] });
+    const w = wizard([], { client: true, accounts: ['me@example.org'] });
     saveSettings(w.config, DEFAULT_SETTINGS);
     await runInit(w.deps);
     expect(w.asked).toEqual(['Change a step?']);
@@ -210,13 +209,13 @@ describe('sift init', () => {
   });
 
   it('redoes the one step picked from a finished setup', async () => {
-    const client = wizard([...GOOGLE], { client: 'web', accounts: ['me@example.org'], change: CLIENT_STEP });
+    const client = wizard([...GOOGLE], { client: true, accounts: ['me@example.org'], change: CLIENT_STEP });
     saveSettings(client.config, DEFAULT_SETTINGS);
     await runInit(client.deps);
     expect(client.calls).toEqual([`install ${CLIENT}`]);
 
     // A client left half redone is no longer a finished setup: the next run carries on with it.
-    const stopped = wizard(['done', 'skip'], { client: 'web', accounts: ['me@example.org'], change: CLIENT_STEP });
+    const stopped = wizard(['done', 'skip'], { client: true, accounts: ['me@example.org'], change: CLIENT_STEP });
     await runInit(stopped.deps);
     expect(stopped.world.setup).toEqual({ googleTasks: 1, location: 'local' });
     expect(stopped.text()).toContain('warn: Still needed: the Google client');
@@ -235,12 +234,12 @@ describe('sift init', () => {
     expect(failed.said[failed.said.findIndex((line) => line.includes('Set this as SIFT_KEY')) + 1]).toMatch(/^[\w-]{43}$/);
 
     // A finished setup without one lists it, and makes one when picked; with one set it is never replaced.
-    const later = wizard([], { client: 'web', accounts: ['me@example.org'], change: KEY_STEP });
+    const later = wizard([], { client: true, accounts: ['me@example.org'], change: KEY_STEP });
     await runInit(later.deps);
     expect(later.text()).toContain('Encryption key: none, credentials stored plain');
     expect(later.calls).toEqual(['save key']);
 
-    const set = wizard([], { client: 'web', accounts: ['me@example.org'], key: 'key-a', change: KEY_STEP });
+    const set = wizard([], { client: true, accounts: ['me@example.org'], key: 'key-a', change: KEY_STEP });
     await runInit(set.deps);
     expect(set.text()).toContain(`Encryption key: Credentials encrypted · key ${set.config.keys.current!.id}`);
     expect(set.text()).toContain('SIFT_OLD_KEYS');
@@ -254,13 +253,13 @@ describe('sift init', () => {
     expect(loadConfig({ SIFT_HOME: w.config.home }).settings.dashboardAllow).toEqual(['me@example.org', 'work@example.com']);
 
     // Changing the list to one that leaves a connected account out says what that means; Enter removes the limit.
-    const narrowed = wizard([], { client: 'web', accounts: ['me@example.org'], allow: ['work@example.com'], change: SIGN_IN_STEP });
+    const narrowed = wizard([], { client: true, accounts: ['me@example.org'], allow: ['work@example.com'], change: SIGN_IN_STEP });
     saveSettings(narrowed.config, { ...DEFAULT_SETTINGS, dashboardAllow: ['me@example.org'] });
     await runInit(narrowed.deps);
     expect(narrowed.config.settings.dashboardAllow).toEqual(['work@example.com']);
     expect(narrowed.text()).toContain('warn: me@example.org is connected but can no longer sign in');
 
-    const lifted = wizard([], { client: 'web', accounts: ['me@example.org'], change: SIGN_IN_STEP });
+    const lifted = wizard([], { client: true, accounts: ['me@example.org'], change: SIGN_IN_STEP });
     saveSettings(lifted.config, { ...DEFAULT_SETTINGS, dashboardAllow: ['me@example.org'] });
     await runInit(lifted.deps);
     expect(loadConfig({ SIFT_HOME: lifted.config.home }).settings.dashboardAllow).toBeUndefined();
@@ -300,18 +299,6 @@ describe('sift init', () => {
     expect(bare.calls).toEqual(['save key']);
     expect(bare.text()).toContain('warn: Google only signs people in at localhost or an HTTPS address');
   });
-
-  it('replaces a Desktop client', async () => {
-    const w = wizard([CLIENT], { client: 'desktop', accounts: ['me@example.org'], location: 'remote' });
-    saveSettings(w.config, DEFAULT_SETTINGS);
-    w.world.setup = { googleTasks: 6, access: 'test', location: 'remote' };
-    await runInit(w.deps);
-    expect(w.text()).toContain('warn: Your client is a Desktop app client');
-    expect(links(w.said)).toEqual(['/auth/clients']);
-    expect(w.world.client).toBe('web');
-    expect(w.world.setup.googleTasks).toBe(6);
-    expect(w.text()).toMatch(/Ready.*https:\/\/box\.example\.ts\.net/);
-  });
 });
 
 describe('settings', () => {
@@ -344,22 +331,10 @@ describe('settings', () => {
     expect(parseSettings('')).toEqual(DEFAULT_SETTINGS);
   });
 
-  it('refuses a key that is no longer a setting, saying where it went', () => {
-    expect(() => parseSettings('model = "openai/x"')).toThrow(
-      "sift.toml: the model is now each person's own, chosen in the dashboard under Settings. Remove model from here.",
-    );
-    expect(() => parseSettings('act = true')).toThrow(
-      "sift.toml: whether sift is on is now each person's own, switched in the dashboard under Settings. Remove act from here.",
-    );
-    expect(() => parseSettings('heuristics = true')).toThrow('sift.toml: heuristics is no longer a setting. Remove heuristics from here.');
-    expect(() => parseSettings('interval = 60')).toThrow('sift.toml: interval is no longer a setting. Remove interval from here.');
-    expect(() => parseSettings('[retention]\ndays = 90')).toThrow('sift.toml: [retention] is no longer a setting. Remove retention from here.');
-    expect(() => parseSettings('[examples]\nfew_shot = false')).toThrow('sift.toml: [examples] is no longer a setting. Remove examples from here.');
-    expect(() => parseSettings('constructor = 1')).toThrow('unknown setting constructor');
-  });
-
   it('rejects typos and wrong types with the setting named', () => {
     expect(() => parseSettings('modle = "a/b"')).toThrow('unknown setting modle');
+    expect(() => parseSettings('[retention]\ndays = 90')).toThrow('unknown setting retention');
+    expect(() => parseSettings('constructor = 1')).toThrow('unknown setting constructor');
     expect(() => parseSettings('[dashboard]\nport = 0')).toThrow('dashboard.port must be a port number');
     expect(() => parseSettings('[dashboard]\nbind = "x"')).toThrow('unknown setting dashboard.bind');
     expect(() => parseSettings('[dashboard]\nhost = "http://x/"')).toThrow('dashboard.host must be a hostname or IP address');
@@ -380,24 +355,25 @@ describe('settings', () => {
     expect(() => loadClientSecrets(config, {})).toThrow('Run `sift init`');
 
     installClient(config, `  ${web}\n`);
-    expect(loadClientSecrets(config, {})).toEqual({ clientId: 'id', clientSecret: 'secret', kind: 'web' });
+    expect(loadClientSecrets(config, {})).toEqual({ clientId: 'id', clientSecret: 'secret' });
 
     const other = loadConfig({ SIFT_HOME: freshHome() });
     const file = join(freshHome(), 'client.json');
     writeFileSync(file, web);
     installClient(other, file);
-    expect(loadClientSecrets(other, {}).kind).toBe('web');
+    expect(loadClientSecrets(other, {}).clientId).toBe('id');
 
     expect(() => installClient(other, desktop)).toThrow('Desktop app client');
     writeFileSync(other.googleClientPath, desktop);
-    expect(loadClientSecrets(other, {}).kind).toBe('desktop');
+    expect(() => loadClientSecrets(other, {})).toThrow('needs a Web application one');
   });
 });
 
 describe('network', () => {
-  it('lists only addresses another machine could reach', () => {
-    for (const { address } of localAddresses()) expect(address.startsWith('127.')).toBe(false);
-  });
+  const addresses = Object.values(networkInterfaces())
+    .flatMap((entries) => entries ?? [])
+    .filter((entry) => entry.family === 'IPv4' && !entry.internal)
+    .map((entry) => entry.address);
 
   it('accepts a host only if it is an address of this machine', async () => {
     expect(await resolveHere('127.0.0.1')).toBe('127.0.0.1');
@@ -410,18 +386,14 @@ describe('network', () => {
     expect(await listenAddresses({ ...DEFAULT_SETTINGS, dashboardHost: 'all' })).toEqual(['::']);
     expect(parseSettings('[dashboard]\nhost = "0.0.0.0"').dashboardHost).toBe('all');
     await expect(listenAddresses({ ...DEFAULT_SETTINGS, dashboardHost: '192.0.2.1' })).rejects.toThrow('does not point at this machine');
-    for (const { address } of localAddresses()) expect(await listenAddresses({ ...DEFAULT_SETTINGS, dashboardHost: address })).toEqual(['127.0.0.1', address]);
+    for (const address of addresses) expect(await listenAddresses({ ...DEFAULT_SETTINGS, dashboardHost: address })).toEqual(['127.0.0.1', address]);
   });
 
-  it("answers to this machine's own names and addresses, and prints URLs a browser can use", () => {
+  it("answers to this machine's own names and addresses", () => {
     const names = machineNames();
-    for (const { address } of localAddresses()) expect(names).toContain(address);
+    for (const address of addresses) expect(names).toContain(address);
     expect(names.some((name) => name.endsWith('.local'))).toBe(true);
     expect(names).not.toContain('localhost');
-
-    expect(dashboardUrls(DEFAULT_SETTINGS)).toEqual(['http://localhost:8787']);
-    expect(dashboardUrls({ ...DEFAULT_SETTINGS, dashboardHost: '192.0.2.9' }, 9000)).toEqual(['http://192.0.2.9:9000']);
-    for (const url of dashboardUrls({ ...DEFAULT_SETTINGS, dashboardHost: 'all' })) expect(url).toMatch(/^http:\/\/[^/]+:8787$/);
   });
 });
 

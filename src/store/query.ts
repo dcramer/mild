@@ -8,21 +8,16 @@ export {
   type SQL,
   and,
   asc,
-  avg,
-  between,
   count,
   countDistinct,
   desc,
   eq,
   exists,
-  getTableColumns,
-  gt,
   gte,
   ilike,
   inArray,
   isNotNull,
   isNull,
-  like,
   lt,
   lte,
   max,
@@ -32,8 +27,7 @@ export {
   notExists,
   notInArray,
   or,
-  sum,
 } from 'drizzle-orm';
-export { alias, union, unionAll } from 'drizzle-orm/pg-core';
+export { alias } from 'drizzle-orm/pg-core';
 export { sql } from './own.ts';
 export * from './schema.ts';

@@ -62,12 +62,12 @@ describe('secrets', () => {
   });
 
   it('encrypts plain values once a key is set', () => {
-    const path = join(dir(), 'model-auth.json');
-    writeFileSync(path, '{"openai":{}}');
-    expect(readSecret(path, A)).toBe('{"openai":{}}');
+    const path = join(dir(), 'google-client.json');
+    writeFileSync(path, '{"web":{}}');
+    expect(readSecret(path, A)).toBe('{"web":{}}');
     expect(rekeySecrets([path], A)).toEqual({ encrypted: [path], rotated: [] });
     expect(readFileSync(path, 'utf8').startsWith('sift-secret:v1:')).toBe(true);
-    expect(readSecret(path, A)).toBe('{"openai":{}}');
+    expect(readSecret(path, A)).toBe('{"web":{}}');
   });
 
   it('fails on a wrong or missing key, naming every file and what to do, and rewrites nothing', () => {

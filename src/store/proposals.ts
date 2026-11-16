@@ -4,7 +4,7 @@ import type { RuleMatch } from '../triage/stages/rules.ts';
 import { listLabels } from './labels.ts';
 import { hasRuleFor, listRules, removeRule, setRule } from './rules.ts';
 
-export type ProposalKind = (typeof PROPOSAL_KINDS)[number];
+type ProposalKind = (typeof PROPOSAL_KINDS)[number];
 
 export interface Proposal {
   id: number;
@@ -58,7 +58,7 @@ async function propose(db: Sql, p: Omit<Proposal, 'id' | 'createdAt'>, now: numb
 /** How many model decisions in a row must agree before sift proposes a rule for the sender. */
 export const PROPOSE_AFTER = 5;
 /** How many times in a row the model must agree with a `usually` rule before sift proposes to stop checking it. */
-export const SETTLED_AFTER = 10;
+const SETTLED_AFTER = 10;
 
 /**
  * Propose a rule for a sender once the model has given their last few messages the same label and each
@@ -83,7 +83,7 @@ export async function proposeForSender(db: Sql, accountId: string, address: stri
 }
 
 /** How many answers in a row about a sender, all the same label, before sift offers to make it a rule. */
-export const PROPOSE_AFTER_ANSWERS = 3;
+const PROPOSE_AFTER_ANSWERS = 3;
 
 /**
  * Propose a rule for a sender whose last few answers all said the same label. Answering one message makes

@@ -6,11 +6,11 @@
 import { z } from 'zod';
 import { DECIDED } from '../triage/types.ts';
 
-export const STAGES = ['rules', 'sender', 'classifier', 'agent', 'fallback'] as const;
+export const STAGES = ['rules', 'classifier', 'agent', 'fallback'] as const;
 export type StageKey = (typeof STAGES)[number];
 const stage = z.enum(STAGES);
 
-export const LABEL_ID = /^[a-z0-9_-]{1,40}$/;
+const LABEL_ID = /^[a-z0-9_-]{1,40}$/;
 /** Text a person typed or the page sent, not empty and not long. */
 export const text = (max = 200) => z.string().min(1).max(max);
 export const labelId = z.string().regex(LABEL_ID);
@@ -63,7 +63,6 @@ export type DecisionRow = z.infer<typeof DecisionRow>;
 
 export const Summary = z.object({
   days: z.number(),
-  generatedAt: z.number(),
   accounts: z.array(z.object({ email: z.string(), lastSyncedAt: z.number().nullable() })),
   totals: z.object({
     /** Messages received in the window. */
@@ -112,7 +111,7 @@ export type Standing = z.infer<typeof Standing>;
 const authentication = z.enum(['pass', 'fail', 'none']);
 
 /** What sift checked about one message. Mirrors `Facts` in src/triage/facts.ts, which says what each means. */
-export const MessageFactSet = z.object({
+const MessageFactSet = z.object({
   unsubscribe: z.enum(['none', 'header', 'one-click']),
   listId: z.string().nullable(),
   markedBulk: z.boolean(),
@@ -135,7 +134,7 @@ export const MessageFactSet = z.object({
   earlierInThread: z.number().optional(),
   ownerInThread: z.boolean().optional(),
 });
-export type MessageFactSet = z.infer<typeof MessageFactSet>;
+type MessageFactSet = z.infer<typeof MessageFactSet>;
 
 /** What sift knows about one sender, or about everyone at one domain, to judge their mail by. */
 export const SenderProfile = z.object({
@@ -190,7 +189,6 @@ export const MessageDetail = z.object({
   subject: z.string(),
   listId: z.string().nullable(),
   receivedAt: z.number(),
-  syncedAt: z.number().nullable(),
   /** Triage headers as synced. */
   headers: z.record(z.string(), z.string()),
   /**
@@ -349,7 +347,7 @@ export const SuggestionItem = z.object({
 export type SuggestionItem = z.infer<typeof SuggestionItem>;
 
 /** A rule sift thinks is worth having, for the user to accept or dismiss. */
-export const ProposalSummary = z.object({
+const ProposalSummary = z.object({
   id: z.number(),
   accountId: z.string(),
   /** `rule`: make this rule. `always`: stop having the model check a rule it has always agreed with. */
@@ -362,7 +360,7 @@ export const ProposalSummary = z.object({
   /** How many decisions in a row it rests on. */
   agreed: z.number(),
 });
-export type ProposalSummary = z.infer<typeof ProposalSummary>;
+type ProposalSummary = z.infer<typeof ProposalSummary>;
 
 export const Suggestions = z.object({
   /** Newest first. */
@@ -519,17 +517,15 @@ export const Session = z.object({
   /** The signed-in account, or null. */
   email: z.string().nullable(),
   canSignIn: z.boolean(),
-  /** Why not: no Google client is set up; Google cannot return to this address; or the client is a Desktop one, which sift no longer signs in with. */
-  reason: z.enum(['no-client', 'address', 'desktop-client']).nullable(),
+  /** Why not: no Google client is set up, or Google cannot return to this address. */
+  reason: z.enum(['no-client', 'address']).nullable(),
   /** Addresses sign-in works at. */
   addresses: z.array(z.string()),
-  /** What the Google client must list as an authorised redirect URI for sign-in at this address. */
-  redirectUri: z.string(),
 });
 export type Session = z.infer<typeof Session>;
 
 /** Right, wrong, "unsure" and failed calls among some judged examples. Accuracy is `right / (total - failed)`. */
-export const EvalTally = z.object({
+const EvalTally = z.object({
   total: z.number(),
   right: z.number(),
   wrong: z.number(),
@@ -537,9 +533,9 @@ export const EvalTally = z.object({
   /** Calls that returned nothing usable. Not counted for or against. */
   failed: z.number(),
 });
-export type EvalTally = z.infer<typeof EvalTally>;
+type EvalTally = z.infer<typeof EvalTally>;
 
-export const EvalScore = EvalTally.extend({
+const EvalScore = EvalTally.extend({
   /** By the label the user gave, most examples first. */
   byLabel: z.array(EvalTally.extend({ labelId: z.string() })),
   /** Which label was taken for which, commonest first. */
@@ -550,7 +546,7 @@ export const EvalScore = EvalTally.extend({
   /** Averages over the calls that answered. */
   perMessage: z.object({ costUsd: z.number(), inputTokens: z.number(), outputTokens: z.number() }),
 });
-export type EvalScore = z.infer<typeof EvalScore>;
+type EvalScore = z.infer<typeof EvalScore>;
 
 /** One replay of the model over stored examples. */
 export const EvalRun = z.object({

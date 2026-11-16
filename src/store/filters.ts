@@ -6,9 +6,9 @@ import { listLabels } from './labels.ts';
 import { listRules } from './rules.ts';
 
 /** What became of the Gmail filter sift wrote for a rule. */
-export type FilterState = (typeof FILTER_STATES)[number];
+type FilterState = (typeof FILTER_STATES)[number];
 
-export interface RuleFilterRow {
+interface RuleFilterRow {
   ruleId: string;
   accountId: string;
   /** The filter in Gmail, while there is one. */
@@ -70,7 +70,7 @@ export async function markFiltersChecked(db: Sql, accountId: string, now: number
   await db.update(mailboxes).set({ filtersCheckedAt: now }).where(eq(mailboxes.id, accountId));
 }
 
-export interface RuleFilterStatus {
+interface RuleFilterStatus {
   state: 'none' | FilterState;
   possible: boolean;
   reason: string | null;

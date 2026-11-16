@@ -115,7 +115,7 @@ export const toDecisionRow = ({ block, subscription, ...r }: DecisionFields): De
   unsubscribe: subscription === 'unsubscribe',
 });
 
-export interface DecisionFilter {
+interface DecisionFilter {
   days: number;
   stage?: string;
   disposition?: string;

@@ -46,27 +46,22 @@ export function useLayerOpen(open: boolean, onClose: () => void) {
   };
 }
 
-export const GUTTER = 'px-5 md:px-6';
+const GUTTER = 'px-5 md:px-6';
 
-export function LayerHeader({ title, subtitle, close = true }: { title: string; subtitle?: ReactNode; close?: boolean | 'phone' }) {
+export function LayerHeader({ title, subtitle }: { title: string; subtitle?: ReactNode }) {
   return (
     <header className={cn('flex items-start gap-3 pt-5 pb-4', GUTTER)}>
       <div className="min-w-0 flex-1">
         <Base.Title className="title break-words">{title}</Base.Title>
         {subtitle ? <div className="mt-1 text-sm text-muted-foreground">{subtitle}</div> : null}
       </div>
-      {close ? (
-        <Base.Close
-          aria-label="Close"
-          aria-keyshortcuts="Escape"
-          className={cn(
-            'press -mt-0.5 -mr-2 flex size-(--control) shrink-0 cursor-pointer items-center justify-center text-muted-foreground hover:bg-(--fill) hover:text-foreground',
-            close === 'phone' && 'md:hidden',
-          )}
-        >
-          <XIcon className="size-4" />
-        </Base.Close>
-      ) : null}
+      <Base.Close
+        aria-label="Close"
+        aria-keyshortcuts="Escape"
+        className="press -mt-0.5 -mr-2 flex size-(--control) shrink-0 cursor-pointer items-center justify-center text-muted-foreground hover:bg-(--fill) hover:text-foreground"
+      >
+        <XIcon className="size-4" />
+      </Base.Close>
     </header>
   );
 }

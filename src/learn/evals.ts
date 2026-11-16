@@ -38,7 +38,7 @@ const CONCURRENCY = 4;
 
 const hash = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 12);
 
-export interface EvalDeps {
+interface EvalDeps {
   db: Sql;
   judge: Judge;
   /** `provider/model-id`, as recorded with the run. */
@@ -217,7 +217,7 @@ export interface EvalRun {
   withSenderExample: { answered: number; right: number };
 }
 
-export interface EvalResult {
+interface EvalResult {
   messageId: string;
   fromAddress: string;
   subject: string;

@@ -1,13 +1,13 @@
 import { useState } from 'react';
 
-export interface Series {
+interface Series {
   key: string;
   name: string;
   /** A CSS colour. Series are drawn bottom to top in the order given. */
   color: string;
 }
 
-export interface ChartRow {
+interface ChartRow {
   key: string;
   /** Under the column. */
   label: string;
@@ -29,7 +29,7 @@ function ceiling(n: number): number {
 }
 
 /** A second measure over the columns, as a line on the right-hand axis: model cost over mail handled. */
-export interface Line {
+interface Line {
   name: string;
   /** One value per row, in the same order. */
   values: readonly number[];

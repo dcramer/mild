@@ -38,7 +38,7 @@ export interface Settings {
  * Each setting's variable, where it goes in `sift.toml`, and how its text is read. Hosts that run sift
  * for you (Vercel, Cloudflare) configure it only this way.
  */
-export const ENVIRONMENT = {
+const ENVIRONMENT = {
   SIFT_DASHBOARD_PORT: { setting: 'dashboardPort', key: ['dashboard', 'port'], as: 'number' },
   SIFT_DASHBOARD_HOST: { setting: 'dashboardHost', key: ['dashboard', 'host'], as: 'string' },
   SIFT_DASHBOARD_ALLOW: { setting: 'dashboardAllow', key: ['dashboard', 'allow'], as: 'list' },
@@ -56,16 +56,6 @@ function fromText(text: string, as: 'number' | 'string' | 'list'): unknown {
 }
 
 export const DEFAULT_SETTINGS: Settings = { dashboardPort: 8787 };
-
-/** Keys that were settings once, and where each went. One left in `sift.toml` is refused with this, not ignored. */
-const REMOVED: Record<string, string> = {
-  model: "the model is now each person's own, chosen in the dashboard under Settings",
-  act: "whether sift is on is now each person's own, switched in the dashboard under Settings",
-  heuristics: 'heuristics is no longer a setting',
-  interval: 'interval is no longer a setting',
-  retention: '[retention] is no longer a setting',
-  examples: '[examples] is no longer a setting',
-};
 
 /**
  * Everything sift keeps lives in one directory, the home: settings, guidance, the database and
@@ -186,8 +176,7 @@ export function parseSettings(text: string, path = 'sift.toml', environment: rea
   const settings: Settings = { ...DEFAULT_SETTINGS };
 
   for (const [key, value] of Object.entries(raw)) {
-    if (Object.hasOwn(REMOVED, key)) throw new Error(`${path}: ${REMOVED[key]}. Remove ${key} from here.`);
-    else if (key === 'dashboard') {
+    if (key === 'dashboard') {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) throw bad('dashboard', 'a table');
       for (const [sub, port] of Object.entries(value as Record<string, unknown>)) {
         if (sub === 'port') {

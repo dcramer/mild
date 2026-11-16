@@ -42,7 +42,7 @@ export interface Read<Q extends z.ZodType = z.ZodType, R extends z.ZodType = z.Z
  * to everyone, so only the install's owner may. `anyone`: nothing of anybody's. Null: the body names
  * nothing that exists, which the route itself reports.
  */
-export type Touches = { account: string } | 'self' | 'install' | 'anyone' | null;
+type Touches = { account: string } | 'self' | 'install' | 'anyone' | null;
 
 /**
  * A POST. The server parses the body through `body` (a body it refuses, or one with a field it does not

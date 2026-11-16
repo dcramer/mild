@@ -73,7 +73,7 @@ export function describeMatch(match: RuleMatch): string {
 /** How narrowly a match is drawn: each condition counts, and an exact sender counts for more than a domain. */
 export const specificity = (match: RuleMatch) => Object.values(match).filter((v) => v !== undefined).length * 2 + (match.from === undefined ? 0 : 1);
 
-export interface RulesOptions {
+interface RulesOptions {
   /** Whether the owner has ever written to the sender. Undefined means not known. */
   hasWritten?: (facts: MessageFacts) => boolean | undefined;
 }
@@ -85,7 +85,7 @@ export interface RuleHit {
 }
 
 /** Whether a rule can only apply once something has said what the mail is: a model, for a condition in words; any tier, for `whenLabel`. */
-export const isJudged = (rule: Rule) => rule.whenLabel !== undefined || rule.when !== undefined;
+const isJudged = (rule: Rule) => rule.whenLabel !== undefined || rule.when !== undefined;
 
 type Outcome = Pick<Decision, 'disposition' | 'subscription' | 'labelId' | 'gmailLabel' | 'block' | 'markRead'> & { ruleId: string };
 
@@ -117,7 +117,7 @@ const keeps = (hit: RuleHit) => (hit.label ? labelled(hit.label, hit.rule.dispos
  * specific match comes first (more conditions, then an exact sender over a domain, then a rule that
  * waits for a label over one that does not); ties go to the earlier rule.
  */
-export function rankRules(rules: readonly Rule[], labels: readonly Label[], facts: MessageFacts, options: RulesOptions = {}): RuleHit[] {
+function rankRules(rules: readonly Rule[], labels: readonly Label[], facts: MessageFacts, options: RulesOptions = {}): RuleHit[] {
   const hits = rules.flatMap((rule): RuleHit[] => {
     if (!applies(rule, facts)) return [];
     const named = rule.labelId ?? rule.whenLabel;
@@ -139,12 +139,7 @@ export function rankRules(rules: readonly Rule[], labels: readonly Label[], fact
  * only apply once the mail has a label, and `judged` says a tier that names labels follows, nothing is
  * decided here and `settle` finishes the job afterwards.
  */
-export function pickRule(
-  rules: readonly Rule[],
-  labels: readonly Label[],
-  facts: MessageFacts,
-  options: RulesOptions & { judged?: boolean } = {},
-): RuleHit | null {
+function pickRule(rules: readonly Rule[], labels: readonly Label[], facts: MessageFacts, options: RulesOptions & { judged?: boolean } = {}): RuleHit | null {
   const ranked = rankRules(rules, labels, facts, options);
   const sure = ranked.filter((h) => !isJudged(h.rule));
   const protection = sure.find(keeps);

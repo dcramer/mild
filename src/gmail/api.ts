@@ -38,7 +38,7 @@ export interface RawMessage {
 }
 
 /** One message that a history record says was added, with its labels at that time. */
-export interface HistoryAddition {
+interface HistoryAddition {
   id: string;
   labelIds: string[];
 }
@@ -58,7 +58,7 @@ export interface HistoryPage {
   nextPageToken?: string;
 }
 
-export interface MessageIdPage {
+interface MessageIdPage {
   ids: string[];
   nextPageToken?: string;
 }

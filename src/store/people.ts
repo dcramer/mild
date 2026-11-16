@@ -3,7 +3,7 @@ import type { Sql } from './sql.ts';
 import type { Store } from './store.ts';
 
 /** Someone a request is from. */
-export interface Person {
+interface Person {
   id: number;
   owner: boolean;
   /** Their mailboxes, by address. */

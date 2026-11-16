@@ -16,7 +16,7 @@ export interface Store {
 }
 
 /** Where the database is: a Postgres server's address, or else PGlite in `databaseDir`. */
-export type StorePaths = { databaseUrl?: string | undefined; databaseMigrationUrl?: string | undefined; databaseDir: string };
+type StorePaths = { databaseUrl?: string | undefined; databaseMigrationUrl?: string | undefined; databaseDir: string };
 
 /** Open the database, migrating it first. */
 export async function openStore(paths: StorePaths): Promise<Store> {

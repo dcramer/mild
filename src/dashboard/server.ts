@@ -231,19 +231,17 @@ export function createDashboardServer(people: People, options: DashboardOptions 
       `sift_session=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
 
     if (signIn && req.method === 'GET' && url.pathname === '/api/session') {
-      const kind = signIn.client();
-      const reason = kind === null ? 'no-client' : !googleCanReturnHere ? 'address' : kind === 'desktop' ? 'desktop-client' : null;
+      const reason = !signIn.hasClient() ? 'no-client' : !googleCanReturnHere ? 'address' : null;
       return void json(res, 200, {
         required: true,
         email: session,
         canSignIn: reason === null,
         reason,
         addresses: options.signInAddresses ?? [],
-        redirectUri: `${origin}/auth/callback`,
       });
     }
     if (signIn && req.method === 'GET' && url.pathname === '/auth/login') {
-      if (signIn.client() === null || !googleCanReturnHere) {
+      if (!signIn.hasClient() || !googleCanReturnHere) {
         res.writeHead(303, { location: '/', 'cache-control': 'no-store' }).end();
         return;
       }
@@ -287,7 +285,7 @@ export function createDashboardServer(people: People, options: DashboardOptions 
       return;
     }
     if (!signIn && req.method === 'GET' && url.pathname === '/api/session')
-      return void json(res, 200, { required: false, email: null, canSignIn: false, reason: null, addresses: [], redirectUri: '' });
+      return void json(res, 200, { required: false, email: null, canSignIn: false, reason: null, addresses: [] });
 
     if (req.method === 'POST') {
       const handler = writes.get(url.pathname);

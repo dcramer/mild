@@ -1,7 +1,7 @@
 import { and, asc, decisions, desc, eq, messages, not, notExists } from './query.ts';
 import { outOfTries } from './runs.ts';
 import type { Sql } from './sql.ts';
-import { type Facts, deriveFacts } from '../triage/facts.ts';
+import type { Facts } from '../triage/facts.ts';
 import type { Address, MessageFacts } from '../triage/types.ts';
 
 const COLUMNS = {
@@ -17,7 +17,6 @@ const COLUMNS = {
   headers: messages.headers,
   labelIds: messages.labelIds,
   observeOnly: messages.observeOnly,
-  facts: messages.facts,
 };
 
 interface Row {
@@ -33,7 +32,6 @@ interface Row {
   headers: Record<string, string>;
   labelIds: string[];
   observeOnly: boolean;
-  facts: Facts | null;
 }
 
 const toMessage = (accountId: string, r: Row): MessageFacts => ({
@@ -49,7 +47,7 @@ const toMessage = (accountId: string, r: Row): MessageFacts => ({
   receivedAt: r.receivedAt,
 });
 
-export interface QueuedMessage {
+interface QueuedMessage {
   facts: MessageFacts;
   /** Pulled in from before sift was connected: suggest, never act. */
   observeOnly: boolean;
@@ -81,14 +79,13 @@ export async function listUndecided(db: Sql, accountId: string, limit: number): 
   return rows.map((r) => ({ observeOnly: r.observeOnly, facts: toMessage(accountId, r) }));
 }
 
-/** The facts recorded for a message, or null if sift has not seen it. Rows synced before facts were recorded get them from their stored headers. */
+/** The facts recorded for a message, or null if sift has not seen it. */
 export async function storedFacts(db: Sql, accountId: string, messageId: string): Promise<Facts | null> {
   const [row] = await db
-    .select(COLUMNS)
+    .select({ facts: messages.facts })
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
-  if (!row) return null;
-  return row.facts ?? deriveFacts(toMessage(accountId, row));
+  return row?.facts ?? null;
 }
 
 /** Replace a message's recorded facts, once reading the whole message has added to them. */

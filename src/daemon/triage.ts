@@ -19,7 +19,7 @@ import { type Judge, type JudgeFailure, modelStage } from '../triage/stages/mode
 import type { Decision, Disposition, MessageFacts, Stage, Unfinished } from '../triage/types.ts';
 import { type EvidenceSources, gatherEvidence } from './evidence.ts';
 
-export interface TriageDeps {
+interface TriageDeps {
   db: Sql;
   /** Null while sift is off: decisions are recorded and nothing in the mailbox changes. */
   mailbox: Mailbox | null;
@@ -35,7 +35,7 @@ export interface TriageDeps {
   now?: () => number;
 }
 
-export interface ModelTier {
+interface ModelTier {
   judge: Judge;
   /** As each run records it. */
   model: string;
@@ -65,13 +65,13 @@ export interface TriageReport {
 }
 
 /** After this many failed calls in a row a pass stops asking the model: the provider is likely down, and the rest of the queue keeps its tries. */
-export const FAILURES_IN_A_ROW = 3;
+const FAILURES_IN_A_ROW = 3;
 
 /**
  * The cascade for one account, as a function that decides one message: the tiers cheapest first, then
  * the rules that wait for a label.
  */
-export async function cascadeFor(deps: TriageDeps, accountId: string): Promise<(facts: MessageFacts) => Promise<Decision | Unfinished>> {
+async function cascadeFor(deps: TriageDeps, accountId: string): Promise<(facts: MessageFacts) => Promise<Decision | Unfinished>> {
   const { db, model } = deps;
   const labels = await listLabels(db, accountId);
   const rules = await listRules(db, accountId);

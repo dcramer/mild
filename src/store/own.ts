@@ -21,7 +21,7 @@ const ORIGINAL = Symbol.for('drizzle:OriginalName');
 const nameOf = (table: PgTable): string => (table as unknown as Record<symbol, string>)[ORIGINAL]!;
 
 /** Whether `source` (a table or an alias of one) holds one person's data. */
-export const isPersonTable = (source: unknown): source is PgTable => is(source, PgTable) && PERSON.has(nameOf(source));
+const isPersonTable = (source: unknown): source is PgTable => is(source, PgTable) && PERSON.has(nameOf(source));
 
 export type Builder = Pick<PgRemoteDatabase, 'select' | 'selectDistinct' | 'insert' | 'update' | 'delete'>;
 

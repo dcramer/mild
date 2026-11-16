@@ -5,7 +5,7 @@ import { Button } from './button.tsx';
 import { Avatar, Menu, type MenuItem } from './menu.tsx';
 import { Wordmark } from './type.tsx';
 
-export interface NavItem {
+interface NavItem {
   /** The path, without the leading `/`. */
   to: string;
   label: string;

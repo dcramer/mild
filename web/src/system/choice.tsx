@@ -6,8 +6,8 @@ const CHOICE =
 
 /**
  * A few choices laid out to be seen at once, one of them on (inked), where a `Select` would hide them:
- * what a message is, where a sender stands. `keys` gives each choice, in order, the key that picks it;
- * `numbered` is the keys 1 to 9. With `clearable` pressing the one that is on turns it off, so none is on.
+ * what a message is, where a sender stands. `numbered` lets the keys 1 to 9 pick them, in order. With
+ * `clearable` pressing the one that is on turns it off, so none is on.
  */
 export function ChoiceGroup<T extends string>({
   label,
@@ -15,7 +15,6 @@ export function ChoiceGroup<T extends string>({
   options,
   onChange,
   numbered,
-  keys = numbered ? NUMBERS : undefined,
   clearable,
   disabled,
 }: {
@@ -24,7 +23,6 @@ export function ChoiceGroup<T extends string>({
   options: readonly (readonly [T, string])[];
   onChange: (value: T | null) => void;
   numbered?: boolean;
-  keys?: readonly string[] | undefined;
   clearable?: boolean;
   disabled?: boolean;
 }) {
@@ -35,7 +33,7 @@ export function ChoiceGroup<T extends string>({
           key={key}
           text={text}
           on={key === value}
-          shortcut={disabled ? undefined : keys?.[index]}
+          shortcut={disabled || !numbered ? undefined : NUMBERS[index]}
           clearable={clearable ?? false}
           disabled={disabled ?? false}
           onPress={() => onChange(clearable && key === value ? null : key)}

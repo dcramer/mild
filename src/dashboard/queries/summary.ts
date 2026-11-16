@@ -110,7 +110,6 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
 
   return {
     days,
-    generatedAt: now,
     accounts,
     totals: {
       messages: (

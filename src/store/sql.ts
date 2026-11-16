@@ -17,7 +17,7 @@ export interface Sql extends Builder {
 }
 
 /** One connection, inside a transaction. */
-export interface Connection {
+interface Connection {
   /** `array`: each row as its values in column order, which is how Drizzle reads them. */
   query: (text: string, params: unknown[], array?: boolean) => Promise<{ rows: unknown[] }>;
 }

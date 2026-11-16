@@ -1,5 +1,5 @@
 {
-  "id": "5723d8ff-5975-4770-a205-53dc77b7373d",
+  "id": "6604834c-e1ef-4848-acc1-e005442b53b4",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -698,7 +698,7 @@
       "checkConstraints": {
         "decisions_stage": {
           "name": "decisions_stage",
-          "value": "\"decisions\".\"stage\" IN ('rules', 'sender', 'classifier', 'agent', 'fallback')"
+          "value": "\"decisions\".\"stage\" IN ('rules', 'classifier', 'agent', 'fallback')"
         },
         "decisions_disposition": {
           "name": "decisions_disposition",
@@ -1608,7 +1608,7 @@
           "name": "synced_at",
           "type": "bigint",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "observe_only": {
           "name": "observe_only",
@@ -1621,7 +1621,7 @@
           "name": "facts",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "read_at": {
           "name": "read_at",

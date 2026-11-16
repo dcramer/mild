@@ -1,6 +1,6 @@
 import { type Label, type MessageFacts, type Stage, labelled } from '../types.ts';
 
-export interface Classification {
+interface Classification {
   /** A label's id. */
   labelId: string;
   /** Calibrated probability that the label is right, 0 to 1. */
@@ -8,9 +8,9 @@ export interface Classification {
 }
 
 /** Port for a decision model (Jev, Clef, or a local classifier). Returns null on error: errors abstain. */
-export type Classify = (facts: MessageFacts) => Promise<Classification | null>;
+type Classify = (facts: MessageFacts) => Promise<Classification | null>;
 
-export interface ClassifierOptions {
+interface ClassifierOptions {
   /** Below this the stage abstains. Labels whose action is `spam` use `minSpamConfidence`. */
   minConfidence: number;
   /** Spam is the costliest mistake, so it gets its own, higher bar. */

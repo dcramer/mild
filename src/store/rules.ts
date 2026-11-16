@@ -5,9 +5,9 @@ import type { Rule, RuleMatch } from '../triage/stages/rules.ts';
 import { listLabels } from './labels.ts';
 
 /** `user`: the user wrote it. `correction`: it came from the user correcting sift. `agent`: sift learned it. */
-export type RuleSource = (typeof RULE_SOURCES)[number];
+type RuleSource = (typeof RULE_SOURCES)[number];
 
-export interface StoredRule extends Rule {
+interface StoredRule extends Rule {
   source: RuleSource;
   hits: number;
 }
@@ -104,7 +104,7 @@ export async function countRuleHit(db: Sql, id: string): Promise<void> {
  * for all their mail and one for each label it might be, so `whenLabel` says which is meant: null for the
  * rule that waits for no label.
  */
-export async function ruleMatching(
+async function ruleMatching(
   db: Sql,
   accountId: string,
   match: RuleMatch,
@@ -167,7 +167,7 @@ export async function blockSender(db: Sql, accountId: string, address: string, l
 }
 
 /** A standing the owner can give by hand. `none` takes back whatever rule said so. */
-export type GivenStanding = 'trusted' | 'unwanted' | 'blocked' | 'none';
+type GivenStanding = 'trusted' | 'unwanted' | 'blocked' | 'none';
 
 /**
  * Give a sender or a domain a standing, which is a rule for exactly them that says only what happens:

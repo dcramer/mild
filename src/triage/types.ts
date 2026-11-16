@@ -10,7 +10,7 @@ export type DecidedDisposition = (typeof DECIDED)[number];
 export const SUBSCRIPTION_ACTIONS = ['preserve', 'unsubscribe'] as const;
 export type SubscriptionAction = (typeof SUBSCRIPTION_ACTIONS)[number];
 
-export const STAGE_NAMES = ['rules', 'sender', 'classifier', 'agent', 'fallback'] as const;
+export const STAGE_NAMES = ['rules', 'classifier', 'agent', 'fallback'] as const;
 export type StageName = (typeof STAGE_NAMES)[number];
 
 export interface Address {

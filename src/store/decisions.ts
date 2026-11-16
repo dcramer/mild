@@ -2,8 +2,8 @@ import { type DECISION_MODES, type DECISION_OUTCOMES, and, asc, decisions, eq, i
 import type { Sql } from './sql.ts';
 import type { Decision, Disposition } from '../triage/types.ts';
 
-export type DecisionMode = (typeof DECISION_MODES)[number];
-export type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
+type DecisionMode = (typeof DECISION_MODES)[number];
+type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
 
 /**
  * Append a decision to the log. Every triage outcome is recorded, including "leave it alone" and
@@ -51,7 +51,7 @@ export async function settleDecision(db: Sql, id: number, outcome: DecisionOutco
   await db.update(decisions).set({ outcome, outcomeDetail: detail }).where(eq(decisions.id, id));
 }
 
-export interface UnsettledDecision {
+interface UnsettledDecision {
   id: number;
   messageId: string;
   disposition: Disposition;

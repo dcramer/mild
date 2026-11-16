@@ -1,7 +1,7 @@
 import { UNSURE } from './stages/model.ts';
 
 /** One judgement set against the owner's answer. */
-export interface Judged {
+interface Judged {
   /** The owner's label. */
   expected: string;
   /** The label the model named, `unsure`, or null when the call failed. */
@@ -11,7 +11,7 @@ export interface Judged {
   outputTokens: number;
 }
 
-export interface Tally {
+interface Tally {
   total: number;
   right: number;
   wrong: number;

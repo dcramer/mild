@@ -108,8 +108,8 @@ describe('pullChanges', () => {
 
   it('falls back to a bounded search when the cursor has expired, reading the new cursor first', async () => {
     const api = fakeApi({ expired: true, historyId: '900', search: ['new', 'old'] });
-    expect(await pullChanges(api, '1', { recoveryDays: 3 })).toEqual({ messageIds: ['old', 'new'], labelChanges: [], historyId: '900', mode: 'recovery' });
-    expect(api.calls).toEqual(['history:1:', 'profile', 'search:newer_than:3d']);
+    expect(await pullChanges(api, '1')).toEqual({ messageIds: ['old', 'new'], labelChanges: [], historyId: '900', mode: 'recovery' });
+    expect(api.calls).toEqual(['history:1:', 'profile', 'search:newer_than:7d']);
   });
 
   it('takes the cursor from the last of many pages', async () => {

@@ -378,10 +378,10 @@ describe('managing sift from the dashboard', () => {
 describe('signing in with Google', () => {
   const SECRET = 'session-secret';
   let completed: string[];
-  let kind: 'web' | 'desktop' | null;
+  let hasClient: boolean;
   let allow: string[] | undefined;
   const signIn: SignIn = {
-    client: () => kind,
+    hasClient: () => hasClient,
     allowed: (email) => allow?.includes(email) ?? true,
     url: (redirectUri, state, challenge) => `https://accounts.example/auth?redirect=${encodeURIComponent(redirectUri)}&state=${state}&challenge=${challenge}`,
     complete: async (redirectUri, code, _verifier, addTo) => {
@@ -411,7 +411,7 @@ describe('signing in with Google', () => {
 
   beforeEach(() => {
     completed = [];
-    kind = 'web';
+    hasClient = true;
     allow = undefined;
   });
 
@@ -459,20 +459,13 @@ describe('signing in with Google', () => {
     expect(String(back.headers['set-cookie'])).toMatch(/; Secure$/);
   });
 
-  it('explains why sign-in is not possible at a plain address, without a client, or with a Desktop client', async () => {
+  it('explains why sign-in is not possible at a plain address or without a client', async () => {
     const { call, port } = await startWithSignIn();
     const plain = await call('GET', '/api/session', undefined, { host: `homebox:${port}` });
     expect(plain.body).toMatchObject({ canSignIn: false, reason: 'address', addresses: ['http://localhost:1', 'https://box.example.ts.net'] });
     expect((await call('GET', '/auth/login', undefined, { host: `homebox:${port}` })).headers['location']).toBe('/');
 
-    kind = 'desktop';
-    expect((await call('GET', '/api/session', undefined, { host: 'box.example.ts.net', 'x-forwarded-proto': 'https' })).body).toMatchObject({
-      canSignIn: false,
-      reason: 'desktop-client',
-    });
-    expect((await call('GET', '/api/session')).body).toMatchObject({ canSignIn: false, reason: 'desktop-client' });
-
-    kind = null;
+    hasClient = false;
     expect((await call('GET', '/api/session')).body).toMatchObject({ canSignIn: false, reason: 'no-client' });
   });
 

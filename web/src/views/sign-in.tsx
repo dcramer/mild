@@ -55,19 +55,6 @@ function Blocked({ session }: { session: Session }) {
       </>
     );
   }
-  if (session.reason === 'desktop-client') {
-    return (
-      <>
-        <p className="statement">This Google client can't sign you in.</p>
-        <p className="text-muted-foreground">It is a Desktop app client. Setup replaces it with a Web application one:</p>
-        <Copyable value="sift init" label="command" />
-        <Step>
-          <p>The new client needs this redirect URI:</p>
-          <Copyable value={session.redirectUri} label="redirect URI" />
-        </Step>
-      </>
-    );
-  }
   return (
     <>
       <p className="statement">No Google client yet.</p>
