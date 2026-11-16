@@ -13,7 +13,7 @@ const files = readdirSync(MIGRATIONS).toSorted();
 describe('store', () => {
   it('migrates a fresh database and enforces constraints', () => {
     const db = openDb(':memory:');
-    expect(schemaVersion(db)).toBe(files.length);
+    expect(schemaVersion(db)).toBe(Number.parseInt(files.at(-1)!, 10));
     db.prepare('INSERT INTO accounts (id, email, created_at) VALUES (?, ?, ?)').run('acct', 'me@example.org', 0);
     const insert = db.prepare(
       `INSERT INTO labels (account_id, id, name, description, disposition, gmail_label, position, updated_at) VALUES (?, ?, 'N', '', ?, 'sift/n', 0, 0)`,

@@ -60,7 +60,7 @@ tests/        synthetic fixtures only
 docker/       Dockerfile and compose file
 ```
 
-Planned, not yet created: `src/learn/` (correction detection, rule promotion), `evals/` (a labelled set for measuring each tier).
+Planned, not yet created: correction detection and rule promotion in `src/learn/`.
 
 Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 
@@ -149,7 +149,9 @@ sift suggests first and acts second. While it only observes, every decision is a
 - **Any decision can be answered, not only a suggestion.** Every list opens a message in the same panel: its text where held, what sift decided and why, what it knows about the sender, and the answer. Answering a message sift had already decided records the user's answer as a new decision for it, makes the rule, and, if sift had changed the message in Gmail, takes that change back so the new decision is carried out from where the message started.
 - **Every marked message becomes an example.** The answer creates an `examples` row; the next pass of `sift run` fetches the whole message (raw RFC 822, all headers, readable text) into it. These are the evaluation and training set. A message that has since been deleted keeps its answer and is marked gone.
 
-Code: `src/learn/feedback.ts` (suggestions, answers, accuracy), `src/daemon/examples.ts` (capture).
+- **Examples test the model.** A test run replays the model over an account's stored examples and scores it against the user's answers: right, wrong, "unsure" and failed calls overall and per label, which labels were taken for which, and cost and tokens per message. It is started from the dashboard and never by sift itself, because every example is a paid model call; a run takes at most 200 examples, newest answers first, four calls at a time, in the background. Each example is judged on what is stored (the recorded headers, the example's text, the sender's history as it stood before the message's first decision), so Gmail is not asked and the user's later answer does not leak in. A run records what it ran with (model, a hash each of the prompt layout, the guidelines and the labels, and whether examples were shown) and one row per example, so two runs can be compared example by example. With examples shown, the one under test is left out of its own prompt; answers that still had another example from the same sender are counted apart, since they are easier than new mail.
+
+Code: `src/learn/feedback.ts` (suggestions, answers, accuracy), `src/daemon/examples.ts` (capture), `src/learn/evals.ts` and `src/triage/score.ts` (test runs).
 
 ## State
 
@@ -160,6 +162,7 @@ One SQLite database, `sift.db` in the home directory (schema in `src/store/migra
 - **suggestion_bodies:** the readable text of mail still waiting on the user, so a suggestion can be judged by reading it. Held only for mail sift would move or could not place, and deleted when the message is answered or stops being a suggestion, and after 30 days regardless (`src/daemon/bodies.ts`). These two tables are the only places message content is stored.
 - **decisions:** an append-only log, each with its mode (observe or act) and outcome. Every triage outcome is recorded, including "keep" and "could not decide", with the tier that made it, the reason, the confidence, and what it cost (model, tokens, dollars, duration). A message can have several decisions; the latest is current.
 - **actions:** the audit log of every mailbox change, with labels before and after, linked to the decision it carried out.
+- **eval_runs, eval_results:** each test run of the model over the examples, with its settings, and what the model said for each example. Labels and costs only, no message content.
 - **labels, rules, questions, accounts:** what mail can be, what sift knows without a model, questions waiting on the user, and each account's history cursor and last sync time.
 
 OAuth tokens are kept in files beside the database, not in it. pi-durable keeps its own database alongside.

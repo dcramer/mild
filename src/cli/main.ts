@@ -15,6 +15,7 @@ import { ensureWebBuilt } from './web-build.ts';
 import { type PassResult, type Wake, createWake, runLoop, runOnce } from '../daemon/run.ts';
 import { syncAccount } from '../daemon/sync.ts';
 import { createGmailApi } from '../gmail/api.ts';
+import { interruptEvals, startEval } from '../learn/evals.ts';
 import { browserSignInUrl, clientFor, completeBrowserSignIn, hasClientSecrets, installClient, loadClientSecrets, saveRefreshToken } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { createJudge } from '../model/judge.ts';
@@ -282,6 +283,7 @@ function buildSignIn(config: Config, db: ReturnType<typeof openDb>): SignIn {
 /** What the dashboard may ask this process to do. See `Controls`. */
 function buildControls(config: Config, db: ReturnType<typeof openDb>, live: { wake?: Wake; activity: Activity }): Controls {
   const current = () => loadConfig().settings;
+  interruptEvals(db);
   return {
     settings: () => {
       const s = current();
@@ -322,6 +324,12 @@ function buildControls(config: Config, db: ReturnType<typeof openDb>, live: { wa
       // The corrected decision is waiting to be carried out; do it now, not at the next interval.
       live.wake?.now();
       return last !== null;
+    },
+    startEval: async (request) => {
+      const spec = current().model;
+      if (!spec) throw new Error('Choose a model first.');
+      const tier = await openModelTier(config, spec);
+      return startEval({ db, judge: tier.judge, model: spec, guidelines: tier.guidelines() }, request).id;
     },
     checkNow: () => live.wake?.now(),
     activity: () => live.activity,

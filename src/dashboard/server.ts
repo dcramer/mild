@@ -4,13 +4,14 @@ import { type IncomingMessage, type Server, type ServerResponse, createServer } 
 import { extname, join, relative, sep } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_EVAL_EXAMPLES, MAX_EVAL_EXAMPLES, getEvalRun, listEvalRuns } from '../learn/evals.ts';
 import { type FeedbackInput, applyFeedback } from '../learn/feedback.ts';
 import { listAccounts } from '../store/accounts.ts';
 import { addLabel, updateLabel } from '../store/labels.ts';
 import { addRule, removeRule } from '../store/rules.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { listChanges, listDecisions, listLabelSummaries, listRuleSummaries, listSuggestions, messageDetail, suggestionDetail, summarize } from './queries.ts';
-import type { ManageState } from './types.ts';
+import type { EvalDetail, Evals, ManageState } from './types.ts';
 
 /** Where `pnpm build:web` puts the built web app. */
 export const WEB_DIST = fileURLToPath(new URL('../../web/dist/', import.meta.url));
@@ -309,6 +310,14 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       controls.checkNow();
       return { added };
     },
+    '/api/evals/run': async (body) => {
+      const { accountId, fewShot, limit } = body;
+      if (!str(accountId) || (fewShot !== undefined && typeof fewShot !== 'boolean')) return null;
+      if (limit !== undefined && (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > MAX_EVAL_EXAMPLES)) return null;
+      if (!listAccounts(db).some((a) => a.id === accountId)) return null;
+      if (!controls) throw new Error('This dashboard cannot run the model.');
+      return { id: await controls.startEval({ accountId, fewShot: fewShot ?? controls.settings().fewShot, limit: limit ?? DEFAULT_EVAL_EXAMPLES }) };
+    },
     '/api/check': () => {
       if (!controls) throw new Error('Nothing is sorting mail from this dashboard.');
       controls.checkNow();
@@ -472,6 +481,20 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
       if (url.pathname === '/api/suggestions') return void json(res, 200, listSuggestions(db, { includeKept: query.get('kept') === '1' }));
       if (url.pathname === '/api/manage') return void json(res, 200, manageState());
       if (url.pathname === '/api/changes') return void json(res, 200, { changes: listChanges(db, 200) });
+      if (url.pathname === '/api/evals') {
+        const counts = db.prepare(`SELECT account_id, count(*) AS n FROM examples WHERE status = 'captured' AND label_id IS NOT NULL GROUP BY account_id`);
+        const evals: Evals = {
+          runs: listEvalRuns(db),
+          examples: Object.fromEntries((counts.all() as { account_id: string; n: number }[]).map((r) => [r.account_id, r.n])),
+          defaultLimit: DEFAULT_EVAL_EXAMPLES,
+          maxLimit: MAX_EVAL_EXAMPLES,
+        };
+        return void json(res, 200, evals);
+      }
+      if (url.pathname === '/api/eval') {
+        const detail: EvalDetail | null = getEvalRun(db, Number(query.get('id')));
+        return void json(res, detail ? 200 : 404, detail ?? { error: 'No such run' });
+      }
       if (url.pathname === '/api/models') {
         void (controls ? controls.models() : Promise.resolve([]))
           .then((models) => json(res, 200, { models }))

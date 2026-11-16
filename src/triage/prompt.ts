@@ -1,3 +1,4 @@
+import { bulkSignals } from './features.ts';
 import { type JudgeInput, UNSURE } from './stages/model.ts';
 
 export const VERDICT_TOOL = 'record_verdict';
@@ -74,3 +75,30 @@ export function buildPrompt(input: JudgeInput): string {
     'EMAIL>>>',
   ].join('\n');
 }
+
+/**
+ * Everything in the prompt that is sift's and not the user's or the email's: the system prompt and the
+ * layout around one message and one example. Two judgements made with the same template were asked the same way.
+ */
+export const PROMPT_TEMPLATE = `${SYSTEM_PROMPT}\n\n${buildPrompt({
+  evidence: {
+    facts: {
+      accountId: '',
+      messageId: '',
+      threadId: '',
+      from: { address: '', domain: '' },
+      to: [],
+      cc: [],
+      subject: '',
+      labelIds: [],
+      headers: {},
+      receivedAt: 0,
+    },
+    signals: bulkSignals({}),
+    body: '',
+    sender: { messagesSeen: 0, userHasWritten: null, pastDispositions: {} },
+  },
+  labels: [],
+  guidelines: '',
+  examples: [{ messageId: '', fromAddress: '', fromDomain: '', subject: '', excerpt: '', labelId: '', markedAt: 0 }],
+})}`;

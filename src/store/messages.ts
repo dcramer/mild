@@ -32,19 +32,29 @@ export function listUndecided(db: DatabaseSync, accountId: string, limit: number
        ORDER BY received_at, id LIMIT ?`,
     )
     .all(accountId, limit) as unknown as Row[];
-  return rows.map((r) => ({
-    observeOnly: r.observe_only === 1,
-    facts: {
-      accountId,
-      messageId: r.id,
-      threadId: r.thread_id,
-      from: { address: r.from_address, domain: r.from_domain, ...(r.from_name ? { name: r.from_name } : {}) },
-      to: JSON.parse(r.to_json) as Address[],
-      cc: JSON.parse(r.cc_json) as Address[],
-      subject: r.subject,
-      labelIds: JSON.parse(r.labels_json) as string[],
-      headers: JSON.parse(r.headers_json) as Record<string, string>,
-      receivedAt: r.received_at,
-    },
-  }));
+  return rows.map((r) => ({ observeOnly: r.observe_only === 1, facts: toFacts(accountId, r) }));
+}
+
+const toFacts = (accountId: string, r: Row): MessageFacts => ({
+  accountId,
+  messageId: r.id,
+  threadId: r.thread_id,
+  from: { address: r.from_address, domain: r.from_domain, ...(r.from_name ? { name: r.from_name } : {}) },
+  to: JSON.parse(r.to_json) as Address[],
+  cc: JSON.parse(r.cc_json) as Address[],
+  subject: r.subject,
+  labelIds: JSON.parse(r.labels_json) as string[],
+  headers: JSON.parse(r.headers_json) as Record<string, string>,
+  receivedAt: r.received_at,
+});
+
+/** One recorded message as triage input, or null if sift never saw it. */
+export function getFacts(db: DatabaseSync, accountId: string, messageId: string): MessageFacts | null {
+  const row = db
+    .prepare(
+      `SELECT id, thread_id, from_address, from_domain, from_name, received_at, subject, to_json, cc_json, headers_json, labels_json, observe_only
+       FROM messages WHERE account_id = ? AND id = ?`,
+    )
+    .get(accountId, messageId) as unknown as Row | undefined;
+  return row ? toFacts(accountId, row) : null;
 }

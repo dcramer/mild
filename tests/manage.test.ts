@@ -11,12 +11,13 @@ import { triageAccount } from '../src/daemon/triage.ts';
 import type { Controls, ManagedSettings, SignIn } from '../src/dashboard/controls.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
 import type { RawMessage } from '../src/gmail/api.ts';
+import { startEval } from '../src/learn/evals.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { listLabels } from '../src/store/labels.ts';
 import { openDb } from '../src/store/db.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { listRules } from '../src/store/rules.ts';
-import { FakeMailbox, facts } from './helpers.ts';
+import { FakeMailbox, facts, storeExample } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
 let db: DatabaseSync;
@@ -48,6 +49,10 @@ const controls: Controls = {
     calls.push(`putBack ${messageId}`);
     if (messageId === 'gone') throw new Error('The message no longer exists.');
     return true;
+  },
+  startEval: async ({ accountId, fewShot, limit }) => {
+    calls.push(`eval ${accountId} ${fewShot} ${limit}`);
+    return 7;
   },
   checkNow: () => void calls.push('check'),
   activity: () => ({ sorting: true, lastPassAt: 5, problems: [] }),
@@ -125,6 +130,40 @@ describe('managing sift from the dashboard', () => {
     for (const bad of [{ act: 'yes' }, { interval: 1 }, { interval: '60' }, { model: 'no-slash' }, { fewShot: 'no' }])
       expect((await call(port, 'POST', '/api/settings', bad)).status).toBe(400);
     expect(settings).toEqual({ act: true, interval: 300, model: null, fewShot: false });
+  });
+
+  it('starts a test run of the model only when asked, through the process that holds the model', async () => {
+    const port = await start();
+    storeExample(db, ACCOUNT, { id: 'e1', from: 'news@example.com', label: 'newsletter' });
+    expect((await call(port, 'GET', '/api/evals')).body).toEqual({ runs: [], examples: { [ACCOUNT]: 1 }, defaultLimit: 50, maxLimit: 200 });
+    expect(calls).toEqual([]);
+
+    expect((await call(port, 'POST', '/api/evals/run', { accountId: ACCOUNT })).body).toEqual({ id: 7 });
+    expect((await call(port, 'POST', '/api/evals/run', { accountId: ACCOUNT, fewShot: false, limit: 20 })).status).toBe(200);
+    expect(calls).toEqual([`eval ${ACCOUNT} true 50`, `eval ${ACCOUNT} false 20`]);
+    for (const bad of [
+      {},
+      { accountId: 'nobody@example.org' },
+      { accountId: ACCOUNT, limit: 201 },
+      { accountId: ACCOUNT, limit: 0 },
+      { accountId: ACCOUNT, fewShot: 1 },
+    ])
+      expect((await call(port, 'POST', '/api/evals/run', bad)).status).toBe(400);
+
+    const { id, done } = startEval(
+      { db, judge: async () => ({ label: 'marketing', reason: 'r' }), model: 'p/small', guidelines: '' },
+      { accountId: ACCOUNT, fewShot: false },
+    );
+    await done;
+    const listed = (await call(port, 'GET', '/api/evals')).body['runs'] as { id: number; model: string; score: { wrong: number } }[];
+    expect(listed).toMatchObject([{ id, model: 'p/small', status: 'done', fewShot: false, score: { total: 1, wrong: 1 } }]);
+    const detail = await call(port, 'GET', `/api/eval?id=${id}`);
+    expect(detail.body).toMatchObject({ run: { id }, results: [{ messageId: 'e1', expected: 'newsletter', got: 'marketing', subject: 'Subject e1' }] });
+    expect((await call(port, 'GET', '/api/eval?id=99')).status).toBe(404);
+
+    close?.();
+    const bare = await start({ withControls: false });
+    expect((await call(bare, 'POST', '/api/evals/run', { accountId: ACCOUNT })).status).toBe(409);
   });
 
   it('edits the guidelines, labels and rules', async () => {

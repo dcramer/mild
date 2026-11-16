@@ -20,6 +20,11 @@ export interface Controls {
    * decision can be carried out from where the message started. Resolves with whether anything was taken back.
    */
   putBack(accountId: string, messageId: string): Promise<boolean>;
+  /**
+   * Replay the model over an account's stored examples, in the background. Every example is a model call
+   * that costs money, so this only ever runs because the user asked. Resolves with the run's id.
+   */
+  startEval(request: { accountId: string; fewShot: boolean; limit: number }): Promise<number>;
   /** Start a pass now instead of waiting for the interval. */
   checkNow(): void;
   activity(): Activity;
