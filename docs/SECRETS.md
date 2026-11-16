@@ -3,9 +3,9 @@
 Four kinds of thing would let someone else act as you, and sift encrypts each when you give it a key:
 
 - in the home directory, the install's own: `google-client.json` (your Google OAuth client) and `dashboard-key` (signs dashboard sessions);
-- in each person's database (`users/<id>.db`, table `credentials`), theirs: a Gmail refresh token per mailbox, and their model sign-ins (API keys, a ChatGPT sign-in).
+- in the database, as each person's own rows (`credentials`), theirs: a Gmail refresh token per mailbox, and their model sign-ins (API keys, a ChatGPT sign-in).
 
-A person's sign-ins are kept in their own database so that what is done for one person cannot reach another's. The rest of the database is not encrypted.
+A person's sign-ins are their own rows, which row-level security keeps from everyone else. The rest of the database is not encrypted.
 
 A key beside what it protects protects nothing, so the key is the one setting that comes from the environment and not `sift.toml`. It guards a copied home directory or backup. It does not guard against someone who can read the running process's environment.
 
@@ -49,7 +49,7 @@ sift refuses to start, and names what it cannot open. If `sift init` made the ke
 | `google-client.json` | Delete it, then `sift init`, and paste the client again from Google Cloud Console. |
 | `dashboard-key` | Delete it; everyone is signed out of the dashboard. |
 
-A person's sign-ins are rows in their database: until there is a way to clear them from the dashboard, delete the rows (`DELETE FROM credentials` in `users/<id>.db`) with sift stopped. Mail, decisions, rules and labels are untouched.
+A person's sign-ins are rows in their database: until there is a way to clear them from the dashboard, delete their rows from `credentials` with sift stopped. Mail, decisions, rules and labels are untouched.
 
 ## How
 

@@ -1,0 +1,341 @@
+CREATE ROLE "sift_app";--> statement-breakpoint
+CREATE TABLE "accounts" (
+	"id" text PRIMARY KEY NOT NULL,
+	"email" text NOT NULL,
+	"user_id" integer NOT NULL,
+	"created_at" bigint NOT NULL,
+	CONSTRAINT "accounts_email_unique" UNIQUE("email")
+);
+--> statement-breakpoint
+CREATE TABLE "actions" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer DEFAULT current_setting('sift.user')::integer NOT NULL,
+	"account_id" text NOT NULL,
+	"message_id" text,
+	"decision_id" integer,
+	"type" text NOT NULL,
+	"payload_json" text NOT NULL,
+	"original_labels" text,
+	"final_labels" text,
+	"status" text NOT NULL,
+	"error" text,
+	"created_at" bigint NOT NULL,
+	"completed_at" bigint,
+	CONSTRAINT "actions_status" CHECK ("actions"."status" IN ('pending', 'done', 'failed', 'unknown', 'undone'))
+);
+--> statement-breakpoint
+ALTER TABLE "actions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "correspondents" (
+	"user_id" integer DEFAULT current_setting('sift.user')::integer NOT NULL,
+	"account_id" text NOT NULL,
+	"address" text NOT NULL,
+	"user_has_written" integer NOT NULL,
+	"checked_at" bigint NOT NULL,
+	CONSTRAINT "correspondents_account_id_address_pk" PRIMARY KEY("account_id","address")
+);
+--> statement-breakpoint
+ALTER TABLE "correspondents" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "credentials" (
+	"user_id" integer DEFAULT current_setting('sift.user')::integer NOT NULL,
+	"kind" text NOT NULL,
+	"key" text NOT NULL,
+	"value" text NOT NULL,
+	"updated_at" bigint NOT NULL,
+	CONSTRAINT "credentials_user_id_kind_key_pk" PRIMARY KEY("user_id","kind","key"),
+	CONSTRAINT "credentials_kind" CHECK ("credentials"."kind" IN ('gmail', 'model'))
+);
+--> statement-breakpoint
+ALTER TABLE "credentials" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "decisions" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer DEFAULT current_setting('sift.user')::integer NOT NULL,
+	"account_id" text NOT NULL,
+	"message_id" text NOT NULL,
+	"stage" text NOT NULL,
+	"disposition" text NOT NULL,
+	"subscription" text NOT NULL,
+	"label_id" text,
+	"gmail_label" text,
+	"block" integer DEFAULT 0 NOT NULL,
+	"mark_read" integer DEFAULT 0 NOT NULL,
+	"rule_id" text,
+	"prior_rule_id" text,
+	"confidence" double precision,
+	"reason" text NOT NULL,
+	"model" text,
+	"input_tokens" integer DEFAULT 0 NOT NULL,
+	"output_tokens" integer DEFAULT 0 NOT NULL,
+	"cost_usd" double precision DEFAULT 0 NOT NULL,
+	"duration_ms" integer,
+	"decided_at" bigint NOT NULL,
+	"mode" text DEFAULT 'observe' NOT NULL,
+	"outcome" text,
+	"outcome_detail" text,
+	"by_user" integer DEFAULT 0 NOT NULL,
+	CONSTRAINT "decisions_own" UNIQUE("user_id","id"),
+	CONSTRAINT "decisions_stage" CHECK ("decisions"."stage" IN ('rules', 'sender', 'classifier', 'heuristics', 'agent', 'fallback')),
+	CONSTRAINT "decisions_disposition" CHECK ("decisions"."disposition" IN ('keep', 'archive', 'spam', 'review')),
+	CONSTRAINT "decisions_subscription" CHECK ("decisions"."subscription" IN ('preserve', 'unsubscribe')),
+	CONSTRAINT "decisions_mode" CHECK ("decisions"."mode" IN ('act', 'observe')),
+	CONSTRAINT "decisions_outcome" CHECK ("decisions"."outcome" IN ('observed', 'none', 'done', 'skipped', 'failed', 'unknown'))
+);
+--> statement-breakpoint
+ALTER TABLE "decisions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "eval_results" (
+	"user_id" integer DEFAULT current_setting('sift.user')::integer NOT NULL,
+	"run_id" integer NOT NULL,
+	"message_id" text NOT NULL,
+	"expected" text NOT NULL,
+	"got" text,
+	"confidence" double precision,
+	"input_tokens" integer DEFAULT 0 NOT NULL,
+	"output_tokens" integer DEFAULT 0 NOT NULL,
+	"cost_usd" double precision DEFAULT 0 NOT NULL,
+	"duration_ms" integer NOT NULL,
+	"shots" integer NOT NULL,
+	"sender_shots" integer NOT NULL,
+	CONSTRAINT "eval_results_run_id_message_id_pk" PRIMARY KEY("run_id","message_id")
+);
+--> statement-breakpoint
+ALTER TABLE "eval_results" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "eval_runs" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer DEFAULT current_setting('sift.user')::integer NOT NULL,
+	"account_id" text NOT NULL,
+	"started_at" bigint NOT NULL,
+	"finished_at" bigint,
+	"status" text NOT NULL,
+	"error" text,
+	"model" text NOT NULL,
+	"prompt_hash" text NOT NULL,
+	"guidelines_hash" text NOT NULL,
+	"labels_hash" text NOT NULL,
+	"labels_json" text NOT NULL,
+	"few_shot" integer NOT NULL,
+	"total" integer NOT NULL,
+	CONSTRAINT "eval_runs_own" UNIQUE("user_id","id"),
+	CONSTRAINT "eval_runs_status" CHECK ("eval_runs"."status" IN ('running', 'done', 'failed', 'interrupted'))
+);
+--> statement-breakpoint
+ALTER TABLE "eval_runs" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "examples" (
+	"user_id" integer DEFAULT current_setting('sift.user')::integer NOT NULL,
+	"account_id" text NOT NULL,
+	"message_id" text NOT NULL,
+	"disposition" text NOT NULL,
+	"label_id" text,
+	"suggested" text NOT NULL,
+	"suggested_by" text NOT NULL,
+	"marked_at" bigint NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"raw" "bytea",
+	"headers_json" text,
+	"body_text" text,
+	"captured_at" bigint,
+	CONSTRAINT "examples_account_id_message_id_pk" PRIMARY KEY("account_id","message_id"),
+	CONSTRAINT "examples_disposition" CHECK ("examples"."disposition" IN ('keep', 'archive', 'spam')),
+	CONSTRAINT "examples_status" CHECK ("examples"."status" IN ('pending', 'captured', 'gone'))
+);
+--> statement-breakpoint
+ALTER TABLE "examples" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "feedback" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer DEFAULT current_setting('sift.user')::integer NOT NULL,
+	"account_id" text NOT NULL,
+	"decision_id" integer NOT NULL,
+	"message_id" text NOT NULL,
+	"verdict" text NOT NULL,
+	"correct" text,
+	"label_id" text,
+	"scope" text NOT NULL,
+	"via" text DEFAULT 'dashboard' NOT NULL,
+	"created_at" bigint NOT NULL,
+	CONSTRAINT "feedback_decision_id_unique" UNIQUE("decision_id"),
+	CONSTRAINT "feedback_verdict" CHECK ("feedback"."verdict" IN ('right', 'wrong', 'answered')),
+	CONSTRAINT "feedback_correct" CHECK ("feedback"."correct" IN ('keep', 'archive', 'spam')),
+	CONSTRAINT "feedback_scope" CHECK ("feedback"."scope" IN ('sender', 'message')),
+	CONSTRAINT "feedback_via" CHECK ("feedback"."via" IN ('dashboard', 'gmail'))
+);
+--> statement-breakpoint
+ALTER TABLE "feedback" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "labels" (
+	"user_id" integer DEFAULT current_setting('sift.user')::integer NOT NULL,
+	"account_id" text NOT NULL,
+	"id" text NOT NULL,
+	"name" text NOT NULL,
+	"description" text NOT NULL,
+	"disposition" text NOT NULL,
+	"block" integer DEFAULT 0 NOT NULL,
+	"mark_read" integer DEFAULT 0 NOT NULL,
+	"unsubscribe" integer DEFAULT 0 NOT NULL,
+	"gmail_label" text NOT NULL,
+	"position" integer NOT NULL,
+	"updated_at" bigint NOT NULL,
+	CONSTRAINT "labels_user_id_account_id_id_pk" PRIMARY KEY("user_id","account_id","id"),
+	CONSTRAINT "labels_disposition" CHECK ("labels"."disposition" IN ('keep', 'archive', 'spam', 'review'))
+);
+--> statement-breakpoint
+ALTER TABLE "labels" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "mailboxes" (
+	"user_id" integer DEFAULT current_setting('sift.user')::integer NOT NULL,
+	"id" text NOT NULL,
+	"history_id" text,
+	"last_synced_at" bigint,
+	"filters_checked_at" bigint,
+	"created_at" bigint NOT NULL,
+	CONSTRAINT "mailboxes_user_id_id_pk" PRIMARY KEY("user_id","id")
+);
+--> statement-breakpoint
+ALTER TABLE "mailboxes" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "messages" (
+	"user_id" integer DEFAULT current_setting('sift.user')::integer NOT NULL,
+	"account_id" text NOT NULL,
+	"id" text NOT NULL,
+	"thread_id" text NOT NULL,
+	"from_address" text NOT NULL,
+	"from_domain" text NOT NULL,
+	"from_name" text,
+	"list_id" text,
+	"received_at" bigint NOT NULL,
+	"subject" text DEFAULT '' NOT NULL,
+	"to_json" text DEFAULT '[]' NOT NULL,
+	"cc_json" text DEFAULT '[]' NOT NULL,
+	"headers_json" text DEFAULT '{}' NOT NULL,
+	"labels_json" text DEFAULT '[]' NOT NULL,
+	"synced_at" bigint,
+	"observe_only" integer DEFAULT 0 NOT NULL,
+	"facts_json" text,
+	"read_at" bigint,
+	CONSTRAINT "messages_user_id_account_id_id_pk" PRIMARY KEY("user_id","account_id","id")
+);
+--> statement-breakpoint
+ALTER TABLE "messages" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "preferences" (
+	"user_id" integer PRIMARY KEY DEFAULT current_setting('sift.user')::integer NOT NULL,
+	"model" text,
+	"guidelines" text,
+	"guidelines_changed_at" bigint
+);
+--> statement-breakpoint
+ALTER TABLE "preferences" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "proposals" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer DEFAULT current_setting('sift.user')::integer NOT NULL,
+	"account_id" text NOT NULL,
+	"kind" text NOT NULL,
+	"match_json" text NOT NULL,
+	"label_id" text NOT NULL,
+	"rule_id" text,
+	"agreed" integer NOT NULL,
+	"status" text DEFAULT 'open' NOT NULL,
+	"created_at" bigint NOT NULL,
+	"resolved_at" bigint,
+	CONSTRAINT "proposals_once" UNIQUE("account_id","kind","match_json"),
+	CONSTRAINT "proposals_kind" CHECK ("proposals"."kind" IN ('rule', 'always')),
+	CONSTRAINT "proposals_status" CHECK ("proposals"."status" IN ('open', 'accepted', 'dismissed'))
+);
+--> statement-breakpoint
+ALTER TABLE "proposals" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "rules" (
+	"id" text PRIMARY KEY NOT NULL,
+	"user_id" integer DEFAULT current_setting('sift.user')::integer NOT NULL,
+	"account_id" text NOT NULL,
+	"position" integer NOT NULL,
+	"match_json" text NOT NULL,
+	"except_json" text DEFAULT '[]' NOT NULL,
+	"label_id" text,
+	"when_label" text,
+	"disposition" text,
+	"subscription" text DEFAULT 'preserve' NOT NULL,
+	"mark_read" integer DEFAULT 0 NOT NULL,
+	"condition" text,
+	"source" text NOT NULL,
+	"hits" integer DEFAULT 0 NOT NULL,
+	"filter_id" text,
+	"filter_state" text,
+	"filter_json" text,
+	"filter_checked_at" bigint,
+	"created_at" bigint NOT NULL,
+	CONSTRAINT "rules_disposition" CHECK ("rules"."disposition" IN ('keep', 'archive', 'spam')),
+	CONSTRAINT "rules_subscription" CHECK ("rules"."subscription" IN ('preserve', 'unsubscribe')),
+	CONSTRAINT "rules_source" CHECK ("rules"."source" IN ('user', 'agent', 'correction')),
+	CONSTRAINT "rules_filter_state" CHECK ("rules"."filter_state" IN ('active', 'changed', 'gone', 'outdated')),
+	CONSTRAINT "rules_says_something" CHECK ("rules"."label_id" IS NOT NULL OR "rules"."when_label" IS NOT NULL OR "rules"."disposition" IS NOT NULL),
+	CONSTRAINT "rules_label_or_wait" CHECK ("rules"."label_id" IS NULL OR "rules"."when_label" IS NULL),
+	CONSTRAINT "rules_condition_needs_label" CHECK ("rules"."condition" IS NULL OR "rules"."label_id" IS NOT NULL)
+);
+--> statement-breakpoint
+ALTER TABLE "rules" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "suggestion_bodies" (
+	"user_id" integer DEFAULT current_setting('sift.user')::integer NOT NULL,
+	"account_id" text NOT NULL,
+	"message_id" text NOT NULL,
+	"body_text" text NOT NULL,
+	"fetched_at" bigint NOT NULL,
+	CONSTRAINT "suggestion_bodies_account_id_message_id_pk" PRIMARY KEY("account_id","message_id")
+);
+--> statement-breakpoint
+ALTER TABLE "suggestion_bodies" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "users" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"owner" integer DEFAULT 0 NOT NULL,
+	"created_at" bigint NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "accounts" ADD CONSTRAINT "accounts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "actions" ADD CONSTRAINT "actions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "actions" ADD CONSTRAINT "actions_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "actions" ADD CONSTRAINT "actions_user_id_decision_id_decisions_user_id_id_fk" FOREIGN KEY ("user_id","decision_id") REFERENCES "public"."decisions"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "correspondents" ADD CONSTRAINT "correspondents_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "correspondents" ADD CONSTRAINT "correspondents_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "credentials" ADD CONSTRAINT "credentials_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "decisions" ADD CONSTRAINT "decisions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "decisions" ADD CONSTRAINT "decisions_user_id_account_id_message_id_messages_user_id_account_id_id_fk" FOREIGN KEY ("user_id","account_id","message_id") REFERENCES "public"."messages"("user_id","account_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "eval_results" ADD CONSTRAINT "eval_results_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "eval_results" ADD CONSTRAINT "eval_results_user_id_run_id_eval_runs_user_id_id_fk" FOREIGN KEY ("user_id","run_id") REFERENCES "public"."eval_runs"("user_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "eval_runs" ADD CONSTRAINT "eval_runs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "eval_runs" ADD CONSTRAINT "eval_runs_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "examples" ADD CONSTRAINT "examples_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "examples" ADD CONSTRAINT "examples_user_id_account_id_message_id_messages_user_id_account_id_id_fk" FOREIGN KEY ("user_id","account_id","message_id") REFERENCES "public"."messages"("user_id","account_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "feedback" ADD CONSTRAINT "feedback_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "feedback" ADD CONSTRAINT "feedback_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "feedback" ADD CONSTRAINT "feedback_user_id_decision_id_decisions_user_id_id_fk" FOREIGN KEY ("user_id","decision_id") REFERENCES "public"."decisions"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "labels" ADD CONSTRAINT "labels_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "labels" ADD CONSTRAINT "labels_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "mailboxes" ADD CONSTRAINT "mailboxes_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "messages" ADD CONSTRAINT "messages_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "messages" ADD CONSTRAINT "messages_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "preferences" ADD CONSTRAINT "preferences_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "proposals" ADD CONSTRAINT "proposals_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "proposals" ADD CONSTRAINT "proposals_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "rules" ADD CONSTRAINT "rules_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "rules" ADD CONSTRAINT "rules_user_id_account_id_mailboxes_user_id_id_fk" FOREIGN KEY ("user_id","account_id") REFERENCES "public"."mailboxes"("user_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "suggestion_bodies" ADD CONSTRAINT "suggestion_bodies_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "suggestion_bodies" ADD CONSTRAINT "suggestion_bodies_user_id_account_id_message_id_messages_user_id_account_id_id_fk" FOREIGN KEY ("user_id","account_id","message_id") REFERENCES "public"."messages"("user_id","account_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "accounts_user" ON "accounts" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "actions_message" ON "actions" USING btree ("account_id","message_id");--> statement-breakpoint
+CREATE INDEX "actions_open" ON "actions" USING btree ("status") WHERE "actions"."status" IN ('pending', 'unknown');--> statement-breakpoint
+CREATE INDEX "actions_decision" ON "actions" USING btree ("decision_id");--> statement-breakpoint
+CREATE INDEX "decisions_message" ON "decisions" USING btree ("account_id","message_id","id");--> statement-breakpoint
+CREATE INDEX "decisions_time" ON "decisions" USING btree ("decided_at");--> statement-breakpoint
+CREATE INDEX "decisions_unsettled" ON "decisions" USING btree ("account_id") WHERE "decisions"."outcome" IS NULL;--> statement-breakpoint
+CREATE INDEX "decisions_prior" ON "decisions" USING btree ("prior_rule_id","id") WHERE "decisions"."prior_rule_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX "examples_pending" ON "examples" USING btree ("account_id") WHERE "examples"."status" = 'pending';--> statement-breakpoint
+CREATE INDEX "feedback_account" ON "feedback" USING btree ("account_id","created_at");--> statement-breakpoint
+CREATE INDEX "messages_sender" ON "messages" USING btree ("account_id","from_address");--> statement-breakpoint
+CREATE INDEX "rules_account" ON "rules" USING btree ("account_id","position");--> statement-breakpoint
+CREATE POLICY "own" ON "actions" AS PERMISSIVE FOR ALL TO "sift_app" USING (user_id = nullif(current_setting('sift.user', true), '')::integer) WITH CHECK (user_id = nullif(current_setting('sift.user', true), '')::integer);--> statement-breakpoint
+CREATE POLICY "own" ON "correspondents" AS PERMISSIVE FOR ALL TO "sift_app" USING (user_id = nullif(current_setting('sift.user', true), '')::integer) WITH CHECK (user_id = nullif(current_setting('sift.user', true), '')::integer);--> statement-breakpoint
+CREATE POLICY "own" ON "credentials" AS PERMISSIVE FOR ALL TO "sift_app" USING (user_id = nullif(current_setting('sift.user', true), '')::integer) WITH CHECK (user_id = nullif(current_setting('sift.user', true), '')::integer);--> statement-breakpoint
+CREATE POLICY "own" ON "decisions" AS PERMISSIVE FOR ALL TO "sift_app" USING (user_id = nullif(current_setting('sift.user', true), '')::integer) WITH CHECK (user_id = nullif(current_setting('sift.user', true), '')::integer);--> statement-breakpoint
+CREATE POLICY "own" ON "eval_results" AS PERMISSIVE FOR ALL TO "sift_app" USING (user_id = nullif(current_setting('sift.user', true), '')::integer) WITH CHECK (user_id = nullif(current_setting('sift.user', true), '')::integer);--> statement-breakpoint
+CREATE POLICY "own" ON "eval_runs" AS PERMISSIVE FOR ALL TO "sift_app" USING (user_id = nullif(current_setting('sift.user', true), '')::integer) WITH CHECK (user_id = nullif(current_setting('sift.user', true), '')::integer);--> statement-breakpoint
+CREATE POLICY "own" ON "examples" AS PERMISSIVE FOR ALL TO "sift_app" USING (user_id = nullif(current_setting('sift.user', true), '')::integer) WITH CHECK (user_id = nullif(current_setting('sift.user', true), '')::integer);--> statement-breakpoint
+CREATE POLICY "own" ON "feedback" AS PERMISSIVE FOR ALL TO "sift_app" USING (user_id = nullif(current_setting('sift.user', true), '')::integer) WITH CHECK (user_id = nullif(current_setting('sift.user', true), '')::integer);--> statement-breakpoint
+CREATE POLICY "own" ON "labels" AS PERMISSIVE FOR ALL TO "sift_app" USING (user_id = nullif(current_setting('sift.user', true), '')::integer) WITH CHECK (user_id = nullif(current_setting('sift.user', true), '')::integer);--> statement-breakpoint
+CREATE POLICY "own" ON "mailboxes" AS PERMISSIVE FOR ALL TO "sift_app" USING (user_id = nullif(current_setting('sift.user', true), '')::integer) WITH CHECK (user_id = nullif(current_setting('sift.user', true), '')::integer);--> statement-breakpoint
+CREATE POLICY "own" ON "messages" AS PERMISSIVE FOR ALL TO "sift_app" USING (user_id = nullif(current_setting('sift.user', true), '')::integer) WITH CHECK (user_id = nullif(current_setting('sift.user', true), '')::integer);--> statement-breakpoint
+CREATE POLICY "own" ON "preferences" AS PERMISSIVE FOR ALL TO "sift_app" USING (user_id = nullif(current_setting('sift.user', true), '')::integer) WITH CHECK (user_id = nullif(current_setting('sift.user', true), '')::integer);--> statement-breakpoint
+CREATE POLICY "own" ON "proposals" AS PERMISSIVE FOR ALL TO "sift_app" USING (user_id = nullif(current_setting('sift.user', true), '')::integer) WITH CHECK (user_id = nullif(current_setting('sift.user', true), '')::integer);--> statement-breakpoint
+CREATE POLICY "own" ON "rules" AS PERMISSIVE FOR ALL TO "sift_app" USING (user_id = nullif(current_setting('sift.user', true), '')::integer) WITH CHECK (user_id = nullif(current_setting('sift.user', true), '')::integer);--> statement-breakpoint
+CREATE POLICY "own" ON "suggestion_bodies" AS PERMISSIVE FOR ALL TO "sift_app" USING (user_id = nullif(current_setting('sift.user', true), '')::integer) WITH CHECK (user_id = nullif(current_setting('sift.user', true), '')::integer);

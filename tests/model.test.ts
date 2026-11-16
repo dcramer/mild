@@ -7,7 +7,7 @@ import { createJudge } from '../src/model/judge.ts';
 import { MODEL_CHOICES, offerModel, openModels, recommendModel, resolveModel, saveApiKey } from '../src/model/models.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts';
-import { openUserDb } from '../src/store/db.ts';
+import { openUserDb } from '../src/store/store.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { PROPOSE_AFTER, listProposals, proposeForSender, proposeSettled, resolveProposal } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
@@ -182,7 +182,7 @@ describe('judge', () => {
 
 describe('preferences in the database', () => {
   async function seeded() {
-    const db = await openUserDb(':memory:');
+    const db = await openUserDb();
     await addMailbox(db, ACCOUNT, '1', 0);
     return db;
   }
@@ -314,7 +314,7 @@ describe('preferences in the database', () => {
 
 describe('standing', () => {
   const db = async () => {
-    const d = await openUserDb(':memory:');
+    const d = await openUserDb();
     await addMailbox(d, ACCOUNT, '1', 0);
     return d;
   };
@@ -375,7 +375,7 @@ describe('standing', () => {
 
 describe('gatherEvidence', () => {
   it('caches whether the owner has written to a sender and counts history', async () => {
-    const db = await openUserDb(':memory:');
+    const db = await openUserDb();
     await addMailbox(db, ACCOUNT, '1', 0);
     const f = facts({ accountId: ACCOUNT });
     await recordSync(db, ACCOUNT, [f], '2');
@@ -397,7 +397,7 @@ describe('gatherEvidence', () => {
   });
 
   it('reports unknown instead of failing when a lookup errors', async () => {
-    const db = await openUserDb(':memory:');
+    const db = await openUserDb();
     await addMailbox(db, ACCOUNT, '1', 0);
     const fail = async () => {
       throw new Error('network');

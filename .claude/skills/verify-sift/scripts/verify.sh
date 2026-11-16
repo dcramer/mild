@@ -56,11 +56,16 @@ case "$cmd" in
   doctor) doctor ;;
   ab) shift 2; ab "$@" ;;
   sql)
-    node --disable-warning=ExperimentalWarning -e '
-      const { DatabaseSync } = require("node:sqlite");
-      const db = new DatabaseSync(process.argv[1], { readOnly: true });
-      console.log(JSON.stringify(db.prepare(process.argv[2]).all(), null, 1));
-    ' "$dir/home/users/1.db" "$3"
+    # The running dashboard holds the database (PGlite is one process's alone), so read a copy of it.
+    copy="$(mktemp -d)"
+    cp -r "$dir/home/database/." "$copy"
+    (cd "$ROOT" && node --input-type=module -e '
+      import { PGlite } from "@electric-sql/pglite";
+      const db = new PGlite(process.argv[1]);
+      console.log(JSON.stringify((await db.query(process.argv[2])).rows, null, 1));
+      await db.close();
+    ' "$copy" "$3")
+    rm -r -- "$copy"
     ;;
   down)
     ab close > /dev/null 2>&1 || true

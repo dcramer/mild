@@ -22,7 +22,7 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
     `SELECT id AS email, last_synced_at FROM mailboxes WHERE ${mine('id')} ORDER BY id`,
   );
   const decisionTotals = await one<{ n: number; free: number | null; cost: number | null }>(
-    `SELECT count(*) AS n, sum(model IS NULL) AS free, sum(cost_usd) AS cost FROM decisions WHERE decided_at >= ? AND ${mine('account_id')}`,
+    `SELECT count(*) AS n, count(*) FILTER (WHERE model IS NULL) AS free, sum(cost_usd) AS cost FROM decisions WHERE decided_at >= ? AND ${mine('account_id')}`,
     since,
   );
 

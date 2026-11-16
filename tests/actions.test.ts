@@ -4,7 +4,7 @@ import { type ActionDeps, execute, reconcile, undo } from '../src/actions/execut
 import { planAction } from '../src/actions/plan.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { getAction } from '../src/store/actions.ts';
-import { openUserDb } from '../src/store/db.ts';
+import { openUserDb } from '../src/store/store.ts';
 import { FakeMailbox, facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -14,7 +14,7 @@ let mailbox: FakeMailbox;
 let deps: ActionDeps;
 
 beforeEach(async () => {
-  db = await openUserDb(':memory:');
+  db = await openUserDb();
   await addMailbox(db, ACCOUNT, '1', 0);
   await recordSync(db, ACCOUNT, [facts({ messageId: 'm1' })], '2');
   mailbox = new FakeMailbox();

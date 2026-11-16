@@ -70,7 +70,7 @@ src/
   cli/        main.ts parses and dispatches; commands/ has one module per command (init, run, status, dev, dashboard)
   config.ts   data directory and paths
   secrets.ts  encrypts the credential files with a key from the environment
-  store/      the only module that opens a database: the async Sql handle (sql.ts) over node:sqlite, queries, numbered SQL migrations
+  store/      the only module that opens a database: Postgres or PGlite (db.ts), the per-person handle (sql.ts), the Drizzle schema and its migrations, queries
   triage/     pure pipeline: types, header features, stages
   actions/    the only mutation path: executor, undo, decision-to-action planning, Mailbox port, filter validation
   gmail/      the only module that holds the Google token: OAuth, API adapter, history sync
@@ -166,7 +166,7 @@ Four commands: `init` sets sift up, `run` sorts mail and serves the dashboard, `
 Everything sift keeps is in one directory, the home: `~/.config/sift` by default (`$XDG_CONFIG_HOME/sift`), or wherever `--home` or `SIFT_HOME` points (the Docker image uses `/data`). Keeping settings, guidance, the database and credentials together means it can be backed up or moved as a unit. No setting requires an environment variable, with one exception: the key that encrypts the credentials.
 
 - `sift.toml`: settings (`act`, `heuristics`, `interval`, `dashboard.port`, `dashboard.host`, `dashboard.allow`, `retention.days`, `examples.few_shot`, `examples.keep_days`). Parsed strictly: an unknown key or wrong type is an error. Command-line flags override it for one run.
-- `sift.db`, `users/`: the databases: who has which mailbox, and each person's mail (see State).
+- `database/`, `database.lock`: the database, when it is PGlite (see State).
 - `google-client.json`, `dashboard-key`: the install's Google client and the session secret, owner-only. People's sign-ins are in their databases.
 - `device-id`: names this installation to a subscription sign-in. Not a secret.
 - `.env`: optional. Read at start, before the one in the working directory; neither replaces a variable already set.
@@ -210,20 +210,14 @@ Code: `src/learn/feedback.ts` (suggestions, answers, accuracy), `src/learn/gmail
 
 ## State
 
-Two kinds of SQLite database, in the home directory (schema in `src/store/migrations/`):
+One Postgres database for everyone (decided 2026-11-15, after a database per person in SQLite): Postgres is the one engine Vercel, Cloudflare and a local install all have. Locally it is PGlite, Postgres compiled to WebAssembly and run inside sift, keeping its data in `database/` in the home directory; given a Postgres server's address (`DATABASE_URL`, or `database.url` in `sift.toml`), sift uses that instead.
 
-- `sift.db`, the install's: who the people are (`users`) and which mailboxes are whose (`accounts`). Migrated by `central/`.
-- `users/<id>.db`, one per person: everything about their mail, below. Migrated by `user/`.
+- **Schema and migrations.** The schema is `src/store/schema.ts` (Drizzle). `pnpm db:generate` writes each change as a migration in `src/store/migrations/`, which sift applies when it opens the database (Drizzle's migrator); what Drizzle cannot say (grants, `FORCE ROW LEVEL SECURITY`) is a custom migration made the same way (`drizzle-kit generate --custom`). A test fails when the schema has a change no migration covers. A database last opened by a newer sift is refused. Drizzle orders migrations by when they were made, so when two branches each add one, generate again on the merged branch rather than keep both.
+- **Who sees what.** `users` and `accounts` say who the people are and which mailboxes are whose. Every other table holds one person's data: it carries `user_id`, filled in from the transaction's `sift.user` setting, and has row-level security, forced even for the tables' owner, that shows and accepts only that person's rows. Foreign keys include `user_id`, so no row can point at another person's. Every query runs in a transaction that first becomes `sift_app`, a role that owns nothing and cannot bypass the policies (`handle`, `src/store/sql.ts`): the central handle sees no one's rows, `store.user(id)` only that person's, `store.nobody` nothing. Tests check every such table has the policy and that one person cannot read or write another's rows. Locally PGlite runs as a superuser, so a statement that resets the role would escape the policies; sift sends only its own parameterised SQL. With a server, connect as a role that is not a superuser. See [SECURITY.md](SECURITY.md).
+- **One process.** PGlite is one process's alone and does not check that itself, so sift holds `database.lock` (its process id) and refuses the folder to another process while it is alive; `sift status` then says sift is running. A lock left by a process that has gone is taken over.
+- **Queries** are SQL written with `?` or `:name` placeholders (sent as `$1`, `$2`), through `Sql`: async, one call per statement, and a transaction is one call taking a function that awaits nothing but the database, since it holds the connection. Using an outer handle inside it is refused rather than left to wait on itself. A column alias in camelCase must be quoted, or Postgres lowercases it.
 
-A request, a pass or a test run holds the database of the person it is for and no other (`src/store/store.ts`), so a query that forgets to filter cannot reach someone else's mail, and a person is backed up, exported or deleted as one file. A person's database keeps its own `mailboxes` with each one's sync state, since foreign keys cannot cross files. The central database is the authority on who owns which: a mailbox is added there first, and opening a person's database adds any it lacks, which is what a crash in between leaves. A person's database also records whose it is (`person`), marked the first time it is opened; it is refused when opened for anyone else, or when it holds a mailbox the central database does not give that person, so a file moved or restored to the wrong place is never served (`claim` in `src/store/store.ts`). Ids are numbered within each person's database.
-
-Each database is migrated when it is opened. Each migration file is applied once and recorded by name in `schema_migrations`, so a file that lands with a lower number than ones already applied still runs; a database that has had a file this build does not know was opened by a newer sift, and is refused. No migration may need the other kind of database: moving data between them takes two releases. Defaults (the starting labels) are written by code when a mailbox's labels are first read, never by a migration.
-
-Together they are the complete record of what sift saw and did, and everything else (the dashboard, undo, future analytics) reads from them.
-
-Everything reaches them through `Sql` (`src/store/sql.ts`), whose calls are async so a database outside the process could stand behind it; over `node:sqlite` each is answered at once. A transaction is one call taking a function, and while it is open every other caller on that database waits, so the function awaits nothing but the database: no Gmail or model call inside one. Using the outer handle inside it is refused rather than left to wait on itself.
-
-sift is moving to Postgres, with everyone in one database (decided 2026-11-15, replacing an earlier decision to stay on SQLite): it is to run on Vercel, on Cloudflare and locally, and Postgres is the one engine all three have. People will then be kept apart by the layers in [SECURITY.md](SECURITY.md) instead of a database each. Until then, what follows is how it works now; the plan is in TODO.md.
+Defaults (the starting labels, a person's preferences) are written by code when first needed, never by a migration. Together the tables are the complete record of what sift saw and did, and everything else (the dashboard, undo, future analytics) reads from them.
 
 - **messages:** one row per message sift has seen: sender, recipients, subject, the triage headers, the labels at sync time and the facts derived from them. No body. This is enough to triage a message again without refetching it.
 - **feedback, examples:** the user's answers to suggestions, and the full content of each message they answered for, kept as evaluation and training data until deleted (see Teaching).
@@ -241,7 +235,7 @@ sift is moving to Postgres, with everyone in one database (decided 2026-11-15, r
 - the record of an unsubscribe, which is how sift knows not to ask that sender again;
 - rules, labels and correspondents, which are not per message.
 
-The file does not shrink; SQLite reuses the freed space.
+Postgres reuses the freed space; the files do not shrink.
 
 OAuth tokens are kept in files beside the database, not in it. pi-durable keeps its own database alongside.
 

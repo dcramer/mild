@@ -15,7 +15,7 @@ import { people } from '../src/store/people.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
-import { openUserDb } from '../src/store/db.ts';
+import { openUserDb } from '../src/store/store.ts';
 import type { Store } from '../src/store/store.ts';
 import { addRule } from '../src/store/rules.ts';
 import { everything, facts, onePerson } from './helpers.ts';
@@ -72,7 +72,7 @@ const seeded = async () => (await seededStore()).db;
 
 describe('tracking', () => {
   it('stores the subject and triage headers with each message, and never a body', async () => {
-    const db = await openUserDb(':memory:');
+    const db = await openUserDb();
     await addMailbox(db, ACCOUNT, '1', 0);
     await recordSync(
       db,
@@ -233,7 +233,7 @@ describe('tracking', () => {
   });
 
   it('handles an empty database', async () => {
-    const empty = await openUserDb(':memory:');
+    const empty = await openUserDb();
     const summary = await summarize(empty, await everything(empty), 30, NOW);
     expect(summary.totals.decisions).toBe(0);
     expect(summary.daily).toHaveLength(30);

@@ -19,11 +19,11 @@ export async function recordDecision(
   options: { mode?: DecisionMode; durationMs?: number; now?: number; byUser?: boolean } = {},
 ): Promise<number> {
   const mode = options.mode ?? 'observe';
-  const result = await db.run(
+  const result = await db.get<{ id: number }>(
     `INSERT INTO decisions
          (account_id, message_id, stage, disposition, subscription, gmail_label, rule_id, confidence, reason,
           model, input_tokens, output_tokens, cost_usd, duration_ms, decided_at, mode, outcome, label_id, block, mark_read, prior_rule_id, by_user)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     accountId,
     messageId,
     decision.stage,
@@ -47,7 +47,7 @@ export async function recordDecision(
     decision.priorRuleId ?? null,
     options.byUser ? 1 : 0,
   );
-  return result.lastInsertRowid;
+  return result!.id;
 }
 
 export async function settleDecision(db: Sql, id: number, outcome: DecisionOutcome, detail: string | null = null): Promise<void> {

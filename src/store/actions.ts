@@ -64,8 +64,8 @@ export async function insertPendingAction(
   action: { accountId: string; messageId: string | null; type: string; payload: ActionPayload; originalLabels: string[]; decisionId?: number },
   now: number,
 ): Promise<number> {
-  const result = await db.run(
-    `INSERT INTO actions (account_id, message_id, type, payload_json, original_labels, decision_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
+  const result = await db.get<{ id: number }>(
+    `INSERT INTO actions (account_id, message_id, type, payload_json, original_labels, decision_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?) RETURNING id`,
     action.accountId,
     action.messageId,
     action.type,
@@ -74,7 +74,7 @@ export async function insertPendingAction(
     action.decisionId ?? null,
     now,
   );
-  return result.lastInsertRowid;
+  return result!.id;
 }
 
 export async function finishAction(db: Sql, id: number, status: ActionStatus, finalLabels: string[] | null, error: string | null, now: number): Promise<void> {

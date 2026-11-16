@@ -1,6 +1,7 @@
 import { loadConfig } from '../../config.ts';
 import { hasClientSecrets } from '../../gmail/auth.ts';
 import { connectedAddresses, listUsers } from '../../store/accounts.ts';
+import { DatabaseInUse } from '../../store/db.ts';
 import { openStore } from '../../store/store.ts';
 import { paint, ui } from '../ui.ts';
 import { checkSecrets } from '../secrets-check.ts';
@@ -10,7 +11,17 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
 
 export async function status(): Promise<void> {
   const config = loadConfig();
-  const store = await openStore(config);
+  const store = await openStore(config).catch((error: unknown) => {
+    if (error instanceof DatabaseInUse) return error;
+    throw error;
+  });
+  // PGlite is one process's alone: while sift runs, what it has recorded is in its dashboard.
+  if (store instanceof DatabaseInUse) {
+    ui.heading('status', paint.path(config.home));
+    ui.info(`sift is running (process ${store.pid}) with the database open. See the dashboard.`);
+    ui.blank();
+    return;
+  }
   const secrets = await checkSecrets(config, store, false);
   const accounts = await connectedAddresses(store.central);
   const people = await Promise.all((await listUsers(store.central)).map((u) => store.user(u.id)));

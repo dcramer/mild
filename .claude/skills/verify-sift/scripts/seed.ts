@@ -26,7 +26,7 @@ const home = process.argv[2];
 if (!home) throw new Error('usage: seed.ts <home>');
 process.env['SIFT_HOME'] = resolve(home);
 const config = loadConfig();
-if (existsSync(config.dbPath)) throw new Error(`${config.dbPath} already exists. Seed an empty home.`);
+if (existsSync(config.databaseDir)) throw new Error(`${config.databaseDir} already exists. Seed an empty home.`);
 
 const HOUR = 3_600_000;
 const now = Date.now();

@@ -1,5 +1,4 @@
 import { connectedAddresses, owner, userOf } from './accounts.ts';
-import { openUserDb } from './db.ts';
 import type { Sql } from './sql.ts';
 import type { Store } from './store.ts';
 
@@ -25,8 +24,8 @@ export interface People {
   signedIn(email: string): Promise<Person | null>;
   /** The install's owner, for a dashboard with no sign-in set up (tests, tools). */
   owner(): Promise<Person | null>;
-  /** A database with no one's mail in it, for a request with nobody behind it. */
-  nobody(): Promise<Sql>;
+  /** Sees no one's rows, for a request with nobody behind it. */
+  nobody: Sql;
 }
 
 export function people(store: Store): People {
@@ -43,10 +42,9 @@ export function people(store: Store): People {
       },
     };
   };
-  let empty: Promise<Sql> | undefined;
   return {
     signedIn: async (email) => await person(await userOf(store.central, email)),
     owner: async () => await person(await owner(store.central)),
-    nobody: () => (empty ??= openUserDb(':memory:')),
+    nobody: store.nobody,
   };
 }

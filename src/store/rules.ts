@@ -111,7 +111,7 @@ export async function ruleMatching(
   whenLabel: string | null = null,
 ): Promise<{ id: string; source: RuleSource } | undefined> {
   return await db.get<{ id: string; source: RuleSource }>(
-    `SELECT id, source FROM rules WHERE account_id = ? AND match_json = ? AND except_json = '[]' AND when_label IS ? ORDER BY position LIMIT 1`,
+    `SELECT id, source FROM rules WHERE account_id = ? AND match_json = ? AND except_json = '[]' AND when_label IS NOT DISTINCT FROM ? ORDER BY position LIMIT 1`,
     accountId,
     JSON.stringify(match),
     whenLabel,

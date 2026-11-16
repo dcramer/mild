@@ -8,7 +8,7 @@ import { applyFeedback } from '../src/learn/feedback.ts';
 import { userChanges } from '../src/learn/gmail.ts';
 import { lastStandingChange } from '../src/store/actions.ts';
 import { addMailbox } from '../src/store/accounts.ts';
-import { openUserDb } from '../src/store/db.ts';
+import { openUserDb } from '../src/store/store.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { listProposals, resolveProposal } from '../src/store/proposals.ts';
@@ -63,7 +63,7 @@ const options = (act: boolean): RunOptions => ({ act, connect: () => ({ api: api
 const decisions = async () => await db.all('SELECT message_id, stage, disposition, mode, outcome, outcome_detail, rule_id FROM decisions ORDER BY id');
 
 beforeEach(async () => {
-  db = await openUserDb(':memory:');
+  db = await openUserDb();
   await addMailbox(db, ACCOUNT, '1', 0);
   mailbox = new FakeMailbox();
   logs = [];

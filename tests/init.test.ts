@@ -326,7 +326,7 @@ describe('settings', () => {
   it('keeps everything in the home directory and needs no environment variables', () => {
     const home = freshHome();
     const config = loadConfig({ SIFT_HOME: home });
-    for (const path of [config.settingsPath, config.dbPath, config.usersDir, config.googleClientPath, config.deviceIdPath]) {
+    for (const path of [config.settingsPath, config.databaseDir, config.googleClientPath, config.deviceIdPath]) {
       expect(path.startsWith(`${home}/`)).toBe(true);
     }
     expect(config.settings).toEqual(DEFAULT_SETTINGS);

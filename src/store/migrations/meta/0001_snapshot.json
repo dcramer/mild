@@ -1,0 +1,2198 @@
+{
+  "id": "2bbf60bb-fa37-4ea4-9107-65f8adc5631a",
+  "prevId": "b5a3f1a7-f869-448b-8c27-d054a42f64ab",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.accounts": {
+      "name": "accounts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "accounts_user": {
+          "name": "accounts_user",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "accounts_user_id_users_id_fk": {
+          "name": "accounts_user_id_users_id_fk",
+          "tableFrom": "accounts",
+          "columnsFrom": ["user_id"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "accounts_email_unique": {
+          "name": "accounts_email_unique",
+          "columns": ["email"],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.actions": {
+      "name": "actions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "current_setting('sift.user')::integer"
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decision_id": {
+          "name": "decision_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "original_labels": {
+          "name": "original_labels",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "final_labels": {
+          "name": "final_labels",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "actions_message": {
+          "name": "actions_message",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "message_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "actions_open": {
+          "name": "actions_open",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "where": "\"actions\".\"status\" IN ('pending', 'unknown')",
+          "concurrently": false
+        },
+        "actions_decision": {
+          "name": "actions_decision",
+          "columns": [
+            {
+              "expression": "decision_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "actions_user_id_users_id_fk": {
+          "name": "actions_user_id_users_id_fk",
+          "tableFrom": "actions",
+          "columnsFrom": ["user_id"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "actions_user_id_account_id_mailboxes_user_id_id_fk": {
+          "name": "actions_user_id_account_id_mailboxes_user_id_id_fk",
+          "tableFrom": "actions",
+          "columnsFrom": ["user_id", "account_id"],
+          "tableTo": "mailboxes",
+          "columnsTo": ["user_id", "id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "actions_user_id_decision_id_decisions_user_id_id_fk": {
+          "name": "actions_user_id_decision_id_decisions_user_id_id_fk",
+          "tableFrom": "actions",
+          "columnsFrom": ["user_id", "decision_id"],
+          "tableTo": "decisions",
+          "columnsTo": ["user_id", "id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "own": {
+          "name": "own",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["sift_app"],
+          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
+          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
+        }
+      },
+      "checkConstraints": {
+        "actions_status": {
+          "name": "actions_status",
+          "value": "\"actions\".\"status\" IN ('pending', 'done', 'failed', 'unknown', 'undone')"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.correspondents": {
+      "name": "correspondents",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "current_setting('sift.user')::integer"
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_has_written": {
+          "name": "user_has_written",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "checked_at": {
+          "name": "checked_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "correspondents_user_id_users_id_fk": {
+          "name": "correspondents_user_id_users_id_fk",
+          "tableFrom": "correspondents",
+          "columnsFrom": ["user_id"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "correspondents_user_id_account_id_mailboxes_user_id_id_fk": {
+          "name": "correspondents_user_id_account_id_mailboxes_user_id_id_fk",
+          "tableFrom": "correspondents",
+          "columnsFrom": ["user_id", "account_id"],
+          "tableTo": "mailboxes",
+          "columnsTo": ["user_id", "id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "correspondents_account_id_address_pk": {
+          "name": "correspondents_account_id_address_pk",
+          "columns": ["account_id", "address"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {
+        "own": {
+          "name": "own",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["sift_app"],
+          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
+          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.credentials": {
+      "name": "credentials",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "current_setting('sift.user')::integer"
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "credentials_user_id_users_id_fk": {
+          "name": "credentials_user_id_users_id_fk",
+          "tableFrom": "credentials",
+          "columnsFrom": ["user_id"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "credentials_user_id_kind_key_pk": {
+          "name": "credentials_user_id_kind_key_pk",
+          "columns": ["user_id", "kind", "key"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {
+        "own": {
+          "name": "own",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["sift_app"],
+          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
+          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
+        }
+      },
+      "checkConstraints": {
+        "credentials_kind": {
+          "name": "credentials_kind",
+          "value": "\"credentials\".\"kind\" IN ('gmail', 'model')"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.decisions": {
+      "name": "decisions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "current_setting('sift.user')::integer"
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stage": {
+          "name": "stage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "disposition": {
+          "name": "disposition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subscription": {
+          "name": "subscription",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label_id": {
+          "name": "label_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gmail_label": {
+          "name": "gmail_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "block": {
+          "name": "block",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "mark_read": {
+          "name": "mark_read",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "rule_id": {
+          "name": "rule_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prior_rule_id": {
+          "name": "prior_rule_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "input_tokens": {
+          "name": "input_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "output_tokens": {
+          "name": "output_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "cost_usd": {
+          "name": "cost_usd",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decided_at": {
+          "name": "decided_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mode": {
+          "name": "mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'observe'"
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outcome_detail": {
+          "name": "outcome_detail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "by_user": {
+          "name": "by_user",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "decisions_message": {
+          "name": "decisions_message",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "message_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "decisions_time": {
+          "name": "decisions_time",
+          "columns": [
+            {
+              "expression": "decided_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "decisions_unsettled": {
+          "name": "decisions_unsettled",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "where": "\"decisions\".\"outcome\" IS NULL",
+          "concurrently": false
+        },
+        "decisions_prior": {
+          "name": "decisions_prior",
+          "columns": [
+            {
+              "expression": "prior_rule_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "where": "\"decisions\".\"prior_rule_id\" IS NOT NULL",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "decisions_user_id_users_id_fk": {
+          "name": "decisions_user_id_users_id_fk",
+          "tableFrom": "decisions",
+          "columnsFrom": ["user_id"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "decisions_user_id_account_id_message_id_messages_user_id_account_id_id_fk": {
+          "name": "decisions_user_id_account_id_message_id_messages_user_id_account_id_id_fk",
+          "tableFrom": "decisions",
+          "columnsFrom": ["user_id", "account_id", "message_id"],
+          "tableTo": "messages",
+          "columnsTo": ["user_id", "account_id", "id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "decisions_own": {
+          "name": "decisions_own",
+          "columns": ["user_id", "id"],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {
+        "own": {
+          "name": "own",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["sift_app"],
+          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
+          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
+        }
+      },
+      "checkConstraints": {
+        "decisions_stage": {
+          "name": "decisions_stage",
+          "value": "\"decisions\".\"stage\" IN ('rules', 'sender', 'classifier', 'heuristics', 'agent', 'fallback')"
+        },
+        "decisions_disposition": {
+          "name": "decisions_disposition",
+          "value": "\"decisions\".\"disposition\" IN ('keep', 'archive', 'spam', 'review')"
+        },
+        "decisions_subscription": {
+          "name": "decisions_subscription",
+          "value": "\"decisions\".\"subscription\" IN ('preserve', 'unsubscribe')"
+        },
+        "decisions_mode": {
+          "name": "decisions_mode",
+          "value": "\"decisions\".\"mode\" IN ('act', 'observe')"
+        },
+        "decisions_outcome": {
+          "name": "decisions_outcome",
+          "value": "\"decisions\".\"outcome\" IN ('observed', 'none', 'done', 'skipped', 'failed', 'unknown')"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.eval_results": {
+      "name": "eval_results",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "current_setting('sift.user')::integer"
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expected": {
+          "name": "expected",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "got": {
+          "name": "got",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "input_tokens": {
+          "name": "input_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "output_tokens": {
+          "name": "output_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "cost_usd": {
+          "name": "cost_usd",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "shots": {
+          "name": "shots",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sender_shots": {
+          "name": "sender_shots",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "eval_results_user_id_users_id_fk": {
+          "name": "eval_results_user_id_users_id_fk",
+          "tableFrom": "eval_results",
+          "columnsFrom": ["user_id"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "eval_results_user_id_run_id_eval_runs_user_id_id_fk": {
+          "name": "eval_results_user_id_run_id_eval_runs_user_id_id_fk",
+          "tableFrom": "eval_results",
+          "columnsFrom": ["user_id", "run_id"],
+          "tableTo": "eval_runs",
+          "columnsTo": ["user_id", "id"],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {
+        "eval_results_run_id_message_id_pk": {
+          "name": "eval_results_run_id_message_id_pk",
+          "columns": ["run_id", "message_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {
+        "own": {
+          "name": "own",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["sift_app"],
+          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
+          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.eval_runs": {
+      "name": "eval_runs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "current_setting('sift.user')::integer"
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prompt_hash": {
+          "name": "prompt_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "guidelines_hash": {
+          "name": "guidelines_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "labels_hash": {
+          "name": "labels_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "labels_json": {
+          "name": "labels_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "few_shot": {
+          "name": "few_shot",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total": {
+          "name": "total",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "eval_runs_user_id_users_id_fk": {
+          "name": "eval_runs_user_id_users_id_fk",
+          "tableFrom": "eval_runs",
+          "columnsFrom": ["user_id"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "eval_runs_user_id_account_id_mailboxes_user_id_id_fk": {
+          "name": "eval_runs_user_id_account_id_mailboxes_user_id_id_fk",
+          "tableFrom": "eval_runs",
+          "columnsFrom": ["user_id", "account_id"],
+          "tableTo": "mailboxes",
+          "columnsTo": ["user_id", "id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "eval_runs_own": {
+          "name": "eval_runs_own",
+          "columns": ["user_id", "id"],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {
+        "own": {
+          "name": "own",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["sift_app"],
+          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
+          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
+        }
+      },
+      "checkConstraints": {
+        "eval_runs_status": {
+          "name": "eval_runs_status",
+          "value": "\"eval_runs\".\"status\" IN ('running', 'done', 'failed', 'interrupted')"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.examples": {
+      "name": "examples",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "current_setting('sift.user')::integer"
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "disposition": {
+          "name": "disposition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label_id": {
+          "name": "label_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "suggested": {
+          "name": "suggested",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "suggested_by": {
+          "name": "suggested_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "marked_at": {
+          "name": "marked_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "raw": {
+          "name": "raw",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "headers_json": {
+          "name": "headers_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "body_text": {
+          "name": "body_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "captured_at": {
+          "name": "captured_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "examples_pending": {
+          "name": "examples_pending",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "where": "\"examples\".\"status\" = 'pending'",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "examples_user_id_users_id_fk": {
+          "name": "examples_user_id_users_id_fk",
+          "tableFrom": "examples",
+          "columnsFrom": ["user_id"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "examples_user_id_account_id_message_id_messages_user_id_account_id_id_fk": {
+          "name": "examples_user_id_account_id_message_id_messages_user_id_account_id_id_fk",
+          "tableFrom": "examples",
+          "columnsFrom": ["user_id", "account_id", "message_id"],
+          "tableTo": "messages",
+          "columnsTo": ["user_id", "account_id", "id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "examples_account_id_message_id_pk": {
+          "name": "examples_account_id_message_id_pk",
+          "columns": ["account_id", "message_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {
+        "own": {
+          "name": "own",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["sift_app"],
+          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
+          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
+        }
+      },
+      "checkConstraints": {
+        "examples_disposition": {
+          "name": "examples_disposition",
+          "value": "\"examples\".\"disposition\" IN ('keep', 'archive', 'spam')"
+        },
+        "examples_status": {
+          "name": "examples_status",
+          "value": "\"examples\".\"status\" IN ('pending', 'captured', 'gone')"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.feedback": {
+      "name": "feedback",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "current_setting('sift.user')::integer"
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decision_id": {
+          "name": "decision_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verdict": {
+          "name": "verdict",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "correct": {
+          "name": "correct",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "label_id": {
+          "name": "label_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "via": {
+          "name": "via",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'dashboard'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "feedback_account": {
+          "name": "feedback_account",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "feedback_user_id_users_id_fk": {
+          "name": "feedback_user_id_users_id_fk",
+          "tableFrom": "feedback",
+          "columnsFrom": ["user_id"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "feedback_user_id_account_id_mailboxes_user_id_id_fk": {
+          "name": "feedback_user_id_account_id_mailboxes_user_id_id_fk",
+          "tableFrom": "feedback",
+          "columnsFrom": ["user_id", "account_id"],
+          "tableTo": "mailboxes",
+          "columnsTo": ["user_id", "id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "feedback_user_id_decision_id_decisions_user_id_id_fk": {
+          "name": "feedback_user_id_decision_id_decisions_user_id_id_fk",
+          "tableFrom": "feedback",
+          "columnsFrom": ["user_id", "decision_id"],
+          "tableTo": "decisions",
+          "columnsTo": ["user_id", "id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "feedback_decision_id_unique": {
+          "name": "feedback_decision_id_unique",
+          "columns": ["decision_id"],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {
+        "own": {
+          "name": "own",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["sift_app"],
+          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
+          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
+        }
+      },
+      "checkConstraints": {
+        "feedback_verdict": {
+          "name": "feedback_verdict",
+          "value": "\"feedback\".\"verdict\" IN ('right', 'wrong', 'answered')"
+        },
+        "feedback_correct": {
+          "name": "feedback_correct",
+          "value": "\"feedback\".\"correct\" IN ('keep', 'archive', 'spam')"
+        },
+        "feedback_scope": {
+          "name": "feedback_scope",
+          "value": "\"feedback\".\"scope\" IN ('sender', 'message')"
+        },
+        "feedback_via": {
+          "name": "feedback_via",
+          "value": "\"feedback\".\"via\" IN ('dashboard', 'gmail')"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.labels": {
+      "name": "labels",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "current_setting('sift.user')::integer"
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "disposition": {
+          "name": "disposition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "block": {
+          "name": "block",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "mark_read": {
+          "name": "mark_read",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "unsubscribe": {
+          "name": "unsubscribe",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "gmail_label": {
+          "name": "gmail_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "labels_user_id_users_id_fk": {
+          "name": "labels_user_id_users_id_fk",
+          "tableFrom": "labels",
+          "columnsFrom": ["user_id"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "labels_user_id_account_id_mailboxes_user_id_id_fk": {
+          "name": "labels_user_id_account_id_mailboxes_user_id_id_fk",
+          "tableFrom": "labels",
+          "columnsFrom": ["user_id", "account_id"],
+          "tableTo": "mailboxes",
+          "columnsTo": ["user_id", "id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "labels_user_id_account_id_id_pk": {
+          "name": "labels_user_id_account_id_id_pk",
+          "columns": ["user_id", "account_id", "id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {
+        "own": {
+          "name": "own",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["sift_app"],
+          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
+          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
+        }
+      },
+      "checkConstraints": {
+        "labels_disposition": {
+          "name": "labels_disposition",
+          "value": "\"labels\".\"disposition\" IN ('keep', 'archive', 'spam', 'review')"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.mailboxes": {
+      "name": "mailboxes",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "current_setting('sift.user')::integer"
+        },
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "history_id": {
+          "name": "history_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_synced_at": {
+          "name": "last_synced_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "filters_checked_at": {
+          "name": "filters_checked_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "mailboxes_user_id_users_id_fk": {
+          "name": "mailboxes_user_id_users_id_fk",
+          "tableFrom": "mailboxes",
+          "columnsFrom": ["user_id"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "mailboxes_user_id_id_pk": {
+          "name": "mailboxes_user_id_id_pk",
+          "columns": ["user_id", "id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {
+        "own": {
+          "name": "own",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["sift_app"],
+          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
+          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.messages": {
+      "name": "messages",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "current_setting('sift.user')::integer"
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "thread_id": {
+          "name": "thread_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "from_address": {
+          "name": "from_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "from_domain": {
+          "name": "from_domain",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "from_name": {
+          "name": "from_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "list_id": {
+          "name": "list_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "to_json": {
+          "name": "to_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'"
+        },
+        "cc_json": {
+          "name": "cc_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'"
+        },
+        "headers_json": {
+          "name": "headers_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "labels_json": {
+          "name": "labels_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'"
+        },
+        "synced_at": {
+          "name": "synced_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "observe_only": {
+          "name": "observe_only",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "facts_json": {
+          "name": "facts_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "read_at": {
+          "name": "read_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "messages_sender": {
+          "name": "messages_sender",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "from_address",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "messages_user_id_users_id_fk": {
+          "name": "messages_user_id_users_id_fk",
+          "tableFrom": "messages",
+          "columnsFrom": ["user_id"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "messages_user_id_account_id_mailboxes_user_id_id_fk": {
+          "name": "messages_user_id_account_id_mailboxes_user_id_id_fk",
+          "tableFrom": "messages",
+          "columnsFrom": ["user_id", "account_id"],
+          "tableTo": "mailboxes",
+          "columnsTo": ["user_id", "id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "messages_user_id_account_id_id_pk": {
+          "name": "messages_user_id_account_id_id_pk",
+          "columns": ["user_id", "account_id", "id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {
+        "own": {
+          "name": "own",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["sift_app"],
+          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
+          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.preferences": {
+      "name": "preferences",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "current_setting('sift.user')::integer"
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "guidelines": {
+          "name": "guidelines",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "guidelines_changed_at": {
+          "name": "guidelines_changed_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "preferences_user_id_users_id_fk": {
+          "name": "preferences_user_id_users_id_fk",
+          "tableFrom": "preferences",
+          "columnsFrom": ["user_id"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "own": {
+          "name": "own",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["sift_app"],
+          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
+          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.proposals": {
+      "name": "proposals",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "current_setting('sift.user')::integer"
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "match_json": {
+          "name": "match_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label_id": {
+          "name": "label_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rule_id": {
+          "name": "rule_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "agreed": {
+          "name": "agreed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'open'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "proposals_user_id_users_id_fk": {
+          "name": "proposals_user_id_users_id_fk",
+          "tableFrom": "proposals",
+          "columnsFrom": ["user_id"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "proposals_user_id_account_id_mailboxes_user_id_id_fk": {
+          "name": "proposals_user_id_account_id_mailboxes_user_id_id_fk",
+          "tableFrom": "proposals",
+          "columnsFrom": ["user_id", "account_id"],
+          "tableTo": "mailboxes",
+          "columnsTo": ["user_id", "id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "proposals_once": {
+          "name": "proposals_once",
+          "columns": ["account_id", "kind", "match_json"],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {
+        "own": {
+          "name": "own",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["sift_app"],
+          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
+          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
+        }
+      },
+      "checkConstraints": {
+        "proposals_kind": {
+          "name": "proposals_kind",
+          "value": "\"proposals\".\"kind\" IN ('rule', 'always')"
+        },
+        "proposals_status": {
+          "name": "proposals_status",
+          "value": "\"proposals\".\"status\" IN ('open', 'accepted', 'dismissed')"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.rules": {
+      "name": "rules",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "current_setting('sift.user')::integer"
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "match_json": {
+          "name": "match_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "except_json": {
+          "name": "except_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'"
+        },
+        "label_id": {
+          "name": "label_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "when_label": {
+          "name": "when_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "disposition": {
+          "name": "disposition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "subscription": {
+          "name": "subscription",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'preserve'"
+        },
+        "mark_read": {
+          "name": "mark_read",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "condition": {
+          "name": "condition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hits": {
+          "name": "hits",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "filter_id": {
+          "name": "filter_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "filter_state": {
+          "name": "filter_state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "filter_json": {
+          "name": "filter_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "filter_checked_at": {
+          "name": "filter_checked_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "rules_account": {
+          "name": "rules_account",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "rules_user_id_users_id_fk": {
+          "name": "rules_user_id_users_id_fk",
+          "tableFrom": "rules",
+          "columnsFrom": ["user_id"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "rules_user_id_account_id_mailboxes_user_id_id_fk": {
+          "name": "rules_user_id_account_id_mailboxes_user_id_id_fk",
+          "tableFrom": "rules",
+          "columnsFrom": ["user_id", "account_id"],
+          "tableTo": "mailboxes",
+          "columnsTo": ["user_id", "id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "own": {
+          "name": "own",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["sift_app"],
+          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
+          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
+        }
+      },
+      "checkConstraints": {
+        "rules_disposition": {
+          "name": "rules_disposition",
+          "value": "\"rules\".\"disposition\" IN ('keep', 'archive', 'spam')"
+        },
+        "rules_subscription": {
+          "name": "rules_subscription",
+          "value": "\"rules\".\"subscription\" IN ('preserve', 'unsubscribe')"
+        },
+        "rules_source": {
+          "name": "rules_source",
+          "value": "\"rules\".\"source\" IN ('user', 'agent', 'correction')"
+        },
+        "rules_filter_state": {
+          "name": "rules_filter_state",
+          "value": "\"rules\".\"filter_state\" IN ('active', 'changed', 'gone', 'outdated')"
+        },
+        "rules_says_something": {
+          "name": "rules_says_something",
+          "value": "\"rules\".\"label_id\" IS NOT NULL OR \"rules\".\"when_label\" IS NOT NULL OR \"rules\".\"disposition\" IS NOT NULL"
+        },
+        "rules_label_or_wait": {
+          "name": "rules_label_or_wait",
+          "value": "\"rules\".\"label_id\" IS NULL OR \"rules\".\"when_label\" IS NULL"
+        },
+        "rules_condition_needs_label": {
+          "name": "rules_condition_needs_label",
+          "value": "\"rules\".\"condition\" IS NULL OR \"rules\".\"label_id\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.suggestion_bodies": {
+      "name": "suggestion_bodies",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "current_setting('sift.user')::integer"
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body_text": {
+          "name": "body_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fetched_at": {
+          "name": "fetched_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "suggestion_bodies_user_id_users_id_fk": {
+          "name": "suggestion_bodies_user_id_users_id_fk",
+          "tableFrom": "suggestion_bodies",
+          "columnsFrom": ["user_id"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "suggestion_bodies_user_id_account_id_message_id_messages_user_id_account_id_id_fk": {
+          "name": "suggestion_bodies_user_id_account_id_message_id_messages_user_id_account_id_id_fk",
+          "tableFrom": "suggestion_bodies",
+          "columnsFrom": ["user_id", "account_id", "message_id"],
+          "tableTo": "messages",
+          "columnsTo": ["user_id", "account_id", "id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "suggestion_bodies_account_id_message_id_pk": {
+          "name": "suggestion_bodies_account_id_message_id_pk",
+          "columns": ["account_id", "message_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {
+        "own": {
+          "name": "own",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["sift_app"],
+          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
+          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.users": {
+      "name": "users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "owner": {
+          "name": "owner",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "views": {},
+  "sequences": {},
+  "roles": {
+    "sift_app": {
+      "name": "sift_app",
+      "createDb": false,
+      "createRole": false,
+      "inherit": true
+    }
+  },
+  "policies": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

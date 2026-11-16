@@ -18,10 +18,13 @@
     "check": "pnpm check:fast && pnpm test",
     "build:web": "pnpm --filter sift-web build",
     "start": "pnpm sift run",
-    "dev": "pnpm sift dev"
+    "dev": "pnpm sift dev",
+    "db:generate": "drizzle-kit generate"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "0.31.11",
     "oxfmt": "^0.75.0",
     "oxlint": "^1.90.0",
     "oxlint-tsgolint": "^7.0.2005",
@@ -34,8 +37,11 @@
   "packageManager": "pnpm@11.8.0",
   "dependencies": {
     "@earendil-works/pi-ai": "^1.5.2",
+    "@electric-sql/pglite": "0.5.16",
     "@googleapis/gmail": "^22.1.0",
+    "drizzle-orm": "0.45.4",
     "google-auth-library": "^11.3.4",
+    "pg": "8.23.1",
     "picocolors": "^1.1.1",
     "smol-toml": "^1.9.1"
   }

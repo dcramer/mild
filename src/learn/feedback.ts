@@ -348,11 +348,11 @@ export async function accuracy(db: Sql, since = 0, accounts?: readonly string[])
   const whose = accounts === undefined ? '' : `AND f.account_id IN (${accounts.map(() => '?').join(', ') || 'NULL'})`;
   const scored = `FROM feedback f JOIN decisions d ON d.id = f.decision_id WHERE f.verdict IN ('right', 'wrong') AND f.created_at >= ? ${whose}`;
   const byStage = await all<{ stage: StageName; reviewed: number; right: number }>(
-    `SELECT d.stage, count(*) AS reviewed, sum(f.verdict = 'right') AS right ${scored} GROUP BY d.stage ORDER BY d.stage`,
+    `SELECT d.stage, count(*) AS reviewed, count(*) FILTER (WHERE f.verdict = 'right') AS right ${scored} GROUP BY d.stage ORDER BY d.stage`,
   );
   const byLabel = await all<{ label_id: string; name: string | null; reviewed: number; right: number }>(
-    `SELECT d.label_id, (SELECT l.name FROM labels l WHERE l.account_id = d.account_id AND l.id = d.label_id) AS name,
-            count(*) AS reviewed, sum(f.verdict = 'right') AS right
+    `SELECT d.label_id, (SELECT l.name FROM labels l WHERE l.id = d.label_id ORDER BY l.account_id LIMIT 1) AS name,
+            count(*) AS reviewed, count(*) FILTER (WHERE f.verdict = 'right') AS right
      ${scored} AND d.label_id IS NOT NULL GROUP BY d.label_id ORDER BY reviewed DESC, d.label_id`,
   );
   const confusion = await all<{ suggested: string; correct: string; count: number }>(

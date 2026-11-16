@@ -143,7 +143,7 @@ export async function listDecisions(db: Sql, scope: Scope, filter: DecisionFilte
   const search = filter.search?.trim();
   if (search) {
     const pattern = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
-    where.push(`(m.subject LIKE ? ESCAPE '\\' OR m.from_address LIKE ? ESCAPE '\\' OR coalesce(m.from_name, '') LIKE ? ESCAPE '\\')`);
+    where.push(`(m.subject ILIKE ? ESCAPE '\\' OR m.from_address ILIKE ? ESCAPE '\\' OR coalesce(m.from_name, '') ILIKE ? ESCAPE '\\')`);
     params.push(pattern, pattern, pattern);
   }
   const clause = where.join(' AND ');

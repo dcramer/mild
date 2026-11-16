@@ -25,7 +25,7 @@ export async function listRuleSummaries(db: Sql, scope: Scope): Promise<RuleSumm
     created_at: number;
     last_hit_at: number | null;
   }>(`SELECT r.id, r.account_id, r.match_json, r.except_json, r.label_id, r.when_label, l.name AS label_name, r.disposition AS override, CASE WHEN l.block = 1 THEN 'block' ELSE l.disposition END AS label_does,
-              (r.mark_read = 1 OR l.mark_read = 1) AS mark_read, (r.subscription = 'unsubscribe' OR l.unsubscribe = 1) AS unsubscribe,
+              (r.mark_read = 1 OR l.mark_read = 1)::integer AS mark_read, (r.subscription = 'unsubscribe' OR l.unsubscribe = 1)::integer AS unsubscribe,
               r.condition, r.source, r.hits, r.filter_id, r.created_at,
               (SELECT max(decided_at) FROM decisions d WHERE d.rule_id = r.id) AS last_hit_at
        FROM rules r LEFT JOIN labels l ON l.account_id = r.account_id AND l.id = coalesce(r.label_id, r.when_label)

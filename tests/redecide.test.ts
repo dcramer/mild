@@ -4,7 +4,7 @@ import { MAX_REJUDGE, rejudgeWaiting } from '../src/daemon/rejudge.ts';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { predatingGuidelines, redecideWaiting } from '../src/learn/redecide.ts';
 import { addMailbox, listAccounts, recordSync } from '../src/store/accounts.ts';
-import { openUserDb } from '../src/store/db.ts';
+import { openUserDb } from '../src/store/store.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { addRule, listRules, removeRule } from '../src/store/rules.ts';
@@ -47,7 +47,7 @@ const count = async () => (await db.get<{ n: number }>('SELECT count(*) AS n FRO
 const waiting = async () => (await pendingSuggestions(db)).map((s) => s.messageId).toSorted();
 
 beforeEach(async () => {
-  db = await openUserDb(':memory:');
+  db = await openUserDb();
   await addMailbox(db, ACCOUNT, '1', 0);
   serial = 0;
 });

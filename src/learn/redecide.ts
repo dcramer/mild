@@ -51,7 +51,7 @@ export async function redecideWaiting(db: Sql, accountId: string, now: number = 
   const rules = rulesStage(stored, labels, { hasWritten: () => known });
   // Decided by a rule that no longer exists, after another tier had already decided it, and never answered.
   const orphaned = await db.all<Pick<Suggestion, 'decisionId' | 'messageId'>>(
-    `SELECT d.id AS decisionId, d.message_id AS messageId FROM decisions d
+    `SELECT d.id AS "decisionId", d.message_id AS "messageId" FROM decisions d
        WHERE d.account_id = ? AND d.mode = 'observe' AND d.stage = 'rules' AND d.rule_id IS NOT NULL
          AND d.id = (SELECT max(id) FROM decisions x WHERE x.account_id = d.account_id AND x.message_id = d.message_id)
          AND NOT EXISTS (SELECT 1 FROM rules r WHERE r.id = d.rule_id)

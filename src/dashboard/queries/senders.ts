@@ -74,7 +74,7 @@ export async function senderPage(
       ? await Promise.all(
           (
             await db.all<{ address: string; name: string | null; messages: number; lastSeenAt: number }>(
-              `SELECT from_address AS address, max(from_name) AS name, count(*) AS messages, max(received_at) AS lastSeenAt
+              `SELECT from_address AS address, max(from_name) AS name, count(*) AS messages, max(received_at) AS "lastSeenAt"
                FROM messages WHERE account_id = ? AND from_domain = ? GROUP BY from_address ORDER BY messages DESC, address LIMIT 100`,
               accountId,
               who.domain,

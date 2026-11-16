@@ -210,7 +210,7 @@ export function createDashboardServer(people: People, options: DashboardOptions 
     // one else's. With no sign-in set up (tests, tools) it is the owner's.
     const person = signIn ? known : await people.owner();
     const whole = person ? scopeFor(person.accounts, person.owner) : scopeFor([], !signIn);
-    const ctx: Context = { db: person ? await person.open(person.id) : await people.nobody(), open: person ? person.open : refuse, controls, now };
+    const ctx: Context = { db: person ? await person.open(person.id) : people.nobody, open: person ? person.open : refuse, controls, now };
     const sessionCookie = (value: string, maxAge: number) =>
       `sift_session=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
 

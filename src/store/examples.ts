@@ -70,7 +70,7 @@ export async function listExamples(db: Sql, accountId?: string, limit = 500): Pr
   }>(
     `SELECT e.account_id, e.message_id, m.from_address, m.from_name, m.subject, e.label_id, e.marked_at, e.status
        FROM examples e JOIN messages m ON m.account_id = e.account_id AND m.id = e.message_id
-       WHERE (? IS NULL OR e.account_id = ?) ORDER BY e.marked_at DESC, e.message_id LIMIT ?`,
+       WHERE (?::text IS NULL OR e.account_id = ?) ORDER BY e.marked_at DESC, e.message_id LIMIT ?`,
     accountId ?? null,
     accountId ?? null,
     limit,

@@ -90,7 +90,9 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
   const examples = (await db.get<{
     captured: number | null;
     pending: number | null;
-  }>(`SELECT sum(status = 'captured') AS captured, sum(status = 'pending') AS pending FROM examples WHERE ${within(scope, 'account_id')}`))!;
+  }>(
+    `SELECT count(*) FILTER (WHERE status = 'captured') AS captured, count(*) FILTER (WHERE status = 'pending') AS pending FROM examples WHERE ${within(scope, 'account_id')}`,
+  ))!;
   return {
     labels: Object.fromEntries([...labels].map(([id, list]) => [id, list.map((l) => ({ id: l.id, name: l.name, disposition: outcomeOf(l) }))])),
     examples: { captured: examples.captured ?? 0, pending: examples.pending ?? 0 },

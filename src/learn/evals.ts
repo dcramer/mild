@@ -103,21 +103,19 @@ export async function startEval(deps: EvalDeps, request: EvalRequest): Promise<{
   if (examples.length === 0) throw new Error('There are no stored examples to test against yet. Answer some suggestions first.');
 
   const shown = labels.map((l) => ({ id: l.id, name: l.name, description: l.description }));
-  const id = (
-    await db.run(
-      `INSERT INTO eval_runs (account_id, started_at, status, model, prompt_hash, guidelines_hash, labels_hash, labels_json, few_shot, total)
-         VALUES (?, ?, 'running', ?, ?, ?, ?, ?, ?, ?)`,
-      request.accountId,
-      now(),
-      deps.model,
-      hash(PROMPT_TEMPLATE),
-      hash(deps.guidelines.trim()),
-      hash(JSON.stringify(shown)),
-      JSON.stringify(shown),
-      request.fewShot ? 1 : 0,
-      examples.length,
-    )
-  ).lastInsertRowid;
+  const { id } = (await db.get<{ id: number }>(
+    `INSERT INTO eval_runs (account_id, started_at, status, model, prompt_hash, guidelines_hash, labels_hash, labels_json, few_shot, total)
+         VALUES (?, ?, 'running', ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    request.accountId,
+    now(),
+    deps.model,
+    hash(PROMPT_TEMPLATE),
+    hash(deps.guidelines.trim()),
+    hash(JSON.stringify(shown)),
+    JSON.stringify(shown),
+    request.fewShot ? 1 : 0,
+    examples.length,
+  ))!;
 
   const RECORD = `INSERT INTO eval_results (run_id, message_id, expected, got, confidence, input_tokens, output_tokens, cost_usd, duration_ms, shots, sender_shots)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;

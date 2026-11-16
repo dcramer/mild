@@ -2,7 +2,7 @@ import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MAX_EVAL_EXAMPLES, getEvalRun, interruptEvals, listEvalRuns, startEval } from '../src/learn/evals.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
-import { openUserDb } from '../src/store/db.ts';
+import { openUserDb } from '../src/store/store.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
@@ -63,7 +63,7 @@ describe('replaying the model over stored examples', () => {
   });
 
   beforeEach(async () => {
-    db = await openUserDb(':memory:');
+    db = await openUserDb();
     await addMailbox(db, ACCOUNT, '1', 0);
     seen = [];
     await storeExample(db, ACCOUNT, { id: 'e1', from: 'news@example.com', label: 'newsletter', body: 'Issue 12.', markedAt: 1 });

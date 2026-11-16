@@ -25,6 +25,6 @@ export const sees = (scope: Scope, accountId: string) => scope.accounts.includes
  * a query as it is. A scope with no accounts matches nothing.
  */
 export function within(scope: Scope, column: string): string {
-  if (scope.accounts.length === 0) return '0';
+  if (scope.accounts.length === 0) return 'FALSE';
   return `${column} IN (${scope.accounts.map((id) => `'${id.replaceAll("'", "''")}'`).join(', ')})`;
 }

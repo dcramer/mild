@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { gatherEvidence } from '../src/daemon/evidence.ts';
 import { readContent } from '../src/gmail/body.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
-import { openUserDb } from '../src/store/db.ts';
+import { openUserDb } from '../src/store/store.ts';
 import { storedFacts } from '../src/store/messages.ts';
 import { describeFacts } from '../src/triage/facts.ts';
 import { htmlFacts } from '../src/triage/html.ts';
@@ -97,7 +97,7 @@ describe('readContent', () => {
 describe('content facts', () => {
   it('are recorded with the message and shown to the model once it has been read', async () => {
     const ACCOUNT = 'me@example.org';
-    const db = await openUserDb(':memory:');
+    const db = await openUserDb();
     await addMailbox(db, ACCOUNT, '1', 0);
     const f = facts({ accountId: ACCOUNT });
     await recordSync(db, ACCOUNT, [f], '2');

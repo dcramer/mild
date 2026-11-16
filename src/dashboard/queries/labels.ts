@@ -20,7 +20,7 @@ export async function listLabelSummaries(db: Sql, scope: Scope, accountId: strin
      GROUP BY d.label_id`,
   );
   const record = await counts(
-    `SELECT d.label_id AS id, count(*) AS n, sum(f.verdict = 'right') AS right FROM feedback f JOIN decisions d ON d.id = f.decision_id
+    `SELECT d.label_id AS id, count(*) AS n, count(*) FILTER (WHERE f.verdict = 'right') AS right FROM feedback f JOIN decisions d ON d.id = f.decision_id
      WHERE f.account_id = ? AND f.verdict IN ('right', 'wrong') AND d.label_id IS NOT NULL GROUP BY d.label_id`,
   );
   return (await listLabels(db, accountId)).map((l) => ({

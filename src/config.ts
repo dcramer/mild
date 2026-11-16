@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { parse } from 'smol-toml';
 import { type Keyring, loadKeyring } from './secrets.ts';
 
-/** What the user chooses, kept in `sift.toml`. None of it is set through the environment; only the encryption key is. */
+/** What the user chooses, kept in `sift.toml`. From the environment so far: only the encryption key and `DATABASE_URL`. */
 export interface Settings {
   /** false: record what sift would do. true: carry decisions out in Gmail. */
   act: boolean;
@@ -30,6 +30,8 @@ export interface Settings {
   fewShot: boolean;
   /** Delete an example this many days after the user answered for it. Unset: examples are kept. */
   examplesKeepDays?: number;
+  /** A Postgres server's address. Unset: PGlite, in the home directory. */
+  databaseUrl?: string;
 }
 
 /** Shorter, and sync's 7-day recovery search could bring back a message already forgotten and decide it twice. */
@@ -45,10 +47,10 @@ export interface Config {
   home: string;
   /** `sift.toml`. */
   settingsPath: string;
-  /** Who the people are and which mailboxes are whose. */
-  dbPath: string;
-  /** One database per person, `<user id>.db`. */
-  usersDir: string;
+  /** Where PGlite keeps the database, when no Postgres server is given. */
+  databaseDir: string;
+  /** A Postgres server to use instead: `DATABASE_URL`, or `database.url` in `sift.toml`. */
+  databaseUrl: string | undefined;
   /** The user's own Google OAuth client, as downloaded from Google Cloud Console. */
   googleClientPath: string;
   deviceIdPath: string;
@@ -74,17 +76,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const home = resolveHome(env);
   mkdirSync(home, { recursive: true, mode: 0o700 });
   const settingsPath = join(home, 'sift.toml');
+  const settings = existsSync(settingsPath) ? parseSettings(readFileSync(settingsPath, 'utf8'), settingsPath) : { ...DEFAULT_SETTINGS };
   return {
     home,
     settingsPath,
-    dbPath: join(home, 'sift.db'),
-    usersDir: join(home, 'users'),
+    databaseDir: join(home, 'database'),
+    databaseUrl: env['DATABASE_URL'] || settings.databaseUrl,
     googleClientPath: join(home, 'google-client.json'),
     deviceIdPath: join(home, 'device-id'),
     setupStatePath: join(home, 'setup.json'),
     dashboardKeyPath: join(home, 'dashboard-key'),
     keys: loadKeyring(env),
-    settings: existsSync(settingsPath) ? parseSettings(readFileSync(settingsPath, 'utf8'), settingsPath) : { ...DEFAULT_SETTINGS },
+    settings,
   };
 }
 
@@ -149,6 +152,13 @@ export function parseSettings(text: string, path = 'sift.toml'): Settings {
           settings.dashboardAllow = list.map((address) => address.toLowerCase());
         } else throw new Error(`${path}: unknown setting dashboard.${sub}.`);
       }
+    } else if (key === 'database') {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) throw bad('database', 'a table');
+      for (const [sub, url] of Object.entries(value as Record<string, unknown>)) {
+        if (sub !== 'url') throw new Error(`${path}: unknown setting database.${sub}.`);
+        if (typeof url !== 'string' || !/^postgres(ql)?:\/\//.test(url)) throw bad('database.url', 'an address starting postgres://');
+        settings.databaseUrl = url;
+      }
     } else if (key === 'retention') {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) throw bad('retention', 'a table');
       for (const [sub, days] of Object.entries(value as Record<string, unknown>)) {
@@ -198,6 +208,9 @@ ${settings.dashboardHost ? `host = ${JSON.stringify(settings.dashboardHost)}` : 
 # only connected accounts can.
 ${settings.dashboardAllow ? `allow = ${JSON.stringify(settings.dashboardAllow)}` : '# allow = ["you@example.com"]'}
 
+# A Postgres server to keep everything in. Unset: sift keeps it in this directory itself (PGlite).
+# DATABASE_URL in the environment wins over this.
+${settings.databaseUrl ? `[database]\nurl = ${JSON.stringify(settings.databaseUrl)}\n` : '# [database]\n# url = "postgres://user:password@host/sift"\n'}
 [retention]
 # Days to keep the record of a message, its decisions and changes, counted from the last thing that happened
 # to it. After that the change can no longer be undone from sift. Suggestions still waiting on you, mail you

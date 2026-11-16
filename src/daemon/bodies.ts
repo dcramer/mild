@@ -33,7 +33,8 @@ export async function keepSuggestionBodies(db: Sql, api: Pick<GmailApi, 'getBody
     // A message that has gone is stored empty, so it is not asked for again on every pass.
     const text = (await api.getBodyText(suggestion.messageId)) ?? '';
     await db.run(
-      'INSERT OR REPLACE INTO suggestion_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, ?, ?, ?)',
+      `INSERT INTO suggestion_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT (account_id, message_id) DO UPDATE SET body_text = excluded.body_text, fetched_at = excluded.fetched_at`,
       accountId,
       suggestion.messageId,
       text,

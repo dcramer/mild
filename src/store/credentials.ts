@@ -31,7 +31,7 @@ export async function credentials(db: Sql, kind: CredentialKind, keys: Keyring):
     write: async (key, text) => {
       await db.run(
         `INSERT INTO credentials (kind, key, value, updated_at) VALUES (?, ?, ?, ?)
-         ON CONFLICT (kind, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+         ON CONFLICT (user_id, kind, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
         kind,
         key,
         sealSecret(name(kind, key), text, keys),

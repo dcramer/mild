@@ -12,15 +12,13 @@ C build
 C up -d
 ```
 
-- **Back up first.** The databases are migrated when sift starts, each migration in its own transaction, and there is no way back down: an older sift refuses a database a newer one migrated.
+- **Back up first.** The database is migrated when sift starts, each migration in its own transaction, and there is no way back down: an older sift refuses a database a newer one migrated.
 - The few seconds sift is down cost nothing. It picks up from its Gmail history cursor.
 - Without Docker: `git pull`, `pnpm install`, restart `sift run`.
 
 ## Back up
 
-The databases are `sift.db` and one per person in `users/`, SQLite in WAL mode: recent writes live in a `-wal` file beside each until they are folded in. **Copying the database files alone from a running sift can give databases that are missing their latest writes or do not open.** Two ways that are safe:
-
-**Stopped (simplest).** A clean stop folds the WAL in, so the directory is then an ordinary set of files.
+The database is PGlite, in `database/`, and only the process that has it open can read it: **copying it while sift runs can give one that does not open.** Stop sift first; a clean stop leaves the folder consistent.
 
 ```sh
 C stop
@@ -28,19 +26,9 @@ C run --rm --no-deps -v "$PWD:/backup" --entrypoint tar sift czf /backup/sift-ho
 C start
 ```
 
-**Running.** Have SQLite write a consistent snapshot of each database into `snapshot/`, then archive that in place of the live ones. People's databases go first: a mailbox connected meanwhile is then at worst missing from a person's snapshot, which sift adds back when it opens it.
+With a Postgres server (`DATABASE_URL`), back the database up with the server's own tools (`pg_dump`, or the host's backups), and the home directory as above for the rest.
 
-```sh
-C exec sift node --disable-warning=ExperimentalWarning -e "
-  const { DatabaseSync } = require('node:sqlite'), fs = require('node:fs');
-  fs.rmSync('/data/snapshot', { recursive: true, force: true });
-  fs.mkdirSync('/data/snapshot/users', { recursive: true });
-  for (const f of [...fs.readdirSync('/data/users').filter((n) => n.endsWith('.db')).map((n) => 'users/' + n), 'sift.db'])
-    new DatabaseSync('/data/' + f).exec(\"VACUUM INTO '/data/snapshot/\" + f + \"'\");"
-C exec -T sift tar czf - -C /data --exclude 'sift.db*' --exclude users . > sift-home.tgz
-```
-
-The first form writes the archive as the container's user (uid 1000), so the current directory must be writable by it.
+This writes the archive as the container's user (uid 1000), so the current directory must be writable by it.
 
 What the archive is:
 
@@ -52,8 +40,6 @@ What the archive is:
 ```sh
 C stop
 C run --rm --no-deps -v "$PWD:/backup" --entrypoint sh sift -c 'rm -rf /data/* /data/.env && tar xzf /backup/sift-home.tgz -C /data'
-# From a running backup only: put the snapshots where the databases go.
-C run --rm --no-deps --entrypoint sh sift -c 'mv /data/snapshot/sift.db /data/sift.db && mv /data/snapshot/users /data/users && rmdir /data/snapshot'
 C start
 ```
 

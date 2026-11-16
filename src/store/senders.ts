@@ -76,7 +76,7 @@ async function facts(db: Sql, accountId: string, who: { address: string } | { do
   const column = 'address' in who ? 'from_address' : 'from_domain';
   const value = 'address' in who ? who.address : who.domain;
   const seen = (await db.get<{ n: number; first: number | null; last: number | null; recent: number; senders: number }>(
-    `SELECT count(*) AS n, min(received_at) AS first, max(received_at) AS last, coalesce(sum(received_at >= ?), 0) AS recent, count(DISTINCT from_address) AS senders
+    `SELECT count(*) AS n, min(received_at) AS first, max(received_at) AS last, count(*) FILTER (WHERE received_at >= ?) AS recent, count(DISTINCT from_address) AS senders
        FROM messages WHERE account_id = ? AND ${column} = ?`,
     now - MONTH_MS,
     accountId,
@@ -92,7 +92,7 @@ async function facts(db: Sql, accountId: string, who: { address: string } | { do
     value,
   );
   const answers = (await db.get<{ right: number; wrong: number }>(
-    `SELECT coalesce(sum(f.verdict = 'right'), 0) AS right, coalesce(sum(f.verdict = 'wrong'), 0) AS wrong FROM feedback f
+    `SELECT count(*) FILTER (WHERE f.verdict = 'right') AS right, count(*) FILTER (WHERE f.verdict = 'wrong') AS wrong FROM feedback f
        JOIN messages m ON m.account_id = f.account_id AND m.id = f.message_id
        WHERE f.account_id = ? AND m.${column} = ?`,
     accountId,
@@ -102,7 +102,7 @@ async function facts(db: Sql, accountId: string, who: { address: string } | { do
     'address' in who
       ? await db.get<{ yes: number }>('SELECT user_has_written AS yes FROM correspondents WHERE account_id = ? AND address = ?', accountId, value)
       : await db.get<{ yes: number | null }>(
-          `SELECT max(user_has_written) AS yes FROM correspondents WHERE account_id = ? AND address LIKE '%@' || ?`,
+          `SELECT max(user_has_written) AS yes FROM correspondents WHERE account_id = ? AND address ILIKE '%@' || ?`,
           accountId,
           value,
         );

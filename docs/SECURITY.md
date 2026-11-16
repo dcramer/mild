@@ -50,4 +50,4 @@ This is about storage at rest. Plaintext passes through the server at the moment
 
 ## Now
 
-sift does not yet do most of this. Today: each person's data is in a SQLite database of their own, opened only through their session's `open(id)`; credentials are encrypted with `SIFT_KEY` ([SECRETS.md](SECRETS.md)); everything else is stored plain. Nothing is hashed or sealed yet.
+Done: one Postgres database (PGlite locally); every person's table carries `user_id` in its keys and foreign keys and has a forced row-level security policy; every query runs as `sift_app` with the person set, through the session's `open(id)`; tests check each table's policy and that people cannot reach each other's rows. Credentials are encrypted with `SIFT_KEY` ([SECRETS.md](SECRETS.md)). Not yet: keys derived per person, hashing and sealing; everything but credentials is stored plain.

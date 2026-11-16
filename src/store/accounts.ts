@@ -30,7 +30,7 @@ export async function connectAccount(store: Store, email: string, historyId: str
     let person = userId;
     if (person === undefined) {
       const first = (await tx.get('SELECT 1 FROM users LIMIT 1')) === undefined;
-      person = (await tx.run('INSERT INTO users (owner, created_at) VALUES (?, ?)', first ? 1 : 0, now)).lastInsertRowid;
+      person = (await tx.get<{ id: number }>('INSERT INTO users (owner, created_at) VALUES (?, ?) RETURNING id', first ? 1 : 0, now))!.id;
     }
     await tx.run('INSERT INTO accounts (id, email, user_id, created_at) VALUES (?, ?, ?, ?)', email, email, person, now);
     return person;
@@ -42,7 +42,7 @@ export async function connectAccount(store: Store, email: string, historyId: str
 /** A mailbox in one person's own database, or its cursor reset if it is there already. */
 export async function addMailbox(db: Sql, id: string, historyId: string, now: number = Date.now()): Promise<void> {
   await db.run(
-    'INSERT INTO mailboxes (id, history_id, created_at) VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET history_id = excluded.history_id',
+    'INSERT INTO mailboxes (id, history_id, created_at) VALUES (?, ?, ?) ON CONFLICT (user_id, id) DO UPDATE SET history_id = excluded.history_id',
     id,
     historyId,
     now,
@@ -79,9 +79,7 @@ export async function connectedAddresses(central: Sql, userId?: number): Promise
 
 /** Whose database `db` is. */
 export async function personOf(db: Sql): Promise<number> {
-  const person = await db.get<{ id: number }>('SELECT id FROM person');
-  if (!person) throw new Error('This database is not yet anyone’s; open it through the store.');
-  return person.id;
+  return (await db.get<{ id: number }>(`SELECT current_setting('sift.user')::integer AS id`))!.id;
 }
 
 /** When the account's last sync began, or null before its first. */
@@ -95,9 +93,10 @@ export async function listAccounts(db: Sql): Promise<Account[]> {
   return rows.map((r) => ({ id: r.id, email: r.id, historyId: r.history_id }));
 }
 
-const INSERT_MESSAGE = `INSERT OR IGNORE INTO messages
+const INSERT_MESSAGE = `INSERT INTO messages
        (account_id, id, thread_id, from_address, from_domain, from_name, list_id, received_at, subject, to_json, cc_json, headers_json, labels_json, synced_at, observe_only, facts_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT DO NOTHING`;
 
 async function insertMessages(db: Sql, accountId: string, messages: readonly MessageFacts[], now: number, observeOnly: boolean): Promise<number> {
   let added = 0;

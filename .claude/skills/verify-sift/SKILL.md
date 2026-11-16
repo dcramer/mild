@@ -60,7 +60,7 @@ Find elements by role and accessible name, not refs or CSS: refs change on every
 
 Phone width: `$V ab "$RUN" set viewport 390 844`. AGENTS.md asks what every part does on a phone.
 
-Stored state, read-only: `$V sql "$RUN" "SELECT … FROM rules"`, from the one person's database (`home/users/1.db`); who owns which mailbox is in `home/sift.db`. Tables worth checking: `decisions`, `rules`, `examples`, `actions`, `labels`, `suggestion_bodies`.
+Stored state, read-only: `$V sql "$RUN" "SELECT … FROM rules"`, from a copy of the database (`home/database`, PGlite), read as its owner, so every person's rows show. Tables worth checking: `decisions`, `rules`, `examples`, `actions`, `labels`, `suggestion_bodies`.
 
 ## Evidence
 

@@ -1,63 +1,52 @@
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { openFile, readMigrations } from './db.ts';
-import type { Database, Sql } from './sql.ts';
+import { openDatabase } from './db.ts';
+import { type Sql, handle } from './sql.ts';
 
 /**
- * The databases. `central` says who the people are and which mailboxes are whose; each person's mail is
- * in a database of their own, and a request or a pass holds only the one it is for.
+ * The database. `central` says who the people are and which mailboxes are whose, and sees no one's
+ * mail; `user(id)` sees only that person's (row-level security, `handle` in `src/store/sql.ts`).
  */
 export interface Store {
   central: Sql;
-  /** One person's database, migrated. Opened once and kept. */
+  /** One person's handle. The first time, it makes their preferences and copies in any mailbox of theirs it lacks. */
   user(id: number): Promise<Sql>;
+  /** Sees no one's rows, for a request with nobody behind it. */
+  nobody: Sql;
   close(): Promise<void>;
 }
 
-/** Where the databases are. `:memory:` keeps them all in memory, for tests. */
-export type StorePaths = { dbPath: string; usersDir: string } | ':memory:';
+/** Where the database is: a Postgres server's address, or else PGlite in `databaseDir`. `:memory:` for tests. */
+export type StorePaths = { databaseUrl?: string | undefined; databaseDir: string } | ':memory:';
 
-/** Open the store, migrating each database as it is opened. */
+/** Open the database, migrating it first. */
 export async function openStore(paths: StorePaths): Promise<Store> {
-  if (paths !== ':memory:') mkdirSync(paths.usersDir, { recursive: true, mode: 0o700 });
-  const central = await openFile(paths === ':memory:' ? ':memory:' : paths.dbPath, readMigrations('central'));
-  const users = new Map<number, Promise<Database>>();
+  const driver = await openDatabase(paths === ':memory:' ? ':memory:' : paths.databaseUrl ? { url: paths.databaseUrl } : { dir: paths.databaseDir });
+  const central = handle(driver, null);
+  const opened = new Map<number, Promise<Sql>>();
   const open = async (id: number) => {
-    const path = paths === ':memory:' ? ':memory:' : join(paths.usersDir, `${id}.db`);
-    const db = await openFile(path, readMigrations('user'));
-    try {
-      await claim(db, central, id, path);
-    } catch (error) {
-      db.close();
-      throw error;
-    }
+    const db = handle(driver, id);
+    // A mailbox is added to `accounts` first, so one can be missing here after a crash in between.
+    const theirs = await central.all<{ id: string; created_at: number }>('SELECT id, created_at FROM accounts WHERE user_id = ?', id);
+    await db.transaction(async (tx) => {
+      await tx.run('INSERT INTO preferences DEFAULT VALUES ON CONFLICT DO NOTHING');
+      for (const mailbox of theirs) await tx.run('INSERT INTO mailboxes (id, created_at) VALUES (?, ?) ON CONFLICT DO NOTHING', mailbox.id, mailbox.created_at);
+    });
     return db;
   };
   return {
     central,
     user: (id) => {
-      let db = users.get(id);
-      if (!db) users.set(id, (db = open(id)));
+      let db = opened.get(id);
+      if (!db) opened.set(id, (db = open(id)));
       return db;
     },
-    close: async () => {
-      central.close();
-      for (const db of await Promise.allSettled(users.values())) if (db.status === 'fulfilled') db.value.close();
-    },
+    nobody: handle(driver, 0),
+    close: () => driver.close(),
   };
 }
 
-/**
- * Make sure `db` is person `id`'s, or throw: it must say so (a new one is marked theirs), and every
- * mailbox in it must be one the central database gives them. Then add any of theirs it lacks: mailboxes
- * are added to the central database first, so one can be missing here after a crash in between.
- */
-async function claim(db: Sql, central: Sql, id: number, path: string): Promise<void> {
-  const marked = await db.get<{ id: number }>('SELECT id FROM person');
-  if (marked === undefined) await db.run('INSERT INTO person (one, id) VALUES (1, ?)', id);
-  else if (marked.id !== id) throw new Error(`${path} is person ${marked.id}'s database, not person ${id}'s. It was moved or restored to the wrong place.`);
-  const theirs = await central.all<{ id: string; created_at: number }>('SELECT id, created_at FROM accounts WHERE user_id = ?', id);
-  const stray = (await db.all<{ id: string }>('SELECT id FROM mailboxes')).filter((m) => !theirs.some((a) => a.id === m.id));
-  if (stray.length > 0) throw new Error(`${path} holds ${stray.map((m) => m.id).join(', ')}, which person ${id} does not have.`);
-  for (const mailbox of theirs) await db.run('INSERT OR IGNORE INTO mailboxes (id, created_at) VALUES (?, ?)', mailbox.id, mailbox.created_at);
+/** For tests: a database in memory with one person in it, who owns the install, and their handle. */
+export async function openUserDb(): Promise<Sql> {
+  const store = await openStore(':memory:');
+  const { id } = (await store.central.get<{ id: number }>('INSERT INTO users (owner, created_at) VALUES (1, 0) RETURNING id'))!;
+  return await store.user(id);
 }
