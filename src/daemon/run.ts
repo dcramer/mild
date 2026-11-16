@@ -63,6 +63,7 @@ export async function runOnce(db: DatabaseSync, options: RunOptions): Promise<Pa
         {
           ...deps,
           mailbox: options.act ? mailbox : null,
+          answers: mailbox,
           ...(options.unsubscribe ? { unsubscribe: options.unsubscribe } : {}),
           ...(options.heuristics ? { heuristics: { mailbox } } : {}),
           ...(options.model

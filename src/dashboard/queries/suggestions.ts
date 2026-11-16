@@ -39,7 +39,34 @@ export function listSuggestions(db: DatabaseSync, scope: Scope, options: { inclu
   const labels = new Map(accounts.map(({ id }) => [id, listLabels(db, id)] as const));
   const names = new Map([...labels].flatMap(([account, list]) => list.map((l) => [`${account}\n${l.id}`, l.name] as const)));
   const waitingNow = pendingSuggestions(db, { accounts: scope.accounts }).filter((s) => options.includeKept || s.disposition !== 'keep');
-  const items = waitingNow.slice(0, MAX_ITEMS).map((s): SuggestionItem => ({
+  const shown = waitingNow.slice(0, MAX_ITEMS);
+  // What each sender's mail has been labelled, by its current decision, to offer as other likely labels.
+  const history = new Map<string, Map<string, number>>();
+  const senders = [...new Set(shown.map((s) => `${s.accountId}\n${s.fromAddress}`))];
+  const tally = db.prepare(
+    `SELECT d.label_id, count(*) AS n FROM decisions d JOIN messages m ON m.account_id = d.account_id AND m.id = d.message_id
+     WHERE d.account_id = ? AND m.from_address = ? AND d.label_id IS NOT NULL
+       AND d.id = (SELECT max(id) FROM decisions x WHERE x.account_id = d.account_id AND x.message_id = d.message_id)
+     GROUP BY d.label_id`,
+  );
+  for (const key of senders) {
+    const [accountId = '', address = ''] = key.split('\n');
+    const rows = tally.all(accountId, address) as { label_id: string; n: number }[];
+    history.set(key, new Map(rows.map((r) => [r.label_id, r.n])));
+  }
+  const alternatives = (s: (typeof shown)[number]) => {
+    const counts = history.get(`${s.accountId}\n${s.fromAddress}`) ?? new Map<string, number>();
+    const total = [...counts.values()].reduce((sum, n) => sum + n, 0);
+    return [...counts]
+      .filter(([id]) => id !== s.labelId)
+      .toSorted((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .flatMap(([id, n]) => {
+        const name = names.get(`${s.accountId}\n${id}`);
+        return name ? [{ id, name, share: n / total }] : [];
+      });
+  };
+  const items = shown.map((s): SuggestionItem => ({
     accountId: s.accountId,
     messageId: s.messageId,
     decisionId: s.decisionId,
@@ -53,6 +80,7 @@ export function listSuggestions(db: DatabaseSync, scope: Scope, options: { inclu
     unsubscribe: s.unsubscribe,
     stage: s.stage,
     confidence: s.confidence,
+    alternatives: alternatives(s),
   }));
   const { reviewed, right } = accuracy(db, 0, scope.accounts);
   const examples = db

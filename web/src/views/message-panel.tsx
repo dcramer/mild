@@ -1,11 +1,30 @@
 import { useEffect, useState } from 'react';
-import { Answer, type AnswerValue } from '@/components/answer.tsx';
+import { useAnswer } from '@/components/answer.tsx';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { MessageBody, SignalFacts } from '@/components/message-parts.tsx';
 import { SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { type MessageDetail, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ago, count, dateTime, money, tier } from '@/lib/format.ts';
-import { Button, Code, Disclosure, Failure, Loading, Note, Panel, Section, Table, Td, TextLink, Timeline, TimelineEvent, Tr, useToast } from '@/system';
+import { ago, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
+import {
+  Button,
+  Code,
+  Disclosure,
+  Failure,
+  Loading,
+  Look,
+  Meter,
+  Note,
+  Panel,
+  Section,
+  SplitButton,
+  Table,
+  Td,
+  TextLink,
+  Timeline,
+  TimelineEvent,
+  Tr,
+  useToast,
+} from '@/system';
 
 /** Open the message panel on one item of a list, so it can step through the rest. */
 export type OpenMessages = (items: MessageRef[], index: number) => void;
@@ -102,7 +121,7 @@ function Body({
   detail: MessageDetail;
   /** Show another message from the same sender in this panel. */
   onPick: (messageId: string) => void;
-  onAnswered: (said: string[]) => void;
+  onAnswered: () => void;
   onUndone: () => void;
 }) {
   const waiting = useLoaded(
@@ -111,7 +130,6 @@ function Body({
     120_000,
   );
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
-  const { busy, error, run } = useAction();
   const undo = useAction();
   const toast = useToast();
   const history = [
@@ -136,93 +154,109 @@ function Body({
     })),
   ].toSorted((x, y) => x.at - y.at || x.order - y.order);
   const current = detail.decisions.at(-1);
-  const others = (waiting.data?.messages ?? []).filter((m) => m.messageId !== detail.messageId);
-  const isWaiting = (waiting.data?.messages ?? []).some((m) => m.messageId === detail.messageId);
-  const acted = detail.actions.some((a) => a.status === 'done' && a.type !== 'undo' && a.type !== 'unsubscribe');
+  const waitingNow = waiting.data?.messages ?? [];
+  const others = waitingNow.filter((m) => m.messageId !== detail.messageId);
+  const isWaiting = waitingNow.some((m) => m.messageId === detail.messageId);
   const labels = manage.data?.labels[detail.accountId] ?? [];
-
-  const submit = (answer: AnswerValue) =>
-    run(async () => {
-      const result = await api.feedback({
-        accountId: detail.accountId,
-        sender: detail.fromAddress,
-        messageId: detail.messageId,
-        // "Only this message" settles this one and leaves the sender's other waiting mail alone.
-        ...(answer.scope === 'once' && current ? { decisionId: current.id } : {}),
-        ...answer,
-      });
-      onAnswered([result.taught ?? 'Noted for this message. No rule was made.', ...(result.fixed ? [result.fixed] : [])]);
-    });
+  const target = current
+    ? { accountId: detail.accountId, sender: detail.fromAddress, messageId: detail.messageId, decisionId: current.id, labelId: current.labelId }
+    : null;
+  const { answer, choices, busy, error } = useAnswer(
+    labels,
+    waitingNow.map((m) => ({ accountId: detail.accountId, sender: detail.fromAddress, messageId: m.messageId, decisionId: m.decisionId, labelId: m.labelId })),
+    onAnswered,
+  );
+  // What else it might be: the labels the sender's other mail has had, most first.
+  const total = detail.sender.labels.reduce((sum, l) => sum + l.messages, 0);
+  const alternatives = detail.sender.labels
+    .filter((l) => l.id !== current?.labelId)
+    .slice(0, 2)
+    .map((l) => ({ id: l.id, name: l.name, share: total ? l.messages / total : 0 }));
+  const [, rest = []] = target ? choices(target, alternatives) : [];
+  const name = current ? (current.labelName ?? outcomeName(current.disposition)) : null;
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-x-10 gap-y-10 lg:grid-cols-[minmax(0,1fr)_25rem]">
-      <div className="flex min-w-0 flex-col gap-10">
+    <div className="flex flex-col gap-8">
+      {target && current ? (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {current.labelId !== null && name ? (
+              <SplitButton
+                className="w-60"
+                label={`${isWaiting ? 'Agree' : 'Keep it'}: ${name}`}
+                menuLabel="Something else"
+                busy={busy}
+                onPress={() => answer(target, current.labelId ?? '')}
+                groups={[rest]}
+                shortcut={{ key: 'a', label: 'Agree with sift' }}
+              >
+                <Meter level={sureness(current.stage, current.confidence)} />
+                <span className="truncate">{name}</span>
+              </SplitButton>
+            ) : (
+              <SplitButton className="w-60" label="Not sure: say what it is" menuLabel="Say what it is" confirm={false} onPress={() => {}} groups={[rest]}>
+                <Look>{outcomeName('review')}</Look>
+              </SplitButton>
+            )}
+            {alternatives.map((a) => (
+              <Button key={a.id} disabled={busy} onClick={() => answer(target, a.id)}>
+                <Meter level={a.share >= 0.5 ? 2 : 1} />
+                {a.name}
+              </Button>
+            ))}
+            <span className="flex-1" />
+            <Button variant="quiet" href={`/rules?from=${encodeURIComponent(detail.fromAddress)}`}>
+              Make a rule…
+            </Button>
+          </div>
+          <p className="text-muted-foreground">
+            {current.reason}
+            {current.mode !== 'observe' ? (
+              <>
+                {' · '}
+                <StatusWord row={current} />
+              </>
+            ) : null}
+          </p>
+          <Failure>{error}</Failure>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <MessageBody detail={detail} />
-        {others.length > 0 ? (
-          <Section title="Also waiting from them" meta={count(others.length)}>
-            <div className="max-h-56 overflow-y-auto">
-              <Table>
-                <tbody>
-                  {others.map((m) => (
-                    <Tr key={m.messageId} onOpen={() => onPick(m.messageId)}>
-                      <Td className="max-w-0 truncate">{m.subject || '(no subject)'}</Td>
-                      <Td num quiet>
-                        {ago(m.receivedAt)}
-                      </Td>
-                    </Tr>
-                  ))}
-                </tbody>
-              </Table>
-            </div>
+        <div className="flex min-w-0 flex-col gap-8">
+          <Section title="Sender" action={<TextLink href={senderHref(detail.accountId, detail.fromAddress)}>All their mail</TextLink>}>
+            <SenderFacts accountId={detail.accountId} profile={detail.sender} />
           </Section>
-        ) : null}
-      </div>
-
-      <div className="flex min-w-0 flex-col gap-8">
-        <Section
-          title={isWaiting ? 'sift suggests' : 'sift decided'}
-          {...(current && current.mode !== 'observe' ? { meta: <StatusWord row={current} /> } : {})}
-        >
-          {current ? (
-            <div className="flex flex-col gap-1.5">
-              <Verdict labelName={current.labelName} disposition={current.disposition} unsubscribe={current.unsubscribe} />
-              <p className="text-muted-foreground">{current.reason}</p>
-            </div>
-          ) : (
-            <p className="text-muted-foreground">Not sorted yet.</p>
-          )}
-        </Section>
-
-        {current && labels.length > 0 ? (
-          <Section title="Your answer">
-            <Answer
-              key={detail.messageId}
-              labels={labels}
-              guess={current.labelId}
-              proposed={current.disposition}
-              sender={detail.fromAddress}
-              acted={acted}
-              busy={busy}
-              error={error}
-              onSubmit={submit}
-            />
-          </Section>
-        ) : null}
-
-        <Section title="Sender" action={<TextLink href={senderHref(detail.accountId, detail.fromAddress)}>All their mail</TextLink>}>
-          <SenderFacts accountId={detail.accountId} profile={detail.sender} />
-        </Section>
-
-        <div className="flex flex-col gap-4">
-          <Disclosure summary="What sift saw in it">
-            <SignalFacts detail={detail} />
-          </Disclosure>
-          {history.length > 0 ? (
-            <Disclosure summary={`Everything sift did with it · ${history.length}`}>
-              <Failure>{undo.error}</Failure>
-              <Timeline>{history.map((entry) => entry.node)}</Timeline>
-            </Disclosure>
+          {others.length > 0 ? (
+            <Section title="Also waiting" meta={count(others.length)}>
+              <div className="max-h-56 overflow-y-auto">
+                <Table>
+                  <tbody>
+                    {others.map((m) => (
+                      <Tr key={m.messageId} onOpen={() => onPick(m.messageId)}>
+                        <Td className="w-full max-w-0 truncate">{m.subject || '(no subject)'}</Td>
+                        <Td num quiet>
+                          {ago(m.receivedAt)}
+                        </Td>
+                      </Tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
+            </Section>
           ) : null}
+          <div className="flex flex-col gap-3">
+            <Disclosure summary="What sift saw in it">
+              <SignalFacts detail={detail} />
+            </Disclosure>
+            {history.length > 0 ? (
+              <Disclosure summary={`History · ${history.length}`}>
+                <Failure>{undo.error}</Failure>
+                <Timeline>{history.map((entry) => entry.node)}</Timeline>
+              </Disclosure>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
@@ -245,7 +279,6 @@ export function MessagePanel({
   onClose: () => void;
 }) {
   const item = items[index];
-  const toast = useToast();
   // Another message from the same sender, looked at without leaving this place in the list.
   const [picked, setPicked] = useState<string | null>(null);
   useEffect(() => setPicked(null), [index]);
@@ -284,8 +317,7 @@ export function MessagePanel({
           detail={data}
           onPick={setPicked}
           onUndone={reload}
-          onAnswered={([taught, fixed]) => {
-            toast(taught ?? 'Noted.', fixed ? { description: fixed } : {});
+          onAnswered={() => {
             if (index < items.length - 1) onIndex(index + 1);
             else onClose();
           }}

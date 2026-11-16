@@ -1,9 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { listLabels } from '../store/labels.ts';
 import { recordDecision } from '../store/decisions.ts';
+import { proposeFromAnswers } from '../store/proposals.ts';
 import { type RuleSays, setRule } from '../store/rules.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
-import { type DecidedDisposition, type Disposition, type StageName, labelled } from '../triage/types.ts';
+import { type DecidedDisposition, type Decision, type Disposition, type StageName, labelled } from '../triage/types.ts';
 
 /** A decision sift made while only observing, that the user has not yet confirmed or corrected. */
 export interface Suggestion {
@@ -158,6 +159,11 @@ export interface FeedbackInput {
   messageId?: string;
   /** Whether sift is acting, which decides whether the corrected message's new decision is to be carried out. */
   mode?: 'act' | 'observe';
+  /**
+   * The user pressed this in the dashboard: each message it settles gets the answer as a decision of its
+   * own, carried out in Gmail on the next pass even while sift only observes.
+   */
+  act?: boolean;
 }
 
 export interface FeedbackResult {
@@ -167,6 +173,10 @@ export interface FeedbackResult {
   taught: string | null;
   /** The message whose earlier decision was replaced, so the caller can put it right in the mailbox. */
   corrected: string | null;
+  /** How many messages now have the answer waiting to be carried out in Gmail. */
+  carrying: number;
+  /** sift proposed a rule because the sender's mail has been answered the same way enough times. */
+  proposed: boolean;
 }
 
 const WILL: Record<Disposition, string> = { keep: 'kept in your inbox', archive: 'archived', spam: 'marked as spam', review: 'left for you' };
@@ -269,33 +279,41 @@ export function applyFeedback(db: DatabaseSync, input: FeedbackInput, now: numbe
       example.run(target.accountId, target.messageId, wanted, is, target.disposition, target.stage, now);
     }
     const ruleId = match && says ? setRule(db, input.accountId, match, says, all.every((t) => verdictFor(t) === 'right') ? 'user' : 'correction', now) : null;
+    // Pressed in the dashboard: what the user said is done to each waiting message it settled.
+    const answer = (target: Suggestion): Decision => {
+      const is = standing(target);
+      return {
+        ...(is ? labelled(is, wanted === is.disposition ? undefined : wanted) : { disposition: wanted, subscription: 'preserve' as const }),
+        ...extra,
+        stage: 'rules',
+        ...(ruleId ? { ruleId } : {}),
+        reason: label ? `you said this is ${label.name}` : `you said to ${DO[wanted]}`,
+      };
+    };
+    if (input.act) for (const target of targets) recordDecision(db, input.accountId, target.messageId, answer(target), { mode: 'act', byUser: true, now });
     // The corrected message gets a decision of its own, so the log shows what the user said and, when
     // sift is acting, the mailbox is brought into line with it.
-    if (given && changes) {
-      const is = standing(given);
+    if (given && changes)
       recordDecision(
         db,
         input.accountId,
         given.messageId,
-        {
-          ...(is ? labelled(is, wanted === is.disposition ? undefined : wanted) : { disposition: wanted, subscription: 'preserve' as const }),
-          ...extra,
-          stage: 'rules',
-          ...(ruleId ? { ruleId } : {}),
-          reason: label ? `you said this is ${label.name}` : `you said to ${DO[wanted]}`,
-        },
-        { mode: input.mode ?? 'observe', now },
+        answer(given),
+        input.act ? { mode: 'act', byUser: true, now } : { mode: input.mode ?? 'observe', now },
       );
-    }
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
     throw error;
   }
   const unsubscribed = (fromLabel: boolean) => ((fromLabel && label?.unsubscribe) || input.unsubscribe ? ', and unsubscribed from' : '');
+  // An answer makes no rule of its own; enough of the same answers for a sender, and sift offers one.
+  const proposed = !match && label !== undefined && proposeFromAnswers(db, input.accountId, input.sender, now);
   return {
     reviewed: targets.length + (given ? 1 : 0),
     corrected: given && changes ? given.messageId : null,
+    carrying: input.act ? targets.length + (given && changes ? 1 : 0) : 0,
+    proposed,
     taught: !says
       ? null
       : says.when && label

@@ -23,6 +23,8 @@ export interface TriageDeps {
   db: DatabaseSync;
   /** Null means observe: decisions are recorded and nothing in the mailbox changes. */
   mailbox: Mailbox | null;
+  /** While sift only observes: the mailbox to carry out the user's own answers in. Nothing else is done with it. */
+  answers?: Mailbox | null;
   /** The inference tier. Omitted when no model is configured: mail no rule covers goes to review. */
   model?: ModelTier;
   /** The heuristics tier, when the user has turned it on. The mailbox is only searched, for whether the owner has written to a sender. */
@@ -128,6 +130,8 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
 
   if (mailbox) {
     for (const pending of listUnsettledDecisions(db, account.id)) await carryOut(pending.id, pending.messageId, pending, mailbox);
+  } else if (deps.answers) {
+    for (const pending of listUnsettledDecisions(db, account.id, { byUserOnly: true })) await carryOut(pending.id, pending.messageId, pending, deps.answers);
   }
 
   const decide = cascadeFor(deps, account.id);

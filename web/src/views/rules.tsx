@@ -65,17 +65,20 @@ const READING: Record<Kind, string> = {
 function AddRuleDialog({
   accountId,
   labels,
+  from,
   onClose,
   onAdded,
 }: {
   accountId: string;
   labels: readonly (readonly [string, string])[];
+  /** A sender to start from, when the dialog was opened from one of their messages. */
+  from?: string;
   onClose: () => void;
   onAdded: () => void;
 }) {
   const { busy, error, run } = useAction();
   const [when, setWhen] = useState<(typeof WHEN)[number][0]>('from');
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState(from ?? '');
   const [kind, setKind] = useState<Kind>('action');
   const [label, setLabel] = useState('');
   const [does, setDoes] = useState<Does>('archive');
@@ -172,6 +175,8 @@ export function Rules() {
   const [label, setLabel] = useParam('label');
   const [source, setSource] = useParam('by', SOURCES);
   const [adding, setAdding] = useState(false);
+  // Opened from a message ("Make a rule…"): the dialog starts on its sender.
+  const [from, setFrom] = useParam('from');
   const accountId = manage.data?.accounts[0]?.id;
   const labels = accountId ? (manage.data?.labels[accountId] ?? []).map((l) => [l.id, l.name] as const) : [];
   const multipleAccounts = new Set(data?.rules.map((r) => r.accountId)).size > 1;
@@ -186,7 +191,6 @@ export function Rules() {
   return (
     <ListView
       title="Rules"
-      meta={data ? `${count(data.rules.length)} · the most specific one wins` : null}
       actions={
         // Shown from the start and enabled once the account is known, so it does not arrive late and move the page.
         <Button disabled={!accountId} onClick={() => setAdding(true)}>
@@ -307,7 +311,18 @@ export function Rules() {
           </tbody>
         </Table>
       )}
-      {adding && accountId ? <AddRuleDialog accountId={accountId} labels={labels} onClose={() => setAdding(false)} onAdded={reload} /> : null}
+      {(adding || from !== '') && accountId ? (
+        <AddRuleDialog
+          accountId={accountId}
+          labels={labels}
+          {...(from === '' ? {} : { from })}
+          onClose={() => {
+            setAdding(false);
+            setFrom('');
+          }}
+          onAdded={reload}
+        />
+      ) : null}
     </ListView>
   );
 }

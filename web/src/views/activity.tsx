@@ -4,7 +4,7 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { DecisionTable } from '@/components/decision-table.tsx';
 import { type Days, api, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/route.ts';
-import { OUTCOME_KEYS, PERIODS, STATUS_FILTERS, TIERS, count, outcomeName, plural } from '@/lib/format.ts';
+import { OUTCOME_KEYS, PERIODS, STATUS_FILTERS, TIERS, count, outcomeName } from '@/lib/format.ts';
 import { Button, Empty, FilterGroup, ListView, Loading, useToast } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
@@ -42,7 +42,6 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
   return (
     <ListView
       title="Activity"
-      meta={data ? `${plural(data.total, 'decision')}, ${period.toLowerCase()}` : null}
       search={{ value: typed, onChange: setTyped, placeholder: 'Search subject or sender' }}
       filters={{
         active: [

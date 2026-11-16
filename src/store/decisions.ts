@@ -16,15 +16,15 @@ export function recordDecision(
   accountId: string,
   messageId: string,
   decision: Decision,
-  options: { mode?: DecisionMode; durationMs?: number; now?: number } = {},
+  options: { mode?: DecisionMode; durationMs?: number; now?: number; byUser?: boolean } = {},
 ): number {
   const mode = options.mode ?? 'observe';
   const result = db
     .prepare(
       `INSERT INTO decisions
          (account_id, message_id, stage, disposition, subscription, gmail_label, rule_id, confidence, reason,
-          model, input_tokens, output_tokens, cost_usd, duration_ms, decided_at, mode, outcome, label_id, block, mark_read, prior_rule_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          model, input_tokens, output_tokens, cost_usd, duration_ms, decided_at, mode, outcome, label_id, block, mark_read, prior_rule_id, by_user)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       accountId,
@@ -48,6 +48,7 @@ export function recordDecision(
       decision.block ? 1 : 0,
       decision.markRead ? 1 : 0,
       decision.priorRuleId ?? null,
+      options.byUser ? 1 : 0,
     );
   return Number(result.lastInsertRowid);
 }
@@ -64,10 +65,17 @@ export interface UnsettledDecision {
   markRead?: boolean;
 }
 
-/** `act` decisions that were recorded but never carried out (a crash or a provider error), oldest first. */
-export function listUnsettledDecisions(db: DatabaseSync, accountId: string): UnsettledDecision[] {
+/**
+ * `act` decisions that were recorded but not yet carried out (an answer waiting for the next pass, a crash,
+ * a provider error), oldest first. `byUserOnly` keeps only the user's own answers, which are carried out
+ * even while sift only observes.
+ */
+export function listUnsettledDecisions(db: DatabaseSync, accountId: string, options: { byUserOnly?: boolean } = {}): UnsettledDecision[] {
   const rows = db
-    .prepare(`SELECT id, message_id, disposition, gmail_label, mark_read FROM decisions WHERE account_id = ? AND outcome IS NULL AND mode = 'act' ORDER BY id`)
+    .prepare(
+      `SELECT id, message_id, disposition, gmail_label, mark_read FROM decisions
+       WHERE account_id = ? AND outcome IS NULL AND mode = 'act' ${options.byUserOnly ? 'AND by_user = 1' : ''} ORDER BY id`,
+    )
     .all(accountId) as unknown as { id: number; message_id: string; disposition: Disposition; gmail_label: string | null; mark_read: number }[];
   return rows.map((r) => ({
     id: r.id,

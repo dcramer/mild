@@ -2,40 +2,19 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 /**
- * The top of a page: its name, one line of where things stand (what is waiting, how many there are), and
- * the page's own action. No explanation: that belongs where it is needed, in an empty state or beside a
- * control. `badge` sits beside the title, for a stamp that says what the page's subject is.
- *
- * A page that will have a `meta` line passes `null` until it knows what the line says: the line's room is
- * held, so the page below does not move when it arrives. Leave `meta` out for a page with none.
+ * The top of a page: its name, and on the right the page's own action or one quiet line of numbers, the
+ * two centred on each other. `badge` sits beside the title, for a stamp that says what the page's subject
+ * is; `meta` is a line under it naming that subject (a sender's address). No count and no explanation.
  */
-export function PageHeader({
-  title,
-  count,
-  badge,
-  meta,
-  actions,
-}: {
-  title: string;
-  /** How many there are, beside the title in a lighter ink. */
-  count?: ReactNode;
-  badge?: ReactNode;
-  meta?: ReactNode;
-  actions?: ReactNode;
-}) {
+export function PageHeader({ title, badge, meta, actions }: { title: string; badge?: ReactNode; meta?: ReactNode; actions?: ReactNode }) {
   return (
-    <header className="flex flex-wrap items-end gap-x-6 gap-y-3">
+    <header className="flex flex-wrap items-center gap-x-6 gap-y-3">
       <div className="min-w-0 flex-1 basis-64">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <h1 className="statement break-words">
-            {title}
-            {count === undefined || count === null ? null : <span className="ml-3 font-medium text-muted-foreground/80 tabular-nums">{count}</span>}
-          </h1>
+          <h1 className="statement break-words">{title}</h1>
           {badge}
         </div>
-        {meta === undefined ? null : (
-          <div className="mt-1.5 flex min-h-[1.5em] flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground tabular-nums">{meta}</div>
-        )}
+        {meta ? <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">{meta}</div> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </header>

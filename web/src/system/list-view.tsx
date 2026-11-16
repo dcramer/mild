@@ -22,8 +22,6 @@ export interface ActiveFilter {
  */
 export function ListView({
   title,
-  count,
-  meta,
   actions,
   intro,
   search,
@@ -31,10 +29,6 @@ export function ListView({
   children,
 }: {
   title: string;
-  /** How many there are, beside the title. */
-  count?: ReactNode;
-  /** A line under the title, only when it says something the list does not. */
-  meta?: ReactNode;
   /** What can be done to the list as a whole, such as adding to it. */
   actions?: ReactNode;
   /** What the page shows between its header and its list. */
@@ -49,7 +43,7 @@ export function ListView({
   const on = filters?.active.length ?? 0;
   return (
     <section className="flex flex-col gap-6">
-      <PageHeader title={title} count={count} meta={meta} actions={actions} />
+      <PageHeader title={title} actions={actions} />
       {intro}
 
       <div className="flex flex-col gap-3">
