@@ -59,7 +59,7 @@ export function describeMatch(match: RuleMatch): string {
 }
 
 /** How narrowly a match is drawn: each condition counts, and an exact sender counts for more than a domain. */
-const specificity = (match: RuleMatch) => Object.values(match).filter((v) => v !== undefined).length * 2 + (match.from === undefined ? 0 : 1);
+export const specificity = (match: RuleMatch) => Object.values(match).filter((v) => v !== undefined).length * 2 + (match.from === undefined ? 0 : 1);
 
 export interface RulesOptions {
   /** Whether the owner has ever written to the sender. Undefined means not known. */

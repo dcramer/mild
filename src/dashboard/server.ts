@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { type FeedbackInput, applyFeedback } from '../learn/feedback.ts';
 import { listAccounts } from '../store/accounts.ts';
 import { addLabel, updateLabel } from '../store/labels.ts';
+import { getRuleFilter, ruleFilterStatus } from '../store/filters.ts';
 import { addRule, removeRule } from '../store/rules.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { listChanges, listDecisions, listLabelSummaries, listRuleSummaries, listSuggestions, messageDetail, suggestionDetail, summarize } from './queries.ts';
@@ -270,8 +271,22 @@ export function createDashboardServer(db: DatabaseSync, options: DashboardOption
         ),
       };
     },
-    '/api/rules/remove': (body) => {
+    '/api/rules/filter': async (body) => {
+      const { id, on } = body;
+      if (!str(id, 40) || typeof on !== 'boolean') return null;
+      if (!controls) throw new Error('This dashboard cannot change Gmail filters.');
+      // Taking a filter out is always allowed: it only reduces what runs unattended.
+      if (on && !controls.settings().act) throw new Error('sift is only observing, so it writes nothing to Gmail. Let it act first, in Settings.');
+      await controls.ruleFilter(id, on);
+      return { filterId: getRuleFilter(db, id)?.filterId ?? null, filter: ruleFilterStatus(db, now()).get(id) ?? null };
+    },
+    '/api/rules/remove': async (body) => {
       if (!str(body['id'], 40)) return null;
+      // A filter left behind would keep acting on mail with no rule to explain or remove it.
+      if (getRuleFilter(db, body['id'])?.filterId) {
+        if (!controls) throw new Error('This rule is also a Gmail filter, which this dashboard cannot remove.');
+        await controls.ruleFilter(body['id'], false);
+      }
       if (!removeRule(db, body['id'])) throw new Error('That rule no longer exists.');
       return { ok: true };
     },

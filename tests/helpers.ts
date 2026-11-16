@@ -1,3 +1,4 @@
+import type { ExistingFilter, FilterProposal } from '../src/actions/filters.ts';
 import type { Mailbox } from '../src/actions/mailbox.ts';
 import type { MessageFacts } from '../src/triage/types.ts';
 
@@ -52,11 +53,27 @@ export class FakeMailbox implements Mailbox {
     return this.sentTo.has(address);
   }
 
-  async createFilter(): Promise<string> {
-    throw new Error('not used');
+  filters: ExistingFilter[] = [];
+  failFilters = false;
+
+  async createFilter(filter: FilterProposal) {
+    if (this.failFilters) throw new Error('network down');
+    const id = `f${this.filters.length + 1}-${Object.values(filter.criteria).join('')}`;
+    this.filters.push({
+      id,
+      criteria: { ...filter.criteria },
+      action: { addLabelIds: filter.action.addLabelIds ?? [], removeLabelIds: filter.action.removeLabelIds ?? [] },
+    });
+    return id;
   }
 
-  async deleteFilter(): Promise<void> {
-    throw new Error('not used');
+  async deleteFilter(id: string) {
+    if (this.failFilters) throw new Error('network down');
+    this.filters = this.filters.filter((f) => f.id !== id);
+  }
+
+  async listFilters() {
+    if (this.failFilters) throw new Error('network down');
+    return structuredClone(this.filters);
   }
 }

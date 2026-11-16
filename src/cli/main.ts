@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
 import { type MessageAction, type Outcome, execute, undo } from '../actions/executor.ts';
+import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
 import { unsubscribe } from '../actions/unsubscribe.ts';
 import { type Config, loadConfig, saveSettings } from '../config.ts';
 import { backfill } from '../daemon/backfill.ts';
@@ -27,6 +28,7 @@ import { type SetupState, runInit } from './init.ts';
 import { listenAddresses, machineNames, tailscaleName } from './network.ts';
 import { closeTerminal } from './terminal.ts';
 import { disposition, paint, spin, ui } from './ui.ts';
+import { getRuleFilter } from '../store/filters.ts';
 import { addRule, listRules, removeRule } from '../store/rules.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
 
@@ -321,6 +323,13 @@ function buildControls(config: Config, db: ReturnType<typeof openDb>, live: { wa
       // The corrected decision is waiting to be carried out; do it now, not at the next interval.
       live.wake?.now();
       return last !== null;
+    },
+    ruleFilter: async (ruleId, on) => {
+      const rule = getRuleFilter(db, ruleId);
+      if (!rule) throw new Error('That rule no longer exists.');
+      const deps = { db, mailbox: mailboxFor(config, rule.accountId) };
+      if (on) await writeRuleFilter(deps, ruleId);
+      else await removeRuleFilter(deps, ruleId);
     },
     checkNow: () => live.wake?.now(),
     activity: () => live.activity,
@@ -624,7 +633,7 @@ async function dev(args: string[]): Promise<void> {
 
 const CONDITION_NAMES: Record<string, string> = { from: 'from', fromDomain: 'from domain', to: 'to', listId: 'list', subjectContains: 'subject has' };
 
-function rules(args: string[]): void {
+async function rules(args: string[]): Promise<void> {
   const { values, positionals } = parseArgs({
     args,
     allowPositionals: true,
@@ -645,6 +654,8 @@ function rules(args: string[]): void {
   try {
     if (verb === 'remove') {
       if (!id) throw new Error('Usage: sift rules remove <rule-id>');
+      const filtered = getRuleFilter(db, id);
+      if (filtered?.filterId) await removeRuleFilter({ db, mailbox: mailboxFor(config, filtered.accountId) }, id);
       if (!removeRule(db, id)) throw new Error(`No rule ${id}.`);
       ui.ok(`Removed ${paint.bold(id)}`);
       return;
@@ -711,7 +722,7 @@ async function main(): Promise<void> {
   else if (command === 'dashboard') await dashboard(args);
   else if (command === 'run') await run(args);
   else if (command === 'dev') await dev(args);
-  else if (command === 'rules') rules(args);
+  else if (command === 'rules') await rules(args);
   else if (command === 'login') await loginCommand(args);
   else if (command === 'models') await listModels();
   else if (command === 'labels') labels(args);

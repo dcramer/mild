@@ -15,7 +15,7 @@ import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.
 import { listLabels } from '../src/store/labels.ts';
 import { openDb } from '../src/store/db.ts';
 import { recordDecision } from '../src/store/decisions.ts';
-import { listRules } from '../src/store/rules.ts';
+import { addRule, listRules } from '../src/store/rules.ts';
 import { FakeMailbox, facts } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -48,6 +48,10 @@ const controls: Controls = {
     calls.push(`putBack ${messageId}`);
     if (messageId === 'gone') throw new Error('The message no longer exists.');
     return true;
+  },
+  ruleFilter: async (ruleId, on) => {
+    calls.push(`filter ${ruleId} ${on ? 'on' : 'off'}`);
+    db.prepare(`UPDATE rules SET filter_id = ?, filter_state = ? WHERE id = ?`).run(on ? 'f1' : null, on ? 'active' : null, ruleId);
   },
   checkNow: () => void calls.push('check'),
   activity: () => ({ sorting: true, lastPassAt: 5, problems: [] }),
@@ -249,6 +253,7 @@ describe('managing sift from the dashboard', () => {
       '/api/labels/add',
       '/api/rules',
       '/api/rules/remove',
+      '/api/rules/filter',
       '/api/undo',
       '/api/backfill',
       '/api/check',
@@ -260,6 +265,32 @@ describe('managing sift from the dashboard', () => {
     expect((await call(port, 'POST', '/api/nope', {})).status).toBe(405);
     expect(settings.act).toBe(false);
     expect(calls).toEqual([]);
+  });
+
+  it('writes a rule to Gmail as a filter only while acting, and removes the filter with the rule', async () => {
+    const port = await start();
+    const id = addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    const spam = addRule(db, ACCOUNT, { match: { from: 'junk@example.com' }, labelId: 'junk' }, 'user');
+    const listed = (await call(port, 'GET', '/api/rules')).body['rules'] as { id: string; filter: Record<string, unknown> }[];
+    expect(listed.find((r) => r.id === id)?.filter).toMatchObject({ state: 'none', possible: true, reason: null });
+    expect(listed.find((r) => r.id === spam)?.filter).toMatchObject({ state: 'none', possible: false, reason: 'Gmail filters cannot mark mail as spam.' });
+
+    const observing = await call(port, 'POST', '/api/rules/filter', { id, on: true });
+    expect(observing.status).toBe(409);
+    expect(observing.body['error']).toMatch(/only observing/);
+    expect(calls).toEqual([]);
+
+    settings.act = true;
+    const written = await call(port, 'POST', '/api/rules/filter', { id, on: true });
+    expect(written.body).toMatchObject({ filterId: 'f1', filter: { state: 'active', possible: true } });
+    expect((await call(port, 'POST', '/api/rules/filter', { id })).status).toBe(400);
+    expect((await call(port, 'POST', '/api/rules/filter', { id: 7, on: true })).status).toBe(400);
+
+    // Taking the filter out does not need sift to be acting.
+    settings.act = false;
+    expect((await call(port, 'POST', '/api/rules/remove', { id })).status).toBe(200);
+    expect(calls).toEqual([`filter ${id} on`, `filter ${id} off`]);
+    expect(listRules(db, ACCOUNT).map((r) => r.id)).toEqual([spam]);
   });
 
   it('can only look, not manage, when no controls are given', async () => {

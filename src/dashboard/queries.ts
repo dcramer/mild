@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { accuracy, pendingSuggestions } from '../learn/feedback.ts';
 import { unsubscribedAt } from '../store/actions.ts';
+import { ruleFilterStatus } from '../store/filters.ts';
 import { listLabels } from '../store/labels.ts';
 import { bulkSignals, passedDmarc } from '../triage/features.ts';
 import {
@@ -359,6 +360,7 @@ export function suggestionDetail(db: DatabaseSync, accountId: string, sender: st
 
 /** Every rule in evaluation order, with its label, what it does, and how often and how recently it decided a message. */
 export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
+  const filters = ruleFilterStatus(db);
   const rows = db
     .prepare(
       `SELECT r.id, r.account_id, r.match_json, r.except_json, r.label_id, l.name AS label_name, r.disposition AS override, CASE WHEN l.block = 1 THEN 'block' ELSE l.disposition END AS label_does,
@@ -400,6 +402,7 @@ export function listRuleSummaries(db: DatabaseSync): RuleSummary[] {
     hits: r.hits,
     lastHitAt: r.last_hit_at,
     filterId: r.filter_id,
+    filter: filters.get(r.id) ?? { state: 'none', possible: false, reason: null, differs: [], checkedAt: null },
     createdAt: r.created_at,
   }));
 }

@@ -20,6 +20,11 @@ export interface Controls {
    * decision can be carried out from where the message started. Resolves with whether anything was taken back.
    */
   putBack(accountId: string, messageId: string): Promise<boolean>;
+  /**
+   * Copy a rule to Gmail as a filter (`on`), or take its filter out again. Rejects with a sentence for
+   * the user when the rule cannot be a filter or Gmail refused.
+   */
+  ruleFilter(ruleId: string, on: boolean): Promise<void>;
   /** Start a pass now instead of waiting for the interval. */
   checkNow(): void;
   activity(): Activity;

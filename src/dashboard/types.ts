@@ -135,6 +135,24 @@ export interface SuggestionDetail {
   }[];
 }
 
+/** A rule's standing as a Gmail filter, which runs in Gmail itself and so applies when sift is off. */
+export interface RuleFilter {
+  /**
+   * `none`: not in Gmail. `active`: sift wrote it and it is still there. `changed`: it was edited in Gmail,
+   * and sift leaves it alone. `gone`: it was deleted in Gmail. `outdated`: the rule no longer says what the
+   * filter does; sift replaces or removes it once it is acting. `RuleSummary.filterId` says whether Gmail still has one.
+   */
+  state: 'none' | 'active' | 'changed' | 'gone' | 'outdated';
+  /** Whether the rule as it stands can be written as a filter. */
+  possible: boolean;
+  /** Why not, in a sentence. */
+  reason: string | null;
+  /** Where Gmail will not do exactly what the rule does. To show before the user asks for the filter. */
+  differs: string[];
+  /** When sift last compared it with Gmail. */
+  checkedAt: number | null;
+}
+
 export interface RuleSummary {
   id: string;
   accountId: string;
@@ -154,8 +172,9 @@ export interface RuleSummary {
   source: string;
   hits: number;
   lastHitAt: number | null;
-  /** Set once the rule has been promoted to a Gmail filter. */
+  /** The rule's filter in Gmail, while there is one. */
   filterId: string | null;
+  filter: RuleFilter;
   createdAt: number;
 }
 

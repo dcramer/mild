@@ -16,7 +16,7 @@ Tiers run cheapest first. A tier either names a label or abstains; the first ans
 
 | Tier | Where | Cost | Status |
 | --- | --- | --- | --- |
-| 1. Gmail filters | Gmail itself; runs even when sift is down | none | not built |
+| 1. Gmail filters | Gmail itself; runs even when sift is down | none | built: a rule is copied there when the user asks ([Rules as Gmail filters](#rules-as-gmail-filters)) |
 | 2. Rules | `src/triage/stages/rules.ts` | none | built and wired |
 | 3. Decision model (Jev / Clef via pi-ai `classify`) | `src/triage/stages/classifier.ts` | ~$0.0001 per message | stage built, provider not wired |
 | 4. Model | `src/triage/stages/model.ts`, `src/model/` | one model call | built; not yet run against a real model |
@@ -39,7 +39,7 @@ Rules that matter across tiers:
 Decisions flow back down so the same mail is cheaper next time.
 
 1. An agent decision may propose a local rule or sender record.
-2. A local rule that Gmail can express, and that has matched repeatedly, is promoted to a Gmail filter.
+2. A rule that Gmail can express is copied to a Gmail filter when the user asks for it. sift does not promote one by itself.
 3. Corrections are detected from Gmail history: the user moving a message back to the inbox, or out of spam, becomes an exception on the rule or sender that caused it.
 
 ## Layout
@@ -73,7 +73,7 @@ Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 - **Change detection:** poll `users.history.list` from the stored `historyId` (2 quota units per call, against 6,000 per user per minute). A 404 means the cursor expired: read the new cursor, then search the last 7 days of the inbox. Pub/Sub push is a possible opt-in; it still needs the polling fallback.
 - **Reads:** `format=metadata` with named headers for triage. The body is fetched only for the agent tier.
 - **Archive** is per message. Gmail shows a thread in the inbox while any message in it has `INBOX`, so a thread stays visible until each message sift was given has been handled; sift does not act on sibling messages it did not triage.
-- **Filters:** at most 1,000 per account, one user label each, no update (delete then create), and they act on new mail only. `validateFilter` rejects forwarding, trash, spam and mark-read actions and criteria with no positive match.
+- **Filters:** at most 1,000 per account, one user label each, no update (delete then create), and they act on new mail only. `validateFilter` rejects forwarding, trash, spam and mark-read actions and criteria with no positive match. See [Rules as Gmail filters](#rules-as-gmail-filters).
 - **Unsubscribe:** RFC 8058 one-click only (an https `List-Unsubscribe` target plus `List-Unsubscribe-Post`), and only when DKIM passes. Never a GET, never a link from the body, never `mailto:`. It is the one request sift makes to an arbitrary host, so it runs in a deterministic executor; the agent can request it but never sees the URL.
 
 ## The run loop
@@ -98,6 +98,16 @@ Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 `unknown` and `pending` actions are settled by `reconcile`, which reads the mailbox and never replays the change. **In Gmail a message sift acts on gets two labels:** the one for what it is (`sift/newsletters`) and, when sift moved it, one for what sift did (`sift/did/archived`, `sift/did/spam`). The executor adds the second itself, so anything sift moved can be found in Gmail whatever the caller passed. Mail left for the user gets `sift/review`. Spam is refused unless the sender is known and a search shows the user has never written to them; a failed search also refuses.
 
 Undo reverses exactly what the action changed, keeps anything the user changed afterwards, refuses trashed mail, and is itself an audited action.
+
+## Rules as Gmail filters
+
+A rule can also be written to Gmail as a filter, so it applies when sift is not running. Only when the user asks, per rule, and only while sift is acting.
+
+- **Which rules.** `filterFor` (`src/triage/filter.ts`, pure) says whether a rule can be one, and why not. A filter runs before sift sees the message and knows none of sift's other rules or protections, so a rule qualifies only if the filter could never do what sift itself would not have done. Refused: a rule that is judged (`usually`, or with a `when`); one whose outcome is spam (not documented for filters) or that marks read (`validateFilter` does not allow it); one matching a list id or carrying exceptions; one sift learned that archives, since a filter cannot spare people the user has written to; one whose values could change the meaning of a Gmail search; and one that another rule could overrule for the same mail (a keep rule, a judged rule, or a narrower one).
+- **Where Gmail differs.** A recipient condition also matches Cc and Bcc; subject words match whole words, not substrings; a domain is written `@domain`. The verdict lists these (`differs`) so they can be shown before the user asks.
+- **Archived by a filter means unseen by sift.** Sync records mail that arrives in the inbox. Mail a filter archives is not recorded, counted against the rule, or unsubscribed from.
+- **Writing and removing** go through `src/actions/rule-filters.ts`: validated, written to `actions` first (`filter`, `unfilter`, with no message), then read back from Gmail's list. A filter the account already has that does exactly the same is taken over, since Gmail refuses a duplicate. Removing a rule removes its filter first.
+- **Keeping track.** At most every 15 minutes a pass lists the account's filters and records on each rule (`filter_state`) what it found: `active`; `changed` (edited in Gmail: left alone); `gone` (deleted in Gmail: not put back); `outdated` (the rule, its label or another rule changed, so the filter no longer does what sift would). An outdated filter is replaced, or removed if the rule can no longer be one, while sift is acting; while observing it is only marked, and keeps running in Gmail.
 
 ## Preferences
 
@@ -158,7 +168,7 @@ One SQLite database, `sift.db` in the home directory (schema in `src/store/migra
 - **feedback, examples:** the user's answers to suggestions, and the full content of each message they answered for, kept as evaluation and training data.
 - **suggestion_bodies:** the readable text of mail still waiting on the user, so a suggestion can be judged by reading it. Held only for mail sift would move or could not place, and deleted when the message is answered or stops being a suggestion, and after 30 days regardless (`src/daemon/bodies.ts`). These two tables are the only places message content is stored.
 - **decisions:** an append-only log, each with its mode (observe or act) and outcome. Every triage outcome is recorded, including "keep" and "could not decide", with the tier that made it, the reason, the confidence, and what it cost (model, tokens, dollars, duration). A message can have several decisions; the latest is current.
-- **actions:** the audit log of every mailbox change, with labels before and after, linked to the decision it carried out.
+- **actions:** the audit log of every mailbox change, with labels before and after, linked to the decision it carried out. Creating and removing a Gmail filter is logged here too, with no message.
 - **labels, rules, questions, accounts:** what mail can be, what sift knows without a model, questions waiting on the user, and each account's history cursor and last sync time.
 
 OAuth tokens are kept in files beside the database, not in it. pi-durable keeps its own database alongside.
@@ -178,10 +188,10 @@ The dashboard is where the user watches sift, teaches it and manages it. `sift r
 
 **What it may do**
 
-Everything that manages sift: answer suggestions, switch between observing and acting, choose the model and interval, edit the guidelines, add and edit labels and what happens to each, add and remove rules, undo a mailbox change, pull in older mail, and trigger a check.
+Everything that manages sift: answer suggestions, switch between observing and acting, choose the model and interval, edit the guidelines, add and edit labels and what happens to each, add and remove rules, write a rule to Gmail as a filter or take it out, undo a mailbox change, pull in older mail, and trigger a check.
 
 - It changes the database and `sift.toml` directly. A running sift re-reads its settings before every pass, and a change wakes it, so nothing needs restarting.
-- It never imports Gmail, the executor or the daemon (lint enforces this). The few things that need them (signing in, undo, pulling in older mail, check now) are passed in by the process as `SignIn` and `Controls` (`src/dashboard/controls.ts`), so every mailbox change still goes through the executor and the audit log.
+- It never imports Gmail, the executor or the daemon (lint enforces this). The few things that need them (signing in, undo, Gmail filters, pulling in older mail, check now) are passed in by the process as `SignIn` and `Controls` (`src/dashboard/controls.ts`), so every mailbox change still goes through the executor and the audit log.
 - Signing in to a model provider is still done with `sift init`.
 
 **Older mail.** Pulling in the last N days records those messages as suggest-only. They are decided on the next pass and are never acted on, even when sift is acting on new mail.

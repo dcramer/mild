@@ -15,6 +15,28 @@ export interface FilterProposal {
   };
 }
 
+/** A filter as it stands in Gmail, with every criterion and action Gmail reports, not only the ones sift writes. */
+export interface ExistingFilter {
+  id: string;
+  criteria: Record<string, string | number | boolean>;
+  action: { addLabelIds: string[]; removeLabelIds: string[]; forward?: string };
+}
+
+const canonical = (filter: Pick<ExistingFilter | FilterProposal, 'criteria' | 'action'>) =>
+  JSON.stringify([
+    Object.entries(filter.criteria)
+      .filter(([, value]) => value !== undefined && value !== '')
+      .map(([key, value]) => [key, typeof value === 'string' ? value.toLowerCase() : value])
+      .toSorted(([a], [b]) => String(a).localeCompare(String(b))),
+    (filter.action.addLabelIds ?? []).toSorted(),
+    (filter.action.removeLabelIds ?? []).toSorted(),
+    filter.action.forward ?? null,
+  ]);
+
+/** Whether two filters match the same mail and do the same to it. */
+export const sameFilter = (a: Pick<ExistingFilter | FilterProposal, 'criteria' | 'action'>, b: Pick<ExistingFilter | FilterProposal, 'criteria' | 'action'>) =>
+  canonical(a) === canonical(b);
+
 const SYSTEM_LABELS = new Set(['INBOX', 'SPAM', 'TRASH', 'UNREAD', 'STARRED', 'IMPORTANT', 'SENT', 'DRAFT', 'CHAT']);
 const isSystemLabel = (id: string) => SYSTEM_LABELS.has(id) || id.startsWith('CATEGORY_');
 

@@ -13,6 +13,8 @@ export interface ActionPayload extends LabelChange {
   undoOf?: number;
   /** For `unsubscribe` actions, which changes no label: the host the request went to. */
   unsubscribe?: string;
+  /** For `filter` and `unfilter` actions, which change no message: the rule, and the Gmail filter written for it or taken out. */
+  filter?: { ruleId: string; id?: string; criteria?: Record<string, unknown>; action?: Record<string, unknown> };
 }
 
 export interface ActionRecord {
@@ -59,7 +61,7 @@ const fromRow = (r: Row): ActionRecord => ({
 /** Write the intent before touching the provider. Returns the action id. */
 export function insertPendingAction(
   db: DatabaseSync,
-  action: { accountId: string; messageId: string; type: string; payload: ActionPayload; originalLabels: string[]; decisionId?: number },
+  action: { accountId: string; messageId: string | null; type: string; payload: ActionPayload; originalLabels: string[]; decisionId?: number },
   now: number,
 ): number {
   const result = db

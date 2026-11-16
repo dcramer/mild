@@ -1,4 +1,4 @@
-import type { FilterProposal } from './filters.ts';
+import type { ExistingFilter, FilterProposal } from './filters.ts';
 
 /** The only way the rest of sift reaches a mail provider. Implemented by src/gmail. No send, forward or delete. */
 export interface Mailbox {
@@ -12,5 +12,8 @@ export interface Mailbox {
   hasSentTo(address: string): Promise<boolean>;
   /** Returns the provider's filter id. Callers must run `validateFilter` first. */
   createFilter(filter: FilterProposal): Promise<string>;
+  /** Resolves when the filter is already gone, too. */
   deleteFilter(filterId: string): Promise<void>;
+  /** Every filter in the account, the user's own included. */
+  listFilters(): Promise<ExistingFilter[]>;
 }

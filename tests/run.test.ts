@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { type RunOptions, runOnce } from '../src/daemon/run.ts';
 import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
 import { undo } from '../src/actions/executor.ts';
+import { writeRuleFilter } from '../src/actions/rule-filters.ts';
 import { applyFeedback } from '../src/learn/feedback.ts';
 import { lastStandingChange } from '../src/store/actions.ts';
 import { connectAccount } from '../src/store/accounts.ts';
@@ -137,6 +138,24 @@ describe('runOnce', () => {
     await runOnce(db, options(true));
     expect(decisions()).toMatchObject([{ message_id: 'news', outcome: 'done' }]);
     expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/newsletters', 'L:sift/did/archived']);
+  });
+});
+
+describe('Gmail filters', () => {
+  it('are checked during a pass, and a Gmail that cannot list them does not fail it', async () => {
+    const id = addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'personal' }, 'user');
+    await writeRuleFilter({ db, mailbox }, id);
+    mailbox.filters = [];
+    mailbox.failFilters = true;
+    const [failed] = await runOnce(db, options(false));
+    expect(failed?.error).toBeUndefined();
+    expect(logs.join('\n')).toMatch(/could not check Gmail filters: network down/);
+
+    mailbox.failFilters = false;
+    const [result] = await runOnce(db, options(false));
+    expect(result?.filters).toEqual({ gone: 1, changed: 0, outdated: 0 });
+    expect(logs.at(-1)).toMatch(/1 filter deleted in Gmail/);
+    expect(db.prepare('SELECT filter_id, filter_state FROM rules WHERE id = ?').get(id)).toEqual({ filter_id: null, filter_state: 'gone' });
   });
 });
 

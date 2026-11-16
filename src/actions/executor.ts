@@ -156,6 +156,7 @@ export async function undo(deps: ActionDeps, actionId: number): Promise<Outcome>
   const action: ActionRecord | null = getAction(deps.db, actionId);
   if (!action) throw new Error(`There is no change #${actionId}.`);
   if (action.type === 'undo') throw new Error(`Change #${actionId} is itself an undo.`);
+  if (action.type === 'filter' || action.type === 'unfilter') throw new Error('A Gmail filter is added or taken out from its rule, not undone.');
   if (action.type === 'unsubscribe') throw new Error('An unsubscribe cannot be undone from here. Subscribe again with the sender.');
   if (action.status !== 'done') throw new Error(`Change #${actionId} is ${action.status}; only completed changes can be undone.`);
 
