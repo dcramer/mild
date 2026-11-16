@@ -1,7 +1,7 @@
-import { ErrorNote, Verdict } from '@/components/bits.tsx';
+import { ErrorNote } from '@/components/bits.tsx';
 import { SenderLink } from '@/components/sender.tsx';
 import { useParam } from '@/lib/route.ts';
-import { type SuggestionGroup, type Suggestions, type Summary, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type SuggestionItem, type Suggestions, type Summary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ACTIONS, ago, count, describeMatch, money, outcomeName, percent, plural, willBe } from '@/lib/format.ts';
 import {
   Button,
@@ -10,11 +10,11 @@ import {
   Failure,
   FilterGroup,
   ListView,
+  Look,
   Loading,
   OnPhone,
   RowActions,
   Reserve,
-  Sub,
   Table,
   TextLink,
   Td,
@@ -24,19 +24,7 @@ import {
 } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
-const groupKey = (g: SuggestionGroup) => `${g.accountId}/${g.sender}`;
 const UNSURE = '-';
-
-/** The sample with repeated subjects folded together, newest first. */
-function subjects(sample: SuggestionGroup['sample']) {
-  const seen = new Map<string, { subject: string; times: number }>();
-  for (const m of sample) {
-    const entry = seen.get(m.subject);
-    if (entry) entry.times += 1;
-    else seen.set(m.subject, { subject: m.subject, times: 1 });
-  }
-  return [...seen.values()];
-}
 
 /** How sift did this week, as one quiet line beside the title; changes that went wrong are the only thing in it that asks for anything. */
 function Week({ summary }: { summary: Summary }) {
@@ -88,59 +76,72 @@ function ProposalRow({ proposal, onResolved }: { proposal: Proposal; onResolved:
   );
 }
 
-/** One sender's waiting mail, as a row: who, what, what sift says, when, and Agree or Change… to say otherwise. */
-function SuggestionRow({ group, onOpen, onAnswered }: { group: SuggestionGroup; onOpen: () => void; onAnswered: (taught: string) => void }) {
+/**
+ * One suggestion: who, what, the label sift gave it, and what sift would do, as the button that agrees.
+ * Agreeing settles that sender's other waiting mail of the same label too, and makes the rule. Change…
+ * opens the message to say otherwise.
+ */
+function SuggestionRow({ item, onOpen, onAnswered }: { item: SuggestionItem; onOpen: () => void; onAnswered: (taught: string) => void }) {
   const { busy, error, run } = useAction();
-  const [first] = subjects(group.sample);
-  const mixed = group.guesses > 1;
-  const sure = group.labelId !== null && !mixed;
+  const placed = !(item.labelId === null && item.disposition === 'review');
   const agree = () =>
     run(async () => {
-      const result = await api.feedback({ accountId: group.accountId, sender: group.sender, scope: 'label', label: group.labelId ?? '' });
+      const result = await api.feedback(
+        item.labelId === null
+          ? { accountId: item.accountId, sender: item.sender, messageId: item.messageId, scope: 'sender', disposition: item.disposition }
+          : { accountId: item.accountId, sender: item.sender, messageId: item.messageId, scope: 'label', label: item.labelId },
+      );
       onAnswered(result.taught ?? 'Noted.');
     });
-  const subject = (
-    <>
-      <span className="truncate">{first?.subject || '(no subject)'}</span>
-      {group.messages > 1 ? <span className="shrink-0 text-muted-foreground/70 tabular-nums">+{count(group.messages - 1)}</span> : null}
-    </>
+  const label = placed ? (
+    <span className="text-muted-foreground">
+      {item.labelName ?? '—'}
+      {item.unsubscribe ? <span className="text-muted-foreground/70"> · unsubscribe</span> : null}
+    </span>
+  ) : (
+    <Look>{outcomeName('review')}</Look>
   );
-  const verdict = <Verdict labelName={group.labelName} disposition={group.disposition} unsubscribe={group.unsubscribe} />;
 
   return (
     <Tr onOpen={onOpen}>
-      <Td className="max-w-0 md:w-[24%]">
+      <Td className="max-w-0 md:w-[22%] md:min-w-48">
         <span className="name block truncate">
-          <SenderLink accountId={group.accountId} address={group.sender}>
-            {group.senderName ?? group.sender}
+          <SenderLink accountId={item.accountId} address={item.sender}>
+            {item.senderName ?? item.sender}
           </SenderLink>
         </span>
-        {group.senderName ? <Sub>{group.sender}</Sub> : null}
         <OnPhone>
-          <span className="flex w-full min-w-0 items-baseline gap-2 text-foreground">{subject}</span>
-          {verdict}
+          <span className="w-full truncate text-foreground">{item.subject || '(no subject)'}</span>
+          {label}
         </OnPhone>
       </Td>
-      <Td phone="hide" className="max-w-0 md:w-[36%]">
-        <span className="flex items-baseline gap-2">{subject}</span>
-      </Td>
-      <Td phone="hide" className="whitespace-nowrap">
-        {verdict}
-        {mixed ? <span className="text-muted-foreground/70"> · for most</span> : null}
+      <Td phone="hide" className="max-w-0 md:w-full">
+        <span className="block truncate">{item.subject || '(no subject)'}</span>
         <Failure className="mt-1">{error}</Failure>
       </Td>
-      <Td phone="hide" num quiet>
-        {ago(group.latestReceivedAt)}
+      <Td phone="hide" className="max-w-0 md:min-w-64">
+        <span className="block truncate">{label}</span>
       </Td>
-      <RowActions>
-        {sure ? (
-          <Button variant="quiet" busy={busy} onClick={agree}>
-            Agree
+      <Td phone="hide" num quiet>
+        {ago(item.receivedAt)}
+      </Td>
+      <RowActions phone="keep">
+        {placed ? (
+          <Button className="w-24" busy={busy} onClick={agree}>
+            {outcomeName(item.disposition)}
           </Button>
-        ) : null}
-        <Button variant="quiet" onClick={onOpen}>
-          {sure ? 'Change…' : 'Answer…'}
-        </Button>
+        ) : (
+          <Button className="w-24" onClick={onOpen}>
+            Choose…
+          </Button>
+        )}
+        <span className="hidden w-24 justify-end md:flex">
+          {placed ? (
+            <Button variant="quiet" onClick={onOpen}>
+              Change…
+            </Button>
+          ) : null}
+        </span>
       </RowActions>
     </Tr>
   );
@@ -148,7 +149,7 @@ function SuggestionRow({ group, onOpen, onAnswered }: { group: SuggestionGroup; 
 
 const DOES = [['', 'Anything'] as const, ...ACTIONS.filter(([key]) => key !== 'keep'), ['review', outcomeName('review')] as const];
 
-/** The home page: what sift would do with waiting mail, sender by sender, for the user to agree with or change. */
+/** The home page: what sift would do with each waiting message, for the user to agree with in one press or change. */
 export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
   const [kept, setKept] = useParam('kept');
   const includeKept = kept === '1';
@@ -162,14 +163,13 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
 
   const names = new Map(Object.values(data?.labels ?? {}).flatMap((list) => list.map((l) => [l.id, l.name] as const)));
   const needle = search.trim().toLowerCase();
-  const groups = (data?.groups ?? []).filter(
-    (g) =>
-      (label === '' || (label === UNSURE ? g.labelId === null : g.labelId === label)) &&
-      (does === '' || g.disposition === does) &&
-      (needle === '' || [g.sender, g.senderName ?? '', ...g.sample.map((m) => m.subject)].some((text) => text.toLowerCase().includes(needle))),
+  const shown = (data?.items ?? []).filter(
+    (i) =>
+      (label === '' || (label === UNSURE ? i.labelId === null : i.labelId === label)) &&
+      (does === '' || i.disposition === does) &&
+      (needle === '' || [i.sender, i.senderName ?? '', i.subject].some((text) => text.toLowerCase().includes(needle))),
   );
-  // A row opens on the newest message waiting from that sender.
-  const items = groups.map((g) => ({ accountId: g.accountId, messageId: g.sample[0]?.messageId ?? '', subject: g.sample[0]?.subject ?? '' }));
+  const refs = shown.map((i) => ({ accountId: i.accountId, messageId: i.messageId, subject: i.subject }));
   const learned = (line: string) => {
     toast(line);
     reload();
@@ -220,22 +220,22 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
       {error ? <ErrorNote message={error} /> : null}
       {loading ? (
         <Loading rows={6} />
-      ) : groups.length === 0 ? (
-        <Empty>{data && data.groups.length > 0 ? 'Nothing waiting matches.' : 'Nothing is waiting on you.'}</Empty>
+      ) : shown.length === 0 ? (
+        <Empty>{data && data.items.length > 0 ? 'Nothing waiting matches.' : 'Nothing is waiting on you.'}</Empty>
       ) : (
         <Table>
           <thead className="sr-only">
             <Tr>
               <Th>Sender</Th>
-              <Th phone="hide">Mail</Th>
-              <Th phone="hide">sift says</Th>
-              <Th phone="hide">Latest</Th>
-              <Th phone="hide">Actions</Th>
+              <Th phone="hide">Subject</Th>
+              <Th phone="hide">Label</Th>
+              <Th phone="hide">Received</Th>
+              <Th>What sift would do</Th>
             </Tr>
           </thead>
           <tbody>
-            {groups.map((group, index) => (
-              <SuggestionRow key={groupKey(group)} group={group} onOpen={() => onOpen(items, index)} onAnswered={learned} />
+            {shown.map((item, index) => (
+              <SuggestionRow key={`${item.accountId}/${item.messageId}`} item={item} onOpen={() => onOpen(refs, index)} onAnswered={learned} />
             ))}
           </tbody>
         </Table>

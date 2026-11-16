@@ -15,7 +15,7 @@ export type {
   StageKey,
   Standing,
   SuggestionDetail,
-  SuggestionGroup,
+  SuggestionItem,
   Suggestions,
   Summary,
 } from '../../../src/dashboard/types.ts';

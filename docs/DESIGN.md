@@ -26,7 +26,7 @@ Tokens and the role classes are in `web/src/index.css`.
 
 | Part | Use |
 | --- | --- |
-| `Button` | `mark`: what the screen is waiting on, one per screen at most, never down a list. `ink`: what finishes a dialog or form. `plain`: a page's own action (adding to its list) and anything else said once. `quiet`: repeated down a list, firmer when its row is pointed at, and ways out. With `href` it is a link. `busy` while a press is being acted on. |
+| `Button` | `mark`: what the screen is waiting on, one per screen at most, never down a list. `ink`: what finishes a dialog or form. `plain`: a page's own action (adding to its list), a row's one answer in a list that is for answering (Suggestions: the action sift proposes), and anything else said once. `quiet`: repeated down a list, firmer when its row is pointed at, and ways out. With `href` it is a link. `busy` while a press is being acted on. |
 | `ConfirmButton` | A press that cannot be taken back (removing a rule, starting to act). It asks in place, with the same words on the button that does it. |
 | `Select`, `Input`, `TextArea`, `Check` | Controls. `Select` is for a short list. |
 | `ChoiceGroup` | A few choices seen at once, one on: what a message is, where a sender stands. `numbered` shows the keys that pick them; `clearable` when none is a choice too. |

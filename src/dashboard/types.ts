@@ -269,26 +269,22 @@ export interface RuleSummary {
 }
 
 /** One sender's mail that is waiting for the user to confirm or correct. */
-export interface SuggestionGroup {
+/** One waiting suggestion: what sift proposes for one message, which the user has not answered. */
+export interface SuggestionItem {
   accountId: string;
+  messageId: string;
+  decisionId: number;
   sender: string;
   senderName: string | null;
-  /** What sift would do with most of it. `review` without a label means it could not place the mail. */
+  subject: string;
+  receivedAt: number;
+  /** What sift would do. `review` without a label means it could not place the mail. */
   disposition: string;
   /** What sift says the mail is, or null if it could not place it. */
   labelId: string | null;
   labelName: string | null;
-  stage: StageKey;
-  /** sift would also unsubscribe from this sender. */
+  /** sift would also unsubscribe. */
   unsubscribe: boolean;
-  /** How many different guesses sift made across this sender's waiting mail. More than one means it is mixed. */
-  guesses: number;
-  messages: number;
-  latestAt: number;
-  /** When the newest of them arrived. */
-  latestReceivedAt: number;
-  /** The newest few, for context. */
-  sample: { decisionId: number; messageId: string; subject: string; reason: string; decidedAt: number }[];
 }
 
 /** A rule sift thinks is worth having, for the user to accept or dismiss. */
@@ -307,9 +303,10 @@ export interface ProposalSummary {
 }
 
 export interface Suggestions {
-  groups: SuggestionGroup[];
+  /** Newest first. */
+  items: SuggestionItem[];
   proposals: ProposalSummary[];
-  /** Messages waiting across all groups. */
+  /** Messages waiting, which can be more than `items` holds. */
   waiting: number;
   /** From the user's answers so far. */
   accuracy: { reviewed: number; right: number };
