@@ -101,3 +101,4 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | sift runs on a headless server reached by hostname or Tailscale, not at localhost: check every URL, listener and sign-in step from another machine | Nothing: judgment |
 | One way to do each thing: use the mechanism David named, and remove the old path when a new one replaces it | Nothing: judgment |
 | One answer about one message does not become a rule about its sender, and a weak signal (having written to someone) is not trust | Nothing: judgment |
+| What sift does is shown as the action alone ("Archive"), never with its extras ("+ unsubscribe") | `Does` takes no extras and there is no helper that formats them |

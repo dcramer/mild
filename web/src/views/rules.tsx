@@ -3,8 +3,9 @@ import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { api, useAction, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/route.ts';
-import { ago, count, describeMatch, extras, outcomeName } from '@/lib/format.ts';
+import { ago, count, describeMatch, outcomeName } from '@/lib/format.ts';
 import {
+  Does,
   Button,
   Check,
   ConfirmButton,
@@ -20,7 +21,6 @@ import {
   OnPhone,
   RowActions,
   Select,
-  Stamp,
   Sub,
   Table,
   Td,
@@ -239,10 +239,7 @@ export function Rules() {
           <tbody>
             {rules.map((rule) => {
               const then = rule.disposition ? (
-                <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <Stamp>{outcomeName(rule.disposition)}</Stamp>
-                  {extras(rule) ? <span className="text-muted-foreground">+ {extras(rule)}</span> : null}
-                </span>
+                <Does action={rule.disposition}>{outcomeName(rule.disposition)}</Does>
               ) : (
                 <span className="text-muted-foreground">Nothing</span>
               );

@@ -66,10 +66,6 @@ const WILL: Record<string, string> = {
 /** What happens to mail with a given action, for the end of a sentence. */
 export const willBe = (key: string) => WILL[key] ?? key;
 
-/** The extras a label, rule or decision carries, for after its action: "mark read, unsubscribe". */
-export const extras = (of: { markRead?: boolean; unsubscribe?: boolean }) =>
-  [of.markRead ? 'mark read' : null, of.unsubscribe ? 'unsubscribe' : null].filter(Boolean).join(', ');
-
 /** Where a decision has got to in Gmail. `trouble` is the only one shown in red. */
 export type Status = 'suggested' | 'waiting' | 'done' | 'unchanged' | 'undone' | 'skipped' | 'failed';
 export const STATUS_NAMES: Record<Status, string> = {

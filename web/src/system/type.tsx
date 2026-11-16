@@ -40,13 +40,9 @@ export function Code({ children }: { children: ReactNode }) {
   return <code className="rounded-[2px] bg-foreground/8 px-[0.35em] py-[0.1em] font-mono text-[0.9em]">{children}</code>;
 }
 
-/**
- * A rubber stamp: a short verdict in a word, from the fixed vocabulary in `lib/format.ts` (what sift does,
- * where a sender stands). All stamps weigh the same, so the word carries the meaning; `look` is only for
- * what is left to the reader.
- */
-export function Stamp({ tone = 'plain', children }: { tone?: 'plain' | 'look'; children: ReactNode }) {
-  return <span className={cn('stamp', tone === 'look' ? 'bg-highlight text-highlight-ink' : 'border border-foreground/30')}>{children}</span>;
+/** Where a sender stands, in one word from the vocabulary in `lib/format.ts`, framed. All stamps weigh the same. */
+export function Stamp({ children }: { children: ReactNode }) {
+  return <span className="stamp border border-foreground/30">{children}</span>;
 }
 
 /** A link inside text or a cell: underlined, so it reads as one without colour. */

@@ -3,6 +3,7 @@ import { type ReactNode, useState } from 'react';
 import { StatusWord, TierLabel, Verdict } from '@/components/bits.tsx';
 import { ACTIONS, STANDINGS, STATUS_NAMES, TIERS, money, outcomeName } from '@/lib/format.ts';
 import {
+  Does,
   AnswerPicker,
   Avatar,
   Button,
@@ -187,14 +188,16 @@ export function SystemView() {
 
       <Section title="Words" meta="lib/format.ts: one name for each thing, everywhere">
         <Sheet>
-          <Row label="sift does" note="A stamp, the same word whether suggested, done or a setting.">
+          <Row label="sift does" note="Its icon and its word, the same whether suggested, done or a setting. Never what comes with it.">
             {ACTIONS.map(([key]) => (
-              <Stamp key={key}>{outcomeName(key)}</Stamp>
+              <Does key={key} action={key}>
+                {outcomeName(key)}
+              </Does>
             ))}
-            <Stamp tone="look">{outcomeName('review')}</Stamp>
+            <Does action="review">{outcomeName('review')}</Does>
           </Row>
-          <Row label="verdict" note="What sift says mail is and does: the label, then the stamp.">
-            <Verdict labelName="Newsletters" disposition="archive" unsubscribe />
+          <Row label="verdict" note="What sift says mail is and does: the action, then the label.">
+            <Verdict labelName="Newsletters" disposition="archive" />
             <Verdict labelName={null} disposition="review" />
           </Row>
           <Row label="meter" note="How sure sift is about a label, in three steps. A suggestion's label is its answer button, meter first.">

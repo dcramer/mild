@@ -3,8 +3,9 @@ import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type LabelSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/route.ts';
-import { ACTIONS, type ActionKey, EXPLAIN, count, extras, outcomeName, percent } from '@/lib/format.ts';
+import { ACTIONS, type ActionKey, EXPLAIN, count, outcomeName, percent } from '@/lib/format.ts';
 import {
+  Does,
   Button,
   Check,
   Code,
@@ -19,7 +20,6 @@ import {
   Loading,
   OnPhone,
   Select,
-  Stamp,
   Sub,
   Table,
   Td,
@@ -200,15 +200,11 @@ export function LabelsView() {
                   <span className="name">{label.name}</span>
                   <Sub>{accounts.length > 1 ? `${account.email} · ${label.description}` : label.description}</Sub>
                   <OnPhone>
-                    <Stamp>{outcomeName(label.disposition)}</Stamp>
-                    {extras(label) ? <span>+ {extras(label)}</span> : null}
+                    <Does action={label.disposition}>{outcomeName(label.disposition)}</Does>
                   </OnPhone>
                 </Td>
                 <Td phone="hide" className="whitespace-nowrap">
-                  <span className="inline-flex items-center gap-2">
-                    <Stamp>{outcomeName(label.disposition)}</Stamp>
-                    {extras(label) ? <span className="text-muted-foreground">+ {extras(label)}</span> : null}
-                  </span>
+                  <Does action={label.disposition}>{outcomeName(label.disposition)}</Does>
                 </Td>
                 <Td phone="hide" num quiet={label.messages === 0}>
                   {count(label.messages)}

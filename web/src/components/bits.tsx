@@ -1,7 +1,7 @@
 import type { DecisionRow } from '@/lib/api.ts';
 import { type Status, STATUS_NAMES, outcomeName, status, tier } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
-import { Code, Failure, Look, Note, Swatch } from '@/system';
+import { Code, Does, Failure, Note, Swatch } from '@/system';
 
 /** A tier's ink swatch and name. The name always accompanies the swatch. */
 export function TierLabel({ stage }: { stage: string }) {
@@ -18,13 +18,12 @@ export function TierLabel({ stage }: { stage: string }) {
  * What sift says mail is and does with it, the same words everywhere: "Archive as Marketing". With no
  * label and nothing done, sift was not sure, which is the reader's to answer, so it is the yellow one.
  */
-export function Verdict({ labelName, disposition, unsubscribe }: { labelName: string | null; disposition: string; unsubscribe?: boolean }) {
-  if (labelName === null && disposition === 'review') return <Look>{outcomeName('review')}</Look>;
+export function Verdict({ labelName, disposition }: { labelName: string | null; disposition: string }) {
+  if (labelName === null && disposition === 'review') return <Does action="review">{outcomeName('review')}</Does>;
   return (
     <span>
-      <span className="font-semibold">{outcomeName(disposition)}</span>
+      <Does action={disposition}>{outcomeName(disposition)}</Does>
       {labelName ? <span className="text-muted-foreground"> as {labelName}</span> : null}
-      {unsubscribe ? <span className="text-muted-foreground/70"> + unsubscribe</span> : null}
     </span>
   );
 }
