@@ -1,6 +1,6 @@
-import { type FILTER_STATES, and, asc, eq, isNotNull, mailboxes, rules as ruleRows } from './query.ts';
+import { type FILTER_STATES, actions, and, asc, eq, inArray, isNotNull, mailboxes, rules as ruleRows } from './query.ts';
 import type { Sql } from './sql.ts';
-import { type FilterVerdict, filterFor } from '../triage/filter.ts';
+import { type FilterPlan, type FilterVerdict, filterFor } from '../triage/filter.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
 import { listAccounts } from './accounts.ts';
 import { listLabels } from './labels.ts';
@@ -77,12 +77,21 @@ interface RuleFilterStatus {
   state: 'none' | FilterState;
   possible: boolean;
   reason: string | null;
+  plan: FilterPlan | null;
   differs: string[];
   checkedAt: number | null;
+  last: { type: 'filter' | 'unfilter'; status: string; error: string | null; at: number } | null;
 }
 
 /** Every rule's standing as a Gmail filter, by rule id, for the dashboard. */
 export async function ruleFilterStatus(db: Sql): Promise<Map<string, RuleFilterStatus>> {
+  const last = new Map<string, RuleFilterStatus['last']>();
+  const changes = await db
+    .select({ type: actions.type, status: actions.status, error: actions.error, at: actions.createdAt, payload: actions.payload })
+    .from(actions)
+    .where(inArray(actions.type, ['filter', 'unfilter']))
+    .orderBy(asc(actions.id));
+  for (const { payload, ...change } of changes) last.set(payload.filter!.ruleId, change as NonNullable<RuleFilterStatus['last']>);
   const status = new Map<string, RuleFilterStatus>();
   for (const account of await listAccounts(db)) {
     for (const [ruleId, verdict] of await filterVerdicts(db, account.id)) {
@@ -91,8 +100,10 @@ export async function ruleFilterStatus(db: Sql): Promise<Map<string, RuleFilterS
         state: row!.state ?? 'none',
         possible: verdict.possible,
         reason: verdict.possible ? null : verdict.reason,
+        plan: verdict.possible ? verdict.plan : null,
         differs: verdict.possible ? verdict.differs : [],
         checkedAt: row!.checkedAt,
+        last: last.get(ruleId) ?? null,
       });
     }
   }

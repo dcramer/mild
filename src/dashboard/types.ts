@@ -321,10 +321,21 @@ export const RuleFilter = z.object({
   possible: z.boolean(),
   /** Why not, in a sentence. */
   reason: z.string().nullable(),
+  /** The filter Gmail would hold, when it can be one: to show before the user asks for it. */
+  plan: z
+    .object({
+      criteria: z.object({ from: z.string().optional(), to: z.string().optional(), subject: z.string().optional() }),
+      /** The Gmail label it applies, by name. */
+      gmailLabel: z.string().optional(),
+      archive: z.boolean(),
+    })
+    .nullable(),
   /** Where Gmail will not do exactly what the rule does. To show before the user asks for the filter. */
   differs: z.array(z.string()),
   /** When sift last compared it with Gmail. */
   checkedAt: z.number().nullable(),
+  /** The latest time sift wrote the filter to Gmail (`filter`) or took it out, and how that went. */
+  last: z.object({ type: z.enum(['filter', 'unfilter']), status: z.string(), error: z.string().nullable(), at: z.number() }).nullable(),
 });
 export type RuleFilter = z.infer<typeof RuleFilter>;
 

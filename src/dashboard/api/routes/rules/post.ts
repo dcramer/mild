@@ -1,8 +1,10 @@
 import { z } from 'zod';
+import { getRuleFilter, ruleFilterStatus } from '../../../../store/filters.ts';
+import { preferences } from '../../../../store/preferences.ts';
 import { madeFromProposal } from '../../../../store/proposals.ts';
 import { listRules, setRule } from '../../../../store/rules.ts';
 
-import { RuleFacts, type RuleMatch } from '../../../types.ts';
+import { RuleFacts, RuleFilter, type RuleMatch } from '../../../types.ts';
 import { accountId, decided, id, labelId, named, redecide, write } from '../../route.ts';
 
 const value = z.string().max(200).optional();
@@ -38,8 +40,11 @@ export default write({
       path: ['whenLabel'],
       message: 'A rule that says what mail is cannot also wait for a label.',
     }),
-  /** `replaced`: a rule with exactly these conditions was there and now says this, so removing it would not put things back. */
-  reply: z.object({ id: z.string(), replaced: z.boolean(), redecided: z.number() }),
+  /**
+   * `replaced`: a rule with exactly these conditions was there and now says this, so removing it would not put things back.
+   * `filter`: the Gmail filter the rule can also be, to offer next; null when it cannot be one, already has one, or Sift is off.
+   */
+  reply: z.object({ id: z.string(), replaced: z.boolean(), redecided: z.number(), filter: RuleFilter.nullable() }),
   touches: named,
   run: async ({ db, now }, { accountId, match, label, whenLabel, disposition, markRead, unsubscribe, when, proposal }) => {
     const { created, replaced } = await db.transaction(async (tx) => {
@@ -64,6 +69,9 @@ export default write({
       );
       return { created: id, replaced: before.has(id) };
     });
-    return { id: created, replaced, redecided: await redecide(db, now, accountId) };
+    const redecided = await redecide(db, now, accountId);
+    const filter = (await ruleFilterStatus(db)).get(created);
+    const offer = filter?.possible && !(await getRuleFilter(db, created))?.filterId && (await preferences(db)).active;
+    return { id: created, replaced, redecided, filter: offer ? filter : null };
   },
 });

@@ -1,9 +1,10 @@
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
-import { type LabelSummary, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type LabelSummary, type RuleFilter, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
 import { type By, type RuleStart, replacedBy } from '@/lib/rule-start.ts';
 import { FACTS, type FactAnswer, type FactKey, factConditions, factParam, factWords, outcomeName } from '@/lib/format.ts';
 import { Button, Check, Dialog, Does, Failure, Field, Form, Input, Select, useToast } from '@/system';
+import { useFilterOffer } from '@/views/gmail-filter.tsx';
 
 const BY = [
   ['from', 'from'],
@@ -30,6 +31,7 @@ function fromMatch(text: string): Record<string, string> {
  * A rule in the order sift applies it: which mail (an address, a domain, a list, a recipient or words in
  * the subject, and what sift saw in it), only when it is something in the reader's words, and the label it
  * is, which brings what that label does. With no label, the rule is an action alone, and says which.
+ * Once added, a rule Gmail could run by itself is offered as a filter, showing the filter.
  */
 export function AddRuleDialog({
   accountId,
@@ -61,6 +63,8 @@ export function AddRuleDialog({
   const [then, setThen] = useState<'' | Action>(start?.action ?? '');
   const [markRead, setMarkRead] = useState(false);
   const [unsubscribe, setUnsubscribe] = useState(false);
+  const [offer, setOffer] = useState<{ id: string; filter: RuleFilter } | null>(null);
+  const filterStep = useFilterOffer(onClose);
   // A rule that waits for a label takes the label a tier gives, so it names none of its own.
   const waitsFor = labels.find((l) => l.id === whenLabel);
   const chosen = waitsFor ? undefined : labels.find((l) => l.id === label);
@@ -76,7 +80,7 @@ export function AddRuleDialog({
   const replacing = replaces ? (replaces.kind === 'label' ? replaces.override : replaces.disposition) : null;
   const unused = (except: FactKey | null) => ANSWERS.filter((a) => a.key === except || !facts.some((f) => f.key === a.key));
   const add = () => {
-    let added: { id: string; replaced: boolean } | null = null;
+    let added: { id: string; replaced: boolean; filter: RuleFilter | null } | null = null;
     const takeBack = (id: string) =>
       later.run(
         () =>
@@ -106,11 +110,13 @@ export function AddRuleDialog({
         // The dialog just showed the rule, so the toast need not say it again.
         toast('Rule added', fresh === null ? {} : { undo: () => takeBack(fresh) });
         onAdded?.(match, { ...(waitsFor ? { whenLabel: waitsFor.id } : {}), ...(action ? { disposition: action } : {}) });
-        onClose();
+        if (added?.filter) setOffer({ id: added.id, filter: added.filter });
+        else onClose();
       },
     );
   };
 
+  if (offer) return <Dialog open onClose={onClose} {...filterStep(offer.id, offer.filter, 'Not now')} />;
   return (
     <Dialog
       open

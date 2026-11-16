@@ -1,8 +1,9 @@
-import { ArrowRightIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import { ArrowRightIcon, FunnelIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type RuleMatch, type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/route.ts';
+import { InGmail } from '@/views/gmail-filter.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { ago, count, describeMatch, factAnswers, factWords, outcomeName, plural, shortDate } from '@/lib/format.ts';
 import {
@@ -15,6 +16,7 @@ import {
   Facts,
   Failure,
   FilterGroup,
+  Hint,
   ListView,
   Loading,
   Panel,
@@ -83,6 +85,7 @@ function Result({ rule }: { rule: RuleSummary }) {
 
 function RulePanel({
   rule,
+  active,
   position,
   onPrevious,
   onNext,
@@ -90,6 +93,8 @@ function RulePanel({
   remove,
 }: {
   rule: RuleSummary;
+  /** Whether Sift is on, which writing a filter to Gmail needs. */
+  active: boolean;
   position: string;
   onPrevious: (() => void) | undefined;
   onNext: (() => void) | undefined;
@@ -128,7 +133,9 @@ function RulePanel({
           <Fact term="Made by">
             {MADE_BY[rule.source] ?? rule.source}, {shortDate(rule.createdAt)}
           </Fact>
-          {rule.filterId ? <Fact term="In Gmail">A filter does this too.</Fact> : null}
+          <Fact term="In Gmail">
+            <InGmail rule={rule} active={active} />
+          </Fact>
         </Facts>
         <div>{remove}</div>
       </div>
@@ -235,6 +242,11 @@ export function Rules() {
                     {rule.kind === 'when-label' ? <span className="text-muted-foreground"> as {rule.labelName}</span> : null}
                     <ArrowRightIcon aria-label="is" className="mx-2 inline size-4 align-[-0.15em] text-muted-foreground" />
                     <Result rule={rule} />
+                    {rule.filterId ? (
+                      <span className="ml-2 inline-flex align-[-0.1em]">
+                        <Hint icon={FunnelIcon} says="Also a filter in Gmail" />
+                      </span>
+                    ) : null}
                   </span>
                   {rule.when ? <Sub className="whitespace-normal">only when it is {rule.when}</Sub> : null}
                 </Td>
@@ -258,6 +270,7 @@ export function Rules() {
         <RulePanel
           key={rules[at].id}
           rule={rules[at]}
+          active={manage.data?.active ?? false}
           position={`${at + 1} of ${rules.length}`}
           onPrevious={at > 0 ? () => setOpen(rules[at - 1].id) : undefined}
           onNext={at < rules.length - 1 ? () => setOpen(rules[at + 1].id) : undefined}

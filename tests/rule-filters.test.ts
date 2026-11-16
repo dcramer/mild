@@ -251,6 +251,19 @@ describe("a rule's Gmail filter", () => {
     expect((await actions()).map((a) => `${a.type} ${a.status}`)).toEqual(['filter done', 'unfilter done', 'filter done', 'unfilter done']);
   });
 
+  it('tells the dashboard the filter it would write, and when it last wrote or took one out', async () => {
+    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    expect((await ruleFilterStatus(db)).get(id)).toMatchObject({
+      plan: { criteria: { from: 'news@example.com' }, gmailLabel: 'sift/newsletters', archive: true },
+      last: null,
+    });
+    await writeRuleFilter(deps(), id);
+    expect((await ruleFilterStatus(db)).get(id)?.last).toEqual({ type: 'filter', status: 'done', error: null, at: clock });
+    mailbox.failFilters = true;
+    await expect(removeRuleFilter(deps(), id)).rejects.toThrow('network down');
+    expect((await ruleFilterStatus(db)).get(id)?.last).toMatchObject({ type: 'unfilter', status: 'unknown', error: 'network down' });
+  });
+
   it('keeps the rule marked as a filter when Gmail could not be reached to remove it', async () => {
     const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
     await writeRuleFilter(deps(), id);

@@ -52,7 +52,7 @@ export async function listRuleSummaries(db: Sql, scope: Scope): Promise<RuleSumm
     hits: r.hits,
     lastHitAt: r.lastHitAt,
     filterId: r.filterId,
-    filter: filters.get(r.id) ?? { state: 'none', possible: false, reason: null, differs: [], checkedAt: null },
+    filter: filters.get(r.id) ?? { state: 'none', possible: false, reason: null, plan: null, differs: [], checkedAt: null, last: null },
     createdAt: r.createdAt,
   }));
 }

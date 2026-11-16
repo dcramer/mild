@@ -408,6 +408,20 @@ describe('managing sift from the dashboard', () => {
     expect((await listRules(db, ACCOUNT)).map((r) => r.id)).toEqual([spam]);
   });
 
+  it('offers a new rule as a Gmail filter only when it can be one and Sift is on', async () => {
+    const { call } = await start();
+    const add = async (rule: Record<string, unknown>) => (await call('POST', '/api/rules', { accountId: ACCOUNT, ...rule })).body['filter'];
+    expect(await add({ match: { from: 'news@example.com' }, label: 'newsletter' })).toBeNull();
+    await setActive(db, true);
+    expect(await add({ match: { from: 'digest@example.com' }, label: 'newsletter' })).toMatchObject({
+      possible: true,
+      plan: { criteria: { from: 'digest@example.com' }, gmailLabel: 'sift/newsletters', archive: true },
+    });
+    expect(await add({ match: { from: 'junk@example.com' }, label: 'junk' })).toBeNull();
+    expect(await add({ match: { from: 'shop@example.com' }, label: 'marketing', when: 'it is a sale' })).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
   it('takes a standing back with its Gmail filter, as removing the rule does', async () => {
     const { call } = await start();
     const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, disposition: 'archive' }, 'user');

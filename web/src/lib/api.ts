@@ -14,6 +14,7 @@ export type {
   MessageDetail,
   Removed,
   RuleFacts,
+  RuleFilter,
   RuleMatch,
   RuleSummary,
   SenderPage,
@@ -36,6 +37,7 @@ import type {
   MessageDetail,
   Models,
   Removed,
+  RuleFilter,
   RuleMatch,
   RuleSummary,
   SenderPage,
@@ -227,8 +229,10 @@ export const api = {
     when?: string;
     /** The proposal it was made from, which this resolves. */
     proposal?: number;
-  }) => post<{ id: string; replaced: boolean }>('/api/rules', rule),
+  }) => post<{ id: string; replaced: boolean; filter: RuleFilter | null }>('/api/rules', rule),
   removeRule: (id: string) => post('/api/rules/remove', { id }),
+  /** Write the rule to Gmail as a filter, or take its filter out. */
+  ruleFilter: (id: string, on: boolean) => post('/api/rules/filter', { id, on }),
   /** Dismiss a proposal, or accept one of kind `always`. A proposed rule is made with `addRule`. */
   resolveProposal: (id: number, accept: boolean) => post('/api/proposals', { id, accept }),
   /** `message`: what the page will not show by itself, if anything. */
