@@ -43,6 +43,13 @@
       "when": 1794856433956,
       "tag": "0005_pass_lock_out_of_postgres",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794857098194,
+      "tag": "0006_eval_run_examples",
+      "breakpoints": true
     }
   ]
 }

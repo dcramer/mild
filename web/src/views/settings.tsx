@@ -416,11 +416,8 @@ function OlderMail() {
           busy={busy}
           onClick={() =>
             run(async () => {
-              const { added } = await api.backfill(Number(days));
-              toast(
-                added === 0 ? 'Nothing new in that period' : `${plural(added, 'message')} pulled in`,
-                added === 0 ? {} : { description: 'They show under Suggestions as sift decides them.' },
-              );
+              await api.backfill(Number(days));
+              toast(`Pulling in the last ${plural(Number(days), 'day')}`);
             })
           }
         >

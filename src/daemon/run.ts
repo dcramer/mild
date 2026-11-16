@@ -15,6 +15,8 @@ import { preferences } from '../store/preferences.ts';
 import { KEEP_BODY_DAYS, keepSuggestionBodies } from './bodies.ts';
 import { captureExamples } from './examples.ts';
 import { PRUNE_PER_RUN, RETENTION_DAYS, pruneOld } from './retention.ts';
+import { continueEval, goingEvals } from '../learn/evals.ts';
+import { backfill } from './backfill.ts';
 import { checkFiltersWhenDue } from './filters.ts';
 import { recordPassStatus } from './status.ts';
 import type { Job, Jobs } from './jobs.ts';
@@ -40,6 +42,8 @@ const DAY_MS = 86_400_000;
 const PASS_INTERVAL_MS = 60_000;
 /** How long a pass holds its mailbox: longer than a pass should take, and how long one that dies keeps it. */
 const PASS_HOLD_MS = 15 * 60_000;
+/** The same for a slice of a test run. */
+const EVAL_HOLD_MS = 15 * 60_000;
 
 export interface PassResult {
   email: string;
@@ -89,14 +93,43 @@ export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[
 export async function runJob(store: Store, job: Job, options: RunOptions, until: number): Promise<PassResult | null> {
   if (!(await stillThere(store, job.person))) return null;
   const db = await store.user(job.person);
-  if (job.kind === 'upkeep') {
-    await upkeep(db, options);
-    return null;
+  switch (job.kind) {
+    case 'upkeep':
+      await upkeep(db, options);
+      return null;
+    case 'eval':
+      await carryOnEval(db, job, options, until);
+      return null;
+    case 'backfill': {
+      const account = (await listAccounts(db)).find((a) => a.id === job.account);
+      if (!account) return null;
+      const { api } = await options.connect(db, account);
+      // Done: the next pass decides what came in, now rather than at the next tick.
+      options.jobs.send((await backfill(db, api, account.id, job.days, until, options.now)) ? { kind: 'pass', person: job.person, account: account.id } : job);
+      return null;
+    }
+    case 'pass': {
+      const account = (await listAccounts(db)).find((a) => a.id === job.account);
+      const result = account ? await passMailbox(db, account, options, until) : null;
+      if (result?.unfinished) options.jobs.send(job);
+      return result;
+    }
   }
-  const account = (await listAccounts(db)).find((a) => a.id === job.account);
-  const result = account ? await passMailbox(db, account, options, until) : null;
-  if (result?.unfinished) options.jobs.send(job);
-  return result;
+}
+
+/** One slice of a test run, by whichever job holds it; sent again while there is more. */
+async function carryOnEval(db: Sql, job: Extract<Job, { kind: 'eval' }>, options: RunOptions, until: number): Promise<void> {
+  const lock = `lock:eval:${job.person}:${job.run}`;
+  const token = await options.ephemeral.claim(lock, EVAL_HOLD_MS);
+  if (token === null) return;
+  try {
+    const tier = options.model ? await options.model(db) : null;
+    if (!tier) return;
+    const over = await continueEval({ db, judge: tier.judge, model: tier.model, ...(options.now ? { now: options.now } : {}) }, job.run, until);
+    if (!over) options.jobs.send(job);
+  } finally {
+    await options.ephemeral.release(lock, token);
+  }
 }
 
 /** Null when another pass holds the mailbox, or it was removed while this one ran. */
@@ -218,12 +251,15 @@ export async function upkeep(db: Sql, options: Pick<RunOptions, 'log' | 'now'>):
   } while (pruned >= PRUNE_PER_RUN);
 }
 
-/** Send what is due: a pass for every mailbox, and each person's upkeep on the first tick of a day. */
+/** Send what is due: a pass for every mailbox, each person's upkeep on the first tick of a day, and test runs still going. */
 async function tick(store: Store, options: Pick<RunOptions, 'ephemeral' | 'jobs' | 'now'>): Promise<void> {
   const day = Math.floor((options.now ?? Date.now)() / DAY_MS);
   for (const user of await listUsers(store.central)) {
+    const db = await store.user(user.id);
     if (await options.ephemeral.claim(`upkeep:${user.id}:${day}`, 2 * DAY_MS)) options.jobs.send({ kind: 'upkeep', person: user.id });
-    for (const account of await listAccounts(await store.user(user.id))) options.jobs.send({ kind: 'pass', person: user.id, account: account.id });
+    for (const account of await listAccounts(db)) options.jobs.send({ kind: 'pass', person: user.id, account: account.id });
+    // Each is carried on by its own job; this resends one a restart or a lost delivery dropped.
+    for (const run of await goingEvals(db)) options.jobs.send({ kind: 'eval', person: user.id, run });
   }
 }
 

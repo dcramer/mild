@@ -121,11 +121,8 @@ function Teach({ state, onDone }: { state: ManageState; onDone: () => void }) {
         busy={busy}
         onPress={() =>
           run(async () => {
-            const { added } = await api.backfill(Number(days));
-            toast(
-              added === 0 ? 'Nothing new in that period' : `${plural(added, 'message')} pulled in`,
-              added === 0 ? {} : { description: 'They show here as sift decides them.' },
-            );
+            await api.backfill(Number(days));
+            toast(`Pulling in the last ${plural(Number(days), 'day')}`);
             onDone();
           })
         }

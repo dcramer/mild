@@ -30,7 +30,7 @@ import { pickShots } from '../triage/fewshot.ts';
 import { PROMPT_TEMPLATE } from '../triage/prompt.ts';
 import { type Scorecard, score } from '../triage/score.ts';
 import { type Evidence, type Judge, type JudgeFailure, describeFailure } from '../triage/stages/model.ts';
-import type { Label, MessageFacts } from '../triage/types.ts';
+import type { MessageFacts } from '../triage/types.ts';
 
 /** Every example judged is a model call the user pays for, so one run is bounded. */
 export const MAX_EVAL_EXAMPLES = 200;
@@ -107,27 +107,24 @@ async function storedEvidence(db: Sql, facts: MessageFacts, body: string | null)
 }
 
 /**
- * Start replaying the model over an account's stored examples, and return at once with the run's id.
- * The run goes on in the background, a few calls at a time; each result is stored as it arrives.
- * `done` resolves when it has finished and never rejects. Only one run at a time. Throws with a
- * message for the user if there is nothing to run.
+ * Start replaying the model over an account's stored examples: record the run with the examples it will
+ * judge, newest answers first, and return its id. `continueEval` judges them. Only one run at a time.
+ * Throws with a message for the user if there is nothing to run.
  */
-export async function startEval(deps: EvalDeps, request: EvalRequest): Promise<{ id: number; done: Promise<void> }> {
+export async function startEval(deps: Pick<EvalDeps, 'db' | 'model' | 'now'>, request: EvalRequest): Promise<number> {
   const { db } = deps;
   const now = deps.now ?? Date.now;
-  if ((await db.select({ id: evalRuns.id }).from(evalRuns).where(eq(evalRuns.status, 'running')).limit(1)).length > 0)
-    throw new Error('A test run is already going. Wait for it to finish.');
-  const labels = await listLabels(db, request.accountId);
+  if ((await goingEvals(db)).length > 0) throw new Error('A test run is already going. Wait for it to finish.');
   const limit = Math.min(Math.max(1, Math.trunc(request.limit ?? DEFAULT_EVAL_EXAMPLES)), MAX_EVAL_EXAMPLES);
-  const examples = (await db
-    .select({ messageId: exampleRows.messageId, labelId: exampleRows.labelId, bodyText: exampleRows.bodyText })
+  const examples = await db
+    .select({ messageId: exampleRows.messageId })
     .from(exampleRows)
     .where(and(eq(exampleRows.accountId, request.accountId), eq(exampleRows.status, 'captured'), isNotNull(exampleRows.labelId)))
     .orderBy(desc(exampleRows.markedAt), exampleRows.messageId)
-    .limit(limit)) as { messageId: string; labelId: string; bodyText: string | null }[];
+    .limit(limit);
   if (examples.length === 0) throw new Error('There are no stored examples to test against yet. Answer some suggestions first.');
 
-  const shown = labels.map((l) => ({ id: l.id, name: l.name, description: l.description }));
+  const shown = (await listLabels(db, request.accountId)).map((l) => ({ id: l.id, name: l.name, description: l.description }));
   const [{ id }] = (await db
     .insert(evalRuns)
     .values({
@@ -140,14 +137,47 @@ export async function startEval(deps: EvalDeps, request: EvalRequest): Promise<{
       labels: shown,
       fewShot: request.fewShot,
       total: examples.length,
+      examples: examples.map((e) => e.messageId),
     })
     .returning({ id: evalRuns.id })) as [{ id: number }];
+  return id;
+}
 
-  const judgeOne = async (example: (typeof examples)[number], labels: readonly Label[]) => {
-    const facts = await getFacts(db, request.accountId, example.messageId);
-    if (!facts) return;
+/** Runs still going. Each is carried on by a job; a tick sends one again in case it was lost. */
+export async function goingEvals(db: Sql): Promise<number[]> {
+  return (await db.select({ id: evalRuns.id }).from(evalRuns).where(eq(evalRuns.status, 'running'))).map((r) => r.id);
+}
+
+/**
+ * Judge what is left of a run, a few calls at a time, starting none after `until`; each result is stored
+ * as it arrives. Finishes the run when nothing is left, or when it cannot go on (its model is no longer
+ * the one in use). True when the run is over.
+ */
+export async function continueEval(deps: EvalDeps, runId: number, until: number): Promise<boolean> {
+  const { db } = deps;
+  const now = deps.now ?? Date.now;
+  const [run] = await db.select().from(evalRuns).where(eq(evalRuns.id, runId));
+  if (run?.status !== 'running') return true;
+  const finish = async (status: 'done' | 'failed', error: string | null) => {
+    await db.update(evalRuns).set({ status, error, finishedAt: now() }).where(eq(evalRuns.id, runId));
+    return true;
+  };
+  if (run.model !== deps.model) return await finish('failed', `The model changed to ${deps.model} during the run.`);
+
+  const judged = new Set((await db.select({ id: evalResults.messageId }).from(evalResults).where(eq(evalResults.runId, runId))).map((r) => r.id));
+  const left = run.examples.filter((id) => !judged.has(id));
+  const labels = await listLabels(db, run.accountId);
+
+  const judgeOne = async (messageId: string) => {
+    const [example] = await db
+      .select({ labelId: exampleRows.labelId, bodyText: exampleRows.bodyText })
+      .from(exampleRows)
+      .where(and(eq(exampleRows.accountId, run.accountId), eq(exampleRows.messageId, messageId)));
+    const facts = await getFacts(db, run.accountId, messageId);
+    // Deleted since the run started.
+    if (!example?.labelId || !facts) return;
     // `pickShots` leaves out the message itself, so an example is never shown its own answer.
-    const shots = request.fewShot ? pickShots(await shotCandidates(db, facts), facts, labels) : [];
+    const shots = run.fewShot ? pickShots(await shotCandidates(db, facts), facts, labels) : [];
     const started = performance.now();
     const answer = await deps
       .judge({
@@ -158,39 +188,35 @@ export async function startEval(deps: EvalDeps, request: EvalRequest): Promise<{
       .catch((error: unknown): JudgeFailure => ({ failed: describeFailure(error) }));
     // An unusable answer was still billed.
     const verdict = 'failed' in answer ? null : answer;
-    await db.insert(evalResults).values({
-      runId: id,
-      messageId: example.messageId,
-      expected: example.labelId,
-      got: verdict?.label ?? null,
-      error: 'failed' in answer ? answer.failed : null,
-      confidence: verdict?.confidence ?? null,
-      inputTokens: answer.usage?.inputTokens ?? 0,
-      outputTokens: answer.usage?.outputTokens ?? 0,
-      costUsd: answer.usage?.costUsd ?? 0,
-      durationMs: Math.round(performance.now() - started),
-      shots: shots.length,
-      senderShots: shots.filter((s) => s.fromAddress === facts.from.address).length,
-    });
+    await db
+      .insert(evalResults)
+      .values({
+        runId,
+        messageId,
+        expected: example.labelId,
+        got: verdict?.label ?? null,
+        error: 'failed' in answer ? answer.failed : null,
+        confidence: verdict?.confidence ?? null,
+        inputTokens: answer.usage?.inputTokens ?? 0,
+        outputTokens: answer.usage?.outputTokens ?? 0,
+        costUsd: answer.usage?.costUsd ?? 0,
+        durationMs: Math.round(performance.now() - started),
+        shots: shots.length,
+        senderShots: shots.filter((s) => s.fromAddress === facts.from.address).length,
+      })
+      .onConflictDoNothing();
   };
 
   let next = 0;
   const worker = async () => {
-    while (next < examples.length) await judgeOne(examples[next++]!, labels);
+    while (next < left.length && now() < until) await judgeOne(left[next++]!);
   };
-  const finish = async (status: 'done' | 'failed', error: string | null) => {
-    await db.update(evalRuns).set({ status, error, finishedAt: now() }).where(eq(evalRuns.id, id));
-  };
-  const done = Promise.all(Array.from({ length: CONCURRENCY }, worker)).then(
-    () => finish('done', null),
-    (error: unknown) => finish('failed', error instanceof Error ? error.message : String(error)),
-  );
-  return { id, done };
-}
-
-/** Call when sift starts: a run still marked as going belongs to a process that has stopped. */
-export async function interruptEvals(db: Sql, now: number = Date.now()): Promise<void> {
-  await db.update(evalRuns).set({ status: 'interrupted', finishedAt: now }).where(eq(evalRuns.status, 'running'));
+  try {
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  } catch (error) {
+    return await finish('failed', error instanceof Error ? error.message : String(error));
+  }
+  return next < left.length ? false : await finish('done', null);
 }
 
 export interface EvalRun {

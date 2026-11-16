@@ -1,5 +1,9 @@
 /** Work for the daemon, small enough to go through a hosted queue: ids, never mail. */
-export type Job = { kind: 'pass'; person: number; account: string } | { kind: 'upkeep'; person: number };
+export type Job =
+  | { kind: 'pass'; person: number; account: string }
+  | { kind: 'upkeep'; person: number }
+  | { kind: 'backfill'; person: number; account: string; days: number }
+  | { kind: 'eval'; person: number; run: number };
 
 /**
  * Where jobs are sent. A queue may deliver a job twice, so running one twice must be harmless: a pass
@@ -21,7 +25,18 @@ const LOCAL_JOB_MS = 5 * 60_000;
  */
 const AT_ONCE = 4;
 
-const keyOf = (job: Job) => (job.kind === 'pass' ? `pass:${job.person}:${job.account}` : `upkeep:${job.person}`);
+const keyOf = (job: Job) => {
+  switch (job.kind) {
+    case 'pass':
+      return `pass:${job.person}:${job.account}`;
+    case 'upkeep':
+      return `upkeep:${job.person}`;
+    case 'backfill':
+      return `backfill:${job.person}:${job.account}`;
+    case 'eval':
+      return `eval:${job.person}:${job.run}`;
+  }
+};
 
 /**
  * Runs jobs in this process. A job already waiting is not queued again, and two alike never run together.

@@ -1,6 +1,6 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MAX_EVAL_EXAMPLES, getEvalRun, interruptEvals, listEvalRuns, startEval } from '../src/learn/evals.ts';
+import { MAX_EVAL_EXAMPLES, type EvalRequest, continueEval, getEvalRun, listEvalRuns, startEval } from '../src/learn/evals.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { openUserDb, raw } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
@@ -60,6 +60,12 @@ describe('replaying the model over stored examples', () => {
     model: 'test/model',
     now: () => 500,
   });
+  /** Start a run and carry it to its end, as its jobs would. */
+  const runEval = async (given: Parameters<typeof continueEval>[0], request: EvalRequest) => {
+    const id = await startEval(given, request);
+    while (!(await continueEval(given, id, Infinity)));
+    return id;
+  };
 
   beforeEach(async () => {
     db = await openUserDb(ACCOUNT);
@@ -72,9 +78,10 @@ describe('replaying the model over stored examples', () => {
   });
 
   it('judges each example, stores every result and reports the score with what it ran with', async () => {
-    const { id, done } = await startEval(deps({ e1: 'newsletter', e2: 'marketing', e3: 'unsure' }), { accountId: ACCOUNT, fewShot: false });
+    const given = deps({ e1: 'newsletter', e2: 'marketing', e3: 'unsure' });
+    const id = await startEval(given, { accountId: ACCOUNT, fewShot: false });
     expect((await listEvalRuns(db))[0]).toMatchObject({ id, status: 'running', total: 4 });
-    await done;
+    expect(await continueEval(given, id, Infinity)).toBe(true);
 
     const { run, results } = (await getEvalRun(db, id))!;
     expect(run).toMatchObject({ status: 'done', startedAt: 500, finishedAt: 500, model: 'test/model', fewShot: false, total: 4, accountId: ACCOUNT });
@@ -93,11 +100,10 @@ describe('replaying the model over stored examples', () => {
   });
 
   it('shows the other examples when asked, never the one under test, and says how many answers had the sender to go on', async () => {
-    const { id, done } = await startEval(deps({ e1: 'newsletter', e2: 'newsletter', e3: 'marketing', e4: 'newsletter' }), {
+    const id = await runEval(deps({ e1: 'newsletter', e2: 'newsletter', e3: 'marketing', e4: 'newsletter' }), {
       accountId: ACCOUNT,
       fewShot: true,
     });
-    await done;
     for (const input of seen) {
       expect(input.examples?.length).toBeGreaterThan(0);
       expect(input.examples?.map((s) => s.messageId)).not.toContain(input.evidence.facts.messageId);
@@ -132,9 +138,7 @@ describe('replaying the model over stored examples', () => {
     );
     await rememberCorrespondent(db, ACCOUNT, news.address, true);
 
-    await (
-      await startEval(deps({}), { accountId: ACCOUNT, fewShot: false, limit: 1 })
-    ).done;
+    await runEval(deps({}), { accountId: ACCOUNT, fewShot: false, limit: 1 });
     expect(seen).toHaveLength(1);
     expect(seen[0]?.evidence).toMatchObject({
       facts: { messageId: 'judged', from: news },
@@ -155,28 +159,22 @@ describe('replaying the model over stored examples', () => {
       running--;
       return { label: 'personal', reason: 'r' };
     };
-    await (
-      await startEval({ db, judge: slow, model: 'test/model' }, { accountId: ACCOUNT, fewShot: false, limit: 10 })
-    ).done;
+    await runEval({ db, judge: slow, model: 'test/model' }, { accountId: ACCOUNT, fewShot: false, limit: 10 });
     expect(seen.map((s) => s.evidence.facts.messageId).toSorted()).toEqual(['x10', 'x11', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7', 'x8', 'x9']);
     expect(most).toBeGreaterThan(1);
     expect(most).toBeLessThanOrEqual(4);
 
     seen = [];
     for (let i = 0; i < MAX_EVAL_EXAMPLES; i++) await storeExample(db, ACCOUNT, { id: `y${i}`, from: `y${i}@example.org`, label: 'personal', markedAt: 900 });
-    await (
-      await startEval(deps({}), { accountId: ACCOUNT, fewShot: false, limit: 100_000 })
-    ).done;
+    await runEval(deps({}), { accountId: ACCOUNT, fewShot: false, limit: 100_000 });
     expect(seen).toHaveLength(MAX_EVAL_EXAMPLES);
   });
 
   it('runs one at a time, and only when there is something to run', async () => {
     const first = await startEval(deps({}), { accountId: ACCOUNT, fewShot: false });
     await expect(startEval(deps({}), { accountId: ACCOUNT, fewShot: false })).rejects.toThrow('already going');
-    await first.done;
-    await (
-      await startEval(deps({}), { accountId: ACCOUNT, fewShot: false })
-    ).done;
+    await continueEval(deps({}), first, Infinity);
+    await runEval(deps({}), { accountId: ACCOUNT, fewShot: false });
     expect((await listEvalRuns(db)).map((r) => r.status)).toEqual(['done', 'done']);
 
     await raw(db).run('DELETE FROM examples');
@@ -187,8 +185,7 @@ describe('replaying the model over stored examples', () => {
     const throwing = async () => {
       throw Object.assign(new Error('503 upstream: cannot read "Your invoice from example.com"'), { status: 503 });
     };
-    const { id, done } = await startEval({ db, judge: throwing, model: 'test/model' }, { accountId: ACCOUNT, fewShot: false });
-    await done;
+    const id = await runEval({ db, judge: throwing, model: 'test/model' }, { accountId: ACCOUNT, fewShot: false });
     const { run, results } = (await getEvalRun(db, id))!;
     expect(run).toMatchObject({ status: 'done', total: 4, score: { total: 4, failed: 4 } });
     expect(new Set(results.map((r) => r.error))).toEqual(new Set(['HTTP 503 unavailable']));
@@ -196,24 +193,17 @@ describe('replaying the model over stored examples', () => {
 
   it('keeps the cost of a call that was billed but answered unusably', async () => {
     const unusable = async (): Promise<JudgeFailure> => ({ failed: 'the model did not return a usable verdict', usage });
-    const { id, done } = await startEval({ db, judge: unusable, model: 'test/model' }, { accountId: ACCOUNT, fewShot: false });
-    await done;
+    const id = await runEval({ db, judge: unusable, model: 'test/model' }, { accountId: ACCOUNT, fewShot: false });
     const { run, results } = (await getEvalRun(db, id))!;
     expect(run.score).toMatchObject({ failed: 4, costUsd: 0.004, inputTokens: 4000 });
     expect(results.every((r) => r.got === null && r.costUsd === 0.001 && r.error === 'the model did not return a usable verdict')).toBe(true);
   });
 
   it('records settings that tell two runs apart', async () => {
-    await (
-      await startEval(deps({}), { accountId: ACCOUNT, fewShot: false })
-    ).done;
-    await (
-      await startEval(deps({}), { accountId: ACCOUNT, fewShot: false })
-    ).done;
+    await runEval(deps({}), { accountId: ACCOUNT, fewShot: false });
+    await runEval(deps({}), { accountId: ACCOUNT, fewShot: false });
     await updateLabel(db, ACCOUNT, 'newsletter', { description: 'Anything sent to a list.' });
-    await (
-      await startEval(deps({}), { accountId: ACCOUNT, fewShot: false })
-    ).done;
+    await runEval(deps({}), { accountId: ACCOUNT, fewShot: false });
     const [c, b, a] = await listEvalRuns(db);
     expect(a?.promptHash).toMatch(/^[0-9a-f]{12}$/);
     expect(new Set([a?.promptHash, b?.promptHash, c?.promptHash]).size).toBe(1);
@@ -222,10 +212,29 @@ describe('replaying the model over stored examples', () => {
     expect(c?.labels.find((l) => l.id === 'newsletter')?.description).toBe('Anything sent to a list.');
   });
 
-  it('marks a run that was going when sift stopped', async () => {
-    await startEval({ db, judge: () => new Promise(() => {}), model: 'test/model' }, { accountId: ACCOUNT, fewShot: false });
-    await interruptEvals(db, 900);
-    expect((await listEvalRuns(db))[0]).toMatchObject({ status: 'interrupted', finishedAt: 900 });
+  it('stops at its time limit and carries on where it stopped, judging nothing twice', async () => {
+    for (let i = 0; i < 6; i++) await storeExample(db, ACCOUNT, { id: `x${i}`, from: `s${i}@example.org`, label: 'personal', markedAt: 100 + i });
+    let clock = 0;
+    // Each call takes a second.
+    const given = {
+      db,
+      judge: async (input: JudgeInput) => (seen.push(input), (clock += 1000), { label: 'personal', reason: 'r' }),
+      model: 'test/model',
+      now: () => clock,
+    };
+    const id = await startEval(given, { accountId: ACCOUNT, fewShot: false });
+    expect(await continueEval(given, id, 1500)).toBe(false);
+    expect(seen.length).toBeLessThan(10);
+    expect(await continueEval(given, id, Infinity)).toBe(true);
+    expect(new Set(seen.map((s) => s.evidence.facts.messageId)).size).toBe(10);
+    expect(seen).toHaveLength(10);
+    expect((await getEvalRun(db, id))?.run).toMatchObject({ status: 'done', total: 10 });
     expect(await getEvalRun(db, 999)).toBeNull();
+  });
+
+  it('fails a run whose model changed under it', async () => {
+    const id = await startEval(deps({}), { accountId: ACCOUNT, fewShot: false });
+    expect(await continueEval({ ...deps({}), model: 'other/model' }, id, Infinity)).toBe(true);
+    expect((await listEvalRuns(db))[0]).toMatchObject({ status: 'failed' });
   });
 });

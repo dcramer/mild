@@ -1,0 +1,1 @@
+ALTER TABLE "eval_runs" ADD COLUMN "examples" jsonb DEFAULT '[]'::jsonb NOT NULL;

@@ -97,7 +97,7 @@ beforeEach(async () => {
     undo: async (_db, id) => (calls.push(`undo ${id}`), 'undone'),
     putBack: async () => false,
     ruleFilter: async (_db, id) => void calls.push(`filter ${id}`),
-    backfill: async () => (calls.push('backfill'), 0),
+    backfill: async () => void calls.push('backfill'),
     startEval: async (_db, { accountId }) => (calls.push(`eval ${accountId}`), 1),
     revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), !unreachable.includes(email)),
     // Whatever is asked for, it would answer with that person's mail: only the route's own check keeps it from the wrong person.

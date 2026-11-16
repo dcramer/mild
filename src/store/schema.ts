@@ -519,6 +519,7 @@ export const evalRuns = pgTable(
     labels: jsonb('labels').$type<{ id: string; name: string; description: string }[]>().notNull(), // as the model was given them
     fewShot: boolean('few_shot').notNull(),
     total: integer('total').notNull(),
+    examples: jsonb('examples').$type<string[]>().notNull().default([]), // message ids of the examples it judges, chosen at the start
   },
   (t) => [unique('eval_runs_own').on(t.userId, t.id), mailbox(t), oneOf('eval_runs_status', t.status, EVAL_STATUSES), own()],
 ).enableRLS();

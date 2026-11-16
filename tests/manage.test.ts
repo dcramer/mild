@@ -9,7 +9,7 @@ import { triageAccount } from '../src/daemon/triage.ts';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { people } from '../src/store/people.ts';
 import type { RawMessage } from '../src/gmail/api.ts';
-import { startEval } from '../src/learn/evals.ts';
+import { continueEval, startEval } from '../src/learn/evals.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { MAX_LABELS, listLabels } from '../src/store/labels.ts';
 import { recordDecision } from '../src/store/decisions.ts';
@@ -36,10 +36,7 @@ const controls: Controls = {
     calls.push(`undo ${id}`);
     return null;
   },
-  backfill: async (days) => {
-    calls.push(`backfill ${days}`);
-    return 12;
-  },
+  backfill: async (days) => void calls.push(`backfill ${days}`),
   putBack: async (_db, _account, messageId) => {
     calls.push(`putBack ${messageId}`);
     if (messageId === 'gone') throw new Error('The message no longer exists.');
@@ -125,11 +122,9 @@ describe('managing sift from the dashboard', () => {
     // A mailbox that is not the viewer's is not there at all.
     expect((await call('POST', '/api/evals/run', { accountId: 'nobody@example.org' })).status).toBe(404);
 
-    const { id, done } = await startEval(
-      { db, judge: async () => ({ label: 'marketing', reason: 'r' }), model: 'p/small' },
-      { accountId: ACCOUNT, fewShot: false },
-    );
-    await done;
+    const given = { db, judge: async () => ({ label: 'marketing', reason: 'r' }), model: 'p/small' };
+    const id = await startEval(given, { accountId: ACCOUNT, fewShot: false });
+    await continueEval(given, id, Infinity);
     const listed = (await call('GET', '/api/evals')).body['runs'] as { id: number; model: string; score: { wrong: number } }[];
     expect(listed).toMatchObject([{ id, model: 'p/small', status: 'done', fewShot: false, score: { total: 1, wrong: 1 } }]);
     const detail = await call('GET', `/api/eval?id=${id}`);
@@ -358,10 +353,10 @@ describe('managing sift from the dashboard', () => {
     expect((await call('POST', '/api/undo', { id: 3 })).body).toEqual({ message: null });
     // A change that is not in this person's database is not passed on.
     expect(await call('POST', '/api/undo', { id: 404 })).toMatchObject({ status: 409, body: { error: 'There is no change #404.' } });
-    expect((await call('POST', '/api/backfill', { days: 7 })).body).toEqual({ added: 12 });
+    expect((await call('POST', '/api/backfill', { days: 7 })).body).toEqual({ ok: true });
     expect((await call('POST', '/api/backfill', { days: 400 })).status).toBe(400);
     expect((await call('POST', '/api/check', {})).status).toBe(200);
-    expect(calls).toEqual(['undo 3', 'backfill 7', 'check', 'check']);
+    expect(calls).toEqual(['undo 3', 'backfill 7', 'check']);
   });
 
   it('refuses every write that did not come from its own page', async () => {
@@ -631,16 +626,30 @@ describe('older mail', () => {
   it('is pulled in without moving the sync cursor, and only once', async () => {
     const api = {
       searchInbox: async (query: string) => (calls.push(query), { ids: ['a', 'b', 'gone'] }),
-      getMetadata: async (id: string) => (id === 'gone' ? null : gmailMessage(id)),
+      getMetadata: async (id: string) => (calls.push(id), id === 'gone' ? null : gmailMessage(id)),
     };
-    expect(await backfill(db, api, ACCOUNT, 7)).toBe(2);
-    expect(await backfill(db, api, ACCOUNT, 7)).toBe(0);
-    expect(calls).toEqual(['newer_than:7d', 'newer_than:7d']);
+    expect(await backfill(db, api, ACCOUNT, 7)).toBe(true);
+    expect(await backfill(db, api, ACCOUNT, 7)).toBe(true);
+    // The second time it reads only what it could not record.
+    expect(calls).toEqual(['newer_than:7d', 'a', 'b', 'gone', 'newer_than:7d', 'gone']);
     expect((await listAccounts(db))[0]?.historyId).toBe('1');
     expect(await raw(db).all('SELECT id, suggest_only FROM messages ORDER BY id')).toEqual([
       { id: 'a', suggest_only: true },
       { id: 'b', suggest_only: true },
     ]);
+  });
+
+  it('stops at its time limit with what it fetched kept, and carries on from there', async () => {
+    let clock = 0;
+    const read: string[] = [];
+    const api = {
+      searchInbox: async () => ({ ids: ['a', 'b', 'c'] }),
+      getMetadata: async (id: string) => (read.push(id), (clock += 1000), gmailMessage(id)),
+    };
+    expect(await backfill(db, api, ACCOUNT, 7, 1500, () => clock)).toBe(false);
+    expect(await raw(db).all('SELECT id FROM messages ORDER BY id')).toEqual([{ id: 'a' }, { id: 'b' }]);
+    expect(await backfill(db, api, ACCOUNT, 7, Infinity, () => clock)).toBe(true);
+    expect(read).toEqual(['a', 'b', 'c']);
   });
 
   it('stops at the cap', async () => {
@@ -649,8 +658,9 @@ describe('older mail', () => {
       searchInbox: async () => ({ ids: Array.from({ length: 200 }, (_, i) => `p${page}-${i}`), nextPageToken: `t${++page}` }),
       getMetadata: async (id: string) => gmailMessage(id),
     };
-    expect(await backfill(db, api, ACCOUNT, 30)).toBe(MAX_BACKFILL);
+    expect(await backfill(db, api, ACCOUNT, 30)).toBe(true);
     expect(page).toBe(2);
+    expect(await raw(db).get('SELECT count(*) AS n FROM messages')).toEqual({ n: MAX_BACKFILL });
   });
 
   it('is only ever suggested about, even while sift is on', async () => {

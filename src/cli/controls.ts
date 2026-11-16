@@ -4,12 +4,11 @@ import { undo } from '../actions/executor.ts';
 import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
 import type { Config } from '../config.ts';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
-import { backfill } from '../daemon/backfill.ts';
 import type { Controls, ModelSignIns } from '../dashboard/controls.ts';
 import { forgetPassStatus, passStatus } from '../daemon/status.ts';
 import type { Jobs } from '../daemon/jobs.ts';
 import { createGmailApi, getMessageHtml } from '../gmail/api.ts';
-import { interruptEvals, startEval } from '../learn/evals.ts';
+import { startEval } from '../learn/evals.ts';
 import { clientFor, loadClientSecrets, revokeGrant } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { pacer } from '../gmail/quota.ts';
@@ -73,8 +72,6 @@ function deviceId(config: Config): string {
 
 /** What the dashboard may ask this process to do. See `Controls`. */
 export async function buildControls(config: Config, store: Store, live: { ephemeral: Ephemeral; jobs?: Jobs; running: boolean }): Promise<Controls> {
-  const everyone = async () => await Promise.all((await listUsers(store.central)).map((u) => store.user(u.id)));
-  for (const db of await everyone()) await interruptEvals(db);
   const choices = modelChoices(config.settings.chatgptSignIn ?? 'device-code');
   // By person: a ChatGPT sign-in waiting on them, and a Sign in with ChatGPT waiting for its address.
   const pending = new Map<number, NonNullable<ModelSignIns['pending']>>();
@@ -165,11 +162,9 @@ export async function buildControls(config: Config, store: Store, live: { epheme
       throw new Error(outcome.reason);
     },
     backfill: async (days) => {
-      let added = 0;
-      for (const db of await everyone())
-        for (const account of await listAccounts(db))
-          added += await backfill(db, (await gmailFor(config, live.ephemeral, db, account.email)).api, account.id, days);
-      return added;
+      if (!live.jobs) throw new Error('Only the dashboard is running here, so nothing can pull in mail.');
+      for (const user of await listUsers(store.central))
+        for (const account of await listAccounts(await store.user(user.id))) live.jobs.send({ kind: 'backfill', person: user.id, account: account.id, days });
     },
     putBack: async (db, accountId, messageId) => {
       const last = await lastStandingChange(db, accountId, messageId);
@@ -181,7 +176,9 @@ export async function buildControls(config: Config, store: Store, live: { epheme
     startEval: async (db, request) => {
       const tier = await openModelTier(config, db);
       if (!tier) throw new Error('Choose a model first.');
-      return (await startEval({ db, judge: tier.judge, model: tier.spec }, request)).id;
+      const run = await startEval({ db, model: tier.spec }, request);
+      live.jobs?.send({ kind: 'eval', person: await personOf(db), run });
+      return run;
     },
     ruleFilter: async (db, ruleId, on) => {
       const rule = await getRuleFilter(db, ruleId);

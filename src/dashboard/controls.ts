@@ -26,8 +26,8 @@ export interface Controls {
    * as undone), or null when there is nothing more to say.
    */
   undo(db: Sql, actionId: number): Promise<string | null>;
-  /** Pull the last `days` days of everyone's inbox in as suggestions. Resolves with how many messages were new. */
-  backfill(days: number): Promise<number>;
+  /** Start pulling the last `days` days of everyone's inbox in as suggestions; they arrive as jobs run. */
+  backfill(days: number): Promise<void>;
   /**
    * After the user has corrected a decision: take back what sift last did to that message, so the new
    * decision can be carried out from where the message started. Resolves with whether anything was taken back.

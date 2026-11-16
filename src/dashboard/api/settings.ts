@@ -123,13 +123,12 @@ export const writes: Write[] = [
   write({
     path: '/api/backfill',
     body: z.strictObject({ days: z.int().min(1).max(30) }),
-    reply: z.object({ added: z.number() }),
+    reply: done,
     touches: install,
-    run: async ({ controls, db }, { days }) => {
+    run: async ({ controls }, { days }) => {
       if (!controls) throw new Error('This dashboard cannot pull in mail.');
-      const added = await controls.backfill(days);
-      await controls.checkNow(db);
-      return { added };
+      await controls.backfill(days);
+      return { ok: true as const };
     },
   }),
   write({
