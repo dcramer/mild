@@ -18,7 +18,8 @@ import { mailboxAliases } from '../store/accounts.ts';
 import { shotCandidates } from '../store/examples.ts';
 import { listLabels } from '../store/labels.ts';
 import { getFacts } from '../store/messages.ts';
-import { hashOf, openEnvelope, openPart } from '../store/content.ts';
+import { hashOf, openEnvelope, openPart, traceIds } from '../store/content.ts';
+import { invokeAgent } from '../telemetry.ts';
 import { deriveFacts } from '../triage/facts.ts';
 import { pickShots } from '../triage/fewshot.ts';
 import { PROMPT_TEMPLATE } from '../triage/prompt.ts';
@@ -151,13 +152,17 @@ export async function continueEval(deps: EvalDeps, runId: number, until: number)
     // often in one go for a sender's waiting mail, would show the model the answer to a message just like it.
     const shots = run.fewShot ? pickShots(await shotCandidates(db, facts, facts.receivedAt), facts, labels) : [];
     const started = performance.now();
-    const answer = await deps
-      .judge({
-        evidence: await storedEvidence(db, facts, openPart(db, run.accountId, messageId, 'text', example.bodyText)),
-        labels,
-        ...(shots.length > 0 ? { examples: shots } : {}),
-      })
-      .catch((error: unknown): JudgeFailure => ({ failed: describeFailure(error) }));
+    const evidence = await storedEvidence(db, facts, openPart(db, run.accountId, messageId, 'text', example.bodyText));
+    // A conversation per message of the run, named by where it is in the run rather than by the message.
+    const answer = await invokeAgent(
+      'eval',
+      [db.person, runId, run.examples.indexOf(messageId)],
+      { 'sift.eval_run': runId, ...traceIds(db, messageId, facts.from) },
+      () =>
+        deps
+          .judge({ evidence, labels, ...(shots.length > 0 ? { examples: shots } : {}) })
+          .catch((error: unknown): JudgeFailure => ({ failed: describeFailure(error) })),
+    );
     // An unusable answer was still billed.
     const verdict = 'failed' in answer ? null : answer;
     await db

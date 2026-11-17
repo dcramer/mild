@@ -6,7 +6,7 @@ import { FRAMES, READS, WRITES } from './api/index.ts';
 import type { Context, Write } from './api/route.ts';
 import { frameNote } from './mail-html.ts';
 import { Refusal } from '../refusal.ts';
-import { type Traced, reportError, traced } from '../telemetry.ts';
+import { identify, reportError, traced } from '../telemetry.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { type Scope, narrow, scopeFor, sees } from './scope.ts';
 
@@ -219,7 +219,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
   /** Named by its route, never by a path a stranger chose. */
   const routeOf = (path: string) => (reads.has(path) || writes.has(path) || frames.has(path) || SIGN_IN_PATHS.has(path) ? path : 'other');
 
-  const handle = async (request: Request, span: Traced): Promise<Response> => {
+  const handle = async (request: Request): Promise<Response> => {
     // The Host header, not the URL: a `node:http` adapter cannot always build a URL from it.
     const hostHeader = request.headers.get('host');
     if (!answers(hostHeader)) {
@@ -245,7 +245,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     // What this request may see: the mailboxes of whoever is signed in, in their own database and no
     // one else's. With no sign-in set up (tests, tools) it is the owner's.
     const person = signIn ? known : await people.owner();
-    if (person) span.set({ 'user.email': session ?? undefined, 'sift.person': person.id });
+    if (person) identify({ id: person.id, email: session });
     const whole = person ? scopeFor(person.accounts, person.owner) : scopeFor([], !signIn);
     const ctx: Context = {
       db: person ? await person.open(person.id) : people.nobody,
@@ -383,7 +383,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     handle: (request) => {
       const { pathname } = new URL(request.url);
       return traced('http.server', `${request.method} ${routeOf(pathname)}`, { 'http.request.method': request.method }, async (span) => {
-        const response = await handle(request, span).catch((error: unknown) => {
+        const response = await handle(request).catch((error: unknown) => {
           const { status, ...body } = failed(request, error);
           return json(status, body);
         });

@@ -1,5 +1,7 @@
 import { type Api, type Model, type Models, createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from '@earendil-works/pi-ai';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { continueEval, startEval } from '../src/learn/evals.ts';
+import { calls } from '../src/gmail/call.ts';
 import { proposeLabels } from '../src/learn/labels.ts';
 import { draftRule } from '../src/learn/rules.ts';
 import { createRuleDrafter } from '../src/model/draft-rule.ts';
@@ -12,10 +14,10 @@ import { PROPOSAL_TOOL } from '../src/triage/proposal.ts';
 import { FILL_TOOL, FIND_TOOL } from '../src/triage/rule-draft.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
 import { loadKeyring } from '../src/secrets.ts';
-import { flushTelemetry, reportError, scrub, startTelemetry, traced } from '../src/telemetry.ts';
+import { flushTelemetry, identify, reportError, scrub, startTelemetry, traced } from '../src/telemetry.ts';
 import { triageAccount } from '../src/work/triage.ts';
 import { freshStore, raw } from './fixtures.ts';
-import { facts, SAMPLE_LABELS, withSampleLabels } from './helpers.ts';
+import { facts, SAMPLE_LABELS, storeExample, withSampleLabels } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
 const SENDER = 'billing@shop.example.com';
@@ -23,7 +25,7 @@ const SUBJECT = 'Your invoice 8812 is overdue';
 const BODY = 'Pay 4,200 by Friday or your account at Acme closes.';
 const REASON = 'An overdue invoice from Acme.';
 
-type Span = { name: string; attributes: Record<string, { value: unknown }> };
+type Span = { name: string; status: string; attributes: Record<string, { value: unknown }> };
 type Envelope = [unknown, [{ type: string }, unknown][]];
 
 /** Everything sent to Sentry, as the transport was handed it. */
@@ -189,6 +191,21 @@ describe('each conversation with the model', () => {
     for (const content of [GOAL, 'acme digest', 'shop.example.com']) expect(text).not.toContain(content);
   });
 
+  it('is a test run’s message, named by where it is in the run', async () => {
+    const { db } = await keyedPerson();
+    await storeExample(db, ACCOUNT, { id: 'abc123', from: SENDER, label: 'transactional', subject: SUBJECT, body: BODY });
+    const { models, model } = answering();
+    const deps = { db, judge: createJudge(models, model), model: 'faux/model' };
+    const run = await startEval(deps, { accountId: ACCOUNT, fewShot: false });
+    expect(await continueEval(deps, run, Infinity)).toBe(true);
+
+    const { attributes, text } = await delivered();
+    const conversation = { 'gen_ai.agent.name': 'eval', 'gen_ai.conversation.id': `eval-${db.person}-${run}-0` };
+    expect(attributes('invoke_agent eval')).toMatchObject({ ...conversation, 'sift.eval_run': run, 'sift.message': hashOf(db, 'abc123') });
+    expect(attributes(`chat ${model.id}`)).toMatchObject(conversation);
+    for (const content of [SUBJECT, BODY, SENDER, 'abc123']) expect(text).not.toContain(content);
+  });
+
   it('is a label proposal, and the next one is another', async () => {
     const { db } = await keyedPerson();
     const PITCHES = { why: 'w', name: 'Cold outreach', description: 'Pitches.', action: 'archive', markRead: false, unsubscribe: true };
@@ -206,6 +223,53 @@ describe('each conversation with the model', () => {
         expect.arrayContaining(['invoke_agent labels', `chat ${model.id}`, `execute_tool ${PROPOSAL_TOOL}`]),
       );
     for (const content of [GOAL, 'Cold outreach']) expect(text).not.toContain(content);
+  });
+});
+
+describe('whom a trace is for', () => {
+  it('is the person a request or piece of work says, on every span and error in it and none beside it', async () => {
+    const OTHER = 'you@example.org';
+    const request = (id: number, email: string) =>
+      traced('http.server', `GET ${id}`, {}, async () => {
+        identify({ id, email });
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        await traced('sift.action', `change ${id}`, {}, async () => reportError(new Error(`refused ${id}`)));
+      });
+    await Promise.all([request(1, ACCOUNT), request(2, OTHER)]);
+
+    const { attributes, events } = await delivered();
+    expect(attributes('GET 1')).toMatchObject({ 'user.id': '1', 'user.email': ACCOUNT });
+    expect(attributes('change 1')).toMatchObject({ 'user.id': '1', 'user.email': ACCOUNT });
+    expect(attributes('GET 2')).toMatchObject({ 'user.id': '2', 'user.email': OTHER });
+    expect(attributes('change 2')).toMatchObject({ 'user.id': '2', 'user.email': OTHER });
+    const users = Object.fromEntries(
+      (events as { exception: { values: { value: string }[] }; user: unknown }[]).map((e) => [e.exception.values[0]!.value, e.user]),
+    );
+    expect(users).toEqual({ 'refused 1': { id: '1', email: ACCOUNT }, 'refused 2': { id: '2', email: OTHER } });
+  });
+});
+
+describe('a Gmail request', () => {
+  const call = calls(async () => {});
+
+  it('is named by its method alone, and a message that is gone is an answer, not a failure', async () => {
+    expect(await call('users.messages.get', 20, async () => ({ data: 'labels', status: 200 }))).toBe('labels');
+    const gone = Object.assign(new Error('Not Found'), { status: 404 });
+    await expect(call('users.threads.get', 40, () => Promise.reject(gone))).rejects.toBe(gone);
+    await expect(call('users.labels.list', 1, () => Promise.reject(Object.assign(new Error('Backend Error'), { status: 500 })))).rejects.toThrow();
+
+    const { spans, attributes } = await delivered();
+    expect(attributes('gmail users.messages.get')).toMatchObject({
+      'sentry.op': 'http.client',
+      'server.address': 'gmail.googleapis.com',
+      'http.response.status_code': 200,
+      'sift.quota_units': 20,
+    });
+    expect(spans.map((s) => [s.name, s.status])).toEqual([
+      ['gmail users.messages.get', 'ok'],
+      ['gmail users.threads.get', 'ok'],
+      ['gmail users.labels.list', 'error'],
+    ]);
   });
 });
 

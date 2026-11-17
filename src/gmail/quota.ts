@@ -1,4 +1,5 @@
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
+import { traced } from '../telemetry.ts';
 
 /** Waits until `units` of the mailbox's Gmail quota may be spent, then counts them. */
 export type Pace = (units: number) => Promise<void>;
@@ -14,5 +15,5 @@ export const pacer =
   (ephemeral: Ephemeral, account: string): Pace =>
   async (units) => {
     const wait = await ephemeral.reserve(`quota:${account}`, units, BUCKET);
-    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    if (wait > 0) await traced('sift.wait', 'gmail quota', { 'sift.wait_ms': wait }, () => new Promise((resolve) => setTimeout(resolve, wait)));
   };

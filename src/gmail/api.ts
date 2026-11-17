@@ -1,6 +1,7 @@
 import { gmail, type gmail_v1 } from '@googleapis/gmail';
 import type { OAuth2Client } from 'google-auth-library';
 import { type MessageContent, readContent } from './body.ts';
+import { calls, isNotFound } from './call.ts';
 import type { Pace } from './quota.ts';
 
 /** Headers fetched for triage. Bodies are never requested here. */
@@ -92,14 +93,9 @@ export interface GmailApi {
   listSendAs(): Promise<string[]>;
 }
 
-export const isNotFound = (error: unknown) => {
-  const e = error as { status?: unknown; code?: unknown };
-  return e?.status === 404 || e?.code === 404 || e?.code === '404';
-};
-
-/** The account's address and current history id. */
-export async function readProfile(auth: OAuth2Client) {
-  const { data } = await gmail({ version: 'v1', auth }).users.getProfile({ userId: 'me' });
+/** The account's address and current history id. Unpaced when the account is only being signed in to. */
+export async function readProfile(auth: OAuth2Client, pace: Pace = async () => {}) {
+  const data = await calls(pace)('users.getProfile', 1, () => gmail({ version: 'v1', auth }).users.getProfile({ userId: 'me' }));
   if (!data.emailAddress || !data.historyId) throw new Error('Gmail profile is missing emailAddress or historyId');
   return { emailAddress: data.emailAddress.toLowerCase(), historyId: data.historyId };
 }
@@ -108,24 +104,25 @@ export async function readProfile(auth: OAuth2Client) {
 export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
   const client: gmail_v1.Gmail = gmail({ version: 'v1', auth });
   const userId = 'me';
+  const call = calls(pace);
 
   return {
     async getProfile() {
-      await pace(1);
-      return await readProfile(auth);
+      return await readProfile(auth, pace);
     },
 
     async listHistory(startHistoryId, pageToken) {
-      await pace(2);
       try {
-        const { data } = await client.users.history.list({
-          userId,
-          startHistoryId,
-          // Not narrowed to the inbox: mail the user takes out of the inbox or out of spam must show up too.
-          historyTypes: ['messageAdded', 'labelAdded', 'labelRemoved'],
-          maxResults: 500,
-          ...(pageToken ? { pageToken } : {}),
-        });
+        const data = await call('users.history.list', 2, () =>
+          client.users.history.list({
+            userId,
+            startHistoryId,
+            // Not narrowed to the inbox: mail the user takes out of the inbox or out of spam must show up too.
+            historyTypes: ['messageAdded', 'labelAdded', 'labelRemoved'],
+            maxResults: 500,
+            ...(pageToken ? { pageToken } : {}),
+          }),
+        );
         const additions: HistoryAddition[] = [];
         const labelChanges: HistoryLabelChange[] = [];
         for (const record of data.history ?? []) {
@@ -147,16 +144,16 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
     },
 
     async searchInbox(query, pageToken) {
-      await pace(5);
-      const { data } = await client.users.messages.list({ userId, q: query, labelIds: ['INBOX'], maxResults: 500, ...(pageToken ? { pageToken } : {}) });
+      const data = await call('users.messages.list', 5, () =>
+        client.users.messages.list({ userId, q: query, labelIds: ['INBOX'], maxResults: 500, ...(pageToken ? { pageToken } : {}) }),
+      );
       const ids = (data.messages ?? []).map((m) => m.id).filter((id) => typeof id === 'string');
       return { ids, ...(data.nextPageToken ? { nextPageToken: data.nextPageToken } : {}) };
     },
 
     async getLabelIds(messageId) {
-      await pace(20);
       try {
-        const { data } = await client.users.messages.get({ userId, id: messageId, format: 'minimal' });
+        const data = await call('users.messages.get', 20, () => client.users.messages.get({ userId, id: messageId, format: 'minimal' }));
         return data.labelIds ?? [];
       } catch (error) {
         if (isNotFound(error)) return null;
@@ -165,22 +162,19 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
     },
 
     async listLabels() {
-      await pace(1);
-      const { data } = await client.users.labels.list({ userId });
+      const data = await call('users.labels.list', 1, () => client.users.labels.list({ userId }));
       return (data.labels ?? []).flatMap((l) => (l.id && l.name ? [{ id: l.id, name: l.name }] : []));
     },
 
     async listSendAs() {
-      await pace(1);
-      const { data } = await client.users.settings.sendAs.list({ userId });
+      const data = await call('users.settings.sendAs.list', 1, () => client.users.settings.sendAs.list({ userId }));
       // An address added but never confirmed from its own inbox is not shown to be the owner's.
       return (data.sendAs ?? []).flatMap((a) => (a.sendAsEmail && a.verificationStatus !== 'pending' ? [a.sendAsEmail.toLowerCase()] : []));
     },
 
     async getContent(messageId) {
-      await pace(60);
       try {
-        const { data } = await client.users.messages.get({ userId, id: messageId, format: 'full' });
+        const data = await call('users.messages.get', 60, () => client.users.messages.get({ userId, id: messageId, format: 'full' }));
         return readContent(data.payload);
       } catch (error) {
         if (isNotFound(error)) return null;
@@ -189,9 +183,8 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
     },
 
     async getThread(threadId) {
-      await pace(40);
       try {
-        const { data } = await client.users.threads.get({ userId, id: threadId, format: 'minimal' });
+        const data = await call('users.threads.get', 40, () => client.users.threads.get({ userId, id: threadId, format: 'minimal' }));
         return (data.messages ?? [])
           .filter((m) => typeof m.id === 'string')
           .toSorted((a, b) => Number(a.internalDate ?? 0) - Number(b.internalDate ?? 0))
@@ -203,9 +196,10 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
     },
 
     async getMetadata(messageId) {
-      await pace(20);
       try {
-        const { data } = await client.users.messages.get({ userId, id: messageId, format: 'metadata', metadataHeaders: [...METADATA_HEADERS] });
+        const data = await call('users.messages.get', 20, () =>
+          client.users.messages.get({ userId, id: messageId, format: 'metadata', metadataHeaders: [...METADATA_HEADERS] }),
+        );
         if (!data.id || !data.threadId) return null;
         const headers: RawMessage['headers'] = [];
         for (const h of data.payload?.headers ?? []) if (h.name && typeof h.value === 'string') headers.push({ name: h.name, value: h.value });

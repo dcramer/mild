@@ -19,10 +19,11 @@ export interface Traced {
 }
 
 /**
- * Carried from a span to those started under it, so any span can be found by the account, message or model
- * run it was for, and a model call and its tools belong to their agent's conversation.
+ * Carried from a span to those started under it, so any span can be found by the message or model run it
+ * was for, and a model call and its tools belong to their agent's conversation. Who it was for is the
+ * scope's user (`identify`), which Sentry puts on every span and error.
  */
-const CARRIED = ['user.email', 'sift.person', 'sift.message', 'sift.sender', 'sift.domain', 'sift.run_id', 'gen_ai.agent.name', 'gen_ai.conversation.id'];
+const CARRIED = ['sift.message', 'sift.sender', 'sift.domain', 'sift.run_id', 'gen_ai.agent.name', 'gen_ai.conversation.id'];
 
 /**
  * Attributes that would hold the prompt, the answer or a tool call's arguments. Sift never sets them and
@@ -99,12 +100,17 @@ export function startTelemetry(dsn: string | undefined, options: { environment?:
       stackFrameVariables: false,
     },
     beforeBreadcrumb: () => null,
-    beforeSend: (event) => scrub({ ...event, request: undefined, breadcrumbs: undefined }),
+    // The user is only what `identify` set: the person's id and their own address.
+    beforeSend: (event) => ({ ...scrub({ ...event, request: undefined, breadcrumbs: undefined, user: undefined }), user: event.user }),
     beforeSendSpan: (span) => scrub(span),
   });
 }
 
-/** Run `work` as a span. A span started inside it is its child and carries its account, message and run. */
+/**
+ * Run `work` as a span. A span started inside it is its child and carries its message and run. One started
+ * outside any (a request, a piece of work) gets a scope of its own, so whom it is `identify`d as is said of
+ * it and of nothing running beside it.
+ */
 export async function traced<T>(op: string, name: string, attributes: Attributes, work: (span: Traced) => Promise<T>): Promise<T> {
   const parent = Sentry.getActiveSpan();
   const above = parent ? Sentry.spanToJSON(parent).attributes : {};
@@ -113,30 +119,41 @@ export async function traced<T>(op: string, name: string, attributes: Attributes
     const value = above[key];
     if (typeof value === 'string' || typeof value === 'number') carried[key] = value;
   }
-  return await Sentry.startSpan({ op, name: scrubText(name), attributes: defined({ ...carried, ...attributes }) }, (span) =>
-    work({
-      set: (more) => span.setAttributes(defined(more)),
-      fail: () => span.setStatus({ code: 2, message: 'internal_error' }),
-    }),
-  );
+  const start = () =>
+    Sentry.startSpan({ op, name: scrubText(name), attributes: defined({ ...carried, ...attributes }) }, (span) =>
+      work({
+        set: (more) => span.setAttributes(defined(more)),
+        fail: () => span.setStatus({ code: 2, message: 'internal_error' }),
+      }),
+    );
+  return await (parent ? start() : Sentry.withIsolationScope(start));
 }
 
 /**
- * Run `work` as a `gen_ai.invoke_agent` span, a conversation of its own in Sentry: `record` is the row it is
- * recorded as in `person`'s database (`sift.run_id`, `sift.label_proposal`, `sift.rule_draft`), so the conversation is
- * that row and nothing else, and a retry is a conversation of its own, as it shares nothing with the try
- * before. Fails when `work` settles `failed`.
+ * Say whom the request or piece of work under way is for: the person, by id, and the address they signed in
+ * as or whose mailbox it is. Every span and error in it names them, which is how Sentry finds a person's
+ * traces, errors and conversations with the model.
  */
-export const invokeAgent = <T extends object>(agent: string, person: number | null, record: { name: string; id: number }, work: () => Promise<T>): Promise<T> =>
+export function identify(person: { id: number; email?: string | null | undefined }): void {
+  Sentry.getIsolationScope().setUser({ id: String(person.id), ...(person.email ? { email: person.email } : {}) });
+}
+
+/**
+ * Run `work` as a `gen_ai.invoke_agent` span, a conversation of its own in Sentry, named by `conversation`:
+ * the person and what it is recorded as in their database (a model run, a label proposal, a rule draft, a
+ * test run's message), so a retry, which shares nothing with the try before, is a conversation of its own.
+ * `attributes` name that record. Fails when `work` settles `failed`.
+ */
+export const invokeAgent = <T extends object>(
+  agent: string,
+  conversation: readonly (number | null)[],
+  attributes: Attributes,
+  work: () => Promise<T>,
+): Promise<T> =>
   traced(
     'gen_ai.invoke_agent',
     `invoke_agent ${agent}`,
-    {
-      'gen_ai.operation.name': 'invoke_agent',
-      'gen_ai.agent.name': agent,
-      'gen_ai.conversation.id': `${agent}-${person}-${record.id}`,
-      [record.name]: record.id,
-    },
+    { ...attributes, 'gen_ai.operation.name': 'invoke_agent', 'gen_ai.agent.name': agent, 'gen_ai.conversation.id': [agent, ...conversation].join('-') },
     async (span) => {
       const settled = await work();
       if ('failed' in settled) span.fail();

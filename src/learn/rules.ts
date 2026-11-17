@@ -22,7 +22,7 @@ export async function draftRule(
   // Read once, on the first look-up: most of what is asked for names no sender.
   let senders: Promise<FoundSender[]> | undefined;
   const find = async (query: string) => searchSenders(await (senders ??= senderDirectory(db, request.accountId)), query);
-  const answer = await invokeAgent('rules', db.person, { name: 'sift.rule_draft', id }, async () => {
+  const answer = await invokeAgent('rules', [db.person, id], { 'sift.rule_draft': id }, async () => {
     try {
       return await deps.draft({ goal: request.goal, labels }, find);
     } catch (error) {

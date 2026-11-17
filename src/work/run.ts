@@ -22,7 +22,7 @@ import { checkFiltersWhenDue } from './filters.ts';
 import { recordPassStatus } from './status.ts';
 import { type SyncReport, syncAccount } from './sync.ts';
 import { CHANGE_TRIES, type TriageReport, triageAccount } from './triage.ts';
-import { reportError, traced } from '../telemetry.ts';
+import { identify, reportError, traced } from '../telemetry.ts';
 
 export interface RunOptions {
   ephemeral: Ephemeral;
@@ -172,12 +172,13 @@ async function unlessUnderWay<T>(options: RunOptions, lock: string, until: numbe
  * piece's ids. A failure is logged; the piece is due again at the next tick.
  */
 export const runWork = (store: Store, work: Work, options: RunOptions, until: number): Promise<PassResult | null> =>
-  traced('sift.work', work.kind, { 'sift.person': work.person }, async (span) => {
+  traced('sift.work', work.kind, {}, async (span) => {
     try {
+      identify({ id: work.person });
       if (!(await stillThere(store, work.person))) return null;
       const db = await store.user(work.person);
       const account = 'account' in work ? (await listAccounts(db)).find((a) => a.id === work.account) : undefined;
-      if (account) span.set({ 'user.email': account.email });
+      if (account) identify({ id: work.person, email: account.email });
       switch (work.kind) {
         case 'upkeep': {
           // Held for the day once it starts, not once it is found due, so one that fails is due again at the next tick.

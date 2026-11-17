@@ -172,7 +172,7 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
       const { accountId, messageId } = input.evidence.facts;
       const run = await startRun(db, { accountId, messageId, model: tier.model, now: now() });
       // The run's id is on the agent's span and, carried, on the model call's: a trace finds its row in `model_runs`.
-      const verdict = await invokeAgent('triage', db.person, { name: 'sift.run_id', id: run }, () =>
+      const verdict = await invokeAgent('triage', [db.person, run], { 'sift.run_id': run }, () =>
         tier.judge(input).catch((error: unknown): JudgeFailure => ({ failed: describeFailure(error) })),
       );
       const usage = verdict.usage ? { usage: verdict.usage } : {};
