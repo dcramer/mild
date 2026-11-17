@@ -13,6 +13,10 @@ const BY = [
   ['to', 'sent to'],
   ['subjectContains', 'with a subject containing'],
 ] as const satisfies readonly (readonly [By, string])[];
+const NAME_MATCH = [
+  ['fromName', 'is'],
+  ['fromNameContains', 'contains'],
+] as const;
 const ACTIONS = ['archive', 'spam', 'keep'] as const;
 type Action = (typeof ACTIONS)[number];
 
@@ -57,6 +61,8 @@ export function AddRuleDialog({
   const toast = useToast();
   const [by, setBy] = useState<By>(start?.by ?? 'from');
   const [value, setValue] = useState(start?.value ?? '');
+  const [nameMatch, setNameMatch] = useState<(typeof NAME_MATCH)[number][0]>('fromName');
+  const [name, setName] = useState('');
   const [facts, setFacts] = useState<FactAnswer[]>(start?.facts ?? []);
   const [condition, setCondition] = useState('');
   const [label, setLabel] = useState(start?.label ?? '');
@@ -80,9 +86,12 @@ export function AddRuleDialog({
   const needsLabel = !waitsFor && condition.trim() !== '' && !chosen;
   // An action alone that keeps mail changes nothing in the inbox.
   const moves = chosen !== undefined || waitsFor !== undefined || action !== 'keep';
-  const named = by === 'from' ? fromMatch(value) : value.trim() === '' ? {} : { [by]: value.trim() };
+  // A name is only asked about beside the address or domain it comes from: anyone can send under any name.
+  const naming = by === 'from' && name.trim() !== '';
+  const nameAlone = naming && value.trim() === '';
+  const named = by === 'from' ? { ...fromMatch(value), ...(naming ? { [nameMatch]: name.trim() } : {}) } : value.trim() === '' ? {} : { [by]: value.trim() };
   const match = facts.length > 0 ? { ...named, facts: factConditions(facts) } : named;
-  const ready = (value.trim() !== '' || facts.length > 0) && !needsLabel;
+  const ready = (value.trim() !== '' || facts.length > 0) && !needsLabel && !nameAlone;
   // Adding a rule with exactly the conditions of one already there replaces it, so the dialog says which.
   const rules = useLoaded('rules', (signal) => api.rules(signal));
   const replaces = ready ? replacedBy(rules.data?.rules ?? [], accountId, match, waitsFor?.id ?? null) : undefined;
@@ -169,6 +178,18 @@ export function AddRuleDialog({
             onChange={(event) => setValue(event.target.value)}
           />
         </Field>
+        {by === 'from' ? (
+          <Field inline label="Name" hint={nameAlone ? 'Anyone can send under any name, so give the address or domain too.' : undefined}>
+            <Select label="How the name matches" value={nameMatch} options={NAME_MATCH} onChange={setNameMatch} />
+            <Input
+              className="min-w-40 flex-1"
+              aria-label="Sender's name"
+              placeholder="any name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </Field>
+        ) : null}
         <Field inline label="That" hint={facts.some((f) => READ.has(f.key)) ? 'Sift reads each message to check this.' : undefined}>
           <div className="flex w-full flex-col items-start gap-2">
             {facts.map((fact, at) => (

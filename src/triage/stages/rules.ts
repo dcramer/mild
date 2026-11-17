@@ -8,6 +8,13 @@ export interface RuleMatch {
   from?: string;
   /** Exact sender domain (no subdomain matching). */
   fromDomain?: string;
+  /**
+   * The sender's display name, ignoring case and runs of spaces. Anyone can put any name on mail, so a rule
+   * holds one only beside `from` or `fromDomain`, whose DMARC says who sent it.
+   */
+  fromName?: string;
+  /** Case-insensitive substring of the sender's display name. Held only beside `from` or `fromDomain`, as `fromName` is. */
+  fromNameContains?: string;
   /** Exact address in To. Cc does not count. */
   to?: string;
   listId?: string;
@@ -56,10 +63,16 @@ export interface Rule {
   learned?: boolean;
 }
 
+/** A display name as rules compare it. */
+const plainName = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
+
 function matches(match: RuleMatch, facts: MessageFacts): boolean {
   const checks: boolean[] = [];
   if (match.from !== undefined) checks.push(facts.from.address === match.from.toLowerCase());
   if (match.fromDomain !== undefined) checks.push(facts.from.domain === match.fromDomain.toLowerCase());
+  const name = plainName(facts.from.name ?? '');
+  if (match.fromName !== undefined) checks.push(name === plainName(match.fromName));
+  if (match.fromNameContains !== undefined) checks.push(name.includes(plainName(match.fromNameContains)));
   if (match.to !== undefined) {
     const to = match.to.toLowerCase();
     checks.push(facts.to.some((a) => a.address === to));
@@ -71,12 +84,24 @@ function matches(match: RuleMatch, facts: MessageFacts): boolean {
   return checks.length > 0 && checks.every(Boolean);
 }
 
+/** Whether a match names who sent it by name alone, which anyone can claim. An exception may: its rule names the sender. */
+export const nameAlone = (match: RuleMatch) =>
+  (match.fromName !== undefined || match.fromNameContains !== undefined) && match.from === undefined && match.fromDomain === undefined;
+
 function applies(rule: Rule, facts: MessageFacts): boolean {
-  return matches(rule.match, facts) && !(rule.except ?? []).some((e) => matches(e, facts));
+  return !nameAlone(rule.match) && matches(rule.match, facts) && !(rule.except ?? []).some((e) => matches(e, facts));
 }
 
 type Named = Exclude<keyof RuleMatch, 'facts'>;
-const CONDITION: Record<Named, string> = { from: 'from', fromDomain: 'from domain', to: 'to', listId: 'list', subjectContains: 'subject contains' };
+const CONDITION: Record<Named, string> = {
+  from: 'from',
+  fromDomain: 'from domain',
+  fromName: 'named',
+  fromNameContains: 'name contains',
+  to: 'to',
+  listId: 'list',
+  subjectContains: 'subject contains',
+};
 
 /** A rule's conditions in words, for the audit log and the dashboard: "from domain example.com, is a reply". */
 export function describeMatch(match: RuleMatch): string {
@@ -86,12 +111,14 @@ export function describeMatch(match: RuleMatch): string {
 }
 
 /**
- * How narrowly a match is drawn. A condition on who sent it, to whom, the list or the subject counts 2, and
- * an exact sender 1 more than a domain; a fact counts 1, since one fact ("is a reply") takes in mail from anyone.
+ * How narrowly a match is drawn. A condition on who sent it, their name, to whom, the list or the subject
+ * counts 2; an exact sender 1 more than a domain, and an exact name 1 more than part of one; a fact counts 1,
+ * since one fact ("is a reply") takes in mail from anyone.
  */
 export const specificity = (match: RuleMatch) =>
   (Object.keys(CONDITION) as Named[]).filter((key) => match[key] !== undefined).length * 2 +
   (match.from === undefined ? 0 : 1) +
+  (match.fromName === undefined ? 0 : 1) +
   Object.values(factsOf(match) ?? {}).filter((v) => v !== undefined).length;
 
 interface RulesOptions {

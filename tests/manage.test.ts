@@ -264,6 +264,12 @@ describe('managing sift from the dashboard', () => {
       { labelName: 'Marketing', override: 'keep', disposition: 'keep' },
     ]);
     expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: {}, label: 'marketing' })).status).toBe(400);
+    expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: { fromName: 'Dependabot' }, label: 'marketing' })).status).toBe(400);
+    const named = await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: 'a@example.com', fromNameContains: 'bot' }, label: 'marketing' });
+    expect((await call('GET', '/api/rules')).body['rules']).toContainEqual(
+      expect.objectContaining({ id: named.body['id'], match: { from: 'a@example.com', fromNameContains: 'bot' } }),
+    );
+    await call('POST', '/api/rules/remove', { id: named.body['id'] });
     const onFacts = await call('POST', '/api/rules', {
       accountId: ACCOUNT,
       match: { fromDomain: 'example.org', facts: { isReply: false, unsubscribe: ['header', 'none'], category: 'promotions' } },

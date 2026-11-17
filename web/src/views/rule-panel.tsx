@@ -1,23 +1,30 @@
 import { type RuleMatch, type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ago, count, describeMatch, factAnswers, factWords, money, outcomeName, plural, shortDate, willBe } from '@/lib/format.ts';
+import { ago, conditionsOf, count, describeMatch, factAnswers, factWords, money, outcomeName, plural, shortDate, willBe } from '@/lib/format.ts';
 import { setParams, useParam } from '@/lib/route.ts';
 import { InGmail } from '@/views/gmail-filter.tsx';
 import { Blank, Button, ConfirmButton, Dialog, Does, Empty, Fact, Facts, Failure, Loading, Panel, Section, Table, Td, Tr, TrGroup, useToast } from '@/system';
 
 const MADE_BY: Record<string, string> = { user: 'You', correction: 'Your answers', learned: 'Sift, when it blocked them' };
-const QUIET: Record<string, string> = { fromDomain: 'anyone at', to: 'sent to', listId: 'the list', subjectContains: 'subject has' };
+const QUIET: Record<string, string> = {
+  fromDomain: 'anyone at',
+  fromName: 'named',
+  fromNameContains: 'name has',
+  to: 'sent to',
+  listId: 'the list',
+  subjectContains: 'subject has',
+};
 
 /** What a rule matches: an address alone, or a quiet word and the value; then what the mail must be, in words. */
-export function Who({ match: { facts, ...match } }: { match: RuleMatch }) {
-  const named = Object.entries(match);
-  const asked = factAnswers(facts).map(factWords);
+export function Who({ match }: { match: RuleMatch }) {
+  const named = conditionsOf(match);
+  const asked = factAnswers(match.facts).map(factWords);
   return (
     <span className="name">
       {named.map(([key, value], index) => (
         <span key={key}>
           {index > 0 ? <span className="font-normal text-muted-foreground">, </span> : null}
           {QUIET[key] ? <span className="font-normal text-muted-foreground">{QUIET[key]} </span> : null}
-          {key === 'subjectContains' ? `“${value}”` : value}
+          {value}
         </span>
       ))}
       {asked.length > 0 ? (
@@ -30,9 +37,9 @@ export function Who({ match: { facts, ...match } }: { match: RuleMatch }) {
   );
 }
 
-export function whoText({ facts, ...match }: RuleMatch): string {
-  const named = Object.entries(match).map(([key, value]) => `${QUIET[key] ? `${QUIET[key]} ` : ''}${key === 'subjectContains' ? `“${value}”` : value}`);
-  const asked = factAnswers(facts).map(factWords);
+export function whoText(match: RuleMatch): string {
+  const named = conditionsOf(match).map(([key, value]) => `${QUIET[key] ? `${QUIET[key]} ` : ''}${value}`);
+  const asked = factAnswers(match.facts).map(factWords);
   return [...named, ...(asked.length > 0 ? [`${named.length > 0 ? 'that' : 'mail that'} ${asked.join(' and ')}`] : [])].join(', ');
 }
 

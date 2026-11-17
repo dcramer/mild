@@ -3,6 +3,7 @@ import { getRuleFilter, ruleFilterStatus } from '../../../../store/filters.ts';
 import { preferences } from '../../../../store/preferences.ts';
 import { madeFromProposal } from '../../../../store/proposals.ts';
 import { listRules, setRule } from '../../../../store/rules.ts';
+import { nameAlone } from '../../../../triage/stages/rules.ts';
 
 import { RuleFacts, RuleFilter, type RuleMatch } from '../../../types.ts';
 import { accountId, decided, id, labelId, named, redecide, write } from '../../route.ts';
@@ -11,12 +12,22 @@ const value = z.string().max(200).optional();
 
 /** A condition left empty is not one. */
 const conditions = z
-  .strictObject({ from: value, fromDomain: value, to: value, listId: value, subjectContains: value, facts: RuleFacts.optional() })
+  .strictObject({
+    from: value,
+    fromDomain: value,
+    fromName: value,
+    fromNameContains: value,
+    to: value,
+    listId: value,
+    subjectContains: value,
+    facts: RuleFacts.optional(),
+  })
   .transform(({ facts, ...rest }): RuleMatch => {
     const given = Object.fromEntries(Object.entries(rest).filter(([, value]) => value !== undefined && value !== ''));
     return facts && Object.keys(facts).length > 0 ? { ...given, facts } : given;
   })
-  .refine((match) => Object.keys(match).length > 0, 'A rule needs at least one condition.');
+  .refine((match) => Object.keys(match).length > 0, 'A rule needs at least one condition.')
+  .refine((match) => !nameAlone(match), 'Anyone can send mail under any name: give the sender’s address or domain as well.');
 
 export default write({
   path: '/api/rules',

@@ -33,6 +33,8 @@ export type RuleFacts = Conditions;
 const match = z.object({
   from: z.string().optional(),
   fromDomain: z.string().optional(),
+  fromName: z.string().optional(),
+  fromNameContains: z.string().optional(),
   to: z.string().optional(),
   listId: z.string().optional(),
   subjectContains: z.string().optional(),

@@ -58,8 +58,10 @@ export function filterFor(rule: FilterableRule, labels: readonly Label[], rules:
   if (rule.markRead || outcome.markRead) return no('It marks mail read, which Sift does not let a filter do.');
   if (rule.learned && archive) return no('Sift learned this rule and holds it back for people you have written to. A filter cannot.');
 
-  const { from, fromDomain, to, listId, subjectContains } = rule.match;
+  const { from, fromDomain, fromName, fromNameContains, to, listId, subjectContains } = rule.match;
   if (listId !== undefined) return no('Gmail filters cannot match a mailing list.');
+  if (fromName !== undefined || fromNameContains !== undefined)
+    return no('Gmail filters match words in a sender’s name and address together, so they cannot hold to the name.');
   if (asksFacts(rule.match)) return no('It asks what Sift found in the message, which Gmail filters cannot see.');
   if ((rule.except ?? []).length > 0) return no('It has exceptions.');
 

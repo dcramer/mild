@@ -205,17 +205,29 @@ export const FACT_FILTER_OPTIONS = [['', 'Any'] as const, ...FACT_FILTER_WORDS.m
 /** A fact filter that is on, as its chip says it. */
 export const factFilterName = (key: FactFilter) => `Mail that ${FACT_FILTER_WORDS.find(([k]) => k === key)?.[1] ?? key}`;
 
+/** A match's named conditions in the order a sentence reads them, whatever order they were stored in; typed text is quoted. */
+export function conditionsOf(match: RuleMatch): (readonly [string, string])[] {
+  const order = ['from', 'fromDomain', 'fromName', 'fromNameContains', 'to', 'listId', 'subjectContains'] as const;
+  const typed = new Set<string>(['fromName', 'fromNameContains', 'subjectContains']);
+  return order.flatMap((key) => {
+    const value = match[key];
+    return value === undefined ? [] : [[key, typed.has(key) ? `“${value}”` : value] as const];
+  });
+}
+
 const MATCH: Record<string, string> = {
   from: 'from',
   fromDomain: 'from anyone at',
+  fromName: 'named',
+  fromNameContains: 'with a name containing',
   to: 'sent to',
   listId: 'on the list',
   subjectContains: 'with a subject containing',
 };
 /** A rule's conditions as words to follow "mail": "from news@example.com, with a subject containing …, that is a reply". */
-export function describeMatch({ facts, ...match }: RuleMatch): string {
-  const named = Object.entries(match).map(([key, value]) => `${MATCH[key] ?? key} ${key === 'subjectContains' ? `“${value}”` : value}`);
-  const asked = factAnswers(facts).map(factWords);
+export function describeMatch(match: RuleMatch): string {
+  const named = conditionsOf(match).map(([key, value]) => `${MATCH[key]} ${value}`);
+  const asked = factAnswers(match.facts).map(factWords);
   return [...named, ...(asked.length > 0 ? [`that ${asked.join(' and ')}`] : [])].join(', ');
 }
 

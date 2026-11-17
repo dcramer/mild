@@ -94,6 +94,43 @@ describe('rules stage', () => {
     expect(await decide([{ ...newsletters, except: [{ subjectContains: 'receipt' }] }], facts({ subject: 'Your receipt' }))).toBeNull();
   });
 
+  describe("the sender's name", () => {
+    const from = (name?: string) => facts({ from: { address: 'notifications@example.com', domain: 'example.com', ...(name === undefined ? {} : { name }) } });
+    const updates: Rule = { id: 'updates', match: { from: 'notifications@example.com', fromName: 'dependabot' }, labelId: 'newsletter' };
+    const bots: Rule = { id: 'bots', match: { fromDomain: 'example.com', fromNameContains: '[bot]' }, labelId: 'newsletter' };
+
+    it('matches a whole name or part of one, ignoring case and runs of spaces', async () => {
+      expect(await decide([updates], from('  Dependabot '))).toMatchObject({ ruleId: 'updates' });
+      expect(await decide([updates], from('Dependabot Preview'))).toBeNull();
+      expect(await decide([updates], from())).toBeNull();
+      expect(await decide([bots], from('github-actions[BOT]'))).toMatchObject({ ruleId: 'bots' });
+      expect(await decide([{ ...bots, match: { fromDomain: 'example.com', fromNameContains: 'release  team' } }], from('The Release Team'))).toMatchObject({
+        ruleId: 'bots',
+      });
+    });
+
+    it('never holds a name without the address or domain it comes from', async () => {
+      expect(await decide([{ id: 'r', match: { fromName: 'Dependabot' }, disposition: 'keep' }], from('Dependabot'))).toBeNull();
+      expect(await decide([{ id: 'r', match: { fromNameContains: 'bot', facts: { isReply: false } }, disposition: 'keep' }], from('Dependabot'))).toBeNull();
+      // An exception belongs to a rule that names the sender.
+      expect(
+        await decide(
+          [{ id: 'r', match: { from: 'notifications@example.com' }, except: [{ fromName: 'Dependabot' }], labelId: 'newsletter' }],
+          from('Dependabot'),
+        ),
+      ).toBeNull();
+    });
+
+    it('beats a rule for all their mail, and a whole name beats part of one', async () => {
+      const all: Rule = { id: 'all', match: { from: 'notifications@example.com' }, labelId: 'newsletter', disposition: 'archive' };
+      const security: Rule = { id: 'security', match: { from: 'notifications@example.com', fromNameContains: 'security' }, labelId: 'personal' };
+      expect(await decide([all, security], from('Security alerts'))).toMatchObject({ ruleId: 'security', disposition: 'keep' });
+      expect(await decide([all, security], from('Dependabot'))).toMatchObject({ ruleId: 'all' });
+      expect(specificity({ from: 'a@example.com', fromName: 'A' })).toBeGreaterThan(specificity({ from: 'a@example.com', fromNameContains: 'A' }));
+      expect(describeMatch(updates.match)).toBe('from notifications@example.com, named dependabot');
+    });
+  });
+
   it('matches To but not Cc', async () => {
     const rule: Rule = { id: 'r', match: { to: 'jobs@example.org' }, labelId: 'cold_outreach' };
     expect(await decide([rule], facts({ cc: [{ address: 'jobs@example.org', domain: 'example.org' }] }))).toBeNull();

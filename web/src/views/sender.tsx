@@ -43,11 +43,14 @@ function byMessage(rows: readonly ListedDecision[]): ListedDecision[] {
 /** Mail no rule placed that Sift has not carried out and the reader has not answered. */
 const isWaiting = (row: ListedDecision) => !row.byUser && !row.carryOut && row.outcome === null && row.stage !== 'rules';
 
+/** A rule for all their mail, not some of it (under one name, say). */
+const forAll = (rule: Rule) => Object.keys(rule.match).length === 1;
+
 const forExactly = (data: SenderPage, rule: Rule) =>
-  data.kind === 'sender' ? rule.match['from'] === data.profile.address : rule.match['fromDomain'] === data.profile.address;
+  forAll(rule) && (data.kind === 'sender' ? rule.match['from'] === data.profile.address : rule.match['fromDomain'] === data.profile.address);
 
 /** The rule that decides their next message: one for exactly them wins over one for their domain. */
-const decidingRule = (data: SenderPage): Rule | null => data.profile.rules.find((r) => forExactly(data, r)) ?? data.profile.rules[0] ?? null;
+const decidingRule = (data: SenderPage): Rule | null => data.profile.rules.find((r) => forExactly(data, r)) ?? data.profile.rules.find(forAll) ?? null;
 
 const ruleHref = (id: string) => `/rules?rule=${encodeURIComponent(id)}`;
 

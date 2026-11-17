@@ -55,6 +55,8 @@ describe('whether a rule can be a Gmail filter', () => {
     expect(reason(rule({ disposition: 'spam' }))).toMatch(/spam/);
     expect(reason(rule({ markRead: true }))).toMatch(/marks mail read/);
     expect(reason(rule({ match: { listId: 'news.example.com' } }))).toMatch(/mailing list/);
+    expect(reason(rule({ match: { from: 'news@example.com', fromName: 'News' } }))).toMatch(/name/);
+    expect(reason(rule({ match: { fromDomain: 'example.com', fromNameContains: 'bot' } }))).toMatch(/name/);
     expect(reason(rule({ except: [{ subjectContains: 'invoice' }] }))).toMatch(/exceptions/);
     expect(reason(rule({ labelId: 'no-such-label' }))).toMatch(/label has been removed/);
     expect(reason(rule({ match: { from: 'news@example.com', facts: { unsubscribe: 'one-click' } } }))).toBe(
