@@ -1,4 +1,4 @@
-import { and, avg, count, decisions, desc, eq, gte, inArray, inboxRuns, isNotNull, isNull, modelRuns, sql, sum } from './query.ts';
+import { and, count, decisions, desc, eq, gte, inArray, inboxRuns, isNull, modelRuns, sql, sum } from './query.ts';
 import type { Sql } from './sql.ts';
 
 /**
@@ -167,21 +167,8 @@ export async function inboxProgress(db: Sql, accountIds: readonly string[]): Pro
   };
 }
 
-/** Too few to go by, and an estimate falls back to the model's catalogue price or to every message needing the model. */
-const ENOUGH = 20;
-
-/** What one model call has cost this person on `model` lately, or null with too few calls to say. */
-export async function costPerCall(db: Sql, model: string): Promise<number | null> {
-  const recent = db
-    .select({ cost: modelRuns.costUsd })
-    .from(modelRuns)
-    .where(and(eq(modelRuns.model, model), isNotNull(modelRuns.finishedAt), isNull(modelRuns.error)))
-    .orderBy(desc(modelRuns.id))
-    .limit(200)
-    .as('recent');
-  const [row] = await db.select({ n: count(), cost: avg(recent.cost).mapWith(Number) }).from(recent);
-  return row && row.n >= ENOUGH ? row.cost : null;
-}
+/** Fewer decisions than this and their share says more about those messages than about the mailbox. */
+const ENOUGH_DECISIONS = 20;
 
 /** Of this person's decisions since `since`, the share a model was asked for; null with too few to say. */
 export async function modelShare(db: Sql, since: number): Promise<number | null> {
@@ -189,5 +176,5 @@ export async function modelShare(db: Sql, since: number): Promise<number | null>
     .select({ n: count(), asked: count(decisions.runId) })
     .from(decisions)
     .where(gte(decisions.decidedAt, since));
-  return row && row.n >= ENOUGH ? row.asked / row.n : null;
+  return row && row.n >= ENOUGH_DECISIONS ? row.asked / row.n : null;
 }

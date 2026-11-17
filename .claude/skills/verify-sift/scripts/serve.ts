@@ -99,7 +99,7 @@ const controls = {
   ...built,
   // What Gmail would say of an inbox of 2,412 messages, with three in four needing the model at about a tenth of a cent each.
   inboxEstimate: async (_db: Parameters<typeof built.inboxEstimate>[0], _mailboxes: readonly string[], reach: 'inbox' | 'recent') =>
-    reach === 'inbox' ? { messages: 2412, model: 1830, cost: 3.1, quota: false } : { messages: 300, model: 228, cost: 0.39, quota: false },
+    reach === 'inbox' ? { messages: 2412, model: 1830, cost: 3.1 } : { messages: 300, model: 228, cost: 0.39 },
   proposeLabels: async (db: Parameters<typeof built.proposeLabels>[0], request: { accountId: string; goal: string }) => {
     faux.setResponses([suggest]);
     return await proposeLabels({ db, propose: createProposer(models, faux.getModel()), model: 'faux/stand-in' }, request);

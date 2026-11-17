@@ -1,4 +1,4 @@
-import { type AnyColumn, and, count, decisions, eq, inArray, isNull, modelRuns, notExists, sql } from './query.ts';
+import { type AnyColumn, and, avg, count, decisions, desc, eq, gt, inArray, isNotNull, isNull, modelRuns, notExists, sql } from './query.ts';
 import type { Sql } from './sql.ts';
 import type { Usage } from '../triage/stages/model.ts';
 
@@ -52,6 +52,36 @@ export async function finishRun(db: Sql, id: number, result: { error?: string; u
       finishedAt: result.now,
     })
     .where(eq(modelRuns.id, id));
+}
+
+/** How many calls an average is taken over: enough that one long message does not sway it, recent enough to follow the labels and prompt as they are now. */
+const RECENT_CALLS = 200;
+/** Fewer answered calls than this and an average says more about those messages than about the mailbox. */
+const ENOUGH_CALLS = 20;
+
+/**
+ * What a call about a message has averaged lately, on `model` or on any; null with too few answered to go by.
+ * A call whose provider reported no usage says nothing of its size or cost, so it is left out.
+ */
+export async function averageCall(db: Sql, model?: string): Promise<{ costUsd: number; inputTokens: number; outputTokens: number } | null> {
+  const recent = db
+    .select({ costUsd: modelRuns.costUsd, inputTokens: modelRuns.inputTokens, outputTokens: modelRuns.outputTokens })
+    .from(modelRuns)
+    .where(
+      and(model === undefined ? undefined : eq(modelRuns.model, model), isNotNull(modelRuns.finishedAt), isNull(modelRuns.error), gt(modelRuns.inputTokens, 0)),
+    )
+    .orderBy(desc(modelRuns.id))
+    .limit(RECENT_CALLS)
+    .as('recent');
+  const [row] = await db
+    .select({
+      n: count(),
+      costUsd: avg(recent.costUsd).mapWith(Number),
+      inputTokens: avg(recent.inputTokens).mapWith(Number),
+      outputTokens: avg(recent.outputTokens).mapWith(Number),
+    })
+    .from(recent);
+  return row && row.n >= ENOUGH_CALLS ? { costUsd: row.costUsd, inputTokens: row.inputTokens, outputTokens: row.outputTokens } : null;
 }
 
 /** Failures that say nothing about their messages (the provider was down): they stop counting, as if put back. */

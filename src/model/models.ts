@@ -98,12 +98,17 @@ export function shortlistModels(provider: string, ids: readonly string[]): strin
  * characters (about 1,000 tokens), examples up to 1,200 (`SHOT_TOKEN_BUDGET`), and the instructions and
  * labels. Out: a label and a reason of at most 300 characters.
  */
-const TYPICAL_CALL = { input: 3000, output: 150 };
+const TYPICAL_CALL: Tokens = { input: 3000, output: 150 };
 
-/** What a model would cost for 1,000 messages at its catalog price, in dollars; null when the catalog has no price. */
-export function costPerThousand(cost: { input: number; output: number }): number | null {
-  const each = (TYPICAL_CALL.input * cost.input + TYPICAL_CALL.output * cost.output) / 1_000_000;
-  return each > 0 ? each * 1000 : null;
+export interface Tokens {
+  input: number;
+  output: number;
+}
+
+/** What one call of `tokens` costs at a model's catalog price, in dollars; null when the catalog has no price. */
+export function priceOf(cost: { input: number; output: number }, tokens: Tokens = TYPICAL_CALL): number | null {
+  const each = (tokens.input * cost.input + tokens.output * cost.output) / 1_000_000;
+  return each > 0 ? each : null;
 }
 
 /** Keys in the environment and files on disk would speak for everyone; each person's sign-in is their own. */

@@ -570,10 +570,8 @@ export const InboxEstimate = z.object({
   messages: z.number(),
   /** Of `messages`, about how many need the model: as many as did lately. */
   model: z.number(),
-  /** About what those calls cost, in dollars; null when the price is not known or the model is on a plan's quota. */
+  /** About what those calls cost, in dollars, through ChatGPT what they would cost through the API; null when the price is not known. */
   cost: z.number().nullable(),
-  /** The model is reached through a subscription (ChatGPT): it uses the plan's quota instead of money. */
-  quota: z.boolean(),
 });
 export type InboxEstimate = z.infer<typeof InboxEstimate>;
 

@@ -120,7 +120,7 @@ beforeEach(async () => {
     },
     applyRule: async (_db, id) => (calls.push(`apply ${id}`), { deciding: 1, reading: 0 }),
     // Reads Gmail for whichever mailboxes it is given: only the route's scope keeps it to the asker's.
-    inboxEstimate: async (_db, mailboxes) => (calls.push(`estimate ${mailboxes.join(',')}`), { messages: 1, model: 1, cost: null, quota: false }),
+    inboxEstimate: async (_db, mailboxes) => (calls.push(`estimate ${mailboxes.join(',')}`), { messages: 1, model: 1, cost: null }),
     startEval: async (_db, { accountId }) => (calls.push(`eval ${accountId}`), 1),
     proposeLabels: async (_db, { accountId, goal }) => (calls.push(`propose ${accountId}`), { id: 1, goal, drafts: [], at: 0 }),
     draftRule: async (_db, { accountId }) => (calls.push(`draft ${accountId}`), { match: { from: ['x@example.com'] }, disposition: 'archive' }),

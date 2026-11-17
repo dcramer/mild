@@ -23,11 +23,7 @@ export function InboxFigures({ estimate, model }: { estimate: InboxEstimate | nu
     <Figures>
       <Figure label="In your inbox" value={count(estimate.messages)} />
       <Figure label="Need the model" value={count(estimate.model)} />
-      {estimate.quota ? (
-        <Figure label="Cost" value="Your plan" tone="look" note="Uses its quota" />
-      ) : estimate.cost === null ? null : (
-        <Figure label="About" value={money(estimate.cost)} tone="look" note={on} />
-      )}
+      {estimate.cost === null ? null : <Figure label="About" value={money(estimate.cost)} tone="look" note={on} />}
     </Figures>
   );
 }
@@ -111,13 +107,7 @@ export function InboxRow({ state, reload, onGoThrough }: { state: ManageState; r
       </SettingRow>
     );
   const said = estimate.data;
-  const costs = !said
-    ? null
-    : said.quota
-      ? 'Going through them uses your plan’s quota.'
-      : said.cost === null
-        ? null
-        : `Going through them costs about ${money(said.cost)}.`;
+  const costs = !said || said.cost === null ? null : `Going through them costs about ${money(said.cost)}.`;
   return (
     <SettingRow
       title="Your inbox"

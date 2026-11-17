@@ -1,8 +1,8 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { continueInboxRun } from '../src/work/inbox.ts';
-import { REACH, costPerCall, goingInboxRuns, inboxProgress, modelShare, startInboxRuns, stopInboxRuns } from '../src/store/inbox.ts';
-import { finishRun, startRun } from '../src/store/runs.ts';
+import { REACH, goingInboxRuns, inboxProgress, modelShare, startInboxRuns, stopInboxRuns } from '../src/store/inbox.ts';
+import { averageCall, finishRun, startRun } from '../src/store/runs.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { type RunOptions, tick } from '../src/work/run.ts';
 import { triageAccount } from '../src/work/triage.ts';
@@ -38,7 +38,7 @@ const controls: Controls = {
     calls.push(`undo ${id}`);
     return null;
   },
-  inboxEstimate: async (_db, _mailboxes, reach) => (calls.push(`estimate ${reach}`), { messages: 40, model: 30, cost: 0.03, quota: false }),
+  inboxEstimate: async (_db, _mailboxes, reach) => (calls.push(`estimate ${reach}`), { messages: 40, model: 30, cost: 0.03 }),
   putBack: async (_db, _account, messageId) => {
     calls.push(`putBack ${messageId}`);
     if (messageId === 'gone') throw new Error('The message no longer exists.');
@@ -1044,7 +1044,7 @@ describe('going through the inbox', () => {
   });
 
   it('estimates from what model calls cost lately and how much mail went to the model, once there are enough of each', async () => {
-    expect(await costPerCall(db, 'test/model')).toBeNull();
+    expect(await averageCall(db)).toBeNull();
     expect(await modelShare(db, 0)).toBeNull();
     const ids = Array.from({ length: 20 }, (_, i) => `e${i}`);
     await recordSync(
@@ -1055,13 +1055,18 @@ describe('going through the inbox', () => {
     );
     for (const [i, id] of ids.entries()) {
       const run = await startRun(db, { accountId: ACCOUNT, messageId: id, model: 'test/model', now: 10 });
-      await finishRun(db, run, { usage: { model: 'test/model', inputTokens: 1, outputTokens: 1, costUsd: i < 10 ? 0.001 : 0.003 }, now: 11 });
+      await finishRun(db, run, { usage: { model: 'test/model', inputTokens: 1000, outputTokens: 100, costUsd: i < 10 ? 0.001 : 0.003 }, now: 11 });
       // Half went to the model.
       const said = { disposition: 'keep', subscription: 'preserve', stage: i % 2 ? 'model' : 'rules', reason: 'r' } as const;
       await recordDecision(db, ACCOUNT, id, said, { carryOut: false, now: 10, ...(i % 2 ? { runId: run } : {}) });
     }
-    expect(await costPerCall(db, 'test/model')).toBeCloseTo(0.002);
-    expect(await costPerCall(db, 'other/model')).toBeNull();
+    // A provider that reported no usage says nothing.
+    const silent = await startRun(db, { accountId: ACCOUNT, messageId: 'e0', model: 'test/model', now: 10 });
+    await finishRun(db, silent, { now: 11 });
+    expect(await averageCall(db, 'test/model')).toEqual({ costUsd: expect.closeTo(0.002), inputTokens: 1000, outputTokens: 100 });
+    // Calls on another model still say how big the person's calls are.
+    expect(await averageCall(db, 'other/model')).toBeNull();
+    expect(await averageCall(db)).toMatchObject({ inputTokens: 1000, outputTokens: 100 });
     expect(await modelShare(db, 0)).toBe(0.5);
     expect(await modelShare(db, 11)).toBeNull();
   });
@@ -1081,7 +1086,7 @@ describe('going through the inbox', () => {
       { acts: false, most: REACH.recent, stopped: true },
       { acts: true, most: REACH.inbox, stopped: false },
     ]);
-    expect((await call('GET', '/api/inbox?reach=inbox')).body).toEqual({ messages: 40, model: 30, cost: 0.03, quota: false });
+    expect((await call('GET', '/api/inbox?reach=inbox')).body).toEqual({ messages: 40, model: 30, cost: 0.03 });
     expect(calls).toEqual(['check', 'check', 'estimate inbox']);
   });
 });

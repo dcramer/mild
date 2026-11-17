@@ -7,7 +7,7 @@ import { createJudge } from '../src/model/judge.ts';
 import {
   finishChatGPTRedirect,
   modelChoices,
-  costPerThousand,
+  priceOf,
   offerModel,
   openModels,
   pollChatGPTDeviceCode,
@@ -868,9 +868,10 @@ describe('shortlistModels', () => {
   });
 });
 
-describe('costPerThousand', () => {
-  it('prices 1,000 typical calls at the catalog rate per million tokens, and has nothing to say without a price', () => {
-    expect(costPerThousand({ input: 1, output: 5 })).toBeCloseTo(3.75);
-    expect(costPerThousand({ input: 0, output: 0 })).toBeNull();
+describe('priceOf', () => {
+  it('prices a call at the catalog rate per million tokens, a typical one unless told its size, and has nothing to say without a price', () => {
+    expect(priceOf({ input: 1, output: 5 })).toBeCloseTo(0.00375);
+    expect(priceOf({ input: 1, output: 5 }, { input: 1000, output: 100 })).toBeCloseTo(0.0015);
+    expect(priceOf({ input: 0, output: 0 })).toBeNull();
   });
 });

@@ -4,7 +4,8 @@ import type { Config } from '../config.ts';
 import { type Ephemeral, holding } from '../ephemeral/ephemeral.ts';
 import type { Controls } from '../dashboard/controls.ts';
 import { forgetPassStatus, passStatus } from '../work/status.ts';
-import { REACH, costPerCall, modelShare } from '../store/inbox.ts';
+import { REACH, modelShare } from '../store/inbox.ts';
+import { averageCall } from '../store/runs.ts';
 import { hasOwnLabels } from '../store/labels.ts';
 import { applyRule, ruleInbox } from '../work/apply.ts';
 import { createGmailApi } from '../gmail/api.ts';
@@ -19,7 +20,7 @@ import type { SignIns } from '../model/credentials.ts';
 import { createJudge } from '../model/judge.ts';
 import { createProposer } from '../model/propose.ts';
 import { createRuleDrafter } from '../model/draft-rule.ts';
-import { costPerThousand, modelChoices, offerModel, openModels, resolveModel, saveApiKey, shortlistModels } from '../model/models.ts';
+import { modelChoices, offerModel, openModels, priceOf, resolveModel, saveApiKey, shortlistModels } from '../model/models.ts';
 import { listAccounts, personOf } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
 import { credentials } from '../store/credentials.ts';
@@ -82,12 +83,20 @@ export async function buildControls(
   const choices = modelChoices(config.settings.chatgptSignIn ?? 'device-code');
   /** Pass the person's mailboxes now, not at the next tick. Nothing does while only the dashboard runs. */
   const passNow = async (db: Sql) => live.kick?.(await personOf(db));
-  /** One model call with the person's model, in dollars; null when they have none or its price is not known. */
+  /** The size of the person's own calls lately, in tokens, which is their mail and their labels more than the model; undefined for a typical call's. */
+  const usualCall = async (db: Sql) => {
+    const usual = await averageCall(db);
+    return usual ? { input: usual.inputTokens, output: usual.outputTokens } : undefined;
+  };
+  /**
+   * What classifying one message costs the person on their model, in dollars: what their calls on it have cost
+   * lately, else their usual call at its catalog price. Through ChatGPT, what the same use would cost through
+   * the API. Null when they have no model or its price is not known.
+   */
   const costEach = async (db: Sql) => {
     const { model: spec } = await preferences(db);
     if (!spec) return null;
-    const perThousand = costPerThousand(resolveModel(await modelsFor(config, live.ephemeral, db), spec).cost);
-    return perThousand === null ? null : perThousand / 1000;
+    return (await averageCall(db, spec))?.costUsd ?? priceOf(resolveModel(await modelsFor(config, live.ephemeral, db), spec).cost, await usualCall(db));
   };
   return {
     models: async (db) => {
@@ -100,10 +109,12 @@ export async function buildControls(
         );
         if (ids.length > 0) shortlist[provider] = ids.map((id) => `${provider}/${id}`);
       }
+      // Each priced for the same calls, so they compare.
+      const tokens = await usualCall(db);
       const costs: Record<string, number> = {};
       for (const m of available) {
-        const cost = costPerThousand(m.cost);
-        if (cost !== null) costs[`${m.provider}/${m.id}`] = cost;
+        const each = priceOf(m.cost, tokens);
+        if (each !== null) costs[`${m.provider}/${m.id}`] = each * 1000;
       }
       return { models: available.map((m) => `${m.provider}/${m.id}`), shortlist, costs };
     },
@@ -148,10 +159,8 @@ export async function buildControls(
       }
       // As much of it as went to the model lately; with nothing to go by, all of it.
       const model = Math.round(messages * ((await modelShare(db, Date.now() - ESTIMATE_DAYS * DAY_MS)) ?? 1));
-      const { model: spec } = await preferences(db);
-      const quota = spec !== null && choices.some((c) => c.provider === spec.split('/')[0] && c.how !== 'key');
-      const each = spec === null || quota ? null : ((await costPerCall(db, spec)) ?? (await costEach(db)));
-      return { messages, model, cost: each === null ? null : model * each, quota };
+      const each = await costEach(db);
+      return { messages, model, cost: each === null ? null : model * each };
     },
     putBack: async (db, accountId, messageId) => {
       const last = await lastStandingChange(db, accountId, messageId);
