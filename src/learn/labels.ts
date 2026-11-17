@@ -1,9 +1,8 @@
 import { Refusal } from '../refusal.ts';
-import { finishLabelProposal, inboxWords, listLabels, startLabelProposal } from '../store/labels.ts';
-import { listAccounts } from '../store/accounts.ts';
+import { finishLabelProposal, listLabels, startLabelProposal } from '../store/labels.ts';
 import type { Sql } from '../store/sql.ts';
 import { invokeAgent, reportError } from '../telemetry.ts';
-import type { Proposal, Proposer } from '../triage/proposal.ts';
+import type { LabelDraft, Proposer } from '../triage/proposal.ts';
 import { LEAVE_IN_INBOX } from '../triage/types.ts';
 
 /**
@@ -13,15 +12,13 @@ import { LEAVE_IN_INBOX } from '../triage/types.ts';
 export async function proposeLabels(
   deps: { db: Sql; propose: Proposer; model: string; now?: () => number },
   request: { accountId: string; goal: string },
-): Promise<Proposal & { id: number; goal: string; at: number }> {
+): Promise<{ id: number; goal: string; drafts: LabelDraft[]; note?: string; at: number }> {
   const { db } = deps;
   const now = deps.now ?? Date.now;
   const at = now();
   const id = await startLabelProposal(db, { ...request, model: deps.model, now: at });
   const labels = (await listLabels(db, request.accountId)).filter((l) => l.id !== LEAVE_IN_INBOX);
-  // Said once for all their mailboxes, so a mailbox connected later is asked with it too.
-  const inbox = await inboxWords(db, [request.accountId, ...(await listAccounts(db)).map((a) => a.id)]);
-  const answer = await invokeAgent('labels', [db.person, id], { 'sift.label_proposal': id }, () => deps.propose({ goal: request.goal, labels, inbox }));
+  const answer = await invokeAgent('labels', [db.person, id], { 'sift.label_proposal': id }, () => deps.propose({ goal: request.goal, labels }));
   const usage = answer.usage ? { usage: answer.usage } : {};
   if ('failed' in answer) {
     await finishLabelProposal(db, request.accountId, id, { error: answer.failed, ...usage, now: now() });
@@ -30,6 +27,6 @@ export async function proposeLabels(
     throw new Refusal(`The model could not suggest labels (${answer.failed}). Try again.`);
   }
   const note = answer.note ? { note: answer.note } : {};
-  await finishLabelProposal(db, request.accountId, id, { drafts: answer.drafts, inbox: answer.inbox, ...note, ...usage, now: now() });
-  return { id, goal: request.goal, drafts: answer.drafts, inbox: answer.inbox, ...note, at };
+  await finishLabelProposal(db, request.accountId, id, { drafts: answer.drafts, ...note, ...usage, now: now() });
+  return { id, goal: request.goal, drafts: answer.drafts, ...note, at };
 }

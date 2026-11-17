@@ -1,5 +1,5 @@
 import type { LabelProposal } from '@/lib/api.ts';
-import { ACTIONS, INBOX_NAME } from '@/lib/format.ts';
+import { ACTIONS } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
 import { Button, Check, Does, OnPhone, RowActions, Sub, Table, Td, Th, Tr } from '@/system';
 import type { LabelDraft } from '@/views/label-panel.tsx';
@@ -28,12 +28,6 @@ export const keptLabels = (suggestions: readonly Suggestion[]) =>
       ...(s.unsubscribe ? { unsubscribe: true } : {}),
     }));
 
-/** What the model suggested always stays in the inbox, as the person is shaping it: kept unless unticked. */
-export interface InboxSuggestion {
-  words: string;
-  on: boolean;
-}
-
 /** Use these labels, Add this label: the press that makes the ones kept, by how many. */
 export const keepWord = (verb: 'Use' | 'Add', kept: number) =>
   kept === 1 ? `${verb} this label` : kept === 0 ? `${verb} these labels` : `${verb} these ${kept} labels`;
@@ -42,19 +36,16 @@ const word = (key: string) => ACTIONS.find(([k]) => k === key)?.[1] ?? key;
 
 /**
  * What the model suggested, each ticked to keep: its name, what it is and what Sift will do with it, and Edit.
- * What always stays in the inbox, when it suggested some, comes first, where Leave in inbox is in every list.
  * On a phone, what Sift does and Edit share the line under the description, which keeps the width.
  */
 export function SuggestionList({
   suggestions,
   onChange,
   onEdit,
-  inbox,
 }: {
   suggestions: readonly Suggestion[];
   onChange: (index: number, change: Partial<Suggestion>) => void;
   onEdit: (index: number) => void;
-  inbox?: InboxSuggestion & { onChange: (change: Partial<InboxSuggestion>) => void; onEdit: () => void };
 }) {
   return (
     <Table>
@@ -66,36 +57,6 @@ export function SuggestionList({
         </Tr>
       </thead>
       <tbody>
-        {inbox && inbox.words.trim() !== '' ? (
-          <Tr>
-            <Td>
-              <span className="flex items-start gap-3">
-                <span className="flex h-6 items-center">
-                  <Check checked={inbox.on} onChange={(on) => inbox.onChange({ on })}>
-                    <span className="sr-only">Use {INBOX_NAME}</span>
-                  </Check>
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className={cn(!inbox.on && 'opacity-45')}>
-                    <span className="name">{INBOX_NAME}</span>
-                    <Sub className="whitespace-normal">Always: {inbox.words}</Sub>
-                  </span>
-                  <OnPhone>
-                    <Button variant="quiet" className="ml-auto" aria-label={`Edit ${INBOX_NAME}`} onClick={inbox.onEdit}>
-                      Edit
-                    </Button>
-                  </OnPhone>
-                </span>
-              </span>
-            </Td>
-            <Td phone="hide" />
-            <RowActions>
-              <Button variant="quiet" aria-label={`Edit ${INBOX_NAME}`} onClick={inbox.onEdit}>
-                Edit
-              </Button>
-            </RowActions>
-          </Tr>
-        ) : null}
         {suggestions.map((s, i) => (
           <Tr key={i}>
             <Td>

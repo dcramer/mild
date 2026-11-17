@@ -53,7 +53,6 @@ const controls: Controls = {
       id: 3,
       goal,
       drafts: [{ name: 'Cold outreach', description: 'Pitches from strangers.', disposition: 'archive', unsubscribe: true, why: 'fewer pitches' }],
-      inbox: 'Bills I still owe',
       at: 1,
     };
   },
@@ -191,16 +190,12 @@ describe('managing sift from the dashboard', () => {
     // One name taken refuses the lot.
     expect((await call('POST', '/api/labels/accept', { labels: [pitches, { ...pitches }] })).status).toBe(409);
     expect(await listLabels(db, NEW)).toHaveLength(1);
-    const accepted = await call('POST', '/api/labels/accept', {
-      labels: [pitches, { name: 'Lies', description: 'Scams.', disposition: 'block' }],
-      inbox: 'Bills I still owe',
-    });
+    const accepted = await call('POST', '/api/labels/accept', { labels: [pitches, { name: 'Lies', description: 'Scams.', disposition: 'block' }] });
     expect(accepted.body).toEqual({ ids: ['pitches', 'lies'] });
     expect(await listLabels(db, NEW)).toEqual([
       { id: 'pitches', name: 'Pitches', description: 'From strangers.', disposition: 'archive', gmailLabel: 'sift/pitches', unsubscribe: true },
       { id: 'lies', name: 'Lies', description: 'Scams.', disposition: 'spam', gmailLabel: 'sift/lies', block: true },
-      // What they kept of what always stays in the inbox goes on Leave in inbox.
-      expect.objectContaining({ id: 'everything_else', description: 'Bills I still owe' }),
+      expect.objectContaining({ id: 'everything_else' }),
     ]);
     // A mailbox that had labels keeps its own.
     expect(await listLabels(db, ACCOUNT)).toEqual(before);
@@ -346,19 +341,10 @@ describe('managing sift from the dashboard', () => {
     expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'marketing')).toMatchObject({ description: 'Sales pitches.', disposition: 'keep' });
   });
 
-  it('adds to what always stays in the inbox with labels, in every mailbox, or refuses both', async () => {
+  it('changes nothing of Leave in inbox', async () => {
     const { call } = await start();
-    const inbox = async () => (await listLabels(db, ACCOUNT)).find((l) => l.id === LEAVE_IN_INBOX)?.description;
-    expect((await call('POST', '/api/labels/add', { labels: [], inbox: 'Bills I still owe' })).status).toBe(200);
-    expect(await inbox()).toBe('Bills I still owe');
-    const pitches = { name: 'Pitches', description: 'From strangers.', disposition: 'archive' };
-    expect((await call('POST', '/api/labels/add', { labels: [pitches], inbox: 'mail a person wrote me' })).status).toBe(200);
-    expect(await inbox()).toBe('Bills I still owe; mail a person wrote me');
-    // Too long together: nothing is added, the label included.
-    const lies = { name: 'Lies', description: 'Scams.', disposition: 'spam' };
-    expect((await call('POST', '/api/labels/add', { labels: [lies], inbox: 'x'.repeat(590) })).status).toBe(409);
-    expect((await listLabels(db, ACCOUNT)).some((l) => l.id === 'lies')).toBe(false);
-    expect((await call('POST', '/api/labels/add', { labels: [] })).status).toBe(400);
+    expect((await call('POST', '/api/labels', { id: LEAVE_IN_INBOX, description: 'Bills I still owe' })).status).toBe(409);
+    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === LEAVE_IN_INBOX)?.description).toBe('');
   });
 
   it('edits labels and rules', async () => {

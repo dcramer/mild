@@ -60,10 +60,10 @@ export interface Decision {
 }
 
 /**
- * Leave in inbox: the one choice every mailbox has that is not a label of the person's. Mail that is none of
- * their labels, or that they said always stays in the inbox (its description, in their words), whatever label
- * also fits. It always keeps and has no Gmail label, so mail put there by mistake is where it would have been
- * without Sift. The id is from when it was called Everything Else; ids never change.
+ * Leave in inbox: the one choice every mailbox has that is not a label of the person's, for mail that is none
+ * of their labels. Sift's own, and nothing about it changes. It always keeps and has no Gmail label, so mail put
+ * there by mistake is where it would have been without Sift. The id is from when it was called Everything Else;
+ * ids never change.
  */
 export const LEAVE_IN_INBOX = 'everything_else';
 export const LEAVE_IN_INBOX_NAME = 'Leave in inbox';

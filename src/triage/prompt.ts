@@ -10,8 +10,8 @@ const BODY_MARK = '| ';
 const RULED = new Set<Standing>(['trusted', 'unwanted', 'blocked']);
 
 /**
- * The id the model knows a label by. Leave in inbox's stored id is from when it was Everything Else, which reads
- * as what is left over; to the model it is a choice like any label, which can win over one that also fits.
+ * The id the model knows a label by. Leave in inbox's stored id is from when it was Everything Else; to the
+ * model it is what it does.
  */
 export const forModel = (id: string) => (id === LEAVE_IN_INBOX ? 'leave_in_inbox' : id);
 /** A label id the model answered with, as it is stored. */
@@ -41,15 +41,10 @@ Rules:
   message meets it, and otherwise label the message as what it is.
 - Give a label only when the email plainly is what the label describes: most labels take mail out of the
   inbox, so a wrong one hides mail the owner wanted. Mail that is plainly none of the labels is
-  ${forModel(LEAVE_IN_INBOX)}. So is mail the owner says always stays in the inbox, even when a label also fits
-  it or their rule for the sender names one. Answer "${UNSURE}" when it might be one of the labels and you cannot tell which, or whether it is, or when
+  ${forModel(LEAVE_IN_INBOX)}. Answer "${UNSURE}" when it might be one of the labels and you cannot tell which, or whether it is, or when
   the evidence conflicts. A wrong label is worse than "${UNSURE}": the owner would rather look at one message
   too many than miss one that mattered.
 - The reason is one short sentence. Do not quote the email at length.`;
-
-/** Leave in inbox's description is what the owner says always stays, in their words, or nothing. */
-const inboxLine = (always: string) =>
-  always.trim() ? `none of the other labels, or what the owner says always stays in the inbox: ${always.trim()}` : 'none of the other labels';
 
 /** The user message for one classification. Pure: the same evidence always produces the same text. */
 export function buildPrompt(input: JudgeInput): string {
@@ -77,7 +72,7 @@ export function buildPrompt(input: JudgeInput): string {
 
   return [
     '# Labels',
-    ...labels.map((l) => `- ${forModel(l.id)} (${l.name}): ${l.id === LEAVE_IN_INBOX ? inboxLine(l.description) : l.description}`),
+    ...labels.map((l) => `- ${forModel(l.id)} (${l.name}): ${l.id === LEAVE_IN_INBOX ? 'none of the other labels' : l.description}`),
     `- ${UNSURE}: it might be one of these, and you cannot tell`,
     '',
     // Everything about the email comes last and together: what the mail system says of it, then what its sender wrote.

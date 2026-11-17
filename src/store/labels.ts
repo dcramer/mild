@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, examples, inArray, isNotNull, isNull, labelProposals, labels, or, rules, sql } from './query.ts';
 import { labelProposalName, openJson, sealJson } from './content.ts';
-import type { LabelDraft, Proposal } from '../triage/proposal.ts';
+import type { LabelDraft } from '../triage/proposal.ts';
 import type { Usage } from '../triage/stages/model.ts';
 import type { Sql } from './sql.ts';
 import { type Disposition, LEAVE_IN_INBOX, LEAVE_IN_INBOX_NAME, type Label } from '../triage/types.ts';
@@ -8,8 +8,7 @@ import { Refusal } from '../refusal.ts';
 
 /**
  * The only choice a new mailbox has; the labels are the person's own, from what they want of Sift. Listed after
- * every label of theirs. Its description is what the person says always stays in their inbox, empty until they
- * say; its name and what it does never change.
+ * every label of theirs. Nothing about it changes: mail to treat differently gets a label of the person's own.
  */
 const leaveInInbox: Label = { id: LEAVE_IN_INBOX, name: LEAVE_IN_INBOX_NAME, description: '', disposition: 'keep' };
 
@@ -156,30 +155,6 @@ export async function removeLabel(db: Sql, accountId: string, id: string, now: n
   return true;
 }
 
-/** How long a label's description may be, and so what the person says always stays in the inbox. */
-export const MAX_DESCRIPTION = 600;
-
-/**
- * What the person said always stays in the inbox. It is said once for all their mailboxes, so a mailbox that
- * has none yet takes another's.
- */
-export async function inboxWords(db: Sql, accountIds: readonly string[]): Promise<string> {
-  for (const accountId of accountIds) {
-    const words = (await listLabels(db, accountId)).find((l) => l.id === LEAVE_IN_INBOX)?.description;
-    if (words) return words;
-  }
-  return '';
-}
-
-/** Add to what always stays in `accountId`'s inbox, after what was said before. Refused past the limit, so a caller's transaction changes nothing. */
-export async function addInboxWords(db: Sql, accountId: string, said: string, words: string): Promise<void> {
-  const added = words.trim();
-  const next = !added || said.includes(added) ? said : said ? `${said}; ${added}` : added;
-  if (next.length > MAX_DESCRIPTION)
-    throw new Refusal(`What always stays in your inbox can be at most ${MAX_DESCRIPTION} characters. Shorten it on the Labels screen first.`);
-  await updateLabel(db, accountId, LEAVE_IN_INBOX, { description: next });
-}
-
 /** Whether the account has a label of its own, besides Leave in inbox. Until it does, Sift reads nothing from its Gmail. */
 export async function hasOwnLabels(db: Sql, accountId: string): Promise<boolean> {
   return (await listLabels(db, accountId)).some((l) => l.id !== LEAVE_IN_INBOX);
@@ -197,9 +172,8 @@ export async function updateLabel(
 ): Promise<boolean> {
   const current = (await listLabels(db, accountId)).find((l) => l.id === id);
   if (!current) return false;
-  const acts = (change.disposition ?? 'keep') !== 'keep' || change.block || change.markRead || change.unsubscribe;
-  if (id === LEAVE_IN_INBOX && (acts || (change.name !== undefined && change.name.trim() !== current.name)))
-    throw new Refusal('Leave in inbox only says what stays in your inbox. Make a label for mail you want moved or tagged.');
+  if (id === LEAVE_IN_INBOX)
+    throw new Refusal('Leave in inbox is Sift’s own and does not change. Add a label of your own for mail you want treated differently.');
   const disposition = change.disposition ?? current.disposition;
   // Changing what a label does drops a block unless the change asks for one.
   const extras = normalise(
@@ -240,7 +214,7 @@ export async function finishLabelProposal(
   db: Sql,
   accountId: string,
   id: number,
-  outcome: (Proposal | { error: string }) & { usage?: Usage; now: number },
+  outcome: ({ drafts: LabelDraft[]; note?: string } | { error: string }) & { usage?: Usage; now: number },
 ): Promise<void> {
   await db
     .update(labelProposals)
@@ -249,7 +223,6 @@ export async function finishLabelProposal(
       ...('drafts' in outcome
         ? {
             labels: sealJson(db, labelProposalName(db, accountId, 'labels'), outcome.drafts),
-            inbox: sealJson(db, labelProposalName(db, accountId, 'inbox'), outcome.inbox),
             ...(outcome.note ? { note: sealJson(db, labelProposalName(db, accountId, 'note'), outcome.note) } : {}),
           }
         : { error: outcome.error }),
@@ -259,7 +232,10 @@ export async function finishLabelProposal(
 }
 
 /** The latest proposal for any of these mailboxes that suggested something, so it survives a reload. */
-export async function latestLabelProposal(db: Sql, accountIds: readonly string[]): Promise<(Proposal & { id: number; goal: string; at: number }) | null> {
+export async function latestLabelProposal(
+  db: Sql,
+  accountIds: readonly string[],
+): Promise<{ id: number; goal: string; drafts: LabelDraft[]; note?: string; at: number } | null> {
   if (accountIds.length === 0) return null;
   const [row] = await db
     .select({
@@ -268,7 +244,6 @@ export async function latestLabelProposal(db: Sql, accountIds: readonly string[]
       goal: labelProposals.goal,
       labels: labelProposals.labels,
       note: labelProposals.note,
-      inbox: labelProposals.inbox,
       at: labelProposals.startedAt,
     })
     .from(labelProposals)
@@ -280,7 +255,6 @@ export async function latestLabelProposal(db: Sql, accountIds: readonly string[]
     id: row.id,
     goal: openJson<string>(db, labelProposalName(db, row.accountId, 'goal'), row.goal),
     drafts: openJson<LabelDraft[]>(db, labelProposalName(db, row.accountId, 'labels'), row.labels),
-    inbox: row.inbox === null ? '' : openJson<string>(db, labelProposalName(db, row.accountId, 'inbox'), row.inbox),
     ...(row.note === null ? {} : { note: openJson<string>(db, labelProposalName(db, row.accountId, 'note'), row.note) }),
     at: row.at,
   };

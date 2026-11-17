@@ -1,8 +1,8 @@
 import { type ReactNode, useState } from 'react';
 import { type LabelProposal, type LabelSummary, api, useAction } from '@/lib/api.ts';
-import { type InboxSuggestion, type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
+import { type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
 import { DescribeStep } from '@/components/describe.tsx';
-import { ACTIONS, type ActionKey, EXPLAIN, INBOX_NAME, count, percent, plural } from '@/lib/format.ts';
+import { ACTIONS, type ActionKey, EXPLAIN, count, percent, plural } from '@/lib/format.ts';
 import {
   ActionIcon,
   Button,
@@ -36,12 +36,8 @@ export interface LabelDraft {
   unsubscribe: boolean;
 }
 
-/**
- * What a label is and what happens to it: the fields for adding one and for changing one. Leave in inbox, the
- * only one with no Gmail label (`gmailLabel` null), has no name or action to change: only what always stays.
- */
+/** What a label is and what happens to it: the fields for adding one and for changing one. */
 export function LabelFields({ draft, onChange, gmailLabel }: { draft: LabelDraft; onChange: (draft: LabelDraft) => void; gmailLabel?: string | null }) {
-  if (gmailLabel === null) return <InboxField words={draft.description} onChange={(description) => onChange({ ...draft, description })} />;
   return (
     <>
       <Field
@@ -105,26 +101,6 @@ export function LabelFields({ draft, onChange, gmailLabel }: { draft: LabelDraft
   );
 }
 
-/** What always stays in the inbox, in the person's words: the model leaves it there whatever label also fits. */
-function InboxField({ words, onChange }: { words: string; onChange: (words: string) => void }) {
-  return (
-    <Field
-      inline
-      label="Always"
-      hint="Sift leaves mail like this in your inbox even when one of your labels also fits it. A rule for its sender still does what the rule says."
-    >
-      <TextArea
-        aria-label="What always stays in your inbox"
-        className="min-h-32"
-        maxLength={600}
-        placeholder="Bills I still have to pay; mail a person wrote to me"
-        value={words}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </Field>
-  );
-}
-
 /**
  * One label: how it is doing, then what it is and what happens to it, edited in place. The figures come
  * first because a label is usually opened for one of them: it is often wrong, or takes much of the mail.
@@ -160,15 +136,7 @@ export function LabelPanel({
   const ready = changed && draft.name.trim() !== '';
   const { busy, error, run } = useAction();
   // No toast: the panel shows what was saved.
-  const save = () =>
-    run(
-      () =>
-        api.saveLabel(
-          label.id,
-          label.gmailLabel === null ? { description: draft.description.trim() } : { ...draft, name: draft.name.trim(), description: draft.description.trim() },
-        ),
-      onSaved,
-    );
+  const save = () => run(() => api.saveLabel(label.id, { ...draft, name: draft.name.trim(), description: draft.description.trim() }), onSaved);
 
   return (
     <Panel narrow open onClose={onClose} title={label.name} position={position} onPrevious={onPrevious} onNext={onNext}>
@@ -183,20 +151,27 @@ export function LabelPanel({
           />
           <Figure label="Rules" value={count(label.rules)} {...(label.rules > 0 ? { href: `/rules?label=${label.id}` } : {})} />
         </Figures>
-        <Form onSubmit={() => ready && save()}>
-          <LabelFields draft={draft} onChange={setDraft} gmailLabel={label.gmailLabel} />
-          <div className="flex items-center gap-2 sm:pl-28">
-            <Button variant="ink" busy={busy} disabled={!ready} onClick={save}>
-              Save
-            </Button>
-            {changed ? (
-              <Button variant="quiet" onClick={() => setDraft(initial)}>
-                Undo changes
+        {/* Sift's own: nothing about it changes. */}
+        {label.gmailLabel === null ? (
+          <p className="text-muted-foreground">
+            Mail none of your labels fit stays in your inbox. Add a label of your own for mail you want treated differently.
+          </p>
+        ) : (
+          <Form onSubmit={() => ready && save()}>
+            <LabelFields draft={draft} onChange={setDraft} gmailLabel={label.gmailLabel} />
+            <div className="flex items-center gap-2 sm:pl-28">
+              <Button variant="ink" busy={busy} disabled={!ready} onClick={save}>
+                Save
               </Button>
-            ) : null}
-            <Failure>{error}</Failure>
-          </div>
-        </Form>
+              {changed ? (
+                <Button variant="quiet" onClick={() => setDraft(initial)}>
+                  Undo changes
+                </Button>
+              ) : null}
+              <Failure>{error}</Failure>
+            </div>
+          </Form>
+        )}
         {/* Leave in inbox is what mail is when it is none of the others. */}
         {label.gmailLabel === null ? null : (
           <div>
@@ -225,11 +200,7 @@ export function LabelPanel({
   );
 }
 
-type Stage =
-  | { at: 'describe' }
-  | { at: 'suggested'; proposal: LabelProposal }
-  | { at: 'edit'; proposal: LabelProposal; index: number | 'inbox' }
-  | { at: 'manual' };
+type Stage = { at: 'describe' } | { at: 'suggested'; proposal: LabelProposal } | { at: 'edit'; proposal: LabelProposal; index: number } | { at: 'manual' };
 
 const BLANK: LabelDraft = { name: '', description: '', disposition: 'archive', markRead: false, unsubscribe: false };
 
@@ -242,7 +213,6 @@ export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onS
   const [stage, setStage] = useState<Stage>({ at: 'describe' });
   const [text, setText] = useState('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [inbox, setInbox] = useState<InboxSuggestion>({ words: '', on: true });
   const [draft, setDraft] = useState<LabelDraft>(BLANK);
   const { busy, error, run } = useAction();
   const done = () => {
@@ -253,13 +223,10 @@ export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onS
     run(async () => {
       const proposal = await api.proposeLabels(text.trim());
       setSuggestions(proposal.drafts.map(suggestionOf));
-      setInbox({ words: proposal.inbox, on: true });
       setStage({ at: 'suggested', proposal });
     });
   const kept = keptLabels(suggestions);
-  const adding = inbox.on && inbox.words.trim() !== '';
   const change = (index: number, next: Partial<Suggestion>) => setSuggestions((all) => all.map((s, i) => (i === index ? { ...s, ...next } : s)));
-  const keep = () => run(() => api.addLabels(kept, adding ? inbox.words.trim() : undefined), done);
 
   if (stage.at === 'manual') {
     const ready = draft.name.trim() !== '';
@@ -289,26 +256,8 @@ export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onS
   }
 
   if (stage.at === 'edit') {
+    const editing = suggestions[stage.index];
     const back = () => setStage({ at: 'suggested', proposal: stage.proposal });
-    if (stage.index === 'inbox')
-      return (
-        <Dialog
-          open
-          onClose={onClose}
-          title={INBOX_NAME}
-          footer={
-            <Button variant="ink" onClick={back}>
-              Done
-            </Button>
-          }
-        >
-          <Form onSubmit={back}>
-            <InboxField words={inbox.words} onChange={(words) => setInbox((was) => ({ ...was, words }))} />
-          </Form>
-        </Dialog>
-      );
-    const index = stage.index;
-    const editing = suggestions[index];
     return (
       <Dialog
         open
@@ -321,7 +270,7 @@ export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onS
         }
       >
         <Form onSubmit={back}>
-          <LabelFields draft={editing} onChange={(next) => change(index, next)} />
+          <LabelFields draft={editing} onChange={(next) => change(stage.index, next)} />
         </Form>
       </Dialog>
     );
@@ -335,9 +284,9 @@ export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onS
         title="Add labels"
         footer={
           <>
-            {suggestions.length > 0 || adding ? (
-              <Button variant="ink" busy={busy} disabled={kept.length === 0 && !adding} onClick={keep}>
-                {kept.length === 0 && adding ? 'Save' : keepWord('Add', kept.length)}
+            {suggestions.length > 0 ? (
+              <Button variant="ink" busy={busy} disabled={kept.length === 0} onClick={() => run(() => api.addLabels(kept), done)}>
+                {keepWord('Add', kept.length)}
               </Button>
             ) : null}
             <Button variant="quiet" onClick={() => setStage({ at: 'describe' })}>
@@ -354,16 +303,9 @@ export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onS
               {stage.proposal.note}
             </Note>
           ) : null}
-          <SuggestionList
-            suggestions={suggestions}
-            onChange={change}
-            onEdit={(index) => setStage({ at: 'edit', proposal: stage.proposal, index })}
-            inbox={{
-              ...inbox,
-              onChange: (next) => setInbox((was) => ({ ...was, ...next })),
-              onEdit: () => setStage({ at: 'edit', proposal: stage.proposal, index: 'inbox' }),
-            }}
-          />
+          {suggestions.length > 0 ? (
+            <SuggestionList suggestions={suggestions} onChange={change} onEdit={(index) => setStage({ at: 'edit', proposal: stage.proposal, index })} />
+          ) : null}
         </div>
       </Dialog>
     );
@@ -372,7 +314,7 @@ export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onS
     <DescribeStep
       title="Add labels"
       question="What mail, and what should happen to it?"
-      hint="Sift suggests labels for the mail to move, none overlapping yours, and what to leave in your inbox whatever else fits. You choose what to keep."
+      hint="Sift suggests one label or several, mostly for mail to move, none overlapping the ones you have. You choose which to add."
       placeholder="Archive shipping updates, but never a missed or failed delivery"
       value={text}
       onChange={setText}

@@ -40,8 +40,8 @@ export const ACTIONS = [
 export type ActionKey = (typeof ACTIONS)[number][0];
 
 /**
- * Leave in inbox: what mail is when it is none of the person's labels, or what they said always stays. It is a
- * choice as good as any label, so every list of them has it in the same place: first, set apart.
+ * Leave in inbox: what mail is when it is none of the person's labels. It is a choice as good as any label, so
+ * every list of them has it in the same place: first, set apart.
  */
 export const INBOX: typeof LEAVE_IN_INBOX = 'everything_else';
 export const INBOX_NAME: typeof LEAVE_IN_INBOX_NAME = 'Leave in inbox';

@@ -44,13 +44,8 @@ const GROUPS = [
 /** Leave in inbox first, where every list has it; then by name, so a label stays put while it is edited. */
 const order = (a: Label, b: Label) => Number(b.label.id === INBOX) - Number(a.label.id === INBOX) || a.label.name.localeCompare(b.label.name);
 
-/** Under a label's name: what it is, or for Leave in inbox what the person said always stays. */
-const about = (label: LabelSummary) =>
-  label.id !== INBOX
-    ? label.description
-    : label.description
-      ? `Always: ${label.description}`
-      : 'Mail none of your labels fit. Say here what must never be moved.';
+/** Under a label's name: what it is. Leave in inbox has no words of the person's. */
+const about = (label: LabelSummary) => (label.id === INBOX ? 'Mail none of your labels fit' : label.description);
 
 /** How often Sift had the label right when the reader checked, in yellow when it is often wrong. Nothing until then. */
 function Right({ label }: { label: LabelSummary }) {

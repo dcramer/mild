@@ -94,8 +94,7 @@ What a rule can say, all of which must hold for it to apply:
   ("it is a notice for a lot I did not bid on").
 - Leave in inbox, among their labels, is not a kind of mail: it leaves the mail where it is, unlabelled. It is
   the label for mail they want to stay in their inbox, which can carry a condition in their words ("from my
-  utility, when it is a bill I still have to pay"). Its description is what they said always stays there. A
-  rule never waits for it.
+  utility, when it is a bill I still have to pay"). A rule never waits for it.
 
 How to fill it in:
 - Use ${FIND_TOOL} to find the real address, domain or list of a sender the owner names, rather than

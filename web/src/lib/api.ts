@@ -206,15 +206,15 @@ export const api = {
   /** Remove a label from every mailbox that has it, with the rules that name it. */
   removeLabel: (id: string) => post('/api/labels/remove', { id }),
   /** Add labels in every mailbox: by hand, or kept from what the model suggested. */
-  addLabels: (labels: { name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }[], inbox?: string) =>
-    post<{ ids: string[] }>('/api/labels/add', { labels, ...(inbox === undefined ? {} : { inbox }) }),
+  addLabels: (labels: { name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }[]) =>
+    post<{ ids: string[] }>('/api/labels/add', { labels }),
   /** Ask the model for labels from what the person wants. Its own call; it can take a minute. */
   proposeLabels: (goal: string) => post<LabelProposal>('/api/labels/propose', { goal }),
   /** The latest labels the model suggested, so a reload keeps them. */
   labelProposal: (signal: AbortSignal) => get<{ proposal: LabelProposal | null }>('/api/labels/proposal', {}, signal),
-  /** Make these labels in every mailbox of the person's that has none yet, with what always stays in the inbox. */
-  acceptLabels: (labels: { name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }[], inbox?: string) =>
-    post<{ ids: string[] }>('/api/labels/accept', { labels, ...(inbox === undefined ? {} : { inbox }) }),
+  /** Make these labels in every mailbox of the person's that has none yet. */
+  acceptLabels: (labels: { name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }[]) =>
+    post<{ ids: string[] }>('/api/labels/accept', { labels }),
   /** The model fills in a rule from the person's words, for the rule dialog. Nothing is made. */
   draftRule: (accountId: string, goal: string) => post<RuleDraft>('/api/rules/draft', { accountId, goal }),
   /** A rule carries a label, an action (`disposition`), or both; or an action for mail that turns out to be `whenLabel`. */

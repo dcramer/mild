@@ -535,7 +535,6 @@ export const labelProposals = pgTable(
     goal: text('goal').notNull(),
     labels: text('labels'),
     note: text('note'), // encrypted: what it says its labels leave out, such as what a label of theirs covers already
-    inbox: text('inbox'), // what it suggests always stays in the inbox, encrypted; null before it was asked
     error: text('error'), // its status and kind, never the provider's text
     inputTokens: integer('input_tokens').notNull().default(0),
     outputTokens: integer('output_tokens').notNull().default(0),

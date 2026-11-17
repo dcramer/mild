@@ -36,11 +36,7 @@ async function seed(account: string): Promise<void> {
   const db = await dbOf(account);
   await withSampleLabels(db, account);
   const asked = await startLabelProposal(db, { accountId: account, goal: `Quiet ${MARK[account]}`, model: 'p/m', now: 1 });
-  await finishLabelProposal(db, account, asked, {
-    drafts: [{ name: `Pitches ${MARK[account]}`, description: 'd', disposition: 'archive', why: 'w' }],
-    inbox: '',
-    now: 2,
-  });
+  await finishLabelProposal(db, account, asked, { drafts: [{ name: `Pitches ${MARK[account]}`, description: 'd', disposition: 'archive', why: 'w' }], now: 2 });
   const mark = MARK[account]!;
   const sender = { address: `sender@${mark}.example.com`, domain: `${mark}.example.com` };
   await recordSync(db, account, [facts({ accountId: account, messageId: `m-${mark}`, subject: `Subject ${mark}`, from: sender })], '2', 1000);
@@ -124,7 +120,7 @@ beforeEach(async () => {
     // Answers about Bravo's mailbox whoever asks: only the route's own check keeps it from Alpha.
     pullingIn: async () => [BRAVO],
     startEval: async (_db, { accountId }) => (calls.push(`eval ${accountId}`), 1),
-    proposeLabels: async (_db, { accountId, goal }) => (calls.push(`propose ${accountId}`), { id: 1, goal, drafts: [], inbox: '', at: 0 }),
+    proposeLabels: async (_db, { accountId, goal }) => (calls.push(`propose ${accountId}`), { id: 1, goal, drafts: [], at: 0 }),
     draftRule: async (_db, { accountId }) => (calls.push(`draft ${accountId}`), { match: { from: ['x@example.com'] }, disposition: 'archive' }),
     revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), !unreachable.includes(email)),
     // Whatever is asked for, it would answer with that person's mail: only the route's own check keeps it from the wrong person.

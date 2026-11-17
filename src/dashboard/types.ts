@@ -513,8 +513,6 @@ export const LabelProposal = z.object({
   drafts: z.array(LabelDraft),
   /** What its labels leave out of what was asked, such as what a label they have covers already. */
   note: z.string().optional(),
-  /** What it suggests always stays in the inbox, beside what the person said before; empty for none. */
-  inbox: z.string(),
   at: z.number(),
 });
 export type LabelProposal = z.infer<typeof LabelProposal>;

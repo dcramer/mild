@@ -2,10 +2,10 @@ import { ArrowRightIcon, ArrowUpRightIcon, PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { type Next, ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { type LabelProposal, type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
-import { INBOX_NAME, plural } from '@/lib/format.ts';
+import { plural } from '@/lib/format.ts';
 import { Button, Dialog, Failure, Field, Form, Note, Onboarding, Select, TextArea, useToast } from '@/system';
 import { type LabelDraft, LabelFields } from '@/views/label-panel.tsx';
-import { type InboxSuggestion, type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
+import { type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
 
 type Choice = ManageState['model']['choices'][number];
 type Account = { name: string; onSettings: () => void; onSignOut: () => void } | undefined;
@@ -186,7 +186,7 @@ function Want({
       steps={steps}
       current={1}
       title="What do you want from Sift?"
-      intro="What you want out of your way, and what you never want to miss, in your own words. Sift suggests labels for the mail to move, and leaves everything else in your inbox."
+      intro="What you want out of your way, and what you never want to miss, in your own words. Sift suggests labels for it, mostly for mail to move. Mail none of them fits stays in your inbox."
       account={account}
     >
       <Form onSubmit={suggest}>
@@ -229,12 +229,11 @@ function Labels({
   onDone: () => void;
 }) {
   const [suggestions, setSuggestions] = useState(() => proposal.drafts.map(suggestionOf));
-  const [inbox, setInbox] = useState<InboxSuggestion>({ words: proposal.inbox, on: true });
-  const [editing, setEditing] = useState<number | 'inbox' | null>(null);
+  const [editing, setEditing] = useState<number | null>(null);
   const { busy, error, run } = useAction();
   const kept = keptLabels(suggestions);
   const change = (index: number, next: Partial<Suggestion>) => setSuggestions((all) => all.map((d, i) => (i === index ? { ...d, ...next } : d)));
-  const use = () => kept.length > 0 && run(() => api.acceptLabels(kept, inbox.on && inbox.words.trim() ? inbox.words.trim() : undefined), onDone);
+  const use = () => kept.length > 0 && run(() => api.acceptLabels(kept), onDone);
   return (
     <Onboarding steps={steps} current={2} title="Your labels" intro={`“${proposal.goal}”`} account={account}>
       {proposal.note ? (
@@ -242,46 +241,19 @@ function Labels({
           {proposal.note}
         </Note>
       ) : null}
-      {suggestions.length > 0 || inbox.words.trim() !== '' ? (
+      {suggestions.length > 0 ? (
         <>
-          <SuggestionList
-            suggestions={suggestions}
-            onChange={change}
-            onEdit={setEditing}
-            inbox={{ ...inbox, onChange: (next) => setInbox((was) => ({ ...was, ...next })), onEdit: () => setEditing('inbox') }}
+          <SuggestionList suggestions={suggestions} onChange={change} onEdit={setEditing} />
+          <Onward
+            next={{ label: keepWord('Use', kept.length), busy, disabled: kept.length === 0, onPress: use }}
+            back={{ label: 'Start over', onPress: onStartOver }}
+            error={error}
           />
-          {suggestions.length > 0 ? (
-            <Onward
-              next={{ label: keepWord('Use', kept.length), busy, disabled: kept.length === 0, onPress: use }}
-              back={{ label: 'Start over', onPress: onStartOver }}
-              error={error}
-            />
-          ) : (
-            <>
-              {/* Sift reads no mail until a mailbox has a label of its own, so what stays in the inbox cannot be kept alone. */}
-              {proposal.note ? null : (
-                <Note tone="look" title="No labels yet">
-                  Sift reads your mail once there is something to move out of your inbox. Start over and say what that is.
-                </Note>
-              )}
-              <Onward next={{ label: 'Start over', onPress: onStartOver }} error={error} />
-            </>
-          )}
         </>
       ) : (
         <Onward next={{ label: 'Start over', onPress: onStartOver }} error={error} />
       )}
-      {editing === 'inbox' ? (
-        <EditDraft
-          draft={{ name: INBOX_NAME, description: inbox.words, disposition: 'keep', markRead: false, unsubscribe: false }}
-          gmailLabel={null}
-          onClose={() => setEditing(null)}
-          onSave={(draft) => {
-            setInbox((was) => ({ ...was, words: draft.description }));
-            setEditing(null);
-          }}
-        />
-      ) : editing === null ? null : (
+      {editing === null ? null : (
         <EditDraft
           draft={suggestions[editing]}
           onClose={() => setEditing(null)}
@@ -296,18 +268,7 @@ function Labels({
 }
 
 /** A suggestion changed before it is made: the fields a label has on the Labels screen. */
-function EditDraft({
-  draft: start,
-  gmailLabel,
-  onClose,
-  onSave,
-}: {
-  draft: LabelDraft;
-  /** Null for what always stays in the inbox, as on the Labels screen. */
-  gmailLabel?: null;
-  onClose: () => void;
-  onSave: (draft: LabelDraft) => void;
-}) {
+function EditDraft({ draft: start, onClose, onSave }: { draft: LabelDraft; onClose: () => void; onSave: (draft: LabelDraft) => void }) {
   const [draft, setDraft] = useState(start);
   const ready = draft.name.trim() !== '';
   const save = () => ready && onSave({ ...draft, name: draft.name.trim(), description: draft.description.trim() });
@@ -328,7 +289,7 @@ function EditDraft({
       }
     >
       <Form onSubmit={save}>
-        <LabelFields draft={draft} onChange={setDraft} {...(gmailLabel === null ? { gmailLabel } : {})} />
+        <LabelFields draft={draft} onChange={setDraft} />
       </Form>
     </Dialog>
   );

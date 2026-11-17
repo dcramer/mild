@@ -14,7 +14,7 @@ export function createProposer(models: Models, model: Model<Api>): Proposer {
   return async (input) => {
     const tool: Tool = {
       name: PROPOSAL_TOOL,
-      description: 'Record the labels you suggest, and what always stays in the inbox.',
+      description: 'Record the labels you suggest.',
       parameters: {
         type: 'object',
         properties: {
@@ -35,10 +35,9 @@ export function createProposer(models: Models, model: Model<Api>): Proposer {
               additionalProperties: false,
             },
           },
-          inbox: { type: 'string', description: 'The kinds of mail that always stay in the inbox, in a short phrase; empty if they asked for none.' },
           note: { type: 'string', description: 'What of what they asked these labels leave out, and why; empty if nothing.' },
         },
-        required: ['labels', 'inbox', 'note'],
+        required: ['labels', 'note'],
         additionalProperties: false,
       },
       constrainedSampling: { type: 'json_schema', strict: 'prefer' },
@@ -68,7 +67,7 @@ export function createProposer(models: Models, model: Model<Api>): Proposer {
       const proposal = readProposal(proposed?.type === 'toolCall' ? proposed.arguments : undefined, input.labels);
       if (proposal) return { ...proposal, usage };
       span.fail();
-      return { failed: 'the model suggested nothing usable', usage };
+      return { failed: 'the model did not suggest any usable labels', usage };
     });
   };
 }

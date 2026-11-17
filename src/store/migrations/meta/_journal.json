@@ -253,6 +253,20 @@
       "when": 1794903974695,
       "tag": "0035_leave_in_inbox_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1794905110767,
+      "tag": "0036_label_proposals_no_inbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1794905111460,
+      "tag": "0037_leave_in_inbox_is_fixed",
+      "breakpoints": true
     }
   ]
 }

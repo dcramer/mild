@@ -1,0 +1,1 @@
+ALTER TABLE "label_proposals" DROP COLUMN "inbox";

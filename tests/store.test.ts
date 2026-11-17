@@ -237,6 +237,9 @@ describe('a new mailbox', () => {
     await raw(db).run(`UPDATE labels SET name = 'The rest', description = 'Bills I still owe.' WHERE id = 'everything_else'`);
     await (await superuser()).exec(renamed);
     expect((await listLabels(db, 'alpha@example.org')).at(-1)).toMatchObject({ name: 'Leave in inbox', description: 'Bills I still owe.' });
+    // Then it stops being the person's to write in at all.
+    await (await superuser()).exec(readFileSync(new URL('0037_leave_in_inbox_is_fixed.sql', MIGRATIONS), 'utf8'));
+    expect((await listLabels(db, 'alpha@example.org')).at(-1)).toMatchObject({ name: 'Leave in inbox', description: '' });
   });
 
   it('turns a rule made before that only keeps mail into Leave in inbox, and leaves one with an extra', async () => {
