@@ -101,11 +101,12 @@ export function buildPrompt(input: JudgeInput): string {
   ].join('\n');
 }
 
+const blank = deriveFacts({ accountId: '', from: { address: '', domain: '' }, to: [], cc: [], labelIds: [], headers: {} });
+
 /**
  * Everything in the prompt that is sift's and not the user's or the email's: the system prompt and the
  * layout around one message and one example. Two judgements made with the same template were asked the same way.
  */
-const blank = deriveFacts({ accountId: '', from: { address: '', domain: '' }, to: [], cc: [], labelIds: [], headers: {} });
 export const PROMPT_TEMPLATE = `${SYSTEM_PROMPT}\n\n${buildPrompt({
   evidence: {
     facts: {
