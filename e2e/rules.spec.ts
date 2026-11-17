@@ -185,7 +185,7 @@ test.describe('Rules', () => {
 
     await opened.getByRole('button', { name: 'Remove', exact: true }).click();
     await ask.getByRole('button', { name: 'Remove', exact: true }).click();
-    await expect(page.getByRole('dialog', { name: 'Rule removed: from anyone at promo.example.com' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Mail from anyone at promo.example.com', exact: true })).toBeVisible();
     await expect(opened).toHaveCount(0);
     expect(new URL(page.url()).search).toBe('');
     await expect(ruleRows(page)).toHaveCount(3);

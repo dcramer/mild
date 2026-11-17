@@ -9,26 +9,29 @@ const TIMEOUT = [5000, 8000] as const;
 
 /** What a receipt holds besides its words. */
 interface Own {
-  /** The description is what kind of thing the title is, so on a phone it heads the toast. */
+  /** The description is what kind of thing the title is ("Rule added"), so it heads the toast. */
   kind?: boolean;
   undo?: () => void;
   action?: { label: string; onPress: () => void };
 }
 
 /**
- * What a press did, said once in one line, after the list it changed has moved on: "Archive as Marketing",
- * "Mail from shop.example.com: archive it". A new one replaces the last, so Undo (and Z, Gmail's key for it) always takes back the
- * latest. It floats as a menu does, framed with the one shadow, and Undo is in the highlighter: it is the
- * one thing on it waiting on the reader. It sits clear of the bottom edge so a panel's footer stays
- * pressable. A failure is set on red, with dark words as on the highlighter, and stays until dismissed. Wrap the app in `Toaster`
- * once; call `useToast()` where something is done.
+ * What a press did, said once, after the list it changed has moved on: "Archive as Marketing", or what was
+ * made ("Mail from shop.example.com: archive it") under what kind of thing it is ("Rule added"). A slip: its
+ * words in a block of their own, wrapping freely, and its presses on a row under a rule, so neither crowds
+ * the other however long the words. A new one replaces the last, so Undo (and Z, Gmail's key for it) always
+ * takes back the latest. It floats as a menu does, framed with the one shadow, and Undo is in the
+ * highlighter: it is the one thing on it waiting on the reader. On a wide screen it sits in the bottom right,
+ * clear of what is read in the middle and above a panel's footer, so Previous and Next stay pressable. A
+ * failure is set on red, with dark words as on the highlighter, and stays until dismissed. Wrap the app in
+ * `Toaster` once; call `useToast()` where something is done.
  */
 export function Toaster({ children }: { children: ReactNode }) {
   return (
     <Base.Provider limit={3}>
       {children}
       <Base.Portal>
-        <Base.Viewport className="pointer-events-none fixed inset-x-4 bottom-20 z-[60] mb-[env(safe-area-inset-bottom)] flex flex-col-reverse items-center gap-2 outline-none md:bottom-16">
+        <Base.Viewport className="pointer-events-none fixed inset-x-4 bottom-20 z-[60] mb-[env(safe-area-inset-bottom)] flex flex-col-reverse items-center gap-2 outline-none md:inset-x-auto md:right-6 md:bottom-16 md:items-end">
           <Receipts />
         </Base.Viewport>
       </Base.Portal>
@@ -44,7 +47,6 @@ function Receipts() {
 }
 
 const PRESS = 'press inline-flex h-(--control) shrink-0 cursor-pointer items-center gap-1.5 px-2.5 text-sm font-semibold whitespace-nowrap hover:bg-(--fill)';
-const QUIET = 'text-foreground/75 hover:text-foreground';
 /** On red, as on the highlighter, words are dark, and so is the focus ring: the yellow one would not show. */
 const ON_RED = 'text-background/75 hover:bg-background/10 hover:text-background focus-visible:outline-background!';
 
@@ -55,35 +57,38 @@ function Receipt({ toast, front }: { toast: Base.Root.ToastObject<Own>; front: b
   return (
     <Base.Root
       toast={toast}
-      swipeDirection="down"
+      swipeDirection={['down', 'right']}
       className={cn(
-        'sheet pointer-events-auto flex min-h-10 w-full flex-wrap items-center justify-end gap-x-1 bg-popover py-1 pl-3.5 text-sm md:w-auto md:max-w-2xl md:flex-nowrap',
-        // A press brings its own padding to the right edge; words alone need the same room as on the left.
-        undo || action || failed ? 'pr-1' : 'pr-3.5',
+        'sheet pointer-events-auto flex w-full flex-col bg-popover md:w-[26rem]',
         'transition-[opacity,translate] duration-150 ease-out data-ending-style:opacity-0 data-limited:hidden data-starting-style:translate-y-2 data-starting-style:opacity-0 motion-reduce:transition-none',
         failed && 'border-destructive bg-destructive text-background',
       )}
     >
-      {/* Title and description run on as one sentence, wrapping rather than cut short; on a phone the presses take the next row only when they do not fit. A kind heads it on a phone, where after a long title it would wrap apart. */}
-      <div className={cn('min-w-[min(13rem,100%)] grow py-1 md:min-w-0', kind && 'flex flex-col md:block')}>
-        <Base.Title render={<span />} className={cn(failed && 'font-semibold')} />
-        <Base.Description render={<span />} className={cn(kind ? 'order-first md:ml-2' : 'ml-2', failed ? 'text-background/75' : 'text-muted-foreground')} />
+      <div className={cn('flex items-start gap-2 py-3 pl-4', failed ? 'pr-1.5' : 'pr-4')}>
+        <div className="flex min-w-0 grow flex-col gap-0.5 pt-0.5">
+          <Base.Title render={<span />} className={cn('text-base leading-snug font-medium', failed && 'font-semibold')} />
+          <Base.Description render={<span />} className={cn('text-sm', kind && 'order-first', failed ? 'text-background/75' : 'text-muted-foreground')} />
+        </div>
+        {failed ? (
+          <Base.Close aria-label="Dismiss" className={cn(PRESS, ON_RED, 'w-(--control) justify-center px-0')}>
+            <XIcon className="size-4" />
+          </Base.Close>
+        ) : null}
       </div>
-      {action ? (
-        <button type="button" className={cn(PRESS, QUIET)} onClick={action.onPress}>
-          {action.label}
-        </button>
-      ) : null}
-      {undo ? (
-        <button type="button" aria-keyshortcuts="z" className={cn(PRESS, 'text-highlight')} onClick={undo}>
-          Undo
-          {key}
-        </button>
-      ) : null}
-      {failed ? (
-        <Base.Close aria-label="Dismiss" className={cn(PRESS, ON_RED, 'w-(--control) justify-center px-0')}>
-          <XIcon className="size-4" />
-        </Base.Close>
+      {undo || action ? (
+        <div className="flex items-center justify-end gap-1 border-t border-(--rule) p-1.5">
+          {action ? (
+            <button type="button" className={cn(PRESS, 'text-foreground/75 hover:text-foreground')} onClick={action.onPress}>
+              {action.label}
+            </button>
+          ) : null}
+          {undo ? (
+            <button type="button" aria-keyshortcuts="z" className={cn(PRESS, 'text-highlight')} onClick={undo}>
+              Undo
+              {key}
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </Base.Root>
   );
@@ -91,7 +96,7 @@ function Receipt({ toast, front }: { toast: Base.Root.ToastObject<Own>; front: b
 
 interface ToastOptions {
   description?: string;
-  /** What kind of thing the title is ("Rule added" for a title that is the rule), in place of a description. */
+  /** What kind of thing the title is ("Rule added" over the rule), said above it, in place of a description. */
   kind?: string;
   tone?: 'failure';
   /** One press that follows from what was done, such as answering the rest the same way. */

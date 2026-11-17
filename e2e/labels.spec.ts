@@ -4,8 +4,8 @@ import { choose, expect, panel, refused, row, settled, test } from './sift.ts';
 /** The section of the Labels screen for one outcome ("Archived"), with its rows. */
 const group = (page: Page, title: string) => page.getByRole('heading', { name: title, exact: true }).locator('xpath=ancestor::section[1]');
 
-/** The label's panel on the Labels screen. Exact, as a toast is a dialog named by what it says ("Label removed: Newsletters"). */
-const labelPanel = (page: Page, name: string) => page.getByRole('dialog', { name, exact: true });
+/** The label's panel on the Labels screen. Not the toast saying it was removed, a dialog named by the label too, which is never modal. */
+const labelPanel = (page: Page, name: string) => page.getByRole('dialog', { name, exact: true }).and(page.locator(':not([aria-modal="false"])'));
 
 /** "12 of 30" beside `Add labels`: how many labels there are. */
 async function labelCount(page: Page) {
@@ -206,9 +206,9 @@ test.describe('Labels', () => {
     await ask.getByRole('button', { name: 'Remove', exact: true }).click();
 
     await expect(opened).toHaveCount(0);
-    await expect(page.getByText('Label removed: Newsletters')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Notifications' }).getByRole('dialog', { name: 'Newsletters', exact: true })).toContainText('Label removed');
     expect(new URL(page.url()).searchParams.has('label')).toBe(false);
-    await expect(page.getByText('Newsletters', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('main').getByText('Newsletters', { exact: true })).toHaveCount(0);
     await expect.poll(() => labelCount(page)).toBe(before - 1);
 
     await page.goto('/rules');
@@ -371,6 +371,6 @@ refused.describe('A mailbox with one label', () => {
     await opened.getByRole('button', { name: 'Remove', exact: true }).click();
     await opened.getByRole('group', { name: 'Remove Sales pitches?' }).getByRole('button', { name: 'Remove', exact: true }).click();
     await expect(opened.getByText('Sales pitches is the last of your labels, and Sift reads no mail without one. Add another first.')).toBeVisible();
-    await expect(page.getByText('Label removed: Sales pitches')).toHaveCount(0);
+    await expect(page.getByText('Label removed')).toHaveCount(0);
   });
 });

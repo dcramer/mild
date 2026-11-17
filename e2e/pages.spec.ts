@@ -172,6 +172,19 @@ test.describe('A sender', () => {
     expect(search(page).get('name')).toBe('Dependabot');
   });
 
+  test("a toast is a slip in the bottom right: its words, then its presses under them, above a panel's footer", async ({ page }) => {
+    await page.goto(SENDER);
+    await standing(page, 'Block').click();
+    const said = ruleToast(page, 'Mail from notifications@code.example.com: send it to spam');
+    const box = (await said.boundingBox())!;
+    const words = (await said.getByText('Mail from notifications@code.example.com: send it to spam', { exact: true }).boundingBox())!;
+    const undo = (await said.getByRole('button', { name: 'Undo' }).boundingBox())!;
+    const { width, height } = page.viewportSize()!;
+    expect(undo.y).toBeGreaterThanOrEqual(words.y + words.height);
+    expect(box.x + box.width).toBeGreaterThan(width - 40);
+    expect(height - (box.y + box.height)).toBeGreaterThanOrEqual(60);
+  });
+
   test('Unwanted is on in one press, with the rule said in its toast and nothing opened over their page', async ({ page }) => {
     await page.goto(SENDER);
     await standing(page, 'Unwanted').click();

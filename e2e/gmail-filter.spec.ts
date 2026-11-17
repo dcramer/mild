@@ -110,7 +110,7 @@ test.describe('A rule as a Gmail filter', () => {
     const ci = await openPanel(page, CI);
     await ci.getByRole('button', { name: 'Remove', exact: true }).click();
     await ci.getByRole('group', { name: 'Remove this rule?' }).getByRole('button', { name: 'Remove', exact: true }).click();
-    await expect(page.getByRole('dialog', { name: `Rule removed: from ${CI}` })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: `Mail from ${CI}`, exact: true })).toBeVisible();
     await expect(ci).toHaveCount(0);
     await expect(ruleRows(page)).toHaveCount(3);
     await expect(row(page, CI)).toHaveCount(0);

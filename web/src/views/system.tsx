@@ -294,10 +294,14 @@ export function SystemView() {
             </Button>
           </Row>
           <Row label="confirm" note="A press that cannot be taken back asks first, in place.">
-            <ConfirmButton question="Remove this rule?" onConfirm={() => toast('Rule removed: from news@example.com')}>
+            <ConfirmButton question="Remove this rule?" onConfirm={() => toast('Mail from news@example.com', { kind: 'Rule removed' })}>
               Remove
             </ConfirmButton>
-            <ConfirmButton question="Remove this rule?" icon={<Trash2Icon aria-hidden />} onConfirm={() => toast('Rule removed: from news@example.com')}>
+            <ConfirmButton
+              question="Remove this rule?"
+              icon={<Trash2Icon aria-hidden />}
+              onConfirm={() => toast('Mail from news@example.com', { kind: 'Rule removed' })}
+            >
               Remove
             </ConfirmButton>
           </Row>

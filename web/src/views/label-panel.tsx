@@ -189,7 +189,7 @@ export function LabelPanel({
                 remove.run(
                   () => api.removeLabel(label.id),
                   () => {
-                    toast(`Label removed: ${label.name}`);
+                    toast(label.name, { kind: 'Label removed' });
                     onSaved();
                     onClose();
                   },

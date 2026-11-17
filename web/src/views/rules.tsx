@@ -99,7 +99,7 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
       onConfirm={() =>
         remove.run(
           () => api.removeRule(rule.id),
-          () => toast(`Rule removed: ${rule.name ?? describeMatch(rule.match)}`),
+          () => toast(rule.name ?? `Mail ${describeMatch(rule.match)}`, { kind: 'Rule removed' }),
         )
       }
     >
