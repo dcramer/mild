@@ -9,11 +9,12 @@ import { getRuleFilter, ruleFilterStatus } from '../src/store/filters.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { addRule, removeRule, setRule } from '../src/store/rules.ts';
 import { type FilterableRule, filterFor } from '../src/triage/filter.ts';
+import { validateFilter } from '../src/actions/filters.ts';
 import { FakeMailbox, SAMPLE_LABELS } from './helpers.ts';
 
 const rule = (overrides: Partial<FilterableRule> = {}): FilterableRule => ({
   id: 'r1',
-  match: { from: 'news@example.com' },
+  match: { from: ['news@example.com'] },
   labelId: 'newsletter',
   ...overrides,
 });
@@ -34,7 +35,7 @@ describe('whether a rule can be a Gmail filter', () => {
   });
 
   it('turns a rule that only archives into a filter that only skips the inbox', () => {
-    const archive: FilterableRule = { id: 'a', match: { from: 'notifications@example.com' }, disposition: 'archive' };
+    const archive: FilterableRule = { id: 'a', match: { from: ['notifications@example.com'] }, disposition: 'archive' };
     const v = verdict(archive);
     expect(v).toMatchObject({ possible: true, plan: { criteria: { from: 'notifications@example.com' }, archive: true } });
     expect(v.possible && v.plan).not.toHaveProperty('gmailLabel');
@@ -43,32 +44,44 @@ describe('whether a rule can be a Gmail filter', () => {
   });
 
   it('writes a domain, a recipient and subject words as Gmail matches them, and says where that differs', () => {
-    const v = verdict(rule({ match: { fromDomain: 'Example.com', to: 'Me@example.org', subjectContains: ' weekly digest ' }, labelId: 'personal' }));
+    const v = verdict(rule({ match: { fromDomain: ['Example.com'], to: ['Me@example.org'], subjectContains: [' weekly digest '] }, labelId: 'personal' }));
     expect(v).toMatchObject({ possible: true, plan: { criteria: { from: '@example.com', to: 'me@example.org', subject: '"weekly digest"' } } });
     expect(v.possible && v.differs).toHaveLength(2);
+  });
+
+  it('writes several values of a condition as alternatives Gmail accepts, an address and a domain together', () => {
+    const v = verdict(
+      rule({ match: { from: ['news@example.com'], fromDomain: ['Example.org'], subjectContains: ['receipt', 'invoice'] }, labelId: 'personal' }),
+    );
+    expect(v).toMatchObject({ possible: true, plan: { criteria: { from: 'news@example.com OR @example.org', subject: '"receipt" OR "invoice"' } } });
+    expect(v.possible && validateFilter({ criteria: v.plan.criteria, action: { removeLabelIds: ['INBOX'] } })).toEqual([]);
+    // Either sender could be one a narrower rule keeps.
+    const keep: FilterableRule = { id: 'k', match: { from: ['billing@example.org'] }, disposition: 'keep' };
+    expect(reason(rule({ match: { fromDomain: ['example.com', 'example.org'] } }), [keep])).toMatch(/Another rule/);
+    expect(reason(rule({ match: { fromDomain: ['example.com', 'example.net'] } }), [keep])).toBeNull();
   });
 
   it('refuses what Gmail cannot do or sift will not let a filter do', () => {
     expect(reason(rule({ labelId: 'phishing' }))).toMatch(/spam/);
     expect(reason(rule({ disposition: 'spam' }))).toMatch(/spam/);
     expect(reason(rule({ markRead: true }))).toMatch(/marks mail read/);
-    expect(reason(rule({ match: { listId: 'news.example.com' } }))).toMatch(/mailing list/);
-    expect(reason(rule({ match: { from: 'news@example.com', fromName: 'News' } }))).toMatch(/name/);
-    expect(reason(rule({ match: { fromDomain: 'example.com', fromNameContains: 'bot' } }))).toMatch(/name/);
-    expect(reason(rule({ except: [{ subjectContains: 'invoice' }] }))).toMatch(/exceptions/);
+    expect(reason(rule({ match: { listId: ['news.example.com'] } }))).toMatch(/mailing list/);
+    expect(reason(rule({ match: { from: ['news@example.com'], fromName: ['News'] } }))).toMatch(/name/);
+    expect(reason(rule({ match: { fromDomain: ['example.com'], fromNameContains: ['bot'] } }))).toMatch(/name/);
+    expect(reason(rule({ except: [{ subjectContains: ['invoice'] }] }))).toMatch(/exceptions/);
     expect(reason(rule({ labelId: 'no-such-label' }))).toMatch(/label has been removed/);
-    expect(reason(rule({ match: { from: 'news@example.com', facts: { unsubscribe: 'one-click' } } }))).toBe(
+    expect(reason(rule({ match: { from: ['news@example.com'], facts: { unsubscribe: 'one-click' } } }))).toBe(
       'It asks what Sift found in the message, which Gmail filters cannot see.',
     );
   });
 
   it('holds back a filter that would get to mail a narrower rule on a fact keeps', () => {
-    const replies: FilterableRule = { id: 'r2', match: { from: 'news@example.com', facts: { isReply: true } }, labelId: 'personal' };
+    const replies: FilterableRule = { id: 'r2', match: { from: ['news@example.com'], facts: { isReply: true } }, labelId: 'personal' };
     expect(reason(rule(), [replies])).toMatch(/Another rule \(from news@example.com, is a reply\)/);
   });
 
   it('refuses a rule that is judged, not matched', () => {
-    expect(reason({ id: 'r', match: { from: 'news@example.com' }, whenLabel: 'newsletter' })).toMatch(/once Sift has said what the mail is/);
+    expect(reason({ id: 'r', match: { from: ['news@example.com'] }, whenLabel: 'newsletter' })).toMatch(/once Sift has said what the mail is/);
     expect(reason(rule({ when: 'it is an auction notice' }))).toMatch(/plain language/);
     expect(verdict(rule()).possible).toBe(true);
   });
@@ -80,35 +93,35 @@ describe('whether a rule can be a Gmail filter', () => {
 
   it('refuses values that would change the meaning of a Gmail search', () => {
     for (const match of [
-      { from: 'a@example.com OR b@example.com' },
-      { from: '{a@example.com b@example.com}' },
-      { fromDomain: 'example.com) OR (from:example.org' },
-      { to: 'me@example.org has:attachment' },
-      { subjectContains: 'offer" OR "invoice' },
-      { from: 'a@example.com', fromDomain: 'example.org' },
+      { from: ['a@example.com OR b@example.com'] },
+      { from: ['{a@example.com b@example.com}'] },
+      { fromDomain: ['example.com) OR (from:example.org'] },
+      { to: ['me@example.org has:attachment'] },
+      { subjectContains: ['offer" OR "invoice'] },
+      { from: ['a@example.com', 'b@example.com OR c@example.com'] },
     ]) {
       expect(reason(rule({ match }))).toMatch(/safely/);
     }
   });
 
   it('refuses a rule another rule could overrule, because Gmail would run the filter regardless', () => {
-    const domain = rule({ id: 'domain', match: { fromDomain: 'example.com' } });
-    const billing = rule({ id: 'billing', match: { from: 'billing@example.com' }, labelId: 'transactional' });
+    const domain = rule({ id: 'domain', match: { fromDomain: ['example.com'] } });
+    const billing = rule({ id: 'billing', match: { from: ['billing@example.com'] }, labelId: 'transactional' });
     // The narrower keep rule wins in sift, so the broad archive cannot go ahead of it; the keep rule itself can.
     expect(reason(domain, [billing])).toMatch(/Another rule \(from billing@example.com\)/);
     expect(verdict(billing, [domain]).possible).toBe(true);
 
     // A keep rule beats an archive rule however broad it is.
-    const keepAll = rule({ id: 'keep', match: { to: 'me@example.org' }, labelId: 'personal' });
+    const keepAll = rule({ id: 'keep', match: { to: ['me@example.org'] }, labelId: 'personal' });
     expect(reason(rule(), [keepAll])).toMatch(/Another rule/);
 
     // A rule for the same sender that is judged can say "not this one".
     expect(reason(rule(), [{ id: 'soft', match: rule().match, whenLabel: 'marketing' }])).toMatch(/Another rule/);
 
     // Rules that cannot match the same mail, agree, or name a removed label are no obstacle.
-    const elsewhere = rule({ id: 'other', match: { from: 'ada@example.org' }, labelId: 'personal' });
-    const agrees = rule({ id: 'agrees', match: { fromDomain: 'example.com' } });
-    const dead = rule({ id: 'dead', match: { fromDomain: 'example.com' }, labelId: 'no-such-label' });
+    const elsewhere = rule({ id: 'other', match: { from: ['ada@example.org'] }, labelId: 'personal' });
+    const agrees = rule({ id: 'agrees', match: { fromDomain: ['example.com'] } });
+    const dead = rule({ id: 'dead', match: { fromDomain: ['example.com'] }, labelId: 'no-such-label' });
     expect(verdict(rule(), [elsewhere, agrees, dead]).possible).toBe(true);
   });
 });
@@ -133,7 +146,7 @@ beforeEach(async () => {
 
 describe("a rule's Gmail filter", () => {
   it('is created through the audit log, read back, and recorded on the rule', async () => {
-    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     await writeRuleFilter(deps(), id);
 
     expect(mailbox.filters).toEqual([
@@ -156,17 +169,17 @@ describe("a rule's Gmail filter", () => {
   });
 
   it('is refused, with nothing sent to Gmail, for a rule that cannot be one', async () => {
-    const id = await addRule(db, ACCOUNT, { match: { from: 'scam@example.com' }, labelId: 'phishing' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: ['scam@example.com'] }, labelId: 'phishing' }, 'user');
     await expect(writeRuleFilter(deps(), id)).rejects.toThrow('Gmail filters cannot mark mail as spam.');
     await expect(writeRuleFilter(deps(), 'r-missing')).rejects.toThrow(/no longer exists/);
-    const replies = await addRule(db, ACCOUNT, { match: { from: 'news@example.com', facts: { isReply: false } }, labelId: 'newsletter' }, 'user');
+    const replies = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'], facts: { isReply: false } }, labelId: 'newsletter' }, 'user');
     await expect(writeRuleFilter(deps(), replies)).rejects.toThrow('It asks what Sift found in the message, which Gmail filters cannot see.');
     expect(mailbox.filters).toEqual([]);
     expect(await actions()).toEqual([]);
   });
 
   it('takes over a filter the account already has that does the same, and replaces its own when asked again', async () => {
-    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     mailbox.filters.push({ id: 'theirs', criteria: { from: 'News@Example.com' }, action: { addLabelIds: ['L:sift/newsletters'], removeLabelIds: ['INBOX'] } });
     await writeRuleFilter(deps(), id);
     expect(mailbox.filters.map((f) => f.id)).toEqual(['theirs']);
@@ -179,7 +192,7 @@ describe("a rule's Gmail filter", () => {
   });
 
   it('asks Gmail at once whether a call that errored went through', async () => {
-    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     const create = mailbox.createFilter.bind(mailbox);
     mailbox.createFilter = async (filter) => {
       await create(filter);
@@ -201,7 +214,7 @@ describe("a rule's Gmail filter", () => {
   });
 
   it('records a call that errored and did not go through as failed, with its error', async () => {
-    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     mailbox.createFilter = async () => {
       throw new Error('timeout');
     };
@@ -211,7 +224,7 @@ describe("a rule's Gmail filter", () => {
   });
 
   it('is asked for again when Gmail did not take it, three times and no more', async () => {
-    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     const create = mailbox.createFilter.bind(mailbox);
     mailbox.createFilter = async () => {
       throw new Error('timeout');
@@ -223,7 +236,7 @@ describe("a rule's Gmail filter", () => {
     await retryRuleFilters(deps(), ACCOUNT);
     expect(await getRuleFilter(db, id)).toMatchObject({ filterId: null });
 
-    const other = await addRule(db, ACCOUNT, { match: { from: 'shop@example.com' }, labelId: 'newsletter' }, 'user');
+    const other = await addRule(db, ACCOUNT, { match: { from: ['shop@example.com'] }, labelId: 'newsletter' }, 'user');
     mailbox.createFilter = async () => {
       throw new Error('timeout');
     };
@@ -236,7 +249,7 @@ describe("a rule's Gmail filter", () => {
   describe('made in Gmail when reading it back failed', () => {
     let id: string;
     beforeEach(async () => {
-      id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+      id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
       const list = mailbox.listFilters.bind(mailbox);
       let calls = 0;
       // Reading back fails, and so does asking again at once.
@@ -273,7 +286,7 @@ describe("a rule's Gmail filter", () => {
       await expect(removeRuleFilter(deps(), id)).rejects.toThrow('network down');
       expect((await actions()).map((a) => `${a.type} ${a.status}`)).toEqual(['filter unknown']);
       mailbox.failFilters = false;
-      await setRule(db, ACCOUNT, { from: 'news@example.com' }, { labelId: 'personal' }, 'user');
+      await setRule(db, ACCOUNT, { from: ['news@example.com'] }, { labelId: 'personal' }, 'user');
       await checkRuleFilters(deps(), ACCOUNT, false);
       expect(mailbox.filters).toEqual([]);
       expect(await getRuleFilter(db, id)).toMatchObject({ filterId: null });
@@ -281,7 +294,7 @@ describe("a rule's Gmail filter", () => {
   });
 
   it('is removed through the audit log, and removing one already deleted in Gmail succeeds', async () => {
-    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     await writeRuleFilter(deps(), id);
     expect(await removeRuleFilter(deps(), id)).toBe(true);
     expect(mailbox.filters).toEqual([]);
@@ -295,7 +308,7 @@ describe("a rule's Gmail filter", () => {
   });
 
   it('tells the dashboard the filter it would write, and when it last wrote or took one out', async () => {
-    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     expect((await ruleFilterStatus(db)).get(id)).toMatchObject({
       plan: { criteria: { from: 'news@example.com' }, gmailLabel: 'sift/newsletters', archive: true },
       history: [],
@@ -308,7 +321,7 @@ describe("a rule's Gmail filter", () => {
   });
 
   it('keeps the rule marked as a filter when Gmail could not be reached to remove it', async () => {
-    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     await writeRuleFilter(deps(), id);
     mailbox.failFilters = true;
     await expect(removeRuleFilter(deps(), id)).rejects.toThrow('network down');
@@ -320,7 +333,7 @@ describe("a rule's Gmail filter", () => {
 describe('checking filters against Gmail', () => {
   let id: string;
   beforeEach(async () => {
-    id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     await writeRuleFilter(deps(), id);
     clock = 2000;
   });
@@ -359,7 +372,7 @@ describe('checking filters against Gmail', () => {
   });
 
   it('replaces a filter whose rule now says something else, or only marks it while sift is off', async () => {
-    await setRule(db, ACCOUNT, { from: 'news@example.com' }, { labelId: 'personal' }, 'user');
+    await setRule(db, ACCOUNT, { from: ['news@example.com'] }, { labelId: 'personal' }, 'user');
     expect(await checkRuleFilters(deps(), ACCOUNT, false)).toEqual({ gone: 0, changed: 0, outdated: 1 });
     expect(await getRuleFilter(db, id)).toMatchObject({ state: 'outdated' });
     expect(mailbox.filters[0]!.action.removeLabelIds).toEqual(['INBOX']);
@@ -380,7 +393,7 @@ describe('checking filters against Gmail', () => {
   });
 
   it('removes a filter when a later rule could overrule it', async () => {
-    await addRule(db, ACCOUNT, { match: { from: 'news@example.com', subjectContains: 'invoice' }, labelId: 'transactional' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: ['news@example.com'], subjectContains: ['invoice'] }, labelId: 'transactional' }, 'user');
     await checkRuleFilters(deps(), ACCOUNT, true);
     expect(mailbox.filters).toEqual([]);
   });

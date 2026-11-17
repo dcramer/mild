@@ -12,11 +12,9 @@ import { SAMPLE_LABELS, facts, withSampleLabels } from './helpers.ts';
 
 const ACCOUNT = 'me@example.com';
 const LABELS = SAMPLE_LABELS.filter((l) => l.id === 'newsletter' || l.id === 'marketing');
+const DOMAIN = [{ by: 'from', value: 'example.org' }];
 const BLANK = {
-  by: 'from',
-  value: 'example.org',
-  senderName: '',
-  nameContains: false,
+  conditions: DOMAIN,
   facts: [],
   label: '',
   onlyOnceLabelled: false,
@@ -30,31 +28,46 @@ const BLANK = {
 describe('the rule the model fills in', () => {
   const read = (args: Partial<typeof BLANK> | Record<string, unknown>) => readRuleDraft({ ...BLANK, ...args }, LABELS);
 
+  const by = (...conditions: [string, string][]) => ({ conditions: conditions.map(([kind, value]) => ({ by: kind, value })) });
+
   it('takes an address as one sender and anything else as everyone at a domain, never one anyone can get an address at', () => {
-    expect(read({ value: 'News@Example.org' })).toEqual({ match: { from: 'news@example.org' }, disposition: 'archive' });
-    expect(read({ value: '@example.org' })).toEqual({ match: { fromDomain: 'example.org' }, disposition: 'archive' });
-    expect(read({ value: 'gmail.com' })).toBeNull();
-    expect(read({ value: 'not a domain' })).toBeNull();
+    expect(read(by(['from', 'News@Example.org']))).toEqual({ match: { from: ['news@example.org'] }, disposition: 'archive' });
+    expect(read(by(['from', '@example.org']))).toEqual({ match: { fromDomain: ['example.org'] }, disposition: 'archive' });
+    expect(read(by(['from', 'gmail.com']))).toBeNull();
+    expect(read(by(['from', 'not a domain']))).toBeNull();
+  });
+
+  it('holds several values of a kind as alternatives, and refuses the rule when one of them is not a rule’s', () => {
+    expect(
+      read(by(['from', 'example.org'], ['from', 'shop@example.net'], ['from', 'EXAMPLE.org'], ['subjectContains', 'receipt'], ['subjectContains', 'invoice'])),
+    ).toEqual({
+      match: { from: ['shop@example.net'], fromDomain: ['example.org'], subjectContains: ['receipt', 'invoice'] },
+      disposition: 'archive',
+    });
+    expect(read(by(['from', 'example.org'], ['from', 'gmail.com']))).toBeNull();
+    expect(read(by(['from', 'example.org'], ['cc', 'me@example.com']))).toBeNull();
   });
 
   it('holds a name only beside an address or domain, and facts in the words they are offered in', () => {
-    expect(read({ senderName: 'Example  Deals', nameContains: true, facts: ['came through a mailing list', 'is not a reply', 'made up'] })).toEqual({
-      match: { fromDomain: 'example.org', fromNameContains: 'Example Deals', facts: { listId: true, isReply: false } },
+    expect(
+      read({ ...by(['from', 'example.org'], ['senderNameContains', 'Example  Deals']), facts: ['came through a mailing list', 'is not a reply', 'made up'] }),
+    ).toEqual({
+      match: { fromDomain: ['example.org'], fromNameContains: ['Example Deals'], facts: { listId: true, isReply: false } },
       disposition: 'archive',
     });
-    expect(read({ by: 'none', value: '', facts: ['has a tracking pixel'] })).toEqual({ match: { facts: { trackingPixel: true } }, disposition: 'archive' });
-    expect(read({ by: 'subjectContains', value: 'Weekly', senderName: 'Example' })).toEqual({ match: { subjectContains: 'Weekly' }, disposition: 'archive' });
-    expect(read({ by: 'none', value: '' })).toBeNull();
+    expect(read({ conditions: [], facts: ['has a tracking pixel'] })).toEqual({ match: { facts: { trackingPixel: true } }, disposition: 'archive' });
+    expect(read(by(['subjectContains', 'Weekly'], ['senderName', 'Example']))).toBeNull();
+    expect(read({ conditions: [] })).toBeNull();
   });
 
   it('names a label by its id, and lets the label decide unless the rule waits for it', () => {
     expect(read({ label: 'newsletters', action: 'spam', markRead: true, unsubscribe: true, when: 'it is about a sale' })).toEqual({
-      match: { fromDomain: 'example.org' },
+      match: { fromDomain: ['example.org'] },
       label: 'newsletter',
       when: 'it is about a sale',
     });
     expect(read({ label: 'Newsletters', onlyOnceLabelled: true, action: 'keep', markRead: true, when: 'ignored' })).toEqual({
-      match: { fromDomain: 'example.org' },
+      match: { fromDomain: ['example.org'] },
       whenLabel: 'newsletter',
       disposition: 'keep',
       markRead: true,
@@ -66,7 +79,7 @@ describe('the rule the model fills in', () => {
 
   it('says what else is needed, and never marks spam read', () => {
     expect(read({ action: 'spam', markRead: true, unsubscribe: true, note: ' Add another\nfor example.net. ' })).toEqual({
-      match: { fromDomain: 'example.org' },
+      match: { fromDomain: ['example.org'] },
       disposition: 'spam',
       unsubscribe: true,
       note: 'Add another for example.net.',
@@ -133,7 +146,7 @@ describe('the model filling in a rule', () => {
     const { provider, complete, draft } = faux();
     provider.setResponses([
       fauxAssistantMessage([fauxToolCall(FIND_TOOL, { query: 'example digest' })], { stopReason: 'toolUse' }),
-      fauxAssistantMessage([fauxToolCall(FILL_TOOL, { ...BLANK, by: 'listId', value: 'digest.example.org' })], { stopReason: 'toolUse' }),
+      fauxAssistantMessage([fauxToolCall(FILL_TOOL, { ...BLANK, conditions: [{ by: 'listId', value: 'digest.example.org' }] })], { stopReason: 'toolUse' }),
     ]);
     const asked: string[] = [];
     const found = [
@@ -141,7 +154,7 @@ describe('the model filling in a rule', () => {
     ];
     const answer = await draft(input, async (query) => (asked.push(query), found));
     expect(answer).toMatchObject({
-      draft: { match: { listId: 'digest.example.org' }, disposition: 'archive' },
+      draft: { match: { listId: ['digest.example.org'] }, disposition: 'archive' },
       lookups: 1,
       usage: { model: expect.stringContaining('/') },
     });
@@ -161,7 +174,9 @@ describe('the model filling in a rule', () => {
     expect(await draft(input, async () => [])).toMatchObject({ failed: 'the model did not fill in a rule', lookups: MAX_LOOKUPS });
     expect(complete.mock.calls.at(-1)?.[1].tools?.map((t) => t.name)).toEqual([FILL_TOOL]);
 
-    provider.setResponses([fauxAssistantMessage([fauxToolCall(FILL_TOOL, { ...BLANK, value: 'gmail.com' })], { stopReason: 'toolUse' })]);
+    provider.setResponses([
+      fauxAssistantMessage([fauxToolCall(FILL_TOOL, { ...BLANK, conditions: [{ by: 'from', value: 'gmail.com' }] })], { stopReason: 'toolUse' }),
+    ]);
     expect(await draft(input, async () => [])).toMatchObject({ failed: 'the model did not fill in a usable rule', lookups: 0 });
   });
 });
@@ -182,10 +197,10 @@ describe('asking for a rule', () => {
       expect(given.goal).toBe('Archive Acme');
       expect(given.labels.map((l) => l.id)).toContain('newsletter');
       expect((await find('acme')).map((s) => s.address)).toEqual(['hi@acme.example.org']);
-      return { draft: { match: { fromDomain: 'acme.example.org' }, disposition: 'archive' }, usage, lookups: 1 };
+      return { draft: { match: { fromDomain: ['acme.example.org'] }, disposition: 'archive' }, usage, lookups: 1 };
     };
     expect(await draftRule({ db, draft, model: 'p/m', now: () => 5 }, { accountId: ACCOUNT, goal: 'Archive Acme' })).toEqual({
-      match: { fromDomain: 'acme.example.org' },
+      match: { fromDomain: ['acme.example.org'] },
       disposition: 'archive',
     });
     const row = await raw(db).get('SELECT * FROM rule_drafts');

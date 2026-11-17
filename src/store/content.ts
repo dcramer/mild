@@ -21,7 +21,7 @@ import {
   sql,
   suggestionBodies,
 } from './query.ts';
-import type { RuleMatch } from '../triage/stages/rules.ts';
+import { type RuleMatch, tidyMatch } from '../triage/stages/rules.ts';
 import type { Sql } from './sql.ts';
 
 /** What Sift holds of a message that came from the message: its body, and the headers its record keeps. */
@@ -63,8 +63,12 @@ export function openPart(db: Sql, accountId: string, messageId: string, part: Pa
 export const sealJson = (db: Sql, name: string, value: unknown): string => seal(db, name, JSON.stringify(value));
 export const openJson = <T>(db: Sql, name: string, stored: string): T => JSON.parse(open(db, name, stored)) as T;
 
-/** Key order does not matter, as it did not to `jsonb` equality; a missing key and an undefined one are the same. */
+/**
+ * Key order does not matter, as it did not to `jsonb` equality; a missing key and an undefined one are the
+ * same. Nor do the order and case of a condition's values, which are alternatives.
+ */
 function canonical(value: unknown): string {
+  if (Array.isArray(value) && value.every((v) => typeof v === 'string')) return JSON.stringify([...new Set(value.map((v) => v.toLowerCase()))].toSorted());
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   const entries = Object.entries(value).filter(([, v]) => v !== undefined);
@@ -75,7 +79,8 @@ function canonical(value: unknown): string {
 }
 
 /** What finds a rule, or a proposal, with exactly these conditions: the keyed hash of them. */
-export const conditionsHash = (db: Sql, match: RuleMatch, except: readonly RuleMatch[] = []): string => hashOf(db, canonical([match, except]));
+export const conditionsHash = (db: Sql, match: RuleMatch, except: readonly RuleMatch[] = []): string =>
+  hashOf(db, canonical([tidyMatch(match), except.map(tidyMatch)]));
 
 /**
  * The keyed hash an address or domain is found by (src/secrets.ts). Equal values hash the same for one

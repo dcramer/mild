@@ -2,27 +2,49 @@ import { CONTENT_FACTS, type RuleFacts, deriveFacts, factCondition, matchesFacts
 import { parseListId } from '../features.ts';
 import { type DecidedDisposition, type Decision, type Label, type MessageFacts, type Stage, type SubscriptionAction, labelled } from '../types.ts';
 
-/** Every condition present must hold. A match with no conditions never matches. */
+/**
+ * Which mail a rule is for. Each condition is a list of values, and mail meets it if any one fits; every
+ * condition present must hold. The sender's address and domain are one condition, as are the two ways of
+ * asking for their name. A match with no conditions never matches.
+ */
 export interface RuleMatch {
-  /** Exact sender address. */
-  from?: string;
-  /** Exact sender domain (no subdomain matching). */
-  fromDomain?: string;
+  /** Exact sender addresses. */
+  from?: string[];
+  /** Exact sender domains (no subdomain matching). */
+  fromDomain?: string[];
   /**
    * The sender's display name, ignoring case and runs of spaces. Anyone can put any name on mail, so a rule
    * holds one only beside `from` or `fromDomain`, whose DMARC says who sent it.
    */
-  fromName?: string;
+  fromName?: string[];
   /** Case-insensitive substring of the sender's display name. Held only beside `from` or `fromDomain`, as `fromName` is. */
-  fromNameContains?: string;
+  fromNameContains?: string[];
   /** Exact address in To. Cc does not count. */
-  to?: string;
-  listId?: string;
+  to?: string[];
+  listId?: string[];
   /** Case-insensitive substring of the subject. */
-  subjectContains?: string;
+  subjectContains?: string[];
   /** What sift recorded about the message (`Facts`): each one named must have the answer given. */
   facts?: RuleFacts;
 }
+
+/** The conditions of a match that name values, as opposed to facts. */
+export type Named = Exclude<keyof RuleMatch, 'facts'>;
+const NAMED: readonly Named[] = ['from', 'fromDomain', 'fromName', 'fromNameContains', 'to', 'listId', 'subjectContains'];
+
+/** A match with each value trimmed, blanks and repeats (ignoring case) dropped, and conditions left with no value removed. */
+export function tidyMatch(match: RuleMatch): RuleMatch {
+  const tidy: RuleMatch = {};
+  for (const key of NAMED) {
+    const seen = new Set<string>();
+    const values = (match[key] ?? []).map((v) => v.trim()).filter((v) => v !== '' && !seen.has(v.toLowerCase()) && seen.add(v.toLowerCase()));
+    if (values.length > 0) tidy[key] = values;
+  }
+  if (match.facts && Object.values(match.facts).some((v) => v !== undefined)) tidy.facts = match.facts;
+  return tidy;
+}
+
+const has = (values: readonly string[] | undefined): values is readonly string[] => values !== undefined && values.length > 0;
 
 /** The match's conditions on facts, or null if it has none. */
 const factsOf = (match: Pick<RuleMatch, 'facts'>): RuleFacts | null =>
@@ -68,57 +90,70 @@ export const plainName = (name: string) => name.trim().replace(/\s+/g, ' ').toLo
 
 function matches(match: RuleMatch, facts: MessageFacts): boolean {
   const checks: boolean[] = [];
-  if (match.from !== undefined) checks.push(facts.from.address === match.from.toLowerCase());
-  if (match.fromDomain !== undefined) checks.push(facts.from.domain === match.fromDomain.toLowerCase());
+  const any = (...fits: boolean[][]) => {
+    const all = fits.flat();
+    if (all.length > 0) checks.push(all.some(Boolean));
+  };
+  any(
+    (match.from ?? []).map((a) => facts.from.address === a.toLowerCase()),
+    (match.fromDomain ?? []).map((d) => facts.from.domain === d.toLowerCase()),
+  );
   const name = plainName(facts.from.name ?? '');
-  if (match.fromName !== undefined) checks.push(name === plainName(match.fromName));
-  if (match.fromNameContains !== undefined) checks.push(name.includes(plainName(match.fromNameContains)));
-  if (match.to !== undefined) {
-    const to = match.to.toLowerCase();
-    checks.push(facts.to.some((a) => a.address === to));
-  }
-  if (match.listId !== undefined) checks.push(parseListId(facts.headers['list-id']) === match.listId.toLowerCase());
-  if (match.subjectContains !== undefined) checks.push(facts.subject.toLowerCase().includes(match.subjectContains.toLowerCase()));
+  any(
+    (match.fromName ?? []).map((n) => name === plainName(n)),
+    (match.fromNameContains ?? []).map((n) => name.includes(plainName(n))),
+  );
+  any((match.to ?? []).map((to) => facts.to.some((a) => a.address === to.toLowerCase())));
+  const list = parseListId(facts.headers['list-id']);
+  any((match.listId ?? []).map((id) => list === id.toLowerCase()));
+  const subject = facts.subject.toLowerCase();
+  any((match.subjectContains ?? []).map((words) => subject.includes(words.toLowerCase())));
   const asked = factsOf(match);
   if (asked) checks.push(matchesFacts(asked, facts.known ?? deriveFacts(facts)));
   return checks.length > 0 && checks.every(Boolean);
 }
 
 /** Whether a match names who sent it by name alone, which anyone can claim. An exception may: its rule names the sender. */
-export const nameAlone = (match: RuleMatch) =>
-  (match.fromName !== undefined || match.fromNameContains !== undefined) && match.from === undefined && match.fromDomain === undefined;
+export const nameAlone = (match: RuleMatch) => (has(match.fromName) || has(match.fromNameContains)) && !has(match.from) && !has(match.fromDomain);
 
 function applies(rule: Rule, facts: MessageFacts): boolean {
   return !nameAlone(rule.match) && matches(rule.match, facts) && !(rule.except ?? []).some((e) => matches(e, facts));
 }
 
-type Named = Exclude<keyof RuleMatch, 'facts'>;
-const CONDITION: Record<Named, string> = {
-  from: 'from',
-  fromDomain: 'from domain',
-  fromName: 'named',
-  fromNameContains: 'name contains',
-  to: 'to',
-  listId: 'list',
-  subjectContains: 'subject contains',
-};
+const either = (values: readonly string[]) => values.join(' or ');
 
-/** A rule's conditions in words, for the audit log and the dashboard: "from domain example.com, is a reply". */
+/** A rule's conditions in words, for the audit log and the dashboard: "from a@example.com or domain example.org, is a reply". */
 export function describeMatch(match: RuleMatch): string {
-  const named = (Object.keys(CONDITION) as Named[]).filter((key) => match[key] !== undefined).map((key) => `${CONDITION[key]} ${match[key]}`);
+  const sender = [...(match.from ?? []), ...(match.fromDomain ?? []).map((d) => `domain ${d}`)];
+  const name = [...(match.fromName ?? []).map((n) => `named ${n}`), ...(match.fromNameContains ?? []).map((n) => `name contains ${n}`)];
+  const named = [
+    ...(sender.length > 0 ? [`from ${either(sender)}`] : []),
+    ...(name.length > 0 ? [either(name)] : []),
+    ...(has(match.to) ? [`to ${either(match.to)}`] : []),
+    ...(has(match.listId) ? [`list ${either(match.listId)}`] : []),
+    ...(has(match.subjectContains) ? [`subject contains ${either(match.subjectContains)}`] : []),
+  ];
   const facts = Object.entries(factsOf(match) ?? {}).flatMap(([key, want]) => factCondition(key, want) ?? []);
   return [...named, ...facts].join(', ');
 }
 
 /**
  * How narrowly a match is drawn. A condition on who sent it, their name, to whom, the list or the subject
- * counts 2; an exact sender 1 more than a domain, and an exact name 1 more than part of one; a fact counts 1,
- * since one fact ("is a reply") takes in mail from anyone.
+ * counts 2; exact senders 1 more than a domain, and an exact name 1 more than part of one; a fact counts 1,
+ * since one fact ("is a reply") takes in mail from anyone. A condition with several values counts as one
+ * with one: a tie goes to the earlier rule either way.
  */
 export const specificity = (match: RuleMatch) =>
-  (Object.keys(CONDITION) as Named[]).filter((key) => match[key] !== undefined).length * 2 +
-  (match.from === undefined ? 0 : 1) +
-  (match.fromName === undefined ? 0 : 1) +
+  [
+    has(match.from) || has(match.fromDomain),
+    has(match.fromName) || has(match.fromNameContains),
+    has(match.to),
+    has(match.listId),
+    has(match.subjectContains),
+  ].filter(Boolean).length *
+    2 +
+  (has(match.from) && !has(match.fromDomain) ? 1 : 0) +
+  (has(match.fromName) && !has(match.fromNameContains) ? 1 : 0) +
   Object.values(factsOf(match) ?? {}).filter((v) => v !== undefined).length;
 
 interface RulesOptions {

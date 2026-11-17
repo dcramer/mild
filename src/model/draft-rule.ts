@@ -1,6 +1,7 @@
 import type { Api, AssistantMessage, Context, Model, Models, Tool, ToolCall } from '@earendil-works/pi-ai';
 import { traced } from '../telemetry.ts';
 import {
+  BY,
   FACT_WORDS,
   FILL_TOOL,
   FIND_TOOL,
@@ -37,10 +38,23 @@ function fill(labels: readonly string[]): Tool {
     parameters: {
       type: 'object',
       properties: {
-        by: { type: 'string', enum: ['from', 'listId', 'to', 'subjectContains', 'none'], description: '`from` takes an address or a domain.' },
-        value: { type: 'string' },
-        senderName: { type: 'string', description: "The sender's name, only beside an address or domain." },
-        nameContains: { type: 'boolean', description: 'The name only contains these words, rather than being them.' },
+        conditions: {
+          type: 'array',
+          description: 'Which mail. Several of one kind are alternatives; different kinds must all hold.',
+          items: {
+            type: 'object',
+            properties: {
+              by: {
+                type: 'string',
+                enum: [...BY],
+                description: '`from` takes an address or a domain. A name (exactly, or containing these words) only beside a `from`.',
+              },
+              value: { type: 'string' },
+            },
+            required: ['by', 'value'],
+            additionalProperties: false,
+          },
+        },
         facts: { type: 'array', items: { type: 'string', enum: FACT_WORDS } },
         label: { type: 'string', enum: ['', ...labels] },
         onlyOnceLabelled: { type: 'boolean', description: 'Wait for a model to give the mail this label, then do `action` instead of what the label does.' },
@@ -50,7 +64,7 @@ function fill(labels: readonly string[]): Tool {
         unsubscribe: { type: 'boolean' },
         note: { type: 'string', description: 'What else they need, or what a rule cannot do; empty if nothing.' },
       },
-      required: ['by', 'value', 'senderName', 'nameContains', 'facts', 'label', 'onlyOnceLabelled', 'when', 'action', 'markRead', 'unsubscribe', 'note'],
+      required: ['conditions', 'facts', 'label', 'onlyOnceLabelled', 'when', 'action', 'markRead', 'unsubscribe', 'note'],
       additionalProperties: false,
     },
     constrainedSampling: { type: 'json_schema', strict: 'prefer' },

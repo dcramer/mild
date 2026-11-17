@@ -45,7 +45,7 @@ beforeEach(async () => {
 /** The rule sift holds for one sender, without its bookkeeping. */
 const ruleFor = async (address: string) =>
   (await listRules(db, ACCOUNT))
-    .filter((r) => r.match.from === address)
+    .filter((r) => r.match.from?.[0] === address)
     .map(({ labelId, whenLabel, disposition, source }) => ({
       ...(labelId ? { labelId } : {}),
       ...(whenLabel ? { whenLabel } : {}),
@@ -78,9 +78,9 @@ describe('suggestions', () => {
   });
 
   it("leave out what a rule of the user's decided, but not what a rule sift learned did", async () => {
-    const mine = await addRule(db, ACCOUNT, { match: { from: 'rule@example.com' }, labelId: 'newsletter' }, 'user');
-    const corrected = await addRule(db, ACCOUNT, { match: { from: 'taught@example.com' }, labelId: 'newsletter' }, 'correction');
-    const learned = await addRule(db, ACCOUNT, { match: { from: 'learned@example.com' }, labelId: 'newsletter' }, 'learned');
+    const mine = await addRule(db, ACCOUNT, { match: { from: ['rule@example.com'] }, labelId: 'newsletter' }, 'user');
+    const corrected = await addRule(db, ACCOUNT, { match: { from: ['taught@example.com'] }, labelId: 'newsletter' }, 'correction');
+    const learned = await addRule(db, ACCOUNT, { match: { from: ['learned@example.com'] }, labelId: 'newsletter' }, 'learned');
     await suggest('rule@example.com', 'archive', { ...NEWS, stage: 'rules', ruleId: mine });
     await suggest('taught@example.com', 'archive', { ...NEWS, stage: 'rules', ruleId: corrected });
     await suggest('learned@example.com', 'archive', { ...NEWS, stage: 'rules', ruleId: learned });
@@ -215,7 +215,7 @@ describe('teaching', () => {
   });
 
   it("the user's answer replaces a rule sift made for the sender, and decides later mail without a model", async () => {
-    const learned = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'learned');
+    const learned = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'learned');
     await suggest('news@example.com', 'archive', { ...NEWS, stage: 'rules', ruleId: learned });
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', disposition: 'keep', scope: 'sender' });
     expect(await listRules(db, ACCOUNT)).toMatchObject([{ id: learned, disposition: 'keep', source: 'correction' }]);
@@ -352,7 +352,7 @@ describe('an answer pressed in the dashboard', () => {
 
   it('keeps the message a "when it is this label, keep" rule was made from, as the panel does after adding it', async () => {
     const decisionId = await suggest('news@example.com', 'archive', { ...NEWS, subscription: 'unsubscribe' });
-    await setRule(db, ACCOUNT, { from: 'news@example.com' }, { whenLabel: 'newsletter', disposition: 'keep' }, 'user', 40);
+    await setRule(db, ACCOUNT, { from: ['news@example.com'] }, { whenLabel: 'newsletter', disposition: 'keep' }, 'user', 40);
     await redecideWaiting(db, ACCOUNT, 41);
     await applyFeedback(
       db,
@@ -379,7 +379,7 @@ describe('an answer pressed in the dashboard', () => {
     expect(await against('news@example.com', 'newsletter', 'keep', 51)).toBe(true);
     expect(await ruleFor('news@example.com')).toEqual([]);
     const [proposal] = await listProposals(db, ACCOUNT);
-    expect(proposal).toMatchObject({ match: { from: 'news@example.com' }, labelId: 'newsletter', disposition: 'keep', agreed: 2 });
+    expect(proposal).toMatchObject({ match: { from: ['news@example.com'] }, labelId: 'newsletter', disposition: 'keep', agreed: 2 });
     // A third refreshes the count; it opens no second proposal.
     expect(await against('news@example.com', 'newsletter', 'keep', 52)).toBe(false);
     expect(await listProposals(db, ACCOUNT)).toMatchObject([{ id: proposal!.id, agreed: 3 }]);
@@ -406,8 +406,8 @@ describe('an answer pressed in the dashboard', () => {
     expect(await against('news@example.com', 'newsletter', 'keep', 52)).toBe(false);
     expect(await listProposals(db, ACCOUNT)).toEqual([]);
 
-    await addRule(db, ACCOUNT, { match: { from: 'shop@example.com' }, labelId: 'marketing' }, 'user');
-    await addRule(db, ACCOUNT, { match: { from: 'alerts@example.com' }, whenLabel: 'notification', disposition: 'spam' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: ['shop@example.com'] }, labelId: 'marketing' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: ['alerts@example.com'] }, whenLabel: 'notification', disposition: 'spam' }, 'user');
     for (const at of [60, 61]) {
       expect(await against('shop@example.com', 'marketing', 'keep', at)).toBe(false);
       expect(await against('alerts@example.com', 'notification', 'keep', at)).toBe(false);
@@ -596,8 +596,8 @@ describe('how far an answer reaches', () => {
 
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', disposition: 'archive', scope: 'sender' });
     expect(await matches()).toEqual([
-      { match: { from: 'bids@example.com', subjectContains: 'outbid' }, disposition: 'keep' },
-      { match: { from: 'bids@example.com' }, disposition: 'archive' },
+      { match: { from: ['bids@example.com'], subjectContains: ['outbid'] }, disposition: 'keep' },
+      { match: { from: ['bids@example.com'] }, disposition: 'archive' },
     ]);
 
     // The narrower rule wins whichever was written first.
@@ -625,7 +625,7 @@ describe('how far an answer reaches', () => {
       corrected: null,
       taught: 'From now on, mail from anyone at shop.example is archived, whatever it is. Sift will not ask about it again.',
     });
-    expect(await matches()).toEqual([{ match: { fromDomain: 'shop.example' }, disposition: 'archive' }]);
+    expect(await matches()).toEqual([{ match: { fromDomain: ['shop.example'] }, disposition: 'archive' }]);
     expect((await pendingSuggestions(db)).map((s) => s.fromAddress)).toEqual(['c@example.com']);
   });
 
@@ -690,7 +690,7 @@ describe('reading a suggestion', () => {
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('other@example.com', 'archive', NEWS);
-    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'marketing' }, 'user', 5);
+    await addRule(db, ACCOUNT, { match: { fromDomain: ['example.com'] }, labelId: 'marketing' }, 'user', 5);
     await rememberCorrespondent(db, ACCOUNT, 'news@example.com', true);
 
     const detail = (await suggestionDetail(db, await everything(db), ACCOUNT, 'news@example.com'))!;
@@ -703,7 +703,7 @@ describe('reading a suggestion', () => {
       messages: 2,
       userHasWritten: true,
       labels: [{ id: 'newsletter', name: 'Newsletters', messages: 2 }],
-      rules: [{ match: { fromDomain: 'example.com' }, labelName: 'Marketing', disposition: 'archive', source: 'user' }],
+      rules: [{ match: { fromDomain: ['example.com'] }, labelName: 'Marketing', disposition: 'archive', source: 'user' }],
     });
     expect(await suggestionDetail(db, await everything(db), ACCOUNT, 'stranger@example.net')).toMatchObject({
       messages: [],

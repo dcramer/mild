@@ -58,18 +58,22 @@ beforeEach(async () => {
 
 describe('searching the inbox for a rule', () => {
   it('asks Gmail only for what the rule names, and leaves out what could change the search', () => {
-    expect(inboxQuery({ fromDomain: 'news.example.com', subjectContains: 'Weekly' })).toBe('from:news.example.com subject:"Weekly"');
-    expect(inboxQuery({ from: 'a@example.com', to: 'me+x@example.org', listId: 'list.example.com' })).toBe(
+    expect(inboxQuery({ fromDomain: ['news.example.com'], subjectContains: ['Weekly'] })).toBe('from:news.example.com subject:"Weekly"');
+    expect(inboxQuery({ from: ['a@example.com'], to: ['me+x@example.org'], listId: ['list.example.com'] })).toBe(
       'from:a@example.com to:me+x@example.org list:list.example.com',
     );
-    expect(inboxQuery({ from: 'a@example.com OR in:sent', subjectContains: 'say "hi"' })).toBe('');
+    expect(inboxQuery({ from: ['a@example.com OR in:sent'], subjectContains: ['say "hi"'] })).toBe('');
+    expect(inboxQuery({ from: ['a@example.com'], fromDomain: ['example.org'], subjectContains: ['receipt', 'invoice'] })).toBe(
+      'from:(a@example.com OR example.org) subject:("receipt" OR "invoice")',
+    );
+    expect(inboxQuery({ from: ['a@example.com', 'b@example.com OR in:sent'] })).toBe('');
   });
 });
 
 describe('applying a rule to the inbox', () => {
   it('finds what the rule decides, seen or not, and leaves out what another rule or the user has decided', async () => {
-    const rule = await addRule(db, ACCOUNT, { match: { fromDomain: 'news.example.com' }, labelId: 'marketing' }, 'user');
-    await addRule(db, ACCOUNT, { match: { from: 'vip@news.example.com' }, disposition: 'keep' }, 'user');
+    const rule = await addRule(db, ACCOUNT, { match: { fromDomain: ['news.example.com'] }, labelId: 'marketing' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: ['vip@news.example.com'] }, disposition: 'keep' }, 'user');
     const seen = message('seen', 'deals@news.example.com');
     const answered = message('answered', 'deals@news.example.com');
     await recordSync(db, ACCOUNT, [seen, answered], '2');
@@ -97,7 +101,7 @@ describe('applying a rule to the inbox', () => {
   });
 
   it("records each as the user's press, to be carried out while Sift is off, and no longer waiting", async () => {
-    const rule = await addRule(db, ACCOUNT, { match: { fromDomain: 'news.example.com' }, labelId: 'marketing' }, 'user');
+    const rule = await addRule(db, ACCOUNT, { match: { fromDomain: ['news.example.com'] }, labelId: 'marketing' }, 'user');
     const seen = message('seen', 'deals@news.example.com');
     await recordSync(db, ACCOUNT, [seen], '2');
     await recordDecision(db, ACCOUNT, 'seen', { disposition: 'review', subscription: 'preserve', stage: 'model', reason: 'unsure' }, { now: 1 });
@@ -128,7 +132,7 @@ describe('applying a rule to the inbox', () => {
   });
 
   it('marks mail a model must read first, and carries out what the rule decides once it has', async () => {
-    const rule = await addRule(db, ACCOUNT, { match: { fromDomain: 'news.example.com' }, whenLabel: 'marketing', disposition: 'spam' }, 'user');
+    const rule = await addRule(db, ACCOUNT, { match: { fromDomain: ['news.example.com'] }, whenLabel: 'marketing', disposition: 'spam' }, 'user');
     const sale = message('sale', 'deals@news.example.com');
     const note = message('note', 'ceo@news.example.com');
     const { api } = gmail([sale, note]);

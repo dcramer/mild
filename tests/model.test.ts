@@ -443,18 +443,21 @@ describe('standing', () => {
     await rememberCorrespondent(d, ACCOUNT, 'ada@example.org', true);
     expect(await senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'known', why: 'you have written to them' });
 
-    await addRule(d, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'personal' }, 'user');
+    await addRule(d, ACCOUNT, { match: { from: ['ada@example.org'] }, labelId: 'personal' }, 'user');
     expect(await senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'trusted', why: 'a rule keeps their mail' });
   });
 
   it('is unwanted or blocked by a rule that hides their mail, but not by one that waits for a label', async () => {
     const d = await db();
     await mail(d, 'a', 'promo@example.com', 'marketing');
-    await addRule(d, ACCOUNT, { match: { from: 'promo@example.com' }, whenLabel: 'marketing' }, 'user');
+    await addRule(d, ACCOUNT, { match: { from: ['promo@example.com'] }, whenLabel: 'marketing' }, 'user');
     expect((await senderFacts(d, ACCOUNT, 'promo@example.com')).standing).toBe('new');
-    await addRule(d, ACCOUNT, { match: { from: 'promo@example.com' }, disposition: 'archive' }, 'user');
+    // One rule for them and another sender says how the owner regards both, not this one.
+    await addRule(d, ACCOUNT, { match: { from: ['promo@example.com', 'deals@example.com'] }, disposition: 'archive' }, 'user');
+    expect((await senderFacts(d, ACCOUNT, 'promo@example.com')).standing).toBe('new');
+    await addRule(d, ACCOUNT, { match: { from: ['promo@example.com'] }, disposition: 'archive' }, 'user');
     expect((await senderFacts(d, ACCOUNT, 'promo@example.com')).standing).toBe('unwanted');
-    await addRule(d, ACCOUNT, { match: { from: 'scam@example.net' }, labelId: 'phishing' }, 'user');
+    await addRule(d, ACCOUNT, { match: { from: ['scam@example.net'] }, labelId: 'phishing' }, 'user');
     expect((await senderFacts(d, ACCOUNT, 'scam@example.net')).standing).toBe('blocked');
   });
 
@@ -462,7 +465,7 @@ describe('standing', () => {
     const d = await db();
     await mail(d, 'a', 'one@example.com', 'newsletter');
     await mail(d, 'b', 'two@example.com', 'newsletter');
-    await addRule(d, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'personal' }, 'user');
+    await addRule(d, ACCOUNT, { match: { fromDomain: ['example.com'] }, labelId: 'personal' }, 'user');
     expect(await domainFacts(d, ACCOUNT, 'example.com')).toMatchObject({ messages: 2, senders: 2, standing: 'trusted' });
     expect(await domainFacts(d, ACCOUNT, 'gmail.com')).toBeNull();
   });

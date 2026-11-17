@@ -49,8 +49,11 @@ const isWaiting = (row: ListedDecision) => !row.byUser && !row.carryOut && row.o
 /** A rule for all their mail, not some of it (under one name, say). */
 const forAll = (rule: Rule) => Object.keys(rule.match).length === 1;
 
-const forExactly = (data: SenderPage, rule: Rule) =>
-  forAll(rule) && (data.kind === 'sender' ? rule.match['from'] === data.profile.address : rule.match['fromDomain'] === data.profile.address);
+/** A rule for them alone: one that names others too is not how the owner regards this one. */
+const forExactly = (data: SenderPage, rule: Rule) => {
+  const named = data.kind === 'sender' ? rule.match.from : rule.match.fromDomain;
+  return forAll(rule) && named?.length === 1 && named[0] === data.profile.address;
+};
 
 /** The rule that decides their next message: one for exactly them wins over one for their domain. */
 const decidingRule = (data: SenderPage): Rule | null => data.profile.rules.find((r) => forExactly(data, r)) ?? data.profile.rules.find(forAll) ?? null;

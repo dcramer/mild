@@ -447,13 +447,13 @@ describe('dashboard server', () => {
 
   it('lists rules with their hits', async () => {
     const db = await seeded();
-    const id = await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'cold_outreach' }, 'user', NOW);
+    const id = await addRule(db, ACCOUNT, { match: { fromDomain: ['example.com'] }, labelId: 'cold_outreach' }, 'user', NOW);
     await recordDecision(db, ACCOUNT, 'waiting', { disposition: 'archive', subscription: 'preserve', stage: 'rules', ruleId: id, reason: 'r' }, { now: NOW });
     expect(await listRuleSummaries(db, await everything(db))).toEqual([
       {
         id,
         accountId: ACCOUNT,
-        match: { fromDomain: 'example.com' },
+        match: { fromDomain: ['example.com'] },
         except: [],
         labelId: 'cold_outreach',
         labelName: 'Cold outreach',
@@ -530,18 +530,18 @@ describe('dashboard server', () => {
         headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' },
         body: JSON.stringify(body),
       });
-    const theirs = async () => (await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from'] === 'news@example.com');
-    await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    const theirs = async () => (await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from']?.[0] === 'news@example.com');
+    await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     // Trust is given in the rule dialog, as what Trust starts it on: a rule for exactly them that only keeps their mail. It replaces the rule for exactly them.
     // It says it replaced one, so the page offers no Undo: removing it would not bring the old rule back.
-    const replacing = await write('/api/rules', { accountId: ACCOUNT, match: { from: 'news@example.com' }, disposition: 'keep' });
+    const replacing = await write('/api/rules', { accountId: ACCOUNT, match: { from: ['news@example.com'] }, disposition: 'keep' });
     expect(replacing.status).toBe(200);
     expect(await replacing.json()).toMatchObject({ replaced: true });
     expect(await theirs()).toMatchObject([{ kind: 'action', labelId: null, override: 'keep', disposition: 'keep', source: 'user' }]);
     const trusted = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
     expect(trusted.profile).toMatchObject({ given: 'trusted' });
 
-    const fresh = await write('/api/rules', { accountId: ACCOUNT, match: { fromDomain: 'example.net' }, disposition: 'spam' });
+    const fresh = await write('/api/rules', { accountId: ACCOUNT, match: { fromDomain: ['example.net'] }, disposition: 'spam' });
     expect(fresh.status).toBe(200);
     expect(await fresh.json()).toMatchObject({ replaced: false });
     const domain = (await (await fetch(`${base}/api/domain?account=${ACCOUNT}&domain=example.net`)).json()) as SenderPage;
@@ -550,6 +550,13 @@ describe('dashboard server', () => {
     // Taking it back is one press.
     expect((await write('/api/standing/clear', { accountId: ACCOUNT, address: 'news@example.com' })).status).toBe(200);
     expect(await theirs()).toEqual([]);
+
+    // A rule naming them among others is on their page but is not their standing, and taking a standing back leaves it.
+    await addRule(db, ACCOUNT, { match: { from: ['news@example.com', 'other@example.org'] }, disposition: 'archive' }, 'user');
+    const among = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
+    expect(among.profile).toMatchObject({ given: null, rules: [{ match: { from: ['news@example.com', 'other@example.org'] } }] });
+    expect((await write('/api/standing/clear', { accountId: ACCOUNT, address: 'news@example.com' })).status).toBe(200);
+    expect(await theirs()).toHaveLength(1);
 
     expect((await write('/api/standing/clear', { accountId: ACCOUNT, address: 'news@example.com', domain: 'example.com' })).status).toBe(400);
     expect((await write('/api/standing/clear', { accountId: ACCOUNT, address: 'not an address' })).status).toBe(400);
@@ -560,36 +567,36 @@ describe('dashboard server', () => {
     const { store, db } = await seededStore();
     const base = await start({}, store);
     const { id: proposal } = (await raw(db).get<{ id: number }>(
-      `INSERT INTO proposals (account_id, match, conditions, label_id, disposition, agreed, created_at) VALUES (?, '{"from":"news@example.com"}', ?, 'newsletter', 'keep', 2, 1) RETURNING id`,
+      `INSERT INTO proposals (account_id, match, conditions, label_id, disposition, agreed, created_at) VALUES (?, '{"from":["news@example.com"]}', ?, 'newsletter', 'keep', 2, 1) RETURNING id`,
       ACCOUNT,
-      conditionsHash(db, { from: 'news@example.com' }),
+      conditionsHash(db, { from: ['news@example.com'] }),
     ))!;
     const post = (path: string, body: object) =>
       fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' }, body: JSON.stringify(body) });
     const open = async () => ((await (await fetch(`${base}/api/suggestions`)).json()) as { proposals: { id: number }[] }).proposals.map((p) => p.id);
-    const fromNews = async () => (await listRuleSummaries(db, await everything(db))).filter((r) => r.match['fromDomain'] === 'example.com');
+    const fromNews = async () => (await listRuleSummaries(db, await everything(db))).filter((r) => r.match['fromDomain']?.[0] === 'example.com');
 
     // Accepting it without a rule in hand is not a way to make one.
     expect((await post('/api/proposals', { id: proposal, accept: true })).status).toBe(400);
     // A rule made some other way, or the dialog closed, leaves it open.
-    expect((await post('/api/rules', { accountId: ACCOUNT, match: { from: 'other@example.com' }, label: 'newsletter' })).status).toBe(200);
+    expect((await post('/api/rules', { accountId: ACCOUNT, match: { from: ['other@example.com'] }, label: 'newsletter' })).status).toBe(200);
     expect(await open()).toEqual([proposal]);
     // A proposal of another mailbox's is refused, and with it the rule.
     await connectAccount(store, 'work@example.org', '1', 0, db.person!);
-    const elsewhere = await post('/api/rules', { accountId: 'work@example.org', match: { fromDomain: 'example.com' }, disposition: 'archive', proposal });
+    const elsewhere = await post('/api/rules', { accountId: 'work@example.org', match: { fromDomain: ['example.com'] }, disposition: 'archive', proposal });
     expect([elsewhere.status, await elsewhere.json()]).toEqual([409, { error: 'That proposal is no longer open.' }]);
     expect(await fromNews()).toEqual([]);
 
     // Edited in the dialog: everyone at the domain, as Receipts, not the sender as Newsletters.
-    const made = await post('/api/rules', { accountId: ACCOUNT, match: { fromDomain: 'example.com' }, label: 'transactional', proposal });
+    const made = await post('/api/rules', { accountId: ACCOUNT, match: { fromDomain: ['example.com'] }, label: 'transactional', proposal });
     expect(made.status).toBe(200);
     expect(await fromNews()).toMatchObject([{ labelId: 'transactional', source: 'user' }]);
-    expect((await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from'] === 'news@example.com')).toEqual([]);
+    expect((await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from']?.[0] === 'news@example.com')).toEqual([]);
     expect(await open()).toEqual([]);
     expect(await raw(db).get('SELECT status FROM proposals WHERE id = ?', proposal)).toEqual({ status: 'accepted' });
     // Made once: the same proposal again makes no second rule.
-    expect((await post('/api/rules', { accountId: ACCOUNT, match: { fromDomain: 'example.org' }, label: 'transactional', proposal })).status).toBe(409);
-    expect((await listRuleSummaries(db, await everything(db))).filter((r) => r.match['fromDomain'] === 'example.org')).toEqual([]);
+    expect((await post('/api/rules', { accountId: ACCOUNT, match: { fromDomain: ['example.org'] }, label: 'transactional', proposal })).status).toBe(409);
+    expect((await listRuleSummaries(db, await everything(db))).filter((r) => r.match['fromDomain']?.[0] === 'example.org')).toEqual([]);
   });
 
   it("tells the page only that something failed when it is Sift's own error, and logs why", async () => {

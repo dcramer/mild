@@ -30,14 +30,15 @@ export const RuleFacts = z.strictObject(
   ),
 ) as unknown as z.ZodType<Conditions>;
 export type RuleFacts = Conditions;
+const values = z.array(z.string()).optional();
 const match = z.object({
-  from: z.string().optional(),
-  fromDomain: z.string().optional(),
-  fromName: z.string().optional(),
-  fromNameContains: z.string().optional(),
-  to: z.string().optional(),
-  listId: z.string().optional(),
-  subjectContains: z.string().optional(),
+  from: values,
+  fromDomain: values,
+  fromName: values,
+  fromNameContains: values,
+  to: values,
+  listId: values,
+  subjectContains: values,
   facts: RuleFacts.optional(),
 });
 export type RuleMatch = z.infer<typeof match>;

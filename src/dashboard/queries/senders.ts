@@ -89,8 +89,8 @@ async function profileOf(db: Sql, scope: Scope, accountId: string, who: { addres
       (r) =>
         r.accountId === accountId &&
         ('address' in who
-          ? r.match['from'] === who.address || (r.match['fromDomain'] === domainName && r.match['from'] === undefined)
-          : r.match['fromDomain'] === domainName || r.match['from']?.endsWith(`@${domainName}`)),
+          ? (r.match.from ?? []).includes(who.address) || (r.match.fromDomain ?? []).includes(domainName)
+          : (r.match.fromDomain ?? []).includes(domainName) || (r.match.from ?? []).some((a) => a.endsWith(`@${domainName}`))),
     )
     .map((r) => ({ id: r.id, match: r.match, labelName: r.labelName, disposition: r.disposition, source: r.source, kind: r.kind, when: r.when }));
   return {

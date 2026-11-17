@@ -43,7 +43,7 @@ async function seed(account: string): Promise<void> {
     { disposition: 'archive', subscription: 'preserve', stage: 'model', labelId: 'newsletter', reason: `because ${mark}` },
     { now: 1000 },
   );
-  const rule = await addRule(db, account, { match: { from: sender.address }, disposition: 'archive' }, 'user', 1000);
+  const rule = await addRule(db, account, { match: { from: [sender.address] }, disposition: 'archive' }, 'user', 1000);
   const { id: action } = (await raw(db).get<{ id: number }>(
     `INSERT INTO actions (account_id, message_id, type, payload, original_labels, status, created_at, decision_id) VALUES (?, ?, 'archive', '{}', '[]', 'done', 1000, ?) RETURNING id`,
     account,
@@ -53,8 +53,8 @@ async function seed(account: string): Promise<void> {
   const { id: proposal } = (await raw(db).get<{ id: number }>(
     `INSERT INTO proposals (account_id, match, conditions, label_id, disposition, agreed, created_at) VALUES (?, ?, ?, 'newsletter', 'keep', 2, 1000) RETURNING id`,
     account,
-    JSON.stringify({ from: `proposed@${mark}.example.com` }),
-    conditionsHash(db, { from: `proposed@${mark}.example.com` }),
+    JSON.stringify({ from: [`proposed@${mark}.example.com`] }),
+    conditionsHash(db, { from: [`proposed@${mark}.example.com`] }),
   ))!;
   await raw(db).run(
     `INSERT INTO examples (account_id, message_id, label_id, marked_at, status, body_text, body_html) VALUES (?, ?, 'newsletter', 1000, 'captured', ?, ?)`,
@@ -112,7 +112,7 @@ beforeEach(async () => {
     pullingIn: async () => [BRAVO],
     startEval: async (_db, { accountId }) => (calls.push(`eval ${accountId}`), 1),
     proposeLabels: async (_db, { accountId, goal }) => (calls.push(`propose ${accountId}`), { id: 1, goal, drafts: [], at: 0 }),
-    draftRule: async (_db, { accountId }) => (calls.push(`draft ${accountId}`), { match: { from: 'x@example.com' }, disposition: 'archive' }),
+    draftRule: async (_db, { accountId }) => (calls.push(`draft ${accountId}`), { match: { from: ['x@example.com'] }, disposition: 'archive' }),
     revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), !unreachable.includes(email)),
     // Whatever is asked for, it would answer with that person's mail: only the route's own check keeps it from the wrong person.
     checkNow: async () => void calls.push('check'),
@@ -267,8 +267,8 @@ describe("nobody sees or changes another person's mail", () => {
       ],
       [
         '/api/rules',
-        { accountId: ALPHA, match: { from: 'x@example.com' }, disposition: 'spam' },
-        { accountId: NOBODY, match: { from: 'x@example.com' }, disposition: 'spam' },
+        { accountId: ALPHA, match: { from: ['x@example.com'] }, disposition: 'spam' },
+        { accountId: NOBODY, match: { from: ['x@example.com'] }, disposition: 'spam' },
       ],
       [
         '/api/standing/clear',
@@ -277,14 +277,14 @@ describe("nobody sees or changes another person's mail", () => {
       ],
       [
         '/api/rules',
-        { accountId: ALPHA, match: { from: 'x@example.com' }, label: 'newsletter', proposal: theirs.proposal },
-        { accountId: NOBODY, match: { from: 'x@example.com' }, label: 'newsletter', proposal: 9999 },
+        { accountId: ALPHA, match: { from: ['x@example.com'] }, label: 'newsletter', proposal: theirs.proposal },
+        { accountId: NOBODY, match: { from: ['x@example.com'] }, label: 'newsletter', proposal: 9999 },
       ],
       // Their own mailbox, with a proposal of someone else's: none of theirs has that id.
       [
         '/api/rules',
-        { accountId: BRAVO, match: { from: 'x@example.com' }, label: 'newsletter', proposal: theirs.proposal },
-        { accountId: BRAVO, match: { from: 'x@example.com' }, label: 'newsletter', proposal: 9999 },
+        { accountId: BRAVO, match: { from: ['x@example.com'] }, label: 'newsletter', proposal: theirs.proposal },
+        { accountId: BRAVO, match: { from: ['x@example.com'] }, label: 'newsletter', proposal: 9999 },
       ],
       ['/api/rules/remove', { id: theirs.rule }, { id: 'r-nobody' }],
       ['/api/rules/filter', { id: theirs.rule, on: true }, { id: 'r-nobody', on: true }],
@@ -313,7 +313,7 @@ describe("nobody sees or changes another person's mail", () => {
     expect((await call('POST', '/api/rules/draft', ALPHA, { accountId: ALPHA_WORK, goal: 'Archive x' })).status).toBe(200);
     expect(calls).toEqual([`inbox ${theirs.rule}`, `apply ${theirs.rule}`, `draft ${ALPHA_WORK}`]);
     expect((await call('POST', '/api/rules/remove', ALPHA, { id: theirs.rule })).status).toBe(200);
-    const fromProposal = { accountId: ALPHA_WORK, match: { from: 'x@example.com' }, label: 'newsletter', proposal: theirs.proposal };
+    const fromProposal = { accountId: ALPHA_WORK, match: { from: ['x@example.com'] }, label: 'newsletter', proposal: theirs.proposal };
     expect((await call('POST', '/api/rules', ALPHA, fromProposal)).status).toBe(200);
     expect(await raw(db).get('SELECT status FROM proposals WHERE id = ?', theirs.proposal)).toEqual({ status: 'accepted' });
     expect((await call('POST', '/api/undo', ALPHA_WORK, { id: theirs.action })).status).toBe(200);

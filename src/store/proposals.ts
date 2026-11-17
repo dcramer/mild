@@ -84,7 +84,7 @@ const MAX_RUN = 20;
 export async function proposeFromCorrections(db: Sql, accountId: string, address: string, labelId: string, now: number = Date.now()): Promise<boolean> {
   const label = (await listLabels(db, accountId)).find((l) => l.id === labelId);
   if (!label) return false;
-  const match = { from: address };
+  const match = { from: [address] };
   if ((await hasRuleFor(db, accountId, match)) || (await hasRuleFor(db, accountId, match, labelId))) return false;
   const recent = await db
     .select({ disposition: feedback.disposition })

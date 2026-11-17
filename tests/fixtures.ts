@@ -218,7 +218,7 @@ export async function recordEverything(db: Sql, account: string): Promise<void> 
     labelId: 'newsletter',
     reason: 'r',
   });
-  await addRule(db, account, { match: { from: 'news@example.com' }, whenLabel: 'newsletter' }, 'user', 0);
+  await addRule(db, account, { match: { from: ['news@example.com'] }, whenLabel: 'newsletter' }, 'user', 0);
   await rememberCorrespondent(db, account, 'news@example.com', true, 0);
   const { id: run } = (await raw(db).get<{ id: number }>(
     `INSERT INTO eval_runs (account_id, started_at, status, model, prompt_hash, labels_hash, labels, few_shot, total)
@@ -234,9 +234,9 @@ export async function recordEverything(db: Sql, account: string): Promise<void> 
       decision,
     ],
     [
-      `INSERT INTO proposals (account_id, match, conditions, label_id, disposition, agreed, created_at) VALUES (?, '{"from": "a@example.com"}', ?, 'newsletter', 'keep', 2, 0)`,
+      `INSERT INTO proposals (account_id, match, conditions, label_id, disposition, agreed, created_at) VALUES (?, '{"from": ["a@example.com"]}', ?, 'newsletter', 'keep', 2, 0)`,
       account,
-      conditionsHash(db, { from: 'a@example.com' }),
+      conditionsHash(db, { from: ['a@example.com'] }),
     ],
     [
       `INSERT INTO feedback (account_id, decision_id, verdict, disposition, label_id, via, created_at) VALUES (?, ?, 'right', 'archive', 'newsletter', 'dashboard', 0)`,

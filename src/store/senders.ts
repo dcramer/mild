@@ -198,9 +198,16 @@ async function facts(db: Sql, accountId: string, who: { address: string } | { do
 
   // Only a rule for exactly this sender or domain that decides by itself says how the owner regards them.
   const dispositions = new Map((await listLabels(db, accountId)).map((l) => [l.id, l.disposition]));
+  // A rule naming them among others is about all of those senders, not how the owner regards this one.
+  const only = (values: readonly string[] | undefined) => (values?.length === 1 ? values[0] : undefined);
   const rule = (await listRules(db, accountId)).find((r) => {
     const keys = Object.keys(r.match);
-    return keys.length === 1 && r.whenLabel === undefined && r.when === undefined && ('address' in who ? r.match.from === value : r.match.fromDomain === value);
+    return (
+      keys.length === 1 &&
+      r.whenLabel === undefined &&
+      r.when === undefined &&
+      ('address' in who ? only(r.match.from) === value : only(r.match.fromDomain) === value)
+    );
   });
   const does = rule ? (rule.disposition ?? (rule.labelId ? dispositions.get(rule.labelId) : undefined)) : undefined;
   const labelled = answered.reduce((sum, l) => sum + l.messages, 0);

@@ -290,8 +290,8 @@ describe('mail', () => {
   it('keeps rules, changes and reasons encrypted, and finds a rule by its hashed conditions under each key', async () => {
     const { as } = await alpha(A);
     const db = await as(A);
-    const id = await setRule(db, 'alpha@example.org', { from: 'news@example.com' }, { disposition: 'archive' }, 'user', 0);
-    expect(await setRule(db, 'alpha@example.org', { from: 'news@example.com' }, { disposition: 'keep' }, 'user', 0)).toBe(id);
+    const id = await setRule(db, 'alpha@example.org', { from: ['news@example.com'] }, { disposition: 'archive' }, 'user', 0);
+    expect(await setRule(db, 'alpha@example.org', { from: ['news@example.com'] }, { disposition: 'keep' }, 'user', 0)).toBe(id);
     await recordDecision(
       db,
       'alpha@example.org',
@@ -312,12 +312,12 @@ describe('mail', () => {
     );
     const stored = await raw(db).all('SELECT r.match, r.except_matches, r.conditions, d.reason, a.payload FROM rules r, decisions d, actions a');
     expect(JSON.stringify(stored)).not.toContain('example.com');
-    expect((await listRules(db, 'alpha@example.org'))[0]).toMatchObject({ id, match: { from: 'news@example.com' }, disposition: 'keep' });
+    expect((await listRules(db, 'alpha@example.org'))[0]).toMatchObject({ id, match: { from: ['news@example.com'] }, disposition: 'keep' });
     expect((await listDecisions(db, await everything(db), { days: 36_500 }, 0)).rows[0]).toMatchObject({ reason: 'rule: from news@example.com' });
 
     await rekeyContent(await as(B_AFTER_A));
     const b = await as(B);
-    expect(await hasRuleFor(b, 'alpha@example.org', { from: 'news@example.com' })).toBe(true);
+    expect(await hasRuleFor(b, 'alpha@example.org', { from: ['news@example.com'] })).toBe(true);
     expect(await getAction(b, action)).toMatchObject({ payload: { unsubscribe: 'news.example.com' } });
   });
 
@@ -325,11 +325,11 @@ describe('mail', () => {
     const { as } = await alpha();
     const db = await as(NONE);
     await raw(db).run(
-      `INSERT INTO rules (id, account_id, position, match, except_matches, conditions, disposition, source, created_at) VALUES ('r', 'alpha@example.org', 0, '{"from": "a@example.com"}', '[]', 'unset:x', 'archive', 'user', 0)`,
+      `INSERT INTO rules (id, account_id, position, match, except_matches, conditions, disposition, source, created_at) VALUES ('r', 'alpha@example.org', 0, '{"from": ["a@example.com"]}', '[]', 'unset:x', 'archive', 'user', 0)`,
     );
-    expect(await hasRuleFor(db, 'alpha@example.org', { from: 'a@example.com' })).toBe(false);
+    expect(await hasRuleFor(db, 'alpha@example.org', { from: ['a@example.com'] })).toBe(false);
     await rekeyContent(db);
-    expect(await hasRuleFor(db, 'alpha@example.org', { from: 'a@example.com' })).toBe(true);
+    expect(await hasRuleFor(db, 'alpha@example.org', { from: ['a@example.com'] })).toBe(true);
   });
 
   it('finds mail by its subject, which the database cannot read', async () => {

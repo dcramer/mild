@@ -108,9 +108,9 @@ const user = await connectAccount(store, ACCOUNT, '1', now - 24 * HOUR);
 const db = await store.user(user);
 await withSampleLabels(db, ACCOUNT);
 // One of each kind of rule: a label, an action, and an action for mail that turns out to be a label.
-const newsRule = await addRule(db, ACCOUNT, { match: { fromDomain: 'news.example.com' }, labelId: 'newsletter' }, 'user');
-const ordersRule = await addRule(db, ACCOUNT, { match: { from: 'orders@shop.example.com' }, labelId: 'transactional' }, 'user');
-const ciRule = await addRule(db, ACCOUNT, { match: { fromDomain: 'ci.example.org' }, disposition: 'archive' }, 'user');
+const newsRule = await addRule(db, ACCOUNT, { match: { fromDomain: ['news.example.com'] }, labelId: 'newsletter' }, 'user');
+const ordersRule = await addRule(db, ACCOUNT, { match: { from: ['orders@shop.example.com'] }, labelId: 'transactional' }, 'user');
+const ciRule = await addRule(db, ACCOUNT, { match: { fromDomain: ['ci.example.org'] }, disposition: 'archive' }, 'user');
 
 /**
  * The Deals mail (m4) as its HTML part, stored by the pass as it would be from Gmail: a remote image, a background from elsewhere, inline styles,
@@ -202,7 +202,7 @@ if ((await listProposals(db, ACCOUNT)).length !== 1) throw new Error('seed answe
 // Three rules written to the fake Gmail as filters, as the dashboard asks: the CI one lands; the Shop one
 // lands and is then deleted in Gmail, which a check notices; Gmail does not answer for the news one.
 // A rule added after the passes, so it decides nothing, that cannot be one (Gmail cannot mark spam).
-await addRule(db, ACCOUNT, { match: { fromDomain: 'promo.example.com' }, disposition: 'spam' }, 'user');
+await addRule(db, ACCOUNT, { match: { fromDomain: ['promo.example.com'] }, disposition: 'spam' }, 'user');
 await writeRuleFilter({ db, mailbox, now: () => now - 3 * HOUR }, ordersRule);
 mailbox.filters = [];
 await checkRuleFilters({ db, mailbox, now: () => now - 150 * 60_000 }, ACCOUNT, false);

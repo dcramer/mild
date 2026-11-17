@@ -1,5 +1,5 @@
 import { type RuleMatch, type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ago, conditionsOf, count, describeMatch, factAnswers, factWords, money, outcomeName, plural, shortDate, willBe } from '@/lib/format.ts';
+import { ago, saidOf, count, describeMatch, factAnswers, factWords, money, outcomeName, plural, shortDate, willBe } from '@/lib/format.ts';
 import { setParams, useParam } from '@/lib/route.ts';
 import { InGmail } from '@/views/gmail-filter.tsx';
 import { Blank, Button, ConfirmButton, Dialog, Does, Empty, Fact, Facts, Failure, Loading, Panel, Section, Table, Td, Tr, TrGroup, useToast } from '@/system';
@@ -16,14 +16,14 @@ const QUIET: Record<string, string> = {
 
 /** What a rule matches: an address alone, or a quiet word and the value; then what the mail must be, in words. */
 export function Who({ match }: { match: RuleMatch }) {
-  const named = conditionsOf(match);
+  const named = saidOf(match);
   const asked = factAnswers(match.facts).map(factWords);
   return (
     <span className="name">
-      {named.map(([key, value], index) => (
-        <span key={key}>
-          {index > 0 ? <span className="font-normal text-muted-foreground">, </span> : null}
-          {QUIET[key] ? <span className="font-normal text-muted-foreground">{QUIET[key]} </span> : null}
+      {named.map(({ key, value, joint, first }) => (
+        <span key={`${key} ${value}`}>
+          {joint ? <span className="font-normal text-muted-foreground">{joint}</span> : null}
+          {first && QUIET[key] ? <span className="font-normal text-muted-foreground">{QUIET[key]} </span> : null}
           {value}
         </span>
       ))}
@@ -38,9 +38,10 @@ export function Who({ match }: { match: RuleMatch }) {
 }
 
 export function whoText(match: RuleMatch): string {
-  const named = conditionsOf(match).map(([key, value]) => `${QUIET[key] ? `${QUIET[key]} ` : ''}${value}`);
+  const said = saidOf(match);
+  const named = said.map(({ key, value, joint, first }) => `${joint}${first && QUIET[key] ? `${QUIET[key]} ` : ''}${value}`).join('');
   const asked = factAnswers(match.facts).map(factWords);
-  return [...named, ...(asked.length > 0 ? [`${named.length > 0 ? 'that' : 'mail that'} ${asked.join(' and ')}`] : [])].join(', ');
+  return [...(named ? [named] : []), ...(asked.length > 0 ? [`${said.length > 0 ? 'that' : 'mail that'} ${asked.join(' and ')}`] : [])].join(', ');
 }
 
 /** A message opened over the rule, in the panel every list opens one in. */

@@ -281,11 +281,11 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
     );
   const match: RuleMatch | null =
     input.scope === 'sender' || input.scope === 'label'
-      ? { from: input.sender }
+      ? { from: [input.sender] }
       : input.scope === 'domain'
-        ? { fromDomain: domain }
+        ? { fromDomain: [domain] }
         : input.scope === 'subject'
-          ? { from: input.sender, subjectContains: contains }
+          ? { from: [input.sender], subjectContains: [contains] }
           : null;
   const whose =
     input.scope === 'domain'

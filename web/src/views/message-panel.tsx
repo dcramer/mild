@@ -187,7 +187,8 @@ function Body({
   // A rule covers mail from here on; this message, which may already have been moved, is answered as the rule would.
   const keep = useAction();
   const covers = (match: RuleMatch) =>
-    Object.keys(match).length === 1 && (match.from === detail.fromAddress || match.fromDomain === detail.fromAddress.split('@')[1]);
+    Object.keys(match).length === 1 &&
+    ((match.from ?? []).includes(detail.fromAddress) || (match.fromDomain ?? []).includes(detail.fromAddress.split('@')[1] ?? ''));
   const keepThis = (labelId: string) =>
     keep.run(async () => {
       const reply = await api.feedback({

@@ -4,7 +4,7 @@ import type { Sql } from './sql.ts';
 import { conditionsHash, openJson, ruleDraftName, ruleName, sealJson } from './content.ts';
 import type { RuleDraft } from '../triage/rule-draft.ts';
 import type { Usage } from '../triage/stages/model.ts';
-import { type Rule, type RuleMatch, asksFacts } from '../triage/stages/rules.ts';
+import { type Rule, type RuleMatch, tidyMatch } from '../triage/stages/rules.ts';
 import { listLabels } from './labels.ts';
 import { Refusal } from '../refusal.ts';
 
@@ -68,9 +68,9 @@ async function check(db: Sql, accountId: string, rule: RuleSays): Promise<void> 
 }
 
 /** Append a rule after the account's existing ones. Returns its id. Throws if it has no condition, says nothing, or names no label of the account's. */
-export async function addRule(db: Sql, accountId: string, rule: Omit<Rule, 'id' | 'learned'>, source: RuleSource, now: number = Date.now()): Promise<string> {
-  const { facts: _facts, ...named } = rule.match;
-  if (Object.values(named).every((v) => v === undefined || v === '') && !asksFacts(rule.match)) throw new Refusal('A rule needs at least one condition.');
+export async function addRule(db: Sql, accountId: string, given: Omit<Rule, 'id' | 'learned'>, source: RuleSource, now: number = Date.now()): Promise<string> {
+  const rule = { ...given, match: tidyMatch(given.match), ...(given.except ? { except: given.except.map(tidyMatch) } : {}) };
+  if (Object.keys(rule.match).length === 0) throw new Refusal('A rule needs at least one condition.');
   await check(db, accountId, rule);
   const id = `r-${randomBytes(4).toString('hex')}`;
   const [{ next }] = (await db
@@ -165,8 +165,8 @@ export async function setRule(db: Sql, accountId: string, match: RuleMatch, rule
  * A rule already made for exactly that sender is left alone. Returns true if a rule was written.
  */
 export async function blockSender(db: Sql, accountId: string, address: string, labelId: string, now: number = Date.now()): Promise<boolean> {
-  if (await ruleMatching(db, accountId, { from: address })) return false;
-  await addRule(db, accountId, { match: { from: address }, labelId }, 'learned', now);
+  if (await ruleMatching(db, accountId, { from: [address] })) return false;
+  await addRule(db, accountId, { match: { from: [address] }, labelId }, 'learned', now);
   return true;
 }
 
@@ -175,7 +175,7 @@ export async function blockSender(db: Sql, accountId: string, address: string, l
  * A standing is given by adding that rule, in the rule dialog. Returns false if there was none.
  */
 /** The user's own rule for exactly this address or domain, which is what their standing is read from. */
-export async function standingRule(db: Sql, accountId: string, match: { from: string } | { fromDomain: string }): Promise<string | null> {
+export async function standingRule(db: Sql, accountId: string, match: { from: [string] } | { fromDomain: [string] }): Promise<string | null> {
   return (await ruleMatching(db, accountId, match))?.id ?? null;
 }
 

@@ -21,7 +21,7 @@ export default write({
   touches: named,
   run: async (ctx, { accountId, address, domain }) => {
     if (!(await listAccounts(ctx.db)).some((a) => a.id === accountId)) return null;
-    const id = await standingRule(ctx.db, accountId, address === undefined ? { fromDomain: domain!.toLowerCase() } : { from: address.toLowerCase() });
+    const id = await standingRule(ctx.db, accountId, address === undefined ? { fromDomain: [domain!.toLowerCase()] } : { from: [address.toLowerCase()] });
     if (id) await removeRuleAndFilter(ctx, id);
     return { ok: true as const };
   },

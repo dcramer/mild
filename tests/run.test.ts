@@ -94,7 +94,7 @@ beforeEach(async () => {
 
 describe('runOnce', () => {
   it('is off by default: records what it would do and changes nothing', async () => {
-    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { fromDomain: ['example.com'] }, labelId: 'newsletter' }, 'user');
     await runOnce(db, { ...options(), model: unsure });
 
     expect(await decisions()).toMatchObject([
@@ -107,7 +107,7 @@ describe('runOnce', () => {
   });
 
   it('asks Gmail again on the next pass for a change that did not land, and stops after three tries', async () => {
-    await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     inbox = [inbox[0]!];
     mailbox.failModify = 'before';
     await runOnce(await active(true), options());
@@ -124,7 +124,7 @@ describe('runOnce', () => {
   });
 
   it('counts a change whose answer was lost but that landed as done, without making it twice', async () => {
-    await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     inbox = [inbox[0]!];
     mailbox.failModify = 'after';
     await runOnce(await active(true), options());
@@ -135,8 +135,8 @@ describe('runOnce', () => {
   });
 
   it('acts on decisions, links each action to its decision and counts rule hits', async () => {
-    const ruleId = await addRule(db, ACCOUNT, { match: { listId: 'news.example.com', from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
-    await addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'personal' }, 'user');
+    const ruleId = await addRule(db, ACCOUNT, { match: { listId: ['news.example.com'], from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: ['ada@example.org'] }, labelId: 'personal' }, 'user');
     await runOnce(await active(true), options());
 
     // Both get the label for what they are; only the archived one gets the label for what sift did.
@@ -159,7 +159,7 @@ describe('runOnce', () => {
   });
 
   it('with no model, leaves what no rule covers in the queue: no decision, no question, nothing changed', async () => {
-    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { fromDomain: ['example.com'] }, labelId: 'newsletter' }, 'user');
     await runOnce(await active(true), options());
     expect(await decisions()).toMatchObject([{ message_id: 'news' }]);
     expect(await decisions()).toHaveLength(1);
@@ -177,7 +177,7 @@ describe('runOnce', () => {
   });
 
   it('records why a decision was not carried out', async () => {
-    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'marketing', disposition: 'spam' }, 'user');
+    await addRule(db, ACCOUNT, { match: { fromDomain: ['example.com'] }, labelId: 'marketing', disposition: 'spam' }, 'user');
     mailbox.sentTo.add('news@example.com');
     mailbox.labels.set('ada', ['UNREAD']);
     await runOnce(await active(true), { ...options(), model: unsure });
@@ -209,7 +209,7 @@ describe('runOnce', () => {
   });
 
   it('keeps a decision it could not carry out and retries it on the next pass', async () => {
-    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { fromDomain: ['example.com'] }, labelId: 'newsletter' }, 'user');
     inbox = [inbox[0]!];
     mailbox.failReads = true;
     const [failed] = await runOnce(await active(true), options());
@@ -291,7 +291,7 @@ describe('a tick', () => {
 
   it('fetches the text of mail left waiting by an earlier pass while every pass runs out of time', async () => {
     const { store, db: own } = await onePerson(ACCOUNT);
-    await addRule(own, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'learned');
+    await addRule(own, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'learned');
     let clock = 0;
     const slow = async () => ({ model: 'test/model', judge: async () => ((clock += 1000), { label: 'unsure', reason: 'r', confidence: 0.2 }) });
     const reading = (): GmailApi => ({ ...api(), getContent: async (id) => ({ text: `Body ${id}`, html: null, facts: { hasAttachments: false } }) });
@@ -401,8 +401,8 @@ describe('teaching from Gmail', () => {
 
   beforeEach(async () => {
     clock = 5000;
-    await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
-    await addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'personal' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: ['ada@example.org'] }, labelId: 'personal' }, 'user');
   });
 
   it('takes mail moved back to the inbox as an answer for that message, makes no rule and changes nothing in Gmail', async () => {
@@ -594,7 +594,7 @@ describe('read state', () => {
 
   it('records when the user opened a message, and not when sift marked it read', async () => {
     await updateLabel(db, ACCOUNT, 'newsletter', { markRead: true });
-    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { fromDomain: ['example.com'] }, labelId: 'newsletter' }, 'user');
     await runOnce(await active(true), options());
     expect(mailbox.labels.get('news')).not.toContain('UNREAD');
 
@@ -607,7 +607,7 @@ describe('read state', () => {
 
   it('still sees the user open a message sift marked read, undid, and that they then read themselves', async () => {
     await updateLabel(db, ACCOUNT, 'newsletter', { markRead: true });
-    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { fromDomain: ['example.com'] }, labelId: 'newsletter' }, 'user');
     await runOnce(await active(true), options());
     await undo({ db, mailbox, now: () => 5000 }, (await lastStandingChange(db, ACCOUNT, 'news'))!.id);
     mailbox.byUser('news', { remove: ['UNREAD'] });
@@ -619,7 +619,7 @@ describe('read state', () => {
 
 describe('Gmail filters', () => {
   it('are checked during a pass, and a Gmail that cannot list them does not fail it', async () => {
-    const id = await addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'personal' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: ['ada@example.org'] }, labelId: 'personal' }, 'user');
     await writeRuleFilter({ db, mailbox }, id);
     mailbox.filters = [];
     mailbox.failFilters = true;
@@ -733,7 +733,7 @@ describe('inference tier', () => {
 
   it('archives what an action rule covers without asking the model or naming a label', async () => {
     judged.length = 0;
-    const ruleId = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, disposition: 'archive' }, 'user');
+    const ruleId = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, disposition: 'archive' }, 'user');
     inbox = [message('g1', 'News <news@example.com>')];
     mailbox.labels.set('g1', ['INBOX', 'UNREAD']);
     await runOnce(await active(true), { ...options(), model: model('newsletter') });
@@ -751,7 +751,7 @@ describe('inference tier', () => {
 
   it('applies a rule that waits for a label only to mail the model gives that label, and asks about the rest', async () => {
     judged.length = 0;
-    const ruleId = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, whenLabel: 'newsletter' }, 'user');
+    const ruleId = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, whenLabel: 'newsletter' }, 'user');
     inbox = [message('u1', 'News <news@example.com>')];
     mailbox.labels.set('u1', ['INBOX']);
     await runOnce(await active(true), { ...options(), model: model('newsletter') });
@@ -876,8 +876,8 @@ describe('a failed model call', () => {
   });
 
   it('after it stops asking, leaves mail the model would have judged in the queue, not to a weaker rule', async () => {
-    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, disposition: 'archive' }, 'user');
-    await addRule(db, ACCOUNT, { match: { from: 'late@example.com' }, whenLabel: 'personal' }, 'user');
+    await addRule(db, ACCOUNT, { match: { fromDomain: ['example.com'] }, disposition: 'archive' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: ['late@example.com'] }, whenLabel: 'personal' }, 'user');
     inbox = [1, 2, 3].map((n) => ({ ...message(`m${n}`, `S${n} <s${n}@example.org>`), internalDate: 9000 - n }));
     inbox.push({ ...message('late', 'Late <late@example.com>'), internalDate: 1 });
     await runOnce(db, { ...options(), model: failing() });
@@ -893,7 +893,7 @@ describe('a failed model call', () => {
   });
 
   it('stops asking after three failures in a row, and still decides what a rule covers', async () => {
-    await addRule(db, ACCOUNT, { match: { from: 'ruled@example.com' }, disposition: 'archive' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: ['ruled@example.com'] }, disposition: 'archive' }, 'user');
     inbox = [1, 2, 3, 4].map((n) => ({ ...message(`m${n}`, `S${n} <s${n}@example.com>`), internalDate: 9000 - n }));
     inbox.push({ ...message('ruled', 'Ruled <ruled@example.com>'), internalDate: 1 });
     const asked: string[] = [];
@@ -923,7 +923,7 @@ describe('a failed model call', () => {
   it('once out of tries, is decided by a rule added since', async () => {
     inbox = [inbox[0]!];
     for (let pass = 0; pass < MAX_ATTEMPTS; pass++) await runOnce(db, { ...options(), model: unusable });
-    await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     await runOnce(db, { ...options(), model: unusable });
     expect(await decisions()).toMatchObject([{ message_id: 'news', stage: 'rules' }]);
   });
@@ -941,7 +941,7 @@ describe('unsubscribing', () => {
 
   it('follows the mailbox change for a label that unsubscribes, and only while on', async () => {
     asked.length = 0;
-    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'cold_outreach' }, 'user');
+    await addRule(db, ACCOUNT, { match: { fromDomain: ['example.com'] }, labelId: 'cold_outreach' }, 'user');
     inbox = [inbox[0]!];
     await runOnce(await active(false), withUnsubscribe());
     expect(asked).toEqual([]);
@@ -956,7 +956,7 @@ describe('unsubscribing', () => {
 
   it('can be asked for by a rule whose label does not, and is not counted when it could not be done', async () => {
     asked.length = 0;
-    await addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'security', subscription: 'unsubscribe', markRead: true }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: ['ada@example.org'] }, labelId: 'security', subscription: 'unsubscribe', markRead: true }, 'user');
     inbox = [inbox[1]!];
     await runOnce(await active(true), withUnsubscribe('refused'));
     expect(asked).toEqual(['ada']);
@@ -967,7 +967,7 @@ describe('unsubscribing', () => {
 
   it('never unsubscribes from someone the user has written to, or when the mailbox change did not happen', async () => {
     asked.length = 0;
-    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'cold_outreach' }, 'user');
+    await addRule(db, ACCOUNT, { match: { fromDomain: ['example.com'] }, labelId: 'cold_outreach' }, 'user');
     await rememberCorrespondent(db, ACCOUNT, 'news@example.com', true);
     inbox = [inbox[0]!];
     await runOnce(await active(true), withUnsubscribe());
@@ -986,7 +986,7 @@ describe('unsubscribing', () => {
 
 describe('correcting what sift did', () => {
   it('takes the change back and carries out what the user said instead', async () => {
-    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'learned');
+    await addRule(db, ACCOUNT, { match: { fromDomain: ['example.com'] }, labelId: 'newsletter' }, 'learned');
     inbox = [inbox[0]!];
     await runOnce(await active(true), options());
     expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/newsletters', 'L:sift/did/archived']);
@@ -1031,7 +1031,7 @@ describe('blocking', () => {
     mailbox.labels.set('p1', ['INBOX']);
     await runOnce(await active(true), { ...options(), model: phishing });
     expect(mailbox.labels.get('p1')).toEqual(['L:sift/phishing', 'L:sift/did/spam', 'SPAM']);
-    expect(await listRules(db, ACCOUNT)).toMatchObject([{ match: { from: 'alerts@example.net' }, labelId: 'phishing', source: 'learned' }]);
+    expect(await listRules(db, ACCOUNT)).toMatchObject([{ match: { from: ['alerts@example.net'] }, labelId: 'phishing', source: 'learned' }]);
     expect(logs.at(-1)).toContain('blocked 1 sender');
 
     let asked = 0;

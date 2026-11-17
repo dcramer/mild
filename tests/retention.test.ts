@@ -78,7 +78,7 @@ describe('pruneOld', () => {
     await message('kept');
     await recordDecision(db, ACCOUNT, 'kept', { ...archive, disposition: 'keep', labelId: 'personal' }, { now: OLD });
     await message('told');
-    const ruleId = await addRule(db, ACCOUNT, { match: { from: 'told@example.com' }, labelId: 'newsletter' }, 'user');
+    const ruleId = await addRule(db, ACCOUNT, { match: { from: ['told@example.com'] }, labelId: 'newsletter' }, 'user');
     await recordDecision(db, ACCOUNT, 'told', { ...archive, stage: 'rules', ruleId }, { now: OLD });
     expect((await pendingSuggestions(db)).map((s) => s.messageId).toSorted()).toEqual(['forgotten', 'kept', 'waiting']);
 

@@ -35,13 +35,16 @@ const QUOTABLE = /^[^"\\()]+$/;
 /** A Gmail search for the inbox mail a rule could match. It only narrows: the rule itself is checked on each message found. */
 export function inboxQuery(match: RuleMatch): string {
   const terms: string[] = [];
-  const add = (operator: string, value: string | undefined) => {
-    if (value !== undefined && PLAIN.test(value)) terms.push(`${operator}:${value}`);
+  // Several values are alternatives; one that cannot be searched for leaves the whole condition out.
+  const add = (operator: string, values: readonly string[], quote: boolean) => {
+    if (values.length === 0 || !values.every((v) => (quote ? QUOTABLE : PLAIN).test(v))) return;
+    const each = values.map((v) => (quote ? `"${v}"` : v));
+    terms.push(`${operator}:${each.length === 1 ? each[0] : `(${each.join(' OR ')})`}`);
   };
-  add('from', match.from ?? match.fromDomain);
-  add('to', match.to);
-  add('list', match.listId);
-  if (match.subjectContains !== undefined && QUOTABLE.test(match.subjectContains)) terms.push(`subject:"${match.subjectContains}"`);
+  add('from', [...(match.from ?? []), ...(match.fromDomain ?? [])], false);
+  add('to', match.to ?? [], false);
+  add('list', match.listId ?? [], false);
+  add('subject', match.subjectContains ?? [], true);
   return terms.join(' ');
 }
 

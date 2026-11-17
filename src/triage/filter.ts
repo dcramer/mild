@@ -31,12 +31,24 @@ const no = (reason: string): FilterVerdict => ({ possible: false, reason });
 const does = (rule: Rule, label: Label | undefined): { disposition: string | undefined; labelId?: string | undefined; markRead?: boolean | undefined } =>
   label ? labelled(label, rule.disposition) : { disposition: rule.disposition };
 
+/** Whether one sender value (an address, or a domain) could be the same mail's sender as another. */
+const sameSender = (a: string, b: string) => {
+  const [x, y] = [a.toLowerCase(), b.toLowerCase()];
+  if (x.includes('@') === y.includes('@')) return x === y;
+  return x.includes('@') ? x.endsWith(`@${y}`) : y.endsWith(`@${x}`);
+};
+
 /** False only when no message could match both. Errs towards true. */
 function mayOverlap(a: RuleMatch, b: RuleMatch): boolean {
-  const differ = (x: string | undefined, y: string | undefined) => x !== undefined && y !== undefined && x.toLowerCase() !== y.toLowerCase();
-  const domainOf = (m: RuleMatch) => m.fromDomain ?? m.from?.split('@')[1];
-  return !differ(a.from, b.from) && !differ(domainOf(a), domainOf(b)) && !differ(a.listId, b.listId);
+  const senders = (m: RuleMatch) => [...(m.from ?? []), ...(m.fromDomain ?? [])];
+  const meet = (x: readonly string[], y: readonly string[], same: (v: string, w: string) => boolean) =>
+    x.length === 0 || y.length === 0 || x.some((v) => y.some((w) => same(v, w)));
+  const equal = (v: string, w: string) => v.toLowerCase() === w.toLowerCase();
+  return meet(senders(a), senders(b), sameSender) && meet(a.listId ?? [], b.listId ?? [], equal);
 }
+
+/** Values for one Gmail search field: one as it is, several as alternatives. */
+const anyOf = (values: readonly string[]) => values.join(' OR ');
 
 /**
  * Whether a rule can be copied to Gmail as a filter, and what the filter is. A filter runs on every
@@ -59,8 +71,8 @@ export function filterFor(rule: FilterableRule, labels: readonly Label[], rules:
   if (rule.learned && archive) return no('Sift learned this rule and holds it back for people you have written to. A filter cannot.');
 
   const { from, fromDomain, fromName, fromNameContains, to, listId, subjectContains } = rule.match;
-  if (listId !== undefined) return no('Gmail filters cannot match a mailing list.');
-  if (fromName !== undefined || fromNameContains !== undefined)
+  if (listId !== undefined && listId.length > 0) return no('Gmail filters cannot match a mailing list.');
+  if ((fromName ?? []).length > 0 || (fromNameContains ?? []).length > 0)
     return no('Gmail filters match words in a sender’s name and address together, so they cannot hold to the name.');
   if (asksFacts(rule.match)) return no('It asks what Sift found in the message, which Gmail filters cannot see.');
   if ((rule.except ?? []).length > 0) return no('It has exceptions.');
@@ -68,21 +80,19 @@ export function filterFor(rule: FilterableRule, labels: readonly Label[], rules:
   const criteria: FilterPlan['criteria'] = {};
   const differs: string[] = [];
   const unsafe = no('Its conditions cannot be written as a Gmail search safely.');
-  if (from !== undefined) {
-    if (!ADDRESS.test(from.toLowerCase()) || (fromDomain !== undefined && from.toLowerCase().split('@')[1] !== fromDomain.toLowerCase())) return unsafe;
-    criteria.from = from.toLowerCase();
-  } else if (fromDomain !== undefined) {
-    if (!DOMAIN.test(fromDomain.toLowerCase())) return unsafe;
-    criteria.from = `@${fromDomain.toLowerCase()}`;
-  }
-  if (to !== undefined) {
-    if (!ADDRESS.test(to.toLowerCase())) return unsafe;
-    criteria.to = to.toLowerCase();
+  const addresses = (from ?? []).map((a) => a.toLowerCase());
+  const domains = (fromDomain ?? []).map((d) => d.toLowerCase());
+  if (!addresses.every((a) => ADDRESS.test(a)) || !domains.every((d) => DOMAIN.test(d))) return unsafe;
+  if (addresses.length + domains.length > 0) criteria.from = anyOf([...addresses, ...domains.map((d) => `@${d}`)]);
+  if (to !== undefined && to.length > 0) {
+    const all = to.map((a) => a.toLowerCase());
+    if (!all.every((a) => ADDRESS.test(a))) return unsafe;
+    criteria.to = anyOf(all);
     differs.push('Gmail also matches mail that only copies this address (Cc or Bcc).');
   }
-  if (subjectContains !== undefined) {
-    if (subjectContains.includes('"') || subjectContains.trim() === '') return unsafe;
-    criteria.subject = `"${subjectContains.trim()}"`;
+  if (subjectContains !== undefined && subjectContains.length > 0) {
+    if (subjectContains.some((words) => words.includes('"') || words.trim() === '')) return unsafe;
+    criteria.subject = anyOf(subjectContains.map((words) => `"${words.trim()}"`));
     differs.push('Gmail matches whole words in the subject, so it can miss mail the rule catches. Sift still handles that mail.');
   }
   if (Object.keys(criteria).length === 0) return no('It has no condition Gmail can match.');

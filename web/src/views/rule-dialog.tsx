@@ -2,21 +2,27 @@ import { PlusIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { setParams } from '@/lib/route.ts';
 import { type LabelSummary, type RuleDraft, type RuleFilter, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
-import { type By, type RuleStart, replacedBy, startWords } from '@/lib/rule-start.ts';
-import { FACTS, type FactAnswer, type FactKey, factAnswers, factConditions, factParam, factWords, outcomeName } from '@/lib/format.ts';
+import { type By, type Condition, type RuleStart, conditionsOf, matchOf, replacedBy, startWords } from '@/lib/rule-start.ts';
+import { FACTS, type FactAnswer, type FactKey, describeMatch, factAnswers, factConditions, factParam, factWords, outcomeName } from '@/lib/format.ts';
 import { Button, Check, Dialog, Does, Failure, Field, Form, Input, Note, Select, TextArea, useToast } from '@/system';
 import { useFilterOffer } from '@/views/gmail-filter.tsx';
 
 const BY = [
   ['from', 'from'],
+  ['fromName', 'named'],
+  ['fromNameContains', 'name contains'],
   ['listId', 'on the list'],
   ['to', 'sent to'],
-  ['subjectContains', 'with a subject containing'],
+  ['subjectContains', 'subject contains'],
 ] as const satisfies readonly (readonly [By, string])[];
-const NAME_MATCH = [
-  ['fromName', 'is'],
-  ['fromNameContains', 'contains'],
-] as const;
+const PLACEHOLDER: Record<By, string> = {
+  from: 'an address or a domain',
+  fromName: 'their name',
+  fromNameContains: 'words in their name',
+  listId: 'a list id',
+  to: 'an address',
+  subjectContains: 'words in the subject',
+};
 const ACTIONS = ['archive', 'spam', 'keep'] as const;
 type Action = (typeof ACTIONS)[number];
 
@@ -25,12 +31,11 @@ const ANSWERS = (Object.keys(FACTS) as FactKey[]).flatMap((key) => FACTS[key].ma
 /** Only what the whole message shows: sift reads each message to check these. */
 const READ = new Set<FactKey>(['hasAttachments', 'trackingPixel']);
 
-/** "From" takes an address or a domain: with a name before an @ it is one address, otherwise everyone at the domain. */
-function fromMatch(text: string): Record<string, string> {
-  const value = text.trim();
-  if (value === '') return {};
-  return /^[^@\s]+@[^@\s]+$/.test(value) ? { from: value } : { fromDomain: value.replace(/^@/, '') };
-}
+/** One line of the rule's conditions: a value of some kind, or an answer about what Sift saw in the message. */
+type Row = Condition | { fact: FactAnswer };
+const isNamed = (row: Row): row is Condition => 'by' in row;
+const rowsOf = (conditions: readonly Condition[], facts: readonly FactAnswer[]): Row[] =>
+  conditions.length + facts.length === 0 ? [{ by: 'from', value: '' }] : [...conditions, ...facts.map((fact) => ({ fact }))];
 
 /**
  * A rule in the order sift applies it: which mail (an address, a domain, a list, a recipient or words in
@@ -62,11 +67,9 @@ export function AddRuleDialog({
   // Undo is pressed after the dialog has closed, so what it reports goes to a toast.
   const later = useAction();
   const toast = useToast();
-  const [by, setBy] = useState<By>(start?.by ?? 'from');
-  const [value, setValue] = useState(start?.value ?? '');
-  const [nameMatch, setNameMatch] = useState<(typeof NAME_MATCH)[number][0]>('fromName');
-  const [name, setName] = useState(start?.name ?? '');
-  const [facts, setFacts] = useState<FactAnswer[]>(start?.facts ?? []);
+  const [rows, setRows] = useState<Row[]>(() => rowsOf(start?.conditions ?? [], start?.facts ?? []));
+  // A line the reader just added takes the cursor; the ones it opened on do not.
+  const [grown, setGrown] = useState(false);
   const [condition, setCondition] = useState('');
   const [label, setLabel] = useState(start?.label ?? '');
   const [whenLabel, setWhenLabel] = useState(start?.whenLabel ?? '');
@@ -79,13 +82,9 @@ export function AddRuleDialog({
   const [describing, setDescribing] = useState(true);
   const [goal, setGoal] = useState(() => (start ? startWords(start, labels) : ''));
   const [note, setNote] = useState<string | null>(null);
-  const fill = ({ match: { facts: drafted, fromName, fromNameContains, ...one }, ...rule }: RuleDraft) => {
-    const [key, given] = Object.entries(one)[0] ?? ['from', ''];
-    setBy(key === 'fromDomain' ? 'from' : (key as By));
-    setValue(given ?? '');
-    setNameMatch(fromNameContains === undefined ? 'fromName' : 'fromNameContains');
-    setName(fromName ?? fromNameContains ?? '');
-    setFacts(factAnswers(drafted));
+  const fill = ({ match: drafted, ...rule }: RuleDraft) => {
+    setRows(rowsOf(conditionsOf(drafted), factAnswers(drafted.facts)));
+    setGrown(false);
     setLabel(rule.label ?? '');
     setWhenLabel(rule.whenLabel ?? '');
     setCondition(rule.when ?? '');
@@ -110,17 +109,51 @@ export function AddRuleDialog({
   const needsLabel = !waitsFor && condition.trim() !== '' && !chosen;
   // An action alone that keeps mail changes nothing in the inbox.
   const moves = chosen !== undefined || waitsFor !== undefined || action !== 'keep';
-  // A name is only asked about beside the address or domain it comes from: anyone can send under any name.
-  const naming = by === 'from' && name.trim() !== '';
-  const nameAlone = naming && value.trim() === '';
-  const named = by === 'from' ? { ...fromMatch(value), ...(naming ? { [nameMatch]: name.trim() } : {}) } : value.trim() === '' ? {} : { [by]: value.trim() };
+  const facts = rows.flatMap((row) => (isNamed(row) ? [] : [row.fact]));
+  const named = matchOf(rows.filter(isNamed));
   const match = facts.length > 0 ? { ...named, facts: factConditions(facts) } : named;
-  const ready = (value.trim() !== '' || facts.length > 0) && !needsLabel && !nameAlone;
+  // A name is only asked about beside the address or domain it comes from: anyone can send under any name.
+  const nameAlone = (named.fromName !== undefined || named.fromNameContains !== undefined) && named.from === undefined && named.fromDomain === undefined;
+  const values = Object.values(named).flat().length;
+  const ready = Object.keys(match).length > 0 && !needsLabel && !nameAlone;
+  // Read back what is not plain from the lines: who a domain takes in, and that values of a kind are alternatives.
+  const readBack =
+    values === 0
+      ? facts.length > 0
+        ? 'From anyone.'
+        : undefined
+      : values > 1 || named.fromDomain !== undefined
+        ? `Mail ${describeMatch(named)}.`
+        : named.from !== undefined
+          ? 'Only this address.'
+          : undefined;
+  const hint = nameAlone
+    ? 'Anyone can send under any name, so give an address or domain too.'
+    : [readBack, facts.some((f) => READ.has(f.key)) ? 'Sift reads each message to check this.' : undefined].filter(Boolean).join(' ') || undefined;
   // Adding a rule with exactly the conditions of one already there replaces it, so the dialog says which.
   const rules = useLoaded('rules', (signal) => api.rules(signal));
   const replaces = ready ? replacedBy(rules.data?.rules ?? [], accountId, match, waitsFor?.id ?? null) : undefined;
   const replacing = replaces ? (replaces.kind === 'label' ? replaces.override : replaces.disposition) : null;
-  const unused = (except: FactKey | null) => ANSWERS.filter((a) => a.key === except || !facts.some((f) => f.key === a.key));
+  // What a line can be: any kind of value, or an answer about a fact no other line asks.
+  const kinds = (row: Row) => [
+    ...BY,
+    ...ANSWERS.filter((a) => (!isNamed(row) && a.key === row.fact.key) || !facts.some((f) => f.key === a.key)).map(
+      (a) => [factParam(a), factWords(a)] as const,
+    ),
+  ];
+  const retype = (row: Row, next: string): Row => {
+    const by = BY.find(([b]) => b === next)?.[0];
+    if (by) return { by, value: isNamed(row) ? row.value : '' };
+    const fact = ANSWERS.find((a) => factParam(a) === next);
+    return fact ? { fact } : row;
+  };
+  const change = (at: number, row: Row) => setRows(rows.map((r, i) => (i === at ? row : r)));
+  const grow = () => {
+    // Another line is most often another of the kind before it: a second sender.
+    const last = rows.findLast(isNamed);
+    setRows([...rows, { by: last?.by ?? 'from', value: '' }]);
+    setGrown(true);
+  };
   const add = () => {
     let added: { id: string; replaced: boolean; filter: RuleFilter | null } | null = null;
     const takeBack = (id: string) =>
@@ -227,64 +260,44 @@ export function AddRuleDialog({
             {note}
           </Note>
         ) : null}
-        <Field
-          inline
-          label="Mail"
-          hint={
-            value.trim() === ''
-              ? facts.length > 0
-                ? 'From anyone'
-                : undefined
-              : by === 'from'
-                ? 'fromDomain' in named
-                  ? `Anyone at ${named['fromDomain']}`
-                  : 'Only this address'
-                : undefined
-          }
-        >
-          <Select label="Match mail" value={by} options={BY} onChange={setBy} />
-          <Input
-            autoFocus
-            className="min-w-40 flex-1"
-            aria-label="Value to match"
-            placeholder={by === 'from' ? 'an address or a domain' : ''}
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-          />
-        </Field>
-        {by === 'from' ? (
-          <Field inline label="Name" hint={nameAlone ? 'Anyone can send under any name, so give the address or domain too.' : undefined}>
-            <Select label="How the name matches" value={nameMatch} options={NAME_MATCH} onChange={setNameMatch} />
-            <Input
-              className="min-w-40 flex-1"
-              aria-label="Sender's name"
-              placeholder="any name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </Field>
-        ) : null}
-        <Field inline label="That" hint={facts.some((f) => READ.has(f.key)) ? 'Sift reads each message to check this.' : undefined}>
+        <Field inline label="Mail" hint={hint}>
           <div className="flex w-full flex-col items-start gap-2">
-            {facts.map((fact, at) => (
-              <span key={fact.key} className="flex max-w-full items-center gap-1">
-                <Select
-                  label={`Condition ${at + 1}`}
-                  value={factParam(fact)}
-                  options={unused(fact.key).map((a) => [factParam(a), factWords(a)] as const)}
-                  onChange={(next) => setFacts(facts.map((f, i) => (i === at ? (ANSWERS.find((a) => factParam(a) === next) ?? f) : f)))}
-                />
-                <Button variant="quiet" size="icon" aria-label={`Remove “${factWords(fact)}”`} onClick={() => setFacts(facts.filter((_, i) => i !== at))}>
+            {rows.map((row, at) => (
+              <span key={at} className="flex w-full min-w-0 items-center gap-1">
+                {/* A kind stays whole beside its value; a long answer about a fact is cut short before the X is. */}
+                <span className={isNamed(row) ? 'shrink-0' : 'flex min-w-0'}>
+                  <Select
+                    label={`Condition ${at + 1}`}
+                    value={isNamed(row) ? row.by : factParam(row.fact)}
+                    options={kinds(row)}
+                    onChange={(next) => change(at, retype(row, next))}
+                  />
+                </span>
+                {isNamed(row) ? (
+                  <Input
+                    autoFocus={at === rows.length - 1 && (grown || at === 0)}
+                    className="min-w-0 flex-1"
+                    aria-label={`Value ${at + 1}`}
+                    placeholder={PLACEHOLDER[row.by]}
+                    value={row.value}
+                    onChange={(event) => change(at, { by: row.by, value: event.target.value })}
+                  />
+                ) : null}
+                <Button
+                  variant="quiet"
+                  size="icon"
+                  className="ml-auto shrink-0"
+                  aria-label={`Remove condition ${at + 1}`}
+                  onClick={() => setRows(rows.filter((_, i) => i !== at))}
+                >
                   <XIcon aria-hidden />
                 </Button>
               </span>
             ))}
-            {facts.length < Object.keys(FACTS).length ? (
-              <Button variant="quiet" className="-ml-3" onClick={() => setFacts([...facts, unused(null)[0]])}>
-                <PlusIcon aria-hidden />
-                Add a condition
-              </Button>
-            ) : null}
+            <Button variant="quiet" className="-ml-3" onClick={grow}>
+              <PlusIcon aria-hidden />
+              Add a condition
+            </Button>
           </div>
         </Field>
         {replaces ? (

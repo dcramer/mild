@@ -205,17 +205,38 @@ export const FACT_FILTER_OPTIONS = [['', 'Any'] as const, ...FACT_FILTER_WORDS.m
 /** A fact filter that is on, as its chip says it. */
 export const factFilterName = (key: FactFilter) => `Mail that ${FACT_FILTER_WORDS.find(([k]) => k === key)?.[1] ?? key}`;
 
-/** A match's named conditions in the order a sentence reads them, whatever order they were stored in; typed text is quoted. */
-export function conditionsOf(match: RuleMatch): (readonly [string, string])[] {
-  const order = ['from', 'fromDomain', 'fromName', 'fromNameContains', 'to', 'listId', 'subjectContains'] as const;
+const GROUP = {
+  from: 'sender',
+  fromDomain: 'sender',
+  fromName: 'name',
+  fromNameContains: 'name',
+  to: 'to',
+  listId: 'list',
+  subjectContains: 'subject',
+} as const;
+type Named = keyof typeof GROUP;
+
+/** One value of a match, as a sentence reads it. */
+interface Said {
+  key: Named;
+  value: string;
+  /** What goes before it: nothing first, "or" after another of the same kind, a comma after a different one. */
+  joint: '' | ' or ' | ', ';
+  /** The first value under its key, which takes that key's words ("anyone at"). */
+  first: boolean;
+}
+
+/** A match's values in the order a sentence reads them, whatever order they were stored in; typed text is quoted. */
+export function saidOf(match: RuleMatch): Said[] {
   const typed = new Set<string>(['fromName', 'fromNameContains', 'subjectContains']);
-  return order.flatMap((key) => {
-    const value = match[key];
-    return value === undefined ? [] : [[key, typed.has(key) ? `“${value}”` : value] as const];
+  const values = (Object.keys(GROUP) as Named[]).flatMap((key) => (match[key] ?? []).map((value) => ({ key, value: typed.has(key) ? `“${value}”` : value })));
+  return values.map((v, at) => {
+    const before = values[at - 1];
+    return { ...v, joint: !before ? '' : GROUP[before.key] === GROUP[v.key] ? ' or ' : ', ', first: before?.key !== v.key };
   });
 }
 
-const MATCH: Record<string, string> = {
+const MATCH: Record<Named, string> = {
   from: 'from',
   fromDomain: 'from anyone at',
   fromName: 'named',
@@ -224,11 +245,13 @@ const MATCH: Record<string, string> = {
   listId: 'on the list',
   subjectContains: 'with a subject containing',
 };
-/** A rule's conditions as words to follow "mail": "from news@example.com, with a subject containing …, that is a reply". */
+/** A rule's conditions as words to follow "mail": "from news@example.com or anyone at example.org, with a subject containing …, that is a reply". */
 export function describeMatch(match: RuleMatch): string {
-  const named = conditionsOf(match).map(([key, value]) => `${MATCH[key]} ${value}`);
+  const named = saidOf(match)
+    .map(({ key, value, joint, first }) => `${joint}${first ? `${MATCH[key]} ` : ''}${value}`)
+    .join('');
   const asked = factAnswers(match.facts).map(factWords);
-  return [...named, ...(asked.length > 0 ? [`that ${asked.join(' and ')}`] : [])].join(', ');
+  return [...(named ? [named] : []), ...(asked.length > 0 ? [`that ${asked.join(' and ')}`] : [])].join(', ');
 }
 
 /** How the owner and a sender (or a domain) know each other, as pointing at its icon says it. */
