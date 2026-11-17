@@ -2,10 +2,10 @@ import { ArrowRightIcon, ArrowUpRightIcon, PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { type Next, ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { type LabelProposal, type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
-import { plural } from '@/lib/format.ts';
+import { INBOX_NAME, plural } from '@/lib/format.ts';
 import { Button, Dialog, Failure, Field, Form, Note, Onboarding, Select, TextArea, useToast } from '@/system';
 import { type LabelDraft, LabelFields } from '@/views/label-panel.tsx';
-import { type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
+import { type InboxSuggestion, type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
 
 type Choice = ManageState['model']['choices'][number];
 type Account = { name: string; onSettings: () => void; onSignOut: () => void } | undefined;
@@ -17,18 +17,15 @@ const EXAMPLES = [
   'Keep receipts out of the way',
   'Quiet the notifications from tools I use',
   'Catch scams and phishing',
-  'Keep recruiters out of my inbox',
   'Never miss a bill or a failed payment',
+  'Keep recruiters out of my inbox',
   'Keep shipping updates out of the way',
-  'Keep security alerts about my accounts where I see them',
+  'Never miss a security alert about my accounts',
   'Unsubscribe me from lists I never signed up for',
-  'Keep calendar invitations from people',
   'Archive automated reports and digests',
-  'Keep mail that asks me to review or approve something',
+  'Never miss mail from my kids’ school',
   'Archive social network notifications',
-  'Keep mail from my kids’ school',
-  'Keep replies to emails I sent',
-  'Keep newsletters I read, and archive the rest',
+  'Tag my travel bookings so I can find them',
   'Archive surveys and feedback requests',
 ];
 /** How many to offer at once. */
@@ -189,7 +186,7 @@ function Want({
       steps={steps}
       current={1}
       title="What do you want from Sift?"
-      intro="Say it in your own words, and Sift suggests labels for it. Each says what a kind of mail is and what Sift does with it. Mail none of them fits stays in your inbox."
+      intro="What you want out of your way, and what you never want to miss, in your own words. Sift suggests labels for the mail to move, and leaves everything else in your inbox."
       account={account}
     >
       <Form onSubmit={suggest}>
@@ -232,11 +229,12 @@ function Labels({
   onDone: () => void;
 }) {
   const [suggestions, setSuggestions] = useState(() => proposal.drafts.map(suggestionOf));
-  const [editing, setEditing] = useState<number | null>(null);
+  const [inbox, setInbox] = useState<InboxSuggestion>({ words: proposal.inbox, on: true });
+  const [editing, setEditing] = useState<number | 'inbox' | null>(null);
   const { busy, error, run } = useAction();
   const kept = keptLabels(suggestions);
   const change = (index: number, next: Partial<Suggestion>) => setSuggestions((all) => all.map((d, i) => (i === index ? { ...d, ...next } : d)));
-  const use = () => kept.length > 0 && run(() => api.acceptLabels(kept), onDone);
+  const use = () => kept.length > 0 && run(() => api.acceptLabels(kept, inbox.on && inbox.words.trim() ? inbox.words.trim() : undefined), onDone);
   return (
     <Onboarding steps={steps} current={2} title="Your labels" intro={`“${proposal.goal}”`} account={account}>
       {proposal.note ? (
@@ -244,9 +242,14 @@ function Labels({
           {proposal.note}
         </Note>
       ) : null}
-      {suggestions.length > 0 ? (
+      {suggestions.length > 0 || inbox.words.trim() !== '' ? (
         <>
-          <SuggestionList suggestions={suggestions} onChange={change} onEdit={setEditing} />
+          <SuggestionList
+            suggestions={suggestions}
+            onChange={change}
+            onEdit={setEditing}
+            inbox={{ ...inbox, onChange: (next) => setInbox((was) => ({ ...was, ...next })), onEdit: () => setEditing('inbox') }}
+          />
           <Onward
             next={{ label: keepWord('Use', kept.length), busy, disabled: kept.length === 0, onPress: use }}
             back={{ label: 'Start over', onPress: onStartOver }}
@@ -256,7 +259,17 @@ function Labels({
       ) : (
         <Onward next={{ label: 'Start over', onPress: onStartOver }} error={error} />
       )}
-      {editing === null ? null : (
+      {editing === 'inbox' ? (
+        <EditDraft
+          draft={{ name: INBOX_NAME, description: inbox.words, disposition: 'keep', markRead: false, unsubscribe: false }}
+          gmailLabel={null}
+          onClose={() => setEditing(null)}
+          onSave={(draft) => {
+            setInbox((was) => ({ ...was, words: draft.description }));
+            setEditing(null);
+          }}
+        />
+      ) : editing === null ? null : (
         <EditDraft
           draft={suggestions[editing]}
           onClose={() => setEditing(null)}
@@ -271,7 +284,18 @@ function Labels({
 }
 
 /** A suggestion changed before it is made: the fields a label has on the Labels screen. */
-function EditDraft({ draft: start, onClose, onSave }: { draft: LabelDraft; onClose: () => void; onSave: (draft: LabelDraft) => void }) {
+function EditDraft({
+  draft: start,
+  gmailLabel,
+  onClose,
+  onSave,
+}: {
+  draft: LabelDraft;
+  /** Null for what always stays in the inbox, as on the Labels screen. */
+  gmailLabel?: null;
+  onClose: () => void;
+  onSave: (draft: LabelDraft) => void;
+}) {
   const [draft, setDraft] = useState(start);
   const ready = draft.name.trim() !== '';
   const save = () => ready && onSave({ ...draft, name: draft.name.trim(), description: draft.description.trim() });
@@ -292,7 +316,7 @@ function EditDraft({ draft: start, onClose, onSave }: { draft: LabelDraft; onClo
       }
     >
       <Form onSubmit={save}>
-        <LabelFields draft={draft} onChange={setDraft} />
+        <LabelFields draft={draft} onChange={setDraft} {...(gmailLabel === null ? { gmailLabel } : {})} />
       </Form>
     </Dialog>
   );

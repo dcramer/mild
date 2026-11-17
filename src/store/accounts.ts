@@ -1,5 +1,5 @@
 import { and, asc, eq, isNull, accounts, credentials, labels, mailboxes, messages as messageRows, users } from './query.ts';
-import { everythingElseRow } from './labels.ts';
+import { inboxRow } from './labels.ts';
 import type { Sql } from './sql.ts';
 import { sealFacts, sealMessage } from './content.ts';
 import type { Store } from './store.ts';
@@ -48,7 +48,7 @@ export async function connectAccount(store: Store, email: string, historyId: str
 export async function ensureMailbox(db: Sql, mailbox: { id: string; historyId?: string | null }): Promise<boolean> {
   return await db.transaction(async (tx) => {
     const added = await tx.insert(mailboxes).values(mailbox).onConflictDoNothing().returning({ id: mailboxes.id });
-    if (added.length > 0) await tx.insert(labels).values(everythingElseRow(mailbox.id));
+    if (added.length > 0) await tx.insert(labels).values(inboxRow(mailbox.id));
     return added.length > 0;
   });
 }

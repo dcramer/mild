@@ -212,9 +212,9 @@ export const api = {
   proposeLabels: (goal: string) => post<LabelProposal>('/api/labels/propose', { goal }),
   /** The latest labels the model suggested, so a reload keeps them. */
   labelProposal: (signal: AbortSignal) => get<{ proposal: LabelProposal | null }>('/api/labels/proposal', {}, signal),
-  /** Make these labels in every mailbox of the person's that has none yet. */
-  acceptLabels: (labels: { name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }[]) =>
-    post<{ ids: string[] }>('/api/labels/accept', { labels }),
+  /** Make these labels in every mailbox of the person's that has none yet, with what always stays in the inbox. */
+  acceptLabels: (labels: { name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }[], inbox?: string) =>
+    post<{ ids: string[] }>('/api/labels/accept', { labels, ...(inbox === undefined ? {} : { inbox }) }),
   /** The model fills in a rule from the person's words, for the rule dialog. Nothing is made. */
   draftRule: (accountId: string, goal: string) => post<RuleDraft>('/api/rules/draft', { accountId, goal }),
   /** A rule carries a label, an action (`disposition`), or both; or an action for mail that turns out to be `whenLabel`. */

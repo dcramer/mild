@@ -152,7 +152,10 @@ export function ListView({
   );
 }
 
-/** One thing a list can be narrowed by, in the filter panel: a short list of choices, one of them on. The first is "any". */
+/**
+ * One thing a list can be narrowed by, in the filter panel: a short list of choices, one of them on. The first is
+ * "any". A `null` between two draws a rule, as in `Select`.
+ */
 export function FilterGroup<T extends string>({
   label,
   value,
@@ -161,25 +164,29 @@ export function FilterGroup<T extends string>({
 }: {
   label: string;
   value: T;
-  options: readonly (readonly [T, string])[];
+  options: readonly (readonly [T, string] | null)[];
   onChange: (value: T) => void;
 }) {
   return (
     <fieldset className="flex flex-col gap-1">
       <legend className="mb-1 text-sm font-medium">{label}</legend>
-      {options.map(([key, text]) => (
-        <button
-          key={key}
-          type="button"
-          role="radio"
-          aria-checked={key === value}
-          className="press -mx-2 flex min-h-7 cursor-pointer items-center gap-2 px-2 text-left text-sm text-muted-foreground hover:bg-(--fill) hover:text-foreground aria-checked:font-medium aria-checked:text-foreground"
-          onClick={() => onChange(key)}
-        >
-          <span className="min-w-0 flex-1 truncate">{text}</span>
-          {key === value ? <CheckIcon aria-hidden className="size-3.5 shrink-0" /> : null}
-        </button>
-      ))}
+      {options.map((option, index) => {
+        if (option === null) return index > 0 && index < options.length - 1 ? <hr key={`rule ${index}`} className="my-1 border-t border-(--rule)" /> : null;
+        const [key, text] = option;
+        return (
+          <button
+            key={key}
+            type="button"
+            role="radio"
+            aria-checked={key === value}
+            className="press -mx-2 flex min-h-7 cursor-pointer items-center gap-2 px-2 text-left text-sm text-muted-foreground hover:bg-(--fill) hover:text-foreground aria-checked:font-medium aria-checked:text-foreground"
+            onClick={() => onChange(key)}
+          >
+            <span className="min-w-0 flex-1 truncate">{text}</span>
+            {key === value ? <CheckIcon aria-hidden className="size-3.5 shrink-0" /> : null}
+          </button>
+        );
+      })}
     </fieldset>
   );
 }

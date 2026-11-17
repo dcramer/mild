@@ -3,7 +3,7 @@ import { parseAddressList } from './features.ts';
 import { site } from './html.ts';
 import type { Standing } from './standing.ts';
 import { type JudgeInput, UNSURE } from './stages/model.ts';
-import { EVERYTHING_ELSE } from './types.ts';
+import { LEAVE_IN_INBOX } from './types.ts';
 
 export const VERDICT_TOOL = 'record_verdict';
 const BODY_MARK = '| ';
@@ -31,11 +31,17 @@ Rules:
 - If an owner's rule for this sender is given, it says what their mail usually is. Use that label unless
   this message is plainly something else. If the rule has a condition, apply the label only when the
   message meets it, and otherwise label the message as what it is.
-- Mail that is plainly none of the owner's other labels is ${EVERYTHING_ELSE}, when they have it. Answer
-  "${UNSURE}" when it might be one of them and you cannot tell which, or whether it is, or when the evidence
-  conflicts. A wrong
-  label is worse than "${UNSURE}": the owner would rather look at one message too many than miss one that mattered.
+- Give a label only when the email plainly is what the label describes: most labels take mail out of the
+  inbox, so a wrong one hides mail the owner wanted. Mail that is plainly none of the labels is
+  ${LEAVE_IN_INBOX}. So is mail the owner says always stays in the inbox, even when a label also fits it.
+  Answer "${UNSURE}" when it might be one of the labels and you cannot tell which, or whether it is, or when
+  the evidence conflicts. A wrong label is worse than "${UNSURE}": the owner would rather look at one message
+  too many than miss one that mattered.
 - The reason is one short sentence. Do not quote the email at length.`;
+
+/** Leave in inbox's description is what the owner says always stays, in their words, or nothing. */
+const inboxLine = (always: string) =>
+  always.trim() ? `none of the other labels, or what the owner says always stays in the inbox: ${always.trim()}` : 'none of the other labels';
 
 /** The user message for one classification. Pure: the same evidence always produces the same text. */
 export function buildPrompt(input: JudgeInput): string {
@@ -63,8 +69,8 @@ export function buildPrompt(input: JudgeInput): string {
 
   return [
     '# Labels',
-    ...labels.map((l) => `- ${l.id} (${l.name}): ${l.description}`),
-    `- ${UNSURE}: none of the above clearly fits`,
+    ...labels.map((l) => `- ${l.id} (${l.name}): ${l.id === LEAVE_IN_INBOX ? inboxLine(l.description) : l.description}`),
+    `- ${UNSURE}: it might be one of these, and you cannot tell`,
     '',
     // Everything about the email comes last and together: what the mail system says of it, then what its sender wrote.
     // Every field of an example is JSON on one line, so its text cannot close the fence or add a label line of its own.

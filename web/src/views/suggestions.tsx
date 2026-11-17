@@ -5,7 +5,20 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { SenderCell, SenderCellLoading } from '@/components/sender.tsx';
 import { useParam } from '@/lib/route.ts';
 import { type SuggestionItem, type Suggestions, type Summary, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ACTIONS, FACT_FILTER_OPTIONS, ago, count, describeMatch, factFilterName, money, outcomeName, percent, plural, sureness } from '@/lib/format.ts';
+import {
+  ACTIONS,
+  FACT_FILTER_OPTIONS,
+  ago,
+  inboxFirst,
+  count,
+  describeMatch,
+  factFilterName,
+  money,
+  outcomeName,
+  percent,
+  plural,
+  sureness,
+} from '@/lib/format.ts';
 import {
   AnswerPicker,
   Button,
@@ -262,7 +275,12 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
         ],
         panel: (
           <>
-            <FilterGroup label="Label" value={label} options={[['', 'Any'] as const, [UNSURE, outcomeName('review')] as const, ...names]} onChange={setLabel} />
+            <FilterGroup
+              label="Label"
+              value={label}
+              options={[['', 'Any'] as const, [UNSURE, outcomeName('review')] as const, null, ...inboxFirst(names)]}
+              onChange={setLabel}
+            />
             <FilterGroup label="Then" value={does} options={DOES} onChange={setDoes} />
             <FilterGroup label="What Sift saw" value={fact} options={FACT_FILTER_OPTIONS} onChange={setFact} />
             <Check checked={includeKept} onChange={setIncludeKept}>

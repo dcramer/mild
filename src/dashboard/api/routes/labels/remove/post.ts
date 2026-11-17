@@ -4,7 +4,7 @@ import { listLabels, removeLabel } from '../../../../../store/labels.ts';
 import { listRules } from '../../../../../store/rules.ts';
 import { redecide, self, text, write } from '../../../route.ts';
 import { removeFilter } from '../../../shared/rules.ts';
-import { EVERYTHING_ELSE } from '../../../../../triage/types.ts';
+import { LEAVE_IN_INBOX } from '../../../../../triage/types.ts';
 import { Refusal } from '../../../../../refusal.ts';
 
 /**
@@ -18,14 +18,14 @@ export default write({
   touches: self,
   run: async (ctx, { id }) => {
     const { db, now } = ctx;
-    if (id === EVERYTHING_ELSE) throw new Refusal('Everything Else cannot be removed: it is what mail is when it is none of your labels.');
+    if (id === LEAVE_IN_INBOX) throw new Refusal('Leave in inbox cannot be removed: it is what mail is when it is none of your labels.');
     const having: string[] = [];
     for (const account of await listAccounts(db)) {
       const labels = await listLabels(db, account.id);
       const label = labels.find((l) => l.id === id);
       if (!label) continue;
       // Without a label of its own a mailbox is read no more, and the dashboard goes back to setting up.
-      if (!labels.some((l) => l.id !== id && l.id !== EVERYTHING_ELSE))
+      if (!labels.some((l) => l.id !== id && l.id !== LEAVE_IN_INBOX))
         throw new Refusal(`${label.name} is the last of your labels, and Sift reads no mail without one. Add another first.`);
       having.push(account.id);
     }

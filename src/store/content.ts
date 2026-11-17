@@ -33,7 +33,7 @@ const nameOf = (db: Sql, accountId: string, messageId: string, part: Part) => `p
 export const ruleName = (db: Sql, ruleId: string, field: 'match' | 'except' | 'filter' | 'name') => `person ${db.person} rule ${ruleId} ${field}`;
 export const proposalName = (db: Sql, accountId: string) => `person ${db.person} proposal of ${accountId}`;
 export const actionName = (db: Sql, accountId: string) => `person ${db.person} action of ${accountId}`;
-export const labelProposalName = (db: Sql, accountId: string, field: 'goal' | 'labels' | 'note') =>
+export const labelProposalName = (db: Sql, accountId: string, field: 'goal' | 'labels' | 'inbox' | 'note') =>
   `person ${db.person} label proposal ${field} of ${accountId}`;
 export const ruleDraftName = (db: Sql, accountId: string, field: 'goal' | 'rule') => `person ${db.person} rule draft ${field} of ${accountId}`;
 
@@ -263,12 +263,19 @@ async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): 
     else kept.set(key, r.id);
   }
   const labelProposalRows = await db
-    .select({ id: labelProposals.id, accountId: labelProposals.accountId, goal: labelProposals.goal, labels: labelProposals.labels, note: labelProposals.note })
+    .select({
+      id: labelProposals.id,
+      accountId: labelProposals.accountId,
+      goal: labelProposals.goal,
+      labels: labelProposals.labels,
+      inbox: labelProposals.inbox,
+      note: labelProposals.note,
+    })
     .from(labelProposals);
   const labelProposalUpdates = labelProposalRows
-    .filter((r) => behind(r.goal) || behind(r.labels) || behind(r.note))
+    .filter((r) => behind(r.goal) || behind(r.labels) || behind(r.inbox) || behind(r.note))
     .map((r) => {
-      const again = (field: 'goal' | 'labels' | 'note', stored: string) =>
+      const again = (field: 'goal' | 'labels' | 'inbox' | 'note', stored: string) =>
         seal(db, labelProposalName(db, r.accountId, field), reopen(db, labelProposalName(db, r.accountId, field), stored));
       return {
         id: r.id,
@@ -276,6 +283,7 @@ async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): 
           goal: again('goal', r.goal),
           labels: r.labels === null ? null : again('labels', r.labels),
           note: r.note === null ? null : again('note', r.note),
+          inbox: r.inbox === null ? null : again('inbox', r.inbox),
         },
       };
     });

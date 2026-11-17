@@ -65,7 +65,7 @@ function DecisionEvent({ d }: { d: Decision }) {
       title={
         <>
           <span className="font-medium">{d.carryOut ? 'Decided' : 'Suggested'}</span>
-          <Verdict labelName={d.labelName} disposition={d.disposition} />
+          <Verdict labelId={d.labelId} labelName={d.labelName} disposition={d.disposition} />
         </>
       }
     >

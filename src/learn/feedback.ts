@@ -32,7 +32,7 @@ import { recordDecision } from '../store/decisions.ts';
 import { proposeFromCorrections } from '../store/proposals.ts';
 import type { RuleFacts } from '../triage/facts.ts';
 import { factsWhere } from '../store/messages.ts';
-import { type DecidedDisposition, type Decision, type Disposition, type StageName, labelled } from '../triage/types.ts';
+import { type DecidedDisposition, type Decision, type Disposition, LEAVE_IN_INBOX, type StageName, labelled } from '../triage/types.ts';
 import { Refusal } from '../refusal.ts';
 
 /** A decision sift only suggested, that the user has not yet confirmed or corrected. */
@@ -223,9 +223,11 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
     ...labelled(label, wanted === label.disposition ? undefined : wanted),
     stage: 'rules',
     reason:
-      input.disposition !== undefined && input.disposition !== label.disposition
-        ? `you said this is ${label.name}, and to ${DO[wanted]}`
-        : `you said this is ${label.name}`,
+      label.id === LEAVE_IN_INBOX
+        ? 'you said to leave it in your inbox'
+        : input.disposition !== undefined && input.disposition !== label.disposition
+          ? `you said this is ${label.name}, and to ${DO[wanted]}`
+          : `you said this is ${label.name}`,
   };
   await db.transaction(async (tx) => {
     const settled: Pick<Suggestion, 'accountId' | 'decisionId' | 'messageId' | 'labelId'>[] = given ? [...targets, given] : [...targets];

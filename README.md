@@ -1,6 +1,6 @@
 # Sift
 
-Sift helps you manage a Gmail inbox, on a machine you own or on Vercel. You say what you want from it, a language model suggests labels from that, and you keep the ones that fit. Each new message gets one of your labels, or Everything Else, and the label decides what happens: keep, archive, mark spam or block the sender. Your rules say what mail is, or what to do with it, without a model; the model is asked about the rest. Where you keep giving a label's mail from one sender another action, Sift proposes the rule that does it.
+Sift helps you manage a Gmail inbox, on a machine you own or on Vercel. You say what you want from it, a language model suggests labels from that, and you keep the ones that fit. Each new message gets one of your labels, which take mail out of your way (archive, mark spam, block the sender), or is left in your inbox: whatever none of them fits, and whatever you said you never want to miss. Your rules say what mail is, or what to do with it, without a model; the model is asked about the rest. Where you keep giving a label's mail from one sender another action, Sift proposes the rule that does it.
 
 It suggests before it acts. Every decision appears in a dashboard, you correct the wrong ones, and nothing in Gmail changes until you turn Sift on. It never deletes mail and cannot send any. Every change it makes can be undone.
 

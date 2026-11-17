@@ -4,7 +4,7 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { type LabelSummary, type ManageState, api, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/route.ts';
 import { AddLabelsDialog, LabelPanel, weak } from '@/views/label-panel.tsx';
-import { count, percent } from '@/lib/format.ts';
+import { INBOX, count, percent } from '@/lib/format.ts';
 import { Blank, Button, Empty, ListView, Look, Loading, Section, Share, Sub, Table, Td, Th, Tr } from '@/system';
 
 /** A label as the person sees it: one thing across their mailboxes, its figures added up, and where it is missing. */
@@ -41,8 +41,12 @@ const GROUPS = [
   { title: 'Marked spam', has: (l: LabelSummary) => l.disposition === 'spam' || l.disposition === 'block' },
 ] as const;
 
-/** Everything Else first, as what all the others are carved out of; then by name, so a label stays put while it is edited. */
-const order = (a: Label, b: Label) => Number(b.label.gmailLabel === null) - Number(a.label.gmailLabel === null) || a.label.name.localeCompare(b.label.name);
+/** Leave in inbox first, where every list has it; then by name, so a label stays put while it is edited. */
+const order = (a: Label, b: Label) => Number(b.label.id === INBOX) - Number(a.label.id === INBOX) || a.label.name.localeCompare(b.label.name);
+
+/** Under a label's name: what it is, or for Leave in inbox what the person said always stays. */
+const about = (label: LabelSummary) =>
+  label.id !== INBOX ? label.description : label.description ? `Always: ${label.description}` : 'Mail none of your labels fit';
 
 /** How often Sift had the label right when the reader checked, in yellow when it is often wrong. Nothing until then. */
 function Right({ label }: { label: LabelSummary }) {
@@ -127,7 +131,7 @@ export function LabelsView() {
                         <Td className="max-w-0">
                           <span className="name">{label.name}</span>
                           {/* On a phone what the label is matters more than the room: two lines, not one. */}
-                          <Sub className="max-md:line-clamp-2 max-md:whitespace-normal">{label.description}</Sub>
+                          <Sub className="max-md:line-clamp-2 max-md:whitespace-normal">{about(label)}</Sub>
                           {only ? <Sub>Only in {only.join(', ')}</Sub> : null}
                         </Td>
                         <Td phone="hide" num className="w-48" title={`${percent(label.messages, mail)} of the mail`}>

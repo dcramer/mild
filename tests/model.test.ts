@@ -132,6 +132,17 @@ describe('prompt', () => {
     expect(prompt([removed])).not.toContain('The owner labelled earlier mail');
   });
 
+  it('gives Leave in inbox what the owner said always stays, which beats any label that also fits', () => {
+    const inbox = { id: 'everything_else', name: 'Leave in inbox', description: 'Bills I still owe', disposition: 'keep' as const };
+    expect(buildPrompt({ evidence: evidence(), labels: [...SAMPLE_LABELS, inbox] })).toContain(
+      '- everything_else (Leave in inbox): none of the other labels, or what the owner says always stays in the inbox: Bills I still owe\n',
+    );
+    expect(buildPrompt({ evidence: evidence(), labels: [...SAMPLE_LABELS, { ...inbox, description: '' }] })).toContain(
+      '- everything_else (Leave in inbox): none of the other labels\n',
+    );
+    expect(SYSTEM_PROMPT).toContain('So is mail the owner says always stays in the inbox, even when a label also fits it.');
+  });
+
   it('states only the facts that are there, each kind of signal on one line', () => {
     const f = facts({
       accountId: ACCOUNT,
@@ -300,7 +311,7 @@ describe('preferences in the database', () => {
     await addMailbox(db, ACCOUNT, '1');
     return db;
   }
-  it('lets the user change a label, but never what Everything Else does', async () => {
+  it('lets the user change a label, and only what always stays in the inbox of Leave in inbox', async () => {
     const db = await seeded();
     expect(await updateLabel(db, ACCOUNT, 'cold_outreach', { disposition: 'keep', name: 'Pitches', description: 'Things I read.' })).toBe(true);
     // The id and the Gmail label never change, so nothing already labelled is orphaned.
@@ -314,13 +325,20 @@ describe('preferences in the database', () => {
     });
     expect(await updateLabel(db, ACCOUNT, 'nope', { disposition: 'keep' })).toBe(false);
 
-    expect(await updateLabel(db, ACCOUNT, 'everything_else', { name: 'The rest', description: 'Whatever is left.' })).toBe(true);
-    for (const change of [{ disposition: 'archive' as const }, { markRead: true }, { unsubscribe: true }, { disposition: 'spam' as const, block: true }])
-      await expect(updateLabel(db, ACCOUNT, 'everything_else', change)).rejects.toThrow('always stays in the inbox');
+    // Its name sent back unchanged, as the page saves it, is no change.
+    expect(await updateLabel(db, ACCOUNT, 'everything_else', { name: 'Leave in inbox', description: 'Bills I still owe.' })).toBe(true);
+    for (const change of [
+      { name: 'The rest' },
+      { disposition: 'archive' as const },
+      { markRead: true },
+      { unsubscribe: true },
+      { disposition: 'spam' as const, block: true },
+    ])
+      await expect(updateLabel(db, ACCOUNT, 'everything_else', change)).rejects.toThrow('only says what stays in your inbox');
     expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'everything_else')).toEqual({
       id: 'everything_else',
-      name: 'The rest',
-      description: 'Whatever is left.',
+      name: 'Leave in inbox',
+      description: 'Bills I still owe.',
       disposition: 'keep',
     });
     // The database holds it too, whatever code writes the row.

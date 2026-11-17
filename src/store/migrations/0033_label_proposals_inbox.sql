@@ -1,0 +1,1 @@
+ALTER TABLE "label_proposals" ADD COLUMN "inbox" text;

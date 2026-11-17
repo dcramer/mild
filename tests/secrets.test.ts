@@ -316,10 +316,15 @@ describe('mail', () => {
     await setRuleFilter(db, id, { filterId: 'f1', state: 'active', written: { from: 'news@example.com' } }, 0);
     const suggested = await startLabelProposal(db, { accountId: 'alpha@example.org', goal: 'Example news out of the way', model: 'test/model', now: 0 });
     const draft = { name: 'Example news', description: 'From news@example.com', disposition: 'archive', why: 'Example news' } as const;
-    await finishLabelProposal(db, 'alpha@example.org', suggested, { drafts: [draft], note: 'Example news is a rule', now: 0 });
+    await finishLabelProposal(db, 'alpha@example.org', suggested, {
+      drafts: [draft],
+      inbox: 'Example news I paid for',
+      note: 'Example news is a rule',
+      now: 0,
+    });
     await startRuleDraft(db, { accountId: 'alpha@example.org', goal: 'Archive news@example.com', model: 'test/model', now: 0 });
     const stored = await raw(db).all(
-      'SELECT r.match, r.except_matches, r.conditions, r.name, r.filter_written, d.reason, a.payload, l.goal, l.labels, l.note, rd.goal FROM rules r, decisions d, actions a, label_proposals l, rule_drafts rd',
+      'SELECT r.match, r.except_matches, r.conditions, r.name, r.filter_written, d.reason, a.payload, l.goal, l.labels, l.inbox, l.note, rd.goal FROM rules r, decisions d, actions a, label_proposals l, rule_drafts rd',
     );
     expect(JSON.stringify(stored)).not.toContain('example.com');
     expect(JSON.stringify(stored)).not.toContain('Example news');

@@ -7,7 +7,7 @@ import { filterStanding } from '@/views/gmail-filter.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { RulePanel, Who, whoText } from '@/views/rule-panel.tsx';
 import type { OpenMessages } from '@/views/message-panel.tsx';
-import { MADE_BY, ago, count, describeMatch, outcomeName } from '@/lib/format.ts';
+import { INBOX, MADE_BY, ago, count, describeMatch, doesName, inboxFirst, outcomeName } from '@/lib/format.ts';
 import {
   Blank,
   Button,
@@ -57,7 +57,7 @@ function Result({ rule }: { rule: RuleSummary }) {
     <>
       {rule.kind === 'label' ? <span>{rule.labelName}</span> : null}
       {rule.kind === 'label' && action ? <span className="text-muted-foreground"> · </span> : null}
-      {action ? <Does action={action}>{outcomeName(action)}</Does> : null}
+      {action ? <Does action={action}>{rule.kind === 'label' ? outcomeName(action) : doesName(null, action)}</Does> : null}
     </>
   );
 }
@@ -80,7 +80,8 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
   const rules = (data?.rules ?? [])
     .filter(
       (r) =>
-        (label === '' || r.labelId === label || r.whenLabel === label) &&
+        // A rule that only keeps leaves mail in the inbox as Leave in inbox does.
+        (label === '' || r.labelId === label || r.whenLabel === label || (label === INBOX && r.labelId === null && r.disposition === 'keep')) &&
         (source === '' || r.source === source) &&
         (gmail === '' || (gmail === 'filter' ? r.filterId !== null : filterStanding(r) === gmail)) &&
         (needle === '' || [r.name ?? '', whoText(r.match), r.labelName ?? ''].some((text) => text.toLowerCase().includes(needle))),
@@ -124,7 +125,7 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
         ],
         panel: (
           <>
-            <FilterGroup label="Label" value={label} options={[['', 'Any'] as const, ...labels]} onChange={setLabel} />
+            <FilterGroup label="Label" value={label} options={[['', 'Any'] as const, null, ...inboxFirst(labels)]} onChange={setLabel} />
             <FilterGroup label="Made by" value={source} options={SOURCES} onChange={setSource} />
             <FilterGroup label="In Gmail" value={gmail} options={GMAIL} onChange={setGmail} />
           </>

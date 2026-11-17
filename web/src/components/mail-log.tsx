@@ -1,6 +1,6 @@
 import { SenderCell, SenderCellLoading } from '@/components/sender.tsx';
 import type { DecisionRow, ListedDecision } from '@/lib/api.ts';
-import { clock, dateTime, dayName, happened, status } from '@/lib/format.ts';
+import { INBOX, clock, dateTime, dayName, happened, status } from '@/lib/format.ts';
 import { Blank, Button, Does, Loading, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
@@ -10,7 +10,9 @@ import type { OpenMessages } from '@/views/message-panel.tsx';
  */
 function Happened({ row, stacked }: { row: DecisionRow; stacked?: boolean }) {
   const { text, tone } = happened(row);
-  const label = row.labelName ? stacked ? <Sub>{row.labelName}</Sub> : <span className="text-muted-foreground"> · {row.labelName}</span> : null;
+  // Leave in inbox is not a kind of mail, so "Kept" says all of it.
+  const label =
+    row.labelName && row.labelId !== INBOX ? stacked ? <Sub>{row.labelName}</Sub> : <span className="text-muted-foreground"> · {row.labelName}</span> : null;
   const what = (
     <>
       <Does action={row.disposition}>{text}</Does>

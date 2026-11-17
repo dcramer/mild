@@ -251,7 +251,7 @@ export const SAMPLE_LABELS: readonly Label[] = [
   },
 ];
 
-/** Give `account` the sample labels, before its own Everything Else, unless it has them. */
+/** Give `account` the sample labels, before its own Leave in inbox, unless it has them. */
 export async function withSampleLabels(db: Sql, account: string): Promise<void> {
   await db
     .insert(labels)

@@ -1,5 +1,20 @@
 import { type RuleMatch, type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ago, saidOf, count, describeMatch, factAnswers, factWords, madeBy, money, outcomeName, plural, shortDate, willBe } from '@/lib/format.ts';
+import {
+  INBOX_NAME,
+  ago,
+  saidOf,
+  count,
+  doesName,
+  describeMatch,
+  factAnswers,
+  factWords,
+  madeBy,
+  money,
+  outcomeName,
+  plural,
+  shortDate,
+  willBe,
+} from '@/lib/format.ts';
 import { useParam } from '@/lib/route.ts';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 import { InGmail } from '@/views/gmail-filter.tsx';
@@ -217,8 +232,9 @@ export function RulePanel({
   const remove = useAction();
   const toast = useToast();
   const action = rule.disposition;
-  // An action rule that keeps mail changes nothing in the inbox.
-  const moves = !(rule.kind === 'action' && action === 'keep');
+  // Leave in inbox, or an action rule that keeps mail, changes nothing in the inbox.
+  const inbox = doesName(rule.kind === 'action' ? null : rule.labelId, action ?? '') === INBOX_NAME;
+  const moves = !inbox;
   return (
     <Panel open onClose={onClose} title={ruleTitle(rule)} {...(position === undefined ? {} : { position })} onPrevious={onPrevious} onNext={onNext}>
       <div className="flex flex-col gap-10">
@@ -228,10 +244,10 @@ export function RulePanel({
               <Who match={rule.match} />
             </Fact>
           ) : null}
-          {rule.kind === 'action' ? null : <Fact term={rule.kind === 'when-label' ? 'When it is' : 'Is'}>{rule.labelName}</Fact>}
+          {rule.kind === 'action' || inbox ? null : <Fact term={rule.kind === 'when-label' ? 'When it is' : 'Is'}>{rule.labelName}</Fact>}
           {action ? (
             <Fact term="Then">
-              <Does action={action}>{outcomeName(action)}</Does>
+              <Does action={action}>{doesName(rule.kind === 'action' ? null : rule.labelId, action)}</Does>
               {rule.override && rule.kind === 'label' ? <span className="text-muted-foreground"> instead of the label’s</span> : null}
               {[rule.markRead ? 'marked read' : null, rule.unsubscribe ? 'unsubscribed' : null].filter(Boolean).map((extra) => (
                 <span key={extra} className="text-muted-foreground">

@@ -1,7 +1,7 @@
 import { MegaphoneIcon, ReplyIcon, SparkleIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { type Contact, type SenderProfile, api, useLoaded } from '@/lib/api.ts';
-import { CONTACT_SAYS, describeMatch, outcomeName, plural, shortDate } from '@/lib/format.ts';
+import { CONTACT_SAYS, INBOX, describeMatch, doesName, outcomeName, plural, shortDate } from '@/lib/format.ts';
 import { Blank, Fact, Facts, Failure, Hint, HoverCard, Marked, Sub, Td, TextLink } from '@/system';
 
 export const senderHref = (accountId: string, address: string) => `/sender/${encodeURIComponent(accountId)}/${encodeURIComponent(address)}`;
@@ -22,9 +22,10 @@ function Rules({ rules }: { rules: SenderProfile['rules'] }) {
       {rules.map((rule) => (
         <li key={rule.id}>
           {rule.name ?? `Mail ${describeMatch(rule.match)}`}
-          {rule.kind === 'action' ? (
+          {rule.kind === 'action' || rule.labelId === INBOX ? (
             <>
-              : <span className="font-medium">{rule.disposition ? outcomeName(rule.disposition) : 'nothing'}</span>
+              :{' '}
+              <span className="font-medium">{rule.disposition || rule.labelId === INBOX ? doesName(rule.labelId, rule.disposition ?? 'keep') : 'nothing'}</span>
             </>
           ) : (
             <>

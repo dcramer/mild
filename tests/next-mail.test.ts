@@ -14,8 +14,9 @@ const page = (decisions: SenderPage['decisions'], labels: [string, number][]): P
 
 describe("a sender's next mail", () => {
   it('is what a rule for all their mail does', () => {
-    const rule = { kind: 'action', labelName: null, disposition: 'archive' } as unknown as Rule;
+    const rule = { kind: 'action', labelId: null, labelName: null, disposition: 'archive' } as unknown as Rule;
     expect(nextMail(page([decided('notifications', 'keep')], [['notifications', 1]]), rule, undefined)).toEqual({
+      labelId: null,
       labelName: null,
       disposition: 'archive',
       usually: false,
@@ -24,11 +25,12 @@ describe("a sender's next mail", () => {
 
   it('is their latest when their mail is of one kind', () => {
     expect(nextMail(page([decided('newsletter', 'archive'), decided('newsletter', 'keep', true)], [['newsletter', 2]]), null, undefined)).toEqual({
+      labelId: 'newsletter',
       labelName: 'Newsletter',
       disposition: 'archive',
       usually: false,
     });
-    expect(nextMail(page([], []), null, undefined)).toEqual({ labelName: null, disposition: 'review', usually: false });
+    expect(nextMail(page([], []), null, undefined)).toEqual({ labelId: null, labelName: null, disposition: 'review', usually: false });
   });
 
   it('is what most of it is when it is of several kinds, whatever Sift decided last', () => {
@@ -39,7 +41,7 @@ describe("a sender's next mail", () => {
         ['security', 1],
       ],
     );
-    expect(nextMail(mixed, null, undefined)).toEqual({ labelName: 'Notification', disposition: 'keep', usually: true });
+    expect(nextMail(mixed, null, undefined)).toEqual({ labelId: 'notification', labelName: 'Notification', disposition: 'keep', usually: true });
     // A rule that waits for a label does not say what all their mail is.
     const waits = { kind: 'when-label', labelName: 'Security', disposition: 'keep' } as unknown as Rule;
     expect(nextMail(mixed, waits, undefined)).toMatchObject({ usually: true });
@@ -53,8 +55,9 @@ describe("a sender's next mail", () => {
         ['newsletter', 1],
       ],
     );
-    expect(nextMail(removed, null, [{ id: 'newsletter' }])).toEqual({ labelName: 'Newsletter', disposition: 'keep', usually: false });
+    expect(nextMail(removed, null, [{ id: 'newsletter' }])).toEqual({ labelId: 'newsletter', labelName: 'Newsletter', disposition: 'keep', usually: false });
     expect(nextMail(page([decided('marketing', 'archive')], [['marketing', 1]]), null, [{ id: 'newsletter' }])).toEqual({
+      labelId: null,
       labelName: null,
       disposition: 'review',
       usually: false,

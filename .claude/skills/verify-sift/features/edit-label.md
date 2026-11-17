@@ -36,4 +36,4 @@ Preconditions:
 - `Suggest labels` calls the model, and the seed's key is made up: it fails with the provider's refusal, under the button. `Write one yourself` works here.
 - `Block` is spam plus blocking the sender, stored as `disposition = 'spam'`, `block = true`.
 - Changing or removing any label re-decides every waiting suggestion. The seed adds its spam rule for `promo.example.com` without doing that, so the first save moves `m4` from `Which label?` to that rule, and For review drops from 12 to 11. That comes from the seed, not from the label.
-- Everything Else has no `Remove`. Removing the last label besides it is refused under the button, since Sift reads no mail without one.
+- Leave in inbox has no `Remove`. Removing the last label besides it is refused under the button, since Sift reads no mail without one.

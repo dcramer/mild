@@ -11,7 +11,7 @@ import { continueEval, startEval } from '../src/learn/evals.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { MAX_LABELS, listLabels } from '../src/store/labels.ts';
-import { EVERYTHING_ELSE } from '../src/triage/types.ts';
+import { LEAVE_IN_INBOX } from '../src/triage/types.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { EXAMPLE_KEEP_DAYS } from '../src/store/examples.ts';
 import { preferences, setActive } from '../src/store/preferences.ts';
@@ -53,6 +53,7 @@ const controls: Controls = {
       id: 3,
       goal,
       drafts: [{ name: 'Cold outreach', description: 'Pitches from strangers.', disposition: 'archive', unsubscribe: true, why: 'fewer pitches' }],
+      inbox: 'Bills I still owe',
       at: 1,
     };
   },
@@ -190,12 +191,16 @@ describe('managing sift from the dashboard', () => {
     // One name taken refuses the lot.
     expect((await call('POST', '/api/labels/accept', { labels: [pitches, { ...pitches }] })).status).toBe(409);
     expect(await listLabels(db, NEW)).toHaveLength(1);
-    const accepted = await call('POST', '/api/labels/accept', { labels: [pitches, { name: 'Lies', description: 'Scams.', disposition: 'block' }] });
+    const accepted = await call('POST', '/api/labels/accept', {
+      labels: [pitches, { name: 'Lies', description: 'Scams.', disposition: 'block' }],
+      inbox: 'Bills I still owe',
+    });
     expect(accepted.body).toEqual({ ids: ['pitches', 'lies'] });
     expect(await listLabels(db, NEW)).toEqual([
       { id: 'pitches', name: 'Pitches', description: 'From strangers.', disposition: 'archive', gmailLabel: 'sift/pitches', unsubscribe: true },
       { id: 'lies', name: 'Lies', description: 'Scams.', disposition: 'spam', gmailLabel: 'sift/lies', block: true },
-      expect.objectContaining({ id: 'everything_else' }),
+      // What they kept of what always stays in the inbox goes on Leave in inbox.
+      expect.objectContaining({ id: 'everything_else', description: 'Bills I still owe' }),
     ]);
     // A mailbox that had labels keeps its own.
     expect(await listLabels(db, ACCOUNT)).toEqual(before);
@@ -325,12 +330,12 @@ describe('managing sift from the dashboard', () => {
     expect(await raw(db).get(`SELECT name FROM labels WHERE id = 'marketing' AND account_id = ?`, ACCOUNT)).toEqual({ name: 'Marketing' });
 
     expect((await call('POST', '/api/labels/remove', { id: 'marketing' })).status).toBe(409);
-    expect((await call('POST', '/api/labels/remove', { id: EVERYTHING_ELSE })).status).toBe(409);
+    expect((await call('POST', '/api/labels/remove', { id: LEAVE_IN_INBOX })).status).toBe(409);
     expect((await call('POST', '/api/labels', { id: 'marketing', name: 'Sales' })).status).toBe(409);
 
     // A mailbox is never left without a label of its own.
     for (const l of await listLabels(db, ACCOUNT))
-      if (l.id !== EVERYTHING_ELSE && l.id !== 'newsletter') expect((await call('POST', '/api/labels/remove', { id: l.id })).status, l.id).toBe(200);
+      if (l.id !== LEAVE_IN_INBOX && l.id !== 'newsletter') expect((await call('POST', '/api/labels/remove', { id: l.id })).status, l.id).toBe(200);
     const last = await call('POST', '/api/labels/remove', { id: 'newsletter' });
     expect(last.status).toBe(409);
     expect(last.body['error']).toContain('Newsletters is the last of your labels');

@@ -40,6 +40,9 @@ describe('whether a rule can be a Gmail filter', () => {
     expect(v).toMatchObject({ possible: true, plan: { criteria: { from: 'notifications@example.com' }, archive: true } });
     expect(v.possible && v.plan).not.toHaveProperty('gmailLabel');
     expect(reason({ ...archive, disposition: 'keep' })).toMatch(/Gmail does anyway/);
+    const inbox = { id: 'everything_else', name: 'Leave in inbox', description: '', disposition: 'keep' as const };
+    const leave = rule({ labelId: 'everything_else' });
+    expect(filterFor(leave, [...SAMPLE_LABELS, inbox], [leave])).toMatchObject({ possible: false, reason: expect.stringMatching(/Gmail does anyway/) });
     expect(reason({ ...archive, disposition: 'spam' })).toMatch(/spam/);
   });
 

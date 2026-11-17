@@ -60,10 +60,12 @@ export interface Decision {
 }
 
 /**
- * The one label every mailbox has: mail that is none of the person's own labels. It always keeps and has no
- * Gmail label, so mail put there by mistake is where it would have been without Sift.
+ * Leave in inbox: the one choice every mailbox has that is not a label of the person's. Mail that is none of
+ * their labels, or that they said always stays in the inbox (its description, in their words), whatever label
+ * also fits. It always keeps and has no Gmail label, so mail put there by mistake is where it would have been
+ * without Sift. The id is from when it was called Everything Else; ids never change.
  */
-export const EVERYTHING_ELSE = 'everything_else';
+export const LEAVE_IN_INBOX = 'everything_else';
 
 /** A kind of mail, and what the user wants done with it. Every tier names one of these; none picks an action. */
 export interface Label {
@@ -73,7 +75,7 @@ export interface Label {
   description: string;
   /** What sift does with mail that carries this label. */
   disposition: Disposition;
-  /** Absent only for Everything Else, which would be on most of the inbox and say nothing. */
+  /** Absent only for Leave in inbox, which would be on most of the inbox and say nothing. */
   gmailLabel?: string;
   /** With `spam`: block the sender, so their later mail is spam without being judged again. */
   block?: boolean;

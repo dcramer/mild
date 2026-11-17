@@ -3,7 +3,19 @@ import { useState } from 'react';
 import { setParams } from '@/lib/route.ts';
 import { type LabelSummary, type RuleDraft, type RuleFilter, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
 import { type By, type Condition, type RuleStart, conditionsOf, matchOf, replacedBy, startWords } from '@/lib/rule-start.ts';
-import { FACTS, type FactAnswer, type FactKey, describeMatch, factAnswers, factConditions, factParam, factWords, outcomeName } from '@/lib/format.ts';
+import {
+  FACTS,
+  type FactAnswer,
+  type FactKey,
+  INBOX,
+  describeMatch,
+  factAnswers,
+  factConditions,
+  factParam,
+  factWords,
+  inboxFirst,
+  outcomeName,
+} from '@/lib/format.ts';
 import { Button, Check, Dialog, Does, Failure, Field, FieldGroup, Form, Input, Note, Select, useToast } from '@/system';
 import { useFilterOffer } from '@/views/gmail-filter.tsx';
 import { DescribeStep } from '@/components/describe.tsx';
@@ -26,6 +38,12 @@ const PLACEHOLDER: Record<By, string> = {
 };
 const ACTIONS = ['archive', 'spam', 'keep'] as const;
 type Action = (typeof ACTIONS)[number];
+/** With no label, keeping is Leave in inbox, so it is the label chosen rather than an action. */
+const ALONE = ['archive', 'spam'] as const;
+
+/** The label a rule starts on: one that only keeps mail is Leave in inbox, which can also carry a condition in words. */
+const startLabel = (rule: { label?: string; whenLabel?: string; action?: Action }) =>
+  !rule.label && !rule.whenLabel && rule.action === 'keep' ? INBOX : (rule.label ?? '');
 
 /** Every answer a fact can have, as one choice each: `isReply:0` is "is a reply". */
 const ANSWERS = (Object.keys(FACTS) as FactKey[]).flatMap((key) => FACTS[key].map((_, index): FactAnswer => ({ key, index })));
@@ -75,7 +93,7 @@ export function AddRuleDialog({
   const [name, setName] = useState('');
   // A start can name a label since removed (what earlier mail was); it is not one to choose.
   const offered = (id: string | undefined) => (labels.some((l) => l.id === id) ? id! : '');
-  const [label, setLabel] = useState(offered(start?.label));
+  const [label, setLabel] = useState(start ? offered(startLabel(start)) : '');
   const [whenLabel, setWhenLabel] = useState(offered(start?.whenLabel));
   const [then, setThen] = useState<'' | Action>(start?.action ?? '');
   const [markRead, setMarkRead] = useState(false);
@@ -89,7 +107,7 @@ export function AddRuleDialog({
   const fill = ({ match: drafted, ...rule }: RuleDraft) => {
     setRows(rowsOf(conditionsOf(drafted), factAnswers(drafted.facts)));
     setGrown(false);
-    setLabel(rule.label ?? '');
+    setLabel(startLabel({ ...rule, ...(rule.disposition ? { action: rule.disposition } : {}) }));
     setWhenLabel(rule.whenLabel ?? '');
     setCondition(rule.when ?? '');
     setName(rule.name ?? '');
@@ -110,10 +128,10 @@ export function AddRuleDialog({
   const waitsFor = labels.find((l) => l.id === whenLabel);
   const chosen = waitsFor ? undefined : labels.find((l) => l.id === label);
   // A rule with no label is only an action, so it needs one; a condition in words needs a label to describe.
-  const action: '' | Action = chosen ? '' : then || 'archive';
+  const action: '' | Action = chosen ? '' : waitsFor ? then || 'archive' : then === 'spam' ? 'spam' : 'archive';
   const needsLabel = !waitsFor && condition.trim() !== '' && !chosen;
-  // An action alone that keeps mail changes nothing in the inbox.
-  const moves = chosen !== undefined || waitsFor !== undefined || action !== 'keep';
+  // Leave in inbox, or an action alone that keeps mail, changes nothing in the inbox.
+  const moves = chosen ? chosen.id !== INBOX : waitsFor !== undefined || action !== 'keep';
   const facts = rows.flatMap((row) => (isNamed(row) ? [] : [row.fact]));
   const named = matchOf(rows.filter(isNamed));
   const match = facts.length > 0 ? { ...named, facts: factConditions(facts) } : named;
@@ -299,7 +317,7 @@ export function AddRuleDialog({
             <Select
               label="Only when it is this label"
               value={whenLabel}
-              options={[['', 'Any label'] as const, ...labels.map((l) => [l.id, l.name] as const)]}
+              options={[['', 'Any label'] as const, null, ...labels.filter((l) => l.id !== INBOX).map((l) => [l.id, l.name] as const)]}
               onChange={setWhenLabel}
             />
           </Field>
@@ -328,7 +346,7 @@ export function AddRuleDialog({
                 <Select
                   label="Label it as"
                   value={label}
-                  options={[['', 'No label, just act'] as const, ...labels.map((l) => [l.id, l.name] as const)]}
+                  options={[...inboxFirst(labels.map((l) => [l.id, l.name] as const)), null, ['', 'No label, just act'] as const]}
                   onChange={setLabel}
                 />
               </Field>
@@ -339,7 +357,12 @@ export function AddRuleDialog({
           {chosen ? null : (
             <>
               <Field inline label="Then">
-                <Select label="What happens to it" value={action || 'archive'} options={ACTIONS.map((a) => [a, outcomeName(a)] as const)} onChange={setThen} />
+                <Select
+                  label="What happens to it"
+                  value={action || 'archive'}
+                  options={(waitsFor ? ACTIONS : ALONE).map((a) => [a, outcomeName(a)] as const)}
+                  onChange={setThen}
+                />
               </Field>
               <Field inline label="Also">
                 <div className="flex flex-col gap-2">

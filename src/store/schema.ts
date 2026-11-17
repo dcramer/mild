@@ -33,7 +33,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import type { Facts } from '../triage/facts.ts';
-import { DECIDED, DISPOSITIONS, EVERYTHING_ELSE, STAGE_NAMES, SUBSCRIPTION_ACTIONS } from '../triage/types.ts';
+import { DECIDED, DISPOSITIONS, LEAVE_IN_INBOX, STAGE_NAMES, SUBSCRIPTION_ACTIONS } from '../triage/types.ts';
 
 export const CREDENTIAL_KINDS = ['gmail', 'model'] as const;
 export const DECISION_OUTCOMES = ['none', 'done', 'skipped', 'failed', 'unknown'] as const;
@@ -201,7 +201,7 @@ export const labels = pgTable(
     block: boolean('block').notNull().default(false),
     markRead: boolean('mark_read').notNull().default(false),
     unsubscribe: boolean('unsubscribe').notNull().default(false),
-    gmailLabel: text('gmail_label'), // null only for Everything Else
+    gmailLabel: text('gmail_label'), // null only for Leave in inbox
     position: integer('position').notNull(),
     // Kept so what was said of mail stays named; offered to nothing. Adding the name again brings it back.
     removedAt: time('removed_at'),
@@ -210,10 +210,10 @@ export const labels = pgTable(
     primaryKey({ columns: [t.userId, t.accountId, t.id] }),
     mailbox(t),
     oneOf('labels_disposition', t.disposition, DISPOSITIONS),
-    check('labels_gmail_label', sql`(${t.id} = ${sql.raw(`'${EVERYTHING_ELSE}'`)}) = (${t.gmailLabel} IS NULL)`),
+    check('labels_gmail_label', sql`(${t.id} = ${sql.raw(`'${LEAVE_IN_INBOX}'`)}) = (${t.gmailLabel} IS NULL)`),
     check(
       'labels_everything_else_keeps',
-      sql`${t.id} <> ${sql.raw(`'${EVERYTHING_ELSE}'`)} OR (${t.disposition} = 'keep' AND NOT ${t.block} AND NOT ${t.markRead} AND NOT ${t.unsubscribe})`,
+      sql`${t.id} <> ${sql.raw(`'${LEAVE_IN_INBOX}'`)} OR (${t.disposition} = 'keep' AND NOT ${t.block} AND NOT ${t.markRead} AND NOT ${t.unsubscribe})`,
     ),
     own(),
   ],
@@ -535,6 +535,7 @@ export const labelProposals = pgTable(
     goal: text('goal').notNull(),
     labels: text('labels'),
     note: text('note'), // encrypted: what it says its labels leave out, such as what a label of theirs covers already
+    inbox: text('inbox'), // what it suggests always stays in the inbox, encrypted; null before it was asked
     error: text('error'), // its status and kind, never the provider's text
     inputTokens: integer('input_tokens').notNull().default(0),
     outputTokens: integer('output_tokens').notNull().default(0),

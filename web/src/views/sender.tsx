@@ -2,7 +2,7 @@ import { type ReactNode, useState } from 'react';
 import { ErrorNote, StatusWord, Verdict } from '@/components/bits.tsx';
 import { ContactHint, SENDER_CELL, SenderCell } from '@/components/sender.tsx';
 import { type ListedDecision, type SenderPage, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ago, count, dateTime, describeMatch, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
+import { INBOX, ago, count, dateTime, describeMatch, doesName, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
 import { type RuleStart, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
 import { nextMail } from '@/lib/next-mail.ts';
 import { useParam } from '@/lib/route.ts';
@@ -62,8 +62,8 @@ const ruleHref = (id: string) => `/rules?rule=${encodeURIComponent(id)}`;
 
 const ruleWords = (rule: Rule) =>
   `${rule.name ?? `Mail ${describeMatch(rule.match)}`}${
-    rule.kind === 'action'
-      ? `: ${rule.disposition ? outcomeName(rule.disposition) : 'nothing'}`
+    rule.kind === 'action' || rule.labelId === INBOX
+      ? `: ${rule.disposition || rule.labelId === INBOX ? doesName(rule.labelId, rule.disposition ?? 'keep') : 'nothing'}`
       : `${rule.kind === 'when-label' ? ', when it is ' : ' is '}${rule.labelName ?? ''}`
   }`;
 
@@ -78,7 +78,7 @@ function NextMail({ data, rule, labels, more }: { data: SenderPage; rule: Rule |
       <p className="slug text-muted-foreground">Their next mail</p>
       <p className="heading">
         {next.usually ? <span className="text-muted-foreground">Usually </span> : null}
-        <Verdict labelName={next.labelName} disposition={next.disposition} />
+        <Verdict labelId={next.labelId} labelName={next.labelName} disposition={next.disposition} />
       </p>
       <ul className="flex flex-col gap-0.5 text-sm text-muted-foreground">
         {rule ? (
@@ -246,7 +246,7 @@ function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMess
           const onPhone = (
             <OnPhone>
               {oneSender ? null : <span className="w-full truncate text-base text-foreground">{subject}</span>}
-              <Verdict labelName={row.labelName} disposition={row.disposition} />
+              <Verdict labelId={row.labelId} labelName={row.labelName} disposition={row.disposition} />
               <span>{ago(row.receivedAt)}</span>
             </OnPhone>
           );
@@ -275,7 +275,7 @@ function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMess
                 </>
               )}
               <Td phone="hide" className="whitespace-nowrap">
-                <Verdict labelName={row.labelName} disposition={row.disposition} />
+                <Verdict labelId={row.labelId} labelName={row.labelName} disposition={row.disposition} />
               </Td>
               <Td phone="hide" className="whitespace-nowrap">
                 <StatusWord row={row} />

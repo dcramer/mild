@@ -202,18 +202,16 @@ describe('a proposal', () => {
 });
 
 describe('a new mailbox', () => {
-  it('starts with Everything Else alone, once, and keeps its labels when connected again', async () => {
+  it('starts with Leave in inbox alone, once, and keeps its labels when connected again', async () => {
     const store = await freshStore();
     const db = await store.user(await connectAccount(store, 'alpha@example.org', '1', 0));
-    expect(await listLabels(db, 'alpha@example.org')).toEqual([
-      { id: 'everything_else', name: 'Everything Else', description: expect.any(String), disposition: 'keep' },
-    ]);
+    expect(await listLabels(db, 'alpha@example.org')).toEqual([{ id: 'everything_else', name: 'Leave in inbox', description: '', disposition: 'keep' }]);
     await withSampleLabels(db, 'alpha@example.org');
     await updateLabel(db, 'alpha@example.org', 'newsletter', { name: 'Reading' });
     await connectAccount(store, 'alpha@example.org', '9', 5);
     await addMailbox(db, 'alpha@example.org', '10');
     expect((await listLabels(db, 'alpha@example.org')).map((l) => l.name)).toContain('Reading');
-    // Everything Else is listed after the person's own.
+    // Leave in inbox is listed after the person's own; the page puts it first.
     expect((await listLabels(db, 'alpha@example.org')).at(-1)?.id).toBe('everything_else');
     // A store opened afresh puts back a mailbox missing from a person's database, with its one label.
     await raw(db).run('DELETE FROM mailboxes');
@@ -222,7 +220,7 @@ describe('a new mailbox', () => {
     expect((await listLabels(reopened, 'alpha@example.org')).map((l) => l.id)).toEqual(['everything_else']);
   });
 
-  it('made before Everything Else existed is given it by a migration, after its own labels', async () => {
+  it('made before Everything Else existed is given it by a migration, after its own labels, and it becomes Leave in inbox', async () => {
     const { db } = await onePerson('alpha@example.org');
     await withSampleLabels(db, 'alpha@example.org');
     await raw(db).run(`DELETE FROM labels WHERE id = 'everything_else'`);
@@ -231,6 +229,13 @@ describe('a new mailbox', () => {
     await (await superuser()).exec(migration);
     expect((await listLabels(db, 'alpha@example.org')).filter((l) => l.id === 'everything_else')).toHaveLength(1);
     expect((await listLabels(db, 'alpha@example.org')).at(-1)?.id).toBe('everything_else');
+    // Its old default said nothing of the person's, so it goes; what they wrote stays theirs.
+    const renamed = readFileSync(new URL('0034_leave_in_inbox.sql', MIGRATIONS), 'utf8');
+    await (await superuser()).exec(renamed);
+    expect((await listLabels(db, 'alpha@example.org')).at(-1)).toEqual({ id: 'everything_else', name: 'Leave in inbox', description: '', disposition: 'keep' });
+    await raw(db).run(`UPDATE labels SET name = 'The rest', description = 'Bills I still owe.' WHERE id = 'everything_else'`);
+    await (await superuser()).exec(renamed);
+    expect((await listLabels(db, 'alpha@example.org')).at(-1)).toMatchObject({ name: 'Leave in inbox', description: 'Bills I still owe.' });
   });
 
   it('needs its labels to exist for anything that names one', async () => {

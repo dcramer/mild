@@ -1,5 +1,5 @@
 import type { RuleMatch, RuleSummary } from './api.ts';
-import { type FactAnswer, factAnswers, factWords } from './format.ts';
+import { type FactAnswer, INBOX, factAnswers, factWords } from './format.ts';
 
 /** A kind of condition the rule dialog holds a value for. `from` takes an address or a domain. */
 export type By = 'from' | 'fromName' | 'fromNameContains' | 'listId' | 'to' | 'subjectContains';
@@ -139,6 +139,7 @@ export function startWords(start: RuleStart, labels: readonly { id: string; name
   const label = named(start.label);
   const waits = named(start.whenLabel);
   if (waits) return `${mail}, once it is ${waits}: ${DO[start.action ?? 'keep']}.`;
+  if (start.label === INBOX) return `${mail}: ${DO.keep}.`;
   if (label) return `${mail} is ${label}.`;
   return start.action ? `${mail}: ${DO[start.action]}.` : `${mail}: `;
 }

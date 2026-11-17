@@ -2,7 +2,7 @@ import { ArrowRightIcon, MegaphoneIcon, PlusIcon, ReplyIcon, SparkleIcon, Trash2
 import { Fragment, type ReactNode, useState } from 'react';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { ContactHint } from '@/components/sender.tsx';
-import { ACTIONS, STATUS_NAMES, TIERS, money, moneyTick, outcomeName } from '@/lib/format.ts';
+import { ACTIONS, INBOX, INBOX_NAME, STATUS_NAMES, TIERS, inboxFirst, money, moneyTick, outcomeName } from '@/lib/format.ts';
 import {
   Blank,
   Does,
@@ -92,14 +92,14 @@ const DAYS = [
   values: Object.fromEntries(counts.map((n, i) => [String(i), n])),
 }));
 const LABELS = [
-  ['personal', 'Personal'],
+  [INBOX, INBOX_NAME],
   ['newsletter', 'Newsletters'],
   ['marketing', 'Marketing'],
   ['phishing', 'Scams and phishing'],
 ] as const;
 const ROWS = [
   { sender: 'Example Weekly', address: 'news@example.com', subject: 'Five things to read', label: 'Newsletters', does: 'archive' },
-  { sender: 'Ada at Example', address: 'ada@example.org', subject: 'Dinner on Saturday?', label: 'Personal', does: 'keep' },
+  { sender: 'Ada at Example', address: 'ada@example.org', subject: 'Dinner on Saturday?', label: INBOX_NAME, does: 'keep' },
   { sender: 'founder@example.net', address: 'founder@example.net', subject: 'Quick question', label: null, does: 'review' },
 ];
 
@@ -134,6 +134,7 @@ export function SystemView() {
   const [search, setSearch] = useState('');
   const [shown, setShown] = useState('');
   const [made, setMade] = useState('');
+  const [labelled, setLabelled] = useState('');
   const toast = useToast();
   const answer = () =>
     toast('Archive as Marketing', {
@@ -221,10 +222,10 @@ export function SystemView() {
             <Does action="review">{outcomeName('review')}</Does>
           </Row>
           <Row label="verdict" note="What Sift says mail is and does: the action, then the label. At any size; a sender's next mail is a heading.">
-            <Verdict labelName="Newsletters" disposition="archive" />
-            <Verdict labelName={null} disposition="review" />
+            <Verdict labelId="newsletters" labelName="Newsletters" disposition="archive" />
+            <Verdict labelId={null} labelName={null} disposition="review" />
             <p className="heading">
-              <Verdict labelName="Marketing" disposition="archive" />
+              <Verdict labelId="marketing" labelName="Marketing" disposition="archive" />
             </p>
           </Row>
           <Row label="meter" note="How sure Sift is about a label, in three steps. A suggestion's label is its answer button, meter first.">
@@ -310,6 +311,9 @@ export function SystemView() {
               onChange={setChoice}
             />
             <Select label="Disabled" value={choice} options={ACTIONS} onChange={setChoice} disabled />
+          </Row>
+          <Row label="select, set apart" note="A rule between choices that are not of a kind: Leave in inbox first, the labels, then no label at all.">
+            <Select label="Label as" value={labelled} options={[...inboxFirst(LABELS), null, ['', 'No label, just act']]} onChange={setLabelled} />
           </Row>
           <Row
             label="shortcut"
@@ -454,7 +458,12 @@ export function SystemView() {
             search={{ value: search, onChange: setSearch, placeholder: 'Search' }}
             filters={{
               active: made === '' ? [] : [{ label: `Then: ${outcomeName(made)}`, clear: () => setMade('') }],
-              panel: <FilterGroup label="Then" value={made} options={[['', 'Anything'], ...ACTIONS]} onChange={setMade} />,
+              panel: (
+                <>
+                  <FilterGroup label="Label" value={labelled} options={[['', 'Any'], null, ...inboxFirst(LABELS)]} onChange={setLabelled} />
+                  <FilterGroup label="Then" value={made} options={[['', 'Anything'], ...ACTIONS]} onChange={setMade} />
+                </>
+              ),
             }}
           >
             <Table keys>
@@ -487,8 +496,9 @@ export function SystemView() {
                           label="What this message is"
                           value={row.label === null ? null : (LABELS.find(([, name]) => name === row.label)?.[0] ?? null)}
                           groups={[
-                            LABELS.slice(0, 2).map(([id, name], i) => ({ id, label: name, lead: <Meter level={i === 0 ? 3 : 1} /> })),
-                            LABELS.slice(2).map(([id, name]) => ({ id, label: name })),
+                            LABELS.slice(0, 1).map(([id, name]) => ({ id, label: name, ...(row.does === 'keep' ? { lead: <Meter level={3} /> } : {}) })),
+                            LABELS.slice(1, 3).map(([id, name], i) => ({ id, label: name, lead: <Meter level={i === 0 ? 3 : 1} /> })),
+                            LABELS.slice(3).map(([id, name]) => ({ id, label: name })),
                           ]}
                           empty={<Look>Which label?</Look>}
                           extra={{ label: 'Add a label…', onSelect: () => toast('Adds a label, then it is among the choices') }}
@@ -572,7 +582,7 @@ export function SystemView() {
         </Section>
         <Section title="Timeline">
           <Timeline>
-            <TimelineEvent at="Nov 13, 3:21 PM" title={<Verdict labelName="Marketing" disposition="archive" />}>
+            <TimelineEvent at="Nov 13, 3:21 PM" title={<Verdict labelId="marketing" labelName="Marketing" disposition="archive" />}>
               <p>Reads as a promotion.</p>
             </TimelineEvent>
             <TimelineEvent at="Nov 13, 3:22 PM" title={<span className="font-medium">Archived in Gmail</span>} action={<Button>Undo</Button>} />

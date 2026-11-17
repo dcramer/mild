@@ -211,6 +211,7 @@ export const SenderProfile = z.object({
       id: z.string(),
       match,
       name: z.string().nullable(),
+      labelId: z.string().nullable(),
       labelName: z.string().nullable(),
       disposition: z.string().nullable(),
       source: z.string(),
@@ -484,7 +485,7 @@ export const LabelSummary = z.object({
   markRead: z.boolean(),
   /** Also leave the sender's mailing list, where that can be done safely. */
   unsubscribe: z.boolean(),
-  /** Null for Everything Else. */
+  /** Null for Leave in inbox. */
   gmailLabel: z.string().nullable(),
   /** Rules that say mail is this label. */
   rules: z.number(),
@@ -512,6 +513,8 @@ export const LabelProposal = z.object({
   drafts: z.array(LabelDraft),
   /** What its labels leave out of what was asked, such as what a label they have covers already. */
   note: z.string().optional(),
+  /** What it suggests always stays in the inbox, beside what the person said before; empty for none. */
+  inbox: z.string(),
   at: z.number(),
 });
 export type LabelProposal = z.infer<typeof LabelProposal>;

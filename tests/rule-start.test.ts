@@ -80,6 +80,12 @@ describe('where each way into the rule dialog starts it', () => {
     ).toEqual({ fromDomain: ['example.org'] });
   });
 
+  it('says a rule that leaves mail in the inbox as that, not as a label', () => {
+    expect(startWords({ conditions: [{ by: 'from', value: 'bills@example.com' }], facts: [], label: 'everything_else' }, [])).toBe(
+      'Mail from bills@example.com: keep it in the inbox.',
+    );
+  });
+
   it('starts keeping mail that is what sift says, as a rule that waits for its label', () => {
     expect(keepStart('x@example.com', 'marketing')).toEqual({
       conditions: [{ by: 'from', value: 'x@example.com' }],

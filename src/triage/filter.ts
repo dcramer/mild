@@ -63,7 +63,7 @@ export function filterFor(rule: FilterableRule, labels: readonly Label[], rules:
   if (rule.when !== undefined) return no('It has a condition in plain language, which Gmail cannot match.');
 
   const outcome = does(rule, label);
-  if (!label && outcome.disposition === 'keep') return no('It only keeps mail in your inbox, which Gmail does anyway.');
+  if (!label?.gmailLabel && outcome.disposition === 'keep') return no('It only keeps mail in your inbox, which Gmail does anyway.');
   if (outcome.disposition === 'spam') return no('Gmail filters cannot mark mail as spam.');
   if (outcome.disposition !== 'keep' && outcome.disposition !== 'archive') return no('Its label leaves mail for you.');
   const archive = outcome.disposition === 'archive';

@@ -49,15 +49,22 @@ describe('what the model suggests', () => {
 
   it('may suggest no labels when it says why, as when one they have covers it already', () => {
     const covered = { labels: [], note: ' Your Receipts\nlabel covers these already. ' };
-    expect(readProposal(covered, [])).toEqual({ drafts: [], note: 'Your Receipts label covers these already.' });
-    expect(readProposal({ labels: [PITCHES], note: '' }, [])).toEqual({ drafts: [expect.objectContaining({ name: 'Cold outreach' })] });
+    expect(readProposal(covered, [])).toEqual({ drafts: [], inbox: '', note: 'Your Receipts label covers these already.' });
+    expect(readProposal({ labels: [PITCHES], note: '' }, [])).toEqual({ drafts: [expect.objectContaining({ name: 'Cold outreach' })], inbox: '' });
+    // What always stays in the inbox is a suggestion by itself, with no label.
+    expect(readProposal({ labels: [], inbox: ' bills I\n still owe ', note: '' }, [])).toEqual({ drafts: [], inbox: 'bills I still owe' });
     expect(readProposal({ labels: [{ ...PITCHES, name: 'Receipts' }], note: '' }, [{ name: 'Receipts', description: 'd' }])).toBeNull();
   });
 
-  it('is asked with the person’s words and the labels they have, and nothing from their mail', () => {
-    const prompt = buildProposalPrompt({ goal: 'Fewer sales pitches.', labels: [{ name: 'Receipts', description: 'What I bought.' }] });
+  it('is asked with the person’s words, the labels they have and what always stays in their inbox, and nothing from their mail', () => {
+    const prompt = buildProposalPrompt({
+      goal: 'Fewer sales pitches.',
+      labels: [{ name: 'Receipts', description: 'What I bought.' }],
+      inbox: 'Bills I still owe',
+    });
     expect(prompt).toContain('Fewer sales pitches.');
     expect(prompt).toContain('- Receipts: What I bought.');
+    expect(prompt).toContain('# What they said always stays in their inbox\nBills I still owe');
   });
 
   it('comes from one call with no tool but the one that records it', async () => {
@@ -66,15 +73,16 @@ describe('what the model suggests', () => {
     models.setProvider(faux.provider);
     const complete = vi.spyOn(models, 'complete');
     const propose = createProposer(models, faux.getModel());
-    faux.setResponses([fauxAssistantMessage([fauxToolCall(PROPOSAL_TOOL, { labels: [PITCHES] })], { stopReason: 'toolUse' })]);
-    expect(await propose({ goal: 'Fewer pitches', labels: [] })).toMatchObject({
+    faux.setResponses([fauxAssistantMessage([fauxToolCall(PROPOSAL_TOOL, { labels: [PITCHES], inbox: '' })], { stopReason: 'toolUse' })]);
+    expect(await propose({ goal: 'Fewer pitches', labels: [], inbox: '' })).toMatchObject({
       drafts: [{ name: 'Cold outreach', disposition: 'archive', unsubscribe: true }],
+      inbox: '',
       usage: { model: expect.stringContaining('/') },
     });
     expect(complete.mock.calls[0]?.[1].tools?.map((t) => t.name)).toEqual([PROPOSAL_TOOL]);
 
     faux.setResponses([fauxAssistantMessage([fauxText('Try a Marketing label.')])]);
-    expect(await propose({ goal: 'Fewer pitches', labels: [] })).toMatchObject({ failed: 'the model did not suggest any usable labels' });
+    expect(await propose({ goal: 'Fewer pitches', labels: [], inbox: '' })).toMatchObject({ failed: 'the model suggested nothing usable' });
   });
 });
 
@@ -90,11 +98,12 @@ describe('asking for labels', () => {
     const asked: unknown[] = [];
     const propose: Proposer = async (input) => (
       asked.push(input),
-      { drafts: [{ name: 'Cold outreach', description: 'Pitches.', disposition: 'archive', why: 'w' }], usage }
+      { drafts: [{ name: 'Cold outreach', description: 'Pitches.', disposition: 'archive', why: 'w' }], inbox: 'Bills from Acme I owe', usage }
     );
     const proposal = await proposeLabels({ db, propose, model: 'p/m', now: () => 5 }, { accountId: ACCOUNT, goal: 'Stop pitches from Acme' });
-    // Everything Else is the prompt's to explain, not one of the person's labels.
-    expect(asked).toEqual([{ goal: 'Stop pitches from Acme', labels: [] }]);
+    // Leave in inbox is the prompt's to explain, not one of the person's labels; what they said always stays is given apart.
+    expect(asked).toEqual([{ goal: 'Stop pitches from Acme', labels: [], inbox: '' }]);
+    expect(proposal.inbox).toBe('Bills from Acme I owe');
     expect(await latestLabelProposal(db, [ACCOUNT])).toEqual(proposal);
     const row = await raw(db).get('SELECT * FROM label_proposals');
     expect(row).toMatchObject({ model: 'p/m', started_at: 5, finished_at: 5, input_tokens: 10, output_tokens: 20, cost_usd: 0.01, error: null });
@@ -104,7 +113,7 @@ describe('asking for labels', () => {
 
   it('records what it says its labels leave out, encrypted, and keeps it with them', async () => {
     const db = await person();
-    const propose: Proposer = async () => ({ drafts: [], note: 'Your Receipts label covers Acme already.', usage });
+    const propose: Proposer = async () => ({ drafts: [], inbox: '', note: 'Your Receipts label covers Acme already.', usage });
     const proposal = await proposeLabels({ db, propose, model: 'p/m' }, { accountId: ACCOUNT, goal: 'Receipts from Acme' });
     expect(proposal).toMatchObject({ drafts: [], note: 'Your Receipts label covers Acme already.' });
     expect(await latestLabelProposal(db, [ACCOUNT])).toEqual(proposal);
@@ -113,7 +122,7 @@ describe('asking for labels', () => {
 
   it('records and reports a failed call, refuses with what went wrong, and keeps the last suggestions that came', async () => {
     const db = await person();
-    const good: Proposer = async () => ({ drafts: [{ name: 'Scams', description: 'Deceit.', disposition: 'spam', why: 'w' }] });
+    const good: Proposer = async () => ({ drafts: [{ name: 'Scams', description: 'Deceit.', disposition: 'spam', why: 'w' }], inbox: '' });
     const first = await proposeLabels({ db, propose: good, model: 'p/m' }, { accountId: ACCOUNT, goal: 'No scams' });
     const failing: Proposer = async () => ({ failed: 'rate limited', usage });
     await expect(proposeLabels({ db, propose: failing, model: 'p/m' }, { accountId: ACCOUNT, goal: 'Again' })).rejects.toThrow('rate limited');

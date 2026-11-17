@@ -232,6 +232,20 @@
       "when": 1794902370287,
       "tag": "0032_windy_blindfold",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794903259788,
+      "tag": "0033_label_proposals_inbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794903261126,
+      "tag": "0034_leave_in_inbox",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
 import type { FactFilter, RuleFacts, RuleMatch, StageKey } from './api.ts';
+import type { LEAVE_IN_INBOX } from '../../../src/triage/types.ts';
 
 /**
  * The dashboard's words. Each thing sift says about mail has exactly one name, used in every stamp,
@@ -37,6 +38,27 @@ export const ACTIONS = [
   ['block', 'Block'],
 ] as const;
 export type ActionKey = (typeof ACTIONS)[number][0];
+
+/**
+ * Leave in inbox: what mail is when it is none of the person's labels, or what they said always stays. It is a
+ * choice as good as any label, so every list of them has it in the same place: first, set apart.
+ */
+export const INBOX: typeof LEAVE_IN_INBOX = 'everything_else';
+export const INBOX_NAME = 'Leave in inbox';
+
+/** Labels as a list's options: Leave in inbox first, then a rule, then the person's own. */
+export const inboxFirst = (labels: Iterable<readonly [string, string]>): (readonly [string, string] | null)[] => {
+  const all = [...labels];
+  const inbox = all.filter(([id]) => id === INBOX);
+  return [...inbox, ...(inbox.length > 0 ? [null] : []), ...all.filter(([id]) => id !== INBOX)];
+};
+
+/**
+ * What mail is and what happens to it, in the words every list uses: "Archive", or "Leave in inbox" for mail
+ * Sift leaves where it is without a label (Leave in inbox itself, or a rule that only keeps).
+ */
+export const doesName = (labelId: string | null, disposition: string) =>
+  labelId === INBOX || (labelId === null && disposition === 'keep') ? INBOX_NAME : outcomeName(disposition);
 
 /** `review`: no tier was sure, so sift leaves the message alone and asks. */
 const OUTCOMES: Record<string, string> = { ...Object.fromEntries(ACTIONS), review: 'No label yet' };

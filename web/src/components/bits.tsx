@@ -1,26 +1,38 @@
 import type { DecisionRow } from '@/lib/api.ts';
-import { type Status, STATUS_NAMES, outcomeName, status } from '@/lib/format.ts';
+import { INBOX_NAME, type Status, STATUS_NAMES, doesName, outcomeName, status } from '@/lib/format.ts';
 import { Does, Note, Sub } from '@/system';
 
 /**
- * What sift says mail is and does with it, the same words everywhere: "Archive as Marketing". In a table
- * cell (`stacked`) the label goes on a quieter second line. With no label and nothing done, sift was not
- * sure, which is the reader's to answer, so it is the yellow one.
+ * What sift says mail is and does with it, the same words everywhere: "Archive as Marketing", or "Leave in
+ * inbox", which is said alone. In a table cell (`stacked`) the label goes on a quieter second line. With no
+ * label and nothing done, sift was not sure, which is the reader's to answer, so it is the yellow one.
  */
-export function Verdict({ labelName, disposition, stacked }: { labelName: string | null; disposition: string; stacked?: boolean }) {
+export function Verdict({
+  labelId,
+  labelName,
+  disposition,
+  stacked,
+}: {
+  labelId: string | null;
+  labelName: string | null;
+  disposition: string;
+  stacked?: boolean;
+}) {
   if (labelName === null && disposition === 'review') return <Does action="review">{outcomeName('review')}</Does>;
-  const does = <Does action={disposition}>{outcomeName(disposition)}</Does>;
+  const alone = doesName(labelId, disposition) === INBOX_NAME;
+  const does = <Does action={disposition}>{doesName(labelId, disposition)}</Does>;
+  const label = alone ? null : labelName;
   if (stacked)
     return (
       <>
         {does}
-        {labelName ? <Sub>{labelName}</Sub> : null}
+        {label ? <Sub>{label}</Sub> : null}
       </>
     );
   return (
     <span>
       {does}
-      {labelName ? <span className="text-muted-foreground"> as {labelName}</span> : null}
+      {label ? <span className="text-muted-foreground"> as {label}</span> : null}
     </span>
   );
 }
