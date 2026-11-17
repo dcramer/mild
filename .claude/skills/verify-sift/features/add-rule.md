@@ -27,10 +27,12 @@ Preconditions:
 - **Add.** `ab find role button click --name "Add rule"`. A toast reads `Rule added` and `Apply to your inbox` opens over the list; it reads Gmail, so here it says `Sift has no access to me@example.org.` Press `Cancel`. The new rule's panel is open: `Then` `Archive`, `Used` `1 time, last just now`, and `In your inbox` `1` lists `48 hours only: 30% off` (decided, not moved: sift is off). `Close`: the list has `deals@promo.example.com` above `anyone at promo.example.com`.
 - **Effect on what is waiting.** `ab open "$B/"`. The link's count is one fewer and there is no Deals row.
 - **Stored.** `verify.sh sql "$RUN" "SELECT disposition, label_id, source, hits FROM rules ORDER BY created_at DESC LIMIT 1"` returns `archive`, null, `user`, `1`; `SELECT count(*) AS n FROM rules` is one more than before; `SELECT stage, disposition FROM decisions WHERE message_id = 'm4' ORDER BY id DESC LIMIT 1` is `rules`, `archive` (the new rule sits above the Spam one). No `actions` row but the seed's filters.
+- **Remove.** `ab open "$B/rules"`, `ab find role cell click --name "deals@promo.example.com"`, `ab find role button click --name "Remove"`: the panel asks `Remove this rule?`. `ab find role button click --name "Remove" --exact`. The panel closes and the row is gone; `SELECT count(*) AS n FROM rules` is back to what it was. It had no filter, so `$RUN/gmail.json` is unchanged and `actions` has no `unfilter` row.
 
 ## Gotchas
 
 - `Escape` may not close the dialog; use `Cancel`.
 - Writing a rule to Gmail as a filter needs Google and sift on, so it cannot be shown here.
 - `anyone at promo.example.com` has exactly the conditions of the seed's Spam rule, so adding it replaces that rule (`Replaces` in the dialog) and the count stays the same. Use an address with no rule to prove adding.
-- `rule-remove` is refused here: removal asks Gmail first (SKILL.md, What this cannot show).
+- Removing a rule asks Gmail for its filter first, even with none recorded; here the fake answers (SKILL.md). Removing one that is a filter is in [gmail-filter.md](gmail-filter.md).
+- Every row's `Remove` has the same name, so remove from the rule's panel, not the list.

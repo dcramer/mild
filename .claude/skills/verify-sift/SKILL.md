@@ -5,7 +5,7 @@ description: Launch a disposable, signed-in sift dashboard seeded with synthetic
 
 # Verify sift
 
-sift's surface is the dashboard (`web/`, served by `src/dashboard/server.ts`). Every `/api/` route needs a Google sign-in as a connected account, and there is no Gmail behind a scratch home, so this skill fakes exactly two things: Gmail, at the `GmailApi` and `Mailbox` ports, and the sign-in, by minting the same `sift_session` cookie `/auth/callback` would set. Everything else is the real code path.
+sift's surface is the dashboard (`web/`, served by `src/dashboard/server.ts`). Every `/api/` route needs a Google sign-in as a connected account, and there is no Gmail behind a scratch home, so this skill fakes exactly two things: Gmail, at the `GmailApi` and `Mailbox` ports for the seed and behind the dashboard's `ruleFilter` control, and the sign-in, by minting the same `sift_session` cookie `/auth/callback` would set. Everything else is the real code path.
 
 `scripts/verify.sh` does all of it. Each run owns one directory; nothing is shared between runs, so several can run at once. Never point it at a real home (`~/.config/sift`) and never drive a dashboard this run did not start: the user's own sift usually listens on 8787 and holds real mail.
 
@@ -36,7 +36,7 @@ What the seed leaves (through three real ticks with sift off, `tick`, with a sta
 | `m11`–`m13` | `billing@utility.example.net` | nothing; then each answered as Receipts but kept, as moving it back to the inbox in Gmail answers | Activity only; the three open a proposal, `Keep Receipts from billing@utility.example.net?` on For review |
 | `m14`–`m21` | `notifications@code.example.com`, as Dependabot (3), Security alerts (2), github-actions[bot] (2) and Ada Lovelace (1) | stand-in model, by name → Notifications, Account alerts, Notifications; Ada's it cannot place | For review: one row per name, sure (`Agree: Notifications`): Dependabot's 3 folded into one (`3 messages`), github-actions[bot]'s 2 into another; Ada's as `Which label?`; the two Account alerts are kept, so not shown. The address's page lists the four names (`/sender/me%40example.org/notifications%40code.example.com`) |
 
-Three rules were written to the fake Gmail as filters, through the real `writeRuleFilter`, so the Rules list shows a filter in each state: `anyone at ci.example.org` landed (`In Gmail`); `orders@shop.example.com` landed and was then deleted in Gmail, which a check noticed (`Deleted in Gmail`); and Gmail did not answer for `anyone at news.example.com`, nor had it kept the filter when asked at once (`Not added to Gmail`, and the line above the list). `anyone at promo.example.com` → Spam, added after the passes, cannot be a filter. Each rule's panel has the history. That is the only way to see a filter here: the dashboard's own Add to Gmail fails, as there is no Gmail behind it.
+Three rules were written to the fake Gmail as filters, through the real `writeRuleFilter`, so the Rules list shows a filter in each state: `anyone at ci.example.org` landed (`In Gmail`); `orders@shop.example.com` landed and was then deleted in Gmail, which a check noticed (`Deleted in Gmail`); and Gmail did not answer for `anyone at news.example.com`, nor had it kept the filter when asked at once (`Not added to Gmail`, and the line above the list). `anyone at promo.example.com` → Spam, added after the passes, cannot be a filter. Each rule's panel has the history. The seed leaves the fake Gmail's filters in `$RUN/gmail.json` (`f1-@ci.example.org` alone), and `serve.ts` carries on from them: adding or removing a filter, and removing a rule (which first asks Gmail for its filter), run the real filter code against that fake and write the file back, so it is where to check what Gmail would hold. Nothing else the dashboard sends to Gmail reaches it.
 
 The promo → Spam rule decided nothing, but any rule added or changed later re-decides what is waiting, and then it catches Deals (`m4`): For review loses that row as well as whatever the new rule covers. Answering a message is not a rule change and does not do this.
 
@@ -69,6 +69,10 @@ Phone width: `$V ab "$RUN" set viewport 390 844`. AGENTS.md asks what every part
 
 `snapshot` does not print `aria-pressed`, so a standing that is on (`Trust`, `Unwanted`, `Block` on a sender's page) looks like the others. Read it with `$V ab "$RUN" eval "JSON.stringify([...document.querySelectorAll('[aria-pressed]')].map(b=>[b.textContent,b.getAttribute('aria-pressed')]))"`.
 
+Every row on Rules has a `Remove` of the same name. Open a rule's panel by its first cell (`ab find role cell click --name "anyone at ci.example.org"`, which gives `?rule=<id>`), where `Remove` is its own; it asks `Remove this rule?` in place, and the confirming press needs `--exact`, as `Remove from Gmail` also matches `Remove`.
+
+Add to Gmail is offered only while Sift is on: Settings (`?settings=1`), `Turn on`, then `Turn on` again to confirm. It is safe here, as `sift dashboard` runs no pass, so nothing is carried out.
+
 Adding a rule with `Apply to mail already there` checked (the default for an action rule) opens `Apply to your inbox`, which reads Gmail and here says `Sift has no access to me@example.org.`; press `Cancel`. The rule is already added by then.
 
 Stored state, read-only: `$V sql "$RUN" "SELECT … FROM rules"`, from a copy of the database (`home/database`, PGlite), read as its owner, so every person's rows show. Tables worth checking: `decisions`, `rules`, `examples`, `feedback` (joined by `decision_id`), `actions`, `labels`, `proposals`, `suggestion_bodies`. Defaults (`labels`) exist once per mailbox, so filter by `account_id = 'me@example.org'`. What names a sender is sealed and reads as ciphertext: a rule's `match` and `except_matches`, a decision's `reason`, a message's headers. Check those on the screen that reads them back (the Rules list, a rule's panel at `?rule=<id>`), and in SQL check the plain columns (`disposition`, `label_id`, `when_label`, `source`, `stage`) of the row you found by id or by `ORDER BY created_at DESC`. A query error prints `sql: <message>` and exits 1.
@@ -79,8 +83,8 @@ Write everything into `$RUN/evidence/`; `down` keeps it. For each feature proved
 
 1. A snapshot or screenshot before the action and after it (`$V ab "$RUN" screenshot "$RUN/evidence/<feature>-after.png"`, `$V ab "$RUN" snapshot > "$RUN/evidence/<feature>-after.txt"`).
 2. `$V ab "$RUN" console` and `$V ab "$RUN" errors`, both empty. A content security policy violation appears only here, never in the build.
-3. The stored side effect, from `sql`, and a second view that reads it back (the Rules screen after an answer, the Labels screen after a label edit).
-4. `SELECT count(*) AS n FROM actions WHERE type NOT IN ('filter', 'unfilter')` is still `0`. sift is off here; a row there means something tried to change a mailbox. The filter rows are the seed's.
+3. The stored side effect, from `sql`, and a second view that reads it back (the Rules screen after an answer, the Labels screen after a label edit). For a Gmail filter, also `$RUN/gmail.json` and its `filter` or `unfilter` row in `actions`.
+4. `SELECT count(*) AS n FROM actions WHERE type NOT IN ('filter', 'unfilter')` is still `0`. sift is off here; a row there means something tried to change a mailbox. Filter rows are the seed's and any the run made.
 
 Do the action the way a user does: press the control, not a POST with curl. The API is the page's private contract; calling it directly proves the server, not the screen. Seeding is the only place internals are used, and it uses the daemon's own pass.
 
@@ -90,7 +94,7 @@ Do the action the way a user does: press the control, not a POST with curl. The 
 $V down "$RUN"
 ```
 
-Closes this run's browser session, stops the process by the pid `up` recorded, deletes `home/`, and keeps `$RUN/evidence/`. Run it after a failed attempt too. Never `pkill -f` a pattern: it matches the shell running it, and other sessions' instances.
+Closes this run's browser session, stops the process by the pid `up` recorded, deletes `home/` and `gmail.json`, and keeps `$RUN/evidence/`. Run it after a failed attempt too. Never `pkill -f` a pattern: it matches the shell running it, and other sessions' instances.
 
 ## Upkeep
 
@@ -106,8 +110,8 @@ State is in `~/.cache/sift-verify-maint/`. Delete `suggested-on` there to see to
 
 ## What this cannot show
 
-- Anything that talks to Google: sign-in itself, connecting another account, Pull in (older mail), Gmail filters, `Apply to your inbox`, undo of a real change. They fail here; that failure is not the change's fault.
-- Removing a rule, from its row on Rules or by pressing a standing that is on: removal first asks Gmail for a filter to take out, even when none is recorded, so it is refused with `Sift has no access to me@example.org. Sign in to the dashboard with that account.` and the rule stays. Prove removal with `tests/dashboard.test.ts`.
+- Anything else that talks to Google: sign-in itself, connecting another account, Pull in (older mail), `Apply to your inbox`, undo of a real change. They fail with `Sift has no access to me@example.org.`; that failure is not the change's fault.
+- Gmail itself: the fake's filters are whatever the filter code asked for. Whether Gmail accepts a filter, and what it does to mail, is for `tests/filters.test.ts` and a real account.
 - The model tier: the seed's stand-in model never calls a provider and places only `m8` and the code.example.com mail it knows by name, so every other unmatched message is "Which label?". With no model at all such mail would wait undecided and not be a suggestion, and every screen would be the connect-a-model wall.
 - Changing Gmail. Settings can turn sift on (`preferences.active`), but `sift dashboard` never runs a pass, so nothing is carried out. Prove the executor with tests (`tests/actions.test.ts`, `tests/run.test.ts`).
 - `examples` rows stay `pending`: the body is captured on the next pass, which never comes.

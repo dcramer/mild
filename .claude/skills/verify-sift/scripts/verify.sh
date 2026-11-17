@@ -2,7 +2,7 @@
 # Drives one disposable sift dashboard. Everything for a run lives in <dir>:
 #   home/       the sift home (seeded, synthetic)     removed by `down`
 #   evidence/   screenshots, snapshots, query output   kept by `down`
-#   pid port cookie dashboard.log
+#   pid port cookie dashboard.log gmail.json (the fake Gmail's filters)
 # Usage: verify.sh up <dir> | doctor <dir> | ab <dir> <agent-browser args...> | sql <dir> <query> | down <dir>
 set -euo pipefail
 
@@ -37,13 +37,13 @@ case "$cmd" in
   up)
     [ ! -e "$dir/home" ] || { echo "up: $dir/home exists. Use a new directory per run." >&2; exit 1; }
     mkdir -p "$dir/evidence"
-    node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/seed.ts" "$dir/home" > "$dir/cookie"
+    node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/seed.ts" "$dir/home" "$dir/gmail.json" > "$dir/cookie"
     port="$(node -e 'const s=require("node:net").createServer().listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')"
     echo "$port" > "$dir/port"
     # `sift dashboard`, not `run`: there is no Gmail behind this home, so a pass would only fail. serve.ts is that
-    # command with a message's HTML answered by the fake (see it). It rebuilds web/dist if sources are newer.
+    # command with a fake Gmail behind its filter control (see it). It rebuilds web/dist if sources are newer.
     cd "$ROOT"
-    nohup node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/serve.ts" "$dir/home" "$port" > "$dir/dashboard.log" 2>&1 &
+    nohup node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/serve.ts" "$dir/home" "$port" "$dir/gmail.json" > "$dir/dashboard.log" 2>&1 &
     echo $! > "$dir/pid"
     for _ in $(seq 1 240); do
       grep -q 'Only the dashboard is running' "$dir/dashboard.log" 2>/dev/null && break
@@ -83,7 +83,7 @@ case "$cmd" in
       for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.25; done
       kill -0 "$pid" 2>/dev/null && kill -9 "$pid"
     fi
-    rm -rf "$dir/home" "$dir/pid" "$dir/port" "$dir/cookie"
+    rm -rf "$dir/home" "$dir/pid" "$dir/port" "$dir/cookie" "$dir/gmail.json"
     echo "stopped; evidence kept in $dir/evidence"
     ;;
   *) echo "unknown command: $cmd" >&2; exit 2 ;;

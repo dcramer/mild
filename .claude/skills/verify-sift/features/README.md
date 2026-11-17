@@ -36,6 +36,7 @@ An H1 and one paragraph of what the user gets, then four H2s in order: `Sub-feat
 - [Answer a suggestion](./answer-suggestion.md): teach sift what a waiting message is, and the rule that makes.
 - [Add a rule](./add-rule.md): a rule made on the Rules screen, and its effect on what is waiting.
 - [Rules from a shortcut](./rule-shortcuts.md): every other press that makes a rule opens the rule dialog in place, started on what that place knows: a proposal, a message, a fact, a standing.
+- [A rule as a Gmail filter](./gmail-filter.md): whether a rule is a filter in Gmail, adding and removing one, and removing a rule that is one.
 - [Edit a label](./edit-label.md): change what a label does.
 - [Read a message as its HTML](./message-html.md): the Text and HTML choice in the message panel, and that nothing remote loads.
 - [What sift saw in a message](./message-facts.md): the facts shown on an opened message, rules on them, and lists narrowed by them.

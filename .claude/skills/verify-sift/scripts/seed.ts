@@ -2,14 +2,15 @@
 /**
  * Verification scaffolding: fills an empty sift home with synthetic mail and prints a session cookie for it.
  *
- *   node .claude/skills/verify-sift/scripts/seed.ts <home>
+ *   node .claude/skills/verify-sift/scripts/seed.ts <home> <gmail.json>
  *
  * The mail goes through the real pass (`tick`, with sift off), so decisions, labels, suggestion
  * bodies and proposals are what sift itself would record. Only Gmail is faked, at the `GmailApi` and
- * `Mailbox` ports. Prints one line: the `sift_session` cookie value for the connected account.
+ * `Mailbox` ports. Writes the fake Gmail's filters to <gmail.json>, for serve.ts to carry on from, and prints one
+ * line: the `sift_session` cookie value for the connected account.
  */
 import { createHmac, randomBytes } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadConfig } from '../../../../src/config.ts';
 import { tick } from '../../../../src/work/run.ts';
@@ -32,8 +33,8 @@ const ACCOUNT = 'me@example.org';
 const WORK = 'me@work.example.org';
 const OTHER = 'bravo@example.net';
 
-const home = process.argv[2];
-if (!home) throw new Error('usage: seed.ts <home>');
+const [home, gmailFile] = process.argv.slice(2);
+if (!home || !gmailFile) throw new Error('usage: seed.ts <home> <gmail.json>');
 process.env['SIFT_HOME'] = resolve(home);
 const config = loadConfig();
 if (existsSync(config.databaseDir)) throw new Error(`${config.databaseDir} already exists. Seed an empty home.`);
@@ -218,6 +219,7 @@ await connectAccount(store, OTHER, '1', now - 22 * HOUR);
 await saveApiKey({ ...(await credentials(db, 'model')), exclusive: (work) => work() }, 'anthropic', 'sk-ant-synthetic-seed');
 await setModel(db, 'anthropic/claude-haiku-4-5');
 await store.close();
+writeFileSync(gmailFile, JSON.stringify({ [ACCOUNT]: mailbox.filters }, null, 1));
 
 // The same cookie `/auth/callback` sets (`signSession` in src/dashboard/server.ts), signed with this home's key.
 const secret = randomBytes(32).toString('base64url');
