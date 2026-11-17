@@ -13,7 +13,7 @@ export function PageHeader({ title, badge, meta, actions }: { title: string; bad
     <header className="flex flex-wrap items-center gap-x-6 gap-y-3">
       <div className="min-w-0 flex-1 basis-64">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <h1 className="statement break-words">{title}</h1>
+          <h1 className="statement min-w-0 wrap-anywhere">{title}</h1>
           {badge}
         </div>
         {meta === undefined ? null : <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">{meta ?? <Blank />}</div>}

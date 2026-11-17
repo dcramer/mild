@@ -1,15 +1,69 @@
-import { alias, and, asc, count, desc, eq, isNotNull, max, messages, sql } from '../../store/query.ts';
+import { alias, and, asc, count, decisions, desc, eq, isNotNull, max, messages, sql } from '../../store/query.ts';
 import { hashOf, openPart, oneSender, openSender } from '../../store/content.ts';
 import type { Sql } from '../../store/sql.ts';
 import { pendingSuggestions } from '../../learn/feedback.ts';
 import { contacts, domainFacts, senderFacts } from '../../store/senders.ts';
 import { listLabels } from '../../store/labels.ts';
+import { plainName } from '../../triage/stages/rules.ts';
 import { type Scope, narrow } from '../scope.ts';
 import type { SenderPage, SenderProfile } from '../types.ts';
 import { listDecisions } from './decisions.ts';
 import { listRuleSummaries } from './rules.ts';
 
 const withName = alias(messages, 'named');
+const later = alias(decisions, 'later');
+
+/** How much of an address's mail the names are read from. Each name is encrypted for its own message, so each is opened in Sift. */
+const NAMES_FROM = 2_000;
+
+/**
+ * The names an address sends under, most mail first, each with what its mail currently is; empty unless it
+ * uses two or more. Names alike but for case and spacing are one, shown as most recently written.
+ */
+async function namesOf(db: Sql, accountId: string, address: string, labelNames: ReadonlyMap<string, string>): Promise<SenderPage['names']> {
+  const rows = await db
+    .select({ id: messages.id, name: messages.fromName, receivedAt: messages.receivedAt })
+    .from(messages)
+    .where(and(eq(messages.accountId, accountId), eq(messages.senderHash, hashOf(db, address))))
+    .orderBy(desc(messages.receivedAt))
+    .limit(NAMES_FROM);
+  const labelled = await db
+    .select({ messageId: decisions.messageId, labelId: decisions.labelId })
+    .from(decisions)
+    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .where(
+      and(
+        eq(decisions.accountId, accountId),
+        eq(messages.senderHash, hashOf(db, address)),
+        isNotNull(decisions.labelId),
+        eq(
+          decisions.id,
+          db
+            .select({ id: max(later.id) })
+            .from(later)
+            .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
+        ),
+      ),
+    );
+  const labelOf = new Map(labelled.map((r) => [r.messageId, r.labelId!]));
+  const names = new Map<string, { name: string | null; messages: number; lastSeenAt: number; labels: Map<string, number> }>();
+  for (const row of rows) {
+    const name = openPart(db, accountId, row.id, 'name', row.name)?.trim() || null;
+    const key = name === null ? '' : plainName(name);
+    const entry = names.get(key) ?? { name, messages: 0, lastSeenAt: row.receivedAt, labels: new Map<string, number>() };
+    entry.messages++;
+    const label = labelOf.get(row.id);
+    if (label !== undefined) entry.labels.set(label, (entry.labels.get(label) ?? 0) + 1);
+    names.set(key, entry);
+  }
+  if ([...names.values()].filter((n) => n.name !== null).length < 2) return [];
+  return [...names.values()]
+    .toSorted((a, b) => b.messages - a.messages || b.lastSeenAt - a.lastSeenAt)
+    .map(({ labels, ...n }) => ({
+      ...n,
+      labels: [...labels].toSorted(([, a], [, b]) => b - a).map(([id, messages]) => ({ id, name: labelNames.get(id) ?? id, messages })),
+    }));
+}
 
 /** What sift knows about one sender. */
 async function profileOf(db: Sql, scope: Scope, accountId: string, who: { address: string } | { domain: string }, now: number): Promise<SenderProfile | null> {
@@ -52,13 +106,20 @@ export async function senderProfile(db: Sql, scope: Scope, accountId: string, ad
   return await profileOf(db, scope, accountId, { address }, now);
 }
 
-/** A sender's page, or a domain's. Null for a domain anyone can get an address at. */
+/** How many of a sender's newest messages are listed on their page. */
+const LISTED = 50;
+
+/**
+ * A sender's page, or a domain's. Null for a domain anyone can get an address at. `under` narrows the mail
+ * listed to what came under that name, read from as far back as the names are.
+ */
 export async function senderPage(
   db: Sql,
   scope: Scope,
   accountId: string,
   who: { address: string } | { domain: string },
   now: number = Date.now(),
+  under?: string,
 ): Promise<SenderPage | null> {
   const profile = await profileOf(db, scope, accountId, who, now);
   if (!profile) return null;
@@ -113,8 +174,14 @@ export async function senderPage(
     kind: 'address' in who ? 'sender' : 'domain',
     name,
     profile,
+    names: 'address' in who ? await namesOf(db, accountId, who.address, new Map((await listLabels(db, accountId)).map((l) => [l.id, l.name]))) : [],
     senders,
-    decisions: (await listDecisions(db, scope, { days: 36_500, limit: 50, accountId, ...filter }, now)).rows,
+    decisions:
+      under === undefined
+        ? (await listDecisions(db, scope, { days: 36_500, limit: LISTED, accountId, ...filter }, now)).rows
+        : (await listDecisions(db, scope, { days: 36_500, limit: NAMES_FROM, accountId, ...filter }, now)).rows
+            .filter((row) => plainName(row.fromName ?? '') === plainName(under))
+            .slice(0, LISTED),
     waiting: (await pendingSuggestions(db, { accountId, ...filter })).length,
   };
 }

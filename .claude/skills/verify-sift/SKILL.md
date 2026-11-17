@@ -31,9 +31,10 @@ What the seed leaves (through three real ticks with sift off, `tick`, with a sta
 | `m5` | `builds@ci.example.org` | action rule → archive | Activity only |
 | `m6` | `ada@example.org` | nothing | Suggestions, `Which label?` |
 | `m7` | `grace@example.net` | nothing | Suggestions, `Which label?` |
-| `m8` | `sale@store.example.com` | stand-in model → Marketing, confidence 0.95 | Suggestions, `Marketing` (sure), the only row with a label to agree with |
+| `m8` | `sale@store.example.com` | stand-in model → Marketing, confidence 0.95 | Suggestions, `Marketing` (sure) |
 | `m9`, `m10` | `alerts@ops.example.com` | the stand-in model answers unusably, three passes running | Activity › Failed, under `Not judged`, with Retry and the page's Retry all |
 | `m11`–`m13` | `billing@utility.example.net` | nothing; then each answered as Receipts and transactions, as the dashboard answers | Activity only; the three alike open a proposal, `Make a rule?` on Suggestions |
+| `m14`–`m21` | `notifications@code.example.com`, as Dependabot (3), Security alerts (2), github-actions[bot] (2) and Ada Lovelace (1) | stand-in model, by name → Notifications, Security and account, Notifications; Ada's it cannot place | Suggestions, one row for the address; its page lists the four names (`/sender/me%40example.org/notifications%40code.example.com`) |
 
 Two rules were written to the fake Gmail as filters, through the real `writeRuleFilter`: `anyone at ci.example.org` landed (its panel says since when, the Rules list marks it, and Activity shows it added), and Gmail did not answer for `anyone at news.example.com`, nor had it kept the filter when asked at once (`failed`: red in Activity and on its panel). That is the only way to see a filter here: the dashboard's own Add to Gmail fails, as there is no Gmail behind it.
 

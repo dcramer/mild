@@ -12,6 +12,8 @@ export interface RuleStart {
   by: By;
   value: string;
   facts: FactAnswer[];
+  /** The sender's name exactly, beside `value`'s address or domain. */
+  name?: string;
   label?: string;
   /** The label the rule waits for a tier to give, in place of `label`. */
   whenLabel?: string;
@@ -43,6 +45,12 @@ export const messageStart = (sender: string, label: string | null): RuleStart =>
   value: sender,
   facts: [],
   ...(label === null ? {} : { label }),
+});
+
+/** One name a sender uses, as what their mail under it mostly is. */
+export const nameStart = (sender: string, name: string, label: string | null): RuleStart => ({
+  ...messageStart(sender, label),
+  name,
 });
 
 /** A message's sender, when their mail is what sift says it is but should stay in the inbox. */

@@ -183,7 +183,9 @@ export const api = {
   message: (account: string, id: string, signal: AbortSignal) => get<MessageDetail>('/api/message', { account, id }, signal),
   /** Where a frame loads a message as its HTML, fetched from Gmail each time it is shown. */
   messageHtml: (account: string, id: string) => `/api/message/html?${new URLSearchParams({ account, id })}`,
-  sender: (account: string, address: string, signal: AbortSignal) => get<SenderPage>('/api/sender', { account, address }, signal),
+  /** `name` lists only their mail under that name. */
+  sender: (account: string, address: string, signal: AbortSignal, name?: string) =>
+    get<SenderPage>('/api/sender', name === undefined ? { account, address } : { account, address, name }, signal),
   domain: (account: string, domain: string, signal: AbortSignal) => get<SenderPage>('/api/domain', { account, domain }, signal),
   /** Give a sender or a domain a standing; `none` takes back the rule that said so. */
   /** A standing is given by adding its rule; this takes it back. */

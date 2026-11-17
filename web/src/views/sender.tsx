@@ -1,9 +1,10 @@
 import { type ReactNode, useState } from 'react';
 import { ErrorNote, StatusWord, Verdict } from '@/components/bits.tsx';
-import { ContactHint, SenderCell } from '@/components/sender.tsx';
+import { ContactHint, SENDER_CELL, SenderCell } from '@/components/sender.tsx';
 import { type ListedDecision, type SenderPage, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, dateTime, describeMatch, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
-import { type RuleStart, messageStart, standingStart } from '@/lib/rule-start.ts';
+import { type RuleStart, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
+import { useParam } from '@/lib/route.ts';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import {
   Button,
@@ -15,6 +16,7 @@ import {
   PageHeader,
   RowActions,
   Section,
+  Select,
   Share,
   StackedBars,
   Table,
@@ -161,14 +163,76 @@ function Labels({ data, onStart }: { data: SenderPage; onStart: (s: RuleStart) =
   );
 }
 
-/** Their mail, one row per message: what it is, what Sift said, where it got to, when it came. On a domain's page, who sent each first, as in every list of mail. */
-function Mail({ rows, onOpen, oneSender }: { rows: ListedDecision[]; onOpen: OpenMessages; oneSender: boolean }) {
+type Named = SenderPage['names'][number];
+
+/** What a name's mail is: its labels, most first, then whether some has none yet. */
+function NameIs({ name }: { name: Named }) {
+  const unplaced = name.messages - name.labels.reduce((sum, l) => sum + l.messages, 0);
+  const words = [...name.labels.map((l) => l.name), ...(unplaced > 0 ? [outcomeName('review')] : [])];
+  return <span className={name.labels.length === 0 ? 'text-muted-foreground' : ''}>{words.join(' · ')}</span>;
+}
+
+/** Each name an address writes under, what its mail is, and a rule started on that name. */
+function Names({ data, onStart }: { data: SenderPage; onStart: (s: RuleStart) => void }) {
+  const whole = data.names.reduce((sum, n) => sum + n.messages, 0);
+  return (
+    <Table>
+      <thead className="sr-only">
+        <Tr>
+          <Th>Name</Th>
+          <Th phone="hide">Share</Th>
+          <Th phone="hide" num>
+            Messages
+          </Th>
+          <Th phone="hide">What it is</Th>
+          <Th>Rule</Th>
+        </Tr>
+      </thead>
+      <tbody>
+        {data.names.map((n) => (
+          <Tr key={n.name ?? ''}>
+            <Td className="font-medium whitespace-nowrap">
+              {n.name ?? <span className="font-normal text-muted-foreground">No name</span>}
+              <OnPhone>
+                <NameIs name={n} />
+                <span>{count(n.messages)}</span>
+              </OnPhone>
+            </Td>
+            <Td phone="hide" className="w-full">
+              <Share part={n.messages} whole={whole} />
+            </Td>
+            <Td phone="hide" num className="whitespace-nowrap">
+              {count(n.messages)} <span className="text-muted-foreground">· {percent(n.messages, whole)}</span>
+            </Td>
+            <Td phone="hide" className="whitespace-nowrap">
+              <NameIs name={n} />
+            </Td>
+            <RowActions phone="keep">
+              {n.name === null ? null : (
+                <Button variant="quiet" onClick={() => onStart(nameStart(data.profile.address, n.name!, n.labels[0]?.id ?? null))}>
+                  Make a rule…
+                </Button>
+              )}
+            </RowActions>
+          </Tr>
+        ))}
+      </tbody>
+    </Table>
+  );
+}
+
+/**
+ * Their mail, one row per message: what it is, what Sift said, where it got to, when it came. Who sent each
+ * comes first: on a domain's page the sender, as in every list of mail; for an address with several names, the name.
+ */
+function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMessages; from: 'sender' | 'name' | null }) {
+  const oneSender = from === null;
   const items = rows.map((r) => ({ accountId: r.accountId, messageId: r.messageId, subject: r.subject }));
   return (
     <Table>
       <thead>
         <Tr>
-          {oneSender ? null : <Th>Sender</Th>}
+          {from === 'sender' ? <Th>Sender</Th> : from === 'name' ? <Th>From</Th> : null}
           <Th {...(oneSender ? {} : { phone: 'hide' as const })}>Message</Th>
           <Th phone="hide">Sift said</Th>
           <Th phone="hide">Status</Th>
@@ -196,9 +260,16 @@ function Mail({ rows, onOpen, oneSender }: { rows: ListedDecision[]; onOpen: Ope
                 </Td>
               ) : (
                 <>
-                  <SenderCell accountId={row.accountId} address={row.fromAddress} name={row.fromName} contact={row.contact}>
-                    {onPhone}
-                  </SenderCell>
+                  {from === 'sender' ? (
+                    <SenderCell accountId={row.accountId} address={row.fromAddress} name={row.fromName} contact={row.contact}>
+                      {onPhone}
+                    </SenderCell>
+                  ) : (
+                    <Td className={SENDER_CELL}>
+                      <span className="name block truncate">{row.fromName ?? <span className="font-normal text-muted-foreground">No name</span>}</span>
+                      {onPhone}
+                    </Td>
+                  )}
                   <Td phone="hide" className="max-w-0 md:w-full">
                     <span className="block truncate">{subject}</span>
                   </Td>
@@ -235,6 +306,11 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
   const [starting, setStarting] = useState<RuleStart | null>(null);
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const [now] = useState(() => Date.now());
+  // Their mail under one name; the rest of the page is the whole address.
+  const [under, setUnder] = useParam('name');
+  const narrowed = useLoaded(`sender-page-${accountId}-${key}-under-${under}`, (signal) =>
+    'address' in who && under !== '' ? api.sender(accountId, who.address, signal, under) : Promise.resolve(null),
+  );
   if (error && !data)
     return 'domain' in who ? <Empty>Anyone can get an address at {who.domain}, so it has no standing of its own.</Empty> : <ErrorNote message={error} />;
   if (loading || !data)
@@ -246,7 +322,11 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
     );
 
   const { profile } = data;
+  const several = data.names.length > 1;
+  // One name would stand for all their mail; with several, the address is who they are.
+  const title = several ? null : data.name;
   const mail = byMessage(data.decisions);
+  const listed = under !== '' && narrowed.data ? byMessage(narrowed.data.decisions) : mail;
   const waiting = mail.filter(isWaiting);
   const items = waiting.map((r) => ({ accountId: r.accountId, messageId: r.messageId, subject: r.subject }));
   const rule = decidingRule(data);
@@ -263,15 +343,15 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
   return (
     <div className="flex flex-col gap-12">
       <PageHeader
-        title={data.name ?? key}
+        title={title ?? key}
         badge={<ContactHint contact={profile.contact} />}
         meta={
-          data.name || profile.domain ? (
+          title || profile.domain ? (
             <>
-              {data.name ? <span>{key}</span> : null}
+              {title ? <span>{key}</span> : null}
               {profile.domain ? (
                 <>
-                  {data.name ? <span aria-hidden>·</span> : null}
+                  {title ? <span aria-hidden>·</span> : null}
                   <TextLink href={`/domain/${encodeURIComponent(accountId)}/${encodeURIComponent(profile.domain.name)}`}>{profile.domain.name}</TextLink>
                   <ContactHint contact={profile.domain.contact} />
                 </>
@@ -293,7 +373,7 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
           <NextMail data={data} rule={rule} more={charted ? null : volume} />
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <ChoiceGroup
-              label={`Where ${data.name ?? key} stands`}
+              label={`Where ${title ?? key} stands`}
               value={given}
               options={GIVE}
               clearable
@@ -314,7 +394,11 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
         ) : null}
       </div>
 
-      {profile.labels.length > 1 ? (
+      {several ? (
+        <Section title="Names" meta={count(data.names.length)}>
+          <Names data={data} onStart={setStarting} />
+        </Section>
+      ) : profile.labels.length > 1 ? (
         <Section title="What it is" meta={count(profile.labels.length)}>
           <Labels data={data} onStart={setStarting} />
         </Section>
@@ -347,8 +431,25 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
         </Section>
       ) : null}
 
-      <Section title="Their mail" meta={count(mail.length)}>
-        {mail.length === 0 ? <Empty>No mail recorded from them.</Empty> : <Mail rows={mail} onOpen={onOpen} oneSender={data.kind === 'sender'} />}
+      <Section
+        title="Their mail"
+        meta={count(listed.length)}
+        action={
+          several ? (
+            <Select
+              label="From"
+              value={under}
+              options={[['', 'Every name'] as const, ...data.names.flatMap((n) => (n.name === null ? [] : [[n.name, n.name] as const]))]}
+              onChange={setUnder}
+            />
+          ) : undefined
+        }
+      >
+        {listed.length === 0 ? (
+          <Empty>No mail recorded from them.</Empty>
+        ) : (
+          <Mail rows={listed} onOpen={onOpen} from={data.kind === 'domain' ? 'sender' : several && under === '' ? 'name' : null} />
+        )}
       </Section>
 
       {starting ? (

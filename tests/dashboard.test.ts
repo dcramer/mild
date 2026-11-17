@@ -491,6 +491,39 @@ describe('dashboard server', () => {
     ]);
   });
 
+  it('breaks an address down by the names it writes under, and lists its mail under one name', async () => {
+    const { store, db } = await seededStore();
+    const from = (name: string) => ({ address: 'notifications@example.org', domain: 'example.org', name });
+    await recordSync(
+      db,
+      ACCOUNT,
+      [
+        facts({ messageId: 'n1', subject: 'Bump zod', receivedAt: NOW - 1000, from: from('Dependabot') }),
+        facts({ messageId: 'n2', subject: 'Bump vite', receivedAt: NOW - 2000, from: from(' dependabot  ') }),
+        facts({ messageId: 'n3', subject: 'New SSH key', receivedAt: NOW - 3000, from: from('Security alerts') }),
+      ],
+      '3',
+      NOW,
+    );
+    const said = { subscription: 'preserve', reason: 'test', stage: 'model' } as const;
+    await recordDecision(db, ACCOUNT, 'n1', { ...said, disposition: 'keep', labelId: 'notification' }, { now: NOW });
+    await recordDecision(db, ACCOUNT, 'n2', { ...said, disposition: 'review' }, { now: NOW });
+    await recordDecision(db, ACCOUNT, 'n3', { ...said, disposition: 'keep', labelId: 'security' }, { now: NOW });
+    const base = await start({}, store);
+    const page = (name?: string) =>
+      get<SenderPage>(
+        `${base}/api/sender?account=${ACCOUNT}&address=notifications@example.org${name === undefined ? '' : `&name=${encodeURIComponent(name)}`}`,
+      );
+
+    expect((await page()).names).toEqual([
+      { name: 'Dependabot', messages: 2, lastSeenAt: NOW - 1000, labels: [{ id: 'notification', name: 'Notifications', messages: 1 }] },
+      { name: 'Security alerts', messages: 1, lastSeenAt: NOW - 3000, labels: [{ id: 'security', name: 'Security and account', messages: 1 }] },
+    ]);
+    expect((await page('DEPENDABOT')).decisions.map((d) => d.messageId).toSorted()).toEqual(['n1', 'n2']);
+    // One name, on some of their mail, is not several.
+    expect((await get<SenderPage>(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).names).toEqual([]);
+  });
+
   it('serves a sender and a domain, whose given standing is a rule made in the dialog and taken back in one press', async () => {
     const { store, db } = await seededStore();
     const base = await start({}, store);

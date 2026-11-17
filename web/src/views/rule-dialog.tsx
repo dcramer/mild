@@ -62,7 +62,7 @@ export function AddRuleDialog({
   const [by, setBy] = useState<By>(start?.by ?? 'from');
   const [value, setValue] = useState(start?.value ?? '');
   const [nameMatch, setNameMatch] = useState<(typeof NAME_MATCH)[number][0]>('fromName');
-  const [name, setName] = useState('');
+  const [name, setName] = useState(start?.name ?? '');
   const [facts, setFacts] = useState<FactAnswer[]>(start?.facts ?? []);
   const [condition, setCondition] = useState('');
   const [label, setLabel] = useState(start?.label ?? '');

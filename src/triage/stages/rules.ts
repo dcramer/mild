@@ -64,7 +64,7 @@ export interface Rule {
 }
 
 /** A display name as rules compare it. */
-const plainName = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
+export const plainName = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
 
 function matches(match: RuleMatch, facts: MessageFacts): boolean {
   const checks: boolean[] = [];

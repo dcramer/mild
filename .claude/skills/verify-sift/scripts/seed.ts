@@ -86,6 +86,20 @@ const inbox = [
   mail('Utility <billing@utility.example.net>', 'Your March bill', 'Your bill is ready.'),
   mail('Utility <billing@utility.example.net>', 'Your April bill', 'Your bill is ready.'),
   mail('Utility <billing@utility.example.net>', 'Your May bill', 'Your bill is ready.'),
+  // One address under several names, which the stand-in model places by name: a security alert breaks every run of five
+  // notifications, so the model's agreement proposes no rule for the address.
+  ...(
+    [
+      ['Dependabot', 'Bump lodash from 4.17.20 to 4.17.21'],
+      ['Dependabot', 'Bump vite from 6.0.1 to 6.0.3'],
+      ['Security alerts', 'A critical vulnerability in lodash'],
+      ['github-actions[bot]', 'Run failed: CI on main'],
+      ['Dependabot', 'Bump zod from 4.0.0 to 4.0.2'],
+      ['Security alerts', 'A new SSH key was added to your account'],
+      ['github-actions[bot]', 'Run failed: Deploy on main'],
+      ['Ada Lovelace', 'Re: Fix the release script (#412)'],
+    ] as const
+  ).map(([name, subject]) => mail(`${name} <notifications@code.example.com>`, subject, subject)),
 ];
 
 const store = await openStore(config);
@@ -153,7 +167,11 @@ const standIn = async () => ({
       ? { label: 'marketing', reason: 'synthetic: a sale sent to a list', confidence: 0.95 }
       : evidence.facts.from.address === 'alerts@ops.example.com'
         ? { failed: 'synthetic: the model did not return a usable verdict', unusable: true as const }
-        : { label: 'unsure', reason: 'synthetic: cannot tell', confidence: 0.3 },
+        : evidence.facts.from.address === 'notifications@code.example.com' && evidence.facts.from.name !== 'Ada Lovelace'
+          ? evidence.facts.from.name === 'Security alerts'
+            ? { label: 'security', reason: 'synthetic: an alert about the account', confidence: 0.95 }
+            : { label: 'notification', reason: 'synthetic: an automated notice', confidence: 0.95 }
+          : { label: 'unsure', reason: 'synthetic: cannot tell', confidence: 0.3 },
 });
 // Three passes, so the Ops alerts have used up their tries.
 const ephemeral = memoryEphemeral();

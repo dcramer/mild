@@ -283,6 +283,15 @@ export const SenderPage = z.object({
   /** The name the sender last used. */
   name: z.string().nullable(),
   profile: SenderProfile,
+  /** For an address that sends under more than one name: each name (null for mail with none), most mail first, with what its mail is by label. */
+  names: z.array(
+    z.object({
+      name: z.string().nullable(),
+      messages: z.number(),
+      lastSeenAt: z.number(),
+      labels: z.array(z.object({ id: z.string(), name: z.string(), messages: z.number() })),
+    }),
+  ),
   /** For a domain: who writes from it, most mail first. */
   senders: z.array(z.object({ address: z.string(), name: z.string().nullable(), messages: z.number(), lastSeenAt: z.number(), contact: Contact })),
   /** Their mail, newest first. */
