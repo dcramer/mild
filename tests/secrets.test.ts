@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseEnv } from 'node:util';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { loadConfig, loadEnvFiles, saveKeyFile, secretPaths } from '../src/config.ts';
 import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
 import { credentialStore } from '../src/model/credentials.ts';
@@ -499,14 +499,12 @@ describe('.env', () => {
     const [home, cwd] = [dir(), dir()];
     writeFileSync(join(home, '.env'), 'SIFT_TEST_SET=home\nSIFT_TEST_HOME=home\nSIFT_TEST_BOTH=home\n');
     writeFileSync(join(cwd, '.env'), 'SIFT_TEST_BOTH=cwd\nSIFT_TEST_CWD=cwd\n');
-    process.env['SIFT_TEST_SET'] = 'environment';
-    try {
-      loadEnvFiles(home, cwd);
-      loadEnvFiles(dir(), dir());
-      expect(names.map((name) => process.env[name])).toEqual(['environment', 'home', 'home', 'cwd']);
-    } finally {
-      for (const name of names) delete process.env[name];
-    }
+    vi.stubEnv('SIFT_TEST_SET', 'environment');
+    // Written by the code under test, not stubbed: stubbing each first marks it for removal after the test.
+    for (const name of names.slice(1)) vi.stubEnv(name, undefined);
+    loadEnvFiles(home, cwd);
+    loadEnvFiles(dir(), dir());
+    expect(names.map((name) => process.env[name])).toEqual(['environment', 'home', 'home', 'cwd']);
   });
 
   it('adds the key to an existing .env without losing what it held, owner-only', () => {

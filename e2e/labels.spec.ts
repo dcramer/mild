@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { choose, expect, panel, refused, row, settled, test } from './sift.ts';
+import { choose, expect, panel, param, PHONE, query, refused, row, settled, test } from './sift.ts';
 
 /** The section of the Labels screen for one outcome ("Archived"), with its rows. */
 const group = (page: Page, title: string) => page.getByRole('heading', { name: title, exact: true }).locator('xpath=ancestor::section[1]');
@@ -31,9 +31,9 @@ test.describe('Labels', () => {
         ),
       );
     await expect(page.getByRole('main').getByRole('columnheader', { name: 'Messages', exact: true })).toHaveCount(3);
-    expect(await shown('Messages')).toBe(1);
-    expect(await shown('Right')).toBe(1);
-    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(() => shown('Messages')).toBe(1);
+    await expect.poll(() => shown('Right')).toBe(1);
+    await page.setViewportSize(PHONE);
     await expect.poll(() => shown('Messages')).toBe(0);
   });
 
@@ -42,7 +42,7 @@ test.describe('Labels', () => {
     await expect(group(page, 'Archived').getByText('Newsletters', { exact: true })).toBeVisible();
 
     const opened = await openLabel(page, 'Newsletters');
-    expect(new URL(page.url()).searchParams.get('label')).toBe('newsletter');
+    await param(page, 'label').toBe('newsletter');
     await expect(opened.getByRole('textbox', { name: 'Name' })).toHaveValue('Newsletters');
     await expect(opened.getByRole('combobox', { name: 'What Sift does with it' })).toHaveText(/Archive/);
     await expect(opened.getByRole('checkbox', { name: 'Unsubscribe, when the sender offers a safe way' })).not.toBeChecked();
@@ -56,11 +56,11 @@ test.describe('Labels', () => {
     // Saving leaves the panel open on what was saved.
     await expect(opened.getByRole('button', { name: 'Save' })).toBeDisabled();
     await expect(opened.getByRole('button', { name: 'Undo changes' })).toHaveCount(0);
-    expect(new URL(page.url()).searchParams.get('label')).toBe('newsletter');
+    await param(page, 'label').toBe('newsletter');
 
     await opened.getByRole('button', { name: 'Close' }).click();
     await expect(opened).toHaveCount(0);
-    expect(new URL(page.url()).searchParams.has('label')).toBe(false);
+    await param(page, 'label').toBeNull();
     await expect(group(page, 'Kept in your inbox').getByText('Newsletters', { exact: true })).toBeVisible();
 
     await page.reload();
@@ -99,7 +99,7 @@ test.describe('Labels', () => {
     await opened.getByRole('button', { name: 'Save' }).click();
 
     await expect(page.getByRole('dialog', { name: 'Digests' })).toBeVisible();
-    expect(new URL(page.url()).searchParams.get('label')).toBe('newsletter');
+    await param(page, 'label').toBe('newsletter');
     await page.getByRole('dialog', { name: 'Digests' }).getByRole('button', { name: 'Close' }).click();
     const listed = group(page, 'Archived').getByRole('row', { name: /^Digests / });
     await expect(listed).toContainText('Weekly roundups I read on Sundays.');
@@ -191,7 +191,7 @@ test.describe('Labels', () => {
       'Permission slips and trip plans from school.',
     );
     await expect.poll(() => labelCount(page)).toBe(before + 1);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
   });
 
   test('closing Add labels adds nothing and opens no panel', async ({ page }) => {
@@ -201,7 +201,7 @@ test.describe('Labels', () => {
     await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(dialog).toHaveCount(0);
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
   });
 
   test('removing a label asks in place, then closes its panel with a toast', async ({ page }) => {
@@ -223,7 +223,7 @@ test.describe('Labels', () => {
 
     await expect(opened).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Notifications' }).getByRole('dialog', { name: 'Newsletters', exact: true })).toContainText('Label removed');
-    expect(new URL(page.url()).searchParams.has('label')).toBe(false);
+    await param(page, 'label').toBeNull();
     await expect(page.getByRole('main').getByText('Newsletters', { exact: true })).toHaveCount(0);
     await expect.poll(() => labelCount(page)).toBe(before - 1);
 
@@ -242,7 +242,7 @@ test.describe('Labels', () => {
     await settled(page);
     await expect(ask).toHaveCount(0);
     await expect(opened.getByRole('button', { name: 'Remove', exact: true })).toBeVisible();
-    expect(new URL(page.url()).searchParams.get('label')).toBe('newsletter');
+    await param(page, 'label').toBe('newsletter');
   });
 
   test('Escape in the outcome list closes only the list', async ({ page }) => {
@@ -254,7 +254,7 @@ test.describe('Labels', () => {
     await expect(page.getByRole('option')).toHaveCount(0);
     await settled(page);
     await expect(opened).toBeVisible();
-    expect(new URL(page.url()).searchParams.get('label')).toBe('newsletter');
+    await param(page, 'label').toBe('newsletter');
   });
 
   test('a label’s rule count leads to those rules alone', async ({ page }) => {
@@ -283,7 +283,7 @@ test.describe('Labels', () => {
     await first.getByRole('button', { name: 'Next' }).click();
     const second = labelPanel(page, 'Account alerts');
     await expect(second.getByRole('heading', { name: 'Account alerts', level: 2 })).toBeVisible();
-    expect(new URL(page.url()).searchParams.get('label')).toBe('security');
+    await param(page, 'label').toBe('security');
     await second.getByRole('button', { name: 'Previous' }).click();
     await expect(labelPanel(page, 'Leave in inbox')).toBeVisible();
   });
@@ -311,7 +311,7 @@ test.describe('Adding a label from an open message', () => {
     await expect(manual).toHaveCount(0);
     await settled(page);
     await expect(panel(page)).toBeVisible();
-    expect(page.url()).toBe(at);
+    await expect(page).toHaveURL(at);
     await choose(panel(page), 'Field trips');
     await expect(panel(page).getByRole('combobox', { name: 'What this message is' })).toHaveText(/Field trips/);
   });
@@ -326,7 +326,7 @@ test.describe('Adding a label from an open message', () => {
 
     await expect(dialog).toHaveCount(0);
     await settled(page);
-    expect(page.url()).toBe(at);
+    await expect(page).toHaveURL(at);
     await panel(page).getByRole('combobox', { name: 'What this message is' }).click();
     await expect(page.getByRole('option', { name: 'Sales pitches', exact: true })).toBeVisible();
   });
@@ -339,7 +339,7 @@ test.describe('Adding a label from an open message', () => {
     await expect(dialog).toHaveCount(0);
     await settled(page);
     await expect(panel(page)).toBeVisible();
-    expect(page.url()).toBe(at);
+    await expect(page).toHaveURL(at);
   });
 
   test('Escape closes only the dialog', async ({ page }) => {
@@ -351,7 +351,7 @@ test.describe('Adding a label from an open message', () => {
     await expect(dialog).toHaveCount(0);
     await settled(page);
     await expect(panel(page)).toBeVisible();
-    expect(page.url()).toBe(at);
+    await expect(page).toHaveURL(at);
   });
 
   test('closing the panel after adding a label keeps it closed', async ({ page }) => {
@@ -365,7 +365,7 @@ test.describe('Adding a label from an open message', () => {
 
     await panel(page).getByRole('button', { name: 'Close' }).first().click();
     await expect(panel(page)).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
     await settled(page);
     await expect(row(page, 'Lunch on Thursday?')).toBeVisible();
     await expect(panel(page)).toHaveCount(0);

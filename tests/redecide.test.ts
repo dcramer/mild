@@ -64,6 +64,7 @@ const count = async () => (await raw(db).get<{ n: number }>('SELECT count(*) AS 
 const waiting = async () => (await pendingSuggestions(db)).map((s) => s.messageId).toSorted();
 
 beforeEach(async () => {
+  meanwhile = null;
   db = await openUserDb(ACCOUNT);
   await addMailbox(db, ACCOUNT, '1');
   serial = 0;

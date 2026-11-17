@@ -4,6 +4,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test as base, expect, type Locator, type Page } from '@playwright/test';
+import { FRAME_POLICY, PAGE_POLICY } from '../src/dashboard/policy.ts';
 
 const SCRIPTS = resolve(import.meta.dirname, '../.claude/skills/verify-sift/scripts');
 export const SEED = join(SCRIPTS, 'seed.ts');
@@ -22,6 +23,22 @@ const freePort = () =>
       server.close(() => (typeof address === 'object' && address ? done(address.port) : fail(new Error('no port'))));
     });
   });
+
+const withTimeout = <T>(work: Promise<T>, ms: number, what: string) =>
+  Promise.race([work, new Promise<never>((_, fail) => setTimeout(() => fail(new Error(`${what} in ${ms / 1000}s`)), ms).unref())]);
+
+const directives = (policy: string) => new Set(policy.split('; '));
+const onPage = directives(PAGE_POLICY);
+/** Directives only a message's HTML frame has: what it refuses (a remote image in its inline style) is it working. */
+const FRAME_ONLY = [...directives(FRAME_POLICY)].filter((d) => !onPage.has(d));
+
+/**
+ * Whether a console error is the message frame refusing something, which is it working: its policy refusing a
+ * remote image in an inline style, told by the directive named; or its sandbox refusing the script Playwright
+ * reads it with, told by the frame's own address in the words. Not by where the browser says the error came
+ * from: Chrome gives the frame's address only when no script is running, and reading the frame is a script.
+ */
+const framePolicy = (text: string) => text.includes('/api/message/html?') || FRAME_ONLY.some((d) => text.includes(`directive: "${d}"`));
 
 /** Starts verify-sift's `serve.ts` (the dashboard alone, with a fake Gmail behind its filter control) on a copy of the seeded home. */
 async function start(variant: Variant, cloud: boolean) {
@@ -52,7 +69,7 @@ async function start(variant: Variant, cloud: boolean) {
     });
     return started ? { port, child } : serve(tries - 1);
   };
-  const { port, child } = await serve(3);
+  const { port, child } = await withTimeout(serve(3), 30_000, 'serve.ts did not start');
   return {
     url: `http://127.0.0.1:${port}`,
     cookie: template.cookie,
@@ -87,14 +104,14 @@ export const test = base.extend<{ variant: Variant; cloud: boolean; allow: strin
   },
   page: async ({ page, allow }, use) => {
     const errors: string[] = [];
-    // A message's HTML frame logs what its sandbox and policy refuse (its scripts, remote images): that is them working.
-    const expected = [...allow, '/api/message/html?'];
     page.on('console', (message) => {
-      if (message.type() !== 'error') return;
-      if (!expected.some((part) => message.text().includes(part) || message.location().url.includes(part))) errors.push(message.text());
+      if (message.type() !== 'error' || framePolicy(message.text())) return;
+      if (!allow.some((part) => message.text().includes(part))) errors.push(message.text());
     });
     page.on('pageerror', (error) => errors.push(error.message));
     await use(page);
+    // A reply still on its way when the test ends would otherwise find its route gone, and log that.
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
     expect(errors, 'the page logged errors').toEqual([]);
   },
 });
@@ -103,6 +120,15 @@ export { expect };
 
 /** `test`, for one where the server refuses (409) and the page shows why: the browser logs the refused request as an error. */
 export const refused = test.extend({ allow: async ({ allow }, use) => use([...allow, 'status of 409']) });
+
+/** The address's query (`?a=1&b=2`, or `''`), asked again until it matches: a press may change the address after it returns. */
+export const query = (page: Page) => expect.poll(() => new URL(page.url()).search);
+
+/** One parameter of the address, null when it is not there, asked again until it matches. */
+export const param = (page: Page, name: string) => expect.poll(() => new URL(page.url()).searchParams.get(name));
+
+/** The address's path, asked again until it matches. */
+export const path = (page: Page) => expect.poll(() => new URL(page.url()).pathname);
 
 /** A row of a list, found by the text of one of its cells (rows have no name of their own). */
 export const row = (page: Page, text: string) => page.getByRole('row').filter({ has: page.getByRole('cell', { name: text }) });
@@ -122,6 +148,29 @@ export const settled = (page: Page) =>
   page.evaluate(
     'new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))).then(() => Promise.allSettled(document.getAnimations().map((a) => a.finished)))',
   );
+
+/** Points at `target` once the page has stopped moving, so what opens on hover is for it, not for whatever slid under the pointer. */
+export async function pointAt(target: Locator) {
+  await settled(target.page());
+  await target.hover();
+}
+
+/** The tooltip showing. */
+export const tooltip = (page: Page) => page.getByRole('tooltip');
+
+/** A phone's screen, for `test.use({ viewport: PHONE })` or `page.setViewportSize(PHONE)`. */
+export const PHONE = { width: 390, height: 844 };
+
+/** How far the page scrolls sideways, asked again until it matches: a part arriving late can widen it. */
+export const sideScroll = (page: Page) => expect.poll(() => page.evaluate('document.documentElement.scrollWidth - document.documentElement.clientWidth'));
+
+/** Where `target` is once the page has stopped moving: a layer that just opened or closed is still sliding. */
+export async function boxOf(target: Locator) {
+  await settled(target.page());
+  const box = await target.boundingBox();
+  if (!box) throw new Error(`${target.toString()} is not on the page`);
+  return box;
+}
 
 /** The open message panel. */
 export const panel = (page: Page) => page.getByRole('dialog').filter({ has: page.getByRole('combobox', { name: 'What this message is' }) });

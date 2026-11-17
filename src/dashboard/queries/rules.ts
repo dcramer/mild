@@ -123,7 +123,7 @@ export async function ruleWaiting(db: Sql, scope: Scope, ruleId: string): Promis
  * What a rule decided by itself each day over the last 30, as its hit count counts them, and what the
  * model calls that checked its condition cost, met or not.
  */
-export async function ruleUsage(db: Sql, scope: Scope, ruleId: string, now: number = Date.now()): Promise<RuleUsage> {
+export async function ruleUsage(db: Sql, scope: Scope, ruleId: string, now: number): Promise<RuleUsage> {
   const since = now - MONTH * DAY_MS;
   const byDay = new Map<string, { changed: number; left: number; costUsd: number }>();
   for (let i = MONTH - 1; i >= 0; i--) byDay.set(localDay(now - i * DAY_MS), { changed: 0, left: 0, costUsd: 0 });

@@ -1,9 +1,7 @@
 import type { Page } from '@playwright/test';
-import { choose, expect, panel, row, test } from './sift.ts';
+import { boxOf, choose, expect, panel, param, path, PHONE, query, row, sideScroll, test } from './sift.ts';
 
 const DEALS = '/?message=m4&account=me%40example.org';
-
-const search = (page: Page) => new URL(page.url()).searchParams;
 
 /**
  * Every request beyond `origin` the browser did not refuse under the content security policy. A refused one is
@@ -30,6 +28,8 @@ test.describe('A message as its HTML', () => {
     await expect(frame.getByRole('link', { name: 'Shop the sale' })).toBeVisible();
     await expect(frame.getByText('Preferences')).toBeVisible();
     await expect(frame.getByRole('link', { name: 'Preferences' })).toHaveCount(0);
+    // Everything the frame asks for is asked for by the time the network goes quiet; one the policy refused is
+    // reported as failed a moment later, so the list is asked again until it has gone.
     await page.waitForLoadState('networkidle');
     await expect.poll(() => [...sent]).toEqual([]);
   });
@@ -43,7 +43,7 @@ test.describe('A message as its HTML', () => {
     await expect.poll(() => tab.url()).toBe('https://shop.example.com/sale');
     await tab.close();
     await expect(panel(page).getByRole('heading', { name: '48 hours only: 30% off' })).toBeVisible();
-    expect(search(page).get('message')).toBe('m4');
+    await param(page, 'message').toBe('m4');
   });
 
   test('Text, once chosen, is kept in the browser', async ({ page }) => {
@@ -74,11 +74,11 @@ test.describe('A message as its HTML', () => {
   });
 
   test('fits a phone', async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize(PHONE);
     await page.goto(DEALS);
     await expect(mailFrame(page, '48 hours only: 30% off').getByRole('heading', { name: '30% off everything' })).toBeVisible();
-    expect((await page.locator('iframe').boundingBox())?.width).toBeLessThanOrEqual(390);
-    expect(await page.evaluate('document.documentElement.scrollWidth - document.documentElement.clientWidth')).toBe(0);
+    expect((await boxOf(page.locator('iframe'))).width).toBeLessThanOrEqual(390);
+    await sideScroll(page).toBe(0);
   });
 });
 
@@ -118,7 +118,7 @@ test.describe('What Sift saw', () => {
     await panel(page).getByRole('button', { name: 'Make a rule for mail that has a one-click unsubscribe' }).click();
     const dialog = page.getByRole('dialog', { name: 'Add a rule' });
     await expect(dialog.getByRole('textbox')).toHaveValue('Mail from deals@promo.example.com that has a one-click unsubscribe: ');
-    expect(page.url()).toMatch(/\/\?message=m4&account=me%40example\.org$/);
+    await expect(page).toHaveURL(/\/\?message=m4&account=me%40example\.org$/);
 
     await dialog.getByRole('button', { name: 'Write it yourself' }).click();
     await expect(dialog.getByRole('textbox', { name: 'Value 1' })).toHaveValue('deals@promo.example.com');
@@ -127,13 +127,13 @@ test.describe('What Sift saw', () => {
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await expect(panel(page).getByRole('heading', { name: '48 hours only: 30% off' })).toBeVisible();
-    expect(page.url()).toMatch(/\/\?message=m4&account=me%40example\.org$/);
+    await expect(page).toHaveURL(/\/\?message=m4&account=me%40example\.org$/);
 
     await panel(page).getByRole('button', { name: 'Make a rule…' }).click();
     await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(dialog).toHaveCount(0);
     await expect(panel(page)).toBeVisible();
-    expect(search(page).get('message')).toBe('m4');
+    await param(page, 'message').toBe('m4');
   });
 
   test('a rule added from the panel opens over it, and Escape closes the rule, then the panel', async ({ page }) => {
@@ -147,17 +147,17 @@ test.describe('What Sift saw', () => {
     await dialog.getByRole('button', { name: 'Add rule', exact: true }).click();
     const sheet = page.getByRole('dialog', { name: 'sale@store.example.com', exact: true });
     await expect(sheet).toContainText('Marketing');
-    expect(search(page).get('message')).toBe('m8');
-    expect(search(page).has('rule')).toBe(true);
+    await param(page, 'message').toBe('m8');
+    await param(page, 'rule').not.toBeNull();
 
     await page.keyboard.press('Escape');
     await expect(sheet).toHaveCount(0);
     await expect(panel(page).getByRole('heading', { name: 'Winter sale starts now' })).toBeVisible();
-    expect(search(page).has('rule')).toBe(false);
+    await param(page, 'rule').toBeNull();
 
     await page.keyboard.press('Escape');
     await expect(panel(page)).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
     await expect(page.getByRole('cell', { name: 'Winter sale starts now' })).toHaveCount(0);
   });
 
@@ -171,7 +171,7 @@ test.describe('What Sift saw', () => {
     await manual.getByRole('button', { name: 'Add label', exact: true }).click();
     await expect(manual).toHaveCount(0);
     await expect(panel(page).getByRole('heading', { name: 'Notes from the review' })).toBeVisible();
-    expect(search(page).get('message')).toBe('m7');
+    await param(page, 'message').toBe('m7');
 
     await choose(panel(page), 'Field trips');
     await expect(panel(page).getByRole('button', { name: 'Save: Field trips' })).toBeVisible();
@@ -200,14 +200,14 @@ test.describe('What Sift saw', () => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Filters' }).click();
     await page.getByRole('radio', { name: 'Is a reply' }).click();
-    expect(search(page).get('fact')).toBe('reply');
+    await param(page, 'fact').toBe('reply');
     const mail = page.getByRole('row').filter({ has: page.getByRole('combobox', { name: 'What this message is' }) });
     await expect(mail).toHaveCount(1);
     await expect(row(page, 'Lunch on Thursday?')).toBeVisible();
 
     await page.getByRole('button', { name: /^Filters/ }).click();
     await page.getByRole('button', { name: 'Clear Mail that is a reply' }).click();
-    expect(search(page).has('fact')).toBe(false);
+    await param(page, 'fact').toBeNull();
     await expect(mail).toHaveCount(9);
   });
 });
@@ -218,8 +218,8 @@ test.describe('A message opened by its address', () => {
     await expect(panel(page).getByRole('heading', { name: 'Lunch on Thursday?' })).toBeVisible();
     await panel(page).getByRole('button', { name: 'Close' }).click();
     await expect(panel(page)).toHaveCount(0);
-    expect(new URL(page.url()).pathname).toBe('/');
-    expect(new URL(page.url()).search).toBe('');
+    await path(page).toBe('/');
+    await query(page).toBe('');
     await expect(row(page, 'Lunch on Thursday?')).toBeVisible();
   });
 
@@ -228,13 +228,13 @@ test.describe('A message opened by its address', () => {
     await expect(panel(page).getByRole('heading', { name: 'Lunch on Thursday?' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(panel(page)).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
 
     await page.getByRole('cell', { name: 'Notes from the review' }).click();
     await expect(panel(page).getByRole('heading', { name: 'Notes from the review' })).toBeVisible();
     await panel(page).getByRole('button', { name: 'Close' }).click();
     await expect(panel(page)).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
   });
 });
 
@@ -243,16 +243,16 @@ test.describe('A message opened from a list', () => {
     await page.goto('/');
     await page.getByRole('cell', { name: 'Notes from the review' }).click();
     await expect(panel(page).getByRole('heading', { name: 'Notes from the review' })).toBeVisible();
-    expect(search(page).get('message')).toBe('m7');
+    await param(page, 'message').toBe('m7');
     await page.goBack();
     await expect(panel(page)).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
 
     await page.goForward();
     await expect(panel(page).getByRole('heading', { name: 'Notes from the review' })).toBeVisible();
     await panel(page).getByRole('button', { name: 'Close' }).click();
     await expect(panel(page)).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
   });
 
   test('the sender link in the panel’s header goes to the sender, closing the panel', async ({ page }) => {
@@ -261,7 +261,7 @@ test.describe('A message opened from a list', () => {
     await panel(page).getByRole('link', { name: 'Grace Hopper' }).click();
     await expect(page.getByRole('heading', { name: 'Grace Hopper', level: 1 })).toBeVisible();
     await expect(panel(page)).toHaveCount(0);
-    expect(new URL(page.url()).pathname).toBe('/sender/me%40example.org/grace%40example.net');
-    expect(new URL(page.url()).searchParams.get('message')).toBeNull();
+    await path(page).toBe('/sender/me%40example.org/grace%40example.net');
+    await param(page, 'message').toBeNull();
   });
 });

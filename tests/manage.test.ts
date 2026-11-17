@@ -85,8 +85,11 @@ beforeEach(async () => {
   calls = [];
 });
 
-async function start(options: { withControls?: boolean } = {}) {
-  return await startDashboard(people(store), options.withControls === false ? {} : { controls });
+async function start(options: { withControls?: boolean; now?: number } = {}) {
+  return await startDashboard(people(store), {
+    ...(options.withControls === false ? {} : { controls }),
+    ...(options.now === undefined ? {} : { now: () => options.now! }),
+  });
 }
 
 describe('managing sift from the dashboard', () => {
@@ -623,7 +626,8 @@ describe('managing sift from the dashboard', () => {
   });
 
   it('charts what a rule decided by itself over 30 days, carried out or not, and what the model calls behind it cost', async () => {
-    const { call } = await start();
+    const now = Date.UTC(2026, 5, 15, 12);
+    const { call } = await start({ now });
     const id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter', when: 'only the digests' }, 'user');
     await recordSync(
       db,
@@ -632,7 +636,6 @@ describe('managing sift from the dashboard', () => {
       '2',
     );
     const byRule = { disposition: 'archive', subscription: 'preserve', stage: 'model', labelId: 'newsletter', ruleId: id, reason: 'rule' } as const;
-    const now = Date.now();
     const usage = { model: 'test-model', inputTokens: 10, outputTokens: 1, costUsd: 0.004 };
     const run = await startRun(db, { accountId: ACCOUNT, messageId: 'u1', model: 'test-model', ruleId: id, now });
     await finishRun(db, run, { usage, now });

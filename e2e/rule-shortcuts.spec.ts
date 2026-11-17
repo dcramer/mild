@@ -1,5 +1,5 @@
 import { addRule, fact, openRule, ruleDialog, rulePanel, ruleRows, ruleToast } from './rule.ts';
-import { expect, panel, row, test } from './sift.ts';
+import { expect, panel, param, query, row, test } from './sift.ts';
 
 const PROPOSAL = 'Keep Receipts from billing@utility.example.net?';
 
@@ -23,7 +23,7 @@ test.describe('Rules from a shortcut', () => {
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await expect(proposal).toBeVisible();
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
   });
 
   test('adding the rule from a proposal, changed, resolves the proposal', async ({ page }) => {
@@ -43,7 +43,7 @@ test.describe('Rules from a shortcut', () => {
     await expect(proposal).toHaveCount(0);
     await opened.getByRole('button', { name: 'Close' }).click();
     await expect(opened).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
 
     await page.getByRole('link', { name: 'Rules' }).click();
     await expect(row(page, 'anyone at utility.example.net as Receipts')).toContainText('Leave in inbox');
@@ -73,7 +73,7 @@ test.describe('Rules from a shortcut', () => {
     await dialog.getByRole('button', { name: 'Write it yourself' }).click();
     await expect(dialog.getByRole('textbox', { name: 'Value 1' })).toHaveValue('sale@store.example.com');
     await expect(dialog.getByRole('combobox', { name: 'Label it as' })).toContainText('Marketing');
-    expect(new URL(page.url()).searchParams.get('message')).toBe('m8');
+    await param(page, 'message').toBe('m8');
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await expect(message).toBeVisible();
@@ -85,7 +85,7 @@ test.describe('Rules from a shortcut', () => {
     await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(dialog).toHaveCount(0);
     await expect(message).toBeVisible();
-    expect(new URL(page.url()).search).toBe('?message=m8&account=me%40example.org');
+    await query(page).toBe('?message=m8&account=me%40example.org');
   });
 
   test("a rule added from a message opens over it, and closing the rule's panel returns to the message", async ({ page }) => {
@@ -98,14 +98,13 @@ test.describe('Rules from a shortcut', () => {
 
     const opened = rulePanel(page, 'sale@store.example.com');
     await expect(fact(opened, 'Then')).toContainText('as Marketing');
-    const params = new URL(page.url()).searchParams;
-    expect(params.get('message')).toBe('m8');
-    expect(params.get('rule')).toMatch(/^r-/);
+    await param(page, 'message').toBe('m8');
+    await param(page, 'rule').toMatch(/^r-/);
 
     await opened.getByRole('button', { name: 'Close' }).click();
     await expect(opened).toHaveCount(0);
     await expect(message.getByText('Rule: from sale@store.example.com is Marketing').first()).toBeVisible();
-    expect(new URL(page.url()).search).toBe('?message=m8&account=me%40example.org');
+    await query(page).toBe('?message=m8&account=me%40example.org');
   });
 
   test('a fact in a message starts the rule on it', async ({ page }) => {
@@ -195,7 +194,7 @@ test.describe('Rules from a shortcut', () => {
     await expect(words).toHaveValue('Mail from notifications@code.example.com named “Dependabot” is Notifications.');
     await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(dialog).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
     await expect(panel(page)).toHaveCount(0);
   });
 

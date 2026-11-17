@@ -1,4 +1,4 @@
-import { expect, test } from './sift.ts';
+import { boxOf, expect, path, PHONE, test } from './sift.ts';
 
 test.describe('A Sift run as a service', () => {
   test.use({ cloud: true });
@@ -14,7 +14,7 @@ test.describe('A Sift run as a service', () => {
     await page.goto('/');
     await page.getByRole('contentinfo').getByRole('link', { name: 'Security' }).click();
     await expect(page.getByRole('heading', { name: 'Security', level: 1 })).toBeVisible();
-    expect(new URL(page.url()).pathname).toBe('/security');
+    await path(page).toBe('/security');
     await expect(page.getByRole('heading', { name: 'What it does not protect against' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'privately on GitHub' })).toHaveAttribute('href', 'https://github.com/dcramer/sift/security/advisories/new');
 
@@ -33,15 +33,15 @@ test.describe('A Sift run as a service', () => {
   });
 
   test.describe('On a phone', () => {
-    test.use({ viewport: { width: 390, height: 844 } });
+    test.use({ viewport: PHONE });
 
     test('the menu has the terms, privacy and security under the sections', async ({ page }) => {
       await page.goto('/rules');
       await page.getByRole('button', { name: 'Menu' }).click();
       const menu = page.getByRole('dialog', { name: 'Menu' });
-      const last = (await menu.getByRole('navigation', { name: 'Sections' }).boundingBox())!;
+      const last = await boxOf(menu.getByRole('navigation', { name: 'Sections' }));
       const privacy = menu.getByRole('link', { name: 'Privacy' });
-      expect((await privacy.boundingBox())!.y).toBeGreaterThan(last.y + last.height);
+      expect((await boxOf(privacy)).y).toBeGreaterThan(last.y + last.height);
       await privacy.click();
       await expect(page.getByRole('heading', { name: 'Privacy policy', level: 1 })).toBeVisible();
     });
@@ -61,7 +61,7 @@ test.describe("Someone's own copy", () => {
   });
 
   test.describe('On a phone', () => {
-    test.use({ viewport: { width: 390, height: 844 } });
+    test.use({ viewport: PHONE });
 
     test('the menu has no fine print', async ({ page }) => {
       await page.goto('/rules');

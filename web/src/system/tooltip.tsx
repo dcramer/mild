@@ -18,6 +18,7 @@ export function Tooltip({ says, children, className }: { says: ReactNode; childr
       <Base.Portal>
         <Base.Positioner sideOffset={6} className="z-50">
           <Base.Popup
+            role="tooltip"
             className={cn(
               'sheet max-w-xs bg-popover px-3 py-2 text-sm whitespace-pre-line tabular-nums text-foreground',
               'transition-opacity duration-100 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none',

@@ -1,5 +1,5 @@
 import { addRule, fact, openRule, ruleDialog, rulePanel, ruleRows } from './rule.ts';
-import { expect, panel, row, test, throughChatGPT } from './sift.ts';
+import { expect, panel, param, pointAt, query, row, test, throughChatGPT, tooltip } from './sift.ts';
 
 test.describe('Rules', () => {
   test('a rule written by hand opens on its panel, and takes the mail it covers off For review', async ({ page }) => {
@@ -36,7 +36,7 @@ test.describe('Rules', () => {
 
     await opened.getByRole('button', { name: 'Close' }).click();
     await expect(opened).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
     // Sorted by use, the new rule has caught Deals and the Spam rule below it has not.
     await expect(ruleRows(page)).toHaveCount(5);
     const rules = await ruleRows(page).allTextContents();
@@ -59,8 +59,8 @@ test.describe('Rules', () => {
     await expect(head('Cost 30D')).toHaveCount(0);
 
     const news = ruleRows(page).filter({ hasText: 'anyone at news.example.com' });
-    await news.getByText(/^(just now|\d+ min ago)$/).hover();
-    await expect(page.getByText(/^[A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2}/)).toBeVisible();
+    await pointAt(news.getByText(/^(just now|\d+ min ago)$/));
+    await expect(tooltip(page)).toHaveText(/^[A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M$/);
 
     await page.getByRole('button', { name: 'Add a rule' }).click();
     const dialog = ruleDialog(page);
@@ -77,8 +77,8 @@ test.describe('Rules', () => {
 
     await expect(head('Cost 30D')).toBeVisible();
     const deals = ruleRows(page).filter({ hasText: 'deals@promo.example.com' });
-    await deals.getByText('$0', { exact: true }).hover();
-    await expect(page.getByText('0 messages checked', { exact: true })).toBeVisible();
+    await pointAt(deals.getByText('$0', { exact: true }));
+    await expect(tooltip(page)).toHaveText('0 messages checked');
     // The rules no model checks leave the column empty.
     await expect(news.getByText(/\$/)).toHaveCount(0);
   });
@@ -101,8 +101,8 @@ test.describe('Rules', () => {
 
     const deals = ruleRows(page).filter({ hasText: 'deals@promo.example.com' });
     await expect(deals.getByText('≈$0', { exact: true })).toBeVisible();
-    await page.getByRole('main').getByRole('columnheader', { name: 'Cost 30D', exact: true }).hover();
-    await expect(page.getByText(/At API prices, which your ChatGPT plan covers\.$/)).toBeVisible();
+    await pointAt(page.getByRole('main').getByRole('columnheader', { name: 'Cost 30D', exact: true }));
+    await expect(tooltip(page)).toHaveText(/At API prices, which your ChatGPT plan covers\.$/);
 
     await page.goto('/activity');
     await expect(page.getByRole('listitem', { name: /model cost at api prices$/ }).first()).toBeAttached();
@@ -188,7 +188,7 @@ test.describe('Rules', () => {
     await expect(dialog).toHaveCount(0);
 
     await expect(ruleRows(page)).toHaveCount(4);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
   });
 
   test("a rule's panel steps through the list, is its own address, and closes to the list", async ({ page }) => {
@@ -215,7 +215,7 @@ test.describe('Rules', () => {
     await expect(news).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(news).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
     await expect(ruleRows(page)).toHaveCount(4);
   });
 
@@ -232,12 +232,12 @@ test.describe('Rules', () => {
     await opened.getByRole('cell', { name: 'Winter sale starts now' }).click();
     const message = panel(page);
     await expect(message.getByRole('heading', { name: 'Winter sale starts now' })).toBeVisible();
-    expect(new URL(page.url()).searchParams.get('message')).toBe('m8');
+    await param(page, 'message').toBe('m8');
 
     await message.getByRole('button', { name: 'Close' }).click();
     await expect(message).toHaveCount(0);
     await expect(opened).toBeVisible();
-    expect(new URL(page.url()).search).toBe(`?rule=${rule}`);
+    await query(page).toBe(`?rule=${rule}`);
   });
 
   test('Apply to your inbox says about how many and shows the newest, then applies in the background until stopped', async ({ page }) => {
@@ -278,7 +278,7 @@ test.describe('Rules', () => {
     await ask.getByRole('button', { name: 'Remove', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Mail from anyone at promo.example.com', exact: true })).toBeVisible();
     await expect(opened).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
     await expect(ruleRows(page)).toHaveCount(3);
     await expect(row(page, 'anyone at promo.example.com')).toHaveCount(0);
   });
@@ -302,7 +302,7 @@ test.describe('Rules', () => {
     await expect(promo).toHaveCount(0);
     await expect(ruleRows(page)).toHaveCount(3);
     await expect(rulePanel(page, 'anyone at promo.example.com')).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
   });
 
   test('Escape on Remove this rule? in a panel takes back the question and leaves the panel open', async ({ page }) => {
@@ -330,6 +330,6 @@ test.describe('Rules', () => {
     await expect(page.getByRole('dialog', { name: 'Rule taken back' })).toBeVisible();
     await expect(rulePanel(page, 'someone@example.com')).toHaveCount(0);
     await expect(ruleRows(page)).toHaveCount(4);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
   });
 });

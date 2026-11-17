@@ -1,5 +1,5 @@
 import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { gatherEvidence } from '../src/work/evidence.ts';
 import { MAX_BODY_CHARS, extractText } from '../src/gmail/body.ts';
 import { type SignIns, credentialStore } from '../src/model/credentials.ts';
@@ -634,14 +634,8 @@ describe('providers', () => {
   });
 
   it("never uses a key from the environment: a person's sign-in is their own", async () => {
-    const before = process.env['ANTHROPIC_API_KEY'];
-    process.env['ANTHROPIC_API_KEY'] = 'someone-elses-key';
-    try {
-      expect(await openModels(memorySignIns(), 'device-code').getAuth('anthropic')).toBeUndefined();
-    } finally {
-      if (before === undefined) delete process.env['ANTHROPIC_API_KEY'];
-      else process.env['ANTHROPIC_API_KEY'] = before;
-    }
+    vi.stubEnv('ANTHROPIC_API_KEY', 'someone-elses-key');
+    expect(await openModels(memorySignIns(), 'device-code').getAuth('anthropic')).toBeUndefined();
   });
 
   // pnpm-workspace.yaml leaves the other providers' SDKs out of the install; these must not need them.
@@ -680,8 +674,6 @@ const TOKENS = {
 };
 
 describe('Sign in with ChatGPT', () => {
-  afterEach(() => void vi.unstubAllGlobals());
-
   it("calls OpenAI's own API with the ChatGPT token, leaving out what OpenAI refuses with one", async () => {
     const signIns = memorySignIns();
     await signIns.write(

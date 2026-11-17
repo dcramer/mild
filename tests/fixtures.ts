@@ -155,7 +155,7 @@ export async function startDashboard(people: People, options: DashboardOptions &
   const call = (method: 'GET' | 'POST', path: string, body?: unknown, headers: Record<string, string> = {}) =>
     new Promise<Reply>((resolve, reject) => {
       const own = method === 'POST' ? { origin: `http://localhost:${port}`, 'content-type': 'application/json', 'x-sift': '1' } : {};
-      const req = request({ port, path, method, headers: { host: `localhost:${port}`, ...own, ...headers } }, (res) => {
+      const req = request({ host: '127.0.0.1', port, path, method, headers: { host: `localhost:${port}`, ...own, ...headers } }, (res) => {
         let text = '';
         res.on('data', (chunk) => (text += String(chunk)));
         res.on('end', () => {

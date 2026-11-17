@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { HEADERS } from '../src/dashboard/server.ts';
 import { READS, WRITES } from '../src/dashboard/api/index.ts';
 import type { Work } from '../src/work/run.ts';
@@ -14,11 +14,6 @@ const vercel = JSON.parse(readFileSync('vercel.json', 'utf8')) as {
   rewrites: { source: string; destination: string }[];
   headers: { source: string; headers: { key: string; value: string }[] }[];
 };
-
-afterEach(() => {
-  for (const name of ['CRON_SECRET', 'VERCEL_ENV', 'VERCEL_URL', 'VERCEL_PROJECT_PRODUCTION_URL']) delete process.env[name];
-  vi.unstubAllGlobals();
-});
 
 describe('the Vercel host', () => {
   it("gives the page Vercel's CDN serves the dashboard's own security headers", () => {
@@ -46,7 +41,7 @@ describe('the Vercel host', () => {
       work(new Request(`${url}work`, { method: 'POST', body, headers: authorization ? { authorization } : {} }));
     await expect(cron(new Request(`${url}cron`))).rejects.toThrow('CRON_SECRET');
     await expect(post('Bearer ')).rejects.toThrow('CRON_SECRET');
-    process.env['CRON_SECRET'] = 'synthetic-secret';
+    vi.stubEnv('CRON_SECRET', 'synthetic-secret');
     expect((await cron(new Request(`${url}cron`))).status).toBe(401);
     expect((await cron(new Request(`${url}cron`, { headers: { authorization: 'Bearer wrong' } }))).status).toBe(401);
     expect((await post()).status).toBe(401);
@@ -58,10 +53,10 @@ describe('the Vercel host', () => {
   });
 
   it("hands each piece only to the deployment's own api/work, which takes exactly those and refuses a stranger's copy", async () => {
-    process.env['CRON_SECRET'] = 'synthetic-secret';
-    process.env['VERCEL_ENV'] = 'production';
-    process.env['VERCEL_URL'] = 'sift-abc123.vercel.app';
-    process.env['VERCEL_PROJECT_PRODUCTION_URL'] = 'sift.example.com';
+    vi.stubEnv('CRON_SECRET', 'synthetic-secret');
+    vi.stubEnv('VERCEL_ENV', 'production');
+    vi.stubEnv('VERCEL_URL', 'sift-abc123.vercel.app');
+    vi.stubEnv('VERCEL_PROJECT_PRODUCTION_URL', 'sift.example.com');
     const sent: Request[] = [];
     vi.stubGlobal('fetch', async (input: string, init: RequestInit) => (sent.push(new Request(input, init)), new Response(null, { status: 202 })));
     const pieces: Work[] = [
@@ -78,8 +73,7 @@ describe('the Vercel host', () => {
   });
 
   it('until it is set up, says to whoever opens it every variable still missing, before opening anything', async () => {
-    const home = process.env['SIFT_HOME'];
-    process.env['SIFT_HOME'] = mkdtempSync(join(tmpdir(), 'sift-vercel-'));
+    vi.stubEnv('SIFT_HOME', mkdtempSync(join(tmpdir(), 'sift-vercel-')));
     const missing = async () => {
       const reply = await respond(new Request('https://sift.example.com/api/session'));
       expect(reply.status).toBe(503);
@@ -92,18 +86,9 @@ describe('the Vercel host', () => {
       SIFT_GOOGLE_CLIENT_SECRET: 'secret',
       SIFT_SESSION_SECRET: 'synthetic',
     };
-    const saved = process.env['CRON_SECRET'];
-    delete process.env['CRON_SECRET'];
-    try {
-      expect(await missing()).toEqual([...Object.keys(given), 'CRON_SECRET']);
-      Object.assign(process.env, given);
-      expect(await missing()).toEqual(['CRON_SECRET']);
-    } finally {
-      for (const name of Object.keys(given)) delete process.env[name];
-      if (saved !== undefined) process.env['CRON_SECRET'] = saved;
-      if (home === undefined) delete process.env['SIFT_HOME'];
-      else process.env['SIFT_HOME'] = home;
-    }
+    expect(await missing()).toEqual([...Object.keys(given), 'CRON_SECRET']);
+    for (const [name, value] of Object.entries(given)) vi.stubEnv(name, value);
+    expect(await missing()).toEqual(['CRON_SECRET']);
   });
 
   it("names no dashboard route as one of Vercel's own functions, which would answer it instead", () => {

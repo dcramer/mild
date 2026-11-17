@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, refused, test } from './sift.ts';
+import { expect, param, path, PHONE, query, refused, sideScroll, test } from './sift.ts';
 
 const WANT = 'What do you want from Sift?';
 const steps = (page: Page) => page.locator('ol > li');
@@ -52,7 +52,7 @@ test.describe('Setting up a mailbox with no labels', () => {
     await page.getByRole('button', { name: 'New mail only' }).click();
 
     await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toBeVisible();
-    expect(new URL(page.url()).pathname).toBe('/');
+    await path(page).toBe('/');
     await page.reload();
     await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toBeVisible();
 
@@ -134,22 +134,22 @@ test.describe('Setting up a mailbox with no labels', () => {
     await page.getByRole('button', { name: 'Settings' }).click();
     const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
     await expect(settings).toBeVisible();
-    expect(new URL(page.url()).searchParams.get('settings')).toBe('1');
+    await param(page, 'settings').toBe('1');
     await settings.getByRole('button', { name: 'Close' }).click();
     await expect(settings).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
     await expect(page.getByRole('heading', { name: 'Your labels', level: 1 })).toBeVisible();
     await expect(page.getByRole('checkbox', { name: 'Use Sales pitches' })).toBeChecked();
   });
 
   test('fits a phone', async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize(PHONE);
     await page.goto('/');
     await expect(page.getByText('Step 2 of 4: What you want')).toBeVisible();
     await suggest(page, 'No more sales pitches');
     await expect(page.getByText('Step 3 of 4: Your labels')).toBeVisible();
     // A string, as e2e is typed without the DOM.
-    expect(await page.evaluate('document.documentElement.scrollWidth - document.documentElement.clientWidth')).toBe(0);
+    await sideScroll(page).toBe(0);
   });
 });
 
@@ -185,7 +185,7 @@ test.describe('A model signed out after setting up', () => {
     const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
     await settings.getByRole('button', { name: 'Connect a model' }).click();
     await expect(settings).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
     await expect(page.getByRole('heading', { name: 'No model connected', level: 1 })).toBeVisible();
   });
 });

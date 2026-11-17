@@ -1,4 +1,4 @@
-import { expect, test } from './sift.ts';
+import { expect, PHONE, pointAt, sideScroll, test, tooltip } from './sift.ts';
 
 test.describe("The masthead's line", () => {
   test('says how long since Sift synced and what the model cost over 30 days, and the cost previews each window', async ({ page }) => {
@@ -9,25 +9,25 @@ test.describe("The masthead's line", () => {
     // Read out as "Synced just now"; each mailbox's own time when pointed at. Pointed at once the cost has
     // arrived, which moves it left.
     const synced = banner.getByText(/^Synced(just now|\d+ min ago)$/).filter({ visible: true });
-    await synced.hover();
-    await expect(page.getByText(/^me@example\.org: /)).toBeVisible();
+    await pointAt(synced);
+    await expect(tooltip(page)).toHaveText(/^me@example\.org: /);
     await expect(cost).toHaveAttribute('href', '/activity');
     await expect(page.getByText(/without a model/)).toHaveCount(0);
 
-    await cost.hover();
+    await pointAt(cost);
     for (const window of ['24H', '7D', '30D']) await expect(page.getByRole('term').filter({ hasText: window })).toBeVisible();
     await expect(page.getByText('Today', { exact: true })).toBeVisible();
   });
 
   test('on a phone, the bar is the name, the line and the menu, and the menu shows the costs above the account', async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize(PHONE);
     await page.goto('/');
     const banner = page.getByRole('banner');
     await expect(banner.getByRole('link', { name: /30D$/ }).filter({ visible: true })).toBeVisible();
     // The page's title says where you are, right under the bar.
     await expect(banner.getByText('For review').filter({ visible: true })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toBeVisible();
-    expect(await page.evaluate('document.documentElement.scrollWidth - document.documentElement.clientWidth')).toBe(0);
+    await sideScroll(page).toBe(0);
 
     await page.getByRole('button', { name: 'Menu' }).click();
     const menu = page.getByRole('dialog', { name: 'Menu' });

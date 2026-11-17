@@ -60,11 +60,12 @@ describe('cleaning a message for the frame', () => {
     expect(cleanHtml('<svg><style><img src=x onerror=alert(1)></style></svg>after')).toBe('after');
     expect(cleanHtml('<p title="a>b" class=c>x</p>')).toBe('<p title="a>b" class="c">x</p>');
     expect(cleanHtml('<!-- <script>alert(1)</script> -->kept')).toBe('kept');
-    // A tag that never ends is read once, not retried from every position.
-    const long = `<a ${'b'.repeat(50_000)}`;
+    // A tag that never ends is read once, not retried from every position: read again from each, this many
+    // characters would take minutes, so the budget leaves a loaded machine plenty of room.
+    const long = `<a ${'b'.repeat(200_000)}`;
     const started = performance.now();
     expect(cleanHtml(long)).toBe(long.replace('<', '&lt;'));
-    expect(performance.now() - started).toBeLessThan(500);
+    expect(performance.now() - started).toBeLessThan(2_000);
   });
 
   it('puts the message on white paper, after its doctype', () => {

@@ -6,10 +6,7 @@ const answer = (status: number, body: string, type: string) => vi.fn(async () =>
 const refusedUnsent = 'Sift cannot be reached, so nothing was changed. Try again when it is back.';
 
 describe('the dashboard client', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.useRealTimers();
-  });
+  afterEach(() => void vi.useRealTimers());
 
   it('takes a proxy answering for Sift as Sift not being there, until Sift answers', async () => {
     vi.useFakeTimers();

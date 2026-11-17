@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { chatgptPending, checkChatGPT, finishChatGPT, forgetChatGPT, startChatGPT } from '../src/app/chatgpt.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import type { SignIns } from '../src/model/credentials.ts';
@@ -17,8 +17,6 @@ function memorySignIns(): SignIns & { stored: Map<string, string> } {
     exclusive: (work) => work(),
   };
 }
-
-afterEach(() => vi.unstubAllGlobals());
 
 describe('a ChatGPT sign-in between requests', () => {
   it('is kept in the ephemeral store, and asked about once per interval by whichever request comes next', async () => {

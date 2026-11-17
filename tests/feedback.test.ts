@@ -650,7 +650,7 @@ describe('feedback endpoint', () => {
     expect(await post(answer)).toEqual({ status: 200, body: { notFixed: null } });
     expect(await raw(db).get('SELECT created_at FROM feedback')).toEqual({ created_at: 77 });
     expect(await raw(db).get('SELECT status FROM examples')).toEqual({ status: 'pending' });
-    const suggestions = (await (await fetch(`http://localhost:${port}/api/suggestions`)).json()) as { waiting: number; accuracy: unknown };
+    const suggestions = (await (await fetch(`http://127.0.0.1:${port}/api/suggestions`)).json()) as { waiting: number; accuracy: unknown };
     expect(suggestions).toMatchObject({ waiting: 0, accuracy: { reviewed: 1, right: 1 } });
     expect((suggestions as unknown as { labels: Record<string, { id: string }[]> }).labels[ACCOUNT]?.map((l) => l.id)).toContain('newsletter');
   });
@@ -688,6 +688,6 @@ describe('feedback endpoint', () => {
     expect((await post({ ...answer, label: undefined, disposition: 'archive' })).status).toBe(400);
     expect((await post({ ...answer, filler: 'x'.repeat(20_000) })).status).toBe(400);
     expect((await post({ ...answer, sender: 'nobody@example.com' })).status).toBe(409);
-    expect((await fetch(`http://localhost:${port}/api/summary`, { method: 'POST' })).status).toBe(405);
+    expect((await fetch(`http://127.0.0.1:${port}/api/summary`, { method: 'POST' })).status).toBe(405);
   });
 });

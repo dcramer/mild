@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, test } from './sift.ts';
+import { expect, param, path, query, test } from './sift.ts';
 
 const settings = (page: Page) => page.getByRole('dialog', { name: 'Settings' });
 
@@ -28,7 +28,7 @@ test.describe('Removing a mailbox', () => {
     const only = settings(page).getByRole('button', { name: 'Remove me@example.org' });
     await expect(only).toBeDisabled();
     await expect(only).toHaveAccessibleDescription('You cannot delete your only remaining mailbox.');
-    expect(new URL(page.url()).searchParams.get('settings')).toBe('1');
+    await param(page, 'settings').toBe('1');
   });
 
   test('Cancel, or Escape, closes only the confirm, and the mailbox stays', async ({ page }) => {
@@ -45,7 +45,7 @@ test.describe('Removing a mailbox', () => {
     await page.keyboard.press('Escape');
     await expect(confirm).toHaveCount(0);
     await expect(settings(page).getByRole('button', { name: 'Remove me@work.example.org' })).toBeEnabled();
-    expect(new URL(page.url()).searchParams.get('settings')).toBe('1');
+    await param(page, 'settings').toBe('1');
   });
 
   test('removing the one signed in as signs out', async ({ page }) => {
@@ -65,7 +65,7 @@ test.describe('Connecting another mailbox', () => {
     await expect(settings(page).getByText('bravo@example.net is already connected to Sift by someone else.')).toBeVisible();
     await settings(page).getByRole('button', { name: 'Close' }).click();
     await expect(settings(page)).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
   });
 });
 
@@ -97,11 +97,11 @@ test.describe('Settings', () => {
     await page.getByRole('button', { name: 'Account, me@example.org' }).click();
     await page.getByRole('menuitem', { name: 'Settings' }).click();
     await expect(settings(page)).toBeVisible();
-    expect(new URL(page.url()).searchParams.get('settings')).toBe('1');
+    await param(page, 'settings').toBe('1');
     await settings(page).getByRole('button', { name: 'Close' }).click();
     await expect(settings(page)).toHaveCount(0);
-    expect(new URL(page.url()).pathname).toBe('/activity');
-    expect(new URL(page.url()).search).toBe('');
+    await path(page).toBe('/activity');
+    await query(page).toBe('');
   });
 });
 

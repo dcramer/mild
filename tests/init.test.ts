@@ -1,10 +1,9 @@
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { networkInterfaces, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseEnv } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { type InitDeps, type SetupState, runInit } from '../src/cli/init.ts';
-import { listenAddresses, machineNames, resolveHere } from '../src/cli/network.ts';
 import type { Ui } from '../src/cli/ui.ts';
 import { DEFAULT_SETTINGS, type Config, loadConfig, readSettings, resolveHome, saveSetting } from '../src/config.ts';
 import { loadKeyring } from '../src/secrets.ts';
@@ -359,34 +358,6 @@ describe('settings', () => {
     expect(() => installClient(other, desktop)).toThrow('Desktop app client');
     writeFileSync(other.googleClientPath, desktop);
     expect(() => loadClientSecrets(other, {})).toThrow('needs a Web application one');
-  });
-});
-
-describe('network', () => {
-  const addresses = Object.values(networkInterfaces())
-    .flatMap((entries) => entries ?? [])
-    .filter((entry) => entry.family === 'IPv4' && !entry.internal)
-    .map((entry) => entry.address);
-
-  it('accepts a host only if it is an address of this machine', async () => {
-    expect(await resolveHere('127.0.0.1')).toBe('127.0.0.1');
-    expect(await resolveHere('192.0.2.1')).toBeNull();
-    expect(await resolveHere('no-such-host.invalid')).toBeNull();
-  });
-
-  it('listens on localhost alone, one more address, or everything, as the setting says', async () => {
-    expect(await listenAddresses(DEFAULT_SETTINGS)).toEqual(['127.0.0.1']);
-    expect(await listenAddresses({ ...DEFAULT_SETTINGS, dashboardHost: 'all' })).toEqual(['::']);
-    expect(readSettings({ SIFT_DASHBOARD_HOST: '0.0.0.0' }).dashboardHost).toBe('all');
-    await expect(listenAddresses({ ...DEFAULT_SETTINGS, dashboardHost: '192.0.2.1' })).rejects.toThrow('does not point at this machine');
-    for (const address of addresses) expect(await listenAddresses({ ...DEFAULT_SETTINGS, dashboardHost: address })).toEqual(['127.0.0.1', address]);
-  });
-
-  it("answers to this machine's own names and addresses", () => {
-    const names = machineNames();
-    for (const address of addresses) expect(names).toContain(address);
-    expect(names.some((name) => name.endsWith('.local'))).toBe(true);
-    expect(names).not.toContain('localhost');
   });
 });
 

@@ -1,9 +1,8 @@
 import type { Page } from '@playwright/test';
-import { choose, expect, panel, row, test } from './sift.ts';
+import { boxOf, choose, expect, panel, param, query, row, test } from './sift.ts';
 
 /** For review's rows: the header row has no answer. */
 const rows = (page: Page) => page.getByRole('row').filter({ has: page.getByRole('combobox', { name: 'What this message is' }) });
-const param = (page: Page, name: string) => new URL(page.url()).searchParams.get(name);
 const heading = (page: Page, subject: string) => panel(page).getByRole('heading', { name: subject, level: 2 });
 
 test.describe('For review, narrowed', () => {
@@ -14,7 +13,7 @@ test.describe('For review, narrowed', () => {
 
     await search.fill('Ada');
     await expect(rows(page)).toHaveCount(2);
-    expect(param(page, 'q')).toBe('Ada');
+    await param(page, 'q').toBe('Ada');
     await search.fill('db-');
     await expect(rows(page)).toHaveCount(2);
     await expect(row(page, 'Replica lag on db-3')).toBeVisible();
@@ -45,7 +44,7 @@ test.describe('For review, narrowed', () => {
     await expect(filters).toHaveCount(0);
     await page.getByRole('list', { name: 'Filters that are on' }).getByRole('button', { name: 'Clear Then: Archive' }).click();
     await expect(rows(page)).toHaveCount(9);
-    expect(param(page, 'does')).toBeNull();
+    await param(page, 'does').toBeNull();
   });
 
   test('a narrowed list stays narrowed through a reload', async ({ page }) => {
@@ -93,7 +92,7 @@ test.describe('Working through For review', () => {
     await expect(heading(page, 'Disk 91% full on db-2')).toBeVisible();
     await open.getByRole('button', { name: 'Previous' }).click();
     await expect(heading(page, 'Replica lag on db-3')).toBeVisible();
-    expect(param(page, 'message')).toBe('m10');
+    await param(page, 'message').toBe('m10');
   });
 
   test('Escape after stepping closes the panel and leaves no message in the address', async ({ page }) => {
@@ -106,7 +105,7 @@ test.describe('Working through For review', () => {
 
     await page.keyboard.press('Escape');
     await expect(open).toHaveCount(0);
-    await expect.poll(() => new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
     // The keys are the list's again, and no panel comes back.
     await page.keyboard.press('j');
     await expect(rows(page).and(page.locator(':focus'))).toHaveCount(1);
@@ -143,7 +142,7 @@ test.describe('Working through For review', () => {
 
   test('a row pressed while the panel is still sliding away opens', async ({ page }) => {
     await page.goto('/');
-    const disk = (await page.getByRole('cell', { name: 'Disk 91% full on db-2' }).boundingBox())!;
+    const disk = await boxOf(page.getByRole('cell', { name: 'Disk 91% full on db-2' }));
     await page.getByRole('cell', { name: 'Replica lag on db-3' }).click();
     await expect(heading(page, 'Replica lag on db-3')).toBeVisible();
     await page.keyboard.press('Escape');
@@ -153,7 +152,7 @@ test.describe('Working through For review', () => {
     // Closing it goes back to the list, not to the message closed before.
     await page.keyboard.press('Escape');
     await expect(panel(page)).toHaveCount(0);
-    await expect.poll(() => new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
   });
 
   test('the panel steps through a folded row’s messages together, as the list shows them', async ({ page }) => {
@@ -173,12 +172,12 @@ test.describe('Working through For review', () => {
     await expect(panel(page).getByText('2 of 2')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(panel(page)).toHaveCount(0);
-    await expect.poll(() => new URL(page.url()).search).toBe('?q=Ada');
+    await query(page).toBe('?q=Ada');
 
     await page.goto('/?q=Ada&message=m6&account=me%40example.org');
     await panel(page).getByRole('button', { name: 'Close' }).click();
     await expect(panel(page)).toHaveCount(0);
-    await expect.poll(() => new URL(page.url()).search).toBe('?q=Ada');
+    await query(page).toBe('?q=Ada');
     await expect(rows(page)).toHaveCount(2);
   });
 
@@ -189,11 +188,11 @@ test.describe('Working through For review', () => {
     await expect(heading(page, 'Notes from the review')).toBeVisible();
     await open.getByRole('button', { name: 'Close' }).click();
     await expect(open).toHaveCount(0);
-    await expect.poll(() => new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
 
     await page.goBack();
     await expect(panel(page)).toHaveCount(0);
-    expect(param(page, 'message')).toBeNull();
+    await param(page, 'message').toBeNull();
   });
 
   test('Back closes the panel', async ({ page }) => {
@@ -202,7 +201,7 @@ test.describe('Working through For review', () => {
     await expect(heading(page, 'Notes from the review')).toBeVisible();
     await page.goBack();
     await expect(panel(page)).toHaveCount(0);
-    await expect.poll(() => new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
     await expect(row(page, 'Notes from the review')).toBeVisible();
   });
 
@@ -227,6 +226,6 @@ test.describe('Working through For review', () => {
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await expect(heading(page, 'Notes from the review')).toBeVisible();
-    expect(param(page, 'message')).toBe('m7');
+    await param(page, 'message').toBe('m7');
   });
 });

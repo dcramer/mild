@@ -1,4 +1,4 @@
-import { choose, expect, panel, row, test } from './sift.ts';
+import { choose, expect, panel, query, row, test } from './sift.ts';
 
 test.describe('For review', () => {
   test('adding a label from a row opens only the dialog, and leaves the page as it was', async ({ page }) => {
@@ -14,7 +14,7 @@ test.describe('For review', () => {
     await manual.getByRole('button', { name: 'Add label', exact: true }).click();
     await expect(manual).toHaveCount(0);
     await expect(panel(page)).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
 
     // The new label is a choice at once.
     await choose(row(page, 'Notes from the review'), 'Field trips');
@@ -28,6 +28,6 @@ test.describe('For review', () => {
     await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(dialog).toHaveCount(0);
     await expect(panel(page)).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
   });
 });

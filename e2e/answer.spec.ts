@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { choose, expect, panel, row, test } from './sift.ts';
+import { choose, expect, panel, param, query, row, test } from './sift.ts';
 
 /** The masthead's link to For review, whose name ends in how many messages wait. */
 const waitingLink = (page: Page) => page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: /^For review/ });
@@ -24,7 +24,7 @@ test.describe('Answering mail', () => {
     await expect(row(page, 'Winter sale starts now')).toHaveCount(0);
     await expect(waitingLink(page)).toHaveAccessibleName('For review 11');
     await expect(panel(page)).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
 
     expect(await ruleCount(page)).toBe(rules);
     await expect(page.getByRole('main')).not.toContainText('sale@store.example.com');
@@ -55,13 +55,12 @@ test.describe('Answering mail', () => {
     await expect(row(page, '2 messages')).toBeVisible();
   });
 
-  // Deals (m4), the recipe's last row, is left out: its HTML's blocked image and script are console errors to the fixture.
   test('answering in the panel saves the label, and the last one closes the panel', async ({ page }) => {
     await page.goto('/?q=Lunch');
     await page.getByRole('cell', { name: 'Lunch on Thursday?' }).click();
     const open = panel(page);
     await expect(open.getByRole('heading', { name: 'Lunch on Thursday?', level: 2 })).toBeVisible();
-    expect(new URL(page.url()).searchParams.get('message')).toBe('m6');
+    await param(page, 'message').toBe('m6');
     await expect(open.getByRole('combobox', { name: 'What this message is' })).toHaveText('Unlabelled');
     await expect(open.getByRole('button', { name: 'Choose what it is first' })).toBeDisabled();
 
@@ -69,7 +68,7 @@ test.describe('Answering mail', () => {
     await open.getByRole('button', { name: 'Save: Marketing' }).click();
     await expect(toast(page, 'Archive as Marketing')).toBeVisible();
     await expect(open).toHaveCount(0);
-    await expect.poll(() => new URL(page.url()).searchParams.get('message')).toBeNull();
+    await param(page, 'message').toBeNull();
     await expect(page.getByText('Nothing waiting matches.')).toBeVisible();
     await expect(waitingLink(page)).toHaveAccessibleName('For review 11');
   });
@@ -121,7 +120,7 @@ test.describe('Answering mail', () => {
     await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
     await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
     await expect(open.getByRole('heading', { name: 'Re: Fix the release script (#412)', level: 2 })).toBeVisible();
-    expect(new URL(page.url()).searchParams.get('message')).toBe('m21');
+    await param(page, 'message').toBe('m21');
   });
 
   test('“Same for 1 more” after the panel closed leaves a panel opened since open', async ({ page }) => {
@@ -137,7 +136,7 @@ test.describe('Answering mail', () => {
     await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
     await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
     await expect(panel(page).getByRole('heading', { name: 'Notes from the review', level: 2 })).toBeVisible();
-    expect(new URL(page.url()).searchParams.get('message')).toBe('m7');
+    await param(page, 'message').toBe('m7');
   });
 
   test('“Same for 1 more” in the panel takes the message off the list behind it', async ({ page }) => {
@@ -179,17 +178,17 @@ test.describe('A rule from For review', () => {
     await expect(dialog.getByRole('textbox', { name: 'What should it do?' })).toHaveValue('Mail from ada@example.org: ');
     await dialog.getByRole('button', { name: 'Write it yourself' }).click();
     await expect(dialog.getByRole('textbox', { name: 'Value 1' })).toHaveValue('ada@example.org');
-    expect(new URL(page.url()).searchParams.get('message')).toBe('m6');
+    await param(page, 'message').toBe('m6');
 
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await expect(open.getByRole('heading', { name: 'Lunch on Thursday?', level: 2 })).toBeVisible();
-    expect(new URL(page.url()).searchParams.get('message')).toBe('m6');
+    await param(page, 'message').toBe('m6');
 
     // The panel has the keys again: the next Escape closes it.
     await page.keyboard.press('Escape');
     await expect(open).toHaveCount(0);
-    await expect.poll(() => new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
     await expect(row(page, 'Lunch on Thursday?')).toBeVisible();
   });
 
@@ -206,7 +205,7 @@ test.describe('A rule from For review', () => {
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await expect(open.getByRole('heading', { name: 'Notes from the review', level: 2 })).toBeVisible();
-    expect(new URL(page.url()).searchParams.get('message')).toBe('m7');
+    await param(page, 'message').toBe('m7');
   });
 
   test('closing the rule dialog over the panel leaves the panel on the same message', async ({ page }) => {
@@ -221,7 +220,7 @@ test.describe('A rule from For review', () => {
     await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(dialog).toHaveCount(0);
     await expect(open.getByRole('heading', { name: 'Winter sale starts now', level: 2 })).toBeVisible();
-    expect(new URL(page.url()).searchParams.get('message')).toBe('m8');
+    await param(page, 'message').toBe('m8');
   });
 
   test('the proposal’s “Make a rule…” opens only the rule dialog, and closing it keeps the proposal', async ({ page }) => {
@@ -240,7 +239,7 @@ test.describe('A rule from For review', () => {
     await expect(dialog).toHaveCount(0);
     await expect(proposal).toBeVisible();
     await expect(panel(page)).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await query(page).toBe('');
   });
 
   test('dismissing the proposal removes it and makes no rule', async ({ page }) => {

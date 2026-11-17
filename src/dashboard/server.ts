@@ -9,30 +9,18 @@ import { Refusal } from '../refusal.ts';
 import { identify, httpStatus, reportError, traced } from '../telemetry.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { type Scope, narrow, scopeFor, sees } from './scope.ts';
+import { FRAME_POLICY, PAGE_POLICY } from './policy.ts';
 
 /** Sent with everything the page loads, its own files included. */
 export const HEADERS = {
-  // Subjects and sender names are untrusted. The page only ever renders them as text, and this is the backstop:
-  // no inline script, no inline style element, nothing loaded from another origin. `manifest-src` and
-  // `worker-src` let the page be installed as an app with its own service worker; both are files of this
-  // server's. (`worker-src` would fall back to `script-src` in most browsers, but not in older Safari.)
-  // `frame-src` is for a message shown as its HTML, which comes from this server's own frame route.
-  'content-security-policy':
-    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  'content-security-policy': PAGE_POLICY,
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'no-referrer',
 };
 
-/**
- * A message's own HTML, in a frame on the page (`FRAMES`). Nothing in it runs (`sandbox` without
- * `allow-scripts`), it has no origin of its own to reach the dashboard's data from (no `allow-same-origin`),
- * and it loads nothing from anywhere, this server included: no image, font, stylesheet or tracking pixel.
- * Its own inline styles are all it may have. Links open in a new tab, which is not sandboxed so the site
- * linked to works, and learns nothing of where it was opened from.
- */
+/** A message's own HTML, in a frame on the page (`FRAMES`). A link it opens learns nothing of where it was opened from. */
 const FRAME_HEADERS = {
-  'content-security-policy':
-    "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox allow-popups allow-popups-to-escape-sandbox",
+  'content-security-policy': FRAME_POLICY,
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'no-referrer',
   // A link's host would otherwise be looked up ahead of a click, which tells its DNS the message was opened.

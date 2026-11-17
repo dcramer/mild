@@ -8,5 +8,5 @@ export default read({
   path: '/api/rules/usage',
   query: z.object({ id: ruleId }),
   reply: RuleUsage,
-  run: async ({ db }, scope, { id }) => ok(await ruleUsage(db, scope, id)),
+  run: async ({ db, now }, scope, { id }) => ok(await ruleUsage(db, scope, id, now())),
 });
