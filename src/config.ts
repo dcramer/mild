@@ -59,6 +59,9 @@ const ENVIRONMENT = {
 } as const satisfies Record<string, keyof Settings>;
 export type Variable = keyof typeof ENVIRONMENT;
 
+/** Environment variables, as `process.env` holds them or a test gives them. */
+export type Env = Record<string, string | undefined>;
+
 export const DEFAULT_SETTINGS: Settings = { dashboardPort: 8787 };
 
 /**
@@ -90,12 +93,12 @@ export interface Config {
  * Where the home is: `--home` or SIFT_HOME if given (containers use this), otherwise
  * `$XDG_CONFIG_HOME/sift`, which is `~/.config/sift` by default.
  */
-export function resolveHome(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveHome(env: Env = process.env): string {
   if (env['SIFT_HOME']) return resolve(env['SIFT_HOME']);
   return join(env['XDG_CONFIG_HOME'] || join(homedir(), '.config'), 'sift');
 }
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+export function loadConfig(env: Env = process.env): Config {
   const home = resolveHome(env);
   mkdirSync(home, { recursive: true, mode: 0o700 });
   const settings = readSettings(env);
@@ -136,7 +139,7 @@ export function secretPaths(config: Config): string[] {
 }
 
 /** The settings the environment gives, each checked: a wrong value is an error that names its variable. */
-export function readSettings(env: NodeJS.ProcessEnv): Settings {
+export function readSettings(env: Env): Settings {
   const settings: Settings = { ...DEFAULT_SETTINGS };
   const bad = (variable: Variable, expected: string) => new Error(`${variable} must be ${expected}.`);
   for (const variable of Object.keys(ENVIRONMENT) as Variable[]) {
@@ -189,7 +192,7 @@ export function saveSetting(config: Config, variable: Variable, value: string | 
   const kept = before.filter((line) => line !== '' && !line.startsWith(`${variable}=`));
   writeFileSync(config.envPath, [...kept, ...(value === undefined ? [] : [`${variable}=${value}`])].map((line) => `${line}\n`).join(''), { mode: 0o600 });
   chmodSync(config.envPath, 0o600);
-  const given: NodeJS.ProcessEnv = {};
+  const given: Env = {};
   for (const name of Object.keys(ENVIRONMENT) as Variable[]) {
     const current = settingText(config.settings, name);
     if (current !== undefined) given[name] = current;

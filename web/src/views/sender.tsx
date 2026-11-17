@@ -205,7 +205,7 @@ function Names({ data, onStart }: { data: SenderPage; onStart: (s: RuleStart) =>
             </Td>
             <RowActions phone="keep">
               {n.name === null ? null : (
-                <Button variant="quiet" onClick={() => onStart(nameStart(data.profile.address, n.name!, n.labels[0]?.id ?? null))}>
+                <Button variant="quiet" onClick={() => n.name !== null && onStart(nameStart(data.profile.address, n.name, n.labels[0]?.id ?? null))}>
                   Make a rule…
                 </Button>
               )}

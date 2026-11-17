@@ -99,7 +99,7 @@
       }
     },
     {
-      "files": ["web/src/**/*.ts", "web/src/**/*.tsx"],
+      "files": ["web/src/**/*.ts", "web/src/**/*.tsx", "app/**/*.tsx"],
       "plugins": ["typescript", "unicorn", "oxc", "import", "react"],
       "env": { "browser": true },
       "rules": { "react/react-in-jsx-scope": "off" }
@@ -220,5 +220,5 @@
       }
     }
   ],
-  "ignorePatterns": ["node_modules/**", "web/dist/**"]
+  "ignorePatterns": ["node_modules/**", ".next/**", "next-env.d.ts"]
 }

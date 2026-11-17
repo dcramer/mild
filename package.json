@@ -10,32 +10,44 @@
   "scripts": {
     "prepare": "simple-git-hooks",
     "sift": "node --disable-warning=ExperimentalWarning src/cli/main.ts",
-    "typecheck": "tsc --noEmit && pnpm --filter sift-web typecheck",
+    "typecheck": "tsc --noEmit && next typegen && tsc --noEmit -p tsconfig.web.json",
     "lint": "oxlint",
-    "format": "oxlint --fix && oxfmt src tests web/src web/vite.config.ts vitest.config.ts playwright.config.ts e2e .claude/skills/verify-sift/scripts",
-    "format:check": "oxfmt --check src tests web/src web/vite.config.ts vitest.config.ts playwright.config.ts e2e .claude/skills/verify-sift/scripts",
+    "format": "oxlint --fix && oxfmt src tests web/src app proxy.ts next.config.js vitest.config.ts playwright.config.ts e2e .claude/skills/verify-sift/scripts",
+    "format:check": "oxfmt --check src tests web/src app proxy.ts next.config.js vitest.config.ts playwright.config.ts e2e .claude/skills/verify-sift/scripts",
     "test": "vitest run",
     "e2e": "playwright test",
     "knip": "knip",
     "check:fast": "pnpm typecheck && pnpm lint && pnpm knip && pnpm format:check",
     "check": "pnpm check:fast && pnpm test && pnpm e2e",
-    "build:web": "pnpm --filter sift-web build",
+    "build:web": "NEXT_TELEMETRY_DISABLED=1 next build",
     "start": "pnpm sift run",
     "dev": "pnpm sift dev",
     "db:generate": "drizzle-kit generate",
     "db:reset": "pnpm sift reset-db"
   },
   "devDependencies": {
+    "@base-ui/react": "^1.9.0",
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@fontsource-variable/hanken-grotesk": "^5.3.0",
+    "@fontsource-variable/karla": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
     "@playwright/test": "^1.65.1",
+    "@tailwindcss/postcss": "^4",
+    "@tanstack/react-query": "^5.107.1",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.23.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "cn": "^0.5.2",
     "drizzle-kit": "0.31.11",
     "knip": "^6.45.1",
     "lint-staged": "^17.6.1",
+    "lucide-react": "^1.73.0",
     "oxfmt": "^0.75.0",
     "oxlint": "^1.90.0",
     "oxlint-tsgolint": "^7.0.2005",
     "simple-git-hooks": "^2.14.0",
+    "tailwindcss": "^4",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
   },
@@ -51,8 +63,11 @@
     "@vercel/functions": "^3.11.3",
     "drizzle-orm": "0.45.4",
     "google-auth-library": "^11.3.4",
+    "next": "16.4.6",
     "pg": "8.23.1",
     "picocolors": "^1.1.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "redis": "^5.12.2",
     "zod": "^4.6.7"
   },
@@ -60,11 +75,15 @@
     "pre-commit": "pnpm exec lint-staged && pnpm knip"
   },
   "lint-staged": {
-    "{src,tests,e2e,web/src,.claude/skills/verify-sift/scripts}/**/*.{ts,tsx}": [
+    "{src,tests,e2e,app,web/src,.claude/skills/verify-sift/scripts}/**/*.{ts,tsx}": [
       "oxlint --fix",
       "oxfmt"
     ],
-    "{web/vite,vitest,playwright}.config.ts": [
+    "{proxy,vitest.config,playwright.config}.ts": [
+      "oxlint --fix",
+      "oxfmt"
+    ],
+    "next.config.js": [
       "oxlint --fix",
       "oxfmt"
     ]

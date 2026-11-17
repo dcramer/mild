@@ -1,5 +1,6 @@
 import { readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { PGlite, type PGliteInterface } from '@electric-sql/pglite';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { drizzle as overPg } from 'drizzle-orm/node-postgres';
@@ -9,7 +10,8 @@ import { migrate as migratePglite } from 'drizzle-orm/pglite/migrator';
 import { Pool, types } from 'pg';
 import type { Driver } from './sql.ts';
 
-export const MIGRATIONS = fileURLToPath(new URL('./migrations/', import.meta.url));
+// Not `new URL('./migrations/', import.meta.url)`: Next.js's bundler takes that for one file to bundle.
+export const MIGRATIONS = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
 
 /** Postgres sends 64-bit integers and `numeric` (what `sum()` of one gives) as text; sift's are small enough for a number. */
 const { INT8, NUMERIC } = types.builtins;

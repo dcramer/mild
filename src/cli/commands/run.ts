@@ -67,7 +67,7 @@ export async function run(args: string[]): Promise<void> {
 
     // One process keeps sift online: the same one that classifies mail serves the dashboard.
     const stopDashboard = values['no-dashboard']
-      ? () => {}
+      ? async () => {}
       : await serveDashboard(config, sift, { port, ...(values.dev ? { dev: true } : {}), ...(values.host ? { host: values.host } : {}) });
     ui.blank();
     const stop = new AbortController();
@@ -80,7 +80,7 @@ export async function run(args: string[]): Promise<void> {
         await sleep(INTERVAL_MS, undefined, { signal: stop.signal }).catch(() => {});
       }
     } finally {
-      stopDashboard();
+      await stopDashboard();
       await Promise.all(running);
     }
   } finally {

@@ -10,7 +10,6 @@ import type { Sql } from '../store/sql.ts';
 import type { Store } from '../store/store.ts';
 import { buildControls, gmailFor, openModelTier } from './controls.ts';
 import { buildSignIn } from './google-sign-in.ts';
-import { site } from './site.ts';
 import { logged } from '../telemetry.ts';
 
 /** What a host gives sift: `sift run` on a machine, or a function on Vercel (docs/runtime.md). */
@@ -24,8 +23,6 @@ export interface Host {
   allowedHosts: readonly string[];
   /** Addresses Google can sign someone in at, suggested when the dashboard is opened at one it cannot. */
   signInAddresses: readonly string[];
-  /** The built page (`web/dist`), when sift serves it; absent where the host does (Vercel's CDN). */
-  pageDir?: string;
   log: (line: string) => void;
   /**
    * Gets what is due for these people (or everyone) done, without the caller waiting: `sift run` in this
@@ -37,7 +34,7 @@ export interface Host {
 }
 
 export interface Sift {
-  /** Any request to the site: the page, the API, sign-in. */
+  /** A request to the API or sign-in. The page is Next.js's (`app/`). */
   respond: (request: Request) => Promise<Response>;
   /** What is due, for these people or everyone. */
   due: (people?: readonly number[]) => Promise<Work[]>;
@@ -107,7 +104,7 @@ export async function createSift(host: Host): Promise<Sift> {
     log,
   });
   sift = {
-    respond: host.pageDir ? site(dashboard, host.pageDir) : dashboard.handle,
+    respond: dashboard.handle,
     due: (who) => dueWork(store, options, who),
     work: (piece) => runWork(store, piece, options, Date.now() + host.limitMs),
     tick: (who) => tick(store, options, host.limitMs, who),

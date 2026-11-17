@@ -21,3 +21,6 @@ setup.json
 
 # What the Vercel CLI keeps when a checkout is linked to a project.
 .vercel/
+.next
+next-env.d.ts
+/.swc

@@ -128,7 +128,7 @@ export function SeenFacts({ detail, onRule }: { detail: MessageDetail; onRule: (
               </Td>
               <RowActions phone="keep">
                 {s.rule ? (
-                  <Button variant="quiet" onClick={() => onRule(s.rule!)} aria-label={`Make a rule for mail that ${s.words.toLowerCase()}`}>
+                  <Button variant="quiet" onClick={() => s.rule && onRule(s.rule)} aria-label={`Make a rule for mail that ${s.words.toLowerCase()}`}>
                     Rule…
                   </Button>
                 ) : null}

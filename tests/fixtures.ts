@@ -1,12 +1,10 @@
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { request } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { beforeEach, inject, onTestFinished } from 'vitest';
 import { dashboardListener } from '../src/cli/host.ts';
-import { site } from '../src/app/site.ts';
 import { type DashboardOptions, createDashboard } from '../src/dashboard/server.ts';
 import type { People } from '../src/store/people.ts';
 import { PARSERS, pglite } from '../src/store/db.ts';
@@ -21,7 +19,7 @@ import { rememberCorrespondent } from '../src/store/senders.ts';
 import { conditionsHash } from '../src/store/content.ts';
 import { finishRun, startRun } from '../src/store/runs.ts';
 import type { Usage } from '../src/triage/stages/model.ts';
-import { ACCOUNT, tempDir, withSampleLabels } from './helpers.ts';
+import { ACCOUNT, withSampleLabels } from './helpers.ts';
 
 /*
  * One database per test file, loaded from the image global-setup.ts migrated once for the whole run,
@@ -132,14 +130,6 @@ export async function openUserDb(...accounts: string[]): Promise<Sql> {
   return (await onePerson(...accounts)).db;
 }
 
-/** A stand-in for the built web app: `files` by path, and a page unless they give one. */
-export function builtAssets(files: Record<string, string> = {}): string {
-  const dir = tempDir();
-  mkdirSync(join(dir, 'assets'));
-  for (const [path, text] of Object.entries({ 'index.html': '<!doctype html>page', ...files })) writeFileSync(join(dir, path), text);
-  return dir;
-}
-
 type Dashboard = Awaited<ReturnType<typeof startDashboard>>;
 
 export type Reply = { status: number; text: string; body: Record<string, unknown>; headers: Record<string, string | string[] | undefined> };
@@ -149,10 +139,9 @@ export type Reply = { status: number; text: string; body: Record<string, unknown
  * a write carries the page's own origin and header unless `headers` says otherwise. A string body is
  * sent as it is.
  */
-export async function startDashboard(people: People, options: DashboardOptions & { assetsDir?: string; dev?: boolean } = {}) {
-  const { assetsDir = builtAssets(), dev = false, ...rest } = options;
-  const dashboard = createDashboard(people, { now: () => 77, ephemeral: memoryEphemeral(), ...rest });
-  const server = dashboardListener(site(dashboard, assetsDir), { dev, pageDir: assetsDir });
+export async function startDashboard(people: People, options: DashboardOptions = {}) {
+  const dashboard = createDashboard(people, { now: () => 77, ephemeral: memoryEphemeral(), ...options });
+  const server = dashboardListener(dashboard.handle);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   onTestFinished(() => void server.close());
   const port = (server.address() as AddressInfo).port;

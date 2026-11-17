@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { CodeChallengeMethod, OAuth2Client } from 'google-auth-library';
-import type { Config } from '../config.ts';
+import type { Config, Env } from '../config.ts';
 import { readSecret, writeSecret } from '../secrets.ts';
 import { readProfile } from './api.ts';
 import { GMAIL_SCOPES } from './scopes.ts';
@@ -11,7 +11,7 @@ interface ClientSecrets {
 }
 
 /** True if the user's Google OAuth client is available, from the home directory or the environment. */
-export function hasClientSecrets(config: Config, env: NodeJS.ProcessEnv = process.env): boolean {
+export function hasClientSecrets(config: Config, env: Env = process.env): boolean {
   return Boolean(env['SIFT_GOOGLE_CLIENT_ID'] && env['SIFT_GOOGLE_CLIENT_SECRET']) || existsSync(config.googleClientPath);
 }
 
@@ -45,7 +45,7 @@ function parseClientFile(text: string, path: string): ClientSecrets {
  * Cloud Console downloads; `sift init` puts it there). SIFT_GOOGLE_CLIENT_ID and
  * SIFT_GOOGLE_CLIENT_SECRET override it when both are set.
  */
-export function loadClientSecrets(config: Config, env: NodeJS.ProcessEnv = process.env): ClientSecrets {
+export function loadClientSecrets(config: Config, env: Env = process.env): ClientSecrets {
   const clientId = env['SIFT_GOOGLE_CLIENT_ID'];
   const clientSecret = env['SIFT_GOOGLE_CLIENT_SECRET'];
   if (clientId && clientSecret) return { clientId, clientSecret };

@@ -9,14 +9,7 @@ import { Refusal } from '../refusal.ts';
 import { identify, httpStatus, reportError, traced } from '../telemetry.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { type Scope, narrow, scopeFor, sees } from './scope.ts';
-import { FRAME_POLICY, PAGE_POLICY } from './policy.ts';
-
-/** Sent with everything the page loads, its own files included. */
-export const HEADERS = {
-  'content-security-policy': PAGE_POLICY,
-  'x-content-type-options': 'nosniff',
-  'referrer-policy': 'no-referrer',
-};
+import { FRAME_POLICY, HEADERS } from './policy.ts';
 
 /** A message's own HTML, in a frame on the page (`FRAMES`). A link it opens learns nothing of where it was opened from. */
 const FRAME_HEADERS = {

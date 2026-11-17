@@ -14,7 +14,7 @@ const BUILT = new Set(
 /** Repository paths a document names: a code span that is one path from the root, or a relative link. */
 function named(file: string): string[] {
   const text = readFileSync(file, 'utf8');
-  const spans = [...text.matchAll(/`((?:src|web|tests|docs|api|\.claude)\/[\w./-]*)`/g)].map((m) => m[1]!.replace(/:\d+$/, ''));
+  const spans = [...text.matchAll(/`((?:src|web|app|public|tests|docs|\.claude)\/[\w./-]*)`/g)].map((m) => m[1]!.replace(/:\d+$/, ''));
   const links = [...text.matchAll(/\]\(([^)\s#]+)(?:#[^)]*)?\)/g)]
     .map((m) => m[1]!)
     .filter((target) => !/^[a-z]+:/.test(target))

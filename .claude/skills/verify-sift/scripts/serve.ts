@@ -20,8 +20,6 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { removeRuleFilter, writeRuleFilter } from '../../../../src/actions/rule-filters.ts';
 import { nodeHost, serveDashboard } from '../../../../src/cli/host.ts';
-import { WEB_DIST } from '../../../../src/cli/web-build.ts';
-import { site } from '../../../../src/app/site.ts';
 import { ui } from '../../../../src/cli/ui.ts';
 import { loadConfig } from '../../../../src/config.ts';
 import { memoryEphemeral } from '../../../../src/ephemeral/ephemeral.ts';
@@ -137,18 +135,15 @@ const controls = {
 
 // What createSift puts together for a host with no `start`.
 const sift = {
-  respond: site(
-    createDashboard(people(store), {
-      allowedHosts: host.allowedHosts,
-      signInAddresses: host.signInAddresses,
-      ...(config.settings.cloud ? { cloud: true } : {}),
-      controls,
-      signIn: buildSignIn(config, store),
-      sessionSecret: host.sessionSecret,
-      ephemeral,
-    }),
-    WEB_DIST,
-  ),
+  respond: createDashboard(people(store), {
+    allowedHosts: host.allowedHosts,
+    signInAddresses: host.signInAddresses,
+    ...(config.settings.cloud ? { cloud: true } : {}),
+    controls,
+    signIn: buildSignIn(config, store),
+    sessionSecret: host.sessionSecret,
+    ephemeral,
+  }).handle,
 };
 const stop = await serveDashboard(config, sift, { port: Number(port) });
 ui.info('Only the dashboard is running. `sift run` also reads and classifies mail.');
@@ -156,5 +151,5 @@ await new Promise<void>((done) => {
   process.once('SIGINT', done);
   process.once('SIGTERM', done);
 });
-stop();
+await stop();
 await store.close();
