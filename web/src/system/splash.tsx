@@ -4,6 +4,7 @@ import { TextLink, Wordmark } from './type.tsx';
 /**
  * The first page of someone not signed in: the name, one line set as large as anything gets, then a
  * sentence and the one action. No sheet: it is the whole page. The terms, privacy and source at its foot.
+ * On a phone all but the name sits at the bottom, so the action is under the thumb.
  */
 export function Splash({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
@@ -11,7 +12,7 @@ export function Splash({ title, children }: { title: ReactNode; children: ReactN
       <header className="pt-8 md:pt-10">
         <Wordmark size="lg" />
       </header>
-      <main className="flex flex-1 flex-col justify-center gap-10 py-16 md:gap-12">
+      <main className="flex flex-1 flex-col justify-end gap-6 pt-16 pb-10 md:justify-center md:gap-12 md:py-16">
         <h1 className="display">{title}</h1>
         {children}
       </main>
