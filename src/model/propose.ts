@@ -1,8 +1,7 @@
 import type { Api, AssistantMessage, Context, Model, Models, Tool } from '@earendil-works/pi-ai';
-import { traced } from '../telemetry.ts';
 import { DRAFT_ACTIONS, MAX_DRAFTS, PROPOSAL_PROMPT, PROPOSAL_TOOL, type Proposer, buildProposalPrompt, readDrafts } from '../triage/proposal.ts';
 import { describeFailure as failure } from '../triage/stages/model.ts';
-import { answered } from './judge.ts';
+import { chat, executeTool } from './chat.ts';
 
 /** One attempt, as for the judge; the person asks again. Longer, since it writes several labels. */
 const CALL = { timeoutMs: 120_000, maxRetries: 0 };
@@ -48,15 +47,9 @@ export function createProposer(models: Models, model: Model<Api>): Proposer {
       tools: [tool],
     };
 
-    const call = { 'gen_ai.operation.name': 'chat', 'gen_ai.provider.name': model.provider, 'gen_ai.request.model': model.id };
     let message: AssistantMessage;
     try {
-      message = await traced('gen_ai.chat', `chat ${model.id}`, call, async (span) => {
-        const settled = await models.complete(model, context, CALL);
-        span.set(answered(settled));
-        if (settled.stopReason === 'error' || settled.stopReason === 'aborted') span.fail();
-        return settled;
-      });
+      message = await chat(models, model, context, CALL);
     } catch (error) {
       return { failed: failure(error) };
     }
@@ -68,7 +61,11 @@ export function createProposer(models: Models, model: Model<Api>): Proposer {
     };
     if (message.stopReason === 'error' || message.stopReason === 'aborted') return { failed: failure(message.errorMessage ?? message.stopReason), usage };
     const proposed = message.content.find((block) => block.type === 'toolCall' && block.name === PROPOSAL_TOOL);
-    const drafts = readDrafts(proposed?.type === 'toolCall' ? proposed.arguments : undefined);
-    return drafts ? { drafts, usage } : { failed: 'the model did not suggest any usable labels', usage };
+    return await executeTool(PROPOSAL_TOOL, proposed?.type === 'toolCall' ? proposed.id : undefined, async (span) => {
+      const drafts = readDrafts(proposed?.type === 'toolCall' ? proposed.arguments : undefined);
+      if (drafts) return { drafts, usage };
+      span.fail();
+      return { failed: 'the model did not suggest any usable labels', usage };
+    });
   };
 }

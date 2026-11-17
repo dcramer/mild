@@ -1,7 +1,7 @@
 import type { Api, AssistantMessage, Context, Model, Models, Tool } from '@earendil-works/pi-ai';
-import { type Attributes, traced } from '../telemetry.ts';
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../triage/prompt.ts';
 import { type Judge, UNSURE, describeFailure as failure } from '../triage/stages/model.ts';
+import { chat, executeTool } from './chat.ts';
 
 const MAX_REASON = 300;
 /**
@@ -9,38 +9,6 @@ const MAX_REASON = 300;
  * the SDK's ten minutes, and each attempt must be a run of its own. The queue does the retrying.
  */
 const CALL = { timeoutMs: 60_000, maxRetries: 0 };
-
-/**
- * What the call's span says of the answer, under the names Sentry's AI monitoring reads (OpenTelemetry's
- * GenAI conventions, as Sentry's own pi-ai integration sets them): the model, why it stopped, tokens and
- * cost. Never what was asked or answered. Cached tokens count in the input, and their cost in its cost.
- */
-export function answered(message: AssistantMessage): Attributes {
-  const { usage } = message;
-  const finish = message.stopReason === 'toolUse' ? 'tool_call' : message.stopReason;
-  // A failed call reports zero of everything, which would read as a free one.
-  const billed = (message.stopReason !== 'error' && message.stopReason !== 'deferred') || usage.totalTokens > 0;
-  return {
-    'gen_ai.response.model': message.responseModel ?? message.model,
-    'gen_ai.response.id': message.responseId,
-    'gen_ai.response.finish_reasons': JSON.stringify([finish]),
-    ...(billed
-      ? {
-          'gen_ai.usage.input_tokens': usage.input + usage.cacheRead + usage.cacheWrite,
-          'gen_ai.usage.output_tokens': usage.output,
-          'gen_ai.usage.total_tokens': usage.totalTokens,
-          'gen_ai.usage.cache_read.input_tokens': usage.cacheRead,
-          'gen_ai.usage.cache_creation.input_tokens': usage.cacheWrite,
-          'gen_ai.usage.reasoning.output_tokens': usage.reasoning,
-          'gen_ai.cost.input_tokens': usage.cost.input + usage.cost.cacheRead + usage.cost.cacheWrite,
-          'gen_ai.cost.output_tokens': usage.cost.output,
-          'gen_ai.cost.total_tokens': usage.cost.total,
-          'gen_ai.cost.cache_read.input_tokens': usage.cost.cacheRead,
-          'gen_ai.cost.cache_creation.input_tokens': usage.cost.cacheWrite,
-        }
-      : {}),
-  };
-}
 
 /**
  * A Judge backed by a pi-ai model. One request per message, no conversation and no tools the model can
@@ -73,15 +41,9 @@ export function createJudge(models: Models, model: Model<Api>): Judge {
       tools: [tool],
     };
 
-    const call = { 'gen_ai.operation.name': 'chat', 'gen_ai.provider.name': model.provider, 'gen_ai.request.model': model.id };
     let message: AssistantMessage;
     try {
-      message = await traced('gen_ai.chat', `chat ${model.id}`, call, async (span) => {
-        const settled = await models.complete(model, context, CALL);
-        span.set(answered(settled));
-        if (settled.stopReason === 'error' || settled.stopReason === 'aborted') span.fail();
-        return settled;
-      });
+      message = await chat(models, model, context, CALL);
     } catch (error) {
       return { failed: failure(error) };
     }
@@ -93,29 +55,22 @@ export function createJudge(models: Models, model: Model<Api>): Judge {
     };
     if (message.stopReason === 'error' || message.stopReason === 'aborted') return { failed: failure(message.errorMessage ?? message.stopReason), usage };
 
-    const content = message.content;
-    // The verdict is the tool's one use: its span says whether it was usable, not what it said.
-    return await traced(
-      'gen_ai.execute_tool',
-      `execute_tool ${VERDICT_TOOL}`,
-      { 'gen_ai.operation.name': 'execute_tool', 'gen_ai.tool.name': VERDICT_TOOL, 'gen_ai.tool.type': 'function' },
-      async (span) => {
-        const verdict = content.find((block) => block.type === 'toolCall' && block.name === VERDICT_TOOL);
-        const args = verdict?.type === 'toolCall' ? verdict.arguments : undefined;
-        const label = args?.['label'];
-        const reason = args?.['reason'];
-        const confidence = args?.['confidence'];
-        if (typeof label !== 'string' || !ids.includes(label) || typeof reason !== 'string') {
-          span.fail();
-          return { failed: 'the model did not return a usable verdict', usage, unusable: true };
-        }
-        return {
-          label,
-          reason: reason.replace(/\s+/g, ' ').trim().slice(0, MAX_REASON),
-          ...(typeof confidence === 'number' && confidence >= 0 && confidence <= 1 ? { confidence } : {}),
-          usage,
-        };
-      },
-    );
+    const verdict = message.content.find((block) => block.type === 'toolCall' && block.name === VERDICT_TOOL);
+    const args = verdict?.type === 'toolCall' ? verdict.arguments : undefined;
+    return await executeTool(VERDICT_TOOL, verdict?.type === 'toolCall' ? verdict.id : undefined, async (span) => {
+      const label = args?.['label'];
+      const reason = args?.['reason'];
+      const confidence = args?.['confidence'];
+      if (typeof label !== 'string' || !ids.includes(label) || typeof reason !== 'string') {
+        span.fail();
+        return { failed: 'the model did not return a usable verdict', usage, unusable: true };
+      }
+      return {
+        label,
+        reason: reason.replace(/\s+/g, ' ').trim().slice(0, MAX_REASON),
+        ...(typeof confidence === 'number' && confidence >= 0 && confidence <= 1 ? { confidence } : {}),
+        usage,
+      };
+    });
   };
 }

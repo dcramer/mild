@@ -1,5 +1,4 @@
 import type { Api, AssistantMessage, Context, Model, Models, Tool, ToolCall } from '@earendil-works/pi-ai';
-import { traced } from '../telemetry.ts';
 import {
   BY,
   FACT_WORDS,
@@ -15,7 +14,7 @@ import {
 import { DECIDED } from '../triage/types.ts';
 import type { Usage } from '../triage/stages/model.ts';
 import { describeFailure as failure } from '../triage/stages/model.ts';
-import { answered } from './judge.ts';
+import { chat, executeTool } from './chat.ts';
 
 /** One attempt per turn, as for the judge; the person asks again. */
 const CALL = { timeoutMs: 60_000, maxRetries: 0 };
@@ -87,7 +86,6 @@ export function createRuleDrafter(models: Models, model: Model<Api>): RuleDrafte
       systemPrompt: RULE_DRAFT_PROMPT,
       messages: [{ role: 'user', content: buildRuleDraftPrompt(input), timestamp: Date.now() }],
     };
-    const call = { 'gen_ai.operation.name': 'chat', 'gen_ai.provider.name': model.provider, 'gen_ai.request.model': model.id };
     let usage: Usage | undefined;
     let lookups = 0;
     const spent = () => ({ lookups, ...(usage ? { usage } : {}) });
@@ -95,12 +93,7 @@ export function createRuleDrafter(models: Models, model: Model<Api>): RuleDrafte
       const last = lookups >= MAX_LOOKUPS;
       let message: AssistantMessage;
       try {
-        message = await traced('gen_ai.chat', `chat ${model.id}`, call, async (span) => {
-          const settled = await models.complete(model, { ...context, tools: last ? [record] : [find, record] }, CALL);
-          span.set(answered(settled));
-          if (settled.stopReason === 'error' || settled.stopReason === 'aborted') span.fail();
-          return settled;
-        });
+        message = await chat(models, model, { ...context, tools: last ? [record] : [find, record] }, CALL);
       } catch (error) {
         return { failed: failure(error), ...spent() };
       }
@@ -114,17 +107,23 @@ export function createRuleDrafter(models: Models, model: Model<Api>): RuleDrafte
         return { failed: failure(message.errorMessage ?? message.stopReason), ...spent() };
       const calls = message.content.filter((block): block is ToolCall => block.type === 'toolCall');
       const filled = calls.find((c) => c.name === FILL_TOOL);
-      if (filled) {
-        const draft = readRuleDraft(filled.arguments, input.labels);
-        return draft ? { draft, ...spent() } : { failed: 'the model did not fill in a usable rule', ...spent() };
-      }
+      if (filled)
+        return await executeTool(FILL_TOOL, filled.id, async (span) => {
+          const draft = readRuleDraft(filled.arguments, input.labels);
+          if (draft) return { draft, ...spent() };
+          span.fail();
+          return { failed: 'the model did not fill in a usable rule', ...spent() };
+        });
       const asked = calls.filter((c) => c.name === FIND_TOOL);
       if (last || asked.length === 0) return { failed: 'the model did not fill in a rule', ...spent() };
       context.messages.push(message);
       for (const c of asked) {
         lookups += 1;
         const query = typeof c.arguments['query'] === 'string' ? c.arguments['query'] : '';
-        const text = lookups > MAX_LOOKUPS ? 'No more look-ups: fill in the rule.' : describeFound(await findSenders(query));
+        const text =
+          lookups > MAX_LOOKUPS
+            ? 'No more look-ups: fill in the rule.'
+            : await executeTool(FIND_TOOL, c.id, async () => describeFound(await findSenders(query)));
         context.messages.push({
           role: 'toolResult',
           toolCallId: c.id,

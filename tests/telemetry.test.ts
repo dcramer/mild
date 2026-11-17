@@ -1,9 +1,15 @@
-import { type Api, type Model, type Models, fauxAssistantMessage, fauxProvider, fauxToolCall } from '@earendil-works/pi-ai';
+import { type Api, type Model, type Models, createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from '@earendil-works/pi-ai';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { proposeLabels } from '../src/learn/labels.ts';
+import { draftRule } from '../src/learn/rules.ts';
+import { createRuleDrafter } from '../src/model/draft-rule.ts';
 import { createJudge } from '../src/model/judge.ts';
+import { createProposer } from '../src/model/propose.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { hashOf, traceIds } from '../src/store/content.ts';
 import { VERDICT_TOOL } from '../src/triage/prompt.ts';
+import { PROPOSAL_TOOL } from '../src/triage/proposal.ts';
+import { FILL_TOOL, FIND_TOOL } from '../src/triage/rule-draft.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
 import { loadKeyring } from '../src/secrets.ts';
 import { flushTelemetry, reportError, scrub, startTelemetry, traced } from '../src/telemetry.ts';
@@ -124,10 +130,82 @@ describe('the model call, as Sentry is sent it', () => {
     const decision = await raw(db).get<{ id: number; disposition: string }>('SELECT id, disposition FROM decisions');
     const ids = { 'sift.message': hashOf(db, 'abc123'), 'sift.sender': hashOf(db, SENDER), 'sift.domain': hashOf(db, 'shop.example.com') };
     expect(attributes('triage')).toMatchObject({ ...ids, 'sift.decision_id': decision!.id, 'sift.stage': 'model' });
-    expect(attributes('invoke_agent triage')).toMatchObject({ ...ids, 'sentry.op': 'gen_ai.invoke_agent', 'sift.run_id': run!.id });
-    expect(attributes(`chat ${model.id}`)).toMatchObject({ ...ids, 'sift.run_id': run!.id });
+    const conversation = { 'gen_ai.agent.name': 'triage', 'gen_ai.conversation.id': `triage-${db.person}-${run!.id}` };
+    expect(attributes('invoke_agent triage')).toMatchObject({ ...ids, ...conversation, 'sentry.op': 'gen_ai.invoke_agent', 'sift.run_id': run!.id });
+    expect(attributes(`chat ${model.id}`)).toMatchObject({ ...ids, ...conversation, 'sift.run_id': run!.id });
+    expect(attributes(`execute_tool ${VERDICT_TOOL}`)).toMatchObject(conversation);
     expect(attributes('model')).toMatchObject({ 'sentry.op': 'sift.tier', 'sift.outcome': decision!.disposition });
     for (const content of [SUBJECT, SENDER, 'abc123']) expect(text).not.toContain(content);
+  });
+});
+
+describe('each conversation with the model', () => {
+  /** A provider that gives `answers` in turn. */
+  function scripted(...answers: ReturnType<typeof fauxAssistantMessage>[]) {
+    const provider = fauxProvider();
+    const models = createModels();
+    models.setProvider(provider.provider);
+    provider.setResponses(answers);
+    return { models, model: provider.getModel() };
+  }
+  const GOAL = 'Archive the Acme digest';
+
+  it('is a rule draft: its turns and each tool the model used, all under one id, with none of what was asked', async () => {
+    const { db } = await keyedPerson();
+    const { models, model } = scripted(
+      fauxAssistantMessage([fauxToolCall(FIND_TOOL, { query: 'acme digest' })], { stopReason: 'toolUse' }),
+      fauxAssistantMessage(
+        [
+          fauxToolCall(FILL_TOOL, {
+            conditions: [{ by: 'from', value: 'shop.example.com' }],
+            facts: [],
+            name: '',
+            label: '',
+            onlyOnceLabelled: false,
+            when: '',
+            action: 'archive',
+            markRead: false,
+            unsubscribe: false,
+            note: '',
+          }),
+        ],
+        { stopReason: 'toolUse' },
+      ),
+    );
+    await draftRule({ db, draft: createRuleDrafter(models, model), model: 'faux/model' }, { accountId: ACCOUNT, goal: GOAL });
+
+    const { spans, text } = await delivered();
+    const draft = await raw(db).get<{ id: number }>('SELECT id FROM rule_drafts');
+    const id = `rules-${db.person}-${draft!.id}`;
+    expect(spans.map((s) => [s.name, s.attributes['gen_ai.conversation.id']?.value, s.attributes['gen_ai.agent.name']?.value])).toEqual(
+      expect.arrayContaining([
+        ['invoke_agent rules', id, 'rules'],
+        [`chat ${model.id}`, id, 'rules'],
+        [`execute_tool ${FIND_TOOL}`, id, 'rules'],
+        [`execute_tool ${FILL_TOOL}`, id, 'rules'],
+      ]),
+    );
+    expect(spans.filter((s) => s.name === `chat ${model.id}`)).toHaveLength(2);
+    for (const content of [GOAL, 'acme digest', 'shop.example.com']) expect(text).not.toContain(content);
+  });
+
+  it('is a label proposal, and the next one is another', async () => {
+    const { db } = await keyedPerson();
+    const PITCHES = { why: 'w', name: 'Cold outreach', description: 'Pitches.', action: 'archive', markRead: false, unsubscribe: true };
+    const answer = () => fauxAssistantMessage([fauxToolCall(PROPOSAL_TOOL, { labels: [PITCHES] })], { stopReason: 'toolUse' });
+    const { models, model } = scripted(answer(), answer());
+    const propose = createProposer(models, model);
+    await proposeLabels({ db, propose, model: 'faux/model' }, { accountId: ACCOUNT, goal: GOAL });
+    await proposeLabels({ db, propose, model: 'faux/model' }, { accountId: ACCOUNT, goal: GOAL });
+
+    const { spans, text } = await delivered();
+    const ids = (await raw(db).all<{ id: number }>('SELECT id FROM label_proposals ORDER BY id')).map((p) => `labels-${db.person}-${p.id}`);
+    expect(ids).toHaveLength(2);
+    for (const id of ids)
+      expect(spans.filter((s) => s.attributes['gen_ai.conversation.id']?.value === id).map((s) => s.name)).toEqual(
+        expect.arrayContaining(['invoke_agent labels', `chat ${model.id}`, `execute_tool ${PROPOSAL_TOOL}`]),
+      );
+    for (const content of [GOAL, 'Cold outreach']) expect(text).not.toContain(content);
   });
 });
 

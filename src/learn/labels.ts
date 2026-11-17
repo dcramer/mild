@@ -1,7 +1,7 @@
 import { Refusal } from '../refusal.ts';
 import { finishLabelProposal, listLabels, startLabelProposal } from '../store/labels.ts';
 import type { Sql } from '../store/sql.ts';
-import { reportError, traced } from '../telemetry.ts';
+import { invokeAgent, reportError } from '../telemetry.ts';
 import type { LabelDraft, Proposer } from '../triage/proposal.ts';
 import { EVERYTHING_ELSE } from '../triage/types.ts';
 
@@ -18,16 +18,7 @@ export async function proposeLabels(
   const at = now();
   const id = await startLabelProposal(db, { ...request, model: deps.model, now: at });
   const labels = (await listLabels(db, request.accountId)).filter((l) => l.id !== EVERYTHING_ELSE);
-  const answer = await traced(
-    'gen_ai.invoke_agent',
-    'invoke_agent labels',
-    { 'gen_ai.operation.name': 'invoke_agent', 'gen_ai.agent.name': 'labels', 'sift.label_proposal': id },
-    async (span) => {
-      const settled = await deps.propose({ goal: request.goal, labels });
-      if ('failed' in settled) span.fail();
-      return settled;
-    },
-  );
+  const answer = await invokeAgent('labels', db.person, { name: 'sift.label_proposal', id }, () => deps.propose({ goal: request.goal, labels }));
   const usage = answer.usage ? { usage: answer.usage } : {};
   if ('failed' in answer) {
     await finishLabelProposal(db, request.accountId, id, { error: answer.failed, ...usage, now: now() });

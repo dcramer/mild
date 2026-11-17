@@ -18,8 +18,11 @@ export interface Traced {
   fail(): void;
 }
 
-/** Carried from a span to those started under it, so any span can be found by the account, message or model run it was for. */
-const CARRIED = ['user.email', 'sift.person', 'sift.message', 'sift.sender', 'sift.domain', 'sift.run_id'];
+/**
+ * Carried from a span to those started under it, so any span can be found by the account, message or model
+ * run it was for, and a model call and its tools belong to their agent's conversation.
+ */
+const CARRIED = ['user.email', 'sift.person', 'sift.message', 'sift.sender', 'sift.domain', 'sift.run_id', 'gen_ai.agent.name', 'gen_ai.conversation.id'];
 
 /**
  * Attributes that would hold the prompt, the answer or a tool call's arguments. Sift never sets them and
@@ -117,6 +120,29 @@ export async function traced<T>(op: string, name: string, attributes: Attributes
     }),
   );
 }
+
+/**
+ * Run `work` as a `gen_ai.invoke_agent` span, a conversation of its own in Sentry: `record` is the row it is
+ * recorded as in `person`'s database (`sift.run_id`, `sift.label_proposal`, `sift.rule_draft`), so the conversation is
+ * that row and nothing else, and a retry is a conversation of its own, as it shares nothing with the try
+ * before. Fails when `work` settles `failed`.
+ */
+export const invokeAgent = <T extends object>(agent: string, person: number | null, record: { name: string; id: number }, work: () => Promise<T>): Promise<T> =>
+  traced(
+    'gen_ai.invoke_agent',
+    `invoke_agent ${agent}`,
+    {
+      'gen_ai.operation.name': 'invoke_agent',
+      'gen_ai.agent.name': agent,
+      'gen_ai.conversation.id': `${agent}-${person}-${record.id}`,
+      [record.name]: record.id,
+    },
+    async (span) => {
+      const settled = await work();
+      if ('failed' in settled) span.fail();
+      return settled;
+    },
+  );
 
 /** An error Sift could not deal with, sent with the trace it happened in. */
 export function reportError(error: unknown): void {

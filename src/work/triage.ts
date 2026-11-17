@@ -18,7 +18,7 @@ import { priorRule, readsMessage, rulesStage, settle } from '../triage/stages/ru
 import { type Evidence, type Judge, type JudgeFailure, describeFailure, modelStage } from '../triage/stages/model.ts';
 import type { Decision, Disposition, MessageFacts, Stage, Unfinished } from '../triage/types.ts';
 import { type EvidenceSources, gatherEvidence } from './evidence.ts';
-import { type Traced, reportError, traced } from '../telemetry.ts';
+import { type Traced, invokeAgent, reportError, traced } from '../telemetry.ts';
 import { changeTries } from '../store/actions.ts';
 
 /** How many passes try a mailbox change that did not land. Gmail failing one change is almost always passing, and the user is not asked to look. */
@@ -172,15 +172,8 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
       const { accountId, messageId } = input.evidence.facts;
       const run = await startRun(db, { accountId, messageId, model: tier.model, now: now() });
       // The run's id is on the agent's span and, carried, on the model call's: a trace finds its row in `model_runs`.
-      const verdict = await traced(
-        'gen_ai.invoke_agent',
-        'invoke_agent triage',
-        { 'gen_ai.operation.name': 'invoke_agent', 'gen_ai.agent.name': 'triage', 'sift.run_id': run },
-        async (span) => {
-          const settled = await tier.judge(input).catch((error: unknown): JudgeFailure => ({ failed: describeFailure(error) }));
-          if ('failed' in settled) span.fail();
-          return settled;
-        },
+      const verdict = await invokeAgent('triage', db.person, { name: 'sift.run_id', id: run }, () =>
+        tier.judge(input).catch((error: unknown): JudgeFailure => ({ failed: describeFailure(error) })),
       );
       const usage = verdict.usage ? { usage: verdict.usage } : {};
       await finishRun(db, run, { ...('failed' in verdict ? { error: verdict.failed } : {}), ...usage, now: now() });
