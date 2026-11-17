@@ -2,7 +2,7 @@ import { Component, type ReactNode, Suspense, useEffect, useRef, useState } from
 import { api, useLoaded, useOnline } from '@/lib/api.ts';
 import { setParams, useParam, useRoute } from '@/lib/route.ts';
 import { lazyView } from '@/lib/lazy.tsx';
-import { ListView, Loading, Masthead, Note, Notice, PageHeader } from '@/system';
+import { ListView, Loading, Masthead, Note, Notice, PageFoot, PageHeader } from '@/system';
 import type { MessageRef } from '@/views/message-panel.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
 import { SetUp } from '@/components/set-up.tsx';
@@ -262,6 +262,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
           </Suspense>
         </ScreenBoundary>
       </main>
+      <PageFoot />
       {ruleId !== '' && route[0] !== 'rules' ? (
         <Suspense fallback={null}>
           <RuleSheet id={ruleId} onOpen={openMessages} onClose={() => setParams({ rule: '', apply: '' })} />

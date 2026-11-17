@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Sheet } from './sheet.tsx';
-import { TextLink, Wordmark } from './type.tsx';
+import { FinePrint } from './fine-print.tsx';
+import { Wordmark } from './type.tsx';
 
 /**
  * The one sheet someone sees in place of the dashboard when sign-in cannot start here. The name sits
@@ -16,9 +17,7 @@ export function Entry({ children }: { children: ReactNode }) {
         <Sheet className="entry gap-5 px-6 pt-12 pb-6">{children}</Sheet>
       </div>
       <p className="mt-6 flex flex-wrap items-baseline gap-x-4 gap-y-1 px-6 text-sm text-muted-foreground">
-        <TextLink href="/terms">Terms</TextLink>
-        <TextLink href="/privacy">Privacy</TextLink>
-        <TextLink href="/security">Security</TextLink>
+        <FinePrint />
       </p>
     </main>
   );

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { TextLink, Wordmark } from './type.tsx';
+import { FinePrint } from './fine-print.tsx';
+import { Wordmark } from './type.tsx';
 
 /**
  * The first page of someone not signed in: the name, one line set as large as anything gets, then a
@@ -17,10 +18,7 @@ export function Splash({ title, children }: { title: ReactNode; children: ReactN
         {children}
       </main>
       <footer className="flex gap-4 pb-8 text-sm text-muted-foreground">
-        <TextLink href="/terms">Terms</TextLink>
-        <TextLink href="/privacy">Privacy</TextLink>
-        <TextLink href="/security">Security</TextLink>
-        <TextLink href="https://github.com/dcramer/sift">Open source</TextLink>
+        <FinePrint source />
       </footer>
     </div>
   );

@@ -2,6 +2,7 @@ import { Dialog } from '@base-ui/react/dialog';
 import { MenuIcon, XIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Button } from './button.tsx';
+import { FinePrint } from './fine-print.tsx';
 import { Avatar, Menu, type MenuItem } from './menu.tsx';
 import { Wordmark } from './type.tsx';
 
@@ -42,7 +43,7 @@ function Sections({ items, current }: { items: readonly NavItem[]; current: stri
  * `aside` (a short line about sift that is always worth a glance: when it last synced, what it costs) and
  * `account` (who is signed in and what they can do about it, behind their `Avatar`). No bar; it sits straight
  * on the page. On a narrow screen the bar keeps the name, `aside` and a menu button; the sections and the
- * account move into a panel that covers the screen, with `detail` (what `aside`'s hover card says, which a
+ * account move into a panel that covers the screen, the sections followed by `FinePrint`, with `detail` (what `aside`'s hover card says, which a
  * touch screen never shows) framed above the account. `status` gets a line of its own under the bar.
  */
 export function Masthead({
@@ -125,6 +126,9 @@ export function Masthead({
                 ))}
               </ul>
             </nav>
+            <p className="mt-10 flex flex-wrap gap-x-5 gap-y-2 text-muted-foreground">
+              <FinePrint />
+            </p>
             {detail ? <div className="sheet mt-auto p-4 text-sm">{detail}</div> : null}
             {account ? (
               <div className={`${detail ? 'mt-6' : 'mt-auto'} flex flex-col gap-4 border-t border-(--rule) pt-5`}>

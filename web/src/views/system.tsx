@@ -32,6 +32,7 @@ import {
   Figure,
   Figures,
   FilterGroup,
+  FinePrint,
   Form,
   Highlight,
   HoverCard,
@@ -51,6 +52,7 @@ import {
   CalloutKey,
   Notice,
   OnPhone,
+  PageFoot,
   PageHeader,
   Panel,
   Reserve,
@@ -845,6 +847,16 @@ export function SystemView() {
             </Clause>
           </Document>
         </Sheet>
+      </Section>
+
+      <Section
+        title="FinePrint, PageFoot"
+        meta="the terms, privacy and security: at the foot of every dashboard screen, under the sections in the phone menu, under Splash and Entry"
+      >
+        <p className="flex flex-wrap gap-x-5 gap-y-2 text-muted-foreground">
+          <FinePrint />
+        </p>
+        <PageFoot />
       </Section>
 
       <Section title="Entry" meta="the page in place of the dashboard when sign-in cannot start here; centred in the window">
