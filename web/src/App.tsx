@@ -182,9 +182,14 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
   const waiting = useLoaded('suggestions-false', (signal) => api.suggestions(false, '', signal));
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const expired = manage.data?.activity.expired ?? [];
+  // A list can be pressed while the last panel is still sliding away, its message still in the address. That
+  // press gets a panel of its own, since the closing one would only finish closing and then go Back; and it
+  // takes over the closing one's history entry, or closing it would go Back to the message just closed.
+  const [opened, setOpened] = useState(0);
   const openMessages = (items: MessageRef[], index: number) => {
     setList(items);
-    show(items[index], { state: { panel: true } });
+    setOpened((n) => n + 1);
+    show(items[index], messageId === '' ? { state: { panel: true } } : undefined);
   };
   const accounts = manage.data?.accounts ?? [];
   const synced = accounts.map((a) => a.lastSyncedAt).filter((at) => at !== null);
@@ -262,6 +267,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
         // The panel lies over the page, so nothing moves while its code arrives.
         <Suspense fallback={null}>
           <MessagePanel
+            key={opened}
             items={open.items}
             index={open.index}
             onIndex={(index) => show(open.items[index])}
