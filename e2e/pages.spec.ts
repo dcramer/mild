@@ -122,6 +122,28 @@ test.describe('Activity', () => {
     expect(new URL(page.url()).search).toBe('');
     await expect(page.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
   });
+
+  test('the page of a long list is in the address, and narrowing the list goes back to its first', async ({ page }) => {
+    // The seed has 21 decisions, under one page; the server says there are more.
+    await page.route('**/api/decisions?**', async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({ response, json: { ...(await response.json()), total: 120 } });
+    });
+    await page.goto('/activity?show=all');
+    await expect(page.getByText('1–50 of 120')).toBeVisible();
+    await page.getByRole('button', { name: 'Older' }).click();
+    await expect(page.getByText('51–100 of 120')).toBeVisible();
+    expect(search(page).get('page')).toBe('2');
+
+    await page.reload();
+    await expect(page.getByText('51–100 of 120')).toBeVisible();
+
+    await page.getByRole('radio', { name: 'Changed' }).click();
+    await expect(page.getByText('1–50 of 120')).toBeVisible();
+    expect(search(page).get('page')).toBeNull();
+    // A list still loading when the test ends would find its reply gone.
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+  });
 });
 
 test.describe('A sender', () => {

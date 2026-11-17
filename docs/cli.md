@@ -11,7 +11,6 @@ From a checkout, `pnpm sift <command>` runs it from source.
 | `sift status` | What is set up, and how much Sift has recorded. |
 | `sift dev` | `run` for working on Sift: restarts when server code changes, rebuilds and reloads the page when page code changes. Takes `run`'s options. |
 | `sift reset-db` | Renames the local database folder to `database.<time>`, so Sift starts a new, empty one. For a database an earlier Sift made with migrations since replaced. Refused while Sift has it open; not for a Postgres server. `pnpm db:reset` runs it. |
-| `sift dashboard` | Serve the dashboard without reading mail. Takes `--port` and `--host`. |
 
 `--home <dir>` works with every command and says where Sift keeps its files. When working on Sift, give it a scratch directory so your real mail is left alone.
 

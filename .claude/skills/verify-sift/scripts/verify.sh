@@ -40,8 +40,8 @@ case "$cmd" in
     node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/seed.ts" "$dir/home" "$dir/gmail.json" "${3:-}" > "$dir/cookie"
     port="$(node -e 'const s=require("node:net").createServer().listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')"
     echo "$port" > "$dir/port"
-    # `sift dashboard`, not `run`: there is no Gmail behind this home, so a pass would only fail. serve.ts is that
-    # command with a fake Gmail behind its filter control (see it). It rebuilds web/dist if sources are newer.
+    # The dashboard without `run`'s passes: there is no Gmail behind this home, so a pass would only fail. serve.ts
+    # puts a fake Gmail behind its filter control (see it). It rebuilds web/dist if sources are newer.
     cd "$ROOT"
     nohup node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/serve.ts" "$dir/home" "$port" "$dir/gmail.json" > "$dir/dashboard.log" 2>&1 &
     echo $! > "$dir/pid"

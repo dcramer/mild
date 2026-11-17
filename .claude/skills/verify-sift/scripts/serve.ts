@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
 /**
- * Verification scaffolding: `sift dashboard` for a seeded home, with a fake Gmail behind its filter control.
+ * Verification scaffolding: the dashboard alone, running no pass, for a seeded home, with a fake Gmail behind its filter control.
  *
  *   node .claude/skills/verify-sift/scripts/serve.ts <home> <port> <gmail.json>
  *
@@ -116,7 +116,7 @@ const controls = {
   },
 };
 
-// What createSift puts together for `sift dashboard`.
+// What createSift puts together for a host with no `start`.
 const sift = {
   respond: site(
     createDashboard(people(store), {

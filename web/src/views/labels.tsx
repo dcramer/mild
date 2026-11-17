@@ -146,7 +146,9 @@ export function LabelsView() {
                           phone="hide"
                           num
                           className="w-28"
-                          title={label.record.reviewed > 0 ? `${count(label.record.right)} of ${count(label.record.reviewed)} you checked` : undefined}
+                          title={
+                            label.record.reviewed > 0 ? `${count(label.record.right)} of ${count(label.record.reviewed)} you have ever checked` : undefined
+                          }
                         >
                           <Right label={label} />
                         </Td>

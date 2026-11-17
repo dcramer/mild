@@ -21,7 +21,7 @@ RUN=<scratchpad>/verify-sift/<short-name>   # a new directory per run
 $V up "$RUN"
 ```
 
-`up` seeds `$RUN/home`, picks a free port, starts `sift dashboard` on it (as `scripts/serve.ts`, the same command) (rebuilding `web/dist` first if the page sources are newer, which can take a minute), runs the doctor, and signs the browser session in. It is ready when it prints `ok  pid …` and `browser session … signed in`. It refuses a directory that already has a `home/`. `up "$RUN" --bare` seeds the same, but takes the labels out of `me@work.example.org`, as for a mailbox added while setting up, so the dashboard is the setting-up steps (features/setting-up.md) until that run makes some. `up "$RUN" --on` then turns Sift on and runs one more pass over two new messages: `m22` from `lin@example.com`, which it cannot place, so it gets Sift's `sift/review` label in Gmail and Activity's Changed says `Asked you`; and `m23`, the Store's `Last day of the sale`, archived as Marketing and then undone.
+`up` seeds `$RUN/home`, picks a free port, starts the dashboard alone on it (`scripts/serve.ts`, which runs no pass) (rebuilding `web/dist` first if the page sources are newer, which can take a minute), runs the doctor, and signs the browser session in. It is ready when it prints `ok  pid …` and `browser session … signed in`. It refuses a directory that already has a `home/`. `up "$RUN" --bare` seeds the same, but takes the labels out of `me@work.example.org`, as for a mailbox added while setting up, so the dashboard is the setting-up steps (features/setting-up.md) until that run makes some. `up "$RUN" --on` then turns Sift on and runs one more pass over two new messages: `m22` from `lin@example.com`, which it cannot place, so it gets Sift's `sift/review` label in Gmail and Activity's Changed says `Asked you`; and `m23`, the Store's `Last day of the sale`, archived as Marketing and then undone.
 
 What the seed leaves (through four real ticks with sift off, `tick`, with a stand-in model that is sure `m8` is Marketing, places the code.example.com mail by its sender's name, and can place nothing else):
 
@@ -73,7 +73,7 @@ Phone width: `$V ab "$RUN" set viewport 390 844`. AGENTS.md asks what every part
 
 Every row on Rules has a `Remove` of the same name. Open a rule's panel by its first cell (`ab find role cell click --name "anyone at ci.example.org"`, which gives `?rule=<id>`), where `Remove` is its own; it asks `Remove this rule?` in place, and the confirming press needs `--exact`, as `Remove from Gmail` also matches `Remove`.
 
-Add to Gmail is offered only while Sift is on: Settings (`?settings=1`), `Turn on`, then `Turn on` again to confirm. It is safe here, as `sift dashboard` runs no pass, so nothing is carried out.
+Add to Gmail is offered only while Sift is on: Settings (`?settings=1`), `Turn on`, then `Turn on` again to confirm. It is safe here, as `serve.ts` runs no pass, so nothing is carried out.
 
 Adding a rule with `Apply to mail already there` checked (the default for an action rule) opens `Apply to your inbox`, which reads Gmail and here says `Sift has no access to me@example.org.`; press `Cancel`. The rule is already added by then.
 
@@ -115,5 +115,5 @@ State is in `~/.cache/sift-verify-maint/`. Delete `suggested-on` there to see to
 - Anything else that talks to Google: sign-in itself, connecting another account, Pull in (older mail), `Apply to your inbox`, undo of a real change. They fail with `Sift has no access to me@example.org.`; that failure is not the change's fault.
 - Gmail itself: the fake's filters are whatever the filter code asked for. Whether Gmail accepts a filter, and what it does to mail, is for `tests/filters.test.ts` and a real account.
 - The model tier: the seed's stand-in model never calls a provider and places only `m8` and the code.example.com mail it knows by name, so every other unmatched message is "Unlabelled". With no model at all such mail would wait undecided and not be a suggestion, and every screen would be the setting-up steps. The rule and label stand-ins are fixed answers too: what they fill in proves the dialogs and the code around the model, not what a model would choose.
-- Changing Gmail. Settings can turn sift on (`preferences.active`), but `sift dashboard` never runs a pass, so nothing is carried out. Prove the executor with tests (`tests/actions.test.ts`, `tests/run.test.ts`).
+- Changing Gmail. Settings can turn sift on (`preferences.active`), but `serve.ts` never runs a pass, so nothing is carried out. Prove the executor with tests (`tests/actions.test.ts`, `tests/run.test.ts`).
 - Mail answered that Sift did not hold the text of: its example stays `pending` until a pass reads it, which never comes. An answer to waiting mail moves its held text into the example (`captured`), as the seed's three bills show.

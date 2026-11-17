@@ -2,7 +2,6 @@
 import { loadConfig, loadEnvFiles, resolveHome } from '../config.ts';
 import { closeTerminal } from './terminal.ts';
 import { paint, ui } from './ui.ts';
-import { dashboard } from './commands/dashboard.ts';
 import { dev } from './commands/dev.ts';
 import { init } from './commands/init.ts';
 import { resetDb } from './commands/reset-db.ts';
@@ -17,7 +16,6 @@ const MAIN_COMMANDS: readonly (readonly [string, string])[] = [
 ];
 
 const OTHER_COMMANDS: readonly (readonly [string, string])[] = [
-  ['dashboard', 'serve the dashboard without reading mail'],
   ['dev', 'for working on Sift: run, restarting and reloading as the code changes'],
   ['reset-db', 'move the database aside, so Sift starts a new one'],
 ];
@@ -47,7 +45,6 @@ async function main(): Promise<void> {
   const [command, ...args] = argv;
   if (command === 'status') await status();
   else if (command === 'init') await init();
-  else if (command === 'dashboard') await dashboard(args);
   else if (command === 'run') await run(args);
   else if (command === 'dev') await dev(args);
   else if (command === 'reset-db') resetDb();

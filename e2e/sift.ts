@@ -23,7 +23,7 @@ const freePort = () =>
     });
   });
 
-/** Starts verify-sift's `serve.ts` (`sift dashboard` with a fake Gmail behind its filter control) on a copy of the seeded home. */
+/** Starts verify-sift's `serve.ts` (the dashboard alone, with a fake Gmail behind its filter control) on a copy of the seeded home. */
 async function start(variant: Variant) {
   const template = JSON.parse(process.env[`${TEMPLATES}_${variant}`] ?? 'null') as { dir: string; cookie: string } | null;
   if (!template) throw new Error('e2e/global-setup.ts did not run');

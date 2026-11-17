@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { MailLog, MailLogLoading } from '@/components/mail-log.tsx';
 import { type Days, type DecisionRow, api, useLoaded } from '@/lib/api.ts';
@@ -24,7 +24,9 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
   const [fact, setFact] = useParam('fact', FACT_FILTER_OPTIONS);
   const [label, setLabel] = useParam('label');
   const [typed, setTyped] = useState(search);
-  const [offset, setOffset] = useState(0);
+  const [page, setPage] = useParam('page');
+  const offset = (Math.max(1, Math.floor(Number(page)) || 1) - 1) * PAGE;
+  const goTo = (at: number) => setPage(at === 0 ? '' : String(at / PAGE + 1));
   const client = useQueryClient();
   const toast = useToast();
 
@@ -33,7 +35,14 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
     const timer = setTimeout(() => setSearch(typed.trim()), 250);
     return () => clearTimeout(timer);
   }, [typed]);
-  useEffect(() => setOffset(0), [days, view, search, fact, label]);
+  // A narrower list starts at its first page; a page in the address it was opened with stands.
+  const narrowed = JSON.stringify([days, view, search, fact, label]);
+  const shown = useRef(narrowed);
+  useEffect(() => {
+    if (shown.current === narrowed) return;
+    shown.current = narrowed;
+    goTo(0);
+  }, [narrowed]);
 
   const status = view === '' ? 'changed' : '';
   const query = { days, status, search, fact, label, limit: PAGE, offset };
@@ -131,10 +140,10 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
           <span>
             {count(offset + 1)}–{count(Math.min(offset + PAGE, data.total))} of {count(data.total)}
           </span>
-          <Button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>
+          <Button disabled={offset === 0} onClick={() => goTo(Math.max(0, offset - PAGE))}>
             Newer
           </Button>
-          <Button disabled={offset + PAGE >= data.total} onClick={() => setOffset(offset + PAGE)}>
+          <Button disabled={offset + PAGE >= data.total} onClick={() => goTo(offset + PAGE)}>
             Older
           </Button>
         </div>

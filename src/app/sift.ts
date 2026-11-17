@@ -29,7 +29,7 @@ export interface Host {
   log: (line: string) => void;
   /**
    * Gets what is due for these people (or everyone) done, without the caller waiting: `sift run` in this
-   * process, Vercel each piece in a call of its own. Absent where nothing classifies mail (`sift dashboard`).
+   * process, Vercel each piece in a call of its own. Absent where nothing classifies mail (verify-sift's `serve.ts`).
    */
   start?: (sift: Sift, people?: readonly number[]) => void;
   /** How long one piece of work may start work, short of what the host would cut a call off at. */

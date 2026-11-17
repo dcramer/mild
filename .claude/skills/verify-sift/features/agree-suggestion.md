@@ -21,7 +21,7 @@ Preconditions:
 
 - **Agree.** `ab open "$B/"`, then `ab find role button click --name "Agree: Marketing"`. A toast reads `Archive as Marketing`. The link's count is one fewer, the Store row is gone, and no panel opens.
 - **Second view.** `ab open "$B/rules"`. No rule mentions `sale@store.example.com`.
-- **Stored.** `verify.sh sql "$RUN" "SELECT label_id, carry_out, by_user, outcome FROM decisions WHERE message_id = 'm8' ORDER BY id DESC LIMIT 1"` returns `marketing`, `true`, `true`, null: the answer waits for the next pass to be carried out (`sift dashboard` runs none). `SELECT e.message_id, e.label_id, f.verdict FROM examples e JOIN decisions d ON d.message_id = e.message_id JOIN feedback f ON f.decision_id = d.id WHERE e.message_id = 'm8'` returns `m8`, `marketing`, `right`.
+- **Stored.** `verify.sh sql "$RUN" "SELECT label_id, carry_out, by_user, outcome FROM decisions WHERE message_id = 'm8' ORDER BY id DESC LIMIT 1"` returns `marketing`, `true`, `true`, null: the answer waits for the next pass to be carried out (`serve.ts` runs none). `SELECT e.message_id, e.label_id, f.verdict FROM examples e JOIN decisions d ON d.message_id = e.message_id JOIN feedback f ON f.decision_id = d.id WHERE e.message_id = 'm8'` returns `m8`, `marketing`, `right`.
 
 ## Gotchas
 

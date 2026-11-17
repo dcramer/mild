@@ -45,13 +45,12 @@ The working list for sift. Remove an item when it lands; add what you find. What
 - [ ] **What Sift costs, and why.** Spend by tier and by model, cost per message, which senders and kinds of mail cost the most, what rules saved, and what a change would save. Label suggestions and rule drafts are left out of spend (`src/dashboard/queries/summary.ts` sums only `model_runs`) and kept until the mailbox goes; count them and decide how long to keep them.
 - [ ] **Check an API key when it is pasted.** A wrong or expired key shows as connected until the label suggestion or the next classification fails. Try it on Continue with the provider's cheapest call, recorded like any model call, and say what is wrong under the field.
 - [ ] **An adversarial review of every screen**, as a first-time and as a hurried user: what is unclear, cannot be found, says one thing and does another, or is missing when something goes wrong. Fix what it finds, screen by screen.
-- [ ] Dashboard plumbing: after signing in again from the expired notice the browser returns to `/`, not where it started; an account with no token at all gets no masthead notice; the expired notice clears only after the next pass; the Activity page offset is not in the address; a focused menu or select popup draws the yellow outline around the whole popup; push notifications; switching account from the menu; whether `/system` stays in the production build.
+- [ ] Dashboard plumbing: after signing in again from the expired notice the browser returns to `/`, not where it started; an account with no token at all gets no masthead notice; the expired notice clears only after the next pass; a focused menu or select popup draws the yellow outline around the whole popup; push notifications; switching account from the menu; whether `/system` stays in the production build.
 - [ ] Keyboard: keys to go between sections (Gmail's G then a letter); Undo by key after an answer; the Activity list's own actions.
 - [ ] Design system parts: a select with search for a long list (the model select), and a filter that narrows by sender or label by typing.
 - [ ] Activity lists decisions, so a change with no decision behind it (an unsubscribe, putting a message back after a correction) shows only in that message's history. Decide whether Activity lists those as rows of their own.
 - [ ] Undo from a toast: nothing offers to redo an undo, and an answer cannot be taken back from the toast that reports it; the server needs a way to take an answer back.
-- [ ] How often Sift was right, per label on Labels, counts every answer ever given. Give it a period, or say it is all-time.
-- [ ] Retake the screenshots: README's (`docs/images/suggestions.png`) shows the old page and says an answer makes a rule; design.md's (`docs/images/design-system.png`) is out of date. Delete `dashboard.png`, `labels.png`, `settings.png`, `sign-in.png` and `suggestion-open.png` in the same folder, which nothing uses.
+- [ ] Retake the screenshots: README's (`docs/images/suggestions.png`) shows the old page and says an answer makes a rule; design.md's (`docs/images/design-system.png`) is out of date.
 - [ ] Message text is plain and cut at 4,000 characters, as the model sees it. Decide whether reading needs more (longer text, quoted replies folded, links listed).
 - [ ] On a phone a 600px HTML message scrolls sideways inside its frame; it cannot be scaled without script.
 - [ ] A rule's panel shows its mail still in the inbox, its hit count and last hit; not yet every message it matched, or hits over time.
@@ -60,7 +59,6 @@ The working list for sift. Remove an item when it lands; add what you find. What
 - [ ] Try a label's description, or a rule's "only when", on recent mail before saving it: what the model would now say about a few messages, beside what it said.
 - [ ] Use Tailscale's identity headers to skip the Google round trip for viewers on the tailnet.
 - [ ] Let a Chrome extension call the API: it cannot use the page's cookie or Origin, so it needs its own token, issued to a signed-in user.
-- [ ] Revisit Vercel's UI SDK as the behaviour layer under `web/src/system` once it is past beta and works under the content security policy (evaluated 2026-11-15; see docs/architecture.md).
 - [ ] **Manage the inbox from Sift?** Read, archive, reply-later, search, bulk actions by sender or label. Decide whether that is the direction; the first step would be an inbox view of what Sift kept, with For review's row and panel. Replying needs permission to send.
 
 ## Inference
@@ -73,7 +71,6 @@ The working list for sift. Remove an item when it lands; add what you find. What
 
 ## Setup
 
-- [ ] Remove `sift dashboard` (and `activity.running`, which exists only for it), or add it to the commands AGENTS.md allows.
 - [ ] Run `sift init` inside Docker, where the dashboard address is the host's, not the container's.
 - [ ] **Google verification.** Find out what publishing the Google app requires (branding fields, restricted-scope verification, a yearly security assessment (CASA)) and make that path of `init` exact; check its Console links and field names against the live console, since they were written from memory. Hosting one Google client for other people on Vercel needs the same.
 
@@ -96,10 +93,7 @@ Sift has run on the owner's inbox while off. Nothing that changes the mailbox ha
   - **A public address.** Sign-in is the only gate there; review the session and write protections with that in mind.
 - [ ] **Fewer Gmail calls.** Each pass fetches a new Google access token for each mailbox (`clientFor`); keeping it until it expires needs it encrypted in `Ephemeral`. An idle pass still opens the model sign-in and lists waiting suggestions and their text.
 - [ ] **A lost key has no way back** short of a new database: the rekey pass refuses to start while any sealed row does not open. Let the owner drop what does not open (sign-ins, sealed mail and rule text) and start ([docs/secrets.md](docs/secrets.md#losing-the-key)).
-- [ ] `.env` cannot set `SIFT_HOME`: the home is resolved before `.env` is read. `sift status` says nothing about plain credential files when a key is set.
 - [ ] Restrict the core container's egress to Google and the model providers. The unsubscribe request is the one call to an arbitrary host and needs a relay container of its own first; the plan is in [docs/deploy.md](docs/deploy.md).
 - [ ] Publish the image (registry, tags, multi-arch). It is 337 MB, most of it Node itself.
 - [ ] Optional Pub/Sub push for lower latency, keeping polling as the fallback. It needs a Google Cloud topic, so it is a lot of setup for a self-hosted tool.
-- [ ] **Shared sender reputation**, if ever wanted, is a table of its own with an install-wide hash, written only from what people reported (blocked, marked spam), from senders that passed DMARC, counted only past several different people, and stated in the privacy policy. The per-person hashes are never joined across people.
-- [ ] **Cloudflare**, if ever: Workers are not Node (`node:crypto`, `node:fs` for the page, `pg`, the model library, the Google client), so it needs a third `Driver` (Hyperdrive or Neon's serverless driver) and Upstash's HTTP client for `Ephemeral`.
 - [ ] **An agent you talk to** ("why did you archive that", "clean up my rules"), if ever built, gets its own sandbox container: shell and files, no credentials, a read-only snapshot of the database, no network except a tool channel to the core. Decide how it reaches its model without holding the key: a proxy in the core that adds it, or the core making the calls for it.

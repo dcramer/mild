@@ -267,7 +267,7 @@ Postgres reuses the freed space; the files do not shrink.
 
 ### Dashboard
 
-The dashboard is where the user watches Sift, teaches it and manages it. `sift run` serves it (a JSON API in `src/dashboard/` and the static web app built from `web/`) from the same process that reads and classifies mail; `sift dashboard` serves it alone.
+The dashboard is where the user watches Sift, teaches it and manages it. `sift run` serves it (a JSON API in `src/dashboard/` and the static web app built from `web/`) from the same process that reads and classifies mail.
 
 **Who may use it**
 
@@ -311,7 +311,7 @@ Gmail has no API for it, so Sift makes the request a mail client would: the send
 
 ## Errors and traces
 
-With `SENTRY_DSN` set, Sift sends errors, traces, logs and the tick's check-ins to that Sentry project (`src/telemetry.ts`, the only module that imports the SDK; lint enforces it). Unset, nothing is sent and every span is a no-op. Each host starts it once: `sift run` and `sift dashboard` at start, and Vercel when an instance opens, sending what is waiting with `waitUntil` after each response and piece of work, since an instance may be frozen once it has answered. The release is the commit Vercel names, or `SENTRY_RELEASE`.
+With `SENTRY_DSN` set, Sift sends errors, traces, logs and the tick's check-ins to that Sentry project (`src/telemetry.ts`, the only module that imports the SDK; lint enforces it). Unset, nothing is sent and every span is a no-op. Each host starts it once: `sift run` at start, and Vercel when an instance opens, sending what is waiting with `waitUntil` after each response and piece of work, since an instance may be frozen once it has answered. The release is the commit Vercel names, or `SENTRY_RELEASE`.
 
 - **What is traced.** Each piece of work (`sift.work`: a pass, upkeep, older mail, a test run), and in a pass one span per message (`sift.triage`) with one per tier under it (`sift.tier`), each mailbox change and unsubscribe (`sift.action`, from the executor), each Gmail request (`http.client`, its path with the ids in it as `{id}` in `url.template`; a 404 is an answer, not a failure) and any wait for the mailbox's quota (`sift.wait`), each database statement under a span (`db`, its text with the values as `$1`, never the values, sealed or not), each Redis call (`cache.get` with `cache.hit`, `cache.put`, or `db` for a lock or quota, named by the first part of the key alone, since the rest may be an address or a sign-in's secret), each outgoing request to OpenAI's sign-in (`http.client`, without the query), and each dashboard request (`http.server`, named by its route and never by the path a stranger sent). Spans use OpenTelemetry's names (`http.request.method`, `server.address`, `http.response.status_code`, `http.route`, `db.system.name`, `db.query.text`, `db.operation.name`), and a span that failed says `error.type`: the error's class or the status, never its words. Every trace is kept (`tracesSampleRate` 1): a dropped pass would lose its model calls.
 - **One trace per tick on Vercel.** The cron's tick is a span (`sift.tick`), and each call it makes to `api/work` carries the trace (`sentry-trace`, `baggage`), so each piece of work is part of it; so are the pieces a person starts from the dashboard, under their request. Each tick, there and under `sift run`, is a check-in of the `tick` monitor, so Sentry says when it stops, fails or runs long.
