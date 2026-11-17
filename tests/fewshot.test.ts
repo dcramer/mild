@@ -45,13 +45,38 @@ describe('choosing examples', () => {
     expect(ids(picked)).toEqual(['sender-new', 'sender-old', 'domain', 'other-new', 'receipt']);
   });
 
+  it('takes at most two from the same sender, and gives the other places to the newest of each label from anyone else', () => {
+    const picked = pickShots(
+      [
+        shot('s1', 'news@example.com', 'newsletter', 9),
+        shot('s2', 'news@example.com', 'newsletter', 8),
+        shot('s3', 'news@example.com', 'newsletter', 7),
+        shot('s4', 'news@example.com', 'marketing', 6),
+        shot('sale', 'shop@example.org', 'marketing', 2),
+        shot('note', 'ada@example.org', 'personal', 1),
+      ],
+      judged,
+      DEFAULT_LABELS,
+    );
+    expect(ids(picked)).toEqual(['s1', 's2', 'sale', 'note']);
+  });
+
+  it('skips the same domain when anyone can get an address there', () => {
+    const stranger = facts({ messageId: 'now', from: { address: 'someone@gmail.com', domain: 'gmail.com' } });
+    const candidates = [shot('other', 'another@gmail.com', 'personal', 2), shot('receipt', 'shop@example.org', 'transactional', 1)];
+    expect(ids(pickShots(candidates, stranger, DEFAULT_LABELS))).toEqual(['other', 'receipt']);
+    expect(ids(pickShots([shot('other', 'another@gmail.com', 'personal', 2), shot('mine', 'pal@gmail.com', 'personal', 1)], stranger, DEFAULT_LABELS))).toEqual(
+      ['other'],
+    );
+  });
+
   it('never includes the message itself or an example whose label has gone', () => {
     const picked = pickShots([shot('now', 'news@example.com', 'newsletter', 5), shot('gone', 'news@example.com', 'removed_label', 4)], judged, DEFAULT_LABELS);
     expect(picked).toEqual([]);
   });
 
   it('stops at a few examples and at the token budget', () => {
-    const many = Array.from({ length: 20 }, (_, i) => shot(`s${i}`, 'news@example.com', 'newsletter', i));
+    const many = Array.from({ length: 20 }, (_, i) => shot(`s${i}`, `s${i}@example.com`, 'newsletter', i));
     expect(pickShots(many, judged, DEFAULT_LABELS)).toHaveLength(MAX_SHOTS);
 
     const long = many.map((s) => ({ ...s, excerpt: 'x'.repeat(MAX_EXCERPT_CHARS), subject: 'y'.repeat(900) }));
@@ -64,6 +89,14 @@ describe('choosing examples', () => {
   it('cuts an excerpt to one short line', () => {
     expect(excerptOf('  Hello\r\n\r\nthere  ')).toBe('Hello there');
     expect(excerptOf('a'.repeat(5000))).toHaveLength(MAX_EXCERPT_CHARS);
+  });
+
+  it('starts an excerpt after the lines that link to the web copy, and without the padding after the preview text', () => {
+    const newsletter =
+      'View this email in your browser\n\nHaving trouble reading? Click here\nThis week: three new recipes\u034f \u200c\u034f \u200c\nRead online at the end.';
+    expect(excerptOf(newsletter)).toBe('This week: three new recipes Read online at the end.');
+    expect(excerptOf('View our new collection.')).toBe('View our new collection.');
+    expect(excerptOf('View in browser')).toBe('');
   });
 });
 
