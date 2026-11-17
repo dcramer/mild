@@ -144,6 +144,7 @@ beforeEach(async () => {
 
 const READS = (account: string, mark: string) => [
   '/api/summary',
+  '/api/usage',
   '/api/decisions',
   `/api/decisions?q=${mark}`,
   '/api/rules',

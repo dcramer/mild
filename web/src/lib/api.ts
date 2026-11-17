@@ -27,6 +27,7 @@ export type {
   SuggestionItem,
   Suggestions,
   Summary,
+  Usage,
 } from '../../../src/dashboard/types.ts';
 import type {
   DecisionPage,
@@ -51,6 +52,7 @@ import type {
   SuggestionDetail,
   Suggestions,
   Summary,
+  Usage,
 } from '../../../src/dashboard/types.ts';
 
 export type Days = 1 | 7 | 30 | 90;
@@ -175,6 +177,7 @@ async function post<T = unknown>(path: string, body: unknown): Promise<T> {
 export const api = {
   /** With `label`, each day also says how much of its mail was that label. */
   summary: (days: Days, signal: AbortSignal, label = '') => get<Summary>('/api/summary', { days, label }, signal),
+  usage: (signal: AbortSignal) => get<Usage>('/api/usage', {}, signal),
   decisions: (q: DecisionQuery, signal: AbortSignal) =>
     get<DecisionPage>(
       '/api/decisions',

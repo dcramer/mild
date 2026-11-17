@@ -4,22 +4,8 @@ import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answe
 import { ErrorNote } from '@/components/bits.tsx';
 import { SenderCell, SenderCellLoading } from '@/components/sender.tsx';
 import { messageKey, useParam } from '@/lib/route.ts';
-import { type SuggestionItem, type Suggestions, type Summary, api, useAction, useLoaded } from '@/lib/api.ts';
-import {
-  ACTIONS,
-  FACT_FILTER_OPTIONS,
-  INBOX,
-  ago,
-  inboxFirst,
-  count,
-  describeMatch,
-  factFilterName,
-  money,
-  outcomeName,
-  percent,
-  plural,
-  sureness,
-} from '@/lib/format.ts';
+import { type SuggestionItem, type Suggestions, api, useAction, useLoaded } from '@/lib/api.ts';
+import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, ago, inboxFirst, count, describeMatch, factFilterName, outcomeName, plural, sureness } from '@/lib/format.ts';
 import {
   AnswerPicker,
   Button,
@@ -38,7 +24,6 @@ import {
   RowActions,
   Reserve,
   Table,
-  TextLink,
   Td,
   Th,
   Tr,
@@ -50,16 +35,6 @@ import { proposalStart } from '@/lib/rule-start.ts';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 const UNSURE = '-';
-
-/** How Sift did this week, as one quiet line beside the title. Not on a phone, where Activity has it. */
-function Week({ summary }: { summary: Summary | null }) {
-  const t = summary?.totals;
-  return t ? (
-    <p className="hidden text-sm text-muted-foreground tabular-nums md:block">
-      This week {percent(t.withoutInference, t.decided)} without a model · {money(t.costUsd)} · <TextLink href="/activity">Activity</TextLink>
-    </p>
-  ) : null;
-}
 
 type Proposal = Suggestions['proposals'][number];
 
@@ -230,7 +205,6 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
   const withKept = includeKept || label === INBOX;
   // Unnarrowed, the same list the masthead counts.
   const { data, error, loading, reload } = useLoaded(`suggestions-${withKept}${fact ? `-${fact}` : ''}`, (signal) => api.suggestions(withKept, fact, signal));
-  const summary = useLoaded('summary-7', (signal) => api.summary(7, signal));
   const [search, setSearch] = useParam('q');
   const [does, setDoes] = useParam('does', DOES);
 
@@ -251,7 +225,6 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
   return (
     <ListView
       title="For review"
-      actions={<Week summary={summary.data} />}
       intro={
         <>
           {/* Most people start off, so the room is held for it. */}

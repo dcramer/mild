@@ -25,6 +25,7 @@ export { Panel } from './panel.tsx';
 export { Reserve } from './reserve.tsx';
 export { Select } from './select.tsx';
 export { Share } from './share.tsx';
+export { Spark } from './spark.tsx';
 export { SettingRow, SettingsGroup, Sheet } from './sheet.tsx';
 export { Splash } from './splash.tsx';
 export { ActionIcon, Does } from './does.tsx';

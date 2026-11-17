@@ -1,12 +1,12 @@
 import { Component, type ReactNode, Suspense, useEffect, useRef, useState } from 'react';
 import { api, useLoaded, useOnline } from '@/lib/api.ts';
-import { ago } from '@/lib/format.ts';
 import { setParams, useParam, useRoute } from '@/lib/route.ts';
 import { lazyView } from '@/lib/lazy.tsx';
 import { ListView, Loading, Masthead, Note, Notice, PageHeader } from '@/system';
 import type { MessageRef } from '@/views/message-panel.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
 import { SetUp } from '@/components/set-up.tsx';
+import { SiftStatus, UsageDetail } from '@/components/status.tsx';
 import { Boot } from '@/views/boot.tsx';
 
 // The home page comes with the app. Every other screen is its own file, fetched when first needed and,
@@ -199,7 +199,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
   const accounts = manage.data?.accounts ?? [];
   // Who they are, not which mailbox they happened to sign in with.
   const name = accounts.find((a) => a.primary)?.email ?? signedInAs;
-  const synced = accounts.map((a) => a.lastSyncedAt).filter((at) => at !== null);
+  const usage = useLoaded('usage', (signal) => api.usage(signal), 60_000);
 
   return (
     <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col px-4 md:px-6">
@@ -220,13 +220,8 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
             </Notice>
           ) : null
         }
-        aside={
-          manage.data ? (
-            <span className="whitespace-nowrap">
-              {accounts.length === 0 ? 'No account connected' : synced.length > 0 ? `Synced ${ago(Math.min(...synced))}` : 'Not synced yet'}
-            </span>
-          ) : null
-        }
+        aside={manage.data ? <SiftStatus accounts={accounts} usage={usage.data} /> : null}
+        detail={usage.data ? <UsageDetail usage={usage.data} /> : null}
         account={
           name
             ? {

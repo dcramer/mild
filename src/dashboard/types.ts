@@ -158,6 +158,10 @@ export const Summary = z.object({
 });
 export type Summary = z.infer<typeof Summary>;
 
+/** GET /api/usage: what the model cost, in dollars, over the last day, week and 30 days; `daily` is those 30 days, oldest first. */
+export const Usage = z.object({ day: z.number(), week: z.number(), month: z.number(), daily: z.array(z.number()) });
+export type Usage = z.infer<typeof Usage>;
+
 /** GET /api/decisions: a page of decisions, and how many match in all. */
 export const DecisionPage = z.object({ total: z.number(), rows: z.array(ListedDecision) });
 export type DecisionPage = z.infer<typeof DecisionPage>;

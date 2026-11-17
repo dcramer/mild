@@ -7,6 +7,7 @@ import { execute } from '../src/actions/executor.ts';
 import { listDecisions } from '../src/dashboard/queries/decisions.ts';
 import { listRuleSummaries } from '../src/dashboard/queries/rules.ts';
 import { summarize } from '../src/dashboard/queries/summary.ts';
+import { usage } from '../src/dashboard/queries/usage.ts';
 import type { SenderPage } from '../src/dashboard/types.ts';
 import { people } from '../src/store/people.ts';
 import { addMailbox, connectAccount, recordSync } from '../src/store/accounts.ts';
@@ -169,6 +170,32 @@ describe('tracking', () => {
     // An answer waiting for the next pass is shown among the changes.
     const answer = await recordDecision(db, ACCOUNT, 'c', { ...base, disposition: 'archive' }, { carryOut: true, byUser: true, now: NOW });
     expect(await ids('changed')).toEqual([answer, failed, done]);
+  });
+
+  it('sums what the model cost over a day, a week and 30 days, failed calls included, and per day for the 30', async () => {
+    const { db } = await onePerson(ACCOUNT);
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'a', receivedAt: NOW - 50 * DAY })], '1', NOW);
+    for (const [ago, costUsd, error] of [
+      [2 * 3_600_000, 0.01, false],
+      [3 * DAY, 0.02, true],
+      [20 * DAY, 0.04, false],
+      [40 * DAY, 1, false],
+    ] as const) {
+      const run = await startRun(db, { accountId: ACCOUNT, messageId: 'a', model: 'test-model', now: NOW - ago });
+      await finishRun(db, run, {
+        ...(error ? { error: 'failed' } : {}),
+        usage: { model: 'test-model', inputTokens: 1, outputTokens: 1, costUsd },
+        now: NOW - ago,
+      });
+    }
+    const used = await usage(db, await everything(db), NOW);
+    expect(used.day).toBeCloseTo(0.01);
+    expect(used.week).toBeCloseTo(0.03);
+    expect(used.month).toBeCloseTo(0.07);
+    expect(used.daily).toHaveLength(30);
+    expect(used.daily.at(-1)).toBeCloseTo(0.01);
+    expect(used.daily.at(-4)).toBeCloseTo(0.02);
+    expect(used.daily.reduce((a, b) => a + b)).toBeCloseTo(0.07);
   });
 
   it('counts only the window and reports tiers, cost and backlog', async () => {

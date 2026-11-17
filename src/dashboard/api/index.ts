@@ -45,6 +45,7 @@ import suggestionRead from './routes/suggestion/get.ts';
 import suggestionsRead from './routes/suggestions/get.ts';
 import summaryRead from './routes/summary/get.ts';
 import undoWrite from './routes/undo/post.ts';
+import usageRead from './routes/usage/get.ts';
 
 /**
  * Every route under `/api/`, each its own module at `routes/<path>/<get|post|frame>.ts`. The server applies
@@ -67,6 +68,7 @@ export const READS: readonly Read[] = [
   suggestionRead,
   suggestionsRead,
   summaryRead,
+  usageRead,
 ];
 export const WRITES: readonly Write[] = [
   accountDeleteWrite,

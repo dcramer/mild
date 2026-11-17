@@ -2,6 +2,7 @@ import { ArrowRightIcon, MegaphoneIcon, PlusIcon, ReplyIcon, SparkleIcon, Trash2
 import { Fragment, type ReactNode, useState } from 'react';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { ContactHint } from '@/components/sender.tsx';
+import { SiftStatus, UsageDetail } from '@/components/status.tsx';
 import { ACTIONS, INBOX, INBOX_NAME, STATUS_NAMES, TIERS, inboxFirst, money, moneyTick, outcomeName } from '@/lib/format.ts';
 import {
   Blank,
@@ -60,6 +61,7 @@ import {
   SettingRow,
   SettingsGroup,
   Sheet,
+  Spark,
   StackedBars,
   Sub,
   Swatch,
@@ -76,6 +78,12 @@ import {
   Wordmark,
 } from '@/system';
 
+const DAILY_COST = [
+  0.11, 0.14, 0.09, 0.21, 0.12, 0.08, 0.04, 0.13, 0.16, 0.1, 0.12, 0.31, 0.15, 0.09, 0.05, 0.12, 0.14, 0.11, 0.18, 0.13, 0.07, 0.06, 0.15, 0.17, 0.12, 0.19,
+  0.14, 0.11, 0.16, 0.14,
+];
+const USAGE = { day: 0.14, week: 0.96, month: DAILY_COST.reduce((a, b) => a + b), daily: DAILY_COST };
+const SYNCED = Date.now() - 20_000;
 const SERIES = TIERS.map((t, index) => ({ key: String(index), name: t.name, color: t.color }));
 const DAYS = [
   [12, 5, 3, 1],
@@ -463,7 +471,6 @@ export function SystemView() {
         <Sheet className="p-5">
           <ListView
             title="For review"
-            actions={<span className="text-muted-foreground">This week 84% without a model</span>}
             search={{ value: search, onChange: setSearch, placeholder: 'Search' }}
             filters={{
               active: made === '' ? [] : [{ label: `Then: ${outcomeName(made)}`, clear: () => setMade('') }],
@@ -613,6 +620,14 @@ export function SystemView() {
             line={{ name: 'Model cost', values: [0.04, 0.02, 0.06, 0, 0.03, 0.08, 0.05], format: money, tick: moneyTick }}
           />
         </div>
+        <div className="flex w-80 max-w-full flex-col gap-4">
+          <Figures compact>
+            <Figure compact label="24H" value="$0.14" />
+            <Figure compact label="7D" value="$0.96" />
+            <Figure compact label="30D" value="$4.12" />
+          </Figures>
+          <Spark values={DAILY_COST} from="Oct 19" to="Today" />
+        </div>
         <dl className="grid max-w-xl grid-cols-[8rem_minmax(0,1fr)_3rem] items-center gap-x-4 gap-y-2 text-sm">
           {[
             ['Notifications', 1067],
@@ -761,8 +776,15 @@ export function SystemView() {
               { to: 'system/rules', label: 'Rules' },
             ]}
             status={<Notice>Sift cannot be reached</Notice>}
-            aside={<span>Synced just now</span>}
-            account={{ name: 'ada@example.org', items: [{ label: 'Sign out', onSelect: () => toast('Signed out') }] }}
+            aside={<SiftStatus accounts={[{ id: 'ada@example.org', email: 'ada@example.org', lastSyncedAt: SYNCED, primary: true }]} usage={USAGE} />}
+            detail={<UsageDetail usage={USAGE} />}
+            account={{
+              name: 'ada@example.org',
+              items: [
+                { label: 'Settings', onSelect: () => toast('Settings') },
+                { label: 'Sign out', onSelect: () => toast('Signed out') },
+              ],
+            }}
           />
         </Sheet>
       </Section>

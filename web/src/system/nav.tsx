@@ -39,22 +39,25 @@ function Sections({ items, current }: { items: readonly NavItem[]; current: stri
 
 /**
  * The top of every screen: the name, the sections, `status` (a `Notice`: what is wrong with sift itself),
- * `aside` (a line about sift, such as when it last synced) and `account` (who is signed in and what they
- * can do about it, behind their `Avatar`). No bar; it sits straight on the page. On a narrow screen the
- * sections, `aside` and the account move into a panel that covers the screen, opened from a menu button,
- * and `status` gets a line of its own under the bar, where it cannot be missed.
+ * `aside` (a short line about sift that is always worth a glance: when it last synced, what it costs) and
+ * `account` (who is signed in and what they can do about it, behind their `Avatar`). No bar; it sits straight
+ * on the page. On a narrow screen the bar keeps the name, `aside` and a menu button; the sections and the
+ * account move into a panel that covers the screen, with `detail` (what `aside`'s hover card says, which a
+ * touch screen never shows) framed above the account. `status` gets a line of its own under the bar.
  */
 export function Masthead({
   items,
   current,
   status,
   aside,
+  detail,
   account,
 }: {
   items: readonly NavItem[];
   current: string;
   status?: ReactNode;
   aside?: ReactNode;
+  detail?: ReactNode;
   account?: { name: string; items: readonly MenuItem[] } | undefined;
 }) {
   const [open, setOpen] = useState(false);
@@ -90,7 +93,7 @@ export function Masthead({
         </div>
       </div>
 
-      <p className="name min-w-0 flex-1 truncate md:hidden">{here?.label}</p>
+      <div className="flex min-w-0 flex-1 justify-end text-sm text-muted-foreground md:hidden">{aside}</div>
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Trigger aria-label="Menu" className={`${ICON_PRESS} relative -mr-2 md:hidden`}>
           <MenuIcon className="size-5" />
@@ -105,7 +108,7 @@ export function Masthead({
                 <XIcon className="size-5" />
               </Dialog.Close>
             </div>
-            <nav aria-label="Sections" className="mt-8">
+            <nav aria-label="Sections" className="mt-14">
               <ul className="flex flex-col gap-1">
                 {items.map((item) => (
                   <li key={item.to}>
@@ -122,28 +125,29 @@ export function Masthead({
                 ))}
               </ul>
             </nav>
-            {aside || account ? (
-              <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 pt-10 text-sm text-muted-foreground">
-                {aside}
-                {account ? (
-                  <>
-                    <span className="break-all">{account.name}</span>
-                    {account.items.map((item) => (
-                      <Button
-                        key={item.label}
-                        variant="quiet"
-                        disabled={item.disabled}
-                        title={item.note}
-                        onClick={() => {
-                          setOpen(false);
-                          item.onSelect();
-                        }}
-                      >
-                        {item.label}
-                      </Button>
-                    ))}
-                  </>
-                ) : null}
+            {detail ? <div className="sheet mt-auto p-4 text-sm">{detail}</div> : null}
+            {account ? (
+              <div className={`${detail ? 'mt-6' : 'mt-auto'} flex flex-col gap-4 border-t border-(--rule) pt-5`}>
+                <p className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <Avatar name={account.name} />
+                  <span className="min-w-0 break-all">{account.name}</span>
+                </p>
+                <div className="grid auto-cols-fr grid-flow-col gap-2">
+                  {account.items.map((item) => (
+                    <Button
+                      key={item.label}
+                      disabled={item.disabled}
+                      title={item.note}
+                      className="justify-center"
+                      onClick={() => {
+                        setOpen(false);
+                        item.onSelect();
+                      }}
+                    >
+                      {item.label}
+                    </Button>
+                  ))}
+                </div>
               </div>
             ) : null}
           </Dialog.Popup>
