@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { generateDrizzleJson, generateMigration } from 'drizzle-kit/api';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import * as schema from '../src/store/schema.ts';
 import {
   addMailbox,
@@ -21,6 +22,7 @@ import { accounts, labels } from '../src/store/query.ts';
 import { DatabaseInUse, moveAside, pglite, roleBypass, verified } from '../src/store/db.ts';
 import { openStore, storeOn } from '../src/store/store.ts';
 import { loadKeyring } from '../src/secrets.ts';
+import { resetDb } from '../src/cli/commands/reset-db.ts';
 import type { Sql } from '../src/store/sql.ts';
 import type { Disposition } from '../src/triage/types.ts';
 import { freshStore, onePerson, openUserDb, raw, recordEverything, rowsBy, superuser } from './fixtures.ts';
@@ -96,6 +98,19 @@ describe('migrations', () => {
     const fresh = await openStore(paths);
     expect(await fresh.central.select({ id: accounts.id }).from(accounts)).toEqual([]);
     await fresh.close();
+  });
+
+  it('move Workflow’s runs aside with the database on sift reset-db: they name the old one’s people and mailboxes', () => {
+    const home = tempDir();
+    vi.stubEnv('SIFT_HOME', home);
+    mkdirSync(join(home, 'database'));
+    mkdirSync(join(home, 'workflow'));
+    resetDb();
+    vi.unstubAllEnvs();
+    expect(readdirSync(home).filter((name) => name.startsWith('database') || name.startsWith('workflow'))).toEqual([
+      expect.stringMatching(/^database\.\d{4}-/),
+      expect.stringMatching(/^workflow\.\d{4}-/),
+    ]);
   });
 
   it('refuse a database made by migrations since replaced, rather than run them again over it', async () => {

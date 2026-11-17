@@ -1,12 +1,15 @@
 import { globSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { runKey } from '../src/app/sift.ts';
+import { begin } from '../src/app/process.ts';
+import { createSift, runKey } from '../src/app/sift.ts';
+import { loadConfig } from '../src/config.ts';
+import { fromHere } from '../src/cli/host.ts';
 import { type Ephemeral, memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import type { RunOptions } from '../src/work/run.ts';
 import { startInboxRuns } from '../src/store/inbox.ts';
 import { people } from '../src/store/people.ts';
 import { googleSignIn, onePerson, startDashboard } from './fixtures.ts';
-import { ACCOUNT, FakeMailbox, codeSignIn, testModel, workDue } from './helpers.ts';
+import { ACCOUNT, FakeMailbox, codeSignIn, tempDir, testModel, workDue } from './helpers.ts';
 
 /**
  * Module state that holds between calls, allowed because any instance computes the same: a cache, not a
@@ -92,5 +95,46 @@ describe("a piece's run key", () => {
     expect(runKey(pass, 'another secret')).not.toBe(key);
     expect(runKey({ ...pass, kind: 'inbox', run: 1 }, 'one secret')).not.toBe(key);
     expect(runKey({ ...pass, account: 'other@example.org' }, 'one secret')).not.toBe(key);
+  });
+});
+
+describe('beginning a piece in a process where Workflow has not started', () => {
+  it('rejects, so a tick that catches it goes on to its other pieces', async () => {
+    const pass = { kind: 'pass', person: 1, account: ACCOUNT } as const;
+    expect(await begin(pass, 'key').catch((error: unknown) => String(error))).toBe('Error: Workflow has not started in this process.');
+  });
+});
+
+describe('a piece whose key a run holds', () => {
+  it('is said in the log once that run has gone on longer than any run lasts', async () => {
+    const { store } = await onePerson(ACCOUNT);
+    const logged: string[] = [];
+    let since = Date.now() - 60_000;
+    const sift = await createSift({
+      config: loadConfig({ SIFT_HOME: tempDir() }),
+      store,
+      ephemeral: memoryEphemeral(),
+      sessionSecret: 'secret',
+      allowedHosts: [],
+      signInAddresses: [],
+      log: (line) => logged.push(line),
+      limitMs: 60_000,
+      begin: async () => ({ begun: false, since }),
+    });
+    const held = () => logged.filter((line) => line.includes('has not ended'));
+    await sift.tick();
+    expect(held()).toEqual([]);
+    since = Date.now() - 2 * 3_600_000;
+    await sift.tick();
+    expect(held()).toContain('Deleting old records is held back by a run begun 120 minutes ago that has not ended');
+  });
+});
+
+describe('where the Local World delivers runs under sift run', () => {
+  it('is the listener’s own address, a wildcard at its own family’s loopback', () => {
+    expect(fromHere('::', 8787)).toBe('http://[::1]:8787');
+    expect(fromHere('0.0.0.0', 8787)).toBe('http://127.0.0.1:8787');
+    expect(fromHere('fd7a:115c::1', 8787)).toBe('http://[fd7a:115c::1]:8787');
+    expect(fromHere('127.0.0.1', 8787)).toBe('http://127.0.0.1:8787');
   });
 });

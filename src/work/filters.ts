@@ -28,8 +28,11 @@ export async function filtersDue(db: Sql, accountId: string, fix: boolean, now: 
 export async function checkFiltersWhenDue(deps: ActionDeps, accountId: string, fix: boolean): Promise<FilterCheck | null> {
   const now = (deps.now ?? Date.now)();
   if (await lookedLately(deps.db, accountId, now)) return null;
-  if (fix) await retryRuleFilters(deps, accountId);
-  const check = await checkRuleFilters(deps, accountId, fix);
-  await markFiltersChecked(deps.db, accountId, now);
-  return check;
+  try {
+    if (fix) await retryRuleFilters(deps, accountId);
+    return await checkRuleFilters(deps, accountId, fix);
+  } finally {
+    // A look that failed waits for the next like one that did: otherwise every tick would begin a pass to fail it again.
+    await markFiltersChecked(deps.db, accountId, now);
+  }
 }

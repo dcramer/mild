@@ -55,8 +55,8 @@ export async function startInboxRuns(
 }
 
 /** The runs still going, for what a tick has to do. */
-export async function goingInboxRuns(db: Sql): Promise<{ id: number; accountId: string }[]> {
-  return await db.select({ id: inboxRuns.id, accountId: inboxRuns.accountId }).from(inboxRuns).where(isNull(inboxRuns.finishedAt));
+export async function goingInboxRuns(db: Sql): Promise<Pick<InboxRun, 'id' | 'accountId' | 'ruleId'>[]> {
+  return await db.select({ id: inboxRuns.id, accountId: inboxRuns.accountId, ruleId: inboxRuns.ruleId }).from(inboxRuns).where(isNull(inboxRuns.finishedAt));
 }
 
 /** A run that is still going, or null once it has finished or been stopped. */

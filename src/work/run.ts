@@ -96,21 +96,27 @@ export async function dueWork(store: Store, options: RunOptions, people?: readon
     const runs = await goingInboxRuns(db);
     // Nothing is read from their Gmail until the person has said, with a label of their own, what they want of it.
     const reading = await hasOwnLabels(db);
+    const evals = await goingEvals(db);
+    // Going through an inbox and a test run wait for a model, so the timed tick begins neither without one. Applying a rule needs none.
+    const modelled = Boolean(people) || ((runs.some((run) => !run.ruleId) || evals.length > 0) && Boolean(options.model && (await options.model(db))));
     for (const account of await listAccounts(db)) {
       if (!reading) continue;
       if (people || (await passWanted(db, account, options))) due.push({ kind: 'pass', person, account: account.id });
-      for (const run of runs) if (run.accountId === account.id) due.push({ kind: 'inbox', person, account: account.id, run: run.id });
+      const going = runs.filter((run) => run.accountId === account.id && (run.ruleId || modelled));
+      // An expired sign-in fails a slice as it fails a pass; the look above finds when Gmail answers again.
+      if (going.length === 0 || (!people && (await lastPass(options.ephemeral, account.id))?.expired)) continue;
+      for (const run of going) due.push({ kind: 'inbox', person, account: account.id, run: run.id });
     }
-    for (const run of await goingEvals(db)) due.push({ kind: 'eval', person, run });
+    if (modelled) for (const run of evals) due.push({ kind: 'eval', person, run });
   }
   return due;
 }
 
-const describeWork = (work: Work) =>
+export const describeWork = (work: Work) =>
   work.kind === 'pass'
     ? `${work.account}: pass`
     : work.kind === 'inbox'
-      ? `${work.account}: going through the inbox`
+      ? `${work.account}: inbox run ${work.run}`
       : work.kind === 'eval'
         ? 'A test run'
         : 'Deleting old records';

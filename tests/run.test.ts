@@ -1,6 +1,7 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { type RunOptions, runOnce } from '../src/work/run.ts';
+import { FILTER_CHECK_MINUTES } from '../src/work/filters.ts';
 import { startInboxRuns } from '../src/store/inbox.ts';
 import type { Store } from '../src/store/store.ts';
 import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
@@ -638,7 +639,7 @@ describe('read state', () => {
 });
 
 describe('Gmail filters', () => {
-  it('are checked during a pass, and a Gmail that cannot list them does not fail it', async () => {
+  it('are checked during a pass, and a Gmail that cannot list them does not fail it: they are looked at again when the next look is due', async () => {
     const id = await addRule(db, { match: { from: ['ada@example.org'] }, labelId: 'personal' }, 'user');
     await writeRuleFilter({ db, mailbox }, id, ACCOUNT);
     mailbox.filters = [];
@@ -648,7 +649,9 @@ describe('Gmail filters', () => {
     expect(logs.join('\n')).toMatch(/could not check Gmail filters: network down/);
 
     mailbox.failFilters = false;
-    const [result] = await runOnce(await active(false), options());
+    expect((await runOnce(await active(false), options()))[0]?.filters).toBeUndefined();
+    const later = 5000 + FILTER_CHECK_MINUTES * 60_000;
+    const [result] = await runOnce(await active(false), { ...options(), now: () => later });
     expect(result?.filters).toEqual({ gone: 1, changed: 0, outdated: 0 });
     expect(logs.at(-1)).toMatch(/1 filter deleted in Gmail/);
     expect(await raw(db).get('SELECT filter_id, state FROM rule_filters WHERE rule_id = ?', id)).toEqual({ filter_id: null, state: 'gone' });

@@ -77,8 +77,10 @@ export async function run(args: string[]): Promise<void> {
         await sleep(INTERVAL_MS, undefined, { signal: stop.signal }).catch(() => {});
       }
     } finally {
-      await stopDashboard();
-      await Promise.all(running);
+      // Closing the World first would cut off the runs under way, which then hold their keys until Sift starts again.
+      await stopDashboard(async () => {
+        while (running.size > 0) await Promise.all(running);
+      });
     }
   } finally {
     await ephemeral.close();

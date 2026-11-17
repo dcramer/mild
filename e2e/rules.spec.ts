@@ -309,3 +309,26 @@ test.describe('Rules', () => {
     await query(page).toBe('');
   });
 });
+
+test.describe('Apply to your inbox, with what is due begun', () => {
+  test.use({ work: true });
+
+  test('the press begins the rule’s run as a Workflow run, which finishes when the search finds nothing', async ({ page }) => {
+    await page.goto('/rules');
+    const dialog = await writeRule(page);
+    await dialog.getByRole('textbox', { name: 'Value 1' }).fill('sale@store.example.com');
+    await dialog.getByRole('button', { name: 'Add rule', exact: true }).click();
+    const apply = page.getByRole('dialog', { name: 'Apply to your inbox' });
+    await apply.getByRole('button', { name: 'Archive all' }).click();
+    await expect(apply).toHaveCount(0);
+
+    const opened = rulePanel(page, 'sale@store.example.com');
+    await expect(async () => {
+      await page.reload();
+      // Its mail still waiting, read with how far applying it has got.
+      await expect(opened.getByRole('cell', { name: 'Winter sale starts now' })).toBeVisible({ timeout: 1000 });
+      await expect(opened.getByRole('button', { name: 'Apply to inbox…' })).toBeVisible({ timeout: 1000 });
+    }).toPass();
+    await expect(opened.getByText('Finding them in Gmail', { exact: false })).toHaveCount(0);
+  });
+});
