@@ -329,7 +329,7 @@ export function SystemView() {
               label="With icons"
               value={choice}
               options={ACTIONS}
-              icons={Object.fromEntries(ACTIONS.map(([key]) => [key, <ActionIcon action={key} />]))}
+              icons={Object.fromEntries(ACTIONS.map(([key]) => [key, <ActionIcon key={key} action={key} />]))}
               onChange={setChoice}
             />
             <Select label="Disabled" value={choice} options={ACTIONS} onChange={setChoice} disabled />

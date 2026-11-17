@@ -1,8 +1,11 @@
-import { type ComponentProps, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ComponentProps, type ReactNode, createContext, useContext, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { RowActive, useLayerMoves, useOnPage, useShortcut } from './keys.tsx';
 import { Control, ControlBar } from './controls.tsx';
 import { Tooltip } from './tooltip.tsx';
+
+/** How a row that opens tells its table it is there, until it goes. */
+const Stops = createContext<() => () => void>(() => () => {});
 
 /**
  * Rows of the same kind of thing. It has no surface of its own: on the page it sits flush with the
@@ -34,16 +37,22 @@ export function Table({ keys = false, children }: { keys?: boolean; children: Re
     all[next]?.focus();
     all[next]?.scrollIntoView({ block: 'nearest' });
   };
-  const [openable, setOpenable] = useState(false);
-  useEffect(() => setOpenable(rows().length > 0));
-  const live = { enabled: keys && moves && openable, within };
+  // The rows J and K stop at: until there is one, the keys and their bar are not offered.
+  const [stops, setStops] = useState(0);
+  const [stop] = useState(() => () => {
+    setStops((n) => n + 1);
+    return () => setStops((n) => n - 1);
+  });
+  const live = { enabled: keys && moves && stops > 0, within };
   const down = useShortcut('j', 'Next row', () => step(1), live);
   const up = useShortcut('k', 'Previous row', () => step(-1), live);
   return (
     <div ref={element} className="bleed">
       {/* The bar below sits outside the sideways scroll, which would otherwise hold it in place instead of the screen. */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left">{children}</table>
+        <table className="w-full text-left">
+          <Stops value={stop}>{children}</Stops>
+        </table>
       </div>
       {onPage && (down || up) ? (
         // The page's controls, held at the bottom of the screen while the table is on it.
@@ -64,6 +73,9 @@ export function Table({ keys = false, children }: { keys?: boolean; children: Re
  */
 export function Tr({ onOpen, holds, className, ...props }: ComponentProps<'tr'> & { onOpen?: () => void; holds?: readonly string[] }) {
   const [active, setActive] = useState(false);
+  const stop = useContext(Stops);
+  const opens = onOpen !== undefined;
+  useEffect(() => (opens ? stop() : undefined), [opens, stop]);
   if (!onOpen) return <tr className={cn('row group/row', className)} {...props} />;
   return (
     <RowActive value={active}>
@@ -73,7 +85,9 @@ export function Tr({ onOpen, holds, className, ...props }: ComponentProps<'tr'> 
         className={cn('row group/row cursor-pointer hover:bg-(--fill) focus-visible:bg-(--fill-strong) focus-within:bg-(--fill)', className)}
         onClick={(event) => {
           // React passes up presses in what a row renders elsewhere, such as a dialog it opened; those are not on the row.
-          if (event.currentTarget.contains(event.target as Node)) onOpen();
+          // Nor is a press on a link in it, which goes where the link does.
+          const target = event.target as Element;
+          if (event.currentTarget.contains(target) && !event.currentTarget.contains(target.closest('a'))) onOpen();
         }}
         onFocus={() => setActive(true)}
         onBlur={(event) => {

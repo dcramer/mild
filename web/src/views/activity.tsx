@@ -1,9 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { MailLog, MailLogLoading } from '@/components/mail-log.tsx';
 import { type Days, type DecisionRow, api, useLoaded } from '@/lib/api.ts';
-import { useParam } from '@/lib/route.ts';
+import { paramNow, setParams, useParam } from '@/lib/route.ts';
 import { FACT_FILTER_OPTIONS, HANDLED, PERIODS, count, inboxFirst, labelSeries, factFilterName, longDay, money, moneyTick, shortDay } from '@/lib/format.ts';
 import { Button, Empty, FilterGroup, ListView, Reserve, Select, StackedBars, useToast } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
@@ -17,15 +17,18 @@ const VIEWS = [
   ['all', 'Everything'],
 ] as const;
 
+/** A narrower list starts at its first page; a page in the address it was opened with stands. */
+const narrow = (name: string) => (value: string) => setParams({ [name]: value, page: '' });
+
 /** What sift did to mail, by day, newest first, with a way to undo it. */
 export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
   const plan = usePlan();
-  const [chosen, setChosen] = useParam('days');
+  const [chosen] = useParam('days');
   const days = (PERIODS.some(([key]) => key === chosen) ? Number(chosen) : 7) as Days;
-  const [view, setView] = useParam('show', VIEWS);
-  const [search, setSearch] = useParam('q');
-  const [fact, setFact] = useParam('fact', FACT_FILTER_OPTIONS);
-  const [label, setLabel] = useParam('label');
+  const [view] = useParam('show', VIEWS);
+  const [search] = useParam('q');
+  const [fact] = useParam('fact', FACT_FILTER_OPTIONS);
+  const [label] = useParam('label');
   const [typed, setTyped] = useState(search);
   const [page, setPage] = useParam('page');
   const offset = (Math.max(1, Math.floor(Number(page)) || 1) - 1) * PAGE;
@@ -35,17 +38,11 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
 
   // Search as the viewer types, but not on every keystroke.
   useEffect(() => {
-    const timer = setTimeout(() => setSearch(typed.trim()), 250);
+    const timer = setTimeout(() => {
+      if (typed.trim() !== paramNow('q')) narrow('q')(typed.trim());
+    }, 250);
     return () => clearTimeout(timer);
   }, [typed]);
-  // A narrower list starts at its first page; a page in the address it was opened with stands.
-  const narrowed = JSON.stringify([days, view, search, fact, label]);
-  const shown = useRef(narrowed);
-  useEffect(() => {
-    if (shown.current === narrowed) return;
-    shown.current = narrowed;
-    goTo(0);
-  }, [narrowed]);
 
   const status = view === '' ? 'changed' : '';
   const query = { days, status, search, fact, label, limit: PAGE, offset };
@@ -74,7 +71,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
           label="Period"
           value={String(days) as (typeof PERIODS)[number][0]}
           options={PERIODS}
-          onChange={(value) => setChosen(value === '7' ? '' : value)}
+          onChange={(value) => narrow('days')(value === '7' ? '' : value)}
         />
       }
       search={{ value: typed, onChange: setTyped, placeholder: 'Search subject or sender' }}
@@ -82,17 +79,17 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
         label: 'Show',
         value: view,
         options: VIEWS,
-        onChange: (next) => setView(next as typeof view),
+        onChange: narrow('show'),
       }}
       filters={{
         active: [
-          ...(label === '' ? [] : [{ label: `Label: ${labels.get(label) ?? label}`, clear: () => setLabel('') }]),
-          ...(fact === '' ? [] : [{ label: factFilterName(fact), clear: () => setFact('') }]),
+          ...(label === '' ? [] : [{ label: `Label: ${labels.get(label) ?? label}`, clear: () => narrow('label')('') }]),
+          ...(fact === '' ? [] : [{ label: factFilterName(fact), clear: () => narrow('fact')('') }]),
         ],
         panel: (
           <>
-            <FilterGroup label="Label" value={label} options={[['', 'Any'] as const, null, ...inboxFirst(labels)]} onChange={setLabel} />
-            <FilterGroup label="What Sift saw" value={fact} options={FACT_FILTER_OPTIONS} onChange={setFact} />
+            <FilterGroup label="Label" value={label} options={[['', 'Any'] as const, null, ...inboxFirst(labels)]} onChange={narrow('label')} />
+            <FilterGroup label="What Sift saw" value={fact} options={FACT_FILTER_OPTIONS} onChange={narrow('fact')} />
           </>
         ),
       }}

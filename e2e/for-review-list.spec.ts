@@ -228,3 +228,15 @@ test.describe('Working through For review', () => {
     await param(page, 'message').toBe('m7');
   });
 });
+
+test('a sender’s link in a row goes to their page within the app, and opens no message', async ({ page }) => {
+  await page.goto('/');
+  const link = row(page, 'Replica lag on db-3').getByRole('link').first();
+  await expect(link).toBeVisible();
+  // A full load would drop what the page set on itself.
+  await page.evaluate(() => Object.assign(globalThis, { stillHere: true }));
+  await link.click();
+  await expect(page).toHaveURL(/\/sender\//);
+  expect(await page.evaluate(() => (globalThis as { stillHere?: boolean }).stillHere)).toBe(true);
+  await param(page, 'message').toBe(null);
+});

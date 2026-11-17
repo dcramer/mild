@@ -33,9 +33,11 @@ export function useLayerOpen(open: boolean, onClose: () => void, onClosing?: () 
     const frame = requestAnimationFrame(() => setShown(true));
     return () => cancelAnimationFrame(frame);
   }, []);
-  useEffect(() => {
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
     if (open) setLeaving(false);
-  }, [open]);
+  }
   return {
     open: open && shown && !leaving,
     onOpenChange: (next: boolean) => {
