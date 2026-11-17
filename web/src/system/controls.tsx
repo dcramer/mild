@@ -11,7 +11,7 @@ import { Kbd } from './type.tsx';
 export function ControlBar({ start, children, className }: { start?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <div className={cn('flex items-center gap-x-3 text-muted-foreground', className)}>
-      {start ? <span className="text-sm whitespace-nowrap tabular-nums max-md:order-2">{start}</span> : null}
+      {start ? <span className="px-2 text-sm whitespace-nowrap tabular-nums max-md:order-2">{start}</span> : null}
       <div className="flex flex-1 items-center gap-1 max-md:contents md:justify-end">{children}</div>
     </div>
   );

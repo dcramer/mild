@@ -4,8 +4,6 @@ import { FACTS, type FactAnswer, capitalised, factWords } from '@/lib/format.ts'
 import { type RuleStart, factStart, listStart } from '@/lib/rule-start.ts';
 import { Button, ChoiceGroup, MailFrame, RowActions, Section, Sub, Table, Td, Tr } from '@/system';
 
-const people = (list: MessageDetail['to']) => list.map((p) => p.address).join(', ');
-
 type View = 'text' | 'html';
 const VIEWS = [
   ['text', 'Text'],
@@ -23,14 +21,13 @@ function storedView(): View {
 }
 
 /**
- * A message as sift holds it, under who it went to unless that was the account alone: its HTML when it has
- * one, or its text when it has none or the reader chose text. Who sent it and when are in the panel's header.
+ * A message as sift holds it: its HTML when it has one, or its text when it has none or the reader chose
+ * text. Who sent it, to whom and when are in the panel's header. On a wide screen it fills the column it is
+ * in and scrolls inside, so what is beside it stays put.
  */
 export function MessageBody({ detail }: { detail: MessageDetail }) {
   const [view, setView] = useState(storedView);
   const html = detail.hasHtml && view === 'html';
-  // Mail to the account alone says nothing by saying who it went to.
-  const addressed = detail.cc.length > 0 || detail.to.some((p) => p.address !== detail.accountId);
   const choose = (next: View | null) => {
     if (!next) return;
     setView(next);
@@ -41,25 +38,15 @@ export function MessageBody({ detail }: { detail: MessageDetail }) {
     }
   };
   return (
-    <article className="flex min-w-0 flex-col gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 empty:hidden">
-        {addressed ? (
-          <p className="min-w-0 text-muted-foreground">
-            {detail.to.length > 0 ? `To ${people(detail.to)}` : ''}
-            {detail.cc.length > 0 ? `${detail.to.length > 0 ? ', cc ' : 'Cc '}${people(detail.cc)}` : ''}
-          </p>
-        ) : null}
-        {detail.hasHtml ? (
-          <div className="ml-auto">
-            <ChoiceGroup label="Read it as" value={html ? 'html' : 'text'} options={VIEWS} onChange={choose} />
-          </div>
-        ) : null}
-      </div>
-      {html ? (
-        <div className="flex flex-col gap-2">
-          <MailFrame src={api.messageHtml(detail.accountId, detail.messageId)} title={detail.subject || '(no subject)'} />
-          <p className="text-sm text-muted-foreground">Remote images are blocked.</p>
+    <article className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+      {detail.hasHtml ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <ChoiceGroup label="Read it as" value={html ? 'html' : 'text'} options={VIEWS} onChange={choose} />
+          {html ? <p className="text-sm text-muted-foreground">Remote images are blocked</p> : null}
         </div>
+      ) : null}
+      {html ? (
+        <MailFrame src={api.messageHtml(detail.accountId, detail.messageId)} title={detail.subject || '(no subject)'} />
       ) : detail.body === null ? (
         <p className="text-muted-foreground">
           Sift does not hold this message’s text. It keeps it only while the message waits on you, and for good once you have answered for it.
@@ -67,7 +54,9 @@ export function MessageBody({ detail }: { detail: MessageDetail }) {
       ) : detail.body === '' ? (
         <p className="text-muted-foreground">This message has no readable text, or is no longer in Gmail.</p>
       ) : (
-        <div className="max-w-[68ch] text-reading leading-relaxed break-words whitespace-pre-wrap">{detail.body}</div>
+        <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+          <div className="max-w-[68ch] text-reading leading-relaxed break-words whitespace-pre-wrap">{detail.body}</div>
+        </div>
       )}
     </article>
   );

@@ -189,7 +189,7 @@ export function cleanHtml(html: string): string {
 }
 
 /** Under the message's own styles: email is written for white paper, whatever the dashboard's colours. */
-const PAPER = '<style>:root{color-scheme:light;background:#fff;color:#000}</style>';
+const PAPER = '<style>:root{color-scheme:light;background:#fff;color:#000;scrollbar-width:thin}</style>';
 
 /** The document the frame shows: the cleaned message, on white. */
 export function mailDocument(html: string): string {
