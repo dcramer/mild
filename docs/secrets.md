@@ -34,24 +34,22 @@ Rotating the key (above) is enough only if nobody who had the key could also hav
 | What | Do |
 | --- | --- |
 | Gmail access | In each Google Account, remove Sift's access under third-party apps; that ends every token Sift was given. Then sign in to the dashboard again. |
-| The Google client (`google-client.json`) | In Google Cloud Console, reset the client's secret, then `sift init` and paste the new JSON. |
+| The Google client (`google-client.json`, or `SIFT_GOOGLE_CLIENT_SECRET`) | In Google Cloud Console, reset the client's secret, then `sift init` and paste the new JSON, or set the new secret on Vercel. |
 | Model keys and sign-ins | Revoke the API key, or sign out other sessions, at the provider. Then sign in again under Settings in the dashboard. |
-| Dashboard sessions (`dashboard-key`) | Delete the file. Sift makes a new one and everyone is signed out. |
+| Dashboard sessions (`dashboard-key`, or `SIFT_SESSION_SECRET`) | Delete the file, or set a new secret. Everyone is signed out. |
 
-Then rotate the key itself. The key does not encrypt the rest of the databases, so a copied home also carries its mail records.
+Then rotate the key itself. The key leaves the rest of the record plain (labels, and what was decided and done, and when), so a copied home carries that too.
 
 ## Losing the key
 
-Sift refuses to start (on Vercel, the deploy fails), and names what it cannot open. If `sift init` made the key, first check that Sift was started from the directory whose `.env` holds it. Otherwise nothing in them can be recovered, and each has to be given again:
+Sift refuses to start (on Vercel, the deploy fails), and names what it cannot open. If `sift init` made the key, first check that Sift was started from the directory whose `.env` holds it. Otherwise nothing the key sealed can be recovered: the files below, every sign-in, and in the databases the text and headers of recorded mail, rules' conditions and names, and decisions' reasons.
 
 | Lost | Then |
 | --- | --- |
-| A Gmail sign-in | Sign in to the dashboard with that account. |
-| A model sign-in | Sign in again under Settings in the dashboard. |
 | `google-client.json` | Delete it, then `sift init`, and paste the client again from Google Cloud Console. |
 | `dashboard-key` | Delete it; everyone is signed out of the dashboard. |
 
-A person's sign-ins are rows in their database: until there is a way to clear them from the dashboard, delete their rows from `credentials` with Sift stopped. Mail, decisions, rules and labels are untouched.
+Sift checks every sealed row before it starts, so it will not start while any the key sealed is still in a database, and there is not yet a way to drop only those rows (TODO.md).
 
 ## How
 

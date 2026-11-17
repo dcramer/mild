@@ -6,9 +6,9 @@ Sift helps you manage a Gmail inbox from a machine you own.
 - **Leave in inbox.** Mail no label fits, and anything you said you never want to miss, stays where it is.
 - **Rules** say what mail is, or what to do with it, without asking the model. Where you keep giving one sender's mail a different action than its label's, Sift proposes the rule.
 
-It suggests before it acts. Every decision appears in a dashboard for you to correct, and nothing in Gmail changes until you turn Sift on. It never deletes mail, cannot send any, and every change it makes can be undone.
+It suggests before it acts. Every decision appears in a dashboard for you to correct, and until you turn Sift on it changes Gmail only for mail you answer there yourself. It never deletes mail and cannot send any. A change to a message can be undone; an unsubscribe cannot.
 
-**Status: early.** In use on one real inbox with Sift off; it has not yet changed a real mailbox. Open work is in [TODO.md](TODO.md).
+**Status: early.** In use on one real inbox, not yet turned on. Open work is in [TODO.md](TODO.md).
 
 ![For review](docs/images/suggestions.png)
 
@@ -25,7 +25,7 @@ pnpm sift init
 
 1. **An encryption key** for the Google and model credentials Sift stores. It is saved as `SIFT_KEY` in `.env` in the directory you ran `init` from, not in Sift's home, so a copy of the home does not carry its own key. Start Sift from that directory.
 2. **Where Sift runs:** this machine, or a server you reach from another one. Google signs people in only at `localhost` or an HTTPS address, so on a server `init` turns on `tailscale serve`.
-3. **A Google OAuth client** of your own, so Sift reads your mail with nobody in between. `init` opens each Google Cloud page in turn with the values to enter, and you paste the client's JSON back.
+3. **A Google OAuth client** of your own, so Sift reads your mail with nobody in between. `init` links each Google Cloud page in turn with the values to enter, and you paste the client's JSON back.
 
 Everything else Sift keeps, its settings and its database included, is in `~/.config/sift`; [docs/cli.md](docs/cli.md#files) lists it. There is no database server to run.
 

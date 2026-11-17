@@ -21,7 +21,7 @@ From a checkout, `pnpm sift <command>` runs it from source.
 
 | Option | Effect |
 | --- | --- |
-| `--once` | One tick, then exit, without serving the dashboard: everything due (a pass for each mailbox with a label of its own, upkeep, older mail, test runs), each piece stopped after 5 minutes. Exits 1 if a piece failed. |
+| `--once` | One tick, then exit, without serving the dashboard: everything due (a pass for each mailbox with a label of its own, upkeep, older mail, test runs), each piece starting nothing new after 5 minutes. Exits 1 if a piece failed. |
 | `--port <port>` | The dashboard's port for this run. |
 | `--host <address>` | Listen on this address instead of `SIFT_DASHBOARD_HOST`. A container uses `0.0.0.0` and lets its port mapping decide who can reach it. |
 | `--no-dashboard` | Read and classify mail without serving the dashboard. |

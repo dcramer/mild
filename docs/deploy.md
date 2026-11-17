@@ -12,7 +12,7 @@ C build
 C up -d
 ```
 
-- **Back up first.** The database is migrated when Sift starts, each migration in its own transaction, and there is no way back down: an older Sift refuses a database a newer one migrated.
+- **Back up first.** The database is migrated when Sift starts, all pending migrations in one transaction, and there is no way back down: an older Sift refuses a database a newer one migrated.
 - The few seconds Sift is down cost nothing. It picks up from its Gmail history cursor.
 - Without Docker: `git pull`, `pnpm install`, restart `sift run`.
 
@@ -26,11 +26,11 @@ C run --rm --no-deps -v "$PWD:/backup" --entrypoint tar sift czf /backup/sift-ho
 C start
 ```
 
+This writes the archive as the container's user (uid 1000), so the current directory must be writable by it.
+
 With a Postgres server (`DATABASE_URL`), back the database up with the server's own tools (`pg_dump`, or the host's backups), and the home directory as above for the rest.
 
 On a Postgres server, give Sift two roles: one that owns the database, as `DATABASE_MIGRATION_URL`, and a login that owns nothing (`CREATE ROLE sift LOGIN PASSWORD '…'`), as `DATABASE_URL`. Sift migrates as the first and runs as the second, which cannot alter the tables or switch their row-level security off. With only `DATABASE_URL`, that role must own the database, and so could.
-
-This writes the archive as the container's user (uid 1000), so the current directory must be writable by it.
 
 What the archive is:
 

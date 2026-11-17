@@ -8,7 +8,7 @@ What it needs: the **Pro** plan (Hobby runs crons once a day; Sift ticks each mi
 
 [![Deploy with Vercel](https://vercel.com/button)][deploy]
 
-It copies this repository to your GitHub account, adds Neon and Upstash for Redis to the project, and asks for the variables in step 3, so the first deploy migrates the database and comes up whole. Make the Google client (step 2) first: its id and secret are asked for, and its redirect URI can wait until Vercel has given the project its address. Then add that URI, and open the address.
+It copies this repository to your GitHub account, adds Neon and Upstash for Redis to the project, asks for the Google client's id and secret and three secrets (`SIFT_KEY`, `SIFT_SESSION_SECRET`, `CRON_SECRET`), and lets Neon and Upstash set the database and Redis addresses, so the first deploy migrates the database and comes up whole. Make the Google client (step 2) first: its id and secret are asked for, and its redirect URI can wait until Vercel has given the project its address. Then add that URI, and open the address.
 
 Upstash is expected to set `REDIS_URL`; if the site says it is missing, copy the store's `redis://`/`rediss://` address into it and deploy again.
 
@@ -43,7 +43,7 @@ In the project's Environment Variables, for Production:
 | `DATABASE_MIGRATION_URL` | Optional, and better: Neon's unpooled address for the owner role, with `DATABASE_URL` then a role that owns nothing (`CREATE ROLE sift LOGIN PASSWORD '…'`), so row-level security holds Sift itself. |
 | `REDIS_URL` | The Redis database's `redis://` or `rediss://` address. |
 | `SIFT_GOOGLE_CLIENT_ID`, `SIFT_GOOGLE_CLIENT_SECRET` | From step 2. |
-| `SIFT_KEY` | Encrypts the credentials Sift stores ([secrets.md](secrets.md)). `openssl rand -base64 32` |
+| `SIFT_KEY` | Encrypts the credentials and mail Sift stores ([secrets.md](secrets.md)). `openssl rand -base64 32` |
 | `SIFT_SESSION_SECRET` | Signs sessions; changing it signs everyone out. `openssl rand -base64 32` |
 | `CRON_SECRET` | Vercel sends it with each cron call and Sift with each piece of work it hands out; nothing without it can start work. `openssl rand -hex 32` |
 | `SIFT_DASHBOARD_HOST` | Only with a domain of your own: that domain. |
@@ -54,7 +54,7 @@ Until every required one is set, the site lists those still missing; `CRON_SECRE
 
 ## 4. Deploy again
 
-Redeploy production, so the build sees the variables: it migrates the database before the new functions serve anything. Open your address and sign in with Google (the first account becomes the owner); the page walks through connecting a model, saying what you want, choosing your labels and pulling in recent mail to teach it with. Nothing in Gmail changes until you turn Sift on, under Settings.
+Redeploy production, so the build sees the variables: it migrates the database before the new functions serve anything. Open your address and sign in with Google (the first account becomes the owner); the page walks through connecting a model, saying what you want, choosing your labels and pulling in recent mail to teach it with. Until you turn Sift on, under Settings, Gmail changes only for mail you answer in the dashboard.
 
 Mail is checked each minute. Logs are the project's function logs.
 
