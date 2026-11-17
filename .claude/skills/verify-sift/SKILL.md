@@ -32,7 +32,7 @@ What the seed leaves (through three real ticks with sift off, `tick`, with a sta
 | `m6` | `ada@example.org` | nothing | For review, `Which label?` |
 | `m7` | `grace@example.net` | nothing | For review, `Which label?` |
 | `m8` | `sale@store.example.com` | stand-in model → Marketing, confidence 0.95 | For review, `Marketing` (sure) |
-| `m9`, `m10` | `alerts@ops.example.com` | the stand-in model answers unusably, three passes running | Activity › Failed, under `Not judged`, with Retry and the page's Retry all |
+| `m9`, `m10` | `alerts@ops.example.com` | the stand-in model answers unusably, three passes running; a fourth pass leaves them to the user | For review, `Which label?` |
 | `m11`–`m13` | `billing@utility.example.net` | nothing; then each answered as Receipts but kept, as moving it back to the inbox in Gmail answers | Activity only; the three open a proposal, `Keep Receipts from billing@utility.example.net?` on For review |
 | `m14`–`m21` | `notifications@code.example.com`, as Dependabot (3), Security alerts (2), github-actions[bot] (2) and Ada Lovelace (1) | stand-in model, by name → Notifications, Account alerts, Notifications; Ada's it cannot place | For review: one row per name, sure (`Agree: Notifications`): Dependabot's 3 folded into one (`3 messages`), github-actions[bot]'s 2 into another; Ada's as `Which label?`; the two Account alerts are kept, so not shown. The address's page lists the four names (`/sender/me%40example.org/notifications%40code.example.com`) |
 

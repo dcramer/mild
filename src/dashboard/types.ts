@@ -56,12 +56,11 @@ export type FactFilter = keyof typeof FACT_FILTERS;
 export const FACT_FILTER_KEYS = Object.keys(FACT_FILTERS) as FactFilter[];
 const answered = z.object({ reviewed: z.number(), right: z.number() });
 
-/** What was done in Gmail on a day: changes that stand, by what they did, and changes that failed. */
+/** What was done in Gmail on a day: changes that stand, by what they did. */
 export const DayChanges = z.object({
   archive: z.number(),
   spam: z.number(),
   keep: z.number(),
-  failed: z.number(),
 });
 export type DayChanges = z.infer<typeof DayChanges>;
 
@@ -122,8 +121,6 @@ export const Summary = z.object({
     costUsd: z.number(),
     /** Recorded messages with no decision yet (all time). */
     awaitingTriage: z.number(),
-    /** Actions in the window that failed or whose outcome is unconfirmed. */
-    troubledActions: z.number(),
   }),
   /** Messages by the tier that first decided them, with what that cost. */
   byStage: z.array(z.object({ stage, decisions: z.number(), costUsd: z.number(), tokens: z.number() })),
@@ -582,18 +579,6 @@ export const Models = z.object({
   error: z.string().optional(),
 });
 export type Models = z.infer<typeof Models>;
-
-/** Mail the model failed on every time it was tried. `error` is what went wrong the last time. */
-export const UnjudgedRow = z.object({
-  accountId: z.string(),
-  messageId: z.string(),
-  fromAddress: z.string(),
-  fromName: z.string().nullable(),
-  subject: z.string(),
-  error: z.string().nullable(),
-  triedAt: z.number(),
-});
-export type UnjudgedRow = z.infer<typeof UnjudgedRow>;
 
 /** GET /api/session. */
 export const Session = z.object({

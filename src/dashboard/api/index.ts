@@ -4,7 +4,6 @@ import activeWrite from './routes/active/post.ts';
 import backfillWrite from './routes/backfill/post.ts';
 import checkWrite from './routes/check/post.ts';
 import decisionsRead from './routes/decisions/get.ts';
-import decisionsRetryWrite from './routes/decisions/retry/post.ts';
 import domainRead from './routes/domain/get.ts';
 import evalRead from './routes/eval/get.ts';
 import evalsRead from './routes/evals/get.ts';
@@ -39,9 +38,6 @@ import suggestionRead from './routes/suggestion/get.ts';
 import suggestionsRead from './routes/suggestions/get.ts';
 import summaryRead from './routes/summary/get.ts';
 import undoWrite from './routes/undo/post.ts';
-import unjudgedRead from './routes/unjudged/get.ts';
-import unjudgedRetryAllWrite from './routes/unjudged/retry-all/post.ts';
-import unjudgedRetryWrite from './routes/unjudged/retry/post.ts';
 
 /**
  * Every route under `/api/`, each its own module at `routes/<path>/<get|post|frame>.ts`. The server applies
@@ -63,14 +59,12 @@ export const READS: readonly Read[] = [
   suggestionRead,
   suggestionsRead,
   summaryRead,
-  unjudgedRead,
 ];
 export const WRITES: readonly Write[] = [
   accountDeleteWrite,
   activeWrite,
   backfillWrite,
   checkWrite,
-  decisionsRetryWrite,
   evalsRunWrite,
   examplesDeleteWrite,
   examplesDeleteAllWrite,
@@ -90,7 +84,5 @@ export const WRITES: readonly Write[] = [
   rulesRemoveWrite,
   standingClearWrite,
   undoWrite,
-  unjudgedRetryWrite,
-  unjudgedRetryAllWrite,
 ];
 export const FRAMES: readonly Frame[] = [messageHtmlFrame];

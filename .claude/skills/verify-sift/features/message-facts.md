@@ -7,7 +7,7 @@ An opened message lists what sift saw in it that the reader can use (a mailing l
 - `facts-panel`: the message panel's `What sift saw` section; each row with a `Rule…` press (named `Make a rule for mail that …`) that opens Add a rule over the panel, started on the sender and that fact, or on the list.
 - `facts-rule`: in Add a rule, `That` holds conditions on facts (`Add a condition`, a `Condition N` select per condition, `Remove “…”` beside it). With one, the address may be left empty: `From anyone`.
 - `facts-rules-list`: a rule's facts read after its sender on Rules: `mail that is in Promotions`, `the list promo.example.com, that has a tracking pixel`.
-- `facts-filter`: `What sift saw` in the Filters panel of For review and Activity (not Activity's Failed view); the chip reads `Mail that …`.
+- `facts-filter`: `What sift saw` in the Filters panel of For review and Activity; the chip reads `Mail that …`.
 
 ## How to get to it (user POV)
 

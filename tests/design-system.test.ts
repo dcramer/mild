@@ -158,6 +158,25 @@ describe('yellow means look here', () => {
   });
 });
 
+describe('red means a failure the reader can do something about', () => {
+  test('a screen says a failure only as the error of a press or a load, never in words of its own or as a status', () => {
+    // Sift retries what it does in the background (a mailbox change, a Gmail filter, a model call) and reports
+    // what never lands; the page is for a press that just failed, or a page that could not load.
+    const failures: string[] = [];
+    for (const path of SCREENS) {
+      const source = readFileSync(path, 'utf8');
+      const file = `web/src/${relative(WEB, path)}`;
+      for (const said of source.matchAll(/<Failure\b([^>]*)>([\s\S]*?)<\/Failure>/g)) {
+        const line = source.slice(0, said.index).split('\n').length;
+        if (/\binline\b/.test(said[1]!)) failures.push(`${file}:${line} <Failure inline>: what Sift did not manage is history, said plainly.`);
+        else if (!/^\{[\s\S]*\b(error|failed)\b[\s\S]*\}$/.test(said[2]!.trim()))
+          failures.push(`${file}:${line} <Failure> holds words of its own: it holds the error of a press or a load.`);
+      }
+    }
+    expect(failures, failures.join('\n')).toEqual([]);
+  });
+});
+
 test('whatever can be pressed shows the pointer', () => {
   // A choice in a menu or a select is pressed like a button. Only a disabled one keeps the arrow, through a variant.
   const bare = [...SYSTEM].flatMap((path) => words(path)).filter(({ word }) => word === 'cursor-default');

@@ -20,7 +20,7 @@ import { backfill } from './backfill.ts';
 import { checkFiltersWhenDue } from './filters.ts';
 import { recordPassStatus } from './status.ts';
 import { type SyncReport, syncAccount } from './sync.ts';
-import { type TriageReport, triageAccount } from './triage.ts';
+import { CHANGE_TRIES, type TriageReport, triageAccount } from './triage.ts';
 import { reportError, traced } from '../telemetry.ts';
 
 export interface RunOptions {
@@ -320,7 +320,8 @@ function describe(result: PassResult, active: boolean): string | null {
     if (triage.unsubscribed > 0) parts.push(`unsubscribed from ${triage.unsubscribed} sender${triage.unsubscribed === 1 ? '' : 's'}`);
     if (triage.blocked > 0) parts.push(`blocked ${triage.blocked} sender${triage.blocked === 1 ? '' : 's'}`);
     if (triage.unjudged > 0) parts.push(`the model failed on ${triage.unjudged}: ${triage.failure}`);
-    if (triage.troubled > 0) parts.push(`${triage.troubled} need attention (see Changes in the dashboard)`);
+    if (triage.retrying > 0) parts.push(`${triage.retrying} change${triage.retrying === 1 ? '' : 's'} to try again`);
+    if (triage.troubled > 0) parts.push(`${triage.troubled} change${triage.troubled === 1 ? '' : 's'} not made after ${CHANGE_TRIES} tries`);
   }
   if (result.captured) parts.push(`stored ${result.captured} marked message${result.captured === 1 ? '' : 's'} as examples`);
   if (result.unfinished) parts.push('out of time, carrying on');

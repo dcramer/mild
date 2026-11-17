@@ -3,7 +3,7 @@ import { hasClientSecrets } from '../../gmail/auth.ts';
 import { connectedAddresses, listUsers } from '../../store/accounts.ts';
 import { DatabaseInUse } from '../../store/db.ts';
 import { preferences } from '../../store/preferences.ts';
-import { type SQL, actions, count, decisions, inArray, messages, rules } from '../../store/query.ts';
+import { type SQL, actions, count, decisions, messages, rules } from '../../store/query.ts';
 import { openStore } from '../../store/store.ts';
 import { paint, ui } from '../ui.ts';
 import { checkSecrets } from '../secrets-check.ts';
@@ -44,11 +44,9 @@ export async function status(): Promise<void> {
     ['Dashboard', signInAddresses(settings.dashboardPort).join(paint.dim('  or  '))],
   ]);
   ui.blank();
-  const troubled = await total(actions, inArray(actions.status, ['failed', 'unknown', 'pending']));
   ui.fields([
     ['Recorded', `${plural(await total(messages), 'message')} · ${plural(await total(decisions), 'decision')} · ${plural(await total(actions), 'change')}`],
     ['Rules', plural(await total(rules), 'rule')],
-    ...(troubled > 0 ? [['Check', paint.bad(`${plural(troubled, 'change')} failed or unconfirmed; see Changes in the dashboard`)] as const] : []),
   ]);
   ui.blank();
   if (!ready) ui.warn(`Setup is not finished. Run ${paint.cmd('sift init')}.`);

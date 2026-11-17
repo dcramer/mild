@@ -50,7 +50,7 @@ Enforced by `no-restricted-imports` in `.oxlintrc.json`. They are the security m
 - Never delete or trash mail, send, reply or forward. sift does not request `gmail.send`.
 - Only messages currently in `INBOX` are changed. Re-read labels immediately before acting.
 - A model only says which label mail is. What happens is the user's to say: through the label's action, or through a rule, which may name an action directly ("from this address: archive") with or without a label. Don't let model output choose a disposition, a Gmail label or an action directly.
-- When no tier is sure, the answer is `review`: leave the message alone and ask. An error is an abstention, never a guess, and a failed model call is not "unsure": it decides nothing and is tried again.
+- When no tier is sure, the answer is `review`: leave the message alone and ask. An error is an abstention, never a guess, and a failed model call is not "unsure": it decides nothing and is tried again. After three tries the message is the user's to say, like any mail no tier could place.
 - A user correction beats anything learned.
 - Every Gmail filter passes `validateFilter` first, whoever proposed it.
 - Anything that acts on a sender's address (blocking them, using their unsubscribe link) needs the message to have passed DMARC. Without it the address proves nothing, and the action could be turned on someone who was only impersonated.
@@ -102,6 +102,7 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | The same thing looks the same on every page: a sender in a list is `SenderCell` (name, then address under it) | `tests/design-system.test.ts` (only `components/sender.tsx` and the message panel's header use `SenderLink`) |
 | Every part is on the specimen page | `tests/design-system.test.ts` |
 | Every Gmail filter passes `validateFilter` | `tests/filters.test.ts` |
+| What Sift does by itself (a mailbox change, a Gmail filter, a model call) it retries, and what never lands goes to Sentry and the record; the page never raises it as an alert. Red is for a press that just failed or a page that could not load, and for what only the reader can fix (a sign-in that expired, no model) | `tests/design-system.test.ts` (`Failure` holds only an error, never words of its own or a status) |
 | The page is shown an error's own words only when it is a `Refusal` (`src/refusal.ts`), written for the person reading it; any other error, which may name a key, a database or another person, goes to the log | `failed` in `src/dashboard/server.ts`; `tests/dashboard.test.ts` |
 | Before visual work, load the `design` skill. Consistency with the system is not the same as a page that reads well. | Nothing: judgment |
 | Redesign one page at a time, offering a few directions built from the real parts in `web/src/system` (not redrawn in a mock), and get David's pick before the next page. Don't carry over a part he has not approved. | Nothing: judgment |

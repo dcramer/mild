@@ -100,18 +100,24 @@ interface RuleFilterStatus {
   history: { type: 'filter' | 'unfilter'; status: string; error: string | null; at: number }[];
 }
 
-/** Every rule's standing as a Gmail filter, by rule id, for the dashboard. */
-export async function ruleFilterStatus(db: Sql): Promise<Map<string, RuleFilterStatus>> {
+/** Each rule's filter changes, oldest first, by rule id: every account's, or one account's. */
+export async function filterHistory(db: Sql, accountId?: string): Promise<Map<string, RuleFilterStatus['history']>> {
   const history = new Map<string, RuleFilterStatus['history']>();
   const changes = await db
     .select({ accountId: actions.accountId, type: actions.type, status: actions.status, error: actions.error, at: actions.createdAt, payload: actions.payload })
     .from(actions)
-    .where(inArray(actions.type, ['filter', 'unfilter']))
+    .where(and(inArray(actions.type, ['filter', 'unfilter']), accountId === undefined ? undefined : eq(actions.accountId, accountId)))
     .orderBy(asc(actions.id));
-  for (const { accountId, payload, ...change } of changes) {
-    const { ruleId } = openPayload(db, accountId, payload).filter!;
+  for (const { accountId: owner, payload, ...change } of changes) {
+    const { ruleId } = openPayload(db, owner, payload).filter!;
     history.set(ruleId, [...(history.get(ruleId) ?? []), change as RuleFilterStatus['history'][number]]);
   }
+  return history;
+}
+
+/** Every rule's standing as a Gmail filter, by rule id, for the dashboard. */
+export async function ruleFilterStatus(db: Sql): Promise<Map<string, RuleFilterStatus>> {
+  const history = await filterHistory(db);
   const status = new Map<string, RuleFilterStatus>();
   for (const account of await listAccounts(db)) {
     for (const [ruleId, verdict] of await filterVerdicts(db, account.id)) {

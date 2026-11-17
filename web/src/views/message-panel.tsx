@@ -69,8 +69,10 @@ function DecisionEvent({ d }: { d: Decision }) {
   );
 }
 
+/** Where a change got to, when it is not done. One that did not land is tried again, so it is only history. */
+const ACTION_STATUS: Record<string, string> = { undone: 'Undone', pending: 'Waiting', unknown: 'Not done', failed: 'Not done' };
+
 function ActionEvent({ a, onUndo, busy }: { a: Action; onUndo: (id: number) => void; busy: boolean }) {
-  const bad = a.status !== 'done' && a.status !== 'undone';
   const labels = (title: string, list: string[]) =>
     list.length === 0 ? null : (
       <p className="flex flex-wrap items-baseline gap-1.5">
@@ -86,11 +88,7 @@ function ActionEvent({ a, onUndo, busy }: { a: Action; onUndo: (id: number) => v
       title={
         <>
           <span className="font-medium">{CHANGE[a.type] ?? a.type} in Gmail</span>
-          {a.status === 'done' ? null : bad ? (
-            <Failure inline>{a.status}</Failure>
-          ) : (
-            <span className="text-muted-foreground">{a.status === 'undone' ? 'Undone' : a.status}</span>
-          )}
+          {a.status === 'done' ? null : <span className="text-muted-foreground">{ACTION_STATUS[a.status] ?? a.status}</span>}
         </>
       }
       {...(a.status === 'done' && a.type !== 'undo' && a.type !== 'unsubscribe'
@@ -105,7 +103,6 @@ function ActionEvent({ a, onUndo, busy }: { a: Action; onUndo: (id: number) => v
     >
       {labels('Added', a.added)}
       {labels('Removed', a.removed)}
-      <Failure>{a.error}</Failure>
     </TimelineEvent>
   );
 }

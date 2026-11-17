@@ -1,7 +1,7 @@
 import type { DecisionRow } from '@/lib/api.ts';
 import { type Status, STATUS_NAMES, outcomeName, status, tier } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
-import { Does, Failure, Note, Sub, Swatch } from '@/system';
+import { Does, Note, Sub, Swatch } from '@/system';
 
 /** A tier's ink swatch and name. The name always accompanies the swatch. */
 export function TierLabel({ stage }: { stage: string }) {
@@ -37,15 +37,9 @@ export function Verdict({ labelName, disposition, stacked }: { labelName: string
   );
 }
 
-/** Where a decision has got to in Gmail, in a word. A failure is the only one in red. */
+/** Where a decision has got to in Gmail, in a word. */
 export function StatusWord({ row, className }: { row: Pick<DecisionRow, 'carryOut' | 'outcome' | 'actionStatus' | 'outcomeDetail'>; className?: string }) {
   const s: Status = status(row);
-  if (s === 'failed')
-    return (
-      <Failure inline className={className} title={row.outcomeDetail ?? undefined}>
-        {STATUS_NAMES[s]}
-      </Failure>
-    );
   return (
     <span className={cn('text-muted-foreground', className)} title={row.outcomeDetail ?? undefined}>
       {STATUS_NAMES[s]}

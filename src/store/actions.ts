@@ -94,6 +94,12 @@ export async function finishAction(db: Sql, id: number, status: ActionStatus, fi
   await db.update(actions).set({ status, finalLabels, error, completedAt: now }).where(eq(actions.id, id));
 }
 
+/** How many times a decision's change was sent to Gmail, and whether one of those landed. */
+export async function changeTries(db: Sql, decisionId: number): Promise<{ tries: number; landed: boolean }> {
+  const rows = await db.select({ status: actions.status }).from(actions).where(eq(actions.decisionId, decisionId));
+  return { tries: rows.length, landed: rows.some((r) => r.status === 'done') };
+}
+
 export async function setActionStatus(db: Sql, id: number, status: ActionStatus): Promise<void> {
   await db.update(actions).set({ status }).where(eq(actions.id, id));
 }

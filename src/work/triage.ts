@@ -19,7 +19,11 @@ import { priorRule, readsMessage, rulesStage, settle } from '../triage/stages/ru
 import { type Evidence, type Judge, type JudgeFailure, describeFailure, modelStage } from '../triage/stages/model.ts';
 import type { Decision, Disposition, MessageFacts, Stage, Unfinished } from '../triage/types.ts';
 import { type EvidenceSources, gatherEvidence } from './evidence.ts';
-import { type Traced, traced } from '../telemetry.ts';
+import { type Traced, reportError, traced } from '../telemetry.ts';
+import { changeTries } from '../store/actions.ts';
+
+/** How many passes try a mailbox change that did not land. Gmail failing one change is almost always passing, and the user is not asked to look. */
+export const CHANGE_TRIES = 3;
 
 /** Read access to the account's mail, for the model's evidence and for rules on what only the whole message shows. It never changes the mailbox. */
 type Sources = Omit<EvidenceSources, 'db' | 'now'>;
@@ -60,7 +64,9 @@ export interface TriageReport {
   acted: number;
   /** Decisions whose action was not attempted, e.g. the message had left the inbox or spam was refused. */
   skipped: number;
-  /** Actions that failed or whose result is unconfirmed. */
+  /** Changes that did not land, to be tried again on the next pass. */
+  retrying: number;
+  /** Changes that did not land after `CHANGE_TRIES`, reported and given up on. */
   troubled: number;
   /** Rules sift proposed this pass, for the user to accept. */
   proposed: number;
@@ -148,6 +154,7 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     decided: { keep: 0, archive: 0, spam: 0, review: 0 },
     acted: 0,
     skipped: 0,
+    retrying: 0,
     troubled: 0,
     proposed: 0,
     blocked: 0,
@@ -199,11 +206,23 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
       return 'none';
     }
     const outcome = await execute({ db, mailbox: box, now }, account.id, messageId, action, decisionId);
-    await settleDecision(db, decisionId, outcome.status, outcome.status === 'done' ? null : outcome.reason);
-    if (outcome.status === 'done') report.acted++;
+    if (outcome.status === 'failed' || outcome.status === 'unknown') {
+      // Left unsettled, so the next pass asks again, from the labels as they are then.
+      const { tries } = await changeTries(db, decisionId);
+      if (tries < CHANGE_TRIES) {
+        report.retrying++;
+        return outcome.status;
+      }
+      reportError(new Error(`A change was not made after ${tries} tries: ${outcome.reason}`));
+      report.troubled++;
+    }
+    // An earlier try that could not be read back may have landed after all, leaving nothing to do now.
+    const landed = outcome.status === 'skipped' && (await changeTries(db, decisionId)).landed;
+    const settled = landed ? 'done' : outcome.status === 'unknown' ? 'failed' : outcome.status;
+    await settleDecision(db, decisionId, settled, settled === 'done' || outcome.status === 'done' ? null : outcome.reason);
+    if (outcome.status === 'done' || landed) report.acted++;
     else if (outcome.status === 'skipped') report.skipped++;
-    else report.troubled++;
-    return outcome.status;
+    return landed ? 'done' : outcome.status;
   };
 
   const over = () => {
@@ -221,11 +240,16 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
 
   const { model: _given, ...modelless } = deps;
   const decide = await cascadeFor(model ? { ...deps, model } : modelless, account.id, () => asking);
+  // Mail the model failed on every time it was asked is not asked again: a rule may still say what it is, and otherwise
+  // it is the user's to say, like any mail no tier could place.
+  const decideByRules = await cascadeFor(modelless, account.id);
+  const unjudged = (decision: Decision | Unfinished): Decision | Unfinished =>
+    'unfinished' in decision || decision.stage !== 'fallback' ? decision : { ...decision, reason: 'the model failed on it each time it was asked' };
   // One span per message: what each tier made of it, the model's call, and what was changed in the mailbox.
-  const decideOne = async ({ facts, suggestOnly, applyRule }: QueuedMessage, span: Traced) => {
+  const decideOne = async ({ facts, suggestOnly, applyRule, outOfTries }: QueuedMessage, span: Traced) => {
     const started = performance.now();
     runId = undefined;
-    const decision = await decide(facts);
+    const decision = outOfTries ? unjudged(await decideByRules(facts)) : await decide(facts);
     if ('unfinished' in decision) {
       span.set({ 'sift.outcome': 'unfinished' });
       // Not asked, because the provider is down: it stays in the queue, unrecorded, for the next pass.
@@ -241,7 +265,7 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     }
     // With no model, mail no rule covers is not anyone's to answer yet: it stays in the queue, unrecorded, for a
     // model once one is connected, or a rule added meanwhile. A model's own "unsure" is recorded and asked about.
-    if (decision.stage === 'fallback' && !model) return;
+    if (decision.stage === 'fallback' && !model && !outOfTries) return;
     // The user applied this rule to their inbox and the model has now said what the mail is: theirs to carry out, Sift on or off.
     const pressed = applyRule !== null && decision.ruleId === applyRule && Boolean(box);
     const into = pressed ? box : suggestOnly ? null : mailbox;

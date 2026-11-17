@@ -1,11 +1,10 @@
-import { scopeFor } from '../src/dashboard/scope.ts';
 import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Sql } from '../src/store/sql.ts';
 import { describe, expect, it } from 'vitest';
 import { execute } from '../src/actions/executor.ts';
-import { listDecisions, retryDecision } from '../src/dashboard/queries/decisions.ts';
+import { listDecisions } from '../src/dashboard/queries/decisions.ts';
 import { listRuleSummaries } from '../src/dashboard/queries/rules.ts';
 import { summarize } from '../src/dashboard/queries/summary.ts';
 import type { SenderPage } from '../src/dashboard/types.ts';
@@ -159,7 +158,6 @@ describe('tracking', () => {
 
     expect(await ids('suggested')).toEqual([3, 2, 1]);
     expect(await ids('done')).toEqual([done]);
-    expect(await ids('trouble')).toEqual([failed]);
     expect(await ids('nonsense')).toEqual([]);
     expect((await listDecisions(db, await everything(db), { days: 7, status: 'done' }, NOW)).rows[0]).toMatchObject({
       actionId: archived,
@@ -169,26 +167,18 @@ describe('tracking', () => {
     await setActionStatus(db, archived, 'undone');
     expect(await ids('undone')).toEqual([done]);
     expect(await ids('done')).toEqual([]);
-    expect((await listDecisions(db, await everything(db), { days: 7, status: 'trouble' }, NOW)).total).toBe(1);
     // What changed in Gmail, or was tried: not the suggestions, which never touched it.
     expect(await ids('changed')).toEqual([failed, done]);
 
-    // An answer waiting for the next pass is not a failure, but it is shown among the changes.
+    // An answer waiting for the next pass is shown among the changes.
     const answer = await recordDecision(db, ACCOUNT, 'c', { ...base, disposition: 'archive' }, { carryOut: true, byUser: true, now: NOW });
-    expect(await ids('trouble')).toEqual([failed]);
     expect(await ids('changed')).toEqual([answer, failed, done]);
-
-    // A failed change goes back to waiting; sift's own waits for sift to be on, and only a failure can be retried.
-    expect(await retryDecision(db, scopeFor(['someone@example.net'], false), failed)).toEqual({ retried: false, waiting: false });
-    expect(await retryDecision(db, await everything(db), failed)).toEqual({ retried: true, waiting: true });
-    expect(await raw(db).get('SELECT outcome FROM decisions WHERE id = ?', failed)).toEqual({ outcome: null });
-    expect(await retryDecision(db, await everything(db), done)).toEqual({ retried: false, waiting: false });
   });
 
   it('counts only the window and reports tiers, cost and backlog', async () => {
     const db = await seeded();
     const summary = await summarize(db, await everything(db), 7, NOW);
-    expect(summary.totals).toEqual({ messages: 4, decided: 3, withoutInference: 2, judged: 2, costUsd: 0.03, awaitingTriage: 1, troubledActions: 0 });
+    expect(summary.totals).toEqual({ messages: 4, decided: 3, withoutInference: 2, judged: 2, costUsd: 0.03, awaitingTriage: 1 });
     expect(summary.byStage.map((s) => [s.stage, s.decisions])).toEqual([
       ['rules', 1],
       ['classifier', 1],
@@ -248,9 +238,10 @@ describe('tracking', () => {
       'Gmail answered 503',
     );
     const { daily } = await summarize(db, await everything(db), 7, NOW);
-    expect(daily.at(-1)?.changes).toEqual({ archive: 1, spam: 0, keep: 0, failed: 1 });
+    // A change that never landed changed nothing.
+    expect(daily.at(-1)?.changes).toEqual({ archive: 1, spam: 0, keep: 0 });
     // Suggestions changed nothing, so the other days have no changes; the model's cost is on the day it was asked.
-    expect(daily.slice(0, -1).every((d) => d.changes.archive + d.changes.spam + d.changes.keep + d.changes.failed === 0)).toBe(true);
+    expect(daily.slice(0, -1).every((d) => d.changes.archive + d.changes.spam + d.changes.keep === 0)).toBe(true);
     expect(daily.reduce((sum, d) => sum + d.costUsd, 0)).toBeCloseTo(0.03);
   });
 

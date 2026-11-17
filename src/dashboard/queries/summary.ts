@@ -9,7 +9,6 @@ import {
   desc,
   eq,
   gte,
-  inArray,
   mailboxes,
   max,
   messages,
@@ -93,7 +92,7 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
 
   const dailyByDay = new Map<string, { counts: Record<StageKey, number>; changes: DayChanges; costUsd: number }>();
   for (let i = days - 1; i >= 0; i--)
-    dailyByDay.set(localDay(now - i * DAY_MS), { counts: emptyCounts(), changes: { archive: 0, spam: 0, keep: 0, failed: 0 }, costUsd: 0 });
+    dailyByDay.set(localDay(now - i * DAY_MS), { counts: emptyCounts(), changes: { archive: 0, spam: 0, keep: 0 }, costUsd: 0 });
   for (const row of await db.select({ decidedAt: decisions.decidedAt, stage: decisions.stage }).from(decisions).where(triagedSince)) {
     const day = dailyByDay.get(localDay(row.decidedAt));
     if (day) day.counts[row.stage]++;
@@ -102,8 +101,8 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
     const day = dailyByDay.get(localDay(run.startedAt));
     if (day) day.costUsd += run.costUsd;
   }
-  // What was done in Gmail each day, once per message, by its latest change: one that stands, by what it
-  // did, or one that failed. Undone ones are not counted.
+  // What was done in Gmail each day, once per message, by its latest change that stands, by what it did.
+  // Undone ones, and ones that never landed, are not counted.
   const latest = alias(actions, 'latest');
   for (const row of await db
     .select({ decidedAt: decisions.decidedAt, disposition: decisions.disposition, block: decisions.block, outcome: decisions.outcome, status: actions.status })
@@ -133,8 +132,7 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
     )) {
     const day = dailyByDay.get(localDay(row.decidedAt));
     if (!day) continue;
-    if (row.outcome === 'failed' || row.outcome === 'unknown' || row.status === 'failed' || row.status === 'unknown') day.changes.failed++;
-    else if (row.status === 'done') {
+    if (row.status === 'done') {
       const what = row.block ? 'spam' : row.disposition;
       if (what === 'archive' || what === 'spam' || what === 'keep') day.changes[what]++;
     }
@@ -173,12 +171,6 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
               not(outOfTries(db, messages.accountId, messages.id)),
             ),
           )
-      )[0]!.n,
-      troubledActions: (
-        await db
-          .select({ n: count() })
-          .from(actions)
-          .where(and(gte(actions.createdAt, since), inArray(actions.status, ['failed', 'unknown', 'pending']), within(scope, actions.accountId)))
       )[0]!.n,
     },
     byStage,

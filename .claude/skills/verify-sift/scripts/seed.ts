@@ -174,9 +174,9 @@ const standIn = async () => ({
             : { label: 'notification', reason: 'synthetic: an automated notice', confidence: 0.95 }
           : { label: 'unsure', reason: 'synthetic: cannot tell', confidence: 0.3 },
 });
-// Three passes, so the Ops alerts have used up their tries.
+// Four passes: three use up the Ops alerts' tries with the model, and the fourth leaves them to the user.
 const ephemeral = memoryEphemeral();
-for (let pass = 0; pass < 3; pass++) {
+for (let pass = 0; pass < 4; pass++) {
   for (const result of await tick(store, { ephemeral, model: standIn, connect: () => ({ api, mailbox }), log: () => {} }, Infinity))
     if (result.error) throw new Error(`seed pass failed: ${result.error}`);
 }

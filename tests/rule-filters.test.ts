@@ -1,7 +1,7 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { undo } from '../src/actions/executor.ts';
-import { checkRuleFilters, removeRuleFilter, writeRuleFilter } from '../src/actions/rule-filters.ts';
+import { checkRuleFilters, removeRuleFilter, retryRuleFilters, writeRuleFilter } from '../src/actions/rule-filters.ts';
 import { FILTER_CHECK_MINUTES, checkFiltersWhenDue } from '../src/work/filters.ts';
 import { addMailbox } from '../src/store/accounts.ts';
 import { openUserDb, raw, unmarked } from './fixtures.ts';
@@ -208,6 +208,29 @@ describe("a rule's Gmail filter", () => {
     await expect(writeRuleFilter(deps(), id)).rejects.toThrow('timeout');
     expect(await raw(db).all('SELECT type, status, error FROM actions')).toEqual([{ type: 'filter', status: 'failed', error: 'timeout' }]);
     expect(await getRuleFilter(db, id)).toMatchObject({ filterId: null, state: null });
+  });
+
+  it('is asked for again when Gmail did not take it, three times and no more', async () => {
+    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    const create = mailbox.createFilter.bind(mailbox);
+    mailbox.createFilter = async () => {
+      throw new Error('timeout');
+    };
+    await expect(writeRuleFilter(deps(), id)).rejects.toThrow('timeout');
+    for (let i = 0; i < 3; i++) await retryRuleFilters(deps(), ACCOUNT);
+    expect(await raw(db).all('SELECT status FROM actions')).toEqual([{ status: 'failed' }, { status: 'failed' }, { status: 'failed' }]);
+    mailbox.createFilter = create;
+    await retryRuleFilters(deps(), ACCOUNT);
+    expect(await getRuleFilter(db, id)).toMatchObject({ filterId: null });
+
+    const other = await addRule(db, ACCOUNT, { match: { from: 'shop@example.com' }, labelId: 'newsletter' }, 'user');
+    mailbox.createFilter = async () => {
+      throw new Error('timeout');
+    };
+    await expect(writeRuleFilter(deps(), other)).rejects.toThrow('timeout');
+    mailbox.createFilter = create;
+    await retryRuleFilters(deps(), ACCOUNT);
+    expect((await getRuleFilter(db, other))?.filterId).not.toBeNull();
   });
 
   describe('made in Gmail when reading it back failed', () => {

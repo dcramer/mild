@@ -1,4 +1,4 @@
-import { type SQL, and, asc, decisions, desc, eq, lt, messages, not, notExists, or, sql, suggestionBodies } from './query.ts';
+import { type SQL, and, asc, decisions, desc, eq, lt, messages, notExists, or, sql, suggestionBodies } from './query.ts';
 import { outOfTries } from './runs.ts';
 import type { Sql } from './sql.ts';
 import type { Facts, RuleFacts } from '../triage/facts.ts';
@@ -50,16 +50,18 @@ export interface QueuedMessage {
   suggestOnly: boolean;
   /** The rule the user applied to their inbox when this was pulled in: what it decides here is carried out. */
   applyRule: string | null;
+  /** The model has failed on it `MAX_ATTEMPTS` times: it is not asked again. */
+  outOfTries: boolean;
 }
 
 /**
  * Recorded messages that have no decision yet, newest first, rebuilt as triage input. This is the triage queue.
  * Newest first because mail can wait in it (with no model, what no rule covers is left there), and what waits
- * must never keep new mail from being classified. Mail the model has failed on `MAX_ATTEMPTS` times is left out until the user puts it back.
+ * must never keep new mail from being classified.
  */
 export async function listUndecided(db: Sql, accountId: string, limit: number): Promise<QueuedMessage[]> {
   const rows = await db
-    .select(COLUMNS)
+    .select({ ...COLUMNS, outOfTries: outOfTries(db, messages.accountId, messages.id).mapWith(Boolean) })
     .from(messages)
     .where(
       and(
@@ -70,12 +72,11 @@ export async function listUndecided(db: Sql, accountId: string, limit: number): 
             .from(decisions)
             .where(and(eq(decisions.accountId, messages.accountId), eq(decisions.messageId, messages.id))),
         ),
-        not(outOfTries(db, messages.accountId, messages.id)),
       ),
     )
     .orderBy(desc(messages.receivedAt), asc(messages.id))
     .limit(limit);
-  return rows.map((r) => ({ suggestOnly: r.suggestOnly, applyRule: r.applyRule, facts: toMessage(db, accountId, r) }));
+  return rows.map((r) => ({ suggestOnly: r.suggestOnly, applyRule: r.applyRule, outOfTries: r.outOfTries, facts: toMessage(db, accountId, r) }));
 }
 
 /** The facts recorded for a message, or null if sift has not seen it. */

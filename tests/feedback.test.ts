@@ -5,7 +5,6 @@ import { captureExamples } from '../src/work/examples.ts';
 import { triageAccount } from '../src/work/triage.ts';
 import { listSuggestions, suggestionDetail } from '../src/dashboard/queries/suggestions.ts';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
-import { listUnjudged } from '../src/dashboard/queries/runs.ts';
 import { summarize } from '../src/dashboard/queries/summary.ts';
 import { people } from '../src/store/people.ts';
 import { accuracy, applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
@@ -285,11 +284,9 @@ describe('an answer pressed in the dashboard', () => {
     });
   });
 
-  it('answers mail the model could never judge, as mail sift had no suggestion for, and takes it out of Failed', async () => {
+  it('answers mail the model could never judge before a pass leaves it to the user, as mail sift had no suggestion for', async () => {
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'stuck', from: { address: 'news@example.com', domain: 'example.com' } })], '3');
     for (let i = 0; i < MAX_ATTEMPTS; i++) await startRun(db, { accountId: ACCOUNT, messageId: 'stuck', model: 'test/model', now: 0 });
-    const scope = await everything(db);
-    expect((await listUnjudged(db, scope, 10)).map((r) => r.messageId)).toEqual(['stuck']);
     await expect(
       applyFeedback(db, { accountId: ACCOUNT, sender: 'other@example.com', label: 'newsletter', scope: 'once', messageId: 'stuck', carryOut: true }),
     ).rejects.toThrow('not from that sender');
@@ -312,7 +309,6 @@ describe('an answer pressed in the dashboard', () => {
     expect(await raw(db).get(`SELECT label_id FROM examples WHERE message_id = 'stuck'`)).toEqual({
       label_id: 'newsletter',
     });
-    expect(await listUnjudged(db, scope, 10)).toEqual([]);
     expect(await accuracy(db)).toMatchObject({ reviewed: 0 });
 
     const mailbox = new FakeMailbox();

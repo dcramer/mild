@@ -55,28 +55,14 @@ import type { OpenMessages } from '@/views/message-panel.tsx';
 
 const UNSURE = '-';
 
-/**
- * How sift did this week, as one quiet line beside the title; changes that went wrong are the only thing
- * in it that asks for anything. Drawn before the week is known, so on a phone, where it wraps under the
- * title, the page below does not move when it arrives.
- */
+/** How Sift did this week, as one quiet line beside the title. Not on a phone, where Activity has it. */
 function Week({ summary }: { summary: Summary | null }) {
   const t = summary?.totals;
-  // On a phone only what went wrong is said here; the week's figures are on Activity.
-  return (
-    <p className="flex flex-col gap-0.5 text-sm text-muted-foreground tabular-nums md:items-end">
-      {t && t.troubledActions > 0 ? (
-        <Failure inline>
-          <TextLink href="/activity?show=trouble&days=30">{plural(t.troubledActions, 'change')} went wrong</TextLink>
-        </Failure>
-      ) : null}
-      {t ? (
-        <span className="hidden md:inline">
-          This week {percent(t.withoutInference, t.decided)} without a model · {money(t.costUsd)} · <TextLink href="/activity">Activity</TextLink>
-        </span>
-      ) : null}
+  return t ? (
+    <p className="hidden text-sm text-muted-foreground tabular-nums md:block">
+      This week {percent(t.withoutInference, t.decided)} without a model · {money(t.costUsd)} · <TextLink href="/activity">Activity</TextLink>
     </p>
-  );
+  ) : null;
 }
 
 type Proposal = Suggestions['proposals'][number];

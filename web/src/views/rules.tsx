@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { setParams, useParam } from '@/lib/route.ts';
-import { filterStanding, standingWords } from '@/views/gmail-filter.tsx';
+import { filterStanding } from '@/views/gmail-filter.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { RulePanel, Who, whoText } from '@/views/rule-panel.tsx';
 import { ago, count, describeMatch, outcomeName } from '@/lib/format.ts';
@@ -17,7 +17,6 @@ import {
   FilterGroup,
   Hint,
   ListView,
-  TextLink,
   Loading,
   RowActions,
   Sub,
@@ -40,16 +39,14 @@ const GMAIL = [
   ['filter', 'Is a filter'],
   ['could', 'Could be one'],
   ['cannot', 'Cannot be one'],
-  ['look', 'Needs a look'],
 ] as const;
 
-/** A rule's standing as a Gmail filter as an icon, only where it is one or should have been. */
+/** A funnel where Gmail runs the rule as a filter. */
 function FilterMark({ rule }: { rule: RuleSummary }) {
-  const standing = filterStanding(rule);
-  if (standing === 'could' || standing === 'cannot') return null;
+  if (filterStanding(rule) !== 'filter') return null;
   return (
     <span className="ml-2 inline-flex align-[-0.1em]">
-      <Hint icon={FunnelIcon} says={standingWords(rule)} tone={standing === 'failed' ? 'failure' : standing === 'look' ? 'look' : 'plain'} />
+      <Hint icon={FunnelIcon} says="In Gmail" />
     </span>
   );
 }
@@ -89,17 +86,11 @@ export function Rules() {
       (r) =>
         (label === '' || r.labelId === label || r.whenLabel === label) &&
         (source === '' || r.source === source) &&
-        (gmail === '' ||
-          (gmail === 'filter'
-            ? r.filterId !== null
-            : gmail === 'look'
-              ? ['failed', 'look'].includes(filterStanding(r))
-              : !r.filterId && filterStanding(r) === gmail)) &&
+        (gmail === '' || (gmail === 'filter' ? r.filterId !== null : filterStanding(r) === gmail)) &&
         (needle === '' || [whoText(r.match), r.labelName ?? ''].some((text) => text.toLowerCase().includes(needle))),
     )
     .toSorted((a, b) => b.hits - a.hits);
   const at = rules.findIndex((r) => r.id === open);
-  const failedFilters = (data?.rules ?? []).filter((r) => filterStanding(r) === 'failed').length;
 
   const removeButton = (rule: RuleSummary) => (
     <ConfirmButton
@@ -146,12 +137,6 @@ export function Rules() {
     >
       {error ? <ErrorNote message={error} /> : null}
       <Failure>{remove.error}</Failure>
-      {failedFilters > 0 && gmail !== 'look' ? (
-        <Failure>
-          Gmail did not take the filter change for {failedFilters === 1 ? '1 rule' : `${count(failedFilters)} rules`}.{' '}
-          <TextLink href="/rules?gmail=look">See {failedFilters === 1 ? 'it' : 'them'}</TextLink>
-        </Failure>
-      ) : null}
       {loading ? (
         <Loading>
           <Td className="max-w-0 md:w-full">

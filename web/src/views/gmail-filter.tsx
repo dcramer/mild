@@ -71,26 +71,13 @@ function FilterDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => voi
 }
 
 /** Where a rule stands as a Gmail filter, for the Rules list: `failed` and `look` need the user. */
-export function filterStanding(rule: RuleSummary): 'failed' | 'look' | 'filter' | 'could' | 'cannot' {
-  const { state, possible, history } = rule.filter;
-  if ((history.at(-1)?.status ?? 'done') !== 'done') return 'failed';
-  if (rule.filterId ? state === 'changed' || state === 'outdated' : state === 'gone') return 'look';
-  return rule.filterId ? 'filter' : possible ? 'could' : 'cannot';
-}
-
-/** The rule's standing in a word or two, for a list. Empty for a rule that is no filter. */
-export function standingWords(rule: RuleSummary): string {
-  const { state } = rule.filter;
-  switch (filterStanding(rule)) {
-    case 'failed':
-      return rule.filter.history.at(-1)?.type === 'unfilter' ? 'Not removed from Gmail' : 'Not added to Gmail';
-    case 'look':
-      return state === 'changed' ? 'Edited in Gmail' : state === 'gone' ? 'Deleted in Gmail' : 'Filter out of date';
-    case 'filter':
-      return 'In Gmail';
-    default:
-      return '';
-  }
+/**
+ * Whether Gmail runs the rule as a filter, or could. A filter the user edited or deleted in Gmail is their
+ * choice, one out of date is brought into line once Sift is on, and a change Gmail did not take is tried
+ * again: none of them is the reader's to look at.
+ */
+export function filterStanding(rule: RuleSummary): 'filter' | 'could' | 'cannot' {
+  return rule.filterId ? 'filter' : rule.filter.possible ? 'could' : 'cannot';
 }
 
 /** Whether Gmail runs the rule as a filter, and why not; what Sift did about it, and the press to add or remove it. */
@@ -119,12 +106,11 @@ export function InGmail({ rule, active }: { rule: RuleSummary; active: boolean }
         change.status === 'done' ? (
           <span className="font-medium">{change.type === 'filter' ? 'Added to Gmail' : 'Removed from Gmail'}</span>
         ) : (
-          <Failure inline>{change.type === 'filter' ? 'Not added to Gmail' : 'Not removed from Gmail'}</Failure>
+          <span className="text-muted-foreground">{change.type === 'filter' ? 'Not added to Gmail' : 'Not removed from Gmail'}</span>
         ),
-      detail: change.status === 'done' ? null : change.error,
     })),
     // Noticed by a check, not done by Sift, so the audit log has no row for it.
-    ...(state === 'gone' && checkedAt !== null ? [{ at: checkedAt, title: <span className="font-medium">Deleted in Gmail</span>, detail: null }] : []),
+    ...(state === 'gone' && checkedAt !== null ? [{ at: checkedAt, title: <span className="font-medium">Deleted in Gmail</span> }] : []),
   ].toSorted((a, b) => a.at - b.at);
 
   return (
@@ -155,9 +141,7 @@ export function InGmail({ rule, active }: { rule: RuleSummary; active: boolean }
       {events.length > 0 ? (
         <Timeline>
           {events.map((event) => (
-            <TimelineEvent key={`${event.at}-${String(event.detail)}`} at={dateTime(event.at)} title={event.title}>
-              {event.detail}
-            </TimelineEvent>
+            <TimelineEvent key={event.at} at={dateTime(event.at)} title={event.title} />
           ))}
         </Timeline>
       ) : null}

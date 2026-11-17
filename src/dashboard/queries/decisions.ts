@@ -80,38 +80,14 @@ export const decisionsJoined = (db: Sql) =>
       ),
     );
 
-/**
- * Where a decision has got to, as the dashboard groups it. `trouble`: failed or not confirmed. A change
- * still waiting for a pass (an answer, or anything left while sift was off) is not trouble.
- */
+/** Where a decision has got to, as the dashboard groups it. */
 const STATUS_WHERE: Record<string, SQL | undefined> = {
   suggested: eq(decisions.carryOut, false),
   done: and(eq(decisions.carryOut, true), inArray(decisions.outcome, ['done', 'none']), sql`coalesce(${actions.status}, 'done') = 'done'`),
   undone: eq(actions.status, 'undone'),
-  trouble: and(
-    eq(decisions.carryOut, true),
-    isNotNull(decisions.outcome),
-    sql`coalesce(${actions.status}, '') NOT IN ('pending', 'undone')`,
-    or(inArray(decisions.outcome, ['failed', 'unknown']), inArray(actions.status, ['failed', 'unknown'])),
-  ),
   // What was done to mail in Gmail, tried, or waiting to be: suggestions and mail left alone are not.
   changed: and(eq(decisions.carryOut, true), or(isNotNull(actions.id), isNull(decisions.outcome), inArray(decisions.outcome, ['failed', 'unknown']))),
 };
-
-/**
- * Try a failed or unconfirmed change again: the decision goes back to waiting, and the next pass carries it
- * out through the executor as it would any other. The user's own answer is retried even while sift is
- * off; anything else waits for sift to be on. False if there was nothing to retry.
- */
-export async function retryDecision(db: Sql, scope: Scope, id: number): Promise<{ retried: boolean; waiting: boolean }> {
-  const [row] = await db
-    .select({ byUser: decisions.byUser })
-    .from(decisions)
-    .where(and(eq(decisions.id, id), eq(decisions.carryOut, true), inArray(decisions.outcome, ['failed', 'unknown']), within(scope, decisions.accountId)));
-  if (!row) return { retried: false, waiting: false };
-  await db.update(decisions).set({ outcome: null, outcomeDetail: null }).where(eq(decisions.id, id));
-  return { retried: true, waiting: !row.byUser };
-}
 
 type DecisionFields = Awaited<ReturnType<typeof decisionsJoined>>[number];
 
@@ -125,7 +101,7 @@ interface DecisionFilter {
   days: number;
   stage?: string;
   disposition?: string;
-  /** `suggested`, `done`, `undone` or `trouble`. */
+  /** `suggested`, `done`, `undone` or `changed`. */
   status?: string;
   /** Case-insensitive substring of the subject, sender address or sender name. Reads every decision the rest of the filter leaves. */
   search?: string;

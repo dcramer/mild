@@ -15,11 +15,12 @@ import { onePerson, openUserDb, raw, withReason } from './fixtures.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { setActive } from '../src/store/preferences.ts';
-import { MAX_ATTEMPTS, finishRun, putBackInQueue, startRun } from '../src/store/runs.ts';
+import { MAX_ATTEMPTS, finishRun, startRun } from '../src/store/runs.ts';
 import { listProposals } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
-import { FakeMailbox, facts } from './helpers.ts';
+import { FakeMailbox, everything, facts } from './helpers.ts';
+import { listSuggestions } from '../src/dashboard/queries/suggestions.ts';
 
 const ACCOUNT = 'me@example.org';
 
@@ -103,6 +104,34 @@ describe('runOnce', () => {
     expect(mailbox.modifyCalls).toBe(0);
     expect(await raw(db).get('SELECT count(*) AS n FROM actions')).toEqual({ n: 0 });
     expect(logs).toEqual([`${ACCOUNT}: 2 new; would archive 1, review 1`]);
+  });
+
+  it('asks Gmail again on the next pass for a change that did not land, and stops after three tries', async () => {
+    await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    inbox = [inbox[0]!];
+    mailbox.failModify = 'before';
+    await runOnce(await active(true), options());
+    expect(await decisions()).toMatchObject([{ message_id: 'news', carry_out: true, outcome: null }]);
+    expect(logs.at(-1)).toMatch(/1 change to try again/);
+    await runOnce(db, options());
+    await runOnce(db, options());
+    expect(await decisions()).toMatchObject([{ message_id: 'news', outcome: 'failed' }]);
+    expect(logs.at(-1)).toMatch(/1 change not made after 3 tries/);
+    mailbox.failModify = null;
+    await runOnce(db, options());
+    expect(mailbox.labels.get('news')).toContain('INBOX');
+    expect(await raw(db).get("SELECT count(*) AS n FROM actions WHERE type = 'archive'")).toEqual({ n: 3 });
+  });
+
+  it('counts a change whose answer was lost but that landed as done, without making it twice', async () => {
+    await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    inbox = [inbox[0]!];
+    mailbox.failModify = 'after';
+    await runOnce(await active(true), options());
+    mailbox.failModify = null;
+    await runOnce(db, options());
+    expect(await decisions()).toMatchObject([{ message_id: 'news', outcome: 'done' }]);
+    expect(mailbox.modifyCalls).toBe(1);
   });
 
   it('acts on decisions, links each action to its decision and counts rule hits', async () => {
@@ -751,7 +780,7 @@ describe('a failed model call', () => {
     for (let pass = 1; pass <= 3; pass++) {
       await runOnce(db, { ...options(), model: unusable });
       expect(await decisions()).toEqual([]);
-      expect(await listUndecided(db, ACCOUNT, 10)).toHaveLength(pass < 3 ? 1 : 0);
+      expect((await listUndecided(db, ACCOUNT, 10)).map((m) => m.outOfTries)).toEqual([pass === 3]);
     }
     // A failed call was still billed.
     expect(await runs()).toEqual(
@@ -805,7 +834,7 @@ describe('a failed model call', () => {
     await runOnce(db, options());
     for (let i = 0; i < MAX_ATTEMPTS; i++)
       await finishRun(db, await startRun(db, { accountId: ACCOUNT, messageId: 'news', model: 'test/model', now: 0 }), { usage, now: 0 });
-    expect(await listUndecided(db, ACCOUNT, 10)).toEqual([]);
+    expect((await listUndecided(db, ACCOUNT, 10)).map((m) => m.outOfTries)).toEqual([true]);
   });
 
   it('after it stops asking, leaves mail the model would have judged in the queue, not to a weaker rule', async () => {
@@ -822,7 +851,7 @@ describe('a failed model call', () => {
     inbox = [inbox[0]!];
     await runOnce(db, options());
     for (let i = 0; i < MAX_ATTEMPTS; i++) await startRun(db, { accountId: ACCOUNT, messageId: 'news', model: 'test/model', now: 0 });
-    expect(await listUndecided(db, ACCOUNT, 10)).toEqual([]);
+    expect((await listUndecided(db, ACCOUNT, 10)).map((m) => m.outOfTries)).toEqual([true]);
   });
 
   it('stops asking after three failures in a row, and still decides what a rule covers', async () => {
@@ -836,14 +865,29 @@ describe('a failed model call', () => {
     expect((await listUndecided(db, ACCOUNT, 10)).map((m) => m.facts.messageId)).toEqual(['m1', 'm2', 'm3', 'm4']);
   });
 
-  it('can be put back in the queue, and is decided once the model answers', async () => {
+  it("once out of tries, asks the model no more: a rule may say what it is, and otherwise it is the user's to say", async () => {
     inbox = [inbox[0]!];
     for (let pass = 0; pass < MAX_ATTEMPTS; pass++) await runOnce(db, { ...options(), model: unusable });
-    expect(await putBackInQueue(db, ACCOUNT, 'news', 6000)).toBe(true);
-    expect(await putBackInQueue(db, ACCOUNT, 'news', 6000)).toBe(false);
-    await runOnce(db, { ...options(), model: async () => ({ model: 'test/model', judge: async () => ({ label: 'newsletter', reason: 'r' }) }) });
-    expect(await decisions()).toMatchObject([{ message_id: 'news', stage: 'model' }]);
-    expect((await runs()).at(-1)).toEqual({ message_id: 'news', model: 'test/model', error: null, cost_usd: 0 });
+    expect(await decisions()).toEqual([]);
+    const asked = (await runs()).length;
+    await runOnce(db, { ...options(), model: unusable });
+    expect(await runs()).toHaveLength(asked);
+    expect(withReason(await raw(db).get(`SELECT stage, disposition, label_id, carry_out, reason FROM decisions WHERE message_id = 'news'`))).toEqual({
+      stage: 'fallback',
+      disposition: 'review',
+      label_id: null,
+      carry_out: false,
+      reason: 'the model failed on it each time it was asked',
+    });
+    expect((await listSuggestions(db, await everything(db))).items.map((i) => [i.messageId, i.labelId])).toEqual([['news', null]]);
+  });
+
+  it('once out of tries, is decided by a rule added since', async () => {
+    inbox = [inbox[0]!];
+    for (let pass = 0; pass < MAX_ATTEMPTS; pass++) await runOnce(db, { ...options(), model: unusable });
+    await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    await runOnce(db, { ...options(), model: unusable });
+    expect(await decisions()).toMatchObject([{ message_id: 'news', stage: 'rules' }]);
   });
 });
 

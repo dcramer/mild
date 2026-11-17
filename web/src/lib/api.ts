@@ -24,7 +24,6 @@ export type {
   SuggestionItem,
   Suggestions,
   Summary,
-  UnjudgedRow,
 } from '../../../src/dashboard/types.ts';
 import type {
   DecisionPage,
@@ -46,7 +45,6 @@ import type {
   SuggestionDetail,
   Suggestions,
   Summary,
-  UnjudgedRow,
 } from '../../../src/dashboard/types.ts';
 
 export type Days = 1 | 7 | 30 | 90;
@@ -200,7 +198,6 @@ export const api = {
   models: (signal: AbortSignal) => get<Models>('/api/models', {}, signal),
   /** The reader's own: true, sift carries out its decisions in their Gmail. */
   setActive: (active: boolean) => post('/api/active', { active }),
-  unjudged: (signal: AbortSignal) => get<{ rows: UnjudgedRow[] }>('/api/unjudged', {}, signal),
   /** The reader's own model, `provider/model-id`, or null for none. */
   setModel: (model: string | null) => post('/api/model', { model }),
   /** Start a ChatGPT sign-in: resolves with where to go, and by device code the code to enter there. */
@@ -244,10 +241,6 @@ export const api = {
   resolveProposal: (id: number, accept: boolean) => post('/api/proposals', { id, accept }),
   /** `message`: what the page will not show by itself, if anything. */
   undo: (id: number) => post<{ message: string | null }>('/api/undo', { id }),
-  /** Try a failed change again. `waiting`: it is sift's own, and waits for sift to be on. */
-  retry: (id: number) => post<{ retried: boolean; waiting: boolean }>('/api/decisions/retry', { id }),
-  requeue: (accountId: string, messageId: string) => post<{ ok: true }>('/api/unjudged/retry', { accountId, messageId }),
-  requeueAll: () => post<{ retried: number }>('/api/unjudged/retry-all', {}),
   backfill: (days: number) => post('/api/backfill', { days }),
   checkNow: () => post('/api/check', {}),
   session: (signal: AbortSignal) => get<Session>('/api/session', {}, signal),

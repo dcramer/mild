@@ -8,7 +8,6 @@ import type { Store } from '../src/store/store.ts';
 import { freshStore, raw, rowsBy, startDashboard } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
-import { MAX_ATTEMPTS, finishRun, startRun } from '../src/store/runs.ts';
 import { facts } from './helpers.ts';
 import { conditionsHash } from '../src/store/content.ts';
 
@@ -60,12 +59,6 @@ async function seed(account: string): Promise<void> {
     `Body ${mark}`,
     `<p>Html ${mark}</p>`,
   );
-  // Mail the model failed on every time, waiting to be put back in the queue.
-  await recordSync(db, account, [facts({ accountId: account, messageId: `u-${mark}`, subject: `Unjudged ${mark}`, from: sender })], '3', 1000);
-  for (let i = 0; i < MAX_ATTEMPTS; i++) {
-    const run = await startRun(db, { accountId: account, messageId: `u-${mark}`, model: 'p/m', now: 1000 });
-    await finishRun(db, run, { error: `failed for ${mark}`, now: 1000 });
-  }
   ids[account] = { rule, action, proposal };
 }
 
@@ -143,7 +136,6 @@ const READS = (account: string, mark: string) => [
   '/api/suggestions?kept=1',
   '/api/suggestions?kept=1&fact=not-to-you',
   '/api/decisions?days=90&fact=not-to-you',
-  '/api/unjudged',
   '/api/manage',
   '/api/examples',
   '/api/evals',
@@ -298,7 +290,6 @@ describe("nobody sees or changes another person's mail", () => {
       ['/api/rules/apply', { id: theirs.rule, messageIds: ['g'] }, { id: 'r-nobody', messageIds: ['g'] }],
       ['/api/proposals', { id: theirs.proposal, accept: false }, { id: 9999, accept: false }],
       ['/api/undo', { id: theirs.action }, { id: 9999 }],
-      ['/api/unjudged/retry', { accountId: ALPHA, messageId: `u-${MARK[ALPHA]}` }, { accountId: NOBODY, messageId: `u-${MARK[ALPHA]}` }],
       ['/api/examples/delete', { accountId: ALPHA, messageId: `m-${MARK[ALPHA]}` }, { accountId: NOBODY, messageId: `m-${MARK[ALPHA]}` }],
       ['/api/examples/delete-all', { accountId: ALPHA }, { accountId: NOBODY }],
       ['/api/evals/run', { accountId: ALPHA }, { accountId: NOBODY }],
@@ -323,17 +314,6 @@ describe("nobody sees or changes another person's mail", () => {
     expect((await call('POST', '/api/rules', ALPHA, fromProposal)).status).toBe(200);
     expect(await raw(db).get('SELECT status FROM proposals WHERE id = ?', theirs.proposal)).toEqual({ status: 'accepted' });
     expect((await call('POST', '/api/undo', ALPHA_WORK, { id: theirs.action })).status).toBe(200);
-    const unjudged = async () => (JSON.parse((await call('GET', '/api/unjudged', ALPHA)).text) as { rows: { messageId: string }[] }).rows;
-    expect((await unjudged()).map((r) => r.messageId).toSorted()).toEqual([`u-${MARK[ALPHA]}`, `u-${MARK[ALPHA_WORK]}`]);
-    expect((await call('POST', '/api/unjudged/retry', ALPHA_WORK, { accountId: ALPHA, messageId: `u-${MARK[ALPHA]}` })).status).toBe(200);
-    expect((await unjudged()).map((r) => r.messageId)).toEqual([`u-${MARK[ALPHA_WORK]}`]);
-    expect((await call('POST', '/api/unjudged/retry', ALPHA, { accountId: ALPHA, messageId: `u-${MARK[ALPHA]}` })).status).toBe(409);
-    // Retrying everything is each person's own.
-    expect((await call('POST', '/api/unjudged/retry-all', BRAVO, {})).body).toEqual({ retried: 1 });
-    expect((await unjudged()).map((r) => r.messageId)).toEqual([`u-${MARK[ALPHA_WORK]}`]);
-    expect((await call('POST', '/api/unjudged/retry-all', ALPHA, {})).body).toEqual({ retried: 1 });
-    expect(await unjudged()).toEqual([]);
-    expect((await call('POST', '/api/unjudged/retry-all', ALPHA, {})).status).toBe(409);
   });
 
   it('lets each person change their own mode, model and sign-ins, and only their own', async () => {

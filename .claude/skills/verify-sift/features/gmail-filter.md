@@ -1,11 +1,10 @@
 # A rule as a Gmail filter
 
-A rule Gmail can run itself can be added to Gmail as a filter, so its mail is handled without Sift. Each rule's panel says whether it is a filter and what happened to it there, and the Rules list says which rules Gmail did not take.
+A rule Gmail can run itself can be added to Gmail as a filter, so its mail is handled without Sift. Each rule's panel says whether it is a filter and what happened to it there. Nothing is flagged on the Rules list: a filter Gmail did not take is asked for again, and one deleted in Gmail is the user's choice.
 
 ## Sub-features
 
 - `filter-state`: `In Gmail` on a rule's panel: `Gmail runs this rule as a filter.`, `Its filter was deleted in Gmail. Sift will not put it back.`, `Gmail could run this by itself once Sift is on.`, or why it cannot be one; with its history (`Added to Gmail`, `Removed from Gmail`, `Deleted in Gmail`, `Not added to Gmail`).
-- `filter-failed`: the line above Rules, `Gmail did not take the filter change for 1 rule. See it`.
 - `filter-remove`: `Remove from Gmail` on a rule that is a filter; the rule stays.
 - `filter-add`: `Add to Gmail…`, only while Sift is on, then `Add it to Gmail as a filter?` and `Add to Gmail`.
 - `filter-rule-remove`: removing a rule that is a filter takes the filter out first.
@@ -19,7 +18,7 @@ A rule Gmail can run itself can be added to Gmail as a filter, so its mail is ha
 
 Preconditions:
 
-- Fresh seed. `$RUN/gmail.json` holds one filter for `me@example.org`, `f1-@ci.example.org`. Rules shows `anyone at news.example.com` `Not added to Gmail`, `orders@shop.example.com` `Deleted in Gmail`, `anyone at ci.example.org` `In Gmail`, and the failed line above them.
+- Fresh seed. `$RUN/gmail.json` holds one filter for `me@example.org`, `f1-@ci.example.org`. Rules shows a funnel only on `anyone at ci.example.org`, and nothing in red. The news rule's panel history ends `Not added to Gmail`, the shop rule's `Deleted in Gmail`, both in plain ink.
 
 - **Remove from Gmail.** `ab open "$B/rules"`, `ab find role cell click --name "anyone at ci.example.org"`. `In Gmail` reads `Gmail runs this rule as a filter.` `ab find role button click --name "Remove from Gmail"`. A toast reads `Removed from Gmail`; `In Gmail` reads `Gmail could run this by itself once Sift is on.` with `Removed from Gmail` in its history. `$RUN/gmail.json` has no filters; `SELECT type, status FROM actions ORDER BY id DESC LIMIT 1` is `unfilter`, `done`; the rule is still there.
 - **Turn Sift on.** `ab open "$B/?settings=1"`, `ab find role button click --name "Turn on" --exact`; it asks `Archive, label and mark spam on new mail by itself?`; `ab find role button click --name "Turn on" --exact` again. `Active` reads `On`; `SELECT active FROM preferences` has `true` for person 1.

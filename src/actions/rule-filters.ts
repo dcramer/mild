@@ -1,5 +1,6 @@
 import { finishAction, insertPendingAction, openPayload } from '../store/actions.ts';
-import { filterVerdicts, getRuleFilter, listRuleFilters, setRuleFilter } from '../store/filters.ts';
+import { filterHistory, filterVerdicts, getRuleFilter, listRuleFilters, setRuleFilter } from '../store/filters.ts';
+import { reportError } from '../telemetry.ts';
 import { actions, and, asc, eq, inArray } from '../store/query.ts';
 import type { FilterPlan } from '../triage/filter.ts';
 import type { ActionDeps } from './executor.ts';
@@ -68,6 +69,36 @@ export async function writeRuleFilter(deps: ActionDeps, ruleId: string): Promise
   }
   await finishAction(deps.db, actionId, 'done', null, null, clock(deps));
   await setRuleFilter(deps.db, ruleId, { filterId: got.id, state: 'active', written: { plan, got } satisfies Written }, clock(deps));
+}
+
+/**
+ * How many times in a row a filter change the user asked for is sent to Gmail. The press said when it did not
+ * take; Gmail failing is almost always passing, so Sift asks again rather than leave the rule marked.
+ */
+const FILTER_TRIES = 3;
+
+/**
+ * Ask Gmail again for each rule's last filter change the user asked for, where Gmail did not take it and the
+ * rule still asks for it. Only while Sift is on, as writing a filter needs.
+ */
+export async function retryRuleFilters(deps: ActionDeps, accountId: string): Promise<void> {
+  await settleRuleFilters(deps, accountId);
+  const verdicts = await filterVerdicts(deps.db, accountId);
+  for (const [ruleId, changes] of await filterHistory(deps.db, accountId)) {
+    const last = changes.at(-1)!;
+    if (last.status !== 'failed') continue;
+    const tries = changes.length - changes.findLastIndex((c) => c.type !== last.type || c.status !== 'failed') - 1;
+    const rule = await getRuleFilter(deps.db, ruleId);
+    if (tries >= FILTER_TRIES || !rule) continue;
+    const add = last.type === 'filter' && !rule.filterId && verdicts.get(ruleId)?.possible;
+    const remove = last.type === 'unfilter' && rule.filterId;
+    if (!add && !remove) continue;
+    try {
+      await (add ? writeRuleFilter(deps, ruleId) : removeRuleFilter(deps, ruleId));
+    } catch (error) {
+      if (tries + 1 >= FILTER_TRIES) reportError(error);
+    }
+  }
 }
 
 /** Take a rule's filter out of Gmail. Returns false if it had none. Throws if Gmail still has it afterwards. */

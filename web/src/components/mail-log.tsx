@@ -1,7 +1,7 @@
 import { SenderCell, SenderCellLoading } from '@/components/sender.tsx';
-import type { DecisionRow, ListedDecision, UnjudgedRow } from '@/lib/api.ts';
-import { ago, clock, dateTime, dayName, happened, status } from '@/lib/format.ts';
-import { Blank, Button, Does, Failure, Loading, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from '@/system';
+import type { DecisionRow, ListedDecision } from '@/lib/api.ts';
+import { clock, dateTime, dayName, happened, status } from '@/lib/format.ts';
+import { Blank, Button, Does, Loading, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 /**
@@ -18,48 +18,33 @@ function Happened({ row, stacked }: { row: DecisionRow; stacked?: boolean }) {
       {label}
     </>
   );
-  if (tone === 'failed')
-    return (
-      <span title={row.outcomeDetail ?? undefined}>
-        <Failure inline>{text}</Failure>
-        {label}
-      </span>
-    );
   if (tone === 'undone') return <span className="text-muted-foreground line-through">{what}</span>;
   return <span className={tone === 'quiet' ? 'text-muted-foreground' : undefined}>{what}</span>;
 }
 
 /**
  * What sift did to mail, newest first, under a heading for each day: who, the subject, what happened and
- * when. Undo where sift changed something; Retry where a change failed. A row opens the message.
- * `unjudged` goes first, under its own heading: mail the model failed on every time it was asked, with
- * Retry to put it back in the queue.
+ * when. Undo where sift changed something. A row opens the message.
  */
 export function MailLog({
   rows,
-  unjudged = [],
   onOpen,
   onUndo,
-  onRetry,
-  onRequeue,
   search,
 }: {
   rows: ListedDecision[];
-  unjudged?: UnjudgedRow[];
   onOpen: OpenMessages;
   onUndo: (row: DecisionRow) => void;
-  onRetry: (row: DecisionRow) => void;
-  onRequeue?: (row: UnjudgedRow) => void;
   search?: string;
 }) {
-  const items = [...unjudged, ...rows].map((row) => ({ accountId: row.accountId, messageId: row.messageId, subject: row.subject }));
+  const items = rows.map((row) => ({ accountId: row.accountId, messageId: row.messageId, subject: row.subject }));
   const term = search ? { term: search } : {};
   const days: { name: string; rows: { row: ListedDecision; index: number }[] }[] = [];
   rows.forEach((row, index) => {
     const name = dayName(row.decidedAt);
     const last = days.at(-1);
-    if (last?.name === name) last.rows.push({ row, index: unjudged.length + index });
-    else days.push({ name, rows: [{ row, index: unjudged.length + index }] });
+    if (last?.name === name) last.rows.push({ row, index });
+    else days.push({ name, rows: [{ row, index }] });
   });
 
   return (
@@ -73,44 +58,6 @@ export function MailLog({
           <Th phone="hide">Undo</Th>
         </Tr>
       </thead>
-      {unjudged.length > 0 ? (
-        <tbody>
-          <TrGroup title="Not judged" span={5} />
-          {unjudged.map((row, index) => {
-            const failed = (
-              <span title={row.error ?? undefined}>
-                <Failure inline>Model failed</Failure>
-              </span>
-            );
-            return (
-              <Tr key={`${row.accountId}/${row.messageId}`} onOpen={() => onOpen(items, index)}>
-                <SenderCell accountId={row.accountId} address={row.fromAddress} name={row.fromName} {...term}>
-                  <OnPhone>
-                    <span className="w-full truncate text-foreground">{row.subject || '(no subject)'}</span>
-                    {failed}
-                    <span>{ago(row.triedAt)}</span>
-                  </OnPhone>
-                </SenderCell>
-                <Td phone="hide" className="max-w-0 md:w-full">
-                  <span className="block truncate">{row.subject ? <Marked text={row.subject} {...term} /> : '(no subject)'}</span>
-                </Td>
-                <Td phone="hide" className="max-w-0 md:min-w-60">
-                  <span className="block truncate">
-                    {failed}
-                    {row.error ? <Sub>{row.error}</Sub> : null}
-                  </span>
-                </Td>
-                <Td phone="hide" num quiet title={dateTime(row.triedAt)}>
-                  {ago(row.triedAt)}
-                </Td>
-                <RowActions>
-                  <span className="flex w-20 justify-end">{onRequeue ? <Button onClick={() => onRequeue(row)}>Retry</Button> : null}</span>
-                </RowActions>
-              </Tr>
-            );
-          })}
-        </tbody>
-      ) : null}
       {days.map((day) => (
         <tbody key={day.name}>
           <TrGroup title={day.name} span={5} />
@@ -142,8 +89,6 @@ export function MailLog({
                       <Button variant="quiet" onClick={() => onUndo(row)}>
                         Undo
                       </Button>
-                    ) : s === 'failed' ? (
-                      <Button onClick={() => onRetry(row)}>Retry</Button>
                     ) : null}
                   </span>
                 </RowActions>

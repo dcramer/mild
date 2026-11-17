@@ -16,7 +16,6 @@ export const TIERS: { key: StageKey; name: string; color: string }[] = [
 export const HANDLED = [
   { key: 'changed', name: 'Changed in Gmail', color: 'var(--handled-changed)' },
   { key: 'left', name: 'Left alone', color: 'var(--handled-left)' },
-  { key: 'failed', name: 'Failed', color: 'var(--destructive)' },
 ];
 export const tier = (key: string) => TIERS.find((t) => t.key === key) ?? { key, name: key, color: 'var(--muted-foreground)' };
 
@@ -61,7 +60,7 @@ const WILL: Record<string, string> = {
 /** What happens to mail with a given action, for the end of a sentence. */
 export const willBe = (key: string) => WILL[key] ?? key;
 
-/** Where a decision has got to in Gmail. `trouble` is the only one shown in red. */
+/** Where a decision has got to in Gmail. */
 export type Status = 'suggested' | 'waiting' | 'done' | 'unchanged' | 'undone' | 'skipped' | 'failed';
 export const STATUS_NAMES: Record<Status, string> = {
   suggested: 'Suggested',
@@ -70,7 +69,7 @@ export const STATUS_NAMES: Record<Status, string> = {
   unchanged: 'No change',
   undone: 'Undone',
   skipped: 'Skipped',
-  failed: 'Failed',
+  failed: 'Not done',
 };
 export function status(d: { carryOut: boolean; outcome: string | null; actionStatus: string | null }): Status {
   if (!d.carryOut) return 'suggested';
@@ -242,17 +241,17 @@ export const CONTACT_SAYS = {
 const DID: Record<string, string> = { archive: 'Archived', spam: 'Marked spam', block: 'Blocked', keep: 'Kept' };
 const DOING: Record<string, string> = { archive: 'archive', spam: 'mark spam', block: 'block', keep: 'keep' };
 /**
- * What happened to a message, as a log says it: "Archived", "Archive failed", "Waiting to archive". `tone`
- * says how to show it: a failure is red, an undone change is struck through, the rest are plain.
+ * What happened to a message, as a log says it: "Archived", "Not archived", "Waiting to archive". `tone`
+ * says how to show it: an undone change is struck through, what did not happen is quiet, the rest are plain.
  */
 export function happened(d: { carryOut: boolean; outcome: string | null; actionStatus: string | null; disposition: string }): {
   text: string;
-  tone: 'plain' | 'failed' | 'undone' | 'quiet';
+  tone: 'plain' | 'undone' | 'quiet';
 } {
   const s = status(d);
   const doing = DOING[d.disposition];
   if (d.disposition === 'review') return { text: outcomeName('review'), tone: 'quiet' };
-  if (s === 'failed') return { text: `${capitalised(doing ?? d.disposition)} failed`, tone: 'failed' };
+  if (s === 'failed') return { text: `Not ${(DID[d.disposition] ?? d.disposition).toLowerCase()}`, tone: 'quiet' };
   if (s === 'undone') return { text: DID[d.disposition] ?? d.disposition, tone: 'undone' };
   if (s === 'waiting') return { text: `Waiting to ${doing ?? d.disposition}`, tone: 'quiet' };
   if (s === 'suggested') return { text: `Would ${doing ?? d.disposition}`, tone: 'quiet' };
