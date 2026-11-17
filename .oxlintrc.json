@@ -178,5 +178,5 @@
       "rules": { "no-restricted-imports": ["error", { "patterns": [{ "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }] }] }
     }
   ],
-  "ignorePatterns": [".claude/**", "node_modules/**", "web/dist/**"]
+  "ignorePatterns": ["node_modules/**", "web/dist/**"]
 }

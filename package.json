@@ -12,8 +12,8 @@
     "sift": "node --disable-warning=ExperimentalWarning src/cli/main.ts",
     "typecheck": "tsc --noEmit && pnpm --filter sift-web typecheck",
     "lint": "oxlint",
-    "format": "oxlint --fix && oxfmt src tests web/src web/vite.config.ts vitest.config.ts",
-    "format:check": "oxfmt --check src tests web/src web/vite.config.ts vitest.config.ts",
+    "format": "oxlint --fix && oxfmt src tests web/src web/vite.config.ts vitest.config.ts .claude/skills/verify-sift/scripts",
+    "format:check": "oxfmt --check src tests web/src web/vite.config.ts vitest.config.ts .claude/skills/verify-sift/scripts",
     "test": "vitest run",
     "knip": "knip",
     "check:fast": "pnpm typecheck && pnpm lint && pnpm knip && pnpm format:check",
@@ -58,7 +58,7 @@
     "pre-commit": "pnpm exec lint-staged && pnpm knip"
   },
   "lint-staged": {
-    "{src,tests,web/src}/**/*.{ts,tsx}": [
+    "{src,tests,web/src,.claude/skills/verify-sift/scripts}/**/*.{ts,tsx}": [
       "oxlint --fix",
       "oxfmt"
     ],

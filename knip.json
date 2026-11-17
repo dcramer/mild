@@ -1,8 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignore": [
-    ".claude/**"
-  ],
   "ignoreBinaries": [
     "tailscale"
   ],
@@ -10,7 +7,8 @@
     ".": {
       "entry": [
         "api/*.ts",
-        "src/vercel/migrate.ts"
+        "src/vercel/migrate.ts",
+        ".claude/skills/verify-sift/scripts/*.ts"
       ]
     },
     "web": {
