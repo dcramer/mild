@@ -286,7 +286,8 @@ function Body({
               </div>
             </Section>
           ) : null}
-          {history.length > 0 ? (
+          {/* After "Also waiting" has loaded, which would otherwise push it down from under the pointer. */}
+          {history.length > 0 && !waiting.loading ? (
             <Disclosure summary={`History · ${history.length}`}>
               <Failure>{undo.error}</Failure>
               <Timeline>{history.map((entry) => entry.node)}</Timeline>

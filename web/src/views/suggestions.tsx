@@ -250,16 +250,6 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
               </Callout>
             ) : null}
           </Reserve>
-          {/* Proposals arrive after the list is drawn, and would push it down. */}
-          <Reserve id="home-proposals" ready={data !== null} room={{ narrow: 0, wide: 0 }}>
-            {data && data.proposals.length > 0 ? (
-              <ul className="sheet flex flex-col">
-                {data.proposals.map((proposal) => (
-                  <ProposalRow key={proposal.id} proposal={proposal} labels={data.labels[proposal.accountId] ?? []} />
-                ))}
-              </ul>
-            ) : null}
-          </Reserve>
         </>
       }
       search={{ value: search, onChange: setSearch, placeholder: 'Search senders and subjects' }}
@@ -283,6 +273,13 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
       }}
     >
       {error ? <ErrorNote message={error} /> : null}
+      {data && data.proposals.length > 0 ? (
+        <ul className="sheet flex flex-col">
+          {data.proposals.map((proposal) => (
+            <ProposalRow key={proposal.id} proposal={proposal} labels={data.labels[proposal.accountId] ?? []} />
+          ))}
+        </ul>
+      ) : null}
       {loading ? (
         <Loading>
           <SenderCellLoading>
