@@ -2,6 +2,7 @@ import { type InboxEstimate, type ManageState, api, useAction, useLoaded } from 
 import { ago, count, money, plural } from '@/lib/format.ts';
 import { Blank, Button, Dialog, Failure, Figure, Figures, SettingRow, Share } from '@/system';
 import { costOfMessages, priceNote, subscription } from '@/lib/prices.ts';
+import { useNow } from '@/components/status.tsx';
 
 type Reach = 'inbox' | 'recent';
 
@@ -85,6 +86,7 @@ export function InboxRow({ state, reload, onGoThrough }: { state: ManageState; r
   const { going, last } = state.inbox;
   const { busy, error, run } = useAction();
   const estimate = useInboxEstimate('inbox');
+  const now = useNow(10_000);
   if (going)
     return (
       <SettingRow
@@ -94,7 +96,7 @@ export function InboxRow({ state, reload, onGoThrough }: { state: ManageState; r
             <Share part={going.done} whole={going.listed ? going.total : 0} />
             <span className="tabular-nums">
               {going.listed
-                ? [`${count(going.done)} of ${count(going.total)}`, `${money(going.spent)} so far`, timeLeft(going, Date.now())].filter(Boolean).join(' · ')
+                ? [`${count(going.done)} of ${count(going.total)}`, `${money(going.spent)} so far`, timeLeft(going, now)].filter(Boolean).join(' · ')
                 : `Reading your inbox · ${count(going.total)} found`}
             </span>
             <Failure>{error}</Failure>

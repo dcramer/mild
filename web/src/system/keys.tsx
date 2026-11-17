@@ -1,4 +1,4 @@
-import { type ReactNode, createContext, useContext, useEffect, useId, useRef, useSyncExternalStore } from 'react';
+import { type ReactNode, createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Kbd } from './type.tsx';
 import { TOUCH } from './touch.ts';
 
@@ -87,14 +87,12 @@ export const RowActive = createContext(true);
  * own keys are live. `moves` says the layer uses J and K itself, so a table inside it leaves them alone.
  */
 export function KeyLayer({ moves = false, children }: { moves?: boolean; children: ReactNode }) {
-  const layer = useRef(0);
-  if (layer.current === 0) layer.current = nextLayer++;
+  const [layer] = useState(() => nextLayer++);
   useEffect(() => {
-    const id = layer.current;
-    layers.push(id);
-    return () => void layers.splice(layers.indexOf(id), 1);
-  }, []);
-  return <Layer value={{ layer: layer.current, moves }}>{children}</Layer>;
+    layers.push(layer);
+    return () => void layers.splice(layers.indexOf(layer), 1);
+  }, [layer]);
+  return <Layer value={{ layer, moves }}>{children}</Layer>;
 }
 
 /** Whether the layer this is in keeps J and K for itself. */
@@ -121,7 +119,9 @@ export function useShortcut(
   const active = useContext(RowActive) && options.enabled !== false && key !== undefined;
   const shortcuts = useShortcutsOn();
   const latest = useRef({ run, within: options.within });
-  latest.current = { run, within: options.within };
+  useLayoutEffect(() => {
+    latest.current = { run, within: options.within };
+  });
   useEffect(() => {
     if (!active || key === undefined) return;
     bindings.set(id, { key, label, layer, run: () => latest.current.run(), within: () => latest.current.within?.() ?? null });

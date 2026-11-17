@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, useState } from 'react';
 import { Button } from './button.tsx';
 
 /**
@@ -39,6 +39,12 @@ export function ConfirmButton({
         {icon ?? children}
       </Button>
     );
+  const escape = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Escape') return;
+    // The Escape is this question's alone, not the panel or dialog it sits in.
+    event.stopPropagation();
+    setAsking(false);
+  };
   const ask = (
     <span
       role="group"
@@ -49,17 +55,12 @@ export function ConfirmButton({
             'absolute top-1/2 right-0 z-10 inline-flex -translate-y-1/2 items-center gap-1.5 bg-(--surface) pl-3 group-hover/row:[background-image:linear-gradient(var(--fill),var(--fill))] group-focus-within/row:[background-image:linear-gradient(var(--fill),var(--fill))]'
           : 'inline-flex items-center gap-1.5'
       }
-      onKeyDown={(event) => {
-        if (event.key !== 'Escape') return;
-        // The Escape is this question's alone, not the panel or dialog it sits in.
-        event.stopPropagation();
-        setAsking(false);
-      }}
     >
       <span className="mr-1 text-sm whitespace-nowrap">{question}</span>
       <Button
         variant="ink"
         autoFocus
+        onKeyDown={escape}
         onClick={() => {
           setAsking(false);
           onConfirm();
@@ -67,7 +68,7 @@ export function ConfirmButton({
       >
         {children}
       </Button>
-      <Button variant="quiet" onClick={() => setAsking(false)}>
+      <Button variant="quiet" onKeyDown={escape} onClick={() => setAsking(false)}>
         Cancel
       </Button>
     </span>

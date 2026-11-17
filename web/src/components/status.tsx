@@ -9,18 +9,20 @@ type Accounts = ManageState['accounts'];
 /** The way in to the model when it is a subscription, whose plan pays for the calls: the sums are API prices. */
 type Plan = ManageState['model']['choices'][number] | null;
 
-/** Re-renders every half minute, so "just now" becomes "1 min ago" with nothing loaded. */
-function useTicking() {
-  const [, tick] = useState(0);
+/** The time, moved on every `ms`, so what is drawn from it ("1 min ago", the time left) keeps up with nothing loaded. */
+export function useNow(ms: number): number {
+  const [now, setNow] = useState(Date.now);
   useEffect(() => {
-    const timer = setInterval(() => tick((n) => n + 1), 30_000);
+    const timer = setInterval(() => setNow(Date.now()), ms);
     return () => clearInterval(timer);
-  }, []);
+  }, [ms]);
+  return now;
 }
 
 /** What the model cost over each window, and its shape over the 30 days: the hover card, and on a phone the menu. */
 export function UsageDetail({ usage, plan }: { usage: Usage; plan: Plan }) {
-  const first = new Date(Date.now() - (usage.daily.length - 1) * 86_400_000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const now = useNow(60_000);
+  const first = new Date(now - (usage.daily.length - 1) * 86_400_000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   return (
     <div className="flex flex-col gap-4">
       <Figures compact>
@@ -39,7 +41,8 @@ export function UsageDetail({ usage, plan }: { usage: Usage; plan: Plan }) {
  * what the model cost over 30 days, which previews the rest and links to Activity.
  */
 export function SiftStatus({ accounts, usage, plan }: { accounts: Accounts; usage: Usage | null; plan: Plan }) {
-  useTicking();
+  // `ago` reads the clock itself.
+  useNow(30_000);
   const synced = accounts.flatMap((a) => (a.lastSyncedAt === null ? [] : [{ email: a.email, at: a.lastSyncedAt }]));
   return (
     <span className="flex items-center gap-2 whitespace-nowrap tabular-nums">

@@ -121,17 +121,6 @@ function Preview({ accountId, who }: { accountId: string; who: Who }) {
   );
 }
 
-/** A link with a preview of what Sift knows. Inside a row that opens on a press, the link takes the press itself. */
-function Linked({ href, card, children, className }: { href: string; card: ReactNode; children: ReactNode; className?: string | undefined }) {
-  return (
-    <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-      <HoverCard href={href} card={card} {...(className ? { className } : {})}>
-        {children}
-      </HoverCard>
-    </span>
-  );
-}
-
 /**
  * A sender, wherever one is named by address or name: a link to their page. A name opens their mail under
  * that name.
@@ -150,18 +139,18 @@ export function SenderLink({
   className?: string;
 }) {
   return (
-    <Linked href={senderHref(accountId, address, name)} card={<Preview accountId={accountId} who={{ address }} />} className={className}>
+    <HoverCard href={senderHref(accountId, address, name)} card={<Preview accountId={accountId} who={{ address }} />} {...(className ? { className } : {})}>
       {children ?? name ?? address}
-    </Linked>
+    </HoverCard>
   );
 }
 
 /** A domain, wherever one is named: a link to its page. */
 export function DomainLink({ accountId, domain, className }: { accountId: string; domain: string; className?: string }) {
   return (
-    <Linked href={domainHref(accountId, domain)} card={<Preview accountId={accountId} who={{ domain }} />} className={className}>
+    <HoverCard href={domainHref(accountId, domain)} card={<Preview accountId={accountId} who={{ domain }} />} {...(className ? { className } : {})}>
       {domain}
-    </Linked>
+    </HoverCard>
   );
 }
 

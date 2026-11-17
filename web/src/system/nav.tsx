@@ -1,6 +1,6 @@
 import { Dialog } from '@base-ui/react/dialog';
 import { MenuIcon, XIcon } from 'lucide-react';
-import { type ReactNode, useContext, useEffect, useState } from 'react';
+import { type ReactNode, useContext, useState } from 'react';
 import { Button } from './button.tsx';
 import { Cloud, FinePrint } from './fine-print.tsx';
 import { Avatar, Menu, type MenuItem } from './menu.tsx';
@@ -62,9 +62,13 @@ export function Masthead({
   account?: { name: string; items: readonly MenuItem[] } | undefined;
 }) {
   const [open, setOpen] = useState(false);
-  const cloud = useContext(Cloud);
   // Going somewhere closes the panel.
-  useEffect(() => setOpen(false), [current]);
+  const [shownAt, setShownAt] = useState(current);
+  if (shownAt !== current) {
+    setShownAt(current);
+    setOpen(false);
+  }
+  const cloud = useContext(Cloud);
   const here = items.find((item) => item.to === current);
   const waiting = items.reduce((sum, item) => sum + (item.count ?? 0), 0);
 

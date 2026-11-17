@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc", "import"],
+  "plugins": ["typescript", "unicorn", "oxc", "import", "react", "jsx-a11y", "nextjs"],
   "options": {
     "typeAware": true,
     "reportUnusedDisableDirectives": "warn"
@@ -99,10 +99,42 @@
       }
     },
     {
+      // The page, and the frame app/ draws around it. Categories reach a plugin's rules only from the root, so
+      // the React rules outside correctness, suspicious and perf that matter here are named.
       "files": ["web/src/**/*.ts", "web/src/**/*.tsx", "app/**/*.tsx"],
-      "plugins": ["typescript", "unicorn", "oxc", "import", "react"],
       "env": { "browser": true },
-      "rules": { "react/react-in-jsx-scope": "off" }
+      "rules": {
+        "react/rules-of-hooks": "error",
+        "react/no-danger": "error",
+        "react/jsx-no-target-blank": "error",
+        "react/no-unstable-nested-components": "error",
+        "react/iframe-missing-sandbox": "error",
+        "react/jsx-no-script-url": "error",
+        "react/checked-requires-onchange-or-readonly": "error",
+        "no-new-func": "error",
+        // The JSX transform imports React itself.
+        "react/react-in-jsx-scope": "off",
+        // Nothing in the page is memoized, so a new object or function as a prop or context value costs no render.
+        "react/jsx-no-constructed-context-values": "off",
+        // Keyed by place here: separators, lists fixed while shown, and condition rows whose fields are all controlled.
+        "react/no-array-index-key": "off",
+        // Each moves the focus into what the reader's own press just opened (a dialog, a question, a new row), as it should.
+        "jsx-a11y/no-autofocus": "off",
+        // The parts take roles on purpose (radio buttons that draw as buttons, a meter as an image); the tags it offers draw and behave otherwise.
+        "jsx-a11y/prefer-tag-over-role": "off",
+        // eslint-plugin-jsx-a11y's recommended handlers: a hover or focus that only shows a tooltip is not an interaction.
+        "jsx-a11y/no-noninteractive-element-interactions": ["error", { "handlers": ["onClick", "onError", "onLoad", "onMouseDown", "onMouseUp", "onKeyPress", "onKeyDown", "onKeyUp"] }],
+        // The page has its own router (web/src/lib/route.ts), which takes a press on a link to itself.
+        "nextjs/no-html-link-for-pages": "off",
+        // next/image is served by /_next/image, which next.config.js turns off.
+        "nextjs/no-img-element": "off",
+        "no-restricted-imports": ["error", { "patterns": [{ "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." }] }]
+      }
+    },
+    {
+      // A chart's columns take the focus, so a keyboard gets the figures a pointer gets on hover.
+      "files": ["web/src/system/chart.tsx"],
+      "rules": { "jsx-a11y/no-noninteractive-tabindex": "off" }
     },
     {
       "files": ["web/src/views/**/*.tsx", "web/src/components/**/*.tsx", "web/src/lib/**/*.ts", "web/src/lib/**/*.tsx", "web/src/App.tsx", "web/src/main.tsx"],
@@ -111,10 +143,29 @@
           "error",
           {
             "patterns": [
+              { "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." },
               { "group": ["@base-ui/**"], "message": "Only web/src/system imports Base UI. Use or extend a part from '@/system' (docs/design.md)." }
             ]
           }
         ]
+      }
+    },
+    {
+      // The frame Next.js draws on the server: it hands the page nothing, so the page's data comes only from /api/.
+      "files": ["app/**/*.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**", "!next", "!next/navigation", "!next/server", "!react", "!@/client.tsx", "!@/index.css"],
+                "message": "app/ only frames the page (@/client.tsx), which gets its data from /api/. Server code reached from here could be handed to the browser."
+              }
+            ]
+          }
+        ],
+        "no-restricted-globals": ["error", { "name": "process", "message": "What the frame reads from the environment it can hand to the browser. The page gets its data from /api/." }]
       }
     },
     {

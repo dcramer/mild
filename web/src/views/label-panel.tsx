@@ -26,7 +26,7 @@ import {
 const canMarkRead = (does: string) => does === 'keep' || does === 'archive';
 /** Wrong often enough to look at: under 85% right, over at least ten answers. */
 export const weak = (label: LabelSummary) => label.record.reviewed >= 10 && label.record.right / label.record.reviewed < 0.85;
-const ICONS = Object.fromEntries(ACTIONS.map(([key]) => [key, <ActionIcon action={key} />])) as Record<ActionKey, ReactNode>;
+const ICONS = Object.fromEntries(ACTIONS.map(([key]) => [key, <ActionIcon key={key} action={key} />])) as Record<ActionKey, ReactNode>;
 
 export interface LabelDraft {
   name: string;

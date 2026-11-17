@@ -1,0 +1,19 @@
+# Next.js, React and Workflow answer every request, so their fixes are taken as they come out, in one pull request
+# a week that CI checks.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    allow:
+      - dependency-name: next
+      - dependency-name: react
+      - dependency-name: react-dom
+      - dependency-name: '@types/react'
+      - dependency-name: '@types/react-dom'
+      - dependency-name: workflow
+      - dependency-name: '@workflow/*'
+    groups:
+      next-react-workflow:
+        patterns: ['*']

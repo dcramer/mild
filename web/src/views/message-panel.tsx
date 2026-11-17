@@ -1,6 +1,6 @@
 import { messageKey } from '@/lib/route.ts';
 import { PlusIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAnswer } from '@/components/answer.tsx';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { MessageBody, SeenFacts } from '@/components/message-parts.tsx';
@@ -349,7 +349,11 @@ export function MessagePanel({
   const item = items[index];
   // Another message from the same sender, looked at without leaving this place in the list.
   const [picked, setPicked] = useState<string | null>(null);
-  useEffect(() => setPicked(null), [index]);
+  const [shownAt, setShownAt] = useState(index);
+  if (shownAt !== index) {
+    setShownAt(index);
+    setPicked(null);
+  }
   const messageId = picked ?? item?.messageId ?? '';
   const { data, error, loading, reload } = useLoaded(`message/${item?.accountId ?? ''}/${messageId}`, (signal) =>
     item ? api.message(item.accountId, messageId, signal) : Promise.reject(new Error('Nothing is open.')),
