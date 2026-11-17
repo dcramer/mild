@@ -4,6 +4,7 @@ import { ContactHint, SENDER_CELL, SenderCell } from '@/components/sender.tsx';
 import { type ListedDecision, type SenderPage, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, dateTime, describeMatch, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
 import { type RuleStart, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
+import { nextMail } from '@/lib/next-mail.ts';
 import { useParam } from '@/lib/route.ts';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import {
@@ -65,7 +66,7 @@ const ruleWords = (rule: Rule) =>
 
 /** What happens to their next message, and what says so: a rule, or the model, with how often it has been right. */
 function NextMail({ data, rule, more }: { data: SenderPage; rule: Rule | null; more: ReactNode }) {
-  const last = data.decisions.find((d) => !d.byUser);
+  const next = nextMail(data, rule);
   const decides = rule !== null && rule.kind !== 'when-label';
   const { right, wrong } = data.profile.answers;
   const others = data.profile.rules.filter((r) => r !== rule);
@@ -73,13 +74,8 @@ function NextMail({ data, rule, more }: { data: SenderPage; rule: Rule | null; m
     <div className="flex flex-col gap-1.5">
       <p className="slug text-muted-foreground">Their next mail</p>
       <p className="heading">
-        {decides ? (
-          <Verdict labelName={rule.labelName} disposition={rule.disposition ?? 'keep'} />
-        ) : last ? (
-          <Verdict labelName={last.labelName} disposition={last.disposition} />
-        ) : (
-          <Verdict labelName={null} disposition="review" />
-        )}
+        {next.usually ? <span className="text-muted-foreground">Usually </span> : null}
+        <Verdict labelName={next.labelName} disposition={next.disposition} />
       </p>
       <ul className="flex flex-col gap-0.5 text-sm text-muted-foreground">
         {rule ? (
@@ -87,17 +83,17 @@ function NextMail({ data, rule, more }: { data: SenderPage; rule: Rule | null; m
             <TextLink href={ruleHref(rule.id)}>{ruleWords(rule)}</TextLink>
           </li>
         ) : null}
-        {decides ? null : (
-          <li>
-            {rule ? 'Otherwise the model decides each one' : 'The model decides each one'}
-            {right + wrong > 0 ? `; right ${count(right)} of ${count(right + wrong)} times you checked` : ''}
-          </li>
-        )}
         {others.map((r) => (
           <li key={r.id}>
             <TextLink href={ruleHref(r.id)}>{ruleWords(r)}</TextLink>
           </li>
         ))}
+        {decides ? null : (
+          <li>
+            {data.profile.rules.length > 0 ? 'Otherwise the model decides each one' : 'The model decides each one'}
+            {right + wrong > 0 ? `; right ${count(right)} of ${count(right + wrong)} times you checked` : ''}
+          </li>
+        )}
         {more ? <li>{more}</li> : null}
       </ul>
     </div>
