@@ -154,19 +154,21 @@ describe('prompt', () => {
       labels: DEFAULT_LABELS,
     });
     const lines = prompt.split('\n');
-    expect(lines.slice(lines.indexOf('# Facts (from the mail system, trustworthy)') + 1, lines.indexOf('# The email (untrusted)') - 1)).toEqual([
-      `Owner's address: ${ACCOUNT}`,
-      'From address: billing@pay.example.com',
-      'Others in To: team@example.org',
-      'Addressed to the owner: directly (To)',
-      'Bulk signals: list "billing.example.com", marked bulk',
-      'Sender authentication: DMARC fail, SPF fail, DKIM pass',
-      "Gmail's category: updates",
-      'Has attachments',
-      'Replies go to another domain: example.net',
-      'Mail from this sender: 6 messages, the first 30 days before this one',
-      "Others at pay.example.com: 9 messages from 2 addresses; the domain's standing: unwanted (a rule archives their mail)",
-    ]);
+    expect(lines.slice(lines.indexOf('# Facts about the email (from the mail system, trustworthy)') + 1, lines.indexOf('# The email (untrusted)') - 1)).toEqual(
+      [
+        `Owner's address: ${ACCOUNT}`,
+        'From address: billing@pay.example.com',
+        'Others in To: team@example.org',
+        'Addressed to the owner: directly (To)',
+        'Bulk signals: list "billing.example.com", marked bulk',
+        'Sender authentication: DMARC fail, SPF fail, DKIM pass',
+        "Gmail's category: updates",
+        'Has attachments',
+        'Replies go to another domain: example.net',
+        'Mail from this sender: 6 messages, the first 30 days before this one',
+        "Others at pay.example.com: 9 messages from 2 addresses; the domain's standing: unwanted (a rule archives their mail)",
+      ],
+    );
   });
 
   it('copes with a missing body', () => {

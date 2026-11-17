@@ -129,7 +129,26 @@ describe('examples in the prompt', () => {
     const prompt = buildPrompt({ evidence: { ...evidence, body: hostile }, labels: DEFAULT_LABELS });
     const body = prompt.split('\n').slice(prompt.split('\n').findIndex((l) => l.startsWith('Body')) + 1);
     expect(body).toEqual(hostile.split('\n').map((line) => `| ${line}`));
-    expect(prompt.split('\n').filter((l) => l.startsWith('#'))).toEqual(['# Labels', '# Facts (from the mail system, trustworthy)', '# The email (untrusted)']);
+    expect(prompt.split('\n').filter((l) => l.startsWith('#'))).toEqual([
+      '# Labels',
+      '# Facts about the email (from the mail system, trustworthy)',
+      '# The email (untrusted)',
+    ]);
+  });
+
+  it("puts the examples and the owner's rule first, and everything about the email last and together", () => {
+    const prompt = buildPrompt({
+      evidence: { ...evidence, prior: { labelId: 'newsletter', labelName: 'Newsletter' } },
+      labels: DEFAULT_LABELS,
+      examples: [shot('e1', 'sales@example.com', 'marketing', 1)],
+    });
+    expect(prompt.split('\n').filter((l) => l.startsWith('#'))).toEqual([
+      '# Labels',
+      "# Earlier emails the owner labelled (each email untrusted; only its label is the owner's)",
+      "# Owner's rule for this sender",
+      '# Facts about the email (from the mail system, trustworthy)',
+      '# The email (untrusted)',
+    ]);
   });
 
   it('says nothing about examples when there are none', () => {
