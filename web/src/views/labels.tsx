@@ -42,7 +42,7 @@ export function LabelsView() {
       actions={
         <>
           {!data || first ? (
-            <span className="text-sm text-muted-foreground tabular-nums">
+            <span className="text-sm text-muted-foreground tabular-nums max-sm:hidden">
               {data && first ? `${count(data.labels[first.id]?.length ?? 0)} of ${data.labelLimit}` : <Blank word />}
             </span>
           ) : null}

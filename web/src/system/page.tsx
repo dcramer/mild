@@ -6,12 +6,13 @@ import { Blank } from './state.tsx';
  * The top of a page: its name, and on the right the page's own action or one quiet line of numbers, the
  * two centred on each other. `badge` sits beside the title, for a stamp that says what the page's subject
  * is; `meta` is a line under it naming that subject (a sender's address), and `null` holds its room
- * until it is known. No count and no explanation.
+ * until it is known. No count and no explanation. On a phone the action stays beside a title alone; a title
+ * with a line under it keeps its width, and the action goes under it.
  */
 export function PageHeader({ title, badge, meta, actions }: { title: string; badge?: ReactNode; meta?: ReactNode; actions?: ReactNode }) {
   return (
     <header className="flex flex-wrap items-center gap-x-6 gap-y-3">
-      <div className="min-w-0 flex-1 basis-64">
+      <div className={cn('min-w-0 flex-1', meta === undefined ? 'basis-40' : 'basis-64')}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <h1 className="statement min-w-0 wrap-anywhere">{title}</h1>
           {badge}
