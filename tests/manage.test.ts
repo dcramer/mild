@@ -314,7 +314,7 @@ describe('managing sift from the dashboard', () => {
     expect(await does()).not.toHaveProperty('block');
     const shown = ((await call('GET', '/api/manage')).body['labels'] as Record<string, { id: string; disposition: string; markRead: boolean }[]>)[ACCOUNT];
     expect(shown?.find((l) => l.id === 'marketing')).toMatchObject({ disposition: 'archive', markRead: true });
-    expect(shown?.find((l) => l.id === 'phishing')).toMatchObject({ disposition: 'block', markRead: false });
+    expect(shown?.find((l) => l.id === 'phishing')).toMatchObject({ disposition: 'spam', markRead: false });
     expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'personal', unsubscribe: true })).status).toBe(200);
     expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'personal')).toMatchObject({ disposition: 'keep', unsubscribe: true });
     expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'personal', unsubscribe: 'yes' })).status).toBe(400);
@@ -418,7 +418,7 @@ describe('managing sift from the dashboard', () => {
   it('writes a rule to Gmail as a filter only while sift is on, and removes the filter with the rule', async () => {
     const { call } = await start();
     const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
-    const spam = await addRule(db, ACCOUNT, { match: { from: 'junk@example.com' }, labelId: 'junk' }, 'user');
+    const spam = await addRule(db, ACCOUNT, { match: { from: 'scam@example.com' }, labelId: 'phishing' }, 'user');
     const listed = (await call('GET', '/api/rules')).body['rules'] as { id: string; filter: Record<string, unknown> }[];
     expect(listed.find((r) => r.id === id)?.filter).toMatchObject({ state: 'none', possible: true, reason: null });
     expect(listed.find((r) => r.id === spam)?.filter).toMatchObject({ state: 'none', possible: false, reason: 'Gmail filters cannot mark mail as spam.' });
@@ -450,7 +450,7 @@ describe('managing sift from the dashboard', () => {
       possible: true,
       plan: { criteria: { from: 'digest@example.com' }, gmailLabel: 'sift/newsletters', archive: true },
     });
-    expect(await add({ match: { from: 'junk@example.com' }, label: 'junk' })).toBeNull();
+    expect(await add({ match: { from: 'scam@example.com' }, label: 'phishing' })).toBeNull();
     expect(await add({ match: { from: 'shop@example.com' }, label: 'marketing', when: 'it is a sale' })).toBeNull();
     expect(calls).toEqual([]);
   });

@@ -49,7 +49,6 @@ describe('whether a rule can be a Gmail filter', () => {
   });
 
   it('refuses what Gmail cannot do or sift will not let a filter do', () => {
-    expect(reason(rule({ labelId: 'junk' }))).toMatch(/spam/);
     expect(reason(rule({ labelId: 'phishing' }))).toMatch(/spam/);
     expect(reason(rule({ disposition: 'spam' }))).toMatch(/spam/);
     expect(reason(rule({ markRead: true }))).toMatch(/marks mail read/);
@@ -157,7 +156,7 @@ describe("a rule's Gmail filter", () => {
   });
 
   it('is refused, with nothing sent to Gmail, for a rule that cannot be one', async () => {
-    const id = await addRule(db, ACCOUNT, { match: { from: 'junk@example.com' }, labelId: 'junk' }, 'user');
+    const id = await addRule(db, ACCOUNT, { match: { from: 'scam@example.com' }, labelId: 'phishing' }, 'user');
     await expect(writeRuleFilter(deps(), id)).rejects.toThrow('Gmail filters cannot mark mail as spam.');
     await expect(writeRuleFilter(deps(), 'r-missing')).rejects.toThrow(/no longer exists/);
     const replies = await addRule(db, ACCOUNT, { match: { from: 'news@example.com', facts: { isReply: false } }, labelId: 'newsletter' }, 'user');

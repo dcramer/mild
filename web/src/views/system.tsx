@@ -93,7 +93,7 @@ const LABELS = [
   ['personal', 'Personal'],
   ['newsletter', 'Newsletters'],
   ['marketing', 'Marketing'],
-  ['junk', 'Junk'],
+  ['phishing', 'Scams and phishing'],
 ] as const;
 const ROWS = [
   { sender: 'Example Weekly', address: 'news@example.com', subject: 'Five things to read', label: 'Newsletters', does: 'archive' },

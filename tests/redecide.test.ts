@@ -32,7 +32,7 @@ const ACCOUNT = 'me@example.org';
 let db: Sql;
 let serial: number;
 
-const MARKETING = { disposition: 'archive', labelId: 'marketing', gmailLabel: 'sift/marketing', subscription: 'unsubscribe' } as const;
+const MARKETING = { disposition: 'archive', labelId: 'marketing', gmailLabel: 'sift/marketing', subscription: 'preserve' } as const;
 
 /** A message from `address` with the decision sift suggested for it. Returns the message id. */
 async function decided(address: string, decision: Partial<Decision> = {}, at = ++serial): Promise<string> {
@@ -138,7 +138,7 @@ describe('when a rule changes', () => {
 
   it('goes back to review when no tier had placed it before the rule', async () => {
     const lost = await decided('who@example.com', { stage: 'fallback', reason: 'no stage reached a decision' });
-    const ruleId = await addRule(db, ACCOUNT, { match: { from: 'who@example.com' }, labelId: 'junk' }, 'user');
+    const ruleId = await addRule(db, ACCOUNT, { match: { from: 'who@example.com' }, labelId: 'phishing' }, 'user');
     await redecideWaiting(db, ACCOUNT);
     await removeRule(db, ruleId);
     await redecideWaiting(db, ACCOUNT);
@@ -200,7 +200,7 @@ describe("when a label's outcome changes", () => {
     const sale = await decided('sales@example.com', { ...MARKETING, confidence: 0.7 });
     const run = await startRun(db, { accountId: ACCOUNT, messageId: sale, model: 'p/m', now: 0 });
     await raw(db).run(`UPDATE decisions SET run_id = ?, prior_rule_id = 'r-prior' WHERE message_id = ?`, run, sale);
-    const other = await decided('news@example.com', { disposition: 'archive', labelId: 'newsletter', subscription: 'unsubscribe' });
+    const other = await decided('news@example.com', { disposition: 'archive', labelId: 'newsletter', subscription: 'preserve' });
     await updateLabel(db, ACCOUNT, 'marketing', { disposition: 'keep', unsubscribe: false });
 
     expect(await redecideWaiting(db, ACCOUNT, 80)).toBe(1);

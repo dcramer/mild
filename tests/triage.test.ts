@@ -52,10 +52,13 @@ describe('rules stage', () => {
   });
 
   it("carries a label's extras: blocking with spam, marking read with keep and archive", async () => {
-    const phishing = await decide([{ id: 'r', match: { fromDomain: 'example.com' }, labelId: 'phishing' }]);
+    const blocking = LABELS.map((l) => (l.id === 'phishing' ? { ...l, block: true } : l));
+    const phishing = await rulesStage([{ id: 'r', match: { fromDomain: 'example.com' }, labelId: 'phishing' }], blocking).decide(facts());
     expect(phishing).toMatchObject({ disposition: 'spam', block: true });
     // The user's own exception replaces the label's action, block included.
-    expect(await decide([{ id: 'r', match: { fromDomain: 'example.com' }, labelId: 'phishing', disposition: 'spam' }])).not.toHaveProperty('block');
+    expect(
+      await rulesStage([{ id: 'r', match: { fromDomain: 'example.com' }, labelId: 'phishing', disposition: 'spam' }], blocking).decide(facts()),
+    ).not.toHaveProperty('block');
 
     const read = LABELS.map((l) => (l.id === 'newsletter' ? { ...l, markRead: true, block: true } : l));
     const archived = await rulesStage([newsletters], read).decide(facts());

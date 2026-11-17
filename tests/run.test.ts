@@ -662,7 +662,7 @@ describe('inference tier', () => {
     expect(withReason(await raw(db).get(`SELECT stage, label_id, reason FROM decisions WHERE message_id = 'news'`))).toEqual({
       stage: 'rules',
       label_id: 'transactional',
-      reason: 'rule: has attachments is Receipts and transactions',
+      reason: 'rule: has attachments is Receipts',
     });
     expect(await raw(db).get(`SELECT facts->>'hasAttachments' AS has FROM messages WHERE id = 'news'`)).toEqual({ has: 'true' });
   });
@@ -717,13 +717,13 @@ describe('inference tier', () => {
 
     inbox = [message('u2', 'News <news@example.com>')];
     mailbox.labels.set('u2', ['INBOX']);
-    await runOnce(await active(true), { ...options(), model: model('transactional') });
+    await runOnce(await active(true), { ...options(), model: model('security') });
     expect(withReason(await raw(db).get(`SELECT disposition, label_id, rule_id, prior_rule_id, reason FROM decisions WHERE message_id = 'u2'`))).toEqual({
       disposition: 'keep',
-      label_id: 'transactional',
+      label_id: 'security',
       rule_id: null,
       prior_rule_id: ruleId,
-      reason: 'not the usual Newsletters. Receipts and transactions: looks like a mailing',
+      reason: 'not the usual Newsletters. Account alerts: looks like a mailing',
     });
     expect(mailbox.labels.get('u2')).toContain('INBOX');
   });
@@ -880,7 +880,7 @@ describe('unsubscribing', () => {
 
   it('follows the mailbox change for a label that unsubscribes, and only while on', async () => {
     asked.length = 0;
-    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'cold_outreach' }, 'user');
     inbox = [inbox[0]!];
     await runOnce(await active(false), withUnsubscribe());
     expect(asked).toEqual([]);
@@ -895,18 +895,18 @@ describe('unsubscribing', () => {
 
   it('can be asked for by a rule whose label does not, and is not counted when it could not be done', async () => {
     asked.length = 0;
-    await addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'notification', subscription: 'unsubscribe', markRead: true }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: 'ada@example.org' }, labelId: 'security', subscription: 'unsubscribe', markRead: true }, 'user');
     inbox = [inbox[1]!];
     await runOnce(await active(true), withUnsubscribe('refused'));
     expect(asked).toEqual(['ada']);
     // Kept, labelled, and marked read as the rule asks.
-    expect(mailbox.labels.get('ada')).toEqual(['INBOX', 'L:sift/notifications']);
+    expect(mailbox.labels.get('ada')).toEqual(['INBOX', 'L:sift/security']);
     expect(logs.at(-1)).not.toContain('unsubscribed');
   });
 
   it('never unsubscribes from someone the user has written to, or when the mailbox change did not happen', async () => {
     asked.length = 0;
-    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user');
+    await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'cold_outreach' }, 'user');
     await rememberCorrespondent(db, ACCOUNT, 'news@example.com', true);
     inbox = [inbox[0]!];
     await runOnce(await active(true), withUnsubscribe());
@@ -961,6 +961,9 @@ describe('blocking', () => {
     return { ...m, headers: [...m.headers, { name: 'Authentication-Results', value: `mx.google.com; dmarc=${authenticated ? 'pass' : 'fail'}` }] };
   };
   const phishing = async () => ({ model: 'test/model', judge: async () => ({ label: 'phishing', reason: 'asks for a password', confidence: 0.95 }) });
+  beforeEach(async () => {
+    await updateLabel(db, ACCOUNT, 'phishing', { block: true });
+  });
 
   it('marks the message spam and makes a rule for the sender, so their later mail needs no model', async () => {
     inbox = [phish('p1', true)];

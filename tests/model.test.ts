@@ -43,15 +43,15 @@ const stage = (verdict: Verdict | JudgeFailure, ev: Evidence = evidence()) =>
 
 describe('model stage', () => {
   it('takes what happens from the label, not from the model', async () => {
-    const decision = await stage({ label: 'marketing', reason: 'a sale announcement', confidence: 0.9 }).decide(facts());
+    const decision = await stage({ label: 'cold_outreach', reason: 'a sales sequence', confidence: 0.9 }).decide(facts());
     expect(decision).toEqual({
       disposition: 'archive',
       subscription: 'unsubscribe',
-      labelId: 'marketing',
-      gmailLabel: 'sift/marketing',
+      labelId: 'cold_outreach',
+      gmailLabel: 'sift/cold-outreach',
       stage: 'model',
       confidence: 0.9,
-      reason: 'Marketing: a sale announcement',
+      reason: 'Cold outreach: a sales sequence',
     });
   });
 
@@ -69,7 +69,7 @@ describe('model stage', () => {
     const unknown = await stage({ label: 'newsletter', reason: 'r' }, evidence({ userHasWritten: null })).decide(facts());
     expect(unknown).toMatchObject({ disposition: 'review', reason: expect.stringContaining('could not check') });
 
-    expect(await stage({ label: 'transactional', reason: 'r', confidence: 0.95 }, evidence({ userHasWritten: true })).decide(facts())).toMatchObject({
+    expect(await stage({ label: 'security', reason: 'r', confidence: 0.95 }, evidence({ userHasWritten: true })).decide(facts())).toMatchObject({
       disposition: 'keep',
     });
   });
@@ -78,11 +78,14 @@ describe('model stage', () => {
     const unsure = await stage({ label: 'phishing', reason: 'an unexpected order confirmation', confidence: 0.82 }).decide(facts());
     expect(unsure).toMatchObject({ disposition: 'review', labelId: 'phishing', reason: expect.stringContaining('not sure enough to act on it') });
     expect(unsure).not.toHaveProperty('block');
-    expect(await stage({ label: 'junk', reason: 'r' }).decide(facts())).toMatchObject({ disposition: 'review' });
-    expect(await stage({ label: 'phishing', reason: 'a fake sign-in page', confidence: 0.95 }).decide(facts())).toMatchObject({
-      disposition: 'spam',
-      block: true,
+    expect(await stage({ label: 'phishing', reason: 'r' }).decide(facts())).toMatchObject({ disposition: 'review' });
+    const blocking = DEFAULT_LABELS.map((l) => (l.id === 'phishing' ? { ...l, block: true } : l));
+    const sure = modelStage({
+      gather: async () => evidence(),
+      judge: async () => ({ label: 'phishing', reason: 'a fake sign-in page', confidence: 0.95 }),
+      labels: blocking,
     });
+    expect(await sure.decide(facts())).toMatchObject({ disposition: 'spam', block: true });
     expect(await stage({ label: 'marketing', reason: 'r', confidence: 0.6 }).decide(facts())).toMatchObject({ disposition: 'review', labelId: 'marketing' });
     expect(await stage({ label: 'personal', reason: 'r', confidence: 0.89 }).decide(facts())).toMatchObject({ disposition: 'review', labelId: 'personal' });
     expect(await stage({ label: 'personal', reason: 'r', confidence: 0.9 }).decide(facts())).toMatchObject({ disposition: 'keep' });
@@ -305,22 +308,25 @@ describe('preferences in the database', () => {
     // No label is left for the user by default: that is a matter of trust, not something a label does.
     expect(defaults.filter((l) => l.disposition === 'review')).toEqual([]);
     expect(Object.fromEntries(defaults.filter((l) => l.disposition !== 'keep').map((l) => [l.id, l.block ? 'block' : l.disposition]))).toEqual({
+      transactional: 'archive',
+      notification: 'archive',
       newsletter: 'archive',
       marketing: 'archive',
       cold_outreach: 'archive',
-      junk: 'spam',
-      phishing: 'block',
+      phishing: 'spam',
     });
+    // Whether bulk mail is wanted depends on who sent it, so only the follow-ups of cold outreach are left by default.
+    expect(defaults.filter((l) => l.unsubscribe).map((l) => l.id)).toEqual(['cold_outreach']);
     expect(new Set(defaults.map((l) => l.gmailLabel)).size).toBe(defaults.length);
 
-    expect(await updateLabel(db, ACCOUNT, 'newsletter', { disposition: 'keep', name: 'Reading', description: 'Things I read.' })).toBe(true);
+    expect(await updateLabel(db, ACCOUNT, 'cold_outreach', { disposition: 'keep', name: 'Pitches', description: 'Things I read.' })).toBe(true);
     // The id and the Gmail label never change, so nothing already labelled is orphaned.
-    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'newsletter')).toEqual({
-      id: 'newsletter',
-      name: 'Reading',
+    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'cold_outreach')).toEqual({
+      id: 'cold_outreach',
+      name: 'Pitches',
       description: 'Things I read.',
       disposition: 'keep',
-      gmailLabel: 'sift/newsletters',
+      gmailLabel: 'sift/cold-outreach',
       unsubscribe: true,
     });
     expect(await updateLabel(db, ACCOUNT, 'nope', { disposition: 'keep' })).toBe(false);
@@ -438,13 +444,13 @@ describe('preferences in the database', () => {
 
   it('keeps only the extras that go with what a label does', async () => {
     const db = await seeded();
-    await updateLabel(db, ACCOUNT, 'junk', { block: true, markRead: true });
-    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'junk')).toMatchObject({ disposition: 'spam', block: true });
-    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'junk')).not.toHaveProperty('markRead');
+    await updateLabel(db, ACCOUNT, 'phishing', { block: true, markRead: true });
+    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'phishing')).toMatchObject({ disposition: 'spam', block: true });
+    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'phishing')).not.toHaveProperty('markRead');
     // Changing what the label does drops the block, and marking read can now be asked for.
-    await updateLabel(db, ACCOUNT, 'junk', { disposition: 'archive', markRead: true });
-    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'junk')).toEqual(expect.objectContaining({ disposition: 'archive', markRead: true }));
-    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'junk')).not.toHaveProperty('block');
+    await updateLabel(db, ACCOUNT, 'phishing', { disposition: 'archive', markRead: true });
+    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'phishing')).toEqual(expect.objectContaining({ disposition: 'archive', markRead: true }));
+    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'phishing')).not.toHaveProperty('block');
   });
 });
 
@@ -570,7 +576,7 @@ describe('standing', () => {
     expect((await senderFacts(d, ACCOUNT, 'promo@example.com')).standing).toBe('new');
     await addRule(d, ACCOUNT, { match: { from: 'promo@example.com' }, disposition: 'archive' }, 'user');
     expect((await senderFacts(d, ACCOUNT, 'promo@example.com')).standing).toBe('unwanted');
-    await addRule(d, ACCOUNT, { match: { from: 'scam@example.net' }, labelId: 'junk' }, 'user');
+    await addRule(d, ACCOUNT, { match: { from: 'scam@example.net' }, labelId: 'phishing' }, 'user');
     expect((await senderFacts(d, ACCOUNT, 'scam@example.net')).standing).toBe('blocked');
   });
 

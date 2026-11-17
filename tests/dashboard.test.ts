@@ -452,7 +452,7 @@ describe('dashboard server', () => {
 
   it('lists rules with their hits', async () => {
     const db = await seeded();
-    const id = await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'newsletter' }, 'user', NOW);
+    const id = await addRule(db, ACCOUNT, { match: { fromDomain: 'example.com' }, labelId: 'cold_outreach' }, 'user', NOW);
     await recordDecision(db, ACCOUNT, 'waiting', { disposition: 'archive', subscription: 'preserve', stage: 'rules', ruleId: id, reason: 'r' }, { now: NOW });
     expect(await listRuleSummaries(db, await everything(db))).toEqual([
       {
@@ -460,8 +460,8 @@ describe('dashboard server', () => {
         accountId: ACCOUNT,
         match: { fromDomain: 'example.com' },
         except: [],
-        labelId: 'newsletter',
-        labelName: 'Newsletters',
+        labelId: 'cold_outreach',
+        labelName: 'Cold outreach',
         override: null,
         disposition: 'archive',
         markRead: false,
@@ -477,7 +477,7 @@ describe('dashboard server', () => {
           state: 'none',
           possible: true,
           reason: null,
-          plan: { criteria: { from: '@example.com' }, gmailLabel: 'sift/newsletters', archive: true },
+          plan: { criteria: { from: '@example.com' }, gmailLabel: 'sift/cold-outreach', archive: true },
           differs: ['Mail the filter archives never reaches Sift: it is not recorded, counted or unsubscribed from.'],
           checkedAt: null,
           history: [],
@@ -513,7 +513,7 @@ describe('dashboard server', () => {
 
     expect((await page()).names).toEqual([
       { name: 'Dependabot', messages: 2, lastSeenAt: NOW - 1000, labels: [{ id: 'notification', name: 'Notifications', messages: 1 }] },
-      { name: 'Security alerts', messages: 1, lastSeenAt: NOW - 3000, labels: [{ id: 'security', name: 'Security and account', messages: 1 }] },
+      { name: 'Security alerts', messages: 1, lastSeenAt: NOW - 3000, labels: [{ id: 'security', name: 'Account alerts', messages: 1 }] },
     ]);
     expect((await page('DEPENDABOT')).decisions.map((d) => d.messageId).toSorted()).toEqual(['n1', 'n2']);
     // One name, on some of their mail, is not several.
@@ -600,16 +600,16 @@ describe('dashboard server', () => {
   it('says what a judged rule will do once it stops reading, and does that when accepted', async () => {
     const { store, db } = await seededStore();
     const base = await start({}, store);
-    const ruleId = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, whenLabel: 'transactional', disposition: 'archive' }, 'user');
+    const ruleId = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, whenLabel: 'security', disposition: 'archive' }, 'user');
     const { id: proposal } = (await raw(db).get<{ id: number }>(
-      `INSERT INTO proposals (account_id, kind, match, conditions, label_id, rule_id, agreed, created_at) VALUES (?, 'always', '{"from":"news@example.com"}', ?, 'transactional', ?, 10, 1) RETURNING id`,
+      `INSERT INTO proposals (account_id, kind, match, conditions, label_id, rule_id, agreed, created_at) VALUES (?, 'always', '{"from":"news@example.com"}', ?, 'security', ?, 10, 1) RETURNING id`,
       ACCOUNT,
       conditionsHash(db, { from: 'news@example.com' }),
       ruleId,
     ))!;
-    // Receipts keeps its mail, but this rule archives it, and will archive all of it.
+    // Account alerts keeps its mail, but this rule archives it, and will archive all of it.
     const listed = (await (await fetch(`${base}/api/suggestions`)).json()) as { proposals: unknown[] };
-    expect(listed.proposals).toMatchObject([{ id: proposal, kind: 'always', labelName: 'Receipts and transactions', disposition: 'archive' }]);
+    expect(listed.proposals).toMatchObject([{ id: proposal, kind: 'always', labelName: 'Account alerts', disposition: 'archive' }]);
     const accepted = await fetch(`${base}/api/proposals`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' },

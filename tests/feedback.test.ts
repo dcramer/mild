@@ -131,6 +131,13 @@ describe('suggestions', () => {
 });
 
 describe('teaching', () => {
+  it("says so when the label's action unsubscribes", async () => {
+    await suggest('pitch@example.com', 'archive', { labelId: 'cold_outreach' });
+    expect((await applyFeedback(db, { accountId: ACCOUNT, sender: 'pitch@example.com', label: 'cold_outreach', scope: 'label' }, 50)).taught).toBe(
+      'From now on, mail from pitch@example.com that is Cold outreach is archived, and unsubscribed from. Sift still reads each message, and asks about anything else from them.',
+    );
+  });
+
   it('agreeing makes a rule for that kind of mail from the sender, and leaves their other mail waiting', async () => {
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'archive', NEWS);
@@ -143,8 +150,7 @@ describe('teaching', () => {
       proposed: false,
       reviewed: 2,
       corrected: null,
-      taught:
-        'From now on, mail from news@example.com that is Newsletters is archived, and unsubscribed from. Sift still reads each message, and asks about anything else from them.',
+      taught: 'From now on, mail from news@example.com that is Newsletters is archived. Sift still reads each message, and asks about anything else from them.',
     });
     // The rule waits for each message to be that label; it is not a blanket over the sender.
     expect(await ruleFor('news@example.com')).toEqual([{ whenLabel: 'newsletter', source: 'user' }]);
@@ -771,7 +777,7 @@ describe('feedback endpoint', () => {
         fixed: null,
         notFixed: null,
         taught:
-          'From now on, mail from news@example.com that is Newsletters is archived, and unsubscribed from. Sift still reads each message, and asks about anything else from them.',
+          'From now on, mail from news@example.com that is Newsletters is archived. Sift still reads each message, and asks about anything else from them.',
       },
     });
     expect(await raw(db).get('SELECT created_at FROM feedback')).toEqual({ created_at: 77 });

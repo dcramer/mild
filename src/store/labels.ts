@@ -6,89 +6,93 @@ import { Refusal } from '../refusal.ts';
 /**
  * The starting set for a new mailbox, with what most people want done with each. They are only carried
  * out once the user turns sift on; until then every one is a suggestion.
+ *
+ * Whether bulk mail is wanted depends on its sender, not its kind, so Newsletters and Marketing archive
+ * without unsubscribing: wanted senders get a rule of their own. Cold outreach unsubscribes because its
+ * one-click address belongs to the tool sending the follow-ups; a person writing by hand has none.
+ * Nothing unsubscribes from scams, which only confirms the address works, and nothing blocks by default:
+ * phishing domains change, mostly fail DMARC so cannot be blocked anyway, and a mistake blocks a real company.
  */
 export const DEFAULT_LABELS: readonly Label[] = [
   {
     id: 'personal',
     name: 'Personal',
     description:
-      'Written by a person to the owner or a small group, however short or oddly written: conversation, a direct request, an introduction, a reply in a conversation the owner took part in.',
+      'Written by a person to the owner or a small group, however short or oddly written: conversation, a direct request, an introduction, a reply in a conversation the owner took part in, a stranger writing about something particular to the owner. Not mail a company sends, however much the owner wants it.',
     disposition: 'keep',
     gmailLabel: 'sift/personal',
   },
   {
     id: 'security',
-    name: 'Security and account',
+    name: 'Account alerts',
     description:
-      "Sign-in alerts, password resets, verification codes, account, legal or policy notices that concern the owner's own account, however alarming, when the sender is who they claim to be.",
+      "Something about the owner's own account that may need them: sign-in alerts, password resets, verification codes, a locked or changed account, a failed payment, a bill due, a card expiring, a renewal about to charge. However alarming, when the sender is who they claim to be. Not a change to terms or a privacy policy.",
     disposition: 'keep',
     gmailLabel: 'sift/security',
   },
   {
     id: 'transactional',
-    name: 'Receipts and transactions',
+    name: 'Receipts',
     description:
-      'Receipts, invoices, orders, shipping, bookings, statements, tax, payment or renewal notices for something the owner did or owes, even from a company that also sends promotions or one they have not had mail from before.',
-    disposition: 'keep',
+      'A record of something the owner did: receipts and paid invoices, order confirmations, shipping and delivery updates, bookings, statements, tax documents. Even from a company that also sends promotions, or one they have not had mail from before. Not something they still have to pay or do.',
+    disposition: 'archive',
     gmailLabel: 'sift/receipts',
   },
   {
     id: 'calendar',
     name: 'Calendar',
-    description: 'Meeting invitations, changes, cancellations and reminders.',
+    description:
+      "An invitation to a meeting or event from a person, or a change or cancellation to one the owner is in. Not replies to the owner's own invitations or automatic reminders, nor an event a company invites a whole list to.",
     disposition: 'keep',
     gmailLabel: 'sift/calendar',
   },
   {
+    id: 'request',
+    name: 'Asks for you',
+    description:
+      'Automated mail from a service where someone asks the owner in particular to do something: a review requested, an assignment, a mention, an approval or a question waiting on them. Not activity they are only watching.',
+    disposition: 'keep',
+    gmailLabel: 'sift/asks',
+  },
+  {
     id: 'notification',
     name: 'Notifications',
-    description: 'Automated activity from a service the owner uses: comments, mentions, builds, alerts, reports, digests of their own activity.',
-    disposition: 'keep',
+    description:
+      'Automated activity from a service the owner uses that asks nothing of them: comments and changes on things they watch, builds, alerts, reports, digests, replies to their invitations, reminders, changes to terms or privacy policies.',
+    disposition: 'archive',
     gmailLabel: 'sift/notifications',
   },
   {
     id: 'newsletter',
     name: 'Newsletters',
-    description: 'Editorial or community content sent to a list the owner appears to have subscribed to.',
+    description: 'Editorial or community content from a list the owner subscribed to: writers, publications, digests, community mailing lists.',
     disposition: 'archive',
     gmailLabel: 'sift/newsletters',
-    unsubscribe: true,
   },
   {
     id: 'marketing',
     name: 'Marketing',
     description:
-      'Promotions, sales, product announcements, webinars and re-engagement mail a company sends to a whole list, wanted or not. Not mail about the owner in particular: their order, account or support request.',
+      'Promotions, sales, product announcements, events and re-engagement mail a company sends to a whole list, whether the owner wants it or never asked for it. Not mail about the owner in particular: their order, account or support request.',
     disposition: 'archive',
     gmailLabel: 'sift/marketing',
-    unsubscribe: true,
   },
   {
     id: 'cold_outreach',
     name: 'Cold outreach',
     description:
-      'An unsolicited pitch from a stranger: sales, recruiting, partnerships, guest posts, fundraising, surveys. Not someone the owner has written to, or who is answering them.',
+      'An unsolicited pitch from a stranger, written from a template or sent as a sequence of follow-ups: sales, recruiting, partnerships, guest posts, fundraising, surveys. Not someone the owner has written to or who is answering them, nor a stranger writing about something particular to the owner.',
     disposition: 'archive',
     gmailLabel: 'sift/cold-outreach',
     unsubscribe: true,
   },
   {
-    id: 'junk',
-    name: 'Junk',
-    description:
-      'Mail that is deceptive or that the owner could never have signed up for: scams, deceptive offers, bulk mail from a sender with no relationship to the owner.',
-    disposition: 'spam',
-    gmailLabel: 'sift/junk',
-    unsubscribe: true,
-  },
-  {
     id: 'phishing',
-    name: 'Phishing',
+    name: 'Scams and phishing',
     description:
-      'An attempt to trick the owner: a fake sign-in, invoice, delivery or security notice, a request for credentials, payment or gift cards, or a sender pretending to be a person or company they are not. Being unexpected or from a new sender is not enough.',
+      'An attempt to deceive the owner: a fake sign-in, invoice, delivery or security notice, a request for credentials, payment or gift cards, a scam or deceptive offer, or a sender pretending to be a person or company they are not. Being unexpected or from a new sender is not enough.',
     disposition: 'spam',
     gmailLabel: 'sift/phishing',
-    block: true,
   },
 ];
 
