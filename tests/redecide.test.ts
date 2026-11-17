@@ -47,7 +47,7 @@ async function decided(address: string, decision: Partial<Decision> = {}, at = +
     db,
     ACCOUNT,
     id,
-    { disposition: 'review', subscription: 'preserve', stage: 'model', reason: 'Marketing: a sale', ...decision },
+    { disposition: 'review', subscription: 'preserve', stage: 'model', confidence: 0.95, reason: 'Marketing: a sale', ...decision },
     { now: at },
   );
   return id;
@@ -197,7 +197,7 @@ describe('when a rule changes', () => {
 
 describe("when a label's outcome changes", () => {
   it('waiting mail with that label gets the new outcome under the same label, without a model', async () => {
-    const sale = await decided('sales@example.com', { ...MARKETING, confidence: 0.7 });
+    const sale = await decided('sales@example.com', MARKETING);
     const run = await startRun(db, { accountId: ACCOUNT, messageId: sale, model: 'p/m', now: 0 });
     await raw(db).run(`UPDATE decisions SET run_id = ?, prior_rule_id = 'r-prior' WHERE message_id = ?`, run, sale);
     const other = await decided('news@example.com', { disposition: 'archive', labelId: 'newsletter', subscription: 'preserve' });
@@ -241,6 +241,22 @@ describe("when a label's outcome changes", () => {
     expect(await current(unknown)).toMatchObject({ disposition: 'review', label_id: 'personal', reason: expect.stringContaining('is not known') });
     expect(await current(stranger)).toMatchObject({ disposition: 'archive', label_id: 'personal' });
     expect(await current(friend)).toMatchObject({ disposition: 'review', reason: expect.stringContaining('you have written to this sender') });
+  });
+
+  it('asks about a label the model was not sure enough of, whatever the label now does', async () => {
+    const guess = await decided('sales@example.com', { disposition: 'review', labelId: 'marketing', gmailLabel: 'sift/marketing', confidence: 0.6 });
+    await updateLabel(db, ACCOUNT, 'marketing', { disposition: 'keep', unsubscribe: false });
+    expect(await redecideWaiting(db, ACCOUNT)).toBe(0);
+    expect(await current(guess)).toMatchObject({ disposition: 'review', label_id: 'marketing', reason: 'Marketing: a sale' });
+    // Decided as the label said before the bar, it is held once the label changes.
+    const before = await decided('deals@example.com', { ...MARKETING, confidence: 0.6 });
+    await updateLabel(db, ACCOUNT, 'marketing', { disposition: 'archive' });
+    await redecideWaiting(db, ACCOUNT);
+    expect(await current(before)).toMatchObject({
+      disposition: 'review',
+      label_id: 'marketing',
+      reason: 'Marketing is now archived, but Sift was not sure enough to act on it. Before: Marketing: a sale',
+    });
   });
 
   it('leaves mail sift could not place alone', async () => {

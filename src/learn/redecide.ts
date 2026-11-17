@@ -6,6 +6,7 @@ import { listLabels } from '../store/labels.ts';
 import { getFacts } from '../store/messages.ts';
 import { countRuleHit, listRules } from '../store/rules.ts';
 import { cachedCorrespondent } from '../store/senders.ts';
+import { SURE } from '../triage/stages/model.ts';
 import { rulesStage, settle } from '../triage/stages/rules.ts';
 import { type Decision, type Disposition, labelled } from '../triage/types.ts';
 import { type Suggestion, pendingSuggestions } from './feedback.ts';
@@ -115,7 +116,9 @@ async function redecide(db: Sql, accountId: string, now: number): Promise<number
         ),
       ),
     );
-  const waiting = new Map([...(await pendingSuggestions(db, { accountId })), ...orphaned].map((s) => [s.messageId, s.decisionId] as const));
+  // Mail Sift marked for review in Gmail while on is the user's to answer; a rule or label changing leaves it there.
+  const suggested = (await pendingSuggestions(db, { accountId })).filter((s) => !s.carriedOut);
+  const waiting = new Map([...suggested, ...orphaned].map((s) => [s.messageId, s.decisionId] as const));
 
   let recorded = 0;
   for (const [messageId, decisionId] of waiting) {
@@ -152,14 +155,17 @@ async function redecide(db: Sql, accountId: string, now: number): Promise<number
         const outcome = settle(stored, labels, facts, { ...labelled(label), stage: base.stage, reason: before }, { hasWritten: () => known });
         // Unknown counts as written to, unless the earlier decision hid the mail: the sender was checked then.
         const safe = known === false || (known === undefined && hides(base.disposition));
-        const held = hides(outcome.disposition) && !safe;
+        // A model's label alone is carried out only when it was sure, as when it was given; a rule of the user's has no bar.
+        // Held then, it was held already and nothing new is recorded, unless it was decided before the bar.
+        const unsure = base.stage === 'model' && (base.confidence ?? 0) < SURE && !outcome.ruleId;
+        const held = unsure || (hides(outcome.disposition) && !safe);
         const derived: Decision = {
           ...(held ? { disposition: 'review', subscription: 'preserve', labelId: label.id, gmailLabel: label.gmailLabel } : outcome),
           stage: base.stage,
           ...(base.confidence === null ? {} : { confidence: base.confidence }),
           ...(base.priorRuleId === null ? {} : { priorRuleId: base.priorRuleId }),
           reason: held
-            ? `${label.name} is now ${WILL[outcome.disposition]}, but ${known ? 'you have written to this sender' : 'whether you have written to this sender is not known'}. Before: ${before}`
+            ? `${label.name} is now ${WILL[outcome.disposition]}, but ${unsure ? 'Sift was not sure enough to act on it' : known ? 'you have written to this sender' : 'whether you have written to this sender is not known'}. Before: ${before}`
             : outcome.ruleId
               ? outcome.reason
               : `${label.name} is now ${WILL[outcome.disposition]}. Before: ${before}`,

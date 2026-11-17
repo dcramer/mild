@@ -25,7 +25,7 @@ Preconditions:
 - **Open the dialog.** `ab open "$B/rules"`, then `ab find role button click --name "Add a rule"`. A level-2 heading `Add a rule` appears with `Add rule` disabled; `Match mail` reads `from`, `Label it as` reads `No label, just act`, `What happens to it` reads `Archive`.
 - **Value.** `ab find role textbox fill "promo.example.com" --name "Value to match"`. `Add rule` is enabled.
 - **Add.** `ab find role button click --name "Add rule"`. The dialog closes and a row reads `anyone at promo.example.com` with `Archive`.
-- **Effect on what is waiting.** `ab open "$B/suggestions"`. The link reads `Suggestions 3` and there is no Deals row.
+- **Effect on what is waiting.** `ab open "$B/"`. The link reads `Suggestions 3` and there is no Deals row.
 - **Stored.** `verify.sh sql "$RUN" "SELECT match, disposition, label_id, source FROM rules WHERE match->>'fromDomain' = 'promo.example.com'"` returns `{"fromDomain":"promo.example.com"}`, `archive`, null, `user`. `actions` is empty.
 
 ## Gotchas

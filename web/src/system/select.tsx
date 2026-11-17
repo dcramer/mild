@@ -28,7 +28,8 @@ export function Select<T extends string>({
         aria-label={label}
         className="press inline-flex h-(--control) max-w-full cursor-pointer items-center justify-between gap-1.5 pr-2 pl-3 text-sm whitespace-nowrap select-none data-disabled:pointer-events-none data-disabled:opacity-45 border border-transparent bg-(--fill) hover:bg-(--fill-strong) data-popup-open:bg-(--fill-strong)"
       >
-        <span className="flex min-w-0 items-center gap-2">
+        {/* Down a pixel, as a button's words sit: Karla centred on its box reads high. */}
+        <span className="relative top-px flex min-w-0 items-center gap-2">
           {icons?.[value] ?? null}
           <span className="truncate">
             <Base.Value />

@@ -58,14 +58,17 @@ export function AnswerPicker({
           aria-label={label}
           className="press inline-flex h-(--control) min-w-0 flex-1 cursor-pointer items-center gap-2 pr-2 pl-3 text-sm whitespace-nowrap select-none border border-transparent bg-(--fill) hover:bg-(--fill-strong) data-popup-open:bg-(--fill-strong)"
         >
-          {current ? (
-            <>
-              {current.lead}
-              <span className="truncate">{current.label}</span>
-            </>
-          ) : (
-            empty
-          )}
+          {/* The meter stands on the label's baseline, and both sit a pixel down, as a button's words do. */}
+          <span className="relative top-px flex min-w-0 items-baseline gap-2">
+            {current ? (
+              <>
+                {current.lead}
+                <span className="truncate">{current.label}</span>
+              </>
+            ) : (
+              empty
+            )}
+          </span>
           <ChevronDownIcon aria-hidden className="ml-auto size-3.5 shrink-0 text-muted-foreground" />
         </Base.Trigger>
         <Base.Portal>

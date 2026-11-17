@@ -18,7 +18,7 @@ Preconditions:
 
 - Fresh seed; `ab console` empty.
 
-- **Toggle to HTML.** `ab open "$B/suggestions?message=m4&account=me%40example.org"`, `ab find role radio click --name "HTML"`. The frame shows `30% off everything` on a cream page with a white card, a `Shop the sale` button and an empty box where the hero image would be. `ab network requests` lists `/api/message/html?…id=m4` and nothing on `images.example.com` or `track.example.com`.
+- **Toggle to HTML.** `ab open "$B/?message=m4&account=me%40example.org"`, `ab find role radio click --name "HTML"`. The frame shows `30% off everything` on a cream page with a white card, a `Shop the sale` button and an empty box where the hero image would be. `ab network requests` lists `/api/message/html?…id=m4` and nothing on `images.example.com` or `track.example.com`.
 - **A link.** `ab snapshot -i` and click the frame's `Shop the sale` by its ref (`find role link` does not reach into the frame): `ab tab` lists a second tab at `https://shop.example.com/sale`. `Preferences` (a `javascript:` link in the source) is plain text.
 - **Remembered.** `ab open "$B/activity?show=all&message=m1&account=me%40example.org"`: `HTML` is still chosen, and the frame says it has no HTML (`m1` was placed by a rule, so sift never read it). `?message=m6` has no `Read it as` at all.
 - **Back to text.** `ab find role radio click --name "Text"`: the frame goes; `ab eval "localStorage.getItem('sift:message-view')"` is `"text"`.

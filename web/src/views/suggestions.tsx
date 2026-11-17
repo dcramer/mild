@@ -191,7 +191,7 @@ function SuggestionRow({
         aside={
           <span className="shrink-0 text-sm md:hidden">
             {item.labelId !== null ? (
-              <span className="inline-flex items-center gap-2 text-muted-foreground">
+              <span className="inline-flex items-baseline gap-2 text-muted-foreground">
                 <Meter level={sureness(item)} />
                 {item.labelName ?? outcomeName(item.disposition)}
               </span>

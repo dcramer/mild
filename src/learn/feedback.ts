@@ -20,6 +20,7 @@ import {
   ne,
   not,
   notExists,
+  or,
   rules,
   sql,
   suggestionBodies,
@@ -49,6 +50,8 @@ export interface Suggestion {
   unsubscribe: boolean;
   /** The label sift gave it, or null if it could not place it. */
   labelId: string | null;
+  /** Carried out: Sift was on, so it is in Gmail with the review label, asked about there. */
+  carriedOut: boolean;
   reason: string;
   confidence: number | null;
   decidedAt: number;
@@ -69,6 +72,7 @@ const SUGGESTION = {
   block: decisions.block,
   subscription: decisions.subscription,
   labelId: decisions.labelId,
+  carriedOut: decisions.carryOut,
   reason: decisions.reason,
   confidence: decisions.confidence,
   decidedAt: decisions.decidedAt,
@@ -86,9 +90,9 @@ const toSuggestion = (
 
 /**
  * Suggestions waiting on the user, newest first: the current decision for a message, recorded as
- * a suggestion, with no answer yet. Decisions that only repeat what the user already told sift (their
- * answers, and rules they wrote or made by correcting it) are not suggestions and are left out; ones
- * from a rule sift learned are.
+ * a suggestion or, while Sift was on, left for the user to say, with no answer yet. Decisions that only
+ * repeat what the user already told sift (their answers, and rules they wrote or made by correcting it)
+ * are not suggestions and are left out; ones from a rule sift learned are.
  */
 export async function pendingSuggestions(
   db: Sql,
@@ -108,7 +112,8 @@ export async function pendingSuggestions(
             .from(x)
             .where(and(eq(x.accountId, decisions.accountId), eq(x.messageId, decisions.messageId))),
         ),
-        eq(decisions.carryOut, false),
+        // Mail Sift asked about while on is waiting on the user as much as what it would have done while off.
+        or(eq(decisions.carryOut, false), eq(decisions.disposition, 'review')),
         eq(decisions.byUser, false),
         notExists(
           db
@@ -215,6 +220,8 @@ interface FeedbackResult {
   corrected: string | null;
   /** How many messages now have the answer waiting to be carried out in Gmail. */
   carrying: number;
+  /** Messages this answer settled that Sift had marked for review in Gmail, so the caller can take that mark back. */
+  asked: string[];
   /** sift proposed a rule because the sender's mail has been answered the same way enough times. */
   proposed: boolean;
 }
@@ -354,7 +361,8 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
         .onConflictDoUpdate({ target: [examples.userId, examples.accountId, examples.messageId], set: marked });
       await tx.delete(suggestionBodies).where(waiting);
     }
-    if (input.carryOut) for (const target of targets) await recordDecision(tx, input.accountId, target.messageId, answer(target), carried);
+    // Mail Sift already marked in Gmail gets the answer as a decision of its own however it was given, as a correction would.
+    for (const target of targets) if (input.carryOut || target.carriedOut) await recordDecision(tx, input.accountId, target.messageId, answer(target), carried);
     // The corrected message gets a decision of its own, so the log shows what the user said and, when
     // it is carried out, the mailbox is brought into line with it.
     if (given && changes) await recordDecision(tx, input.accountId, given.messageId, answer(given), carried);
@@ -366,6 +374,7 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
     reviewed: targets.length + (given || fresh ? 1 : 0),
     corrected: given && changes ? given.messageId : null,
     carrying: input.carryOut ? targets.length + ((given && changes) || fresh ? 1 : 0) : 0,
+    asked: input.carryOut ? targets.filter((t) => t.carriedOut).map((t) => t.messageId) : [],
     proposed,
     taught: !says
       ? null

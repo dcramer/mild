@@ -33,7 +33,7 @@ export const UNSURE = 'unsure';
  * How sure the model must say it is before its label alone is carried out. Below it the user is asked, with
  * the label as the answer to agree with. The dashboard's meter is full from here (`sureness`, web/src/lib/format.ts).
  */
-const SURE = 0.9;
+export const SURE = 0.9;
 
 /** What a call cost, as the provider reported it. */
 export interface Usage {

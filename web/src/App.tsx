@@ -100,6 +100,8 @@ const NAMES: Record<(typeof SECTIONS)[number], string> = {
   labels: 'Labels',
   rules: 'Rules',
 };
+/** Where a section is: the home page is the root. */
+const pathOf = (section: (typeof SECTIONS)[number]) => (section === 'suggestions' ? '' : section);
 /** Settings opens over whatever is showing, the model wall included, so nothing has to be finished to reach it. */
 const openSettings = () => setParams({ settings: '1' }, { state: { panel: true } });
 const closeSettings = () => ((window.history.state as { panel?: boolean } | null)?.panel ? window.history.back() : setParams({ settings: '' }));
@@ -190,8 +192,12 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
   return (
     <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col px-4 md:px-6">
       <Masthead
-        current={profile ? '' : section}
-        items={SECTIONS.map((to) => ({ to, label: NAMES[to], ...(to === 'suggestions' && waiting.data?.waiting ? { count: waiting.data.waiting } : {}) }))}
+        current={profile ? profile.kind : pathOf(section)}
+        items={SECTIONS.map((s) => ({
+          to: pathOf(s),
+          label: NAMES[s],
+          ...(s === 'suggestions' && waiting.data?.waiting ? { count: waiting.data.waiting } : {}),
+        }))}
         status={
           !online ? (
             <Notice>Sift cannot be reached</Notice>

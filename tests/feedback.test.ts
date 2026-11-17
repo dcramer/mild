@@ -147,6 +147,7 @@ describe('teaching', () => {
     const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'label' }, 50);
     expect(result).toEqual({
       carrying: 0,
+      asked: [],
       proposed: false,
       reviewed: 2,
       corrected: null,
@@ -165,7 +166,7 @@ describe('teaching', () => {
     const decisionId = await suggest('ada@example.org', 'archive', { labelId: 'marketing' });
     const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'ada@example.org', label: 'personal', scope: 'once', decisionId }, 50);
 
-    expect(result).toEqual({ reviewed: 1, corrected: null, taught: null, carrying: 0, proposed: false });
+    expect(result).toEqual({ reviewed: 1, corrected: null, taught: null, carrying: 0, asked: [], proposed: false });
     expect(await listRules(db, ACCOUNT)).toEqual([]);
     expect(await raw(db).all('SELECT verdict, disposition, label_id FROM feedback')).toEqual([{ verdict: 'wrong', disposition: 'keep', label_id: 'personal' }]);
     // The message itself is what the model is shown next time.
@@ -209,7 +210,7 @@ describe('teaching', () => {
     const decisionId = await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'archive', NEWS);
     const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', scope: 'once', decisionId });
-    expect(result).toEqual({ reviewed: 1, corrected: null, taught: null, carrying: 0, proposed: false });
+    expect(result).toEqual({ reviewed: 1, corrected: null, taught: null, carrying: 0, asked: [], proposed: false });
     expect(await listRules(db, ACCOUNT)).toEqual([]);
     expect(await pendingSuggestions(db)).toHaveLength(1);
   });
@@ -463,6 +464,7 @@ describe('correcting a decision that is not waiting', () => {
     );
     expect(result).toEqual({
       carrying: 1,
+      asked: [],
       proposed: false,
       reviewed: 1,
       corrected: id,
@@ -552,6 +554,7 @@ describe('how far an answer reaches', () => {
     await expect(applyFeedback(db, { ...answer, contains: 'refund' })).rejects.toThrow('Nothing waiting from bids@example.com has "refund"');
     expect(await applyFeedback(db, { ...answer, contains: 'outbid' })).toEqual({
       carrying: 0,
+      asked: [],
       proposed: false,
       reviewed: 1,
       corrected: null,
@@ -584,6 +587,7 @@ describe('how far an answer reaches', () => {
     await suggest('c@example.com', 'archive', { labelId: 'marketing' });
     expect(await applyFeedback(db, { accountId: ACCOUNT, sender: 'a@shop.example', disposition: 'archive', scope: 'domain' })).toEqual({
       carrying: 0,
+      asked: [],
       proposed: false,
       reviewed: 2,
       corrected: null,
@@ -598,6 +602,7 @@ describe('how far an answer reaches', () => {
     await suggest('news@example.com', 'archive', NEWS);
     expect(await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', scope: 'once' })).toEqual({
       carrying: 0,
+      asked: [],
       proposed: false,
       reviewed: 2,
       corrected: null,

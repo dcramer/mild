@@ -53,7 +53,7 @@ Read-only. Passes only if this run's process is alive, the port answers as `me@e
 ## Drive
 
 ```bash
-$V ab "$RUN" open "http://127.0.0.1:$(cat "$RUN/port")/suggestions"
+$V ab "$RUN" open "http://127.0.0.1:$(cat "$RUN/port")/"
 $V ab "$RUN" snapshot -i          # interactive elements with refs (@e12)
 $V ab "$RUN" find role button click --name "Save answer"
 $V ab "$RUN" press j               # page keys work: J/K move, A agrees, 1–9 pick a label
@@ -61,7 +61,7 @@ $V ab "$RUN" press j               # page keys work: J/K move, A agrees, 1–9 p
 
 `ab` is agent-browser (`npx agent-browser@0.39.2`) in this run's own browser session; any agent-browser command works after it (`agent-browser skills get core` for the full set). Use `127.0.0.1`, which is where the cookie was set, not `localhost`.
 
-Find elements by role and accessible name, not refs or CSS: refs change on every snapshot. A control with a shortcut has its keycap in its name (`Save answer ↵`, `Archive E`); `--name` matches part of a name, so the words alone find it. The names the page uses are in [features/](features/README.md). Routes: `/suggestions`, `/activity`, `/labels`, `/rules`, `/sender/<account>/<address>`, `/domain/<account>/<domain>`, and `/system` (the design-system specimen, no sign-in). An open message is `?message=<id>&account=me%40example.org` on any route, and Settings `?settings=1`.
+Find elements by role and accessible name, not refs or CSS: refs change on every snapshot. A control with a shortcut has its keycap in its name (`Save answer ↵`, `Archive E`); `--name` matches part of a name, so the words alone find it. The names the page uses are in [features/](features/README.md). Routes: `/` (Suggestions), `/activity`, `/labels`, `/rules`, `/sender/<account>/<address>`, `/domain/<account>/<domain>`, and `/system` (the design-system specimen, no sign-in). An open message is `?message=<id>&account=me%40example.org` on any route, and Settings `?settings=1`.
 
 Phone width: `$V ab "$RUN" set viewport 390 844`. AGENTS.md asks what every part does on a phone.
 

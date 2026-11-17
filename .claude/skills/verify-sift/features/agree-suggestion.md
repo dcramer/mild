@@ -20,7 +20,7 @@ Preconditions:
 
 - Fresh seed. The Store row (`Winter sale starts now`, last) has a dropdown reading `Marketing` and a check; the other three read `Which label?`, with the check disabled.
 
-- **Agree.** `ab open "$B/suggestions"`, then `ab find role button click --name "Agree: Marketing"`. A toast reads `Archived as Marketing`. The link reads `Suggestions 3`, the Store row is gone, and no panel opens.
+- **Agree.** `ab open "$B/"`, then `ab find role button click --name "Agree: Marketing"`. A toast reads `Archived as Marketing`. The link reads `Suggestions 3`, the Store row is gone, and no panel opens.
 - **Second view.** `ab open "$B/rules"`. No rule mentions `sale@store.example.com`.
 - **Stored.** `verify.sh sql "$RUN" "SELECT label_id, carry_out, by_user, outcome FROM decisions WHERE message_id = 'm8' ORDER BY id DESC LIMIT 1"` returns `marketing`, `true`, `true`, null: the answer waits for the next pass to be carried out (`sift dashboard` runs none). `SELECT message_id, label_id FROM examples` returns `m8`, `marketing`, and its `feedback` row has `verdict` `right`.
 

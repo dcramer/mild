@@ -8,6 +8,7 @@ import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { people } from '../src/store/people.ts';
 import type { RawMessage } from '../src/gmail/api.ts';
 import { continueEval, startEval } from '../src/learn/evals.ts';
+import { redecideWaiting } from '../src/learn/redecide.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { MAX_LABELS, listLabels } from '../src/store/labels.ts';
 import { recordDecision } from '../src/store/decisions.ts';
@@ -181,7 +182,14 @@ describe('managing sift from the dashboard', () => {
     const { call } = await start();
     const from = { address: 'sales@example.com', domain: 'example.com' };
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'w1', from }), facts({ accountId: ACCOUNT, messageId: 'w2', from })], '2');
-    const marketing = { disposition: 'archive', subscription: 'unsubscribe', stage: 'model', reason: 'Marketing: a sale', labelId: 'marketing' } as const;
+    const marketing = {
+      disposition: 'archive',
+      subscription: 'unsubscribe',
+      stage: 'model',
+      confidence: 0.95,
+      reason: 'Marketing: a sale',
+      labelId: 'marketing',
+    } as const;
     await recordDecision(db, ACCOUNT, 'w1', marketing, { now: 10 });
     await recordDecision(db, ACCOUNT, 'w2', marketing, { now: 20 });
     const latest = async (id: string) =>
@@ -357,6 +365,39 @@ describe('managing sift from the dashboard', () => {
     expect(failed.body).toMatchObject({ fixed: null, notFixed: 'The message no longer exists.' });
     expect(await raw(db).get('SELECT count(*) AS n FROM feedback')).toEqual({ n: 2 });
     expect(calls).toEqual(['putBack done', 'putBack gone']);
+  });
+
+  it('keeps mail Sift marked for review while on waiting, and takes the mark back when it is answered', async () => {
+    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'asked' }), facts({ accountId: ACCOUNT, messageId: 'acted' })], '2');
+    await recordDecision(
+      db,
+      ACCOUNT,
+      'asked',
+      { disposition: 'review', subscription: 'preserve', stage: 'model', reason: 'could be either' },
+      { carryOut: true },
+    );
+    await recordDecision(
+      db,
+      ACCOUNT,
+      'acted',
+      { disposition: 'archive', subscription: 'preserve', stage: 'model', reason: 'r', labelId: 'marketing' },
+      { carryOut: true },
+    );
+    const { call } = await start();
+    expect((await call('GET', '/api/suggestions')).body).toMatchObject({ waiting: 1, items: [{ messageId: 'asked' }] });
+    // A rule or a label changing does not answer it for the user.
+    expect(await redecideWaiting(db, ACCOUNT)).toBe(0);
+
+    const reply = await call('POST', '/api/feedback', { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', scope: 'once' });
+    expect(reply.body).toMatchObject({ reviewed: 1, carrying: 1, corrected: null, fixed: null, notFixed: null });
+    expect(calls).toEqual(['putBack asked']);
+    expect(await raw(db).get("SELECT disposition, label_id, carry_out, by_user FROM decisions WHERE message_id = 'asked' ORDER BY id DESC LIMIT 1")).toEqual({
+      disposition: 'keep',
+      label_id: 'personal',
+      carry_out: true,
+      by_user: true,
+    });
+    expect((await call('GET', '/api/suggestions')).body).toMatchObject({ waiting: 0 });
   });
 
   it('asks the running sift to undo, pull in older mail and check now', async () => {
