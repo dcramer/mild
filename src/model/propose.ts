@@ -49,7 +49,8 @@ export function createProposer(models: Models, model: Model<Api>): Proposer {
 
     let message: AssistantMessage;
     try {
-      message = await chat(models, model, context, CALL);
+      // Asked with the person's own words and labels, never mail, so the call's prompt and answer go on its span.
+      message = await chat(models, model, context, CALL, true);
     } catch (error) {
       return { failed: failure(error) };
     }

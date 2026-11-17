@@ -1,5 +1,8 @@
-import type { Api, AssistantMessage, Context, Model, Models } from '@earendil-works/pi-ai';
+import type { Api, AssistantMessage, Context, Message, Model, Models } from '@earendil-works/pi-ai';
 import { type Attributes, type Traced, traced } from '../telemetry.ts';
+
+/** Why the model stopped, as OpenTelemetry says it. */
+const finishOf = (message: AssistantMessage) => (message.stopReason === 'toolUse' ? 'tool_call' : message.stopReason);
 
 /**
  * What the call's span says of the answer, under the names Sentry's AI monitoring reads (OpenTelemetry's
@@ -8,7 +11,7 @@ import { type Attributes, type Traced, traced } from '../telemetry.ts';
  */
 function answered(message: AssistantMessage): Attributes {
   const { usage } = message;
-  const finish = message.stopReason === 'toolUse' ? 'tool_call' : message.stopReason;
+  const finish = finishOf(message);
   // A failed call reports zero of everything, which would read as a free one.
   const billed = (message.stopReason !== 'error' && message.stopReason !== 'deferred') || usage.totalTokens > 0;
   return {
@@ -33,15 +36,58 @@ function answered(message: AssistantMessage): Attributes {
   };
 }
 
-/** One request to the model, as a `gen_ai.chat` span. Rejects as `complete` does. */
-export const chat = (models: Models, model: Model<Api>, context: Context, options: { timeoutMs: number; maxRetries: number }): Promise<AssistantMessage> =>
+/** A message in OpenTelemetry's GenAI form: its role, and its parts. */
+const otelMessage = (message: Message) => ({
+  role: message.role === 'toolResult' ? 'tool' : message.role,
+  parts:
+    message.role === 'user'
+      ? typeof message.content === 'string'
+        ? [{ type: 'text', content: message.content }]
+        : message.content.flatMap((part) => (part.type === 'text' ? [{ type: 'text', content: part.text }] : []))
+      : message.role === 'assistant'
+        ? message.content.map((part) =>
+            part.type === 'text'
+              ? { type: 'text', content: part.text }
+              : part.type === 'thinking'
+                ? { type: 'reasoning', content: part.thinking }
+                : { type: 'tool_call', id: part.id, name: part.name, arguments: part.arguments },
+          )
+        : [],
+});
+
+/**
+ * One request to the model, as a `gen_ai.chat` span. Rejects as `complete` does. `transcript` puts the
+ * prompt, the tools and the answer on the span, for an agent that is never shown mail; the scrubber drops
+ * them from any other (`SHOWS_PROMPT`, src/telemetry.ts).
+ */
+export const chat = (
+  models: Models,
+  model: Model<Api>,
+  context: Context,
+  options: { timeoutMs: number; maxRetries: number },
+  transcript = false,
+): Promise<AssistantMessage> =>
   traced(
     'gen_ai.chat',
     `chat ${model.id}`,
-    { 'gen_ai.operation.name': 'chat', 'gen_ai.provider.name': model.provider, 'gen_ai.request.model': model.id },
+    {
+      'gen_ai.operation.name': 'chat',
+      'gen_ai.provider.name': model.provider,
+      'gen_ai.request.model': model.id,
+      ...(transcript
+        ? {
+            'gen_ai.system_instructions': context.systemPrompt && JSON.stringify([{ type: 'text', content: context.systemPrompt }]),
+            'gen_ai.input.messages': JSON.stringify(context.messages.map(otelMessage)),
+            'gen_ai.tool.definitions':
+              context.tools &&
+              JSON.stringify(context.tools.map((tool) => ({ type: 'function', name: tool.name, description: tool.description, parameters: tool.parameters }))),
+          }
+        : {}),
+    },
     async (span) => {
       const settled = await models.complete(model, context, options);
       span.set(answered(settled));
+      if (transcript) span.set({ 'gen_ai.output.messages': JSON.stringify([{ ...otelMessage(settled), finish_reason: finishOf(settled) }]) });
       if (settled.stopReason === 'error' || settled.stopReason === 'aborted') span.fail();
       return settled;
     },

@@ -14,7 +14,7 @@ import { createProposer } from '../src/model/propose.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { hashOf, traceIds } from '../src/store/content.ts';
 import { VERDICT_TOOL } from '../src/triage/prompt.ts';
-import { PROPOSAL_TOOL } from '../src/triage/proposal.ts';
+import { PROPOSAL_PROMPT, PROPOSAL_TOOL } from '../src/triage/proposal.ts';
 import { FILL_TOOL, FIND_TOOL } from '../src/triage/rule-draft.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
 import { loadKeyring } from '../src/secrets.ts';
@@ -227,7 +227,20 @@ describe('each conversation with the model', () => {
       expect(spans.filter((s) => s.attributes['gen_ai.conversation.id']?.value === id).map((s) => s.name)).toEqual(
         expect.arrayContaining(['invoke_agent labels', `chat ${model.id}`, `execute_tool ${PROPOSAL_TOOL}`]),
       );
-    for (const content of [GOAL, 'Cold outreach']) expect(text).not.toContain(content);
+    // Never shown mail, so its prompt and answer are on the call's span, in OpenTelemetry's form.
+    const call = spans.find((s) => s.name === `chat ${model.id}`)!.attributes;
+    const read = (key: string) => JSON.parse(String(call[key]?.value)) as unknown;
+    expect(read('gen_ai.system_instructions')).toEqual([{ type: 'text', content: PROPOSAL_PROMPT }]);
+    expect(read('gen_ai.input.messages')).toEqual([{ role: 'user', parts: [{ type: 'text', content: expect.stringContaining(GOAL) }] }]);
+    expect(read('gen_ai.tool.definitions')).toEqual([expect.objectContaining({ type: 'function', name: PROPOSAL_TOOL })]);
+    expect(read('gen_ai.output.messages')).toEqual([
+      {
+        role: 'assistant',
+        parts: [expect.objectContaining({ type: 'tool_call', name: PROPOSAL_TOOL, arguments: { labels: [PITCHES] } })],
+        finish_reason: 'tool_call',
+      },
+    ]);
+    expect(text).toContain('Cold outreach');
   });
 });
 
@@ -397,6 +410,15 @@ describe('the scrubber', () => {
       attributes: { 'user.email': { value: ACCOUNT }, note: { value: 'from [address] and <[address]>' } },
       list: [['x [address]']],
     });
+  });
+
+  it('lets a prompt out only from an agent never shown mail, with its addresses replaced all the same', async () => {
+    for (const agent of ['labels', 'triage', 'rules'])
+      await traced('gen_ai.chat', `chat ${agent}`, { 'gen_ai.agent.name': agent, 'gen_ai.input.messages': `${BODY} ${SENDER}` }, async () => {});
+    const { attributes } = await delivered();
+    expect(attributes('chat labels')['gen_ai.input.messages']).toBe(`${BODY} [address]`);
+    expect(attributes('chat triage')).not.toHaveProperty('gen_ai.input.messages');
+    expect(attributes('chat rules')).not.toHaveProperty('gen_ai.input.messages');
   });
 
   it('runs on every span and error on the way out', async () => {

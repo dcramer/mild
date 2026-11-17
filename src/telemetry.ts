@@ -6,7 +6,8 @@ import * as Sentry from '@sentry/node';
  * caches, outgoing requests and AI agents read them.
  *
  * Nothing that identifies mail may leave the machine: what a span says of a message is a keyed hash
- * (`traceIds`, src/store/content.ts), and the model's prompt and answer are never put on one. `scrub`
+ * (`traceIds`, src/store/content.ts), and the model's prompt and answer go on one only for an agent that is
+ * never shown mail (`SHOWS_PROMPT`). `scrub`
  * runs on everything on its way out, in case something was put there anyway.
  */
 
@@ -28,8 +29,8 @@ export interface Traced {
 const CARRIED = ['sift.message', 'sift.sender', 'sift.domain', 'sift.run_id', 'gen_ai.agent.name', 'gen_ai.conversation.id'];
 
 /**
- * Attributes that would hold the prompt, the answer or a tool call's arguments. Sift never sets them and
- * Sentry's own AI integrations, which would, are not loaded.
+ * Attributes that would hold the prompt, the answer or a tool call's arguments. Sift sets them only for an
+ * agent in `SHOWS_PROMPT`, and Sentry's own AI integrations, which would, are not loaded.
  */
 const CONTENT = new Set([
   'gen_ai.input.messages',
@@ -48,6 +49,18 @@ const CONTENT = new Set([
   'gen_ai.embeddings.input',
 ]);
 
+/**
+ * The agents whose prompt and answer go on their spans, since they are never shown mail: the label agent is
+ * asked with the person's own words and the labels they have. Every other agent's are dropped.
+ */
+const SHOWS_PROMPT = new Set(['labels']);
+
+/** The agent a span is under, as its attributes say, whichever form Sentry hands them in. */
+function agentOf(span: { data?: Record<string, unknown>; attributes?: Record<string, unknown> }): unknown {
+  const named = span.data?.['gen_ai.agent.name'] ?? span.attributes?.['gen_ai.agent.name'];
+  return typeof named === 'object' && named !== null ? (named as { value?: unknown }).value : named;
+}
+
 /** The one address a span may carry: the connected account's, which is the person it is for. */
 const OWN_ADDRESS = 'user.email';
 
@@ -59,15 +72,18 @@ const defined = (attributes: Attributes): Record<string, Value> =>
 /** Every address in a string replaced. */
 const scrubText = (text: string) => text.replace(ADDRESS, '[address]');
 
-/** `value` with every address replaced, at any depth, and content attributes taken out. Only `user.email` is left as it is. */
-export function scrub<T>(value: T): T {
+/**
+ * `value` with every address replaced, at any depth, and content attributes taken out unless `prompt` keeps
+ * them. Only `user.email` is left as it is.
+ */
+export function scrub<T>(value: T, prompt = false): T {
   if (typeof value === 'string') return scrubText(value) as T;
-  if (Array.isArray(value)) return value.map(scrub) as T;
+  if (Array.isArray(value)) return value.map((item) => scrub(item, prompt)) as T;
   if (value === null || typeof value !== 'object') return value;
   const kept: Record<string, unknown> = {};
   for (const [key, inner] of Object.entries(value)) {
-    if (CONTENT.has(key)) continue;
-    kept[key] = key === OWN_ADDRESS ? inner : scrub(inner);
+    if (CONTENT.has(key) && !prompt) continue;
+    kept[key] = key === OWN_ADDRESS ? inner : scrub(inner, prompt);
   }
   return kept as T;
 }
@@ -105,7 +121,7 @@ export function startTelemetry(dsn: string | undefined, options: { environment?:
     beforeBreadcrumb: () => null,
     // The user is only what `identify` set: the person's id and their own address.
     beforeSend: (event) => ({ ...scrub({ ...event, request: undefined, breadcrumbs: undefined, user: undefined }), user: event.user }),
-    beforeSendSpan: (span) => scrub(span),
+    beforeSendSpan: (span) => scrub(span, SHOWS_PROMPT.has(agentOf(span) as string)),
     beforeSendLog: (log) => scrub(log),
   });
 }
