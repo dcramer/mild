@@ -11,6 +11,7 @@ import type { Store } from '../store/store.ts';
 import { buildControls, gmailFor, openModelTier } from './controls.ts';
 import { buildSignIn } from './google-sign-in.ts';
 import { site } from './site.ts';
+import { logged } from '../telemetry.ts';
 
 /** What a host gives sift: `sift run` on a machine, or a function on Vercel (docs/RUNTIME.md). */
 export interface Host {
@@ -54,7 +55,12 @@ const deviceId = (secret: string) => {
 
 /** sift, put together from what the host gives it. Holds nothing between calls but what `host` does. */
 export async function createSift(host: Host): Promise<Sift> {
-  const { config, store, ephemeral, log } = host;
+  const { config, store, ephemeral } = host;
+  // What the host writes is a log in Sentry too, beside the trace it was written in.
+  const log = (line: string) => {
+    logged(line);
+    host.log(line);
+  };
   // Why each person's model could not be reached, so a log says it once rather than every pass. Only the log forgets it.
   const unreachable = new Map<number, string>();
   const options: RunOptions = {

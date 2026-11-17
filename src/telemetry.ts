@@ -1,7 +1,9 @@
 import * as Sentry from '@sentry/node';
 
 /**
- * Errors and traces, sent to Sentry when `SENTRY_DSN` is set. The only module that imports the SDK.
+ * Errors, traces, logs and the tick's check-ins, sent to Sentry when `SENTRY_DSN` is set. The only module
+ * that imports the SDK. Spans follow OpenTelemetry's semantic conventions, so Sentry's views for queries,
+ * caches, outgoing requests and AI agents read them.
  *
  * Nothing that identifies mail may leave the machine: what a span says of a message is a keyed hash
  * (`traceIds`, src/store/content.ts), and the model's prompt and answer are never put on one. `scrub`
@@ -71,9 +73,10 @@ export function scrub<T>(value: T): T {
 }
 
 /**
- * Start sending errors and traces, if there is somewhere to send them. Called once by each host. Nothing
- * is instrumented on its own: no HTTP, database or AI library integration, no breadcrumbs, no local
- * variables, since each would carry what came from mail. Only the spans sift makes go out.
+ * Start sending, if there is somewhere to send to. Called once by each host. Nothing is instrumented on
+ * its own: no HTTP, database or AI library integration, no breadcrumbs, no local variables, since each
+ * would carry what came from mail. Only the spans and logs sift makes go out. The release is the commit
+ * Vercel or `SENTRY_RELEASE` names.
  */
 export function startTelemetry(dsn: string | undefined, options: { environment?: string; transport?: Sentry.NodeOptions['transport'] } = {}): void {
   if (!dsn) return;
@@ -103,6 +106,7 @@ export function startTelemetry(dsn: string | undefined, options: { environment?:
     // The user is only what `identify` set: the person's id and their own address.
     beforeSend: (event) => ({ ...scrub({ ...event, request: undefined, breadcrumbs: undefined, user: undefined }), user: event.user }),
     beforeSendSpan: (span) => scrub(span),
+    beforeSendLog: (log) => scrub(log),
   });
 }
 
@@ -120,13 +124,83 @@ export async function traced<T>(op: string, name: string, attributes: Attributes
     if (typeof value === 'string' || typeof value === 'number') carried[key] = value;
   }
   const start = () =>
-    Sentry.startSpan({ op, name: scrubText(name), attributes: defined({ ...carried, ...attributes }) }, (span) =>
-      work({
-        set: (more) => span.setAttributes(defined(more)),
-        fail: () => span.setStatus({ code: 2, message: 'internal_error' }),
-      }),
-    );
+    Sentry.startSpan({ op, name: scrubText(name), attributes: defined({ ...carried, ...attributes }) }, async (span) => {
+      try {
+        return await work({
+          set: (more) => span.setAttributes(defined(more)),
+          fail: () => span.setStatus({ code: 2, message: 'internal_error' }),
+        });
+      } catch (error) {
+        // The class alone: an error's words can quote the mail.
+        span.setAttribute('error.type', error instanceof Error ? error.constructor.name : typeof error);
+        throw error;
+      }
+    });
   return await (parent ? start() : Sentry.withIsolationScope(start));
+}
+
+const untraced: Traced = { set: () => {}, fail: () => {} };
+
+/** As `traced`, but only under a span already started: on its own it would be a trace of one query. */
+export const within = <T>(op: string, name: string, attributes: Attributes, work: (span: Traced) => Promise<T>): Promise<T> =>
+  Sentry.getActiveSpan() ? traced(op, name, attributes, work) : work(untraced);
+
+/**
+ * What an `http.client` span says of a request: the method and where it went, as `url.template` when the
+ * path would name a message. Never the query, which may carry a code or a token, or either body.
+ */
+export function clientRequest(method: string, url: string, template?: string): { name: string; attributes: Attributes } {
+  const { protocol, hostname, port, origin, pathname } = new URL(url);
+  const where = `${origin}${template ?? pathname}`;
+  return {
+    name: `${method} ${where}`,
+    attributes: {
+      'http.request.method': method,
+      'server.address': hostname,
+      'server.port': Number(port || (protocol === 'https:' ? 443 : 80)),
+      ...(template ? { 'url.template': template } : { 'url.full': where }),
+    },
+  };
+}
+
+/** Set a reply's status on its `http.client` or `http.server` span. A 5xx fails it; a 4xx is the caller's to judge. */
+export function httpStatus(span: Traced, status: number): void {
+  span.set({ 'http.response.status_code': status, ...(status >= 500 ? { 'error.type': String(status) } : {}) });
+  if (status >= 500) span.fail();
+}
+
+/**
+ * `fetch` as an `http.client` span. `propagate` sends the trace along, for a call to Sift's own
+ * deployment, so the work it starts is part of the same trace.
+ */
+export const tracedFetch = (url: string, init: RequestInit & { method: string }, propagate = false): Promise<Response> => {
+  const { name, attributes } = clientRequest(init.method, url);
+  return traced('http.client', name, attributes, async (span) => {
+    const headers = propagate ? { ...(init.headers as Record<string, string>), ...Sentry.getTraceData() } : init.headers;
+    const response = await fetch(url, { ...init, ...(headers ? { headers } : {}) });
+    httpStatus(span, response.status);
+    return response;
+  });
+};
+
+/** Run `work` as part of the trace a call from Sift's own deployment carried in (`tracedFetch`'s `propagate`). */
+export const continued = <T>(headers: Headers, work: () => Promise<T>): Promise<T> =>
+  Sentry.continueTrace({ sentryTrace: headers.get('sentry-trace') ?? undefined, baggage: headers.get('baggage') ?? undefined }, work);
+
+/**
+ * Run `work` as one check-in of the tick that runs every minute, so Sentry says when it stops, fails or
+ * runs long.
+ */
+export const checkedIn = <T>(work: () => Promise<T>): Promise<T> =>
+  Sentry.withMonitor('tick', work, {
+    schedule: { type: 'crontab', value: '* * * * *' },
+    checkinMargin: 2,
+    maxRuntime: 5,
+  });
+
+/** A line of what Sift is doing, as the host writes it, sent as a log beside the trace it was written in. */
+export function logged(line: string): void {
+  Sentry.logger.info(line);
 }
 
 /**

@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { drizzle } from 'drizzle-orm/pg-proxy';
 import type { Keyring } from '../secrets.ts';
+import { within } from '../telemetry.ts';
 import { type Builder, owned } from './own.ts';
 
 /**
@@ -33,6 +34,13 @@ export interface Driver {
   readonly warning?: string;
 }
 
+/** A database span's attributes, as OpenTelemetry names them: Sentry's query view reads them, and the span's name is the statement. */
+const statement = (text: string) => ({
+  'db.system.name': 'postgresql',
+  'db.query.text': text,
+  'db.operation.name': /^\s*(\w+)/.exec(text)?.[1]?.toUpperCase(),
+});
+
 // A call on any handle from inside a transaction would wait for that transaction to end (PGlite has one connection).
 const inside = new AsyncLocalStorage<true>();
 
@@ -55,7 +63,10 @@ export function handle(driver: Driver, person: number | null, keys: Keyring): Sq
   };
   const builder = (query: Connection['query']) =>
     owned(
-      drizzle(async (text, params, method) => ({ rows: (await query(text, params, method === 'all')).rows })),
+      // The statement's text names its values only as `$1`, `$2`: they, sealed or not, stay off the span.
+      drizzle(async (text, params, method) => ({
+        rows: (await within('db', text, statement(text), () => query(text, params, method === 'all'))).rows,
+      })),
       person,
     );
   const over = (connection: Connection): Sql => {

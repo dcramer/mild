@@ -7,6 +7,7 @@ import { vercelAIGatewayProvider } from '@earendil-works/pi-ai/providers/vercel-
 import { registerLazyOAuthFlows } from '@earendil-works/pi-ai/lazy-oauth';
 import { type SignIns, credentialStore } from './credentials.ts';
 import { Refusal } from '../refusal.ts';
+import { tracedFetch } from '../telemetry.ts';
 
 // Without this pi-ai imports its OAuth flows through a variable specifier, which Vercel's file
 // tracing cannot follow, so the function is deployed without them and every refresh fails.
@@ -172,7 +173,7 @@ export interface DeviceCode {
 
 /** Ask OpenAI for a code for the person to enter. Nothing has to come back to this server, so it works wherever the dashboard is. */
 export async function startChatGPTDeviceCode(now: () => number = Date.now): Promise<DeviceCode> {
-  const response = await fetch(DEVICE.userCode, {
+  const response = await tracedFetch(DEVICE.userCode, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ client_id: DEVICE.clientId }),
@@ -191,7 +192,7 @@ export async function startChatGPTDeviceCode(now: () => number = Date.now): Prom
  */
 export async function pollChatGPTDeviceCode(signIns: SignIns, device: DeviceCode, now: () => number = Date.now): Promise<'waiting' | 'slow down' | 'done'> {
   if (now() > device.expiresAt) throw new Refusal('That code expired. Start again.');
-  const response = await fetch(DEVICE.poll, {
+  const response = await tracedFetch(DEVICE.poll, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ device_auth_id: device.deviceAuthId, user_code: device.code }),
@@ -207,7 +208,7 @@ export async function pollChatGPTDeviceCode(signIns: SignIns, device: DeviceCode
   const granted = (await response.json()) as Record<string, unknown>;
   if (typeof granted['authorization_code'] !== 'string' || typeof granted['code_verifier'] !== 'string')
     throw new Error('OpenAI answered the sign-in with something Sift cannot use.');
-  const exchanged = await fetch(DEVICE.token, {
+  const exchanged = await tracedFetch(DEVICE.token, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -310,7 +311,7 @@ export async function finishChatGPTRedirect(signIns: SignIns, pending: PendingRe
   const clientId = back.searchParams.get('client_id');
   if (!code || !clientId) throw new Error('That address is missing part of what ChatGPT sent. Copy all of it.');
 
-  const response = await fetch(SIGN_IN.token, {
+  const response = await tracedFetch(SIGN_IN.token, {
     method: 'POST',
     headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({

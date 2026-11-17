@@ -6,7 +6,7 @@ import { z } from 'zod';
 import type { Work } from '../work/run.ts';
 import { type Sift, createSift } from '../app/sift.ts';
 import { openStore } from '../store/store.ts';
-import { flushTelemetry, startTelemetry } from '../telemetry.ts';
+import { checkedIn, continued, flushTelemetry, startTelemetry, traced, tracedFetch } from '../telemetry.ts';
 
 /** The time limit of every route, as `vercel.json` sets it. */
 export const MAX_DURATION_S = 300;
@@ -47,7 +47,8 @@ export async function fanOut(due: Sift['due'], people?: readonly number[]): Prom
     'content-type': 'application/json',
     ...(bypass ? { 'x-vercel-protection-bypass': bypass } : {}),
   };
-  const taken = await Promise.allSettled((await due(people)).map((piece) => fetch(self, { method: 'POST', headers, body: JSON.stringify(piece) })));
+  // Each call carries the trace, so the work it starts is part of it.
+  const taken = await Promise.allSettled((await due(people)).map((piece) => tracedFetch(self, { method: 'POST', headers, body: JSON.stringify(piece) }, true)));
   const refused = taken.filter((call) => call.status === 'rejected' || call.value.status !== 202).length;
   // What was not taken is due again at the next tick.
   if (refused > 0) process.stdout.write(`${refused} of ${taken.length} pieces of work were not taken\n`);
@@ -126,8 +127,11 @@ export async function respond(request: Request): Promise<Response> {
 /** Vercel Cron, each minute: hands out what is due. */
 export async function cron(request: Request): Promise<Response> {
   if (!fromSift(request)) return new Response(null, { status: 401 });
-  await fanOut((await sift()).due);
-  waitUntil(flushTelemetry());
+  try {
+    await checkedIn(async () => traced('sift.tick', 'tick', {}, async () => fanOut((await sift()).due)));
+  } finally {
+    waitUntil(flushTelemetry());
+  }
   return new Response(null, { status: 204 });
 }
 
@@ -152,6 +156,7 @@ async function sentAfter(work: Promise<unknown>): Promise<void> {
 export async function work(request: Request): Promise<Response> {
   const piece = await admit(request);
   if (piece instanceof Response) return piece;
-  waitUntil(sentAfter((await sift()).work(piece)));
+  const opened = await sift();
+  waitUntil(sentAfter(continued(request.headers, () => opened.work(piece))));
   return new Response(null, { status: 202 });
 }

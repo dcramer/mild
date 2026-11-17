@@ -1,5 +1,9 @@
 import { type Api, type Model, type Models, createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from '@earendil-works/pi-ai';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { memoryEphemeral, tracedEphemeral } from '../src/ephemeral/ephemeral.ts';
+import { getFacts } from '../src/store/messages.ts';
 import { continueEval, startEval } from '../src/learn/evals.ts';
 import { calls } from '../src/gmail/call.ts';
 import { proposeLabels } from '../src/learn/labels.ts';
@@ -14,9 +18,9 @@ import { PROPOSAL_TOOL } from '../src/triage/proposal.ts';
 import { FILL_TOOL, FIND_TOOL } from '../src/triage/rule-draft.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
 import { loadKeyring } from '../src/secrets.ts';
-import { flushTelemetry, identify, reportError, scrub, startTelemetry, traced } from '../src/telemetry.ts';
+import { checkedIn, continued, flushTelemetry, identify, logged, reportError, scrub, startTelemetry, traced, tracedFetch } from '../src/telemetry.ts';
 import { triageAccount } from '../src/work/triage.ts';
-import { freshStore, raw } from './fixtures.ts';
+import { freshStore, openUserDb, raw } from './fixtures.ts';
 import { facts, SAMPLE_LABELS, storeExample, withSampleLabels } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -25,7 +29,7 @@ const SUBJECT = 'Your invoice 8812 is overdue';
 const BODY = 'Pay 4,200 by Friday or your account at Acme closes.';
 const REASON = 'An overdue invoice from Acme.';
 
-type Span = { name: string; status: string; attributes: Record<string, { value: unknown }> };
+type Span = { name: string; status: string; trace_id: string; attributes: Record<string, { value: unknown }> };
 type Envelope = [unknown, [{ type: string }, unknown][]];
 
 /** Everything sent to Sentry, as the transport was handed it. */
@@ -49,7 +53,8 @@ async function delivered() {
     if (!span) throw new Error(`no span ${name} in ${spans.map((s) => s.name).join(', ')}`);
     return Object.fromEntries(Object.entries(span.attributes).map(([key, { value }]) => [key, value]));
   };
-  return { spans, events, attributes, text: JSON.stringify(sent) };
+  const of = (type: string) => items.filter(([header]) => header.type === type).map(([, body]) => body);
+  return { spans, events, attributes, of, text: JSON.stringify(sent) };
 }
 
 /** A person's database with a key, so hashes are hashes. */
@@ -251,25 +256,107 @@ describe('whom a trace is for', () => {
 
 describe('a Gmail request', () => {
   const call = calls(async () => {});
+  const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me';
 
-  it('is named by its method alone, and a message that is gone is an answer, not a failure', async () => {
+  it('is named by its path with the ids left out, and a message that is gone is an answer, not a failure', async () => {
     expect(await call('users.messages.get', 20, async () => ({ data: 'labels', status: 200 }))).toBe('labels');
     const gone = Object.assign(new Error('Not Found'), { status: 404 });
     await expect(call('users.threads.get', 40, () => Promise.reject(gone))).rejects.toBe(gone);
     await expect(call('users.labels.list', 1, () => Promise.reject(Object.assign(new Error('Backend Error'), { status: 500 })))).rejects.toThrow();
 
     const { spans, attributes } = await delivered();
-    expect(attributes('gmail users.messages.get')).toMatchObject({
+    expect(attributes(`GET ${GMAIL}/messages/{id}`)).toMatchObject({
       'sentry.op': 'http.client',
+      'http.request.method': 'GET',
       'server.address': 'gmail.googleapis.com',
+      'server.port': 443,
+      'url.template': '/gmail/v1/users/me/messages/{id}',
       'http.response.status_code': 200,
       'sift.quota_units': 20,
     });
+    expect(attributes(`GET ${GMAIL}/labels`)).toMatchObject({ 'http.response.status_code': 500, 'error.type': '500' });
     expect(spans.map((s) => [s.name, s.status])).toEqual([
-      ['gmail users.messages.get', 'ok'],
-      ['gmail users.threads.get', 'ok'],
-      ['gmail users.labels.list', 'error'],
+      [`GET ${GMAIL}/messages/{id}`, 'ok'],
+      [`GET ${GMAIL}/threads/{id}`, 'ok'],
+      [`GET ${GMAIL}/labels`, 'error'],
     ]);
+  });
+});
+
+describe('the rest of what a trace shows', () => {
+  it('has each database statement, without its values, and only under a span', async () => {
+    const db = await openUserDb(ACCOUNT);
+    await recordSync(db, ACCOUNT, [message], '2', 0);
+    await traced('sift.work', 'pass', {}, async () => void (await getFacts(db, ACCOUNT, 'abc123')));
+
+    const { spans, text } = await delivered();
+    const queries = spans.filter((s) => s.attributes['sentry.op']?.value === 'db');
+    expect(queries.length).toBeGreaterThan(0);
+    const select = queries.find((s) => s.attributes['db.operation.name']?.value === 'SELECT')!;
+    expect(select.name).toMatch(/\$1/);
+    expect(select.attributes).toMatchObject({ 'db.system.name': { value: 'postgresql' }, 'db.query.text': { value: select.name } });
+    // The sync ran outside any span: its statements are not traces of their own.
+    expect(new Set(spans.map((s) => s.trace_id)).size).toBe(1);
+    for (const content of [SUBJECT, SENDER, 'abc123']) expect(text).not.toContain(content);
+  });
+
+  it('has each short-lived read and write, named by the kind of key alone', async () => {
+    const ephemeral = tracedEphemeral(memoryEphemeral());
+    await traced('sift.work', 'pass', {}, async () => {
+      await ephemeral.get('signin:secret-state');
+      await ephemeral.set('signin:secret-state', { a: 1 }, 60_000);
+      await ephemeral.take('signin:secret-state');
+      await ephemeral.claim(`lock:pass:${ACCOUNT}`, 1000);
+    });
+
+    const { spans, text } = await delivered();
+    expect(spans.map((s) => [s.name, s.attributes['sentry.op']?.value, s.attributes['cache.hit']?.value])).toEqual([
+      ['signin', 'cache.get', false],
+      ['signin', 'cache.put', undefined],
+      ['signin', 'cache.get', true],
+      ['SET lock', 'db', undefined],
+      ['pass', 'sift.work', undefined],
+    ]);
+    for (const content of ['secret-state', ACCOUNT]) expect(text).not.toContain(content);
+  });
+
+  it('follows a piece of work handed to the deployment, and leaves the query off the request', async () => {
+    const received: Headers[] = [];
+    const server = createServer((request, response) => {
+      received.push(new Headers(request.headers as Record<string, string>));
+      response.writeHead(202).end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+    try {
+      await traced('sift.tick', 'tick', {}, () => tracedFetch(`http://127.0.0.1:${port}/api/work?code=secret`, { method: 'POST' }, true));
+      await continued(received[0]!, () => traced('sift.work', 'pass', {}, async () => {}));
+    } finally {
+      server.close();
+    }
+
+    const { spans, attributes, text } = await delivered();
+    const url = `http://127.0.0.1:${port}/api/work`;
+    expect(attributes(`POST ${url}`)).toMatchObject({ 'sentry.op': 'http.client', 'url.full': url, 'server.port': port, 'http.response.status_code': 202 });
+    expect(new Set(spans.map((s) => s.trace_id)).size).toBe(1);
+    expect(text).not.toContain('secret');
+  });
+
+  it('says what kind of error failed a span, never its words', async () => {
+    await expect(traced('sift.work', 'pass', {}, async () => Promise.reject(new TypeError(`bad ${SENDER}`)))).rejects.toThrow();
+    const { attributes } = await delivered();
+    expect(attributes('pass')).toMatchObject({ 'error.type': 'TypeError' });
+  });
+
+  it('sends what the host logs, scrubbed, and checks the tick in', async () => {
+    await checkedIn(async () => logged(`${SENDER}: pass failed`));
+    const { of, text } = await delivered();
+    expect(JSON.stringify(of('log'))).toContain('[address]: pass failed');
+    expect(of('check_in').map((c) => [(c as { monitor_slug: string }).monitor_slug, (c as { status: string }).status])).toEqual([
+      ['tick', 'in_progress'],
+      ['tick', 'ok'],
+    ]);
+    expect(text).not.toContain(SENDER);
   });
 });
 

@@ -1,3 +1,4 @@
+import { within } from '../telemetry.ts';
 import { Refusal } from '../refusal.ts';
 /**
  * What sift keeps only briefly and shares between every request and piece of work: sign-ins in progress, which pass
@@ -19,6 +20,34 @@ export interface Ephemeral {
    */
   reserve(key: string, units: number, bucket: Bucket): Promise<number>;
   close(): Promise<void>;
+}
+
+/**
+ * `ephemeral` with each call a span, named by the first part of its key alone (`quota`, `lock`): the rest
+ * may be an address, an id or a sign-in's secret state. Reads and writes are `cache.get` and `cache.put`,
+ * as Sentry's cache view reads them; holding, letting go and counting quota are Redis commands.
+ */
+export function tracedEphemeral(ephemeral: Ephemeral): Ephemeral {
+  const kind = (key: string) => key.split(':')[0]!;
+  const redis = { 'db.system.name': 'redis' };
+  const read = async <T>(key: string, call: () => Promise<T | null>) =>
+    await within('cache.get', kind(key), { ...redis, 'cache.key': kind(key) }, async (span) => {
+      const value = await call();
+      span.set({ 'cache.hit': value !== null });
+      return value;
+    });
+  const command = <R>(operation: string, key: string, call: () => Promise<R>) =>
+    within('db', `${operation} ${kind(key)}`, { ...redis, 'db.operation.name': operation }, call);
+  return {
+    get: (key) => read(key, () => ephemeral.get(key)),
+    take: (key) => read(key, () => ephemeral.take(key)),
+    set: (key, value, ttlMs) =>
+      within('cache.put', kind(key), { ...redis, 'cache.key': kind(key), 'cache.ttl': Math.round(ttlMs / 1000) }, () => ephemeral.set(key, value, ttlMs)),
+    claim: (key, ttlMs) => command('SET', key, () => ephemeral.claim(key, ttlMs)),
+    release: (key, token) => command('EVAL', key, () => ephemeral.release(key, token)),
+    reserve: (key, units, bucket) => command('EVAL', key, () => ephemeral.reserve(key, units, bucket)),
+    close: () => ephemeral.close(),
+  };
 }
 
 /** How long one holder may keep a key in `holding`, and how long another waits for it. */

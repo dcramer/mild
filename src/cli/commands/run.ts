@@ -10,7 +10,7 @@ import { paint, ui } from '../ui.ts';
 import { createSift } from '../../app/sift.ts';
 import { checkSecrets } from '../secrets-check.ts';
 import { nodeHost, portOption, serveDashboard } from '../host.ts';
-import { flushTelemetry, startTelemetry } from '../../telemetry.ts';
+import { checkedIn, flushTelemetry, startTelemetry } from '../../telemetry.ts';
 
 /** A minute: new mail is classified soon after it lands, and a quiet pass costs a history read per mailbox. */
 const INTERVAL_MS = 60_000;
@@ -76,7 +76,7 @@ export async function run(args: string[]): Promise<void> {
     try {
       // Every minute, without waiting for the last tick: ticks that overlap skip work under way.
       while (!stop.signal.aborted) {
-        background(sift.tick());
+        background(checkedIn(() => sift.tick()));
         await sleep(INTERVAL_MS, undefined, { signal: stop.signal }).catch(() => {});
       }
     } finally {

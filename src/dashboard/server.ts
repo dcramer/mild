@@ -6,7 +6,7 @@ import { FRAMES, READS, WRITES } from './api/index.ts';
 import type { Context, Write } from './api/route.ts';
 import { frameNote } from './mail-html.ts';
 import { Refusal } from '../refusal.ts';
-import { identify, reportError, traced } from '../telemetry.ts';
+import { identify, httpStatus, reportError, traced } from '../telemetry.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { type Scope, narrow, scopeFor, sees } from './scope.ts';
 
@@ -381,14 +381,20 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
   return {
     answers,
     handle: (request) => {
-      const { pathname } = new URL(request.url);
-      return traced('http.server', `${request.method} ${routeOf(pathname)}`, { 'http.request.method': request.method }, async (span) => {
+      const { pathname, protocol } = new URL(request.url);
+      const route = routeOf(pathname);
+      const server = {
+        'http.request.method': request.method,
+        'http.route': route,
+        'url.scheme': protocol.slice(0, -1),
+        'user_agent.original': request.headers.get('user-agent') ?? undefined,
+      };
+      return traced('http.server', `${request.method} ${route}`, server, async (span) => {
         const response = await handle(request).catch((error: unknown) => {
           const { status, ...body } = failed(request, error);
           return json(status, body);
         });
-        span.set({ 'http.response.status_code': response.status });
-        if (response.status >= 500) span.fail();
+        httpStatus(span, response.status);
         return response;
       });
     },
