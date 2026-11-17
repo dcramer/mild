@@ -76,6 +76,17 @@ Every setting is an environment variable: Vercel sets them in the project, and a
 
 The database is the full account of what sift saw and did. Every message synced gets a row (metadata and subject, no body). Message content is stored in two places only, each as its text and its HTML: `examples`, for mail the user answered for, kept; and `suggestion_bodies`, mail still waiting on the user, which is deleted when it is answered or stops being a suggestion and after 30 days regardless. Don't store message content anywhere else, and don't lengthen that. Every triage outcome gets a `decisions` row through `recordDecision`, including "keep" and "could not decide"; mail nothing looked at because no model is connected is not an outcome, and stays in the queue. Every model call about a message gets a `model_runs` row, started before the call, with its cost, whether it judged or failed; a decision reached by one points at it. A call for labels gets a `label_proposals` row the same way, and a call for a rule a `rule_drafts` row. A failed call is not an outcome either: it records no decision, and the message is tried again. Every mailbox change goes through the executor and gets an `actions` row linked to its decision. Don't add a code path that decides or acts without recording.
 
+## Cheap to run
+
+Whoever runs Sift pays for everything it does: Vercel bills each function call, queue message and Workflow event, and the model provider each call. What Sift costs must follow the mail it gets, not how long it has been on. A mailbox that got nothing costs close to nothing.
+
+- **Look before working.** Something that runs on a timer first checks, as cheaply as it can, whether there is anything to do (the record, then one small Gmail call), and starts nothing when there isn't. Nothing polls by looping or sleeping.
+- **Batch.** Each Workflow run and step is billed by its events (about three a step, one more for each retry, two for each sleep or hook). A step does a batch of mail, never one message; a run starts only when there is work.
+- **Safe to repeat.** A failed step runs its whole batch again, so a step must be safe to run twice: pick up what is not yet recorded, and check Gmail before changing it again.
+- **Ids between steps.** What a step is given and returns is kept by Workflow outside Sift's record (encrypted on Vercel, plain in a file on a machine), so it is ids and counts only; the step reads and writes the record itself.
+- **Cheapest answer first.** A model call costs the most, so a cheaper tier that can answer goes first.
+- **Count it.** Before adding work that runs per message or on a timer, work out what it adds a month for a mailbox getting a few hundred messages a day, and put the number in [docs/runtime.md](docs/runtime.md#what-it-costs).
+
 ## Definition of done
 
 1. `pnpm check` passes. Never skip, delete or weaken a test to get there.

@@ -64,6 +64,19 @@ Sift runs in production on Vercel. Not yet seen there: `waitUntil` keeping a lon
 
 Each piece of work is a call of its own, so mailboxes do not wait on each other and none shares a function's memory or time with another. Each call starts nothing after its limit less a minute (a model call gives up after 60 seconds), so it never runs into the limit; what it leaves is due at the next tick. More mailboxes cost more calls, about one per mailbox a minute (some 2 million a month for 50), and no latency.
 
+## What it costs
+
+The rule is in [AGENTS.md](../AGENTS.md#cheap-to-run): cost follows mail, not time. Figures are for one mailbox getting a few hundred messages a day, on Vercel Pro, whose $20 monthly credit covers all of a project's usage before anything is billed.
+
+| | Each month | Follows |
+| --- | --- | --- |
+| The minute tick (`api/cron`) | 43,200 calls | time |
+| A pass per mailbox (`api/work`), run whether or not mail came | 43,200 calls, each syncing and opening the model sign-in | time |
+| Model calls | one per message no rule or sender answers, with the cost recorded in `model_runs` | mail |
+| Workflow events, if every pass were a run of about four steps | some 650,000 (about $13 at $0.02 per 1,000) | time |
+
+The two rows that follow time are what to remove: the tick should start a pass only for a mailbox with new mail or a change still to make, so an idle mailbox costs one cheap check a minute.
+
 ## Code
 
 - `src/app/`: what every host shares. `createSift(host)` (`sift.ts`), the controls the dashboard is given, the sign-ins, and serving the page (`site.ts`).
