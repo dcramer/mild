@@ -4,6 +4,7 @@ import { sees } from '../../../../scope.ts';
 import { RuleInbox } from '../../../../types.ts';
 import { missing, ok, read } from '../../../route.ts';
 import { ruleId } from '../../../shared/rules.ts';
+import { Refusal } from '../../../../../refusal.ts';
 
 export default read({
   path: '/api/rules/inbox',
@@ -12,7 +13,7 @@ export default read({
   run: async ({ db, controls }, scope, { id }) => {
     const [rule] = await db.select({ accountId: rules.accountId }).from(rules).where(eq(rules.id, id));
     if (!rule || !sees(scope, rule.accountId)) return missing('That rule no longer exists.');
-    if (!controls) throw new Error('This dashboard cannot read Gmail.');
+    if (!controls) throw new Refusal('This dashboard cannot read Gmail.');
     return ok(await controls.ruleInbox(db, id));
   },
 });

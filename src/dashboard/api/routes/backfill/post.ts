@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { done, install, write } from '../../route.ts';
+import { Refusal } from '../../../../refusal.ts';
 
 export default write({
   path: '/api/backfill',
@@ -7,7 +8,7 @@ export default write({
   reply: done,
   touches: install,
   run: async ({ controls }, { days }) => {
-    if (!controls) throw new Error('This dashboard cannot pull in mail.');
+    if (!controls) throw new Refusal('This dashboard cannot pull in mail.');
     await controls.backfill(days);
     return { ok: true as const };
   },

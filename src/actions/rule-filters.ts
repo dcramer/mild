@@ -4,6 +4,7 @@ import { actions, and, asc, eq, inArray } from '../store/query.ts';
 import type { FilterPlan } from '../triage/filter.ts';
 import type { ActionDeps } from './executor.ts';
 import { type ExistingFilter, type FilterProposal, sameFilter, validateFilter } from './filters.ts';
+import { Refusal } from '../refusal.ts';
 
 /** Gmail's limit per account. */
 const MAX_FILTERS = 1000;
@@ -31,20 +32,20 @@ const NONE = { filterId: null, state: null, written: null };
  */
 export async function writeRuleFilter(deps: ActionDeps, ruleId: string): Promise<void> {
   const found = await getRuleFilter(deps.db, ruleId);
-  if (!found) throw new Error('That rule no longer exists.');
+  if (!found) throw new Refusal('That rule no longer exists.');
   await settleRuleFilters(deps, found.accountId);
   const row = (await getRuleFilter(deps.db, ruleId))!;
   const verdict = (await filterVerdicts(deps.db, row.accountId)).get(ruleId);
-  if (!verdict?.possible) throw new Error(verdict?.reason ?? 'That rule cannot be a Gmail filter.');
+  if (!verdict?.possible) throw new Refusal(verdict?.reason ?? 'That rule cannot be a Gmail filter.');
   if (row.filterId) await removeRuleFilter(deps, ruleId);
 
   const { plan } = verdict;
   const filter = await proposal(deps, plan);
   const problems = validateFilter({ ...filter, ...(row.match.facts ? { facts: row.match.facts } : {}) });
-  if (problems.length > 0) throw new Error(`Refusing to create filter: ${problems.join('; ')}`);
+  if (problems.length > 0) throw new Refusal(`Refusing to create filter: ${problems.join('; ')}`);
   const before = await deps.mailbox.listFilters();
   const twin = before.find((f) => sameFilter(f, filter));
-  if (!twin && before.length >= MAX_FILTERS) throw new Error('Gmail allows 1,000 filters and this account already has that many.');
+  if (!twin && before.length >= MAX_FILTERS) throw new Refusal('Gmail allows 1,000 filters and this account already has that many.');
 
   const actionId = await insertPendingAction(
     deps.db,
@@ -63,7 +64,7 @@ export async function writeRuleFilter(deps: ActionDeps, ruleId: string): Promise
   }
   if (!got) {
     await finishAction(deps.db, actionId, 'failed', null, 'the filter was not there when read back', clock(deps));
-    throw new Error('Gmail did not keep the filter.');
+    throw new Refusal('Gmail did not keep the filter.');
   }
   await finishAction(deps.db, actionId, 'done', null, null, clock(deps));
   await setRuleFilter(deps.db, ruleId, { filterId: got.id, state: 'active', written: { plan, got } satisfies Written }, clock(deps));
@@ -72,7 +73,7 @@ export async function writeRuleFilter(deps: ActionDeps, ruleId: string): Promise
 /** Take a rule's filter out of Gmail. Returns false if it had none. Throws if Gmail still has it afterwards. */
 export async function removeRuleFilter(deps: ActionDeps, ruleId: string): Promise<boolean> {
   const found = await getRuleFilter(deps.db, ruleId);
-  if (!found) throw new Error('That rule no longer exists.');
+  if (!found) throw new Refusal('That rule no longer exists.');
   await settleRuleFilters(deps, found.accountId);
   const { accountId, filterId } = (await getRuleFilter(deps.db, ruleId))!;
   if (filterId) await takeOut(deps, accountId, ruleId, filterId);
@@ -105,7 +106,7 @@ async function takeOut(deps: ActionDeps, accountId: string, ruleId: string, filt
   }
   if (still) {
     await finishAction(deps.db, actionId, 'failed', null, 'the filter was still there when read back', clock(deps));
-    throw new Error('Gmail still has the filter.');
+    throw new Refusal('Gmail still has the filter.');
   }
   await finishAction(deps.db, actionId, 'done', null, null, clock(deps));
 }

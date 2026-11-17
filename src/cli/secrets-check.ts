@@ -1,8 +1,6 @@
 import { type Config, secretPaths } from '../config.ts';
 import { rekeySecrets } from '../secrets.ts';
-import { listUsers } from '../store/accounts.ts';
-import { rekeyContent } from '../store/content.ts';
-import { rekeyCredentials } from '../store/credentials.ts';
+import { rekeyStore } from '../store/rekey.ts';
 import type { Store } from '../store/store.ts';
 import { paint, ui } from './ui.ts';
 
@@ -12,13 +10,7 @@ import { paint, ui } from './ui.ts';
  */
 export async function checkSecrets(config: Config, store: Store, rekey: boolean): Promise<() => void> {
   const { encrypted, rotated } = rekeySecrets(secretPaths(config), config.keys, rekey);
-  const rows: string[] = [];
-  let messages = 0;
-  for (const user of await listUsers(store.central)) {
-    const db = await store.user(user.id);
-    rows.push(...(await rekeyCredentials(db, rekey)));
-    messages += await rekeyContent(db, rekey);
-  }
+  const { credentials: rows, messages } = await rekeyStore(store, rekey);
   return () => {
     if (!config.keys.current) ui.warn(`Credentials and mail are stored unencrypted. ${paint.cmd('sift init')} makes a key to encrypt them.`);
     if (!rekey) return;

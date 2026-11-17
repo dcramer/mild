@@ -7,6 +7,7 @@ import { nameAlone } from '../../../../triage/stages/rules.ts';
 
 import { RuleFacts, RuleFilter, type RuleMatch } from '../../../types.ts';
 import { accountId, decided, id, labelId, named, redecide, write } from '../../route.ts';
+import { Refusal } from '../../../../refusal.ts';
 
 const value = z.string().max(200).optional();
 
@@ -60,7 +61,7 @@ export default write({
   run: async ({ db, now }, { accountId, match, label, whenLabel, disposition, markRead, unsubscribe, when, proposal }) => {
     const { created, replaced } = await db.transaction(async (tx) => {
       // First: making the rule also settles any proposal for exactly that mail.
-      if (proposal !== undefined && !(await madeFromProposal(tx, proposal, accountId, now()))) throw new Error('That proposal is no longer open.');
+      if (proposal !== undefined && !(await madeFromProposal(tx, proposal, accountId, now()))) throw new Refusal('That proposal is no longer open.');
       const before = new Set((await listRules(tx, accountId)).map((r) => r.id));
       // A rule with exactly these conditions is replaced; the dialog shows which.
       const id = await setRule(

@@ -34,6 +34,7 @@ import type { RuleMatch } from '../triage/stages/rules.ts';
 import type { RuleFacts } from '../triage/facts.ts';
 import { factsWhere } from '../store/messages.ts';
 import { type DecidedDisposition, type Decision, type Disposition, type StageName, type SubscriptionAction, labelled } from '../triage/types.ts';
+import { Refusal } from '../refusal.ts';
 
 /** A decision sift only suggested, that the user has not yet confirmed or corrected. */
 export interface Suggestion {
@@ -234,16 +235,16 @@ const DO: Record<DecidedDisposition, string> = { keep: 'keep it', archive: 'arch
 export async function applyFeedback(db: Sql, input: FeedbackInput, now: number = Date.now()): Promise<FeedbackResult> {
   const labels = await listLabels(db, input.accountId);
   const label = input.label === undefined ? undefined : labels.find((l) => l.id === input.label);
-  if (input.label !== undefined && !label) throw new Error(`There is no label "${input.label}".`);
+  if (input.label !== undefined && !label) throw new Refusal(`There is no label "${input.label}".`);
   const outcome = input.disposition ?? label?.disposition;
-  if (outcome === undefined) throw new Error('Say what this is, or what should happen to it.');
+  if (outcome === undefined) throw new Refusal('Say what this is, or what should happen to it.');
   // A label set to "leave it for me" keeps the mail in the inbox.
   const wanted: DecidedDisposition = outcome === 'review' ? 'keep' : outcome;
 
   const contains = input.contains?.trim() ?? '';
   const when = input.when?.trim() ?? '';
-  if (input.scope === 'subject' && contains === '') throw new Error('Say which words the subject must contain.');
-  if ((input.scope === 'label' || when !== '') && !label) throw new Error('Say what kind of mail this is for.');
+  if (input.scope === 'subject' && contains === '') throw new Refusal('Say which words the subject must contain.');
+  if ((input.scope === 'label' || when !== '') && !label) throw new Refusal('Say what kind of mail this is for.');
   const domain = input.sender.split('@')[1] ?? '';
   const waiting = await pendingSuggestions(db, { accountId: input.accountId, ...(input.scope === 'domain' ? { domain } : { sender: input.sender }) });
   const targets = waiting.filter((s) =>
@@ -265,9 +266,9 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
       ? await undecided(db, input.accountId, input.messageId)
       : null;
   const from = given?.fromAddress ?? fresh?.fromAddress;
-  if (from !== undefined && from !== input.sender) throw new Error('That message is not from that sender.');
+  if (from !== undefined && from !== input.sender) throw new Refusal('That message is not from that sender.');
   if (targets.length === 0 && !given && !fresh)
-    throw new Error(
+    throw new Refusal(
       input.scope === 'subject' ? `Nothing waiting from ${input.sender} has "${contains}" in the subject.` : 'That suggestion is no longer waiting.',
     );
   const match: RuleMatch | null =

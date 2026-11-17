@@ -22,11 +22,12 @@ import { getRuleFilter } from '../store/filters.ts';
 import { preferences } from '../store/preferences.ts';
 import type { Sql } from '../store/sql.ts';
 import type { Store } from '../store/store.ts';
+import { Refusal } from '../refusal.ts';
 
 /** A Gmail client for one of the person's mailboxes, with the sign-in kept in their database. */
 async function gmailClient(config: Config, db: Sql, email: string) {
   const token = await (await credentials(db, 'gmail')).read(email);
-  if (token === null) throw new Error(`Sift has no access to ${email}. Sign in to the dashboard with that account.`);
+  if (token === null) throw new Refusal(`Sift has no access to ${email}. Sign in to the dashboard with that account.`);
   return clientFor(loadClientSecrets(config), token);
 }
 
@@ -56,7 +57,7 @@ export async function openModelTier(config: Config, ephemeral: Ephemeral, db: Sq
   if (!spec) return null;
   const models = await modelsFor(config, ephemeral, db);
   const model = resolveModel(models, spec);
-  if (!(await models.getAuth(model))) throw new Error(`Not signed in to ${model.provider}. Sign in under Settings in the dashboard.`);
+  if (!(await models.getAuth(model))) throw new Refusal(`Not signed in to ${model.provider}. Sign in under Settings in the dashboard.`);
   return { spec, judge: createJudge(models, model) };
 }
 
@@ -111,7 +112,7 @@ export async function buildControls(
       await passNow(db);
     },
     saveModelKey: async (db, provider, key) => {
-      if (!choices.some((c) => c.provider === provider && c.how === 'key')) throw new Error('That provider does not take an API key.');
+      if (!choices.some((c) => c.provider === provider && c.how === 'key')) throw new Refusal('That provider does not take an API key.');
       await saveApiKey(await modelSignIns(live.ephemeral, db), provider, key);
       await passNow(db);
     },
@@ -121,14 +122,14 @@ export async function buildControls(
     },
     undo: async (db, actionId) => {
       const action = await getAction(db, actionId);
-      if (!action) throw new Error(`There is no change #${actionId}.`);
+      if (!action) throw new Refusal(`There is no change #${actionId}.`);
       const outcome = await undo({ db, mailbox: (await gmailFor(config, live.ephemeral, db, action.accountId)).mailbox }, actionId);
       if (outcome.status === 'done') return null;
       if (outcome.status === 'skipped') return 'Already put back by hand';
-      throw new Error(outcome.reason);
+      throw new Refusal(outcome.reason);
     },
     backfill: async (days) => {
-      if (!live.kick) throw new Error('Only the dashboard is running here, so nothing can pull in mail.');
+      if (!live.kick) throw new Refusal('Only the dashboard is running here, so nothing can pull in mail.');
       for (const user of await listUsers(store.central))
         for (const account of await listAccounts(await store.user(user.id))) await askForBackfill(live.ephemeral, account.id, days);
       live.kick();
@@ -142,28 +143,28 @@ export async function buildControls(
     },
     startEval: async (db, request) => {
       const tier = await openModelTier(config, live.ephemeral, db);
-      if (!tier) throw new Error('Choose a model first.');
+      if (!tier) throw new Refusal('Choose a model first.');
       const run = await startEval({ db, model: tier.spec }, request);
       live.kick?.(await personOf(db));
       return run;
     },
     ruleFilter: async (db, ruleId, on) => {
       const rule = await getRuleFilter(db, ruleId);
-      if (!rule) throw new Error('That rule no longer exists.');
+      if (!rule) throw new Refusal('That rule no longer exists.');
       const deps = { db, mailbox: (await gmailFor(config, live.ephemeral, db, rule.accountId)).mailbox };
       if (on) await writeRuleFilter(deps, ruleId);
       else await removeRuleFilter(deps, ruleId);
     },
     ruleInbox: async (db, ruleId) => {
       const rule = await getRuleFilter(db, ruleId);
-      if (!rule) throw new Error('That rule no longer exists.');
+      if (!rule) throw new Refusal('That rule no longer exists.');
       const { api } = await gmailFor(config, live.ephemeral, db, rule.accountId);
       const { matches, capped } = await ruleInbox(db, api, rule.accountId, ruleId);
       return { matches: matches.map((m) => ({ accountId: rule.accountId, ...m })), capped, costEach: await costEach(db) };
     },
     applyRule: async (db, ruleId, messageIds) => {
       const rule = await getRuleFilter(db, ruleId);
-      if (!rule) throw new Error('That rule no longer exists.');
+      if (!rule) throw new Refusal('That rule no longer exists.');
       const { api } = await gmailFor(config, live.ephemeral, db, rule.accountId);
       const applied = await applyRule(db, api, rule.accountId, ruleId, messageIds);
       await passNow(db);

@@ -5,6 +5,7 @@ import { rules } from '../../../../../store/query.ts';
 import { RuleFilter } from '../../../../types.ts';
 import { ownerOf, write } from '../../../route.ts';
 import { ruleId } from '../../../shared/rules.ts';
+import { Refusal } from '../../../../../refusal.ts';
 
 export default write({
   path: '/api/rules/filter',
@@ -12,9 +13,9 @@ export default write({
   reply: z.object({ filterId: z.string().nullable(), filter: RuleFilter.nullable() }),
   touches: ownerOf(rules),
   run: async ({ db, controls }, { id, on }) => {
-    if (!controls) throw new Error('This dashboard cannot change Gmail filters.');
+    if (!controls) throw new Refusal('This dashboard cannot change Gmail filters.');
     // Taking a filter out is always allowed: it only reduces what runs unattended.
-    if (on && !(await preferences(db)).active) throw new Error('Sift is off, so it writes nothing to Gmail. Turn it on first, in Settings.');
+    if (on && !(await preferences(db)).active) throw new Refusal('Sift is off, so it writes nothing to Gmail. Turn it on first, in Settings.');
     await controls.ruleFilter(db, id, on);
     return { filterId: (await getRuleFilter(db, id))?.filterId ?? null, filter: (await ruleFilterStatus(db)).get(id) ?? null };
   },

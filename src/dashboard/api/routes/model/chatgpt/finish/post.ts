@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { done, self, text, write } from '../../../../route.ts';
+import { Refusal } from '../../../../../../refusal.ts';
 
 export default write({
   path: '/api/model/chatgpt/finish',
@@ -7,7 +8,7 @@ export default write({
   reply: done,
   touches: self,
   run: async ({ db, controls }, { address }) => {
-    if (!controls) throw new Error('This dashboard cannot sign in to a model.');
+    if (!controls) throw new Refusal('This dashboard cannot sign in to a model.');
     await controls.finishChatGPT(db, address.trim());
     return { ok: true as const };
   },

@@ -10,6 +10,7 @@ import type { Sql } from '../store/sql.ts';
 import { type RuleMatch, priorRule, rulesStage } from '../triage/stages/rules.ts';
 import type { Decision, MessageFacts } from '../triage/types.ts';
 import { MAX_BACKFILL } from './backfill.ts';
+import { Refusal } from '../refusal.ts';
 
 /** What one press looks at in the inbox: the same bound as pulling in older mail, on Gmail calls and on what it can send to a model. */
 const MOST = MAX_BACKFILL;
@@ -46,7 +47,7 @@ export function inboxQuery(match: RuleMatch): string {
 
 async function ruleOf(db: Sql, accountId: string, ruleId: string) {
   const rules = await listRules(db, accountId);
-  if (!rules.some((r) => r.id === ruleId)) throw new Error('That rule no longer exists.');
+  if (!rules.some((r) => r.id === ruleId)) throw new Refusal('That rule no longer exists.');
   return { rules, labels: await listLabels(db, accountId) };
 }
 

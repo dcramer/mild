@@ -25,6 +25,7 @@ import { PROMPT_TEMPLATE } from '../triage/prompt.ts';
 import { type Scorecard, score } from '../triage/score.ts';
 import { type Evidence, type Judge, type JudgeFailure, describeFailure } from '../triage/stages/model.ts';
 import type { MessageFacts } from '../triage/types.ts';
+import { Refusal } from '../refusal.ts';
 
 /** Every example judged is a model call the user pays for, so one run is bounded. */
 export const MAX_EVAL_EXAMPLES = 200;
@@ -84,7 +85,7 @@ async function storedEvidence(db: Sql, facts: MessageFacts, body: string | null)
 export async function startEval(deps: Pick<EvalDeps, 'db' | 'model' | 'now'>, request: EvalRequest): Promise<number> {
   const { db } = deps;
   const now = deps.now ?? Date.now;
-  if ((await goingEvals(db)).length > 0) throw new Error('A test run is already going. Wait for it to finish.');
+  if ((await goingEvals(db)).length > 0) throw new Refusal('A test run is already going. Wait for it to finish.');
   const limit = Math.min(Math.max(1, Math.trunc(request.limit ?? DEFAULT_EVAL_EXAMPLES)), MAX_EVAL_EXAMPLES);
   const examples = await db
     .select({ messageId: exampleRows.messageId })
@@ -92,7 +93,7 @@ export async function startEval(deps: Pick<EvalDeps, 'db' | 'model' | 'now'>, re
     .where(and(eq(exampleRows.accountId, request.accountId), eq(exampleRows.status, 'captured'), isNotNull(exampleRows.labelId)))
     .orderBy(desc(exampleRows.markedAt), exampleRows.messageId)
     .limit(limit);
-  if (examples.length === 0) throw new Error('There are no stored examples to test against yet. Answer some suggestions first.');
+  if (examples.length === 0) throw new Refusal('There are no stored examples to test against yet. Answer some suggestions first.');
 
   const shown = (await listLabels(db, request.accountId)).map((l) => ({ id: l.id, name: l.name, description: l.description }));
   const [{ id }] = (await db

@@ -4,6 +4,7 @@ import type { Sql } from './sql.ts';
 import { conditionsHash, openJson, ruleName, sealJson } from './content.ts';
 import { type Rule, type RuleMatch, asksFacts } from '../triage/stages/rules.ts';
 import { listLabels } from './labels.ts';
+import { Refusal } from '../refusal.ts';
 
 /** `user`: the user wrote it. `correction`: it came from the user correcting sift. `learned`: sift made it when it blocked the sender. */
 type RuleSource = (typeof RULE_SOURCES)[number];
@@ -57,17 +58,17 @@ export type RuleSays = Pick<Rule, 'labelId' | 'whenLabel' | 'disposition' | 'sub
 /** Throws, with a sentence for the user, unless `rule` says something sift can act on with the account's labels. */
 async function check(db: Sql, accountId: string, rule: RuleSays): Promise<void> {
   if (rule.labelId === undefined && rule.whenLabel === undefined && rule.disposition === undefined)
-    throw new Error('A rule needs a label, an action, or both.');
-  if (rule.labelId !== undefined && rule.whenLabel !== undefined) throw new Error('A rule either says what mail is or waits for a label, not both.');
-  if (rule.when?.trim() && rule.labelId === undefined) throw new Error('A condition in your own words needs a label for the mail it describes.');
+    throw new Refusal('A rule needs a label, an action, or both.');
+  if (rule.labelId !== undefined && rule.whenLabel !== undefined) throw new Refusal('A rule either says what mail is or waits for a label, not both.');
+  if (rule.when?.trim() && rule.labelId === undefined) throw new Refusal('A condition in your own words needs a label for the mail it describes.');
   const named = rule.labelId ?? rule.whenLabel;
-  if (named !== undefined && !(await listLabels(db, accountId)).some((l) => l.id === named)) throw new Error(`There is no label "${named}".`);
+  if (named !== undefined && !(await listLabels(db, accountId)).some((l) => l.id === named)) throw new Refusal(`There is no label "${named}".`);
 }
 
 /** Append a rule after the account's existing ones. Returns its id. Throws if it has no condition, says nothing, or names no label of the account's. */
 export async function addRule(db: Sql, accountId: string, rule: Omit<Rule, 'id' | 'learned'>, source: RuleSource, now: number = Date.now()): Promise<string> {
   const { facts: _facts, ...named } = rule.match;
-  if (Object.values(named).every((v) => v === undefined || v === '') && !asksFacts(rule.match)) throw new Error('A rule needs at least one condition.');
+  if (Object.values(named).every((v) => v === undefined || v === '') && !asksFacts(rule.match)) throw new Refusal('A rule needs at least one condition.');
   await check(db, accountId, rule);
   const id = `r-${randomBytes(4).toString('hex')}`;
   const [{ next }] = (await db

@@ -1,3 +1,4 @@
+import { Refusal } from '../refusal.ts';
 /**
  * What sift keeps only briefly and shares between every request and piece of work: sign-ins in progress, which pass
  * holds a mailbox, Gmail quota, how the last pass went. Every key expires. Losing any of it costs a retry,
@@ -28,7 +29,7 @@ export async function holding<T>(ephemeral: Ephemeral, key: string, work: () => 
   const giveUp = Date.now() + HOLD_MS;
   let token = await ephemeral.claim(key, HOLD_MS);
   while (token === null) {
-    if (Date.now() > giveUp) throw new Error('Something else held this too long. Try again.');
+    if (Date.now() > giveUp) throw new Refusal('Something else held this too long. Try again.');
     await new Promise((resolve) => setTimeout(resolve, 100));
     token = await ephemeral.claim(key, HOLD_MS);
   }

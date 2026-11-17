@@ -3,6 +3,7 @@ import { DEFAULT_EVAL_EXAMPLES, MAX_EVAL_EXAMPLES } from '../../../../../learn/e
 import { listAccounts } from '../../../../../store/accounts.ts';
 import { EvalRequest } from '../../../../types.ts';
 import { named, write } from '../../../route.ts';
+import { Refusal } from '../../../../../refusal.ts';
 
 export default write({
   path: '/api/evals/run',
@@ -11,7 +12,7 @@ export default write({
   touches: named,
   run: async ({ db, controls }, { accountId, fewShot, limit }) => {
     if (!(await listAccounts(db)).some((a) => a.id === accountId)) return null;
-    if (!controls) throw new Error('This dashboard cannot run the model.');
+    if (!controls) throw new Refusal('This dashboard cannot run the model.');
     return { id: await controls.startEval(db, { accountId, fewShot: fewShot ?? true, limit: limit ?? DEFAULT_EVAL_EXAMPLES }) };
   },
 });

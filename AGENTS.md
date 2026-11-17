@@ -101,6 +101,7 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | The same thing looks the same on every page: a sender in a list is `SenderCell` (name, then address under it) | `tests/design-system.test.ts` (only `components/sender.tsx` and the message panel's header use `SenderLink`) |
 | Every part is on the specimen page | `tests/design-system.test.ts` |
 | Every Gmail filter passes `validateFilter` | `tests/filters.test.ts` |
+| The page is shown an error's own words only when it is a `Refusal` (`src/refusal.ts`), written for the person reading it; any other error, which may name a key, a database or another person, goes to the log | `failed` in `src/dashboard/server.ts`; `tests/dashboard.test.ts` |
 | Before visual work, load the `design` skill. Consistency with the system is not the same as a page that reads well. | Nothing: judgment |
 | Redesign one page at a time, offering a few directions built from the real parts in `web/src/system` (not redrawn in a mock), and get David's pick before the next page. Don't carry over a part he has not approved. | Nothing: judgment |
 | Every line on a screen says something the reader can use; a page needs intent, not a heading over every field it has | Nothing: judgment (see "Don't state the obvious") |

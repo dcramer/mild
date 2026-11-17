@@ -6,6 +6,7 @@ import { openrouterProvider } from '@earendil-works/pi-ai/providers/openrouter';
 import { vercelAIGatewayProvider } from '@earendil-works/pi-ai/providers/vercel-ai-gateway';
 import { registerLazyOAuthFlows } from '@earendil-works/pi-ai/lazy-oauth';
 import { type SignIns, credentialStore } from './credentials.ts';
+import { Refusal } from '../refusal.ts';
 
 // Without this pi-ai imports its OAuth flows through a variable specifier, which Vercel's file
 // tracing cannot follow, so the function is deployed without them and every refresh fails.
@@ -143,9 +144,9 @@ export function openModels(signIns: SignIns, chatgpt: ChatGPTSignIn): Models {
 /** Look up a `provider/model-id` spec. Throws a message the user can act on. */
 export function resolveModel(models: Models, spec: string): Model<Api> {
   const slash = spec.indexOf('/');
-  if (slash <= 0 || slash === spec.length - 1) throw new Error(`The model must look like provider/model-id, not "${spec}".`);
+  if (slash <= 0 || slash === spec.length - 1) throw new Refusal(`The model must look like provider/model-id, not "${spec}".`);
   const model = models.getModel(spec.slice(0, slash), spec.slice(slash + 1));
-  if (!model) throw new Error(`Unknown model "${spec}". Choose one in the dashboard, under Settings.`);
+  if (!model) throw new Refusal(`Unknown model "${spec}". Choose one in the dashboard, under Settings.`);
   return model;
 }
 
@@ -176,11 +177,11 @@ export async function startChatGPTDeviceCode(now: () => number = Date.now): Prom
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ client_id: DEVICE.clientId }),
   });
-  if (!response.ok) throw new Error(`OpenAI would not give a sign-in code (${response.status}).`);
+  if (!response.ok) throw new Refusal(`OpenAI would not give a sign-in code (${response.status}).`);
   const body = (await response.json()) as Record<string, unknown>;
   const interval = Number(body['interval']);
   if (typeof body['device_auth_id'] !== 'string' || typeof body['user_code'] !== 'string' || !Number.isFinite(interval) || interval < 0)
-    throw new Error('OpenAI answered with a sign-in code Sift cannot use.');
+    throw new Refusal('OpenAI answered with a sign-in code Sift cannot use.');
   return { code: body['user_code'], url: DEVICE.verify, expiresAt: now() + DEVICE_CODE_MS, intervalMs: interval * 1000, deviceAuthId: body['device_auth_id'] };
 }
 
@@ -189,7 +190,7 @@ export async function startChatGPTDeviceCode(now: () => number = Date.now): Prom
  * login would. `slow down` asks for a longer wait before the next question. Throws with what went wrong.
  */
 export async function pollChatGPTDeviceCode(signIns: SignIns, device: DeviceCode, now: () => number = Date.now): Promise<'waiting' | 'slow down' | 'done'> {
-  if (now() > device.expiresAt) throw new Error('That code expired. Start again.');
+  if (now() > device.expiresAt) throw new Refusal('That code expired. Start again.');
   const response = await fetch(DEVICE.poll, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -201,7 +202,7 @@ export async function pollChatGPTDeviceCode(signIns: SignIns, device: DeviceCode
     const code = typeof error === 'object' ? error.code : error;
     if (code === 'deviceauth_authorization_pending') return 'waiting';
     if (code === 'slow_down') return 'slow down';
-    throw new Error(`OpenAI refused the sign-in (${response.status}). Start again.`);
+    throw new Refusal(`OpenAI refused the sign-in (${response.status}). Start again.`);
   }
   const granted = (await response.json()) as Record<string, unknown>;
   if (typeof granted['authorization_code'] !== 'string' || typeof granted['code_verifier'] !== 'string')

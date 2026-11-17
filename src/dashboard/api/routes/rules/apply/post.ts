@@ -3,6 +3,7 @@ import { eq, rules } from '../../../../../store/query.ts';
 import { RuleApplied } from '../../../../types.ts';
 import { ownerOf, text, write } from '../../../route.ts';
 import { ruleId } from '../../../shared/rules.ts';
+import { Refusal } from '../../../../../refusal.ts';
 
 export default write({
   path: '/api/rules/apply',
@@ -12,7 +13,7 @@ export default write({
   run: async ({ db, controls }, { id, messageIds }) => {
     const [rule] = await db.select({ id: rules.id }).from(rules).where(eq(rules.id, id));
     if (!rule) return null;
-    if (!controls) throw new Error('This dashboard cannot change Gmail.');
+    if (!controls) throw new Refusal('This dashboard cannot change Gmail.');
     return await controls.applyRule(db, id, messageIds);
   },
 });

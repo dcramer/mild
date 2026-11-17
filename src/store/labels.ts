@@ -1,6 +1,7 @@
 import { and, asc, eq, labels } from './query.ts';
 import type { Sql } from './sql.ts';
 import type { Disposition, Label } from '../triage/types.ts';
+import { Refusal } from '../refusal.ts';
 
 /**
  * The starting set for a new mailbox, with what most people want done with each. They are only carried
@@ -169,11 +170,11 @@ export async function addLabel(
 ): Promise<Label> {
   const name = label.name.trim();
   const id = slug(name);
-  if (id === '' || RESERVED.has(id)) throw new Error(`"${name}" cannot be used as a label name.`);
+  if (id === '' || RESERVED.has(id)) throw new Refusal(`"${name}" cannot be used as a label name.`);
   const existing = await listLabels(db, accountId);
-  if (existing.length >= MAX_LABELS) throw new Error(`Sift keeps at most ${MAX_LABELS} labels. Change one that is no longer used instead.`);
+  if (existing.length >= MAX_LABELS) throw new Refusal(`Sift keeps at most ${MAX_LABELS} labels. Change one that is no longer used instead.`);
   if (existing.some((l) => l.id === id || l.id.replace(/_/g, '-') === id || l.gmailLabel === `sift/${id}` || l.name.toLowerCase() === name.toLowerCase()))
-    throw new Error(`There is already a label "${name}".`);
+    throw new Refusal(`There is already a label "${name}".`);
   const extras = normalise(label.disposition, label.block ?? false, label.markRead ?? false);
   const created: Label = {
     id,

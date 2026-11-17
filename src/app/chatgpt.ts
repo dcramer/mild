@@ -8,6 +8,7 @@ import {
   startChatGPTRedirect,
 } from '../model/models.ts';
 import type { SignIns } from '../model/credentials.ts';
+import { Refusal } from '../refusal.ts';
 
 /**
  * A ChatGPT sign-in waiting on a person, or how their last one failed. Kept briefly, where every request
@@ -43,7 +44,7 @@ export async function startChatGPT(ephemeral: Ephemeral, person: number, how: 'd
 
 export async function finishChatGPT(ephemeral: Ephemeral, person: number, signIns: SignIns, address: string): Promise<void> {
   const waiting = await ephemeral.get<Waiting>(key(person));
-  if (!waiting || !('redirect' in waiting)) throw new Error('No ChatGPT sign-in is waiting. Start again.');
+  if (!waiting || !('redirect' in waiting)) throw new Refusal('No ChatGPT sign-in is waiting. Start again.');
   await finishChatGPTRedirect(signIns, waiting.redirect, address);
   await ephemeral.take(key(person));
 }

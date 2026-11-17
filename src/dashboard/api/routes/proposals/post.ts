@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { resolveProposal } from '../../../../store/proposals.ts';
 import { proposals } from '../../../../store/query.ts';
 import { done, id, ownerOf, write } from '../../route.ts';
+import { Refusal } from '../../../../refusal.ts';
 
 export default write({
   path: '/api/proposals',
@@ -9,7 +10,7 @@ export default write({
   reply: done,
   touches: ownerOf(proposals),
   run: async ({ db, now }, { id, accept }) => {
-    if (!(await resolveProposal(db, id, accept, now()))) throw new Error('That proposal is no longer open.');
+    if (!(await resolveProposal(db, id, accept, now()))) throw new Refusal('That proposal is no longer open.');
     return { ok: true as const };
   },
 });

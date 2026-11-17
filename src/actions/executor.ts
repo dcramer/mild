@@ -13,6 +13,7 @@ import {
   setActionStatus,
 } from '../store/actions.ts';
 import type { Mailbox } from './mailbox.ts';
+import { Refusal } from '../refusal.ts';
 
 export interface MessageAction {
   /** `label` leaves the message where it is; `archive` and `spam` take it out of the inbox. */
@@ -168,15 +169,15 @@ async function spamRefusal(deps: ActionDeps, accountId: string, messageId: strin
  */
 export async function undo(deps: ActionDeps, actionId: number): Promise<Outcome> {
   const action: ActionRecord | null = await getAction(deps.db, actionId);
-  if (!action) throw new Error(`There is no change #${actionId}.`);
-  if (action.type === 'undo') throw new Error(`Change #${actionId} is itself an undo.`);
-  if (action.type === 'filter' || action.type === 'unfilter') throw new Error('A Gmail filter is added or taken out from its rule, not undone.');
-  if (action.type === 'unsubscribe') throw new Error('An unsubscribe cannot be undone from here. Subscribe again with the sender.');
-  if (action.status !== 'done') throw new Error(`Change #${actionId} is ${action.status}; only completed changes can be undone.`);
+  if (!action) throw new Refusal(`There is no change #${actionId}.`);
+  if (action.type === 'undo') throw new Refusal(`Change #${actionId} is itself an undo.`);
+  if (action.type === 'filter' || action.type === 'unfilter') throw new Refusal('A Gmail filter is added or taken out from its rule, not undone.');
+  if (action.type === 'unsubscribe') throw new Refusal('An unsubscribe cannot be undone from here. Subscribe again with the sender.');
+  if (action.status !== 'done') throw new Refusal(`Change #${actionId} is ${action.status}; only completed changes can be undone.`);
 
   const current = await deps.mailbox.getLabelIds(action.messageId);
-  if (current === null) throw new Error('The message no longer exists.');
-  if (current.includes('TRASH')) throw new Error('The message is in the trash; restore it in Gmail first.');
+  if (current === null) throw new Refusal('The message no longer exists.');
+  if (current.includes('TRASH')) throw new Refusal('The message is in the trash; restore it in Gmail first.');
 
   const outcome = await applyChange(deps, { accountId: action.accountId, messageId: action.messageId, type: 'undo', undoOf: action.id }, current, {
     add: action.payload.remove,

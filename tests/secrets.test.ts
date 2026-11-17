@@ -9,6 +9,7 @@ import { credentialStore } from '../src/model/credentials.ts';
 import { type Keyring, loadKeyring, openSecret, openToRekey, readSecret, rekeySecrets, writeSecret } from '../src/secrets.ts';
 import { credentials, rekeyCredentials } from '../src/store/credentials.ts';
 import { openPart, rekeyContent, sealPart } from '../src/store/content.ts';
+import { rekeyStore } from '../src/store/rekey.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { suggestionBodies } from '../src/store/query.ts';
 import type { Sql } from '../src/store/sql.ts';
@@ -256,6 +257,18 @@ describe('mail', () => {
     const row = await raw(db).get<{ facts: { listId: string } }>("SELECT facts FROM messages WHERE id = 'm3'");
     expect(row!.facts.listId).not.toContain('example.com');
     expect(await storedFacts(db, 'alpha@example.org', 'm3')).toMatchObject({ listId: 'news.example.com' });
+  });
+
+  it('brings a sender recorded before senders were encrypted under the key, for every person in the store', async () => {
+    const { as } = await alpha(A);
+    // As migration 0013 left it: the address as it was, and as its own hash.
+    await raw(await as(A)).run("UPDATE messages SET from_address = 'news@example.com', sender_hash = 'news@example.com'");
+    await expect(messageDetail(await as(A), await everything(await as(A)), 'alpha@example.org', 'm1')).rejects.toThrow('stored unencrypted');
+    expect(await rekeyStore(await freshStore(A), true)).toEqual({ credentials: [], messages: 2 });
+    const db = await as(A);
+    expect(JSON.stringify(await raw(db).all('SELECT from_address, sender_hash FROM messages'))).not.toContain('example.com');
+    expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm1')).toMatchObject({ fromAddress: 'news@example.com' });
+    expect(await senderFacts(db, 'alpha@example.org', 'news@example.com')).toMatchObject({ messages: 2 });
   });
 
   it('remembers who the owner has written to by hash, and hashes again under a new key', async () => {

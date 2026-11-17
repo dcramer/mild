@@ -5,6 +5,7 @@ import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 import { FRAMES, READS, WRITES } from './api/index.ts';
 import type { Context, Write } from './api/route.ts';
 import { frameNote } from './mail-html.ts';
+import { Refusal } from '../refusal.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { type Scope, narrow, scopeFor, sees } from './scope.ts';
 
@@ -107,6 +108,8 @@ export interface DashboardOptions {
   signInAddresses?: readonly string[];
   /** What the dashboard can ask the rest of sift to do. Without it the page can look but not manage. */
   controls?: Controls;
+  /** Where an error goes that is Sift's own, not a `Refusal`: the page is told only that something failed. */
+  log?: (line: string) => void;
   now?: () => number;
 }
 
@@ -182,6 +185,15 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
   if (signIn && secret === '') throw new Error('signIn needs a sessionSecret');
   const { ephemeral } = options;
   if (signIn && !ephemeral) throw new Error('signIn needs an ephemeral store');
+  const log = options.log ?? (() => {});
+  const report = (request: Request, error: unknown) =>
+    log(`${request.method} ${new URL(request.url).pathname}: ${error instanceof Error ? error.message : String(error)}`);
+  /** What the page is told of an error: a refusal's own words, anything else only that it failed. */
+  const failed = (request: Request, error: unknown): { status: number; error: string } => {
+    if (error instanceof Refusal) return { status: 409, error: error.message };
+    report(request, error);
+    return { status: 500, error: 'Sift could not do that. Why is in its log.' };
+  };
   /** A sign-in in flight, by the state Google echoes back: the PKCE verifier and where to return to. */
   const pendingKey = (state: string) => `signin:google:${state}`;
 
@@ -277,7 +289,8 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
         if (!who) return fail('Google did not complete the sign-in.');
         return redirect('/', sessionCookie(signSession({ email, person: who.id }, secret, now()), SESSION_DAYS * 86_400), signInCookie('', 0));
       } catch (error) {
-        return fail(error instanceof Error ? error.message : String(error));
+        report(request, error);
+        return fail('Google did not complete the sign-in.');
       }
     }
     if (signIn && session === null && url.pathname.startsWith('/api/')) return json(401, { error: 'Sign in to use the dashboard.' });
@@ -314,7 +327,8 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
         if (reply.status === 200 && handler.endsSession?.(reply.body)) return json(200, reply.body, { 'set-cookie': sessionCookie('', 0) });
         return json(reply.status, reply.body);
       } catch (error) {
-        return json(409, { error: error instanceof Error ? error.message : String(error) });
+        const { status, ...body } = failed(request, error);
+        return json(status, body);
       }
     }
     if (method !== 'GET') return new Response(null, { status: 405, headers: { allow: 'GET, POST' } });
@@ -328,10 +342,10 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
         ? { status: 404, html: frameNote('There is no such message here.') }
         : !params.success
           ? { status: 400, html: frameNote(refusedBy(params.error)) }
-          : await shown.run(ctx, scope, params.data).catch((error: unknown) => ({
-              status: 500,
-              html: frameNote(error instanceof Error ? error.message : String(error)),
-            }));
+          : await shown.run(ctx, scope, params.data).catch((error: unknown) => {
+              const { status, error: note } = failed(request, error);
+              return { status, html: frameNote(note) };
+            });
       return new Response(reply.html, { status: reply.status, headers: FRAME_HEADERS });
     }
     if (url.pathname.startsWith('/api/')) {
@@ -348,7 +362,8 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
         const sent = reply.status === 200 ? replied(route.reply, reply.body) : reply;
         return json(sent.status, sent.body);
       } catch (error) {
-        return json(500, { error: error instanceof Error ? error.message : String(error) });
+        const { status, ...body } = failed(request, error);
+        return json(status, body);
       }
     }
     return new Response('Not found', { status: 404, headers: { ...HEADERS, 'content-type': 'text/plain' } });
@@ -356,6 +371,10 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
 
   return {
     answers,
-    handle: (request) => handle(request).catch((error: unknown) => json(500, { error: error instanceof Error ? error.message : String(error) })),
+    handle: (request) =>
+      handle(request).catch((error: unknown) => {
+        const { status, ...body } = failed(request, error);
+        return json(status, body);
+      }),
   };
 }

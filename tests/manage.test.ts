@@ -472,13 +472,14 @@ describe('managing sift from the dashboard', () => {
 describe('signing in with Google', () => {
   const SECRET = 'session-secret';
   let completed: string[];
+  let logged: string[];
   let hasClient: boolean;
   const signIn: SignIn = {
     hasClient: () => hasClient,
     url: (redirectUri, state, challenge) => `https://accounts.example/auth?redirect=${encodeURIComponent(redirectUri)}&state=${state}&challenge=${challenge}`,
     complete: async (redirectUri, code, _verifier, addTo) => {
       completed.push(`${redirectUri} ${code} addTo=${addTo}`);
-      if (code === 'refused') throw new Error('Google refused the sign-in.');
+      if (code === 'refused') throw new Error('invalid_grant');
       if (code === 'second') {
         await connectAccount(store, 'work@example.com', '1', 0, 1);
         return 'work@example.com';
@@ -495,6 +496,7 @@ describe('signing in with Google', () => {
       sessionSecret: SECRET,
       signInAddresses: ['http://localhost:1', 'https://box.example.ts.net'],
       allowedHosts: ['box.example.ts.net', 'homebox'],
+      log: (line) => logged.push(line),
       now: () => 1000,
     });
   }
@@ -509,6 +511,7 @@ describe('signing in with Google', () => {
 
   beforeEach(() => {
     completed = [];
+    logged = [];
     hasClient = true;
   });
 
@@ -568,11 +571,12 @@ describe('signing in with Google', () => {
     expect((await call('GET', '/api/session')).body).toMatchObject({ canSignIn: false, reason: 'no-client' });
   });
 
-  it('says why a sign-in failed, and adds a second account only for someone signed in', async () => {
+  it('says a sign-in failed and logs why, and adds a second account only for someone signed in', async () => {
     const { call } = await startWithSignIn();
     const login = await call('GET', '/auth/login?add=1');
     const refused = await callback(call, login, 'refused');
-    expect(decodeURIComponent(String(refused.headers['location']))).toBe('/?signin=Google refused the sign-in.');
+    expect(decodeURIComponent(String(refused.headers['location']))).toBe('/?signin=Google did not complete the sign-in.');
+    expect(logged).toEqual(['GET /auth/callback: invalid_grant']);
     expect(String(refused.headers['set-cookie'])).not.toContain('sift_session');
     expect(completed.at(-1)).toContain('addTo=null');
 

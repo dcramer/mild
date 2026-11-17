@@ -5,6 +5,7 @@ import type { Rule, RuleMatch } from '../triage/stages/rules.ts';
 import type { DecidedDisposition, Label } from '../triage/types.ts';
 import { listLabels } from './labels.ts';
 import { hasRuleFor, listRules, removeRule, setRule } from './rules.ts';
+import { Refusal } from '../refusal.ts';
 
 type ProposalKind = (typeof PROPOSAL_KINDS)[number];
 
@@ -174,7 +175,7 @@ export async function resolveProposal(db: Sql, id: number, accept: boolean, now:
   if (!row) return false;
   const p = opened(db, row);
   if (accept) {
-    if (p.kind === 'rule') throw new Error('A proposed rule is made from the rule dialog.');
+    if (p.kind === 'rule') throw new Refusal('A proposed rule is made from the rule dialog.');
     const existing = (await listRules(db, p.accountId)).find((r) => r.id === p.ruleId)!;
     const label = (await listLabels(db, p.accountId)).find((l) => l.id === p.labelId)!;
     // Takes this proposal with it.

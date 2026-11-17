@@ -625,6 +625,16 @@ describe('dashboard server', () => {
     ]);
   });
 
+  it("tells the page only that something failed when it is Sift's own error, and logs why", async () => {
+    const { store, db } = await seededStore();
+    await raw(db).run("UPDATE messages SET subject = 'sift-secret:v1:deadbeef:x:y' WHERE id = 'c'");
+    const logged: string[] = [];
+    const base = await start({ log: (line) => logged.push(line) }, store);
+    const reply = await fetch(`${base}/api/message?account=${encodeURIComponent(ACCOUNT)}&id=c`);
+    expect([reply.status, await reply.json()]).toEqual([500, { error: 'Sift could not do that. Why is in its log.' }]);
+    expect(logged).toEqual([expect.stringMatching(/^GET \/api\/message: .*SIFT_KEY/)]);
+  });
+
   it('rejects bad input, other methods and unknown paths', async () => {
     const base = await start();
     expect((await fetch(`${base}/api/summary?days=5000`)).status).toBe(400);
