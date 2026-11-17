@@ -11,6 +11,8 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { facts, withSampleLabels } from './helpers.ts';
 import { conditionsHash } from '../src/store/content.ts';
+import { startEval } from '../src/learn/evals.ts';
+import * as api from '../src/dashboard/api/index.ts';
 
 // Two people. Alpha set sift up and has two mailboxes; Bravo arrived later with one.
 const ALPHA = 'alpha@example.org';
@@ -26,7 +28,9 @@ let calls: string[];
 /** Mailboxes Google cannot be reached to revoke. */
 let unreachable: string[];
 const cookies: Record<string, string> = {};
-const ids: Record<string, { rule: string; action: number; proposal: number }> = {};
+const ids: Record<string, { rule: string; action: number; proposal: number; run: number }> = {};
+/** Every `/api/` path some test here has called as a signed-in person. */
+const called = new Set<string>();
 
 async function seed(account: string): Promise<void> {
   const db = await dbOf(account);
@@ -63,11 +67,16 @@ async function seed(account: string): Promise<void> {
     `Body ${mark}`,
     `<p>Html ${mark}</p>`,
   );
-  ids[account] = { rule, action, proposal };
+  const run = await startEval({ db, model: `model/${mark}` }, { accountId: account, fewShot: false });
+  // Finished, so the next mailbox in the same database can start one.
+  await raw(db).run(`UPDATE eval_runs SET status = 'done', finished_at = 1000 WHERE id = ?`, run);
+  ids[account] = { rule, action, proposal, run };
 }
 
-const call = (method: 'GET' | 'POST', path: string, who: string | null, body?: unknown) =>
-  dashboard.call(method, path, body, who ? { cookie: cookies[who]! } : {});
+const call = (method: 'GET' | 'POST', path: string, who: string | null, body?: unknown) => {
+  if (who) called.add(new URL(path, 'http://sift').pathname);
+  return dashboard.call(method, path, body, who ? { cookie: cookies[who]! } : {});
+};
 
 const signIn: SignIn = {
   hasClient: () => true,
@@ -145,6 +154,8 @@ const READS = (account: string, mark: string) => [
   '/api/manage',
   '/api/examples',
   '/api/evals',
+  `/api/eval?id=${ids[account]!.run}`,
+  '/api/models',
   '/api/labels/proposal',
   `/api/message?account=${encodeURIComponent(account)}&id=m-${mark}`,
   `/api/suggestion?account=${encodeURIComponent(account)}&sender=sender@${mark}.example.com`,
@@ -468,5 +479,13 @@ describe('removing a mailbox and deleting an account', () => {
     await connectAccount(store, ALPHA_WORK, '1', 9);
     expect((await userOf(store.central, ALPHA_WORK))!.id).not.toBe(alpha);
     expect((await call('GET', '/api/manage', ALPHA_WORK)).status).toBe(401);
+  });
+});
+
+// Runs last: it reads what every test above called.
+describe('every route', () => {
+  it('is called above as a signed-in person', () => {
+    const missing = [...api.READS, ...api.WRITES, ...api.FRAMES].map((route) => route.path).filter((path) => !called.has(path));
+    expect(missing, 'add these to the reads or writes above, called as someone whose data it is not').toEqual([]);
   });
 });
