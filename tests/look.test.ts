@@ -9,12 +9,14 @@ import { setRuleFilter } from '../src/store/filters.ts';
 import { setActive } from '../src/store/preferences.ts';
 import { examples } from '../src/store/query.ts';
 import { addRule } from '../src/store/rules.ts';
-import { type RunOptions, dueWork } from '../src/work/run.ts';
+import { goingInboxRuns, startInboxRuns } from '../src/store/inbox.ts';
+import { startEval } from '../src/learn/evals.ts';
+import { type RunOptions, type Work, dueWork } from '../src/work/run.ts';
 import { FILTER_CHECK_MINUTES } from '../src/work/filters.ts';
 import { passStatus, recordPassStatus } from '../src/work/status.ts';
 import type { Decision } from '../src/triage/types.ts';
 import { onePerson, raw } from './fixtures.ts';
-import { ACCOUNT, DAY, FakeMailbox, rawMessage, testModel, workDue } from './helpers.ts';
+import { ACCOUNT, DAY, FakeMailbox, rawMessage, storeExample, testModel, workDue } from './helpers.ts';
 
 const MINUTE = 60_000;
 
@@ -41,7 +43,7 @@ function gmail(): GmailApi {
       reached('listHistory'),
       { additions: arrived.filter((a) => a.at > Number(start)).map((a) => ({ id: a.raw.id, labelIds: a.raw.labelIds })), historyId: String(history) }
     ),
-    searchInbox: async () => ({ ids: [] }),
+    searchInbox: async () => ({ ids: arrived.map((a) => a.raw.id) }),
     inboxSize: async () => arrived.length,
     getMetadata: async (id) => arrived.find((a) => a.raw.id === id)?.raw ?? null,
     getLabelIds: async (id) => mailbox.labels.get(id) ?? null,
@@ -67,11 +69,21 @@ const options = (more: Partial<RunOptions> = {}): RunOptions => ({
   ...more,
 });
 
-/** Whether the timed tick, a minute on, begins a pass over the mailbox. */
-async function timedTickPasses(more: Partial<RunOptions> = {}): Promise<boolean> {
+/** Whether the timed tick, a minute on, begins a piece of this kind. */
+async function timedTickBegins(kind: Work['kind'], more: Partial<RunOptions> = {}): Promise<boolean> {
   clock += MINUTE;
-  return (await dueWork(store, options(more))).some((piece) => piece.kind === 'pass');
+  return (await dueWork(store, options(more))).some((piece) => piece.kind === kind);
 }
+
+const timedTickPasses = (more: Partial<RunOptions> = {}) => timedTickBegins('pass', more);
+
+/** The inbox runs the timed tick, a minute on, begins a slice of. */
+async function timedTickSlices(more: Partial<RunOptions> = {}): Promise<number[]> {
+  clock += MINUTE;
+  return (await dueWork(store, options(more))).flatMap((piece) => (piece.kind === 'inbox' ? [piece.run] : []));
+}
+
+const unsure = async () => testModel();
 
 const decision = (disposition: Decision['disposition']): Decision => ({ disposition, subscription: 'preserve', stage: 'rules', reason: 'a rule' });
 
@@ -127,7 +139,7 @@ describe('the timed tick', () => {
   });
 
   it('begins one for mail waiting to be decided only while there is a model to decide it', async () => {
-    expect(await timedTickPasses({ model: async () => testModel() })).toBe(true);
+    expect(await timedTickPasses({ model: unsure })).toBe(true);
     expect(await timedTickPasses({ model: async () => null })).toBe(false);
   });
 
@@ -203,6 +215,19 @@ describe('the timed tick', () => {
       expect(await timedTickPasses()).toBe(true);
     });
 
+    it('counts a look that failed as a look, and begins none until the next is due', async () => {
+      await setRuleFilter(db, await filtered(), ACCOUNT, { filterId: 'f1', state: 'active', written: null }, clock);
+      clock += FILTER_CHECK_MINUTES * MINUTE;
+      mailbox.failFilters = true;
+      const logged: string[] = [];
+      expect(await timedTickPasses()).toBe(true);
+      await workDue(store, options({ log: (line) => logged.push(line) }), Infinity);
+      expect(logged).toContain(`${ACCOUNT}: could not check Gmail filters: network down`);
+      expect(await timedTickPasses()).toBe(false);
+      clock += FILTER_CHECK_MINUTES * MINUTE;
+      expect(await timedTickPasses()).toBe(true);
+    });
+
     it('begins one for a filter change Gmail did not take, to ask again while Sift is on', async () => {
       await finishAction(db, await change(await filtered()), 'failed', null, 'network down', clock);
       clock += FILTER_CHECK_MINUTES * MINUTE;
@@ -210,6 +235,55 @@ describe('the timed tick', () => {
       await setActive(db, true);
       expect(await timedTickPasses()).toBe(true);
     });
+  });
+});
+
+describe('going through an inbox, applying a rule to it, and a test run', () => {
+  it('the timed tick begins an inbox run’s next slice only while there is a model, and the sign-in has not expired', async () => {
+    await startInboxRuns(db, [ACCOUNT], { acts: false, most: 10, now: clock });
+    expect(await timedTickBegins('inbox')).toBe(false);
+    expect(await timedTickBegins('inbox', { model: unsure })).toBe(true);
+    failing = true;
+    expect(await timedTickPasses()).toBe(false);
+    expect(await timedTickBegins('inbox', { model: unsure })).toBe(false);
+  });
+
+  it('the timed tick begins a test run’s next slice only while there is a model', async () => {
+    await storeExample(db, ACCOUNT, { id: 'ex', from: 'ada@example.org', label: 'personal' });
+    await startEval({ db, model: 'test/model' }, { accountId: ACCOUNT, fewShot: false });
+    expect(await timedTickBegins('eval')).toBe(false);
+    expect(await timedTickBegins('eval', { model: unsure })).toBe(true);
+  });
+
+  it('the timed tick begins a slice applying a rule without a model, beside going through the inbox once there is one, and neither while the sign-in has expired', async () => {
+    await startInboxRuns(db, [ACCOUNT], { acts: false, most: 10, now: clock });
+    const ruleId = await addRule(db, { match: { from: ['news@example.com'] }, disposition: 'archive' }, 'user', clock);
+    await startInboxRuns(db, [ACCOUNT], { acts: true, most: 10, now: clock, ruleId });
+    const applying = (await goingInboxRuns(db)).find((run) => run.ruleId === ruleId)!.id;
+    expect(await timedTickSlices()).toEqual([applying]);
+    expect(await timedTickSlices({ model: unsure })).toHaveLength(2);
+    failing = true;
+    expect(await timedTickPasses()).toBe(false);
+    expect(await timedTickSlices({ model: unsure })).toEqual([]);
+  });
+
+  it('a slice applying a rule needs no model, and the look then begins the pass that carries out what it decided', async () => {
+    const ruleId = await addRule(db, { match: { from: ['news@example.com'] }, disposition: 'archive' }, 'user', clock);
+    await startInboxRuns(db, [ACCOUNT], { acts: true, most: 10, now: clock, ruleId });
+    expect(await timedTickPasses()).toBe(false);
+    await workDue(store, options(), Infinity);
+    expect(await raw(db).all('SELECT message_id, carry_out, by_user FROM decisions')).toEqual([{ message_id: 'news', carry_out: true, by_user: true }]);
+    expect(await timedTickPasses()).toBe(true);
+    await workDue(store, options(), Infinity);
+    expect(mailbox.labels.get('news')).not.toContain('INBOX');
+    expect(await timedTickPasses()).toBe(false);
+  });
+
+  it('a press begins either without looking', async () => {
+    await startInboxRuns(db, [ACCOUNT], { acts: false, most: 10, now: clock });
+    await storeExample(db, ACCOUNT, { id: 'ex', from: 'ada@example.org', label: 'personal' });
+    await startEval({ db, model: 'test/model' }, { accountId: ACCOUNT, fewShot: false });
+    expect((await dueWork(store, options(), [person])).map((piece) => piece.kind).toSorted()).toEqual(['eval', 'inbox', 'pass']);
   });
 });
 

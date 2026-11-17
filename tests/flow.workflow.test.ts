@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { getWorld } from 'workflow/runtime';
 import { begin } from '../src/app/flow.ts';
 import { runKey } from '../src/app/sift.ts';
 import { offerSift } from '../src/app/process.ts';
@@ -21,14 +22,18 @@ describe('a piece of work', () => {
     const pass: Work = { kind: 'pass', person: 1, account: 'me@example.org' };
     const other: Work = { kind: 'pass', person: 1, account: 'other@example.org' };
 
-    expect(await begin(pass, runKey(pass, SECRET))).toBe(true);
+    const before = Date.now();
+    expect(await begin(pass, runKey(pass, SECRET))).toEqual({ begun: true });
     await vi.waitFor(() => expect(done).toEqual([pass]));
-    expect(await begin(pass, runKey(pass, SECRET))).toBe(false);
-    expect(await begin(other, runKey(other, SECRET))).toBe(true);
+    const refused = await begin(pass, runKey(pass, SECRET));
+    expect(refused.begun).toBe(false);
+    // When the run holding the key began, so a run that never ends shows (src/app/sift.ts).
+    expect(!refused.begun && refused.since).toBeGreaterThanOrEqual(before - 1000);
+    expect(await begin(other, runKey(other, SECRET))).toEqual({ begun: true });
     await vi.waitFor(() => expect(done).toEqual([pass, other]));
 
     finish();
-    await vi.waitFor(async () => expect(await begin(pass, runKey(pass, SECRET))).toBe(true));
+    await vi.waitFor(async () => expect(await begin(pass, runKey(pass, SECRET))).toEqual({ begun: true }));
     await vi.waitFor(() => expect(done).toEqual([pass, other, pass]));
   });
 
@@ -46,13 +51,30 @@ describe('a piece of work', () => {
     const whole: Work = { kind: 'inbox', person: 1, account: 'me@example.org', run: 1 };
     const rule: Work = { ...whole, run: 2 };
 
-    expect(await begin(whole, runKey(whole, SECRET))).toBe(true);
-    expect(await begin(rule, runKey(rule, SECRET))).toBe(true);
+    expect(await begin(whole, runKey(whole, SECRET))).toEqual({ begun: true });
+    expect(await begin(rule, runKey(rule, SECRET))).toEqual({ begun: true });
     await vi.waitFor(() => expect(done).toHaveLength(2));
     expect(done).toEqual(expect.arrayContaining([whole, rule]));
-    expect(await begin(rule, runKey(rule, SECRET))).toBe(false);
+    expect((await begin(rule, runKey(rule, SECRET))).begun).toBe(false);
 
     finish();
-    await vi.waitFor(async () => expect(await begin(rule, runKey(rule, SECRET))).toBe(true));
+    await vi.waitFor(async () => expect(await begin(rule, runKey(rule, SECRET))).toEqual({ begun: true }));
+  });
+
+  it('leaves nothing of itself behind once done: its input names the mailbox', async () => {
+    offerSift(async () => ({ work: async () => null }));
+    const since = new Date();
+    const pass: Work = { kind: 'pass', person: 1, account: 'kept@example.org' };
+    const key = runKey(pass, SECRET);
+    expect(await begin(pass, key)).toEqual({ begun: true });
+    await vi.waitFor(async () => expect(await begin(pass, key)).toEqual({ begun: true }));
+    const world = await getWorld();
+    await vi.waitFor(async () => {
+      const { data } = await world.runs.list({ resolveData: 'all' });
+      // The data directory is shared with other test files, and keeps runs from before.
+      const ended = data.filter((run) => run.status === 'completed' && run.createdAt >= since);
+      expect(ended.length).toBeGreaterThan(0);
+      expect(ended.map((run) => run.input)).toEqual(ended.map(() => undefined));
+    });
   });
 });

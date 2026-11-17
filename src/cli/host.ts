@@ -57,6 +57,8 @@ async function nextPage(dev: boolean, workflow: { dir: string; url: string }): P
   if (!dev) await ensurePageBuilt();
   // Naming the world keeps `withWorkflow` (next.config.js) from putting its data in the build folder.
   Object.assign(process.env, NO_TELEMETRY, { WORKFLOW_TARGET_WORLD: 'local', WORKFLOW_LOCAL_DATA_DIR: workflow.dir, WORKFLOW_LOCAL_BASE_URL: workflow.url });
+  // Sift has read its own .env files; Next.js would add the checkout's, such as the production values `vercel env pull` leaves.
+  process.env['__NEXT_PROCESSED_ENV'] = 'true';
   const app = createNext({ dev, dir: ROOT });
   await app.prepare();
   return {
@@ -127,18 +129,30 @@ function dashboardAddresses(config: Config, port: number) {
   return { allowedHosts: [...machineNames(), ...(host && host !== 'all' ? [host] : [])], signInAddresses: signInAddresses(port) };
 }
 
-/** The listener at `address`, as this machine reaches it. */
-function fromHere(address: string, port: number): string {
-  const host = address === '::' || address === '0.0.0.0' ? '127.0.0.1' : address.includes(':') ? `[${address}]` : address;
-  return `http://${host}:${port}`;
+/** The listener at `address`, as this machine reaches it: a wildcard at its own family's loopback, since `::` may take no IPv4. */
+export function fromHere(address: string, port: number): string {
+  const host = address === '0.0.0.0' ? '127.0.0.1' : address === '::' ? '::1' : address;
+  return `http://${host.includes(':') ? `[${host}]` : host}:${port}`;
 }
 
-/** Serve the dashboard from this process and say where it is, so one process keeps Sift online. */
+/**
+ * Workflow's Local World keeps its queue in memory, so a run that a stop or a crash cut off holds its key until the
+ * World is started: then it sends each such run again, and hands back the step that was under way.
+ * @public `tests/restart.workflow.test.ts` calls it in a worker, as Sift started again.
+ */
+export async function takeUpRuns(): Promise<void> {
+  await (await getWorld()).start?.();
+}
+
+/**
+ * Serve the dashboard from this process and say where it is, so one process keeps Sift online. Stopping takes no new
+ * requests, waits for `settle` (the work under way, which Workflow delivers over open connections), then closes.
+ */
 export async function serveDashboard(
   config: Config,
   sift: Pick<Sift, 'respond'>,
   options: { port: number; host?: string; dev?: boolean },
-): Promise<() => Promise<void>> {
+): Promise<(settle?: () => Promise<void>) => Promise<void>> {
   const { port } = options;
   // --host replaces the setting: a container listens on every interface and its port mapping decides who can reach it.
   const listen = options.host ? [options.host] : await listenAddresses(config.settings);
@@ -163,11 +177,12 @@ export async function serveDashboard(
   const [first, ...others] = signInAddresses(port);
   ui.fields([['Dashboard', paint.bold(first ?? '')], ...others.map((url) => ['', paint.bold(url)] as const)]);
   if (others.length > 0) ui.info(`The second needs ${paint.cmd(`tailscale serve --bg ${port}`)} once. Sign in there with Google.`);
-  return async () => {
-    for (const server of servers) {
-      server.close();
-      server.closeAllConnections();
-    }
+  // Once listening: what it sends again is delivered here.
+  await takeUpRuns();
+  return async (settle) => {
+    for (const server of servers) server.close();
+    await settle?.();
+    for (const server of servers) server.closeAllConnections();
     await page.close();
   };
 }

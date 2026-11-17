@@ -1,7 +1,7 @@
 import { createHash, createHmac } from 'node:crypto';
 import { unsubscribe } from '../actions/unsubscribe.ts';
 import type { Config } from '../config.ts';
-import { type PassResult, type RunOptions, type Work, dueWork, runWork } from '../work/run.ts';
+import { type PassResult, type RunOptions, type Work, describeWork, dueWork, runWork } from '../work/run.ts';
 import { createDashboard } from '../dashboard/server.ts';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 import { listAccounts, personOf } from '../store/accounts.ts';
@@ -11,6 +11,7 @@ import type { Store } from '../store/store.ts';
 import { buildControls, gmailFor, openModelTier } from './controls.ts';
 import { buildSignIn } from './google-sign-in.ts';
 import { logged, reportError } from '../telemetry.ts';
+import type { Beginning } from './process.ts';
 
 /** What a host gives sift: `sift run` on a machine, or a function on Vercel (docs/runtime.md). */
 export interface Host {
@@ -25,10 +26,10 @@ export interface Host {
   signInAddresses: readonly string[];
   log: (line: string) => void;
   /**
-   * Starts a Workflow run for a piece (`src/app/flow.ts`) that holds `key` until it ends; false when one holds
+   * Starts a Workflow run for a piece (`src/app/flow.ts`) that holds `key` until it ends; refused while one holds
    * it already. Absent where nothing classifies mail (verify-sift's `serve.ts`).
    */
-  begin?: (piece: Work, key: string) => Promise<boolean>;
+  begin?: (piece: Work, key: string) => Promise<Beginning>;
   /** How long one piece of work may start work, short of what the host would cut a call off at. */
   limitMs: number;
 }
@@ -60,6 +61,12 @@ export function runKey(piece: Work, secret: string): string {
       return `upkeep:${piece.person}`;
   }
 }
+
+/**
+ * Longer than any run lasts: its step's four tries, each cut off at the host's limit. A run holding a piece's key
+ * for longer will not end by itself, and its piece is never begun again (docs/runtime.md).
+ */
+const STUCK_MS = 30 * 60_000;
 
 /** The id ChatGPT registers this install's sign-ins under: a UUID, the same on every instance. */
 const deviceId = (secret: string) => {
@@ -104,10 +111,14 @@ export async function createSift(host: Host): Promise<Sift> {
     if (!begin) return;
     for (const piece of await dueWork(store, options, who)) {
       // What is not begun is due again at the next tick.
-      await begin(piece, runKey(piece, host.sessionSecret)).catch((error: unknown) => {
+      const beginning = await begin(piece, runKey(piece, host.sessionSecret)).catch((error: unknown) => {
         reportError(error);
         log(`Could not begin ${piece.kind}, will retry: ${error instanceof Error ? error.message : String(error)}`);
       });
+      if (!beginning || beginning.begun || beginning.since === undefined || Date.now() - beginning.since < STUCK_MS) continue;
+      const minutes = Math.round((Date.now() - beginning.since) / 60_000);
+      reportError(new Error(`A ${piece.kind} run has held its key for ${minutes} minutes`));
+      log(`${describeWork(piece)} is held back by a run begun ${minutes} minutes ago that has not ended`);
     }
   };
   const controls = await buildControls(config, {
