@@ -102,6 +102,8 @@ How to fill it in:
 - A mailing list is the surest match for a newsletter that comes from a service on behalf of many senders.
 - Use a label when the owner says what the mail is and one of theirs fits. Use an action alone when they say
   only what should happen to it. Spam is only for deceit.
+- A label must be one of theirs. When they name one they do not have, use an action alone (what they said
+  should happen, or keep) and say in the note to add that label first.
 - Unsubscribe only when they ask to stop the mail coming.
 - Name the rule, in a few words of the owner's own ("Shop receipts"), only when it has several values or
   several kinds of condition. A rule for one sender, list or subject needs no name: its condition says it.

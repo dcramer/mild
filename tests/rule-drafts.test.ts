@@ -184,9 +184,20 @@ describe('the model filling in a rule', () => {
     provider.setResponses([
       ...Array.from({ length: MAX_LOOKUPS }, () => fauxAssistantMessage([fauxToolCall(FIND_TOOL, { query: 'x' })], { stopReason: 'toolUse' })),
       fauxAssistantMessage([fauxText('I could not find them.')]),
+      fauxAssistantMessage([fauxText('Still nothing.')]),
     ]);
     expect(await draft(input, async () => [])).toMatchObject({ failed: 'the model did not fill in a rule', lookups: MAX_LOOKUPS });
     expect(complete.mock.calls.at(-1)?.[1].tools?.map((t) => t.name)).toEqual([FILL_TOOL]);
+  });
+
+  it('asks once more for the rule when the model answers in words', async () => {
+    const { provider, complete, draft } = faux();
+    provider.setResponses([
+      fauxAssistantMessage([fauxText('You want the digest archived.')]),
+      fauxAssistantMessage([fauxToolCall(FILL_TOOL, BLANK)], { stopReason: 'toolUse' }),
+    ]);
+    expect(await draft(input, async () => [])).toMatchObject({ draft: { match: { fromDomain: ['example.org'] }, disposition: 'archive' } });
+    expect(complete.mock.calls[1]?.[1].messages.at(-1)).toMatchObject({ role: 'user', content: `Fill in the rule with ${FILL_TOOL}.` });
   });
 
   it('sends an unusable rule back once with what is wrong, then gives up saying why', async () => {

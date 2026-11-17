@@ -19,7 +19,7 @@ import { chat, executeTool } from './chat.ts';
 /** One attempt per turn, as for the judge; the person asks again. */
 const CALL = { timeoutMs: 60_000, maxRetries: 0 };
 
-/** Rules filled in before giving up: one more after an unusable one, which is told what is wrong with it. */
+/** Turns that may end without a usable rule: one more after an unusable one, told what is wrong with it, or after an answer in words. */
 const MAX_FILLS = 2;
 
 const find: Tool = {
@@ -39,7 +39,13 @@ function fill(labels: readonly string[]): Tool {
     description: 'Fill in the rule.',
     parameters: {
       type: 'object',
+      // Written first, as the judge's reason is, so the rest follows from it rather than being worked out after.
       properties: {
+        reading: {
+          type: 'string',
+          description:
+            'A sentence: which mail they mean, and whether it gets one of their labels, an action alone, or an action once a model gives it a label.',
+        },
         conditions: {
           type: 'array',
           description: 'Which mail. Several of one kind are alternatives; different kinds must all hold.',
@@ -59,15 +65,15 @@ function fill(labels: readonly string[]): Tool {
         },
         facts: { type: 'array', items: { type: 'string', enum: FACT_WORDS } },
         name: { type: 'string', description: 'A few words, only for a rule with several values or kinds of condition; empty otherwise.' },
-        label: { type: 'string', enum: ['', ...labels] },
+        label: { type: 'string', enum: ['', ...labels], description: 'One of their labels, or empty.' },
         onlyOnceLabelled: { type: 'boolean', description: 'Wait for a model to give the mail this label, then do `action` instead of what the label does.' },
         when: { type: 'string', description: 'A condition in the owner’s words, beside a label.' },
-        action: { type: 'string', enum: ['', ...DECIDED], description: 'With no label, or when it waits for one.' },
+        action: { type: 'string', enum: ['', ...DECIDED], description: 'Needed with no label, or when it waits for one; empty beside a label that decides.' },
         markRead: { type: 'boolean' },
         unsubscribe: { type: 'boolean' },
         note: { type: 'string', description: 'What else they need, or what a rule cannot do; empty if nothing.' },
       },
-      required: ['conditions', 'facts', 'name', 'label', 'onlyOnceLabelled', 'when', 'action', 'markRead', 'unsubscribe', 'note'],
+      required: ['reading', 'conditions', 'facts', 'name', 'label', 'onlyOnceLabelled', 'when', 'action', 'markRead', 'unsubscribe', 'note'],
       additionalProperties: false,
     },
     constrainedSampling: { type: 'json_schema', strict: 'prefer' },
@@ -125,7 +131,13 @@ export function createRuleDrafter(models: Models, model: Model<Api>): RuleDrafte
         if (fills >= MAX_FILLS) return { failed: `the model did not fill in a usable rule: ${unusable}`, ...spent() };
       }
       const asked = calls.filter((c) => c.name === FIND_TOOL);
-      if (!filled && (last || asked.length === 0)) return { failed: 'the model did not fill in a rule', ...spent() };
+      if (!filled && (last || asked.length === 0)) {
+        // It answered in words. Asked once more, since nothing makes a model call a tool.
+        fills += 1;
+        if (fills >= MAX_FILLS || calls.length > 0) return { failed: 'the model did not fill in a rule', ...spent() };
+        context.messages.push(message, { role: 'user', content: `Fill in the rule with ${FILL_TOOL}.`, timestamp: Date.now() });
+        continue;
+      }
       context.messages.push(message);
       if (filled)
         context.messages.push({

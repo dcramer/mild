@@ -213,7 +213,7 @@ describe('each conversation with the model', () => {
 
   it('is a label proposal, and the next one is another', async () => {
     const { db } = await keyedPerson();
-    const PITCHES = { why: 'w', name: 'Cold outreach', description: 'Pitches.', action: 'archive', markRead: false, unsubscribe: true };
+    const PITCHES = { why: 'w', name: 'Sales pitches', description: 'Pitches.', action: 'archive', markRead: false, unsubscribe: true };
     const answer = () => fauxAssistantMessage([fauxToolCall(PROPOSAL_TOOL, { labels: [PITCHES] })], { stopReason: 'toolUse' });
     const { models, model } = scripted(answer(), answer());
     const propose = createProposer(models, model);
@@ -240,7 +240,7 @@ describe('each conversation with the model', () => {
         finish_reason: 'tool_call',
       },
     ]);
-    expect(text).toContain('Cold outreach');
+    expect(text).toContain('Sales pitches');
   });
 });
 

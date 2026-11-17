@@ -17,21 +17,32 @@ const PITCHES = { why: 'fewer pitches', name: 'Cold outreach', description: 'Pit
 describe('what the model suggests', () => {
   it('keeps the usable drafts, tidied, and drops the rest', () => {
     expect(
-      readDrafts({
-        labels: [
-          { ...PITCHES, name: '  Cold\n outreach ' },
-          { ...PITCHES, action: 'block' },
-          { ...PITCHES, name: '' },
-          { ...PITCHES, name: 'Scams', action: 'spam', markRead: true, unsubscribe: false },
-        ],
-      }),
+      readDrafts(
+        {
+          labels: [
+            { ...PITCHES, name: '  Cold\n outreach ' },
+            { ...PITCHES, action: 'block' },
+            { ...PITCHES, name: '' },
+            { ...PITCHES, name: 'Scams', action: 'spam', markRead: true, unsubscribe: false },
+          ],
+        },
+        [],
+      ),
     ).toEqual([
       { name: 'Cold outreach', description: 'Pitches from strangers.', disposition: 'archive', unsubscribe: true, why: 'fewer pitches' },
       { name: 'Scams', description: 'Pitches from strangers.', disposition: 'spam', why: 'fewer pitches' },
     ]);
-    expect(readDrafts({ labels: Array.from({ length: 20 }, (_, i) => ({ ...PITCHES, name: `L${i}` })) })).toHaveLength(MAX_DRAFTS);
-    expect(readDrafts({ labels: [] })).toBeNull();
-    expect(readDrafts(undefined)).toBeNull();
+    expect(readDrafts({ labels: Array.from({ length: 20 }, (_, i) => ({ ...PITCHES, name: `L${i}` })) }, [])).toHaveLength(MAX_DRAFTS);
+    expect(readDrafts({ labels: [] }, [])).toBeNull();
+    expect(readDrafts(undefined, [])).toBeNull();
+  });
+
+  it('drops a draft named like a label they have or an earlier draft, since one repeat refuses the whole batch', () => {
+    const drafts = readDrafts(
+      { labels: [PITCHES, { ...PITCHES, name: 'RECEIPTS' }, { ...PITCHES, name: 'cold outreach' }, { ...PITCHES, name: 'Scams', action: 'spam' }] },
+      [{ name: 'Receipts', description: 'What I bought.' }],
+    );
+    expect(drafts?.map((d) => d.name)).toEqual(['Cold outreach', 'Scams']);
   });
 
   it('is asked with the person’s words and the labels they have, and nothing from their mail', () => {

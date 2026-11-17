@@ -71,15 +71,20 @@ const MAX_WHY = 200;
 
 const tidy = (value: unknown, max: number) => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 
-/** The drafts in the tool's arguments, dropping any that is not usable; null when there are none. */
-export function readDrafts(args: unknown): LabelDraft[] | null {
-  const labels = (args as { labels?: unknown } | undefined)?.labels;
-  if (!Array.isArray(labels)) return null;
-  const drafts = labels.flatMap((raw: Record<string, unknown>): LabelDraft[] => {
+/**
+ * The drafts in the tool's arguments, dropping any that is not usable or is named like one of `labels` or an
+ * earlier draft, which would refuse the whole batch when accepted; null when there are none.
+ */
+export function readDrafts(args: unknown, labels: ProposalInput['labels']): LabelDraft[] | null {
+  const proposed = (args as { labels?: unknown } | undefined)?.labels;
+  if (!Array.isArray(proposed)) return null;
+  const taken = new Set(labels.map((l) => l.name.toLowerCase()));
+  const drafts = proposed.flatMap((raw: Record<string, unknown>): LabelDraft[] => {
     const name = tidy(raw['name'], MAX_NAME);
     const description = tidy(raw['description'], MAX_DESCRIPTION);
     const disposition = DRAFT_ACTIONS.find((a) => a === raw['action']);
-    if (!name || !description || !disposition) return [];
+    if (!name || !description || !disposition || taken.has(name.toLowerCase())) return [];
+    taken.add(name.toLowerCase());
     return [
       {
         name,
