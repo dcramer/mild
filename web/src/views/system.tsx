@@ -822,8 +822,10 @@ export function SystemView() {
               { to: 'system/rules', label: 'Rules' },
             ]}
             status={<Notice>Sift cannot be reached</Notice>}
-            aside={<SiftStatus accounts={[{ id: 'ada@example.org', email: 'ada@example.org', lastSyncedAt: SYNCED, primary: true }]} usage={USAGE} />}
-            detail={<UsageDetail usage={USAGE} />}
+            aside={
+              <SiftStatus accounts={[{ id: 'ada@example.org', email: 'ada@example.org', lastSyncedAt: SYNCED, primary: true }]} usage={USAGE} plan={null} />
+            }
+            detail={<UsageDetail usage={USAGE} plan={null} />}
             account={{
               name: 'ada@example.org',
               items: [

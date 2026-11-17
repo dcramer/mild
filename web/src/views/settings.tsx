@@ -2,9 +2,9 @@ import { Trash2Icon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { GoThroughInbox, InboxRow } from '@/components/inbox.tsx';
-import { ProviderList, costLine, providerName, useProviderConnect } from '@/components/model-connect.tsx';
+import { ProviderList, costLine, providerName, spentLine, subscription, useProviderConnect } from '@/components/model-connect.tsx';
 import { type ManageState, type Removed, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ago, money, plural } from '@/lib/format.ts';
+import { ago } from '@/lib/format.ts';
 import { useParam } from '@/lib/route.ts';
 import {
   Button,
@@ -201,7 +201,7 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
       title="Model"
       note={
         spent && spent.costUsd > 0
-          ? `Classifies what no rule covers. ${money(spent.costUsd)} in the last 30 days, for ${plural(spent.judged, 'message')}.`
+          ? `Classifies what no rule covers. ${spentLine(spent.costUsd, spent.judged, subscription(state.model))}`
           : 'Classifies what no rule covers.'
       }
     >

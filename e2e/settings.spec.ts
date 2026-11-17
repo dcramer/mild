@@ -48,11 +48,29 @@ test.describe('Settings', () => {
       const listed = await response.json();
       await route.fulfill({ response, json: { ...listed, models: [MODEL], shortlist: { 'openai-codex': [MODEL] }, costs: { [MODEL]: 0.4 } } });
     });
+    await page.route('**/api/usage*', async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({ response, json: { ...(await response.json()), day: 0.1, week: 1, month: 4.2 } });
+    });
+    await page.route('**/api/summary?days=30*', async (route) => {
+      const response = await route.fetch();
+      const summary = await response.json();
+      await route.fulfill({ response, json: { ...summary, totals: { ...summary.totals, costUsd: 4.2, judged: 1234 } } });
+    });
     await page.goto('/?settings=1');
+    await expect(
+      settings(page).getByText('Classifies what no rule covers. $4.20 at API prices in the last 30 days, for 1,234 messages, which your ChatGPT plan covers.'),
+    ).toBeVisible();
     await expect(settings(page).getByText('About $0.40 per 1,000 messages at API prices, which your ChatGPT plan covers.')).toBeVisible();
     await expect(active(page).getByText('2,412 messages. About $3.10 at API prices, which your ChatGPT plan covers.')).toBeVisible();
     await active(page).getByRole('button', { name: 'Go through…' }).click();
     await expect(goThrough(page).getByText('on gpt-5.6-luna, at API prices')).toBeVisible();
+    await goThrough(page).getByRole('button', { name: 'Not now' }).click();
+    await settings(page).getByRole('button', { name: 'Close' }).click();
+    await expect(settings(page)).toHaveCount(0);
+    // The masthead's month is only about what the API would have charged, and its card says so.
+    await page.getByRole('link', { name: '≈$4.20 30D' }).hover();
+    await expect(page.getByText('At API prices, which your ChatGPT plan covers.', { exact: true }).filter({ visible: true })).toBeVisible();
   });
 
   test('goes through the inbox from Settings, and stops', async ({ page }) => {

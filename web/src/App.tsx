@@ -7,6 +7,7 @@ import type { MessageRef } from '@/views/message-panel.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
 import { SetUp } from '@/components/set-up.tsx';
 import { SiftStatus, UsageDetail } from '@/components/status.tsx';
+import { subscription } from '@/components/model-connect.tsx';
 import { Boot } from '@/views/boot.tsx';
 
 // The home page comes with the app. Every other screen is its own file, fetched when first needed and,
@@ -202,6 +203,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
   // Who they are, not which mailbox they happened to sign in with.
   const name = accounts.find((a) => a.primary)?.email ?? signedInAs;
   const usage = useLoaded('usage', (signal) => api.usage(signal), 60_000);
+  const plan = manage.data ? subscription(manage.data.model) : null;
 
   return (
     <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col px-4 md:px-6">
@@ -222,8 +224,8 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
             </Notice>
           ) : null
         }
-        aside={manage.data ? <SiftStatus accounts={accounts} usage={usage.data} /> : null}
-        detail={usage.data ? <UsageDetail usage={usage.data} /> : null}
+        aside={manage.data ? <SiftStatus accounts={accounts} usage={usage.data} plan={plan} /> : null}
+        detail={usage.data ? <UsageDetail usage={usage.data} plan={plan} /> : null}
         account={
           name
             ? {

@@ -1,7 +1,7 @@
 import { ChevronRightIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
-import { money } from '@/lib/format.ts';
+import { money, plural } from '@/lib/format.ts';
 import { Button, ChoiceGroup, Copyable, Disclosure, Fact, Facts, Failure, Form, Input, Select, Sub, Table, Td, TextLink, Th, Tr } from '@/system';
 
 type Choice = ManageState['model']['choices'][number];
@@ -74,18 +74,30 @@ export function subscription(model: Pick<ManageState['model'], 'choices' | 'chos
 
 /** Said after a price through a subscription. */
 const AT_API_PRICES = 'at API prices';
+/** Said of a price through a subscription, once in each place one is shown: the person does not pay it. */
+const covers = (plan: Choice) => `which your ${plan.label} plan covers`;
+
+/** A sum spent or to spend, and through a subscription that it is an API price the plan covers, said once wherever sums are shown together. */
+export const atApiPrices = (plan: Choice) => `At API prices, ${covers(plan)}.`;
 
 /** What classifying with a model costs, about so much per 1,000 messages. Null when the catalog has no price. */
 export function costLine(choice: Choice | undefined, costs: Record<string, number>, model: string): string | null {
   const cost = costs[model];
   if (cost === undefined) return null;
-  if (choice && choice.how !== 'key') return `About ${money(cost)} per 1,000 messages ${AT_API_PRICES}, which your ${choice.label} plan covers.`;
+  if (choice && choice.how !== 'key') return `About ${money(cost)} per 1,000 messages ${AT_API_PRICES}, ${covers(choice)}.`;
   return `About ${money(cost)} per 1,000 messages.`;
 }
 
 /** What going through so many messages would cost, as the inbox's row says it. */
 export function costOfMessages(usd: number, subscribed: Choice | null): string {
-  return subscribed ? `About ${money(usd)} ${AT_API_PRICES}, which your ${subscribed.label} plan covers.` : `Going through them costs about ${money(usd)}.`;
+  return subscribed ? `About ${money(usd)} ${AT_API_PRICES}, ${covers(subscribed)}.` : `Going through them costs about ${money(usd)}.`;
+}
+
+/** What the model cost over the last 30 days, for so many messages, as Settings says it. */
+export function spentLine(usd: number, messages: number, subscribed: Choice | null): string {
+  return subscribed
+    ? `${money(usd)} ${AT_API_PRICES} in the last 30 days, for ${plural(messages, 'message')}, ${covers(subscribed)}.`
+    : `${money(usd)} in the last 30 days, for ${plural(messages, 'message')}.`;
 }
 
 /** Under a price figure: the model it is for and, through a subscription, that it is an API price. */
