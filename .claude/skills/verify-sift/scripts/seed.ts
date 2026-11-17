@@ -160,7 +160,7 @@ const api: GmailApi = {
 };
 
 // A stand-in model that calls no provider. It is sure the Store's sale is Marketing, answers unusably about
-// the Ops alerts every time (a provider error would be taken for an outage and not count), and can place nothing else, so what no rule covers becomes a question ("Which label?"): with
+// the Ops alerts every time (a provider error would be taken for an outage and not count), and can place nothing else, so what no rule covers is left Unlabelled: with
 // no model at all it would wait, undecided, and never be asked about.
 const standIn = async () => ({
   model: 'synthetic/stand-in',

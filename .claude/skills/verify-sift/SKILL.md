@@ -29,14 +29,14 @@ What the seed leaves (through four real ticks with sift off, `tick`, with a stan
 | --- | --- | --- | --- |
 | `m1`, `m2` | `digest@news.example.com` | label rule → Newsletters | Activity only |
 | `m3` | `orders@shop.example.com` | label rule → Receipts | Activity only |
-| `m4` | `deals@promo.example.com` | nothing | For review, `Which label?` |
+| `m4` | `deals@promo.example.com` | nothing | For review, `Unlabelled` |
 | `m5` | `builds@ci.example.org` | action rule → archive | Activity only |
-| `m6` | `ada@example.org` | nothing | For review, `Which label?` |
-| `m7` | `grace@example.net` | nothing | For review, `Which label?` |
+| `m6` | `ada@example.org` | nothing | For review, `Unlabelled` |
+| `m7` | `grace@example.net` | nothing | For review, `Unlabelled` |
 | `m8` | `sale@store.example.com` | stand-in model → Marketing, confidence 0.95 | For review, `Marketing` (sure) |
-| `m9`, `m10` | `alerts@ops.example.com` | the stand-in model answers unusably, three passes running; a fourth pass leaves them to the user | For review, `Which label?` |
+| `m9`, `m10` | `alerts@ops.example.com` | the stand-in model answers unusably, three passes running; a fourth pass leaves them to the user | For review, `Unlabelled` |
 | `m11`–`m13` | `billing@utility.example.net` | nothing; then each answered as Receipts but kept, as moving it back to the inbox in Gmail answers | Activity only; the three open a proposal, `Keep Receipts from billing@utility.example.net?` on For review |
-| `m14`–`m21` | `notifications@code.example.com`, as Dependabot (3), Security alerts (2), github-actions[bot] (2) and Ada Lovelace (1) | stand-in model, by name → Notifications, Account alerts, Notifications; Ada's it cannot place | For review: one row per name, sure (`Agree: Notifications`): Dependabot's 3 folded into one (`3 messages`), github-actions[bot]'s 2 into another; Ada's as `Which label?`; the two Account alerts are kept, so not shown. The address's page lists the four names (`/sender/me%40example.org/notifications%40code.example.com`) |
+| `m14`–`m21` | `notifications@code.example.com`, as Dependabot (3), Security alerts (2), github-actions[bot] (2) and Ada Lovelace (1) | stand-in model, by name → Notifications, Account alerts, Notifications; Ada's it cannot place | For review: one row per name, sure (`Agree: Notifications`): Dependabot's 3 folded into one (`3 messages`), github-actions[bot]'s 2 into another; Ada's as `Unlabelled`; the two Account alerts are kept, so not shown. The address's page lists the four names (`/sender/me%40example.org/notifications%40code.example.com`) |
 
 Three rules were written to the fake Gmail as filters, through the real `writeRuleFilter`, so their panels show a filter in each state: `anyone at ci.example.org` landed (`In Gmail`); `orders@shop.example.com` landed and was then deleted in Gmail, which a check noticed (`Deleted in Gmail`); and Gmail did not answer for `anyone at news.example.com`, nor had it kept the filter when asked at once (`Not added to Gmail` in its panel's history). Only the first has the `In Gmail` funnel on the list; the other two show their state only in their panels. `anyone at promo.example.com` → Spam, added after the passes, cannot be a filter. Each rule's panel has the history. The seed leaves the fake Gmail's filters in `$RUN/gmail.json` (`f1-@ci.example.org` alone), and `serve.ts` carries on from them: adding or removing a filter, and removing a rule (which first asks Gmail for its filter), run the real filter code against that fake and write the file back, so it is where to check what Gmail would hold. Nothing else the dashboard sends to Gmail reaches it.
 
@@ -114,6 +114,6 @@ State is in `~/.cache/sift-verify-maint/`. Delete `suggested-on` there to see to
 
 - Anything else that talks to Google: sign-in itself, connecting another account, Pull in (older mail), `Apply to your inbox`, undo of a real change. They fail with `Sift has no access to me@example.org.`; that failure is not the change's fault.
 - Gmail itself: the fake's filters are whatever the filter code asked for. Whether Gmail accepts a filter, and what it does to mail, is for `tests/filters.test.ts` and a real account.
-- The model tier: the seed's stand-in model never calls a provider and places only `m8` and the code.example.com mail it knows by name, so every other unmatched message is "Which label?". With no model at all such mail would wait undecided and not be a suggestion, and every screen would be the setting-up steps. The rule and label stand-ins are fixed answers too: what they fill in proves the dialogs and the code around the model, not what a model would choose.
+- The model tier: the seed's stand-in model never calls a provider and places only `m8` and the code.example.com mail it knows by name, so every other unmatched message is "Unlabelled". With no model at all such mail would wait undecided and not be a suggestion, and every screen would be the setting-up steps. The rule and label stand-ins are fixed answers too: what they fill in proves the dialogs and the code around the model, not what a model would choose.
 - Changing Gmail. Settings can turn sift on (`preferences.active`), but `sift dashboard` never runs a pass, so nothing is carried out. Prove the executor with tests (`tests/actions.test.ts`, `tests/run.test.ts`).
 - Mail answered that Sift did not hold the text of: its example stays `pending` until a pass reads it, which never comes. An answer to waiting mail moves its held text into the example (`captured`), as the seed's three bills show.

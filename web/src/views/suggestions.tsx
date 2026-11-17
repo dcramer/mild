@@ -31,7 +31,6 @@ import {
   Failure,
   FilterGroup,
   ListView,
-  Look,
   Loading,
   Meter,
   OnPhone,
@@ -164,14 +163,16 @@ function SuggestionRow({
         contact={item.contact}
         aside={
           <span className="shrink-0 text-sm md:hidden">
-            {item.labelId !== null ? (
-              <span className="inline-flex items-baseline gap-2 text-muted-foreground">
-                <Meter level={sureness(item)} />
-                {item.labelName ?? outcomeName(item.disposition)}
-              </span>
-            ) : (
-              <Look>Which label?</Look>
-            )}
+            <span className="inline-flex items-baseline gap-2 text-muted-foreground">
+              {item.labelId !== null ? (
+                <>
+                  <Meter level={sureness(item)} />
+                  {item.labelName ?? outcomeName(item.disposition)}
+                </>
+              ) : (
+                outcomeName('review')
+              )}
+            </span>
           </span>
         }
       >
@@ -205,7 +206,7 @@ function SuggestionRow({
           label="What this message is"
           value={item.labelId}
           groups={groups}
-          empty={<Look>Which label?</Look>}
+          empty={outcomeName('review')}
           busy={busy}
           onSubmit={(id) => (folded ? answerAll([item, ...rest].map(answerableOf), id) : answer(target, id))}
           extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}

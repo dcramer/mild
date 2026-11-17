@@ -39,5 +39,5 @@ Preconditions:
 - `Suggest labels` asks `serve.ts`'s stand-in (SKILL.md), never a provider: its answers are fixed by the words, as above. Each ask is a `label_proposals` row; its `labels` and `note` are sealed.
 - `Remove`'s question replaces the button with one of the same name: wait for `Remove <label>?` before the second press, or it presses nothing.
 - `Block` is spam plus blocking the sender, stored as `disposition = 'spam'`, `block = true`.
-- Changing or removing any label re-decides every waiting suggestion. The seed adds its spam rule for `promo.example.com` without doing that, so the first save moves `m4` from `Which label?` to that rule, and For review drops from 12 to 11. That comes from the seed, not from the label.
+- Changing or removing any label re-decides every waiting suggestion. The seed adds its spam rule for `promo.example.com` without doing that, so the first save moves `m4` from `Unlabelled` to that rule, and For review drops from 12 to 11. That comes from the seed, not from the label.
 - Leave in inbox opens on its figures and a line saying it is Sift's own: nothing to edit, and no `Remove`. Removing the last label besides it is refused under the button, since Sift reads no mail without one.

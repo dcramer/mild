@@ -18,8 +18,8 @@ export interface Pick {
  * Saying what something is: a dropdown that starts on sift's answer, and a check that commits it.
  * Choosing only chooses; the check commits, so agreeing is one press and a change is two. Once the choice
  * differs from where it started, the check is inked, the one ink allowed down a list, because something is
- * now waiting on the reader's press. `groups` run most likely first; `empty` is what shows when there is no
- * answer yet, and the check waits for a choice.
+ * now waiting on the reader's press. `groups` run most likely first; `empty` is what shows, in quiet ink, when
+ * there is no answer yet, and the check waits for a choice.
  */
 export function AnswerPicker({
   label,
@@ -36,7 +36,7 @@ export function AnswerPicker({
   /** sift's answer, where the dropdown starts. */
   value: string | null;
   groups: readonly (readonly Pick[])[];
-  empty: ReactNode;
+  empty: string;
   onSubmit: (id: string) => void;
   busy?: boolean;
   className?: string;
@@ -66,7 +66,7 @@ export function AnswerPicker({
                 <span className="truncate">{current.label}</span>
               </>
             ) : (
-              empty
+              <span className="truncate text-muted-foreground">{empty}</span>
             )}
           </span>
           <ChevronDownIcon aria-hidden className="ml-auto size-3.5 shrink-0 text-muted-foreground" />

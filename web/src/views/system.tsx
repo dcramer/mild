@@ -500,7 +500,7 @@ export function SystemView() {
                             LABELS.slice(1, 3).map(([id, name], i) => ({ id, label: name, lead: <Meter level={i === 0 ? 3 : 1} /> })),
                             LABELS.slice(3).map(([id, name]) => ({ id, label: name })),
                           ]}
-                          empty={<Look>Which label?</Look>}
+                          empty={outcomeName('review')}
                           extra={{ label: 'Add a label…', onSelect: () => toast('Adds a label, then it is among the choices') }}
                           onSubmit={(id) => toast(`Answered: ${LABELS.find(([key]) => key === id)?.[1] ?? id}`)}
                         />

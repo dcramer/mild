@@ -9,7 +9,7 @@ import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { type RuleStart, keepStart, messageStart } from '@/lib/rule-start.ts';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { type MessageDetail, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ago, capitalised, count, dateTime, money, sureness, tier } from '@/lib/format.ts';
+import { ago, capitalised, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
 import {
   AnswerPicker,
   Blank,
@@ -18,7 +18,6 @@ import {
   Disclosure,
   Failure,
   Loading,
-  Look,
   Note,
   Panel,
   Section,
@@ -233,7 +232,7 @@ function Body({
             label="What this message is"
             value={current?.labelId ?? null}
             groups={groups}
-            empty={<Look>Which label?</Look>}
+            empty={outcomeName('review')}
             busy={busy}
             onSubmit={(id) => answer(target, id)}
             extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}

@@ -39,7 +39,7 @@ test.describe('Activity', () => {
     await expect(page.getByRole('columnheader', { name: 'Today' })).toBeVisible();
     await expect(row(page, 'Winter sale starts now')).toContainText('Would archive');
     await expect(row(page, 'Winter sale starts now')).toContainText('Marketing');
-    await expect(row(page, 'Lunch on Thursday?')).toContainText('No label yet');
+    await expect(row(page, 'Lunch on Thursday?')).toContainText('Unlabelled');
   });
 
   test('search narrows by subject and by sender, and is kept in the address', async ({ page }) => {
@@ -134,7 +134,7 @@ test.describe('A sender', () => {
     await expect(names.getByRole('row', { name: /^Dependabot 3 · 38%/ })).toContainText('Notifications');
     await expect(names.getByRole('row', { name: /^Security alerts 2 · 25%/ })).toContainText('Account alerts');
     await expect(names.getByRole('row', { name: /^github-actions\[bot\] 2 · 25%/ })).toContainText('Notifications');
-    await expect(names.getByRole('row', { name: /^Ada Lovelace 1 · 13%/ })).toContainText('No label yet');
+    await expect(names.getByRole('row', { name: /^Ada Lovelace 1 · 13%/ })).toContainText('Unlabelled');
 
     for (const name of ['Trust', 'Unwanted', 'Block']) await expect(standing(page, name)).toHaveAttribute('aria-pressed', 'false');
   });

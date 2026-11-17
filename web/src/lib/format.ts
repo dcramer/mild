@@ -65,8 +65,8 @@ export const inboxFirst = (labels: Iterable<readonly [string, string]>): (readon
 export const doesName = (labelId: string | null, disposition: string) =>
   labelId === INBOX || (labelId === null && disposition === 'keep') ? INBOX_NAME : outcomeName(disposition);
 
-/** `review`: no tier was sure, so sift leaves the message alone and asks. */
-const OUTCOMES: Record<string, string> = { ...Object.fromEntries(ACTIONS), review: 'No label yet' };
+/** `review`: no tier was sure which label, so sift leaves the message alone and asks. Not a failure, so never drawn as one. */
+const OUTCOMES: Record<string, string> = { ...Object.fromEntries(ACTIONS), review: 'Unlabelled' };
 export const outcomeName = (key: string) => OUTCOMES[key] ?? key;
 
 /** What a label's action does, in a sentence, so a choice says what follows from it before it is made. */

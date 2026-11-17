@@ -32,7 +32,7 @@ test.describe('For review, narrowed', () => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Filters' }).click();
     const filters = page.getByRole('complementary', { name: 'Filters' });
-    await filters.getByRole('group', { name: 'Label' }).getByRole('radio', { name: 'No label yet' }).click();
+    await filters.getByRole('group', { name: 'Label' }).getByRole('radio', { name: 'Unlabelled' }).click();
     await expect(rows(page)).toHaveCount(6);
     await filters.getByRole('group', { name: 'Label' }).getByRole('radio', { name: 'Notifications' }).click();
     await expect(rows(page)).toHaveCount(2);

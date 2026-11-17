@@ -17,7 +17,7 @@ A message sift placed shows the label it gave in the row's answer: a dropdown st
 
 Preconditions:
 
-- Fresh seed. The Store row (`Winter sale starts now`) has a dropdown (`What this message is`, like every row's) holding a `Sure` meter and `Marketing`, and the check `Agree: Marketing`; the Notifications rows have `Agree: Notifications`; the six `Which label?` rows have the check disabled (`Choose what it is first`).
+- Fresh seed. The Store row (`Winter sale starts now`) has a dropdown (`What this message is`, like every row's) holding a `Sure` meter and `Marketing`, and the check `Agree: Marketing`; the Notifications rows have `Agree: Notifications`; the six `Unlabelled` rows have the check disabled (`Choose what it is first`).
 
 - **Agree.** `ab open "$B/"`, then `ab find role button click --name "Agree: Marketing"`. A toast reads `Archive as Marketing`. The link's count is one fewer, the Store row is gone, and no panel opens.
 - **Second view.** `ab open "$B/rules"`. No rule mentions `sale@store.example.com`.

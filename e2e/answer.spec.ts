@@ -62,7 +62,7 @@ test.describe('Answering mail', () => {
     const open = panel(page);
     await expect(open.getByRole('heading', { name: 'Lunch on Thursday?', level: 2 })).toBeVisible();
     expect(new URL(page.url()).searchParams.get('message')).toBe('m6');
-    await expect(open.getByRole('combobox', { name: 'What this message is' })).toHaveText('Which label?');
+    await expect(open.getByRole('combobox', { name: 'What this message is' })).toHaveText('Unlabelled');
     await expect(open.getByRole('button', { name: 'Choose what it is first' })).toBeDisabled();
 
     await choose(open, 'Marketing');
@@ -85,7 +85,7 @@ test.describe('Answering mail', () => {
     const said = toast(page, 'Archive as Notifications');
     await expect(said.getByRole('button', { name: 'Same for 1 more' })).toBeVisible();
     await expect(open.getByRole('heading', { name: 'Disk 91% full on db-2', level: 2 })).toBeVisible();
-    await expect(open.getByRole('combobox', { name: 'What this message is' })).toHaveText('Which label?');
+    await expect(open.getByRole('combobox', { name: 'What this message is' })).toHaveText('Unlabelled');
 
     await open.getByRole('button', { name: 'Close' }).click();
     await expect(open).toHaveCount(0);
