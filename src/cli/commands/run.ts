@@ -8,6 +8,7 @@ import { openStore } from '../../store/store.ts';
 import { openEphemeral } from '../../ephemeral/open.ts';
 import { paint, ui } from '../ui.ts';
 import { createSift } from '../../app/sift.ts';
+import { begin, offerSift } from '../../app/process.ts';
 import { checkSecrets } from '../secrets-check.ts';
 import { nodeHost, portOption, serveDashboard } from '../host.ts';
 import { checkedIn, flushTelemetry, startTelemetry } from '../../telemetry.ts';
@@ -19,10 +20,8 @@ export async function run(args: string[]): Promise<void> {
   const { values } = parseArgs({
     args,
     options: {
-      once: { type: 'boolean', default: false },
       port: { type: 'string' },
       host: { type: 'string' },
-      'no-dashboard': { type: 'boolean', default: false },
       // Set by `sift dev`.
       dev: { type: 'boolean', default: false },
     },
@@ -45,8 +44,15 @@ export async function run(args: string[]): Promise<void> {
       running.add(held);
     };
     const port = portOption(values.port) ?? config.settings.dashboardPort;
-    // What is due runs here, a few pieces at a time; stopping waits for it.
-    const sift = await createSift({ ...nodeHost(config, store, ephemeral, port, log), start: (sift, people) => background(sift.tick(people)) });
+    // Each piece is a Workflow run, delivered over the dashboard's listener to this process, where its step does it; stopping waits for it.
+    const sift = await createSift({ ...nodeHost(config, store, ephemeral, port, log), begin });
+    offerSift(async () => ({
+      work: (piece) => {
+        const doing = sift.work(piece);
+        background(doing);
+        return doing;
+      },
+    }));
 
     const users = await listUsers(store.central);
     const people = users.length;
@@ -58,23 +64,14 @@ export async function run(args: string[]): Promise<void> {
     else if ((await connectedAddresses(store.central)).length === 0) ui.warn('No Gmail account yet. Open the dashboard and sign in with Google.');
     else if (on === 0) ui.info('Gmail is not changed while Sift is off. Each person turns it on in the dashboard, under Settings.');
 
-    if (values.once) {
-      ui.blank();
-      const results = await sift.tick();
-      if (results.some((r) => r.error)) process.exitCode = 1;
-      return;
-    }
-
-    // One process keeps sift online: the same one that classifies mail serves the dashboard.
-    const stopDashboard = values['no-dashboard']
-      ? async () => {}
-      : await serveDashboard(config, sift, { port, ...(values.dev ? { dev: true } : {}), ...(values.host ? { host: values.host } : {}) });
+    // One process keeps sift online: the same one that classifies mail serves the dashboard, and Workflow delivers its runs there.
+    const stopDashboard = await serveDashboard(config, sift, { port, ...(values.dev ? { dev: true } : {}), ...(values.host ? { host: values.host } : {}) });
     ui.blank();
     const stop = new AbortController();
     process.once('SIGINT', () => stop.abort());
     process.once('SIGTERM', () => stop.abort());
     try {
-      // Every minute, without waiting for the last tick: ticks that overlap skip work under way.
+      // Every minute, without waiting for the last tick: a piece whose run is under way is not begun again.
       while (!stop.signal.aborted) {
         background(checkedIn(() => sift.tick()));
         await sleep(INTERVAL_MS, undefined, { signal: stop.signal }).catch(() => {});

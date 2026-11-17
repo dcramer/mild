@@ -2,7 +2,10 @@
 /**
  * Verification scaffolding: the dashboard alone, running no pass, for a seeded home, with a fake Gmail behind its filter control.
  *
- *   node .claude/skills/verify-sift/scripts/serve.ts <home> <port> <gmail.json>
+ *   node .claude/skills/verify-sift/scripts/serve.ts <home> <port> <gmail.json> [--work]
+ *
+ * `--work` also begins what is due for a person when they press for it (Check now, in Settings), as `sift run`
+ * does: each piece a Workflow run delivered back to this process, a pass reading a Gmail with nothing new.
  *
  * Everything else is the real command's parts: the same store, controls, server, sign-in and policy. The one
  * control replaced is `ruleFilter`, which adds and removes a rule's Gmail filter (and is asked before any rule is
@@ -38,15 +41,19 @@ import { createProposer } from '../../../../src/model/propose.ts';
 import { createRuleDrafter } from '../../../../src/model/draft-rule.ts';
 import { PROPOSAL_TOOL } from '../../../../src/triage/proposal.ts';
 import { FILL_TOOL, FIND_TOOL } from '../../../../src/triage/rule-draft.ts';
+import { begin, offerSift } from '../../../../src/app/process.ts';
+import { runKey } from '../../../../src/app/sift.ts';
+import type { GmailApi } from '../../../../src/gmail/api.ts';
+import { type RunOptions, dueWork, runWork } from '../../../../src/work/run.ts';
 
-const [home, port, gmailFile] = process.argv.slice(2);
-if (!home || !port || !gmailFile) throw new Error('usage: serve.ts <home> <port> <gmail.json>');
+const [home, port, gmailFile, flag] = process.argv.slice(2);
+if (!home || !port || !gmailFile) throw new Error('usage: serve.ts <home> <port> <gmail.json> [--work]');
+const working = flag === '--work';
 process.env['SIFT_HOME'] = resolve(home);
 const config = loadConfig();
 const store = await openStore(config);
 const ephemeral = memoryEphemeral();
 const host = nodeHost(config, store, ephemeral, Number(port), (line) => ui.plain(line));
-const built = await buildControls(config, { ephemeral, deviceId: 'verify-sift', running: false });
 
 const saved = JSON.parse(readFileSync(gmailFile, 'utf8')) as Record<string, ExistingFilter[]>;
 const mailboxes = new Map<string, FakeMailbox>();
@@ -59,6 +66,36 @@ const mailboxOf = (accountId: string) => {
   }
   return mailbox;
 };
+/** A Gmail where nothing has happened since the seed's last pass. */
+const nothingNew = (address: string, historyId: string): GmailApi => ({
+  getProfile: async () => ({ emailAddress: address, historyId }),
+  listHistory: async () => ({ additions: [], historyId }),
+  searchInbox: async () => ({ ids: [] }),
+  inboxSize: async () => 0,
+  getMetadata: async () => null,
+  getLabelIds: async () => null,
+  listLabels: async () => [],
+  getContent: async () => null,
+  getThread: async () => null,
+  listSendAs: async () => [address],
+});
+const options: RunOptions = {
+  ephemeral,
+  log: (line) => ui.plain(line),
+  connect: (_db, account) => ({ api: nothingNew(account.email, account.historyId ?? '1'), mailbox: mailboxOf(account.id) }),
+};
+if (working) offerSift(async () => ({ work: (piece) => runWork(store, piece, options, Date.now() + 60_000) }));
+const built = await buildControls(config, {
+  ephemeral,
+  deviceId: 'verify-sift',
+  running: working,
+  ...(working
+    ? {
+        kick: async (person: number) =>
+          void (await Promise.all((await dueWork(store, options, [person])).map((piece) => begin(piece, runKey(piece, host.sessionSecret))))),
+      }
+    : {}),
+});
 const faux = fauxProvider();
 const models = createModels();
 models.setProvider(faux.provider);
@@ -133,7 +170,7 @@ const controls = {
   },
 };
 
-// What createSift puts together for a host with no `start`.
+// What createSift puts together for a host with no `begin`.
 const sift = {
   respond: createDashboard(people(store), {
     allowedHosts: host.allowedHosts,
@@ -146,7 +183,9 @@ const sift = {
   }).handle,
 };
 const stop = await serveDashboard(config, sift, { port: Number(port) });
-ui.info('Only the dashboard is running. `sift run` also reads and classifies mail.');
+ui.info(
+  working ? 'Only the dashboard is running, and what is due when pressed for.' : 'Only the dashboard is running. `sift run` also reads and classifies mail.',
+);
 await new Promise<void>((done) => {
   process.once('SIGINT', done);
   process.once('SIGTERM', done);

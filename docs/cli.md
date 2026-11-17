@@ -20,10 +20,8 @@ From a checkout, `pnpm sift <command>` runs it from source.
 
 | Option | Effect |
 | --- | --- |
-| `--once` | One tick, then exit, without serving the dashboard: everything due (a pass for each mailbox with a label of its own, upkeep, going through an inbox, test runs), each piece starting nothing new after 5 minutes. Exits 1 if a piece failed. |
 | `--port <port>` | The dashboard's port for this run. |
 | `--host <address>` | Listen on this address instead of `SIFT_DASHBOARD_HOST`. A container uses `0.0.0.0` and lets its port mapping decide who can reach it. |
-| `--no-dashboard` | Read and classify mail without serving the dashboard. |
 
 A pass runs every minute, each person's mailboxes changed in Gmail only if that person turned Sift on under Settings in the dashboard. A change there applies from the next pass, without a restart; a change to a setting needs one.
 
@@ -47,5 +45,6 @@ Nothing needs an environment variable. Everything Sift keeps is in one directory
 | `.env` | Settings, as variables: the dashboard's port and address (`SIFT_DASHBOARD_PORT`, `SIFT_DASHBOARD_HOST`), a Postgres server and the role that migrates it (`DATABASE_URL`, `DATABASE_MIGRATION_URL`), a Redis server (`REDIS_URL`), `SIFT_CHATGPT_SIGN_IN`, `SENTRY_DSN` (set from `sift init` once setup is finished), and `SIFT_CLOUD`, `true` on a Sift run for other people, which gives it terms, a privacy policy and a security page. The environment wins over it. Whether Sift is on is each person's, under Settings in the dashboard. |
 | `database/` | The database (PGlite), unless `DATABASE_URL` names a Postgres server: who has which mailbox, and for each person their sign-ins (encrypted), model, labels, rules, the record of every message, decision and change, and the full content of mail they answered for. |
 | `database.lock` | Which process has the database open. |
+| `workflow/` | Workflow's runs: each piece of work Sift has begun, and the key that lets only this install deliver them. |
 | `google-client.json`, `dashboard-key` | The Google client and the session secret. Owner-only. |
 | `setup.json` | How far `init` has got. |

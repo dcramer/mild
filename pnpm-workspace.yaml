@@ -1,5 +1,8 @@
 allowBuilds:
   esbuild: true
+  # The Workflow SDK's: SWC's checks for its compiler binary, which comes as a package of its own; cbor-x has a JavaScript fallback.
+  '@swc/core': false
+  cbor-extract: false
   # Install scripts of transitive pi-ai dependencies; not needed for the providers sift uses.
   '@google/genai': false
   protobufjs: false

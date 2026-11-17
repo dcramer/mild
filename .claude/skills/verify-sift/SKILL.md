@@ -23,7 +23,7 @@ $V up "$RUN"
 
 `up` seeds `$RUN/home`, picks a free port, starts the dashboard alone on it (`scripts/serve.ts`, which runs no pass) (rebuilding the page with Next.js first if its sources are newer than `.next`, which can take a minute), runs the doctor, and signs the browser session in. It is ready when it prints `ok  pid …` and `browser session … signed in`. It refuses a directory that already has a `home/`. `up "$RUN" --bare` seeds the same, but takes the person's labels out, as before they chose any, so the dashboard is the setting-up steps (features/setting-up.md) until that run makes some. `up "$RUN" --on` then turns Sift on and runs one more pass over two new messages: `m22` from `lin@example.com`, which it cannot place, so it gets Sift's `sift/review` label in Gmail and Activity's Changed says `Asked you`; and `m23`, the Store's `Last day of the sale`, archived as Marketing and then undone.
 
-What the seed leaves (through four real ticks with sift off, `tick`, with a stand-in model that is sure `m8` is Marketing, places the code.example.com mail by its sender's name, and can place nothing else):
+What the seed leaves (through four real passes with sift off, `workDue` in `tests/helpers.ts`, with a stand-in model that is sure `m8` is Marketing, places the code.example.com mail by its sender's name, and can place nothing else):
 
 | Id | Sender | What places it | Shows as |
 | --- | --- | --- | --- |
@@ -73,7 +73,7 @@ Phone width: `$V ab "$RUN" set viewport 390 844`. AGENTS.md asks what every part
 
 Every row on Rules has a `Remove` of the same name. Open a rule's panel by its first cell (`ab find role cell click --name "anyone at ci.example.org"`, which gives `?rule=<id>`), where `Remove` is its own; it asks `Remove this rule?` in place, and the confirming press needs `--exact`, as `Remove filter` also matches `Remove`.
 
-Add as a Gmail filter is offered only while Sift is on: Settings (`?settings=1`), `Turn on`, then `Turn on` again to confirm. It is safe here, as `serve.ts` runs no pass, so nothing is carried out.
+Add as a Gmail filter is offered only while Sift is on: Settings (`?settings=1`), `Turn on`, then `Turn on` again to confirm. It is safe here, as `serve.ts` runs no pass (unless started with `--work`, which only the e2e tests do), so nothing is carried out.
 
 Adding a rule with `Apply to mail already there` checked (the default for an action rule) opens `Apply to your inbox`. Its search of Gmail is `serve.ts`'s stand-in: `About 1,200` and `Found in Gmail 1` to `5`, whatever the rule. Pressing it (`Archive all` and the like) starts a run no pass goes on with, so the rule's panel stays at `Finding them in Gmail · 0 so far` until `Stop`. The rule is already added by then.
 
@@ -88,7 +88,7 @@ Write everything into `$RUN/evidence/`; `down` keeps it. For each feature proved
 3. The stored side effect, from `sql`, and a second view that reads it back (the Rules screen after an answer, the Labels screen after a label edit). For a Gmail filter, also `$RUN/gmail.json` and its `filter` or `unfilter` row in `actions`.
 4. `SELECT count(*) AS n FROM actions WHERE type NOT IN ('filter', 'unfilter')` is still `0`. sift is off here; a row there means something tried to change a mailbox. Filter rows are the seed's and any the run made.
 
-Do the action the way a user does: press the control, not a POST with curl. The API is the page's private contract; calling it directly proves the server, not the screen. Seeding is the only place internals are used, and it uses the real pass (`tick`, src/work/run.ts).
+Do the action the way a user does: press the control, not a POST with curl. The API is the page's private contract; calling it directly proves the server, not the screen. Seeding is the only place internals are used, and it uses the real pass (`runWork`, src/work/run.ts).
 
 ## Cleanup
 

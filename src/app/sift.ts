@@ -1,7 +1,7 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { unsubscribe } from '../actions/unsubscribe.ts';
 import type { Config } from '../config.ts';
-import { type PassResult, type RunOptions, type Work, dueWork, runWork, tick } from '../work/run.ts';
+import { type PassResult, type RunOptions, type Work, dueWork, runWork } from '../work/run.ts';
 import { createDashboard } from '../dashboard/server.ts';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 import { listAccounts, personOf } from '../store/accounts.ts';
@@ -10,7 +10,7 @@ import type { Sql } from '../store/sql.ts';
 import type { Store } from '../store/store.ts';
 import { buildControls, gmailFor, openModelTier } from './controls.ts';
 import { buildSignIn } from './google-sign-in.ts';
-import { logged } from '../telemetry.ts';
+import { logged, reportError } from '../telemetry.ts';
 
 /** What a host gives sift: `sift run` on a machine, or a function on Vercel (docs/runtime.md). */
 export interface Host {
@@ -25,10 +25,10 @@ export interface Host {
   signInAddresses: readonly string[];
   log: (line: string) => void;
   /**
-   * Gets what is due for these people (or everyone) done, without the caller waiting: `sift run` in this
-   * process, Vercel each piece in a call of its own. Absent where nothing classifies mail (verify-sift's `serve.ts`).
+   * Starts a Workflow run for a piece (`src/app/flow.ts`) that holds `key` until it ends; false when one holds
+   * it already. Absent where nothing classifies mail (verify-sift's `serve.ts`).
    */
-  start?: (sift: Sift, people?: readonly number[]) => void;
+  begin?: (piece: Work, key: string) => Promise<boolean>;
   /** How long one piece of work may start work, short of what the host would cut a call off at. */
   limitMs: number;
 }
@@ -36,12 +36,29 @@ export interface Host {
 export interface Sift {
   /** A request to the API or sign-in. The page is Next.js's (`app/`). */
   respond: (request: Request) => Promise<Response>;
-  /** What is due, for these people or everyone. */
-  due: (people?: readonly number[]) => Promise<Work[]>;
-  /** Do one piece of it, within the host's limit. */
+  /** Do one piece of what is due, within the host's limit: what a Workflow run's step calls. */
   work: (work: Work) => Promise<PassResult | null>;
-  /** Do all of it here, a few pieces at a time. */
-  tick: (people?: readonly number[]) => Promise<PassResult[]>;
+  /** Begin a run for each piece due, for these people or everyone. */
+  tick: (people?: readonly number[]) => Promise<void>;
+}
+
+/**
+ * The key a piece's run holds, so each piece has one run at a time wherever it was begun. Workflow keeps keys
+ * unencrypted, so a mailbox is named by a keyed hash of its address. Upkeep's names no day: the claim it makes
+ * inside keeps it to once a day.
+ */
+export function runKey(piece: Work, secret: string): string {
+  const mailbox = (address: string) => createHmac('sha256', `sift run key:${secret}`).update(address).digest('base64url').slice(0, 22);
+  switch (piece.kind) {
+    case 'pass':
+      return `pass:${mailbox(piece.account)}`;
+    case 'inbox':
+      return `inbox:${mailbox(piece.account)}:${piece.run}`;
+    case 'eval':
+      return `eval:${piece.person}:${piece.run}`;
+    case 'upkeep':
+      return `upkeep:${piece.person}`;
+  }
 }
 
 /** The id ChatGPT registers this install's sign-ins under: a UUID, the same on every instance. */
@@ -82,16 +99,23 @@ export async function createSift(host: Host): Promise<Sift> {
       return { api, mailbox };
     },
   };
-  // Bound below, before any request can reach `kick`.
-  let sift: Sift | undefined;
-  const { start } = host;
-  // What a person starts in the dashboard (check now, a test run, going through the inbox) begins now, not at the next tick.
-  const kick = start && ((person?: number) => start(sift!, person === undefined ? undefined : [person]));
+  const { begin } = host;
+  const tick = async (who?: readonly number[]) => {
+    if (!begin) return;
+    for (const piece of await dueWork(store, options, who)) {
+      // What is not begun is due again at the next tick.
+      await begin(piece, runKey(piece, host.sessionSecret)).catch((error: unknown) => {
+        reportError(error);
+        log(`Could not begin ${piece.kind}, will retry: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
+  };
   const controls = await buildControls(config, {
     ephemeral,
     deviceId: deviceId(host.sessionSecret),
-    running: Boolean(start),
-    ...(kick ? { kick } : {}),
+    running: Boolean(begin),
+    // What a person starts in the dashboard (check now, a test run, going through the inbox) begins now, not at the next tick.
+    ...(begin ? { kick: (person: number) => tick([person]) } : {}),
   });
   const dashboard = createDashboard(people(store), {
     allowedHosts: host.allowedHosts,
@@ -103,11 +127,9 @@ export async function createSift(host: Host): Promise<Sift> {
     ephemeral,
     log,
   });
-  sift = {
+  return {
     respond: dashboard.handle,
-    due: (who) => dueWork(store, options, who),
     work: (piece) => runWork(store, piece, options, Date.now() + host.limitMs),
-    tick: (who) => tick(store, options, host.limitMs, who),
+    tick,
   };
-  return sift;
 }

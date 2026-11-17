@@ -77,10 +77,10 @@ export async function openModelTier(config: Config, ephemeral: Ephemeral, db: Sq
 /** What the dashboard may ask this process to do. See `Controls`. */
 export async function buildControls(
   config: Config,
-  live: { ephemeral: Ephemeral; deviceId: string; kick?: (person?: number) => void; running: boolean },
+  live: { ephemeral: Ephemeral; deviceId: string; kick?: (person: number) => Promise<void>; running: boolean },
 ): Promise<Controls> {
   const choices = modelChoices(config.settings.chatgptSignIn ?? 'device-code');
-  /** Pass the person's mailboxes now, not at the next tick. Nothing does while only the dashboard runs. */
+  /** Begin what is due for the person now, not at the next tick. Nothing does while only the dashboard runs. */
   const passNow = async (db: Sql) => live.kick?.(await personOf(db));
   /** The size of the person's own calls lately, in tokens, which is their mail and their labels more than the model; undefined for a typical call's. */
   const usualCall = async (db: Sql) => {
@@ -171,7 +171,7 @@ export async function buildControls(
       const tier = await openModelTier(config, live.ephemeral, db);
       if (!tier) throw new Refusal('Choose a model first.');
       const run = await startEval({ db, model: tier.spec }, request);
-      live.kick?.(await personOf(db));
+      await passNow(db);
       return run;
     },
     proposeLabels: async (db, request) => {

@@ -1,11 +1,12 @@
 import { globSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { runKey } from '../src/app/sift.ts';
 import { type Ephemeral, memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { type RunOptions, tick } from '../src/work/run.ts';
+import type { RunOptions } from '../src/work/run.ts';
 import { startInboxRuns } from '../src/store/inbox.ts';
 import { people } from '../src/store/people.ts';
 import { googleSignIn, onePerson, startDashboard } from './fixtures.ts';
-import { ACCOUNT, FakeMailbox, codeSignIn, testModel } from './helpers.ts';
+import { ACCOUNT, FakeMailbox, codeSignIn, testModel, workDue } from './helpers.ts';
 
 /**
  * Module state that holds between calls, allowed because any instance computes the same: a cache, not a
@@ -76,8 +77,20 @@ describe('a flow whose steps reach different instances', () => {
       }),
     });
     await startInboxRuns(db, [ACCOUNT], { acts: false, most: 10, now: 0 });
-    await tick(store, instance(), Infinity);
-    await tick(store, instance(), Infinity);
+    await workDue(store, instance(), Infinity);
+    await workDue(store, instance(), Infinity);
     expect(searched).toEqual(['']);
+  });
+});
+
+describe("a piece's run key", () => {
+  it('names a mailbox only by a keyed hash, since Workflow keeps keys unencrypted', () => {
+    const pass = { kind: 'pass', person: 1, account: 'me@example.org' } as const;
+    const key = runKey(pass, 'one secret');
+    expect(key).not.toContain('example.org');
+    expect(runKey(pass, 'one secret')).toBe(key);
+    expect(runKey(pass, 'another secret')).not.toBe(key);
+    expect(runKey({ ...pass, kind: 'inbox', run: 1 }, 'one secret')).not.toBe(key);
+    expect(runKey({ ...pass, account: 'other@example.org' }, 'one secret')).not.toBe(key);
   });
 });

@@ -20,6 +20,8 @@ Import this repository as a Vercel project and deploy it as it is: Vercel adds d
 
 This first deploy builds without a database. Until steps 2 and 3 are done, the site lists the variables it still needs.
 
+In Settings, Environment Variables, keep **Enable access to System Environment Variables** checked. Workflow knows it is on Vercel only by `VERCEL_DEPLOYMENT_ID`; without it every run fails, and every piece of work with it.
+
 Then, from the project's Storage tab, add Neon and a Redis database. Each sets variables of its own; Sift reads the ones in step 3.
 
 ## 2. The Google client
@@ -45,7 +47,7 @@ In the project's Environment Variables, for Production:
 | `SIFT_GOOGLE_CLIENT_ID`, `SIFT_GOOGLE_CLIENT_SECRET` | From step 2. |
 | `SIFT_KEY` | Encrypts the credentials and mail Sift stores ([secrets.md](secrets.md)). `openssl rand -base64 32` |
 | `SIFT_SESSION_SECRET` | Signs sessions; changing it signs everyone out. `openssl rand -base64 32` |
-| `CRON_SECRET` | Vercel sends it with each cron call and Sift with each piece of work it hands out; nothing without it can start work. `openssl rand -hex 32` |
+| `CRON_SECRET` | Vercel sends it with each cron call; nothing without it can start a tick. `openssl rand -hex 32` |
 | `SIFT_DASHBOARD_HOST` | Only with a domain of your own: that domain. |
 | `SIFT_CHATGPT_SIGN_IN` | Only to change how people sign in to ChatGPT ([cli.md](cli.md#models)). |
 | `SIFT_CLOUD` | `true` only when this Sift is a service for other people. It gives the site its terms, privacy policy and security page; Google asks for the first two before it publishes the app. They speak for you, so read them first (`web/src/views/legal.tsx`). |
@@ -62,8 +64,6 @@ Mail is checked each minute. Logs are the project's function logs.
 ## Previews
 
 A preview deployment builds and migrates with whatever `DATABASE_URL` it is given, and production refuses a database a newer Sift migrated. Give previews a database of their own (Neon's integration can make a branch per preview), or no Preview variables at all, so they build without one and touch nothing. Crons run only in production.
-
-With Deployment Protection on, a preview reaches its own `/api/work` only with Vercel's Protection Bypass for Automation (`VERCEL_AUTOMATION_BYPASS_SECRET`), which Sift sends when it is set.
 
 ## Upgrading
 

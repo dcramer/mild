@@ -185,23 +185,15 @@ export function httpStatus(span: Traced, status: number): void {
   if (status >= 500) span.fail();
 }
 
-/**
- * `fetch` as an `http.client` span. `propagate` sends the trace along, for a call to Sift's own
- * deployment, so the work it starts is part of the same trace.
- */
-export const tracedFetch = (url: string, init: RequestInit & { method: string }, propagate = false): Promise<Response> => {
+/** `fetch` as an `http.client` span. */
+export const tracedFetch = (url: string, init: RequestInit & { method: string }): Promise<Response> => {
   const { name, attributes } = clientRequest(init.method, url);
   return traced('http.client', name, attributes, async (span) => {
-    const headers = propagate ? { ...(init.headers as Record<string, string>), ...Sentry.getTraceData() } : init.headers;
-    const response = await fetch(url, { ...init, ...(headers ? { headers } : {}) });
+    const response = await fetch(url, init);
     httpStatus(span, response.status);
     return response;
   });
 };
-
-/** Run `work` as part of the trace a call from Sift's own deployment carried in (`tracedFetch`'s `propagate`). */
-export const continued = <T>(headers: Headers, work: () => Promise<T>): Promise<T> =>
-  Sentry.continueTrace({ sentryTrace: headers.get('sentry-trace') ?? undefined, baggage: headers.get('baggage') ?? undefined }, work);
 
 /**
  * Run `work` as one check-in of the tick that runs every minute, so Sentry says when it stops, fails or
