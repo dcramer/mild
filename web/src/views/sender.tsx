@@ -324,7 +324,7 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
           reload,
         );
       toast(addedWords(standingStart(who, standing), manage.data?.labels[accountId] ?? []), {
-        description: given.was ? 'Rule replaced' : 'Rule added',
+        kind: given.was ? 'Rule replaced' : 'Rule added',
         undo: takeBack,
         // Mail already in the inbox stays until the rule is applied there, as the dialog offers.
         ...(standing === 'trusted' ? {} : { action: { label: 'Apply to inbox…', onPress: () => setParams({ rule: given.id, apply: '1' }) } }),

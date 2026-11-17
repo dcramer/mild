@@ -9,6 +9,8 @@ const TIMEOUT = [5000, 8000] as const;
 
 /** What a receipt holds besides its words. */
 interface Own {
+  /** The description is what kind of thing the title is, so on a phone it heads the toast. */
+  kind?: boolean;
   undo?: () => void;
   action?: { label: string; onPress: () => void };
 }
@@ -47,7 +49,7 @@ const QUIET = 'text-foreground/75 hover:text-foreground';
 const ON_RED = 'text-background/75 hover:bg-background/10 hover:text-background focus-visible:outline-background!';
 
 function Receipt({ toast, front }: { toast: Base.Root.ToastObject<Own>; front: boolean }) {
-  const { undo, action } = toast.data ?? {};
+  const { kind, undo, action } = toast.data ?? {};
   const failed = toast.type === 'failure';
   const key = useShortcut('z', 'Undo', () => undo?.(), { enabled: front && undo !== undefined, everywhere: true });
   return (
@@ -62,10 +64,10 @@ function Receipt({ toast, front }: { toast: Base.Root.ToastObject<Own>; front: b
         failed && 'border-destructive bg-destructive text-background',
       )}
     >
-      {/* Title and description run on as one sentence, wrapping rather than cut short; on a phone the presses take the next row only when they do not fit. */}
-      <div className="min-w-[min(13rem,100%)] grow py-1 md:min-w-0">
+      {/* Title and description run on as one sentence, wrapping rather than cut short; on a phone the presses take the next row only when they do not fit. A kind heads it on a phone, where after a long title it would wrap apart. */}
+      <div className={cn('min-w-[min(13rem,100%)] grow py-1 md:min-w-0', kind && 'flex flex-col md:block')}>
         <Base.Title render={<span />} className={cn(failed && 'font-semibold')} />
-        <Base.Description render={<span />} className={cn('ml-2', failed ? 'text-background/75' : 'text-muted-foreground')} />
+        <Base.Description render={<span />} className={cn(kind ? 'order-first md:ml-2' : 'ml-2', failed ? 'text-background/75' : 'text-muted-foreground')} />
       </div>
       {action ? (
         <button type="button" className={cn(PRESS, QUIET)} onClick={action.onPress}>
@@ -89,6 +91,8 @@ function Receipt({ toast, front }: { toast: Base.Root.ToastObject<Own>; front: b
 
 interface ToastOptions {
   description?: string;
+  /** What kind of thing the title is ("Rule added" for a title that is the rule), in place of a description. */
+  kind?: string;
   tone?: 'failure';
   /** One press that follows from what was done, such as answering the rest the same way. */
   action?: { label: string; onPress: () => void };
@@ -101,7 +105,7 @@ let failures = 0;
 /** Say what a press did. */
 export function useToast(): (title: string, options?: ToastOptions) => void {
   const manager = Base.useToastManager();
-  return (title, { description, tone, action, undo } = {}) => {
+  return (title, { description, kind, tone, action, undo } = {}) => {
     const failed = tone === 'failure';
     // What is said replaces what was said last; each failure keeps its own place until dismissed.
     const id = failed ? `failure-${++failures}` : 'said';
@@ -112,9 +116,10 @@ export function useToast(): (title: string, options?: ToastOptions) => void {
     manager.add<Own>({
       id,
       title,
-      ...(description ? { description } : {}),
+      ...(description || kind ? { description: kind ?? description } : {}),
       ...(failed ? { type: 'failure', priority: 'high' as const, timeout: 0 } : { timeout: TIMEOUT[undo || action ? 1 : 0] }),
       data: {
+        ...(kind ? { kind: true } : {}),
         ...(undo ? { undo: closing(undo) } : {}),
         ...(action ? { action: { label: action.label, onPress: closing(action.onPress) } } : {}),
       },

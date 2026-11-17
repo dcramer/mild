@@ -219,7 +219,7 @@ export function AddRuleDialog({
           ...(action ? { action } : {}),
         };
         toast(addedWords(rule, labels, { name, when: condition }), {
-          description: added?.replaced ? 'Rule replaced' : 'Rule added',
+          kind: added?.replaced ? 'Rule replaced' : 'Rule added',
           ...(fresh === null ? {} : { undo: () => takeBack(fresh) }),
         });
         onAdded?.(match, { ...(waitsFor ? { whenLabel: waitsFor.id } : {}), ...(action ? { disposition: action } : {}) });

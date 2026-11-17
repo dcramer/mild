@@ -680,11 +680,22 @@ export function SystemView() {
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => toast('12 messages pulled in', { description: 'They show under For review as Sift decides them.' })}>A result</Button>
             <Button onClick={answer}>With Undo</Button>
+            <Button
+              onClick={() =>
+                toast('Mail from notifications@code.example.com: send it to spam', {
+                  kind: 'Rule added',
+                  action: { label: 'Apply to inbox…', onPress: () => toast('Applied to 3 messages') },
+                  undo: () => toast('Rule taken back'),
+                })
+              }
+            >
+              With a kind
+            </Button>
             <Button onClick={() => toast('Could not undo', { tone: 'failure', description: 'Gmail answered 503.' })}>Failure</Button>
             <Button
               onClick={() => {
                 toast('Could not undo', { tone: 'failure', description: 'Gmail answered 503.' });
-                toast('Mail from deals@example.com: archive it', { description: 'Rule added' });
+                toast('Mail from deals@example.com: archive it', { kind: 'Rule added' });
                 answer();
               }}
             >

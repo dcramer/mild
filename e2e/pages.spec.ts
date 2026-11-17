@@ -263,6 +263,15 @@ test.describe('A domain', () => {
 test.describe('On a phone', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
+  test("a rule's toast says Rule added above the rule, where after it the two would wrap apart", async ({ page }) => {
+    await page.goto(SENDER);
+    await standing(page, 'Block').click();
+    const said = ruleToast(page, 'Mail from notifications@code.example.com: send it to spam');
+    const kind = (await said.getByText('Rule added', { exact: true }).boundingBox())!;
+    const rule = (await said.getByText('Mail from notifications@code.example.com: send it to spam', { exact: true }).boundingBox())!;
+    expect(kind.y + kind.height / 2).toBeLessThan(rule.y);
+  });
+
   test('a For review row opens its message over the whole screen, and Close returns to the list', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('row').filter({ hasText: 'Lunch on Thursday?' }).click();
