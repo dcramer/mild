@@ -222,6 +222,17 @@ describe('a new mailbox', () => {
     expect((await listLabels(reopened, 'alpha@example.org')).map((l) => l.id)).toEqual(['everything_else']);
   });
 
+  it('made before Everything Else existed is given it by a migration, after its own labels', async () => {
+    const { db } = await onePerson('alpha@example.org');
+    await withSampleLabels(db, 'alpha@example.org');
+    await raw(db).run(`DELETE FROM labels WHERE id = 'everything_else'`);
+    const migration = readFileSync(new URL('0030_every_mailbox_has_everything_else.sql', MIGRATIONS), 'utf8');
+    await (await superuser()).exec(migration);
+    await (await superuser()).exec(migration);
+    expect((await listLabels(db, 'alpha@example.org')).filter((l) => l.id === 'everything_else')).toHaveLength(1);
+    expect((await listLabels(db, 'alpha@example.org')).at(-1)?.id).toBe('everything_else');
+  });
+
   it('needs its labels to exist for anything that names one', async () => {
     const { db } = await onePerson('alpha@example.org');
     await recordSync(db, 'alpha@example.org', [facts({ accountId: 'alpha@example.org', messageId: 'm1' })], '2', 0);
