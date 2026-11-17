@@ -1,6 +1,3 @@
-import { writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import type { Sql } from '../src/store/sql.ts';
 import { describe, expect, it } from 'vitest';
 import { execute } from '../src/actions/executor.ts';
@@ -13,7 +10,7 @@ import { people } from '../src/store/people.ts';
 import { recordSync } from '../src/store/accounts.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
-import { builtAssets, firstAccount, modelRun, openUserDb, raw, startDashboard, onePerson, unmarked } from './fixtures.ts';
+import { firstAccount, modelRun, openUserDb, raw, startDashboard, onePerson, unmarked } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 import { addRule, removeRule } from '../src/store/rules.ts';
 import { ACCOUNT, DAY, everything, facts, quietSources, testModel } from './helpers.ts';
@@ -297,135 +294,14 @@ describe('tracking', () => {
   });
 });
 
-const assets = () =>
-  builtAssets({
-    'index.html': '<!doctype html><script type="module" src="/assets/app-abc123.js"></script>',
-    'assets/app-abc123.js': 'console.log(1)',
-    'assets/app-abc123.css': 'body{}',
-    'secret.env': 'TOKEN=x',
-  });
-
 const get = async <T>(url: string) => (await (await fetch(url)).json()) as T;
 
 describe('dashboard server', () => {
   /** The dashboard's address, over `store` or else a newly seeded one. */
   async function start(options: Parameters<typeof startDashboard>[1] = {}, store?: Store) {
     const over = store ?? (await seededStore()).store;
-    return (await startDashboard(people(over), { assetsDir: assets(), now: () => NOW, ...options })).base;
+    return (await startDashboard(people(over), { now: () => NOW, ...options })).base;
   }
-
-  it('serves the built app with a strict content security policy', async () => {
-    const base = await start();
-    const page = await fetch(base);
-    expect(page.status).toBe(200);
-    const csp = page.headers.get('content-security-policy') ?? '';
-    expect(csp).toContain("script-src 'self'");
-    expect(csp).toContain("style-src 'self'");
-    expect(csp).not.toContain('unsafe');
-    // The one frame the page may hold is a message from this server's own frame route.
-    expect(csp.split('; ').filter((d) => d.startsWith('frame'))).toEqual(["frame-src 'self'", "frame-ancestors 'none'"]);
-    expect(page.headers.get('cache-control')).toBe('no-store');
-
-    const script = await fetch(`${base}/assets/app-abc123.js`);
-    expect(script.headers.get('content-type')).toContain('javascript');
-    expect(script.headers.get('cache-control')).toContain('immutable');
-    expect((await fetch(`${base}/assets/app-abc123.css`)).status).toBe(200);
-  });
-
-  it('serves the app manifest and the service worker, which the policy allows from this server only', async () => {
-    const dir = assets();
-    writeFileSync(join(dir, 'manifest.webmanifest'), '{}');
-    writeFileSync(join(dir, 'sw.js'), 'self');
-    const base = await start({ assetsDir: dir });
-    const csp = (await fetch(base)).headers.get('content-security-policy') ?? '';
-    expect(csp).toContain("manifest-src 'self'");
-    expect(csp).toContain("worker-src 'self'");
-    expect((await fetch(`${base}/manifest.webmanifest`)).headers.get('content-type')).toBe('application/manifest+json');
-    const worker = await fetch(`${base}/sw.js`);
-    expect(worker.headers.get('content-type')).toContain('javascript');
-    // Never from a cache: a browser must see a new build's worker to replace the old one.
-    expect(worker.headers.get('cache-control')).toBe('no-store');
-  });
-
-  it('serves the page for the paths it reads itself, and nothing else in place of a missing file', async () => {
-    const base = await start();
-    const home = await (await fetch(base)).text();
-    for (const path of [
-      '/rules',
-      '/settings/accounts',
-      '/system',
-      '/privacy',
-      '/terms',
-      '/security',
-      '/decisions?q=digest&message=a',
-      '/sender/me%40example.org/news%40example.com',
-      '/domain/me%40example.org/example.com',
-    ]) {
-      const page = await fetch(`${base}${path}`);
-      expect(page.status).toBe(200);
-      expect(page.headers.get('content-type')).toContain('text/html');
-      expect(page.headers.get('content-security-policy')).toContain("default-src 'none'");
-      expect(page.headers.get('cache-control')).toBe('no-store');
-      expect(await page.text()).toBe(home);
-    }
-    expect((await fetch(`${base}/assets/missing.js`)).status).toBe(404);
-    expect((await fetch(`${base}/assets/missing`)).status).toBe(404);
-    expect((await fetch(`${base}/rules.json`)).status).toBe(404);
-    // Sign-in is not set up here, so its paths are not the page either.
-    expect((await fetch(`${base}/auth/login`, { redirect: 'manual' })).status).toBe(404);
-    expect((await fetch(`${base}/api/rules/nope`)).status).toBe(404);
-  });
-
-  it('in dev mode serves the page as it is on disk now, and tells it when to reload', async () => {
-    const dir = assets();
-    const base = await start({ assetsDir: dir, dev: true });
-
-    const page = await fetch(base);
-    expect(await page.text()).toContain('<script type="module" src="/dev/reload.js"></script>');
-    // Same policy as normal: the reload script is a file of the server's own, not inline.
-    expect(page.headers.get('content-security-policy')).not.toContain('unsafe');
-    expect(await (await fetch(`${base}/dev/reload.js`)).text()).toContain("EventSource('/dev/events')");
-    expect((await fetch(`${base}/assets/app-abc123.js`)).headers.get('cache-control')).toBe('no-store');
-
-    // A file written after the server started is served, and the page is told the build changed.
-    const events = await fetch(`${base}/dev/events`);
-    const reader = events.body!.getReader();
-    const next = async () => new TextDecoder().decode((await reader.read()).value);
-    let stream = await next();
-    while (!stream.includes('data: ')) stream += await next();
-    writeFileSync(join(dir, 'assets', 'later-def456.js'), 'console.log(2)');
-    writeFileSync(join(dir, 'index.html'), '<!doctype html><html><head></head><body>rebuilt</body></html>');
-    const fs = await import('node:fs');
-    fs.utimesSync(join(dir, 'index.html'), new Date(NOW + 60_000), new Date(NOW + 60_000));
-    const first = /data: (\S+)/.exec(stream)?.[1];
-    let after = '';
-    while (!/data: /.test(after)) after += await next();
-    expect(/data: (\S+)/.exec(after)?.[1]).not.toBe(first);
-    await reader.cancel();
-    expect(await (await fetch(base)).text()).toContain('rebuilt');
-    expect((await fetch(`${base}/assets/later-def456.js`)).status).toBe(200);
-  });
-
-  it('has no dev routes unless asked', async () => {
-    const base = await start();
-    expect((await fetch(`${base}/dev/reload.js`)).status).toBe(404);
-    expect(await (await fetch(base)).text()).not.toContain('/dev/reload.js');
-  });
-
-  it('serves only listed asset types and never escapes the asset directory', async () => {
-    const base = await start();
-    expect((await fetch(`${base}/secret.env`)).status).toBe(404);
-    expect((await fetch(`${base}/..%2f..%2fpackage.json`)).status).toBe(404);
-    expect((await fetch(`${base}/assets/../../package.json`)).status).toBe(404);
-  });
-
-  it('says how to build when the app has not been built, and still serves the API', async () => {
-    const base = await start({ assetsDir: join(tmpdir(), 'sift-web-missing') });
-    const page = await fetch(base);
-    expect(page.status).toBe(503);
-    expect(await page.text()).toContain('pnpm build:web');
-    expect((await fetch(`${base}/api/summary`)).status).toBe(200);
-  });
 
   it('serves the summary', async () => {
     const summary = await get<{ days: number; recent: unknown[] }>(`${await start()}/api/summary?days=90`);

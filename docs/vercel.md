@@ -16,7 +16,7 @@ Upstash is expected to set `REDIS_URL`; if the site says it is missing, copy the
 
 ## 1. The project
 
-Import this repository as a Vercel project and deploy it as it is: Vercel adds databases only to a project that exists. Root Directory: `./`, the repository root (Vercel offers `web/` because it finds Vite there, and a build from there knows nothing of `vercel.json` or the functions). Framework Preset: Other. `vercel.json` sets the build, the functions (`api/`), the minute's cron and the page's headers, and Node comes from `package.json` (24.x).
+Import this repository as a Vercel project and deploy it as it is: Vercel adds databases only to a project that exists. Root Directory: `./`, the repository root. `vercel.json` sets the Framework Preset (Next.js), the build (`next build`, then the migration) and the minute's cron, and Node comes from `package.json` (24.x).
 
 This first deploy builds without a database. Until steps 2 and 3 are done, the site lists the variables it still needs.
 
@@ -63,7 +63,7 @@ Mail is checked each minute. Logs are the project's function logs.
 
 A preview deployment builds and migrates with whatever `DATABASE_URL` it is given, and production refuses a database a newer Sift migrated. Give previews a database of their own (Neon's integration can make a branch per preview), or no Preview variables at all, so they build without one and touch nothing. Crons run only in production.
 
-With Deployment Protection on, a preview reaches its own `api/work` only with Vercel's Protection Bypass for Automation (`VERCEL_AUTOMATION_BYPASS_SECRET`), which Sift sends when it is set.
+With Deployment Protection on, a preview reaches its own `/api/work` only with Vercel's Protection Bypass for Automation (`VERCEL_AUTOMATION_BYPASS_SECRET`), which Sift sends when it is set.
 
 ## Upgrading
 

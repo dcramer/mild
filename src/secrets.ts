@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes, scryptSync } from 'node:crypto';
 import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
+import type { Env } from './config.ts';
 
 /**
  * Credentials at rest, in a file or a database row. Each is either plain text or one line:
@@ -39,7 +40,7 @@ function derive(secret: string): Key {
 }
 
 /** `SIFT_KEY` is the current key; `SIFT_OLD_KEYS` lists, comma-separated, the ones it replaced. */
-export function loadKeyring(env: NodeJS.ProcessEnv = process.env): Keyring {
+export function loadKeyring(env: Env = process.env): Keyring {
   const current = env['SIFT_KEY']?.trim();
   const old = (env['SIFT_OLD_KEYS'] ?? '')
     .split(',')

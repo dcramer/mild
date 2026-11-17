@@ -20,7 +20,7 @@ import { EXAMPLE_KEEP_DAYS } from '../src/store/examples.ts';
 import { preferences, setActive } from '../src/store/preferences.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { ACCOUNT, DAY, FakeMailbox, UNSURE, facts, quietSources, rawMessage, storeExample, testModel } from './helpers.ts';
-import { type Reply, builtAssets, firstAccount, modelRun, raw, startDashboard, onePerson, withReason } from './fixtures.ts';
+import { type Reply, firstAccount, modelRun, raw, startDashboard, onePerson, withReason } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 
 let db: Sql;
@@ -717,7 +717,6 @@ describe('signing in with Google', () => {
 
   async function startWithSignIn() {
     return await startDashboard(people(store), {
-      assetsDir: builtAssets({ 'assets/app.js': '1', 'sw.js': '1', 'manifest.webmanifest': '{}' }),
       controls,
       signIn,
       sessionSecret: SECRET,
@@ -742,12 +741,8 @@ describe('signing in with Google', () => {
     hasClient = true;
   });
 
-  it('serves the page to anyone but the data only to someone signed in', async () => {
+  it('serves the data only to someone signed in', async () => {
     const { call } = await startWithSignIn();
-    expect((await call('GET', '/')).status).toBe(200);
-    expect((await call('GET', '/assets/app.js')).status).toBe(200);
-    // What installs the page as an app holds no data, and a browser fetches the manifest without cookies.
-    for (const path of ['/sw.js', '/manifest.webmanifest', '/rules', '/system']) expect((await call('GET', path)).status).toBe(200);
     for (const path of ['/api/summary', '/api/manage', '/api/suggestions', '/api/senders']) expect((await call('GET', path)).status).toBe(401);
     expect((await call('POST', '/api/active', { active: true })).status).toBe(401);
     expect((await call('GET', '/api/summary', undefined, { cookie: 'sift_session=forged.signature' })).status).toBe(401);

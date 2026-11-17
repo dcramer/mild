@@ -1,12 +1,2 @@
-{
-  "files": [],
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
-  ],
-  "compilerOptions": {
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  }
-}
+// What the linter finds for the page's files. The settings are tsconfig.web.json's, which Next.js reads.
+{ "extends": "../tsconfig.web.json" }

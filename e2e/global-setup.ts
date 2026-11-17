@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { ensureWebBuilt } from '../src/cli/web-build.ts';
+import { ensurePageBuilt } from '../src/cli/page-build.ts';
 import { SEED, TEMPLATES, type Variant } from './sift.ts';
 
 /**
@@ -11,7 +11,7 @@ import { SEED, TEMPLATES, type Variant } from './sift.ts';
  * every test then starts from a copy of one.
  */
 export default async function setup() {
-  await ensureWebBuilt();
+  await ensurePageBuilt();
   const root = mkdtempSync(join(tmpdir(), 'sift-e2e-'));
   const variants: Record<Variant, string[]> = { full: [], bare: ['--bare'], on: ['--on'] };
   await Promise.all(

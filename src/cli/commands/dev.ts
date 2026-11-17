@@ -1,50 +1,47 @@
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { type ChildProcess, spawn } from 'node:child_process';
+import { existsSync, watch } from 'node:fs';
 import { join } from 'node:path';
-import { paint, ui } from '../ui.ts';
-import { ROOT } from '../web-build.ts';
+import { ui } from '../ui.ts';
+import { ROOT } from '../page-build.ts';
 
 /**
- * For working on sift itself: `sift run`, restarted whenever the server's code changes, beside a build
- * of the page that is redone whenever the page's code changes. The page reloads by itself on either.
- * Arguments are passed on to `run`.
+ * For working on sift itself: `sift run`, restarted whenever the server's code changes, with the page from
+ * Next.js's development server, which updates it in place as its code changes. Arguments are passed on to `run`.
  */
 export async function dev(args: string[]): Promise<void> {
   if (!existsSync(join(ROOT, 'web/src'))) throw new Error('`sift dev` needs a checkout of the source. Use `sift run` here.');
-  ui.heading('dev', 'restarts on server changes, reloads on page changes');
+  ui.heading('dev', 'restarts on server changes, updates the page as it changes');
   ui.blank();
 
-  const server = spawn(
-    process.execPath,
-    ['--watch', '--watch-preserve-output', '--disable-warning=ExperimentalWarning', join(ROOT, 'src/cli/main.ts'), 'run', '--dev', ...args],
-    { stdio: 'inherit' },
-  );
-  const page = spawn('pnpm', ['--filter', 'sift-web', 'exec', 'vite', 'build', '--watch', '--logLevel', 'warn'], {
-    cwd: ROOT,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  // The page build is quiet unless it has something to say, which is then an error or a warning.
-  for (const stream of [page.stdout, page.stderr]) {
-    stream.setEncoding('utf8');
-    stream.on('data', (chunk: string) => {
-      for (const line of chunk.split('\n')) if (line.trim() !== '') ui.plain(`${paint.dim('page')}  ${line}`);
-    });
-  }
-
-  const stop = () => {
-    server.kill('SIGTERM');
-    page.kill('SIGTERM');
+  // Not `node --watch`: Next.js takes the message channel it opens to the process it runs for one of its own workers'.
+  let server: ChildProcess | undefined;
+  let stopping = false;
+  const start = () => {
+    server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', join(ROOT, 'src/cli/main.ts'), 'run', '--dev', ...args], { stdio: 'inherit' });
   };
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
-  // Either one ending ends both: a dev session with half of it gone is only confusing.
+  const restart = () => {
+    const old = server;
+    if (!old || old.exitCode !== null) return start();
+    old.once('exit', () => !stopping && start());
+    old.kill('SIGTERM');
+  };
+  // Only the server's code restarts it: the page's is the development server's to follow. A save is often several writes.
+  let pending: NodeJS.Timeout | undefined;
+  const watcher = watch(join(ROOT, 'src'), { recursive: true }, () => {
+    clearTimeout(pending);
+    pending = setTimeout(restart, 100);
+  });
+  start();
   await new Promise<void>((resolve) => {
-    let left = 2;
-    const ended = () => {
-      stop();
-      if (--left === 0) resolve();
+    const stop = () => {
+      stopping = true;
+      watcher.close();
+      clearTimeout(pending);
+      if (!server || server.exitCode !== null) return resolve();
+      server.once('exit', () => resolve());
+      server.kill('SIGTERM');
     };
-    server.once('exit', ended);
-    page.once('exit', ended);
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
   });
 }

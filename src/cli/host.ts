@@ -1,28 +1,17 @@
 import { randomBytes } from 'node:crypto';
-import { existsSync, statSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
-import { join } from 'node:path';
-import { Readable } from 'node:stream';
-import type { Config } from '../config.ts';
-import { HEADERS } from '../dashboard/server.ts';
+import { type Duplex, Readable } from 'node:stream';
+import nextModule from 'next';
+import type { Config, Env } from '../config.ts';
+import { HEADERS } from '../dashboard/policy.ts';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 import type { Host, Sift } from '../app/sift.ts';
 import type { Store } from '../store/store.ts';
-import { WEB_DIST, ensureWebBuilt } from './web-build.ts';
+import { NO_TELEMETRY, ROOT, ensurePageBuilt } from './page-build.ts';
 import { readSecret, writeSecret } from '../secrets.ts';
 import { reportError } from '../telemetry.ts';
 import { listenAddresses, machineNames, tailscaleName } from './network.ts';
 import { paint, ui } from './ui.ts';
-
-/** Loaded by the page in dev mode. Reloads when the page's files change or the server comes back as a new process. */
-const DEV_RELOAD_JS = `let seen = null;
-new EventSource('/dev/events').onmessage = (event) => {
-  if (seen !== null && event.data !== seen) setTimeout(() => location.reload(), 150);
-  seen = event.data;
-};
-`;
-const DEV_SCRIPT = '<script type="module" src="/dev/reload.js"></script>';
-const DEV_BUILDING = `<!doctype html><html class="dark"><head><meta charset="UTF-8" /><title>Sift</title>${DEV_SCRIPT}</head><body>Building the page…</body></html>`;
 
 /** Addresses of this machine: a forwarded scheme is believed only from one, as `tailscale serve` sends it. */
 const LOCAL_PEERS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
@@ -47,52 +36,34 @@ async function send(res: ServerResponse, response: Response): Promise<void> {
   res.writeHead(response.status, headers).end(Buffer.from(await response.arrayBuffer()));
 }
 
-/**
- * The site as a `node:http` server, for `sift run`. With `dev` (`sift dev`), the page is told to reload
- * when its files change or this process restarts, under the same origin and content security policy as
- * normal, so a policy violation shows up while developing.
- */
-export function dashboardListener(respond: (request: Request) => Promise<Response>, options: { dev?: boolean; pageDir?: string } = {}): Server {
-  const dev = options.dev ?? false;
-  const pageDir = options.pageDir ?? WEB_DIST;
-  // Changes when the page is rebuilt, and when this process is a new one.
-  const boot = Date.now();
-  const devVersion = () => {
-    const index = join(pageDir, 'index.html');
-    return `${boot}:${existsSync(index) ? statSync(index).mtimeMs : 0}`;
-  };
+/** The page: Next.js (`app/`), answering in this process. Absent where only the API is wanted (tests). */
+export interface Page {
+  handle: (req: IncomingMessage, res: ServerResponse) => Promise<void>;
+  /** The development server's live reload. */
+  upgrade: (req: IncomingMessage, socket: Duplex, head: Buffer) => Promise<void>;
+  /** Next.js keeps the process alive until it is closed. */
+  close: () => Promise<void>;
+}
 
+// Node gives `next`'s exports as the default import; its types, read as CommonJS under NodeNext, put them under `default`.
+const createNext = nextModule as unknown as (typeof nextModule)['default'];
+
+/** Next.js for this checkout: the built page, or with `dev` the development server, which rebuilds as the page's code changes. */
+async function nextPage(dev: boolean): Promise<Page> {
+  if (!dev) await ensurePageBuilt();
+  Object.assign(process.env, NO_TELEMETRY);
+  const app = createNext({ dev, dir: ROOT });
+  await app.prepare();
+  return { handle: app.getRequestHandler(), upgrade: app.getUpgradeHandler(), close: () => app.close() };
+}
+
+/** The site as a `node:http` server, for `sift run`: the API and sign-in from `respond`, everything else from the page. */
+export function dashboardListener(respond: (request: Request) => Promise<Response>, page?: Page): Server {
   const serve = async (req: IncomingMessage, res: ServerResponse) => {
-    if (dev && req.url === '/dev/reload.js') {
-      res.writeHead(200, { ...HEADERS, 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' }).end(DEV_RELOAD_JS);
-      return;
-    }
-    if (dev && req.url === '/dev/events') {
-      res.writeHead(200, { ...HEADERS, 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
-      res.write('retry: 500\n\n');
-      let sent = '';
-      const tick = () => {
-        const version = devVersion();
-        if (version !== sent) res.write(`data: ${(sent = version)}\n\n`);
-      };
-      tick();
-      const timer = setInterval(tick, 300);
-      req.on('close', () => clearInterval(timer));
-      return;
-    }
-    const response = await respond(toRequest(req));
-    if (!dev) return await send(res, response);
-    // In dev nothing is cached, and the page carries the reload script.
-    response.headers.set('cache-control', 'no-store');
-    if (response.status === 503) {
-      res.writeHead(200, { ...HEADERS, 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(DEV_BUILDING);
-      return;
-    }
-    if (!response.headers.get('content-type')?.startsWith('text/html')) return await send(res, response);
-    const html = await response.text();
-    await send(res, new Response(html.includes('</head>') ? html.replace('</head>', `${DEV_SCRIPT}</head>`) : html + DEV_SCRIPT, response));
+    if (page && !/^\/(api|auth)\//.test(req.url ?? '/')) return await page.handle(req, res);
+    await send(res, await respond(toRequest(req)));
   };
-  return createServer(
+  const server = createServer(
     (req, res) =>
       void serve(req, res).catch((error: unknown) => {
         // The handler answers its own errors; one here is the adapter's, and its words may name a path.
@@ -103,13 +74,15 @@ export function dashboardListener(respond: (request: Request) => Promise<Respons
             .end(JSON.stringify({ error: 'Sift could not do that.' }));
       }),
   );
+  if (page) server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => void page.upgrade(req, socket, head).catch(() => socket.destroy()));
+  return server;
 }
 
 /**
  * What signs dashboard sessions: `SIFT_SESSION_SECRET`, for a host that keeps no files between starts;
  * otherwise made the first time it is needed and kept in the home directory.
  */
-function sessionSecret(config: Config, env: NodeJS.ProcessEnv = process.env): string {
+function sessionSecret(config: Config, env: Env = process.env): string {
   if (env['SIFT_SESSION_SECRET']) return env['SIFT_SESSION_SECRET'];
   const stored = readSecret(config.dashboardKeyPath, config.keys);
   if (stored !== null) return stored.trim();
@@ -127,9 +100,9 @@ export function signInAddresses(port: number): string[] {
 /** How long a piece of work in `sift run` may start work: as a host's function would cut it off, so the same path runs. */
 const LIMIT_MS = 5 * 60_000;
 
-/** What `sift run` gives sift as its host: this machine, its home directory, its page. */
+/** What `sift run` gives sift as its host: this machine and its home directory. */
 export function nodeHost(config: Config, store: Store, ephemeral: Ephemeral, port: number, log: (line: string) => void): Host {
-  return { config, store, ephemeral, sessionSecret: sessionSecret(config), ...dashboardAddresses(config, port), pageDir: WEB_DIST, log, limitMs: LIMIT_MS };
+  return { config, store, ephemeral, sessionSecret: sessionSecret(config), ...dashboardAddresses(config, port), log, limitMs: LIMIT_MS };
 }
 
 /**
@@ -141,21 +114,17 @@ function dashboardAddresses(config: Config, port: number) {
   return { allowedHosts: [...machineNames(), ...(host && host !== 'all' ? [host] : [])], signInAddresses: signInAddresses(port) };
 }
 
-/**
- * Serve the dashboard from this process and say where it is. Used by `run`, so one process keeps sift
- * online, and by `dashboard` on its own.
- */
+/** Serve the dashboard from this process and say where it is, so one process keeps Sift online. */
 export async function serveDashboard(
   config: Config,
   sift: Pick<Sift, 'respond'>,
   options: { port: number; host?: string; dev?: boolean },
-): Promise<() => void> {
+): Promise<() => Promise<void>> {
   const { port } = options;
   // --host replaces the setting: a container listens on every interface and its port mapping decides who can reach it.
   const listen = options.host ? [options.host] : await listenAddresses(config.settings);
-  // In dev the page is rebuilt alongside, and served as it changes.
-  if (!options.dev) await ensureWebBuilt();
-  const servers = listen.map(() => dashboardListener(sift.respond, options.dev ? { dev: true } : {}));
+  const page = await nextPage(options.dev ?? false);
+  const servers = listen.map(() => dashboardListener(sift.respond, page));
   await Promise.all(
     servers.map(
       (server, index) =>
@@ -175,11 +144,12 @@ export async function serveDashboard(
   const [first, ...others] = signInAddresses(port);
   ui.fields([['Dashboard', paint.bold(first ?? '')], ...others.map((url) => ['', paint.bold(url)] as const)]);
   if (others.length > 0) ui.info(`The second needs ${paint.cmd(`tailscale serve --bg ${port}`)} once. Sign in there with Google.`);
-  return () => {
+  return async () => {
     for (const server of servers) {
       server.close();
       server.closeAllConnections();
     }
+    await page.close();
   };
 }
 

@@ -9,7 +9,7 @@ From a checkout, `pnpm sift <command>` runs it from source.
 | `sift init` | Set Sift up. A first run walks through every step; one stopped part-way carries on from where it stopped. Once setup is finished it lists the steps with what each is set to and redoes the one you pick. |
 | `sift run` | Read and classify mail, and serve the dashboard. The one process to keep running. |
 | `sift status` | What is set up, and how much Sift has recorded. |
-| `sift dev` | `run` for working on Sift: restarts when server code changes, rebuilds and reloads the page when page code changes. Takes `run`'s options. |
+| `sift dev` | `run` for working on Sift: restarts when server code changes; the page comes from Next.js's development server, which updates it in place as page code changes. Takes `run`'s options. |
 | `sift reset-db` | Renames the local database folder to `database.<time>`, so Sift starts a new, empty one. For a database an earlier Sift made with migrations since replaced. Refused while Sift has it open; not for a Postgres server. `pnpm db:reset` runs it. |
 
 `--home <dir>` works with every command and says where Sift keeps its files. When working on Sift, give it a scratch directory so your real mail is left alone.
