@@ -7,7 +7,8 @@ import { Backdrop, LayerBody, LayerHeader, useLayerOpen } from './layer.tsx';
 
 /**
  * One thing from a list, opened beside the list: it slides over from the right, as wide as three
- * quarters of the screen, and the list stays behind it. `onPrevious` and `onNext` step through the
+ * quarters of the screen, and the list stays behind it. Never narrower than a 600px email beside the
+ * message panel's right column, so on a smaller screen it covers the screen. `onPrevious` and `onNext` step through the
  * list without closing; leave one out at either end. `narrow` for a short form. Covers the screen on a phone. Closes on Escape
  * or a press outside.
  *
@@ -50,7 +51,7 @@ export function Panel({
           ref={popup}
           tabIndex={-1}
           initialFocus={popup}
-          className={`focus-within-shown fixed inset-y-0 right-0 z-50 flex w-full flex-col border-(--frame) bg-card [--surface:var(--card)] text-sm outline-none transition-transform duration-150 ease-out data-ending-style:translate-x-full data-starting-style:translate-x-full motion-reduce:transition-none md:border-l ${narrow ? 'md:w-[min(44rem,100vw)]' : 'md:w-[min(75vw,80rem)]'}`}
+          className={`focus-within-shown fixed inset-y-0 right-0 z-50 flex w-full flex-col border-(--frame) bg-card [--surface:var(--card)] text-sm outline-none transition-transform duration-150 ease-out data-ending-style:translate-x-full data-starting-style:translate-x-full motion-reduce:transition-none md:border-l ${narrow ? 'md:w-[min(44rem,100vw)]' : 'md:w-[min(max(75vw,66rem),80rem,100vw)]'}`}
         >
           <KeyLayer moves>
             <LayerHeader title={title} subtitle={subtitle} />

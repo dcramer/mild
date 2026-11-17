@@ -210,7 +210,7 @@ function Body({
     // On a phone the answer comes first, then the message, then the rest. On a desktop the message fills the
     // height beside one column that scrolls on its own; that column reaches into the panel's gutters, so its
     // rows' hover and its scrollbar sit where the page's would.
-    <div className="flex flex-col gap-10 lg:grid lg:h-full lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-[minmax(0,1fr)] lg:gap-12">
+    <div className="flex flex-col gap-10 lg:grid lg:h-full lg:grid-cols-[minmax(0,1fr)_20rem] lg:grid-rows-[minmax(0,1fr)] lg:gap-12 2xl:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="flex min-h-0 min-w-0 flex-col max-lg:order-2">
         <MessageBody detail={detail} />
       </div>
