@@ -151,7 +151,7 @@ Everything a person prefers is in their own database.
 
 - **Whether Sift is on, and their model** (`preferences`, `src/store/preferences.ts`): whether Sift changes their Gmail or only suggests, and which model judges it, both set under Settings. What they want is said by their labels' descriptions and their rules; there are no free-form guidelines beside them, since the system's intent is the same for everyone and a label's description already says what belongs in it.
 - **What is structured or learned:**
-  - `labels`: what mail can be and what to do with each. Seeded with cautious defaults (nothing is marked spam); changed and added to in the dashboard, under Labels.
+  - `labels`: what mail can be and what to do with each. Everything else from the start; the rest chosen while setting up, from what the model suggests, and changed and added to in the dashboard, under Labels.
   - `rules`: what the user has said happens to mail, or what it is; and a rule for each sender Sift blocked.
   - `correspondents`: whether the user has ever written to an address, cached.
 
@@ -231,7 +231,7 @@ One Postgres database for everyone: Postgres is the one engine Vercel and a loca
 - **One process.** PGlite is one process's alone and does not check that itself, so Sift holds `database.lock` (its process id) and refuses the folder to another process while it is alive; `sift status` then says Sift is running. A lock left by a process that has gone is taken over.
 - **Queries** are built with Drizzle's builder on the `Sql` handle, from the tables, operators and `sql` in `src/store/query.ts`; nothing outside `src/store/` imports Drizzle, and no SQL text names a table (`sql` refuses one interpolated, and a test reads `src/` for one written). `sql` is for expressions the builder lacks (`count(*) FILTER`, `coalesce`), with columns interpolated. A transaction is one call taking a function that awaits nothing but the database, since it holds the connection; using an outer handle inside it is refused rather than left to wait on itself. A failed statement reports the database's error, never the values bound to it, which can be a message's text.
 
-Defaults are written by code, never by a migration: a mailbox's starting labels with the mailbox (`ensureMailbox`), and a person's preferences when their database is first opened. Labels are never deleted, so every label a row names exists. Together the tables are the complete record of what Sift saw and did, and everything else (the dashboard, undo, future analytics) reads from them.
+Defaults are written by code, never by a migration: a mailbox's one starting label, Everything else, with the mailbox (`ensureMailbox`), and a person's preferences when their database is first opened. Labels are never deleted, so every label a row names exists. Together the tables are the complete record of what Sift saw and did, and everything else (the dashboard, undo, future analytics) reads from them.
 
 - **messages:** one row per message Sift has seen: sender, recipients, subject, the triage headers, the labels at sync time and the facts derived from them. No body. This is enough to triage a message again without refetching it.
 - **feedback, examples:** the user's answers, one per decision (what the mail is, what should happen to it, and whether it came from the dashboard or Gmail), and the readable text of each message they answered for, kept as evaluation and training data until deleted or a year old (see Teaching).
