@@ -42,7 +42,7 @@ function FilterMark({ rule }: { rule: RuleSummary }) {
   if (filterStanding(rule) !== 'filter') return null;
   return (
     <span className="ml-2 inline-flex align-[-0.1em]">
-      <Hint icon={FunnelIcon} says="In Gmail" />
+      <Hint icon={FunnelIcon} says="Gmail filter" />
     </span>
   );
 }
@@ -123,13 +123,13 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
         active: [
           ...(label === '' ? [] : [{ label: `Label: ${labels.find(([id]) => id === label)?.[1] ?? label}`, clear: () => setLabel('') }]),
           ...(source === '' ? [] : [{ label: `Made by: ${SOURCES.find(([key]) => key === source)?.[1]}`, clear: () => setSource('') }]),
-          ...(gmail === '' ? [] : [{ label: `In Gmail: ${GMAIL.find(([key]) => key === gmail)?.[1]}`, clear: () => setGmail('') }]),
+          ...(gmail === '' ? [] : [{ label: `Gmail filter: ${GMAIL.find(([key]) => key === gmail)?.[1]}`, clear: () => setGmail('') }]),
         ],
         panel: (
           <>
             <FilterGroup label="Label" value={label} options={[['', 'Any'] as const, null, ...inboxFirst(labels)]} onChange={setLabel} />
             <FilterGroup label="Made by" value={source} options={SOURCES} onChange={setSource} />
-            <FilterGroup label="In Gmail" value={gmail} options={GMAIL} onChange={setGmail} />
+            <FilterGroup label="Gmail filter" value={gmail} options={GMAIL} onChange={setGmail} />
           </>
         ),
       }}

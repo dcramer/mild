@@ -4,26 +4,26 @@ A rule Gmail can run itself can be added to Gmail as a filter, so its mail is ha
 
 ## Sub-features
 
-- `filter-state`: `In Gmail` on a rule's panel: `Gmail runs this rule as a filter.`, `Its filter was deleted in Gmail. Sift will not put it back.`, `Gmail could run this by itself once Sift is on.`, or why it cannot be one; with its history (`Added to Gmail`, `Removed from Gmail`, `Deleted in Gmail`, `Not added to Gmail`).
-- `filter-remove`: `Remove from Gmail` on a rule that is a filter; the rule stays.
-- `filter-add`: `Add to Gmail…`, only while Sift is on, then `Add it to Gmail as a filter?` and `Add to Gmail`.
+- `filter-state`: `Gmail filter` on a rule's panel: `Gmail runs this rule itself, as one of your Gmail filters…`, `Its Gmail filter was deleted in Gmail. Sift will not put it back.`, `Once Sift is on, Gmail could run this rule itself…`; with its history (`Filter added`, `Filter removed`, `Filter deleted in Gmail`, `Gmail did not take the filter`). A rule that can never be a filter and has none has no `Gmail filter` section.
+- `filter-remove`: `Remove filter` on a rule that is a filter; the rule stays.
+- `filter-add`: `Add as a Gmail filter…`, only while Sift is on, then `Add it to Gmail as a filter?` and `Add to Gmail`.
 - `filter-rule-remove`: removing a rule that is a filter takes the filter out first.
 
 ## How to get to it (user POV)
 
-- Rules, a rule's row, then `In Gmail` in its panel.
-- Settings, `Active`, `Turn on`, before Add to Gmail is offered.
+- Rules, a rule's row, then `Gmail filter` in its panel.
+- Settings, `Active`, `Turn on`, before Add as a Gmail filter is offered.
 
 ## Driving it with verify.sh
 
 Preconditions:
 
-- Fresh seed. `$RUN/gmail.json` holds one filter for `me@example.org`, `f1-@ci.example.org`. Rules shows a funnel only on `anyone at ci.example.org`, and nothing in red. The news rule's panel history ends `Not added to Gmail`, the shop rule's `Deleted in Gmail`, muted, neither red.
+- Fresh seed. `$RUN/gmail.json` holds one filter for `me@example.org`, `f1-@ci.example.org`. Rules shows a funnel only on `anyone at ci.example.org`, and nothing in red. The news rule's panel history ends `Gmail did not take the filter`, the shop rule's `Filter deleted in Gmail`, muted, neither red.
 
-- **Remove from Gmail.** `ab open "$B/rules"`, `ab find role cell click --name "anyone at ci.example.org"`. `In Gmail` reads `Gmail runs this rule as a filter.` `ab find role button click --name "Remove from Gmail"`. A toast reads `Removed from Gmail`; `In Gmail` reads `Gmail could run this by itself once Sift is on.` with `Removed from Gmail` in its history. `$RUN/gmail.json` has no filters; `SELECT type, status FROM actions ORDER BY id DESC LIMIT 1` is `unfilter`, `done`; the rule is still there.
+- **Remove filter.** `ab open "$B/rules"`, `ab find role cell click --name "anyone at ci.example.org"`. `Gmail filter` reads `Gmail runs this rule itself, as one of your Gmail filters…` `ab find role button click --name "Remove filter"`. A toast reads `Gmail filter removed`; `Gmail filter` reads `Once Sift is on, Gmail could run this rule itself…` with `Filter removed` in its history. `$RUN/gmail.json` has no filters; `SELECT type, status FROM actions ORDER BY id DESC LIMIT 1` is `unfilter`, `done`; the rule is still there.
 - **Turn Sift on.** `ab open "$B/?settings=1"`, `ab find role button click --name "Turn on" --exact`; it asks `Archive, label and mark spam on new mail by itself?`; `ab find role button click --name "Turn on" --exact` again. `Active` reads `On`; `SELECT active FROM preferences` has `true` for person 1.
-- **Add to Gmail.** Back on the ci rule's panel, `ab find role button click --name "Add to Gmail…"`. A dialog `Add it to Gmail as a filter?` says mail the filter archives never reaches Sift. `ab find role button click --name "Add to Gmail" --exact`. `In Gmail` reads `Gmail runs this rule as a filter.`, its history ends `Added to Gmail`, `$RUN/gmail.json` holds the filter again, and the newest `actions` row is `filter`, `done`.
-- **Remove the rule.** `ab find role button click --name "Remove" --exact` (the panel also has `Remove from Gmail`), wait for `Remove this rule?`, then `ab find role button click --name "Remove" --exact` on `Remove this rule?`. The row is gone, `$RUN/gmail.json` has no filters, and the newest `actions` row is `unfilter`, `done`.
+- **Add as a Gmail filter.** Back on the ci rule's panel, `ab find role button click --name "Add as a Gmail filter…"`. A dialog `Add it to Gmail as a filter?` says mail the filter archives never reaches Sift. `ab find role button click --name "Add to Gmail" --exact`. `Gmail filter` reads `Gmail runs this rule itself…`, its history ends `Filter added`, `$RUN/gmail.json` holds the filter again, and the newest `actions` row is `filter`, `done`.
+- **Remove the rule.** `ab find role button click --name "Remove" --exact` (the panel also has `Remove filter`), wait for `Remove this rule?`, then `ab find role button click --name "Remove" --exact` on `Remove this rule?`. The row is gone, `$RUN/gmail.json` has no filters, and the newest `actions` row is `unfilter`, `done`.
 - After all of it, `SELECT count(*) AS n FROM actions WHERE type NOT IN ('filter', 'unfilter')` is `0`, and `ab console` and `ab errors` print nothing.
 
 ## Gotchas

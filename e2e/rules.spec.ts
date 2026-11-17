@@ -29,7 +29,8 @@ test.describe('Rules', () => {
     await expect(dialog).toHaveCount(0);
     const opened = rulePanel(page, 'deals@promo.example.com');
     await expect(fact(opened, 'Then')).toHaveText('Archive');
-    await expect(fact(opened, 'Used')).toHaveText('1 time, last just now');
+    await expect(fact(opened, 'Matched, 30 days')).toHaveText('1');
+    await expect(fact(opened, 'All time')).toHaveText('1');
     await expect(opened.getByRole('cell', { name: '48 hours only: 30% off' })).toBeVisible();
     expect(openRule(page)).toMatch(/^r-/);
 
@@ -70,7 +71,8 @@ test.describe('Rules', () => {
     await dialog.getByRole('textbox', { name: 'Only when it is, in your words' }).fill('a sale that ends today');
     await addRule(dialog);
     const opened = rulePanel(page, 'deals@promo.example.com');
-    await expect(fact(opened, 'Cost, 30 days')).toHaveText('$0 · 0 messages checked');
+    await expect(fact(opened, 'Cost, 30 days')).toHaveText('$0');
+    await expect(opened.getByText('0 messages checked', { exact: true })).toBeVisible();
     await opened.getByRole('button', { name: 'Close' }).click();
 
     await expect(head('Cost 30D')).toBeVisible();
@@ -170,8 +172,11 @@ test.describe('Rules', () => {
     const news = rulePanel(page, 'anyone at news.example.com');
     await expect(news.getByText('1 of 4')).toBeVisible();
     await expect(news.getByRole('button', { name: 'Previous' })).toBeDisabled();
-    await expect(fact(news, 'Is')).toHaveText('Newsletters');
-    await expect(fact(news, 'Used')).toHaveText(/^2 times, last /);
+    await expect(fact(news, 'Then')).toHaveText('Archive as Newsletters');
+    await expect(fact(news, 'Matched, 30 days')).toHaveText('2');
+    // Today's column: decided while Sift was off, so not changed in Gmail. No model read them, so no cost.
+    await expect(news.getByRole('listitem', { name: /: 0 changed in gmail, 2 left alone$/ })).toHaveCount(1);
+    await expect(news.getByText('Model cost, 30 days')).toHaveCount(0);
     await expect(news.getByRole('cell', { name: 'This week in widgets' })).toBeVisible();
     const first = openRule(page);
 

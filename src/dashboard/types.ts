@@ -400,6 +400,15 @@ export const RuleWaiting = z.object({ total: z.number(), messages: z.array(Inbox
 export type RuleWaiting = z.infer<typeof RuleWaiting>;
 
 /**
+ * What a rule decided each day, oldest first: `changed` was carried out in Gmail, `left` was not (Sift was
+ * off, or it never landed). `costUsd` is the model calls that checked its condition that day, met or not.
+ */
+export const RuleUsage = z.object({
+  daily: z.array(z.object({ day: z.string(), changed: z.number(), left: z.number(), costUsd: z.number() })),
+});
+export type RuleUsage = z.infer<typeof RuleUsage>;
+
+/**
  * The mail in the inbox now that a rule would decide, found in Gmail. `seen`: Sift has a record of it.
  * `reads`: a model must say what it is first. `capped`: the inbox had more than one press looks at.
  * `costEach`: one model call with the person's model, in dollars, when known.

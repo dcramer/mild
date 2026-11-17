@@ -39,6 +39,7 @@ import rulesInboxRead from './routes/rules/inbox/get.ts';
 import rulesRead from './routes/rules/get.ts';
 import rulesWrite from './routes/rules/post.ts';
 import rulesRemoveWrite from './routes/rules/remove/post.ts';
+import rulesUsageRead from './routes/rules/usage/get.ts';
 import rulesWaitingRead from './routes/rules/waiting/get.ts';
 import senderRead from './routes/sender/get.ts';
 import standingClearWrite from './routes/standing/clear/post.ts';
@@ -66,6 +67,7 @@ export const READS: readonly Read[] = [
   modelsRead,
   rulesRead,
   rulesInboxRead,
+  rulesUsageRead,
   rulesWaitingRead,
   senderRead,
   suggestionRead,

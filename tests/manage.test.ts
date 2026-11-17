@@ -14,7 +14,7 @@ import { redecideWaiting } from '../src/learn/redecide.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { MAX_LABELS, listLabels } from '../src/store/labels.ts';
 import { LEAVE_IN_INBOX } from '../src/triage/types.ts';
-import { recordDecision } from '../src/store/decisions.ts';
+import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { EXAMPLE_KEEP_DAYS } from '../src/store/examples.ts';
 import { preferences, setActive } from '../src/store/preferences.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
@@ -607,6 +607,33 @@ describe('managing sift from the dashboard', () => {
     expect((await call('POST', '/api/rules/apply', { id, messageIds: ['g1'] })).body).toEqual({ deciding: 0, reading: 1 });
     expect((await call('POST', '/api/rules/apply', { id, messageIds: [] })).status).toBe(400);
     expect(calls).toEqual([`inbox ${id}`, `apply ${id} g1`]);
+  });
+
+  it('charts what a rule decided by itself over 30 days, carried out or not, and what the model calls behind it cost', async () => {
+    const { call } = await start();
+    const id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter', when: 'only the digests' }, 'user');
+    await recordSync(
+      db,
+      ACCOUNT,
+      ['u1', 'u2', 'u3', 'u4'].map((messageId) => facts({ accountId: ACCOUNT, messageId })),
+      '2',
+    );
+    const byRule = { disposition: 'archive', subscription: 'preserve', stage: 'model', labelId: 'newsletter', ruleId: id, reason: 'rule' } as const;
+    const now = Date.now();
+    const usage = { model: 'test-model', inputTokens: 10, outputTokens: 1, costUsd: 0.004 };
+    const run = await startRun(db, { accountId: ACCOUNT, messageId: 'u1', model: 'test-model', ruleId: id, now });
+    await finishRun(db, run, { usage, now });
+    // A check that found the condition unmet decided nothing for the rule, and still cost.
+    await finishRun(db, await startRun(db, { accountId: ACCOUNT, messageId: 'u3', model: 'test-model', ruleId: id, now }), { usage, now });
+    await settleDecision(db, await recordDecision(db, ACCOUNT, 'u1', byRule, { now, carryOut: true, runId: run }), 'done');
+    await recordDecision(db, ACCOUNT, 'u2', byRule, { now });
+    // Older than the chart, and the user's own answer: neither counts.
+    await recordDecision(db, ACCOUNT, 'u3', byRule, { now: now - 40 * 86_400_000 });
+    await recordDecision(db, ACCOUNT, 'u4', byRule, { now, byUser: true });
+    const { daily } = (await call('GET', `/api/rules/usage?id=${id}`)).body as { daily: { changed: number; left: number; costUsd: number }[] };
+    expect(daily).toHaveLength(30);
+    expect(daily.at(-1)).toMatchObject({ changed: 1, left: 1, costUsd: 0.008 });
+    expect(daily.slice(0, -1).every((day) => day.changed + day.left + day.costUsd === 0)).toBe(true);
   });
 
   it('writes a rule to Gmail as a filter only while sift is on, and removes the filter with the rule', async () => {

@@ -1,5 +1,6 @@
 import { type RuleMatch, type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import {
+  HANDLED,
   INBOX_NAME,
   ago,
   saidOf,
@@ -8,18 +9,44 @@ import {
   describeMatch,
   factAnswers,
   factWords,
+  longDay,
   madeBy,
   money,
+  moneyTick,
   outcomeName,
   plural,
   shortDate,
+  shortDay,
   willBe,
 } from '@/lib/format.ts';
+import { Verdict } from '@/components/bits.tsx';
 import { messageKey, useParam } from '@/lib/route.ts';
 import { MatchValue } from '@/components/sender.tsx';
 import type { OpenMessages } from '@/views/message-panel.tsx';
-import { InGmail } from '@/views/gmail-filter.tsx';
-import { Blank, Button, ConfirmButton, Dialog, Does, Empty, Fact, Facts, Failure, Loading, Panel, Section, Table, Td, Tr, TrGroup, useToast } from '@/system';
+import { GmailFilter } from '@/views/gmail-filter.tsx';
+import {
+  Blank,
+  Button,
+  ConfirmButton,
+  Dialog,
+  Does,
+  Empty,
+  Fact,
+  Facts,
+  Failure,
+  Figure,
+  Figures,
+  Loading,
+  Panel,
+  Reserve,
+  Section,
+  StackedBars,
+  Table,
+  Td,
+  Tr,
+  TrGroup,
+  useToast,
+} from '@/system';
 
 const QUIET: Record<string, string> = {
   fromDomain: 'anyone at',
@@ -181,7 +208,7 @@ function InInbox({ rule, onOpen }: { rule: RuleSummary; onOpen: OpenMessages }) 
   const { total = 0, messages = [] } = waiting.data ?? {};
   return (
     <Section
-      title="In your inbox"
+      title="Still in your inbox"
       meta={total > 0 ? count(total) : undefined}
       action={
         <Button variant="plain" onClick={() => setApplying('1')}>
@@ -192,7 +219,7 @@ function InInbox({ rule, onOpen }: { rule: RuleSummary; onOpen: OpenMessages }) 
       <Failure>{waiting.error}</Failure>
       {messages.length > 0 ? (
         <>
-          <p className="text-muted-foreground">This rule decided these, but they came before it or while Sift was off, so they were not moved.</p>
+          <p className="text-muted-foreground">These came before the rule or while Sift was off, so they were not moved.</p>
           <Table>
             <tbody>
               {messages.map((m, index) => (
@@ -210,6 +237,37 @@ function InInbox({ rule, onOpen }: { rule: RuleSummary; onOpen: OpenMessages }) 
       ) : null}
       {applying === '1' ? <ApplyDialog rule={rule} onClose={() => setApplying('')} /> : null}
     </Section>
+  );
+}
+
+/**
+ * How much the rule decided over the last 30 days, by day, then since it was made; for a rule a model
+ * checks, what checking cost. A rule is usually opened to see whether it is doing anything.
+ */
+function Use({ rule }: { rule: RuleSummary }) {
+  const usage = useLoaded(`rule-usage ${rule.id}`, (signal) => api.ruleUsage(rule.id, signal));
+  const daily = usage.data?.daily ?? [];
+  const matched = daily.reduce((sum, day) => sum + day.changed + day.left, 0);
+  const cost = daily.reduce((sum, day) => sum + day.costUsd, 0);
+  return (
+    <Reserve id="rule-use" ready={usage.data !== null || usage.error !== null} room={{ narrow: 280, wide: 260 }}>
+      <div className="flex flex-col gap-5">
+        <Failure>{usage.error}</Failure>
+        <Figures>
+          <Figure label="Matched, 30 days" value={count(matched)} note={rule.lastHitAt ? `last ${ago(rule.lastHitAt)}` : null} />
+          {checked(rule) ? <Figure label="Cost, 30 days" value={money(rule.checkCost)} note={`${plural(rule.checks, 'message')} checked`} /> : null}
+          <Figure label="All time" value={count(rule.hits)} note={`since ${shortDate(rule.createdAt)}`} />
+        </Figures>
+        {matched > 0 ? (
+          <StackedBars
+            compact
+            series={HANDLED}
+            rows={daily.map((day) => ({ key: day.day, label: shortDay(day.day), title: longDay(day.day), values: { changed: day.changed, left: day.left } }))}
+            {...(cost > 0 ? { line: { name: 'Model cost', values: daily.map((day) => day.costUsd), format: money, tick: moneyTick } } : {})}
+          />
+        ) : null}
+      </div>
+    </Reserve>
   );
 }
 
@@ -235,31 +293,21 @@ export function RulePanel({
 }) {
   const remove = useAction();
   const toast = useToast();
-  const action = rule.disposition;
+  const action = rule.disposition ?? 'keep';
+  const labelId = rule.kind === 'label' ? rule.labelId : null;
   // Leave in inbox, or an action rule that keeps mail, changes nothing in the inbox.
-  const inbox = doesName(rule.kind === 'action' ? null : rule.labelId, action ?? '') === INBOX_NAME;
-  const moves = !inbox;
+  const moves = doesName(labelId, action) !== INBOX_NAME;
   return (
-    <Panel open onClose={onClose} title={ruleTitle(rule)} {...(position === undefined ? {} : { position })} onPrevious={onPrevious} onNext={onNext}>
-      <div className="flex flex-col gap-10">
+    <Panel narrow open onClose={onClose} title={ruleTitle(rule)} {...(position === undefined ? {} : { position })} onPrevious={onPrevious} onNext={onNext}>
+      <div className="flex flex-col gap-8">
+        <Use rule={rule} />
         <Facts>
           {rule.name ? (
             <Fact term="Mail">
               <Who accountId={rule.accountId} match={rule.match} />
             </Fact>
           ) : null}
-          {rule.kind === 'action' || inbox ? null : <Fact term={rule.kind === 'when-label' ? 'When it is' : 'Is'}>{rule.labelName}</Fact>}
-          {action ? (
-            <Fact term="Then">
-              <Does action={action}>{doesName(rule.kind === 'action' ? null : rule.labelId, action)}</Does>
-              {rule.override && rule.kind === 'label' ? <span className="text-muted-foreground"> instead of the label’s</span> : null}
-              {[rule.markRead ? 'marked read' : null, rule.unsubscribe ? 'unsubscribed' : null].filter(Boolean).map((extra) => (
-                <span key={extra} className="text-muted-foreground">
-                  , {extra}
-                </span>
-              ))}
-            </Fact>
-          ) : null}
+          {rule.kind === 'when-label' ? <Fact term="When it is">{rule.labelName}</Fact> : null}
           {rule.when ? <Fact term="Only when it is">{rule.when}</Fact> : null}
           {rule.except.length > 0 ? (
             <Fact term="Unless">
@@ -270,18 +318,20 @@ export function RulePanel({
               ))}
             </Fact>
           ) : null}
-          {rule.kind === 'when-label' || rule.when ? <Fact term="Reading">Sift reads each message it matches.</Fact> : null}
-          <Fact term="Used">{rule.hits === 0 ? 'Never' : `${plural(rule.hits, 'time')}${rule.lastHitAt ? `, last ${ago(rule.lastHitAt)}` : ''}`}</Fact>
-          {checked(rule) ? (
-            <Fact term="Cost, 30 days">
-              {money(rule.checkCost)} <span className="text-muted-foreground">· {plural(rule.checks, 'message')} checked</span>
-            </Fact>
-          ) : null}
+          <Fact term="Then">
+            <Verdict labelId={labelId} labelName={labelId === null ? null : rule.labelName} disposition={action} />
+            {rule.override && rule.kind === 'label' ? <span className="text-muted-foreground">, instead of the label’s</span> : null}
+            {[rule.markRead ? 'marked read' : null, rule.unsubscribe ? 'unsubscribed' : null].filter(Boolean).map((extra) => (
+              <span key={extra} className="text-muted-foreground">
+                , {extra}
+              </span>
+            ))}
+          </Fact>
           <Fact term="Made by">
             {madeBy(rule.source)}, {shortDate(rule.createdAt)}
           </Fact>
         </Facts>
-        <InGmail rule={rule} active={active} />
+        <GmailFilter rule={rule} active={active} />
         {moves ? <InInbox rule={rule} onOpen={onOpen} /> : null}
         <div>
           <ConfirmButton

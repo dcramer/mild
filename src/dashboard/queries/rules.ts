@@ -4,8 +4,9 @@ import type { RuleMatch } from '../../triage/stages/rules.ts';
 import { openEnvelope, openJson, ruleName } from '../../store/content.ts';
 import { ruleFilterStatus } from '../../store/filters.ts';
 import { type Scope, within } from '../scope.ts';
-import type { RuleSummary, RuleWaiting } from '../types.ts';
+import type { RuleSummary, RuleUsage, RuleWaiting } from '../types.ts';
 import { DAY_MS } from './decisions.ts';
+import { localDay } from './summary.ts';
 import { MONTH } from './usage.ts';
 
 /**
@@ -111,4 +112,33 @@ export async function ruleWaiting(db: Sql, scope: Scope, ruleId: string): Promis
       return { accountId: r.accountId, messageId: r.messageId, subject, receivedAt: r.receivedAt };
     }),
   };
+}
+
+/**
+ * What a rule decided by itself each day over the last 30, as its hit count counts them, and what the
+ * model calls that checked its condition cost, met or not.
+ */
+export async function ruleUsage(db: Sql, scope: Scope, ruleId: string, now: number = Date.now()): Promise<RuleUsage> {
+  const since = now - MONTH * DAY_MS;
+  const byDay = new Map<string, { changed: number; left: number; costUsd: number }>();
+  for (let i = MONTH - 1; i >= 0; i--) byDay.set(localDay(now - i * DAY_MS), { changed: 0, left: 0, costUsd: 0 });
+  const decided = await db
+    .select({ decidedAt: decisions.decidedAt, outcome: decisions.outcome })
+    .from(decisions)
+    .where(and(within(scope, decisions.accountId), eq(decisions.ruleId, ruleId), eq(decisions.byUser, false), gte(decisions.decidedAt, since)));
+  for (const row of decided) {
+    const day = byDay.get(localDay(row.decidedAt));
+    if (!day) continue;
+    if (row.outcome === 'done') day.changed++;
+    else day.left++;
+  }
+  const checks = await db
+    .select({ startedAt: modelRuns.startedAt, costUsd: modelRuns.costUsd })
+    .from(modelRuns)
+    .where(and(within(scope, modelRuns.accountId), eq(modelRuns.ruleId, ruleId), gte(modelRuns.startedAt, since)));
+  for (const run of checks) {
+    const day = byDay.get(localDay(run.startedAt));
+    if (day) day.costUsd += run.costUsd;
+  }
+  return { daily: [...byDay].map(([day, rest]) => ({ day, ...rest })) };
 }

@@ -47,6 +47,7 @@ import type {
   RuleInbox,
   RuleMatch,
   RuleSummary,
+  RuleUsage,
   RuleWaiting,
   SenderPage,
   Session,
@@ -255,6 +256,7 @@ export const api = {
   ruleFilter: (id: string, on: boolean) => post('/api/rules/filter', { id, on }),
   /** What the rule decided and Sift has not moved. */
   ruleWaiting: (id: string, signal: AbortSignal) => get<RuleWaiting>('/api/rules/waiting', { id }, signal),
+  ruleUsage: (id: string, signal: AbortSignal) => get<RuleUsage>('/api/rules/usage', { id }, signal),
   /** The inbox mail the rule would decide now, read from Gmail. */
   ruleInbox: (id: string, signal: AbortSignal) => get<RuleInbox>('/api/rules/inbox', { id }, signal),
   /** Apply the rule to messages from its inbox preview. */

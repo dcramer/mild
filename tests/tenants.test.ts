@@ -167,6 +167,7 @@ const READS = (account: string, mark: string) => [
   `/api/examples?account=${encodeURIComponent(account)}`,
   `/api/message/html?account=${encodeURIComponent(account)}&id=m-${mark}`,
   `/api/rules/waiting?id=${ids[account]!.rule}`,
+  `/api/rules/usage?id=${ids[account]!.rule}`,
   `/api/rules/inbox?id=${ids[account]!.rule}`,
   '/api/inbox?reach=inbox',
 ];

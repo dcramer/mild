@@ -56,7 +56,7 @@ The working list for sift. Remove an item when it lands; add what you find. What
 - [ ] Retake the screenshots: README's (`docs/images/suggestions.png`) shows the old page and says an answer makes a rule; design.md's (`docs/images/design-system.png`) is out of date.
 - [ ] Message text is plain and cut at 4,000 characters, as the model sees it. Decide whether reading needs more (longer text, quoted replies folded, links listed).
 - [ ] On a phone a 600px HTML message scrolls sideways inside its frame; it cannot be scaled without script.
-- [ ] A rule's panel shows its mail still in the inbox, its hit count and last hit; not yet every message it matched, or hits over time.
+- [ ] A rule's panel shows what it decided each day over 30 days and its mail still in the inbox; not yet every message it matched.
 - [ ] **Mailboxes.** A mailbox switcher in the page (one, or all); a way to hand over or leave an install; try a second account end to end.
 - [ ] Removing a mailbox or deleting an account leaves the Gmail filters Sift wrote, and the confirm says so. Offer to remove them, which needs the mailbox's access before it is revoked. Say that backups keep data for their own retention.
 - [ ] Try a label's description, or a rule's "only when", on recent mail before saving it: what the model would now say about a few messages, beside what it said.

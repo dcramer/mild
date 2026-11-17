@@ -97,7 +97,7 @@ test.describe('Rules from a shortcut', () => {
     await addRule(dialog);
 
     const opened = rulePanel(page, 'sale@store.example.com');
-    await expect(fact(opened, 'Is')).toHaveText('Marketing');
+    await expect(fact(opened, 'Then')).toContainText('as Marketing');
     const params = new URL(page.url()).searchParams;
     expect(params.get('message')).toBe('m8');
     expect(params.get('rule')).toMatch(/^r-/);

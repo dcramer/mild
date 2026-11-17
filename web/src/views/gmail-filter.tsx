@@ -80,42 +80,45 @@ export function filterStanding(rule: RuleSummary): 'filter' | 'could' | 'cannot'
   return rule.filterId ? 'filter' : rule.filter.possible ? 'could' : 'cannot';
 }
 
-/** Whether Gmail runs the rule as a filter, and why not; what Sift did about it, and the press to add or remove it. */
-export function InGmail({ rule, active }: { rule: RuleSummary; active: boolean }) {
+/**
+ * Whether Gmail runs the rule itself, as one of its own filters, or could; what Sift did about it, and the
+ * press to add or remove it. Said so that someone who has never made a Gmail filter knows what one is. Left
+ * out for a rule that can never be one and has none.
+ */
+export function GmailFilter({ rule, active }: { rule: RuleSummary; active: boolean }) {
   const [adding, setAdding] = useState(false);
   const remove = useAction();
   const toast = useToast();
-  const { state, possible, reason, history, checkedAt } = rule.filter;
+  const { state, possible, history, checkedAt } = rule.filter;
+  if (!rule.filterId && !possible) return null;
   const said = rule.filterId
     ? state === 'changed'
-      ? 'Its filter was edited in Gmail. Sift leaves it as it is.'
+      ? 'Its Gmail filter was edited in Gmail, so Sift leaves it as it is.'
       : state === 'outdated'
-        ? 'Its filter still does what this rule used to. Sift updates it once it is on.'
-        : 'Gmail runs this rule as a filter.'
+        ? 'Its Gmail filter still does what this rule used to. Sift updates it once it is on.'
+        : 'Gmail runs this rule itself, as one of your Gmail filters, so it applies the moment mail arrives, even when Sift isn’t running.'
     : state === 'gone'
-      ? 'Its filter was deleted in Gmail. Sift will not put it back.'
-      : !possible
-        ? reason
-        : active
-          ? 'Gmail could run this by itself.'
-          : 'Gmail could run this by itself once Sift is on.';
+      ? 'Its Gmail filter was deleted in Gmail. Sift will not put it back.'
+      : active
+        ? 'Gmail could run this rule itself, as one of your Gmail filters, so it applies the moment mail arrives, even when Sift isn’t running.'
+        : 'Once Sift is on, Gmail could run this rule itself, as one of your Gmail filters, so it applies even when Sift isn’t running.';
   const events = [
     ...history.map((change) => ({
       at: change.at,
       title:
         change.status === 'done' ? (
-          <span className="font-medium">{change.type === 'filter' ? 'Added to Gmail' : 'Removed from Gmail'}</span>
+          <span className="font-medium">{change.type === 'filter' ? 'Filter added' : 'Filter removed'}</span>
         ) : (
-          <span className="text-muted-foreground">{change.type === 'filter' ? 'Not added to Gmail' : 'Not removed from Gmail'}</span>
+          <span className="text-muted-foreground">{change.type === 'filter' ? 'Gmail did not take the filter' : 'Gmail did not remove the filter'}</span>
         ),
     })),
     // Noticed by a check, not done by Sift, so the audit log has no row for it.
-    ...(state === 'gone' && checkedAt !== null ? [{ at: checkedAt, title: <span className="font-medium">Deleted in Gmail</span> }] : []),
+    ...(state === 'gone' && checkedAt !== null ? [{ at: checkedAt, title: <span className="font-medium">Filter deleted in Gmail</span> }] : []),
   ].toSorted((a, b) => a.at - b.at);
 
   return (
     <Section
-      title="In Gmail"
+      title="Gmail filter"
       action={
         rule.filterId ? (
           <Button
@@ -124,20 +127,20 @@ export function InGmail({ rule, active }: { rule: RuleSummary; active: boolean }
             onClick={() =>
               remove.run(
                 () => api.ruleFilter(rule.id, false),
-                () => toast('Removed from Gmail'),
+                () => toast('Gmail filter removed'),
               )
             }
           >
-            Remove from Gmail
+            Remove filter
           </Button>
-        ) : possible && active ? (
+        ) : active ? (
           <Button variant="plain" onClick={() => setAdding(true)}>
-            Add to Gmail…
+            Add as a Gmail filter…
           </Button>
         ) : undefined
       }
     >
-      <p className={!rule.filterId && !possible ? 'text-muted-foreground' : undefined}>{said}</p>
+      <p className={rule.filterId || active ? undefined : 'text-muted-foreground'}>{said}</p>
       {events.length > 0 ? (
         <Timeline>
           {events.map((event) => (
