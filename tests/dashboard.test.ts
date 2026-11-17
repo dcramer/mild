@@ -120,6 +120,7 @@ describe('tracking', () => {
       getLabelIds: async () => [...labels],
       modifyLabels: async (_id: string, change: { add: string[]; remove: string[] }) => {
         labels.splice(0, labels.length, ...labels.filter((l) => !change.remove.includes(l)), ...change.add);
+        return [...labels];
       },
       ensureLabel: async (name: string) => `L:${name}`,
       hasSentTo: async () => false,

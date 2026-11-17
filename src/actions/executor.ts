@@ -77,21 +77,21 @@ async function applyChange(
     clock(deps),
   );
 
-  let finalLabels: string[] | null;
+  let finalLabels: string[];
   try {
-    await deps.mailbox.modifyLabels(target.messageId, change);
-    finalLabels = await deps.mailbox.getLabelIds(target.messageId);
+    // Gmail answers the change with the message's labels after it, so they are not read again.
+    finalLabels = await deps.mailbox.modifyLabels(target.messageId, change);
   } catch (error) {
     // The call may or may not have landed. Leave it open; reconcile() settles it from the mailbox's actual state.
     await finishAction(deps.db, actionId, 'unknown', null, message(error), clock(deps));
     return { status: 'unknown', actionId, reason: message(error) };
   }
 
-  if (finalLabels && applied(finalLabels, change)) {
+  if (applied(finalLabels, change)) {
     await finishAction(deps.db, actionId, 'done', finalLabels, null, clock(deps));
     return { status: 'done', actionId, finalLabels };
   }
-  const reason = finalLabels ? 'labels read back did not match the change' : 'message disappeared during the change';
+  const reason = 'the labels Gmail gave back did not match the change';
   await finishAction(deps.db, actionId, 'failed', finalLabels, reason, clock(deps));
   return { status: 'failed', actionId, reason };
 }

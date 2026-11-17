@@ -26,7 +26,8 @@ export function createGmailMailbox(auth: OAuth2Client, pace: Pace): Mailbox {
 
     async modifyLabels(messageId, change) {
       await pace(5);
-      await client.users.messages.modify({ userId, id: messageId, requestBody: { addLabelIds: change.add, removeLabelIds: change.remove } });
+      const { data } = await client.users.messages.modify({ userId, id: messageId, requestBody: { addLabelIds: change.add, removeLabelIds: change.remove } });
+      return data.labelIds ?? [];
     },
 
     async ensureLabel(name) {

@@ -194,18 +194,24 @@ export async function runWork(store: Store, work: Work, options: RunOptions, unt
 
 /**
  * Gmail for one pass, reading each message whole at most once: the model, the examples and the bodies kept
- * for waiting mail share the read. Held only for the pass.
+ * for waiting mail share the read. `held` says which were read; a read that failed is asked for again. Held only for the pass.
  */
-function readingOnce(api: GmailApi): GmailApi {
+function readingOnce(api: GmailApi): { api: GmailApi; held: (messageId: string) => boolean } {
   const reads = new Map<string, Promise<MessageContent | null>>();
-  return {
-    ...api,
-    getContent: (messageId) => {
-      const read = reads.get(messageId) ?? api.getContent(messageId);
+  const done = new Set<string>();
+  const getContent = (messageId: string) => {
+    let read = reads.get(messageId);
+    if (!read) {
+      read = api.getContent(messageId);
       reads.set(messageId, read);
-      return read;
-    },
+      read.then(
+        () => done.add(messageId),
+        () => reads.delete(messageId),
+      );
+    }
+    return read;
   };
+  return { api: { ...api, getContent }, held: (messageId) => done.has(messageId) };
 }
 
 /** One pass, its outcome kept for the dashboard. Null when the mailbox was removed while it ran. */
@@ -232,7 +238,7 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
   const result: PassResult = { email: account.email };
   try {
     const { api: gmail, mailbox } = await options.connect(db, account);
-    const api = readingOnce(gmail);
+    const { api, held } = readingOnce(gmail);
     const deps = { db, mailbox, ...(options.now ? { now: options.now } : {}) };
     if (active) await reconcile(deps);
     result.sync = await syncAccount(db, api, account, options.now, until);
@@ -249,9 +255,11 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
       },
       account,
     );
-    if (result.triage.unfinished || over()) return finish(result, active, options, true);
+    const out = Boolean(result.triage.unfinished) || over();
+    // Out of time, the text the model read is still kept for the mail it left waiting, and nothing more is fetched.
+    await keepSuggestionBodies(db, api, account.id, options.now, { held, fetch: !out });
+    if (out) return finish(result, active, options, true);
     result.captured = await captureExamples(db, api, account.id, options.now);
-    await keepSuggestionBodies(db, api, account.id, options.now);
     try {
       const filters = await checkFiltersWhenDue(deps, account.id, active);
       if (filters) result.filters = filters;

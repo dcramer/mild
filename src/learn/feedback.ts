@@ -25,7 +25,7 @@ import {
   suggestionBodies,
 } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
-import { hashOf, openEnvelope } from '../store/content.ts';
+import { hashOf, openEnvelope, openPart } from '../store/content.ts';
 import { listLabels } from '../store/labels.ts';
 import { recordDecision } from '../store/decisions.ts';
 import { proposeFromAnswers } from '../store/proposals.ts';
@@ -337,13 +337,21 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
         .insert(feedback)
         .values({ accountId: target.accountId, decisionId: target.decisionId, ...answered })
         .onConflictDoUpdate({ target: [feedback.userId, feedback.decisionId], set: answered });
-      // Every marked message is kept whole as an example; `sift run` fetches it on its next pass.
+      // Every marked message is kept whole as an example. Its text was kept only while it waited on the user,
+      // so it moves to the example; without it, `sift run` fetches the message on its next pass.
+      const waiting = and(eq(suggestionBodies.accountId, target.accountId), eq(suggestionBodies.messageId, target.messageId));
+      const [kept] = await tx.select({ text: suggestionBodies.bodyText, html: suggestionBodies.bodyHtml }).from(suggestionBodies).where(waiting);
+      // A message gone from Gmail was kept empty; fetching it again records it as gone.
+      const held =
+        kept && (kept.html !== null || openPart(tx, target.accountId, target.messageId, 'text', kept.text) !== '')
+          ? { status: 'captured' as const, bodyText: kept.text, bodyHtml: kept.html, capturedAt: now }
+          : {};
+      const marked = { disposition: wanted, labelId: is, markedAt: now, ...held };
       await tx
         .insert(examples)
-        .values({ accountId: target.accountId, messageId: target.messageId, disposition: wanted, labelId: is, markedAt: now })
-        .onConflictDoUpdate({ target: [examples.userId, examples.accountId, examples.messageId], set: { disposition: wanted, labelId: is, markedAt: now } });
-      // Its text was kept only while it waited on the user.
-      await tx.delete(suggestionBodies).where(and(eq(suggestionBodies.accountId, target.accountId), eq(suggestionBodies.messageId, target.messageId)));
+        .values({ accountId: target.accountId, messageId: target.messageId, ...marked })
+        .onConflictDoUpdate({ target: [examples.userId, examples.accountId, examples.messageId], set: marked });
+      await tx.delete(suggestionBodies).where(waiting);
     }
     if (input.carryOut) for (const target of targets) await recordDecision(tx, input.accountId, target.messageId, answer(target), carried);
     // The corrected message gets a decision of its own, so the log shows what the user said and, when

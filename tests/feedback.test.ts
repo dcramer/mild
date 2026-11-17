@@ -629,9 +629,13 @@ describe('reading a suggestion', () => {
     expect(await messageDetail(db, await everything(db), ACCOUNT, 'm2')).toMatchObject({ body: 'Text of m2', hasHtml: false });
     expect(await messageDetail(db, await everything(db), ACCOUNT, 'm3')).toMatchObject({ body: null, hasHtml: false });
 
-    // Answered: the temporary copy goes at once. (The example keeps the message's text once it is captured.)
+    // Answered: the temporary copy goes at once, to the example.
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' });
     expect((await stored()).map((r) => (r as { message_id: string }).message_id)).toEqual(['m2', 'm4']);
+    expect(await raw(db).get(`SELECT status, body_text FROM examples WHERE message_id = 'm1'`)).toEqual({
+      status: 'captured',
+      body_text: 'sift-plain:Text of m1',
+    });
     await keepSuggestionBodies(db, api, ACCOUNT, () => 1000);
     expect((await stored()).map((r) => (r as { message_id: string }).message_id)).toEqual(['m2', 'm4']);
 
@@ -675,6 +679,43 @@ describe('examples', () => {
       { message_id: 'm1', disposition: 'archive', label_id: 'newsletter', status: 'pending', body_text: null },
       { message_id: 'm2', disposition: 'archive', label_id: 'newsletter', status: 'pending', body_text: null },
     ]);
+  });
+
+  it('keeps only what this pass already read once out of time, and fetches no more', async () => {
+    await suggest('news@example.com', 'archive', NEWS); // m1
+    await suggest('news@example.com', 'archive', NEWS); // m2
+    const fetched: string[] = [];
+    const api = { getContent: async (id: string) => (fetched.push(id), { text: `Text of ${id}`, html: null, facts: { hasAttachments: false } }) };
+    expect(await keepSuggestionBodies(db, api, ACCOUNT, () => 1000, { held: (id) => id === 'm2', fetch: false })).toBe(0);
+    expect(fetched).toEqual(['m2']);
+    expect(await raw(db).all('SELECT message_id FROM suggestion_bodies')).toEqual([{ message_id: 'm2' }]);
+  });
+
+  it('takes the text kept while the mail waited, and fetches only what was not kept', async () => {
+    await suggest('news@example.com', 'archive', NEWS); // m1: kept
+    await suggest('news@example.com', 'archive', NEWS); // m2: gone from Gmail when its text was fetched
+    await keepSuggestionBodies(
+      db,
+      { getContent: async (id) => (id === 'm2' ? null : { text: `Text of ${id}`, html: `<p>${id}</p>`, facts: { hasAttachments: false } }) },
+      ACCOUNT,
+      () => 1000,
+    );
+    await suggest('news@example.com', 'archive', NEWS); // m3: not kept yet
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' }, 50);
+    expect(await raw(db).all('SELECT message_id, status, body_text, body_html, captured_at FROM examples ORDER BY message_id')).toEqual([
+      { message_id: 'm1', status: 'captured', body_text: 'sift-plain:Text of m1', body_html: 'sift-plain:<p>m1</p>', captured_at: 50 },
+      { message_id: 'm2', status: 'pending', body_text: null, body_html: null, captured_at: null },
+      { message_id: 'm3', status: 'pending', body_text: null, body_html: null, captured_at: null },
+    ]);
+
+    const fetched: string[] = [];
+    await captureExamples(
+      db,
+      { getContent: async (id) => (fetched.push(id), id === 'm2' ? null : { text: 'Hi', html: null, facts: { hasAttachments: false } }) },
+      ACCOUNT,
+    );
+    expect(fetched).toEqual(['m2', 'm3']);
+    expect(await raw(db).get(`SELECT status FROM examples WHERE message_id = 'm2'`)).toEqual({ status: 'gone' });
   });
 
   it('stores the text on the next pass, and keeps the answer when the message is gone', async () => {

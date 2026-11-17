@@ -40,6 +40,21 @@ describe('execute', () => {
     expect(mailbox.labels.get('m1')).toEqual(['UNREAD', 'L:mine', 'L:sift/newsletters', 'L:sift/did/archived']);
   });
 
+  it('reads the labels once, before the change, and takes the labels Gmail answers the change with', async () => {
+    const reads: string[] = [];
+    const read = mailbox.getLabelIds.bind(mailbox);
+    mailbox.getLabelIds = async (id) => (reads.push(id), await read(id));
+    expect(await execute(deps, ACCOUNT, 'm1', { type: 'archive' })).toMatchObject({ status: 'done' });
+    expect(reads).toEqual(['m1']);
+
+    mailbox.labels.set('m1', ['INBOX']);
+    mailbox.modifyLabels = async () => ['INBOX'];
+    expect(await execute(deps, ACCOUNT, 'm1', { type: 'archive' })).toMatchObject({
+      status: 'failed',
+      reason: 'the labels Gmail gave back did not match the change',
+    });
+  });
+
   it('labels without moving the message', async () => {
     await execute(deps, ACCOUNT, 'm1', { type: 'label', labels: ['sift/review'] });
     expect(mailbox.labels.get('m1')).toEqual(['INBOX', 'UNREAD', 'L:mine', 'L:sift/review']);

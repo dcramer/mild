@@ -4,8 +4,8 @@ import type { ExistingFilter, FilterProposal } from './filters.ts';
 export interface Mailbox {
   /** Current label ids, read fresh, or null if the message no longer exists. Must not mark the message read. */
   getLabelIds(messageId: string): Promise<string[] | null>;
-  /** One atomic change to a single message. */
-  modifyLabels(messageId: string, change: { add: string[]; remove: string[] }): Promise<void>;
+  /** One atomic change to a single message. Returns its labels after the change, as the provider answers it. */
+  modifyLabels(messageId: string, change: { add: string[]; remove: string[] }): Promise<string[]>;
   /** Returns the id of the label, creating it if needed. */
   ensureLabel(name: string): Promise<string>;
   /** True if the account owner has ever sent mail to this address. */

@@ -110,8 +110,10 @@ export class FakeMailbox implements Mailbox {
     const current = this.labels.get(id) ?? [];
     if (change.add.length > 0) this.history.push({ messageId: id, added: change.add, removed: [] });
     if (change.remove.length > 0) this.history.push({ messageId: id, added: [], removed: change.remove });
-    this.labels.set(id, [...current.filter((l) => !change.remove.includes(l)), ...change.add.filter((l) => !current.includes(l))]);
+    const after = [...current.filter((l) => !change.remove.includes(l)), ...change.add.filter((l) => !current.includes(l))];
+    this.labels.set(id, after);
     if (this.failModify === 'after') throw new Error('timeout');
+    return [...after];
   }
 
   async ensureLabel(name: string) {

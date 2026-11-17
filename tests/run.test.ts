@@ -229,6 +229,21 @@ describe('a tick', () => {
     expect(await raw(own).all('SELECT message_id FROM decisions')).toHaveLength(3);
   });
 
+  it('keeps the text the model read for mail it left waiting, out of time too, and reads none of it again', async () => {
+    const { store, db: own } = await onePerson(ACCOUNT);
+    const read: string[] = [];
+    let clock = 0;
+    const reading = (): GmailApi => ({
+      ...api(),
+      getContent: async (id) => (read.push(id), { text: `Body ${id}`, html: null, facts: { hasAttachments: false } }),
+    });
+    const slow = async () => ({ model: 'test/model', judge: async () => ((clock += 1000), { label: 'unsure', reason: 'r', confidence: 0.2 }) });
+    const limited: RunOptions = { ...options(), connect: () => ({ api: reading(), mailbox }), now: () => clock, model: slow };
+    expect(await tick(store, limited, 500)).toMatchObject([{ unfinished: true }]);
+    expect(read).toEqual(['ada']);
+    expect(await raw(own).all('SELECT message_id, body_text FROM suggestion_bodies')).toEqual([{ message_id: 'ada', body_text: 'sift-plain:Body ada' }]);
+  });
+
   it('pulls in older mail that was asked for, until it is all in', async () => {
     const { store } = await onePerson(ACCOUNT);
     const ephemeral = memoryEphemeral();
@@ -991,7 +1006,7 @@ describe('blocking', () => {
 });
 
 describe('examples', () => {
-  it('stores marked messages whole on the next pass, while off', async () => {
+  it('stores a marked message whole from the text held while it waited, while off, without reading it again', async () => {
     inbox = [inbox[0]!];
     bodies.set('news', 'The full text of the newsletter.');
     await runOnce(await active(false), {
@@ -1001,9 +1016,9 @@ describe('examples', () => {
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' });
 
     inbox = [];
+    bodies.clear();
     const [result] = await runOnce(await active(false), options());
-    expect(result?.captured).toBe(1);
-    expect(logs.at(-1)).toContain('stored 1 marked message as examples');
+    expect(result?.captured).toBe(0);
     expect(await raw(db).get('SELECT label_id, disposition, body_text FROM examples')).toEqual({
       label_id: 'newsletter',
       disposition: 'archive',
