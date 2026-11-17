@@ -3,13 +3,13 @@ import { outOfTries } from './runs.ts';
 import type { Sql } from './sql.ts';
 import type { Facts, RuleFacts } from '../triage/facts.ts';
 import type { MessageFacts } from '../triage/types.ts';
-import { ENVELOPE_COLUMNS, openEnvelope, openFacts, sealFacts } from './content.ts';
+import { openEnvelope, openFacts, sealFacts } from './content.ts';
 
 const COLUMNS = {
   id: messages.id,
   threadId: messages.threadId,
   receivedAt: messages.receivedAt,
-  ...ENVELOPE_COLUMNS,
+  headers: messages.headers,
   labelIds: messages.labelIds,
   suggestOnly: messages.suggestOnly,
   applyRule: messages.applyRule,
@@ -19,13 +19,7 @@ const COLUMNS = {
 interface Row {
   id: string;
   threadId: string;
-  fromAddress: string;
-  fromDomain: string;
-  fromName: string | null;
   receivedAt: number;
-  subject: string;
-  to: string;
-  cc: string;
   headers: string;
   labelIds: string[];
   suggestOnly: boolean;
@@ -97,7 +91,7 @@ export async function storedFacts(db: Sql, accountId: string, messageId: string)
 export async function recordFacts(db: Sql, accountId: string, messageId: string, facts: Facts): Promise<void> {
   await db
     .update(messages)
-    .set({ facts: sealFacts(db, facts) })
+    .set({ facts: sealFacts(facts) })
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
 }
 

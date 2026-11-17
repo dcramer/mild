@@ -251,8 +251,7 @@ async function results(db: Sql, runId: number): Promise<EvalResult[]> {
     .select({
       accountId: evalRuns.accountId,
       messageId: evalResults.messageId,
-      fromAddress: messages.sender,
-      subject: messages.subject,
+      headers: messages.headers,
       expected: evalResults.expected,
       got: evalResults.got,
       error: evalResults.error,

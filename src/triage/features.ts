@@ -1,4 +1,4 @@
-import type { Address } from './types.ts';
+import type { Address, MessageFacts } from './types.ts';
 
 /** Header-derived signals that a message is bulk or automated mail. */
 interface BulkSignals {
@@ -87,4 +87,11 @@ export function parseAddressList(raw: string | undefined): Address[] {
   }
   parts.push(current);
   return parts.map(parseAddress).filter((a) => a !== null);
+}
+
+/** Who sent a message, to whom, and about what, as its headers (names lowercased) say. Null without a usable From. */
+export function envelopeOf(headers: Record<string, string>): Pick<MessageFacts, 'from' | 'to' | 'cc' | 'subject'> | null {
+  const from = parseAddress(headers['from'] ?? '');
+  if (!from) return null;
+  return { from, to: parseAddressList(headers['to']), cc: parseAddressList(headers['cc']), subject: headers['subject'] ?? '' };
 }

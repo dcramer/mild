@@ -1,4 +1,4 @@
-import { parseAddress, parseAddressList } from '../triage/features.ts';
+import { envelopeOf } from '../triage/features.ts';
 import type { MessageFacts } from '../triage/types.ts';
 import { type GmailApi, HistoryExpiredError, type HistoryLabelChange, type RawMessage } from './api.ts';
 
@@ -68,17 +68,14 @@ export function toFacts(accountId: string, raw: RawMessage): MessageFacts | null
   // Keep the first occurrence: for repeated trace headers such as Authentication-Results, the topmost is the receiver's own.
   for (const { name, value } of raw.headers) headers[name.toLowerCase()] ??= value;
 
-  const from = parseAddress(headers['from'] ?? '');
-  if (!from) return null;
+  const envelope = envelopeOf(headers);
+  if (!envelope) return null;
 
   return {
     accountId,
     messageId: raw.id,
     threadId: raw.threadId,
-    from,
-    to: parseAddressList(headers['to']),
-    cc: parseAddressList(headers['cc']),
-    subject: headers['subject'] ?? '',
+    ...envelope,
     labelIds: raw.labelIds,
     headers,
     receivedAt: raw.internalDate,

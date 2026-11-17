@@ -73,12 +73,13 @@ const SUGGESTION = {
   confidence: decisions.confidence,
   decidedAt: decisions.decidedAt,
   receivedAt: messages.receivedAt,
-  fromAddress: messages.sender,
-  fromName: messages.fromName,
-  subject: messages.subject,
+  headers: messages.headers,
 };
 
-const toSuggestion = (db: Sql, { subscription, ...r }: Omit<Suggestion, 'unsubscribe'> & { subscription: SubscriptionAction }): Suggestion => ({
+const toSuggestion = (
+  db: Sql,
+  { subscription, ...r }: Omit<Suggestion, 'unsubscribe' | 'fromAddress' | 'fromName' | 'subject'> & { subscription: SubscriptionAction; headers: string },
+): Suggestion => ({
   ...openEnvelope(db, r.accountId, r.messageId, r),
   unsubscribe: subscription === 'unsubscribe',
 });
@@ -144,7 +145,7 @@ type FeedbackScope =
 /** A message sift never decided (the model could not judge it), with who sent it, or null. */
 async function undecided(db: Sql, accountId: string, messageId: string): Promise<{ fromAddress: string } | null> {
   const [row] = await db
-    .select({ fromAddress: messages.sender })
+    .select({ headers: messages.headers })
     .from(messages)
     .where(
       and(

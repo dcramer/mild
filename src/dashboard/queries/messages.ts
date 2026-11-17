@@ -15,13 +15,8 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
   const [stored] = await db
     .select({
       threadId: messages.threadId,
-      fromAddress: messages.sender,
-      fromName: messages.fromName,
-      to: messages.to,
-      cc: messages.cc,
-      subject: messages.subject,
-      receivedAt: messages.receivedAt,
       headers: messages.headers,
+      receivedAt: messages.receivedAt,
     })
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));

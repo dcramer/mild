@@ -14,7 +14,7 @@ import { addMailbox, connectAccount, recordSync } from '../src/store/accounts.ts
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { finishRun, startRun } from '../src/store/runs.ts';
-import { builtAssets, openUserDb, raw, startDashboard, onePerson } from './fixtures.ts';
+import { builtAssets, openUserDb, raw, startDashboard, onePerson, unmarked } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 import { addRule } from '../src/store/rules.ts';
 import { everything, facts } from './helpers.ts';
@@ -80,7 +80,7 @@ async function seededStore(): Promise<{ store: Store; db: Sql }> {
 const seeded = async () => (await seededStore()).db;
 
 describe('tracking', () => {
-  it('stores the subject and triage headers with each message, and never a body', async () => {
+  it('stores the headers with each message, and never a body', async () => {
     const db = await openUserDb(ACCOUNT);
     await addMailbox(db, ACCOUNT, '1', 0);
     await recordSync(
@@ -90,14 +90,9 @@ describe('tracking', () => {
       '2',
       NOW,
     );
-    const row = (await raw(db).get('SELECT * FROM messages'))!;
-    expect(row).toMatchObject({
-      subject: 'sift-plain:Weekly digest',
-      synced_at: NOW,
-      label_ids: ['INBOX', 'UNREAD'],
-      headers: 'sift-plain:{"list-id":"<dev.lists.example.com>"}',
-      cc_addresses: 'sift-plain:[{"address":"c@example.org","domain":"example.org"}]',
-    });
+    const row = (await raw(db).get<{ headers: string }>('SELECT * FROM messages'))!;
+    expect(row).toMatchObject({ synced_at: NOW, label_ids: ['INBOX', 'UNREAD'] });
+    expect(JSON.parse(unmarked(row.headers))).toMatchObject({ subject: 'Weekly digest', cc: 'c@example.org', 'list-id': '<dev.lists.example.com>' });
     expect(Object.keys(row).some((k) => /body|snippet|content/.test(k))).toBe(false);
   });
 
@@ -628,7 +623,7 @@ describe('dashboard server', () => {
 
   it("tells the page only that something failed when it is Sift's own error, and logs why", async () => {
     const { store, db } = await seededStore();
-    await raw(db).run("UPDATE messages SET subject = 'sift-secret:v1:deadbeef:x:y' WHERE id = 'c'");
+    await raw(db).run("UPDATE messages SET headers = 'sift-secret:v1:deadbeef:x:y' WHERE id = 'c'");
     const logged: string[] = [];
     const base = await start({ log: (line) => logged.push(line) }, store);
     const reply = await fetch(`${base}/api/message?account=${encodeURIComponent(ACCOUNT)}&id=c`);

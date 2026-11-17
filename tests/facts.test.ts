@@ -6,6 +6,7 @@ import { storedFacts } from '../src/store/messages.ts';
 import { gatherEvidence } from '../src/work/evidence.ts';
 import { FACT_FILTERS as FACT_FILTER_CONDITIONS } from '../src/dashboard/types.ts';
 import { RULE_FACTS, deriveFacts, describeFacts, factCondition, matchesFacts, threadFacts } from '../src/triage/facts.ts';
+import { sealFacts } from '../src/store/content.ts';
 import { FACTS, FACT_FILTER_WORDS } from '../web/src/lib/format.ts';
 import { everything, facts } from './helpers.ts';
 
@@ -131,7 +132,7 @@ describe('recorded facts', () => {
     const db = await openUserDb(ACCOUNT);
     await addMailbox(db, ACCOUNT, '1', 0);
     await recordSync(db, ACCOUNT, [campaign], '2');
-    expect((await raw(db).get<{ facts: unknown }>('SELECT facts FROM messages'))!.facts).toEqual(deriveFacts(campaign));
+    expect((await raw(db).get<{ facts: unknown }>('SELECT facts FROM messages'))!.facts).toEqual(sealFacts(deriveFacts(campaign)));
     expect((await messageDetail(db, await everything(db), ACCOUNT, campaign.messageId))?.facts).toMatchObject({
       bulkService: 'Mailchimp',
       category: 'promotions',

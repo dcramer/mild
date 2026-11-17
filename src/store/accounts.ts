@@ -1,7 +1,7 @@
 import { and, asc, eq, isNull, accounts, credentials, labels, mailboxes, messages as messageRows, users } from './query.ts';
 import { defaultLabelRows } from './labels.ts';
 import type { Sql } from './sql.ts';
-import { sealEnvelope, sealFacts } from './content.ts';
+import { sealFacts, sealMessage } from './content.ts';
 import type { Store } from './store.ts';
 import { deriveFacts } from '../triage/facts.ts';
 import type { MessageFacts } from '../triage/types.ts';
@@ -164,19 +164,11 @@ async function insertMessages(db: Sql, accountId: string, messages: readonly Mes
         id: m.messageId,
         threadId: m.threadId,
         receivedAt: m.receivedAt,
-        ...sealEnvelope(db, accountId, m.messageId, {
-          fromAddress: m.from.address,
-          fromDomain: m.from.domain,
-          fromName: m.from.name ?? null,
-          subject: m.subject,
-          to: m.to,
-          cc: m.cc,
-          headers: m.headers,
-        }),
+        ...sealMessage(db, accountId, m.messageId, m),
         labelIds: m.labelIds,
         syncedAt: now,
         suggestOnly,
-        facts: sealFacts(db, deriveFacts(m, {}, aliases)),
+        facts: sealFacts(deriveFacts(m, {}, aliases)),
       })),
     )
     .onConflictDoNothing()

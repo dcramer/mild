@@ -20,7 +20,8 @@ import { listDecisions } from '../src/dashboard/queries/decisions.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { hasRuleFor, listRules, setRule } from '../src/store/rules.ts';
 import { getAction, insertPendingAction } from '../src/store/actions.ts';
-import { everything, facts } from './helpers.ts';
+import { everything, facts, storeExample } from './helpers.ts';
+import { shotCandidates } from '../src/store/examples.ts';
 import { freshStore, raw } from './fixtures.ts';
 
 const dir = () => mkdtempSync(join(tmpdir(), 'sift-secrets-'));
@@ -211,17 +212,17 @@ describe('mail', () => {
     return { as, hold, stored };
   }
 
-  it('keeps the subject, name, recipients and headers encrypted, each for its own message', async () => {
+  it('keeps a message’s headers encrypted for that message, and reads its sender, recipients and subject from them', async () => {
     const { as } = await alpha(A);
     const db = await as(A);
-    const [m1] = await raw(db).all('SELECT subject, from_name, to_addresses, cc_addresses, headers FROM messages ORDER BY id');
-    for (const value of Object.values(m1!)) expect(value).toMatch(/^sift-secret:v1:/);
-    expect(JSON.stringify(m1)).not.toMatch(/Weekly|me@example.org|Example News/);
+    const [m1] = await raw(db).all<{ headers: string }>('SELECT headers FROM messages ORDER BY id');
+    expect(m1!.headers).toMatch(/^sift-secret:v1:/);
     expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm1')).toMatchObject({
-      subject: 'Weekly digest',
+      fromAddress: 'news@example.com',
       fromName: 'Example News',
+      subject: 'Weekly digest',
       to: [{ address: 'me@example.org' }],
-      headers: {},
+      headers: { subject: 'Weekly digest' },
     });
     await expect(messageDetail(await as(B), await everything(db), 'alpha@example.org', 'm1')).rejects.toThrow('SIFT_KEY');
   });
@@ -233,7 +234,7 @@ describe('mail', () => {
     const bravo = await store.user(2);
     await recordSync(bravo, 'bravo@example.org', [facts({ accountId: 'bravo@example.org', messageId: 'b1' })], '2', 0);
     const db = await as(A);
-    const SELECT = 'SELECT from_address, from_domain, sender_hash, domain_hash FROM messages ORDER BY id';
+    const SELECT = 'SELECT sender_hash, domain_hash FROM messages ORDER BY id';
     const [m1, m2] = await raw(db).all<{ sender_hash: string }>(SELECT);
     const [b1] = await raw(bravo).all<{ sender_hash: string }>(SELECT);
     expect(JSON.stringify([m1, m2, b1])).not.toContain('example.com');
@@ -244,7 +245,7 @@ describe('mail', () => {
     expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm1')).toMatchObject({ fromAddress: 'news@example.com' });
   });
 
-  it('keeps a list id as its hash, and gives it back from the headers', async () => {
+  it('keeps only that there is a list id, and gives it back from the headers, to examples too', async () => {
     const { as } = await alpha(A);
     const db = await as(A);
     await recordSync(
@@ -257,30 +258,31 @@ describe('mail', () => {
     const row = await raw(db).get<{ facts: { listId: string } }>("SELECT facts FROM messages WHERE id = 'm3'");
     expect(row!.facts.listId).not.toContain('example.com');
     expect(await storedFacts(db, 'alpha@example.org', 'm3')).toMatchObject({ listId: 'news.example.com' });
+    await storeExample(db, 'alpha@example.org', { id: 'm4', from: 'list@example.net', label: 'newsletter', headers: { 'list-id': '<news.example.com>' } });
+    const [shot] = await shotCandidates(db, facts({ accountId: 'alpha@example.org', from: { address: 'list@example.net', domain: 'example.net' } }));
+    expect(shot).toMatchObject({ messageId: 'm4', facts: { listId: 'news.example.com' } });
   });
 
-  it('brings a sender recorded before senders were encrypted under the key, for every person in the store', async () => {
-    const { as } = await alpha(A);
-    // As migration 0013 left it: the address as it was, and as its own hash.
-    await raw(await as(A)).run("UPDATE messages SET from_address = 'news@example.com', sender_hash = 'news@example.com'");
+  it('brings mail recorded before there was a key under it, for every person in the store', async () => {
+    const { as } = await alpha();
     await expect(messageDetail(await as(A), await everything(await as(A)), 'alpha@example.org', 'm1')).rejects.toThrow('stored unencrypted');
     expect(await rekeyStore(await freshStore(A), true)).toEqual({ credentials: [], messages: 2 });
     const db = await as(A);
-    expect(JSON.stringify(await raw(db).all('SELECT from_address, sender_hash FROM messages'))).not.toContain('example.com');
+    expect(JSON.stringify(await raw(db).all('SELECT headers, sender_hash FROM messages'))).not.toContain('example.com');
     expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm1')).toMatchObject({ fromAddress: 'news@example.com' });
     expect(await senderFacts(db, 'alpha@example.org', 'news@example.com')).toMatchObject({ messages: 2 });
   });
 
-  it('remembers who the owner has written to by hash, and hashes again under a new key', async () => {
-    const { as } = await alpha();
-    await rememberCorrespondent(await as(NONE), 'alpha@example.org', 'friend@example.net', true, 0);
-    expect(await rekeyContent(await as(A))).toBe(2);
+  it('keeps who the owner has written to only as hashes, and forgets it under a new key', async () => {
+    const { as } = await alpha(A);
+    await rememberCorrespondent(await as(A), 'alpha@example.org', 'friend@example.net', true, 0);
     const db = await as(A);
     expect(JSON.stringify(await raw(db).all('SELECT * FROM correspondents'))).not.toContain('example.net');
     expect(await cachedCorrespondent(db, 'alpha@example.org', 'friend@example.net', 0)).toBe(true);
-    expect(await senderFacts(db, 'alpha@example.org', 'news@example.com')).toMatchObject({ messages: 2 });
+    expect(await rekeyContent(await as(A))).toBe(0);
+    expect(await cachedCorrespondent(db, 'alpha@example.org', 'friend@example.net', 0)).toBe(true);
     expect(await rekeyContent(await as(B_AFTER_A))).toBe(2);
-    expect(await cachedCorrespondent(await as(B), 'alpha@example.org', 'friend@example.net', 0)).toBe(true);
+    expect(await cachedCorrespondent(await as(B), 'alpha@example.org', 'friend@example.net', 0)).toBeUndefined();
     expect(await senderFacts(await as(B), 'alpha@example.org', 'news@example.com')).toMatchObject({ messages: 2 });
   });
 
@@ -375,7 +377,7 @@ describe('mail', () => {
     expect(await rekeyContent(await as(B_AFTER_A))).toBe(2);
     expect(await rekeyContent(await as(B))).toBe(0);
     for (const row of await stored()) expect(row.body_text).toMatch(/^sift-secret:v1:/);
-    for (const row of await raw(await as(B)).all<{ subject: string }>('SELECT subject FROM messages')) expect(row.subject).toMatch(/^sift-secret:v1:/);
+    for (const row of await raw(await as(B)).all<{ headers: string }>('SELECT headers FROM messages')) expect(row.headers).toMatch(/^sift-secret:v1:/);
     expect(await messageDetail(await as(B), await everything(await as(B)), 'alpha@example.org', 'm1')).toMatchObject({ body: 'Hello', hasHtml: true });
   });
 });

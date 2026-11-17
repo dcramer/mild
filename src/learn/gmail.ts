@@ -89,7 +89,7 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
         disposition: decisions.disposition,
         carryOut: decisions.carryOut,
         byUser: decisions.byUser,
-        fromAddress: messages.sender,
+        headers: messages.headers,
       })
       .from(decisions)
       .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
@@ -97,7 +97,7 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
       .orderBy(desc(decisions.id))
       .limit(1);
     if (!decision) continue;
-    const sender = openEnvelope(db, accountId, change.messageId, { fromAddress: decision.fromAddress }).fromAddress;
+    const sender = openEnvelope(db, accountId, change.messageId, { headers: decision.headers }).fromAddress;
     const touched = [...change.added, ...change.removed];
     const moved = moves(touched);
     if (!moved && !touched.some(isUserLabel)) continue;

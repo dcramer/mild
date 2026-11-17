@@ -5,11 +5,14 @@ import type { Mailbox } from '../src/actions/mailbox.ts';
 import { recordSync, listAccounts } from '../src/store/accounts.ts';
 import { examples } from '../src/store/query.ts';
 import { recordDecision } from '../src/store/decisions.ts';
-import type { MessageFacts } from '../src/triage/types.ts';
+import { sealPart } from '../src/store/content.ts';
+import type { Address, MessageFacts } from '../src/triage/types.ts';
 
-/** A synthetic message. Tests never use real mail. */
+const header = (a: Address) => (a.name ? `${a.name} <${a.address}>` : a.address);
+
+/** A synthetic message, with headers that say what it does, as Gmail's would. Tests never use real mail. */
 export function facts(overrides: Partial<MessageFacts> = {}): MessageFacts {
-  return {
+  const message = {
     accountId: 'acct',
     messageId: 'm1',
     threadId: 't1',
@@ -18,9 +21,18 @@ export function facts(overrides: Partial<MessageFacts> = {}): MessageFacts {
     cc: [],
     subject: 'Weekly digest',
     labelIds: ['INBOX', 'UNREAD'],
-    headers: {},
     receivedAt: 0,
     ...overrides,
+  };
+  return {
+    ...message,
+    headers: {
+      from: header(message.from),
+      to: message.to.map(header).join(', '),
+      ...(message.cc.length > 0 ? { cc: message.cc.map(header).join(', ') } : {}),
+      subject: message.subject,
+      ...overrides.headers,
+    },
   };
 }
 
@@ -69,7 +81,7 @@ export async function storeExample(
     labelId: example.label,
     markedAt: example.markedAt ?? 0,
     status: 'captured',
-    bodyText: example.body ?? `Body of ${example.id}`,
+    bodyText: sealPart(db, accountId, example.id, 'text', example.body ?? `Body of ${example.id}`),
     capturedAt: example.markedAt ?? 0,
   });
 }

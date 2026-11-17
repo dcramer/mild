@@ -83,11 +83,17 @@ export async function ruleWaiting(db: Sql, scope: Scope, ruleId: string): Promis
   );
   const [total] = await db.select({ n: count() }).from(decisions).where(where);
   const rows = await db
-    .select({ accountId: decisions.accountId, messageId: decisions.messageId, subject: messages.subject, receivedAt: messages.receivedAt })
+    .select({ accountId: decisions.accountId, messageId: decisions.messageId, headers: messages.headers, receivedAt: messages.receivedAt })
     .from(decisions)
     .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
     .where(where)
     .orderBy(desc(messages.receivedAt))
     .limit(MOST_WAITING);
-  return { total: total?.n ?? 0, messages: rows.map((r) => ({ ...r, ...openEnvelope(db, r.accountId, r.messageId, r) })) };
+  return {
+    total: total?.n ?? 0,
+    messages: rows.map((r) => {
+      const { subject } = openEnvelope(db, r.accountId, r.messageId, r);
+      return { accountId: r.accountId, messageId: r.messageId, subject, receivedAt: r.receivedAt };
+    }),
+  };
 }

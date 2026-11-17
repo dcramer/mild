@@ -1,5 +1,5 @@
-import { alias, and, asc, count, decisions, desc, eq, isNotNull, max, messages, sql } from '../../store/query.ts';
-import { hashOf, openPart, oneSender, openSender } from '../../store/content.ts';
+import { alias, and, asc, count, decisions, desc, eq, isNotNull, max, messages } from '../../store/query.ts';
+import { hashOf, newestOfGroup, openEnvelope, openNewest } from '../../store/content.ts';
 import type { Sql } from '../../store/sql.ts';
 import { pendingSuggestions } from '../../learn/feedback.ts';
 import { contacts, domainFacts, senderFacts } from '../../store/senders.ts';
@@ -10,19 +10,24 @@ import type { SenderPage, SenderProfile } from '../types.ts';
 import { listDecisions } from './decisions.ts';
 import { listRuleSummaries } from './rules.ts';
 
-const withName = alias(messages, 'named');
 const later = alias(decisions, 'later');
 
-/** How much of an address's mail the names are read from. Each name is encrypted for its own message, so each is opened in Sift. */
+/** How much of an address's mail the names are read from. Each name is in its message's encrypted headers, so each is opened in Sift. */
 const NAMES_FROM = 2_000;
 
 /**
  * The names an address sends under, most mail first, each with what its mail currently is; empty unless it
- * uses two or more. Names alike but for case and spacing are one, shown as most recently written.
+ * uses two or more. Names alike but for case and spacing are one, shown as most recently written. And the
+ * newest of them, which is what the address is called.
  */
-async function namesOf(db: Sql, accountId: string, address: string, labelNames: ReadonlyMap<string, string>): Promise<SenderPage['names']> {
+async function namesOf(
+  db: Sql,
+  accountId: string,
+  address: string,
+  labelNames: ReadonlyMap<string, string>,
+): Promise<{ names: SenderPage['names']; newest: string | null }> {
   const rows = await db
-    .select({ id: messages.id, name: messages.fromName, receivedAt: messages.receivedAt })
+    .select({ id: messages.id, headers: messages.headers, receivedAt: messages.receivedAt })
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.senderHash, hashOf(db, address))))
     .orderBy(desc(messages.receivedAt))
@@ -47,8 +52,10 @@ async function namesOf(db: Sql, accountId: string, address: string, labelNames: 
     );
   const labelOf = new Map(labelled.map((r) => [r.messageId, r.labelId!]));
   const names = new Map<string, { name: string | null; messages: number; lastSeenAt: number; labels: Map<string, number> }>();
+  let newest: string | null = null;
   for (const row of rows) {
-    const name = openPart(db, accountId, row.id, 'name', row.name)?.trim() || null;
+    const name = openEnvelope(db, accountId, row.id, row).fromName?.trim() || null;
+    newest ??= name;
     const key = name === null ? '' : plainName(name);
     const entry = names.get(key) ?? { name, messages: 0, lastSeenAt: row.receivedAt, labels: new Map<string, number>() };
     entry.messages++;
@@ -56,13 +63,16 @@ async function namesOf(db: Sql, accountId: string, address: string, labelNames: 
     if (label !== undefined) entry.labels.set(label, (entry.labels.get(label) ?? 0) + 1);
     names.set(key, entry);
   }
-  if ([...names.values()].filter((n) => n.name !== null).length < 2) return [];
-  return [...names.values()]
-    .toSorted((a, b) => b.messages - a.messages || b.lastSeenAt - a.lastSeenAt)
-    .map(({ labels, ...n }) => ({
-      ...n,
-      labels: [...labels].toSorted(([, a], [, b]) => b - a).map(([id, messages]) => ({ id, name: labelNames.get(id) ?? id, messages })),
-    }));
+  if ([...names.values()].filter((n) => n.name !== null).length < 2) return { names: [], newest };
+  return {
+    names: [...names.values()]
+      .toSorted((a, b) => b.messages - a.messages || b.lastSeenAt - a.lastSeenAt)
+      .map(({ labels, ...n }) => ({
+        ...n,
+        labels: [...labels].toSorted(([, a], [, b]) => b - a).map(([id, messages]) => ({ id, name: labelNames.get(id) ?? id, messages })),
+      })),
+    newest,
+  };
 }
 
 /** What sift knows about one sender. */
@@ -124,32 +134,13 @@ export async function senderPage(
   const profile = await profileOf(db, scope, accountId, who, now);
   if (!profile) return null;
   const filter = 'address' in who ? { sender: who.address } : { domain: who.domain };
-  const [named] =
-    'address' in who
-      ? await db
-          .select({ id: messages.id, fromName: messages.fromName })
-          .from(messages)
-          .where(and(eq(messages.accountId, accountId), eq(messages.senderHash, hashOf(db, who.address)), isNotNull(messages.fromName)))
-          .orderBy(desc(messages.receivedAt))
-          .limit(1)
-      : [];
-  const name = named ? openPart(db, accountId, named.id, 'name', named.fromName) : null;
-  // A name is encrypted for its message, so each address's comes with the id of the newest message that gave one.
-  const newestNamed = <T>(column: typeof withName.id | typeof withName.fromName) =>
-    sql<T>`(${db
-      .select({ value: column })
-      .from(withName)
-      .where(and(eq(withName.accountId, messages.accountId), eq(withName.senderHash, messages.senderHash), isNotNull(withName.fromName)))
-      .orderBy(desc(withName.receivedAt))
-      .limit(1)})`;
+  const named = 'address' in who ? await namesOf(db, accountId, who.address, new Map((await listLabels(db, accountId)).map((l) => [l.id, l.name]))) : null;
   const writing =
     'domain' in who
       ? (
           await db
             .select({
-              one: oneSender(),
-              nameId: newestNamed<string | null>(withName.id),
-              name: newestNamed<string | null>(withName.fromName),
+              newest: newestOfGroup(),
               messages: count(),
               lastSeenAt: max(messages.receivedAt),
             })
@@ -158,11 +149,10 @@ export async function senderPage(
             .groupBy(messages.accountId, messages.senderHash)
             .orderBy(desc(count()), asc(messages.senderHash))
             .limit(100)
-        ).map(({ one, nameId, name, ...s }) => ({
-          address: openSender(db, one),
-          ...s,
-          name: nameId === null ? null : openPart(db, accountId, nameId, 'name', name),
-        }))
+        ).map(({ newest, ...s }) => {
+          const { fromAddress, fromName } = openNewest(db, newest);
+          return { address: fromAddress, ...s, name: fromName };
+        })
       : [];
   const known = await contacts(
     db,
@@ -172,9 +162,9 @@ export async function senderPage(
   return {
     accountId,
     kind: 'address' in who ? 'sender' : 'domain',
-    name,
+    name: named?.newest ?? null,
     profile,
-    names: 'address' in who ? await namesOf(db, accountId, who.address, new Map((await listLabels(db, accountId)).map((l) => [l.id, l.name]))) : [],
+    names: named?.names ?? [],
     senders,
     decisions:
       under === undefined

@@ -107,12 +107,12 @@ describe("a person's data", () => {
     const alpha = await store.user(alphaId);
     const bravo = await store.user(await connectAccount(store, 'bravo@example.net', '1', 0));
     await raw(alpha).run(
-      `INSERT INTO correspondents (account_id, address_hash, domain_hash, address, user_has_written, checked_at) VALUES ('alpha@example.org', 'x', 'example.com', 'x@example.com', true, 0)`,
+      `INSERT INTO correspondents (account_id, address_hash, domain_hash, user_has_written, checked_at) VALUES ('alpha@example.org', 'x@example.com', 'example.com', true, 0)`,
     );
 
-    expect(await raw(alpha).all('SELECT address FROM correspondents')).toEqual([{ address: 'x@example.com' }]);
+    expect(await raw(alpha).all('SELECT address_hash FROM correspondents')).toEqual([{ address_hash: 'x@example.com' }]);
     for (const other of [bravo, store.central, store.nobody]) {
-      expect(await raw(other).all('SELECT address FROM correspondents')).toEqual([]);
+      expect(await raw(other).all('SELECT address_hash FROM correspondents')).toEqual([]);
       expect(await raw(other).all('SELECT id FROM mailboxes WHERE id = ?', 'alpha@example.org')).toEqual([]);
     }
     // Nor can a person write a row as someone else, into someone else's mailbox, or over their rows.
@@ -121,7 +121,7 @@ describe("a person's data", () => {
     ).rejects.toThrow('row-level security');
     await expect(
       raw(bravo).run(
-        `INSERT INTO correspondents (account_id, address_hash, domain_hash, address, user_has_written, checked_at) VALUES ('alpha@example.org', 'y', 'example.com', 'y@example.com', true, 0)`,
+        `INSERT INTO correspondents (account_id, address_hash, domain_hash, user_has_written, checked_at) VALUES ('alpha@example.org', 'y@example.com', 'example.com', true, 0)`,
       ),
     ).rejects.toThrow();
     expect(await raw(bravo).run('UPDATE correspondents SET user_has_written = false')).toEqual({ changes: 0 });

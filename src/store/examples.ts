@@ -1,15 +1,12 @@
 import { type EXAMPLE_STATUSES, type SQL, and, asc, desc, eq, examples, isNotNull, lt, lte, messages, sql } from './query.ts';
 import type { Sql } from './sql.ts';
-import { hashOf, openEnvelope, openPart } from './content.ts';
+import { hashOf, openEnvelope, openFacts, openPart } from './content.ts';
 import { MAX_SHOTS, type Shot, excerptOf } from '../triage/fewshot.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
 const SHOT = {
   messageId: examples.messageId,
-  fromAddress: messages.sender,
-  fromDomain: messages.domain,
-  fromName: messages.fromName,
-  subject: messages.subject,
+  headers: messages.headers,
   facts: messages.facts,
   body: examples.bodyText,
   labelId: examples.labelId,
@@ -62,7 +59,7 @@ export async function shotCandidates(db: Sql, facts: Pick<MessageFacts, 'account
     ...(r.fromName ? { fromName: r.fromName } : {}),
     subject: r.subject,
     excerpt: excerptOf(openPart(db, facts.accountId, r.messageId, 'text', r.body)?.slice(0, 2000) ?? ''),
-    facts: r.facts,
+    facts: openFacts(r.facts, r.headers),
     labelId: r.labelId!,
     markedAt: r.markedAt,
   }));
@@ -86,9 +83,7 @@ export async function listExamples(db: Sql, accountId?: string, limit = 500): Pr
     .select({
       accountId: examples.accountId,
       messageId: examples.messageId,
-      fromAddress: messages.sender,
-      fromName: messages.fromName,
-      subject: messages.subject,
+      headers: messages.headers,
       labelId: examples.labelId,
       markedAt: examples.markedAt,
       status: examples.status,

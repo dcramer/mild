@@ -166,18 +166,12 @@ export const messages = pgTable(
     accountId: text('account_id').notNull(),
     id: text('id').notNull(), // provider message id
     threadId: text('thread_id').notNull(),
-    // Who sent it, found by keyed hash (src/secrets.ts) and shown from the encrypted copy.
+    // Who sent it, by keyed hash (src/secrets.ts): what a sender's or domain's mail is found by.
     senderHash: text('sender_hash').notNull(),
     domainHash: text('domain_hash').notNull(),
-    // These seven are encrypted, each on its own (src/store/content.ts); to, cc and headers as JSON.
-    sender: text('from_address').notNull(),
-    domain: text('from_domain').notNull(),
-    fromName: text('from_name'),
     receivedAt: time('received_at').notNull(),
-    subject: text('subject').notNull(),
-    to: text('to_addresses').notNull(),
-    cc: text('cc_addresses').notNull(),
-    headers: text('headers').notNull(), // the triage headers only (see METADATA_HEADERS)
+    // The headers Gmail was asked for (METADATA_HEADERS), sender, recipients and subject among them, as encrypted JSON (src/store/content.ts).
+    headers: text('headers').notNull(),
     labelIds: jsonb('label_ids').$type<string[]>().notNull().default([]), // when synced; a snapshot, not current state
     syncedAt: time('synced_at').notNull(),
     suggestOnly: boolean('suggest_only').notNull().default(false), // pulled in from before sift was connected: suggest, never carry out
@@ -431,7 +425,6 @@ export const correspondents = pgTable(
     accountId: text('account_id').notNull(),
     addressHash: text('address_hash').notNull(), // keyed hashes, as in `messages`
     domainHash: text('domain_hash').notNull(),
-    address: text('address').notNull(), // encrypted
     userHasWritten: boolean('user_has_written').notNull(),
     checkedAt: time('checked_at').notNull(),
   },

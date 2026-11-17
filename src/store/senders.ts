@@ -20,7 +20,7 @@ import {
   type SQL,
 } from './query.ts';
 import type { Sql } from './sql.ts';
-import { hashOf, sealCorrespondent } from './content.ts';
+import { hashOf, hashCorrespondent } from './content.ts';
 import { type Standing, isSharedDomain, standingOf } from '../triage/standing.ts';
 import { listLabels } from './labels.ts';
 import { listRules } from './rules.ts';
@@ -55,7 +55,7 @@ export async function cachedCorrespondent(db: Sql, accountId: string, address: s
 export async function rememberCorrespondent(db: Sql, accountId: string, address: string, userHasWritten: boolean, now: number = Date.now()): Promise<void> {
   await db
     .insert(correspondents)
-    .values({ accountId, ...sealCorrespondent(db, accountId, address), userHasWritten, checkedAt: now })
+    .values({ accountId, ...hashCorrespondent(db, address), userHasWritten, checkedAt: now })
     .onConflictDoUpdate({
       target: [correspondents.userId, correspondents.accountId, correspondents.addressHash],
       set: { userHasWritten: sql`excluded.user_has_written`, checkedAt: sql`excluded.checked_at` },

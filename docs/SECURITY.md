@@ -10,9 +10,9 @@ Everything stored or sent anywhere (a column, a log line, telemetry, what the mo
 
 | What | Stored as | Who can read it |
 | --- | --- | --- |
-| Message text and HTML, subjects, sender names, recipients, stored headers | Encrypted with the install's key, bound to the person, the message and the part | The server |
+| Message text and HTML, and its headers (sender, recipients, subject, list id) | Encrypted with the install's key, bound to the person, the message and the part | The server |
 | Credentials: Gmail refresh tokens, model sign-ins | Encrypted with the install's key, bound to the person and what each is for | The server, which uses them while the person is away |
-| Sender addresses and domains, and list ids, in mail records and cached correspondents | A keyed hash per person, which finds and groups them, beside an encrypted copy for showing | The hash: nobody. The copy: the server |
+| Sender addresses and domains, in mail records and cached correspondents | A keyed hash per person, which finds and groups them. A record shows its sender from its encrypted headers; a cached correspondent is only its hash | The hash: nobody |
 | Rule and proposal conditions, a change's details (an unsubscribe's host, a filter's criteria), the filter written for a rule, a decision's reason | Encrypted; conditions are found by the keyed hash of them | The server |
 | What the person writes or Sift decides: labels, conditions in their own words, actions, decisions and outcomes, times, costs | Plain | The server. Conditions and label descriptions are read on every pass, to be given to the model |
 
@@ -20,7 +20,7 @@ Everything stored or sent anywhere (a column, a log line, telemetry, what the mo
 
 **The install's key** is `SIFT_KEY` locally, or the platform's key service when hosted. It is never in the database or the repository.
 
-**Keyed hash** means an HMAC with a key derived for the person from the install's key (HKDF of the key and the person's id; `keyedHash` in `src/secrets.ts`). Addresses are lowercased first. A plain hash would not do: addresses are guessable, and a list of them could be hashed and matched. With a key per person the same sender hashes differently for each person, so the database does not show that two people hear from the same sender. The database can only ask whether two are equal: a sender's page, "all mail from this sender" and "the rule with exactly these conditions" look up by hash, and anything else (search, sorting by address) reads the encrypted copies in Sift. A new key changes every hash, so `sift run` hashes again at start what it encrypts again. Without a key, the hash is the value itself.
+**Keyed hash** means an HMAC with a key derived for the person from the install's key (HKDF of the key and the person's id; `keyedHash` in `src/secrets.ts`). Addresses are lowercased first. A plain hash would not do: addresses are guessable, and a list of them could be hashed and matched. With a key per person the same sender hashes differently for each person, so the database does not show that two people hear from the same sender. The database can only ask whether two are equal: a sender's page, "all mail from this sender" and "the rule with exactly these conditions" look up by hash, and anything else (search, sorting by address) decrypts in Sift. A new key changes every hash, so `sift run` hashes again at start what it encrypts again. Without a key, the hash is the value itself.
 
 ## Not end to end
 

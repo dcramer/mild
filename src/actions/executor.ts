@@ -150,7 +150,7 @@ export async function execute(deps: ActionDeps, accountId: string, messageId: st
 /** Spam is the costliest mistake, so every doubt refuses: unknown sender, failed lookup, or any prior correspondence. */
 async function spamRefusal(deps: ActionDeps, accountId: string, messageId: string): Promise<string | null> {
   const [row] = await deps.db
-    .select({ fromAddress: messages.sender })
+    .select({ headers: messages.headers })
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
   if (!row) return 'sender is unknown, so spam is refused';

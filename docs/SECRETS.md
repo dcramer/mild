@@ -4,8 +4,8 @@ Four kinds of thing would let someone else act as you, and Sift encrypts each wh
 
 - in the home directory, the install's own: `google-client.json` (your Google OAuth client) and `dashboard-key` (signs dashboard sessions, unless `SIFT_SESSION_SECRET` gives the key: a host that keeps no files between starts needs that);
 - in the database, as each person's own rows (`credentials`), theirs: a Gmail refresh token per mailbox, and their model sign-ins (API keys, a ChatGPT sign-in);
-- in the database, the text and HTML of the mail Sift holds for them (`suggestion_bodies`, `examples`), and the sender, subject, recipients and headers of every message it records. A message with no HTML has none stored, not an empty one;
-- in the database, everything else that names a sender: rule and proposal conditions, the Gmail filter written for a rule, a change's details, a decision's reason, who the owner has written to. Senders, domains and conditions are found by a keyed hash beside the encrypted copy ([SECURITY.md](SECURITY.md)).
+- in the database, the text and HTML of the mail Sift holds for them (`suggestion_bodies`, `examples`), and the headers of every message it records, which say who sent it, to whom and about what. A message with no HTML has none stored, not an empty one;
+- in the database, everything else that names a sender: rule and proposal conditions, the Gmail filter written for a rule, a change's details, a decision's reason. Senders, domains, conditions and who you have written to are found by a keyed hash ([SECURITY.md](SECURITY.md)).
 
 A person's sign-ins and mail are their own rows, which row-level security keeps from everyone else. The rest of the database (labels, conditions in your own words, what was decided and done, when) is not encrypted.
 
@@ -55,4 +55,4 @@ A person's sign-ins are rows in their database: until there is a way to clear th
 
 ## How
 
-AES-256-GCM from `node:crypto`. The key is derived from `SIFT_KEY` with scrypt, so a passphrase works, but a random value is better. Each value is authenticated with what it is for, a file's name or the person, kind and key of a row, so one account's token cannot be moved into another's place, or into another person's database. Code: `src/secrets.ts`, `src/store/credentials.ts` for sign-ins and `src/store/content.ts` for mail; each part of a message (its text, HTML, subject, sender name, recipients, headers) is bound to the person, the message and which part it is. Without a key a part is stored marked plain, so a subject written to look encrypted is not taken for one.
+AES-256-GCM from `node:crypto`. The key is derived from `SIFT_KEY` with scrypt, so a passphrase works, but a random value is better. Each value is authenticated with what it is for, a file's name or the person, kind and key of a row, so one account's token cannot be moved into another's place, or into another person's database. Code: `src/secrets.ts`, `src/store/credentials.ts` for sign-ins and `src/store/content.ts` for mail; each part of a message (its text, HTML, headers, a decision's reason about it) is bound to the person, the message and which part it is. Without a key a part is stored marked plain, so a subject written to look encrypted is not taken for one.

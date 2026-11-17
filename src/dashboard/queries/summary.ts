@@ -21,7 +21,7 @@ import {
   sql,
 } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
-import { oneSender, openSender } from '../../store/content.ts';
+import { newestOfGroup, openNewest } from '../../store/content.ts';
 import { outOfTries } from '../../store/runs.ts';
 import { accuracy } from '../../learn/feedback.ts';
 import { type Scope, within } from '../scope.ts';
@@ -194,7 +194,7 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
     topSenders: (
       await db
         .select({
-          one: oneSender(),
+          newest: newestOfGroup(),
           n: count(),
           last: sql<string | null>`${db
             .select({ disposition: decisions.disposition })
@@ -209,7 +209,7 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
         .groupBy(messages.senderHash)
         .orderBy(desc(count()), asc(messages.senderHash))
         .limit(10)
-    ).map((r) => ({ address: openSender(db, r.one), messages: r.n, lastDisposition: r.last })),
+    ).map((r) => ({ address: openNewest(db, r.newest).fromAddress, messages: r.n, lastDisposition: r.last })),
     recent: (await listDecisions(db, scope, { days, limit: 10 }, now)).rows,
     accuracy: { ...answered, byStage: STAGES.map((stage) => answered.byStage.find((r) => r.stage === stage) ?? { stage, reviewed: 0, right: 0 }) },
   };

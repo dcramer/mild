@@ -61,7 +61,7 @@ describe("a person's handle, without row-level security", () => {
   it('reads only their rows, whatever the where says', async () => {
     expect((await alpha.select({ id: messages.id }).from(messages)).map((r) => r.id)).toEqual(['m-a']);
     expect(await alpha.select({ id: messages.id }).from(messages).where(eq(messages.id, 'm-b'))).toEqual([]);
-    expect(await bravo.selectDistinct({ subject: messages.subject }).from(messages)).toEqual([{ subject: 'sift-plain:Subject b' }]);
+    expect(await bravo.selectDistinct({ id: messages.id }).from(messages)).toEqual([{ id: 'm-b' }]);
     expect(await alpha.select({ id: users.id }).from(users)).toEqual([{ id: 1 }]);
   });
 
