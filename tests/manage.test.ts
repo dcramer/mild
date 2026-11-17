@@ -306,7 +306,7 @@ describe('managing sift from the dashboard', () => {
     const kept = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     calls = [];
 
-    expect((await call('POST', '/api/labels/remove', { id: 'marketing' })).body).toEqual({ ok: true, rules: 1, redecided: 1 });
+    expect((await call('POST', '/api/labels/remove', { id: 'marketing' })).body).toEqual({ ok: true, redecided: 1 });
     expect(calls).toEqual([`filter ${rule} off`]);
     expect((await listLabels(db, ACCOUNT)).map((l) => l.id)).not.toContain('marketing');
     expect((await listRules(db, ACCOUNT)).map((r) => r.id)).toEqual([kept]);
@@ -327,6 +327,13 @@ describe('managing sift from the dashboard', () => {
     expect((await call('POST', '/api/labels/remove', { id: 'marketing' })).status).toBe(409);
     expect((await call('POST', '/api/labels/remove', { id: EVERYTHING_ELSE })).status).toBe(409);
     expect((await call('POST', '/api/labels', { id: 'marketing', name: 'Sales' })).status).toBe(409);
+
+    // A mailbox is never left without a label of its own.
+    for (const l of await listLabels(db, ACCOUNT))
+      if (l.id !== EVERYTHING_ELSE && l.id !== 'newsletter') expect((await call('POST', '/api/labels/remove', { id: l.id })).status, l.id).toBe(200);
+    const last = await call('POST', '/api/labels/remove', { id: 'newsletter' });
+    expect(last.status).toBe(409);
+    expect(last.body['error']).toContain('Newsletters is the last of your labels');
 
     // The name again brings it back, as the label it is now.
     const again = await call('POST', '/api/labels/add', { labels: [{ name: 'Marketing', description: 'Sales pitches.', disposition: 'keep' }] });

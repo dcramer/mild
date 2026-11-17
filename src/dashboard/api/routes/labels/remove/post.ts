@@ -14,26 +14,29 @@ import { Refusal } from '../../../../../refusal.ts';
 export default write({
   path: '/api/labels/remove',
   body: z.strictObject({ id: text(40) }),
-  reply: z.object({ ok: z.literal(true), rules: z.number(), redecided: z.number() }),
+  reply: z.object({ ok: z.literal(true), redecided: z.number() }),
   touches: self,
   run: async (ctx, { id }) => {
     const { db, now } = ctx;
     if (id === EVERYTHING_ELSE) throw new Refusal('Everything Else cannot be removed: it is what mail is when it is none of your labels.');
     const having: string[] = [];
-    for (const account of await listAccounts(db)) if ((await listLabels(db, account.id)).some((l) => l.id === id)) having.push(account.id);
+    for (const account of await listAccounts(db)) {
+      const labels = await listLabels(db, account.id);
+      const label = labels.find((l) => l.id === id);
+      if (!label) continue;
+      // Without a label of its own a mailbox is read no more, and the dashboard goes back to setting up.
+      if (!labels.some((l) => l.id !== id && l.id !== EVERYTHING_ELSE))
+        throw new Refusal(`${label.name} is the last of your labels, and Sift reads no mail without one. Add another first.`);
+      having.push(account.id);
+    }
     if (having.length === 0) throw new Refusal(`There is no label "${id}".`);
-    let rules = 0;
     for (const accountId of having)
-      for (const rule of await listRules(db, accountId))
-        if (rule.labelId === id || rule.whenLabel === id) {
-          await removeFilter(ctx, rule.id);
-          rules++;
-        }
+      for (const rule of await listRules(db, accountId)) if (rule.labelId === id || rule.whenLabel === id) await removeFilter(ctx, rule.id);
     await db.transaction(async (tx) => {
       for (const accountId of having) await removeLabel(tx, accountId, id, now());
     });
     let redecided = 0;
     for (const accountId of having) redecided += await redecide(db, now, accountId);
-    return { ok: true as const, rules, redecided };
+    return { ok: true as const, redecided };
   },
 });

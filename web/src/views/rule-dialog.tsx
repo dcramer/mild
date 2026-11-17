@@ -73,8 +73,10 @@ export function AddRuleDialog({
   const [grown, setGrown] = useState(false);
   const [condition, setCondition] = useState('');
   const [name, setName] = useState('');
-  const [label, setLabel] = useState(start?.label ?? '');
-  const [whenLabel, setWhenLabel] = useState(start?.whenLabel ?? '');
+  // A start can name a label since removed (what earlier mail was); it is not one to choose.
+  const offered = (id: string | undefined) => (labels.some((l) => l.id === id) ? id! : '');
+  const [label, setLabel] = useState(offered(start?.label));
+  const [whenLabel, setWhenLabel] = useState(offered(start?.whenLabel));
   const [then, setThen] = useState<'' | Action>(start?.action ?? '');
   const [markRead, setMarkRead] = useState(false);
   const [unsubscribe, setUnsubscribe] = useState(false);

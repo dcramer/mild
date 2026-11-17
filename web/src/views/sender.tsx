@@ -68,8 +68,8 @@ const ruleWords = (rule: Rule) =>
   }`;
 
 /** What happens to their next message, and what says so: a rule, or the model, with how often it has been right. */
-function NextMail({ data, rule, more }: { data: SenderPage; rule: Rule | null; more: ReactNode }) {
-  const next = nextMail(data, rule);
+function NextMail({ data, rule, labels, more }: { data: SenderPage; rule: Rule | null; labels: readonly { id: string }[] | undefined; more: ReactNode }) {
+  const next = nextMail(data, rule, labels);
   const decides = rule !== null && rule.kind !== 'when-label';
   const { right, wrong } = data.profile.answers;
   const others = data.profile.rules.filter((r) => r !== rule);
@@ -372,7 +372,7 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
 
       <div className={charted ? 'grid grid-cols-[minmax(0,1fr)] gap-x-16 gap-y-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]' : ''}>
         <div className="flex flex-col gap-5">
-          <NextMail data={data} rule={rule} more={charted ? null : volume} />
+          <NextMail data={data} rule={rule} labels={manage.data?.labels[accountId]} more={charted ? null : volume} />
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <ChoiceGroup
               label={`Where ${title ?? key} stands`}
