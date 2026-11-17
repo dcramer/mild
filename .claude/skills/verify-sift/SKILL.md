@@ -75,7 +75,7 @@ Every row on Rules has a `Remove` of the same name. Open a rule's panel by its f
 
 Add as a Gmail filter is offered only while Sift is on: Settings (`?settings=1`), `Turn on`, then `Turn on` again to confirm. It is safe here, as `serve.ts` runs no pass, so nothing is carried out.
 
-Adding a rule with `Apply to mail already there` checked (the default for an action rule) opens `Apply to your inbox`, which reads Gmail and here says `Sift has no access to me@example.org.`; press `Cancel`. The rule is already added by then.
+Adding a rule with `Apply to mail already there` checked (the default for an action rule) opens `Apply to your inbox`. Its search of Gmail is `serve.ts`'s stand-in: `About 1,200` and `Found in Gmail 1` to `5`, whatever the rule. Pressing it (`Archive all` and the like) starts a run no pass goes on with, so the rule's panel stays at `Finding them in Gmail · 0 so far` until `Stop`. The rule is already added by then.
 
 Stored state, read-only: `$V sql "$RUN" "SELECT … FROM rules"`, from a copy of the database (`home/database`, PGlite), read as its owner, so every person's rows show. Tables worth checking: `decisions`, `rules`, `examples`, `feedback` (joined by `decision_id`), `actions`, `labels`, `proposals`, `suggestion_bodies`, `rule_drafts`. Labels belong to a mailbox, so filter by `account_id = 'me@example.org'`. What names a sender or came from mail is sealed (src/store/content.ts): a message's `headers`; a decision's `reason`; a rule's `match`, `except_matches`, `name` and `filter_written`; a proposal's `match`; an action's `payload`; a label proposal's `goal`, `labels` and `note`; a rule draft's `goal` and `rule`; and the text and HTML in `examples` and `suggestion_bodies`. The seed sets no `SIFT_KEY`, so these are stored as `sift-plain:` and the value, readable in SQL (`SELECT rule FROM rule_drafts`); with a key they would be ciphertext. Still prove them on the screen that reads them back (the Rules list, a rule's panel at `?rule=<id>`). A query error prints `sql: <message>` and exits 1.
 
@@ -112,7 +112,7 @@ State is in `~/.cache/sift-verify-maint/`. Delete `suggested-on` there to see to
 
 ## What this cannot show
 
-- Anything else that talks to Google: sign-in itself, connecting another account, `Apply to your inbox`, undo of a real change. They fail with `Sift has no access to me@example.org.`; that failure is not the change's fault.
+- Anything else that talks to Google: sign-in itself, connecting another account, what `Apply to your inbox` finds and does, undo of a real change. They fail with `Sift has no access to me@example.org.`; that failure is not the change's fault.
 - Gmail itself: the fake's filters are whatever the filter code asked for. Whether Gmail accepts a filter, and what it does to mail, is for `tests/filters.test.ts` and a real account.
 - The model tier: the seed's stand-in model never calls a provider and places only `m8` and the code.example.com mail it knows by name, so every other unmatched message is "Unlabelled". With no model at all such mail would wait undecided and not be a suggestion, and every screen would be the setting-up steps. The rule and label stand-ins are fixed answers too: what they fill in proves the dialogs and the code around the model, not what a model would choose.
 - Changing Gmail. Settings can turn sift on (`preferences.active`), but `serve.ts` never runs a pass, so nothing is carried out. Prove the executor with tests (`tests/actions.test.ts`, `tests/run.test.ts`).

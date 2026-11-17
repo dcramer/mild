@@ -3,7 +3,8 @@ import type { Sql } from './sql.ts';
 
 /**
  * How many of a mailbox's newest messages one press goes through. `inbox` bounds what one press can spend
- * on model calls; `recent` is enough to teach with while setting up.
+ * on model calls and Gmail reads, applying a rule as much as going through the inbox; `recent` is enough to
+ * teach with while setting up.
  */
 export const REACH = { inbox: 10_000, recent: 300 } as const;
 export type Reach = keyof typeof REACH;
@@ -11,6 +12,8 @@ export type Reach = keyof typeof REACH;
 export interface InboxRun {
   id: number;
   accountId: string;
+  /** Applying this rule; null when going through the whole inbox. */
+  ruleId: string | null;
   startedAt: number;
   acts: boolean;
   most: number;
@@ -23,6 +26,7 @@ export interface InboxRun {
 const COLUMNS = {
   id: inboxRuns.id,
   accountId: inboxRuns.accountId,
+  ruleId: inboxRuns.ruleId,
   startedAt: inboxRuns.startedAt,
   acts: inboxRuns.acts,
   most: inboxRuns.most,
@@ -32,12 +36,19 @@ const COLUMNS = {
   next: inboxRuns.next,
 };
 
-/** Start going through each of these mailboxes, except one already being gone through. Returns how many started. */
-export async function startInboxRuns(db: Sql, accountIds: readonly string[], run: { acts: boolean; most: number; now: number }): Promise<number> {
+/**
+ * Start going through each of these mailboxes, or applying `ruleId` to the mail it finds in them, except where
+ * that is already going. Returns how many started.
+ */
+export async function startInboxRuns(
+  db: Sql,
+  accountIds: readonly string[],
+  run: { acts: boolean; most: number; now: number; ruleId?: string },
+): Promise<number> {
   if (accountIds.length === 0) return 0;
   const started = await db
     .insert(inboxRuns)
-    .values(accountIds.map((accountId) => ({ accountId, startedAt: run.now, acts: run.acts, most: run.most })))
+    .values(accountIds.map((accountId) => ({ accountId, ruleId: run.ruleId ?? null, startedAt: run.now, acts: run.acts, most: run.most })))
     .onConflictDoNothing()
     .returning({ id: inboxRuns.id });
   return started.length;
@@ -88,9 +99,12 @@ export async function advanceInboxRun(db: Sql, run: InboxRun, next: number, now:
       .where(and(eq(inboxRuns.id, run.id), isNull(inboxRuns.finishedAt)));
 }
 
-/** Stop every run of this person's that is still going. What has been decided stays decided. */
-export async function stopInboxRuns(db: Sql, now: number): Promise<void> {
-  await db.update(inboxRuns).set({ finishedAt: now, stopped: true }).where(isNull(inboxRuns.finishedAt));
+/** Stop this person's runs applying `ruleId` (null: going through the whole inbox) that are still going. What has been decided stays decided. */
+export async function stopInboxRuns(db: Sql, ruleId: string | null, now: number): Promise<void> {
+  await db
+    .update(inboxRuns)
+    .set({ finishedAt: now, stopped: true })
+    .where(and(isNull(inboxRuns.finishedAt), ruleId === null ? isNull(inboxRuns.ruleId) : eq(inboxRuns.ruleId, ruleId)));
 }
 
 /** What the model has cost going through one run's messages. */
@@ -120,7 +134,7 @@ export interface InboxProgress {
   last: { finishedAt: number; total: number; spent: number; stopped: boolean } | null;
 }
 
-/** Where going through these mailboxes has got, or how it last went. */
+/** Where going through these mailboxes has got, or how it last went. Runs applying a rule are the rule's to show. */
 export async function inboxProgress(db: Sql, accountIds: readonly string[]): Promise<InboxProgress> {
   if (accountIds.length === 0) return { going: null, last: null };
   const rows = await db
@@ -135,7 +149,7 @@ export async function inboxProgress(db: Sql, accountIds: readonly string[]): Pro
       total: sql<number>`jsonb_array_length(${inboxRuns.messages})`.mapWith(Number),
     })
     .from(inboxRuns)
-    .where(inArray(inboxRuns.accountId, [...accountIds]))
+    .where(and(inArray(inboxRuns.accountId, [...accountIds]), isNull(inboxRuns.ruleId)))
     .orderBy(desc(inboxRuns.id));
   const going = rows.filter((r) => r.finishedAt === null);
   if (going.length > 0) {

@@ -556,6 +556,8 @@ export const inboxRuns = pgTable(
     id: id(),
     userId: userId(),
     accountId: text('account_id').notNull(),
+    // Applying this rule to the mail it finds in the inbox, as the user's press. Null: deciding the whole inbox as new mail.
+    ruleId: text('rule_id'),
     startedAt: time('started_at').notNull(),
     finishedAt: time('finished_at'), // null while it goes on
     stopped: boolean('stopped').notNull().default(false),
@@ -571,7 +573,8 @@ export const inboxRuns = pgTable(
     unique('inbox_runs_own').on(t.userId, t.id),
     mailbox(t),
     uniqueIndex('inbox_runs_one_going')
-      .on(t.userId, t.accountId)
+      // One whole-inbox run, and one per rule, at a time.
+      .on(t.userId, t.accountId, sql`coalesce(${t.ruleId}, '')`)
       .where(sql`${t.finishedAt} IS NULL`),
     own(),
   ],

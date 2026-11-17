@@ -7,7 +7,7 @@ import { forgetPassStatus, passStatus } from '../work/status.ts';
 import { REACH, modelShare } from '../store/inbox.ts';
 import { averageCall } from '../store/runs.ts';
 import { hasOwnLabels } from '../store/labels.ts';
-import { applyRule, ruleInbox } from '../work/apply.ts';
+import { ruleInbox } from '../work/apply.ts';
 import { createGmailApi } from '../gmail/api.ts';
 import { startEval } from '../learn/evals.ts';
 import { proposeLabels } from '../learn/labels.ts';
@@ -196,16 +196,8 @@ export async function buildControls(
       const rule = await getRuleFilter(db, ruleId);
       if (!rule) throw new Refusal('That rule no longer exists.');
       const { api } = await gmailFor(config, live.ephemeral, db, rule.accountId);
-      const { matches, capped } = await ruleInbox(db, api, rule.accountId, ruleId);
-      return { matches: matches.map((m) => ({ accountId: rule.accountId, ...m })), capped, costEach: await costEach(db) };
-    },
-    applyRule: async (db, ruleId, messageIds) => {
-      const rule = await getRuleFilter(db, ruleId);
-      if (!rule) throw new Refusal('That rule no longer exists.');
-      const { api } = await gmailFor(config, live.ephemeral, db, rule.accountId);
-      const applied = await applyRule(db, api, rule.accountId, ruleId, messageIds);
-      await passNow(db);
-      return applied;
+      const sample = await ruleInbox(db, api, rule.accountId, ruleId);
+      return { ...sample, examples: sample.examples.map((m) => ({ accountId: rule.accountId, ...m })), costEach: await costEach(db) };
     },
     revokeGmail: async (db, email) => {
       await forgetPassStatus(live.ephemeral, email);

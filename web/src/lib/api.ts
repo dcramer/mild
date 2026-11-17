@@ -257,17 +257,18 @@ export const api = {
   /** What the rule decided and Sift has not moved. */
   ruleWaiting: (id: string, signal: AbortSignal) => get<RuleWaiting>('/api/rules/waiting', { id }, signal),
   ruleUsage: (id: string, signal: AbortSignal) => get<RuleUsage>('/api/rules/usage', { id }, signal),
-  /** The inbox mail the rule would decide now, read from Gmail. */
+  /** What applying the rule to the inbox would do, from a sample read from Gmail. */
   ruleInbox: (id: string, signal: AbortSignal) => get<RuleInbox>('/api/rules/inbox', { id }, signal),
-  /** Apply the rule to messages from its inbox preview. */
-  applyRule: (id: string, messageIds: readonly string[]) => post<{ deciding: number; reading: number }>('/api/rules/apply', { id, messageIds }),
+  /** Start applying the rule to the inbox, in the background. */
+  applyRule: (id: string) => post('/api/rules/apply', { id }),
   /** Dismiss a proposal. A proposed rule is made with `addRule`. */
   dismissProposal: (id: number) => post('/api/proposals', { id }),
   /** `message`: what the page will not show by itself, if anything. */
   undo: (id: number) => post<{ message: string | null }>('/api/undo', { id }),
   inboxEstimate: (reach: 'inbox' | 'recent', signal: AbortSignal) => get<InboxEstimate>('/api/inbox', { reach }, signal),
   startInbox: (reach: 'inbox' | 'recent') => post('/api/inbox/start', { reach }),
-  stopInbox: () => post('/api/inbox/stop', {}),
+  /** Stop going through the inbox, or with `rule`, stop applying it. */
+  stopInbox: (rule?: string) => post('/api/inbox/stop', rule ? { rule } : {}),
   checkNow: () => post('/api/check', {}),
   session: (signal: AbortSignal) => get<Session>('/api/session', {}, signal),
   signOut: () => post('/api/signout', {}),

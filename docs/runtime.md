@@ -30,7 +30,7 @@ What is due:
 | --- | --- | --- |
 | A pass per mailbox | every mailbox with a label of its own | `lock:pass:<mailbox>` |
 | Upkeep per person | `upkeep:<person>:<day>`, claimed when it starts and let go if it fails | the claim |
-| Going through an inbox, its next slice | `inbox_runs` not finished | `lock:inbox:<mailbox>` |
+| Going through an inbox, or applying a rule to it, its next slice | `inbox_runs` not finished | `lock:inbox:<run>` |
 | A test run's next slice | runs marked running | `lock:eval:<person>:<run>` |
 
 Work left unfinished is due again at the next tick. Ticks may overlap; a lock held means something else has that piece. A lock lasts the piece's limit and a minute more, so one left by a call the host cut off runs out about when the next tick wants it. A ChatGPT device code is asked about when the page reloads while the person enters it, at most once per OpenAI's interval.

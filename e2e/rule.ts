@@ -16,10 +16,7 @@ export const fact = (within: Locator, term: string) =>
     .filter({ hasText: new RegExp(`^${term}$`) })
     .locator('xpath=following-sibling::dd[1]');
 
-/**
- * Presses Add rule with `Apply to mail already there` unticked: ticked, it opens Apply to your inbox, which
- * reads Gmail, and the 409 it gets here is a console error the fixture fails on.
- */
+/** Presses Add rule with `Apply to mail already there` unticked, so that Apply to your inbox does not open over the rule's panel. */
 export async function addRule(dialog: Locator) {
   const add = dialog.getByRole('button', { name: 'Add rule', exact: true });
   await expect(add).toBeVisible();

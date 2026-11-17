@@ -8,7 +8,8 @@
  * control replaced is `ruleFilter`, which adds and removes a rule's Gmail filter (and is asked before any rule is
  * removed). It runs the real filter code against a fake mailbox holding the filters the seed left in
  * <gmail.json>, and writes them back there after each call. `inboxEstimate` answers for a fixed inbox of
- * 2,412 messages (the newest 300 while setting up). Every other control that reaches Gmail still finds no access. `draftRule` runs the real drafting (look-ups of the seeded senders, the `fill_rule` arguments read by
+ * 2,412 messages (the newest 300 while setting up), and `ruleInbox` for about 1,240 messages any rule would
+ * decide, the newest five `Found in Gmail 1` to `5`, none needing the model. Every other control that reaches Gmail still finds no access. `draftRule` runs the real drafting (look-ups of the seeded senders, the `fill_rule` arguments read by
  * `readRuleDraft`, the `rule_drafts` row) with a stand-in model: it looks up the second line of its prompt (the
  * words the person typed), then fills in a rule archiving and marking read mail from the first sender found, with
  * a note naming the second. Nothing found fills in `nobody@example.com`. `proposeLabels` runs the real suggesting
@@ -100,6 +101,19 @@ const controls = {
   // What Gmail would say of an inbox of 2,412 messages, with three in four needing the model at about a tenth of a cent each.
   inboxEstimate: async (_db: Parameters<typeof built.inboxEstimate>[0], _mailboxes: readonly string[], reach: 'inbox' | 'recent') =>
     reach === 'inbox' ? { messages: 2412, model: 1830, cost: 3.1 } : { messages: 300, model: 228, cost: 0.39 },
+  ruleInbox: async () => ({
+    examples: Array.from({ length: 5 }, (_, i) => ({
+      accountId: 'me@example.org',
+      messageId: `g${i + 1}`,
+      subject: `Found in Gmail ${i + 1}`,
+      receivedAt: Date.now() - (i + 1) * 3_600_000,
+    })),
+    messages: 1240,
+    reading: 0,
+    exact: false,
+    most: null,
+    costEach: null,
+  }),
   proposeLabels: async (db: Parameters<typeof built.proposeLabels>[0], request: { accountId: string; goal: string }) => {
     faux.setResponses([suggest]);
     return await proposeLabels({ db, propose: createProposer(models, faux.getModel()), model: 'faux/stand-in' }, request);

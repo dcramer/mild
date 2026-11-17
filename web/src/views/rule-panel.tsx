@@ -15,6 +15,7 @@ import {
   moneyTick,
   outcomeName,
   plural,
+  roughly,
   shortDate,
   shortDay,
   willBe,
@@ -40,6 +41,7 @@ import {
   Panel,
   Reserve,
   Section,
+  Share,
   StackedBars,
   Table,
   Td,
@@ -93,32 +95,19 @@ export function whoText(match: RuleMatch): string {
   return [...(named ? [named] : []), ...(asked.length > 0 ? [`${said.length > 0 ? 'that' : 'mail that'} ${asked.join(' and ')}`] : [])].join(', ');
 }
 
-/** "Archive 20 as Marketing", and what a model must read first. */
-function applyWords(rule: RuleSummary, deciding: number, reading: number): string {
-  const action = outcomeName(rule.disposition ?? 'keep');
-  const read = reading > 0 ? `read ${count(reading)}` : '';
-  if (deciding === 0) return read.replace(/^r/, 'R');
-  return `${action} ${count(deciding)}${rule.labelName ? ` as ${rule.labelName}` : ''}${read ? `, ${read}` : ''}`;
-}
-
 /**
- * What applying the rule would do in the inbox now, read from Gmail, and the press that does it. Nothing
- * moves until that press: then it is the user's, carried out whether Sift is on or off.
+ * What applying the rule to the inbox would do, from the newest mail Gmail finds for it, and the press that
+ * starts it. Nothing moves until that press: then it is the user's, carried out whether Sift is on or off.
  */
 function ApplyDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => void }) {
   // Each look searches Gmail, so it is not repeated on a timer.
   const inbox = useLoaded(`rule-inbox ${rule.id}`, (signal) => api.ruleInbox(rule.id, signal), 0);
   const apply = useAction();
   const toast = useToast();
-  const matches = inbox.data?.matches ?? [];
-  const groups = [
-    { title: 'Sift has seen', rows: matches.filter((m) => m.seen && !m.reads) },
-    { title: 'Found in Gmail', rows: matches.filter((m) => !m.seen && !m.reads) },
-    { title: 'Sift reads these first', rows: matches.filter((m) => m.reads) },
-  ].filter((g) => g.rows.length > 0);
-  const reading = matches.filter((m) => m.reads).length;
-  const deciding = matches.length - reading;
-  const cost = inbox.data?.costEach;
+  const sample = inbox.data;
+  const none = sample?.exact === true && sample.messages === 0;
+  const cost = sample?.costEach ? sample.costEach * sample.reading : null;
+  const action = outcomeName(rule.disposition ?? 'keep');
   return (
     <Dialog
       open
@@ -135,22 +124,18 @@ function ApplyDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => void
           <Button
             variant="ink"
             busy={apply.busy}
-            disabled={matches.length === 0}
+            disabled={!sample || none}
             onClick={() =>
               apply.run(
-                () =>
-                  api.applyRule(
-                    rule.id,
-                    matches.map((m) => m.messageId),
-                  ),
+                () => api.applyRule(rule.id),
                 () => {
-                  toast(`Applied to ${plural(matches.length, 'message')}`);
+                  toast(ruleTitle(rule), { kind: 'Applying to your inbox' });
                   onClose();
                 },
               )
             }
           >
-            {matches.length === 0 ? 'Apply' : applyWords(rule, deciding, reading)}
+            {!sample || none ? 'Apply' : `${action} ${sample.exact ? count(sample.messages) : 'all'}${rule.labelName ? ` as ${rule.labelName}` : ''}`}
           </Button>
           <Button variant="quiet" onClick={onClose}>
             Cancel
@@ -159,10 +144,10 @@ function ApplyDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => void
         </>
       }
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-6">
         <Failure>{inbox.error}</Failure>
         {inbox.loading ? (
-          <Loading rows={4}>
+          <Loading rows={5}>
             <Td className="w-full max-w-0">
               <Blank />
             </Td>
@@ -170,53 +155,78 @@ function ApplyDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => void
               <Blank word />
             </Td>
           </Loading>
-        ) : inbox.data && matches.length === 0 ? (
+        ) : !sample ? null : none ? (
           <Empty>Nothing in your inbox for this rule.</Empty>
         ) : (
-          <Table>
-            <tbody>
-              {groups.map((group) => [
-                <TrGroup key={group.title} title={`${group.title} · ${count(group.rows.length)}`} span={2} />,
-                ...group.rows.map((m) => (
-                  <Tr key={m.messageId}>
-                    <Td className="w-full max-w-0 truncate">{m.subject || '(no subject)'}</Td>
-                    <Td num quiet>
-                      {ago(m.receivedAt)}
-                    </Td>
-                  </Tr>
-                )),
-              ])}
-            </tbody>
-          </Table>
+          <>
+            <Figures>
+              <Figure
+                label="In your inbox"
+                value={sample.exact ? count(sample.messages) : sample.messages === 0 ? 'A few' : `About ${roughly(sample.messages)}`}
+                note={sample.most === null ? null : `the newest ${count(sample.most)}`}
+              />
+              {sample.reading > 0 ? <Figure label="Need the model" value={sample.exact ? count(sample.reading) : `About ${roughly(sample.reading)}`} /> : null}
+              {cost ? <Figure label="About" value={money(cost)} tone="look" /> : null}
+            </Figures>
+            {sample.examples.length > 0 ? (
+              <Table>
+                <tbody>
+                  <TrGroup title="Newest" span={2} />
+                  {sample.examples.map((m) => (
+                    <Tr key={m.messageId}>
+                      <Td className="w-full max-w-0 truncate">{m.subject || '(no subject)'}</Td>
+                      <Td num quiet>
+                        {ago(m.receivedAt)}
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </Table>
+            ) : null}
+            {sample.reading > 0 ? (
+              <p className="text-muted-foreground">
+                A model reads {sample.reading === sample.messages ? 'each of these' : 'some of these'} first. Those that are {rule.when ?? rule.labelName} are{' '}
+                {willBe(rule.disposition ?? 'keep')}; the rest are treated as new mail.
+              </p>
+            ) : null}
+          </>
         )}
-        {reading > 0 ? (
-          <p className="text-muted-foreground">
-            A model reads each of these first{cost ? `, ${cost * reading < 0.01 ? 'under a cent' : `about ${money(cost * reading)}`} in all` : ''}. Those that
-            are {rule.when ?? rule.labelName} are {willBe(rule.disposition ?? 'keep')}; the rest are treated as new mail.
-          </p>
-        ) : null}
-        {inbox.data?.capped ? <p className="text-muted-foreground">Only the newest 300 in your inbox were looked at.</p> : null}
       </div>
     </Dialog>
   );
 }
 
-/** Mail the rule decided that is still waiting in the inbox, and the press that applies the rule there. */
+/** Mail the rule decided that is still waiting in the inbox, how far applying it there has got, and the press that applies it. */
 function InInbox({ rule, onOpen }: { rule: RuleSummary; onOpen: OpenMessages }) {
   const waiting = useLoaded(`rule-waiting ${rule.id}`, (signal) => api.ruleWaiting(rule.id, signal));
   const [applying, setApplying] = useParam('apply');
-  const { total = 0, messages = [] } = waiting.data ?? {};
+  const stop = useAction();
+  const { total = 0, messages = [], applying: going = null } = waiting.data ?? {};
   return (
     <Section
       title="Still in your inbox"
       meta={total > 0 ? count(total) : undefined}
       action={
-        <Button variant="plain" onClick={() => setApplying('1')}>
-          Apply to inbox…
-        </Button>
+        going ? (
+          <Button variant="plain" busy={stop.busy} onClick={() => stop.run(() => api.stopInbox(rule.id))}>
+            Stop
+          </Button>
+        ) : (
+          <Button variant="plain" onClick={() => setApplying('1')}>
+            Apply to inbox…
+          </Button>
+        )
       }
     >
-      <Failure>{waiting.error}</Failure>
+      <Failure>{waiting.error ?? stop.error}</Failure>
+      {going ? (
+        <div className="flex flex-col gap-2">
+          <Share part={going.done} whole={going.listed ? going.total : 0} />
+          <span className="text-muted-foreground tabular-nums">
+            {going.listed ? `Applying · ${count(going.done)} of ${count(going.total)}` : `Finding them in Gmail · ${count(going.total)} so far`}
+          </span>
+        </div>
+      ) : null}
       {messages.length > 0 ? (
         <>
           <p className="text-muted-foreground">These came before the rule or while Sift was off, so they were not moved.</p>

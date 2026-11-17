@@ -7,7 +7,10 @@ import { addMailbox, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule } from '../src/store/rules.ts';
 import type { MessageFacts } from '../src/triage/types.ts';
-import { applyRule, inboxQuery, ruleInbox } from '../src/work/apply.ts';
+import { REACH, goingInboxRuns, inboxProgress, startInboxRuns, stopInboxRuns } from '../src/store/inbox.ts';
+import { removeRule } from '../src/store/rules.ts';
+import { inboxQuery, ruleInbox } from '../src/work/apply.ts';
+import { continueRuleRun } from '../src/work/inbox.ts';
 import { triageAccount } from '../src/work/triage.ts';
 import { openUserDb, raw } from './fixtures.ts';
 import { FakeMailbox, facts } from './helpers.ts';
@@ -30,15 +33,21 @@ const asGmail = (m: MessageFacts): RawMessage => ({
   ],
 });
 
-/** A Gmail whose inbox holds `inbox`, answering every search with all of it: the rule is what narrows it. */
-function gmail(inbox: MessageFacts[]) {
+/**
+ * A Gmail whose inbox holds `inbox`, answering every search with all of it: the rule is what narrows it.
+ * `more`: the search says there is another page and guesses this many in all.
+ */
+function gmail(inbox: MessageFacts[], { gone = [], more }: { gone?: string[]; more?: number } = {}) {
   const searches: string[] = [];
   const fetched: string[] = [];
   return {
     searches,
     fetched,
     api: {
-      searchInbox: async (query: string) => (searches.push(query), { ids: inbox.map((m) => m.messageId) }),
+      searchInbox: async (query: string) => (
+        searches.push(query),
+        { ids: [...inbox.map((m) => m.messageId), ...gone], ...(more === undefined ? {} : { nextPageToken: 'p2', estimate: more }) }
+      ),
       getMetadata: async (id: string) => {
         fetched.push(id);
         const found = inbox.find((m) => m.messageId === id);
@@ -46,6 +55,13 @@ function gmail(inbox: MessageFacts[]) {
       },
     },
   };
+}
+
+/** Press Apply on `rule` and go through the run it starts, as the ticks would. */
+async function applyRule(api: ReturnType<typeof gmail>['api'], rule: string, now: number) {
+  await startInboxRuns(db, [ACCOUNT], { acts: true, most: REACH.inbox, now, ruleId: rule });
+  const [run] = await goingInboxRuns(db);
+  return await continueRuleRun({ db, api, now: () => now }, run!.id);
 }
 
 const decisionsOf = async (id: string) =>
@@ -88,16 +104,28 @@ describe('applying a rule to the inbox', () => {
       message('other', 'ada@example.org'),
     ]);
 
-    const { matches, capped } = await ruleInbox(db, api, ACCOUNT, rule);
+    const sample = await ruleInbox(db, api, ACCOUNT, rule);
     expect(searches).toEqual(['from:news.example.com']);
-    expect(capped).toBe(false);
-    expect(matches.map(({ messageId, seen, reads }) => ({ messageId, seen, reads }))).toEqual([
-      { messageId: 'seen', seen: true, reads: false },
-      { messageId: 'unseen', seen: false, reads: false },
-    ]);
+    expect(sample).toMatchObject({ messages: 2, reading: 0, exact: true, most: null });
+    expect(sample.examples.map((m) => m.messageId)).toEqual(['seen', 'unseen']);
     // Mail Sift has a record of is not fetched again.
-    expect(fetched).toEqual(['unseen', 'vip', 'other']);
+    expect(fetched.toSorted()).toEqual(['other', 'unseen', 'vip']);
     expect(await raw(db).get(`SELECT count(*) AS n FROM messages WHERE id = 'unseen'`)).toEqual({ n: 0 });
+  });
+
+  it("checks only the newest, and scales what they say to Gmail's guess at how many there are", async () => {
+    const rule = await addRule(db, ACCOUNT, { match: { fromDomain: ['news.example.com'] }, labelId: 'marketing' }, 'user');
+    // Of the newest twenty, the even ones are the rule's.
+    const inbox = Array.from({ length: 40 }, (_, i) => message(`m${i}`, i % 2 === 0 ? 'deals@news.example.com' : 'ada@example.org'));
+    const { api, fetched } = gmail(inbox, { more: 300 });
+
+    const sample = await ruleInbox(db, api, ACCOUNT, rule);
+    expect(fetched).toHaveLength(20);
+    expect(sample).toMatchObject({ messages: 150, reading: 0, exact: false, most: null });
+    expect(sample.examples.map((m) => m.messageId)).toEqual(['m0', 'm2', 'm4', 'm6', 'm8']);
+
+    // Past what one press goes through, it says so.
+    expect(await ruleInbox(db, gmail(inbox, { more: 50_000 }).api, ACCOUNT, rule)).toMatchObject({ messages: REACH.inbox / 2, most: REACH.inbox });
   });
 
   it("records each as the user's press, to be carried out while Sift is off, and no longer waiting", async () => {
@@ -107,9 +135,9 @@ describe('applying a rule to the inbox', () => {
     await recordDecision(db, ACCOUNT, 'seen', { disposition: 'review', subscription: 'preserve', stage: 'model', reason: 'unsure' }, { now: 1 });
     await redecideWaiting(db, ACCOUNT, 2);
     const unseen = message('unseen', 'tips@news.example.com');
-    const { api } = gmail([seen, unseen]);
+    const { api } = gmail([seen, unseen], { gone: ['gone'] });
 
-    expect(await applyRule(db, api, ACCOUNT, rule, ['seen', 'unseen', 'unseen', 'gone'], 3)).toEqual({ deciding: 2, reading: 0 });
+    expect(await applyRule(api, rule, 3)).toEqual({ from: 0, to: 3, of: 3 });
     for (const id of ['seen', 'unseen'])
       expect((await decisionsOf(id)).at(-1)).toEqual({
         stage: 'rules',
@@ -120,7 +148,11 @@ describe('applying a rule to the inbox', () => {
         by_user: true,
       });
     // Pressed twice, nothing more happens.
-    expect(await applyRule(db, api, ACCOUNT, rule, ['seen'], 4)).toEqual({ deciding: 0, reading: 0 });
+    await applyRule(api, rule, 4);
+    expect(await decisionsOf('seen')).toHaveLength(3);
+    expect(await decisionsOf('unseen')).toHaveLength(1);
+    // The run is the rule's to show, not going through the inbox.
+    expect(await inboxProgress(db, [ACCOUNT])).toEqual({ going: null, last: null });
 
     const mailbox = new FakeMailbox();
     mailbox.labels.set('seen', ['INBOX']);
@@ -137,12 +169,8 @@ describe('applying a rule to the inbox', () => {
     const note = message('note', 'ceo@news.example.com');
     const { api } = gmail([sale, note]);
 
-    const { matches } = await ruleInbox(db, api, ACCOUNT, rule);
-    expect(matches.map((m) => [m.messageId, m.reads])).toEqual([
-      ['sale', true],
-      ['note', true],
-    ]);
-    expect(await applyRule(db, api, ACCOUNT, rule, ['sale', 'note'], 3)).toEqual({ deciding: 0, reading: 2 });
+    expect(await ruleInbox(db, api, ACCOUNT, rule)).toMatchObject({ messages: 2, reading: 2, exact: true });
+    await applyRule(api, rule, 3);
     expect(await raw(db).all('SELECT id, apply_rule FROM messages ORDER BY id')).toEqual([
       { id: 'note', apply_rule: rule },
       { id: 'sale', apply_rule: rule },
@@ -163,5 +191,28 @@ describe('applying a rule to the inbox', () => {
     // What the model found it to be is a suggestion, as any mail is while Sift is off.
     expect(await decisionsOf('note')).toEqual([{ stage: 'model', disposition: 'keep', label_id: 'personal', rule_id: null, carry_out: false, by_user: false }]);
     expect(mailbox.labels.get('note')).toEqual(['INBOX']);
+  });
+
+  it('goes on a slice at a time, stops when asked or when its rule is removed, and leaves going through the inbox alone', async () => {
+    const rule = await addRule(db, ACCOUNT, { match: { fromDomain: ['news.example.com'] }, labelId: 'marketing' }, 'user');
+    const other = await addRule(db, ACCOUNT, { match: { from: ['ada@example.org'] }, disposition: 'archive' }, 'user');
+    const { api } = gmail(Array.from({ length: 300 }, (_, i) => message(`m${i}`, 'deals@news.example.com')));
+    await startInboxRuns(db, [ACCOUNT], { acts: false, most: REACH.inbox, now: 1 });
+    await startInboxRuns(db, [ACCOUNT], { acts: true, most: REACH.inbox, now: 1, ruleId: rule });
+    await startInboxRuns(db, [ACCOUNT], { acts: true, most: REACH.inbox, now: 1, ruleId: other });
+    // One run per rule at a time.
+    expect(await startInboxRuns(db, [ACCOUNT], { acts: true, most: REACH.inbox, now: 1, ruleId: rule })).toBe(0);
+    const runOf = async (ruleId: string | null) =>
+      (await raw(db).get<{ id: number }>('SELECT id FROM inbox_runs WHERE rule_id IS NOT DISTINCT FROM ?', ruleId))!.id;
+    const [whole, mine, theirs] = [await runOf(null), await runOf(rule), await runOf(other)];
+
+    expect(await continueRuleRun({ db, api, now: () => 2 }, mine)).toEqual({ from: 0, to: 250, of: 300 });
+    await stopInboxRuns(db, rule, 3);
+    expect(await continueRuleRun({ db, api, now: () => 4 }, mine)).toBeNull();
+    expect(await raw(db).get(`SELECT count(*) AS n FROM decisions WHERE rule_id = ?`, rule)).toEqual({ n: 250 });
+
+    await removeRule(db, other);
+    expect(await continueRuleRun({ db, api, now: () => 5 }, theirs)).toBeNull();
+    expect((await goingInboxRuns(db)).map((r) => r.id)).toEqual([whole]);
   });
 });

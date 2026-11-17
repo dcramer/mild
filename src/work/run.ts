@@ -17,8 +17,8 @@ import { captureExamples } from './examples.ts';
 import { PRUNE_PER_RUN, RETENTION_DAYS, pruneOld } from './retention.ts';
 import { continueEval, goingEvals } from '../learn/evals.ts';
 import { hasOwnLabels } from '../store/labels.ts';
-import { continueInboxRun } from './inbox.ts';
-import { goingInboxRuns } from '../store/inbox.ts';
+import { continueInboxRun, continueRuleRun } from './inbox.ts';
+import { goingInboxRun, goingInboxRuns } from '../store/inbox.ts';
 import { checkFiltersWhenDue } from './filters.ts';
 import { recordPassStatus } from './status.ts';
 import { type SyncReport, syncAccount } from './sync.ts';
@@ -183,7 +183,7 @@ export const runWork = (store: Store, work: Work, options: RunOptions, until: nu
         case 'pass':
           return account ? await unlessUnderWay(options, `lock:pass:${account.id}`, until, () => passMailbox(db, account, options, until)) : null;
         case 'inbox':
-          if (account) await unlessUnderWay(options, `lock:inbox:${account.id}`, until, () => goThroughInbox(db, account, work.run, options, until));
+          if (account) await unlessUnderWay(options, `lock:inbox:${work.run}`, until, () => goThroughInbox(db, account, work.run, options, until));
           return null;
         case 'eval':
           await unlessUnderWay(options, `lock:eval:${work.person}:${work.run}`, until, async () => {
@@ -226,11 +226,17 @@ function readingOnce(api: GmailApi): { api: GmailApi; held: (messageId: string) 
 }
 
 /**
- * Go on with an inbox run over one mailbox, with what a pass would use: its model, Gmail read once per
- * message, and the mailbox only while Sift is on. Without a model it waits; deciding only what rules cover
- * would leave the rest behind it.
+ * Go on with an inbox run over one mailbox. Applying a rule needs only Gmail: the pass carries out what it
+ * records. Going through the inbox uses what a pass would: its model, Gmail read once per message, and the
+ * mailbox only while Sift is on. Without a model it waits; deciding only what rules cover would leave the rest behind it.
  */
 async function goThroughInbox(db: Sql, account: Account, run: number, options: RunOptions, until: number): Promise<void> {
+  if ((await goingInboxRun(db, run))?.ruleId) {
+    const { api } = await options.connect(db, account);
+    const went = await continueRuleRun({ db, api, until, ...(options.now ? { now: options.now } : {}) }, run);
+    if (went && went.to > went.from) options.log(`${account.email}: applied a rule to ${went.to} of ${went.of} in the inbox`);
+    return;
+  }
   const tier = options.model ? await options.model(db) : null;
   if (!tier) return;
   const { active } = await preferences(db);

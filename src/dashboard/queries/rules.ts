@@ -1,4 +1,4 @@
-import { alias, and, asc, count, decisions, desc, eq, gte, labels, max, messages, modelRuns, rules, sql } from '../../store/query.ts';
+import { alias, and, asc, count, decisions, desc, eq, gte, inboxRuns, isNull, labels, max, messages, modelRuns, rules, sql } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import type { RuleMatch } from '../../triage/stages/rules.ts';
 import { openEnvelope, openJson, ruleName } from '../../store/content.ts';
@@ -80,7 +80,7 @@ const MOST_WAITING = 50;
 
 /**
  * Mail a rule decided that Sift has not moved and the user has not answered: it came while Sift was off, or
- * before the rule and was decided again when it was made. Newest first.
+ * before the rule and was decided again when it was made. Newest first. And how far applying it to the inbox has got.
  */
 export async function ruleWaiting(db: Sql, scope: Scope, ruleId: string): Promise<RuleWaiting> {
   const later = alias(decisions, 'later');
@@ -105,8 +105,13 @@ export async function ruleWaiting(db: Sql, scope: Scope, ruleId: string): Promis
     .where(where)
     .orderBy(desc(messages.receivedAt))
     .limit(MOST_WAITING);
+  const [applying] = await db
+    .select({ listed: inboxRuns.listed, done: inboxRuns.next, total: sql<number>`jsonb_array_length(${inboxRuns.messages})`.mapWith(Number) })
+    .from(inboxRuns)
+    .where(and(within(scope, inboxRuns.accountId), eq(inboxRuns.ruleId, ruleId), isNull(inboxRuns.finishedAt)));
   return {
     total: total?.n ?? 0,
+    applying: applying ?? null,
     messages: rows.map((r) => {
       const { subject } = openEnvelope(db, r.accountId, r.messageId, r);
       return { accountId: r.accountId, messageId: r.messageId, subject, receivedAt: r.receivedAt };

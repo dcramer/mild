@@ -127,6 +127,8 @@ export const plural = (n: number, one: string, many = `${one}s`) => `${count(n)}
 const int = new Intl.NumberFormat();
 const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
 export const count = (n: number) => (n >= 10_000 ? compact.format(n) : int.format(n));
+/** A number only known roughly, to two figures: 1,234 is 1,200. */
+export const roughly = (n: number) => count(n < 100 ? n : Number(n.toPrecision(2)));
 export const percent = (part: number, whole: number) => (whole === 0 ? '–' : `${Math.round((part / whole) * 100)}%`);
 export const money = (usd: number) => (usd === 0 ? '$0' : usd < 0.01 ? '<$0.01' : `$${usd.toFixed(2)}`);
 /** A round amount on an axis, which may be under a cent: $0.025. */

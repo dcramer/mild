@@ -395,8 +395,15 @@ export type RuleSummary = z.infer<typeof RuleSummary>;
 
 const InboxMessage = z.object({ accountId: z.string(), messageId: z.string(), subject: z.string(), receivedAt: z.number() });
 
-/** What a rule decided and Sift has not moved: the newest of them, and how many in all. */
-export const RuleWaiting = z.object({ total: z.number(), messages: z.array(InboxMessage) });
+/**
+ * What a rule decided and Sift has not moved: the newest of them, and how many in all. `applying`: how far
+ * applying it to the inbox has got (`listed` false: still finding them, so `total` is how many so far).
+ */
+export const RuleWaiting = z.object({
+  total: z.number(),
+  messages: z.array(InboxMessage),
+  applying: z.object({ listed: z.boolean(), done: z.number(), total: z.number() }).nullable(),
+});
 export type RuleWaiting = z.infer<typeof RuleWaiting>;
 
 /**
@@ -409,19 +416,19 @@ export const RuleUsage = z.object({
 export type RuleUsage = z.infer<typeof RuleUsage>;
 
 /**
- * The mail in the inbox now that a rule would decide, found in Gmail. `seen`: Sift has a record of it.
- * `reads`: a model must say what it is first. `capped`: the inbox had more than one press looks at.
- * `costEach`: one model call with the person's model, in dollars, when known.
+ * What applying a rule to the inbox would do, from the newest mail Gmail finds for it: those examples, and how
+ * many it would decide (`exact`, or scaled from them), of which `reading` a model must read first. `most`: how
+ * many one press goes through, when more match than that. `costEach`: one model call with the person's model, in dollars, when known.
  */
 export const RuleInbox = z.object({
-  matches: z.array(InboxMessage.extend({ seen: z.boolean(), reads: z.boolean() })),
-  capped: z.boolean(),
+  examples: z.array(InboxMessage),
+  messages: z.number(),
+  reading: z.number(),
+  exact: z.boolean(),
+  most: z.number().nullable(),
   costEach: z.number().nullable(),
 });
 export type RuleInbox = z.infer<typeof RuleInbox>;
-
-/** What applying a rule set going: carried out on the next pass (`deciding`), or once a model has read them (`reading`). */
-export const RuleApplied = z.object({ deciding: z.number(), reading: z.number() });
 
 /** One waiting suggestion: what sift proposes for one message, which the user has not answered. */
 export const SuggestionItem = z.object({

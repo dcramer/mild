@@ -113,12 +113,14 @@ beforeEach(async () => {
       calls.push(`inbox ${id}`);
       const owner = Object.keys(ids).find((account) => ids[account]!.rule === id)!;
       return {
-        matches: [{ accountId: owner, messageId: 'g', subject: `Inbox ${MARK[owner]}`, receivedAt: 1, seen: false, reads: false }],
-        capped: false,
+        examples: [{ accountId: owner, messageId: 'g', subject: `Inbox ${MARK[owner]}`, receivedAt: 1 }],
+        messages: 1,
+        reading: 0,
+        exact: true,
+        most: null,
         costEach: null,
       };
     },
-    applyRule: async (_db, id) => (calls.push(`apply ${id}`), { deciding: 1, reading: 0 }),
     // Reads Gmail for whichever mailboxes it is given: only the route's scope keeps it to the asker's.
     inboxEstimate: async (_db, mailboxes) => (calls.push(`estimate ${mailboxes.join(',')}`), { messages: 1, model: 1, cost: null }),
     startEval: async (_db, { accountId }) => (calls.push(`eval ${accountId}`), 1),
@@ -315,7 +317,7 @@ describe("nobody sees or changes another person's mail", () => {
       ],
       ['/api/rules/remove', { id: theirs.rule }, { id: 'r-nobody' }],
       ['/api/rules/filter', { id: theirs.rule, on: true }, { id: 'r-nobody', on: true }],
-      ['/api/rules/apply', { id: theirs.rule, messageIds: ['g'] }, { id: 'r-nobody', messageIds: ['g'] }],
+      ['/api/rules/apply', { id: theirs.rule }, { id: 'r-nobody' }],
       ['/api/proposals', { id: theirs.proposal }, { id: 9999 }],
       ['/api/undo', { id: theirs.action }, { id: 9999 }],
       ['/api/examples/delete', { accountId: ALPHA, messageId: `m-${MARK[ALPHA]}` }, { accountId: NOBODY, messageId: `m-${MARK[ALPHA]}` }],
@@ -337,9 +339,9 @@ describe("nobody sees or changes another person's mail", () => {
 
     // The same writes are the owner's to make on their own mail.
     expect((await call('GET', `/api/rules/inbox?id=${theirs.rule}`, ALPHA)).text).toContain(MARK[ALPHA_WORK]);
-    expect((await call('POST', '/api/rules/apply', ALPHA, { id: theirs.rule, messageIds: ['g'] })).status).toBe(200);
+    expect((await call('POST', '/api/rules/apply', ALPHA, { id: theirs.rule })).status).toBe(200);
     expect((await call('POST', '/api/rules/draft', ALPHA, { accountId: ALPHA_WORK, goal: 'Archive x' })).status).toBe(200);
-    expect(calls).toEqual([`inbox ${theirs.rule}`, `apply ${theirs.rule}`, `draft ${ALPHA_WORK}`]);
+    expect(calls).toEqual([`inbox ${theirs.rule}`, 'check', `draft ${ALPHA_WORK}`]);
     expect((await call('POST', '/api/rules/remove', ALPHA, { id: theirs.rule })).status).toBe(200);
     const fromProposal = { accountId: ALPHA_WORK, match: { from: ['x@example.com'] }, label: 'newsletter', proposal: theirs.proposal };
     expect((await call('POST', '/api/rules', ALPHA, fromProposal)).status).toBe(200);

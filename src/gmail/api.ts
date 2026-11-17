@@ -63,6 +63,8 @@ export interface HistoryPage {
 interface MessageIdPage {
   ids: string[];
   nextPageToken?: string;
+  /** Gmail's guess at how many match in all, which can be well off. */
+  estimate?: number;
 }
 
 /** Thrown when Gmail no longer holds history back to the stored cursor. */
@@ -150,7 +152,11 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
         client.users.messages.list({ userId, q: query, labelIds: ['INBOX'], maxResults: 500, ...(pageToken ? { pageToken } : {}) }),
       );
       const ids = (data.messages ?? []).map((m) => m.id).filter((id) => typeof id === 'string');
-      return { ids, ...(data.nextPageToken ? { nextPageToken: data.nextPageToken } : {}) };
+      return {
+        ids,
+        ...(data.nextPageToken ? { nextPageToken: data.nextPageToken } : {}),
+        ...(typeof data.resultSizeEstimate === 'number' ? { estimate: data.resultSizeEstimate } : {}),
+      };
     },
 
     async inboxSize() {

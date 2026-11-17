@@ -66,9 +66,15 @@ const controls: Controls = {
   },
   ruleInbox: async (_db, ruleId) => (
     calls.push(`inbox ${ruleId}`),
-    { matches: [{ accountId: ACCOUNT, messageId: 'g1', subject: 'Found', receivedAt: 1, seen: false, reads: true }], capped: false, costEach: 0.001 }
+    {
+      examples: [{ accountId: ACCOUNT, messageId: 'g1', subject: 'Found', receivedAt: 1 }],
+      messages: 40,
+      reading: 40,
+      exact: false,
+      most: null,
+      costEach: 0.001,
+    }
   ),
-  applyRule: async (_db, ruleId, ids) => (calls.push(`apply ${ruleId} ${ids.join(',')}`), { deciding: 0, reading: ids.length }),
   revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), true),
   checkNow: async () => void calls.push('check'),
   activity: async () => ({ running: true, lastPassAt: 5, problems: [], expired: [ACCOUNT] }),
@@ -591,7 +597,7 @@ describe('managing sift from the dashboard', () => {
     expect(calls).toEqual([]);
   });
 
-  it("lists what a rule decided and has not moved, and passes the inbox and the press on for the rule's mailbox", async () => {
+  it("lists what a rule decided and has not moved, passes the inbox on for the rule's mailbox, and applies it there in the background", async () => {
     const { call } = await start();
     const id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'w1', subject: 'Waiting' }), facts({ accountId: ACCOUNT, messageId: 'w2' })], '2');
@@ -601,12 +607,19 @@ describe('managing sift from the dashboard', () => {
     expect((await call('GET', `/api/rules/waiting?id=${id}`)).body).toEqual({
       total: 1,
       messages: [{ accountId: ACCOUNT, messageId: 'w1', subject: 'Waiting', receivedAt: 0 }],
+      applying: null,
     });
-    expect((await call('GET', `/api/rules/inbox?id=${id}`)).body).toMatchObject({ matches: [{ messageId: 'g1', reads: true }], costEach: 0.001 });
+    expect((await call('GET', `/api/rules/inbox?id=${id}`)).body).toMatchObject({ examples: [{ messageId: 'g1' }], messages: 40, costEach: 0.001 });
     expect((await call('GET', '/api/rules/inbox?id=r-nobody')).status).toBe(404);
-    expect((await call('POST', '/api/rules/apply', { id, messageIds: ['g1'] })).body).toEqual({ deciding: 0, reading: 1 });
-    expect((await call('POST', '/api/rules/apply', { id, messageIds: [] })).status).toBe(400);
-    expect(calls).toEqual([`inbox ${id}`, `apply ${id} g1`]);
+    expect((await call('POST', '/api/rules/apply', { id })).body).toEqual({ ok: true });
+    expect(calls).toEqual([`inbox ${id}`, 'check']);
+    expect((await call('GET', `/api/rules/waiting?id=${id}`)).body).toMatchObject({ applying: { listed: false, done: 0, total: 0 } });
+    expect(await call('POST', '/api/rules/apply', { id })).toMatchObject({ status: 409, body: { error: 'Sift is already applying this rule.' } });
+    // Stopping going through the inbox leaves applying a rule going.
+    await call('POST', '/api/inbox/stop', {});
+    expect((await call('GET', `/api/rules/waiting?id=${id}`)).body).toMatchObject({ applying: { done: 0 } });
+    await call('POST', '/api/inbox/stop', { rule: id });
+    expect((await call('GET', `/api/rules/waiting?id=${id}`)).body).toMatchObject({ applying: null });
   });
 
   it('charts what a rule decided by itself over 30 days, carried out or not, and what the model calls behind it cost', async () => {
@@ -1045,7 +1058,7 @@ describe('going through the inbox', () => {
   it('stops when the person stops it, keeping what it decided', async () => {
     inGmail(gmailMessage('a'), gmailMessage('b'), gmailMessage('c'), gmailMessage('d'), gmailMessage('e'));
     const run = await begin(false);
-    await goOn(run, { judge: async () => (await stopInboxRuns(db, 70), await unsure()) });
+    await goOn(run, { judge: async () => (await stopInboxRuns(db, null, 70), await unsure()) });
     expect(asked).toHaveLength(4);
     expect(await raw(db).all('SELECT next, finished_at, stopped FROM inbox_runs')).toEqual([{ next: 4, finished_at: 70, stopped: true }]);
     expect(await goOn(run)).toBeNull();
