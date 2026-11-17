@@ -21,12 +21,13 @@ export const HANDLED = [
 export const tier = (key: string) => TIERS.find((t) => t.key === key) ?? { key, name: key, color: 'var(--muted-foreground)' };
 
 /**
- * How sure sift is of a label, in three steps for a meter. A rule decided it, so it is sure; a model says how sure it was. Thresholds are a first guess until real mail calibrates them.
+ * How sure sift is of a label, in three steps for a meter. Full means Sift does it by itself while it is on:
+ * a rule decided it, or a model was at least as sure as Sift needs to act (`SURE`, src/triage/stages/model.ts).
+ * Mail held for the user (`review`) is never full, however sure the model was.
  */
-export function sureness(stage: string, confidence: number | null): 1 | 2 | 3 {
-  if (stage === 'rules') return 3;
-  if (confidence === null) return 2;
-  return confidence >= 0.9 ? 3 : confidence >= 0.7 ? 2 : 1;
+export function sureness({ stage, confidence, disposition }: { stage: string; confidence: number | null; disposition: string }): 1 | 2 | 3 {
+  const level = stage === 'rules' ? 3 : confidence === null ? 2 : confidence >= 0.9 ? 3 : confidence >= 0.7 ? 2 : 1;
+  return disposition === 'review' ? (Math.min(level, 2) as 1 | 2) : level;
 }
 
 /** What a label can be set to do, and so what sift does with mail. The same word whether it is suggested, done or a setting. */

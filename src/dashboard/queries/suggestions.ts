@@ -14,6 +14,7 @@ import {
 import type { Sql } from '../../store/sql.ts';
 import { accuracy, pendingSuggestions } from '../../learn/feedback.ts';
 import { listLabels } from '../../store/labels.ts';
+import { preferences } from '../../store/preferences.ts';
 import { hashOf, openPart } from '../../store/content.ts';
 import type { Label } from '../../triage/types.ts';
 import { listProposals, settledAction } from '../../store/proposals.ts';
@@ -155,6 +156,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
     items,
     waiting: waitingNow.length,
     accuracy: { reviewed, right },
+    active: (await preferences(db)).active,
   };
 }
 

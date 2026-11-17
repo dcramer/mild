@@ -183,7 +183,7 @@ function Body({
     .filter((l) => l.id !== current?.labelId)
     .slice(0, 2)
     .map((l) => ({ id: l.id, name: l.name, share: total ? l.messages / total : 0 }));
-  const groups = choices(target, current ? sureness(current.stage, current.confidence) : 1, alternatives);
+  const groups = choices(target, current ? sureness(current) : 1, alternatives);
   // Mail that is what Sift says but matters anyway: a rule keeps the sender's mail of that kind, and this message with it.
   const given = labels.find((l) => l.id === current?.labelId);
   const keepable = given && current?.disposition !== 'keep' && given.disposition !== 'keep' && given.disposition !== 'review' ? given : null;

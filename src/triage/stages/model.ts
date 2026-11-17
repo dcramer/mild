@@ -29,8 +29,11 @@ export interface Evidence {
 
 export const UNSURE = 'unsure';
 
-/** How sure the model must say it is before its label alone sends mail to spam. */
-const SURE_FOR_SPAM = 0.9;
+/**
+ * How sure the model must say it is before its label alone is carried out. Below it the user is asked, with
+ * the label as the answer to agree with. The dashboard's meter is full from here (`sureness`, web/src/lib/format.ts).
+ */
+const SURE = 0.9;
 
 /** What a call cost, as the provider reported it. */
 export interface Usage {
@@ -165,17 +168,6 @@ export function modelStage(deps: ModelStageDeps): Stage<Decision | Unfinished> {
         };
       }
 
-      // Spam (and a block, which some labels add) is the one outcome that is hard to notice and undo, so the
-      // model's word alone reaches it only when it is very sure.
-      if (outcome.disposition === 'spam' && (verdict.confidence ?? 0) < SURE_FOR_SPAM)
-        return {
-          ...base,
-          disposition: 'review',
-          labelId: label.id,
-          gmailLabel: label.gmailLabel,
-          reason: `${unusual}${label.name}, but not sure enough to mark it spam: ${verdict.reason}`,
-        };
-
       // Nor is a reply in a conversation the owner has taken part in, whoever sent it.
       if (hides && evidence.known.ownerInThread)
         return {
@@ -184,6 +176,15 @@ export function modelStage(deps: ModelStageDeps): Stage<Decision | Unfinished> {
           labelId: label.id,
           gmailLabel: label.gmailLabel,
           reason: `${unusual}${label.name}, but you have written in this thread: ${verdict.reason}`,
+        };
+
+      if ((verdict.confidence ?? 0) < SURE)
+        return {
+          ...base,
+          disposition: 'review',
+          labelId: label.id,
+          gmailLabel: label.gmailLabel,
+          reason: `${unusual}${label.name}, but not sure enough to act on it: ${verdict.reason}`,
         };
 
       return { ...base, ...outcome, reason: `${unusual}${label.name}: ${verdict.reason}` };

@@ -92,9 +92,12 @@ describe('managing sift from the dashboard', () => {
     expect((await call('POST', '/api/active', { active: true })).status).toBe(200);
     expect((await preferences(db)).active).toBe(true);
     expect((await call('GET', '/api/manage')).body).toMatchObject({ active: true });
+    // Suggestions says so too, since what its rows mean depends on it.
+    expect((await call('GET', '/api/suggestions')).body).toMatchObject({ active: true });
     for (const bad of [{}, { active: 'yes' }, { active: true, interval: 60 }]) expect((await call('POST', '/api/active', bad)).status).toBe(400);
     expect((await call('POST', '/api/active', { active: false })).status).toBe(200);
     expect((await preferences(db)).active).toBe(false);
+    expect((await call('GET', '/api/suggestions')).body).toMatchObject({ active: false });
     expect(calls).toEqual(['check', 'check']);
   });
 

@@ -23,6 +23,8 @@ import {
   AnswerPicker,
   Button,
   Blank,
+  Callout,
+  CalloutKey,
   Check,
   Dialog,
   Empty,
@@ -176,7 +178,7 @@ function SuggestionRow({
   const { answer, choices, busy, error } = useAnswer(labels, waiting, onAnswered);
   // A message none of the labels fits gets a new one; it is then among the choices.
   const [adding, setAdding] = useState(false);
-  const groups = choices(target, sureness(item.stage, item.confidence), item.alternatives);
+  const groups = choices(target, sureness(item), item.alternatives);
 
   return (
     <Tr onOpen={onOpen}>
@@ -190,7 +192,7 @@ function SuggestionRow({
           <span className="shrink-0 text-sm md:hidden">
             {item.labelId !== null ? (
               <span className="inline-flex items-center gap-2 text-muted-foreground">
-                <Meter level={sureness(item.stage, item.confidence)} />
+                <Meter level={sureness(item)} />
                 {item.labelName ?? outcomeName(item.disposition)}
               </span>
             ) : (
@@ -271,6 +273,19 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
       actions={<Week summary={summary.data} />}
       intro={
         <>
+          {/* Most people start off, so the room is held for it. */}
+          <Reserve id="home-off" ready={data !== null} room={{ narrow: 386, wide: 206 }}>
+            {data && !data.active ? (
+              <Callout title="Sift is off" action={<Button href="?settings=1">Turn Sift on…</Button>}>
+                <p>
+                  Nothing here has been done in Gmail. Each row is what Sift would do with that message. Correct the ones it gets wrong, and turn it on once it
+                  stops making mistakes.
+                </p>
+                <CalloutKey mark={<Meter level={3} />}>Sure. Once Sift is on, it does this by itself.</CalloutKey>
+                <CalloutKey mark={<Meter level={2} />}>Less sure, or no label. Sift leaves the message where it is and asks you.</CalloutKey>
+              </Callout>
+            ) : null}
+          </Reserve>
           {/* Proposals arrive after the list is drawn, and would push it down. */}
           <Reserve id="home-proposals" ready={data !== null} room={{ narrow: 0, wide: 0 }}>
             {data && data.proposals.length > 0 ? (

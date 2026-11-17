@@ -44,6 +44,8 @@ import {
   Menu,
   Meter,
   Note,
+  Callout,
+  CalloutKey,
   Notice,
   OnPhone,
   PageHeader,
@@ -775,6 +777,14 @@ export function SystemView() {
           <Button onClick={() => setDialog(true)}>Open a dialog</Button>
           <Button onClick={() => setPanel(true)}>Open the panel</Button>
         </div>
+      </Section>
+
+      <Section title="Callout" meta="first on a page whose rows read differently in the state Sift is in">
+        <Callout title="Sift is off" action={<Button href="#system">Turn Sift on…</Button>}>
+          <p>What the state means for everything below it, said once.</p>
+          <CalloutKey mark={<Meter level={3} />}>What a mark in the rows means.</CalloutKey>
+          <CalloutKey mark={<Meter level={2} />}>And the others.</CalloutKey>
+        </Callout>
       </Section>
 
       <Section title="Note">

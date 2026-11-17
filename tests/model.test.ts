@@ -69,20 +69,23 @@ describe('model stage', () => {
     const unknown = await stage({ label: 'newsletter', reason: 'r' }, evidence({ userHasWritten: null })).decide(facts());
     expect(unknown).toMatchObject({ disposition: 'review', reason: expect.stringContaining('could not check') });
 
-    expect(await stage({ label: 'transactional', reason: 'r' }, evidence({ userHasWritten: true })).decide(facts())).toMatchObject({ disposition: 'keep' });
+    expect(await stage({ label: 'transactional', reason: 'r', confidence: 0.95 }, evidence({ userHasWritten: true })).decide(facts())).toMatchObject({
+      disposition: 'keep',
+    });
   });
 
-  it('marks spam on its word only when very sure, and otherwise asks', async () => {
+  it('acts on its word only when sure, and otherwise asks with its label', async () => {
     const unsure = await stage({ label: 'phishing', reason: 'an unexpected order confirmation', confidence: 0.82 }).decide(facts());
-    expect(unsure).toMatchObject({ disposition: 'review', labelId: 'phishing', reason: expect.stringContaining('not sure enough to mark it spam') });
+    expect(unsure).toMatchObject({ disposition: 'review', labelId: 'phishing', reason: expect.stringContaining('not sure enough to act on it') });
     expect(unsure).not.toHaveProperty('block');
     expect(await stage({ label: 'junk', reason: 'r' }).decide(facts())).toMatchObject({ disposition: 'review' });
     expect(await stage({ label: 'phishing', reason: 'a fake sign-in page', confidence: 0.95 }).decide(facts())).toMatchObject({
       disposition: 'spam',
       block: true,
     });
-    // Hiding without spam keeps its bar.
-    expect(await stage({ label: 'marketing', reason: 'r', confidence: 0.6 }).decide(facts())).toMatchObject({ disposition: 'archive' });
+    expect(await stage({ label: 'marketing', reason: 'r', confidence: 0.6 }).decide(facts())).toMatchObject({ disposition: 'review', labelId: 'marketing' });
+    expect(await stage({ label: 'personal', reason: 'r', confidence: 0.89 }).decide(facts())).toMatchObject({ disposition: 'review', labelId: 'personal' });
+    expect(await stage({ label: 'personal', reason: 'r', confidence: 0.9 }).decide(facts())).toMatchObject({ disposition: 'keep' });
   });
 
   it('never hides a reply in a thread the owner has written in', async () => {
@@ -93,9 +96,9 @@ describe('model stage', () => {
       labelId: 'marketing',
       reason: expect.stringContaining('you have written in this thread'),
     });
-    expect(await stage({ label: 'personal', reason: 'r' }, inThread).decide(facts())).toMatchObject({ disposition: 'keep' });
+    expect(await stage({ label: 'personal', reason: 'r', confidence: 0.95 }, inThread).decide(facts())).toMatchObject({ disposition: 'keep' });
     const strangers = { ...ev, known: { ...ev.known, earlierInThread: 2, ownerInThread: false } };
-    expect(await stage({ label: 'marketing', reason: 'r' }, strangers).decide(facts())).toMatchObject({ disposition: 'archive' });
+    expect(await stage({ label: 'marketing', reason: 'r', confidence: 0.95 }, strangers).decide(facts())).toMatchObject({ disposition: 'archive' });
   });
 
   it('leaves the message unfinished when the model call fails, rather than asking about it', async () => {

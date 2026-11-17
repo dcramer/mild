@@ -150,7 +150,7 @@ describe('applying a rule to the inbox', () => {
     const sources = { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } };
     const model = {
       judge: async ({ evidence }: { evidence: { facts: MessageFacts } }) =>
-        evidence.facts.messageId === 'sale' ? { label: 'marketing', reason: 'a sale' } : { label: 'personal', reason: 'from a person' },
+        evidence.facts.messageId === 'sale' ? { label: 'marketing', reason: 'a sale' } : { label: 'personal', reason: 'from a person', confidence: 0.95 },
       model: 'test/model',
     };
     await triageAccount({ db, mailbox: null, answers: mailbox, model, sources }, (await listAccounts(db))[0]!);

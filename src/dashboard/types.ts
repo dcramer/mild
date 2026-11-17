@@ -464,6 +464,8 @@ export const Suggestions = z.object({
   labels: z.record(z.string(), z.array(z.object({ id: z.string(), name: z.string(), disposition: z.string() }))),
   /** Marked messages kept whole as examples, and how many are still to be fetched. */
   examples: z.object({ captured: z.number(), pending: z.number() }),
+  /** Whether Sift is on for the viewer. Off, nothing listed has been done in Gmail. */
+  active: z.boolean(),
 });
 export type Suggestions = z.infer<typeof Suggestions>;
 
