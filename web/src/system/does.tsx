@@ -1,9 +1,8 @@
-import { ArchiveIcon, BanIcon, CircleHelpIcon, ForwardIcon, InboxIcon, ShieldAlertIcon } from 'lucide-react';
+import { ArchiveIcon, BanIcon, CircleHelpIcon, InboxIcon, ShieldAlertIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-// `forward` is a custom action not built yet (TODO.md); only the sign-in page's examples show it.
-const ICONS = { keep: InboxIcon, archive: ArchiveIcon, spam: ShieldAlertIcon, block: BanIcon, review: CircleHelpIcon, forward: ForwardIcon } as const;
+const ICONS = { keep: InboxIcon, archive: ArchiveIcon, spam: ShieldAlertIcon, block: BanIcon, review: CircleHelpIcon } as const;
 
 /** An action's icon alone, where its word is said beside it by something else, such as an option in a `Select`. */
 export function ActionIcon({ action }: { action: string }) {

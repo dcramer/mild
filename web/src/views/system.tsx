@@ -777,10 +777,9 @@ export function SystemView() {
 
       <Section title="Splash" meta="the first page of someone not signed in: the name, one line set large, the one action">
         <div className="sheet [&>div]:min-h-0">
-          <Splash title="Gmail, sifted.">
-            <Button variant="mark" size="lg" className="justify-between gap-8 self-start">
+          <Splash title="Your inbox, without the pesky salespeople.">
+            <Button variant="mark" size="lg" className="self-start">
               Sign in with Google
-              <ArrowRightIcon aria-hidden />
             </Button>
           </Splash>
         </div>
