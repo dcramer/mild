@@ -10,7 +10,7 @@ import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 import { type Account, lastSyncedAt, listAccounts, listUsers } from '../store/accounts.ts';
 import type { Store } from '../store/store.ts';
 import { EXAMPLE_KEEP_DAYS, pruneExamples } from '../store/examples.ts';
-import { listUndecided, purgeSuggestionBodies } from '../store/messages.ts';
+import { latestArrival, listUndecided, purgeSuggestionBodies } from '../store/messages.ts';
 import { listUnsettledDecisions } from '../store/decisions.ts';
 import { preferences } from '../store/preferences.ts';
 import { KEEP_BODY_DAYS, bodiesDue, keepSuggestionBodies } from './bodies.ts';
@@ -22,7 +22,8 @@ import { continueInboxRun, continueRuleRun } from './inbox.ts';
 import { goingInboxRun, goingInboxRuns } from '../store/inbox.ts';
 import { checkFiltersWhenDue, filtersDue } from './filters.ts';
 import { type PassStatus, lastPass, recordPassStatus } from './status.ts';
-import { type SyncReport, syncAccount } from './sync.ts';
+import { TICK_MS, lookGap } from './gap.ts';
+import { type SyncReport, syncAccount, syncWants } from './sync.ts';
 import { CHANGE_TRIES, type TriageReport, triageAccount } from './triage.ts';
 import { identify, reportError, traced } from '../telemetry.ts';
 
@@ -244,9 +245,9 @@ async function passMailbox(db: Sql, account: Account, options: RunOptions, until
 }
 
 /**
- * Whether a pass over this mailbox would do anything: the record first, then one Gmail call (1 quota unit). Each
- * condition is something `runMailbox` does on a pass that finds no new mail, so the two change together. What it
- * cannot tell is a yes. A no is kept as a pass that found nothing would keep it, so "Last checked" stays true.
+ * Whether a pass over this mailbox would do anything: the record first, then, once the mailbox's look gap has passed,
+ * Gmail's history since the cursor. Each condition is something `runMailbox` does on a pass, so the two change together.
+ * What it cannot tell is a yes. A no is kept as a pass that found nothing would keep it, so "Last checked" stays true.
  */
 async function passWanted(db: Sql, account: Account, options: RunOptions): Promise<boolean> {
   const now = (options.now ?? Date.now)();
@@ -254,10 +255,12 @@ async function passWanted(db: Sql, account: Account, options: RunOptions): Promi
   try {
     // An expired sign-in fails every pass alike until the person signs in again, which only Gmail answering shows.
     if (!last?.expired && (await recordWants(db, account, options, now, last))) return true;
+    // Looked at once the next tick would be past the gap, so a minute's gap is every tick however long the last pass took.
+    const arrived = await latestArrival(db, account.id);
+    if (last && now - last.at <= lookGap(arrived === null ? null : now - arrived) - TICK_MS) return false;
     const { api } = await options.connect(db, account);
-    // The cursor `syncAccount` keeps is the history id Gmail gave when it last read the mailbox; any change moves Gmail's on.
-    const { historyId } = await api.getProfile();
-    if (last?.expired || historyId !== account.historyId) return true;
+    const wanted = await syncWants(db, api, account);
+    if (last?.expired || wanted) return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     // Any other error the pass meets too, and reports.

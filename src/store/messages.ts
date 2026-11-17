@@ -1,4 +1,4 @@
-import { type SQL, and, asc, decisions, desc, eq, lt, messages, notExists, or, sql, suggestionBodies } from './query.ts';
+import { type SQL, and, asc, decisions, desc, eq, lt, max, messages, notExists, or, sql, suggestionBodies } from './query.ts';
 import { outOfTries } from './runs.ts';
 import type { Sql } from './sql.ts';
 import type { Facts, RuleFacts } from '../triage/facts.ts';
@@ -120,6 +120,15 @@ export async function getFacts(db: Sql, accountId: string, messageId: string): P
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
   return row ? toMessage(db, accountId, row) : null;
+}
+
+/** When the mailbox's latest recorded mail reached Gmail; null when it has none. */
+export async function latestArrival(db: Sql, accountId: string): Promise<number | null> {
+  const [row] = await db
+    .select({ at: max(messages.receivedAt) })
+    .from(messages)
+    .where(eq(messages.accountId, accountId));
+  return row!.at;
 }
 
 /** Delete the text of waiting mail fetched before `cutoff`, every mailbox's. Returns how many went. */

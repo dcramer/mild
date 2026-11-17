@@ -145,18 +145,21 @@ const mailbox = new FakeMailbox();
 for (const { raw } of inbox) mailbox.labels.set(raw.id, [...raw.labelIds]);
 // Ada's mail is a reply: the owner has written to her.
 mailbox.sentTo.add('ada@example.org');
-let cursor = 1;
-// What the next sync finds added to the inbox.
-let arriving = inbox;
+// Gmail's history: each delivery moves it on, and a read from a cursor lists what came after, as the timed tick's look and sync read it.
+let history = 1;
+const arrivals: { at: number; mail: (typeof inbox)[number] }[] = [];
+const arrive = (mail: typeof inbox) => {
+  history++;
+  for (const m of mail) arrivals.push({ at: history, mail: m });
+};
+arrive(inbox);
 const find = (id: string) => inbox.find((m) => m.raw.id === id);
 const api: GmailApi = {
-  // Mail arriving moves Gmail's history past the cursor, as the timed tick looks for.
-  getProfile: async () => ({ emailAddress: ACCOUNT, historyId: String(arriving.length > 0 ? cursor + 1 : cursor) }),
-  listHistory: async () => {
-    const additions = arriving.map((m) => ({ id: m.raw.id, labelIds: m.raw.labelIds }));
-    arriving = [];
-    return { additions, historyId: String(++cursor) };
-  },
+  getProfile: async () => ({ emailAddress: ACCOUNT, historyId: String(history) }),
+  listHistory: async (start) => ({
+    additions: arrivals.filter((a) => a.at > Number(start)).map(({ mail }) => ({ id: mail.raw.id, labelIds: mail.raw.labelIds })),
+    historyId: String(history),
+  }),
   searchInbox: async () => ({ ids: [] }),
   inboxSize: async () => inbox.length,
   getMetadata: async (id) => find(id)?.raw ?? null,
@@ -220,8 +223,9 @@ if (variant === '--on') {
   ];
   inbox.push(...later);
   for (const { raw } of later) mailbox.labels.set(raw.id, [...raw.labelIds]);
-  arriving = later;
-  for (const result of await workDue(store, { ephemeral, model: standIn, connect: () => ({ api, mailbox }), log: () => {} }, Infinity))
+  arrive(later);
+  // As Check now begins it: the timed tick, moments after the last pass, would wait out the gap between looks.
+  for (const result of await workDue(store, { ephemeral, model: standIn, connect: () => ({ api, mailbox }), log: () => {} }, Infinity, [user]))
     if (result.error) throw new Error(`seed pass failed: ${result.error}`);
   const [lin, sale] = later.map((m) => m.raw.id);
   if (!mailbox.labels.get(lin ?? '')?.some((l) => l.endsWith('sift/review'))) throw new Error('the pass with sift on did not leave Lin for the user');
