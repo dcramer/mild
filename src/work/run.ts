@@ -258,6 +258,8 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
     if (active) await reconcile(deps);
     result.sync = await syncAccount(db, api, account, options.now, until);
     if (result.sync.unfinished) return finish(result, active, options, true);
+    // Before triage, which takes every pass there is while a backlog lasts: fetched only after it, mail left waiting would never get its text.
+    await keepSuggestionBodies(db, api, account.id, options.now, { fetch: !over() });
     result.triage = await triageAccount(
       {
         ...deps,
@@ -271,7 +273,7 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
       account,
     );
     const out = Boolean(result.triage.unfinished) || over();
-    // Out of time, the text the model read is still kept for the mail it left waiting, and nothing more is fetched.
+    // Out of time, the text the model read is still kept for the mail it left waiting; the rest waits for the next pass.
     await keepSuggestionBodies(db, api, account.id, options.now, { held, fetch: !out });
     if (out) return finish(result, active, options, true);
     result.captured = await captureExamples(db, api, account.id);
