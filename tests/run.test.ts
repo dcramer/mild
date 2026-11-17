@@ -8,7 +8,7 @@ import { undo } from '../src/actions/executor.ts';
 import { writeRuleFilter } from '../src/actions/rule-filters.ts';
 import { applyFeedback } from '../src/learn/feedback.ts';
 import { userChanges } from '../src/learn/gmail.ts';
-import { lastStandingChange } from '../src/store/actions.ts';
+import { insertPendingAction, lastStandingChange } from '../src/store/actions.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { passStatus } from '../src/work/status.ts';
 import { connectAccount, deleteUser, recordSync, removeMailbox } from '../src/store/accounts.ts';
@@ -128,6 +128,22 @@ describe('runOnce', () => {
     await runOnce(db, options());
     expect(await decisions()).toMatchObject([{ message_id: 'news', outcome: 'done' }]);
     expect(mailbox.modifyCalls).toBe(1);
+  });
+
+  it('settles each mailbox’s unconfirmed changes from that mailbox', async () => {
+    const OTHER = 'other@example.org';
+    const { db: own } = await onePerson(ACCOUNT, OTHER);
+    await setActive(own, true);
+    await recordSync(own, OTHER, [facts({ accountId: OTHER, messageId: 'theirs' })], '1');
+    const id = await insertPendingAction(
+      own,
+      { accountId: OTHER, messageId: 'theirs', type: 'archive', payload: { add: [], remove: ['INBOX'] }, originalLabels: ['INBOX'] },
+      0,
+    );
+    const theirs = new FakeMailbox();
+    theirs.labels.set('theirs', []);
+    await runOnce(own, { ...options(), connect: (_db, account) => ({ api: api(), mailbox: account.id === OTHER ? theirs : mailbox }) });
+    expect(await raw(own).get('SELECT status FROM actions WHERE id = ?', id)).toEqual({ status: 'done' });
   });
 
   it('acts on decisions, links each action to its decision and counts rule hits', async () => {

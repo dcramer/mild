@@ -103,6 +103,12 @@ async function changeLabels(deps: ActionDeps, target: Target, current: string[],
   return { status: 'failed', actionId, reason };
 }
 
+/** An unsubscribe already `unknown` stays so: no mailbox can say whether it took. */
+const settles = (action: ActionRecord) => !(action.type === 'unsubscribe' && action.status === 'unknown');
+
+/** Whether `reconcile` has a change in this mailbox to settle. */
+export const reconcileDue = async (db: Sql, accountId: string): Promise<boolean> => (await listOpenActions(db, { accountId })).some(settles);
+
 /**
  * Settle actions whose outcome was never confirmed (a crash or a provider error mid-change) by reading
  * the mailbox. A label change on one message is atomic, so it either fully applied or did not happen.
@@ -111,11 +117,10 @@ async function changeLabels(deps: ActionDeps, target: Target, current: string[],
  * An unsubscribe changes no label, so the mailbox cannot say whether it took: one cut short is `unknown`,
  * which leaves the sender to be tried again, and never `done`, which would leave them alone for good.
  */
-export async function reconcile(deps: ActionDeps, scope?: { accountId: string; messageId: string }): Promise<number> {
+export async function reconcile(deps: ActionDeps, scope?: { accountId: string; messageId?: string }): Promise<number> {
   let settled = 0;
-  for (const action of await listOpenActions(deps.db, scope)) {
+  for (const action of (await listOpenActions(deps.db, scope)).filter(settles)) {
     if (action.type === 'unsubscribe') {
-      if (action.status === 'unknown') continue;
       await finishAction(deps.db, action.id, 'unknown', null, 'Sift stopped before the answer was recorded', clock(deps));
       settled++;
       continue;

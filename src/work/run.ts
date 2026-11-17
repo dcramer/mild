@@ -1,5 +1,5 @@
 import type { Sql } from '../store/sql.ts';
-import { reconcile } from '../actions/executor.ts';
+import { reconcile, reconcileDue } from '../actions/executor.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import type { MessageContent } from '../gmail/body.ts';
@@ -7,20 +7,21 @@ import type { FilterCheck } from '../actions/rule-filters.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
-import { type Account, listAccounts, listUsers } from '../store/accounts.ts';
+import { type Account, lastSyncedAt, listAccounts, listUsers } from '../store/accounts.ts';
 import type { Store } from '../store/store.ts';
 import { EXAMPLE_KEEP_DAYS, pruneExamples } from '../store/examples.ts';
-import { purgeSuggestionBodies } from '../store/messages.ts';
+import { listUndecided, purgeSuggestionBodies } from '../store/messages.ts';
+import { listUnsettledDecisions } from '../store/decisions.ts';
 import { preferences } from '../store/preferences.ts';
-import { KEEP_BODY_DAYS, keepSuggestionBodies } from './bodies.ts';
-import { captureExamples } from './examples.ts';
+import { KEEP_BODY_DAYS, bodiesDue, keepSuggestionBodies } from './bodies.ts';
+import { captureExamples, examplesDue } from './examples.ts';
 import { PRUNE_PER_RUN, RETENTION_DAYS, pruneOld } from './retention.ts';
 import { continueEval, goingEvals } from '../learn/evals.ts';
 import { hasOwnLabels } from '../store/labels.ts';
 import { continueInboxRun, continueRuleRun } from './inbox.ts';
 import { goingInboxRun, goingInboxRuns } from '../store/inbox.ts';
-import { checkFiltersWhenDue } from './filters.ts';
-import { recordPassStatus } from './status.ts';
+import { checkFiltersWhenDue, filtersDue } from './filters.ts';
+import { type PassStatus, lastPass, recordPassStatus } from './status.ts';
 import { type SyncReport, syncAccount } from './sync.ts';
 import { CHANGE_TRIES, type TriageReport, triageAccount } from './triage.ts';
 import { identify, reportError, traced } from '../telemetry.ts';
@@ -81,8 +82,9 @@ export type Work =
   | { kind: 'eval'; person: number; run: number };
 
 /**
- * What is due, for these people or everyone: found in the record and the ephemeral store, so a tick needs
- * nothing remembered from the last, and work a tick left unfinished is simply due again.
+ * What is due, found in the record and the ephemeral store, so a tick needs nothing remembered from the last, and
+ * work a tick left unfinished is simply due again. `people`: those who just asked, whose passes are begun
+ * without looking. Without it, the timed tick: everyone, each mailbox's pass only when `passWanted`.
  */
 export async function dueWork(store: Store, options: RunOptions, people?: readonly number[]): Promise<Work[]> {
   const day = today(options);
@@ -96,7 +98,7 @@ export async function dueWork(store: Store, options: RunOptions, people?: readon
     const reading = await hasOwnLabels(db);
     for (const account of await listAccounts(db)) {
       if (!reading) continue;
-      due.push({ kind: 'pass', person, account: account.id });
+      if (people || (await passWanted(db, account, options))) due.push({ kind: 'pass', person, account: account.id });
       for (const run of runs) if (run.accountId === account.id) due.push({ kind: 'inbox', person, account: account.id, run: run.id });
     }
     for (const run of await goingEvals(db)) due.push({ kind: 'eval', person, run });
@@ -230,8 +232,53 @@ async function passMailbox(db: Sql, account: Account, options: RunOptions, until
       at: (options.now ?? Date.now)(),
       ...(result.error ? { error: result.error } : {}),
       ...(result.expired ? { expired: true } : {}),
+      ...(result.unfinished ? { unfinished: true } : {}),
     });
   return result;
+}
+
+/**
+ * Whether a pass over this mailbox would do anything: the record first, then one Gmail call (1 quota unit). Each
+ * condition is something `runMailbox` does on a pass that finds no new mail, so the two change together. What it
+ * cannot tell is a yes. A no is kept as a pass that found nothing would keep it, so "Last checked" stays true.
+ */
+async function passWanted(db: Sql, account: Account, options: RunOptions): Promise<boolean> {
+  const now = (options.now ?? Date.now)();
+  const last = await lastPass(options.ephemeral, account.id);
+  try {
+    // An expired sign-in fails every pass alike until the person signs in again, which only Gmail answering shows.
+    if (!last?.expired && (await recordWants(db, account, options, now, last))) return true;
+    const { api } = await options.connect(db, account);
+    // The cursor `syncAccount` keeps is the history id Gmail gave when it last read the mailbox; any change moves Gmail's on.
+    const { historyId } = await api.getProfile();
+    if (last?.expired || historyId !== account.historyId) return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // Any other error the pass meets too, and reports.
+    if (!message.includes('invalid_grant')) return true;
+    if (!last?.expired) options.log(`${account.email}: Google sign-in has expired. Sign in to the dashboard again.`);
+    await recordPassStatus(options.ephemeral, account.id, { at: now, error: message, expired: true });
+    return false;
+  }
+  await recordPassStatus(options.ephemeral, account.id, { at: now });
+  return false;
+}
+
+async function recordWants(db: Sql, account: Account, options: RunOptions, now: number, last: PassStatus | null): Promise<boolean> {
+  // Not passed since this ephemeral store began, failed, or out of time: what it left is not all in the record.
+  if (!last || last.error || last.unfinished) return true;
+  const synced = await lastSyncedAt(db, account.id);
+  // The day's first sync reads the mailbox's other addresses again.
+  if (synced === null || Math.floor(synced / DAY_MS) !== Math.floor(now / DAY_MS)) return true;
+  const { active } = await preferences(db);
+  if (active && (await reconcileDue(db, account.id))) return true;
+  if ((await listUnsettledDecisions(db, account.id, active ? {} : { byUserOnly: true })).length > 0) return true;
+  if (await bodiesDue(db, account.id, now)) return true;
+  if (await examplesDue(db, account.id)) return true;
+  if (await filtersDue(db, account.id, active, now)) return true;
+  // With no model, what no rule covers waits for one and a pass leaves it be. A rule added since decides it at the next
+  // pass begun for anything else: new mail, a press, the day's first sync.
+  return (await listUndecided(db, account.id, 1)).length > 0 && Boolean(options.model && (await options.model(db)));
 }
 
 /**
@@ -248,7 +295,7 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
     const { api: gmail, mailbox } = await options.connect(db, account);
     const { api, held } = readingOnce(gmail);
     const deps = { db, mailbox, ...(options.now ? { now: options.now } : {}) };
-    if (active) await reconcile(deps);
+    if (active) await reconcile(deps, { accountId: account.id });
     result.sync = await syncAccount(db, api, account, options.now, until);
     if (result.sync.unfinished) return finish(result, active, options, true);
     // Before triage, which takes every pass there is while a backlog lasts: fetched only after it, mail left waiting would never get its text.
