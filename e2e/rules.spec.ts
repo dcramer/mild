@@ -15,6 +15,8 @@ test.describe('Rules', () => {
     await expect(dialog.getByRole('combobox', { name: 'Condition 1' })).toContainText('from');
     await expect(dialog.getByRole('combobox', { name: 'Label it as' })).toContainText('No label, just act');
     await expect(dialog.getByRole('combobox', { name: 'What happens to it' })).toContainText('Archive');
+    // Said before anything is typed there: the cost is why to leave it empty.
+    await expect(dialog.getByText('A model checks this, one call per message the rule matches.')).toBeVisible();
 
     await dialog.getByRole('textbox', { name: 'Value 1' }).fill('deals@promo.example.com');
     await expect(dialog.getByText('Only this address.')).toBeVisible();

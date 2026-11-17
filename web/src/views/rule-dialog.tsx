@@ -339,13 +339,7 @@ export function AddRuleDialog({
               <Field
                 inline
                 label="Only when"
-                hint={
-                  needsLabel
-                    ? 'Choose a label below for this to describe.'
-                    : condition.trim() !== ''
-                      ? 'A model reads each message it matches to check.'
-                      : undefined
-                }
+                hint={needsLabel ? 'Choose a label below for this to describe.' : 'A model checks this, one call per message the rule matches.'}
               >
                 <Input
                   className="w-full"
