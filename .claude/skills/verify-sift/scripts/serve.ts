@@ -8,9 +8,10 @@
  * control replaced is `ruleFilter`, which adds and removes a rule's Gmail filter (and is asked before any rule is
  * removed). It runs the real filter code against a fake mailbox holding the filters the seed left in
  * <gmail.json>, and writes them back there after each call. Every other control that reaches Gmail still finds
- * no access. `draftRule` runs the real drafting, look-ups of the seeded senders included, with a stand-in model:
- * it looks up the words of the request, then fills in a rule archiving the first sender found, with a note
- * naming the second.
+ * no access. `draftRule` runs the real drafting (look-ups of the seeded senders, the `fill_rule` arguments read by
+ * `readRuleDraft`, the `rule_drafts` row) with a stand-in model: it looks up the second line of its prompt (the
+ * words the person typed), then fills in a rule archiving and marking read mail from the first sender found, with
+ * a note naming the second. Nothing found fills in `nobody@example.com`.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -58,7 +59,8 @@ const mailboxOf = (accountId: string) => {
 const faux = fauxProvider();
 const models = createModels();
 models.setProvider(faux.provider);
-const blank = { by: 'from', senderName: '', nameContains: false, facts: [], label: '', onlyOnceLabelled: false, when: '', markRead: true, unsubscribe: false };
+// The rest of what `fill_rule` requires (src/model/draft-rule.ts), unused.
+const blank = { facts: [], name: '', label: '', onlyOnceLabelled: false, when: '', markRead: true, unsubscribe: false };
 const lookUp = (context: { messages: readonly { role: string; content: unknown }[] }) => {
   const asked = context.messages.find((m) => m.role === 'user')?.content;
   const words = String(asked).split('\n')[1] ?? '';
@@ -67,7 +69,10 @@ const lookUp = (context: { messages: readonly { role: string; content: unknown }
 const fillIn = (context: { messages: readonly { role: string; content: unknown }[] }) => {
   const found = [...JSON.stringify(context.messages.at(-1)?.content).matchAll(/<([^>\s]+@[^>\s]+)>|- ([^\s,<]+@[^\s,]+)/g)].map((m) => m[1] ?? m[2]);
   const note = found[1] ? `Add another rule for ${found[1]}.` : '';
-  return fauxAssistantMessage([fauxToolCall(FILL_TOOL, { ...blank, value: found[0] ?? 'nobody@example.com', action: 'archive', note })], { stopReason: 'toolUse' });
+  return fauxAssistantMessage(
+    [fauxToolCall(FILL_TOOL, { ...blank, conditions: [{ by: 'from', value: found[0] ?? 'nobody@example.com' }], action: 'archive', note })],
+    { stopReason: 'toolUse' },
+  );
 };
 const controls = {
   ...built,

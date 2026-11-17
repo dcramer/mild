@@ -6,15 +6,15 @@ Wherever sift offers to make a rule outside the Rules screen, the press opens th
 
 - `shortcut-proposal`: For review's proposal line (`Keep Receipts from …?`). `Make a rule…` opens the dialog on the proposal's sender, waiting for its label (`Only when it is this label`), then doing what the user has been doing; adding resolves the proposal, whatever the user changed; closing the dialog leaves it. `Dismiss` is one press and makes no rule.
 - `shortcut-message`: the message panel's `Make a rule…`, on the sender and the label the message has.
-- `shortcut-fact`: a `What sift saw` row's `Rule…`, on the sender and that fact, or on the list (see message-facts.md).
-- `shortcut-standing`: `Trust`, `Unwanted`, `Block` on a sender's or domain's page, on that address or domain, no label, and `Keep`, `Archive` or `Spam`. Adding one opens the rule's panel (`?rule=<id>`). Pressing the standing that is on takes it back in one press.
+- `shortcut-fact`: a `What Sift saw` row's `Rule…`, on the sender and that fact, or on the list (see message-facts.md).
+- `shortcut-standing`: `Trust`, `Unwanted`, `Block` (the group `Where <name> stands`) on a sender's or domain's page, on that address or domain, no label, and `Keep`, `Archive` or `Spam`. Adding one opens the rule's panel (`?rule=<id>`). Pressing the standing that is on takes it back in one press.
 - `shortcut-replaces`: when the dialog's conditions are exactly those of a rule already there, a `Replaces` line names what that rule says, and adding replaces it.
 
 ## How to get to it (user POV)
 
 - For review, the line above the list.
 - Any message, `Make a rule…` at the top of the panel or `Rule…` beside what sift saw.
-- A sender's name anywhere, then `Your say` on their page; or the domain linked from it.
+- A sender's name anywhere, then `Where <their name> stands` on their page; or the domain linked from it.
 
 ## Driving it with verify.sh
 

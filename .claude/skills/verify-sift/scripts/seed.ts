@@ -87,8 +87,8 @@ const inbox = [
   mail('Utility <billing@utility.example.net>', 'Your March bill', 'Your bill is ready.'),
   mail('Utility <billing@utility.example.net>', 'Your April bill', 'Your bill is ready.'),
   mail('Utility <billing@utility.example.net>', 'Your May bill', 'Your bill is ready.'),
-  // One address under several names, which the stand-in model places by name: a security alert breaks every run of five
-  // notifications, so the model's agreement proposes no rule for the address.
+  // One address under several names, which the stand-in model places by name, so For review folds them by name and
+  // gives the address's page a list of names.
   ...(
     [
       ['Dependabot', 'Bump lodash from 4.17.20 to 4.17.21'],
@@ -107,7 +107,7 @@ const store = await openStore(config);
 const user = await connectAccount(store, ACCOUNT, '1', now - 24 * HOUR);
 const db = await store.user(user);
 await withSampleLabels(db, ACCOUNT);
-// One of each kind of rule: a label, an action, and an action for mail that turns out to be a label.
+// Two label rules and an action rule; a fourth, which cannot be a filter, is added after the passes.
 const newsRule = await addRule(db, ACCOUNT, { match: { fromDomain: ['news.example.com'] }, labelId: 'newsletter' }, 'user');
 const ordersRule = await addRule(db, ACCOUNT, { match: { from: ['orders@shop.example.com'] }, labelId: 'transactional' }, 'user');
 const ciRule = await addRule(db, ACCOUNT, { match: { fromDomain: ['ci.example.org'] }, disposition: 'archive' }, 'user');
@@ -191,7 +191,6 @@ for (const waiting of await pendingSuggestions(db, { accountId: ACCOUNT, sender:
       sender: waiting.fromAddress,
       label: 'transactional',
       disposition: 'keep',
-      scope: 'once',
       decisionId: waiting.decisionId,
       messageId: waiting.messageId,
       via: 'gmail',

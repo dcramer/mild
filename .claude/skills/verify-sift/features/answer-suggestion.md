@@ -31,4 +31,4 @@ Preconditions:
 - A row shows the sender's name, not the address; the address is in the panel.
 - Each subject is in its row twice, once in a copy shown only on phones, so `find text "<subject>"` reaches the hidden one and fails. Use `find role cell`.
 - Rows have no accessible name. `find role row --name` matches nothing.
-- The example stays `pending`: its body is captured on the next pass, and `sift dashboard` never runs one.
+- The answer moves the text Sift held for the waiting message into the example: `SELECT status FROM examples WHERE message_id = 'm4'` is `captured`, and `suggestion_bodies` no longer has `m4`.

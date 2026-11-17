@@ -17,7 +17,7 @@ A message sift placed shows the label it gave in the row's answer: a dropdown st
 
 Preconditions:
 
-- Fresh seed. The Store row (`Winter sale starts now`) has a dropdown reading `Sure Marketing` and the check `Agree: Marketing`; the Notifications rows have `Agree: Notifications`; the four `Which label?` rows have the check disabled (`Choose what it is first`).
+- Fresh seed. The Store row (`Winter sale starts now`) has a dropdown reading `Sure Marketing` and the check `Agree: Marketing`; the Notifications rows have `Agree: Notifications`; the six `Which label?` rows have the check disabled (`Choose what it is first`).
 
 - **Agree.** `ab open "$B/"`, then `ab find role button click --name "Agree: Marketing"`. A toast reads `Archive as Marketing`. The link's count is one fewer, the Store row is gone, and no panel opens.
 - **Second view.** `ab open "$B/rules"`. No rule mentions `sale@store.example.com`.
@@ -26,5 +26,5 @@ Preconditions:
 ## Gotchas
 
 - An answer makes no rule, and answers that agree with the label propose none. Only answers giving a label's mail another action do (two in a row for one sender), which the dashboard's check never gives: the seed makes its one from Gmail answers.
-- Only a row sift placed starts on a label. In the seed that is `m8` alone, placed by the stand-in model as sure; it is unsure of everything else, so `Unsure` and `Fairly sure` meters cannot be shown here, and the dropdown's likely group holds only the label itself.
+- Only a row sift placed starts on a label. In the seed those are Store (`m8`) and the Dependabot and github-actions[bot] rows, placed by the stand-in model as sure; it is unsure of everything else, so `Unsure` and `Fairly sure` meters cannot be shown here, and the dropdown's likely group holds only the label itself.
 - The check has no key of its own; Enter on a focused check presses it.
