@@ -6,6 +6,8 @@ dist
 .claude/worktrees/
 CLAUDE.local.md
 coverage/
+test-results/
+playwright-report/
 
 # The key that encrypts stored credentials. Never commit.
 .env

@@ -12,12 +12,13 @@
     "sift": "node --disable-warning=ExperimentalWarning src/cli/main.ts",
     "typecheck": "tsc --noEmit && pnpm --filter sift-web typecheck",
     "lint": "oxlint",
-    "format": "oxlint --fix && oxfmt src tests web/src web/vite.config.ts vitest.config.ts .claude/skills/verify-sift/scripts",
-    "format:check": "oxfmt --check src tests web/src web/vite.config.ts vitest.config.ts .claude/skills/verify-sift/scripts",
+    "format": "oxlint --fix && oxfmt src tests web/src web/vite.config.ts vitest.config.ts playwright.config.ts e2e .claude/skills/verify-sift/scripts",
+    "format:check": "oxfmt --check src tests web/src web/vite.config.ts vitest.config.ts playwright.config.ts e2e .claude/skills/verify-sift/scripts",
     "test": "vitest run",
+    "e2e": "playwright test",
     "knip": "knip",
     "check:fast": "pnpm typecheck && pnpm lint && pnpm knip && pnpm format:check",
-    "check": "pnpm check:fast && pnpm test",
+    "check": "pnpm check:fast && pnpm test && pnpm e2e",
     "build:web": "pnpm --filter sift-web build",
     "start": "pnpm sift run",
     "dev": "pnpm sift dev",
@@ -25,6 +26,7 @@
     "db:reset": "pnpm sift reset-db"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.23.1",
     "drizzle-kit": "0.31.11",
@@ -58,11 +60,11 @@
     "pre-commit": "pnpm exec lint-staged && pnpm knip"
   },
   "lint-staged": {
-    "{src,tests,web/src,.claude/skills/verify-sift/scripts}/**/*.{ts,tsx}": [
+    "{src,tests,e2e,web/src,.claude/skills/verify-sift/scripts}/**/*.{ts,tsx}": [
       "oxlint --fix",
       "oxfmt"
     ],
-    "{web/vite,vitest}.config.ts": [
+    "{web/vite,vitest,playwright}.config.ts": [
       "oxlint --fix",
       "oxfmt"
     ]

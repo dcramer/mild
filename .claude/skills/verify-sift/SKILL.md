@@ -5,6 +5,8 @@ description: Launch a disposable, signed-in sift dashboard seeded with synthetic
 
 # Verify sift
 
+`pnpm e2e` (`e2e/`) runs the same seed and server under Playwright, one copy per test: a change to what the seed leaves changes what those tests can expect.
+
 sift's surface is the dashboard (`web/`, served by `src/dashboard/server.ts`). Every `/api/` route needs a Google sign-in as a connected account, and there is no Gmail behind a scratch home, so this skill fakes exactly two things: Gmail, at the `GmailApi` and `Mailbox` ports for the seed and behind the dashboard's `ruleFilter` control, and the sign-in, by minting the same `sift_session` cookie `/auth/callback` would set. Everything else is the real code path.
 
 `scripts/verify.sh` does all of it. Each run owns one directory; nothing is shared between runs, so several can run at once. Never point it at a real home (`~/.config/sift`) and never drive a dashboard this run did not start: the user's own sift usually listens on 8787 and holds real mail.

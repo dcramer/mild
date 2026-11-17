@@ -18,9 +18,10 @@ Package manager is **pnpm**. Node 24 (`.nvmrc`). Node runs the `.ts` sources dir
 | Command | Use |
 | --- | --- |
 | `pnpm install` | First thing in a fresh checkout or worktree. Installs the pre-commit hook (`simple-git-hooks` in package.json): lint and format on staged files (`lint-staged`), then knip. |
-| `pnpm check` | The gate: typecheck + lint + unused code (knip) + format check + tests. Must pass before every commit. |
+| `pnpm check` | The gate: typecheck + lint + unused code (knip) + format check + tests + browser tests. Must pass before every commit. |
 | `pnpm check:fast` | All of it but the tests. |
 | `pnpm vitest run tests/foo.test.ts` | One test file. Add `-t "name"` for one test. |
+| `pnpm e2e` | The browser tests in `e2e/`: Playwright against a real dashboard per test, on a copy of verify-sift's seed. `pnpm e2e e2e/foo.spec.ts`, `-g "name"` for one, `--headed` to watch. The first time on a machine, `pnpm exec playwright install chromium`. |
 | `pnpm format` | `oxlint --fix` then `oxfmt`. |
 | `pnpm sift <command>` | Run the CLI from source. `pnpm start` is `pnpm sift run`. |
 | `pnpm build:web` | Build the dashboard into `web/dist`. `sift run` does this itself when the page is missing or older than its sources; restart sift to pick up a new build (`pnpm dev` does both for you). |
@@ -79,7 +80,7 @@ The database is the full account of what sift saw and did. Every message synced 
 
 1. `pnpm check` passes. Never skip, delete or weaken a test to get there.
 2. Behavior change: a test covers it. A test that needs the database takes it from `tests/fixtures.ts` (`openUserDb`, `onePerson`, `freshStore`), and one that needs the server takes `startDashboard`; never open either of its own.
-3. Dashboard change: `pnpm build:web` passes and you looked at the page in a browser with the console open (a content security policy violation shows up there, not in the build).
+3. Dashboard change: `pnpm build:web` passes, a browser test in `e2e/` drives what changed the way the user does (each fails on anything the page logs as an error, which is where a content security policy violation shows), and you looked at the page.
 4. Schema change: change `src/store/schema.ts`, then `pnpm db:generate` writes the migration. Never write or edit schema SQL by hand; what Drizzle cannot express goes in a custom migration (`pnpm db:generate --custom --name …`). Never edit an applied migration. A new table of a person's data carries `user_id` (`userId()`) and the `own()` policy, and goes in the custom migration's `FORCE ROW LEVEL SECURITY` list; a test fails otherwise.
 
 ## Rules and what enforces them
@@ -102,6 +103,7 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | `mark` and `ink` buttons are never down a list; one `mark` per screen | `tests/design-system.test.ts` (inside `Tr` / `RowActions` in the same file) |
 | The same thing looks the same on every page: a sender in a list is `SenderCell` (name, then address under it) | `tests/design-system.test.ts` (only `components/sender.tsx` and the message panel's header use `SenderLink`) |
 | Every part is on the specimen page | `tests/design-system.test.ts` |
+| What the user does on the dashboard is driven in a browser by a test, as they do it: a bug found there gets a test in `e2e/` that fails before the fix | `pnpm e2e`, in `pnpm check` and CI; which flows still lack one is judgment |
 | verify-sift's seed and server change with the code they call (a removed field, a renamed export) | `pnpm check` typechecks, lints, formats and runs knip over `.claude/skills/verify-sift/scripts` like `src/`; its recipes' wording is still judgment, prompted by `maintain-check.sh` |
 | A doc names a file where it is now: moving or removing one updates every doc that names it | `tests/docs.test.ts` (code spans that are a path, and relative links, in the docs, AGENTS.md and the skill); whether the words still describe the code is judgment |
 | Every Gmail filter passes `validateFilter` | `tests/filters.test.ts` |

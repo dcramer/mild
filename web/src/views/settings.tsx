@@ -346,7 +346,8 @@ function ConfirmRemoval({
     run(async () => {
       const reply = await send();
       const note = notRevoked(reply);
-      if (reply.signedOut) return window.location.assign(note ? `/?signin=${encodeURIComponent(note)}` : '/');
+      // Never settles, so nothing is fetched again with the session just ended while the page leaves.
+      if (reply.signedOut) return new Promise<never>(() => window.location.assign(note ? `/?signin=${encodeURIComponent(note)}` : '/'));
       onClose();
       onDone?.(note);
     });

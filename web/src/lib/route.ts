@@ -71,6 +71,9 @@ export function setParams(changes: Record<string, string>, push?: { state: unkno
   navigate(pathOf(at) + (text ? `?${text}` : ''), push ? { state: push.state } : { replace: true });
 }
 
+/** One value in the address's query now, for code that runs after a press, outside rendering. */
+export const paramNow = (name: string) => queryOf(at).get(name) ?? '';
+
 /**
  * One value kept in the address's query (`?q=invoice`), so a narrowed view can be bookmarked and
  * survives a reload. `''` is "not set". Given `options`, the `[value, label]` pairs of the control it

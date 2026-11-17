@@ -49,7 +49,12 @@ export function ConfirmButton({
             'absolute top-1/2 right-0 z-10 inline-flex -translate-y-1/2 items-center gap-1.5 bg-(--surface) pl-3 group-hover/row:[background-image:linear-gradient(var(--fill),var(--fill))] group-focus-within/row:[background-image:linear-gradient(var(--fill),var(--fill))]'
           : 'inline-flex items-center gap-1.5'
       }
-      onKeyDown={(event) => event.key === 'Escape' && setAsking(false)}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return;
+        // The Escape is this question's alone, not the panel or dialog it sits in.
+        event.stopPropagation();
+        setAsking(false);
+      }}
     >
       <span className="mr-1 text-sm whitespace-nowrap">{question}</span>
       <Button

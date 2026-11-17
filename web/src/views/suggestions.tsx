@@ -241,9 +241,11 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
       (does === '' || i.disposition === does) &&
       (needle === '' || [i.sender, i.senderName ?? '', i.subject].some((text) => text.toLowerCase().includes(needle))),
   );
-  const refs = shown.map((i) => ({ accountId: i.accountId, messageId: i.messageId, subject: i.subject }));
   const answerable = (data?.items ?? []).map(answerableOf);
   const rows = fold(shown);
+  // The panel steps through the messages as the list draws them: a folded row's together.
+  const order = rows.flatMap(({ item, rest }) => [item, ...rest]);
+  const refs = order.map((i) => ({ accountId: i.accountId, messageId: i.messageId, subject: i.subject }));
 
   return (
     <ListView
@@ -348,7 +350,7 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
                 rest={rest}
                 labels={data?.labels[item.accountId] ?? []}
                 waiting={answerable}
-                onOpen={() => onOpen(refs, shown.indexOf(item))}
+                onOpen={() => onOpen(refs, order.indexOf(item))}
                 onAnswered={reload}
               />
             ))}

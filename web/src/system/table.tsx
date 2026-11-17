@@ -68,7 +68,10 @@ export function Tr({ onOpen, className, ...props }: ComponentProps<'tr'> & { onO
       <tr
         tabIndex={0}
         className={cn('row group/row cursor-pointer hover:bg-(--fill) focus-visible:bg-(--fill-strong) focus-within:bg-(--fill)', className)}
-        onClick={onOpen}
+        onClick={(event) => {
+          // React passes up presses in what a row renders elsewhere, such as a dialog it opened; those are not on the row.
+          if (event.currentTarget.contains(event.target as Node)) onOpen();
+        }}
         onFocus={() => setActive(true)}
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget)) setActive(false);

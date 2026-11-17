@@ -56,15 +56,17 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
           ? {
               action: {
                 label: `Same for ${alike.length} more`,
+                // Pressed later, maybe after this message's row or panel has gone: so it refreshes what is shown, and never
+                // calls `onDone`, which would move or close a panel the reader has since moved on in.
                 onPress: () =>
-                  void Promise.all(alike.map((w) => say(w, labelId))).then(
-                    () => {
+                  run(async () => {
+                    try {
+                      await Promise.all(alike.map((w) => say(w, labelId)));
                       toast(`${said}: ${alike.length} more`);
-                      onDone();
-                    },
-                    (failure: unknown) =>
-                      toast('Could not answer the rest', { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) }),
-                  ),
+                    } catch (failure) {
+                      toast('Could not answer the rest', { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) });
+                    }
+                  }),
               },
             }
           : {},

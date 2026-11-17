@@ -1,6 +1,6 @@
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
-import { setParams } from '@/lib/route.ts';
+import { paramNow, setParams } from '@/lib/route.ts';
 import { type LabelSummary, type RuleDraft, type RuleFilter, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
 import { type By, type Condition, type RuleStart, conditionsOf, matchOf, replacedBy, startWords } from '@/lib/rule-start.ts';
 import {
@@ -187,7 +187,10 @@ export function AddRuleDialog({
             toast('Could not take the rule back', { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) });
             throw failure;
           }),
-        () => toast('Rule taken back'),
+        () => {
+          toast('Rule taken back');
+          if (paramNow('rule') === id) setParams({ rule: '', apply: '' });
+        },
       );
     run(
       async () => {
