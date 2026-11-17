@@ -290,7 +290,7 @@ describe('mail', () => {
   it('keeps rules, changes and reasons encrypted, and finds a rule by its hashed conditions under each key', async () => {
     const { as } = await alpha(A);
     const db = await as(A);
-    const id = await setRule(db, 'alpha@example.org', { from: ['news@example.com'] }, { disposition: 'archive' }, 'user', 0);
+    const id = await setRule(db, 'alpha@example.org', { from: ['news@example.com'] }, { disposition: 'archive', name: 'Example news' }, 'user', 0);
     expect(await setRule(db, 'alpha@example.org', { from: ['news@example.com'] }, { disposition: 'keep' }, 'user', 0)).toBe(id);
     await recordDecision(
       db,
@@ -310,14 +310,22 @@ describe('mail', () => {
       },
       0,
     );
-    const stored = await raw(db).all('SELECT r.match, r.except_matches, r.conditions, d.reason, a.payload FROM rules r, decisions d, actions a');
+    const stored = await raw(db).all('SELECT r.match, r.except_matches, r.conditions, r.name, d.reason, a.payload FROM rules r, decisions d, actions a');
     expect(JSON.stringify(stored)).not.toContain('example.com');
-    expect((await listRules(db, 'alpha@example.org'))[0]).toMatchObject({ id, match: { from: ['news@example.com'] }, disposition: 'keep' });
+    expect(JSON.stringify(stored)).not.toContain('Example news');
+    // A rule replaced without a name keeps its own.
+    expect((await listRules(db, 'alpha@example.org'))[0]).toMatchObject({
+      id,
+      match: { from: ['news@example.com'] },
+      disposition: 'keep',
+      name: 'Example news',
+    });
     expect((await listDecisions(db, await everything(db), { days: 36_500 }, 0)).rows[0]).toMatchObject({ reason: 'rule: from news@example.com' });
 
     await rekeyContent(await as(B_AFTER_A));
     const b = await as(B);
     expect(await hasRuleFor(b, 'alpha@example.org', { from: ['news@example.com'] })).toBe(true);
+    expect((await listRules(b, 'alpha@example.org'))[0]).toMatchObject({ name: 'Example news' });
     expect(await getAction(b, action)).toMatchObject({ payload: { unsubscribe: 'news.example.com' } });
   });
 

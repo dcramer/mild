@@ -335,6 +335,12 @@ describe('managing sift from the dashboard', () => {
       { labelName: 'Investor updates', override: null, disposition: 'keep' },
       { labelName: 'Marketing', override: 'keep', disposition: 'keep' },
     ]);
+    // A name is said in place of the conditions; adding the same conditions again with none takes it away.
+    const again = { accountId: ACCOUNT, match: { fromDomain: ['example.net', 'example.com'] }, label: 'investor-updates' };
+    expect((await call('POST', '/api/rules', { ...again, name: ' Investor  mail ' })).body).toMatchObject({ id: added.body['id'], replaced: true });
+    expect((await call('GET', '/api/rules')).body['rules']).toMatchObject([{ id: added.body['id'], name: 'Investor mail' }, { name: null }]);
+    await call('POST', '/api/rules', { ...again, name: '' });
+    expect((await listRules(db, ACCOUNT))[0]).not.toHaveProperty('name');
     expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: {}, label: 'marketing' })).status).toBe(400);
     expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: { fromName: ['Dependabot'] }, label: 'marketing' })).status).toBe(400);
     const named = await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: ['a@example.com'], fromNameContains: ['bot'] }, label: 'marketing' });

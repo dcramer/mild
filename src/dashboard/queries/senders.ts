@@ -92,7 +92,7 @@ async function profileOf(db: Sql, scope: Scope, accountId: string, who: { addres
           ? (r.match.from ?? []).includes(who.address) || (r.match.fromDomain ?? []).includes(domainName)
           : (r.match.fromDomain ?? []).includes(domainName) || (r.match.from ?? []).some((a) => a.endsWith(`@${domainName}`))),
     )
-    .map((r) => ({ id: r.id, match: r.match, labelName: r.labelName, disposition: r.disposition, source: r.source, kind: r.kind, when: r.when }));
+    .map((r) => ({ id: r.id, match: r.match, name: r.name, labelName: r.labelName, disposition: r.disposition, source: r.source, kind: r.kind, when: r.when }));
   return {
     address: 'address' in who ? who.address : who.domain,
     contact: known.contact,

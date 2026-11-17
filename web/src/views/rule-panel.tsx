@@ -37,6 +37,9 @@ export function Who({ match }: { match: RuleMatch }) {
   );
 }
 
+/** What a rule is called: its name, or its conditions. */
+const ruleTitle = (rule: Pick<RuleSummary, 'name' | 'match'>) => rule.name ?? whoText(rule.match);
+
 export function whoText(match: RuleMatch): string {
   const said = saidOf(match);
   const named = said.map(({ key, value, joint, first }) => `${joint}${first && QUIET[key] ? `${QUIET[key]} ` : ''}${value}`).join('');
@@ -80,7 +83,7 @@ function ApplyDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => void
       title="Apply to your inbox"
       subtitle={
         <>
-          {whoText(rule.match)} → {rule.labelName ? `${rule.labelName} · ` : ''}
+          {ruleTitle(rule)} → {rule.labelName ? `${rule.labelName} · ` : ''}
           {rule.disposition ? <Does action={rule.disposition}>{outcomeName(rule.disposition)}</Does> : null}
         </>
       }
@@ -217,9 +220,14 @@ export function RulePanel({
   // An action rule that keeps mail changes nothing in the inbox.
   const moves = !(rule.kind === 'action' && action === 'keep');
   return (
-    <Panel open onClose={onClose} title={whoText(rule.match)} {...(position === undefined ? {} : { position })} onPrevious={onPrevious} onNext={onNext}>
+    <Panel open onClose={onClose} title={ruleTitle(rule)} {...(position === undefined ? {} : { position })} onPrevious={onPrevious} onNext={onNext}>
       <div className="flex flex-col gap-10">
         <Facts>
+          {rule.name ? (
+            <Fact term="Mail">
+              <Who match={rule.match} />
+            </Fact>
+          ) : null}
           {rule.kind === 'action' ? null : <Fact term={rule.kind === 'when-label' ? 'When it is' : 'Is'}>{rule.labelName}</Fact>}
           {action ? (
             <Fact term="Then">
@@ -259,7 +267,7 @@ export function RulePanel({
               remove.run(
                 () => api.removeRule(rule.id),
                 () => {
-                  toast(`Rule removed: ${describeMatch(rule.match)}`);
+                  toast(`Rule removed: ${rule.name ?? describeMatch(rule.match)}`);
                   onClose();
                 },
               )

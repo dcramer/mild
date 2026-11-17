@@ -49,6 +49,8 @@ export function searchSenders(senders: readonly FoundSender[], query: string): F
 /** A rule the model filled in. Nothing is made: the dialog shows it, and the person adds it, changed or not. */
 export interface RuleDraft {
   match: RuleMatch;
+  /** A few words for a rule whose conditions are too many to read at a glance. */
+  name?: string;
   label?: string;
   whenLabel?: string;
   /** A condition in the person's words, for the model to check: only beside `label`. */
@@ -101,6 +103,8 @@ How to fill it in:
 - Use a label when the owner says what the mail is and one of theirs fits. Use an action alone when they say
   only what should happen to it. Spam is only for deceit.
 - Unsubscribe only when they ask to stop the mail coming.
+- Name the rule, in a few words of the owner's own ("Shop receipts"), only when it has several values or
+  several kinds of condition. A rule for one sender, list or subject needs no name: its condition says it.
 - One rule covers every sender they name for the same thing ("receipts from Uber and Lyft" is one rule, from
   either domain). When they want different things for different mail, fill in the first and say in the note
   what else they need ("Add another rule to keep mail from lyft.com"). Say in the note, too, anything they
@@ -134,6 +138,8 @@ export function describeFound(found: readonly FoundSender[]): string {
 
 const MAX_VALUE = 200;
 const MAX_NOTE = 300;
+/** As long as the dialog lets a name be. */
+const MAX_NAME = 80;
 /** More than a rule dialog shows sensibly; past it they want a list, which a rule is not. */
 const MAX_CONDITIONS = 20;
 
@@ -202,8 +208,10 @@ export function readRuleDraft(args: unknown, labels: RuleDraftInput['labels']): 
   if (acts && !disposition) return null;
   const when = tidy(raw['when'], MAX_VALUE);
   const note = tidy(raw['note'], MAX_NOTE);
+  const name = tidy(raw['name'], MAX_NAME);
   return {
     match,
+    ...(name === '' ? {} : { name }),
     ...(label && !waits ? { label: label.id } : {}),
     ...(waits ? { whenLabel: label.id } : {}),
     ...(label && !waits && when !== '' ? { when } : {}),

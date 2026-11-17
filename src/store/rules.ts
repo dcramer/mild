@@ -29,6 +29,7 @@ export async function listRules(db: Sql, accountId: string): Promise<StoredRule[
       subscription: rules.subscription,
       markRead: rules.markRead,
       condition: rules.condition,
+      name: rules.name,
       source: rules.source,
       hits: rules.hits,
     })
@@ -48,6 +49,7 @@ export async function listRules(db: Sql, accountId: string): Promise<StoredRule[
       ...(r.markRead ? { markRead: true } : {}),
       ...(r.condition ? { when: r.condition } : {}),
       ...(r.source === 'learned' ? { learned: true } : {}),
+      ...(r.name === null ? {} : { name: openJson<string>(db, ruleName(db, r.id, 'name'), r.name) }),
       source: r.source,
       hits: r.hits,
     };
@@ -55,7 +57,15 @@ export async function listRules(db: Sql, accountId: string): Promise<StoredRule[
 }
 
 /** What a rule says, apart from its conditions. */
-export type RuleSays = Pick<Rule, 'labelId' | 'whenLabel' | 'disposition' | 'subscription' | 'markRead' | 'when'>;
+export type RuleSays = Pick<Rule, 'labelId' | 'whenLabel' | 'disposition' | 'subscription' | 'markRead' | 'when'> & {
+  /** Null takes a name away; left out, a rule replaced keeps its own. */
+  name?: string | null;
+};
+
+const sealName = (db: Sql, id: string, name: string | null | undefined) => {
+  const given = name?.replace(/\s+/g, ' ').trim();
+  return given ? sealJson(db, ruleName(db, id, 'name'), given) : null;
+};
 
 /** Throws, with a sentence for the user, unless `rule` says something sift can act on with the account's labels. */
 async function check(db: Sql, accountId: string, rule: RuleSays): Promise<void> {
@@ -68,7 +78,13 @@ async function check(db: Sql, accountId: string, rule: RuleSays): Promise<void> 
 }
 
 /** Append a rule after the account's existing ones. Returns its id. Throws if it has no condition, says nothing, or names no label of the account's. */
-export async function addRule(db: Sql, accountId: string, given: Omit<Rule, 'id' | 'learned'>, source: RuleSource, now: number = Date.now()): Promise<string> {
+export async function addRule(
+  db: Sql,
+  accountId: string,
+  given: Omit<Rule, 'id' | 'learned' | 'name'> & Pick<RuleSays, 'name'>,
+  source: RuleSource,
+  now: number = Date.now(),
+): Promise<string> {
   const rule = { ...given, match: tidyMatch(given.match), ...(given.except ? { except: given.except.map(tidyMatch) } : {}) };
   if (Object.keys(rule.match).length === 0) throw new Refusal('A rule needs at least one condition.');
   await check(db, accountId, rule);
@@ -84,6 +100,7 @@ export async function addRule(db: Sql, accountId: string, given: Omit<Rule, 'id'
     match: sealJson(db, ruleName(db, id, 'match'), rule.match),
     except: sealJson(db, ruleName(db, id, 'except'), rule.except ?? []),
     conditions: conditionsHash(db, rule.match, rule.except),
+    name: sealName(db, id, rule.name),
     labelId: rule.labelId ?? null,
     whenLabel: rule.whenLabel ?? null,
     disposition: rule.disposition ?? null,
@@ -154,6 +171,7 @@ export async function setRule(db: Sql, accountId: string, match: RuleMatch, rule
       subscription: rule.subscription ?? 'preserve',
       markRead: rule.markRead ?? false,
       condition: rule.when?.trim() || null,
+      ...(rule.name === undefined ? {} : { name: sealName(db, existing.id, rule.name) }),
       source,
     })
     .where(eq(rules.id, existing.id));

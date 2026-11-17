@@ -23,6 +23,7 @@ const BLANK = {
   markRead: false,
   unsubscribe: false,
   note: '',
+  name: '',
 };
 
 describe('the rule the model fills in', () => {
@@ -42,6 +43,11 @@ describe('the rule the model fills in', () => {
       read(by(['from', 'example.org'], ['from', 'shop@example.net'], ['from', 'EXAMPLE.org'], ['subjectContains', 'receipt'], ['subjectContains', 'invoice'])),
     ).toEqual({
       match: { from: ['shop@example.net'], fromDomain: ['example.org'], subjectContains: ['receipt', 'invoice'] },
+      disposition: 'archive',
+    });
+    expect(read({ ...by(['from', 'example.org'], ['from', 'example.net']), name: ' Example  mail ' })).toEqual({
+      match: { fromDomain: ['example.org', 'example.net'] },
+      name: 'Example mail',
       disposition: 'archive',
     });
     expect(read(by(['from', 'example.org'], ['from', 'gmail.com']))).toBeNull();

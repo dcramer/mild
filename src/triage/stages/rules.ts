@@ -83,6 +83,8 @@ export interface Rule {
   when?: string;
   /** sift made this rule itself, when it blocked the sender. The user's own rules are trusted further. */
   learned?: boolean;
+  /** What the user calls it ("Shop receipts"), said in place of its conditions. */
+  name?: string;
 }
 
 /** A display name as rules compare it. */
@@ -250,7 +252,7 @@ const DOES: Record<DecidedDisposition, string> = { keep: 'keep it', archive: 'ar
 
 /** A rule's conditions and what it says, in words. */
 export function describeRule({ rule, label }: RuleHit): string {
-  const who = describeMatch(rule.match);
+  const who = rule.name ?? describeMatch(rule.match);
   if (rule.when) return `${who}, when it is ${rule.when}, is ${label?.name ?? rule.labelId}`;
   if (rule.whenLabel) return `${who}, when it is ${label?.name ?? rule.whenLabel}${rule.disposition ? `: ${DOES[rule.disposition]}` : ''}`;
   if (rule.labelId) return `${who} is ${label?.name ?? rule.labelId}${rule.disposition ? `, but ${DOES[rule.disposition]}` : ''}`;

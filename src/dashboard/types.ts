@@ -212,6 +212,7 @@ export const SenderProfile = z.object({
     z.object({
       id: z.string(),
       match,
+      name: z.string().nullable(),
       labelName: z.string().nullable(),
       disposition: z.string().nullable(),
       source: z.string(),
@@ -359,6 +360,8 @@ export const RuleSummary = z.object({
    * the mail is `whenLabel`.
    */
   kind: ruleKind,
+  /** What the user calls it, said in place of its conditions. */
+  name: z.string().nullable(),
   labelId: z.string().nullable(),
   whenLabel: z.string().nullable(),
   /** The name of the label the rule names or waits for. Null for an `action` rule. */
@@ -556,6 +559,7 @@ export type LabelProposal = z.infer<typeof LabelProposal>;
 /** A rule the model filled in from what the person wants, for the rule dialog to show. Nothing is made until they add it. */
 export const RuleDraft = z.object({
   match,
+  name: z.string().optional(),
   label: z.string().optional(),
   whenLabel: z.string().optional(),
   when: z.string().optional(),

@@ -61,7 +61,7 @@ const decidingRule = (data: SenderPage): Rule | null => data.profile.rules.find(
 const ruleHref = (id: string) => `/rules?rule=${encodeURIComponent(id)}`;
 
 const ruleWords = (rule: Rule) =>
-  `Mail ${describeMatch(rule.match)}${
+  `${rule.name ?? `Mail ${describeMatch(rule.match)}`}${
     rule.kind === 'action'
       ? `: ${rule.disposition ? outcomeName(rule.disposition) : 'nothing'}`
       : `${rule.kind === 'when-label' ? ', when it is ' : ' is '}${rule.labelName ?? ''}`

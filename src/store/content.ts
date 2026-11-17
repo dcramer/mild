@@ -29,7 +29,7 @@ type Part = 'text' | 'html' | 'headers' | 'reason';
 
 /** Each is encrypted for its person, message and part, so one copied into another row does not open. */
 const nameOf = (db: Sql, accountId: string, messageId: string, part: Part) => `person ${db.person} ${part} of ${accountId} ${messageId}`;
-export const ruleName = (db: Sql, ruleId: string, field: 'match' | 'except' | 'filter') => `person ${db.person} rule ${ruleId} ${field}`;
+export const ruleName = (db: Sql, ruleId: string, field: 'match' | 'except' | 'filter' | 'name') => `person ${db.person} rule ${ruleId} ${field}`;
 export const proposalName = (db: Sql, accountId: string) => `person ${db.person} proposal of ${accountId}`;
 export const actionName = (db: Sql, accountId: string) => `person ${db.person} action of ${accountId}`;
 export const labelProposalName = (db: Sql, accountId: string, field: 'goal' | 'labels') => `person ${db.person} label proposal ${field} of ${accountId}`;
@@ -214,20 +214,22 @@ const UNSET = 'unset:';
 async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): Promise<void> {
   const behind = (stored: string | null) => stored !== null && prefix !== null && !stored.startsWith(prefix);
   const ruleRows = await db
-    .select({ id: rules.id, match: rules.match, except: rules.except, filter: rules.filterWritten, conditions: rules.conditions })
+    .select({ id: rules.id, match: rules.match, except: rules.except, filter: rules.filterWritten, name: rules.name, conditions: rules.conditions })
     .from(rules);
   const ruleUpdates = ruleRows
-    .filter((r) => r.conditions.startsWith(UNSET) || behind(r.match) || behind(r.except) || behind(r.filter))
+    .filter((r) => r.conditions.startsWith(UNSET) || behind(r.match) || behind(r.except) || behind(r.filter) || behind(r.name))
     .map((r) => {
       const match = JSON.parse(reopen(db, ruleName(db, r.id, 'match'), r.match)) as RuleMatch;
       const except = JSON.parse(reopen(db, ruleName(db, r.id, 'except'), r.except)) as RuleMatch[];
       const filter = r.filter === null ? null : reopen(db, ruleName(db, r.id, 'filter'), r.filter);
+      const name = r.name === null ? null : reopen(db, ruleName(db, r.id, 'name'), r.name);
       return {
         id: r.id,
         set: {
           match: sealJson(db, ruleName(db, r.id, 'match'), match),
           except: sealJson(db, ruleName(db, r.id, 'except'), except),
           filterWritten: filter === null ? null : seal(db, ruleName(db, r.id, 'filter'), filter),
+          name: name === null ? null : seal(db, ruleName(db, r.id, 'name'), name),
           conditions: conditionsHash(db, match, except),
         },
       };

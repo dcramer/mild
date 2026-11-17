@@ -72,6 +72,7 @@ export function AddRuleDialog({
   // A line the reader just added takes the cursor; the ones it opened on do not.
   const [grown, setGrown] = useState(false);
   const [condition, setCondition] = useState('');
+  const [name, setName] = useState('');
   const [label, setLabel] = useState(start?.label ?? '');
   const [whenLabel, setWhenLabel] = useState(start?.whenLabel ?? '');
   const [then, setThen] = useState<'' | Action>(start?.action ?? '');
@@ -89,6 +90,7 @@ export function AddRuleDialog({
     setLabel(rule.label ?? '');
     setWhenLabel(rule.whenLabel ?? '');
     setCondition(rule.when ?? '');
+    setName(rule.name ?? '');
     setThen(rule.disposition ?? '');
     setMarkRead(rule.markRead ?? false);
     setUnsubscribe(rule.unsubscribe ?? false);
@@ -177,6 +179,8 @@ export function AddRuleDialog({
           ...(!chosen && markRead ? { markRead } : {}),
           ...(!chosen && unsubscribe ? { unsubscribe } : {}),
           ...(chosen && condition.trim() !== '' ? { when: condition.trim() } : {}),
+          // Sent empty too: a rule this replaces is called what the reader left here.
+          name: name.trim(),
           ...(proposal === undefined ? {} : { proposal }),
         });
       },
@@ -274,6 +278,9 @@ export function AddRuleDialog({
                 Add a condition
               </Button>
             </div>
+          </Field>
+          <Field inline label="Name" hint={name.trim() === '' ? undefined : 'Rules and Activity say this in place of the conditions.'}>
+            <Input className="w-full" aria-label="Name" maxLength={80} placeholder="optional" value={name} onChange={(event) => setName(event.target.value)} />
           </Field>
           {replaces ? (
             <Field inline label="Replaces">

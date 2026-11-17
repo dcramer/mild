@@ -197,6 +197,13 @@
       "when": 1794891351592,
       "tag": "0027_rule_drafts_row_security",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1794897363898,
+      "tag": "0028_square_virginia_dare",
+      "breakpoints": true
     }
   ]
 }

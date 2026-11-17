@@ -462,6 +462,7 @@ describe('dashboard server', () => {
         markRead: false,
         unsubscribe: true,
         kind: 'label',
+        name: null,
         whenLabel: null,
         when: null,
         source: 'user',

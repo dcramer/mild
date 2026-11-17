@@ -351,6 +351,7 @@ export const rules = pgTable(
     match: text('match').notNull(),
     except: text('except_matches').notNull(),
     conditions: text('conditions').notNull(),
+    name: text('name'), // what the user calls it, encrypted JSON: it may name senders
     labelId: text('label_id'),
     whenLabel: text('when_label'),
     disposition: text('disposition', { enum: DECIDED }),

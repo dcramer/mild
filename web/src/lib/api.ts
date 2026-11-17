@@ -237,6 +237,8 @@ export const api = {
     markRead?: boolean;
     unsubscribe?: boolean;
     when?: string;
+    /** What the reader calls it; empty for none. */
+    name?: string;
     /** The proposal it was made from, which this resolves. */
     proposal?: number;
   }) => post<{ id: string; replaced: boolean; filter: RuleFilter | null }>('/api/rules', rule),

@@ -87,7 +87,7 @@ export function Rules() {
         (label === '' || r.labelId === label || r.whenLabel === label) &&
         (source === '' || r.source === source) &&
         (gmail === '' || (gmail === 'filter' ? r.filterId !== null : filterStanding(r) === gmail)) &&
-        (needle === '' || [whoText(r.match), r.labelName ?? ''].some((text) => text.toLowerCase().includes(needle))),
+        (needle === '' || [r.name ?? '', whoText(r.match), r.labelName ?? ''].some((text) => text.toLowerCase().includes(needle))),
     )
     .toSorted((a, b) => b.hits - a.hits);
   const at = rules.findIndex((r) => r.id === open);
@@ -101,7 +101,7 @@ export function Rules() {
       onConfirm={() =>
         remove.run(
           () => api.removeRule(rule.id),
-          () => toast(`Rule removed: ${describeMatch(rule.match)}`),
+          () => toast(`Rule removed: ${rule.name ?? describeMatch(rule.match)}`),
         )
       }
     >
@@ -162,7 +162,7 @@ export function Rules() {
               <Tr key={rule.id} onOpen={() => setOpen(rule.id)}>
                 <Td className="max-w-0 md:w-full">
                   <span className="block break-words md:truncate">
-                    <Who match={rule.match} />
+                    {rule.name ? <span className="name">{rule.name}</span> : <Who match={rule.match} />}
                     {rule.kind === 'when-label' ? <span className="text-muted-foreground"> as {rule.labelName}</span> : null}
                     <ArrowRightIcon aria-label="is" className="mx-2 inline size-4 align-[-0.15em] text-muted-foreground" />
                     <Result rule={rule} />

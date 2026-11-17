@@ -40,6 +40,8 @@ export default write({
       markRead: z.boolean().optional(),
       unsubscribe: z.boolean().optional(),
       when: z.string().max(200).optional(),
+      /** What the user calls it; empty for none, which also takes away the name of a rule this replaces. */
+      name: z.string().max(80).optional(),
       /** The proposal this rule was made from, as the user left it. */
       proposal: id.optional(),
     })
@@ -56,7 +58,7 @@ export default write({
    */
   reply: z.object({ id: z.string(), replaced: z.boolean(), redecided: z.number(), filter: RuleFilter.nullable() }),
   touches: named,
-  run: async ({ db, now }, { accountId, match, label, whenLabel, disposition, markRead, unsubscribe, when, proposal }) => {
+  run: async ({ db, now }, { accountId, match, label, whenLabel, disposition, markRead, unsubscribe, when, name, proposal }) => {
     const { created, replaced } = await db.transaction(async (tx) => {
       // First: making the rule also settles any proposal for exactly that mail.
       if (proposal !== undefined && !(await madeFromProposal(tx, proposal, accountId, now()))) throw new Refusal('That proposal is no longer open.');
@@ -73,6 +75,7 @@ export default write({
           ...(markRead ? { markRead } : {}),
           ...(unsubscribe ? { subscription: 'unsubscribe' as const } : {}),
           ...(when !== undefined && when.trim() !== '' ? { when } : {}),
+          name: name ?? null,
         },
         'user',
         now(),

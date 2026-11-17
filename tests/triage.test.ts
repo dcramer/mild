@@ -95,6 +95,9 @@ describe('rules stage', () => {
     expect(await decide([rule], from('other@example.net', 'A receipt'))).toBeNull();
     expect(await decide([rule], from('news@example.com', 'Weekly digest'))).toBeNull();
     expect(describeMatch(rule.match)).toBe('from shop@example.net or domain example.com, subject contains receipt or invoice');
+    expect(await decide([{ ...rule, name: 'Shop receipts' }], from('shop@example.net', 'A receipt'))).toMatchObject({
+      reason: 'rule: Shop receipts is Receipts',
+    });
     expect(specificity(rule.match)).toBe(specificity({ fromDomain: ['example.com'], subjectContains: ['receipt'] }));
   });
 

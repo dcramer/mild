@@ -21,7 +21,7 @@ function Rules({ rules }: { rules: SenderProfile['rules'] }) {
     <ul className="flex flex-col gap-1">
       {rules.map((rule) => (
         <li key={rule.id}>
-          Mail {describeMatch(rule.match)}
+          {rule.name ?? `Mail ${describeMatch(rule.match)}`}
           {rule.kind === 'action' ? (
             <>
               : <span className="font-medium">{rule.disposition ? outcomeName(rule.disposition) : 'nothing'}</span>
