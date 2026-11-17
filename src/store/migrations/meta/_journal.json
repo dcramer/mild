@@ -218,6 +218,13 @@
       "when": 1794898455922,
       "tag": "0030_every_mailbox_has_everything_else",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794901891210,
+      "tag": "0031_label_proposal_notes",
+      "breakpoints": true
     }
   ]
 }

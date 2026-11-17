@@ -1,5 +1,5 @@
 import type { Api, AssistantMessage, Context, Model, Models, Tool } from '@earendil-works/pi-ai';
-import { DRAFT_ACTIONS, MAX_DRAFTS, PROPOSAL_PROMPT, PROPOSAL_TOOL, type Proposer, buildProposalPrompt, readDrafts } from '../triage/proposal.ts';
+import { DRAFT_ACTIONS, MAX_DRAFTS, PROPOSAL_PROMPT, PROPOSAL_TOOL, type Proposer, buildProposalPrompt, readProposal } from '../triage/proposal.ts';
 import { describeFailure as failure } from '../triage/stages/model.ts';
 import { chat, executeTool } from './chat.ts';
 
@@ -35,8 +35,9 @@ export function createProposer(models: Models, model: Model<Api>): Proposer {
               additionalProperties: false,
             },
           },
+          note: { type: 'string', description: 'What of what they asked these labels leave out, and why; empty if nothing.' },
         },
-        required: ['labels'],
+        required: ['labels', 'note'],
         additionalProperties: false,
       },
       constrainedSampling: { type: 'json_schema', strict: 'prefer' },
@@ -63,8 +64,8 @@ export function createProposer(models: Models, model: Model<Api>): Proposer {
     if (message.stopReason === 'error' || message.stopReason === 'aborted') return { failed: failure(message.errorMessage ?? message.stopReason), usage };
     const proposed = message.content.find((block) => block.type === 'toolCall' && block.name === PROPOSAL_TOOL);
     return await executeTool(PROPOSAL_TOOL, proposed?.type === 'toolCall' ? proposed.id : undefined, async (span) => {
-      const drafts = readDrafts(proposed?.type === 'toolCall' ? proposed.arguments : undefined, input.labels);
-      if (drafts) return { drafts, usage };
+      const proposal = readProposal(proposed?.type === 'toolCall' ? proposed.arguments : undefined, input.labels);
+      if (proposal) return { ...proposal, usage };
       span.fail();
       return { failed: 'the model did not suggest any usable labels', usage };
     });

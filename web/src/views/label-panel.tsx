@@ -3,7 +3,7 @@ import { type LabelProposal, type LabelSummary, api, useAction } from '@/lib/api
 import { type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
 import { DescribeStep } from '@/components/describe.tsx';
 import { ACTIONS, type ActionKey, EXPLAIN, count, percent, plural } from '@/lib/format.ts';
-import { ActionIcon, Button, Check, Code, Dialog, Failure, Field, Figure, Figures, Form, Input, Panel, Select, TextArea } from '@/system';
+import { ActionIcon, Button, Check, Code, Dialog, Failure, Field, Figure, Figures, Form, Input, Note, Panel, Select, TextArea } from '@/system';
 
 const canMarkRead = (does: string) => does === 'keep' || does === 'archive';
 /** Wrong often enough to look at: under 85% right, over at least ten answers. */
@@ -245,9 +245,11 @@ export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onS
         title="Add labels"
         footer={
           <>
-            <Button variant="ink" busy={busy} disabled={kept.length === 0} onClick={() => run(() => api.addLabels(kept), done)}>
-              {keepWord('Add', kept.length)}
-            </Button>
+            {suggestions.length > 0 ? (
+              <Button variant="ink" busy={busy} disabled={kept.length === 0} onClick={() => run(() => api.addLabels(kept), done)}>
+                {keepWord('Add', kept.length)}
+              </Button>
+            ) : null}
             <Button variant="quiet" onClick={() => setStage({ at: 'describe' })}>
               Back
             </Button>
@@ -257,7 +259,14 @@ export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onS
       >
         <div className="flex flex-col gap-4">
           <p className="text-muted-foreground">“{stage.proposal.goal}”</p>
-          <SuggestionList suggestions={suggestions} onChange={change} onEdit={(index) => setStage({ at: 'edit', proposal: stage.proposal, index })} />
+          {stage.proposal.note ? (
+            <Note tone="look" title="Not in these labels">
+              {stage.proposal.note}
+            </Note>
+          ) : null}
+          {suggestions.length > 0 ? (
+            <SuggestionList suggestions={suggestions} onChange={change} onEdit={(index) => setStage({ at: 'edit', proposal: stage.proposal, index })} />
+          ) : null}
         </div>
       </Dialog>
     );

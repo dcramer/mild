@@ -3,7 +3,7 @@ import { type ReactNode, useState } from 'react';
 import { type Next, ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { type LabelProposal, type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
 import { plural } from '@/lib/format.ts';
-import { Button, Dialog, Failure, Field, Form, Onboarding, Select, TextArea, useToast } from '@/system';
+import { Button, Dialog, Failure, Field, Form, Note, Onboarding, Select, TextArea, useToast } from '@/system';
 import { type LabelDraft, LabelFields } from '@/views/label-panel.tsx';
 import { type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
 
@@ -239,17 +239,23 @@ function Labels({
   const use = () => kept.length > 0 && run(() => api.acceptLabels(kept), onDone);
   return (
     <Onboarding steps={steps} current={2} title="Your labels" intro={`“${proposal.goal}”`} account={account}>
-      <SuggestionList suggestions={suggestions} onChange={change} onEdit={setEditing} />
-      <Onward
-        next={{
-          label: keepWord('Use', kept.length),
-          busy,
-          disabled: kept.length === 0,
-          onPress: use,
-        }}
-        back={{ label: 'Start over', onPress: onStartOver }}
-        error={error}
-      />
+      {proposal.note ? (
+        <Note tone="look" title="Not in these labels">
+          {proposal.note}
+        </Note>
+      ) : null}
+      {suggestions.length > 0 ? (
+        <>
+          <SuggestionList suggestions={suggestions} onChange={change} onEdit={setEditing} />
+          <Onward
+            next={{ label: keepWord('Use', kept.length), busy, disabled: kept.length === 0, onPress: use }}
+            back={{ label: 'Start over', onPress: onStartOver }}
+            error={error}
+          />
+        </>
+      ) : (
+        <Onward next={{ label: 'Start over', onPress: onStartOver }} error={error} />
+      )}
       {editing === null ? null : (
         <EditDraft
           draft={suggestions[editing]}

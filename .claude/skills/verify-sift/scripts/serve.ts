@@ -11,7 +11,9 @@
  * no access. `draftRule` runs the real drafting (look-ups of the seeded senders, the `fill_rule` arguments read by
  * `readRuleDraft`, the `rule_drafts` row) with a stand-in model: it looks up the second line of its prompt (the
  * words the person typed), then fills in a rule archiving and marking read mail from the first sender found, with
- * a note naming the second. Nothing found fills in `nobody@example.com`.
+ * a note naming the second. Nothing found fills in `nobody@example.com`. `proposeLabels` runs the real suggesting
+ * the same way: its stand-in suggests Sales pitches when the words name pitches, and notes that Receipts and
+ * transactions covers receipts already when they name receipts; words naming neither fail as an unusable answer.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -32,8 +34,11 @@ import { people } from '../../../../src/store/people.ts';
 import { openStore } from '../../../../src/store/store.ts';
 import { FakeMailbox } from '../../../../tests/helpers.ts';
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from '@earendil-works/pi-ai';
+import { proposeLabels } from '../../../../src/learn/labels.ts';
 import { draftRule } from '../../../../src/learn/rules.ts';
+import { createProposer } from '../../../../src/model/propose.ts';
 import { createRuleDrafter } from '../../../../src/model/draft-rule.ts';
+import { PROPOSAL_TOOL } from '../../../../src/triage/proposal.ts';
 import { FILL_TOOL, FIND_TOOL } from '../../../../src/triage/rule-draft.ts';
 
 const [home, port, gmailFile] = process.argv.slice(2);
@@ -74,8 +79,28 @@ const fillIn = (context: { messages: readonly { role: string; content: unknown }
     { stopReason: 'toolUse' },
   );
 };
+const PITCHES = {
+  why: 'fewer pitches',
+  name: 'Sales pitches',
+  description: 'Unsolicited sales pitches from strangers and their follow-ups.',
+  action: 'archive',
+  markRead: false,
+  unsubscribe: true,
+};
+const suggest = (context: { messages: readonly { role: string; content: unknown }[] }) => {
+  const words =
+    String(context.messages.find((m) => m.role === 'user')?.content)
+      .split('\n')[1]
+      ?.toLowerCase() ?? '';
+  const note = words.includes('receipt') ? 'Your Receipts and transactions label covers receipts already.' : '';
+  return fauxAssistantMessage([fauxToolCall(PROPOSAL_TOOL, { labels: words.includes('pitch') ? [PITCHES] : [], note })], { stopReason: 'toolUse' });
+};
 const controls = {
   ...built,
+  proposeLabels: async (db: Parameters<typeof built.proposeLabels>[0], request: { accountId: string; goal: string }) => {
+    faux.setResponses([suggest]);
+    return await proposeLabels({ db, propose: createProposer(models, faux.getModel()), model: 'faux/stand-in' }, request);
+  },
   draftRule: async (db: Parameters<typeof built.draftRule>[0], request: { accountId: string; goal: string }) => {
     faux.setResponses([lookUp, fillIn]);
     return await draftRule({ db, draft: createRuleDrafter(models, faux.getModel()), model: 'faux/stand-in' }, request);

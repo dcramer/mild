@@ -171,13 +171,18 @@ export async function finishLabelProposal(
   db: Sql,
   accountId: string,
   id: number,
-  outcome: ({ drafts: LabelDraft[] } | { error: string }) & { usage?: Usage; now: number },
+  outcome: ({ drafts: LabelDraft[]; note?: string } | { error: string }) & { usage?: Usage; now: number },
 ): Promise<void> {
   await db
     .update(labelProposals)
     .set({
       finishedAt: outcome.now,
-      ...('drafts' in outcome ? { labels: sealJson(db, labelProposalName(db, accountId, 'labels'), outcome.drafts) } : { error: outcome.error }),
+      ...('drafts' in outcome
+        ? {
+            labels: sealJson(db, labelProposalName(db, accountId, 'labels'), outcome.drafts),
+            ...(outcome.note ? { note: sealJson(db, labelProposalName(db, accountId, 'note'), outcome.note) } : {}),
+          }
+        : { error: outcome.error }),
       ...(outcome.usage ? { inputTokens: outcome.usage.inputTokens, outputTokens: outcome.usage.outputTokens, costUsd: outcome.usage.costUsd } : {}),
     })
     .where(eq(labelProposals.id, id));
@@ -187,7 +192,7 @@ export async function finishLabelProposal(
 export async function latestLabelProposal(
   db: Sql,
   accountIds: readonly string[],
-): Promise<{ id: number; goal: string; drafts: LabelDraft[]; at: number } | null> {
+): Promise<{ id: number; goal: string; drafts: LabelDraft[]; note?: string; at: number } | null> {
   if (accountIds.length === 0) return null;
   const [row] = await db
     .select({
@@ -195,6 +200,7 @@ export async function latestLabelProposal(
       accountId: labelProposals.accountId,
       goal: labelProposals.goal,
       labels: labelProposals.labels,
+      note: labelProposals.note,
       at: labelProposals.startedAt,
     })
     .from(labelProposals)
@@ -206,6 +212,7 @@ export async function latestLabelProposal(
     id: row.id,
     goal: openJson<string>(db, labelProposalName(db, row.accountId, 'goal'), row.goal),
     drafts: openJson<LabelDraft[]>(db, labelProposalName(db, row.accountId, 'labels'), row.labels),
+    ...(row.note === null ? {} : { note: openJson<string>(db, labelProposalName(db, row.accountId, 'note'), row.note) }),
     at: row.at,
   };
 }

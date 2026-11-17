@@ -12,7 +12,7 @@ import { EVERYTHING_ELSE } from '../triage/types.ts';
 export async function proposeLabels(
   deps: { db: Sql; propose: Proposer; model: string; now?: () => number },
   request: { accountId: string; goal: string },
-): Promise<{ id: number; goal: string; drafts: LabelDraft[]; at: number }> {
+): Promise<{ id: number; goal: string; drafts: LabelDraft[]; note?: string; at: number }> {
   const { db } = deps;
   const now = deps.now ?? Date.now;
   const at = now();
@@ -26,6 +26,7 @@ export async function proposeLabels(
     reportError(new Error(`Label suggestion failed: ${answer.failed}`));
     throw new Refusal(`The model could not suggest labels (${answer.failed}). Try again.`);
   }
-  await finishLabelProposal(db, request.accountId, id, { drafts: answer.drafts, ...usage, now: now() });
-  return { id, goal: request.goal, drafts: answer.drafts, at };
+  const note = answer.note ? { note: answer.note } : {};
+  await finishLabelProposal(db, request.accountId, id, { drafts: answer.drafts, ...note, ...usage, now: now() });
+  return { id, goal: request.goal, drafts: answer.drafts, ...note, at };
 }

@@ -5,7 +5,7 @@ import { createProposer } from '../src/model/propose.ts';
 import { loadKeyring } from '../src/secrets.ts';
 import { connectAccount } from '../src/store/accounts.ts';
 import { latestLabelProposal } from '../src/store/labels.ts';
-import { MAX_DRAFTS, PROPOSAL_TOOL, type Proposer, buildProposalPrompt, readDrafts } from '../src/triage/proposal.ts';
+import { MAX_DRAFTS, PROPOSAL_TOOL, type Proposer, buildProposalPrompt, readProposal } from '../src/triage/proposal.ts';
 import { freshStore, raw } from './fixtures.ts';
 
 const reportError = vi.hoisted(() => vi.fn());
@@ -15,6 +15,8 @@ const ACCOUNT = 'me@example.com';
 const PITCHES = { why: 'fewer pitches', name: 'Cold outreach', description: 'Pitches from strangers.', action: 'archive', markRead: false, unsubscribe: true };
 
 describe('what the model suggests', () => {
+  const readDrafts = (args: unknown, labels: { name: string; description: string }[]) => readProposal(args, labels)?.drafts ?? null;
+
   it('keeps the usable drafts, tidied, and drops the rest', () => {
     expect(
       readDrafts(
@@ -43,6 +45,13 @@ describe('what the model suggests', () => {
       [{ name: 'Receipts', description: 'What I bought.' }],
     );
     expect(drafts?.map((d) => d.name)).toEqual(['Cold outreach', 'Scams']);
+  });
+
+  it('may suggest no labels when it says why, as when one they have covers it already', () => {
+    const covered = { labels: [], note: ' Your Receipts\nlabel covers these already. ' };
+    expect(readProposal(covered, [])).toEqual({ drafts: [], note: 'Your Receipts label covers these already.' });
+    expect(readProposal({ labels: [PITCHES], note: '' }, [])).toEqual({ drafts: [expect.objectContaining({ name: 'Cold outreach' })] });
+    expect(readProposal({ labels: [{ ...PITCHES, name: 'Receipts' }], note: '' }, [{ name: 'Receipts', description: 'd' }])).toBeNull();
   });
 
   it('is asked with the person’s words and the labels they have, and nothing from their mail', () => {
@@ -91,6 +100,15 @@ describe('asking for labels', () => {
     expect(row).toMatchObject({ model: 'p/m', started_at: 5, finished_at: 5, input_tokens: 10, output_tokens: 20, cost_usd: 0.01, error: null });
     expect(JSON.stringify(row)).not.toContain('Acme');
     expect(JSON.stringify(row)).not.toContain('Cold outreach');
+  });
+
+  it('records what it says its labels leave out, encrypted, and keeps it with them', async () => {
+    const db = await person();
+    const propose: Proposer = async () => ({ drafts: [], note: 'Your Receipts label covers Acme already.', usage });
+    const proposal = await proposeLabels({ db, propose, model: 'p/m' }, { accountId: ACCOUNT, goal: 'Receipts from Acme' });
+    expect(proposal).toMatchObject({ drafts: [], note: 'Your Receipts label covers Acme already.' });
+    expect(await latestLabelProposal(db, [ACCOUNT])).toEqual(proposal);
+    expect(JSON.stringify(await raw(db).get('SELECT note FROM label_proposals'))).not.toContain('Acme');
   });
 
   it('records and reports a failed call, refuses with what went wrong, and keeps the last suggestions that came', async () => {

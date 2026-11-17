@@ -27,7 +27,7 @@ export interface ProposalInput {
   labels: readonly Pick<Label, 'name' | 'description'>[];
 }
 
-export type Proposer = (input: ProposalInput) => Promise<{ drafts: LabelDraft[]; usage?: Usage } | { failed: string; usage?: Usage }>;
+export type Proposer = (input: ProposalInput) => Promise<{ drafts: LabelDraft[]; note?: string; usage?: Usage } | { failed: string; usage?: Usage }>;
 
 export const PROPOSAL_PROMPT = `You suggest email labels for the owner of a mailbox, from what they say they want.
 
@@ -52,9 +52,11 @@ What makes a good label:
   a person wrote to them among automated mail that is archived.
 - Spam is only for deceit: scams and phishing. Unsubscribe only where the sender never had the owner's
   permission, such as cold outreach; unsubscribing from a scam confirms the address works.
-- Propose between one and ${MAX_DRAFTS} labels, fewer if fewer serve what they said. None may repeat or
-  overlap a label they already have: no email should fit both a new label and one of theirs. Where what
-  they ask is already covered, say so in the reason and propose only what is not.
+- Propose up to ${MAX_DRAFTS} labels, fewer if fewer serve what they said. None may repeat or overlap a label
+  they already have: no email should fit both a new label and one of theirs.
+- Say in the note what of what they asked your labels leave out: what a label of theirs covers already (name
+  it), what belongs in a rule for a sender, or what labels cannot do. When all of it is like that, propose no
+  labels and say why in the note. Otherwise leave the note empty.
 
 Call ${PROPOSAL_TOOL} exactly once. Names are short and plain, in Title Case ("Cold Outreach"). A description is one or two sentences:
 what belongs, and what looks similar but does not. The reason says in a few words which part of what the
@@ -71,12 +73,16 @@ const MAX_WHY = 200;
 
 const tidy = (value: unknown, max: number) => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 
+const MAX_NOTE = 400;
+
 /**
- * The drafts in the tool's arguments, dropping any that is not usable or is named like one of `labels` or an
- * earlier draft, which would refuse the whole batch when accepted; null when there are none.
+ * The drafts and note in the tool's arguments, dropping any draft that is not usable or is named like one of
+ * `labels` or an earlier draft, which would refuse the whole batch when accepted; null when that leaves
+ * neither a draft nor a note.
  */
-export function readDrafts(args: unknown, labels: ProposalInput['labels']): LabelDraft[] | null {
-  const proposed = (args as { labels?: unknown } | undefined)?.labels;
+export function readProposal(args: unknown, labels: ProposalInput['labels']): { drafts: LabelDraft[]; note?: string } | null {
+  const raw = (args ?? {}) as { labels?: unknown; note?: unknown };
+  const proposed = raw.labels;
   if (!Array.isArray(proposed)) return null;
   const taken = new Set(labels.map((l) => l.name.toLowerCase()));
   const drafts = proposed.flatMap((raw: Record<string, unknown>): LabelDraft[] => {
@@ -96,5 +102,7 @@ export function readDrafts(args: unknown, labels: ProposalInput['labels']): Labe
       },
     ];
   });
-  return drafts.length > 0 ? drafts.slice(0, MAX_DRAFTS) : null;
+  const note = tidy(raw.note, MAX_NOTE);
+  if (drafts.length === 0 && note === '') return null;
+  return { drafts: drafts.slice(0, MAX_DRAFTS), ...(note === '' ? {} : { note }) };
 }

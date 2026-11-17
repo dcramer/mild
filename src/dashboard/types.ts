@@ -506,7 +506,14 @@ const LabelDraft = z.object({
   why: z.string(),
 });
 
-export const LabelProposal = z.object({ id: z.number(), goal: z.string(), drafts: z.array(LabelDraft), at: z.number() });
+export const LabelProposal = z.object({
+  id: z.number(),
+  goal: z.string(),
+  drafts: z.array(LabelDraft),
+  /** What its labels leave out of what was asked, such as what a label they have covers already. */
+  note: z.string().optional(),
+  at: z.number(),
+});
 export type LabelProposal = z.infer<typeof LabelProposal>;
 
 /** A rule the model filled in from what the person wants, for the rule dialog to show. Nothing is made until they add it. */

@@ -316,10 +316,10 @@ describe('mail', () => {
     await setRuleFilter(db, id, { filterId: 'f1', state: 'active', written: { from: 'news@example.com' } }, 0);
     const suggested = await startLabelProposal(db, { accountId: 'alpha@example.org', goal: 'Example news out of the way', model: 'test/model', now: 0 });
     const draft = { name: 'Example news', description: 'From news@example.com', disposition: 'archive', why: 'Example news' } as const;
-    await finishLabelProposal(db, 'alpha@example.org', suggested, { drafts: [draft], now: 0 });
+    await finishLabelProposal(db, 'alpha@example.org', suggested, { drafts: [draft], note: 'Example news is a rule', now: 0 });
     await startRuleDraft(db, { accountId: 'alpha@example.org', goal: 'Archive news@example.com', model: 'test/model', now: 0 });
     const stored = await raw(db).all(
-      'SELECT r.match, r.except_matches, r.conditions, r.name, r.filter_written, d.reason, a.payload, l.goal, l.labels, rd.goal FROM rules r, decisions d, actions a, label_proposals l, rule_drafts rd',
+      'SELECT r.match, r.except_matches, r.conditions, r.name, r.filter_written, d.reason, a.payload, l.goal, l.labels, l.note, rd.goal FROM rules r, decisions d, actions a, label_proposals l, rule_drafts rd',
     );
     expect(JSON.stringify(stored)).not.toContain('example.com');
     expect(JSON.stringify(stored)).not.toContain('Example news');
@@ -338,7 +338,11 @@ describe('mail', () => {
     expect((await listRules(b, 'alpha@example.org'))[0]).toMatchObject({ name: 'Example news' });
     expect(await getAction(b, action)).toMatchObject({ payload: { unsubscribe: 'news.example.com' } });
     expect(await getRuleFilter(b, id)).toMatchObject({ written: { from: 'news@example.com' } });
-    expect(await latestLabelProposal(b, ['alpha@example.org'])).toMatchObject({ goal: 'Example news out of the way', drafts: [draft] });
+    expect(await latestLabelProposal(b, ['alpha@example.org'])).toMatchObject({
+      goal: 'Example news out of the way',
+      drafts: [draft],
+      note: 'Example news is a rule',
+    });
     const [{ goal }] = (await raw(b).all('SELECT goal FROM rule_drafts')) as [{ goal: string }];
     expect(openJson(b, ruleDraftName(b, 'alpha@example.org', 'goal'), goal)).toBe('Archive news@example.com');
   });
