@@ -15,7 +15,7 @@ import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { finishRun, startRun } from '../src/store/runs.ts';
 import { builtAssets, openUserDb, raw, startDashboard, onePerson, unmarked } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
-import { addRule } from '../src/store/rules.ts';
+import { addRule, removeRule } from '../src/store/rules.ts';
 import { everything, facts } from './helpers.ts';
 import { conditionsHash } from '../src/store/content.ts';
 
@@ -575,6 +575,43 @@ describe('dashboard server', () => {
     expect((await write('/api/standing/clear', { accountId: ACCOUNT, address: 'news@example.com', domain: 'example.com' })).status).toBe(400);
     expect((await write('/api/standing/clear', { accountId: ACCOUNT, address: 'not an address' })).status).toBe(400);
     expect((await fetch(`${base}/api/domain?account=${ACCOUNT}&domain=gmail.com`)).status).toBe(404);
+  });
+
+  it('gives a standing in one press, replacing only another standing, and says which so Undo can give it back', async () => {
+    const { store, db } = await seededStore();
+    const base = await start({}, store);
+    const give = async (body: object) => {
+      const response = await fetch(`${base}/api/standing`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' },
+        body: JSON.stringify({ accountId: ACCOUNT, ...body }),
+      });
+      return { status: response.status, body: await response.json() };
+    };
+    const theirs = async () => (await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from']?.[0] === 'news@example.com');
+
+    const fresh = await give({ address: 'News@example.com', standing: 'trusted' });
+    expect(fresh).toEqual({ status: 200, body: { id: expect.any(String), was: null } });
+    const { id } = fresh.body as { id: string };
+    expect(await theirs()).toMatchObject([{ id, kind: 'label', labelId: 'everything_else', source: 'user' }]);
+    expect((await give({ address: 'news@example.com', standing: 'blocked' })).body).toEqual({ id, was: 'trusted' });
+    expect(await theirs()).toMatchObject([{ id, disposition: 'spam' }]);
+    const page = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
+    expect(page.profile).toMatchObject({ given: 'blocked' });
+    // Undo gives back the standing it replaced.
+    expect((await give({ address: 'news@example.com', standing: 'trusted' })).body).toEqual({ id, was: 'blocked' });
+
+    // A rule for exactly them that says more than what happens to their mail is theirs to change in the dialog: nothing is written.
+    await removeRule(db, id);
+    const labelled = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+    expect((await give({ address: 'news@example.com', standing: 'blocked' })).body).toEqual({ theirs: labelled });
+    expect(await theirs()).toMatchObject([{ id: labelled, labelId: 'newsletter' }]);
+    const reading = await addRule(db, ACCOUNT, { match: { fromDomain: ['example.net'] }, disposition: 'archive', markRead: true }, 'user');
+    expect((await give({ domain: 'example.net', standing: 'unwanted' })).body).toEqual({ theirs: reading });
+
+    expect((await give({ domain: 'example.org', standing: 'unwanted' })).body).toEqual({ id: expect.any(String), was: null });
+    expect((await give({ address: 'news@example.com', domain: 'example.com', standing: 'blocked' })).status).toBe(400);
+    expect((await give({ address: 'news@example.com', standing: 'known' })).status).toBe(400);
   });
 
   it('makes a proposed rule only as the user left it in the dialog, which resolves the proposal', async () => {

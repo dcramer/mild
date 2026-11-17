@@ -7,6 +7,7 @@ import type { Usage } from '../triage/stages/model.ts';
 import { type Rule, type RuleMatch, tidyMatch } from '../triage/stages/rules.ts';
 import { listLabels } from './labels.ts';
 import { LEAVE_IN_INBOX } from '../triage/types.ts';
+import type { Given } from '../triage/standing.ts';
 import { Refusal } from '../refusal.ts';
 
 /** `user`: the user wrote it. `correction`: it came from the user correcting sift. `learned`: sift made it when it blocked the sender. */
@@ -204,6 +205,36 @@ export async function blockSender(db: Sql, accountId: string, address: string, l
 /** The user's own rule for exactly this address or domain, which is what their standing is read from. */
 export async function standingRule(db: Sql, accountId: string, match: { from: [string] } | { fromDomain: [string] }): Promise<string | null> {
   return (await ruleMatching(db, accountId, match))?.id ?? null;
+}
+
+const STANDING_DOES = { trusted: 'keep', unwanted: 'archive', blocked: 'spam' } as const;
+
+/** The standing a rule for exactly one sender or domain gives them, or null when it says more than what happens to their mail. */
+function standingOfRule(rule: Rule): Given | null {
+  if (rule.except || rule.when || rule.markRead || rule.subscription === 'unsubscribe') return null;
+  if (rule.labelId === LEAVE_IN_INBOX && !rule.disposition) return 'trusted';
+  if (rule.labelId) return null;
+  return rule.disposition === 'archive' ? 'unwanted' : rule.disposition === 'spam' ? 'blocked' : null;
+}
+
+/**
+ * Give a sender or domain a standing in one press: their own rule that says only what happens to their mail.
+ * It replaces a rule for exactly them only when that is a standing too, and says which (`was`) so Undo can
+ * give it back. A rule that says more (a label, an exception, an extra) is not replaced: the user changes it
+ * in the rule dialog, where they see what they lose, and `theirs` names it.
+ */
+export async function giveStanding(
+  db: Sql,
+  accountId: string,
+  match: { from: [string] } | { fromDomain: [string] },
+  standing: Given,
+  now: number,
+): Promise<{ id: string; was: Given | null } | { theirs: string }> {
+  const existing = await ruleMatching(db, accountId, match);
+  const rule = existing && (await listRules(db, accountId)).find((r) => r.id === existing.id);
+  const was = rule ? standingOfRule(rule) : null;
+  if (rule && !was) return { theirs: rule.id };
+  return { id: await setRule(db, accountId, match, { disposition: STANDING_DOES[standing] }, 'user', now), was };
 }
 
 /** Record a call for a rule before it is made. */

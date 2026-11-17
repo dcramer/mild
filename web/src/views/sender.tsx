@@ -1,11 +1,11 @@
 import { type ReactNode, useState } from 'react';
 import { ErrorNote, StatusWord, Verdict } from '@/components/bits.tsx';
 import { ContactHint, SENDER_CELL, SenderCell } from '@/components/sender.tsx';
-import { type ListedDecision, type SenderPage, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type Given, type ListedDecision, type SenderPage, api, useAction, useLoaded } from '@/lib/api.ts';
 import { INBOX, ago, count, dateTime, describeMatch, doesName, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
-import { type RuleStart, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
+import { type RuleStart, messageStart, nameStart, standingStart, startWords } from '@/lib/rule-start.ts';
 import { nextMail } from '@/lib/next-mail.ts';
-import { messageKey, useParam } from '@/lib/route.ts';
+import { messageKey, setParams, useParam } from '@/lib/route.ts';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import {
   Button,
@@ -25,6 +25,7 @@ import {
   TextLink,
   Th,
   Tr,
+  useToast,
 } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
@@ -301,9 +302,34 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
     'address' in who ? api.sender(accountId, who.address, signal) : api.domain(accountId, who.domain, signal),
   );
   const give = useAction();
-  // Every rule this page starts opens the rule dialog on it, to see and change before adding.
+  // Undo is pressed after the standing is given, so what it reports goes to a toast.
+  const later = useAction();
+  const toast = useToast();
+  // Every other rule this page starts opens the rule dialog on it, to see and change before adding.
   const [starting, setStarting] = useState<RuleStart | null>(null);
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  // A standing is a rule for exactly them that says only what happens to their mail, so it is given in one press, with Undo.
+  const giveStanding = (standing: Given) =>
+    give.run(async () => {
+      const given = await api.giveStanding(accountId, who, standing);
+      // Their own rule says more than a standing would: the dialog shows what replacing it loses.
+      if ('theirs' in given) return setStarting(standingStart(who, standing));
+      const takeBack = () =>
+        later.run(
+          () =>
+            (given.was ? api.giveStanding(accountId, who, given.was) : api.clearStanding(accountId, who)).catch((failure: unknown) => {
+              toast('Could not take the rule back', { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) });
+              throw failure;
+            }),
+          reload,
+        );
+      toast('Rule added', {
+        description: startWords(standingStart(who, standing), manage.data?.labels[accountId] ?? []),
+        undo: takeBack,
+        // Mail already in the inbox stays until the rule is applied there, as the dialog offers.
+        ...(standing === 'trusted' ? {} : { action: { label: 'Apply to inbox…', onPress: () => setParams({ rule: given.id, apply: '1' }) } }),
+      });
+    }, reload);
   const [now] = useState(() => Date.now());
   // Their mail under one name; the rest of the page is the whole address.
   const [under, setUnder] = useParam('name');
@@ -380,7 +406,7 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
               options={GIVE}
               clearable
               disabled={give.busy}
-              onChange={(standing) => (standing ? setStarting(standingStart(who, standing)) : give.run(() => api.clearStanding(accountId, who), reload))}
+              onChange={(standing) => (standing ? giveStanding(standing) : give.run(() => api.clearStanding(accountId, who), reload))}
             />
             <Button variant="quiet" onClick={() => setStarting(messageStart(key, top?.id ?? null))}>
               Make a rule…

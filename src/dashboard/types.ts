@@ -5,6 +5,7 @@
  */
 import { z } from 'zod';
 import { RULE_FACTS, type RuleFacts as Conditions, factCondition } from '../triage/facts.ts';
+import { GIVEN } from '../triage/standing.ts';
 import { DECIDED } from '../triage/types.ts';
 
 export const STAGES = ['rules', 'classifier', 'model', 'fallback'] as const;
@@ -192,12 +193,16 @@ const MessageFactSet = z.object({
 type MessageFactSet = z.infer<typeof MessageFactSet>;
 
 /** What sift knows about one sender, or about everyone at one domain, to judge their mail by. */
+/** A standing the owner gives a sender or domain: a rule for exactly them that says only what happens to their mail. */
+export const Given = z.enum(GIVEN);
+export type Given = z.infer<typeof Given>;
+
 export const SenderProfile = z.object({
   /** An address, or for a domain's profile the domain. */
   address: z.string(),
   contact: Contact,
   /** What the owner's own rule for exactly them says, given on their page. */
-  given: z.enum(['trusted', 'unwanted', 'blocked']).nullable(),
+  given: Given.nullable(),
   lastSeenAt: z.number().nullable(),
   /** Messages in the last 30 days. */
   recent: z.number(),

@@ -12,21 +12,6 @@ const search = (page: Page) => new URL(page.url()).searchParams;
 /** One of a sender's or domain's standings; `aria-pressed` says whether it is theirs. */
 const standing = (page: Page, name: string) => page.getByRole('group', { name: /stands$/ }).getByRole('button', { name, exact: true });
 
-/**
- * Adds the rule the open rule dialog started on, without looking at the inbox (which asks Gmail, absent here),
- * and gives back who it is for.
- */
-async function addAsIs(page: Page) {
-  const dialog = page.getByRole('dialog', { name: 'Add a rule' });
-  await dialog.getByRole('button', { name: 'Write it yourself' }).click();
-  const who = await dialog.getByRole('textbox', { name: 'Value 1' }).inputValue();
-  const apply = dialog.getByRole('checkbox', { name: 'Apply to mail already there' });
-  if (await apply.isVisible()) await apply.uncheck();
-  await dialog.getByRole('button', { name: 'Add rule', exact: true }).click();
-  await expect(dialog).toHaveCount(0);
-  return who;
-}
-
 test.describe('Activity, after a pass with Sift on', () => {
   test.use({ variant: 'on' });
 
@@ -164,39 +149,14 @@ test.describe('A sender', () => {
     expect(search(page).get('name')).toBe('Dependabot');
   });
 
-  test('closing the rule dialog a standing opened leaves no standing on', async ({ page }) => {
-    await page.goto(SENDER);
-    await standing(page, 'Trust').click();
-    const dialog = page.getByRole('dialog', { name: 'Add a rule' });
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole('button', { name: 'Close' }).click();
-    await expect(dialog).toHaveCount(0);
-    await expect(standing(page, 'Trust')).toHaveAttribute('aria-pressed', 'false');
-    expect(new URL(page.url()).search).toBe('');
-  });
-
-  test('Unwanted is on once its rule is added, and closing the rule leaves their page as it was', async ({ page }) => {
+  test('Unwanted is on in one press, with the rule said in its toast and nothing opened over their page', async ({ page }) => {
     await page.goto(SENDER);
     await standing(page, 'Unwanted').click();
-    await addAsIs(page);
-    const sheet = page.getByRole('dialog', { name: 'notifications@code.example.com' });
-    await expect(sheet).toContainText('Archive');
-    await sheet.getByRole('button', { name: 'Close' }).click();
-    await expect(sheet).toHaveCount(0);
-    expect(new URL(page.url()).search).toBe('');
+    await expect(page.getByRole('dialog', { name: 'Rule added' })).toContainText('Mail from notifications@code.example.com: archive it.');
     await expect(standing(page, 'Unwanted')).toHaveAttribute('aria-pressed', 'true');
     await expect(standing(page, 'Trust')).toHaveAttribute('aria-pressed', 'false');
-  });
-
-  test('Trust is on once its rule is added', async ({ page }) => {
-    await page.goto(SENDER);
-    await standing(page, 'Trust').click();
-    await addAsIs(page);
-    const sheet = page.getByRole('dialog', { name: 'notifications@code.example.com' });
-    await expect(sheet).toContainText('Leave in inbox');
-    await sheet.getByRole('button', { name: 'Close' }).click();
-    await expect(sheet).toHaveCount(0);
-    await expect(standing(page, 'Trust')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('dialog', { name: 'Add a rule' })).toHaveCount(0);
+    expect(new URL(page.url()).search).toBe('');
   });
 
   test('a message opened from their mail closes back to their page', async ({ page }) => {
@@ -269,13 +229,10 @@ test.describe('A domain', () => {
     for (const name of ['Trust', 'Unwanted', 'Block']) await expect(standing(page, name)).toHaveAttribute('aria-pressed', 'false');
   });
 
-  test('Block opens the rule dialog for everyone at the domain, and is on once it is added', async ({ page }) => {
+  test('Block is on for everyone at the domain in one press', async ({ page }) => {
     await page.goto(DOMAIN);
     await standing(page, 'Block').click();
-    await expect(addAsIs(page)).resolves.toBe('code.example.com');
-    const sheet = page.getByRole('dialog', { name: 'anyone at code.example.com' });
-    await expect(sheet).toContainText('Spam');
-    await sheet.getByRole('button', { name: 'Close' }).click();
+    await expect(page.getByRole('dialog', { name: 'Rule added' })).toContainText('Mail from code.example.com: send it to spam.');
     await expect(standing(page, 'Block')).toHaveAttribute('aria-pressed', 'true');
   });
 });

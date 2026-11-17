@@ -120,65 +120,61 @@ test.describe('Rules from a shortcut', () => {
     await expect(panel(page)).toBeVisible();
   });
 
-  test("a sender's standing is a rule: one press starts it, another replaces it, and pressing it again takes it back", async ({ page }) => {
+  test("a sender's standing is a rule given in one press: another replaces it, Undo gives the last back, and pressing it again takes it back", async ({
+    page,
+  }) => {
     await page.goto('/sender/me%40example.org/ada%40example.org');
     const standing = page.getByRole('group', { name: 'Where Ada Lovelace stands' });
-    const dialog = ruleDialog(page);
+    const said = page.getByRole('dialog', { name: 'Rule added' });
+    const pressed = async (on: string | null) => {
+      for (const name of ['Trust', 'Unwanted', 'Block'])
+        await expect(standing.getByRole('button', { name })).toHaveAttribute('aria-pressed', String(name === on));
+    };
 
     await standing.getByRole('button', { name: 'Trust' }).click();
-    await expect(dialog.getByRole('textbox', { name: 'What should it do?' })).toHaveValue('Mail from ada@example.org: leave it in the inbox.');
-    await dialog.getByRole('button', { name: 'Write it yourself' }).click();
-    await expect(dialog.getByRole('textbox', { name: 'Value 1' })).toHaveValue('ada@example.org');
-    await expect(dialog.getByRole('combobox', { name: 'Label it as' })).toContainText('Leave in inbox');
-    await addRule(dialog);
-    const opened = rulePanel(page, 'ada@example.org');
-    await expect(opened.getByText('It only keeps mail in your inbox, which Gmail does anyway.')).toBeVisible();
-    const trusted = openRule(page);
-    expect(trusted).toMatch(/^r-/);
-    await opened.getByRole('button', { name: 'Close' }).click();
-    await expect(opened).toHaveCount(0);
+    await expect(said).toContainText('Mail from ada@example.org: leave it in the inbox.');
+    // Keeping mail moves nothing, so there is nothing in the inbox to apply it to.
+    await expect(said.getByRole('button', { name: 'Apply to inbox…' })).toHaveCount(0);
+    await expect(ruleDialog(page)).toHaveCount(0);
+    await pressed('Trust');
+    await expect(page.getByRole('main').getByRole('link', { name: 'Mail from ada@example.org: Leave in inbox' })).toBeVisible();
 
-    await standing.getByRole('button', { name: 'Unwanted' }).click();
-    await dialog.getByRole('button', { name: 'Write it yourself' }).click();
-    await expect(dialog.getByRole('group', { name: 'Replaces' })).toHaveText(/Leave in inbox$/);
-    await expect(dialog.getByRole('combobox', { name: 'Label it as' })).toContainText('No label, just act');
-    await expect(dialog.getByRole('combobox', { name: 'What happens to it' })).toContainText('Archive');
-    await addRule(dialog);
-    // It replaced the Trust rule, so it is the same one.
-    await expect(fact(opened, 'Then')).toHaveText('Archive');
-    expect(openRule(page)).toBe(trusted);
-    await opened.getByRole('button', { name: 'Close' }).click();
-    await expect(opened).toHaveCount(0);
-    await expect(page.getByRole('main').getByRole('link', { name: 'Mail from ada@example.org: Archive' })).toBeVisible();
-    await expect(standing.getByRole('button', { name: 'Unwanted' })).toHaveAttribute('aria-pressed', 'true');
-    await expect(standing.getByRole('button', { name: 'Trust' })).toHaveAttribute('aria-pressed', 'false');
+    await standing.getByRole('button', { name: 'Block' }).click();
+    await expect(said).toContainText('Mail from ada@example.org: send it to spam.');
+    await expect(said.getByRole('button', { name: 'Apply to inbox…' })).toBeVisible();
+    await pressed('Block');
+    await said.getByRole('button', { name: 'Undo' }).click();
+    await pressed('Trust');
 
-    await standing.getByRole('button', { name: 'Unwanted' }).click();
-    await expect(standing.getByRole('button', { name: 'Unwanted' })).toHaveAttribute('aria-pressed', 'false');
-    await expect(standing.getByRole('button', { name: 'Trust' })).toHaveAttribute('aria-pressed', 'false');
-    await expect(standing.getByRole('button', { name: 'Block' })).toHaveAttribute('aria-pressed', 'false');
-    await expect(dialog).toHaveCount(0);
+    await standing.getByRole('button', { name: 'Trust' }).click();
+    await pressed(null);
     await page.goto('/rules');
     await expect(ruleRows(page)).toHaveCount(4);
     await expect(row(page, 'ada@example.org')).toHaveCount(0);
   });
 
-  test('Trust, once added, shows as pressed, and pressing it again takes it back', async ({ page }) => {
+  test('Undo takes back a standing that replaced none', async ({ page }) => {
     await page.goto('/sender/me%40example.org/ada%40example.org');
     const standing = page.getByRole('group', { name: 'Where Ada Lovelace stands' });
-    const dialog = ruleDialog(page);
-    await standing.getByRole('button', { name: 'Trust' }).click();
-    await dialog.getByRole('button', { name: 'Write it yourself' }).click();
-    await addRule(dialog);
-    const opened = rulePanel(page, 'ada@example.org');
-    await opened.getByRole('button', { name: 'Close' }).click();
-    await expect(opened).toHaveCount(0);
-    await expect(page.getByRole('main').getByRole('link', { name: 'Mail from ada@example.org: Leave in inbox' })).toBeVisible();
+    await standing.getByRole('button', { name: 'Unwanted' }).click();
+    await expect(standing.getByRole('button', { name: 'Unwanted' })).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('z');
+    await expect(standing.getByRole('button', { name: 'Unwanted' })).toHaveAttribute('aria-pressed', 'false');
+    await page.goto('/rules');
+    await expect(row(page, 'ada@example.org')).toHaveCount(0);
+  });
 
-    await expect(standing.getByRole('button', { name: 'Trust' })).toHaveAttribute('aria-pressed', 'true', { timeout: 2000 });
-    await standing.getByRole('button', { name: 'Trust' }).click();
-    await expect(standing.getByRole('button', { name: 'Trust' })).toHaveAttribute('aria-pressed', 'false');
+  test('a standing for a sender whose own rule says more opens the dialog, which says what it replaces', async ({ page }) => {
+    await page.goto('/sender/me%40example.org/orders%40shop.example.com');
+    const standing = page.getByRole('group', { name: /stands$/ });
+    await standing.getByRole('button', { name: 'Block' }).click();
+    const dialog = ruleDialog(page);
+    await dialog.getByRole('button', { name: 'Write it yourself' }).click();
+    await expect(dialog.getByRole('group', { name: 'Replaces' })).toContainText('Receipts');
+    await expect(dialog.getByRole('combobox', { name: 'What happens to it' })).toContainText('Spam');
+    await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
+    await expect(standing.getByRole('button', { name: 'Block' })).toHaveAttribute('aria-pressed', 'false');
   });
 
   test("a sender's page starts a rule on the sender, and one per name it writes under", async ({ page }) => {
@@ -201,22 +197,15 @@ test.describe('Rules from a shortcut', () => {
     await expect(panel(page)).toHaveCount(0);
   });
 
-  test("a domain's standing that is already a rule shows as pressed, and another replaces it", async ({ page }) => {
+  test("a domain's standing that is already a rule shows as pressed, and another replaces it in one press", async ({ page }) => {
     await page.goto('/domain/me%40example.org/promo.example.com');
     const standing = page.getByRole('group', { name: 'Where promo.example.com stands' });
     await expect(standing.getByRole('button', { name: 'Block' })).toHaveAttribute('aria-pressed', 'true');
 
     await standing.getByRole('button', { name: 'Unwanted' }).click();
-    const dialog = ruleDialog(page);
-    await dialog.getByRole('button', { name: 'Write it yourself' }).click();
-    await expect(dialog.getByRole('textbox', { name: 'Value 1' })).toHaveValue('promo.example.com');
-    await expect(dialog.getByText('Mail from anyone at promo.example.com.')).toBeVisible();
-    await expect(dialog.getByRole('group', { name: 'Replaces' })).toHaveText(/Spam$/);
-    await expect(dialog.getByRole('combobox', { name: 'What happens to it' })).toContainText('Archive');
-
-    await page.keyboard.press('Escape');
-    await expect(dialog).toHaveCount(0);
-    await expect(standing.getByRole('button', { name: 'Block' })).toHaveAttribute('aria-pressed', 'true');
-    await expect(standing.getByRole('button', { name: 'Unwanted' })).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByRole('dialog', { name: 'Rule added' })).toContainText('Mail from promo.example.com: archive it.');
+    await expect(standing.getByRole('button', { name: 'Unwanted' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(standing.getByRole('button', { name: 'Block' })).toHaveAttribute('aria-pressed', 'false');
+    await expect(ruleDialog(page)).toHaveCount(0);
   });
 });

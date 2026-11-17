@@ -288,6 +288,11 @@ describe("nobody sees or changes another person's mail", () => {
         { accountId: NOBODY, match: { from: ['x@example.com'] }, disposition: 'spam' },
       ],
       [
+        '/api/standing',
+        { accountId: ALPHA, address: `sender@${MARK[ALPHA]}.example.com`, standing: 'blocked' },
+        { accountId: NOBODY, address: `sender@${MARK[ALPHA]}.example.com`, standing: 'blocked' },
+      ],
+      [
         '/api/standing/clear',
         { accountId: ALPHA, address: `sender@${MARK[ALPHA]}.example.com` },
         { accountId: NOBODY, address: `sender@${MARK[ALPHA]}.example.com` },

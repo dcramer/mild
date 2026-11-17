@@ -8,6 +8,10 @@ import type { Disposition } from './types.ts';
  */
 export type Standing = 'trusted' | 'known' | 'new' | 'unwanted' | 'blocked';
 
+/** The standings the owner gives, each a rule of their own. */
+export const GIVEN = ['trusted', 'unwanted', 'blocked'] as const satisfies readonly Standing[];
+export type Given = (typeof GIVEN)[number];
+
 /** Messages before an unruled sender counts as known. */
 const KNOWN_AFTER = 5;
 

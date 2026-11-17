@@ -40,6 +40,7 @@ import rulesRemoveWrite from './routes/rules/remove/post.ts';
 import rulesWaitingRead from './routes/rules/waiting/get.ts';
 import senderRead from './routes/sender/get.ts';
 import standingClearWrite from './routes/standing/clear/post.ts';
+import standingWrite from './routes/standing/post.ts';
 import suggestionRead from './routes/suggestion/get.ts';
 import suggestionsRead from './routes/suggestions/get.ts';
 import summaryRead from './routes/summary/get.ts';
@@ -95,6 +96,7 @@ export const WRITES: readonly Write[] = [
   rulesFilterWrite,
   rulesRemoveWrite,
   standingClearWrite,
+  standingWrite,
   undoWrite,
 ];
 export const FRAMES: readonly Frame[] = [messageHtmlFrame];

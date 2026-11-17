@@ -7,6 +7,7 @@ export type {
   DecisionRow,
   FactFilter,
   FeedbackRequest,
+  Given,
   LabelProposal,
   LabelSummary,
   ListedDecision,
@@ -32,6 +33,7 @@ import type {
   FactFilter,
   FeedbackReply,
   FeedbackRequest,
+  Given,
   LabelProposal,
   ManageState,
   MessageDetail,
@@ -186,7 +188,9 @@ export const api = {
   sender: (account: string, address: string, signal: AbortSignal, name?: string) =>
     get<SenderPage>('/api/sender', name === undefined ? { account, address } : { account, address, name }, signal),
   domain: (account: string, domain: string, signal: AbortSignal) => get<SenderPage>('/api/domain', { account, domain }, signal),
-  /** A standing is given by adding its rule; this takes it back. */
+  /** `theirs`: their own rule says more than a standing, so nothing was written and the rule dialog is for this. */
+  giveStanding: (accountId: string, who: { address: string } | { domain: string }, standing: Given) =>
+    post<{ id: string; was: Given | null } | { theirs: string }>('/api/standing', { accountId, ...who, standing }),
   clearStanding: (accountId: string, who: { address: string } | { domain: string }) => post('/api/standing/clear', { accountId, ...who }),
   rules: (signal: AbortSignal) => get<{ rules: RuleSummary[] }>('/api/rules', {}, signal),
   suggestions: (includeKept: boolean, fact: FactFilter | '', signal: AbortSignal) =>
