@@ -146,8 +146,9 @@ export async function continueEval(deps: EvalDeps, runId: number, until: number)
     const facts = await getFacts(db, run.accountId, messageId);
     // Deleted since the run started.
     if (!example?.labelId || !facts) return;
-    // `pickShots` leaves out the message itself, so an example is never shown its own answer.
-    const shots = run.fewShot ? pickShots(await shotCandidates(db, facts), facts, labels) : [];
+    // Only what had been answered when the message arrived, as new mail would have had. Answers given later,
+    // often in one go for a sender's waiting mail, would show the model the answer to a message just like it.
+    const shots = run.fewShot ? pickShots(await shotCandidates(db, facts, facts.receivedAt), facts, labels) : [];
     const started = performance.now();
     const answer = await deps
       .judge({
@@ -206,8 +207,8 @@ export interface EvalRun {
   total: number;
   score: Scorecard;
   /**
-   * Of the answers, those given with an example from the same sender in the prompt. These flatter a
-   * few-shot run: new mail from a sender the user answered for is usually decided by a rule, not the model.
+   * Of the answers, those given with an example from the same sender in the prompt: how much of the score is
+   * senders the user had already answered for, which are easier than a new one.
    */
   withSenderExample: { answered: number; right: number };
 }

@@ -20,12 +20,19 @@ const withMessage = and(eq(messages.accountId, examples.accountId), eq(messages.
 
 /**
  * Stored examples that might help judge `facts`: the newest from its sender, from its sender's domain,
- * and of each label. More than the prompt takes; `pickShots` chooses among them.
+ * and of each label, answered before `before` when it is given. More than the prompt takes; `pickShots` chooses among them.
  */
-export async function shotCandidates(db: Sql, facts: Pick<MessageFacts, 'accountId' | 'from'>): Promise<Shot[]> {
+export async function shotCandidates(db: Sql, facts: Pick<MessageFacts, 'accountId' | 'from'>, before?: number): Promise<Shot[]> {
   // One more than the prompt takes, so leaving out the message under judgement still fills it.
   const limit = MAX_SHOTS + 1;
-  const captured = (also?: SQL) => and(eq(examples.accountId, facts.accountId), eq(examples.status, 'captured'), isNotNull(examples.labelId), also);
+  const captured = (also?: SQL) =>
+    and(
+      eq(examples.accountId, facts.accountId),
+      eq(examples.status, 'captured'),
+      isNotNull(examples.labelId),
+      before === undefined ? undefined : lt(examples.markedAt, before),
+      also,
+    );
   const newest = (also: SQL) =>
     db
       .select(SHOT)

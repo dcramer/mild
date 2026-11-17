@@ -70,10 +70,11 @@ describe('replaying the model over stored examples', () => {
     db = await openUserDb(ACCOUNT);
     await addMailbox(db, ACCOUNT, '1', 0);
     seen = [];
-    await storeExample(db, ACCOUNT, { id: 'e1', from: 'news@example.com', label: 'newsletter', body: 'Issue 12.', markedAt: 1 });
-    await storeExample(db, ACCOUNT, { id: 'e2', from: 'news@example.com', label: 'newsletter', markedAt: 2 });
-    await storeExample(db, ACCOUNT, { id: 'e3', from: 'sales@example.org', label: 'marketing', markedAt: 3 });
-    await storeExample(db, ACCOUNT, { id: 'e4', from: 'ada@example.org', label: 'personal', markedAt: 4 });
+    // Each arrives, then is answered before the next arrives.
+    await storeExample(db, ACCOUNT, { id: 'e1', from: 'news@example.com', label: 'newsletter', body: 'Issue 12.', receivedAt: 10, markedAt: 11 });
+    await storeExample(db, ACCOUNT, { id: 'e2', from: 'news@example.com', label: 'newsletter', receivedAt: 20, markedAt: 21 });
+    await storeExample(db, ACCOUNT, { id: 'e3', from: 'sales@example.org', label: 'marketing', receivedAt: 30, markedAt: 31 });
+    await storeExample(db, ACCOUNT, { id: 'e4', from: 'ada@example.org', label: 'personal', receivedAt: 40, markedAt: 41 });
   });
 
   it('judges each example, stores every result and reports the score with what it ran with', async () => {
@@ -98,20 +99,17 @@ describe('replaying the model over stored examples', () => {
     expect(seen.find((s) => s.evidence.facts.messageId === 'e1')?.evidence.body).toBe('Issue 12.');
   });
 
-  it('shows the other examples when asked, never the one under test, and says how many answers had the sender to go on', async () => {
+  it('shows only the examples answered before the message arrived, and says how many answers had the sender to go on', async () => {
     const id = await runEval(deps({ e1: 'newsletter', e2: 'newsletter', e3: 'marketing', e4: 'newsletter' }), {
       accountId: ACCOUNT,
       fewShot: true,
     });
-    for (const input of seen) {
-      expect(input.examples?.length).toBeGreaterThan(0);
-      expect(input.examples?.map((s) => s.messageId)).not.toContain(input.evidence.facts.messageId);
-    }
-    expect(seen.find((s) => s.evidence.facts.messageId === 'e1')?.examples?.[0]?.messageId).toBe('e2');
+    const shown = Object.fromEntries(seen.map((s) => [s.evidence.facts.messageId, s.examples?.map((e) => e.messageId) ?? []]));
+    expect(shown).toEqual({ e1: [], e2: ['e1'], e3: ['e2'], e4: ['e3', 'e2'] });
     const { run, results } = (await getEvalRun(db, id))!;
     expect(run.fewShot).toBe(true);
-    expect(results.find((r) => r.messageId === 'e1')).toMatchObject({ shots: 3, senderShots: 1 });
-    expect(run.withSenderExample).toEqual({ answered: 2, right: 2 });
+    expect(results.find((r) => r.messageId === 'e2')).toMatchObject({ shots: 1, senderShots: 1 });
+    expect(run.withSenderExample).toEqual({ answered: 1, right: 1 });
   });
 
   it('counts the mail the sender had sent when the message arrived, not what came after', async () => {
@@ -126,7 +124,7 @@ describe('replaying the model over stored examples', () => {
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'later', from: news, receivedAt: 30 })], '5');
     await raw(db).run(
       `INSERT INTO examples (account_id, message_id, disposition, label_id, marked_at, status, body_text)
-       VALUES (?, 'judged', 'keep', 'personal', 9, 'captured', 'Hello.')`,
+       VALUES (?, 'judged', 'keep', 'personal', 99, 'captured', 'Hello.')`,
       ACCOUNT,
     );
     await rememberCorrespondent(db, ACCOUNT, news.address, true);

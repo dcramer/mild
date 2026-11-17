@@ -28,13 +28,32 @@ export function facts(overrides: Partial<MessageFacts> = {}): MessageFacts {
 export async function storeExample(
   db: Sql,
   accountId: string,
-  example: { id: string; from: string; label: string; subject?: string; body?: string; markedAt?: number; name?: string; headers?: Record<string, string> },
+  example: {
+    id: string;
+    from: string;
+    label: string;
+    subject?: string;
+    body?: string;
+    markedAt?: number;
+    receivedAt?: number;
+    name?: string;
+    headers?: Record<string, string>;
+  },
 ): Promise<void> {
   const from = { address: example.from, domain: example.from.split('@')[1] ?? '', ...(example.name ? { name: example.name } : {}) };
   await recordSync(
     db,
     accountId,
-    [facts({ accountId, messageId: example.id, from, subject: example.subject ?? `Subject ${example.id}`, headers: example.headers ?? {} })],
+    [
+      facts({
+        accountId,
+        messageId: example.id,
+        from,
+        subject: example.subject ?? `Subject ${example.id}`,
+        headers: example.headers ?? {},
+        receivedAt: example.receivedAt ?? 0,
+      }),
+    ],
     '2',
   );
   await recordDecision(db, accountId, example.id, {
