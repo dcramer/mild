@@ -20,7 +20,9 @@ import {
   type SQL,
 } from './query.ts';
 import type { Sql } from './sql.ts';
-import { hashOf, hashCorrespondent } from './content.ts';
+import { hashOf, hashCorrespondent, newestOfGroup, openNewest } from './content.ts';
+import { parseListId } from '../triage/features.ts';
+import type { FoundSender } from '../triage/rule-draft.ts';
 import { type Standing, isSharedDomain, standingOf } from '../triage/standing.ts';
 import { listLabels } from './labels.ts';
 import { listRules } from './rules.ts';
@@ -226,4 +228,42 @@ export async function senderFacts(db: Sql, accountId: string, address: string, n
 /** Null for a domain anyone can get an address at, which says nothing about its senders. */
 export async function domainFacts(db: Sql, accountId: string, domain: string, now: number = Date.now()): Promise<SenderFacts | null> {
   return isSharedDomain(domain) ? null : await facts(db, accountId, { domain }, now);
+}
+
+const sent = alias(messages, 'sent');
+
+/**
+ * Everyone Sift has recorded mail from in a mailbox, with their newest mail's name, list and subject and
+ * the label their newest labelled mail got. Senders are found only by keyed hash, so this reads one record
+ * of each and the caller searches it.
+ */
+export async function senderDirectory(db: Sql, accountId: string): Promise<FoundSender[]> {
+  const names = new Map((await listLabels(db, accountId)).map((l) => [l.id, l.name]));
+  const rows = await db
+    .select({
+      newest: newestOfGroup(),
+      n: count(),
+      label: sql<string | null>`${db
+        .select({ id: decisions.labelId })
+        .from(decisions)
+        .innerJoin(sent, and(eq(sent.accountId, decisions.accountId), eq(sent.id, decisions.messageId)))
+        .where(and(eq(sent.accountId, accountId), eq(sent.senderHash, messages.senderHash), isNotNull(decisions.labelId)))
+        .orderBy(desc(decisions.id))
+        .limit(1)}`,
+    })
+    .from(messages)
+    .where(eq(messages.accountId, accountId))
+    .groupBy(messages.senderHash)
+    .orderBy(desc(count()), asc(messages.senderHash));
+  return rows.map((r) => {
+    const newest = openNewest(db, r.newest);
+    return {
+      address: newest.fromAddress,
+      name: newest.fromName,
+      listId: parseListId(newest.headers['list-id']),
+      messages: r.n,
+      label: r.label === null ? null : (names.get(r.label) ?? null),
+      subject: newest.subject,
+    };
+  });
 }

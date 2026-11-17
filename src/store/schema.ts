@@ -539,6 +539,27 @@ export const labelProposals = pgTable(
   (t) => [unique('label_proposals_own').on(t.userId, t.id), mailbox(t), index('label_proposals_time').on(t.accountId, t.startedAt), own()],
 ).enableRLS();
 
+/** One row per call asking the person's model to fill in a rule from their words; the rule is made, or not, in the dialog. */
+export const ruleDrafts = pgTable(
+  'rule_drafts',
+  {
+    id: id(),
+    userId: userId(),
+    accountId: text('account_id').notNull(),
+    startedAt: time('started_at').notNull(),
+    finishedAt: time('finished_at'),
+    model: text('model').notNull(),
+    goal: text('goal').notNull(), // encrypted, as a label proposal's
+    rule: text('rule'), // the draft, encrypted JSON
+    lookups: integer('lookups').notNull().default(0), // look-ups of the person's senders it made
+    error: text('error'), // its status and kind, never the provider's text
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    costUsd: doublePrecision('cost_usd').notNull().default(0),
+  },
+  (t) => [unique('rule_drafts_own').on(t.userId, t.id), mailbox(t), index('rule_drafts_time').on(t.accountId, t.startedAt), own()],
+).enableRLS();
+
 /** One row per example judged: labels and cost, no message content. */
 export const evalResults = pgTable(
   'eval_results',

@@ -13,6 +13,7 @@ export type {
   ManageState,
   MessageDetail,
   Removed,
+  RuleDraft,
   RuleFacts,
   RuleFilter,
   RuleMatch,
@@ -36,6 +37,7 @@ import type {
   MessageDetail,
   Models,
   Removed,
+  RuleDraft,
   RuleFilter,
   RuleInbox,
   RuleMatch,
@@ -222,6 +224,8 @@ export const api = {
   /** Make these labels in every mailbox of the person's that has none yet. */
   acceptLabels: (labels: { name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }[]) =>
     post<{ ids: string[] }>('/api/labels/accept', { labels }),
+  /** The model fills in a rule from the person's words, for the rule dialog. Nothing is made. */
+  draftRule: (accountId: string, goal: string) => post<RuleDraft>('/api/rules/draft', { accountId, goal }),
   /** A rule carries a label, an action (`disposition`), or both; or an action for mail that turns out to be `whenLabel`. */
   addRule: (rule: {
     accountId: string;

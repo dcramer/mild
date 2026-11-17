@@ -1,5 +1,5 @@
 import type { Sql } from '../store/sql.ts';
-import type { LabelProposal, RuleInbox } from './types.ts';
+import type { LabelProposal, RuleDraft, RuleInbox } from './types.ts';
 
 /**
  * What the dashboard can ask the rest of sift to do. The dashboard itself may not import Gmail, the
@@ -46,6 +46,11 @@ export interface Controls {
    * and their labels, and no mail. Rejects with a sentence for them when there is no model or the call failed.
    */
   proposeLabels(db: Sql, request: { accountId: string; goal: string }): Promise<LabelProposal>;
+  /**
+   * Ask the person's model to fill in a rule from what they want, looking up the senders Sift has recorded
+   * in that mailbox as it needs. Rejects with a sentence for them when there is no model or the call failed.
+   */
+  draftRule(db: Sql, request: { accountId: string; goal: string }): Promise<RuleDraft>;
   /**
    * Copy a rule to Gmail as a filter (`on`), or take its filter out again. Rejects with a sentence for
    * the user when the rule cannot be a filter or Gmail refused.

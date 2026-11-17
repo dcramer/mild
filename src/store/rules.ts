@@ -1,7 +1,9 @@
 import { randomBytes } from 'node:crypto';
-import { type RULE_SOURCES, and, asc, eq, proposals, rules, sql } from './query.ts';
+import { type RULE_SOURCES, and, asc, eq, proposals, ruleDrafts, rules, sql } from './query.ts';
 import type { Sql } from './sql.ts';
-import { conditionsHash, openJson, ruleName, sealJson } from './content.ts';
+import { conditionsHash, openJson, ruleDraftName, ruleName, sealJson } from './content.ts';
+import type { RuleDraft } from '../triage/rule-draft.ts';
+import type { Usage } from '../triage/stages/model.ts';
 import { type Rule, type RuleMatch, asksFacts } from '../triage/stages/rules.ts';
 import { listLabels } from './labels.ts';
 import { Refusal } from '../refusal.ts';
@@ -175,4 +177,36 @@ export async function blockSender(db: Sql, accountId: string, address: string, l
 /** The user's own rule for exactly this address or domain, which is what their standing is read from. */
 export async function standingRule(db: Sql, accountId: string, match: { from: string } | { fromDomain: string }): Promise<string | null> {
   return (await ruleMatching(db, accountId, match))?.id ?? null;
+}
+
+/** Record a call for a rule before it is made. */
+export async function startRuleDraft(db: Sql, request: { accountId: string; goal: string; model: string; now: number }): Promise<number> {
+  const [row] = await db
+    .insert(ruleDrafts)
+    .values({
+      accountId: request.accountId,
+      startedAt: request.now,
+      model: request.model,
+      goal: sealJson(db, ruleDraftName(db, request.accountId, 'goal'), request.goal),
+    })
+    .returning({ id: ruleDrafts.id });
+  return row!.id;
+}
+
+/** What the call filled in, or why it failed, and what it cost. */
+export async function finishRuleDraft(
+  db: Sql,
+  accountId: string,
+  id: number,
+  outcome: ({ draft: RuleDraft } | { error: string }) & { usage?: Usage; lookups: number; now: number },
+): Promise<void> {
+  await db
+    .update(ruleDrafts)
+    .set({
+      finishedAt: outcome.now,
+      lookups: outcome.lookups,
+      ...('draft' in outcome ? { rule: sealJson(db, ruleDraftName(db, accountId, 'rule'), outcome.draft) } : { error: outcome.error }),
+      ...(outcome.usage ? { inputTokens: outcome.usage.inputTokens, outputTokens: outcome.usage.outputTokens, costUsd: outcome.usage.costUsd } : {}),
+    })
+    .where(eq(ruleDrafts.id, id));
 }

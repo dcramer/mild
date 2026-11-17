@@ -16,6 +16,7 @@ import {
   notLike,
   or,
   proposals,
+  ruleDrafts,
   rules,
   sql,
   suggestionBodies,
@@ -32,6 +33,7 @@ export const ruleName = (db: Sql, ruleId: string, field: 'match' | 'except' | 'f
 export const proposalName = (db: Sql, accountId: string) => `person ${db.person} proposal of ${accountId}`;
 export const actionName = (db: Sql, accountId: string) => `person ${db.person} action of ${accountId}`;
 export const labelProposalName = (db: Sql, accountId: string, field: 'goal' | 'labels') => `person ${db.person} label proposal ${field} of ${accountId}`;
+export const ruleDraftName = (db: Sql, accountId: string, field: 'goal' | 'rule') => `person ${db.person} rule draft ${field} of ${accountId}`;
 
 /**
  * Marks a value stored without a key. Content comes from whoever sent the mail, so a subject that only
@@ -201,7 +203,7 @@ export async function rekeyContent(db: Sql, write = true): Promise<number> {
 const UNSET = 'unset:';
 
 /**
- * Rules, proposals and label proposals: few, so read whole. Their conditions are hashed again with the key, and those a
+ * Rules, proposals, label proposals and rule drafts: few, so read whole. Their conditions are hashed again with the key, and those a
  * migration could not hash (`unset:`) are hashed here even without one.
  */
 async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): Promise<void> {
@@ -244,8 +246,17 @@ async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): 
         seal(db, labelProposalName(db, r.accountId, field), reopen(db, labelProposalName(db, r.accountId, field), stored));
       return { id: r.id, set: { goal: again('goal', r.goal), labels: r.labels === null ? null : again('labels', r.labels) } };
     });
+  const draftRows = await db.select({ id: ruleDrafts.id, accountId: ruleDrafts.accountId, goal: ruleDrafts.goal, rule: ruleDrafts.rule }).from(ruleDrafts);
+  const draftUpdates = draftRows
+    .filter((r) => behind(r.goal) || behind(r.rule))
+    .map((r) => {
+      const again = (field: 'goal' | 'rule', stored: string) =>
+        seal(db, ruleDraftName(db, r.accountId, field), reopen(db, ruleDraftName(db, r.accountId, field), stored));
+      return { id: r.id, set: { goal: again('goal', r.goal), rule: r.rule === null ? null : again('rule', r.rule) } };
+    });
   if (write)
     await db.transaction(async (tx) => {
+      for (const { id, set } of draftUpdates) await tx.update(ruleDrafts).set(set).where(eq(ruleDrafts.id, id));
       for (const { id, set } of ruleUpdates) await tx.update(rules).set(set).where(eq(rules.id, id));
       for (const { id, set } of proposalUpdates) await tx.update(proposals).set(set).where(eq(proposals.id, id));
       for (const { id, set } of labelProposalUpdates) await tx.update(labelProposals).set(set).where(eq(labelProposals.id, id));

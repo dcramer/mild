@@ -552,6 +552,20 @@ const LabelDraft = z.object({
 export const LabelProposal = z.object({ id: z.number(), goal: z.string(), drafts: z.array(LabelDraft), at: z.number() });
 export type LabelProposal = z.infer<typeof LabelProposal>;
 
+/** A rule the model filled in from what the person wants, for the rule dialog to show. Nothing is made until they add it. */
+export const RuleDraft = z.object({
+  match,
+  label: z.string().optional(),
+  whenLabel: z.string().optional(),
+  when: z.string().optional(),
+  disposition: decided.optional(),
+  markRead: z.literal(true).optional(),
+  unsubscribe: z.literal(true).optional(),
+  /** What else they need, or what a rule cannot do. */
+  note: z.string().optional(),
+});
+export type RuleDraft = z.infer<typeof RuleDraft>;
+
 /**
  * A ChatGPT sign-in waiting on the person: where to go, and by device code the code to enter there.
  * Without a code, it is a Sign in with ChatGPT, finished by pasting back the address it ends on.

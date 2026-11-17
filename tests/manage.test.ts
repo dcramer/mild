@@ -56,6 +56,10 @@ const controls: Controls = {
       at: 1,
     };
   },
+  draftRule: async (_db, { accountId, goal }) => (
+    calls.push(`draft ${accountId} ${goal}`),
+    { match: { fromDomain: 'example.org' }, disposition: 'archive', note: 'And another.' }
+  ),
   ruleFilter: async (target, ruleId, on) => {
     calls.push(`filter ${ruleId} ${on ? 'on' : 'off'}`);
     await raw(target).run(`UPDATE rules SET filter_id = ?, filter_state = ? WHERE id = ?`, on ? 'f1' : null, on ? 'active' : null, ruleId);
@@ -155,6 +159,16 @@ describe('managing sift from the dashboard', () => {
 
     const { call: bare } = await start({ withControls: false });
     expect((await bare('POST', '/api/evals/run', { accountId: ACCOUNT })).status).toBe(409);
+  });
+
+  it('asks the model to fill in a rule for one of the person’s mailboxes, and makes nothing', async () => {
+    const { call } = await start();
+    const drafted = await call('POST', '/api/rules/draft', { accountId: ACCOUNT, goal: '  Archive everything from example.org  ' });
+    expect(drafted.body).toEqual({ match: { fromDomain: 'example.org' }, disposition: 'archive', note: 'And another.' });
+    for (const bad of [{ accountId: ACCOUNT }, { accountId: ACCOUNT, goal: '  ' }, { goal: 'x' }])
+      expect((await call('POST', '/api/rules/draft', bad)).status).toBe(400);
+    expect(calls).toEqual([`draft ${ACCOUNT} Archive everything from example.org`]);
+    expect((await call('GET', '/api/rules')).body['rules']).toEqual([]);
   });
 
   it('asks the model for labels from what the person wants, and makes the ones they keep in every mailbox without any, all or none', async () => {

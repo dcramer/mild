@@ -247,6 +247,7 @@ export async function recordEverything(db: Sql, account: string): Promise<void> 
     [`INSERT INTO suggestion_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, ?, 'Hello.', 0)`, account, message],
     [`INSERT INTO model_runs (account_id, message_id, model, started_at, error) VALUES (?, ?, 'p/m', 0, 'e')`, account, message],
     [`INSERT INTO label_proposals (account_id, started_at, model, goal) VALUES (?, 0, 'p/m', 'g')`, account],
+    [`INSERT INTO rule_drafts (account_id, started_at, model, goal) VALUES (?, 0, 'p/m', 'g')`, account],
     [
       `INSERT INTO eval_results (run_id, message_id, expected, got, duration_ms, shots, sender_shots) VALUES (?, ?, 'newsletter', 'newsletter', 1, 0, 0)`,
       run,

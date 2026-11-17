@@ -9,6 +9,7 @@ import { applyRule, ruleInbox } from '../work/apply.ts';
 import { createGmailApi } from '../gmail/api.ts';
 import { startEval } from '../learn/evals.ts';
 import { proposeLabels } from '../learn/labels.ts';
+import { draftRule } from '../learn/rules.ts';
 import { clientFor, loadClientSecrets, revokeGrant } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { pacer } from '../gmail/quota.ts';
@@ -16,6 +17,7 @@ import { chatgptPending, checkChatGPT, finishChatGPT, forgetChatGPT, startChatGP
 import type { SignIns } from '../model/credentials.ts';
 import { createJudge } from '../model/judge.ts';
 import { createProposer } from '../model/propose.ts';
+import { createRuleDrafter } from '../model/draft-rule.ts';
 import { costPerThousand, modelChoices, offerModel, openModels, resolveModel, saveApiKey, shortlistModels } from '../model/models.ts';
 import { listAccounts, listUsers, personOf } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
@@ -160,6 +162,11 @@ export async function buildControls(
       const opened = await openModel(config, live.ephemeral, db);
       if (!opened) throw new Refusal('Choose a model first.');
       return await proposeLabels({ db, propose: createProposer(opened.models, opened.model), model: opened.spec }, request);
+    },
+    draftRule: async (db, request) => {
+      const opened = await openModel(config, live.ephemeral, db);
+      if (!opened) throw new Refusal('Choose a model first.');
+      return await draftRule({ db, draft: createRuleDrafter(opened.models, opened.model), model: opened.spec }, request);
     },
     ruleFilter: async (db, ruleId, on) => {
       const rule = await getRuleFilter(db, ruleId);

@@ -8,7 +8,9 @@
  * control replaced is `ruleFilter`, which adds and removes a rule's Gmail filter (and is asked before any rule is
  * removed). It runs the real filter code against a fake mailbox holding the filters the seed left in
  * <gmail.json>, and writes them back there after each call. Every other control that reaches Gmail still finds
- * no access.
+ * no access. `draftRule` runs the real drafting, look-ups of the seeded senders included, with a stand-in model:
+ * it looks up the words of the request, then fills in a rule archiving the first sender found, with a note
+ * naming the second.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -28,6 +30,10 @@ import { getRuleFilter } from '../../../../src/store/filters.ts';
 import { people } from '../../../../src/store/people.ts';
 import { openStore } from '../../../../src/store/store.ts';
 import { FakeMailbox } from '../../../../tests/helpers.ts';
+import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from '@earendil-works/pi-ai';
+import { draftRule } from '../../../../src/learn/rules.ts';
+import { createRuleDrafter } from '../../../../src/model/draft-rule.ts';
+import { FILL_TOOL, FIND_TOOL } from '../../../../src/triage/rule-draft.ts';
 
 const [home, port, gmailFile] = process.argv.slice(2);
 if (!home || !port || !gmailFile) throw new Error('usage: serve.ts <home> <port> <gmail.json>');
@@ -49,8 +55,26 @@ const mailboxOf = (accountId: string) => {
   }
   return mailbox;
 };
+const faux = fauxProvider();
+const models = createModels();
+models.setProvider(faux.provider);
+const blank = { by: 'from', senderName: '', nameContains: false, facts: [], label: '', onlyOnceLabelled: false, when: '', markRead: true, unsubscribe: false };
+const lookUp = (context: { messages: readonly { role: string; content: unknown }[] }) => {
+  const asked = context.messages.find((m) => m.role === 'user')?.content;
+  const words = String(asked).split('\n')[1] ?? '';
+  return fauxAssistantMessage([fauxToolCall(FIND_TOOL, { query: words })], { stopReason: 'toolUse' });
+};
+const fillIn = (context: { messages: readonly { role: string; content: unknown }[] }) => {
+  const found = [...JSON.stringify(context.messages.at(-1)?.content).matchAll(/<([^>\s]+@[^>\s]+)>|- ([^\s,<]+@[^\s,]+)/g)].map((m) => m[1] ?? m[2]);
+  const note = found[1] ? `Add another rule for ${found[1]}.` : '';
+  return fauxAssistantMessage([fauxToolCall(FILL_TOOL, { ...blank, value: found[0] ?? 'nobody@example.com', action: 'archive', note })], { stopReason: 'toolUse' });
+};
 const controls = {
   ...built,
+  draftRule: async (db: Parameters<typeof built.draftRule>[0], request: { accountId: string; goal: string }) => {
+    faux.setResponses([lookUp, fillIn]);
+    return await draftRule({ db, draft: createRuleDrafter(models, faux.getModel()), model: 'faux/stand-in' }, request);
+  },
   // What `ruleFilter` in src/app/controls.ts does, with the fake mailbox in place of the account's Gmail.
   ruleFilter: async (db: Parameters<typeof built.ruleFilter>[0], ruleId: string, on: boolean) => {
     const rule = await getRuleFilter(db, ruleId);

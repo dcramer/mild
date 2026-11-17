@@ -29,6 +29,7 @@ import modelSignoutWrite from './routes/model/signout/post.ts';
 import modelsRead from './routes/models/get.ts';
 import proposalsWrite from './routes/proposals/post.ts';
 import rulesApplyWrite from './routes/rules/apply/post.ts';
+import rulesDraftWrite from './routes/rules/draft/post.ts';
 import rulesFilterWrite from './routes/rules/filter/post.ts';
 import rulesInboxRead from './routes/rules/inbox/get.ts';
 import rulesRead from './routes/rules/get.ts';
@@ -86,6 +87,7 @@ export const WRITES: readonly Write[] = [
   proposalsWrite,
   rulesWrite,
   rulesApplyWrite,
+  rulesDraftWrite,
   rulesFilterWrite,
   rulesRemoveWrite,
   standingClearWrite,

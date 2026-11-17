@@ -1,5 +1,5 @@
 import type { RuleMatch, RuleSummary } from './api.ts';
-import { type FactAnswer, factAnswers } from './format.ts';
+import { type FactAnswer, factAnswers, factWords } from './format.ts';
 
 /** The one named condition the rule dialog holds. `from` takes an address or a domain. */
 export type By = 'from' | 'listId' | 'to' | 'subjectContains';
@@ -87,4 +87,27 @@ const canonical = (value: unknown): unknown =>
 export function replacedBy(rules: readonly RuleSummary[], accountId: string, match: RuleMatch, whenLabel: string | null): RuleSummary | undefined {
   const key = JSON.stringify(canonical(match));
   return rules.find((r) => r.accountId === accountId && r.whenLabel === whenLabel && r.except.length === 0 && JSON.stringify(canonical(r.match)) === key);
+}
+
+const WHICH: Record<By, (value: string) => string> = {
+  from: (value) => `from ${value}`,
+  listId: (value) => `on the list ${value}`,
+  to: (value) => `sent to ${value}`,
+  subjectContains: (value) => `with “${value}” in the subject`,
+};
+const DO = { keep: 'keep it in the inbox', archive: 'archive it', spam: 'send it to spam' } as const;
+
+/** What the rule dialog starts on, said as someone would describe the rule, for the box it opens on. */
+export function startWords(start: RuleStart, labels: readonly { id: string; name: string }[]): string {
+  const named = (id: string | undefined) => labels.find((l) => l.id === id)?.name;
+  const which = [
+    start.value.trim() === '' ? 'Mail' : `Mail ${WHICH[start.by](start.value.trim())}`,
+    ...(start.name ? [`named “${start.name}”`] : []),
+    ...(start.facts.length > 0 ? [`that ${start.facts.map(factWords).join(' and ')}`] : []),
+  ].join(' ');
+  const label = named(start.label);
+  const waits = named(start.whenLabel);
+  if (waits) return `${which}, once it is ${waits}: ${DO[start.action ?? 'keep']}.`;
+  if (label) return `${which} is ${label}.`;
+  return start.action ? `${which}: ${DO[start.action]}.` : `${which}: `;
 }

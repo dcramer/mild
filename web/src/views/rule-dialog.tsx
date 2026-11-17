@@ -1,10 +1,10 @@
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { setParams } from '@/lib/route.ts';
-import { type LabelSummary, type RuleFilter, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
-import { type By, type RuleStart, replacedBy } from '@/lib/rule-start.ts';
-import { FACTS, type FactAnswer, type FactKey, factConditions, factParam, factWords, outcomeName } from '@/lib/format.ts';
-import { Button, Check, Dialog, Does, Failure, Field, Form, Input, Select, useToast } from '@/system';
+import { type LabelSummary, type RuleDraft, type RuleFilter, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type By, type RuleStart, replacedBy, startWords } from '@/lib/rule-start.ts';
+import { FACTS, type FactAnswer, type FactKey, factAnswers, factConditions, factParam, factWords, outcomeName } from '@/lib/format.ts';
+import { Button, Check, Dialog, Does, Failure, Field, Form, Input, Note, Select, TextArea, useToast } from '@/system';
 import { useFilterOffer } from '@/views/gmail-filter.tsx';
 
 const BY = [
@@ -37,6 +37,9 @@ function fromMatch(text: string): Record<string, string> {
  * the subject, and what sift saw in it), only when it is something in the reader's words, and the label it
  * is, which brings what that label does. With no label, the rule is an action alone, and says which.
  * Once added, a rule Gmail could run by itself is offered as a filter, showing the filter.
+ *
+ * It opens on the rule in the reader's words (what it was opened from, said as a sentence):
+ * the model fills the form in from them, looking up senders, and the reader checks it and adds it.
  */
 export function AddRuleDialog({
   accountId,
@@ -72,6 +75,27 @@ export function AddRuleDialog({
   const [unsubscribe, setUnsubscribe] = useState(false);
   const [offer, setOffer] = useState<{ id: string; filter: RuleFilter } | null>(null);
   const [applyNow, setApplyNow] = useState(true);
+  const drafting = useAction();
+  const [describing, setDescribing] = useState(true);
+  const [goal, setGoal] = useState(() => (start ? startWords(start, labels) : ''));
+  const [note, setNote] = useState<string | null>(null);
+  const fill = ({ match: { facts: drafted, fromName, fromNameContains, ...one }, ...rule }: RuleDraft) => {
+    const [key, given] = Object.entries(one)[0] ?? ['from', ''];
+    setBy(key === 'fromDomain' ? 'from' : (key as By));
+    setValue(given ?? '');
+    setNameMatch(fromNameContains === undefined ? 'fromName' : 'fromNameContains');
+    setName(fromName ?? fromNameContains ?? '');
+    setFacts(factAnswers(drafted));
+    setLabel(rule.label ?? '');
+    setWhenLabel(rule.whenLabel ?? '');
+    setCondition(rule.when ?? '');
+    setThen(rule.disposition ?? '');
+    setMarkRead(rule.markRead ?? false);
+    setUnsubscribe(rule.unsubscribe ?? false);
+    setNote(rule.note ?? null);
+    setDescribing(false);
+  };
+  const describe = () => goal.trim() !== '' && drafting.run(async () => fill(await api.draftRule(accountId, goal.trim())));
   // Once it is made, the rule opens wherever this was, with what it covers in the inbox; ticked, the look at the inbox too.
   const opened = (id: string | undefined) => {
     onClose();
@@ -135,6 +159,48 @@ export function AddRuleDialog({
   };
 
   if (offer) return <Dialog open onClose={onClose} {...filterStep(offer.id, offer.filter, 'Not now')} />;
+  if (describing)
+    return (
+      <Dialog
+        open
+        onClose={onClose}
+        title="Add a rule"
+        footer={
+          <>
+            <Button variant="ink" busy={drafting.busy} disabled={goal.trim() === ''} onClick={describe}>
+              Fill it in
+            </Button>
+            <Button variant="quiet" onClick={() => setDescribing(false)}>
+              Fill it in yourself
+            </Button>
+            <Failure>{drafting.error}</Failure>
+          </>
+        }
+      >
+        <Form onSubmit={describe}>
+          <Field
+            label="What should it do?"
+            hint={
+              drafting.busy
+                ? 'This can take a minute.'
+                : 'Name a sender as you know them: Sift finds their address in your mail. You see the rule before it is added.'
+            }
+          >
+            <TextArea
+              autoFocus
+              aria-label="What should the rule do?"
+              className="min-h-28"
+              maxLength={2000}
+              placeholder="Archive receipts from example.com and mark them read"
+              value={goal}
+              // What it was opened from ends where the reader carries on.
+              onFocus={(event) => event.currentTarget.setSelectionRange(goal.length, goal.length)}
+              onChange={(event) => setGoal(event.target.value)}
+            />
+          </Field>
+        </Form>
+      </Dialog>
+    );
   return (
     <Dialog
       open
@@ -145,6 +211,9 @@ export function AddRuleDialog({
           <Button variant="ink" busy={busy} disabled={!ready} onClick={add}>
             Add rule
           </Button>
+          <Button variant="quiet" onClick={() => setDescribing(true)}>
+            Describe it
+          </Button>
           <Button variant="quiet" onClick={onClose}>
             Cancel
           </Button>
@@ -153,6 +222,11 @@ export function AddRuleDialog({
       }
     >
       <Form onSubmit={() => ready && add()}>
+        {note ? (
+          <Note tone="look" title="Not in this rule">
+            {note}
+          </Note>
+        ) : null}
         <Field
           inline
           label="Mail"

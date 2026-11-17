@@ -183,6 +183,20 @@
       "when": 1794886437583,
       "tag": "0025_proposals_are_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794891349965,
+      "tag": "0026_rule_drafts",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1794891351592,
+      "tag": "0027_rule_drafts_row_security",
+      "breakpoints": true
     }
   ]
 }
