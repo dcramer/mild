@@ -22,11 +22,13 @@ import { saveApiKey } from '../../../../src/model/models.ts';
 import { credentials } from '../../../../src/store/credentials.ts';
 import { writeSecret } from '../../../../src/secrets.ts';
 import { connectAccount } from '../../../../src/store/accounts.ts';
+import { listLabels, removeLabel } from '../../../../src/store/labels.ts';
 import { setModel } from '../../../../src/store/preferences.ts';
 import { listProposals } from '../../../../src/store/proposals.ts';
 import { openStore } from '../../../../src/store/store.ts';
 import { addRule } from '../../../../src/store/rules.ts';
 import type { JudgeInput } from '../../../../src/triage/stages/model.ts';
+import { LEAVE_IN_INBOX } from '../../../../src/triage/types.ts';
 import { FakeMailbox, withSampleLabels } from '../../../../tests/helpers.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -213,8 +215,9 @@ await writeRuleFilter({ db, mailbox, now: () => now - HOUR }, newsRule).catch(()
 // A second mailbox of the same person, with no mail (connected after the passes, so none comes to it), to remove; and a second person, who owns nothing yet and
 // takes over the install when the first deletes their account. Neither can be signed in to here.
 await connectAccount(store, WORK, '1', now - 23 * HOUR, user);
-// With labels of its own, or every screen would be the setting-up steps; `--bare` leaves it without, to show them.
-if (variant !== '--bare') await withSampleLabels(db, WORK);
+// It comes with the person's labels; `--bare` takes them out, as for a mailbox added while setting up, so every screen is the setting-up steps.
+if (variant === '--bare')
+  for (const label of await listLabels(db, WORK)) if (label.id !== LEAVE_IN_INBOX) await removeLabel(db, WORK, label.id, now - 23 * HOUR);
 await connectAccount(store, OTHER, '1', now - 22 * HOUR);
 // A model in use, so the dashboard is not behind its setting-up steps. The key is made up, and this
 // instance runs no passes, so nothing ever calls Anthropic with it.

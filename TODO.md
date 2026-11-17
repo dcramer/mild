@@ -19,7 +19,6 @@ The working list for sift. Remove an item when it lands; add what you find. What
 - [ ] **Setting up labels.**
   - Run it with a real model: whether its suggestions are narrow (Cold outreach, not Marketing) and mostly filters, not categories to keep; whether "never miss" goes into the descriptions of labels that might catch it; how long the call takes; whether eight is too many to read.
   - Check on the owner's answered mail that the model's "unsure" still means unsure with Leave in inbox on the list, not "none of these".
-  - A mailbox connected later puts the whole dashboard behind the steps until it has labels. Decide whether the person's other mailboxes stay usable meanwhile.
   - Look at a provider's own sign-in step (an API key, ChatGPT's code) in the setting-up page's layout.
 - [ ] **Rules as Gmail filters.** Decide whether a filter may mark mail read (refused today). Mail a filter archives never reaches Sift, so it has no record, no hit count and no unsubscribe: record mail that arrives outside the inbox already carrying a `sift/` label.
 - [ ] **Propose leaving a sender in the inbox** after a run of Leave in inbox answers for them, as `proposeFromCorrections` already does for a label's mail given another action, so their mail stops costing a model call.

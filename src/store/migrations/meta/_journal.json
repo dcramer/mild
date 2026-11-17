@@ -267,6 +267,13 @@
       "when": 1794905111460,
       "tag": "0037_leave_in_inbox_is_fixed",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1794935334220,
+      "tag": "0038_later_mailboxes_have_labels",
+      "breakpoints": true
     }
   ]
 }

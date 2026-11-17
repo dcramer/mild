@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, examples, inArray, isNotNull, isNull, labelProposals, labels, or, rules, sql } from './query.ts';
+import { and, asc, desc, eq, examples, inArray, isNotNull, isNull, labelProposals, labels, ne, or, rules, sql } from './query.ts';
 import { labelProposalName, openJson, sealJson } from './content.ts';
 import type { LabelDraft } from '../triage/proposal.ts';
 import type { Usage } from '../triage/stages/model.ts';
@@ -27,6 +27,29 @@ const toRow = (accountId: string, l: Label, position: number) => ({
 
 /** A new mailbox's one label, written with it (`ensureMailbox`). */
 export const inboxRow = (accountId: string) => toRow(accountId, leaveInInbox, MAX_LABELS);
+
+/** The labels of the person's other mailboxes, each once, as rows for `accountId`. Where two mailboxes have one, the first mailbox's wins. */
+export async function labelsOfTheirOtherMailboxes(db: Sql, accountId: string): Promise<ReturnType<typeof toRow>[]> {
+  const rows = await db
+    .select({
+      id: labels.id,
+      name: labels.name,
+      description: labels.description,
+      disposition: labels.disposition,
+      gmailLabel: labels.gmailLabel,
+      block: labels.block,
+      markRead: labels.markRead,
+      unsubscribe: labels.unsubscribe,
+    })
+    .from(labels)
+    .where(and(ne(labels.accountId, accountId), ne(labels.id, LEAVE_IN_INBOX), isNull(labels.removedAt)))
+    .orderBy(asc(labels.accountId), asc(labels.position), asc(labels.id));
+  const seen = new Set<string>();
+  return rows
+    .filter((r) => !seen.has(r.id) && seen.add(r.id))
+    .slice(0, MAX_LABELS)
+    .map((r, position) => ({ ...r, accountId, position }));
+}
 
 /** An account's labels in order, leaving out removed ones. */
 export async function listLabels(db: Sql, accountId: string): Promise<Label[]> {

@@ -21,7 +21,7 @@ RUN=<scratchpad>/verify-sift/<short-name>   # a new directory per run
 $V up "$RUN"
 ```
 
-`up` seeds `$RUN/home`, picks a free port, starts `sift dashboard` on it (as `scripts/serve.ts`, the same command) (rebuilding `web/dist` first if the page sources are newer, which can take a minute), runs the doctor, and signs the browser session in. It is ready when it prints `ok  pid …` and `browser session … signed in`. It refuses a directory that already has a `home/`. `up "$RUN" --bare` seeds the same, but leaves `me@work.example.org` without labels of its own, so the dashboard is the setting-up steps (features/setting-up.md) until that run makes some.
+`up` seeds `$RUN/home`, picks a free port, starts `sift dashboard` on it (as `scripts/serve.ts`, the same command) (rebuilding `web/dist` first if the page sources are newer, which can take a minute), runs the doctor, and signs the browser session in. It is ready when it prints `ok  pid …` and `browser session … signed in`. It refuses a directory that already has a `home/`. `up "$RUN" --bare` seeds the same, but takes the labels out of `me@work.example.org`, as for a mailbox added while setting up, so the dashboard is the setting-up steps (features/setting-up.md) until that run makes some.
 
 What the seed leaves (through four real ticks with sift off, `tick`, with a stand-in model that is sure `m8` is Marketing, places the code.example.com mail by its sender's name, and can place nothing else):
 

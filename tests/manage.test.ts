@@ -180,6 +180,8 @@ describe('managing sift from the dashboard', () => {
     expect((await call('POST', '/api/labels/accept', { labels: [pitches] })).status).toBe(409);
 
     await connectAccount(store, NEW, '1', 0, 1);
+    // As if added while setting up, before there were labels to give it.
+    await raw(db).run(`DELETE FROM labels WHERE account_id = ? AND id <> 'everything_else'`, NEW);
     const proposed = await call('POST', '/api/labels/propose', { goal: '  Fewer sales pitches  ' });
     expect(proposed.body).toMatchObject({ goal: 'Fewer sales pitches', drafts: [{ name: 'Cold outreach', disposition: 'archive', unsubscribe: true }] });
     for (const bad of [{}, { goal: '   ' }, { goal: 'x', accountId: NEW }]) expect((await call('POST', '/api/labels/propose', bad)).status).toBe(400);
@@ -781,9 +783,11 @@ describe('signing in with Google', () => {
     const cookie = { cookie: cookieFrom((await callback(call, first, 'abc')).headers) };
     const add = await call('GET', '/auth/login?add=1', undefined, cookie);
     const added = await callback(call, add, 'second', cookie);
-    // The account being added joins the mailboxes of whoever is signed in.
+    // The account being added joins the mailboxes of whoever is signed in, who stays signed in as themselves.
     expect(completed.at(-1)).toContain(`addTo=${ACCOUNT}`);
-    expect((await call('GET', '/api/session', undefined, { cookie: cookieFrom(added.headers) })).body).toMatchObject({ email: 'work@example.com' });
+    expect(added.headers['location']).toBe('/?settings=1');
+    expect(String(added.headers['set-cookie'])).not.toContain('sift_session');
+    expect((await call('GET', '/api/session', undefined, cookie)).body).toMatchObject({ email: ACCOUNT });
   });
 
   it('completes a sign-in only in the browser that started it', async () => {

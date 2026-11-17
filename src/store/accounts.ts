@@ -1,5 +1,5 @@
 import { and, asc, eq, isNull, accounts, credentials, labels, mailboxes, messages as messageRows, users } from './query.ts';
-import { inboxRow } from './labels.ts';
+import { inboxRow, labelsOfTheirOtherMailboxes } from './labels.ts';
 import type { Sql } from './sql.ts';
 import { sealFacts, sealMessage } from './content.ts';
 import type { Store } from './store.ts';
@@ -42,13 +42,14 @@ export async function connectAccount(store: Store, email: string, historyId: str
 }
 
 /**
- * A mailbox in one person's own database, with its one starting label, unless it is there already. Its
- * `accounts` row must exist. Returns whether it was new.
+ * A mailbox in one person's own database, unless it is there already, with Leave in inbox and the labels the
+ * person has in their other mailboxes: a label is one thing to them, so a mailbox connected later is not set
+ * up again. Its `accounts` row must exist. Returns whether it was new.
  */
 export async function ensureMailbox(db: Sql, mailbox: { id: string; historyId?: string | null }): Promise<boolean> {
   return await db.transaction(async (tx) => {
     const added = await tx.insert(mailboxes).values(mailbox).onConflictDoNothing().returning({ id: mailboxes.id });
-    if (added.length > 0) await tx.insert(labels).values(inboxRow(mailbox.id));
+    if (added.length > 0) await tx.insert(labels).values([...(await labelsOfTheirOtherMailboxes(tx, mailbox.id)), inboxRow(mailbox.id)]);
     return added.length > 0;
   });
 }

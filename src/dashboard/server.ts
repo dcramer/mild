@@ -296,6 +296,8 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
         const email = await signIn.complete(entry.redirectUri, code, entry.verifier, entry.addTo);
         const who = await people.signedIn(email);
         if (!who) return fail('Google did not complete the sign-in.');
+        // A mailbox added joins whoever is signed in, who stays signed in as themselves, back in Settings where they added it.
+        if (entry.addTo !== null && who.id === person?.id) return redirect('/?settings=1', signInCookie('', 0));
         return redirect('/', sessionCookie(signSession({ email, person: who.id }, secret, now()), SESSION_DAYS * 86_400), signInCookie('', 0));
       } catch (error) {
         report(request, error);

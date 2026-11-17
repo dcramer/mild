@@ -221,6 +221,37 @@ describe('a new mailbox', () => {
     expect((await listLabels(reopened, 'alpha@example.org')).map((l) => l.id)).toEqual(['everything_else']);
   });
 
+  it("connected later has the labels of the person's other mailboxes, so it is not set up again", async () => {
+    const store = await freshStore();
+    const person = await connectAccount(store, 'alpha@example.org', '1', 0);
+    const db = await store.user(person);
+    await withSampleLabels(db, 'alpha@example.org');
+    await updateLabel(db, 'alpha@example.org', 'newsletter', { name: 'Reading' });
+    await connectAccount(store, 'beta@example.org', '1', 0, person);
+    const [alpha, beta] = [await listLabels(db, 'alpha@example.org'), await listLabels(db, 'beta@example.org')];
+    expect(beta).toEqual(alpha);
+    expect(beta.find((l) => l.id === 'newsletter')).toMatchObject({ name: 'Reading', gmailLabel: 'sift/newsletters' });
+    // Someone else's are not theirs.
+    expect((await listLabels(await store.user(await connectAccount(store, 'gamma@example.org', '1', 0)), 'gamma@example.org')).map((l) => l.id)).toEqual([
+      'everything_else',
+    ]);
+  });
+
+  it("connected later with no labels of its own is given the person's by a migration", async () => {
+    const store = await freshStore();
+    const person = await connectAccount(store, 'alpha@example.org', '1', 0);
+    const db = await store.user(person);
+    await withSampleLabels(db, 'alpha@example.org');
+    await connectAccount(store, 'beta@example.org', '1', 0, person);
+    // As one was made before: Leave in inbox alone, and a label it once had, removed.
+    await raw(db).run(`DELETE FROM labels WHERE account_id = 'beta@example.org' AND id NOT IN ('everything_else', 'newsletter')`);
+    await raw(db).run(`UPDATE labels SET removed_at = 1 WHERE account_id = 'beta@example.org' AND id = 'newsletter'`);
+    const migration = readFileSync(new URL('0038_later_mailboxes_have_labels.sql', MIGRATIONS), 'utf8');
+    await (await superuser()).exec(migration);
+    await (await superuser()).exec(migration);
+    expect(await listLabels(db, 'beta@example.org')).toEqual(await listLabels(db, 'alpha@example.org'));
+  });
+
   it('made before Everything Else existed is given it by a migration, after its own labels, and it becomes Leave in inbox', async () => {
     const { db } = await onePerson('alpha@example.org');
     await withSampleLabels(db, 'alpha@example.org');
