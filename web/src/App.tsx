@@ -227,7 +227,8 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
         account={
           signedInAs
             ? {
-                name: signedInAs,
+                // Who they are, not which mailbox they happened to sign in with.
+                name: accounts.find((a) => a.primary)?.email ?? signedInAs,
                 items: [
                   { label: 'Settings', onSelect: openSettings },
                   {

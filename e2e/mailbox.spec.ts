@@ -57,6 +57,28 @@ test.describe('Removing a mailbox', () => {
   });
 });
 
+test.describe('The primary mailbox', () => {
+  test('is chosen in Settings, names the account at the top, and passes on when it is removed', async ({ page }) => {
+    await page.goto('/?settings=1');
+    const primary = settings(page).getByRole('combobox', { name: 'Primary mailbox' });
+    await expect(primary).toContainText('me@example.org');
+    await primary.click();
+    await page.getByRole('option', { name: 'me@work.example.org', exact: true }).click();
+    await expect(primary).toContainText('me@work.example.org');
+    await settings(page).getByRole('button', { name: 'Close' }).click();
+    await expect(page.getByRole('button', { name: 'Account, me@work.example.org' })).toBeVisible();
+
+    await page.goto('/?settings=1');
+    await expect(primary).toContainText('me@work.example.org');
+    await settings(page).getByRole('button', { name: 'Remove me@work.example.org' }).click();
+    await confirmRemoval(page, 'Remove me@work.example.org', 'me@work.example.org', 'Remove mailbox');
+    // With one mailbox left there is nothing to choose.
+    await expect(primary).toHaveCount(0);
+    await settings(page).getByRole('button', { name: 'Close' }).click();
+    await expect(page.getByRole('button', { name: 'Account, me@example.org' })).toBeVisible();
+  });
+});
+
 test.describe('Settings', () => {
   test('closes to the page it opened over, with nothing left in the address', async ({ page }) => {
     await page.goto('/activity');

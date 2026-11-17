@@ -562,7 +562,7 @@ export const ManageState = z.object({
     pending: z.union([SignInCode, z.object({ error: z.string() })]).nullable(),
   }),
   activity: z.object({ running: z.boolean(), lastPassAt: z.number().nullable(), problems: z.array(z.string()), expired: z.array(z.string()) }),
-  accounts: z.array(z.object({ id: z.string(), email: z.string(), lastSyncedAt: z.number().nullable() })),
+  accounts: z.array(z.object({ id: z.string(), email: z.string(), lastSyncedAt: z.number().nullable(), primary: z.boolean() })),
   /** Per account, in order. */
   labels: z.record(z.string(), z.array(LabelSummary)),
   /** How many labels an account may have. */

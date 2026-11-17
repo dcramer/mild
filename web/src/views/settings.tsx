@@ -282,6 +282,8 @@ function RemoveMailbox({
 function Mailboxes({ state, signedInAs, reload }: { state: ManageState; signedInAs: string | null; reload: () => void }) {
   // Kept on the page, not in a toast: it asks the reader to do something at Google, and a toast would go before it was done.
   const [notRevoked, setNotRevoked] = useState<string | null>(null);
+  const { busy, error, run } = useAction();
+  const primary = state.accounts.find((a) => a.primary)?.email;
   return (
     <SettingsGroup title="Mailboxes" note="Anyone signed in as one of these sees all of them.">
       <Sheet>
@@ -306,6 +308,27 @@ function Mailboxes({ state, signedInAs, reload }: { state: ManageState; signedIn
           <Button href="/auth/login?add=1">Connect</Button>
         </SettingRow>
       </Sheet>
+      {state.accounts.length > 1 && primary ? (
+        <Sheet>
+          <SettingRow
+            title="Primary mailbox"
+            note={
+              <>
+                Your account goes by it, whichever one you sign in with. If it is removed, the one connected longest takes its place.
+                <Failure>{error}</Failure>
+              </>
+            }
+          >
+            <Select
+              label="Primary mailbox"
+              value={primary}
+              options={state.accounts.map((a) => [a.email, a.email] as const)}
+              disabled={busy}
+              onChange={(email) => run(() => api.makePrimary(email), reload)}
+            />
+          </SettingRow>
+        </Sheet>
+      ) : null}
       {notRevoked ? (
         <Note tone="failure" title="Sift still has access at Google">
           <p>{notRevoked}</p>

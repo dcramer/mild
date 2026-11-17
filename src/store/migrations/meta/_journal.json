@@ -274,6 +274,20 @@
       "when": 1794935334220,
       "tag": "0038_later_mailboxes_have_labels",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1794935874363,
+      "tag": "0039_primary_mailbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1794935875019,
+      "tag": "0040_every_person_has_a_primary_mailbox",
+      "breakpoints": true
     }
   ]
 }

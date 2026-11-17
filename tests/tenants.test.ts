@@ -307,6 +307,7 @@ describe("nobody sees or changes another person's mail", () => {
       ['/api/evals/run', { accountId: ALPHA }, { accountId: NOBODY }],
       ['/api/rules/draft', { accountId: ALPHA, goal: 'Archive x' }, { accountId: NOBODY, goal: 'Archive x' }],
       ['/api/mailbox/remove', { address: ALPHA }, { address: NOBODY }],
+      ['/api/mailbox/primary', { address: ALPHA }, { address: NOBODY }],
     ];
     for (const [path, body, nobody] of writes) {
       const answer = await call('POST', path, BRAVO, body);
@@ -410,6 +411,17 @@ describe('removing a mailbox and deleting an account', () => {
   beforeEach(async () => {
     for (const account of [ALPHA, ALPHA_WORK, BRAVO])
       await raw(await dbOf(account)).run(`INSERT INTO credentials (kind, key, value) VALUES ('gmail', ?, 'token')`, account);
+  });
+
+  it('makes one of their own mailboxes primary, whichever they signed in with, and hands it on when it is removed', async () => {
+    const primary = async (who: string) =>
+      ((await call('GET', '/api/manage', who)).body['accounts'] as { email: string; primary: boolean }[]).filter((a) => a.primary).map((a) => a.email);
+    expect(await primary(ALPHA_WORK)).toEqual([ALPHA]);
+    expect((await call('POST', '/api/mailbox/primary', ALPHA, { address: ALPHA_WORK })).status).toBe(200);
+    expect(await primary(ALPHA)).toEqual([ALPHA_WORK]);
+    expect(await primary(BRAVO)).toEqual([BRAVO]);
+    await call('POST', '/api/mailbox/remove', ALPHA, { address: ALPHA_WORK });
+    expect(await primary(ALPHA)).toEqual([ALPHA]);
   });
 
   it('removes a mailbox, revoking its access first, and leaves the rest of the person and everyone else', async () => {

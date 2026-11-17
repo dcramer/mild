@@ -88,7 +88,10 @@ export const users = pgTable(
   ],
 );
 
-/** A mailbox, an identity someone signed in with. Its id is its address. It never changes hands. */
+/**
+ * A mailbox, an identity someone signed in with. Its id is its address. It never changes hands. A person's
+ * primary one is who they are, whichever they signed in with.
+ */
 export const accounts = pgTable(
   'accounts',
   {
@@ -97,8 +100,14 @@ export const accounts = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     createdAt: time('created_at').notNull(),
+    primary: boolean('primary').notNull().default(false),
   },
-  (t) => [unique('accounts_own').on(t.userId, t.id)],
+  (t) => [
+    unique('accounts_own').on(t.userId, t.id),
+    uniqueIndex('accounts_one_primary')
+      .on(t.userId)
+      .where(sql`${t.primary}`),
+  ],
 );
 
 // One person's data.

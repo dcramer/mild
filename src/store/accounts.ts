@@ -34,7 +34,8 @@ export async function connectAccount(store: Store, email: string, historyId: str
       const first = (await tx.select({ id: users.id }).from(users).limit(1)).length === 0;
       [{ id: person }] = (await tx.insert(users).values({ owner: first, createdAt: now }).returning({ id: users.id })) as [{ id: number }];
     }
-    await tx.insert(accounts).values({ id: email, userId: person, createdAt: now });
+    // A person's first mailbox is their primary one.
+    await tx.insert(accounts).values({ id: email, userId: person, createdAt: now, primary: userId === undefined });
     return person;
   });
   await addMailbox(await store.user(user), email, historyId);
@@ -63,8 +64,8 @@ export async function addMailbox(db: Sql, id: string, historyId: string): Promis
 
 /**
  * Remove one of a person's mailboxes: its Gmail sign-in, then its account, which takes its mailbox and every
- * row of it along. Revoking the sign-in at Google is the caller's, before this. Returns false if the mailbox
- * is not theirs.
+ * row of it along. The primary one's place goes to the earliest connected of those left. Revoking the
+ * sign-in at Google is the caller's, before this. Returns false if the mailbox is not theirs.
  */
 export async function removeMailbox(store: Store, userId: number, email: string): Promise<boolean> {
   const [theirs] = await store.central
@@ -74,8 +75,47 @@ export async function removeMailbox(store: Store, userId: number, email: string)
   if (!theirs) return false;
   // The token first: a crash in between leaves a mailbox sift cannot read, not a token for one it no longer has.
   await (await store.user(userId)).delete(credentials).where(and(eq(credentials.kind, 'gmail'), eq(credentials.key, email)));
-  await store.central.delete(accounts).where(and(eq(accounts.id, email), eq(accounts.userId, userId)));
+  await store.central.transaction(async (tx) => {
+    const [gone] = await tx
+      .delete(accounts)
+      .where(and(eq(accounts.id, email), eq(accounts.userId, userId)))
+      .returning({ primary: accounts.primary });
+    if (!gone?.primary) return;
+    const [next] = await tx
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(eq(accounts.userId, userId))
+      .orderBy(asc(accounts.createdAt), asc(accounts.id))
+      .limit(1);
+    if (next) await tx.update(accounts).set({ primary: true }).where(eq(accounts.id, next.id));
+  });
   return true;
+}
+
+/** Make one of a person's mailboxes their primary one. False if it is not theirs. */
+export async function makePrimary(central: Sql, userId: number, email: string): Promise<boolean> {
+  return await central.transaction(async (tx) => {
+    const [theirs] = await tx
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(and(eq(accounts.id, email), eq(accounts.userId, userId)));
+    if (!theirs) return false;
+    await tx
+      .update(accounts)
+      .set({ primary: false })
+      .where(and(eq(accounts.userId, userId), eq(accounts.primary, true)));
+    await tx.update(accounts).set({ primary: true }).where(eq(accounts.id, email));
+    return true;
+  });
+}
+
+/** A person's primary mailbox, or null if they have none left. */
+export async function primaryOf(central: Sql, userId: number): Promise<string | null> {
+  const [row] = await central
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(and(eq(accounts.userId, userId), eq(accounts.primary, true)));
+  return row?.id ?? null;
 }
 
 /**

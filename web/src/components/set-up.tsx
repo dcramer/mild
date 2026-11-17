@@ -60,7 +60,11 @@ export function SetUp({ signedInAs, onSettings, children }: { signedInAs: string
   const bare = !made && state.accounts.some((a) => !(state.labels[a.id] ?? []).some((l) => l.gmailLabel !== null));
   if (!walled && !bare && !teaching) return children;
   const account: Account = signedInAs
-    ? { name: signedInAs, onSettings, onSignOut: () => void api.signOut().then(() => window.location.assign('/')) }
+    ? {
+        name: state.accounts.find((a) => a.primary)?.email ?? signedInAs,
+        onSettings,
+        onSignOut: () => void api.signOut().then(() => window.location.assign('/')),
+      }
     : undefined;
   const steps = ['Connect a model', 'What you want', 'Your labels', ...(state.owner ? ['Older mail'] : [])];
   // A model signed out after setting up is the only thing to do: no steps.

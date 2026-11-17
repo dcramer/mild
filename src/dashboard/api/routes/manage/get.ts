@@ -8,7 +8,7 @@ import { ManageState } from '../../../types.ts';
 import { type Context, ok, read } from '../../route.ts';
 
 /** Everything the Settings screen shows, for the mailboxes in scope. */
-async function manageState({ db, controls }: Context, scope: Scope): Promise<ManageState> {
+async function manageState({ db, controls, person }: Context, scope: Scope): Promise<ManageState> {
   const accounts = (await listAccounts(db)).filter((a) => sees(scope, a.id));
   const own = await preferences(db);
   const activity = controls ? await controls.activity(accounts.map((a) => a.id)) : { running: false, lastPassAt: null, problems: [], expired: [] };
@@ -22,7 +22,9 @@ async function manageState({ db, controls }: Context, scope: Scope): Promise<Man
       problems: activity.problems.filter((line) => accounts.some((a) => line.startsWith(`${a.email}: `))),
       expired: activity.expired.filter((email) => accounts.some((a) => a.email === email)),
     },
-    accounts: await Promise.all(accounts.map(async (a) => ({ id: a.id, email: a.email, lastSyncedAt: await lastSyncedAt(db, a.id) }))),
+    accounts: await Promise.all(
+      accounts.map(async (a) => ({ id: a.id, email: a.email, lastSyncedAt: await lastSyncedAt(db, a.id), primary: a.id === person?.primary })),
+    ),
     labels: Object.fromEntries(await Promise.all(accounts.map(async (a) => [a.id, await listLabelSummaries(db, scope, a.id)] as const))),
     labelLimit: MAX_LABELS,
   };

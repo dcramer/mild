@@ -1,4 +1,4 @@
-import { connectedAddresses, deleteUser, owner, removeMailbox, userOf } from './accounts.ts';
+import { connectedAddresses, deleteUser, makePrimary, owner, primaryOf, removeMailbox, userOf } from './accounts.ts';
 import type { Sql } from './sql.ts';
 import type { Store } from './store.ts';
 
@@ -8,6 +8,8 @@ export interface Person {
   owner: boolean;
   /** Their mailboxes, by address. */
   accounts: string[];
+  /** The one of them that is who they are, whichever they signed in with. */
+  primary: string | null;
   /**
    * The only way a request opens a person's database. Refuses any id this person may not read, which
    * today is everyone's but their own. A view that needs several opens each.
@@ -15,6 +17,8 @@ export interface Person {
   open: (id: number) => Promise<Sql>;
   /** Remove one of their mailboxes and everything recorded about its mail. False if it is not theirs. */
   removeMailbox: (email: string) => Promise<boolean>;
+  /** False if it is not theirs. */
+  makePrimary: (email: string) => Promise<boolean>;
   /** Delete them and everything of theirs. */
   remove: () => Promise<void>;
 }
@@ -40,11 +44,13 @@ export function people(store: Store): People {
       id: user.id,
       owner: user.owner,
       accounts: await connectedAddresses(store.central, user.id),
+      primary: await primaryOf(store.central, user.id),
       open: async (id) => {
         if (!readable.has(id)) throw new Error(`Person ${user.id} may not open person ${id}'s database.`);
         return await store.user(id);
       },
       removeMailbox: async (email) => await removeMailbox(store, user.id, email),
+      makePrimary: async (email) => await makePrimary(store.central, user.id, email),
       remove: async () => await deleteUser(store, user.id),
     };
   };

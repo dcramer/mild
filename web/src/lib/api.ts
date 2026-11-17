@@ -260,6 +260,7 @@ export const api = {
   signOut: () => post('/api/signout', {}),
   /** `address` is what the person typed to confirm. */
   removeMailbox: (address: string) => post<Removed>('/api/mailbox/remove', { address }),
+  makePrimary: (address: string) => post('/api/mailbox/primary', { address }),
   deleteAccount: (address: string) => post<Removed>('/api/account/delete', { address }),
 };
 

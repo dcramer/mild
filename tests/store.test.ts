@@ -5,7 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { generateDrizzleJson, generateMigration } from 'drizzle-kit/api';
 import { describe, expect, it } from 'vitest';
 import * as schema from '../src/store/schema.ts';
-import { addMailbox, connectAccount, connectedAddresses, deleteUser, recordSync, removeMailbox } from '../src/store/accounts.ts';
+import { addMailbox, connectAccount, connectedAddresses, deleteUser, makePrimary, primaryOf, recordSync, removeMailbox } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { listLabels, updateLabel } from '../src/store/labels.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
@@ -185,6 +185,44 @@ describe("a mailbox's data", () => {
     }
     expect(await raw(alpha).all(`SELECT key FROM credentials WHERE kind = 'gmail' ORDER BY key`)).toEqual([{ key: 'alpha@example.org' }]);
     expect(await connectedAddresses(store.central)).toEqual(['alpha@example.org', 'bravo@example.net']);
+  });
+});
+
+describe('a primary mailbox', () => {
+  it('is the first one a person connects, is theirs to change, and goes to the one connected longest when removed', async () => {
+    const store = await freshStore();
+    const alpha = await connectAccount(store, 'alpha@example.org', '1', 0);
+    await connectAccount(store, 'alpha@work.example.com', '1', 10, alpha);
+    await connectAccount(store, 'alpha@club.example.com', '1', 5, alpha);
+    const bravo = await connectAccount(store, 'bravo@example.net', '1', 20);
+    expect([await primaryOf(store.central, alpha), await primaryOf(store.central, bravo)]).toEqual(['alpha@example.org', 'bravo@example.net']);
+
+    expect(await makePrimary(store.central, bravo, 'alpha@work.example.com')).toBe(false);
+    expect(await makePrimary(store.central, alpha, 'alpha@work.example.com')).toBe(true);
+    expect(await primaryOf(store.central, alpha)).toBe('alpha@work.example.com');
+    expect(await primaryOf(store.central, bravo)).toBe('bravo@example.net');
+
+    // Removing another leaves it; removing it hands it on, by when each was connected rather than by address.
+    await removeMailbox(store, alpha, 'alpha@example.org');
+    await makePrimary(store.central, alpha, 'alpha@work.example.com');
+    await connectAccount(store, 'alpha@a.example.com', '1', 30, alpha);
+    expect(await primaryOf(store.central, alpha)).toBe('alpha@work.example.com');
+    await removeMailbox(store, alpha, 'alpha@work.example.com');
+    expect(await primaryOf(store.central, alpha)).toBe('alpha@club.example.com');
+  });
+
+  it('is given by a migration to the earliest connected mailbox of each person without one', async () => {
+    const store = await freshStore();
+    const alpha = await connectAccount(store, 'alpha@example.org', '1', 10);
+    await connectAccount(store, 'alpha@work.example.com', '1', 5, alpha);
+    const bravo = await connectAccount(store, 'bravo@example.net', '1', 20);
+    await connectAccount(store, 'bravo@work.example.net', '1', 30, bravo);
+    await makePrimary(store.central, bravo, 'bravo@work.example.net');
+    await raw(store.central).run(`UPDATE accounts SET "primary" = false WHERE user_id = ?`, alpha);
+    const migration = readFileSync(new URL('0040_every_person_has_a_primary_mailbox.sql', MIGRATIONS), 'utf8');
+    await (await superuser()).exec(migration);
+    await (await superuser()).exec(migration);
+    expect([await primaryOf(store.central, alpha), await primaryOf(store.central, bravo)]).toEqual(['alpha@work.example.com', 'bravo@work.example.net']);
   });
 });
 
