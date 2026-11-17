@@ -4,7 +4,7 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { MailLog, MailLogLoading } from '@/components/mail-log.tsx';
 import { type Days, type DecisionRow, api, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/route.ts';
-import { FACT_FILTER_OPTIONS, HANDLED, PERIODS, count, factFilterName, longDay, money, moneyTick, shortDay } from '@/lib/format.ts';
+import { FACT_FILTER_OPTIONS, HANDLED, PERIODS, count, inboxFirst, labelSeries, factFilterName, longDay, money, moneyTick, shortDay } from '@/lib/format.ts';
 import { Button, Empty, FilterGroup, ListView, Reserve, Select, StackedBars, useToast } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
@@ -22,6 +22,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
   const [view, setView] = useParam('show', VIEWS);
   const [search, setSearch] = useParam('q');
   const [fact, setFact] = useParam('fact', FACT_FILTER_OPTIONS);
+  const [label, setLabel] = useParam('label');
   const [typed, setTyped] = useState(search);
   const [offset, setOffset] = useState(0);
   const client = useQueryClient();
@@ -32,12 +33,15 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
     const timer = setTimeout(() => setSearch(typed.trim()), 250);
     return () => clearTimeout(timer);
   }, [typed]);
-  useEffect(() => setOffset(0), [days, view, search, fact]);
+  useEffect(() => setOffset(0), [days, view, search, fact, label]);
 
   const status = view === '' ? 'changed' : '';
-  const query = { days, status, search, fact, limit: PAGE, offset };
+  const query = { days, status, search, fact, label, limit: PAGE, offset };
   const { data, error, loading } = useLoaded(`decisions-${JSON.stringify(query)}`, (signal) => api.decisions(query, signal));
-  const summary = useLoaded(`summary-${days}`, (signal) => api.summary(days, signal));
+  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  // A label is one thing across the mailboxes, with the same id in each.
+  const labels = new Map(Object.values(manage.data?.labels ?? {}).flatMap((list) => list.map((l) => [l.id, l.name] as const)));
+  const summary = useLoaded(`summary-${days}-${label}`, (signal) => api.summary(days, signal, label));
   const daily = summary.data?.daily ?? [];
   // A day's column is worth drawing only beside others, and only once something happened.
   const charted = daily.length > 1 && daily.some((day) => day.costUsd > 0 || Object.values(day.counts).some((n) => n > 0));
@@ -70,8 +74,16 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
         onChange: (next) => setView(next as typeof view),
       }}
       filters={{
-        active: fact === '' ? [] : [{ label: factFilterName(fact), clear: () => setFact('') }],
-        panel: <FilterGroup label="What Sift saw" value={fact} options={FACT_FILTER_OPTIONS} onChange={setFact} />,
+        active: [
+          ...(label === '' ? [] : [{ label: `Label: ${labels.get(label) ?? label}`, clear: () => setLabel('') }]),
+          ...(fact === '' ? [] : [{ label: factFilterName(fact), clear: () => setFact('') }]),
+        ],
+        panel: (
+          <>
+            <FilterGroup label="Label" value={label} options={[['', 'Any'] as const, null, ...inboxFirst(labels)]} onChange={setLabel} />
+            <FilterGroup label="What Sift saw" value={fact} options={FACT_FILTER_OPTIONS} onChange={setFact} />
+          </>
+        ),
       }}
       intro={
         // The chart arrives after the list is drawn, and would push it down.
@@ -79,15 +91,18 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
           <div className="flex flex-col gap-6">
             {charted ? (
               <StackedBars
-                series={HANDLED}
+                series={label === '' ? HANDLED : labelSeries(labels.get(label) ?? label)}
                 rows={daily.map((day) => {
                   const handled = Object.values(day.counts).reduce((a, b) => a + b, 0);
                   const changed = day.changes.archive + day.changes.spam + day.changes.keep;
+                  const labelled = day.labelled ?? 0;
+                  const values: Record<string, number> =
+                    label === '' ? { changed, left: Math.max(0, handled - changed) } : { label: labelled, rest: Math.max(0, handled - labelled) };
                   return {
                     key: day.day,
                     label: shortDay(day.day),
                     title: longDay(day.day),
-                    values: { changed, left: Math.max(0, handled - changed) },
+                    values,
                   };
                 })}
                 line={{ name: 'Model cost', values: daily.map((day) => day.costUsd), format: money, tick: moneyTick }}
@@ -102,10 +117,14 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
         <MailLogLoading />
       ) : !data || data.rows.length === 0 ? (
         <Empty>
-          {search !== '' || fact !== '' ? 'Nothing matches.' : view === '' ? 'Sift has changed nothing in Gmail in this period.' : 'Nothing in this period.'}
+          {search !== '' || fact !== '' || label !== ''
+            ? 'Nothing matches.'
+            : view === ''
+              ? 'Sift has changed nothing in Gmail in this period.'
+              : 'Nothing in this period.'}
         </Empty>
       ) : (
-        <MailLog rows={data.rows} onOpen={onOpen} onUndo={undo} search={search} />
+        <MailLog rows={data.rows} onOpen={onOpen} onUndo={undo} search={search} labelled={label !== ''} />
       )}
       {data && data.total > PAGE ? (
         <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground tabular-nums">

@@ -59,6 +59,8 @@ interface DecisionQuery {
   search: string;
   /** Empty for none. */
   fact: FactFilter | '';
+  /** A label's id; empty for any. */
+  label: string;
   limit: number;
   offset: number;
 }
@@ -169,9 +171,14 @@ async function post<T = unknown>(path: string, body: unknown): Promise<T> {
 }
 
 export const api = {
-  summary: (days: Days, signal: AbortSignal) => get<Summary>('/api/summary', { days }, signal),
+  /** With `label`, each day also says how much of its mail was that label. */
+  summary: (days: Days, signal: AbortSignal, label = '') => get<Summary>('/api/summary', { days, label }, signal),
   decisions: (q: DecisionQuery, signal: AbortSignal) =>
-    get<DecisionPage>('/api/decisions', { days: q.days, status: q.status, q: q.search, fact: q.fact, limit: q.limit, offset: q.offset }, signal),
+    get<DecisionPage>(
+      '/api/decisions',
+      { days: q.days, status: q.status, q: q.search, fact: q.fact, label: q.label, limit: q.limit, offset: q.offset },
+      signal,
+    ),
   message: (account: string, id: string, signal: AbortSignal) => get<MessageDetail>('/api/message', { account, id }, signal),
   /** Where a frame loads a message as the HTML Sift holds for it. */
   messageHtml: (account: string, id: string) => `/api/message/html?${new URLSearchParams({ account, id })}`,

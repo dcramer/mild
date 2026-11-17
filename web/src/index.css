@@ -99,6 +99,8 @@
   /* What became of mail sift handled, in Activity's chart: ink at two strengths, with a failure in red. */
   --handled-changed: #a8a69d;
   --handled-left: #4e4c46;
+  /* With a label chosen, that label's share of the mail: what the reader asked to look at. */
+  --handled-label: var(--highlight);
 }
 
 @layer components {

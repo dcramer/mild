@@ -14,11 +14,12 @@ export default read({
     status: filter,
     q: filter,
     fact: filter,
+    label: filter,
     limit: z.coerce.number().int().positive().catch(50),
     offset: z.coerce.number().int().nonnegative().catch(0),
   }),
   reply: DecisionPage,
-  run: async ({ db, now }, scope, { days, status, q, fact, limit, offset }) =>
+  run: async ({ db, now }, scope, { days, status, q, fact, label, limit, offset }) =>
     ok(
       await listDecisions(
         db,
@@ -28,6 +29,7 @@ export default read({
           ...(status ? { status } : {}),
           ...(q ? { search: q } : {}),
           ...(fact ? { fact } : {}),
+          ...(label ? { label } : {}),
           limit,
           offset,
         },

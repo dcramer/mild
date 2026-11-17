@@ -216,6 +216,14 @@ describe('tracking', () => {
     expect(daily.at(-1)?.counts).toEqual({ rules: 0, classifier: 0, model: 0, fallback: 0 });
   });
 
+  it('says per day how much of the mail was one label, only when asked', async () => {
+    const db = await seeded();
+    const labelled = async (label?: string) => (await summarize(db, await everything(db), 7, NOW, label)).daily.map((d) => d.labelled);
+    expect((await labelled()).every((n) => n === undefined)).toBe(true);
+    expect((await labelled('newsletter')).reduce((a = 0, b = 0) => a + b, 0)).toBe(1);
+    expect((await labelled('nope')).every((n) => n === 0)).toBe(true);
+  });
+
   it('says per day what was done in Gmail, what failed, and what the model cost', async () => {
     const db = await seeded();
     const base = { subscription: 'preserve', reason: 'test', stage: 'rules' } as const;
@@ -426,6 +434,17 @@ describe('dashboard server', () => {
     // Not known until a model reads the message, so nothing matches yet.
     expect(await ids('attachments')).toEqual([]);
     expect(await ids(encodeURIComponent("reply' OR 1=1 --"))).toEqual([]);
+  });
+
+  it('narrows decisions to one label, Leave in inbox taking mail kept with no label', async () => {
+    const { store, db } = await seededStore();
+    await recordDecision(db, ACCOUNT, 'waiting', { disposition: 'keep', subscription: 'preserve', stage: 'rules', reason: 'r' }, { now: NOW });
+    const base = await start({}, store);
+    type Page = { rows: { messageId: string }[] };
+    const ids = async (label: string) => (await get<Page>(`${base}/api/decisions?days=7&label=${label}`)).rows.map((r) => r.messageId);
+    expect(await ids('newsletter')).toEqual(['a']);
+    expect(await ids('everything_else')).toEqual(['waiting']);
+    expect(await ids('nope')).toEqual([]);
   });
 
   it('returns one message with its decisions and actions', async () => {

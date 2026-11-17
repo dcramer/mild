@@ -8,11 +8,17 @@ import type { OpenMessages } from '@/views/message-panel.tsx';
  * What happened to a message, with the label and whether it was the user's own answer. In its own cell
  * (`stacked`) the label goes on a quieter second line.
  */
-function Happened({ row, stacked }: { row: DecisionRow; stacked?: boolean }) {
+function Happened({ row, stacked, labelled }: { row: DecisionRow; stacked?: boolean; labelled?: boolean }) {
   const { text, tone } = happened(row);
   // Leave in inbox is not a kind of mail, so "Kept" says all of it.
   const label =
-    row.labelName && row.labelId !== INBOX ? stacked ? <Sub>{row.labelName}</Sub> : <span className="text-muted-foreground"> · {row.labelName}</span> : null;
+    row.labelName && row.labelId !== INBOX && !labelled ? (
+      stacked ? (
+        <Sub>{row.labelName}</Sub>
+      ) : (
+        <span className="text-muted-foreground"> · {row.labelName}</span>
+      )
+    ) : null;
   const what = (
     <>
       <Does action={row.disposition}>{text}</Does>
@@ -26,18 +32,21 @@ function Happened({ row, stacked }: { row: DecisionRow; stacked?: boolean }) {
 
 /**
  * What sift did to mail, newest first, under a heading for each day: who, the subject, what happened and
- * when. Undo where sift changed something. A row opens the message.
+ * when. Undo where sift changed something. A row opens the message. `labelled` when every row is one label,
+ * so no row names it.
  */
 export function MailLog({
   rows,
   onOpen,
   onUndo,
   search,
+  labelled,
 }: {
   rows: ListedDecision[];
   onOpen: OpenMessages;
   onUndo: (row: DecisionRow) => void;
   search?: string;
+  labelled?: boolean;
 }) {
   const items = rows.map((row) => ({ accountId: row.accountId, messageId: row.messageId, subject: row.subject }));
   const term = search ? { term: search } : {};
@@ -70,7 +79,7 @@ export function MailLog({
                 <SenderCell accountId={row.accountId} address={row.fromAddress} name={row.fromName} contact={row.contact} {...term}>
                   <OnPhone>
                     <span className="w-full truncate text-foreground">{row.subject || '(no subject)'}</span>
-                    <Happened row={row} />
+                    <Happened row={row} labelled={labelled} />
                     <span>{clock(row.decidedAt)}</span>
                   </OnPhone>
                 </SenderCell>
@@ -79,7 +88,7 @@ export function MailLog({
                 </Td>
                 <Td phone="hide" className="max-w-0 md:min-w-60">
                   <span className="block truncate">
-                    <Happened row={row} stacked />
+                    <Happened row={row} stacked labelled={labelled} />
                   </span>
                 </Td>
                 <Td phone="hide" num quiet title={dateTime(row.decidedAt)}>

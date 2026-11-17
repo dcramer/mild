@@ -25,6 +25,7 @@ import { type Scope, within } from '../scope.ts';
 import { type DecisionRow, FACT_FILTERS, FACT_FILTER_KEYS, type ListedDecision } from '../types.ts';
 import { factsWhere } from '../../store/messages.ts';
 import { contacts } from '../../store/senders.ts';
+import { LEAVE_IN_INBOX } from '../../triage/types.ts';
 
 export const DAY_MS = 86_400_000;
 
@@ -97,6 +98,12 @@ export const toDecisionRow = (db: Sql, { block, subscription, ...r }: DecisionFi
   outcomeDetail: r.outcome === 'skipped' ? r.outcomeDetail : null,
 });
 
+/** Decisions as the label `id`. Leave in inbox also takes mail kept with no label, as every list names it. */
+export const labelIs = (id: string) =>
+  id === LEAVE_IN_INBOX
+    ? or(eq(decisions.labelId, LEAVE_IN_INBOX), and(isNull(decisions.labelId), eq(decisions.disposition, 'keep')))
+    : eq(decisions.labelId, id);
+
 interface DecisionFilter {
   days: number;
   /** `suggested`, `done`, `undone` or `changed`. */
@@ -110,6 +117,8 @@ interface DecisionFilter {
   domain?: string;
   /** One of `FACT_FILTERS`. */
   fact?: string;
+  /** A label's id (`labelIs`). */
+  label?: string;
   limit?: number;
   offset?: number;
 }
@@ -134,6 +143,7 @@ export async function listDecisions(
     if (!isOneOf(FACT_FILTER_KEYS, filter.fact)) return { total: 0, rows: [] };
     where.push(factsWhere(FACT_FILTERS[filter.fact]));
   }
+  if (filter.label !== undefined) where.push(labelIs(filter.label));
   const clause = and(...where);
   const limit = Math.min(Math.max(Math.trunc(filter.limit ?? 50), 1), 200);
   const offset = Math.max(Math.trunc(filter.offset ?? 0), 0);

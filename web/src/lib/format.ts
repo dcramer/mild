@@ -18,6 +18,11 @@ export const HANDLED = [
   { key: 'changed', name: 'Changed in Gmail', color: 'var(--handled-changed)' },
   { key: 'left', name: 'Left alone', color: 'var(--handled-left)' },
 ];
+/** Activity's chart with a label chosen: that label, bottom, and the rest of the mail. */
+export const labelSeries = (name: string) => [
+  { key: 'label', name, color: 'var(--handled-label)' },
+  { key: 'rest', name: 'Other mail', color: 'var(--handled-left)' },
+];
 export const tier = (key: string) => TIERS.find((t) => t.key === key) ?? { key, name: key, color: 'var(--muted-foreground)' };
 
 /**

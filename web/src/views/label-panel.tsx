@@ -142,7 +142,13 @@ export function LabelPanel({
     <Panel narrow open onClose={onClose} title={label.name} position={position} onPrevious={onPrevious} onNext={onNext}>
       <div className="flex flex-col gap-8">
         <Figures>
-          <Figure label="Messages" value={count(label.messages)} note={`${percent(label.messages, mail)} of the mail`} />
+          {/* The count is of all time; Activity reaches back 90 days at most. */}
+          <Figure
+            label="Messages"
+            value={count(label.messages)}
+            note={`${percent(label.messages, mail)} of the mail`}
+            {...(label.messages > 0 ? { href: `/activity?show=all&days=90&label=${encodeURIComponent(label.id)}` } : {})}
+          />
           <Figure
             label="Right"
             value={label.record.reviewed === 0 ? '–' : percent(label.record.right, label.record.reviewed)}

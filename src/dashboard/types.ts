@@ -127,7 +127,16 @@ export const Summary = z.object({
   byStage: z.array(z.object({ stage, decisions: z.number(), costUsd: z.number(), tokens: z.number() })),
   byDisposition: z.array(z.object({ disposition: z.string(), decisions: z.number() })),
   /** One entry per day in the window, oldest first, with a count for every stage. */
-  daily: z.array(z.object({ day: z.string(), counts: z.record(stage, z.number()), changes: DayChanges, costUsd: z.number() })),
+  daily: z.array(
+    z.object({
+      day: z.string(),
+      counts: z.record(stage, z.number()),
+      changes: DayChanges,
+      costUsd: z.number(),
+      /** Of the mail counted, how much was the label asked about. */
+      labelled: z.number().optional(),
+    }),
+  ),
   topSenders: z.array(z.object({ address: z.string(), messages: z.number(), lastDisposition: z.string().nullable() })),
   /** The ten latest decisions in the window. */
   recent: z.array(ListedDecision),

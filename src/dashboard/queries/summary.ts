@@ -25,7 +25,7 @@ import { outOfTries } from '../../store/runs.ts';
 import { accuracy } from '../../learn/feedback.ts';
 import { type Scope, within } from '../scope.ts';
 import { type DayChanges, STAGES, type StageKey, type Summary } from '../types.ts';
-import { DAY_MS, listDecisions } from './decisions.ts';
+import { DAY_MS, labelIs, listDecisions } from './decisions.ts';
 
 const first = alias(decisions, 'first');
 
@@ -36,8 +36,8 @@ const localDay = (ms: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-/** Everything the dashboard shows, for the last `days` days. Read-only. */
-export async function summarize(db: Sql, scope: Scope, days: number, now: number = Date.now()): Promise<Summary> {
+/** Everything the dashboard shows, for the last `days` days; with `label`, how much of each day's mail was that label. Read-only. */
+export async function summarize(db: Sql, scope: Scope, days: number, now: number = Date.now(), label?: string): Promise<Summary> {
   const since = now - days * DAY_MS;
   const decidedSince = and(gte(decisions.decidedAt, since), within(scope, decisions.accountId));
 
@@ -90,12 +90,20 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
     return { stage, decisions: row?.n ?? 0, costUsd: row?.cost ?? 0, tokens: row?.tokens ?? 0 };
   });
 
-  const dailyByDay = new Map<string, { counts: Record<StageKey, number>; changes: DayChanges; costUsd: number }>();
+  const dailyByDay = new Map<string, { counts: Record<StageKey, number>; changes: DayChanges; costUsd: number; labelled?: number }>();
   for (let i = days - 1; i >= 0; i--)
-    dailyByDay.set(localDay(now - i * DAY_MS), { counts: emptyCounts(), changes: { archive: 0, spam: 0, keep: 0 }, costUsd: 0 });
-  for (const row of await db.select({ decidedAt: decisions.decidedAt, stage: decisions.stage }).from(decisions).where(triagedSince)) {
+    dailyByDay.set(localDay(now - i * DAY_MS), {
+      counts: emptyCounts(),
+      changes: { archive: 0, spam: 0, keep: 0 },
+      costUsd: 0,
+      ...(label === undefined ? {} : { labelled: 0 }),
+    });
+  const isLabel = label === undefined ? sql<boolean>`false` : sql<boolean>`coalesce(${labelIs(label)}, false)`;
+  for (const row of await db.select({ decidedAt: decisions.decidedAt, stage: decisions.stage, labelled: isLabel }).from(decisions).where(triagedSince)) {
     const day = dailyByDay.get(localDay(row.decidedAt));
-    if (day) day.counts[row.stage]++;
+    if (!day) continue;
+    day.counts[row.stage]++;
+    if (row.labelled && day.labelled !== undefined) day.labelled++;
   }
   for (const run of runs) {
     const day = dailyByDay.get(localDay(run.startedAt));
@@ -182,7 +190,7 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
         .groupBy(decisions.disposition)
         .orderBy(desc(count()))
     ).map((r) => ({ disposition: r.disposition, decisions: r.n })),
-    daily: [...dailyByDay].map(([day, { counts, changes, costUsd }]) => ({ day, counts, changes, costUsd })),
+    daily: [...dailyByDay].map(([day, rest]) => ({ day, ...rest })),
     topSenders: (
       await db
         .select({
