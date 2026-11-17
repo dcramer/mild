@@ -527,12 +527,12 @@ describe('dashboard server', () => {
       });
     const theirs = async () => (await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from']?.[0] === 'news@example.com');
     await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
-    // Trust is given in the rule dialog, as what Trust starts it on: a rule for exactly them that only keeps their mail. It replaces the rule for exactly them.
+    // Trust is given in the rule dialog, as what Trust starts it on: a rule for exactly them that only keeps their mail, which is Leave in inbox. It replaces the rule for exactly them.
     // It says it replaced one, so the page offers no Undo: removing it would not bring the old rule back.
     const replacing = await write('/api/rules', { accountId: ACCOUNT, match: { from: ['news@example.com'] }, disposition: 'keep' });
     expect(replacing.status).toBe(200);
     expect(await replacing.json()).toMatchObject({ replaced: true });
-    expect(await theirs()).toMatchObject([{ kind: 'action', labelId: null, override: 'keep', disposition: 'keep', source: 'user' }]);
+    expect(await theirs()).toMatchObject([{ kind: 'label', labelId: 'everything_else', source: 'user' }]);
     const trusted = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
     expect(trusted.profile).toMatchObject({ given: 'trusted' });
 

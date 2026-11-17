@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { listAccounts } from '../../../../../store/accounts.ts';
-import { addLabels, hasOwnLabels, updateLabel } from '../../../../../store/labels.ts';
-import { LEAVE_IN_INBOX } from '../../../../../triage/types.ts';
+import { addInboxWords, addLabels, hasOwnLabels, inboxWords } from '../../../../../store/labels.ts';
 import { MAX_DRAFTS } from '../../../../../triage/proposal.ts';
 import { fromOutcome, outcome, self, text, write } from '../../../route.ts';
 import { DESCRIPTION } from '../../../shared/labels.ts';
@@ -31,8 +30,14 @@ export default write({
   reply: z.object({ ids: z.array(z.string()) }),
   touches: self,
   run: async ({ db, controls }, { labels, inbox }) => {
+    const accounts = await listAccounts(db);
     const bare: string[] = [];
-    for (const account of await listAccounts(db)) if (!(await hasOwnLabels(db, account.id))) bare.push(account.id);
+    for (const account of accounts) if (!(await hasOwnLabels(db, account.id))) bare.push(account.id);
+    // A mailbox connected later takes what was said before for the others too.
+    const said = await inboxWords(
+      db,
+      accounts.map((a) => a.id),
+    );
     if (bare.length === 0) throw new Refusal('Your mailboxes have labels already. Change them on the Labels screen.');
     const wanted = labels.map(({ disposition, markRead, unsubscribe, ...rest }) => ({
       ...rest,
@@ -44,7 +49,7 @@ export default write({
       const each = [];
       for (const accountId of bare) {
         each.push(await addLabels(tx, accountId, wanted));
-        if (inbox !== undefined) await updateLabel(tx, accountId, LEAVE_IN_INBOX, { description: inbox });
+        await addInboxWords(tx, accountId, said, inbox ?? '');
       }
       return each[0]!;
     });

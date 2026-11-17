@@ -330,8 +330,8 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
   const items = waiting.map((r) => ({ accountId: r.accountId, messageId: r.messageId, subject: r.subject }));
   const rule = decidingRule(data);
   const [top] = profile.labels;
-  // A standing is an action rule for exactly them; a label rule that happens to archive is not one.
-  const given = rule?.kind === 'action' && forExactly(data, rule) ? profile.given : null;
+  // A standing is an action rule for exactly them, or Leave in inbox (trusted); a label rule that happens to archive is not one.
+  const given = rule && (rule.kind === 'action' || rule.labelId === INBOX) && forExactly(data, rule) ? profile.given : null;
   const charted = profile.messages >= CHARTED;
   const volume = (
     <span>

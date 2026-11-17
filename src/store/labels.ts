@@ -3,7 +3,7 @@ import { labelProposalName, openJson, sealJson } from './content.ts';
 import type { LabelDraft, Proposal } from '../triage/proposal.ts';
 import type { Usage } from '../triage/stages/model.ts';
 import type { Sql } from './sql.ts';
-import { type Disposition, LEAVE_IN_INBOX, type Label } from '../triage/types.ts';
+import { type Disposition, LEAVE_IN_INBOX, LEAVE_IN_INBOX_NAME, type Label } from '../triage/types.ts';
 import { Refusal } from '../refusal.ts';
 
 /**
@@ -11,7 +11,7 @@ import { Refusal } from '../refusal.ts';
  * every label of theirs. Its description is what the person says always stays in their inbox, empty until they
  * say; its name and what it does never change.
  */
-const leaveInInbox: Label = { id: LEAVE_IN_INBOX, name: 'Leave in inbox', description: '', disposition: 'keep' };
+const leaveInInbox: Label = { id: LEAVE_IN_INBOX, name: LEAVE_IN_INBOX_NAME, description: '', disposition: 'keep' };
 
 const toRow = (accountId: string, l: Label, position: number) => ({
   accountId,
@@ -81,7 +81,7 @@ function normalise(disposition: Disposition, block: boolean, markRead: boolean):
   };
 }
 
-/** Labels an account may have. Each is a choice the model weighs on every message and the reader answers with, so a long list makes both worse. */
+/** Labels an account may have of its own, besides Leave in inbox. Each is a choice the model weighs on every message and the reader answers with, so a long list makes both worse. */
 export const MAX_LABELS = 30;
 
 type NewLabel = { name: string; description: string; disposition: Disposition; block?: boolean; markRead?: boolean; unsubscribe?: boolean };
@@ -91,8 +91,17 @@ function draft(existing: readonly Label[], label: NewLabel): Label {
   const name = label.name.trim();
   const id = slug(name);
   if (id === '' || RESERVED.has(id)) throw new Refusal(`"${name}" cannot be used as a label name.`);
-  if (existing.length >= MAX_LABELS) throw new Refusal(`Sift keeps at most ${MAX_LABELS} labels. Remove one you no longer use first.`);
-  if (existing.some((l) => l.id === id || l.id.replace(/_/g, '-') === id || l.gmailLabel === `sift/${id}` || l.name.toLowerCase() === name.toLowerCase()))
+  if (existing.filter((l) => l.id !== LEAVE_IN_INBOX).length >= MAX_LABELS)
+    throw new Refusal(`Sift keeps at most ${MAX_LABELS} labels. Remove one you no longer use first.`);
+  if (
+    existing.some(
+      (l) =>
+        l.id === id ||
+        (l.id !== LEAVE_IN_INBOX && l.id.replace(/_/g, '-') === id) ||
+        l.gmailLabel === `sift/${id}` ||
+        l.name.toLowerCase() === name.toLowerCase(),
+    )
+  )
     throw new Refusal(`There is already a label "${name}".`);
   return {
     id,
@@ -145,6 +154,30 @@ export async function removeLabel(db: Sql, accountId: string, id: string, now: n
   await db.delete(rules).where(and(eq(rules.accountId, accountId), or(eq(rules.labelId, id), eq(rules.whenLabel, id))));
   await db.delete(examples).where(and(eq(examples.accountId, accountId), eq(examples.labelId, id)));
   return true;
+}
+
+/** How long a label's description may be, and so what the person says always stays in the inbox. */
+export const MAX_DESCRIPTION = 600;
+
+/**
+ * What the person said always stays in the inbox. It is said once for all their mailboxes, so a mailbox that
+ * has none yet takes another's.
+ */
+export async function inboxWords(db: Sql, accountIds: readonly string[]): Promise<string> {
+  for (const accountId of accountIds) {
+    const words = (await listLabels(db, accountId)).find((l) => l.id === LEAVE_IN_INBOX)?.description;
+    if (words) return words;
+  }
+  return '';
+}
+
+/** Add to what always stays in `accountId`'s inbox, after what was said before. Refused past the limit, so a caller's transaction changes nothing. */
+export async function addInboxWords(db: Sql, accountId: string, said: string, words: string): Promise<void> {
+  const added = words.trim();
+  const next = !added || said.includes(added) ? said : said ? `${said}; ${added}` : added;
+  if (next.length > MAX_DESCRIPTION)
+    throw new Refusal(`What always stays in your inbox can be at most ${MAX_DESCRIPTION} characters. Shorten it on the Labels screen first.`);
+  await updateLabel(db, accountId, LEAVE_IN_INBOX, { description: next });
 }
 
 /** Whether the account has a label of its own, besides Leave in inbox. Until it does, Sift reads nothing from its Gmail. */

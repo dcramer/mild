@@ -206,8 +206,8 @@ export const api = {
   /** Remove a label from every mailbox that has it, with the rules that name it. */
   removeLabel: (id: string) => post('/api/labels/remove', { id }),
   /** Add labels in every mailbox: by hand, or kept from what the model suggested. */
-  addLabels: (labels: { name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }[]) =>
-    post<{ ids: string[] }>('/api/labels/add', { labels }),
+  addLabels: (labels: { name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }[], inbox?: string) =>
+    post<{ ids: string[] }>('/api/labels/add', { labels, ...(inbox === undefined ? {} : { inbox }) }),
   /** Ask the model for labels from what the person wants. Its own call; it can take a minute. */
   proposeLabels: (goal: string) => post<LabelProposal>('/api/labels/propose', { goal }),
   /** The latest labels the model suggested, so a reload keeps them. */

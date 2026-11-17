@@ -199,6 +199,7 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
   const label = (await listLabels(db, input.accountId)).find((l) => l.id === input.label);
   if (!label) throw new Refusal(`There is no label "${input.label}".`);
   const outcome = input.disposition ?? label.disposition;
+  if (label.id === LEAVE_IN_INBOX && outcome !== 'keep') throw new Refusal('Mail left in your inbox stays there. Choose the label for mail to move.');
   // A label set to "leave it for me" keeps the mail in the inbox.
   const wanted: DecidedDisposition = outcome === 'review' ? 'keep' : outcome;
 

@@ -81,7 +81,10 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
     const guess = labels.find((l) => l.id === target.labelId);
     const likely = [
       ...(guess ? [{ id: guess.id, label: guess.name, lead: <Meter level={sure} /> }] : []),
-      ...alternatives.filter((a) => a.id !== target.labelId).map((a) => ({ id: a.id, label: a.name, lead: <Meter level={a.share >= 0.5 ? 2 : 1} /> })),
+      // A removed label is still in the sender's history, but nothing is given it again.
+      ...alternatives
+        .filter((a) => a.id !== target.labelId && labels.some((l) => l.id === a.id))
+        .map((a) => ({ id: a.id, label: a.name, lead: <Meter level={a.share >= 0.5 ? 2 : 1} /> })),
     ];
     const inbox = labels.find((l) => l.id === INBOX);
     const first = inbox ? [{ id: inbox.id, label: inbox.name, ...likely.find((p) => p.id === INBOX) }] : [];

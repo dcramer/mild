@@ -1,5 +1,5 @@
 import type { FactFilter, RuleFacts, RuleMatch, StageKey } from './api.ts';
-import type { LEAVE_IN_INBOX } from '../../../src/triage/types.ts';
+import type { LEAVE_IN_INBOX, LEAVE_IN_INBOX_NAME } from '../../../src/triage/types.ts';
 
 /**
  * The dashboard's words. Each thing sift says about mail has exactly one name, used in every stamp,
@@ -44,7 +44,7 @@ export type ActionKey = (typeof ACTIONS)[number][0];
  * choice as good as any label, so every list of them has it in the same place: first, set apart.
  */
 export const INBOX: typeof LEAVE_IN_INBOX = 'everything_else';
-export const INBOX_NAME = 'Leave in inbox';
+export const INBOX_NAME: typeof LEAVE_IN_INBOX_NAME = 'Leave in inbox';
 
 /** Labels as a list's options: Leave in inbox first, then a rule, then the person's own. */
 export const inboxFirst = (labels: Iterable<readonly [string, string]>): (readonly [string, string] | null)[] => {
@@ -297,19 +297,22 @@ const DOING: Record<string, string> = { archive: 'archive', spam: 'mark spam', b
  * What happened to a message, as a log says it: "Archived", "Not archived", "Waiting to archive". `tone`
  * says how to show it: an undone change is struck through, what did not happen is quiet, the rest are plain.
  */
-export function happened(d: { carryOut: boolean; outcome: string | null; actionStatus: string | null; disposition: string }): {
+export function happened(d: { carryOut: boolean; outcome: string | null; actionStatus: string | null; disposition: string; labelId: string | null }): {
   text: string;
   tone: 'plain' | 'undone' | 'quiet';
 } {
   const s = status(d);
-  const doing = DOING[d.disposition];
+  // Leave in inbox is said as itself, as every list says it: "Would leave in inbox", not "Would keep".
+  const inbox = doesName(d.labelId, d.disposition) === INBOX_NAME;
+  const doing = inbox ? 'leave in inbox' : DOING[d.disposition];
+  const did = inbox ? 'Left in inbox' : DID[d.disposition];
   if (d.disposition === 'review') return { text: outcomeName('review'), tone: 'quiet' };
-  if (s === 'failed') return { text: `Not ${(DID[d.disposition] ?? d.disposition).toLowerCase()}`, tone: 'quiet' };
-  if (s === 'undone') return { text: DID[d.disposition] ?? d.disposition, tone: 'undone' };
+  if (s === 'failed') return { text: `Not ${(did ?? d.disposition).toLowerCase()}`, tone: 'quiet' };
+  if (s === 'undone') return { text: did ?? d.disposition, tone: 'undone' };
   if (s === 'waiting') return { text: `Waiting to ${doing ?? d.disposition}`, tone: 'quiet' };
   if (s === 'suggested') return { text: `Would ${doing ?? d.disposition}`, tone: 'quiet' };
   if (s === 'skipped') return { text: 'Skipped', tone: 'quiet' };
-  return { text: DID[d.disposition] ?? d.disposition, tone: 'plain' };
+  return { text: did ?? d.disposition, tone: 'plain' };
 }
 
 /** A day in the log: "Today", "Yesterday", else "Thu, Nov 12". */

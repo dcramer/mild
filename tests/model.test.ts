@@ -21,7 +21,7 @@ import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { listLabels, updateLabel } from '../src/store/labels.ts';
 import { openUserDb, raw } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
-import { addRule } from '../src/store/rules.ts';
+import { addRule, listRules } from '../src/store/rules.ts';
 import { contactOf, contacts, domainFacts, rememberCorrespondent, senderFacts } from '../src/store/senders.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../src/triage/prompt.ts';
@@ -135,12 +135,19 @@ describe('prompt', () => {
   it('gives Leave in inbox what the owner said always stays, which beats any label that also fits', () => {
     const inbox = { id: 'everything_else', name: 'Leave in inbox', description: 'Bills I still owe', disposition: 'keep' as const };
     expect(buildPrompt({ evidence: evidence(), labels: [...SAMPLE_LABELS, inbox] })).toContain(
-      '- everything_else (Leave in inbox): none of the other labels, or what the owner says always stays in the inbox: Bills I still owe\n',
+      '- leave_in_inbox (Leave in inbox): none of the other labels, or what the owner says always stays in the inbox: Bills I still owe\n',
     );
     expect(buildPrompt({ evidence: evidence(), labels: [...SAMPLE_LABELS, { ...inbox, description: '' }] })).toContain(
-      '- everything_else (Leave in inbox): none of the other labels\n',
+      '- leave_in_inbox (Leave in inbox): none of the other labels\n',
     );
-    expect(SYSTEM_PROMPT).toContain('So is mail the owner says always stays in the inbox, even when a label also fits it.');
+    expect(SYSTEM_PROMPT).toContain('So is mail the owner says always stays in the inbox, even when a label also fits');
+    // What the owner answered before reaches the model under the same name.
+    expect(
+      buildPrompt({
+        evidence: evidence({ messagesSeen: 3, userHasWritten: false, ownerLabels: [{ id: 'everything_else', messages: 2 }] }),
+        labels: [...SAMPLE_LABELS, inbox],
+      }),
+    ).toContain('The owner labelled earlier mail from this sender: leave_in_inbox 2\n');
   });
 
   it('states only the facts that are there, each kind of signal on one line', () => {
@@ -252,6 +259,17 @@ describe('judge', () => {
     expect(verdict).toMatchObject({ label: 'marketing', confidence: 0.92, reason: 'A seasonal sale.' });
     expect(verdict).toHaveProperty('usage.model', expect.stringContaining('/'));
     expect(verdict).toHaveProperty('usage.inputTokens', expect.any(Number));
+  });
+
+  it('knows Leave in inbox by a name of its own, and answers with the id it is stored under', async () => {
+    const faux = fauxProvider();
+    const models = createModels();
+    models.setProvider(faux.provider);
+    const inbox = { id: 'everything_else', name: 'Leave in inbox', description: '', disposition: 'keep' as const };
+    faux.setResponses([
+      fauxAssistantMessage([fauxToolCall(VERDICT_TOOL, { reason: 'r', label: 'leave_in_inbox', confidence: 0.9 })], { stopReason: 'toolUse' }),
+    ]);
+    expect(await createJudge(models, faux.getModel())({ evidence: evidence(), labels: [...SAMPLE_LABELS, inbox] })).toMatchObject({ label: 'everything_else' });
   });
 
   it('asks for the reason before the label, so the label follows from it', async () => {
@@ -471,6 +489,17 @@ describe('standing', () => {
 
     await addRule(d, ACCOUNT, { match: { from: ['ada@example.org'] }, labelId: 'personal' }, 'user');
     expect(await senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'trusted', why: 'a rule keeps their mail' });
+  });
+
+  it('makes a rule that only keeps their mail Leave in inbox, which trusts them; one with an extra stays an action', async () => {
+    const d = await db();
+    const ada = await addRule(d, ACCOUNT, { match: { from: ['ada@example.org'] }, disposition: 'keep' }, 'user');
+    expect((await listRules(d, ACCOUNT)).find((r) => r.id === ada)).toMatchObject({ labelId: 'everything_else' });
+    expect((await listRules(d, ACCOUNT)).find((r) => r.id === ada)).not.toHaveProperty('disposition');
+    expect(await senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'trusted' });
+    const read = await addRule(d, ACCOUNT, { match: { from: ['digest@example.com'] }, disposition: 'keep', markRead: true }, 'user');
+    expect((await listRules(d, ACCOUNT)).find((r) => r.id === read)).toMatchObject({ disposition: 'keep' });
+    expect((await listRules(d, ACCOUNT)).find((r) => r.id === read)).not.toHaveProperty('labelId');
   });
 
   it('is unwanted or blocked by a rule that hides their mail, but not by one that waits for a label', async () => {

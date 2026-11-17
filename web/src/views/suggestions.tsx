@@ -8,6 +8,7 @@ import { type SuggestionItem, type Suggestions, type Summary, api, useAction, us
 import {
   ACTIONS,
   FACT_FILTER_OPTIONS,
+  INBOX,
   ago,
   inboxFirst,
   count,
@@ -223,13 +224,13 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
   const includeKept = kept === '1';
   const setIncludeKept = (on: boolean) => setKept(on ? '1' : '');
   const [fact, setFact] = useParam('fact', FACT_FILTER_OPTIONS);
+  const [label, setLabel] = useParam('label');
+  // Narrowed to Leave in inbox, the mail it would leave there is what was asked for.
+  const withKept = includeKept || label === INBOX;
   // Unnarrowed, the same list the masthead counts.
-  const { data, error, loading, reload } = useLoaded(`suggestions-${includeKept}${fact ? `-${fact}` : ''}`, (signal) =>
-    api.suggestions(includeKept, fact, signal),
-  );
+  const { data, error, loading, reload } = useLoaded(`suggestions-${withKept}${fact ? `-${fact}` : ''}`, (signal) => api.suggestions(withKept, fact, signal));
   const summary = useLoaded('summary-7', (signal) => api.summary(7, signal));
   const [search, setSearch] = useParam('q');
-  const [label, setLabel] = useParam('label');
   const [does, setDoes] = useParam('does', DOES);
 
   const names = new Map(Object.values(data?.labels ?? {}).flatMap((list) => list.map((l) => [l.id, l.name] as const)));
@@ -271,7 +272,7 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
           ...(label === '' ? [] : [{ label: `Label: ${label === UNSURE ? outcomeName('review') : (names.get(label) ?? label)}`, clear: () => setLabel('') }]),
           ...(does === '' ? [] : [{ label: `Then: ${DOES.find(([key]) => key === does)?.[1]}`, clear: () => setDoes('') }]),
           ...(fact === '' ? [] : [{ label: factFilterName(fact), clear: () => setFact('') }]),
-          ...(includeKept ? [{ label: 'With mail Sift would keep', clear: () => setIncludeKept(false) }] : []),
+          ...(includeKept ? [{ label: 'With mail Sift would leave in your inbox', clear: () => setIncludeKept(false) }] : []),
         ],
         panel: (
           <>
@@ -284,7 +285,7 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
             <FilterGroup label="Then" value={does} options={DOES} onChange={setDoes} />
             <FilterGroup label="What Sift saw" value={fact} options={FACT_FILTER_OPTIONS} onChange={setFact} />
             <Check checked={includeKept} onChange={setIncludeKept}>
-              With mail Sift would keep
+              With mail Sift would leave in your inbox
             </Check>
           </>
         ),

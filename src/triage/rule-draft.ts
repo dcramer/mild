@@ -2,7 +2,7 @@ import { RULE_FACTS, type RuleFacts } from './facts.ts';
 import { isSharedDomain } from './standing.ts';
 import type { Usage } from './stages/model.ts';
 import { type Named, type RuleMatch, nameAlone, tidyMatch } from './stages/rules.ts';
-import { DECIDED, type DecidedDisposition, type Label } from './types.ts';
+import { DECIDED, type DecidedDisposition, type Label, LEAVE_IN_INBOX } from './types.ts';
 
 export const FIND_TOOL = 'find_senders';
 export const FILL_TOOL = 'fill_rule';
@@ -92,6 +92,10 @@ What a rule can say, all of which must hold for it to apply:
   its own action instead of the label's.
 - Beside a label, a condition in the owner's words that a model checks on each message the rule matches
   ("it is a notice for a lot I did not bid on").
+- Leave in inbox, among their labels, is not a kind of mail: it leaves the mail where it is, unlabelled. It is
+  the label for mail they want to stay in their inbox, which can carry a condition in their words ("from my
+  utility, when it is a bill I still have to pay"). Its description is what they said always stays there. A
+  rule never waits for it.
 
 How to fill it in:
 - Use ${FIND_TOOL} to find the real address, domain or list of a sender the owner names, rather than
@@ -210,6 +214,7 @@ export function readRuleDraft(args: unknown, labels: RuleDraftInput['labels']): 
   const label = labelName === '' ? undefined : labels.find((l) => l.name.toLowerCase() === labelName);
   if (labelName !== '' && !label) return { unusable: '`label` is not one of theirs' };
   const waits = label !== undefined && raw['onlyOnceLabelled'] === true;
+  if (waits && label.id === LEAVE_IN_INBOX) return { unusable: 'a rule cannot wait for Leave in inbox: use it as the label' };
   const disposition = DECIDED.find((a) => a === raw['action']);
   const acts = !label || waits;
   if (acts && !disposition) return { unusable: waits ? 'a rule that waits for a label needs an `action`' : 'a rule with no label needs an `action`' };

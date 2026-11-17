@@ -287,7 +287,7 @@ describe('managing sift from the dashboard', () => {
     expect(withReason(await raw(db).get(`SELECT stage, disposition, reason FROM decisions WHERE message_id = 'w1' ORDER BY id DESC LIMIT 1`))).toEqual({
       stage: 'rules',
       disposition: 'keep',
-      reason: 'rule: from sales@example.com, is a reply: keep it',
+      reason: 'rule: from sales@example.com, is a reply: leave it in the inbox',
     });
     expect(await latest('w2')).toEqual({ stage: 'model', disposition: 'keep', label_id: 'marketing' });
   });
@@ -346,6 +346,21 @@ describe('managing sift from the dashboard', () => {
     expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'marketing')).toMatchObject({ description: 'Sales pitches.', disposition: 'keep' });
   });
 
+  it('adds to what always stays in the inbox with labels, in every mailbox, or refuses both', async () => {
+    const { call } = await start();
+    const inbox = async () => (await listLabels(db, ACCOUNT)).find((l) => l.id === LEAVE_IN_INBOX)?.description;
+    expect((await call('POST', '/api/labels/add', { labels: [], inbox: 'Bills I still owe' })).status).toBe(200);
+    expect(await inbox()).toBe('Bills I still owe');
+    const pitches = { name: 'Pitches', description: 'From strangers.', disposition: 'archive' };
+    expect((await call('POST', '/api/labels/add', { labels: [pitches], inbox: 'mail a person wrote me' })).status).toBe(200);
+    expect(await inbox()).toBe('Bills I still owe; mail a person wrote me');
+    // Too long together: nothing is added, the label included.
+    const lies = { name: 'Lies', description: 'Scams.', disposition: 'spam' };
+    expect((await call('POST', '/api/labels/add', { labels: [lies], inbox: 'x'.repeat(590) })).status).toBe(409);
+    expect((await listLabels(db, ACCOUNT)).some((l) => l.id === 'lies')).toBe(false);
+    expect((await call('POST', '/api/labels/add', { labels: [] })).status).toBe(400);
+  });
+
   it('edits labels and rules', async () => {
     const { call } = await start();
 
@@ -372,11 +387,13 @@ describe('managing sift from the dashboard', () => {
     for (const taken of ['investor updates', 'Review', 'Did', 'Cold outreach', '!!!'])
       expect((await call('POST', '/api/labels/add', { labels: [{ name: taken, description: '', disposition: 'keep' }] })).status).toBe(409);
     // Up to the limit, and no further.
-    for (let n = (await listLabels(db, ACCOUNT)).length; n < MAX_LABELS; n++)
+    // Leave in inbox is not one the limit counts.
+    const own = async () => (await listLabels(db, ACCOUNT)).filter((l) => l.id !== LEAVE_IN_INBOX).length;
+    for (let n = await own(); n < MAX_LABELS; n++)
       expect((await call('POST', '/api/labels/add', { labels: [{ name: `Extra ${n}`, description: '', disposition: 'keep' }] })).status).toBe(200);
     const full = await call('POST', '/api/labels/add', { labels: [{ name: 'One too many', description: '', disposition: 'keep' }] });
     expect(full.status).toBe(409);
-    expect((await listLabels(db, ACCOUNT)).length).toBe(MAX_LABELS);
+    expect(await own()).toBe(MAX_LABELS);
 
     const added = await call('POST', '/api/rules', {
       accountId: ACCOUNT,

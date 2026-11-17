@@ -46,7 +46,11 @@ const order = (a: Label, b: Label) => Number(b.label.id === INBOX) - Number(a.la
 
 /** Under a label's name: what it is, or for Leave in inbox what the person said always stays. */
 const about = (label: LabelSummary) =>
-  label.id !== INBOX ? label.description : label.description ? `Always: ${label.description}` : 'Mail none of your labels fit';
+  label.id !== INBOX
+    ? label.description
+    : label.description
+      ? `Always: ${label.description}`
+      : 'Mail none of your labels fit. Say here what must never be moved.';
 
 /** How often Sift had the label right when the reader checked, in yellow when it is often wrong. Nothing until then. */
 function Right({ label }: { label: LabelSummary }) {
@@ -69,7 +73,9 @@ export function LabelsView() {
   // Previous and next go down the page as it reads.
   const listed = groups.flatMap((g) => g.rows);
   const at = listed.findIndex(({ label }) => label.id === open);
-  const most = data ? Math.max(0, ...data.accounts.map((a) => data.labels[a.id]?.length ?? 0)) : 0;
+  // Leave in inbox is not one of the labels the limit counts.
+  const own = all.filter(({ label }) => label.id !== INBOX).length;
+  const most = data ? Math.max(0, ...data.accounts.map((a) => (data.labels[a.id] ?? []).filter((l) => l.id !== INBOX).length)) : 0;
   const full = !!data && most >= data.labelLimit;
 
   return (
@@ -77,9 +83,7 @@ export function LabelsView() {
       title="Labels"
       actions={
         <>
-          <span className="text-sm text-muted-foreground tabular-nums max-sm:hidden">
-            {data ? `${count(all.length)} of ${data.labelLimit}` : <Blank word />}
-          </span>
+          <span className="text-sm text-muted-foreground tabular-nums max-sm:hidden">{data ? `${count(own)} of ${data.labelLimit}` : <Blank word />}</span>
           <Button
             disabled={!data || data.accounts.length === 0 || full}
             {...(full ? { why: `Sift keeps at most ${data?.labelLimit} labels. Remove one you no longer use first.` } : {})}
@@ -130,6 +134,7 @@ export function LabelsView() {
                       <Tr key={label.id} onOpen={() => setOpen(label.id)}>
                         <Td className="max-w-0">
                           <span className="name">{label.name}</span>
+                          {label.id === INBOX ? <span className="text-muted-foreground"> (Default)</span> : null}
                           {/* On a phone what the label is matters more than the room: two lines, not one. */}
                           <Sub className="max-md:line-clamp-2 max-md:whitespace-normal">{about(label)}</Sub>
                           {only ? <Sub>Only in {only.join(', ')}</Sub> : null}

@@ -6,6 +6,7 @@ import type { RuleDraft } from '../triage/rule-draft.ts';
 import type { Usage } from '../triage/stages/model.ts';
 import { type Rule, type RuleMatch, tidyMatch } from '../triage/stages/rules.ts';
 import { listLabels } from './labels.ts';
+import { LEAVE_IN_INBOX } from '../triage/types.ts';
 import { Refusal } from '../refusal.ts';
 
 /** `user`: the user wrote it. `correction`: it came from the user correcting sift. `learned`: sift made it when it blocked the sender. */
@@ -67,6 +68,17 @@ const sealName = (db: Sql, id: string, name: string | null | undefined) => {
   return given ? sealJson(db, ruleName(db, id, 'name'), given) : null;
 };
 
+/**
+ * Leaving mail in the inbox and nothing else is Leave in inbox, whoever asks: one form, which can also carry a
+ * condition in words. Keeping with an extra (mark read, unsubscribe) stays an action of its own.
+ */
+function leaveInInbox<T extends RuleSays>(rule: T): T {
+  const alone = rule.labelId === undefined && rule.whenLabel === undefined && rule.disposition === 'keep';
+  if (!alone || rule.markRead || rule.subscription === 'unsubscribe') return rule;
+  const { disposition, ...rest } = rule;
+  return { ...rest, labelId: LEAVE_IN_INBOX } as T;
+}
+
 /** Throws, with a sentence for the user, unless `rule` says something sift can act on with the account's labels. */
 async function check(db: Sql, accountId: string, rule: RuleSays): Promise<void> {
   if (rule.labelId === undefined && rule.whenLabel === undefined && rule.disposition === undefined)
@@ -85,7 +97,7 @@ export async function addRule(
   source: RuleSource,
   now: number = Date.now(),
 ): Promise<string> {
-  const rule = { ...given, match: tidyMatch(given.match), ...(given.except ? { except: given.except.map(tidyMatch) } : {}) };
+  const rule = leaveInInbox({ ...given, match: tidyMatch(given.match), ...(given.except ? { except: given.except.map(tidyMatch) } : {}) });
   if (Object.keys(rule.match).length === 0) throw new Refusal('A rule needs at least one condition.');
   await check(db, accountId, rule);
   const id = `r-${randomBytes(4).toString('hex')}`;
@@ -154,7 +166,8 @@ export async function hasRuleFor(db: Sql, accountId: string, match: RuleMatch, w
  * Say what mail matching `match` is or what happens to it, replacing the rule with exactly the same
  * conditions (and the same awaited label) if there is one. Returns the rule's id.
  */
-export async function setRule(db: Sql, accountId: string, match: RuleMatch, rule: RuleSays, source: RuleSource, now: number = Date.now()): Promise<string> {
+export async function setRule(db: Sql, accountId: string, match: RuleMatch, says: RuleSays, source: RuleSource, now: number = Date.now()): Promise<string> {
+  const rule = leaveInInbox(says);
   // Whatever sift was proposing for this mail is settled by the user saying what it is.
   await db
     .update(proposals)

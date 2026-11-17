@@ -52,7 +52,8 @@ const own = (rule: RuleSummary) => (rule.kind === 'label' ? rule.override : rule
 
 /** What the rule makes of the mail: its label, then an action only where the rule has its own. */
 function Result({ rule }: { rule: RuleSummary }) {
-  const action = own(rule);
+  // Leave in inbox says what happens itself.
+  const action = rule.labelId === INBOX ? undefined : own(rule);
   return (
     <>
       {rule.kind === 'label' ? <span>{rule.labelName}</span> : null}

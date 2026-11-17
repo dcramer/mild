@@ -1,5 +1,5 @@
 import type { Api, AssistantMessage, Context, Model, Models, Tool } from '@earendil-works/pi-ai';
-import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../triage/prompt.ts';
+import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt, forModel, fromModel } from '../triage/prompt.ts';
 import { type Judge, UNSURE, describeFailure as failure } from '../triage/stages/model.ts';
 import { chat, executeTool } from './chat.ts';
 
@@ -17,7 +17,7 @@ const CALL = { timeoutMs: 60_000, maxRetries: 0 };
  */
 export function createJudge(models: Models, model: Model<Api>): Judge {
   return async (input) => {
-    const ids = [...input.labels.map((l) => l.id), UNSURE];
+    const ids = [...input.labels.map((l) => forModel(l.id)), UNSURE];
     const tool: Tool = {
       name: VERDICT_TOOL,
       description: 'Record which label this email gets.',
@@ -66,7 +66,7 @@ export function createJudge(models: Models, model: Model<Api>): Judge {
         return { failed: 'the model did not return a usable verdict', usage, unusable: true };
       }
       return {
-        label,
+        label: fromModel(label),
         reason: reason.replace(/\s+/g, ' ').trim().slice(0, MAX_REASON),
         ...(typeof confidence === 'number' && confidence >= 0 && confidence <= 1 ? { confidence } : {}),
         usage,

@@ -1,5 +1,6 @@
 import { Refusal } from '../refusal.ts';
-import { finishLabelProposal, listLabels, startLabelProposal } from '../store/labels.ts';
+import { finishLabelProposal, inboxWords, listLabels, startLabelProposal } from '../store/labels.ts';
+import { listAccounts } from '../store/accounts.ts';
 import type { Sql } from '../store/sql.ts';
 import { invokeAgent, reportError } from '../telemetry.ts';
 import type { Proposal, Proposer } from '../triage/proposal.ts';
@@ -17,9 +18,9 @@ export async function proposeLabels(
   const now = deps.now ?? Date.now;
   const at = now();
   const id = await startLabelProposal(db, { ...request, model: deps.model, now: at });
-  const all = await listLabels(db, request.accountId);
-  const labels = all.filter((l) => l.id !== LEAVE_IN_INBOX);
-  const inbox = all.find((l) => l.id === LEAVE_IN_INBOX)?.description ?? '';
+  const labels = (await listLabels(db, request.accountId)).filter((l) => l.id !== LEAVE_IN_INBOX);
+  // Said once for all their mailboxes, so a mailbox connected later is asked with it too.
+  const inbox = await inboxWords(db, [request.accountId, ...(await listAccounts(db)).map((a) => a.id)]);
   const answer = await invokeAgent('labels', [db.person, id], { 'sift.label_proposal': id }, () => deps.propose({ goal: request.goal, labels, inbox }));
   const usage = answer.usage ? { usage: answer.usage } : {};
   if ('failed' in answer) {

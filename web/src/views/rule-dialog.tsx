@@ -9,6 +9,7 @@ import {
   type FactKey,
   INBOX,
   describeMatch,
+  doesName,
   factAnswers,
   factConditions,
   factParam,
@@ -307,7 +308,7 @@ export function AddRuleDialog({
               <span className="flex min-h-(--control) items-center gap-1">
                 {replaces.labelName ? <span>{replaces.labelName}</span> : null}
                 {replaces.labelName && replacing ? <span className="text-muted-foreground">·</span> : null}
-                {replacing ? <Does action={replacing}>{outcomeName(replacing)}</Does> : null}
+                {replacing ? <Does action={replacing}>{replaces?.kind === 'label' ? outcomeName(replacing) : doesName(null, replacing)}</Does> : null}
               </span>
             </Field>
           ) : null}
@@ -353,37 +354,40 @@ export function AddRuleDialog({
             </>
           )}
         </FieldGroup>
-        <FieldGroup title="What happens">
-          {chosen ? null : (
-            <>
-              <Field inline label="Then">
-                <Select
-                  label="What happens to it"
-                  value={action || 'archive'}
-                  options={(waitsFor ? ACTIONS : ALONE).map((a) => [a, outcomeName(a)] as const)}
-                  onChange={setThen}
-                />
+        {/* Leave in inbox brings its action, and moves nothing: there is nothing to say here. */}
+        {chosen && !moves ? null : (
+          <FieldGroup title="What happens">
+            {chosen ? null : (
+              <>
+                <Field inline label="Then">
+                  <Select
+                    label="What happens to it"
+                    value={action || 'archive'}
+                    options={(waitsFor ? ACTIONS : ALONE).map((a) => [a, outcomeName(a)] as const)}
+                    onChange={setThen}
+                  />
+                </Field>
+                <Field inline label="Also">
+                  <div className="flex flex-col gap-2">
+                    <Check checked={markRead} onChange={setMarkRead}>
+                      Mark it read
+                    </Check>
+                    <Check checked={unsubscribe} onChange={setUnsubscribe}>
+                      Unsubscribe, when the sender offers a safe way
+                    </Check>
+                  </div>
+                </Field>
+              </>
+            )}
+            {moves ? (
+              <Field inline label="Inbox" hint="You see what it covers before anything moves.">
+                <Check checked={applyNow} onChange={setApplyNow}>
+                  Apply to mail already there
+                </Check>
               </Field>
-              <Field inline label="Also">
-                <div className="flex flex-col gap-2">
-                  <Check checked={markRead} onChange={setMarkRead}>
-                    Mark it read
-                  </Check>
-                  <Check checked={unsubscribe} onChange={setUnsubscribe}>
-                    Unsubscribe, when the sender offers a safe way
-                  </Check>
-                </div>
-              </Field>
-            </>
-          )}
-          {moves ? (
-            <Field inline label="Inbox" hint="You see what it covers before anything moves.">
-              <Check checked={applyNow} onChange={setApplyNow}>
-                Apply to mail already there
-              </Check>
-            </Field>
-          ) : null}
-        </FieldGroup>
+            ) : null}
+          </FieldGroup>
+        )}
       </Form>
     </Dialog>
   );

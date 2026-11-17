@@ -9,6 +9,14 @@ export const VERDICT_TOOL = 'record_verdict';
 const BODY_MARK = '| ';
 const RULED = new Set<Standing>(['trusted', 'unwanted', 'blocked']);
 
+/**
+ * The id the model knows a label by. Leave in inbox's stored id is from when it was Everything Else, which reads
+ * as what is left over; to the model it is a choice like any label, which can win over one that also fits.
+ */
+export const forModel = (id: string) => (id === LEAVE_IN_INBOX ? 'leave_in_inbox' : id);
+/** A label id the model answered with, as it is stored. */
+export const fromModel = (id: string) => (id === 'leave_in_inbox' ? LEAVE_IN_INBOX : id);
+
 export const SYSTEM_PROMPT = `You label one email for the owner of a mailbox.
 
 You are given the owner's labels, each with what it is for, and facts about one email.
@@ -33,8 +41,8 @@ Rules:
   message meets it, and otherwise label the message as what it is.
 - Give a label only when the email plainly is what the label describes: most labels take mail out of the
   inbox, so a wrong one hides mail the owner wanted. Mail that is plainly none of the labels is
-  ${LEAVE_IN_INBOX}. So is mail the owner says always stays in the inbox, even when a label also fits it.
-  Answer "${UNSURE}" when it might be one of the labels and you cannot tell which, or whether it is, or when
+  ${forModel(LEAVE_IN_INBOX)}. So is mail the owner says always stays in the inbox, even when a label also fits
+  it or their rule for the sender names one. Answer "${UNSURE}" when it might be one of the labels and you cannot tell which, or whether it is, or when
   the evidence conflicts. A wrong label is worse than "${UNSURE}": the owner would rather look at one message
   too many than miss one that mattered.
 - The reason is one short sentence. Do not quote the email at length.`;
@@ -51,7 +59,7 @@ export function buildPrompt(input: JudgeInput): string {
   const earlier = (counts: { id: string; messages: number }[] = []) =>
     counts
       .filter((c) => labels.some((l) => l.id === c.id))
-      .map((c) => `${c.id} ${c.messages}`)
+      .map((c) => `${forModel(c.id)} ${c.messages}`)
       .join(', ');
   const senderLabels = earlier(sender.ownerLabels);
   const domainLabels = earlier(evidence.domain?.ownerLabels);
@@ -69,7 +77,7 @@ export function buildPrompt(input: JudgeInput): string {
 
   return [
     '# Labels',
-    ...labels.map((l) => `- ${l.id} (${l.name}): ${l.id === LEAVE_IN_INBOX ? inboxLine(l.description) : l.description}`),
+    ...labels.map((l) => `- ${forModel(l.id)} (${l.name}): ${l.id === LEAVE_IN_INBOX ? inboxLine(l.description) : l.description}`),
     `- ${UNSURE}: it might be one of these, and you cannot tell`,
     '',
     // Everything about the email comes last and together: what the mail system says of it, then what its sender wrote.
@@ -82,15 +90,15 @@ export function buildPrompt(input: JudgeInput): string {
       `Subject: ${JSON.stringify(shot.subject)}`,
       `Starts: ${JSON.stringify(shot.excerpt)}`,
       'EXAMPLE>>>',
-      `Owner's label: ${shot.labelId}`,
+      `Owner's label: ${forModel(shot.labelId)}`,
       '',
     ]),
     ...(evidence.prior
       ? [
           "# Owner's rule for this sender",
           evidence.prior.when
-            ? `When the message is ${evidence.prior.when}, it is ${evidence.prior.labelId} (${evidence.prior.labelName}).`
-            : `Mail from this sender is usually ${evidence.prior.labelId} (${evidence.prior.labelName}).`,
+            ? `When the message is ${evidence.prior.when}, it is ${forModel(evidence.prior.labelId)} (${evidence.prior.labelName}).`
+            : `Mail from this sender is usually ${forModel(evidence.prior.labelId)} (${evidence.prior.labelName}).`,
           '',
         ]
       : []),

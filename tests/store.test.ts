@@ -8,6 +8,7 @@ import * as schema from '../src/store/schema.ts';
 import { addMailbox, connectAccount, connectedAddresses, deleteUser, recordSync, removeMailbox } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { listLabels, updateLabel } from '../src/store/labels.ts';
+import { addRule, listRules } from '../src/store/rules.ts';
 import { accounts, labels } from '../src/store/query.ts';
 import { DatabaseInUse, moveAside, pglite, roleBypass, verified } from '../src/store/db.ts';
 import { openStore, storeOn } from '../src/store/store.ts';
@@ -236,6 +237,20 @@ describe('a new mailbox', () => {
     await raw(db).run(`UPDATE labels SET name = 'The rest', description = 'Bills I still owe.' WHERE id = 'everything_else'`);
     await (await superuser()).exec(renamed);
     expect((await listLabels(db, 'alpha@example.org')).at(-1)).toMatchObject({ name: 'Leave in inbox', description: 'Bills I still owe.' });
+  });
+
+  it('turns a rule made before that only keeps mail into Leave in inbox, and leaves one with an extra', async () => {
+    const { db } = await onePerson('alpha@example.org');
+    const trusted = await addRule(db, 'alpha@example.org', { match: { from: ['ada@example.org'] }, disposition: 'archive' }, 'user');
+    const read = await addRule(db, 'alpha@example.org', { match: { from: ['digest@example.com'] }, disposition: 'archive', markRead: true }, 'user');
+    // As they were stored before: an action that keeps, with no label.
+    await raw(db).run(`UPDATE rules SET disposition = 'keep'`);
+    await (await superuser()).exec(readFileSync(new URL('0035_leave_in_inbox_rules.sql', MIGRATIONS), 'utf8'));
+    const rules = await listRules(db, 'alpha@example.org');
+    expect(rules.find((r) => r.id === trusted)).toMatchObject({ labelId: 'everything_else' });
+    expect(rules.find((r) => r.id === trusted)).not.toHaveProperty('disposition');
+    expect(rules.find((r) => r.id === read)).toMatchObject({ disposition: 'keep', markRead: true });
+    expect(rules.find((r) => r.id === read)).not.toHaveProperty('labelId');
   });
 
   it('needs its labels to exist for anything that names one', async () => {

@@ -250,11 +250,23 @@ function Labels({
             onEdit={setEditing}
             inbox={{ ...inbox, onChange: (next) => setInbox((was) => ({ ...was, ...next })), onEdit: () => setEditing('inbox') }}
           />
-          <Onward
-            next={{ label: keepWord('Use', kept.length), busy, disabled: kept.length === 0, onPress: use }}
-            back={{ label: 'Start over', onPress: onStartOver }}
-            error={error}
-          />
+          {suggestions.length > 0 ? (
+            <Onward
+              next={{ label: keepWord('Use', kept.length), busy, disabled: kept.length === 0, onPress: use }}
+              back={{ label: 'Start over', onPress: onStartOver }}
+              error={error}
+            />
+          ) : (
+            <>
+              {/* Sift reads no mail until a mailbox has a label of its own, so what stays in the inbox cannot be kept alone. */}
+              {proposal.note ? null : (
+                <Note tone="look" title="No labels yet">
+                  Sift reads your mail once there is something to move out of your inbox. Start over and say what that is.
+                </Note>
+              )}
+              <Onward next={{ label: 'Start over', onPress: onStartOver }} error={error} />
+            </>
+          )}
         </>
       ) : (
         <Onward next={{ label: 'Start over', onPress: onStartOver }} error={error} />

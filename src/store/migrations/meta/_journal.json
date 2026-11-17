@@ -246,6 +246,13 @@
       "when": 1794903261126,
       "tag": "0034_leave_in_inbox",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794903974695,
+      "tag": "0035_leave_in_inbox_rules",
+      "breakpoints": true
     }
   ]
 }

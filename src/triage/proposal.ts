@@ -1,5 +1,5 @@
 import type { Usage } from './stages/model.ts';
-import type { Label } from './types.ts';
+import { type Label, LEAVE_IN_INBOX_NAME } from './types.ts';
 
 export const PROPOSAL_TOOL = 'propose_labels';
 
@@ -52,7 +52,8 @@ How the labels are used:
   mail the owner asks to have tagged; sorting the inbox into categories is not what they want.
 - What the owner never wants to miss ("never miss a bill") is not a label. Say it in inbox: a short phrase
   naming the kinds of mail that always stay in the inbox, even when a label would also fit them, such as
-  "bills I still have to pay; mail a person wrote to me". The model reads it on every email. Leave it empty
+  "bills I still have to pay; mail a person wrote to me". The model reads it on every email no rule of theirs
+  decides. Leave it empty
   when they asked for nothing like that, and add only what they have not already said.
 - The owner can also make rules for one sender or domain ("from this address: archive"). What depends on
   who sent the mail belongs in a rule, not a label.
@@ -108,7 +109,8 @@ const MAX_INBOX = 600;
 export function readProposal(args: unknown, labels: ProposalInput['labels']): Proposal | null {
   const raw = (args ?? {}) as { labels?: unknown; inbox?: unknown; note?: unknown };
   const proposed = Array.isArray(raw.labels) ? raw.labels : [];
-  const taken = new Set(labels.map((l) => l.name.toLowerCase()));
+  // Leave in inbox is not among `labels`, but no label may take its name either.
+  const taken = new Set([...labels.map((l) => l.name.toLowerCase()), LEAVE_IN_INBOX_NAME.toLowerCase()]);
   const drafts = proposed.flatMap((item: Record<string, unknown>): LabelDraft[] => {
     const name = tidy(item['name'], MAX_NAME);
     const description = tidy(item['description'], MAX_DESCRIPTION);

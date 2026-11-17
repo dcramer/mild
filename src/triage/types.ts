@@ -66,6 +66,7 @@ export interface Decision {
  * without Sift. The id is from when it was called Everything Else; ids never change.
  */
 export const LEAVE_IN_INBOX = 'everything_else';
+export const LEAVE_IN_INBOX_NAME = 'Leave in inbox';
 
 /** A kind of mail, and what the user wants done with it. Every tier names one of these; none picks an action. */
 export interface Label {

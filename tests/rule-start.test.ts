@@ -82,7 +82,7 @@ describe('where each way into the rule dialog starts it', () => {
 
   it('says a rule that leaves mail in the inbox as that, not as a label', () => {
     expect(startWords({ conditions: [{ by: 'from', value: 'bills@example.com' }], facts: [], label: 'everything_else' }, [])).toBe(
-      'Mail from bills@example.com: keep it in the inbox.',
+      'Mail from bills@example.com: leave it in the inbox.',
     );
   });
 

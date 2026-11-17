@@ -18,7 +18,7 @@ export default write({
   touches: self,
   run: async (ctx, { id }) => {
     const { db, now } = ctx;
-    if (id === LEAVE_IN_INBOX) throw new Refusal('Leave in inbox cannot be removed: it is what mail is when it is none of your labels.');
+    if (id === LEAVE_IN_INBOX) throw new Refusal('Leave in inbox cannot be removed: it is where mail stays when none of your labels should move it.');
     const having: string[] = [];
     for (const account of await listAccounts(db)) {
       const labels = await listLabels(db, account.id);

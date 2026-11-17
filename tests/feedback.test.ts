@@ -10,6 +10,7 @@ import { people } from '../src/store/people.ts';
 import { accuracy, applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { listAccounts, recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
+import { senderFacts } from '../src/store/senders.ts';
 import { dismissProposal, listProposals, madeFromProposal } from '../src/store/proposals.ts';
 import { MAX_ATTEMPTS, startRun } from '../src/store/runs.ts';
 import { addRule, listRules, setRule } from '../src/store/rules.ts';
@@ -45,6 +46,20 @@ async function answerEach(sender: string, label: string, now = Date.now()): Prom
 beforeEach(async () => {
   ({ store, db } = await onePerson(ACCOUNT));
   serial = 0;
+});
+
+describe('leaving mail in the inbox', () => {
+  it('is what the owner said of that sender afterwards, and moves nothing out', async () => {
+    await suggest('bills@example.com', 'archive', { labelId: 'newsletter' });
+    await suggest('bills@example.com', 'archive', { labelId: 'newsletter' });
+    // As the dashboard answers: carried out, so the answer is a decision of its own.
+    for (const messageId of ['m1', 'm2'])
+      await applyFeedback(db, { accountId: ACCOUNT, sender: 'bills@example.com', label: 'everything_else', messageId, carryOut: true });
+    expect((await senderFacts(db, ACCOUNT, 'bills@example.com')).answered).toEqual([{ id: 'everything_else', messages: 2 }]);
+    await expect(
+      applyFeedback(db, { accountId: ACCOUNT, sender: 'bills@example.com', label: 'everything_else', disposition: 'archive', messageId: 'm1' }),
+    ).rejects.toThrow('stays there');
+  });
 });
 
 /** The rule sift holds for one sender, without its bookkeeping. */

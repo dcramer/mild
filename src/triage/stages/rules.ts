@@ -1,6 +1,15 @@
 import { CONTENT_FACTS, type RuleFacts, deriveFacts, factCondition, matchesFacts } from '../facts.ts';
 import { parseListId } from '../features.ts';
-import { type DecidedDisposition, type Decision, type Label, type MessageFacts, type Stage, type SubscriptionAction, labelled } from '../types.ts';
+import {
+  type DecidedDisposition,
+  type Decision,
+  type Label,
+  LEAVE_IN_INBOX,
+  type MessageFacts,
+  type Stage,
+  type SubscriptionAction,
+  labelled,
+} from '../types.ts';
 
 /**
  * Which mail a rule is for. Each condition is a list of values, and mail meets it if any one fits; every
@@ -253,9 +262,11 @@ const DOES: Record<DecidedDisposition, string> = { keep: 'keep it', archive: 'ar
 /** A rule's conditions and what it says, in words. */
 export function describeRule({ rule, label }: RuleHit): string {
   const who = rule.name ?? describeMatch(rule.match);
-  if (rule.when) return `${who}, when it is ${rule.when}, is ${label?.name ?? rule.labelId}`;
+  // Leave in inbox is not a kind of mail, so it is said as what happens.
+  const is = rule.labelId === LEAVE_IN_INBOX ? ': leave it in the inbox' : ` is ${label?.name ?? rule.labelId}`;
+  if (rule.when) return `${who}, when it is ${rule.when}${is}`;
   if (rule.whenLabel) return `${who}, when it is ${label?.name ?? rule.whenLabel}${rule.disposition ? `: ${DOES[rule.disposition]}` : ''}`;
-  if (rule.labelId) return `${who} is ${label?.name ?? rule.labelId}${rule.disposition ? `, but ${DOES[rule.disposition]}` : ''}`;
+  if (rule.labelId) return `${who}${is}${rule.disposition ? `, but ${DOES[rule.disposition]}` : ''}`;
   return `${who}: ${DOES[rule.disposition ?? 'keep']}`;
 }
 

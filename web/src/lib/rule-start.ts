@@ -130,7 +130,7 @@ function which(conditions: readonly Condition[]): string[] {
     return `${WHICH[by]} ${values.join(' or ')}`;
   });
 }
-const DO = { keep: 'keep it in the inbox', archive: 'archive it', spam: 'send it to spam' } as const;
+const DO = { keep: 'leave it in the inbox', archive: 'archive it', spam: 'send it to spam' } as const;
 
 /** What the rule dialog starts on, said as someone would describe the rule, for the box it opens on. */
 export function startWords(start: RuleStart, labels: readonly { id: string; name: string }[]): string {

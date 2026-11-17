@@ -332,7 +332,7 @@ describe('mail', () => {
     expect((await listRules(db, 'alpha@example.org'))[0]).toMatchObject({
       id,
       match: { from: ['news@example.com'] },
-      disposition: 'keep',
+      labelId: 'everything_else',
       name: 'Example news',
     });
     expect((await listDecisions(db, await everything(db), { days: 36_500 }, 0)).rows[0]).toMatchObject({ reason: 'rule: from news@example.com' });

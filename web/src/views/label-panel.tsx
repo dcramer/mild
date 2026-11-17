@@ -1,8 +1,8 @@
 import { type ReactNode, useState } from 'react';
-import { type LabelProposal, type LabelSummary, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type LabelProposal, type LabelSummary, api, useAction } from '@/lib/api.ts';
 import { type InboxSuggestion, type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
 import { DescribeStep } from '@/components/describe.tsx';
-import { ACTIONS, type ActionKey, EXPLAIN, INBOX, INBOX_NAME, count, percent, plural } from '@/lib/format.ts';
+import { ACTIONS, type ActionKey, EXPLAIN, INBOX_NAME, count, percent, plural } from '@/lib/format.ts';
 import {
   ActionIcon,
   Button,
@@ -108,7 +108,11 @@ export function LabelFields({ draft, onChange, gmailLabel }: { draft: LabelDraft
 /** What always stays in the inbox, in the person's words: the model leaves it there whatever label also fits. */
 function InboxField({ words, onChange }: { words: string; onChange: (words: string) => void }) {
   return (
-    <Field inline label="Always" hint="Sift leaves mail like this in your inbox even when one of your labels also fits it, as it does mail none of them fit.">
+    <Field
+      inline
+      label="Always"
+      hint="Sift leaves mail like this in your inbox even when one of your labels also fits it. A rule for its sender still does what the rule says."
+    >
       <TextArea
         aria-label="What always stays in your inbox"
         className="min-h-32"
@@ -240,11 +244,6 @@ export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onS
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [inbox, setInbox] = useState<InboxSuggestion>({ words: '', on: true });
   const [draft, setDraft] = useState<LabelDraft>(BLANK);
-  // What they said before always stays in the inbox, which what is suggested adds to.
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 10_000);
-  const said = Object.values(manage.data?.labels ?? {})
-    .flat()
-    .find((l) => l.id === INBOX)?.description;
   const { busy, error, run } = useAction();
   const done = () => {
     onSaved();
@@ -260,11 +259,7 @@ export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onS
   const kept = keptLabels(suggestions);
   const adding = inbox.on && inbox.words.trim() !== '';
   const change = (index: number, next: Partial<Suggestion>) => setSuggestions((all) => all.map((s, i) => (i === index ? { ...s, ...next } : s)));
-  const keep = () =>
-    run(async () => {
-      if (kept.length > 0) await api.addLabels(kept);
-      if (adding) await api.saveLabel(INBOX, { description: said ? `${said}; ${inbox.words.trim()}` : inbox.words.trim() });
-    }, done);
+  const keep = () => run(() => api.addLabels(kept, adding ? inbox.words.trim() : undefined), done);
 
   if (stage.at === 'manual') {
     const ready = draft.name.trim() !== '';
@@ -377,7 +372,7 @@ export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onS
     <DescribeStep
       title="Add labels"
       question="What mail, and what should happen to it?"
-      hint="Sift suggests one label or several, none overlapping the ones you have. You choose which to add."
+      hint="Sift suggests labels for the mail to move, none overlapping yours, and what to leave in your inbox whatever else fits. You choose what to keep."
       placeholder="Archive shipping updates, but never a missed or failed delivery"
       value={text}
       onChange={setText}

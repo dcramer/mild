@@ -3,7 +3,7 @@ import type { Sql } from '../store/sql.ts';
 import { openPayload } from '../store/actions.ts';
 import { openEnvelope } from '../store/content.ts';
 import { listLabels } from '../store/labels.ts';
-import type { DecidedDisposition } from '../triage/types.ts';
+import { type DecidedDisposition, LEAVE_IN_INBOX } from '../triage/types.ts';
 import { applyFeedback } from './feedback.ts';
 
 /** Labels put on or taken off one message in Gmail. */
@@ -73,7 +73,8 @@ const moves = (labels: string[]) => labels.includes('INBOX') || labels.includes(
  * they want; a move alone does not say what the mail is, so it keeps the label sift gave it and records
  * the different outcome. The answer is recorded as the dashboard's "only this one" is: never a rule, and
  * nothing is changed in Gmail, since the message is already where the user put it. Mail sift could not
- * place is skipped unless the user labelled it. Safe to run again over the same history.
+ * place, and mail it left in the inbox and the user moved, are skipped unless the user labelled it. Safe to
+ * run again over the same history.
  * Returns how many answers were recorded.
  */
 export async function learnFromGmail(db: Sql, accountId: string, changes: readonly MessageChange[], gmail: GmailState, now: number): Promise<number> {
@@ -111,7 +112,8 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
     const on = current.flatMap((id) => siftLabel(id) ?? []);
     const given = change.added.flatMap((id) => siftLabel(id) ?? []).filter((l) => on.includes(l));
     const label = given.length === 1 ? given[0] : on.length === 1 ? on[0] : labels.find((l) => l.id === decision.labelId);
-    if (!label) continue;
+    // Moving mail Sift left in the inbox says it is not that, but not what it is: like mail Sift could not place.
+    if (!label || (label.id === LEAVE_IN_INBOX && place !== 'keep')) continue;
 
     const agrees = decision.labelId === label.id && (decision.disposition === 'review' ? 'keep' : decision.disposition) === place;
     if (agrees) {
