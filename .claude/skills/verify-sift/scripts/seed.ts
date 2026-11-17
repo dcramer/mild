@@ -214,8 +214,10 @@ await writeRuleFilter({ db, mailbox, now: () => now - HOUR }, newsRule).catch(()
 // A second mailbox of the same person, with no mail (connected after the passes, so none comes to it), to remove; and a second person, who owns nothing yet and
 // takes over the install when the first deletes their account. Neither can be signed in to here.
 await connectAccount(store, WORK, '1', now - 23 * HOUR, user);
+// With labels of its own, or every screen would be the setting-up steps.
+await withSampleLabels(db, WORK);
 await connectAccount(store, OTHER, '1', now - 22 * HOUR);
-// A model in use, so the dashboard is not behind its connect-a-model wall. The key is made up, and this
+// A model in use, so the dashboard is not behind its setting-up steps. The key is made up, and this
 // instance runs no passes, so nothing ever calls Anthropic with it.
 await saveApiKey({ ...(await credentials(db, 'model')), exclusive: (work) => work() }, 'anthropic', 'sk-ant-synthetic-seed');
 await setModel(db, 'anthropic/claude-haiku-4-5');

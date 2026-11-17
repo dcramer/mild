@@ -72,7 +72,7 @@ describe('asking for labels', () => {
     const proposal = await proposeLabels({ db, propose, model: 'p/m', now: () => 5 }, { accountId: ACCOUNT, goal: 'Stop pitches from Acme' });
     // Everything else is the prompt's to explain, not one of the person's labels.
     expect(asked).toEqual([{ goal: 'Stop pitches from Acme', labels: [] }]);
-    expect(await latestLabelProposal(db, ACCOUNT)).toEqual(proposal);
+    expect(await latestLabelProposal(db, [ACCOUNT])).toEqual(proposal);
     const row = await raw(db).get('SELECT * FROM label_proposals');
     expect(row).toMatchObject({ model: 'p/m', started_at: 5, finished_at: 5, input_tokens: 10, output_tokens: 20, cost_usd: 0.01, error: null });
     expect(JSON.stringify(row)).not.toContain('Acme');
@@ -89,6 +89,6 @@ describe('asking for labels', () => {
       { error: null, cost_usd: 0 },
       { error: 'rate limited', cost_usd: 0.01 },
     ]);
-    expect(await latestLabelProposal(db, ACCOUNT)).toEqual(first);
+    expect(await latestLabelProposal(db, [ACCOUNT])).toEqual(first);
   });
 });

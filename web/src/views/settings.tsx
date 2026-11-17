@@ -462,7 +462,7 @@ function Keys() {
 }
 
 /** How sift runs, most used first. What it does with mail is under Labels and Rules. */
-/** Settings, over whatever is showing. Opened from the account menu, or from under the model wall, so nothing has to be set up first. */
+/** Settings, over whatever is showing. Opened from the account menu, or from the setting-up page, so nothing has to be set up first. */
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
   const session = useLoaded('session', (signal) => api.session(signal), 300_000);

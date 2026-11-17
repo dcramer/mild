@@ -157,32 +157,37 @@ describe('managing sift from the dashboard', () => {
     expect((await bare('POST', '/api/evals/run', { accountId: ACCOUNT })).status).toBe(409);
   });
 
-  it('asks the model for labels from what the person wants, and makes the ones they keep, all or none', async () => {
+  it('asks the model for labels from what the person wants, and makes the ones they keep in every mailbox without any, all or none', async () => {
     const { call } = await start();
-    expect((await call('GET', `/api/labels/proposal?account=${encodeURIComponent(ACCOUNT)}`)).body).toEqual({ proposal: null });
-    const proposed = await call('POST', '/api/labels/propose', { accountId: ACCOUNT, goal: '  Fewer sales pitches  ' });
-    expect(proposed.body).toMatchObject({ goal: 'Fewer sales pitches', drafts: [{ name: 'Cold outreach', disposition: 'archive', unsubscribe: true }] });
-    for (const bad of [{ accountId: ACCOUNT }, { accountId: ACCOUNT, goal: '   ' }]) expect((await call('POST', '/api/labels/propose', bad)).status).toBe(400);
-    expect((await call('POST', '/api/labels/propose', { accountId: 'nobody@example.org', goal: 'x' })).status).toBe(404);
-    expect(calls).toEqual([`propose ${ACCOUNT}`]);
-
-    const before = (await listLabels(db, ACCOUNT)).length;
+    const NEW = 'new@example.org';
+    expect((await call('GET', '/api/labels/proposal')).body).toEqual({ proposal: null });
+    // Every mailbox has labels: nothing to make them in.
     const pitches = { name: 'Pitches', description: 'From strangers.', disposition: 'archive', unsubscribe: true };
-    // One name already taken refuses the lot.
-    expect((await call('POST', '/api/labels/accept', { accountId: ACCOUNT, labels: [pitches, { ...pitches, name: 'Personal' }] })).status).toBe(409);
-    expect(await listLabels(db, ACCOUNT)).toHaveLength(before);
-    const accepted = await call('POST', '/api/labels/accept', {
-      accountId: ACCOUNT,
-      labels: [pitches, { name: 'Lies', description: 'Scams.', disposition: 'block' }],
-    });
+    expect((await call('POST', '/api/labels/accept', { labels: [pitches] })).status).toBe(409);
+
+    await connectAccount(store, NEW, '1', 0, 1);
+    const proposed = await call('POST', '/api/labels/propose', { goal: '  Fewer sales pitches  ' });
+    expect(proposed.body).toMatchObject({ goal: 'Fewer sales pitches', drafts: [{ name: 'Cold outreach', disposition: 'archive', unsubscribe: true }] });
+    for (const bad of [{}, { goal: '   ' }, { goal: 'x', accountId: NEW }]) expect((await call('POST', '/api/labels/propose', bad)).status).toBe(400);
+    // Recorded on the mailbox that has no labels yet.
+    expect(calls).toEqual([`propose ${NEW}`]);
+
+    const before = await listLabels(db, ACCOUNT);
+    // One name taken refuses the lot.
+    expect((await call('POST', '/api/labels/accept', { labels: [pitches, { ...pitches }] })).status).toBe(409);
+    expect(await listLabels(db, NEW)).toHaveLength(1);
+    const accepted = await call('POST', '/api/labels/accept', { labels: [pitches, { name: 'Lies', description: 'Scams.', disposition: 'block' }] });
     expect(accepted.body).toEqual({ ids: ['pitches', 'lies'] });
-    expect((await listLabels(db, ACCOUNT)).filter((l) => ['pitches', 'lies'].includes(l.id))).toEqual([
+    expect(await listLabels(db, NEW)).toEqual([
       { id: 'pitches', name: 'Pitches', description: 'From strangers.', disposition: 'archive', gmailLabel: 'sift/pitches', unsubscribe: true },
       { id: 'lies', name: 'Lies', description: 'Scams.', disposition: 'spam', gmailLabel: 'sift/lies', block: true },
+      expect.objectContaining({ id: 'everything_else' }),
     ]);
+    // A mailbox that had labels keeps its own.
+    expect(await listLabels(db, ACCOUNT)).toEqual(before);
     // With labels of their own, the mailbox's mail starts coming in.
     expect(calls.at(-1)).toBe('check');
-    expect((await call('POST', '/api/labels/accept', { accountId: ACCOUNT, labels: [] })).status).toBe(400);
+    expect((await call('POST', '/api/labels/accept', { labels: [] })).status).toBe(400);
   });
 
   it("lists the examples it holds without their content, and deletes one or all of an account's", async () => {

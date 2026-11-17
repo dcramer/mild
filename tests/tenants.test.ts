@@ -144,12 +144,12 @@ const READS = (account: string, mark: string) => [
   '/api/manage',
   '/api/examples',
   '/api/evals',
+  '/api/labels/proposal',
   `/api/message?account=${encodeURIComponent(account)}&id=m-${mark}`,
   `/api/suggestion?account=${encodeURIComponent(account)}&sender=sender@${mark}.example.com`,
   `/api/sender?account=${encodeURIComponent(account)}&address=sender@${mark}.example.com`,
   `/api/domain?account=${encodeURIComponent(account)}&domain=${mark}.example.com`,
   `/api/examples?account=${encodeURIComponent(account)}`,
-  `/api/labels/proposal?account=${encodeURIComponent(account)}`,
   `/api/message/html?account=${encodeURIComponent(account)}&id=m-${mark}`,
   `/api/rules/waiting?id=${ids[account]!.rule}`,
   `/api/rules/inbox?id=${ids[account]!.rule}`,
@@ -299,12 +299,6 @@ describe("nobody sees or changes another person's mail", () => {
       ['/api/examples/delete', { accountId: ALPHA, messageId: `m-${MARK[ALPHA]}` }, { accountId: NOBODY, messageId: `m-${MARK[ALPHA]}` }],
       ['/api/examples/delete-all', { accountId: ALPHA }, { accountId: NOBODY }],
       ['/api/evals/run', { accountId: ALPHA }, { accountId: NOBODY }],
-      ['/api/labels/propose', { accountId: ALPHA, goal: 'Fewer pitches' }, { accountId: NOBODY, goal: 'Fewer pitches' }],
-      [
-        '/api/labels/accept',
-        { accountId: ALPHA, labels: [{ name: 'Mine now', description: '', disposition: 'archive' }] },
-        { accountId: NOBODY, labels: [{ name: 'Mine now', description: '', disposition: 'archive' }] },
-      ],
       ['/api/mailbox/remove', { address: ALPHA }, { address: NOBODY }],
     ];
     for (const [path, body, nobody] of writes) {

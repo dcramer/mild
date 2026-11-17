@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNotNull, labelProposals, labels } from './query.ts';
+import { and, asc, desc, eq, inArray, isNotNull, labelProposals, labels } from './query.ts';
 import { labelProposalName, openJson, sealJson } from './content.ts';
 import type { LabelDraft } from '../triage/proposal.ts';
 import type { Usage } from '../triage/stages/model.ts';
@@ -183,19 +183,29 @@ export async function finishLabelProposal(
     .where(eq(labelProposals.id, id));
 }
 
-/** The account's latest proposal that suggested something, so it survives a reload. */
-export async function latestLabelProposal(db: Sql, accountId: string): Promise<{ id: number; goal: string; drafts: LabelDraft[]; at: number } | null> {
+/** The latest proposal for any of these mailboxes that suggested something, so it survives a reload. */
+export async function latestLabelProposal(
+  db: Sql,
+  accountIds: readonly string[],
+): Promise<{ id: number; goal: string; drafts: LabelDraft[]; at: number } | null> {
+  if (accountIds.length === 0) return null;
   const [row] = await db
-    .select({ id: labelProposals.id, goal: labelProposals.goal, labels: labelProposals.labels, at: labelProposals.startedAt })
+    .select({
+      id: labelProposals.id,
+      accountId: labelProposals.accountId,
+      goal: labelProposals.goal,
+      labels: labelProposals.labels,
+      at: labelProposals.startedAt,
+    })
     .from(labelProposals)
-    .where(and(eq(labelProposals.accountId, accountId), isNotNull(labelProposals.labels)))
+    .where(and(inArray(labelProposals.accountId, [...accountIds]), isNotNull(labelProposals.labels)))
     .orderBy(desc(labelProposals.startedAt), desc(labelProposals.id))
     .limit(1);
   if (!row?.labels) return null;
   return {
     id: row.id,
-    goal: openJson<string>(db, labelProposalName(db, accountId, 'goal'), row.goal),
-    drafts: openJson<LabelDraft[]>(db, labelProposalName(db, accountId, 'labels'), row.labels),
+    goal: openJson<string>(db, labelProposalName(db, row.accountId, 'goal'), row.goal),
+    drafts: openJson<LabelDraft[]>(db, labelProposalName(db, row.accountId, 'labels'), row.labels),
     at: row.at,
   };
 }

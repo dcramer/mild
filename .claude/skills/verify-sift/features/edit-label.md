@@ -18,9 +18,9 @@ A label is what mail is; its outcome is what happens to it. The user changes a l
 
 Preconditions:
 
-- Fresh seed. Labels lists Newsletters once, for `me@example.org` (the work mailbox has only Everything else); the row reads `Archive`, 2 messages.
+- Fresh seed. Labels lists Newsletters once per mailbox; `me@example.org`'s row (first) reads `Archive`, 2 messages.
 
-- **Open.** `ab open "$B/labels"`, then `ab find text "Newsletters" click --exact`. It opens: a level-2 heading `Newsletters` with `Name`, `What it is`, `What Sift does with it: Archive`, and `Unsubscribe, when the sender offers a safe way` unchecked.
+- **Open.** `ab open "$B/labels"`, then `ab find text "Newsletters" click --exact`. The first, `me@example.org`'s, opens: a level-2 heading `Newsletters` with `Name`, `What it is`, `What Sift does with it: Archive`, and `Unsubscribe, when the sender offers a safe way` unchecked.
 - **Change the outcome.** `ab find role combobox click --name "What Sift does with it"` lists `Keep`, `Archive`, `Spam`, `Block`; then `ab find role option click --name "Keep"`.
 - **Save.** `ab find role button click --name "Save"`. The panel stays open (`?label=newsletter`). `Close`: the `me@example.org` Newsletters row's outcome cell reads `Keep`.
 - **Second view.** `ab reload`. The row still reads `Keep`; `me@work.example.org`'s still reads `Archive`.

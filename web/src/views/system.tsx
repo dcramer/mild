@@ -21,6 +21,7 @@ import {
   Document,
   Empty,
   Entry,
+  Onboarding,
   Splash,
   Fact,
   Facts,
@@ -741,19 +742,36 @@ export function SystemView() {
         </Sheet>
       </Section>
 
-      <Section title="Entry" meta="the page in place of the dashboard: signing in, then connecting a model; centred in the window">
+      <Section title="Entry" meta="the page in place of the dashboard when sign-in cannot start here; centred in the window">
         <div className="sheet [&>main]:min-h-0">
-          <Entry account={{ name: 'me@example.org', onSettings: () => {}, onSignOut: () => {} }}>
-            <p className="statement">Connect a model.</p>
-            <p className="text-muted-foreground">It reads the mail no rule covers and says which of your labels it is.</p>
-            <Field label="How far back" hint="Up to 300 messages, one model call each.">
-              <Select label="How far back" value="7" options={[['7', 'The last week']] as const} onChange={() => {}} />
-            </Field>
+          <Entry>
+            <p className="statement">Sign-in is not set up.</p>
+            <p className="text-muted-foreground">Sift needs a Google client before anyone can sign in.</p>
             <Button variant="mark" size="lg" className="justify-between">
               Continue
               <ArrowRightIcon aria-hidden />
             </Button>
           </Entry>
+        </div>
+      </Section>
+
+      <Section title="Onboarding" meta="the page in place of the dashboard while someone sets Sift up: the steps, then the step, centred; scrolls when long">
+        <div className="sheet [&>div]:min-h-0">
+          <Onboarding
+            steps={['Connect a model', 'What you want', 'Your labels', 'Older mail']}
+            current={1}
+            title="What do you want from Sift?"
+            intro="Say it in your own words, and Sift suggests labels for it."
+            account={{ name: 'me@example.org', onSettings: () => {}, onSignOut: () => {} }}
+          >
+            <TextArea aria-label="What do you want from Sift?" className="min-h-24" defaultValue="Get sales pitches out of my inbox." />
+            <div>
+              <Button variant="mark" size="lg">
+                Suggest labels
+                <ArrowRightIcon aria-hidden />
+              </Button>
+            </div>
+          </Onboarding>
         </div>
       </Section>
 

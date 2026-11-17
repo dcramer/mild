@@ -7,6 +7,7 @@ export type {
   DecisionRow,
   FactFilter,
   FeedbackRequest,
+  LabelProposal,
   LabelSummary,
   ListedDecision,
   ManageState,
@@ -30,6 +31,7 @@ import type {
   FactFilter,
   FeedbackReply,
   FeedbackRequest,
+  LabelProposal,
   ManageState,
   MessageDetail,
   Models,
@@ -213,6 +215,13 @@ export const api = {
   ) => post('/api/labels', { accountId, id, ...change }),
   addLabel: (label: { accountId: string; name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }) =>
     post<{ id: string }>('/api/labels/add', label),
+  /** Ask the model for labels from what the person wants. Its own call; it can take a minute. */
+  proposeLabels: (goal: string) => post<LabelProposal>('/api/labels/propose', { goal }),
+  /** The latest labels the model suggested, so a reload keeps them. */
+  labelProposal: (signal: AbortSignal) => get<{ proposal: LabelProposal | null }>('/api/labels/proposal', {}, signal),
+  /** Make these labels in every mailbox of the person's that has none yet. */
+  acceptLabels: (labels: { name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }[]) =>
+    post<{ ids: string[] }>('/api/labels/accept', { labels }),
   /** A rule carries a label, an action (`disposition`), or both; or an action for mail that turns out to be `whenLabel`. */
   addRule: (rule: {
     accountId: string;

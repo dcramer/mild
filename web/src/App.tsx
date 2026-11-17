@@ -6,7 +6,7 @@ import { lazyView } from '@/lib/lazy.tsx';
 import { ListView, Loading, Masthead, Note, Notice, PageHeader } from '@/system';
 import type { MessageRef } from '@/views/message-panel.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
-import { ModelWall } from '@/components/model-wall.tsx';
+import { SetUp } from '@/components/set-up.tsx';
 import { Boot } from '@/views/boot.tsx';
 
 // The home page comes with the app. Every other screen is its own file, fetched when first needed and,
@@ -102,7 +102,7 @@ const NAMES: Record<(typeof SECTIONS)[number], string> = {
 };
 /** Where a section is: the home page is the root. */
 const pathOf = (section: (typeof SECTIONS)[number]) => (section === 'suggestions' ? '' : section);
-/** Settings opens over whatever is showing, the model wall included, so nothing has to be finished to reach it. */
+/** Settings opens over whatever is showing, setting up included, so nothing has to be finished to reach it. */
 const openSettings = () => setParams({ settings: '1' }, { state: { panel: true } });
 const closeSettings = () => ((window.history.state as { panel?: boolean } | null)?.panel ? window.history.back() : setParams({ settings: '' }));
 
@@ -139,9 +139,9 @@ function Gate({ route }: { route: string[] }) {
   }
   return (
     <>
-      <ModelWall signedInAs={session.data.email} onSettings={openSettings}>
+      <SetUp signedInAs={session.data.email} onSettings={openSettings}>
         <Dashboard signedInAs={session.data.email} route={route} />
-      </ModelWall>
+      </SetUp>
       {settings === '1' ? (
         <Suspense fallback={null}>
           <SettingsPanel onClose={closeSettings} />
