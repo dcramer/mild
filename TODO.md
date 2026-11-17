@@ -129,7 +129,7 @@ sift has run for real, off, on the owner's inbox: sync, the model, suggestions a
 
 - [ ] The person's words to the label model, and what it suggests, are encrypted, but the labels made from them (names, descriptions) are plain. Decide one way.
 - [ ] **Shared sender reputation**, if ever wanted, is a table of its own with an install-wide hash, written only from what people reported (blocked, marked spam), from senders that passed DMARC, counted only past several different people, and stated in the privacy policy. The per-person hashes are never joined across people.
-- [ ] **Vercel, the rest.** Sift runs in production there ([docs/VERCEL.md](docs/VERCEL.md)); check what RUNTIME.md still lists as untried. The Deploy Button (README) is untried: check that it adds Neon and Upstash, and that Upstash sets `REDIS_URL` (Vercel's own chatbot template relies on it; no vendor page says so).
+- [ ] **Vercel, the rest.** Sift runs in production there ([docs/VERCEL.md](docs/VERCEL.md)); check what RUNTIME.md still lists as untried. The Deploy Button (docs/VERCEL.md) is untried: check that it adds Neon and Upstash, and that Upstash sets `REDIS_URL` (Vercel's own chatbot template relies on it; no vendor page says so).
   - **Setup in the browser.** No `sift init`: the Google client and settings entered in the dashboard (model sign-in already is), with the first visitor claiming the install safely.
   - **A public address.** It no longer sits behind a tailnet, so sign-in is the only gate; review the session and write protections with that in mind.
   - **Google verification.** Hosting one Google client for other people means restricted-scope verification and a yearly security assessment (CASA).
