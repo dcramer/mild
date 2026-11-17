@@ -8,7 +8,9 @@ import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
 import { credentialStore } from '../src/model/credentials.ts';
 import { type Keyring, loadKeyring, openSecret, openToRekey, readSecret, rekeySecrets, writeSecret } from '../src/secrets.ts';
 import { credentials, rekeyCredentials } from '../src/store/credentials.ts';
-import { conditionsHash, openPart, proposalName, rekeyContent, ruleName, sealJson, sealPart } from '../src/store/content.ts';
+import { conditionsHash, openJson, openPart, proposalName, rekeyContent, ruleDraftName, ruleName, sealJson, sealPart } from '../src/store/content.ts';
+import { getRuleFilter, setRuleFilter } from '../src/store/filters.ts';
+import { finishLabelProposal, latestLabelProposal, startLabelProposal } from '../src/store/labels.ts';
 import { listProposals } from '../src/store/proposals.ts';
 import { rekeyStore } from '../src/store/rekey.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
@@ -19,7 +21,7 @@ import { cachedCorrespondent, domainFacts, rememberCorrespondent, senderFacts } 
 import { storedFacts } from '../src/store/messages.ts';
 import { listDecisions } from '../src/dashboard/queries/decisions.ts';
 import { recordDecision } from '../src/store/decisions.ts';
-import { hasRuleFor, listRules, setRule } from '../src/store/rules.ts';
+import { hasRuleFor, listRules, setRule, startRuleDraft } from '../src/store/rules.ts';
 import { getAction, insertPendingAction } from '../src/store/actions.ts';
 import { everything, facts, storeExample, withSampleLabels } from './helpers.ts';
 import { shotCandidates } from '../src/store/examples.ts';
@@ -311,7 +313,14 @@ describe('mail', () => {
       },
       0,
     );
-    const stored = await raw(db).all('SELECT r.match, r.except_matches, r.conditions, r.name, d.reason, a.payload FROM rules r, decisions d, actions a');
+    await setRuleFilter(db, id, { filterId: 'f1', state: 'active', written: { from: 'news@example.com' } }, 0);
+    const suggested = await startLabelProposal(db, { accountId: 'alpha@example.org', goal: 'Example news out of the way', model: 'test/model', now: 0 });
+    const draft = { name: 'Example news', description: 'From news@example.com', disposition: 'archive', why: 'Example news' } as const;
+    await finishLabelProposal(db, 'alpha@example.org', suggested, { drafts: [draft], now: 0 });
+    await startRuleDraft(db, { accountId: 'alpha@example.org', goal: 'Archive news@example.com', model: 'test/model', now: 0 });
+    const stored = await raw(db).all(
+      'SELECT r.match, r.except_matches, r.conditions, r.name, r.filter_written, d.reason, a.payload, l.goal, l.labels, rd.goal FROM rules r, decisions d, actions a, label_proposals l, rule_drafts rd',
+    );
     expect(JSON.stringify(stored)).not.toContain('example.com');
     expect(JSON.stringify(stored)).not.toContain('Example news');
     // A rule replaced without a name keeps its own.
@@ -328,6 +337,10 @@ describe('mail', () => {
     expect(await hasRuleFor(b, 'alpha@example.org', { from: ['news@example.com'] })).toBe(true);
     expect((await listRules(b, 'alpha@example.org'))[0]).toMatchObject({ name: 'Example news' });
     expect(await getAction(b, action)).toMatchObject({ payload: { unsubscribe: 'news.example.com' } });
+    expect(await getRuleFilter(b, id)).toMatchObject({ written: { from: 'news@example.com' } });
+    expect(await latestLabelProposal(b, ['alpha@example.org'])).toMatchObject({ goal: 'Example news out of the way', drafts: [draft] });
+    const [{ goal }] = (await raw(b).all('SELECT goal FROM rule_drafts')) as [{ goal: string }];
+    expect(openJson(b, ruleDraftName(b, 'alpha@example.org', 'goal'), goal)).toBe('Archive news@example.com');
   });
 
   it('hashes at start the conditions a migration could not, with or without a key', async () => {
@@ -364,6 +377,23 @@ describe('mail', () => {
       conditions: conditionsHash(db, { from: ['a@example.com'], subjectContains: ['Weekly'] }, [{ fromName: ['Example'] }]),
     });
     expect((await listProposals(db, 'alpha@example.org'))[0]).toMatchObject({ match: { from: ['b@example.com'] } });
+  });
+
+  it('keeps the answered one of two proposals for the same mail that hashed apart before conditions held lists', async () => {
+    const { as } = await alpha(A);
+    const db = await as(A);
+    await withSampleLabels(db, 'alpha@example.org');
+    await raw(db).run(
+      `INSERT INTO proposals (account_id, match, conditions, label_id, disposition, agreed, status, created_at) VALUES ('alpha@example.org', ?, 'unset:p', 'newsletter', 'archive', 3, 'dismissed', 0)`,
+      sealJson(db, proposalName(db, 'alpha@example.org'), { from: 'b@example.com' }),
+    );
+    await raw(db).run(
+      `INSERT INTO proposals (account_id, match, conditions, label_id, disposition, agreed, created_at) VALUES ('alpha@example.org', ?, ?, 'newsletter', 'archive', 3, 1)`,
+      sealJson(db, proposalName(db, 'alpha@example.org'), { from: ['b@example.com'] }),
+      conditionsHash(db, { from: ['b@example.com'] }),
+    );
+    await rekeyContent(db);
+    expect(await raw(db).all('SELECT status FROM proposals')).toEqual([{ status: 'dismissed' }]);
   });
 
   it('finds mail by its subject, which the database cannot read', async () => {
