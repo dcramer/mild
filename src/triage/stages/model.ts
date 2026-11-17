@@ -163,7 +163,7 @@ export function modelStage(deps: ModelStageDeps): Stage<Decision | Unfinished> {
           ...base,
           disposition: 'review',
           labelId: label.id,
-          gmailLabel: label.gmailLabel,
+          ...(label.gmailLabel ? { gmailLabel: label.gmailLabel } : {}),
           reason: `${unusual}${label.name}, but ${why}: ${verdict.reason}`,
         };
       }
@@ -174,7 +174,7 @@ export function modelStage(deps: ModelStageDeps): Stage<Decision | Unfinished> {
           ...base,
           disposition: 'review',
           labelId: label.id,
-          gmailLabel: label.gmailLabel,
+          ...(label.gmailLabel ? { gmailLabel: label.gmailLabel } : {}),
           reason: `${unusual}${label.name}, but you have written in this thread: ${verdict.reason}`,
         };
 
@@ -183,7 +183,7 @@ export function modelStage(deps: ModelStageDeps): Stage<Decision | Unfinished> {
           ...base,
           disposition: 'review',
           labelId: label.id,
-          gmailLabel: label.gmailLabel,
+          ...(label.gmailLabel ? { gmailLabel: label.gmailLabel } : {}),
           reason: `${unusual}${label.name}, but not sure enough to act on it: ${verdict.reason}`,
         };
 

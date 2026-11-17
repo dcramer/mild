@@ -20,7 +20,7 @@ import { listDecisions } from '../src/dashboard/queries/decisions.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { hasRuleFor, listRules, setRule } from '../src/store/rules.ts';
 import { getAction, insertPendingAction } from '../src/store/actions.ts';
-import { everything, facts, storeExample } from './helpers.ts';
+import { everything, facts, storeExample, withSampleLabels } from './helpers.ts';
 import { shotCandidates } from '../src/store/examples.ts';
 import { freshStore, raw } from './fixtures.ts';
 
@@ -248,6 +248,7 @@ describe('mail', () => {
   it('keeps only that there is a list id, and gives it back from the headers, to examples too', async () => {
     const { as } = await alpha(A);
     const db = await as(A);
+    await withSampleLabels(db, 'alpha@example.org');
     await recordSync(
       db,
       'alpha@example.org',

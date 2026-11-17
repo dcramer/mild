@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import * as schema from '../src/store/schema.ts';
 import { addMailbox, connectAccount, connectedAddresses, deleteUser, recordSync, removeMailbox } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
-import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts';
+import { listLabels, updateLabel } from '../src/store/labels.ts';
 import { addRule, removeRule } from '../src/store/rules.ts';
 import { accounts, labels } from '../src/store/query.ts';
 import { DatabaseInUse, moveAside, pglite, roleBypass, verified } from '../src/store/db.ts';
@@ -15,7 +15,7 @@ import { openStore, storeOn } from '../src/store/store.ts';
 import { loadKeyring } from '../src/secrets.ts';
 import type { Disposition } from '../src/triage/types.ts';
 import { freshStore, onePerson, openUserDb, raw, recordEverything, rowsBy, superuser } from './fixtures.ts';
-import { facts } from './helpers.ts';
+import { facts, withSampleLabels } from './helpers.ts';
 import { conditionsHash } from '../src/store/content.ts';
 
 const MIGRATIONS = new URL('../src/store/migrations/', import.meta.url);
@@ -213,19 +213,24 @@ describe('a proposal', () => {
 });
 
 describe('a new mailbox', () => {
-  it('starts with the default labels, once, and keeps them when connected again', async () => {
-    const { store, db } = await onePerson('alpha@example.org');
-    const ids = DEFAULT_LABELS.map((l) => l.id);
-    expect((await listLabels(db, 'alpha@example.org')).map((l) => l.id)).toEqual(ids);
+  it('starts with Everything else alone, once, and keeps its labels when connected again', async () => {
+    const store = await freshStore();
+    const db = await store.user(await connectAccount(store, 'alpha@example.org', '1', 0));
+    expect(await listLabels(db, 'alpha@example.org')).toEqual([
+      { id: 'everything_else', name: 'Everything else', description: expect.any(String), disposition: 'keep' },
+    ]);
+    await withSampleLabels(db, 'alpha@example.org');
     await updateLabel(db, 'alpha@example.org', 'newsletter', { name: 'Reading' });
     await connectAccount(store, 'alpha@example.org', '9', 5);
     await addMailbox(db, 'alpha@example.org', '10');
     expect((await listLabels(db, 'alpha@example.org')).map((l) => l.name)).toContain('Reading');
-    // A store opened afresh puts back a mailbox missing from a person's database, labels and all.
+    // Everything else is listed after the person's own.
+    expect((await listLabels(db, 'alpha@example.org')).at(-1)?.id).toBe('everything_else');
+    // A store opened afresh puts back a mailbox missing from a person's database, with its one label.
     await raw(db).run('DELETE FROM mailboxes');
     expect(await listLabels(db, 'alpha@example.org')).toEqual([]);
     const reopened = await storeOn(pglite(await superuser()), loadKeyring({})).user(1);
-    expect((await listLabels(reopened, 'alpha@example.org')).map((l) => l.id)).toEqual(ids);
+    expect((await listLabels(reopened, 'alpha@example.org')).map((l) => l.id)).toEqual(['everything_else']);
   });
 
   it('needs its labels to exist for anything that names one', async () => {

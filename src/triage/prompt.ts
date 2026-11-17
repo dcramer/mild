@@ -3,6 +3,7 @@ import { parseAddressList } from './features.ts';
 import { site } from './html.ts';
 import type { Standing } from './standing.ts';
 import { type JudgeInput, UNSURE } from './stages/model.ts';
+import { EVERYTHING_ELSE } from './types.ts';
 
 export const VERDICT_TOOL = 'record_verdict';
 const BODY_MARK = '| ';
@@ -30,8 +31,10 @@ Rules:
 - If an owner's rule for this sender is given, it says what their mail usually is. Use that label unless
   this message is plainly something else. If the rule has a condition, apply the label only when the
   message meets it, and otherwise label the message as what it is.
-- If no label clearly fits, or the evidence conflicts, answer "${UNSURE}". A wrong label is worse
-  than "${UNSURE}": the owner would rather look at one message too many than miss one that mattered.
+- Mail that is plainly none of the owner's other labels is ${EVERYTHING_ELSE}, when they have it. Answer
+  "${UNSURE}" when it might be one of them and you cannot tell which, or whether it is, or when the evidence
+  conflicts. A wrong
+  label is worse than "${UNSURE}": the owner would rather look at one message too many than miss one that mattered.
 - The reason is one short sentence. Do not quote the email at length.`;
 
 const tally = (labels: { id: string; messages: number }[]) => labels.map((l) => `${l.id} ${l.messages}`).join(', ');

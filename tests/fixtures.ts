@@ -19,6 +19,7 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { addRule } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import { conditionsHash } from '../src/store/content.ts';
+import { withSampleLabels } from './helpers.ts';
 
 /*
  * One database per test file, loaded from the image global-setup.ts migrated once for the whole run,
@@ -178,7 +179,9 @@ export async function onePerson(...accounts: string[]): Promise<{ store: Store; 
   const store = await freshStore();
   let user: number | undefined;
   for (const account of accounts) user = await connectAccount(store, account, '1', 0, user);
-  return { store, db: await store.user(user ?? 1) };
+  const db = await store.user(user ?? 1);
+  for (const account of accounts) await withSampleLabels(db, account);
+  return { store, db };
 }
 
 /**
@@ -186,6 +189,7 @@ export async function onePerson(...accounts: string[]): Promise<{ store: Store; 
  * `db`): what deleting a mailbox or a person must take with it. Its message is `m-<account>`.
  */
 export async function recordEverything(db: Sql, account: string): Promise<void> {
+  await withSampleLabels(db, account);
   const message = `m-${account}`;
   await recordSync(
     db,
@@ -248,6 +252,7 @@ export async function recordEverything(db: Sql, account: string): Promise<void> 
     [`INSERT INTO examples (account_id, message_id, label_id, marked_at) VALUES (?, ?, 'newsletter', 0)`, account, message],
     [`INSERT INTO suggestion_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, ?, 'Hello.', 0)`, account, message],
     [`INSERT INTO model_runs (account_id, message_id, model, started_at, error) VALUES (?, ?, 'p/m', 0, 'e')`, account, message],
+    [`INSERT INTO label_proposals (account_id, started_at, model, goal) VALUES (?, 0, 'p/m', 'g')`, account],
     [
       `INSERT INTO eval_results (run_id, message_id, expected, got, duration_ms, shots, sender_shots) VALUES (?, ?, 'newsletter', 'newsletter', 1, 0, 0)`,
       run,

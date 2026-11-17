@@ -12,8 +12,11 @@ import examplesDeleteAllWrite from './routes/examples/delete-all/post.ts';
 import examplesDeleteWrite from './routes/examples/delete/post.ts';
 import examplesRead from './routes/examples/get.ts';
 import feedbackWrite from './routes/feedback/post.ts';
+import labelsAcceptWrite from './routes/labels/accept/post.ts';
 import labelsAddWrite from './routes/labels/add/post.ts';
 import labelsWrite from './routes/labels/post.ts';
+import labelsProposalRead from './routes/labels/proposal/get.ts';
+import labelsProposeWrite from './routes/labels/propose/post.ts';
 import mailboxRemoveWrite from './routes/mailbox/remove/post.ts';
 import manageRead from './routes/manage/get.ts';
 import messageRead from './routes/message/get.ts';
@@ -49,6 +52,7 @@ export const READS: readonly Read[] = [
   evalRead,
   evalsRead,
   examplesRead,
+  labelsProposalRead,
   manageRead,
   messageRead,
   modelsRead,
@@ -71,6 +75,8 @@ export const WRITES: readonly Write[] = [
   feedbackWrite,
   labelsWrite,
   labelsAddWrite,
+  labelsAcceptWrite,
+  labelsProposeWrite,
   mailboxRemoveWrite,
   modelWrite,
   modelChatgptWrite,

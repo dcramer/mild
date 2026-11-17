@@ -6,10 +6,10 @@ import { FILTER_CHECK_MINUTES, checkFiltersWhenDue } from '../src/work/filters.t
 import { addMailbox } from '../src/store/accounts.ts';
 import { openUserDb, raw, unmarked } from './fixtures.ts';
 import { getRuleFilter, ruleFilterStatus } from '../src/store/filters.ts';
-import { DEFAULT_LABELS, updateLabel } from '../src/store/labels.ts';
+import { updateLabel } from '../src/store/labels.ts';
 import { addRule, removeRule, setRule } from '../src/store/rules.ts';
 import { type FilterableRule, filterFor } from '../src/triage/filter.ts';
-import { FakeMailbox } from './helpers.ts';
+import { FakeMailbox, SAMPLE_LABELS } from './helpers.ts';
 
 const rule = (overrides: Partial<FilterableRule> = {}): FilterableRule => ({
   id: 'r1',
@@ -17,7 +17,7 @@ const rule = (overrides: Partial<FilterableRule> = {}): FilterableRule => ({
   labelId: 'newsletter',
   ...overrides,
 });
-const verdict = (candidate: FilterableRule, others: FilterableRule[] = []) => filterFor(candidate, DEFAULT_LABELS, [candidate, ...others]);
+const verdict = (candidate: FilterableRule, others: FilterableRule[] = []) => filterFor(candidate, SAMPLE_LABELS, [candidate, ...others]);
 const reason = (candidate: FilterableRule, others: FilterableRule[] = []) => {
   const v = verdict(candidate, others);
   return v.possible ? null : v.reason;

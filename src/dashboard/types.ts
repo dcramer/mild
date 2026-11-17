@@ -532,7 +532,8 @@ export const LabelSummary = z.object({
   markRead: z.boolean(),
   /** Also leave the sender's mailing list, where that can be done safely. */
   unsubscribe: z.boolean(),
-  gmailLabel: z.string(),
+  /** Null for Everything else. */
+  gmailLabel: z.string().nullable(),
   /** Rules that say mail is this label. */
   rules: z.number(),
   /** Messages whose current decision carries this label. */
@@ -541,6 +542,20 @@ export const LabelSummary = z.object({
   record: answered,
 });
 export type LabelSummary = z.infer<typeof LabelSummary>;
+
+/** A label the model suggested from what the person wants. Nothing is made until they accept it. */
+const LabelDraft = z.object({
+  name: z.string(),
+  description: z.string(),
+  disposition: z.enum(['keep', 'archive', 'spam']),
+  markRead: z.literal(true).optional(),
+  unsubscribe: z.literal(true).optional(),
+  /** Which part of what they asked for it serves. */
+  why: z.string(),
+});
+
+export const LabelProposal = z.object({ id: z.number(), goal: z.string(), drafts: z.array(LabelDraft), at: z.number() });
+export type LabelProposal = z.infer<typeof LabelProposal>;
 
 /**
  * A ChatGPT sign-in waiting on the person: where to go, and by device code the code to enter there.

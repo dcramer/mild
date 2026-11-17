@@ -3,10 +3,10 @@ import type { Sql } from '../src/store/sql.ts';
 import type { ExistingFilter, FilterProposal } from '../src/actions/filters.ts';
 import type { Mailbox } from '../src/actions/mailbox.ts';
 import { recordSync, listAccounts } from '../src/store/accounts.ts';
-import { examples } from '../src/store/query.ts';
+import { examples, labels } from '../src/store/query.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { sealPart } from '../src/store/content.ts';
-import type { Address, MessageFacts } from '../src/triage/types.ts';
+import type { Address, Label, MessageFacts } from '../src/triage/types.ts';
 
 const header = (a: Address) => (a.name ? `${a.name} <${a.address}>` : a.address);
 
@@ -166,3 +166,106 @@ export const everything = async (db: Sql): Promise<Scope> =>
     (await listAccounts(db)).map((a) => a.id),
     true,
   );
+
+/** The labels a mailbox in a test has unless it says otherwise: the starting set Sift once gave everyone. */
+export const SAMPLE_LABELS: readonly Label[] = [
+  {
+    id: 'personal',
+    name: 'Personal',
+    description:
+      'Written by a person to the owner or a small group, however short or oddly written: conversation, a direct request, an introduction, a reply in a conversation the owner took part in, a stranger writing about something particular to the owner. Not mail a company sends, however much the owner wants it.',
+    disposition: 'keep',
+    gmailLabel: 'sift/personal',
+  },
+  {
+    id: 'security',
+    name: 'Account alerts',
+    description:
+      "Something about the owner's own account that may need them: sign-in alerts, password resets, verification codes, a locked or changed account, a failed payment, a bill due, a card expiring, a renewal about to charge. However alarming, when the sender is who they claim to be. Not a change to terms or a privacy policy.",
+    disposition: 'keep',
+    gmailLabel: 'sift/security',
+  },
+  {
+    id: 'transactional',
+    name: 'Receipts',
+    description:
+      'A record of something the owner did: receipts and paid invoices, order confirmations, shipping and delivery updates, bookings, statements, tax documents. Even from a company that also sends promotions, or one they have not had mail from before. Not something they still have to pay or do.',
+    disposition: 'archive',
+    gmailLabel: 'sift/receipts',
+  },
+  {
+    id: 'calendar',
+    name: 'Calendar',
+    description:
+      "An invitation to a meeting or event from a person, or a change or cancellation to one the owner is in. Not replies to the owner's own invitations or automatic reminders, nor an event a company invites a whole list to.",
+    disposition: 'keep',
+    gmailLabel: 'sift/calendar',
+  },
+  {
+    id: 'request',
+    name: 'Asks for you',
+    description:
+      'Automated mail from a service where someone asks the owner in particular to do something: a review requested, an assignment, a mention, an approval or a question waiting on them. Not activity they are only watching.',
+    disposition: 'keep',
+    gmailLabel: 'sift/asks',
+  },
+  {
+    id: 'notification',
+    name: 'Notifications',
+    description:
+      'Automated activity from a service the owner uses that asks nothing of them: comments and changes on things they watch, builds, alerts, reports, digests, replies to their invitations, reminders, changes to terms or privacy policies.',
+    disposition: 'archive',
+    gmailLabel: 'sift/notifications',
+  },
+  {
+    id: 'newsletter',
+    name: 'Newsletters',
+    description: 'Editorial or community content from a list the owner subscribed to: writers, publications, digests, community mailing lists.',
+    disposition: 'archive',
+    gmailLabel: 'sift/newsletters',
+  },
+  {
+    id: 'marketing',
+    name: 'Marketing',
+    description:
+      'Promotions, sales, product announcements, events and re-engagement mail a company sends to a whole list, whether the owner wants it or never asked for it. Not mail about the owner in particular: their order, account or support request.',
+    disposition: 'archive',
+    gmailLabel: 'sift/marketing',
+  },
+  {
+    id: 'cold_outreach',
+    name: 'Cold outreach',
+    description:
+      'An unsolicited pitch from a stranger, written from a template or sent as a sequence of follow-ups: sales, recruiting, partnerships, guest posts, fundraising, surveys. Not someone the owner has written to or who is answering them, nor a stranger writing about something particular to the owner.',
+    disposition: 'archive',
+    gmailLabel: 'sift/cold-outreach',
+    unsubscribe: true,
+  },
+  {
+    id: 'phishing',
+    name: 'Scams and phishing',
+    description:
+      'An attempt to deceive the owner: a fake sign-in, invoice, delivery or security notice, a request for credentials, payment or gift cards, a scam or deceptive offer, or a sender pretending to be a person or company they are not. Being unexpected or from a new sender is not enough.',
+    disposition: 'spam',
+    gmailLabel: 'sift/phishing',
+  },
+];
+
+/** Give `account` the sample labels, before its own Everything else, unless it has them. */
+export async function withSampleLabels(db: Sql, account: string): Promise<void> {
+  await db
+    .insert(labels)
+    .values(
+      SAMPLE_LABELS.map((l, position) => ({
+        accountId: account,
+        id: l.id,
+        name: l.name,
+        description: l.description,
+        disposition: l.disposition,
+        gmailLabel: l.gmailLabel ?? null,
+        position,
+        unsubscribe: l.unsubscribe ?? false,
+      })),
+    )
+    .onConflictDoNothing();
+}

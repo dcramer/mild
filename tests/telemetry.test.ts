@@ -3,14 +3,13 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createJudge } from '../src/model/judge.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { hashOf, traceIds } from '../src/store/content.ts';
-import { DEFAULT_LABELS } from '../src/store/labels.ts';
 import { VERDICT_TOOL } from '../src/triage/prompt.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
 import { loadKeyring } from '../src/secrets.ts';
 import { flushTelemetry, reportError, scrub, startTelemetry, traced } from '../src/telemetry.ts';
 import { triageAccount } from '../src/work/triage.ts';
 import { freshStore, raw } from './fixtures.ts';
-import { facts } from './helpers.ts';
+import { facts, SAMPLE_LABELS, withSampleLabels } from './helpers.ts';
 
 const ACCOUNT = 'me@example.org';
 const SENDER = 'billing@shop.example.com';
@@ -50,6 +49,7 @@ async function keyedPerson() {
   const store = await freshStore(loadKeyring({ SIFT_KEY: 'telemetry-key' }));
   const db = await store.user(await connectAccount(store, ACCOUNT, '1', 0));
   const other = await store.user(await connectAccount(store, 'you@example.org', '1', 0));
+  await withSampleLabels(db, ACCOUNT);
   return { db, other };
 }
 
@@ -88,7 +88,7 @@ describe('the model call, as Sentry is sent it', () => {
       model,
     )({
       evidence: { facts: message, known: deriveFacts(message), body: BODY, sender: { messagesSeen: 1, userHasWritten: false } },
-      labels: DEFAULT_LABELS,
+      labels: SAMPLE_LABELS,
     });
     expect(verdict).toMatchObject({ label: 'transactional' });
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { listAccounts } from '../../../../../store/accounts.ts';
-import { addLabel } from '../../../../../store/labels.ts';
+import { addLabels } from '../../../../../store/labels.ts';
 import { accountId, fromOutcome, named, outcome, text, write } from '../../../route.ts';
 import { DESCRIPTION } from '../../../shared/labels.ts';
 
@@ -19,6 +19,7 @@ export default write({
   run: async ({ db }, { accountId, name, description, disposition, markRead, unsubscribe }) => {
     if (!(await listAccounts(db)).some((a) => a.id === accountId)) return null;
     const label = { name, description, ...fromOutcome(disposition), ...(markRead ? { markRead } : {}), ...(unsubscribe ? { unsubscribe } : {}) };
-    return { id: (await addLabel(db, accountId, label)).id };
+    const [added] = await addLabels(db, accountId, [label]);
+    return { id: added!.id };
   },
 });

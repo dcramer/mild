@@ -15,7 +15,7 @@ const CALL = { timeoutMs: 60_000, maxRetries: 0 };
  * GenAI conventions, as Sentry's own pi-ai integration sets them): the model, why it stopped, tokens and
  * cost. Never what was asked or answered. Cached tokens count in the input, and their cost in its cost.
  */
-function answered(message: AssistantMessage): Attributes {
+export function answered(message: AssistantMessage): Attributes {
   const { usage } = message;
   const finish = message.stopReason === 'toolUse' ? 'tool_call' : message.stopReason;
   // A failed call reports zero of everything, which would read as a free one.

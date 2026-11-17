@@ -33,7 +33,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import type { Facts } from '../triage/facts.ts';
-import { DECIDED, DISPOSITIONS, STAGE_NAMES, SUBSCRIPTION_ACTIONS } from '../triage/types.ts';
+import { DECIDED, DISPOSITIONS, EVERYTHING_ELSE, STAGE_NAMES, SUBSCRIPTION_ACTIONS } from '../triage/types.ts';
 
 export const CREDENTIAL_KINDS = ['gmail', 'model'] as const;
 export const DECISION_OUTCOMES = ['none', 'done', 'skipped', 'failed', 'unknown'] as const;
@@ -203,10 +203,20 @@ export const labels = pgTable(
     block: boolean('block').notNull().default(false),
     markRead: boolean('mark_read').notNull().default(false),
     unsubscribe: boolean('unsubscribe').notNull().default(false),
-    gmailLabel: text('gmail_label').notNull(),
+    gmailLabel: text('gmail_label'), // null only for Everything else
     position: integer('position').notNull(),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.accountId, t.id] }), mailbox(t), oneOf('labels_disposition', t.disposition, DISPOSITIONS), own()],
+  (t) => [
+    primaryKey({ columns: [t.userId, t.accountId, t.id] }),
+    mailbox(t),
+    oneOf('labels_disposition', t.disposition, DISPOSITIONS),
+    check('labels_gmail_label', sql`(${t.id} = ${sql.raw(`'${EVERYTHING_ELSE}'`)}) = (${t.gmailLabel} IS NULL)`),
+    check(
+      'labels_everything_else_keeps',
+      sql`${t.id} <> ${sql.raw(`'${EVERYTHING_ELSE}'`)} OR (${t.disposition} = 'keep' AND NOT ${t.block} AND NOT ${t.markRead} AND NOT ${t.unsubscribe})`,
+    ),
+    own(),
+  ],
 ).enableRLS();
 
 /** What a row says mail is: one of its mailbox's labels. Labels are never deleted. */
@@ -516,6 +526,29 @@ export const evalRuns = pgTable(
     examples: jsonb('examples').$type<string[]>().notNull().default([]), // message ids of the examples it judges, chosen at the start
   },
   (t) => [unique('eval_runs_own').on(t.userId, t.id), mailbox(t), oneOf('eval_runs_status', t.status, EVAL_STATUSES), own()],
+).enableRLS();
+
+/**
+ * Labels the model suggested from what the person said they want, with what the call cost. Their words and
+ * the suggestions are encrypted, since either may name a sender. `labels` is null when the call failed.
+ */
+export const labelProposals = pgTable(
+  'label_proposals',
+  {
+    id: id(),
+    userId: userId(),
+    accountId: text('account_id').notNull(),
+    startedAt: time('started_at').notNull(),
+    finishedAt: time('finished_at'),
+    model: text('model').notNull(),
+    goal: text('goal').notNull(),
+    labels: text('labels'),
+    error: text('error'), // its status and kind, never the provider's text
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    costUsd: doublePrecision('cost_usd').notNull().default(0),
+  },
+  (t) => [unique('label_proposals_own').on(t.userId, t.id), mailbox(t), index('label_proposals_time').on(t.accountId, t.startedAt), own()],
 ).enableRLS();
 
 /** One row per example judged: labels and cost, no message content. */

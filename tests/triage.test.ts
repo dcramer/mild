@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LABELS } from '../src/store/labels.ts';
 import { bulkSignals, parseAddress } from '../src/triage/features.ts';
 import { triage } from '../src/triage/pipeline.ts';
 import { classifierStage } from '../src/triage/stages/classifier.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
 import { type Rule, describeMatch, readsMessage, rulesStage, settle, specificity } from '../src/triage/stages/rules.ts';
 import { labelled } from '../src/triage/types.ts';
-import { facts } from './helpers.ts';
+import { facts, SAMPLE_LABELS } from './helpers.ts';
 
-const LABELS = DEFAULT_LABELS;
+const LABELS = SAMPLE_LABELS;
 
 describe('pipeline', () => {
   it('sends a message to review when every stage abstains', async () => {

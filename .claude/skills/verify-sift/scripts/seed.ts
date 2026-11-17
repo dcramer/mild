@@ -29,7 +29,7 @@ import { addRule, countRuleHit } from '../../../../src/store/rules.ts';
 import { proposals } from '../../../../src/store/query.ts';
 import { conditionsHash, proposalName, sealJson } from '../../../../src/store/content.ts';
 import type { JudgeInput } from '../../../../src/triage/stages/model.ts';
-import { FakeMailbox } from '../../../../tests/helpers.ts';
+import { FakeMailbox, withSampleLabels } from '../../../../tests/helpers.ts';
 
 const ACCOUNT = 'me@example.org';
 const WORK = 'me@work.example.org';
@@ -108,6 +108,7 @@ const inbox = [
 const store = await openStore(config);
 const user = await connectAccount(store, ACCOUNT, '1', now - 24 * HOUR);
 const db = await store.user(user);
+await withSampleLabels(db, ACCOUNT);
 // One of each kind of rule: a label, an action, and an action for mail that turns out to be a label.
 const newsRule = await addRule(db, ACCOUNT, { match: { fromDomain: 'news.example.com' }, labelId: 'newsletter' }, 'user');
 const ordersRule = await addRule(db, ACCOUNT, { match: { from: 'orders@shop.example.com' }, labelId: 'transactional' }, 'user');

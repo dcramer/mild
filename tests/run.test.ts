@@ -11,8 +11,8 @@ import { lastStandingChange } from '../src/store/actions.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { passStatus } from '../src/work/status.ts';
 import { addMailbox, connectAccount, deleteUser, recordSync, removeMailbox } from '../src/store/accounts.ts';
-import { onePerson, openUserDb, raw, withReason } from './fixtures.ts';
-import { updateLabel } from '../src/store/labels.ts';
+import { freshStore, onePerson, openUserDb, raw, withReason } from './fixtures.ts';
+import { addLabels, updateLabel } from '../src/store/labels.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { setActive } from '../src/store/preferences.ts';
 import { MAX_ATTEMPTS, finishRun, startRun } from '../src/store/runs.ts';
@@ -226,6 +226,22 @@ describe('runOnce', () => {
 
 describe('a tick', () => {
   const person = async (store: Store) => (await raw(store.central).get<{ id: number }>('SELECT id FROM users'))!.id;
+
+  it('reads nothing from Gmail for a mailbox until it has a label of its own, older mail asked for or not', async () => {
+    const store = await freshStore();
+    const NEW = 'new@example.net';
+    const newcomer = await connectAccount(store, NEW, '1', 0);
+    const own = await store.user(newcomer);
+    let connected = 0;
+    const ephemeral = memoryEphemeral();
+    await askForBackfill(ephemeral, NEW, 7);
+    const counting: RunOptions = { ...options(), ephemeral, connect: () => (connected++, { api: api(), mailbox }) };
+    expect(await tick(store, counting, Infinity, [newcomer])).toEqual([]);
+    expect(connected).toBe(0);
+    await addLabels(own, NEW, [{ name: 'Pitches', description: 'From strangers.', disposition: 'archive' }]);
+    expect(await tick(store, counting, Infinity, [newcomer])).toMatchObject([{ email: NEW }]);
+    expect(connected).toBe(2);
+  });
 
   it('skips a mailbox another pass holds, and a finished pass lets go', async () => {
     const { store } = await onePerson(ACCOUNT);

@@ -160,7 +160,9 @@ async function redecide(db: Sql, accountId: string, now: number): Promise<number
         const unsure = base.stage === 'model' && (base.confidence ?? 0) < SURE && !outcome.ruleId;
         const held = unsure || (hides(outcome.disposition) && !safe);
         const derived: Decision = {
-          ...(held ? { disposition: 'review', subscription: 'preserve', labelId: label.id, gmailLabel: label.gmailLabel } : outcome),
+          ...(held
+            ? { disposition: 'review', subscription: 'preserve', labelId: label.id, ...(label.gmailLabel ? { gmailLabel: label.gmailLabel } : {}) }
+            : outcome),
           stage: base.stage,
           ...(base.confidence === null ? {} : { confidence: base.confidence }),
           ...(base.priorRuleId === null ? {} : { priorRuleId: base.priorRuleId }),

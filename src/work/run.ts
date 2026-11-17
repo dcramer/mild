@@ -16,6 +16,7 @@ import { KEEP_BODY_DAYS, keepSuggestionBodies } from './bodies.ts';
 import { captureExamples } from './examples.ts';
 import { PRUNE_PER_RUN, RETENTION_DAYS, pruneOld } from './retention.ts';
 import { continueEval, goingEvals } from '../learn/evals.ts';
+import { hasOwnLabels } from '../store/labels.ts';
 import { backfill } from './backfill.ts';
 import { checkFiltersWhenDue } from './filters.ts';
 import { recordPassStatus } from './status.ts';
@@ -103,6 +104,8 @@ export async function dueWork(store: Store, options: RunOptions, people?: readon
     const db = await store.user(person);
     if (await options.ephemeral.claim(`upkeep:${person}:${day}`, 2 * DAY_MS)) due.push({ kind: 'upkeep', person });
     for (const account of await listAccounts(db)) {
+      // Nothing is read from Gmail for a mailbox until the person has said, with a label of their own, what they want of it.
+      if (!(await hasOwnLabels(db, account.id))) continue;
       due.push({ kind: 'pass', person, account: account.id });
       const days = await options.ephemeral.get<number>(backfillKey(account.id));
       if (days !== null) due.push({ kind: 'backfill', person, account: account.id, days });

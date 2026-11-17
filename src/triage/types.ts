@@ -61,6 +61,12 @@ export interface Decision {
   confidence?: number;
 }
 
+/**
+ * The one label every mailbox has: mail that is none of the person's own labels. It always keeps and has no
+ * Gmail label, so mail put there by mistake is where it would have been without Sift.
+ */
+export const EVERYTHING_ELSE = 'everything_else';
+
 /** A kind of mail, and what the user wants done with it. Every tier names one of these; none picks an action. */
 export interface Label {
   id: string;
@@ -69,7 +75,8 @@ export interface Label {
   description: string;
   /** What sift does with mail that carries this label. */
   disposition: Disposition;
-  gmailLabel: string;
+  /** Absent only for Everything else, which would be on most of the inbox and say nothing. */
+  gmailLabel?: string;
   /** With `spam`: block the sender, so their later mail is spam without being judged again. */
   block?: boolean;
   /** With `keep` or `archive`: mark the mail read as well. */
@@ -90,7 +97,7 @@ export function labelled(
     disposition,
     subscription: label.unsubscribe && !wanted ? 'unsubscribe' : 'preserve',
     labelId: label.id,
-    gmailLabel: label.gmailLabel,
+    ...(label.gmailLabel ? { gmailLabel: label.gmailLabel } : {}),
     // An exception replaces the label's action, so it does not inherit the block.
     ...(label.block && override === undefined && disposition === 'spam' ? { block: true } : {}),
     ...(label.markRead && !wanted && (disposition === 'keep' || disposition === 'archive') ? { markRead: true } : {}),

@@ -154,7 +154,12 @@ export function ruleOutcome({ rule, label }: RuleHit, found?: Label): Outcome {
   }
   // Only what happens: the label's own extras are not the rule's to apply.
   const disposition = rule.disposition ?? 'keep';
-  return { disposition, subscription: 'preserve', ...(found ? { labelId: found.id, gmailLabel: found.gmailLabel } : {}), ...extras(disposition) };
+  return {
+    disposition,
+    subscription: 'preserve',
+    ...(found ? { labelId: found.id, ...(found.gmailLabel ? { gmailLabel: found.gmailLabel } : {}) } : {}),
+    ...extras(disposition),
+  };
 }
 
 const keeps = (hit: RuleHit) => (hit.label ? labelled(hit.label, hit.rule.disposition).disposition : hit.rule.disposition) === 'keep';

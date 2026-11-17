@@ -1,5 +1,5 @@
 import { and, asc, eq, isNull, accounts, credentials, labels, mailboxes, messages as messageRows, users } from './query.ts';
-import { defaultLabelRows } from './labels.ts';
+import { everythingElseRow } from './labels.ts';
 import type { Sql } from './sql.ts';
 import { sealFacts, sealMessage } from './content.ts';
 import type { Store } from './store.ts';
@@ -42,13 +42,13 @@ export async function connectAccount(store: Store, email: string, historyId: str
 }
 
 /**
- * A mailbox in one person's own database, with the starting labels, unless it is there already. Its
+ * A mailbox in one person's own database, with its one starting label, unless it is there already. Its
  * `accounts` row must exist. Returns whether it was new.
  */
 export async function ensureMailbox(db: Sql, mailbox: { id: string; historyId?: string | null }): Promise<boolean> {
   return await db.transaction(async (tx) => {
     const added = await tx.insert(mailboxes).values(mailbox).onConflictDoNothing().returning({ id: mailboxes.id });
-    if (added.length > 0) await tx.insert(labels).values(defaultLabelRows(mailbox.id));
+    if (added.length > 0) await tx.insert(labels).values(everythingElseRow(mailbox.id));
     return added.length > 0;
   });
 }

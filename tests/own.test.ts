@@ -11,7 +11,7 @@ import { decisions, labels, messages, rules, users } from '../src/store/schema.t
 import { type Driver, type Sql, handle } from '../src/store/sql.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { freshStore, raw, superuser, unmarked, withReason } from './fixtures.ts';
-import { facts } from './helpers.ts';
+import { facts, withSampleLabels } from './helpers.ts';
 import type { Disposition } from '../src/triage/types.ts';
 import { loadKeyring } from '../src/secrets.ts';
 
@@ -45,6 +45,7 @@ beforeEach(async () => {
   ] as const) {
     const person = await connectAccount(store, account, '1', 0);
     const db = await store.user(person);
+    await withSampleLabels(db, account);
     await recordSync(db, account, [facts({ accountId: account, messageId: `m-${id}`, subject: `Subject ${id}` })], '2', 1);
     await recordDecision(db, account, `m-${id}`, { disposition: 'review', subscription: 'preserve', stage: 'fallback', reason: id });
     await raw(db).run(

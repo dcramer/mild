@@ -3,12 +3,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { people } from '../src/store/people.ts';
 import { connectAccount, connectedAddresses, listUsers, personOf, recordSync, userOf } from '../src/store/accounts.ts';
+import { finishLabelProposal, startLabelProposal } from '../src/store/labels.ts';
 import { preferences, setModel } from '../src/store/preferences.ts';
 import type { Store } from '../src/store/store.ts';
 import { freshStore, raw, rowsBy, startDashboard } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
-import { facts } from './helpers.ts';
+import { facts, withSampleLabels } from './helpers.ts';
 import { conditionsHash } from '../src/store/content.ts';
 
 // Two people. Alpha set sift up and has two mailboxes; Bravo arrived later with one.
@@ -29,6 +30,9 @@ const ids: Record<string, { rule: string; action: number; proposal: number }> = 
 
 async function seed(account: string): Promise<void> {
   const db = await dbOf(account);
+  await withSampleLabels(db, account);
+  const asked = await startLabelProposal(db, { accountId: account, goal: `Quiet ${MARK[account]}`, model: 'p/m', now: 1 });
+  await finishLabelProposal(db, account, asked, { drafts: [{ name: `Pitches ${MARK[account]}`, description: 'd', disposition: 'archive', why: 'w' }], now: 2 });
   const mark = MARK[account]!;
   const sender = { address: `sender@${mark}.example.com`, domain: `${mark}.example.com` };
   await recordSync(db, account, [facts({ accountId: account, messageId: `m-${mark}`, subject: `Subject ${mark}`, from: sender })], '2', 1000);
@@ -107,6 +111,7 @@ beforeEach(async () => {
     // Answers about Bravo's mailbox whoever asks: only the route's own check keeps it from Alpha.
     pullingIn: async () => [BRAVO],
     startEval: async (_db, { accountId }) => (calls.push(`eval ${accountId}`), 1),
+    proposeLabels: async (_db, { accountId, goal }) => (calls.push(`propose ${accountId}`), { id: 1, goal, drafts: [], at: 0 }),
     revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), !unreachable.includes(email)),
     // Whatever is asked for, it would answer with that person's mail: only the route's own check keeps it from the wrong person.
     checkNow: async () => void calls.push('check'),
@@ -144,6 +149,7 @@ const READS = (account: string, mark: string) => [
   `/api/sender?account=${encodeURIComponent(account)}&address=sender@${mark}.example.com`,
   `/api/domain?account=${encodeURIComponent(account)}&domain=${mark}.example.com`,
   `/api/examples?account=${encodeURIComponent(account)}`,
+  `/api/labels/proposal?account=${encodeURIComponent(account)}`,
   `/api/message/html?account=${encodeURIComponent(account)}&id=m-${mark}`,
   `/api/rules/waiting?id=${ids[account]!.rule}`,
   `/api/rules/inbox?id=${ids[account]!.rule}`,
@@ -293,6 +299,12 @@ describe("nobody sees or changes another person's mail", () => {
       ['/api/examples/delete', { accountId: ALPHA, messageId: `m-${MARK[ALPHA]}` }, { accountId: NOBODY, messageId: `m-${MARK[ALPHA]}` }],
       ['/api/examples/delete-all', { accountId: ALPHA }, { accountId: NOBODY }],
       ['/api/evals/run', { accountId: ALPHA }, { accountId: NOBODY }],
+      ['/api/labels/propose', { accountId: ALPHA, goal: 'Fewer pitches' }, { accountId: NOBODY, goal: 'Fewer pitches' }],
+      [
+        '/api/labels/accept',
+        { accountId: ALPHA, labels: [{ name: 'Mine now', description: '', disposition: 'archive' }] },
+        { accountId: NOBODY, labels: [{ name: 'Mine now', description: '', disposition: 'archive' }] },
+      ],
       ['/api/mailbox/remove', { address: ALPHA }, { address: NOBODY }],
     ];
     for (const [path, body, nobody] of writes) {

@@ -1,9 +1,8 @@
 import { type Models, createModels, fauxAssistantMessage, fauxProvider } from '@earendil-works/pi-ai';
 import { describe, expect, it } from 'vitest';
 import { createJudge } from '../src/model/judge.ts';
-import { DEFAULT_LABELS } from '../src/store/labels.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
-import { facts } from './helpers.ts';
+import { facts, SAMPLE_LABELS } from './helpers.ts';
 
 const SECRET = 'Your one-time code is 482913';
 
@@ -24,7 +23,7 @@ async function failedWith(error: string | Error): Promise<unknown> {
     faux.getModel(),
   )({
     evidence: { facts: f, known: deriveFacts(f), body: SECRET, sender: { messagesSeen: 1, userHasWritten: false } },
-    labels: DEFAULT_LABELS,
+    labels: SAMPLE_LABELS,
   });
   return (verdict as { failed?: unknown }).failed;
 }

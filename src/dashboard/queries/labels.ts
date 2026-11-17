@@ -54,7 +54,7 @@ export async function listLabelSummaries(db: Sql, scope: Scope, accountId: strin
     disposition: outcomeOf(l),
     markRead: l.markRead ?? false,
     unsubscribe: l.unsubscribe ?? false,
-    gmailLabel: l.gmailLabel,
+    gmailLabel: l.gmailLabel ?? null,
     rules: rules.get(l.id)?.n ?? 0,
     messages: messages.get(l.id)?.n ?? 0,
     record: { reviewed: record.get(l.id)?.n ?? 0, right: record.get(l.id)?.right ?? 0 },

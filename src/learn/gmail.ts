@@ -102,7 +102,7 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
     const moved = moves(touched);
     if (!moved && !touched.some(isUserLabel)) continue;
     names ??= new Map((await gmail.listLabels()).map((l) => [l.id, l.name]));
-    const siftLabel = (id: string) => labels.find((l) => l.gmailLabel === names?.get(id));
+    const siftLabel = (id: string) => labels.find((l) => l.gmailLabel !== undefined && l.gmailLabel === names?.get(id));
     if (!moved && !touched.some(siftLabel)) continue;
 
     const current = await gmail.getLabelIds(change.messageId);

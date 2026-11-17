@@ -15,7 +15,7 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { EXAMPLE_KEEP_DAYS } from '../src/store/examples.ts';
 import { preferences, setActive } from '../src/store/preferences.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
-import { FakeMailbox, facts, storeExample } from './helpers.ts';
+import { FakeMailbox, facts, storeExample, withSampleLabels } from './helpers.ts';
 import { type Reply, builtAssets, raw, startDashboard, onePerson, withReason } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 
@@ -46,6 +46,15 @@ const controls: Controls = {
   startEval: async (_db, { accountId, fewShot, limit }) => {
     calls.push(`eval ${accountId} ${fewShot} ${limit}`);
     return 7;
+  },
+  proposeLabels: async (_db, { accountId, goal }) => {
+    calls.push(`propose ${accountId}`);
+    return {
+      id: 3,
+      goal,
+      drafts: [{ name: 'Cold outreach', description: 'Pitches from strangers.', disposition: 'archive', unsubscribe: true, why: 'fewer pitches' }],
+      at: 1,
+    };
   },
   ruleFilter: async (target, ruleId, on) => {
     calls.push(`filter ${ruleId} ${on ? 'on' : 'off'}`);
@@ -148,12 +157,41 @@ describe('managing sift from the dashboard', () => {
     expect((await bare('POST', '/api/evals/run', { accountId: ACCOUNT })).status).toBe(409);
   });
 
+  it('asks the model for labels from what the person wants, and makes the ones they keep, all or none', async () => {
+    const { call } = await start();
+    expect((await call('GET', `/api/labels/proposal?account=${encodeURIComponent(ACCOUNT)}`)).body).toEqual({ proposal: null });
+    const proposed = await call('POST', '/api/labels/propose', { accountId: ACCOUNT, goal: '  Fewer sales pitches  ' });
+    expect(proposed.body).toMatchObject({ goal: 'Fewer sales pitches', drafts: [{ name: 'Cold outreach', disposition: 'archive', unsubscribe: true }] });
+    for (const bad of [{ accountId: ACCOUNT }, { accountId: ACCOUNT, goal: '   ' }]) expect((await call('POST', '/api/labels/propose', bad)).status).toBe(400);
+    expect((await call('POST', '/api/labels/propose', { accountId: 'nobody@example.org', goal: 'x' })).status).toBe(404);
+    expect(calls).toEqual([`propose ${ACCOUNT}`]);
+
+    const before = (await listLabels(db, ACCOUNT)).length;
+    const pitches = { name: 'Pitches', description: 'From strangers.', disposition: 'archive', unsubscribe: true };
+    // One name already taken refuses the lot.
+    expect((await call('POST', '/api/labels/accept', { accountId: ACCOUNT, labels: [pitches, { ...pitches, name: 'Personal' }] })).status).toBe(409);
+    expect(await listLabels(db, ACCOUNT)).toHaveLength(before);
+    const accepted = await call('POST', '/api/labels/accept', {
+      accountId: ACCOUNT,
+      labels: [pitches, { name: 'Lies', description: 'Scams.', disposition: 'block' }],
+    });
+    expect(accepted.body).toEqual({ ids: ['pitches', 'lies'] });
+    expect((await listLabels(db, ACCOUNT)).filter((l) => ['pitches', 'lies'].includes(l.id))).toEqual([
+      { id: 'pitches', name: 'Pitches', description: 'From strangers.', disposition: 'archive', gmailLabel: 'sift/pitches', unsubscribe: true },
+      { id: 'lies', name: 'Lies', description: 'Scams.', disposition: 'spam', gmailLabel: 'sift/lies', block: true },
+    ]);
+    // With labels of their own, the mailbox's mail starts coming in.
+    expect(calls.at(-1)).toBe('check');
+    expect((await call('POST', '/api/labels/accept', { accountId: ACCOUNT, labels: [] })).status).toBe(400);
+  });
+
   it("lists the examples it holds without their content, and deletes one or all of an account's", async () => {
     const { call } = await start();
     await storeExample(db, ACCOUNT, { id: 'e1', from: 'news@example.com', label: 'newsletter', body: 'Private words.', markedAt: 1, name: 'News' });
     await storeExample(db, ACCOUNT, { id: 'e2', from: 'ada@example.org', label: 'personal', markedAt: 2 });
     await storeExample(db, ACCOUNT, { id: 'e3', from: 'bob@example.org', label: 'personal', markedAt: 3 });
     await connectAccount(store, 'other@example.org', '1', 0, 1);
+    await withSampleLabels(db, 'other@example.org');
     await storeExample(db, 'other@example.org', { id: 'o1', from: 'cy@example.org', label: 'personal', markedAt: 4 });
 
     const listed = await call('GET', `/api/examples?account=${encodeURIComponent(ACCOUNT)}`);
@@ -245,7 +283,7 @@ describe('managing sift from the dashboard', () => {
       disposition: 'keep',
     });
     expect(mine.body).toEqual({ id: 'investor-updates' });
-    expect((await listLabels(db, ACCOUNT)).at(-1)).toEqual({
+    expect((await listLabels(db, ACCOUNT)).at(-2)).toEqual({
       id: 'investor-updates',
       name: 'Investor updates',
       description: 'Updates from companies I invested in.',
@@ -343,7 +381,7 @@ describe('managing sift from the dashboard', () => {
     expect((await call('POST', '/api/labels/add', { accountId: ACCOUNT, name: 'Scams', description: '', disposition: 'block' })).body).toEqual({
       id: 'scams',
     });
-    expect((await listLabels(db, ACCOUNT)).at(-1)).toMatchObject({ id: 'scams', disposition: 'spam', block: true });
+    expect((await listLabels(db, ACCOUNT)).at(-2)).toMatchObject({ id: 'scams', disposition: 'spam', block: true });
   });
 
   it('puts a corrected message right in Gmail, and still saves the answer if it cannot', async () => {

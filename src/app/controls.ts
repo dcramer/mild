@@ -8,12 +8,14 @@ import { askForBackfill, pullingIn } from '../work/run.ts';
 import { applyRule, ruleInbox } from '../work/apply.ts';
 import { createGmailApi } from '../gmail/api.ts';
 import { startEval } from '../learn/evals.ts';
+import { proposeLabels } from '../learn/labels.ts';
 import { clientFor, loadClientSecrets, revokeGrant } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { pacer } from '../gmail/quota.ts';
 import { chatgptPending, checkChatGPT, finishChatGPT, forgetChatGPT, startChatGPT } from './chatgpt.ts';
 import type { SignIns } from '../model/credentials.ts';
 import { createJudge } from '../model/judge.ts';
+import { createProposer } from '../model/propose.ts';
 import { costPerThousand, modelChoices, offerModel, openModels, resolveModel, saveApiKey, shortlistModels } from '../model/models.ts';
 import { listAccounts, listUsers, personOf } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
@@ -52,13 +54,18 @@ const modelsFor = async (config: Config, ephemeral: Ephemeral, db: Sql) =>
  * The model tier of the person whose database `db` is, from their own choice and sign-in.
  * Null when they have chosen no model. Throws, with what to do, when they have chosen one they cannot reach.
  */
-export async function openModelTier(config: Config, ephemeral: Ephemeral, db: Sql) {
+async function openModel(config: Config, ephemeral: Ephemeral, db: Sql) {
   const { model: spec } = await preferences(db);
   if (!spec) return null;
   const models = await modelsFor(config, ephemeral, db);
   const model = resolveModel(models, spec);
   if (!(await models.getAuth(model))) throw new Refusal(`Not signed in to ${model.provider}. Sign in under Settings in the dashboard.`);
-  return { spec, judge: createJudge(models, model) };
+  return { spec, models, model };
+}
+
+export async function openModelTier(config: Config, ephemeral: Ephemeral, db: Sql) {
+  const opened = await openModel(config, ephemeral, db);
+  return opened && { spec: opened.spec, judge: createJudge(opened.models, opened.model) };
 }
 
 /** What the dashboard may ask this process to do. See `Controls`. */
@@ -148,6 +155,11 @@ export async function buildControls(
       const run = await startEval({ db, model: tier.spec }, request);
       live.kick?.(await personOf(db));
       return run;
+    },
+    proposeLabels: async (db, request) => {
+      const opened = await openModel(config, live.ephemeral, db);
+      if (!opened) throw new Refusal('Choose a model first.');
+      return await proposeLabels({ db, propose: createProposer(opened.models, opened.model), model: opened.spec }, request);
     },
     ruleFilter: async (db, ruleId, on) => {
       const rule = await getRuleFilter(db, ruleId);

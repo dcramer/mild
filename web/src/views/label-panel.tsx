@@ -16,8 +16,11 @@ interface LabelDraft {
   unsubscribe: boolean;
 }
 
-/** What a label is and what happens to it: the fields for adding one and for changing one. */
-function LabelFields({ draft, onChange, gmailLabel }: { draft: LabelDraft; onChange: (draft: LabelDraft) => void; gmailLabel?: string }) {
+/**
+ * What a label is and what happens to it: the fields for adding one and for changing one. Everything else,
+ * the only label with no Gmail label (`gmailLabel` null), always keeps, so its action is not offered.
+ */
+function LabelFields({ draft, onChange, gmailLabel }: { draft: LabelDraft; onChange: (draft: LabelDraft) => void; gmailLabel?: string | null }) {
   return (
     <>
       <Field
@@ -44,39 +47,47 @@ function LabelFields({ draft, onChange, gmailLabel }: { draft: LabelDraft; onCha
           onChange={(event) => onChange({ ...draft, description: event.target.value })}
         />
       </Field>
-      <Field inline label="Then" hint={EXPLAIN[draft.disposition]}>
-        <Select
-          label="What Sift does with it"
-          value={draft.disposition}
-          options={ACTIONS}
-          icons={ICONS}
-          onChange={(disposition) => onChange({ ...draft, disposition })}
-        />
-      </Field>
-      <Field
-        inline
-        label="Also"
-        hint={
-          draft.unsubscribe
-            ? `Only while Sift is on, never from someone you have written to, and it cannot be undone from here.${
-                draft.disposition === 'spam' || draft.disposition === 'block'
-                  ? ' Answering a spammer’s link tells them the address is read, so Sift only does it when the message proves who sent it.'
-                  : ''
-              }`
-            : undefined
-        }
-      >
-        <div className="flex flex-col gap-2">
-          {canMarkRead(draft.disposition) ? (
-            <Check checked={draft.markRead} onChange={(markRead) => onChange({ ...draft, markRead })}>
-              Mark it read
-            </Check>
-          ) : null}
-          <Check checked={draft.unsubscribe} onChange={(unsubscribe) => onChange({ ...draft, unsubscribe })}>
-            Unsubscribe, when the sender offers a safe way
-          </Check>
-        </div>
-      </Field>
+      {gmailLabel === null ? (
+        <Field inline label="Then" hint="Mail that is none of your labels stays in the inbox. To move some of it, add a label for it.">
+          Keep
+        </Field>
+      ) : (
+        <>
+          <Field inline label="Then" hint={EXPLAIN[draft.disposition]}>
+            <Select
+              label="What Sift does with it"
+              value={draft.disposition}
+              options={ACTIONS}
+              icons={ICONS}
+              onChange={(disposition) => onChange({ ...draft, disposition })}
+            />
+          </Field>
+          <Field
+            inline
+            label="Also"
+            hint={
+              draft.unsubscribe
+                ? `Only while Sift is on, never from someone you have written to, and it cannot be undone from here.${
+                    draft.disposition === 'spam' || draft.disposition === 'block'
+                      ? ' Answering a spammer’s link tells them the address is read, so Sift only does it when the message proves who sent it.'
+                      : ''
+                  }`
+                : undefined
+            }
+          >
+            <div className="flex flex-col gap-2">
+              {canMarkRead(draft.disposition) ? (
+                <Check checked={draft.markRead} onChange={(markRead) => onChange({ ...draft, markRead })}>
+                  Mark it read
+                </Check>
+              ) : null}
+              <Check checked={draft.unsubscribe} onChange={(unsubscribe) => onChange({ ...draft, unsubscribe })}>
+                Unsubscribe, when the sender offers a safe way
+              </Check>
+            </div>
+          </Field>
+        </>
+      )}
     </>
   );
 }

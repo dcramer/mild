@@ -69,7 +69,7 @@
             "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." }, 
               {
                 "group": ["**/gmail/**", "**/actions/**", "**/store/**", "**/work/**", "@googleapis/*", "googleapis", "google-auth-library"],
-                "message": "model/ only turns evidence into a verdict. It never reaches Gmail, the database or anything that acts."
+                "message": "model/ only turns evidence into a verdict, and a person's words into suggested labels. It never reaches Gmail, the database or anything that acts."
               },
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }
             ]
