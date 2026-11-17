@@ -5,7 +5,7 @@ import { type ListedDecision, type SenderPage, api, useAction, useLoaded } from 
 import { INBOX, ago, count, dateTime, describeMatch, doesName, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
 import { type RuleStart, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
 import { nextMail } from '@/lib/next-mail.ts';
-import { useParam } from '@/lib/route.ts';
+import { messageKey, useParam } from '@/lib/route.ts';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import {
   Button,
@@ -251,7 +251,7 @@ function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMess
             </OnPhone>
           );
           return (
-            <Tr key={row.id} onOpen={() => onOpen(items, index)}>
+            <Tr key={row.id} onOpen={() => onOpen(items, index)} holds={[messageKey(row)]}>
               {oneSender ? (
                 <Td className="max-w-0 md:w-1/2">
                   <span className="block truncate font-medium">{subject}</span>

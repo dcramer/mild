@@ -30,7 +30,7 @@ export function Dialog({
         <Backdrop />
         <Base.Popup
           className={cn(
-            'sheet fixed inset-0 z-50 flex flex-col bg-card [--surface:var(--card)] text-sm outline-none transition-[opacity,scale] duration-150 ease-out data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-none',
+            'sheet fixed inset-0 z-50 flex flex-col bg-card [--surface:var(--card)] text-sm outline-none transition-[opacity,scale] duration-150 ease-out data-ending-style:pointer-events-none data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-none',
             'md:inset-auto md:top-1/2 md:left-1/2 md:max-h-[calc(100svh-4rem)] md:w-[calc(100vw-4rem)] md:-translate-x-1/2 md:-translate-y-1/2 md:max-w-xl',
           )}
         >

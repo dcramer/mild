@@ -15,7 +15,7 @@ export function Backdrop() {
   return (
     <Base.Backdrop
       forceRender
-      className="fixed inset-0 z-50 bg-background/70 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none"
+      className="fixed inset-0 z-50 bg-background/70 transition-opacity duration-150 data-ending-style:pointer-events-none data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none"
     />
   );
 }
@@ -24,6 +24,7 @@ export function Backdrop() {
  * The Root's open state for a layer that is drawn already open. Base UI does not animate a popup that
  * mounts open, so it opens on the next frame; and a layer the reader dismisses (Escape, a press outside,
  * the close button) slides away before `onClose` takes it off the page; `onClosing` is told as it starts to.
+ * While it slides it takes no presses (each layer's `data-ending-style:pointer-events-none`): a press there is on the page under it.
  */
 export function useLayerOpen(open: boolean, onClose: () => void, onClosing?: () => void) {
   const [shown, setShown] = useState(false);

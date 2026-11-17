@@ -113,6 +113,49 @@ test.describe('Working through For review', () => {
     await expect(panel(page)).toHaveCount(0);
   });
 
+  test('closing the panel leaves the list on the message it was showing', async ({ page }) => {
+    await page.goto('/');
+    await expect(rows(page)).toHaveCount(9);
+    await page.keyboard.press('j');
+    await page.keyboard.press('Enter');
+    await expect(heading(page, 'Replica lag on db-3')).toBeVisible();
+    await page.keyboard.press('j');
+    await expect(heading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(panel(page)).toHaveCount(0);
+    await expect(row(page, 'Disk 91% full on db-2')).toBeFocused();
+    await page.keyboard.press('j');
+    await expect(row(page, 'Re: Fix the release script (#412)')).toBeFocused();
+    await page.keyboard.press('k');
+    await page.keyboard.press('Enter');
+    await expect(heading(page, 'Disk 91% full on db-2')).toBeVisible();
+  });
+
+  test('closing the panel on a folded row’s later message leaves the list on that row', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('cell', { name: 'Bump zod from 4.0.0 to 4.0.2' }).click();
+    await panel(page).getByRole('button', { name: 'Previous' }).click();
+    await expect(heading(page, 'Run failed: CI on main')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(panel(page)).toHaveCount(0);
+    await expect(row(page, 'Run failed: Deploy on main')).toBeFocused();
+  });
+
+  test('a row pressed while the panel is still sliding away opens', async ({ page }) => {
+    await page.goto('/');
+    const disk = (await page.getByRole('cell', { name: 'Disk 91% full on db-2' }).boundingBox())!;
+    await page.getByRole('cell', { name: 'Replica lag on db-3' }).click();
+    await expect(heading(page, 'Replica lag on db-3')).toBeVisible();
+    await page.keyboard.press('Escape');
+    // At once, where the row is: a locator's click would wait for the panel to be gone.
+    await page.mouse.click(disk.x + 10, disk.y + disk.height / 2);
+    await expect(heading(page, 'Disk 91% full on db-2')).toBeVisible();
+    // Closing it goes back to the list, not to the message closed before.
+    await page.keyboard.press('Escape');
+    await expect(panel(page)).toHaveCount(0);
+    await expect.poll(() => new URL(page.url()).search).toBe('');
+  });
+
   test('the panel steps through a folded row’s messages together, as the list shows them', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('cell', { name: 'Run failed: Deploy on main' }).click();

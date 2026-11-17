@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
 import { SenderCell, SenderCellLoading } from '@/components/sender.tsx';
-import { useParam } from '@/lib/route.ts';
+import { messageKey, useParam } from '@/lib/route.ts';
 import { type SuggestionItem, type Suggestions, type Summary, api, useAction, useLoaded } from '@/lib/api.ts';
 import {
   ACTIONS,
@@ -155,7 +155,7 @@ function SuggestionRow({
   const groups = choices(target, sureness(item), item.alternatives);
 
   return (
-    <Tr onOpen={onOpen}>
+    <Tr onOpen={onOpen} holds={[item, ...rest].map(messageKey)}>
       {/* On a phone the row reads like a mail app's: who and what sift thinks, the subject, a line of the text. It opens to answer. */}
       <SenderCell
         accountId={item.accountId}

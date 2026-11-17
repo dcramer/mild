@@ -15,7 +15,7 @@ import {
   shortDate,
   willBe,
 } from '@/lib/format.ts';
-import { useParam } from '@/lib/route.ts';
+import { messageKey, useParam } from '@/lib/route.ts';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 import { InGmail } from '@/views/gmail-filter.tsx';
 import { Blank, Button, ConfirmButton, Dialog, Does, Empty, Fact, Facts, Failure, Loading, Panel, Section, Table, Td, Tr, TrGroup, useToast } from '@/system';
@@ -192,7 +192,7 @@ function InInbox({ rule, onOpen }: { rule: RuleSummary; onOpen: OpenMessages }) 
           <Table>
             <tbody>
               {messages.map((m, index) => (
-                <Tr key={m.messageId} onOpen={() => onOpen(messages, index)}>
+                <Tr key={m.messageId} onOpen={() => onOpen(messages, index)} holds={[messageKey(m)]}>
                   <Td className="w-full max-w-0 truncate">{m.subject || '(no subject)'}</Td>
                   <Td num quiet>
                     {ago(m.receivedAt)}

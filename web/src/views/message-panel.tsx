@@ -1,3 +1,4 @@
+import { messageKey } from '@/lib/route.ts';
 import { PlusIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAnswer } from '@/components/answer.tsx';
@@ -352,6 +353,7 @@ export function MessagePanel({
       keys
       onClose={onClose}
       onClosing={onClosing}
+      returnTo={messageKey(item)}
       title={(data?.subject ?? (picked ? '' : item.subject)) || '(no subject)'}
       subtitle={
         data ? (

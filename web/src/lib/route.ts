@@ -72,6 +72,9 @@ export function setParams(changes: Record<string, string>, push?: { state: unkno
 }
 
 /** One value in the address's query now, for code that runs after a press, outside rendering. */
+/** A message as a list's rows name it (`holds`), which is how the panel finds its way back to one. */
+export const messageKey = (m: { accountId: string; messageId: string }) => `${m.accountId}/${m.messageId}`;
+
 export const paramNow = (name: string) => queryOf(at).get(name) ?? '';
 
 /**

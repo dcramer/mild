@@ -1,3 +1,4 @@
+import { messageKey } from '@/lib/route.ts';
 import { SenderCell, SenderCellLoading } from '@/components/sender.tsx';
 import type { DecisionRow, ListedDecision } from '@/lib/api.ts';
 import { INBOX, clock, dateTime, dayName, happened, status } from '@/lib/format.ts';
@@ -75,7 +76,7 @@ export function MailLog({
           {day.rows.map(({ row, index }) => {
             const s = status(row);
             return (
-              <Tr key={row.id} onOpen={() => onOpen(items, index)}>
+              <Tr key={row.id} onOpen={() => onOpen(items, index)} holds={[messageKey(row)]}>
                 <SenderCell accountId={row.accountId} address={row.fromAddress} name={row.fromName} contact={row.contact} {...term}>
                   <OnPhone>
                     <span className="w-full truncate text-foreground">{row.subject || '(no subject)'}</span>

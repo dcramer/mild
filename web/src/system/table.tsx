@@ -59,14 +59,16 @@ export function Table({ keys = false, children }: { keys?: boolean; children: Re
 /**
  * A row. With `onOpen` the whole row is pressable, by pointer or keyboard, and it is a stop for J and K.
  * The keys of the buttons in a row are live, and drawn, only while the reader is on that row.
+ * `holds` names what the row opens, so a panel that stepped away from it can come back to the row it ended on (`rowHolding`).
  */
-export function Tr({ onOpen, className, ...props }: ComponentProps<'tr'> & { onOpen?: () => void }) {
+export function Tr({ onOpen, holds, className, ...props }: ComponentProps<'tr'> & { onOpen?: () => void; holds?: readonly string[] }) {
   const [active, setActive] = useState(false);
   if (!onOpen) return <tr className={cn('row group/row', className)} {...props} />;
   return (
     <RowActive value={active}>
       <tr
         tabIndex={0}
+        data-holds={holds?.join(' ')}
         className={cn('row group/row cursor-pointer hover:bg-(--fill) focus-visible:bg-(--fill-strong) focus-within:bg-(--fill)', className)}
         onClick={(event) => {
           // React passes up presses in what a row renders elsewhere, such as a dialog it opened; those are not on the row.
@@ -87,6 +89,9 @@ export function Tr({ onOpen, className, ...props }: ComponentProps<'tr'> & { onO
     </RowActive>
   );
 }
+
+/** The row on the page that holds `name`, if one does. */
+export const rowHolding = (name: string) => document.querySelector<HTMLElement>(`tr[data-holds~="${CSS.escape(name)}"]`);
 
 const EDGES = 'first:pl-[calc(var(--gutter)+var(--bleed))] last:pr-[calc(var(--gutter)+var(--bleed))]';
 const PHONE = { hide: 'hidden md:table-cell' } as const;
