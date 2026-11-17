@@ -9,7 +9,8 @@ import { getRuleFilter, ruleFilterStatus } from '../src/store/filters.ts';
 import { DEFAULT_LABELS, updateLabel } from '../src/store/labels.ts';
 import { addRule, removeRule, setRule } from '../src/store/rules.ts';
 import { type FilterableRule, filterFor } from '../src/triage/filter.ts';
-import { FakeMailbox } from './helpers.ts';
+import { listFilterChanges } from '../src/dashboard/queries/rules.ts';
+import { FakeMailbox, everything } from './helpers.ts';
 
 const rule = (overrides: Partial<FilterableRule> = {}): FilterableRule => ({
   id: 'r1',
@@ -249,6 +250,21 @@ describe("a rule's Gmail filter", () => {
     mailbox.filters = [];
     expect(await removeRuleFilter(deps(), id)).toBe(true);
     expect((await actions()).map((a) => `${a.type} ${a.status}`)).toEqual(['filter done', 'unfilter done', 'filter done', 'unfilter done']);
+  });
+
+  it('lists the filters written and taken out in a period, newest first, by what they matched', async () => {
+    const DAY = 86_400_000;
+    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    await writeRuleFilter(deps(), id);
+    clock = 3 * DAY;
+    await removeRuleFilter(deps(), id);
+    await removeRule(db, id);
+    const listed = async (days: number) => listFilterChanges(db, await everything(db), days, 4 * DAY);
+    expect(await listed(7)).toMatchObject([
+      { type: 'unfilter', status: 'done', ruleId: null, criteria: { from: 'news@example.com' }, at: 3 * DAY },
+      { type: 'filter', status: 'done', ruleId: null, criteria: { from: 'news@example.com' }, at: 1000 },
+    ]);
+    expect(await listed(1)).toMatchObject([{ type: 'unfilter', criteria: { from: 'news@example.com' } }]);
   });
 
   it('tells the dashboard the filter it would write, and when it last wrote or took one out', async () => {

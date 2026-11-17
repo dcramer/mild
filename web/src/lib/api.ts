@@ -2,12 +2,12 @@ import { QueryCache, QueryClient, keepPreviousData, onlineManager, useQuery, use
 import { useState, useSyncExternalStore } from 'react';
 
 export type {
-  ChangeRow,
   Contact,
   DecisionPage,
   DecisionRow,
   FactFilter,
   FeedbackRequest,
+  FilterChange,
   LabelSummary,
   ListedDecision,
   ManageState,
@@ -28,11 +28,11 @@ export type {
   UnjudgedRow,
 } from '../../../src/dashboard/types.ts';
 import type {
-  ChangeRow,
   DecisionPage,
   FactFilter,
   FeedbackReply,
   FeedbackRequest,
+  FilterChange,
   ManageState,
   MessageDetail,
   Models,
@@ -170,6 +170,8 @@ async function post<T = unknown>(path: string, body: unknown): Promise<T> {
 
 export const api = {
   summary: (days: Days, signal: AbortSignal) => get<Summary>('/api/summary', { days }, signal),
+  /** Gmail filters written or taken out in the period, newest first. */
+  filters: (days: Days, signal: AbortSignal) => get<{ changes: FilterChange[] }>('/api/filters', { days }, signal),
   decisions: (q: DecisionQuery, signal: AbortSignal) =>
     get<DecisionPage>(
       '/api/decisions',
@@ -196,7 +198,6 @@ export const api = {
   manage: (signal: AbortSignal) => get<ManageState>('/api/manage', {}, signal),
   /** The models the reader's own sign-ins offer, and the one to suggest first. */
   models: (signal: AbortSignal) => get<Models>('/api/models', {}, signal),
-  changes: (signal: AbortSignal) => get<{ changes: ChangeRow[] }>('/api/changes', {}, signal),
   /** The reader's own: true, sift carries out its decisions in their Gmail. */
   setActive: (active: boolean) => post('/api/active', { active }),
   unjudged: (signal: AbortSignal) => get<{ rows: UnjudgedRow[] }>('/api/unjudged', {}, signal),

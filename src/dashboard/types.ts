@@ -545,21 +545,20 @@ export const Models = z.object({
 });
 export type Models = z.infer<typeof Models>;
 
-/** A change sift made to the mailbox. */
-export const ChangeRow = z.object({
+/** Sift writing a rule to Gmail as a filter (`filter`), or taking one out, as the audit log has it. */
+export const FilterChange = z.object({
   id: z.number(),
   accountId: z.string(),
-  messageId: z.string(),
-  type: z.string(),
+  type: z.enum(['filter', 'unfilter']),
   status: z.string(),
   error: z.string().nullable(),
-  createdAt: z.number(),
-  subject: z.string().nullable(),
-  fromAddress: z.string().nullable(),
-  /** For an undo, the change it reversed. */
-  undoOf: z.number().nullable(),
+  at: z.number(),
+  /** Null once the rule is removed. */
+  ruleId: z.string().nullable(),
+  /** What the filter matched, as written to Gmail: for one taken out, as it was last written. */
+  criteria: z.object({ from: z.string().optional(), to: z.string().optional(), subject: z.string().optional() }),
 });
-export type ChangeRow = z.infer<typeof ChangeRow>;
+export type FilterChange = z.infer<typeof FilterChange>;
 
 /** Mail the model failed on every time it was tried. `error` is what went wrong the last time. */
 export const UnjudgedRow = z.object({

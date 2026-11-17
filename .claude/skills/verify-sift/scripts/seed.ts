@@ -13,6 +13,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadConfig } from '../../../../src/config.ts';
 import { tick } from '../../../../src/work/run.ts';
+import { writeRuleFilter } from '../../../../src/actions/rule-filters.ts';
 import { memoryEphemeral } from '../../../../src/ephemeral/ephemeral.ts';
 import { applyFeedback, pendingSuggestions } from '../../../../src/learn/feedback.ts';
 import type { GmailApi, RawMessage } from '../../../../src/gmail/api.ts';
@@ -91,9 +92,9 @@ const store = await openStore(config);
 const user = await connectAccount(store, ACCOUNT, '1', now - 24 * HOUR);
 const db = await store.user(user);
 // One of each kind of rule: a label, an action, and an action for mail that turns out to be a label.
-await addRule(db, ACCOUNT, { match: { fromDomain: 'news.example.com' }, labelId: 'newsletter' }, 'user');
+const newsRule = await addRule(db, ACCOUNT, { match: { fromDomain: 'news.example.com' }, labelId: 'newsletter' }, 'user');
 await addRule(db, ACCOUNT, { match: { from: 'orders@shop.example.com' }, labelId: 'transactional' }, 'user');
-await addRule(db, ACCOUNT, { match: { fromDomain: 'ci.example.org' }, disposition: 'archive' }, 'user');
+const ciRule = await addRule(db, ACCOUNT, { match: { fromDomain: 'ci.example.org' }, disposition: 'archive' }, 'user');
 
 /**
  * The Deals mail (m4) as its HTML part, stored by the pass as it would be from Gmail: a remote image, a background from elsewhere, inline styles,
@@ -177,6 +178,12 @@ for (const waiting of await pendingSuggestions(db, { accountId: ACCOUNT, sender:
     now,
   );
 if ((await listProposals(db, ACCOUNT)).length !== 1) throw new Error('seed answers did not propose a rule');
+// Two rules written to the fake Gmail as filters, as the dashboard asks: the CI one lands; Gmail does not answer for the news one.
+await writeRuleFilter({ db, mailbox, now: () => now - 2 * HOUR }, ciRule);
+mailbox.createFilter = async () => {
+  throw new Error('Gmail did not answer');
+};
+await writeRuleFilter({ db, mailbox, now: () => now - HOUR }, newsRule).catch(() => undefined);
 // A second mailbox of the same person, with no mail (connected after the passes, so none comes to it), to remove; and a second person, who owns nothing yet and
 // takes over the install when the first deletes their account. Neither can be signed in to here.
 await connectAccount(store, WORK, '1', now - 23 * HOUR, user);

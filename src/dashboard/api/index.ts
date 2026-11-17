@@ -2,7 +2,6 @@ import type { Frame, Read, Write } from './route.ts';
 import accountDeleteWrite from './routes/account/delete/post.ts';
 import activeWrite from './routes/active/post.ts';
 import backfillWrite from './routes/backfill/post.ts';
-import changesRead from './routes/changes/get.ts';
 import checkWrite from './routes/check/post.ts';
 import decisionsRead from './routes/decisions/get.ts';
 import decisionsRetryWrite from './routes/decisions/retry/post.ts';
@@ -10,6 +9,7 @@ import domainRead from './routes/domain/get.ts';
 import evalRead from './routes/eval/get.ts';
 import evalsRead from './routes/evals/get.ts';
 import evalsRunWrite from './routes/evals/run/post.ts';
+import filtersRead from './routes/filters/get.ts';
 import examplesDeleteAllWrite from './routes/examples/delete-all/post.ts';
 import examplesDeleteWrite from './routes/examples/delete/post.ts';
 import examplesRead from './routes/examples/get.ts';
@@ -46,12 +46,12 @@ import unjudgedRetryWrite from './routes/unjudged/retry/post.ts';
  * the session, the scope and the write checks to all of them.
  */
 export const READS: readonly Read[] = [
-  changesRead,
   decisionsRead,
   domainRead,
   evalRead,
   evalsRead,
   examplesRead,
+  filtersRead,
   manageRead,
   messageRead,
   modelsRead,

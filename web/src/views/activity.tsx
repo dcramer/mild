@@ -6,6 +6,7 @@ import { type Days, type DecisionRow, type UnjudgedRow, api, useLoaded } from '@
 import { useParam } from '@/lib/route.ts';
 import { FACT_FILTER_OPTIONS, HANDLED, PERIODS, count, factFilterName, longDay, money, moneyTick, plural, shortDay } from '@/lib/format.ts';
 import { Button, Empty, Failure, FilterGroup, ListView, Reserve, Select, StackedBars, TextLink, useToast } from '@/system';
+import { gmailMatches } from '@/views/gmail-filter.tsx';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 const PAGE = 50;
@@ -48,6 +49,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
   const waiting = useLoaded('unjudged', (signal) => api.unjudged(signal));
   const unjudged = waiting.data?.rows ?? [];
   const summary = useLoaded(`summary-${days}`, (signal) => api.summary(days, signal));
+  const filterChanges = useLoaded(`filters-${days}`, (signal) => api.filters(days, signal));
   const daily = summary.data?.daily ?? [];
   // A day's column is worth drawing only beside others, and only once something happened.
   const charted = daily.length > 1 && daily.some((day) => day.costUsd > 0 || Object.values(day.counts).some((n) => n > 0));
@@ -76,6 +78,17 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
     .join(', and ');
   const needle = search.toLowerCase();
   const shown = view === 'trouble' ? unjudged.filter((r) => [r.subject, r.fromAddress, r.fromName ?? ''].some((t) => t.toLowerCase().includes(needle))) : [];
+  // Filters belong to no message, so a narrowing by what Sift saw in one leaves them out. A page shows those
+  // from between its rows, the first page up to now and the last back to the start of the period.
+  const rows = data?.rows ?? [];
+  const newest = offset === 0 ? Infinity : (rows[0]?.decidedAt ?? Infinity);
+  const oldest = offset + PAGE >= (data?.total ?? 0) ? -Infinity : (rows.at(-1)?.decidedAt ?? -Infinity);
+  const filters =
+    view === 'trouble' || narrowed !== ''
+      ? []
+      : (filterChanges.data?.changes ?? []).filter(
+          (c) => c.at <= newest && c.at > oldest && (needle === '' || gmailMatches(c.criteria).toLowerCase().includes(needle)),
+        );
 
   return (
     <ListView
@@ -139,7 +152,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
       {error ? <ErrorNote message={error} /> : null}
       {loading ? (
         <MailLogLoading />
-      ) : !data || data.rows.length + shown.length === 0 ? (
+      ) : !data || data.rows.length + shown.length + filters.length === 0 ? (
         <Empty>
           {search !== '' || narrowed !== ''
             ? 'Nothing matches.'
@@ -148,7 +161,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
               : 'Nothing in this period.'}
         </Empty>
       ) : (
-        <MailLog rows={data.rows} unjudged={shown} onOpen={onOpen} onUndo={undo} onRetry={retry} onRequeue={requeue} search={search} />
+        <MailLog rows={data.rows} unjudged={shown} filters={filters} onOpen={onOpen} onUndo={undo} onRetry={retry} onRequeue={requeue} search={search} />
       )}
       {data && data.total > PAGE ? (
         <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground tabular-nums">

@@ -6,7 +6,7 @@ import { Button, Code, Dialog, Fact, Facts, Failure, useToast } from '@/system';
 type Plan = NonNullable<RuleFilter['plan']>;
 
 /** In the words of Gmail's own list of filters, so the user can find it there. */
-const matches = ({ criteria }: Plan) =>
+export const gmailMatches = (criteria: Plan['criteria']) =>
   [criteria.from && `from:(${criteria.from})`, criteria.to && `to:(${criteria.to})`, criteria.subject && `subject:(${criteria.subject})`]
     .filter(Boolean)
     .join(' ');
@@ -25,7 +25,7 @@ export function useFilterOffer(onDone: () => void) {
     children: plan ? (
       <Facts>
         <Fact term="Matches">
-          <Code>{matches(plan)}</Code>
+          <Code>{gmailMatches(plan.criteria)}</Code>
         </Fact>
         <Fact term="Do this">{doThis(plan)}</Fact>
         {differs.length > 0 ? (
@@ -99,11 +99,17 @@ export function InGmail({ rule, active }: { rule: RuleSummary; active: boolean }
   return (
     <div className="flex flex-col items-start gap-2">
       <span className={!rule.filterId && !possible ? 'text-muted-foreground' : undefined}>{said}</span>
-      {failed ? (
+      {failed?.status === 'failed' ? (
         <Failure>
-          {failed.type === 'filter' ? 'Could not add it to Gmail' : 'Could not take it out of Gmail'}
+          {failed.type === 'filter' ? 'Could not add it to Gmail' : 'Could not remove it from Gmail'}
           {failed.error ? `: ${failed.error}` : '.'}
         </Failure>
+      ) : failed ? (
+        // Gmail did not answer; the next check finds out whether it took.
+        <span className="text-muted-foreground">
+          {failed.type === 'filter' ? 'Adding it to Gmail is not confirmed' : 'Removing it from Gmail is not confirmed'}
+          {failed.error ? `: ${failed.error}` : '.'}
+        </span>
       ) : null}
       {rule.filterId ? (
         <Button
@@ -111,11 +117,11 @@ export function InGmail({ rule, active }: { rule: RuleSummary; active: boolean }
           onClick={() =>
             remove.run(
               () => api.ruleFilter(rule.id, false),
-              () => toast('Taken out of Gmail'),
+              () => toast('Removed from Gmail'),
             )
           }
         >
-          Take out of Gmail
+          Remove from Gmail
         </Button>
       ) : possible && active ? (
         <Button onClick={() => setAdding(true)}>Add to Gmail…</Button>

@@ -23,7 +23,7 @@ import type { Sql } from '../../store/sql.ts';
 import { openEnvelope } from '../../store/content.ts';
 import { DISPOSITIONS } from '../../triage/types.ts';
 import { type Scope, within } from '../scope.ts';
-import { type DecisionRow, FACT_FILTERS, FACT_FILTER_KEYS, type ListedDecision, STAGES, type ChangeRow } from '../types.ts';
+import { type DecisionRow, FACT_FILTERS, FACT_FILTER_KEYS, type ListedDecision, STAGES } from '../types.ts';
 import { factsWhere } from '../../store/messages.ts';
 import { contacts } from '../../store/senders.ts';
 
@@ -193,31 +193,4 @@ export async function listDecisions(
     rows.map((r) => ({ accountId: r.accountId, address: r.fromAddress })),
   );
   return { total, rows: rows.map((r) => ({ ...r, contact: known.get(`${r.accountId}\n${r.fromAddress}`) ?? null })) };
-}
-
-/** Changes sift made to the mailbox, newest first, with the message each was about. */
-export async function listChanges(db: Sql, scope: Scope, limit: number): Promise<ChangeRow[]> {
-  const rows = await db
-    .select({
-      id: actions.id,
-      accountId: actions.accountId,
-      messageId: actions.messageId,
-      type: actions.type,
-      status: actions.status,
-      error: actions.error,
-      createdAt: actions.createdAt,
-      payload: actions.payload,
-      subject: messages.subject,
-      fromAddress: messages.fromAddress,
-    })
-    .from(actions)
-    .leftJoin(messages, and(eq(messages.accountId, actions.accountId), eq(messages.id, actions.messageId)))
-    .where(and(isNotNull(actions.messageId), within(scope, actions.accountId)))
-    .orderBy(desc(actions.id))
-    .limit(limit);
-  return rows.map(({ payload, ...r }) => ({
-    ...openEnvelope(db, r.accountId, r.messageId!, r),
-    messageId: r.messageId!,
-    undoOf: payload.undoOf ?? null,
-  }));
 }
