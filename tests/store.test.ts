@@ -190,19 +190,22 @@ describe("a mailbox's data", () => {
 });
 
 describe('a proposal', () => {
-  it('to stop checking a rule goes with the rule, and only that kind names one', async () => {
+  it('to stop checking a rule goes with the rule, and only a proposed rule names what it does', async () => {
     const { db } = await onePerson('alpha@example.org');
     const rule = await addRule(db, 'alpha@example.org', { match: { from: 'news@example.com' }, whenLabel: 'newsletter' }, 'user', 0);
-    const propose = (kind: string, ruleId: string | null) =>
+    const propose = (kind: string, ruleId: string | null, disposition: string | null = null) =>
       raw(db).run(
-        `INSERT INTO proposals (account_id, kind, match, conditions, label_id, rule_id, agreed, created_at) VALUES ('alpha@example.org', ?, ?, ?, 'newsletter', ?, 1, 0)`,
+        `INSERT INTO proposals (account_id, kind, match, conditions, label_id, rule_id, disposition, agreed, created_at) VALUES ('alpha@example.org', ?, ?, ?, 'newsletter', ?, ?, 1, 0)`,
         kind,
         JSON.stringify({ from: `${kind}@example.com` }),
         conditionsHash(db, { from: `${kind}@example.com` }),
         ruleId,
+        disposition,
       );
-    await expect(propose('rule', rule)).rejects.toThrow();
+    await expect(propose('rule', rule, 'keep')).rejects.toThrow();
+    await expect(propose('rule', null)).rejects.toThrow();
     await expect(propose('always', null)).rejects.toThrow();
+    await expect(propose('always', rule, 'keep')).rejects.toThrow();
     await propose('always', rule);
     await removeRule(db, rule);
     expect(await raw(db).all('SELECT id FROM proposals')).toEqual([]);

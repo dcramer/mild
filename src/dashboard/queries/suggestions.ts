@@ -208,7 +208,8 @@ async function proposalSummaries(db: Sql, scope: Scope, labels: Map<string, Labe
       match: p.match,
       labelId: p.labelId,
       labelName: label.name,
-      disposition: rule ? settledAction(rule, label) : outcomeOf(label),
+      disposition: rule ? settledAction(rule, label) : p.disposition!,
+      labelDisposition: outcomeOf(label),
       agreed: p.agreed,
     });
   }

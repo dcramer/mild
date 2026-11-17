@@ -4,7 +4,7 @@ Wherever sift offers to make a rule outside the Rules screen, the press opens th
 
 ## Sub-features
 
-- `shortcut-proposal`: For review's `Make a rule?` line. `Make a rule…` opens the dialog on the proposal's sender and label; adding resolves the proposal, whatever the user changed; `Cancel` leaves it. `Dismiss` is one press and makes no rule.
+- `shortcut-proposal`: For review's proposal line (`Keep Receipts from …?`). `Make a rule…` opens the dialog on the proposal's sender, waiting for its label, then doing what the user has been doing; adding resolves the proposal, whatever the user changed; `Cancel` leaves it. `Dismiss` is one press and makes no rule.
 - `shortcut-stop-reading`: a `Stop checking?` line (a rule that waits for a label, after ten agreeing messages). `Stop reading them…` opens a dialog that says what happens `Now` and `After`; `Stop reading them` in it changes the rule.
 - `shortcut-message`: the message panel's `Make a rule…`, on the sender and the label the message has.
 - `shortcut-fact`: a `What sift saw` row's `Rule…`, on the sender and that fact, or on the list (see message-facts.md).
@@ -21,11 +21,11 @@ Wherever sift offers to make a rule outside the Rules screen, the press opens th
 
 Preconditions:
 
-- Fresh seed. For review shows `Make a rule? The last 3 from billing@utility.example.net were Receipts and transactions.`
+- Fresh seed. For review shows `Keep Receipts from billing@utility.example.net? You kept the last 3, but the label archives them.`
 
-- **Open on a proposal.** `ab open "$B/"`, `ab find role button click --name "Make a rule…"`. Add a rule opens over For review: `Value to match` reads `billing@utility.example.net`, `Label it as` reads `Receipts and transactions`.
+- **Open on a proposal.** `ab open "$B/"`, `ab find role button click --name "Make a rule…"`. Add a rule opens over For review: `Value to match` reads `billing@utility.example.net`, `Only when it is this label` reads `Receipts`, `What happens to it` reads `Keep`.
 - **Close.** `ab find role button click --name "Cancel"`. The line is still there; `verify.sh sql "$RUN" "SELECT status FROM proposals"` is `open`.
-- **Change and add.** `Make a rule…` again, `ab find role textbox fill "utility.example.net" --name "Value to match"`, `ab find role combobox click --name "Label it as"`, `ab find role option click --name "Notifications"`, `ab find role button click --name "Add rule"`. A toast reads `Added a rule for mail from anyone at utility.example.net.` and the line is gone. `proposals` is `accepted`; `SELECT match::text, label_id FROM rules WHERE match::text LIKE '%utility%'` is `{"fromDomain": "utility.example.net"}`, `notification`. Rules has the row `anyone at utility.example.net → Notifications`.
+- **Change and add.** `Make a rule…` again, `ab find role textbox fill "utility.example.net" --name "Value to match"`, `ab find role button click --name "Add rule"`. A toast reads `Rule added` and the line is gone. `proposals` is `accepted`; `SELECT match::text, when_label, disposition FROM rules WHERE match::text LIKE '%utility%'` is `{"fromDomain": "utility.example.net"}`, `transactional`, `keep`.
 - **From a message.** `ab open "$B/?message=m8&account=me%40example.org"`, `ab find role button click --name "Make a rule…"`. The dialog shows `sale@store.example.com` and `Label it as` `Marketing`; the address still has `?message=m8`. `Cancel`.
 - **From a fact or a list.** On `?message=m4`, `ab find role button click --name "Make a rule for mail that came through a mailing list"`: `Match mail` reads `on the list`, the value `promo.example.com`, `What happens to it` `Archive`. `Cancel`.
 - **A standing.** `ab open "$B/sender/me%40example.org/ada%40example.org"`, `ab find role button click --name "Trust"`. The dialog shows `ada@example.org`, `No label, just act`, `Keep`. `Add rule`: the page reads `Their mail always stays in your inbox.` Then `Unwanted`: the dialog shows `Replaces` `Keep` and `Archive`. `Add rule`: one rule for Ada, `disposition` `archive`. `Unwanted` again: `None given`, and no rule for Ada.

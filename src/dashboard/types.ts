@@ -440,13 +440,15 @@ export type SuggestionItem = z.infer<typeof SuggestionItem>;
 const ProposalSummary = z.object({
   id: z.number(),
   accountId: z.string(),
-  /** `rule`: make this rule. `always`: stop having the model check a rule it has always agreed with. */
+  /** `rule`: do to the label's mail what the user has been doing instead. `always`: stop having the model check a rule it has always agreed with. */
   kind: z.enum(['rule', 'always']),
   match,
   labelId: z.string(),
   labelName: z.string(),
-  /** What happens to the mail: the label's action, or for `always` what the rule will do to all of it. */
+  /** For `rule` what the user has been doing to the label's mail; for `always` what the rule will do to all of it. */
   disposition: z.string(),
+  /** What the label does. */
+  labelDisposition: z.string(),
   /** How many decisions in a row it rests on. */
   agreed: z.number(),
 });
@@ -510,7 +512,7 @@ export const FeedbackReply = z.object({
   corrected: z.string().nullable(),
   /** How many messages now have the answer waiting to be carried out in Gmail. */
   carrying: z.number(),
-  /** sift proposed a rule because the sender's mail has been answered the same way enough times. */
+  /** Sift proposed a rule because the user keeps giving the sender's mail of this label another action. */
   proposed: z.boolean(),
   /** What was done in Gmail about the corrected message, in a sentence. Null if nothing needed doing. */
   fixed: z.string().nullable(),

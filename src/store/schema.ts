@@ -392,6 +392,7 @@ export const proposals = pgTable(
     conditions: text('conditions').notNull(),
     labelId: text('label_id').notNull(),
     ruleId: text('rule_id'), // the judged rule an `always` would stop checking
+    disposition: text('disposition', { enum: DECIDED }), // what a `rule` does to the label's mail, which the label would not
     agreed: integer('agreed').notNull(), // how many decisions in a row it rests on
     status: text('status', { enum: PROPOSAL_STATUSES }).notNull().default('open'),
     createdAt: time('created_at').notNull(),
@@ -405,6 +406,8 @@ export const proposals = pgTable(
     oneOf('proposals_kind', t.kind, PROPOSAL_KINDS),
     oneOf('proposals_status', t.status, PROPOSAL_STATUSES),
     check('proposals_always_has_rule', sql`(${t.kind} = 'always') = (${t.ruleId} IS NOT NULL)`),
+    check('proposals_rule_has_action', sql`(${t.kind} = 'rule') = (${t.disposition} IS NOT NULL)`),
+    oneOf('proposals_disposition', t.disposition, DECIDED),
     own(),
   ],
 ).enableRLS();

@@ -11,7 +11,7 @@ import { people } from '../src/store/people.ts';
 import { accuracy, applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { listAccounts, recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
-import { listProposals } from '../src/store/proposals.ts';
+import { listProposals, madeFromProposal, resolveProposal } from '../src/store/proposals.ts';
 import { MAX_ATTEMPTS, startRun } from '../src/store/runs.ts';
 import { addRule, listRules, setRule } from '../src/store/rules.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
@@ -321,17 +321,17 @@ describe('an answer pressed in the dashboard', () => {
     expect(mailbox.labels.get('stuck')).not.toContain('INBOX');
   });
 
-  it('three answers in a row the same for a sender propose a rule, and make none themselves', async () => {
-    const answers = [];
-    for (let i = 0; i < 3; i++) answers.push(await suggest('news@example.com', 'archive', NEWS));
-    const said = [];
-    for (const [i, decisionId] of answers.entries())
-      said.push(
-        await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'once', decisionId, carryOut: true }, 50 + i),
+  it('answers that go with the label propose no rule: one would do what already happens', async () => {
+    for (let i = 0; i < 4; i++) {
+      const decisionId = await suggest('news@example.com', 'archive', NEWS);
+      const reply = await applyFeedback(
+        db,
+        { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'once', decisionId, carryOut: true },
+        50 + i,
       );
-    expect(said.map((r) => r.proposed)).toEqual([false, false, true]);
-    expect(await ruleFor('news@example.com')).toEqual([]);
-    expect(await listProposals(db, ACCOUNT)).toMatchObject([{ kind: 'rule', match: { from: 'news@example.com' }, labelId: 'newsletter', agreed: 3 }]);
+      expect(reply.proposed).toBe(false);
+    }
+    expect(await listProposals(db, ACCOUNT)).toEqual([]);
   });
 
   it('can keep a message under the label that would move it: the label counts as right, and nothing is unsubscribed', async () => {
@@ -372,17 +372,54 @@ describe('an answer pressed in the dashboard', () => {
     expect(await raw(db).get(`SELECT label_id FROM examples WHERE message_id = 'm1'`)).toEqual({ label_id: 'newsletter' });
   });
 
-  it('answers that keep mail its label would move propose no rule that would move it', async () => {
-    for (let i = 0; i < 3; i++) {
-      const decisionId = await suggest('news@example.com', 'archive', NEWS);
-      const reply = await applyFeedback(
-        db,
-        { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', disposition: 'keep', scope: 'once', decisionId, carryOut: true },
-        50 + i,
-      );
-      expect(reply.proposed).toBe(false);
-    }
+  /** The user keeping (or archiving) a sender's message of `label` that the label would do otherwise, as moving it in Gmail does. */
+  const against = async (sender: string, label: string, disposition: 'keep' | 'archive', at: number) => {
+    const decisionId = await suggest(sender, 'archive', { labelId: label });
+    return (await applyFeedback(db, { accountId: ACCOUNT, sender, label, disposition, scope: 'once', decisionId, via: 'gmail' }, at)).proposed;
+  };
+
+  it("two answers giving a label's mail another action propose a rule that does that, made only in the rule dialog", async () => {
+    expect(await against('news@example.com', 'newsletter', 'keep', 50)).toBe(false);
+    expect(await against('news@example.com', 'newsletter', 'keep', 51)).toBe(true);
+    expect(await ruleFor('news@example.com')).toEqual([]);
+    const [proposal] = await listProposals(db, ACCOUNT);
+    expect(proposal).toMatchObject({ kind: 'rule', match: { from: 'news@example.com' }, labelId: 'newsletter', disposition: 'keep', agreed: 2 });
+    // A third refreshes the count; it opens no second proposal.
+    expect(await against('news@example.com', 'newsletter', 'keep', 52)).toBe(false);
+    expect(await listProposals(db, ACCOUNT)).toMatchObject([{ id: proposal!.id, agreed: 3 }]);
+
+    await expect(resolveProposal(db, proposal!.id, true)).rejects.toThrow('rule dialog');
+    expect(await madeFromProposal(db, proposal!.id, 'other@example.org')).toBe(false);
+    expect(await madeFromProposal(db, proposal!.id, ACCOUNT)).toBe(true);
     expect(await listProposals(db, ACCOUNT)).toEqual([]);
+  });
+
+  it('counts a run per label, broken by an answer that went with the label', async () => {
+    await against('news@example.com', 'newsletter', 'keep', 50);
+    await against('news@example.com', 'marketing', 'keep', 51);
+    expect(await listProposals(db, ACCOUNT)).toEqual([]);
+    const decisionId = await suggest('news@example.com', 'archive', NEWS);
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'once', decisionId }, 52);
+    expect(await against('news@example.com', 'newsletter', 'keep', 53)).toBe(false);
+    expect(await against('news@example.com', 'newsletter', 'keep', 54)).toBe(true);
+  });
+
+  it('does not propose again what the user dismissed, nor where the sender has a rule for all their mail or that label', async () => {
+    await against('news@example.com', 'newsletter', 'keep', 50);
+    await against('news@example.com', 'newsletter', 'keep', 51);
+    await resolveProposal(db, (await listProposals(db, ACCOUNT))[0]!.id, false);
+    expect(await against('news@example.com', 'newsletter', 'keep', 52)).toBe(false);
+    expect(await listProposals(db, ACCOUNT)).toEqual([]);
+
+    await addRule(db, ACCOUNT, { match: { from: 'shop@example.com' }, labelId: 'marketing' }, 'user');
+    await addRule(db, ACCOUNT, { match: { from: 'alerts@example.com' }, whenLabel: 'notification', disposition: 'spam' }, 'user');
+    for (const at of [60, 61]) {
+      expect(await against('shop@example.com', 'marketing', 'keep', at)).toBe(false);
+      expect(await against('alerts@example.com', 'notification', 'keep', at)).toBe(false);
+    }
+    // A rule for another of the sender's labels leaves this one open.
+    expect(await against('alerts@example.com', 'marketing', 'keep', 62)).toBe(false);
+    expect(await against('alerts@example.com', 'marketing', 'keep', 63)).toBe(true);
   });
 });
 

@@ -126,14 +126,9 @@ async function ruleMatching(
   return row;
 }
 
-/** Whether any rule, of any kind, has exactly these conditions. */
-export async function hasRuleFor(db: Sql, accountId: string, match: RuleMatch): Promise<boolean> {
-  const found = await db
-    .select({ id: rules.id })
-    .from(rules)
-    .where(and(eq(rules.accountId, accountId), eq(rules.conditions, conditionsHash(db, match))))
-    .limit(1);
-  return found.length > 0;
+/** Whether a rule has exactly these conditions and waits for `whenLabel` (none: a rule for all the mail they match). */
+export async function hasRuleFor(db: Sql, accountId: string, match: RuleMatch, whenLabel: string | null = null): Promise<boolean> {
+  return (await ruleMatching(db, accountId, match, whenLabel)) !== undefined;
 }
 
 /**

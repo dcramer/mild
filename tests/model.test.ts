@@ -21,8 +21,7 @@ import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { DEFAULT_LABELS, listLabels, updateLabel } from '../src/store/labels.ts';
 import { openUserDb, raw } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
-import { startRun } from '../src/store/runs.ts';
-import { PROPOSE_AFTER, listProposals, madeFromProposal, proposeForSender, proposeSettled, resolveProposal } from '../src/store/proposals.ts';
+import { listProposals, proposeSettled, resolveProposal } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { contactOf, contacts, domainFacts, rememberCorrespondent, senderFacts } from '../src/store/senders.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
@@ -294,13 +293,6 @@ describe('preferences in the database', () => {
     await addMailbox(db, ACCOUNT, '1');
     return db;
   }
-  const modelDecision = async (db: Awaited<ReturnType<typeof seeded>>, id: string, labelId: string, disposition: 'keep' | 'archive' | 'review') => {
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id })], '2');
-    const runId = await startRun(db, { accountId: ACCOUNT, messageId: id, model: 'p/m', now: 0 });
-    await recordDecision(db, ACCOUNT, id, { disposition, subscription: 'preserve', stage: 'model', labelId, reason: 'r' }, { runId });
-    return await proposeForSender(db, ACCOUNT, 'news@example.com');
-  };
-
   it('seeds default labels, each with a Gmail label and an outcome, and lets the user change them', async () => {
     const db = await seeded();
     const defaults = await listLabels(db, ACCOUNT);
@@ -333,82 +325,6 @@ describe('preferences in the database', () => {
   });
 
   const ids = (n: number, prefix = 'm') => Array.from({ length: n }, (_, i) => `${prefix}${i}`);
-
-  it(`proposes a rule for a sender after ${PROPOSE_AFTER} model decisions with the same label, and writes it only when accepted`, async () => {
-    const db = await seeded();
-    for (const id of ids(PROPOSE_AFTER - 1)) expect(await modelDecision(db, id, 'newsletter', 'archive')).toBe(false);
-    expect(await modelDecision(db, 'last', 'newsletter', 'archive')).toBe(true);
-    expect(await listRules(db, ACCOUNT)).toEqual([]);
-    const [proposal] = await listProposals(db, ACCOUNT);
-    expect(proposal).toMatchObject({ kind: 'rule', match: { from: 'news@example.com' }, labelId: 'newsletter', agreed: PROPOSE_AFTER });
-    // One more agreeing message does not open a second proposal.
-    expect(await modelDecision(db, 'again', 'newsletter', 'archive')).toBe(false);
-
-    // Accepting it does not make it: the user makes it in the rule dialog, where they can change it first.
-    await expect(resolveProposal(db, proposal!.id, true)).rejects.toThrow('rule dialog');
-    expect(await listRules(db, ACCOUNT)).toEqual([]);
-    expect(await madeFromProposal(db, proposal!.id, 'other@example.org')).toBe(false);
-    expect(await madeFromProposal(db, proposal!.id, ACCOUNT)).toBe(true);
-    expect(await listProposals(db, ACCOUNT)).toEqual([]);
-    expect(await madeFromProposal(db, proposal!.id, ACCOUNT)).toBe(false);
-    expect(await resolveProposal(db, proposal!.id, false)).toBe(false);
-  });
-
-  it('does not propose again what the user dismissed', async () => {
-    const db = await seeded();
-    for (const id of ids(PROPOSE_AFTER)) await modelDecision(db, id, 'newsletter', 'archive');
-    await resolveProposal(db, (await listProposals(db, ACCOUNT))[0]!.id, false);
-    expect(await modelDecision(db, 'later', 'newsletter', 'archive')).toBe(false);
-    expect(await listProposals(db, ACCOUNT)).toEqual([]);
-    expect(await listRules(db, ACCOUNT)).toEqual([]);
-  });
-
-  it('counts each message once, and only what a model call decided', async () => {
-    const db = await seeded();
-    await modelDecision(db, 'a', 'newsletter', 'archive');
-    await modelDecision(db, 'b', 'newsletter', 'archive');
-    // A label toggled back and forth decides the same two messages again, as redecide does, under the same call.
-    for (let i = 0; i < PROPOSE_AFTER; i++)
-      await recordDecision(db, ACCOUNT, i % 2 ? 'a' : 'b', {
-        disposition: 'archive',
-        subscription: 'preserve',
-        stage: 'model',
-        labelId: 'newsletter',
-        reason: 'r',
-      });
-    await raw(db).run('UPDATE decisions d SET run_id = (SELECT r.id FROM model_runs r WHERE r.message_id = d.message_id) WHERE run_id IS NULL');
-    expect(await proposeForSender(db, ACCOUNT, 'news@example.com')).toBe(false);
-    // What the user said about a message is theirs, not the model's.
-    await modelDecision(db, 'answered', 'newsletter', 'archive');
-    await recordDecision(db, ACCOUNT, 'answered', {
-      disposition: 'archive',
-      subscription: 'preserve',
-      stage: 'rules',
-      labelId: 'newsletter',
-      reason: 'you said',
-    });
-    for (const id of ids(PROPOSE_AFTER - 3)) expect(await modelDecision(db, id, 'newsletter', 'archive')).toBe(false);
-    expect(await modelDecision(db, 'last', 'newsletter', 'archive')).toBe(true);
-  });
-
-  it('does not propose for senders who send mixed mail, or mail a protection held back', async () => {
-    const db = await seeded();
-    await modelDecision(db, 'a', 'transactional', 'keep');
-    for (const id of ids(PROPOSE_AFTER - 2)) await modelDecision(db, id, 'marketing', 'archive');
-    expect(await modelDecision(db, 'c', 'marketing', 'archive')).toBe(false);
-
-    // Marketing archives, but each of these was left for review because the owner had written to the sender.
-    const held = await seeded();
-    for (const id of ids(PROPOSE_AFTER - 1)) await modelDecision(held, id, 'marketing', 'review');
-    expect(await modelDecision(held, 'c', 'marketing', 'review')).toBe(false);
-  });
-
-  it('proposes nothing for a sender who already has a rule', async () => {
-    const db = await seeded();
-    await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'personal' }, 'user');
-    for (const id of ids(PROPOSE_AFTER)) expect(await modelDecision(db, id, 'newsletter', 'archive')).toBe(false);
-    expect(await listProposals(db, ACCOUNT)).toEqual([]);
-  });
 
   it('proposes to stop waiting for the label once every message a rule was checked against had it', async () => {
     const db = await seeded();

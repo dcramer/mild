@@ -121,17 +121,47 @@ function StopReadingDialog({ proposal, onClose }: { proposal: Proposal; onClose:
   );
 }
 
-/** A rule sift thinks is worth having. Nothing changes until the user has seen the rule and said yes. */
+/** What the user has been doing to a label's mail, and what the label does instead: "You kept the last 2, but the label archives them". */
+const USER_DID: Record<string, (n: string) => string> = {
+  keep: (n) => `kept the last ${n}`,
+  archive: (n) => `archived the last ${n}`,
+  spam: (n) => `marked the last ${n} as spam`,
+};
+const LABEL_DOES: Record<string, string> = {
+  keep: 'keeps them',
+  archive: 'archives them',
+  spam: 'marks them spam',
+  block: 'marks them spam and blocks the sender',
+};
+
+/**
+ * A rule worth having: the user keeps doing something other than what a label does to a sender's mail of
+ * that label, which the model cannot learn. Nothing changes until the user has seen the rule and said yes.
+ */
 function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonly AnswerLabel[] }) {
   const { busy, error, run } = useAction();
   const [open, setOpen] = useState(false);
+  const n = count(proposal.agreed);
   return (
     <li className="row flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
       <p className="min-w-0 flex-1 basis-80">
-        <span className="font-semibold">{proposal.kind === 'rule' ? 'Make a rule?' : 'Stop checking?'}</span>{' '}
-        <span className="text-muted-foreground">
-          The last {count(proposal.agreed)} from {describeMatch(proposal.match).replace(/^from /, '')} were {proposal.labelName}.
-        </span>
+        {proposal.kind === 'rule' ? (
+          <>
+            <span className="font-semibold">
+              {outcomeName(proposal.disposition)} {proposal.labelName} {describeMatch(proposal.match)}?
+            </span>{' '}
+            <span className="text-muted-foreground">
+              You {USER_DID[proposal.disposition]?.(n)}, but the label {LABEL_DOES[proposal.labelDisposition]}.
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="font-semibold">Stop checking?</span>{' '}
+            <span className="text-muted-foreground">
+              The last {n} from {describeMatch(proposal.match).replace(/^from /, '')} were {proposal.labelName}.
+            </span>
+          </>
+        )}
         <Failure>{error}</Failure>
       </p>
       <span className="flex items-center gap-1.5">

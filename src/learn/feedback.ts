@@ -29,7 +29,7 @@ import type { Sql } from '../store/sql.ts';
 import { hashOf, openEnvelope, openPart } from '../store/content.ts';
 import { listLabels } from '../store/labels.ts';
 import { recordDecision } from '../store/decisions.ts';
-import { proposeFromAnswers } from '../store/proposals.ts';
+import { proposeFromCorrections } from '../store/proposals.ts';
 import { type RuleSays, setRule } from '../store/rules.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
 import type { RuleFacts } from '../triage/facts.ts';
@@ -222,7 +222,7 @@ interface FeedbackResult {
   carrying: number;
   /** Messages this answer settled that Sift had marked for review in Gmail, so the caller can take that mark back. */
   asked: string[];
-  /** sift proposed a rule because the sender's mail has been answered the same way enough times. */
+  /** Sift proposed a rule because the user keeps giving the sender's mail of this label another action. */
   proposed: boolean;
 }
 
@@ -368,8 +368,8 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
     if (given && changes) await recordDecision(tx, input.accountId, given.messageId, answer(given), carried);
   });
   const unsubscribed = (fromLabel: boolean) => ((fromLabel && label?.unsubscribe) || input.unsubscribe ? ', and unsubscribed from' : '');
-  // An answer makes no rule of its own; enough of the same answers for a sender, and sift offers one.
-  const proposed = !match && label !== undefined && (await proposeFromAnswers(db, input.accountId, input.sender, now));
+  // An answer makes no rule of its own; enough answers giving a sender's mail of one label another action, and Sift offers one.
+  const proposed = !match && label !== undefined && (await proposeFromCorrections(db, input.accountId, input.sender, label.id, now));
   return {
     reviewed: targets.length + (given || fresh ? 1 : 0),
     corrected: given && changes ? given.messageId : null,

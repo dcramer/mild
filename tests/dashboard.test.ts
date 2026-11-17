@@ -569,7 +569,7 @@ describe('dashboard server', () => {
     const { store, db } = await seededStore();
     const base = await start({}, store);
     const { id: proposal } = (await raw(db).get<{ id: number }>(
-      `INSERT INTO proposals (account_id, kind, match, conditions, label_id, agreed, created_at) VALUES (?, 'rule', '{"from":"news@example.com"}', ?, 'newsletter', 5, 1) RETURNING id`,
+      `INSERT INTO proposals (account_id, kind, match, conditions, label_id, disposition, agreed, created_at) VALUES (?, 'rule', '{"from":"news@example.com"}', ?, 'newsletter', 'keep', 2, 1) RETURNING id`,
       ACCOUNT,
       conditionsHash(db, { from: 'news@example.com' }),
     ))!;

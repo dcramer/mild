@@ -16,7 +16,7 @@ import { updateLabel } from '../src/store/labels.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { setActive } from '../src/store/preferences.ts';
 import { MAX_ATTEMPTS, finishRun, putBackInQueue, startRun } from '../src/store/runs.ts';
-import { listProposals, madeFromProposal } from '../src/store/proposals.ts';
+import { listProposals } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import { FakeMailbox, facts } from './helpers.ts';
@@ -617,29 +617,16 @@ describe('inference tier', () => {
     expect(mailbox.labels.get('news')).toEqual(['UNREAD', 'L:sift/newsletters', 'L:sift/did/archived']);
   });
 
-  it('proposes a rule for a sender the model keeps labelling the same way, and keeps judging until it is accepted', async () => {
+  it('proposes no rule for a sender the model keeps labelling the same way: it would do what already happens', async () => {
     judged.length = 0;
-    const arrive = async (id: string) => {
+    for (const id of ['n1', 'n2', 'n3', 'n4', 'n5', 'n6']) {
       inbox = [message(id, 'News <news@example.com>')];
       mailbox.labels.set(id, ['INBOX']);
       await runOnce(await active(true), { ...options(), model: model('newsletter') });
-    };
-    for (const id of ['n1', 'n2', 'n3', 'n4', 'n5', 'n6']) await arrive(id);
+    }
     expect(judged).toEqual(['n1', 'n2', 'n3', 'n4', 'n5', 'n6']);
-    expect(await listRules(db, ACCOUNT)).toEqual([]);
-    expect(logs.some((line) => line.includes('proposed 1 rule'))).toBe(true);
-
-    const [proposal] = await listProposals(db, ACCOUNT);
-    await addRule(db, ACCOUNT, { match: proposal!.match, labelId: proposal!.labelId }, 'user');
-    expect(await madeFromProposal(db, proposal!.id, ACCOUNT)).toBe(true);
-    await arrive('n7');
-    expect(judged).not.toContain('n7');
-    expect(withReason(await raw(db).get(`SELECT stage, disposition, label_id, reason FROM decisions WHERE message_id = 'n7'`))).toEqual({
-      stage: 'rules',
-      disposition: 'archive',
-      label_id: 'newsletter',
-      reason: 'rule: from news@example.com is Newsletters',
-    });
+    expect(await listProposals(db, ACCOUNT)).toEqual([]);
+    expect(logs.some((line) => line.includes('proposed'))).toBe(false);
   });
 
   it('reads a message before the rules when one asks what only the whole message shows, and once in all', async () => {

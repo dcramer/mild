@@ -82,7 +82,7 @@ const inbox = [
   // The stand-in model fails on these every time, so after three passes they are out of the queue and not judged.
   mail('Ops <alerts@ops.example.com>', 'Disk 91% full on db-2', 'Free space is running low.'),
   mail('Ops <alerts@ops.example.com>', 'Replica lag on db-3', 'The replica is 40 seconds behind.'),
-  // Answered below as Receipts, three alike, so sift proposes a rule for the sender.
+  // Kept below as Receipts, which that label archives, as moving them back to the inbox in Gmail answers; so Sift proposes keeping them.
   mail('Utility <billing@utility.example.net>', 'Your March bill', 'Your bill is ready.'),
   mail('Utility <billing@utility.example.net>', 'Your April bill', 'Your bill is ready.'),
   mail('Utility <billing@utility.example.net>', 'Your May bill', 'Your bill is ready.'),
@@ -180,7 +180,7 @@ for (let pass = 0; pass < 3; pass++) {
     if (result.error) throw new Error(`seed pass failed: ${result.error}`);
 }
 if (mailbox.modifyCalls > 0) throw new Error('seed pass changed the fake mailbox while sift was off');
-// Each answered as the dashboard answers one, which is how a proposal from answers comes about.
+// Each answered as Gmail answers a move back to the inbox: the label, kept. Two alike propose a rule that keeps them.
 for (const waiting of await pendingSuggestions(db, { accountId: ACCOUNT, sender: 'billing@utility.example.net' }))
   await applyFeedback(
     db,
@@ -188,10 +188,11 @@ for (const waiting of await pendingSuggestions(db, { accountId: ACCOUNT, sender:
       accountId: ACCOUNT,
       sender: waiting.fromAddress,
       label: 'transactional',
+      disposition: 'keep',
       scope: 'once',
       decisionId: waiting.decisionId,
       messageId: waiting.messageId,
-      carryOut: true,
+      via: 'gmail',
     },
     now,
   );

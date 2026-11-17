@@ -10,7 +10,7 @@ import { listLabels } from '../store/labels.ts';
 import { listUnsettledDecisions, recordDecision, settleDecision } from '../store/decisions.ts';
 import { type QueuedMessage, listUndecided } from '../store/messages.ts';
 import { excuseRuns, finishRun, startRun } from '../store/runs.ts';
-import { proposeForSender, proposeSettled } from '../store/proposals.ts';
+import { proposeSettled } from '../store/proposals.ts';
 import { blockSender, countRuleHit, listRules } from '../store/rules.ts';
 import { cachedCorrespondent } from '../store/senders.ts';
 import { passedDmarc } from '../triage/features.ts';
@@ -255,11 +255,8 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     });
     span.set({ 'sift.stage': decision.stage, 'sift.disposition': decision.disposition, 'sift.decision_id': decisionId });
     if (decision.ruleId) await countRuleHit(db, decision.ruleId);
-    if (decision.stage === 'model') {
-      const proposed = decision.priorRuleId
-        ? await proposeSettled(db, account.id, decision.priorRuleId, now())
-        : await proposeForSender(db, account.id, facts.from.address, now());
-      if (proposed) report.proposed++;
+    if (decision.stage === 'model' && decision.priorRuleId) {
+      if (await proposeSettled(db, account.id, decision.priorRuleId, now())) report.proposed++;
     }
     report.decided[decision.disposition]++;
     const status = into ? await carryOut(decisionId, facts.messageId, decision, into) : null;

@@ -48,7 +48,7 @@ async function seed(account: string): Promise<void> {
     decision,
   ))!;
   const { id: proposal } = (await raw(db).get<{ id: number }>(
-    `INSERT INTO proposals (account_id, kind, match, conditions, label_id, agreed, created_at) VALUES (?, 'rule', ?, ?, 'newsletter', 5, 1000) RETURNING id`,
+    `INSERT INTO proposals (account_id, kind, match, conditions, label_id, disposition, agreed, created_at) VALUES (?, 'rule', ?, ?, 'newsletter', 'keep', 2, 1000) RETURNING id`,
     account,
     JSON.stringify({ from: `proposed@${mark}.example.com` }),
     conditionsHash(db, { from: `proposed@${mark}.example.com` }),

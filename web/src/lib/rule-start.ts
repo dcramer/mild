@@ -25,8 +25,8 @@ export interface RuleStart {
 const WAITING_DOES = { keep: 'keep', archive: 'archive', spam: 'spam', block: 'spam', review: 'keep' } as const;
 
 /**
- * A proposed rule, waiting for its label and then doing what the label does. A proposal names one sender,
- * so its match has one named condition.
+ * A proposed rule, waiting for its label and then doing what `does` says: for a proposed rule, what the
+ * user has been doing to that label's mail. A proposal names one sender, so its match has one named condition.
  */
 export function proposalStart({ facts, ...match }: RuleMatch, label: string, does: string): RuleStart {
   const [key, value] = Object.entries(match)[0] ?? ['from', ''];

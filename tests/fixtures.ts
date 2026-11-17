@@ -230,7 +230,7 @@ export async function recordEverything(db: Sql, account: string): Promise<void> 
       decision,
     ],
     [
-      `INSERT INTO proposals (account_id, kind, match, conditions, label_id, agreed, created_at) VALUES (?, 'rule', '{"from": "a@example.com"}', ?, 'newsletter', 5, 0)`,
+      `INSERT INTO proposals (account_id, kind, match, conditions, label_id, disposition, agreed, created_at) VALUES (?, 'rule', '{"from": "a@example.com"}', ?, 'newsletter', 'keep', 2, 0)`,
       account,
       conditionsHash(db, { from: 'a@example.com' }),
     ],

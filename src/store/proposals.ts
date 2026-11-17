@@ -1,4 +1,4 @@
-import { type PROPOSAL_KINDS, alias, and, decisions, desc, eq, feedback, isNotNull, max, messages, proposals } from './query.ts';
+import { type PROPOSAL_KINDS, and, decisions, desc, eq, feedback, messages, proposals } from './query.ts';
 import type { Sql } from './sql.ts';
 import { conditionsHash, hashOf, openJson, proposalName, sealJson } from './content.ts';
 import type { Rule, RuleMatch } from '../triage/stages/rules.ts';
@@ -16,6 +16,8 @@ export interface Proposal {
   match: RuleMatch;
   labelId: string;
   ruleId: string | null;
+  /** With `rule`: what the user has been doing to the label's mail instead of what the label does. */
+  disposition: DecidedDisposition | null;
   /** How many decisions in a row it rests on. */
   agreed: number;
   createdAt: number;
@@ -28,6 +30,7 @@ const COLUMNS = {
   match: proposals.match,
   labelId: proposals.labelId,
   ruleId: proposals.ruleId,
+  disposition: proposals.disposition,
   agreed: proposals.agreed,
   createdAt: proposals.createdAt,
 };
@@ -54,7 +57,10 @@ async function propose(db: Sql, p: Omit<Proposal, 'id' | 'createdAt'>, now: numb
     .where(and(eq(proposals.accountId, p.accountId), eq(proposals.kind, p.kind), eq(proposals.conditions, conditionsHash(db, p.match))));
   if (existing) {
     if (existing.status === 'open')
-      await db.update(proposals).set({ agreed: p.agreed, labelId: p.labelId, ruleId: p.ruleId }).where(eq(proposals.id, existing.id));
+      await db
+        .update(proposals)
+        .set({ agreed: p.agreed, labelId: p.labelId, ruleId: p.ruleId, disposition: p.disposition })
+        .where(eq(proposals.id, existing.id));
     return false;
   }
   await db.insert(proposals).values({
@@ -64,83 +70,52 @@ async function propose(db: Sql, p: Omit<Proposal, 'id' | 'createdAt'>, now: numb
     conditions: conditionsHash(db, p.match),
     labelId: p.labelId,
     ruleId: p.ruleId,
+    disposition: p.disposition,
     agreed: p.agreed,
     createdAt: now,
   });
   return true;
 }
 
-const later = alias(decisions, 'later');
-
-/** How many messages in a row the model must have labelled alike before sift proposes a rule for the sender. */
-export const PROPOSE_AFTER = 5;
-/** How many times in a row the model must agree with a `usually` rule before sift proposes to stop checking it. */
-const SETTLED_AFTER = 10;
+/**
+ * How many of a sender's messages of one label the user must have given the same other action before Sift
+ * offers a rule. Not one: one answer about one message does not become a rule about its sender.
+ */
+const PROPOSE_AFTER = 2;
+/** How far back a run of answers is counted, for saying how many it rests on. */
+const MAX_RUN = 20;
 
 /**
- * Propose a rule for a sender once the model has given their last few messages the same label and each
- * ended the way the label says. Each message counts once, by where it stands now: one the user answered,
- * or that a rule decided since, is not the model's. Senders who send mixed mail never settle. Nothing is
- * proposed where a rule for exactly that sender exists. Returns true if a proposal was opened.
+ * Propose a rule for a sender whose mail of one label the user keeps giving another action than the label's:
+ * moving their Notifications back to the inbox, or archiving their Account alerts. The model only says what
+ * mail is, so no number of examples teaches it that; only a rule can. Answers that go with the label propose
+ * nothing, since such a rule would do what already happens, and one breaks the run. Nothing is proposed where
+ * the sender already has a rule for all their mail or for that label. Returns true if a proposal was opened.
  */
-export async function proposeForSender(db: Sql, accountId: string, address: string, now: number = Date.now()): Promise<boolean> {
-  if (await hasRuleFor(db, accountId, { from: address })) return false;
+export async function proposeFromCorrections(db: Sql, accountId: string, address: string, labelId: string, now: number = Date.now()): Promise<boolean> {
+  const label = (await listLabels(db, accountId)).find((l) => l.id === labelId);
+  if (!label) return false;
+  const match = { from: address };
+  if ((await hasRuleFor(db, accountId, match)) || (await hasRuleFor(db, accountId, match, labelId))) return false;
   const recent = await db
-    .select({ labelId: decisions.labelId, disposition: decisions.disposition, priorRuleId: decisions.priorRuleId })
-    .from(decisions)
-    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
-    .where(
-      and(
-        eq(decisions.accountId, accountId),
-        eq(messages.senderHash, hashOf(db, address)),
-        eq(
-          decisions.id,
-          db
-            .select({ id: max(later.id) })
-            .from(later)
-            .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
-        ),
-        eq(decisions.stage, 'model'),
-        isNotNull(decisions.runId),
-      ),
-    )
-    .orderBy(desc(decisions.id))
-    .limit(PROPOSE_AFTER);
-  const [first] = recent;
-  if (!first || recent.length < PROPOSE_AFTER || first.labelId === null) return false;
-  const label = (await listLabels(db, accountId)).find((l) => l.id === first.labelId)!;
-  // One where a protection held sift back, or a wider rule already spoke, is not settled.
-  if (!recent.every((r) => r.labelId === first.labelId && r.disposition === label.disposition && r.priorRuleId === null)) return false;
-  return await propose(db, { accountId, kind: 'rule', match: { from: address }, labelId: first.labelId, ruleId: null, agreed: recent.length }, now);
-}
-
-/** How many answers in a row about a sender, all the same label, before sift offers to make it a rule. */
-const PROPOSE_AFTER_ANSWERS = 3;
-
-/**
- * Propose a rule for a sender whose last few answers all said the same label, and each let the label do what
- * it does. Answering one message makes no rule; this is how answers turn into one, with the user's say-so.
- * An answer that kept the label but not its action ("Marketing, but keep it") breaks the run: the rule
- * proposed would do what the user just said not to.
- */
-export async function proposeFromAnswers(db: Sql, accountId: string, address: string, now: number = Date.now()): Promise<boolean> {
-  if (await hasRuleFor(db, accountId, { from: address })) return false;
-  const recent = await db
-    .select({ labelId: feedback.labelId, disposition: feedback.disposition })
+    .select({ disposition: feedback.disposition })
     .from(feedback)
     .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
     .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
-    .where(and(eq(feedback.accountId, accountId), eq(messages.senderHash, hashOf(db, address))))
+    .where(and(eq(feedback.accountId, accountId), eq(feedback.labelId, labelId), eq(messages.senderHash, hashOf(db, address))))
     .orderBy(desc(feedback.createdAt), desc(feedback.decisionId))
-    .limit(PROPOSE_AFTER_ANSWERS);
+    .limit(MAX_RUN);
   const [first] = recent;
-  if (!first || recent.length < PROPOSE_AFTER_ANSWERS || first.labelId === null) return false;
-  const label = (await listLabels(db, accountId)).find((l) => l.id === first.labelId);
-  if (!label) return false;
   const does = label.disposition === 'review' ? 'keep' : label.disposition;
-  if (!recent.every((r) => r.labelId === first.labelId && r.disposition === does)) return false;
-  return await propose(db, { accountId, kind: 'rule', match: { from: address }, labelId: first.labelId, ruleId: null, agreed: recent.length }, now);
+  if (!first || first.disposition === does) return false;
+  const run = recent.findIndex((r) => r.disposition !== first.disposition);
+  const agreed = run === -1 ? recent.length : run;
+  if (agreed < PROPOSE_AFTER) return false;
+  return await propose(db, { accountId, kind: 'rule', match, labelId, ruleId: null, disposition: first.disposition, agreed }, now);
 }
+
+/** How many times in a row the model must agree with a `usually` rule before sift proposes to stop checking it. */
+const SETTLED_AFTER = 10;
 
 /** Propose dropping the "when it is L" from a rule once every message it was checked against turned out to be L, for long enough. */
 export async function proposeSettled(db: Sql, accountId: string, ruleId: string, now: number = Date.now()): Promise<boolean> {
@@ -153,7 +128,7 @@ export async function proposeSettled(db: Sql, accountId: string, ruleId: string,
     .orderBy(desc(decisions.id))
     .limit(SETTLED_AFTER);
   if (recent.length < SETTLED_AFTER || !recent.every((r) => r.ruleId === ruleId)) return false;
-  return await propose(db, { accountId, kind: 'always', match: rule.match, labelId: rule.whenLabel, ruleId, agreed: recent.length }, now);
+  return await propose(db, { accountId, kind: 'always', match: rule.match, labelId: rule.whenLabel, ruleId, disposition: null, agreed: recent.length }, now);
 }
 
 /** What a judged rule does to everything it matches once it stops waiting for its label: its own action, or the label's. */

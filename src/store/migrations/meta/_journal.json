@@ -141,6 +141,20 @@
       "when": 1794879430470,
       "tag": "0019_gmail_label_from_the_label",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794880021508,
+      "tag": "0020_drop_agreement_proposals",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794880022849,
+      "tag": "0021_proposals_carry_an_action",
+      "breakpoints": true
     }
   ]
 }
