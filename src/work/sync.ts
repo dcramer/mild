@@ -83,3 +83,14 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
   await recordSync(db, account.id, unrecorded, pull.historyId, startedAt, read);
   return { mode: pull.mode, added, skipped, corrections };
 }
+
+/**
+ * Whether `syncAccount` would find anything: mail new to the inbox, or a change the person made in Gmail. Sift's own
+ * changes move Gmail's history too, and are told from the person's as sync tells them, so they begin no pass. Reads
+ * history from the cursor (2 quota units a page) and moves nothing.
+ */
+export async function syncWants(db: Sql, api: GmailApi, account: Account): Promise<boolean> {
+  const pull = await pullChanges(api, account.historyId);
+  if (pull.mode !== 'incremental' || pull.messageIds.length > 0) return true;
+  return (await userChanges(db, account.id, pull.labelChanges, (await lastSyncedAt(db, account.id)) ?? 0)).length > 0;
+}
