@@ -191,5 +191,5 @@ export function saveSetting(config: Config, variable: Variable, value: string | 
 /** A setting as its variable's text. */
 function settingText(settings: Settings, variable: Variable): string | undefined {
   const value = settings[ENVIRONMENT[variable]];
-  return value === undefined ? undefined : Array.isArray(value) ? value.join(',') : String(value);
+  return value === undefined ? undefined : String(value);
 }

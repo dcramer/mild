@@ -226,4 +226,13 @@ describe('asking for a rule', () => {
     expect(reportError).toHaveBeenCalledWith(new Error('Rule drafting failed: rate limited'));
     expect(await raw(db).all('SELECT error, rule, cost_usd FROM rule_drafts')).toEqual([{ error: 'rate limited', rule: null, cost_usd: 0.01 }]);
   });
+
+  it('finishes the record of a call whose look-up threw', async () => {
+    const db = await person();
+    const throwing: RuleDrafter = async () => {
+      throw new Error('lookup failed');
+    };
+    await expect(draftRule({ db, draft: throwing, model: 'p/m', now: () => 7 }, { accountId: ACCOUNT, goal: 'Archive Acme' })).rejects.toThrow('lookup failed');
+    expect(await raw(db).all('SELECT error, finished_at FROM rule_drafts')).toEqual([{ error: 'lookup failed', finished_at: 7 }]);
+  });
 });

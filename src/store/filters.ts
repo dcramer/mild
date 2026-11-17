@@ -74,7 +74,7 @@ export async function setRuleFilter(
     .where(eq(ruleRows.id, ruleId));
 }
 
-/** For each of the account's rules, whether it can be a Gmail filter as things stand. `_now` is unused; src/actions/rule-filters.ts still passes it. */
+/** For each of the account's rules, whether it can be a Gmail filter as things stand. */
 export async function filterVerdicts(db: Sql, accountId: string): Promise<Map<string, FilterVerdict>> {
   const rules = await listRules(db, accountId);
   const labels = await listLabels(db, accountId);

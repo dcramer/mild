@@ -42,13 +42,16 @@ const DAY_MS = 86_400_000;
  * minute over. A host that cuts the work off leaves the lock to run out about when the next tick wants it.
  */
 const HOLD_PAST_LIMIT_MS = 60_000;
-/** The longest a lock is held, for work with no limit (`sift run --once`, tests). */
+/** The longest a lock is held, for work with no limit (`runOnce`). */
 const LONGEST_HOLD_MS = 15 * 60_000;
 /**
  * How many pieces of work one tick does at once: enough that one mailbox's backlog (a minute-long model
  * call, a sync waiting on Gmail's quota) does not hold up everyone's new mail.
  */
 const AT_ONCE = 4;
+const today = (options: Pick<RunOptions, 'now'>) => Math.floor((options.now ?? Date.now)() / DAY_MS);
+/** A person's upkeep done today. */
+const upkeepKey = (person: number, day: number) => `upkeep:${person}:${day}`;
 /** Older mail asked for and not yet all pulled in, by mailbox; given up after a day. */
 const backfillKey = (account: string) => `backfill:${account}`;
 const BACKFILL_MS = 86_400_000;
@@ -81,7 +84,6 @@ export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[
   return results;
 }
 
-/** A piece of work a tick found due. */
 /**
  * A piece of work a tick found due: ids only, so it can be handed to a call of its own (Vercel), and
  * whatever runs it opens everything it touches from them.
@@ -97,12 +99,12 @@ export type Work =
  * nothing remembered from the last, and work a tick left unfinished is simply due again.
  */
 export async function dueWork(store: Store, options: RunOptions, people?: readonly number[]): Promise<Work[]> {
-  const day = Math.floor((options.now ?? Date.now)() / DAY_MS);
+  const day = today(options);
   const due: Work[] = [];
   for (const { id: person } of await listUsers(store.central)) {
     if (people && !people.includes(person)) continue;
     const db = await store.user(person);
-    if (await options.ephemeral.claim(`upkeep:${person}:${day}`, 2 * DAY_MS)) due.push({ kind: 'upkeep', person });
+    if ((await options.ephemeral.get(upkeepKey(person, day))) === null) due.push({ kind: 'upkeep', person });
     for (const account of await listAccounts(db)) {
       // Nothing is read from Gmail for a mailbox until the person has said, with a label of their own, what they want of it.
       if (!(await hasOwnLabels(db, account.id))) continue;
@@ -177,9 +179,19 @@ export const runWork = (store: Store, work: Work, options: RunOptions, until: nu
       const account = 'account' in work ? (await listAccounts(db)).find((a) => a.id === work.account) : undefined;
       if (account) span.set({ 'user.email': account.email });
       switch (work.kind) {
-        case 'upkeep':
-          await upkeep(db, options);
+        case 'upkeep': {
+          // Held for the day once it starts, not once it is found due, so one that fails is due again at the next tick.
+          const key = upkeepKey(work.person, today(options));
+          const token = await options.ephemeral.claim(key, 2 * DAY_MS);
+          if (token === null) return null;
+          try {
+            await upkeep(db, options);
+          } catch (error) {
+            await options.ephemeral.release(key, token);
+            throw error;
+          }
           return null;
+        }
         case 'pass':
           return account ? await unlessUnderWay(options, `lock:pass:${account.id}`, until, () => passMailbox(db, account, options, until)) : null;
         case 'backfill':
@@ -337,7 +349,7 @@ function describe(result: PassResult, active: boolean): string | null {
   return parts.length > 0 ? parts.join('; ') : null;
 }
 
-/** One person's upkeep, sent when sift starts and once a day after: old examples, message text and messages go. */
+/** One person's upkeep, done by the first tick of each day: old examples, message text and messages go. */
 export async function upkeep(db: Sql, options: Pick<RunOptions, 'log' | 'now'>): Promise<void> {
   const now = (options.now ?? Date.now)();
   const dropped = await pruneExamples(db, now);

@@ -10,6 +10,7 @@ import type { Host, Sift } from '../app/sift.ts';
 import type { Store } from '../store/store.ts';
 import { WEB_DIST, ensureWebBuilt } from './web-build.ts';
 import { readSecret, writeSecret } from '../secrets.ts';
+import { reportError } from '../telemetry.ts';
 import { listenAddresses, machineNames, tailscaleName } from './network.ts';
 import { paint, ui } from './ui.ts';
 
@@ -94,10 +95,12 @@ export function dashboardListener(respond: (request: Request) => Promise<Respons
   return createServer(
     (req, res) =>
       void serve(req, res).catch((error: unknown) => {
+        // The handler answers its own errors; one here is the adapter's, and its words may name a path.
+        reportError(error);
         if (!res.headersSent)
           res
             .writeHead(500, { ...HEADERS, 'content-type': 'application/json', 'cache-control': 'no-store' })
-            .end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+            .end(JSON.stringify({ error: 'Sift could not do that.' }));
       }),
   );
 }

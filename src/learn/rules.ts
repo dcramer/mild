@@ -22,7 +22,15 @@ export async function draftRule(
   // Read once, on the first look-up: most of what is asked for names no sender.
   let senders: Promise<FoundSender[]> | undefined;
   const find = async (query: string) => searchSenders(await (senders ??= senderDirectory(db, request.accountId)), query);
-  const answer = await invokeAgent('rules', db.person, { name: 'sift.rule_draft', id }, () => deps.draft({ goal: request.goal, labels }, find));
+  const answer = await invokeAgent('rules', db.person, { name: 'sift.rule_draft', id }, async () => {
+    try {
+      return await deps.draft({ goal: request.goal, labels }, find);
+    } catch (error) {
+      // A look-up that threw: the call still ends on the record, as one that failed.
+      await finishRuleDraft(db, request.accountId, id, { error: error instanceof Error ? error.message : String(error), lookups: 0, now: now() });
+      throw error;
+    }
+  });
   const spent = { lookups: answer.lookups, ...(answer.usage ? { usage: answer.usage } : {}), now: now() };
   if ('failed' in answer) {
     await finishRuleDraft(db, request.accountId, id, { error: answer.failed, ...spent });

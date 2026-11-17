@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { RETENTION_DAYS, pruneOld } from '../src/work/retention.ts';
 import { KEEP_BODY_DAYS } from '../src/work/bodies.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { type RunOptions, tick, upkeep } from '../src/work/run.ts';
+import { type RunOptions, dueWork, tick, upkeep } from '../src/work/run.ts';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { recordSync } from '../src/store/accounts.ts';
 import { type ActionType, finishAction, insertPendingAction, unsubscribedAt } from '../src/store/actions.ts';
@@ -89,7 +89,7 @@ describe('pruneOld', () => {
   it('keeps a message the user answered while its example is kept, then forgets it with the answer', async () => {
     await message('answered');
     await recordDecision(db, ACCOUNT, 'answered', archive, { now: OLD });
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'answered@example.com', label: 'newsletter', scope: 'once', carryOut: true }, OLD);
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'answered@example.com', label: 'newsletter', carryOut: true }, OLD);
     await raw(db).run(`UPDATE decisions SET outcome = 'done' WHERE carry_out`);
 
     expect(await pruneOld(db, NOW)).toBe(0);
@@ -122,7 +122,7 @@ describe('pruneOld', () => {
     }
     await message('answered');
     for (let i = 0; i < MAX_ATTEMPTS; i++) await startRun(db, { accountId: ACCOUNT, messageId: 'answered', model: 'p/m', now: OLD });
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'answered@example.com', label: 'newsletter', scope: 'once', messageId: 'answered' }, OLD);
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'answered@example.com', label: 'newsletter', messageId: 'answered' }, OLD);
 
     expect(await pruneOld(db, NOW)).toBe(1);
     expect(await left('messages', 'id')).toEqual(['answered', 'tried lately']);
@@ -176,5 +176,14 @@ describe('retention', () => {
       'Forgot 1 message with nothing newer than 365 days',
     ]);
     expect(await left('messages', 'id')).toEqual([]);
+  });
+
+  it('is due again when it was found due and never run', async () => {
+    const options: RunOptions = { ephemeral: memoryEphemeral(), connect: () => Promise.reject(new Error('not connected')), log: () => {}, now: () => NOW };
+    const upkeepDue = async () => (await dueWork(store, options)).filter((work) => work.kind === 'upkeep');
+    expect(await upkeepDue()).toHaveLength(1);
+    expect(await upkeepDue()).toHaveLength(1);
+    await tick(store, options, Infinity);
+    expect(await upkeepDue()).toEqual([]);
   });
 });

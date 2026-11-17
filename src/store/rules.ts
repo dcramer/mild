@@ -188,10 +188,6 @@ export async function blockSender(db: Sql, accountId: string, address: string, l
   return true;
 }
 
-/**
- * Take back a sender's or a domain's standing: remove the rule for exactly them that waits for no label.
- * A standing is given by adding that rule, in the rule dialog. Returns false if there was none.
- */
 /** The user's own rule for exactly this address or domain, which is what their standing is read from. */
 export async function standingRule(db: Sql, accountId: string, match: { from: [string] } | { fromDomain: [string] }): Promise<string | null> {
   return (await ruleMatching(db, accountId, match))?.id ?? null;
