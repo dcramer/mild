@@ -141,15 +141,15 @@ function Gate({ route }: { route: string[] }) {
   // Open to anyone, signed in or not: Google reads the privacy policy and the terms before it lets anyone outside a test list sign in.
   // Someone's own copy has none, and the address is the dashboard's.
   const Legal = LEGAL[route[0] ?? ''];
-  if (Legal && cloud !== null)
+  if (Legal && cloud)
     return (
       <Suspense fallback={null}>
-        <Legal contact={cloud} />
+        <Legal />
       </Suspense>
     );
   if (session.data.required && session.data.email === null) {
     return (
-      <Cloud value={cloud !== null}>
+      <Cloud value={cloud}>
         <Suspense fallback={null}>
           <SignInScreen session={session.data} error={new URLSearchParams(window.location.search).get('signin')} />
         </Suspense>
@@ -157,7 +157,7 @@ function Gate({ route }: { route: string[] }) {
     );
   }
   return (
-    <Cloud value={cloud !== null}>
+    <Cloud value={cloud}>
       <SetUp signedInAs={session.data.email} onSettings={openSettings}>
         <Dashboard signedInAs={session.data.email} route={route} />
       </SetUp>

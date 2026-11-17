@@ -109,8 +109,8 @@ export interface DashboardOptions {
   ephemeral?: Ephemeral;
   /** Addresses Google can sign the user in at, to suggest when they opened the dashboard at one it cannot. */
   signInAddresses?: readonly string[];
-  /** `SIFT_CLOUD`: where the people of a Sift run as a service write to whoever runs it. */
-  cloud?: string;
+  /** `SIFT_CLOUD`: this Sift is a service for other people, with terms, a privacy policy and a security page. */
+  cloud?: boolean;
   /** What the dashboard can ask the rest of sift to do. Without it the page can look but not manage. */
   controls?: Controls;
   /** Where an error goes that is Sift's own, not a `Refusal`: the page is told only that something failed. */
@@ -191,7 +191,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
   const { ephemeral } = options;
   if (signIn && !ephemeral) throw new Error('signIn needs an ephemeral store');
   const log = options.log ?? (() => {});
-  const cloud = options.cloud ?? null;
+  const cloud = options.cloud ?? false;
   const report = (request: Request, error: unknown) =>
     log(`${request.method} ${new URL(request.url).pathname}: ${error instanceof Error ? error.message : String(error)}`);
   /** What the page is told of an error: a refusal's own words, anything else only that it failed. */

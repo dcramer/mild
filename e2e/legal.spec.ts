@@ -1,11 +1,11 @@
 import { expect, test } from './sift.ts';
 
-const CONTACT = 'support@example.com';
-
 test.describe('A Sift run as a service', () => {
-  test.use({ cloud: CONTACT });
+  test.use({ cloud: true });
 
-  test('the security page is linked at the foot of the signed-out page, says where to report a problem, and links to the privacy policy', async ({ page }) => {
+  test('the security page is linked at the foot of the signed-out page, says where to report a problem privately, and links to the privacy policy', async ({
+    page,
+  }) => {
     // The seeded dashboard has no Google sign-in, so its session reply is made into a signed-out visitor's.
     await page.route('**/api/session?*', async (route) => {
       const response = await route.fetch();
@@ -16,11 +16,11 @@ test.describe('A Sift run as a service', () => {
     await expect(page.getByRole('heading', { name: 'Security', level: 1 })).toBeVisible();
     expect(new URL(page.url()).pathname).toBe('/security');
     await expect(page.getByRole('heading', { name: 'What it does not protect against' })).toBeVisible();
-    await expect(page.getByRole('link', { name: CONTACT })).toHaveAttribute('href', `mailto:${CONTACT}`);
+    await expect(page.getByRole('link', { name: 'privately on GitHub' })).toHaveAttribute('href', 'https://github.com/dcramer/sift/security/advisories/new');
 
     await page.getByRole('link', { name: 'privacy policy' }).click();
     await expect(page.getByRole('heading', { name: 'Privacy policy', level: 1 })).toBeVisible();
-    await expect(page.getByRole('link', { name: CONTACT }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: 'an issue on GitHub' })).toHaveAttribute('href', 'https://github.com/dcramer/sift/issues');
   });
 
   test('signed in, the foot of a screen links to the terms, privacy and security', async ({ page }) => {

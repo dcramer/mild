@@ -1,27 +1,25 @@
 import { Clause, Document, TextLink } from '@/system';
 
-// Shown only on a Sift run as a service for other people (`SIFT_CLOUD`), whose value is `contact`: "we" is
-// whoever runs it, with their own Google client. Google's verification reads these pages: the Limited Use
+// Shown only on a Sift run as a service for other people (`SIFT_CLOUD`): "we" is whoever runs it, with
+// their own Google client. Until it has an address of its own, people reach it through the repository. Google's verification reads these pages: the Limited Use
 // statement must stay word for word, and what they say sift keeps must stay true of the code. The security
 // page is held to docs/security.md and AGENTS.md's safety rules the same way.
 const UPDATED = 'November 17, 2026';
 const SOURCE = 'https://github.com/dcramer/sift';
 const USER_DATA_POLICY = 'https://developers.google.com/terms/api-services-user-data-policy';
 const PERMISSIONS = 'https://myaccount.google.com/permissions';
+const ISSUES = `${SOURCE}/issues`;
+// GitHub's private vulnerability reporting: seen only by the repository's maintainers.
+const REPORT = `${SOURCE}/security/advisories/new`;
 
-/** Where to write to whoever runs this Sift. */
-function Contact({ to }: { to: string }) {
-  return <TextLink href={`mailto:${to}`}>{to}</TextLink>;
-}
-
-export function PrivacyView({ contact }: { contact: string }) {
+export function PrivacyView() {
   return (
     <main>
       <Document title="Privacy policy" updated={UPDATED}>
         <p>
           Sift helps manage a Gmail inbox: it classifies mail, and, as you tell it to, archives it, marks it as spam or unsubscribes from it. This Sift is run
-          by the person or organisation that set it up (“we”, at <Contact to={contact} />
-          ). Sift is <TextLink href={SOURCE}>open source</TextLink>, and anyone can run a copy: this policy is ours, for this one.
+          by the person or organisation that set it up (“we”). Sift is <TextLink href={SOURCE}>open source</TextLink>, and anyone can run a copy: this policy is
+          ours, for this one.
         </p>
 
         <Clause title="What Sift reads">
@@ -119,8 +117,11 @@ export function PrivacyView({ contact }: { contact: string }) {
 
         <Clause title="Changes and contact">
           <p>
-            When this policy changes, the date above changes with it. Questions and requests go to <Contact to={contact} />. See also the{' '}
-            <TextLink href="/terms">terms of service</TextLink>.
+            When this policy changes, the date above changes with it. See also the <TextLink href="/terms">terms of service</TextLink>.
+          </p>
+          <p>
+            Ask a question or make a request in <TextLink href={ISSUES}>an issue on GitHub</TextLink>. Issues are public: for anything about your own data, ask
+            us to get in touch and leave the details out.
           </p>
         </Clause>
       </Document>
@@ -128,13 +129,13 @@ export function PrivacyView({ contact }: { contact: string }) {
   );
 }
 
-export function TermsView({ contact }: { contact: string }) {
+export function TermsView() {
   return (
     <main>
       <Document title="Terms of service" updated={UPDATED}>
         <p>
-          These terms are between you and the person or organisation running this Sift (“we”, at <Contact to={contact} />
-          ). By signing in, you agree to them and to the <TextLink href="/privacy">privacy policy</TextLink>.
+          These terms are between you and the person or organisation running this Sift (“we”). By signing in, you agree to them and to the{' '}
+          <TextLink href="/privacy">privacy policy</TextLink>.
         </p>
 
         <Clause title="What Sift does">
@@ -193,7 +194,7 @@ export function TermsView({ contact }: { contact: string }) {
   );
 }
 
-export function SecurityView({ contact }: { contact: string }) {
+export function SecurityView() {
   return (
     <main>
       <Document title="Security" updated={UPDATED}>
@@ -335,7 +336,7 @@ export function SecurityView({ contact }: { contact: string }) {
         <Clause title="If something is wrong">
           <p>
             To cut Sift off at once, remove its access in your <TextLink href={PERMISSIONS}>Google account’s permissions</TextLink>; that ends every token it
-            was given. Report a security problem in this Sift to <Contact to={contact} />, not in a public issue.
+            was given. Report a security problem <TextLink href={REPORT}>privately on GitHub</TextLink>, not in a public issue.
           </p>
         </Clause>
       </Document>

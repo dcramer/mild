@@ -39,11 +39,11 @@ export interface Settings {
    */
   sentryDsn?: string;
   /**
-   * Set when this Sift is a service for other people: the address they write to with questions and
-   * security reports. Only then does the page have terms, a privacy policy and a security page, which
-   * speak for whoever runs it. Unset: someone's own copy, where they would speak to its own owner.
+   * True when this Sift is a service for other people. Only then does the page have terms, a privacy
+   * policy and a security page, which speak for whoever runs it. Unset: someone's own copy, where they
+   * would speak to its own owner.
    */
-  cloud?: string;
+  cloud?: boolean;
 }
 
 /** Each setting's variable, and what its text must be. Hosts that run sift for you (Vercel) configure it only this way. */
@@ -172,8 +172,8 @@ export function readSettings(env: NodeJS.ProcessEnv): Settings {
         settings.sentryDsn = text;
         break;
       case 'SIFT_CLOUD':
-        if (!/^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/.test(text)) throw bad(variable, 'the email address people write to about this Sift');
-        settings.cloud = text;
+        if (!/^(true|false|1|0)$/i.test(text)) throw bad(variable, 'true or false');
+        settings.cloud = /^(true|1)$/i.test(text);
         break;
     }
   }

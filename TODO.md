@@ -91,6 +91,7 @@ Sift has run on the owner's inbox while off. Nothing that changes the mailbox ha
 
 ## Deployment and isolation
 
+- [ ] **A contact for the hosted Sift.** Its terms, privacy policy and security page (`web/src/views/legal.tsx`) send questions to the repository's public issues and security reports to GitHub's private reporting, for want of an address of its own. Give it one (a setting beside `SIFT_CLOUD`) and name it in those pages and in the Google consent screen.
 - [ ] The person's words to the label model, and what it suggests, are encrypted, but the labels made from them (names, descriptions) are plain. Decide one way.
 - [ ] **Vercel.** Not yet seen: `waitUntil` keeping a long piece going past the reply for its whole limit. The Deploy Button ([docs/vercel.md](docs/vercel.md)) is untried: check that it adds Neon and Upstash, and that Upstash sets `REDIS_URL`.
   - **Setup in the browser.** No `sift init`: the Google client and settings entered in the dashboard, with the first visitor claiming the install safely.

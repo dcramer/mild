@@ -139,7 +139,7 @@ const sift = {
     createDashboard(people(store), {
       allowedHosts: host.allowedHosts,
       signInAddresses: host.signInAddresses,
-      ...(config.settings.cloud ? { cloud: config.settings.cloud } : {}),
+      ...(config.settings.cloud ? { cloud: true } : {}),
       controls,
       signIn: buildSignIn(config, store),
       sessionSecret: host.sessionSecret,
