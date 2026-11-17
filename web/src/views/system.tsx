@@ -5,6 +5,7 @@ import { ContactHint } from '@/components/sender.tsx';
 import { SiftStatus, UsageDetail } from '@/components/status.tsx';
 import { ACTIONS, INBOX, INBOX_NAME, STATUS_NAMES, TIERS, inboxFirst, money, moneyTick, outcomeName } from '@/lib/format.ts';
 import {
+  Heads,
   Blank,
   Does,
   AnswerPicker,
@@ -486,13 +487,11 @@ export function SystemView() {
             }}
           >
             <Table keys>
-              <thead className="sr-only">
-                <Tr>
-                  <Th>Sender</Th>
-                  <Th phone="hide">Subject</Th>
-                  <Th>Label</Th>
-                </Tr>
-              </thead>
+              <Heads>
+                <Th>Sender</Th>
+                <Th phone="hide">Subject</Th>
+                <Th>Label</Th>
+              </Heads>
               <tbody>
                 {ROWS.filter((row) => (made === '' || row.does === made) && `${row.sender} ${row.subject}`.toLowerCase().includes(search.toLowerCase())).map(
                   (row) => (
@@ -551,13 +550,11 @@ export function SystemView() {
             }}
           >
             <Table keys>
-              <thead className="sr-only">
-                <Tr>
-                  <Th>Sender</Th>
-                  <Th phone="hide">Subject</Th>
-                  <Th phone="hide">What happened</Th>
-                </Tr>
-              </thead>
+              <Heads>
+                <Th>Sender</Th>
+                <Th phone="hide">Subject</Th>
+                <Th phone="hide">What happened</Th>
+              </Heads>
               {(
                 [
                   ['Today', ROWS.slice(0, 2)],
@@ -775,24 +772,22 @@ export function SystemView() {
         </Section>
       </div>
 
-      <Section title="Column heads" meta="shown where a figure means nothing without one">
+      <Section title="Column heads" meta="shown where a figure would not say what it is without one">
         <Table>
-          <thead>
-            <Tr>
-              <Th>
-                <span className="sr-only">Rule</span>
-              </Th>
-              <Th phone="hide" num says="Mail the rule has decided since it was made">
-                Messages
-              </Th>
-              <Th phone="hide" num>
-                Last used
-              </Th>
-              <Th phone="hide" num>
-                Cost 30D
-              </Th>
-            </Tr>
-          </thead>
+          <Heads shown="wide">
+            <Th>
+              <span className="sr-only">Rule</span>
+            </Th>
+            <Th phone="hide" num says="Mail the rule has decided since it was made">
+              Messages
+            </Th>
+            <Th phone="hide" num>
+              Last used
+            </Th>
+            <Th phone="hide" num>
+              Cost 30D
+            </Th>
+          </Heads>
           <tbody>
             <Tr>
               <Td className="max-w-0 md:w-full">

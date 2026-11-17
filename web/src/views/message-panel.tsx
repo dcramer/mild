@@ -11,6 +11,8 @@ import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/s
 import { type MessageDetail, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, capitalised, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
 import {
+  Th,
+  Heads,
   AnswerPicker,
   Blank,
   Button,
@@ -283,6 +285,10 @@ function Body({
             <Section title="Also waiting" meta={count(others.length)}>
               <div className="max-h-56 overflow-y-auto">
                 <Table>
+                  <Heads>
+                    <Th>Message</Th>
+                    <Th num>Received</Th>
+                  </Heads>
                   <tbody>
                     {others.map((m) => (
                       <Tr key={m.messageId} onOpen={() => onPick(m.messageId)}>

@@ -211,6 +211,18 @@ test('a tooltip is a Tooltip, never a title, so none shows on a touch screen', (
   expect(failures, failures.join('\n')).toEqual([]);
 });
 
+test("a table's column heads are Heads of Th, so every list shows or hides them the same way", () => {
+  const failures = SCREENS.flatMap((path) => {
+    const source = readFileSync(path, 'utf8');
+    const file = `web/src/${relative(WEB, path)}`;
+    return [
+      ...(/<(thead|th)\b/.test(source) ? [`${file}: write column heads as Heads and Th`] : []),
+      ...((source.match(/<Table\b/g) ?? []).length > (source.match(/<Heads\b/g) ?? []).length ? [`${file}: a Table without Heads`] : []),
+    ];
+  });
+  expect(failures, failures.join('\n')).toEqual([]);
+});
+
 test('every part is on the specimen page', () => {
   const index = readFileSync(join(WEB, 'system/index.ts'), 'utf8');
   const parts = [...index.matchAll(/export \{([^}]*)\}/g)]

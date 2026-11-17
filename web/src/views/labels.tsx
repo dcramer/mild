@@ -5,7 +5,7 @@ import { type LabelSummary, type ManageState, api, useLoaded } from '@/lib/api.t
 import { useParam } from '@/lib/route.ts';
 import { AddLabelsDialog, LabelPanel, weak } from '@/views/label-panel.tsx';
 import { INBOX, count, percent } from '@/lib/format.ts';
-import { Blank, Button, Empty, ListView, Look, Loading, Section, Share, Sub, Table, Td, Th, Tr } from '@/system';
+import { Heads, Blank, Button, Empty, ListView, Look, Loading, Section, Share, Sub, Table, Td, Th, Tr } from '@/system';
 
 /** A label as the person sees it: one thing across their mailboxes, its figures added up, and where it is missing. */
 interface Label {
@@ -50,7 +50,7 @@ const about = (label: LabelSummary) => (label.id === INBOX ? 'Mail none of your 
 /** How often Sift had the label right when the reader checked, in yellow when it is often wrong. Nothing until then. */
 function Right({ label }: { label: LabelSummary }) {
   if (label.record.reviewed === 0) return null;
-  const text = `${percent(label.record.right, label.record.reviewed)} right`;
+  const text = percent(label.record.right, label.record.reviewed);
   return weak(label) ? <Look>{text}</Look> : <span className="text-muted-foreground">{text}</span>;
 }
 
@@ -112,18 +112,23 @@ export function LabelsView() {
         <Empty>No labels yet.</Empty>
       ) : (
         <div className="flex flex-col gap-10 md:gap-12">
-          {groups.map((group) => {
+          {groups.map((group, index) => {
             const share = group.rows.reduce((sum, { label }) => sum + label.messages, 0);
             return (
               <Section key={group.title} title={group.title} meta={mail > 0 ? `${percent(share, mail)} of the mail` : undefined}>
                 <Table>
-                  <thead className="sr-only">
-                    <Tr>
-                      <Th>Label</Th>
-                      <Th phone="hide">Messages</Th>
-                      <Th phone="hide">Right</Th>
-                    </Tr>
-                  </thead>
+                  {/* Over the first group alone: the columns line up down the page. */}
+                  <Heads {...(index === 0 ? { shown: 'wide' as const } : {})}>
+                    <Th>
+                      <span className="sr-only">Label</span>
+                    </Th>
+                    <Th phone="hide" num>
+                      Messages
+                    </Th>
+                    <Th phone="hide" num>
+                      Right
+                    </Th>
+                  </Heads>
                   <tbody>
                     {group.rows.map(({ label, only }) => (
                       <Tr key={label.id} onOpen={() => setOpen(label.id)}>

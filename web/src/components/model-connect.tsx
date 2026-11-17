@@ -2,7 +2,7 @@ import { ChevronRightIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
 import { money, plural } from '@/lib/format.ts';
-import { Button, ChoiceGroup, Copyable, Disclosure, Fact, Facts, Failure, Form, Input, Select, Sub, Table, Td, TextLink, Th, Tr } from '@/system';
+import { Button, ChoiceGroup, Copyable, Disclosure, Fact, Facts, Failure, Form, Heads, Input, Select, Sub, Table, Td, TextLink, Th, Tr } from '@/system';
 
 type Choice = ManageState['model']['choices'][number];
 
@@ -23,11 +23,9 @@ export const providerName = (choice: Choice | undefined, provider: string) => ch
 export function ProviderList({ choices, inUse, onChoose }: { choices: readonly Choice[]; inUse: string | null; onChoose: (choice: Choice) => void }) {
   return (
     <Table>
-      <thead className="sr-only">
-        <Tr>
-          <Th>Provider</Th>
-        </Tr>
-      </thead>
+      <Heads>
+        <Th>Provider</Th>
+      </Heads>
       <tbody>
         {choices.map((choice) =>
           choice.provider === inUse ? (

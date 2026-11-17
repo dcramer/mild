@@ -26,6 +26,8 @@ import { MatchValue } from '@/components/sender.tsx';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 import { GmailFilter } from '@/views/gmail-filter.tsx';
 import {
+  Th,
+  Heads,
   Blank,
   Button,
   ConfirmButton,
@@ -170,6 +172,10 @@ function ApplyDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => void
             </Figures>
             {sample.examples.length > 0 ? (
               <Table>
+                <Heads>
+                  <Th>Message</Th>
+                  <Th num>Received</Th>
+                </Heads>
                 <tbody>
                   <TrGroup title="Newest" span={2} />
                   {sample.examples.map((m) => (
@@ -231,6 +237,10 @@ function InInbox({ rule, onOpen }: { rule: RuleSummary; onOpen: OpenMessages }) 
         <>
           <p className="text-muted-foreground">These came before the rule or while Sift was off, so they were not moved.</p>
           <Table>
+            <Heads>
+              <Th>Message</Th>
+              <Th num>Received</Th>
+            </Heads>
             <tbody>
               {messages.map((m, index) => (
                 <Tr key={m.messageId} onOpen={() => onOpen(messages, index)} holds={[messageKey(m)]}>

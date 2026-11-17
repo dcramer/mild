@@ -8,6 +8,7 @@ import { nextMail } from '@/lib/next-mail.ts';
 import { messageKey, setParams, useParam } from '@/lib/route.ts';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import {
+  Heads,
   Button,
   ChoiceGroup,
   Empty,
@@ -133,14 +134,12 @@ function Labels({ data, onStart }: { data: SenderPage; onStart: (s: RuleStart) =
   const whole = data.profile.labels.reduce((sum, l) => sum + l.messages, 0);
   return (
     <Table>
-      <thead className="sr-only">
-        <Tr>
-          <Th>Label</Th>
-          <Th phone="hide">Share</Th>
-          <Th num>Messages</Th>
-          <Th>Rule</Th>
-        </Tr>
-      </thead>
+      <Heads>
+        <Th>Label</Th>
+        <Th phone="hide">Share</Th>
+        <Th num>Messages</Th>
+        <Th>Rule</Th>
+      </Heads>
       <tbody>
         {data.profile.labels.map((label) => (
           <Tr key={label.id}>
@@ -177,17 +176,15 @@ function Names({ data, onStart }: { data: SenderPage; onStart: (s: RuleStart) =>
   const whole = data.names.reduce((sum, n) => sum + n.messages, 0);
   return (
     <Table>
-      <thead className="sr-only">
-        <Tr>
-          <Th>Name</Th>
-          <Th phone="hide">Share</Th>
-          <Th phone="hide" num>
-            Messages
-          </Th>
-          <Th phone="hide">What it is</Th>
-          <Th>Rule</Th>
-        </Tr>
-      </thead>
+      <Heads>
+        <Th>Name</Th>
+        <Th phone="hide">Share</Th>
+        <Th phone="hide" num>
+          Messages
+        </Th>
+        <Th phone="hide">What it is</Th>
+        <Th>Rule</Th>
+      </Heads>
       <tbody>
         {data.names.map((n) => (
           <Tr key={n.name ?? ''}>
@@ -229,17 +226,15 @@ function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMess
   const items = rows.map((r) => ({ accountId: r.accountId, messageId: r.messageId, subject: r.subject }));
   return (
     <Table>
-      <thead>
-        <Tr>
-          {from === 'sender' ? <Th>Sender</Th> : from === 'name' ? <Th>From</Th> : null}
-          <Th {...(oneSender ? {} : { phone: 'hide' as const })}>Message</Th>
-          <Th phone="hide">Sift said</Th>
-          <Th phone="hide">Status</Th>
-          <Th phone="hide" num>
-            Received
-          </Th>
-        </Tr>
-      </thead>
+      <Heads shown="always">
+        {from === 'sender' ? <Th>Sender</Th> : from === 'name' ? <Th>From</Th> : null}
+        <Th {...(oneSender ? {} : { phone: 'hide' as const })}>Message</Th>
+        <Th phone="hide">Sift said</Th>
+        <Th phone="hide">Status</Th>
+        <Th phone="hide" num>
+          Received
+        </Th>
+      </Heads>
       <tbody>
         {rows.map((row, index) => {
           const subject = row.subject || '(no subject)';
@@ -435,15 +430,13 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
       {data.senders.length > 0 ? (
         <Section title="Who writes from here" meta={count(data.senders.length)}>
           <Table>
-            <thead>
-              <Tr>
-                <Th>Sender</Th>
-                <Th num>Messages</Th>
-                <Th phone="hide" num>
-                  Latest
-                </Th>
-              </Tr>
-            </thead>
+            <Heads shown="always">
+              <Th>Sender</Th>
+              <Th num>Messages</Th>
+              <Th phone="hide" num>
+                Latest
+              </Th>
+            </Heads>
             <tbody>
               {data.senders.map((sender) => (
                 <Tr key={sender.address}>

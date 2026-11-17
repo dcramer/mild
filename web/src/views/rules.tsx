@@ -9,6 +9,7 @@ import { RulePanel, Who, checked, whoText } from '@/views/rule-panel.tsx';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 import { INBOX, MADE_BY, ago, count, dateTime, describeMatch, doesName, inboxFirst, money, outcomeName, plural } from '@/lib/format.ts';
 import {
+  Heads,
   Blank,
   Button,
   ConfirmButton,
@@ -152,27 +153,25 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
         <Empty>{data && data.rules.length > 0 ? 'No rule matches.' : 'No rules yet.'}</Empty>
       ) : (
         <Table>
-          <thead className="max-md:sr-only">
-            <Tr>
-              <Th>
-                <span className="sr-only">Rule</span>
+          <Heads shown="wide">
+            <Th>
+              <span className="sr-only">Rule</span>
+            </Th>
+            <Th phone="hide" num says="Mail the rule has decided since it was made">
+              Messages
+            </Th>
+            <Th phone="hide" num>
+              Last used
+            </Th>
+            {costs ? (
+              <Th phone="hide" num says="What the model cost checking a rule’s condition over the last 30 days, whether the mail met it or not">
+                Cost 30D
               </Th>
-              <Th phone="hide" num says="Mail the rule has decided since it was made">
-                Messages
-              </Th>
-              <Th phone="hide" num>
-                Last used
-              </Th>
-              {costs ? (
-                <Th phone="hide" num says="What the model cost checking a rule’s condition over the last 30 days, whether the mail met it or not">
-                  Cost 30D
-                </Th>
-              ) : null}
-              <Th phone="hide">
-                <span className="sr-only">Remove</span>
-              </Th>
-            </Tr>
-          </thead>
+            ) : null}
+            <Th phone="hide">
+              <span className="sr-only">Remove</span>
+            </Th>
+          </Heads>
           <tbody>
             {rules.map((rule) => (
               <Tr key={rule.id} onOpen={() => setOpen(rule.id)}>

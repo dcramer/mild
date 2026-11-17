@@ -226,7 +226,7 @@ test.describe('Rules', () => {
 
     const apply = page.getByRole('dialog', { name: 'Apply to your inbox' });
     await expect(apply.getByText('About 1,200')).toBeVisible();
-    await expect(apply.getByRole('row')).toHaveCount(6);
+    await expect(apply.getByRole('rowgroup').last().getByRole('row')).toHaveCount(6);
     await expect(apply.getByRole('cell', { name: 'Found in Gmail 1' })).toBeVisible();
     await apply.getByRole('button', { name: 'Archive all' }).click();
     await expect(apply).toHaveCount(0);

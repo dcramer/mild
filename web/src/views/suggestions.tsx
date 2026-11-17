@@ -7,6 +7,7 @@ import { messageKey, useParam } from '@/lib/route.ts';
 import { type SuggestionItem, type Suggestions, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, ago, inboxFirst, count, factFilterName, outcomeName, plural, sureness } from '@/lib/format.ts';
 import {
+  Heads,
   AnswerPicker,
   Button,
   Blank,
@@ -308,14 +309,12 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
         </Empty>
       ) : (
         <Table keys>
-          <thead className="sr-only">
-            <Tr>
-              <Th>Sender</Th>
-              <Th phone="hide">Subject</Th>
-              <Th phone="hide">Received</Th>
-              <Th>Label</Th>
-            </Tr>
-          </thead>
+          <Heads>
+            <Th>Sender</Th>
+            <Th phone="hide">Subject</Th>
+            <Th phone="hide">Received</Th>
+            <Th>Label</Th>
+          </Heads>
           <tbody>
             {rows.map(({ item, rest }) => (
               <SuggestionRow

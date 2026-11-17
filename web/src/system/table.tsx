@@ -97,6 +97,20 @@ export const rowHolding = (name: string) => document.querySelector<HTMLElement>(
 const EDGES = 'first:pl-[calc(var(--gutter)+var(--bleed))] last:pr-[calc(var(--gutter)+var(--bleed))]';
 const PHONE = { hide: 'hidden md:table-cell' } as const;
 
+/**
+ * A table's column heads, one `Th` each. Unshown, they are for screen readers alone: a list that reads as
+ * plain rows (a sender, a subject, what Sift did). `shown` once a figure or a date would not say what it is
+ * without one, as soon as there are two beside the first column: `wide` where a phone drops those columns,
+ * `always` where it keeps some.
+ */
+export function Heads({ shown, children }: { shown?: 'wide' | 'always'; children: ReactNode }) {
+  return (
+    <thead className={shown === 'always' ? undefined : shown === 'wide' ? 'max-md:sr-only' : 'sr-only'}>
+      <tr>{children}</tr>
+    </thead>
+  );
+}
+
 type Cell<T extends 'th' | 'td'> = Omit<ComponentProps<T>, 'title'> & {
   phone?: keyof typeof PHONE;
   /** What the column or the value means beyond its words, in a `Tooltip`. */

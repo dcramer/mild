@@ -2,7 +2,7 @@ import { messageKey } from '@/lib/route.ts';
 import { SenderCell, SenderCellLoading } from '@/components/sender.tsx';
 import type { DecisionRow, ListedDecision } from '@/lib/api.ts';
 import { INBOX, clock, dateTime, dayName, happened, status } from '@/lib/format.ts';
-import { Blank, Button, Does, Loading, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from '@/system';
+import { Heads, Blank, Button, Does, Loading, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
 /**
@@ -63,15 +63,13 @@ export function MailLog({
 
   return (
     <Table keys>
-      <thead className="sr-only">
-        <Tr>
-          <Th>Sender</Th>
-          <Th phone="hide">Subject</Th>
-          <Th phone="hide">What happened</Th>
-          <Th phone="hide">When</Th>
-          <Th phone="hide">Undo</Th>
-        </Tr>
-      </thead>
+      <Heads>
+        <Th>Sender</Th>
+        <Th phone="hide">Subject</Th>
+        <Th phone="hide">What happened</Th>
+        <Th phone="hide">When</Th>
+        <Th phone="hide">Undo</Th>
+      </Heads>
       {days.map((day) => (
         <tbody key={day.name}>
           <TrGroup title={day.name} span={5} />

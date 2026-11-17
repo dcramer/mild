@@ -1,7 +1,7 @@
 import type { LabelProposal } from '@/lib/api.ts';
 import { ACTIONS } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
-import { Button, Check, Does, OnPhone, RowActions, Sub, Table, Td, Th, Tr } from '@/system';
+import { Heads, Button, Check, Does, OnPhone, RowActions, Sub, Table, Td, Th, Tr } from '@/system';
 import type { LabelDraft } from '@/views/label-panel.tsx';
 
 /** A label the model suggested, as the person is shaping it: kept unless unticked. */
@@ -49,13 +49,11 @@ export function SuggestionList({
 }) {
   return (
     <Table>
-      <thead className="sr-only">
-        <Tr>
-          <Th>Label</Th>
-          <Th>Then</Th>
-          <Th>Edit</Th>
-        </Tr>
-      </thead>
+      <Heads>
+        <Th>Label</Th>
+        <Th>Then</Th>
+        <Th>Edit</Th>
+      </Heads>
       <tbody>
         {suggestions.map((s, i) => (
           <Tr key={i}>

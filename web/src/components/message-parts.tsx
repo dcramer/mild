@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { type MessageDetail, api } from '@/lib/api.ts';
 import { FACTS, type FactAnswer, capitalised, factWords } from '@/lib/format.ts';
 import { type RuleStart, factStart, listStart } from '@/lib/rule-start.ts';
-import { Button, ChoiceGroup, MailFrame, RowActions, Section, Sub, Table, Td, Tr } from '@/system';
+import { Button, ChoiceGroup, Heads, MailFrame, RowActions, Section, Sub, Table, Td, Th, Tr } from '@/system';
 
 type View = 'text' | 'html';
 const VIEWS = [
@@ -115,6 +115,10 @@ export function SeenFacts({ detail, onRule }: { detail: MessageDetail; onRule: (
   return (
     <Section title="What Sift saw">
       <Table>
+        <Heads>
+          <Th>What Sift saw</Th>
+          <Th>Rule</Th>
+        </Heads>
         <tbody>
           {seen.map((s) => (
             <Tr key={s.words}>

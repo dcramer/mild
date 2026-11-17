@@ -21,6 +21,22 @@ async function openLabel(page: Page, name: string) {
 }
 
 test.describe('Labels', () => {
+  test('heads its figures once, over the first group, and on a phone not at all', async ({ page }) => {
+    await page.goto('/labels');
+    // Heads kept for screen readers are in a row a pixel wide; one a phone drops has no width.
+    const shown = async (name: string) =>
+      Number(
+        await page.evaluate(
+          `[...document.querySelectorAll('main th')].filter((th) => th.textContent === ${JSON.stringify(name)} && th.getBoundingClientRect().width > 0 && th.closest('thead').getBoundingClientRect().width > 1).length`,
+        ),
+      );
+    await expect(page.getByRole('main').getByRole('columnheader', { name: 'Messages', exact: true })).toHaveCount(3);
+    expect(await shown('Messages')).toBe(1);
+    expect(await shown('Right')).toBe(1);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(() => shown('Messages')).toBe(0);
+  });
+
   test('changing what Sift does with a label moves it, and stays changed', async ({ page }) => {
     await page.goto('/labels');
     await expect(group(page, 'Archived').getByText('Newsletters', { exact: true })).toBeVisible();

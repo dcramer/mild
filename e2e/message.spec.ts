@@ -87,6 +87,8 @@ test.describe('What Sift saw', () => {
     panel(page)
       .getByRole('table')
       .filter({ has: page.getByRole('button', { name: /^Make a rule for mail that/ }) })
+      .getByRole('rowgroup')
+      .last()
       .getByRole('row');
 
   test('lists what each message showed, and nothing it did not', async ({ page }) => {
