@@ -63,8 +63,15 @@ case "$cmd" in
     (cd "$ROOT" && node --input-type=module -e '
       import { PGlite } from "@electric-sql/pglite";
       const db = new PGlite(process.argv[1]);
-      console.log(JSON.stringify((await db.query(process.argv[2])).rows, null, 1));
-      await db.close();
+      try {
+        console.log(JSON.stringify((await db.query(process.argv[2])).rows, null, 1));
+      } catch (e) {
+        // An uncaught PGlite error prints its whole minified bundle before the message.
+        console.error(`sql: ${e.message}${e.hint ? ` (${e.hint})` : ""}`);
+        process.exitCode = 1;
+      } finally {
+        await db.close();
+      }
     ' "$copy" "$3")
     rm -r -- "$copy"
     ;;

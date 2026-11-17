@@ -26,17 +26,19 @@ What the seed leaves (through three real ticks with sift off, `tick`, with a sta
 | Id | Sender | What places it | Shows as |
 | --- | --- | --- | --- |
 | `m1`, `m2` | `digest@news.example.com` | label rule → Newsletters | Activity only |
-| `m3` | `orders@shop.example.com` | label rule → Receipts and transactions | Activity only |
+| `m3` | `orders@shop.example.com` | label rule → Receipts | Activity only |
 | `m4` | `deals@promo.example.com` | nothing | For review, `Which label?` |
 | `m5` | `builds@ci.example.org` | action rule → archive | Activity only |
 | `m6` | `ada@example.org` | nothing | For review, `Which label?` |
 | `m7` | `grace@example.net` | nothing | For review, `Which label?` |
 | `m8` | `sale@store.example.com` | stand-in model → Marketing, confidence 0.95 | For review, `Marketing` (sure) |
 | `m9`, `m10` | `alerts@ops.example.com` | the stand-in model answers unusably, three passes running | Activity › Failed, under `Not judged`, with Retry and the page's Retry all |
-| `m11`–`m13` | `billing@utility.example.net` | nothing; then each answered as Receipts and transactions but kept, as moving it back to the inbox in Gmail answers | Activity only; the three open a proposal, `Keep Receipts from billing@utility.example.net?` on For review |
-| `m14`–`m21` | `notifications@code.example.com`, as Dependabot (3), Security alerts (2), github-actions[bot] (2) and Ada Lovelace (1) | stand-in model, by name → Notifications, Security and account, Notifications; Ada's it cannot place | For review, one row for the address; its page lists the four names (`/sender/me%40example.org/notifications%40code.example.com`) |
+| `m11`–`m13` | `billing@utility.example.net` | nothing; then each answered as Receipts but kept, as moving it back to the inbox in Gmail answers | Activity only; the three open a proposal, `Keep Receipts from billing@utility.example.net?` on For review |
+| `m14`–`m21` | `notifications@code.example.com`, as Dependabot (3), Security alerts (2), github-actions[bot] (2) and Ada Lovelace (1) | stand-in model, by name → Notifications, Account alerts, Notifications; Ada's it cannot place | For review: the five Notifications rows, sure (`Agree: Notifications`), and Ada's as `Which label?`; the two Account alerts are kept, so not shown. The address's page lists the four names (`/sender/me%40example.org/notifications%40code.example.com`) |
 
-Three rules were written to the fake Gmail as filters, through the real `writeRuleFilter`, so the Rules list shows a filter in each state: `anyone at ci.example.org` landed (grey funnel); `orders@shop.example.com` landed and was then deleted in Gmail, which a check noticed (yellow); and Gmail did not answer for `anyone at news.example.com`, nor had it kept the filter when asked at once (`failed`: red, and the line above the list). `anyone at promo.example.com` → Spam, added after the passes, cannot be a filter. Each rule's panel has the history. That is the only way to see a filter here: the dashboard's own Add to Gmail fails, as there is no Gmail behind it.
+Three rules were written to the fake Gmail as filters, through the real `writeRuleFilter`, so the Rules list shows a filter in each state: `anyone at ci.example.org` landed (`In Gmail`); `orders@shop.example.com` landed and was then deleted in Gmail, which a check noticed (`Deleted in Gmail`); and Gmail did not answer for `anyone at news.example.com`, nor had it kept the filter when asked at once (`Not added to Gmail`, and the line above the list). `anyone at promo.example.com` → Spam, added after the passes, cannot be a filter. Each rule's panel has the history. That is the only way to see a filter here: the dashboard's own Add to Gmail fails, as there is no Gmail behind it.
+
+The promo → Spam rule decided nothing, but any rule added or changed later re-decides what is waiting, and then it catches Deals (`m4`): For review loses that row as well as whatever the new rule covers. Answering a message is not a rule change and does not do this.
 
 The connected account is `me@example.org`, signed in as person 1, who also has `me@work.example.org` (no mail, to remove). A second person, `bravo@example.net`, exists only in the database: there is no way to sign in as them here. Person 1 is the owner, (`preferences.active` false), default labels, 4 user rules. Its model is Anthropic, `claude-haiku-4-5`, with a made-up key, so the dashboard is not behind the connect-a-model wall; nothing calls Anthropic, since no pass runs. To see the wall, sign it out from the page: `ab eval "fetch('/api/model/signout',{method:'POST',headers:{'content-type':'application/json','x-sift':'1'},body:JSON.stringify({provider:'anthropic'})})"`. Every message carries `dmarc=pass`; the three lists (news, promo, store) carry one-click unsubscribe headers. What sift saw in each (`messages.facts`) is set up to show: `m6` (Ada) is a reply, and the owner has written to her (so she shows as someone you write to, once the model's pass has asked); `m7` (Grace) has an attachment; `m4` (Deals) went through Mailchimp, sends replies elsewhere, is in Promotions and has a tracking pixel and tracked links; `m8` (Store) is in Promotions. Attachments and tracking are known only because the stand-in model read those messages. `m4` is also the one message with an HTML part, held beside its text as a pass would hold it (in `scripts/seed.ts`: a remote image and background, inline styles, a link, a `javascript:` link, a meta refresh and a script); the other waiting mail is held as text alone, and mail not waiting on the user is not held at all.
 
@@ -65,7 +67,11 @@ Find elements by role and accessible name, not refs or CSS: refs change on every
 
 Phone width: `$V ab "$RUN" set viewport 390 844`. AGENTS.md asks what every part does on a phone.
 
-Stored state, read-only: `$V sql "$RUN" "SELECT … FROM rules"`, from a copy of the database (`home/database`, PGlite), read as its owner, so every person's rows show. Tables worth checking: `decisions`, `rules`, `examples`, `actions`, `labels`, `suggestion_bodies`.
+`snapshot` does not print `aria-pressed`, so a standing that is on (`Trust`, `Unwanted`, `Block` on a sender's page) looks like the others. Read it with `$V ab "$RUN" eval "JSON.stringify([...document.querySelectorAll('[aria-pressed]')].map(b=>[b.textContent,b.getAttribute('aria-pressed')]))"`.
+
+Adding a rule with `Apply to mail already there` checked (the default for an action rule) opens `Apply to your inbox`, which reads Gmail and here says `Sift has no access to me@example.org.`; press `Cancel`. The rule is already added by then.
+
+Stored state, read-only: `$V sql "$RUN" "SELECT … FROM rules"`, from a copy of the database (`home/database`, PGlite), read as its owner, so every person's rows show. Tables worth checking: `decisions`, `rules`, `examples`, `feedback` (joined by `decision_id`), `actions`, `labels`, `proposals`, `suggestion_bodies`. Defaults (`labels`) exist once per mailbox, so filter by `account_id = 'me@example.org'`. What names a sender is sealed and reads as ciphertext: a rule's `match` and `except_matches`, a decision's `reason`, a message's headers. Check those on the screen that reads them back (the Rules list, a rule's panel at `?rule=<id>`), and in SQL check the plain columns (`disposition`, `label_id`, `when_label`, `source`, `stage`) of the row you found by id or by `ORDER BY created_at DESC`. A query error prints `sql: <message>` and exits 1.
 
 ## Evidence
 
@@ -74,7 +80,7 @@ Write everything into `$RUN/evidence/`; `down` keeps it. For each feature proved
 1. A snapshot or screenshot before the action and after it (`$V ab "$RUN" screenshot "$RUN/evidence/<feature>-after.png"`, `$V ab "$RUN" snapshot > "$RUN/evidence/<feature>-after.txt"`).
 2. `$V ab "$RUN" console` and `$V ab "$RUN" errors`, both empty. A content security policy violation appears only here, never in the build.
 3. The stored side effect, from `sql`, and a second view that reads it back (the Rules screen after an answer, the Labels screen after a label edit).
-4. `SELECT count(*) FROM actions WHERE type NOT IN ('filter', 'unfilter')` is still `0`. sift is off here; a row there means something tried to change a mailbox. The filter rows are the seed's.
+4. `SELECT count(*) AS n FROM actions WHERE type NOT IN ('filter', 'unfilter')` is still `0`. sift is off here; a row there means something tried to change a mailbox. The filter rows are the seed's.
 
 Do the action the way a user does: press the control, not a POST with curl. The API is the page's private contract; calling it directly proves the server, not the screen. Seeding is the only place internals are used, and it uses the daemon's own pass.
 
@@ -100,7 +106,8 @@ State is in `~/.cache/sift-verify-maint/`. Delete `suggested-on` there to see to
 
 ## What this cannot show
 
-- Anything that talks to Google: sign-in itself, connecting another account, Pull in (older mail), Gmail filters, undo of a real change. They fail here; that failure is not the change's fault.
-- The model tier: the seed's stand-in model never calls a provider and places only `m8`, so every other unmatched message is "Which label?". With no model at all such mail would wait undecided and not be a suggestion, and every screen would be the connect-a-model wall.
+- Anything that talks to Google: sign-in itself, connecting another account, Pull in (older mail), Gmail filters, `Apply to your inbox`, undo of a real change. They fail here; that failure is not the change's fault.
+- Removing a rule, from its row on Rules or by pressing a standing that is on: removal first asks Gmail for a filter to take out, even when none is recorded, so it is refused with `Sift has no access to me@example.org. Sign in to the dashboard with that account.` and the rule stays. Prove removal with `tests/dashboard.test.ts`.
+- The model tier: the seed's stand-in model never calls a provider and places only `m8` and the code.example.com mail it knows by name, so every other unmatched message is "Which label?". With no model at all such mail would wait undecided and not be a suggestion, and every screen would be the connect-a-model wall.
 - Changing Gmail. Settings can turn sift on (`preferences.active`), but `sift dashboard` never runs a pass, so nothing is carried out. Prove the executor with tests (`tests/actions.test.ts`, `tests/run.test.ts`).
 - `examples` rows stay `pending`: the body is captured on the next pass, which never comes.

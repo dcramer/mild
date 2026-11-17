@@ -5,13 +5,14 @@ The maintained recipes for proving what a dashboard user sees and does. Read thi
 ## Baseline preconditions
 
 - A run started with `verify.sh up "$RUN"` in a new directory, and `verify.sh doctor "$RUN"` printing `ok`.
-- The seed as SKILL.md describes it: account `me@example.org` with a second, empty mailbox `me@work.example.org`, and a second person `bravo@example.net` who cannot be signed in to; sift off, Anthropic in use with a made-up key (a stand-in that places nothing judged the seed mail); 4 suggestions (Deals, Ada Lovelace, Grace Hopper as `Which label?`; Store as `Marketing`); one proposal (`Keep Receipts from billing@utility.example.net?`, from three of its bills kept in the inbox); 3 user rules; the default labels.
+- The seed as SKILL.md describes it: account `me@example.org` with a second, empty mailbox `me@work.example.org`, and a second person `bravo@example.net` who cannot be signed in to; sift off, Anthropic in use with a made-up key (the seed judged its mail with a stand-in model; nothing calls Anthropic); 10 suggestions, in this order (oldest first): Ada Lovelace (`Re: Fix the release script (#412)`, from `notifications@code.example.com`) as `Which label?`; five Dependabot and github-actions[bot] rows as `Notifications`; Store (`Winter sale starts now`) as `Marketing`; Grace Hopper, Ada Lovelace (`Lunch on Thursday?`) and Deals (`48 hours only: 30% off`, last) as `Which label?`; one proposal (`Keep Receipts from billing@utility.example.net?`, from three of its bills kept in the inbox); 4 user rules, among them `anyone at promo.example.com` → Spam, which catches Deals at the next rule change; the default labels, once per mailbox.
+- These counts move as the product does; recipes say how a count changes (`one fewer`), so only this line needs updating when the seed's result changes.
 - `B=http://127.0.0.1:$(cat "$RUN/port")`, and `ab` below means `verify.sh ab "$RUN"`.
 - Never drive an instance this run did not start.
 
 ## Driving conventions
 
-- Start each recipe from a fresh seed unless it says otherwise. Recipes change rules and labels, so two in one run interact: answering one suggestion re-decides the others.
+- Start each recipe from a fresh seed unless it says otherwise. Recipes change rules and labels, so two in one run interact: any rule change re-decides everything waiting.
 - Find by role and accessible name (`ab find role button click --name "Save answer"`). Table rows have no name to find by. Open a suggestion by its subject cell, `ab find role cell click --name "<subject>"`; `find text` on a subject reaches the hidden phone copy and fails. Open a label with `ab find text "<label name>" click --exact`.
 - Pick from a combobox with two steps: `ab find role combobox click --name "<combobox>"`, then `ab find role option click --name "<option>"`.
 - After every action, wait for the result you expect to see, not a fixed time.
@@ -21,7 +22,8 @@ The maintained recipes for proving what a dashboard user sees and does. Read thi
 - Before and after: a snapshot or screenshot of the state the action changed, in `$RUN/evidence/`.
 - `ab console` and `ab errors` empty after the journey.
 - The stored row, via `verify.sh sql`, and a second screen that shows it.
-- `SELECT count(*) AS n FROM actions` is `0`.
+- `SELECT count(*) AS n FROM actions WHERE type NOT IN ('filter', 'unfilter')` is `0` (the filter rows are the seed's).
+- A rule's conditions are sealed: read them on Rules or the rule's panel, and check the rule's plain columns in SQL (SKILL.md, Drive).
 - Name the feature and entry point with each artifact. An entry point not driven is reported as not verified, not covered by another.
 
 ## Feature entry contract

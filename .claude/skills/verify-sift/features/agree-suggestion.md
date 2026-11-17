@@ -17,11 +17,11 @@ A message sift placed shows the label it gave in the row's answer: a dropdown st
 
 Preconditions:
 
-- Fresh seed. The Store row (`Winter sale starts now`, last) has a dropdown reading `Marketing` and a check; the other three read `Which label?`, with the check disabled.
+- Fresh seed. The Store row (`Winter sale starts now`) has a dropdown reading `Sure Marketing` and the check `Agree: Marketing`; the Notifications rows have `Agree: Notifications`; the four `Which label?` rows have the check disabled (`Choose what it is first`).
 
-- **Agree.** `ab open "$B/"`, then `ab find role button click --name "Agree: Marketing"`. A toast reads `Archived as Marketing`. The link reads `For review 3`, the Store row is gone, and no panel opens.
+- **Agree.** `ab open "$B/"`, then `ab find role button click --name "Agree: Marketing"`. A toast reads `Archive as Marketing`. The link's count is one fewer, the Store row is gone, and no panel opens.
 - **Second view.** `ab open "$B/rules"`. No rule mentions `sale@store.example.com`.
-- **Stored.** `verify.sh sql "$RUN" "SELECT label_id, carry_out, by_user, outcome FROM decisions WHERE message_id = 'm8' ORDER BY id DESC LIMIT 1"` returns `marketing`, `true`, `true`, null: the answer waits for the next pass to be carried out (`sift dashboard` runs none). `SELECT message_id, label_id FROM examples` returns `m8`, `marketing`, and its `feedback` row has `verdict` `right`.
+- **Stored.** `verify.sh sql "$RUN" "SELECT label_id, carry_out, by_user, outcome FROM decisions WHERE message_id = 'm8' ORDER BY id DESC LIMIT 1"` returns `marketing`, `true`, `true`, null: the answer waits for the next pass to be carried out (`sift dashboard` runs none). `SELECT e.message_id, e.label_id, f.verdict FROM examples e JOIN decisions d ON d.message_id = e.message_id JOIN feedback f ON f.decision_id = d.id WHERE e.message_id = 'm8'` returns `m8`, `marketing`, `right`.
 
 ## Gotchas
 
