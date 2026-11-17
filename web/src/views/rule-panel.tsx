@@ -1,10 +1,9 @@
 import { type RuleMatch, type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ago, saidOf, count, describeMatch, factAnswers, factWords, money, outcomeName, plural, shortDate, willBe } from '@/lib/format.ts';
+import { ago, saidOf, count, describeMatch, factAnswers, factWords, madeBy, money, outcomeName, plural, shortDate, willBe } from '@/lib/format.ts';
 import { setParams, useParam } from '@/lib/route.ts';
 import { InGmail } from '@/views/gmail-filter.tsx';
 import { Blank, Button, ConfirmButton, Dialog, Does, Empty, Fact, Facts, Failure, Loading, Panel, Section, Table, Td, Tr, TrGroup, useToast } from '@/system';
 
-const MADE_BY: Record<string, string> = { user: 'You', correction: 'Your answers', learned: 'Sift, when it blocked them' };
 const QUIET: Record<string, string> = {
   fromDomain: 'anyone at',
   fromName: 'named',
@@ -253,7 +252,7 @@ export function RulePanel({
           {rule.kind === 'when-label' || rule.when ? <Fact term="Reading">Sift reads each message it matches.</Fact> : null}
           <Fact term="Used">{rule.hits === 0 ? 'Never' : `${plural(rule.hits, 'time')}${rule.lastHitAt ? `, last ${ago(rule.lastHitAt)}` : ''}`}</Fact>
           <Fact term="Made by">
-            {MADE_BY[rule.source] ?? rule.source}, {shortDate(rule.createdAt)}
+            {madeBy(rule.source)}, {shortDate(rule.createdAt)}
           </Fact>
         </Facts>
         <InGmail rule={rule} active={active} />

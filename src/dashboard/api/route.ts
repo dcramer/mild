@@ -21,6 +21,8 @@ export interface Context {
   signedInAs: string | null;
   /** Absent when the page can look but not manage. */
   controls: Controls | undefined;
+  /** What the page may be told of an error the request goes on past: a refusal's own words, anything else (logged and reported) only that it failed. */
+  said: (error: unknown) => string;
   now: () => number;
 }
 

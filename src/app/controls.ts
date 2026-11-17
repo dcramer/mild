@@ -149,7 +149,6 @@ export async function buildControls(
       if (last) await undo({ db, mailbox: (await gmailFor(config, live.ephemeral, db, accountId)).mailbox }, last.id);
       // The corrected decision is waiting to be carried out; do it now, not at the next interval.
       await passNow(db);
-      return last !== null;
     },
     startEval: async (db, request) => {
       const tier = await openModelTier(config, live.ephemeral, db);

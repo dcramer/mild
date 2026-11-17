@@ -43,6 +43,14 @@ type Decision = MessageDetail['decisions'][number];
 type Action = MessageDetail['actions'][number];
 
 const CHANGE: Record<string, string> = { archive: 'Archived', spam: 'Marked spam', label: 'Labelled', undo: 'Undid a change', unsubscribe: 'Unsubscribed' };
+/** A change that never landed, as the lists say it ("Not archived"): it is tried again, so it is only history. */
+const NOT_DONE: Record<string, string> = {
+  archive: 'Not archived',
+  spam: 'Not marked spam',
+  label: 'Not labelled',
+  undo: 'Not undone',
+  unsubscribe: 'Not unsubscribed',
+};
 
 function DecisionEvent({ d }: { d: Decision }) {
   const facts = [
@@ -70,8 +78,8 @@ function DecisionEvent({ d }: { d: Decision }) {
   );
 }
 
-/** Where a change got to, when it is not done. One that did not land is tried again, so it is only history. */
-const ACTION_STATUS: Record<string, string> = { undone: 'Undone', pending: 'Waiting', unknown: 'Not done', failed: 'Not done' };
+/** Where a change got to, when it is not done and did land. */
+const ACTION_STATUS: Record<string, string> = { undone: 'Undone', pending: 'Waiting' };
 
 function ActionEvent({ a, onUndo, busy }: { a: Action; onUndo: (id: number) => void; busy: boolean }) {
   const labels = (title: string, list: string[]) =>
@@ -87,10 +95,14 @@ function ActionEvent({ a, onUndo, busy }: { a: Action; onUndo: (id: number) => v
     <TimelineEvent
       at={dateTime(a.createdAt)}
       title={
-        <>
-          <span className="font-medium">{CHANGE[a.type] ?? a.type} in Gmail</span>
-          {a.status === 'done' ? null : <span className="text-muted-foreground">{ACTION_STATUS[a.status] ?? a.status}</span>}
-        </>
+        a.status === 'failed' || a.status === 'unknown' ? (
+          <span className="text-muted-foreground">{NOT_DONE[a.type] ?? a.type}</span>
+        ) : (
+          <>
+            <span className="font-medium">{CHANGE[a.type] ?? a.type} in Gmail</span>
+            {a.status === 'done' ? null : <span className="text-muted-foreground">{ACTION_STATUS[a.status] ?? a.status}</span>}
+          </>
+        )
       }
       {...(a.status === 'done' && a.type !== 'undo' && a.type !== 'unsubscribe'
         ? {
@@ -197,7 +209,6 @@ function Body({
         sender: detail.fromAddress,
         messageId: detail.messageId,
         ...(current ? { decisionId: current.id } : {}),
-        scope: 'once',
         label: labelId,
         disposition: 'keep',
       });

@@ -1,18 +1,6 @@
 import type { DecisionRow } from '@/lib/api.ts';
-import { type Status, STATUS_NAMES, outcomeName, status, tier } from '@/lib/format.ts';
-import { cn } from '@/lib/utils';
-import { Does, Note, Sub, Swatch } from '@/system';
-
-/** A tier's ink swatch and name. The name always accompanies the swatch. */
-export function TierLabel({ stage }: { stage: string }) {
-  const t = tier(stage);
-  return (
-    <span className="inline-flex items-center gap-2 whitespace-nowrap">
-      <Swatch color={t.color} />
-      {t.name}
-    </span>
-  );
-}
+import { type Status, STATUS_NAMES, outcomeName, status } from '@/lib/format.ts';
+import { Does, Note, Sub } from '@/system';
 
 /**
  * What sift says mail is and does with it, the same words everywhere: "Archive as Marketing". In a table
@@ -38,10 +26,10 @@ export function Verdict({ labelName, disposition, stacked }: { labelName: string
 }
 
 /** Where a decision has got to in Gmail, in a word. */
-export function StatusWord({ row, className }: { row: Pick<DecisionRow, 'carryOut' | 'outcome' | 'actionStatus' | 'outcomeDetail'>; className?: string }) {
+export function StatusWord({ row }: { row: Pick<DecisionRow, 'carryOut' | 'outcome' | 'actionStatus' | 'outcomeDetail'> }) {
   const s: Status = status(row);
   return (
-    <span className={cn('text-muted-foreground', className)} title={row.outcomeDetail ?? undefined}>
+    <span className="text-muted-foreground" title={row.outcomeDetail ?? undefined}>
       {STATUS_NAMES[s]}
     </span>
   );

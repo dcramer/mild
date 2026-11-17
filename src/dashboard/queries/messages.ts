@@ -14,7 +14,6 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
   if (!sees(scope, accountId)) return null;
   const [stored] = await db
     .select({
-      threadId: messages.threadId,
       headers: messages.headers,
       receivedAt: messages.receivedAt,
     })
@@ -46,11 +45,7 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
       id: actions.id,
       type: actions.type,
       status: actions.status,
-      decisionId: actions.decisionId,
       payload: actions.payload,
-      originalLabels: actions.originalLabels,
-      finalLabels: actions.finalLabels,
-      error: actions.error,
       createdAt: actions.createdAt,
     })
     .from(actions)
@@ -61,13 +56,11 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
   return {
     accountId,
     messageId,
-    threadId: m.threadId,
     fromAddress: m.fromAddress,
     fromName: m.fromName,
     to: m.to,
     cc: m.cc,
     subject: m.subject,
-    listId: facts.listId,
     receivedAt: m.receivedAt,
     headers: m.headers,
     body: body?.text ?? null,

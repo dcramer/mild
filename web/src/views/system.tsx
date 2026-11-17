@@ -1,6 +1,6 @@
-import { ArrowRightIcon, FunnelIcon, MegaphoneIcon, PlusIcon, ReplyIcon, SparkleIcon, Trash2Icon } from 'lucide-react';
+import { ArrowRightIcon, MegaphoneIcon, PlusIcon, ReplyIcon, SparkleIcon, Trash2Icon } from 'lucide-react';
 import { Fragment, type ReactNode, useState } from 'react';
-import { StatusWord, TierLabel, Verdict } from '@/components/bits.tsx';
+import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { ContactHint } from '@/components/sender.tsx';
 import { ACTIONS, STATUS_NAMES, TIERS, money, moneyTick, outcomeName } from '@/lib/format.ts';
 import {
@@ -240,15 +240,15 @@ export function SystemView() {
               Receipts
             </Button>
           </Row>
-          <Row label="status" note="Where a decision got to in Gmail. Only a failure is red.">
-            {(['suggested', 'done', 'undone'] as const).map((s) => (
+          <Row label="status" note="Where a decision got to in Gmail. Pointing at a skip says why.">
+            {(['suggested', 'done', 'undone', 'failed'] as const).map((s) => (
               <span key={s} className="text-muted-foreground">
                 {STATUS_NAMES[s]}
               </span>
             ))}
-            <StatusWord row={{ carryOut: true, outcome: 'failed', actionStatus: null, outcomeDetail: 'Gmail answered 503' }} />
+            <StatusWord row={{ carryOut: true, outcome: 'skipped', actionStatus: null, outcomeDetail: 'message is not in the inbox' }} />
           </Row>
-          <Row label="hint" note="An icon after a name; pointing at it says what it means. Look is yellow; failure red.">
+          <Row label="hint" note="An icon after a name; pointing at it says what it means. Look is yellow.">
             <span className="flex items-center gap-2 font-medium">
               Store
               <Hint icon={SparkleIcon} says="The first time Sift has seen them" tone="look" />
@@ -261,15 +261,6 @@ export function SystemView() {
               Ada Lovelace
               <Hint icon={ReplyIcon} says="You have written to them" />
             </span>
-            <span className="flex items-center gap-2 font-medium">
-              anyone at news.example.com
-              <Hint icon={FunnelIcon} says="Not added to Gmail" tone="failure" />
-            </span>
-          </Row>
-          <Row label="tier">
-            {TIERS.map((t) => (
-              <TierLabel key={t.key} stage={t.key} />
-            ))}
           </Row>
         </Sheet>
       </Section>
@@ -335,7 +326,7 @@ export function SystemView() {
             </span>
           </Row>
           <Row label="choice group" note="A few choices seen at once, one on. Numbered where keys pick them; clearable where none is a choice too.">
-            <ChoiceGroup label="What this is" value={label} options={LABELS} onChange={setLabel} numbered />
+            <ChoiceGroup label="What this is" value={label} options={LABELS} onChange={setLabel} />
             <ChoiceGroup
               label="Standing"
               value={standing}
@@ -594,7 +585,7 @@ export function SystemView() {
           <Figures className="gap-x-8">
             <Figure label="No model needed" value="84%" note="1,079 of 1,284" />
             <Figure label="Waiting on you" value="23" tone="look" />
-            <Figure label="Needs a look" value="2" note="in Activity" tone="failure" href="/system" />
+            <Figure label="Rules" value="12" href="/system" />
           </Figures>
           <StackedBars
             compact
@@ -836,13 +827,8 @@ export function SystemView() {
         </div>
       </Section>
 
-      <Section title="Failure" meta="under what failed, or the word for a step that failed">
-        <div className="flex flex-col gap-3">
-          <Failure>Gmail refused the change. Nothing was moved.</Failure>
-          <p>
-            Archive in Gmail <Failure inline>Failed</Failure>
-          </p>
-        </div>
+      <Section title="Failure" meta="under the press that failed">
+        <Failure>Could not save the label: that name is taken.</Failure>
       </Section>
 
       <Section title="Copyable and disclosure">

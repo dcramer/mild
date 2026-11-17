@@ -35,24 +35,21 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
   useEffect(() => setOffset(0), [days, view, search, fact]);
 
   const status = view === '' ? 'changed' : '';
-  const query = { days, stage: '', disposition: '', status, search, fact, limit: PAGE, offset };
+  const query = { days, status, search, fact, limit: PAGE, offset };
   const { data, error, loading } = useLoaded(`decisions-${JSON.stringify(query)}`, (signal) => api.decisions(query, signal));
   const summary = useLoaded(`summary-${days}`, (signal) => api.summary(days, signal));
   const daily = summary.data?.daily ?? [];
   // A day's column is worth drawing only beside others, and only once something happened.
   const charted = daily.length > 1 && daily.some((day) => day.costUsd > 0 || Object.values(day.counts).some((n) => n > 0));
 
-  // `line` is null when the list itself shows what happened.
-  const report = <T,>(work: Promise<T>, line: (result: T) => string | null, failed: string) =>
-    void work.then(
-      (result) => {
-        const said = line(result);
-        if (said) toast(said);
+  const undo = (row: DecisionRow) =>
+    void api.undo(row.actionId ?? 0).then(
+      ({ message }) => {
+        if (message) toast(message);
         void client.invalidateQueries();
       },
-      (failure: unknown) => toast(failed, { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) }),
+      (failure: unknown) => toast('Could not undo', { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) }),
     );
-  const undo = (row: DecisionRow) => report(api.undo(row.actionId ?? 0), ({ message }) => message, 'Could not undo');
 
   return (
     <ListView

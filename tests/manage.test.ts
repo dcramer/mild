@@ -41,7 +41,6 @@ const controls: Controls = {
   putBack: async (_db, _account, messageId) => {
     calls.push(`putBack ${messageId}`);
     if (messageId === 'gone') throw new Error('The message no longer exists.');
-    return true;
   },
   startEval: async (_db, { accountId, fewShot, limit }) => {
     calls.push(`eval ${accountId} ${fewShot} ${limit}`);
@@ -448,15 +447,12 @@ describe('managing sift from the dashboard', () => {
         { carryOut: true },
       );
     const { call } = await start();
-    const answer = { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', scope: 'once' };
-    expect((await call('POST', '/api/feedback', { ...answer, messageId: 'done' })).body).toMatchObject({
-      corrected: 'done',
-      fixed: 'What Sift did to this message in Gmail has been taken back.',
-      notFixed: null,
-    });
+    const answer = { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal' };
+    expect((await call('POST', '/api/feedback', { ...answer, messageId: 'done' })).body).toEqual({ notFixed: null });
     const failed = await call('POST', '/api/feedback', { ...answer, messageId: 'gone' });
     expect(failed.status).toBe(200);
-    expect(failed.body).toMatchObject({ fixed: null, notFixed: 'The message no longer exists.' });
+    // Gmail's own words stay in the log: only a refusal is written for the page.
+    expect(failed.body).toEqual({ notFixed: 'Sift could not do that. Why is in its log.' });
     expect(await raw(db).get('SELECT count(*) AS n FROM feedback')).toEqual({ n: 2 });
     expect(calls).toEqual(['putBack done', 'putBack gone']);
   });
@@ -482,8 +478,8 @@ describe('managing sift from the dashboard', () => {
     // A rule or a label changing does not answer it for the user.
     expect(await redecideWaiting(db, ACCOUNT)).toBe(0);
 
-    const reply = await call('POST', '/api/feedback', { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', scope: 'once' });
-    expect(reply.body).toMatchObject({ reviewed: 1, carrying: 1, corrected: null, fixed: null, notFixed: null });
+    const reply = await call('POST', '/api/feedback', { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal' });
+    expect(reply.body).toEqual({ notFixed: null });
     expect(calls).toEqual(['putBack asked']);
     expect(await raw(db).get("SELECT disposition, label_id, carry_out, by_user FROM decisions WHERE message_id = 'asked' ORDER BY id DESC LIMIT 1")).toEqual({
       disposition: 'keep',

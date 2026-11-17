@@ -33,7 +33,6 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
       sender: target.sender,
       messageId: target.messageId,
       ...(target.decisionId === undefined ? {} : { decisionId: target.decisionId }),
-      scope: 'once',
       label: labelId,
     });
 

@@ -14,7 +14,6 @@ import { dismissProposal, listProposals, madeFromProposal } from '../src/store/p
 import { MAX_ATTEMPTS, startRun } from '../src/store/runs.ts';
 import { addRule, listRules, setRule } from '../src/store/rules.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
-import { rememberCorrespondent } from '../src/store/senders.ts';
 import type { Decision, Disposition } from '../src/triage/types.ts';
 import { everything, facts, FakeMailbox } from './helpers.ts';
 import { raw, startDashboard, onePerson, withReason } from './fixtures.ts';
@@ -130,42 +129,11 @@ describe('suggestions', () => {
 });
 
 describe('teaching', () => {
-  it("says so when the label's action unsubscribes", async () => {
-    await suggest('pitch@example.com', 'archive', { labelId: 'cold_outreach' });
-    expect((await applyFeedback(db, { accountId: ACCOUNT, sender: 'pitch@example.com', label: 'cold_outreach', scope: 'label' }, 50)).taught).toBe(
-      'From now on, mail from pitch@example.com that is Cold outreach is archived, and unsubscribed from. Sift still reads each message, and asks about anything else from them.',
-    );
-  });
-
-  it('agreeing makes a rule for that kind of mail from the sender, and leaves their other mail waiting', async () => {
-    await suggest('news@example.com', 'archive', NEWS);
-    await suggest('news@example.com', 'archive', NEWS);
-    await suggest('news@example.com', 'keep', { labelId: 'transactional' });
-    await suggest('other@example.com', 'archive', NEWS);
-
-    const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'label' }, 50);
-    expect(result).toEqual({
-      carrying: 0,
-      asked: [],
-      proposed: false,
-      reviewed: 2,
-      corrected: null,
-      taught: 'From now on, mail from news@example.com that is Newsletters is archived. Sift still reads each message, and asks about anything else from them.',
-    });
-    // The rule waits for each message to be that label; it is not a blanket over the sender.
-    expect(await ruleFor('news@example.com')).toEqual([{ whenLabel: 'newsletter', source: 'user' }]);
-    expect((await pendingSuggestions(db)).map((s) => [s.fromAddress, s.labelId])).toEqual([
-      ['other@example.com', 'newsletter'],
-      ['news@example.com', 'transactional'],
-    ]);
-    expect(await accuracy(db)).toMatchObject({ reviewed: 2, right: 2 });
-  });
-
-  it('saying only what a message is corrects sift and teaches by example, with no rule tying the sender to a label', async () => {
+  it('saying what a message is corrects sift and teaches by example, with no rule tying the sender to a label', async () => {
     const decisionId = await suggest('ada@example.org', 'archive', { labelId: 'marketing' });
-    const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'ada@example.org', label: 'personal', scope: 'once', decisionId }, 50);
+    const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'ada@example.org', label: 'personal', decisionId }, 50);
 
-    expect(result).toEqual({ reviewed: 1, corrected: null, taught: null, carrying: 0, asked: [], proposed: false });
+    expect(result).toEqual({ corrected: null, carrying: 0, asked: [] });
     expect(await listRules(db, ACCOUNT)).toEqual([]);
     expect(await raw(db).all('SELECT verdict, disposition, label_id FROM feedback')).toEqual([{ verdict: 'wrong', disposition: 'keep', label_id: 'personal' }]);
     // The message itself is what the model is shown next time.
@@ -173,78 +141,36 @@ describe('teaching', () => {
     expect(await accuracy(db)).toMatchObject({ reviewed: 1, right: 0 });
   });
 
-  it("saying only what should happen to a sender's mail makes a rule that names no label", async () => {
-    await suggest('digest@example.com', 'archive', NEWS);
-    const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'digest@example.com', disposition: 'keep', scope: 'sender' });
-    expect(result.taught).toBe('From now on, mail from digest@example.com is kept in your inbox, whatever it is. Sift will not ask about it again.');
-    expect(await ruleFor('digest@example.com')).toEqual([{ disposition: 'keep', source: 'correction' }]);
-    // sift would have archived it, so this counts against it; what it said the mail is stands.
-    expect(await raw(db).get('SELECT verdict, disposition, label_id FROM feedback')).toEqual({ verdict: 'wrong', disposition: 'keep', label_id: 'newsletter' });
-    expect(await accuracy(db)).toMatchObject({ reviewed: 1, right: 0 });
-  });
-
-  it('agreeing with what sift would do for everything from a sender counts for it', async () => {
-    await suggest('promo@example.com', 'archive', { labelId: 'marketing' });
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'promo@example.com', disposition: 'archive', scope: 'sender', unsubscribe: true });
-    expect(await ruleFor('promo@example.com')).toEqual([{ disposition: 'archive', source: 'user' }]);
-    expect((await listRules(db, ACCOUNT))[0]).toMatchObject({ subscription: 'unsubscribe' });
-    expect(await accuracy(db)).toMatchObject({ reviewed: 1, right: 1 });
-  });
-
-  it('answering mail sift could not place says what happens to it without counting as a mistake or needing a label', async () => {
+  it('answering mail sift could not place does not count as a mistake', async () => {
     await suggest('cold@example.net', 'review');
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'cold@example.net', disposition: 'archive', scope: 'sender' });
-    expect(await raw(db).get('SELECT verdict, disposition, label_id FROM feedback')).toEqual({ verdict: 'answered', disposition: 'archive', label_id: null });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'cold@example.net', label: 'newsletter' });
+    expect(await raw(db).get('SELECT verdict, disposition, label_id FROM feedback')).toEqual({
+      verdict: 'answered',
+      disposition: 'archive',
+      label_id: 'newsletter',
+    });
     expect(await accuracy(db)).toMatchObject({ reviewed: 0, right: 0 });
-    expect(await ruleFor('cold@example.net')).toEqual([{ disposition: 'archive', source: 'correction' }]);
+    expect(await listRules(db, ACCOUNT)).toEqual([]);
   });
 
   it('keeps a relabelled message as an example of the label it was given', async () => {
     const decisionId = await suggest('scam@example.net', 'archive', { labelId: 'marketing' });
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'scam@example.net', label: 'phishing', scope: 'once', decisionId });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'scam@example.net', label: 'phishing', decisionId });
     expect(await raw(db).get('SELECT label_id FROM examples')).toEqual({ label_id: 'phishing' });
   });
 
   it('an answer about one message is recorded but makes no rule', async () => {
     const decisionId = await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'archive', NEWS);
-    const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', scope: 'once', decisionId });
-    expect(result).toEqual({ reviewed: 1, corrected: null, taught: null, carrying: 0, asked: [], proposed: false });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', decisionId });
     expect(await listRules(db, ACCOUNT)).toEqual([]);
     expect(await pendingSuggestions(db)).toHaveLength(1);
   });
 
-  it("the user's answer replaces a rule sift made for the sender, and decides later mail without a model", async () => {
-    const learned = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'learned');
-    await suggest('news@example.com', 'archive', { ...NEWS, stage: 'rules', ruleId: learned });
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', disposition: 'keep', scope: 'sender' });
-    expect(await listRules(db, ACCOUNT)).toMatchObject([{ id: learned, disposition: 'keep', source: 'correction' }]);
-    expect((await listRules(db, ACCOUNT))[0]).not.toHaveProperty('learned');
-    expect((await listRules(db, ACCOUNT))[0]).not.toHaveProperty('labelId');
-
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'later' })], '4');
-    let modelCalls = 0;
-    const sources = { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } };
-    const model = {
-      judge: async () => (modelCalls++, { failed: 'not expected' }),
-      model: 'test/model',
-    };
-    await triageAccount({ db, mailbox: null, model, sources }, (await listAccounts(db))[0]!);
-    expect(await raw(db).get(`SELECT stage, disposition, label_id FROM decisions WHERE message_id = 'later'`)).toEqual({
-      stage: 'rules',
-      disposition: 'keep',
-      label_id: null,
-    });
-    expect(modelCalls).toBe(0);
-    expect(await pendingSuggestions(db)).toEqual([]);
-  });
-
   it('rejects a label that does not exist and an answer about nothing that is waiting', async () => {
     await suggest('news@example.com', 'archive', NEWS);
-    await expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'nonsense', scope: 'sender' })).rejects.toThrow('no label');
-    await expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'nobody@example.com', label: 'newsletter', scope: 'sender' })).rejects.toThrow(
-      'no longer waiting',
-    );
+    await expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'nonsense' })).rejects.toThrow('no label');
+    await expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'nobody@example.com', label: 'newsletter' })).rejects.toThrow('no longer waiting');
     expect(await raw(db).get('SELECT count(*) AS n FROM feedback')).toEqual({ n: 0 });
     expect(await listRules(db, ACCOUNT)).toEqual([]);
   });
@@ -263,12 +189,8 @@ describe('an answer pressed in the dashboard', () => {
       { carryOut: true },
     );
 
-    const result = await applyFeedback(
-      db,
-      { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'once', decisionId, carryOut: true },
-      50,
-    );
-    expect(result).toMatchObject({ reviewed: 1, carrying: 1, taught: null, proposed: false });
+    const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', decisionId, carryOut: true }, 50);
+    expect(result).toMatchObject({ carrying: 1 });
     expect(await ruleFor('news@example.com')).toEqual([]);
 
     const mailbox = new FakeMailbox();
@@ -288,15 +210,11 @@ describe('an answer pressed in the dashboard', () => {
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'stuck', from: { address: 'news@example.com', domain: 'example.com' } })], '3');
     for (let i = 0; i < MAX_ATTEMPTS; i++) await startRun(db, { accountId: ACCOUNT, messageId: 'stuck', model: 'test/model', now: 0 });
     await expect(
-      applyFeedback(db, { accountId: ACCOUNT, sender: 'other@example.com', label: 'newsletter', scope: 'once', messageId: 'stuck', carryOut: true }),
+      applyFeedback(db, { accountId: ACCOUNT, sender: 'other@example.com', label: 'newsletter', messageId: 'stuck', carryOut: true }),
     ).rejects.toThrow('not from that sender');
 
-    const result = await applyFeedback(
-      db,
-      { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'once', messageId: 'stuck', carryOut: true },
-      50,
-    );
-    expect(result).toMatchObject({ reviewed: 1, carrying: 1, corrected: null, taught: null });
+    const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', messageId: 'stuck', carryOut: true }, 50);
+    expect(result).toMatchObject({ carrying: 1, corrected: null });
     expect(await raw(db).all(`SELECT stage, disposition, label_id, by_user, carry_out, run_id FROM decisions WHERE message_id = 'stuck'`)).toEqual([
       { stage: 'rules', disposition: 'archive', label_id: 'newsletter', by_user: true, carry_out: true, run_id: null },
     ]);
@@ -320,23 +238,14 @@ describe('an answer pressed in the dashboard', () => {
   it('answers that go with the label propose no rule: one would do what already happens', async () => {
     for (let i = 0; i < 4; i++) {
       const decisionId = await suggest('news@example.com', 'archive', NEWS);
-      const reply = await applyFeedback(
-        db,
-        { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'once', decisionId, carryOut: true },
-        50 + i,
-      );
-      expect(reply.proposed).toBe(false);
+      await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', decisionId, carryOut: true }, 50 + i);
     }
     expect(await listProposals(db, ACCOUNT)).toEqual([]);
   });
 
   it('can keep a message under the label that would move it: the label counts as right, and nothing is unsubscribed', async () => {
     const decisionId = await suggest('news@example.com', 'archive', { ...NEWS, subscription: 'unsubscribe' });
-    await applyFeedback(
-      db,
-      { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', disposition: 'keep', scope: 'once', decisionId, carryOut: true },
-      50,
-    );
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', disposition: 'keep', decisionId, carryOut: true }, 50);
     expect(
       withReason(
         await raw(db).get(`SELECT disposition, subscription, label_id, by_user, reason FROM decisions WHERE message_id = 'm1' ORDER BY id DESC LIMIT 1`),
@@ -356,7 +265,7 @@ describe('an answer pressed in the dashboard', () => {
     await redecideWaiting(db, ACCOUNT, 41);
     await applyFeedback(
       db,
-      { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', disposition: 'keep', scope: 'once', decisionId, messageId: 'm1', carryOut: true },
+      { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', disposition: 'keep', decisionId, messageId: 'm1', carryOut: true },
       50,
     );
     expect(await raw(db).get(`SELECT disposition, subscription, label_id FROM decisions WHERE message_id = 'm1' ORDER BY id DESC LIMIT 1`)).toEqual({
@@ -371,17 +280,20 @@ describe('an answer pressed in the dashboard', () => {
   /** The user keeping (or archiving) a sender's message of `label` that the label would do otherwise, as moving it in Gmail does. */
   const against = async (sender: string, label: string, disposition: 'keep' | 'archive', at: number) => {
     const decisionId = await suggest(sender, 'archive', { labelId: label });
-    return (await applyFeedback(db, { accountId: ACCOUNT, sender, label, disposition, scope: 'once', decisionId, via: 'gmail' }, at)).proposed;
+    await applyFeedback(db, { accountId: ACCOUNT, sender, label, disposition, decisionId, via: 'gmail' }, at);
   };
+  /** Each proposal standing: who it is for, its label, and how many answers it rests on. */
+  const proposed = async () => (await listProposals(db, ACCOUNT)).map((p) => [p.match.from?.[0], p.labelId, p.agreed]);
 
   it("two answers giving a label's mail another action propose a rule that does that, made only in the rule dialog", async () => {
-    expect(await against('news@example.com', 'newsletter', 'keep', 50)).toBe(false);
-    expect(await against('news@example.com', 'newsletter', 'keep', 51)).toBe(true);
+    await against('news@example.com', 'newsletter', 'keep', 50);
+    expect(await proposed()).toEqual([]);
+    await against('news@example.com', 'newsletter', 'keep', 51);
     expect(await ruleFor('news@example.com')).toEqual([]);
     const [proposal] = await listProposals(db, ACCOUNT);
     expect(proposal).toMatchObject({ match: { from: ['news@example.com'] }, labelId: 'newsletter', disposition: 'keep', agreed: 2 });
     // A third refreshes the count; it opens no second proposal.
-    expect(await against('news@example.com', 'newsletter', 'keep', 52)).toBe(false);
+    await against('news@example.com', 'newsletter', 'keep', 52);
     expect(await listProposals(db, ACCOUNT)).toMatchObject([{ id: proposal!.id, agreed: 3 }]);
 
     expect(await madeFromProposal(db, proposal!.id, 'other@example.org')).toBe(false);
@@ -392,29 +304,34 @@ describe('an answer pressed in the dashboard', () => {
   it('counts a run per label, broken by an answer that went with the label', async () => {
     await against('news@example.com', 'newsletter', 'keep', 50);
     await against('news@example.com', 'marketing', 'keep', 51);
-    expect(await listProposals(db, ACCOUNT)).toEqual([]);
+    expect(await proposed()).toEqual([]);
     const decisionId = await suggest('news@example.com', 'archive', NEWS);
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'once', decisionId }, 52);
-    expect(await against('news@example.com', 'newsletter', 'keep', 53)).toBe(false);
-    expect(await against('news@example.com', 'newsletter', 'keep', 54)).toBe(true);
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', decisionId }, 52);
+    await against('news@example.com', 'newsletter', 'keep', 53);
+    expect(await proposed()).toEqual([]);
+    await against('news@example.com', 'newsletter', 'keep', 54);
+    expect(await proposed()).toEqual([['news@example.com', 'newsletter', 2]]);
   });
 
   it('does not propose again what the user dismissed, nor where the sender has a rule for all their mail or that label', async () => {
     await against('news@example.com', 'newsletter', 'keep', 50);
     await against('news@example.com', 'newsletter', 'keep', 51);
     expect(await dismissProposal(db, (await listProposals(db, ACCOUNT))[0]!.id)).toBe(true);
-    expect(await against('news@example.com', 'newsletter', 'keep', 52)).toBe(false);
-    expect(await listProposals(db, ACCOUNT)).toEqual([]);
+    await against('news@example.com', 'newsletter', 'keep', 52);
+    expect(await proposed()).toEqual([]);
 
     await addRule(db, ACCOUNT, { match: { from: ['shop@example.com'] }, labelId: 'marketing' }, 'user');
     await addRule(db, ACCOUNT, { match: { from: ['alerts@example.com'] }, whenLabel: 'notification', disposition: 'spam' }, 'user');
     for (const at of [60, 61]) {
-      expect(await against('shop@example.com', 'marketing', 'keep', at)).toBe(false);
-      expect(await against('alerts@example.com', 'notification', 'keep', at)).toBe(false);
+      await against('shop@example.com', 'marketing', 'keep', at);
+      await against('alerts@example.com', 'notification', 'keep', at);
     }
+    expect(await proposed()).toEqual([]);
     // A rule for another of the sender's labels leaves this one open.
-    expect(await against('alerts@example.com', 'marketing', 'keep', 62)).toBe(false);
-    expect(await against('alerts@example.com', 'marketing', 'keep', 63)).toBe(true);
+    await against('alerts@example.com', 'marketing', 'keep', 62);
+    expect(await proposed()).toEqual([]);
+    await against('alerts@example.com', 'marketing', 'keep', 63);
+    expect(await proposed()).toEqual([['alerts@example.com', 'marketing', 2]]);
   });
 });
 
@@ -426,7 +343,7 @@ describe('accuracy', () => {
     await suggest('shop@example.com', 'archive', { labelId: 'marketing', stage: 'rules' });
     await suggest('ada@example.org', 'review');
     const answer = async (sender: string, label: string, at: number, messageId?: string) =>
-      await applyFeedback(db, { accountId: ACCOUNT, sender, label, scope: 'once', ...(messageId ? { messageId } : {}) }, at);
+      await applyFeedback(db, { accountId: ACCOUNT, sender, label, ...(messageId ? { messageId } : {}) }, at);
     await answer('news@example.com', 'newsletter', 100);
     await answer('sales@example.com', 'marketing', 200);
     // Decided by a rule of the user's, so it is not waiting; it is answered by naming the message.
@@ -486,29 +403,17 @@ describe('correcting a decision that is not waiting', () => {
   const decisionsFor = async (id: string) =>
     (await raw(db).all('SELECT stage, disposition, label_id, carry_out, outcome, reason FROM decisions WHERE message_id = ? ORDER BY id', id)).map(withReason);
 
-  it('records what the user said as a new decision, makes the rule, and names the message to put right', async () => {
+  it('records what the user said as a new decision, makes no rule, and names the message to put right', async () => {
     const id = await acted('bids@example.com', 'marketing');
     expect(await pendingSuggestions(db)).toEqual([]);
-    const result = await applyFeedback(
-      db,
-      { accountId: ACCOUNT, sender: 'bids@example.com', label: 'personal', scope: 'sender', messageId: id, carryOut: true },
-      50,
-    );
-    expect(result).toEqual({
-      carrying: 1,
-      asked: [],
-      proposed: false,
-      reviewed: 1,
-      corrected: id,
-      taught: 'From now on, mail from bids@example.com is kept in your inbox, whatever it is. Sift will not ask about it again.',
-    });
+    const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', label: 'personal', messageId: id, carryOut: true }, 50);
+    expect(result).toEqual({ carrying: 1, asked: [], corrected: id });
     expect(await decisionsFor(id)).toEqual([
       { stage: 'model', disposition: 'archive', label_id: 'marketing', carry_out: true, outcome: null, reason: 'r' },
       // Waiting to be carried out, which the next pass does once the earlier change has been taken back.
       { stage: 'rules', disposition: 'keep', label_id: 'personal', carry_out: true, outcome: null, reason: 'you said this is Personal' },
     ]);
-    // The rule says what happens to their mail; what this message is was corrected on the message alone.
-    expect(await ruleFor('bids@example.com')).toEqual([{ disposition: 'keep', source: 'correction' }]);
+    expect(await listRules(db, ACCOUNT)).toEqual([]);
     expect(await raw(db).get('SELECT verdict, disposition, label_id FROM feedback')).toEqual({ verdict: 'wrong', disposition: 'keep', label_id: 'personal' });
     expect(await raw(db).get('SELECT label_id FROM examples')).toEqual({ label_id: 'personal' });
     expect(await accuracy(db)).toMatchObject({ reviewed: 1, right: 0 });
@@ -516,131 +421,40 @@ describe('correcting a decision that is not waiting', () => {
 
   it('can be answered again, and for this message only', async () => {
     const id = await acted('bids@example.com', 'marketing');
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', label: 'personal', scope: 'once', messageId: id });
-    expect(await listRules(db, ACCOUNT)).toEqual([]);
-    expect(await applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', label: 'newsletter', scope: 'once', messageId: id })).toMatchObject({
-      corrected: id,
-      taught: null,
-    });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', label: 'personal', messageId: id });
+    expect(await applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', label: 'newsletter', messageId: id })).toMatchObject({ corrected: id });
     expect((await decisionsFor(id)).map((d) => (d as { label_id: string }).label_id)).toEqual(['marketing', 'personal', 'newsletter']);
     // While sift is off, the new decision is a record, not something to carry out.
     expect((await decisionsFor(id)).at(-1)).toMatchObject({ carry_out: false, outcome: null });
     expect(await pendingSuggestions(db)).toEqual([]);
   });
 
-  it('agreeing with a decision makes the rule and leaves the message alone', async () => {
+  it('agreeing with a decision leaves the message alone', async () => {
     const id = await acted('news@example.com', 'newsletter');
-    const result = await applyFeedback(db, {
-      accountId: ACCOUNT,
-      sender: 'news@example.com',
-      label: 'newsletter',
-      scope: 'label',
-      messageId: id,
-      carryOut: true,
-    });
-    expect(result).toMatchObject({ reviewed: 1, corrected: null });
+    const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', messageId: id, carryOut: true });
+    expect(result).toEqual({ carrying: 0, asked: [], corrected: null });
     expect(await decisionsFor(id)).toHaveLength(1);
-    expect(await ruleFor('news@example.com')).toEqual([{ whenLabel: 'newsletter', source: 'user' }]);
+    expect(await raw(db).get('SELECT verdict FROM feedback')).toEqual({ verdict: 'right' });
   });
 
   it('settles what is waiting from the sender at the same time, and refuses a message from someone else', async () => {
     const id = await acted('bids@example.com', 'marketing');
     await suggest('bids@example.com', 'archive', { labelId: 'marketing' });
-    expect(await applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', label: 'personal', scope: 'sender', messageId: id })).toMatchObject({
-      reviewed: 2,
-    });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', label: 'personal', messageId: id });
+    expect(await raw(db).get('SELECT count(*) AS n FROM feedback')).toEqual({ n: 2 });
     expect(await pendingSuggestions(db)).toEqual([]);
-    await expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'other@example.com', label: 'personal', scope: 'sender', messageId: id })).rejects.toThrow(
+    await expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'other@example.com', label: 'personal', messageId: id })).rejects.toThrow(
       'not from that sender',
     );
   });
 });
 
-describe('how far an answer reaches', () => {
-  const matches = async () =>
-    (await listRules(db, ACCOUNT)).map((r) => ({
-      match: r.match,
-      ...(r.labelId ? { labelId: r.labelId } : {}),
-      ...(r.whenLabel ? { whenLabel: r.whenLabel } : {}),
-      ...(r.disposition ? { disposition: r.disposition } : {}),
-    }));
-
-  it('a subject answer settles only matching mail and makes a rule that beats a broader one for the sender', async () => {
-    await recordSync(
-      db,
-      ACCOUNT,
-      [facts({ accountId: ACCOUNT, messageId: 'bid', from: { address: 'bids@example.com', domain: 'example.com' }, subject: 'You have been OUTBID on lot 2' })],
-      '2',
-    );
-    await recordDecision(db, ACCOUNT, 'bid', { disposition: 'archive', subscription: 'preserve', stage: 'model', reason: 'r', labelId: 'marketing' });
-    await recordSync(
-      db,
-      ACCOUNT,
-      [facts({ accountId: ACCOUNT, messageId: 'promo', from: { address: 'bids@example.com', domain: 'example.com' }, subject: 'Featured lots' })],
-      '3',
-    );
-    await recordDecision(db, ACCOUNT, 'promo', { disposition: 'archive', subscription: 'preserve', stage: 'model', reason: 'r', labelId: 'marketing' });
-
-    const answer = { accountId: ACCOUNT, sender: 'bids@example.com', label: 'personal', scope: 'subject' as const };
-    await expect(applyFeedback(db, { ...answer, contains: ' ' })).rejects.toThrow('which words');
-    await expect(applyFeedback(db, { ...answer, contains: 'refund' })).rejects.toThrow('Nothing waiting from bids@example.com has "refund"');
-    expect(await applyFeedback(db, { ...answer, contains: 'outbid' })).toEqual({
-      carrying: 0,
-      asked: [],
-      proposed: false,
-      reviewed: 1,
-      corrected: null,
-      taught: 'From now on, mail from bids@example.com with "outbid" in the subject is kept in your inbox, whatever it is. Sift will not ask about it again.',
-    });
-    expect((await pendingSuggestions(db)).map((s) => s.messageId)).toEqual(['promo']);
-
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', disposition: 'archive', scope: 'sender' });
-    expect(await matches()).toEqual([
-      { match: { from: ['bids@example.com'], subjectContains: ['outbid'] }, disposition: 'keep' },
-      { match: { from: ['bids@example.com'] }, disposition: 'archive' },
-    ]);
-
-    // The narrower rule wins whichever was written first.
-    const narrower = (await listRules(db, ACCOUNT)).find((r) => r.match.subjectContains !== undefined)!;
-    await raw(db).run(`UPDATE rules SET position = 99 WHERE id = ?`, narrower.id);
-    await recordSync(
-      db,
-      ACCOUNT,
-      [facts({ accountId: ACCOUNT, messageId: 'later', from: { address: 'bids@example.com', domain: 'example.com' }, subject: 'Outbid again' })],
-      '4',
-    );
-    await triageAccount({ db, mailbox: null }, (await listAccounts(db))[0]!);
-    expect(await raw(db).get(`SELECT disposition, label_id FROM decisions WHERE message_id = 'later'`)).toEqual({ disposition: 'keep', label_id: null });
-  });
-
-  it('a domain answer settles everyone at the domain and makes a rule for it', async () => {
-    await suggest('a@shop.example', 'archive', { labelId: 'marketing' });
-    await suggest('b@shop.example', 'review');
-    await suggest('c@example.com', 'archive', { labelId: 'marketing' });
-    expect(await applyFeedback(db, { accountId: ACCOUNT, sender: 'a@shop.example', disposition: 'archive', scope: 'domain' })).toEqual({
-      carrying: 0,
-      asked: [],
-      proposed: false,
-      reviewed: 2,
-      corrected: null,
-      taught: 'From now on, mail from anyone at shop.example is archived, whatever it is. Sift will not ask about it again.',
-    });
-    expect(await matches()).toEqual([{ match: { fromDomain: ['shop.example'] }, disposition: 'archive' }]);
-    expect((await pendingSuggestions(db)).map((s) => s.fromAddress)).toEqual(['c@example.com']);
-  });
-
+describe('an answer given without its decision', () => {
   it('an answer for the waiting mail only settles it all and makes no rule', async () => {
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'archive', NEWS);
-    expect(await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', scope: 'once' })).toEqual({
-      carrying: 0,
-      asked: [],
-      proposed: false,
-      reviewed: 2,
-      corrected: null,
-      taught: null,
-    });
-    expect(await matches()).toEqual([]);
+    expect(await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal' })).toEqual({ carrying: 0, asked: [], corrected: null });
+    expect(await listRules(db, ACCOUNT)).toEqual([]);
     expect(await raw(db).all('SELECT verdict, disposition, label_id FROM feedback')).toEqual([
       { verdict: 'wrong', disposition: 'keep', label_id: 'personal' },
       { verdict: 'wrong', disposition: 'keep', label_id: 'personal' },
@@ -672,7 +486,7 @@ describe('reading a suggestion', () => {
     expect(await messageDetail(db, await everything(db), ACCOUNT, 'm3')).toMatchObject({ body: null, hasHtml: false });
 
     // Answered: the temporary copy goes at once, to the example.
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter' });
     expect((await stored()).map((r) => (r as { message_id: string }).message_id)).toEqual(['m2', 'm4']);
     expect(await raw(db).get(`SELECT status, body_text FROM examples WHERE message_id = 'm1'`)).toEqual({
       status: 'captured',
@@ -686,29 +500,17 @@ describe('reading a suggestion', () => {
     expect(await stored()).toEqual([]);
   });
 
-  it("shows one sender's waiting mail with what sift knows about them", async () => {
+  it("shows one sender's waiting mail, newest first", async () => {
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('other@example.com', 'archive', NEWS);
-    await addRule(db, ACCOUNT, { match: { fromDomain: ['example.com'] }, labelId: 'marketing' }, 'user', 5);
-    await rememberCorrespondent(db, ACCOUNT, 'news@example.com', true);
 
     const detail = (await suggestionDetail(db, await everything(db), ACCOUNT, 'news@example.com'))!;
-    expect(detail.messages.map((m) => [m.messageId, m.labelName, m.disposition])).toEqual([
-      ['m2', 'Newsletters', 'archive'],
-      ['m1', 'Newsletters', 'archive'],
+    expect(detail.messages.map((m) => [m.messageId, m.subject, m.labelId])).toEqual([
+      ['m2', 'Subject m2', 'newsletter'],
+      ['m1', 'Subject m1', 'newsletter'],
     ]);
-    expect(detail.sender).toMatchObject({
-      address: 'news@example.com',
-      messages: 2,
-      userHasWritten: true,
-      labels: [{ id: 'newsletter', name: 'Newsletters', messages: 2 }],
-      rules: [{ match: { fromDomain: ['example.com'] }, labelName: 'Marketing', disposition: 'archive', source: 'user' }],
-    });
-    expect(await suggestionDetail(db, await everything(db), ACCOUNT, 'stranger@example.net')).toMatchObject({
-      messages: [],
-      sender: { messages: 0, userHasWritten: null, labels: [], rules: [] },
-    });
+    expect(await suggestionDetail(db, await everything(db), ACCOUNT, 'stranger@example.net')).toEqual({ messages: [] });
   });
 });
 
@@ -716,7 +518,7 @@ describe('examples', () => {
   it('queues each marked message with the answer', async () => {
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'keep', { labelId: 'personal' });
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' }, 50);
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter' }, 50);
     expect(await raw(db).all('SELECT message_id, label_id, status, body_text FROM examples ORDER BY message_id')).toEqual([
       { message_id: 'm1', label_id: 'newsletter', status: 'pending', body_text: null },
       { message_id: 'm2', label_id: 'newsletter', status: 'pending', body_text: null },
@@ -743,7 +545,7 @@ describe('examples', () => {
       () => 1000,
     );
     await suggest('news@example.com', 'archive', NEWS); // m3: not kept yet
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' }, 50);
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter' }, 50);
     expect(await raw(db).all('SELECT message_id, status, body_text, body_html FROM examples ORDER BY message_id')).toEqual([
       { message_id: 'm1', status: 'captured', body_text: 'sift-plain:Text of m1', body_html: 'sift-plain:<p>m1</p>' },
       { message_id: 'm2', status: 'pending', body_text: null, body_html: null },
@@ -764,7 +566,7 @@ describe('examples', () => {
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'archive', NEWS);
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter' });
 
     let failing = true;
     const api = {
@@ -784,7 +586,11 @@ describe('examples', () => {
     failing = false;
     expect(await captureExamples(db, api, ACCOUNT)).toBe(1);
     expect(await captureExamples(db, api, ACCOUNT)).toBe(0);
-    expect((await listSuggestions(db, await everything(db))).examples).toEqual({ captured: 2, pending: 0 });
+    expect(await raw(db).all('SELECT message_id, status FROM examples ORDER BY message_id')).toEqual([
+      { message_id: 'm1', status: 'captured' },
+      { message_id: 'm2', status: 'gone' },
+      { message_id: 'm3', status: 'captured' },
+    ]);
   });
 });
 
@@ -798,27 +604,16 @@ describe('feedback endpoint', () => {
     return { post, port };
   }
 
-  const answer = { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'label' };
+  const answer = { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter' };
 
-  it('records an answer sent by the dashboard page and reports what was learned', async () => {
+  it('records an answer sent by the dashboard page', async () => {
     await suggest('news@example.com', 'archive', NEWS);
     const { post, port } = await start();
-    expect(await post(answer)).toEqual({
-      status: 200,
-      body: {
-        reviewed: 1,
-        corrected: null,
-        carrying: 1,
-        proposed: false,
-        fixed: null,
-        notFixed: null,
-        taught:
-          'From now on, mail from news@example.com that is Newsletters is archived. Sift still reads each message, and asks about anything else from them.',
-      },
-    });
+    expect(await post(answer)).toEqual({ status: 200, body: { notFixed: null } });
     expect(await raw(db).get('SELECT created_at FROM feedback')).toEqual({ created_at: 77 });
+    expect(await raw(db).get('SELECT status FROM examples')).toEqual({ status: 'pending' });
     const suggestions = (await (await fetch(`http://localhost:${port}/api/suggestions`)).json()) as { waiting: number; accuracy: unknown };
-    expect(suggestions).toMatchObject({ waiting: 0, accuracy: { reviewed: 1, right: 1 }, examples: { captured: 0, pending: 1 } });
+    expect(suggestions).toMatchObject({ waiting: 0, accuracy: { reviewed: 1, right: 1 } });
     expect((suggestions as unknown as { labels: Record<string, { id: string }[]> }).labels[ACCOUNT]?.map((l) => l.id)).toContain('newsletter');
   });
 
@@ -848,13 +643,10 @@ describe('feedback endpoint', () => {
     expect((await post({ ...answer, disposition: 'review' })).status).toBe(400);
     expect((await post({ ...answer, label: 'DROP TABLE' })).status).toBe(400);
     expect((await post({ ...answer, label: 'nonsense' })).status).toBe(409);
-    expect((await post({ ...answer, scope: 'everyone' })).status).toBe(400);
-    expect((await post({ ...answer, scope: 'subject' })).status).toBe(400);
-    // An answer says what the mail is, what should happen, or both; a rule for a kind of mail needs the kind.
-    const { label: _label, ...unlabelled } = answer;
-    expect((await post({ ...unlabelled, scope: 'sender' })).status).toBe(400);
-    expect((await post({ ...unlabelled, disposition: 'archive' })).status).toBe(400);
-    expect((await post({ ...unlabelled, scope: 'sender', disposition: 'archive' })).status).toBe(200);
+    // An answer says what one message is; a rule is made only in the rule dialog.
+    expect((await post({ ...answer, scope: 'sender' })).status).toBe(400);
+    expect((await post({ ...answer, contains: 'outbid' })).status).toBe(400);
+    expect((await post({ ...answer, label: undefined, disposition: 'archive' })).status).toBe(400);
     expect((await post({ ...answer, filler: 'x'.repeat(20_000) })).status).toBe(400);
     expect((await post({ ...answer, sender: 'nobody@example.com' })).status).toBe(409);
     expect((await fetch(`http://localhost:${port}/api/summary`, { method: 'POST' })).status).toBe(405);

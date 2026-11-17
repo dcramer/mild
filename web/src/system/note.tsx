@@ -29,16 +29,10 @@ export function Note({
 }
 
 /**
- * What went wrong, said where it went wrong: under the form or the press that failed (a block), or as the
- * word for a step that failed (`inline`). Nothing when there is nothing to say. The only red a screen writes.
+ * What went wrong, said under the form or the press that failed. Nothing when there is nothing to say.
+ * The only red a screen writes.
  */
-export function Failure({ inline, className, title, children }: { inline?: boolean; className?: string; title?: string; children: ReactNode }) {
+export function Failure({ className, children }: { className?: string; children: ReactNode }) {
   if (children === null || children === undefined || children === false || children === '') return null;
-  return inline ? (
-    <span className={cn('font-medium text-destructive', className)} title={title}>
-      {children}
-    </span>
-  ) : (
-    <span className={cn('block text-destructive', className)}>{children}</span>
-  );
+  return <span className={cn('block text-destructive', className)}>{children}</span>;
 }

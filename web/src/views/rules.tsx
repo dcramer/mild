@@ -6,7 +6,7 @@ import { setParams, useParam } from '@/lib/route.ts';
 import { filterStanding } from '@/views/gmail-filter.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { RulePanel, Who, whoText } from '@/views/rule-panel.tsx';
-import { ago, count, describeMatch, outcomeName } from '@/lib/format.ts';
+import { MADE_BY, ago, count, describeMatch, outcomeName } from '@/lib/format.ts';
 import {
   Blank,
   Button,
@@ -27,12 +27,7 @@ import {
   useToast,
 } from '@/system';
 
-const SOURCES = [
-  ['', 'Anyone'],
-  ['user', 'You'],
-  ['correction', 'You, correcting Sift'],
-  ['learned', 'Sift, by blocking'],
-] as const;
+const SOURCES = [['', 'Anyone'] as const, ...MADE_BY];
 
 const GMAIL = [
   ['', 'Any'],

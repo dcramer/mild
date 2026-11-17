@@ -33,9 +33,9 @@ export interface Controls {
   pullingIn(mailboxes: readonly string[]): Promise<string[]>;
   /**
    * After the user has corrected a decision: take back what sift last did to that message, so the new
-   * decision can be carried out from where the message started. Resolves with whether anything was taken back.
+   * decision can be carried out from where the message started.
    */
-  putBack(db: Sql, accountId: string, messageId: string): Promise<boolean>;
+  putBack(db: Sql, accountId: string, messageId: string): Promise<void>;
   /**
    * Replay the model over an account's stored examples, in the background. Every example is a model call
    * that costs money, so this only ever runs because the user asked. Resolves with the run's id.

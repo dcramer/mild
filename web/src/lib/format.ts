@@ -60,6 +60,14 @@ const WILL: Record<string, string> = {
 /** What happens to mail with a given action, for the end of a sentence. */
 export const willBe = (key: string) => WILL[key] ?? key;
 
+/** Who made a rule. */
+export const MADE_BY = [
+  ['user', 'You'],
+  ['correction', 'Your answers'],
+  ['learned', 'Sift, when it blocked them'],
+] as const;
+export const madeBy = (source: string) => MADE_BY.find(([key]) => key === source)?.[1] ?? source;
+
 /** Where a decision has got to in Gmail. */
 export type Status = 'suggested' | 'waiting' | 'done' | 'unchanged' | 'undone' | 'skipped' | 'failed';
 export const STATUS_NAMES: Record<Status, string> = {

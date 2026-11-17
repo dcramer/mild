@@ -90,9 +90,9 @@ export const DecisionRow = z.object({
   carryOut: z.boolean(),
   /** Null for a suggestion, and while a decision to carry out is waiting for a pass. */
   outcome: z.string().nullable(),
+  /** Why Sift left it alone (`skipped`), in its own words. Never an error's. */
   outcomeDetail: z.string().nullable(),
   actionId: z.number().nullable(),
-  actionType: z.string().nullable(),
   actionStatus: z.string().nullable(),
   /** The user's own answer, not sift's decision. */
   byUser: z.boolean(),
@@ -194,8 +194,6 @@ export const SenderProfile = z.object({
   recent: z.number(),
   /** For a domain: how many addresses have written from it. */
   senders: z.number(),
-  /** Share of their labelled mail that got the commonest label, 0 to 1. Null with too little to say. */
-  consistency: z.number().nullable(),
   /** The owner's answers about their mail. */
   answers: z.object({ right: z.number(), wrong: z.number() }),
   /** The sender's domain. Null for a domain's own profile and for a domain anyone can get an address at. */
@@ -228,13 +226,11 @@ const address = z.object({ address: z.string(), name: z.string().optional() });
 export const MessageDetail = z.object({
   accountId: z.string(),
   messageId: z.string(),
-  threadId: z.string(),
   fromAddress: z.string(),
   fromName: z.string().nullable(),
   to: z.array(address),
   cc: z.array(address),
   subject: z.string(),
-  listId: z.string().nullable(),
   receivedAt: z.number(),
   /** Triage headers as synced. */
   headers: z.record(z.string(), z.string()),
@@ -263,12 +259,8 @@ export const MessageDetail = z.object({
       id: z.number(),
       type: z.string(),
       status: z.string(),
-      decisionId: z.number().nullable(),
       added: z.array(z.string()),
       removed: z.array(z.string()),
-      originalLabels: z.array(z.string()),
-      finalLabels: z.array(z.string()).nullable(),
-      error: z.string().nullable(),
       createdAt: z.number(),
     }),
   ),
@@ -295,25 +287,18 @@ export const SenderPage = z.object({
   senders: z.array(z.object({ address: z.string(), name: z.string().nullable(), messages: z.number(), lastSeenAt: z.number(), contact: Contact })),
   /** Their mail, newest first. */
   decisions: z.array(ListedDecision),
-  /** How much of it is waiting on the owner. */
-  waiting: z.number(),
 });
 export type SenderPage = z.infer<typeof SenderPage>;
 
 /** One sender's mail that is waiting on the user. GET /api/suggestion. */
 export const SuggestionDetail = z.object({
-  sender: SenderProfile,
   messages: z.array(
     z.object({
       decisionId: z.number(),
       messageId: z.string(),
       subject: z.string(),
       receivedAt: z.number(),
-      disposition: z.string(),
       labelId: z.string().nullable(),
-      labelName: z.string().nullable(),
-      stage,
-      reason: z.string(),
     }),
   ),
 });
@@ -422,8 +407,6 @@ export const SuggestionItem = z.object({
   /** What sift says the mail is, or null if it could not place it. */
   labelId: z.string().nullable(),
   labelName: z.string().nullable(),
-  /** sift would also unsubscribe. */
-  unsubscribe: z.boolean(),
   /** Which tier decided, and how sure a model was (0 to 1); null when no model was asked. */
   stage,
   confidence: z.number().nullable(),
@@ -463,8 +446,6 @@ export const Suggestions = z.object({
   accuracy: answered,
   /** The labels the user can say something is, per account, with what sift does for each. */
   labels: z.record(z.string(), z.array(z.object({ id: z.string(), name: z.string(), disposition: z.string() }))),
-  /** Marked messages kept whole as examples, and how many are still to be fetched. */
-  examples: z.object({ captured: z.number(), pending: z.number() }),
   /** Whether Sift is on for the viewer. Off, nothing listed has been done in Gmail. */
   active: z.boolean(),
   /** Older mail the owner asked for is still being pulled in, or waits for the model: more suggestions are coming. */
@@ -472,49 +453,21 @@ export const Suggestions = z.object({
 });
 export type Suggestions = z.infer<typeof Suggestions>;
 
-/** The body of POST /api/feedback. */
-export const FeedbackRequest = z
-  .strictObject({
-    accountId: z.string(),
-    sender: z.string(),
-    /** What the mail is: a label's id. Left out when the answer says only what should happen. */
-    label: labelId.optional(),
-    /** What should happen to it. Left out: what the label does. */
-    disposition: decided.optional(),
-    /** Also unsubscribe, whether or not the label does. */
-    unsubscribe: z.boolean().optional(),
-    /** A plain-language condition that narrows a rule for the sender. Needs `label`. */
-    when: z.string().max(200).optional(),
-    /**
-     * How far the answer reaches, and so what rule it makes. `label`: the sender's mail of this kind (what
-     * agreeing means). `sender`, `domain`, `subject`: that mail whatever it is. `once`: no rule.
-     */
-    scope: z.enum(['label', 'sender', 'domain', 'subject', 'once']),
-    /** For `subject`: the words the subject must contain. */
-    contains: z.string().max(200).optional(),
-    decisionId: z.int().optional(),
-    /** The message the answer was given on, which need not be waiting: this is how a decision already made is corrected. */
-    messageId: text().optional(),
-  })
-  .refine((a) => a.label !== undefined || a.disposition !== undefined, { message: 'An answer says what the mail is, what should happen to it, or both.' })
-  .refine((a) => a.label !== undefined || (a.scope !== 'label' && a.when === undefined), { path: ['label'], message: 'This answer needs a label.' })
-  .refine((a) => a.scope !== 'subject' || (a.contains ?? '').trim() !== '', { path: ['contains'], message: 'An answer about a subject needs its words.' });
+/** The body of POST /api/feedback: what one message is. It makes no rule; only the rule dialog does. */
+export const FeedbackRequest = z.strictObject({
+  accountId: z.string(),
+  sender: z.string(),
+  label: labelId,
+  /** What should happen to it. Left out: what the label does. */
+  disposition: decided.optional(),
+  decisionId: z.int().optional(),
+  /** The message the answer was given on, which need not be waiting: this is how a decision already made is corrected. */
+  messageId: text().optional(),
+});
 export type FeedbackRequest = z.infer<typeof FeedbackRequest>;
 
 /** What POST /api/feedback answers. */
 export const FeedbackReply = z.object({
-  /** Suggestions this answer settled. */
-  reviewed: z.number(),
-  /** What sift will do differently from now on, in a sentence. Null if nothing lasting was learned. */
-  taught: z.string().nullable(),
-  /** The message whose earlier decision was replaced. */
-  corrected: z.string().nullable(),
-  /** How many messages now have the answer waiting to be carried out in Gmail. */
-  carrying: z.number(),
-  /** Sift proposed a rule because the user keeps giving the sender's mail of this label another action. */
-  proposed: z.boolean(),
-  /** What was done in Gmail about the corrected message, in a sentence. Null if nothing needed doing. */
-  fixed: z.string().nullable(),
   /** Why sift's own change to the corrected message could not be taken back in Gmail. The answer is saved either way. */
   notFixed: z.string().nullable(),
 });

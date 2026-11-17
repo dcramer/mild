@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { people } from '../src/store/people.ts';
 import { connectAccount, connectedAddresses, listUsers, personOf, recordSync, userOf } from '../src/store/accounts.ts';
-import { finishLabelProposal, startLabelProposal } from '../src/store/labels.ts';
+import { finishLabelProposal, listLabels, startLabelProposal } from '../src/store/labels.ts';
 import { preferences, setModel } from '../src/store/preferences.ts';
 import type { Store } from '../src/store/store.ts';
 import { freshStore, raw, rowsBy, startDashboard } from './fixtures.ts';
@@ -94,7 +94,7 @@ beforeEach(async () => {
     saveModelKey: async (db, provider) => void calls.push(`key ${provider} ${await personOf(db)}`),
     signOutModel: async (db, provider) => void calls.push(`signout ${provider} ${await personOf(db)}`),
     undo: async (_db, id) => (calls.push(`undo ${id}`), 'undone'),
-    putBack: async () => false,
+    putBack: async () => {},
     ruleFilter: async (_db, id) => void calls.push(`filter ${id}`),
     // Answers with the mail of whoever has the rule: only the route's own check keeps it from someone else.
     ruleInbox: async (_db, id) => {
@@ -262,8 +262,8 @@ describe("nobody sees or changes another person's mail", () => {
     const writes: [string, Record<string, unknown>, Record<string, unknown>][] = [
       [
         '/api/feedback',
-        { accountId: ALPHA, sender: `sender@${MARK[ALPHA]}.example.com`, disposition: 'keep', scope: 'sender', messageId: `m-${MARK[ALPHA]}` },
-        { accountId: NOBODY, sender: `sender@${MARK[ALPHA]}.example.com`, disposition: 'keep', scope: 'sender', messageId: `m-${MARK[ALPHA]}` },
+        { accountId: ALPHA, sender: `sender@${MARK[ALPHA]}.example.com`, label: 'newsletter', disposition: 'keep', messageId: `m-${MARK[ALPHA]}` },
+        { accountId: NOBODY, sender: `sender@${MARK[ALPHA]}.example.com`, label: 'newsletter', disposition: 'keep', messageId: `m-${MARK[ALPHA]}` },
       ],
       [
         '/api/rules',
@@ -289,7 +289,7 @@ describe("nobody sees or changes another person's mail", () => {
       ['/api/rules/remove', { id: theirs.rule }, { id: 'r-nobody' }],
       ['/api/rules/filter', { id: theirs.rule, on: true }, { id: 'r-nobody', on: true }],
       ['/api/rules/apply', { id: theirs.rule, messageIds: ['g'] }, { id: 'r-nobody', messageIds: ['g'] }],
-      ['/api/proposals', { id: theirs.proposal, accept: false }, { id: 9999, accept: false }],
+      ['/api/proposals', { id: theirs.proposal }, { id: 9999 }],
       ['/api/undo', { id: theirs.action }, { id: 9999 }],
       ['/api/examples/delete', { accountId: ALPHA, messageId: `m-${MARK[ALPHA]}` }, { accountId: NOBODY, messageId: `m-${MARK[ALPHA]}` }],
       ['/api/examples/delete-all', { accountId: ALPHA }, { accountId: NOBODY }],
@@ -336,6 +336,23 @@ describe("nobody sees or changes another person's mail", () => {
     expect((await call('GET', '/api/manage', BRAVO)).body).toMatchObject({ active: true });
     expect((await call('GET', '/api/manage', ALPHA)).body).toMatchObject({ active: false });
     expect((await call('POST', '/api/model', null, { model: 'nobody/model' })).status).toBe(401);
+  });
+
+  it('lets each person change their own labels, and only their own', async () => {
+    const alpha = await dbOf(ALPHA);
+    const labels = async () =>
+      JSON.stringify([await raw(alpha).all('SELECT * FROM labels ORDER BY account_id, id'), await raw(alpha).all('SELECT * FROM label_proposals')]);
+    const before = await labels();
+    const bravo = await dbOf(BRAVO);
+    const label = { name: 'Bravo only', description: 'Mail only Bravo has.', disposition: 'archive' };
+    expect((await call('POST', '/api/labels', BRAVO, { id: 'newsletter', name: 'Bravo reading' })).status).toBe(200);
+    expect((await call('POST', '/api/labels/add', BRAVO, { labels: [label] })).status).toBe(200);
+    expect((await call('POST', '/api/labels/propose', BRAVO, { goal: 'Less noise' })).status).toBe(200);
+    // Bravo's mailbox has labels already, so there is nothing to accept into: refused, and Alpha's untouched either way.
+    expect((await call('POST', '/api/labels/accept', BRAVO, { labels: [label] })).status).toBe(409);
+    expect(calls).toEqual([`propose ${BRAVO}`]);
+    expect((await listLabels(bravo, BRAVO)).map((l) => l.name)).toEqual(expect.arrayContaining(['Bravo reading', 'Bravo only']));
+    expect(await labels()).toBe(before);
   });
 
   it('lets only the person who set sift up change what applies to everyone', async () => {

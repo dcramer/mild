@@ -1,7 +1,6 @@
 import { alias, and, asc, count, decisions, desc, eq, isNotNull, max, messages } from '../../store/query.ts';
 import { hashOf, newestOfGroup, openEnvelope, openNewest } from '../../store/content.ts';
 import type { Sql } from '../../store/sql.ts';
-import { pendingSuggestions } from '../../learn/feedback.ts';
 import { contacts, domainFacts, senderFacts } from '../../store/senders.ts';
 import { listLabels } from '../../store/labels.ts';
 import { plainName } from '../../triage/stages/rules.ts';
@@ -102,7 +101,6 @@ async function profileOf(db: Sql, scope: Scope, accountId: string, who: { addres
     lastSeenAt: known.lastSeenAt,
     recent: known.recent,
     senders: known.senders,
-    consistency: known.consistency,
     answers: known.answers,
     userHasWritten: known.userHasWritten,
     labels: known.labels.map((l) => ({ id: l.id, name: names.get(l.id) ?? l.id, messages: l.messages })),
@@ -172,6 +170,5 @@ export async function senderPage(
         : (await listDecisions(db, scope, { days: 36_500, limit: NAMES_FROM, accountId, ...filter }, now)).rows
             .filter((row) => plainName(row.fromName ?? '') === plainName(under))
             .slice(0, LISTED),
-    waiting: (await pendingSuggestions(db, { accountId, ...filter })).length,
   };
 }

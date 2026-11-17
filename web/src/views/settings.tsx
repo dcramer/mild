@@ -177,7 +177,7 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
   const month = useLoaded('summary-30', (signal) => api.summary(30, signal), 300_000);
   const provider = chosen?.split('/')[0] ?? null;
   const choice = choices.find((c) => c.provider === provider);
-  // Connecting a model is the wall under this panel.
+  // Connecting a model is SetUp's Connect step, under this panel: the button closes the panel onto it.
   if (chosen === null || provider === null || !signedIn.includes(provider))
     return (
       <SettingsGroup title="Model" note="Classifies what no rule covers.">

@@ -115,8 +115,5 @@ describe('making a rule from the dashboard', () => {
     const pages = globSync('web/src/**/*.{ts,tsx}').filter((file) => file !== 'web/src/lib/api.ts');
     const adding = pages.filter((file) => readFileSync(file, 'utf8').includes('api.addRule('));
     expect(adding).toEqual(['web/src/views/rule-dialog.tsx']);
-    // An answer's other scopes make a rule on the server; the page answers for the message alone.
-    const scopes = pages.flatMap((file) => [...readFileSync(file, 'utf8').matchAll(/scope: '(\w+)'/g)].map((m) => `${file}: ${m[1]}`));
-    expect(scopes.filter((s) => !s.endsWith(': once'))).toEqual([]);
   });
 });

@@ -308,7 +308,7 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
           {(data && data.items.length > 0) || fact !== ''
             ? 'Nothing waiting matches.'
             : data?.importing
-              ? 'Pulling in your recent mail. Suggestions show here as Sift reads it.'
+              ? 'Pulling in your recent mail. It shows here as Sift reads it.'
               : 'Nothing is waiting on you.'}
         </Empty>
       ) : (

@@ -1,18 +1,4 @@
-import {
-  alias,
-  and,
-  count,
-  decisions,
-  eq,
-  examples as exampleRows,
-  isNotNull,
-  max,
-  messages as messageRows,
-  not,
-  notExists,
-  sql,
-  suggestionBodies,
-} from '../../store/query.ts';
+import { alias, and, count, decisions, eq, isNotNull, max, messages as messageRows, not, notExists, suggestionBodies } from '../../store/query.ts';
 import { outOfTries } from '../../store/runs.ts';
 import type { Sql } from '../../store/sql.ts';
 import { accuracy, pendingSuggestions } from '../../learn/feedback.ts';
@@ -25,31 +11,18 @@ import { contacts } from '../../store/senders.ts';
 import { type Scope, sees, within } from '../scope.ts';
 import { FACT_FILTERS, type FactFilter, type SuggestionDetail, type SuggestionItem, type Suggestions } from '../types.ts';
 import { outcomeOf } from './labels.ts';
-import { senderProfile } from './senders.ts';
 
-/** One sender's waiting mail, newest first, with what sift knows about them. */
+/** One sender's waiting mail, newest first. */
 export async function suggestionDetail(db: Sql, scope: Scope, accountId: string, sender: string): Promise<SuggestionDetail | null> {
   if (!sees(scope, accountId)) return null;
-  const names = new Map((await listLabels(db, accountId)).map((l) => [l.id, l.name]));
-  const messages = [];
-  for (const s of await pendingSuggestions(db, { accountId, sender, limit: 200 })) {
-    const [received] = (await db
-      .select({ receivedAt: messageRows.receivedAt })
-      .from(messageRows)
-      .where(and(eq(messageRows.accountId, accountId), eq(messageRows.id, s.messageId)))) as [{ receivedAt: number }];
-    messages.push({
-      decisionId: s.decisionId,
-      messageId: s.messageId,
-      subject: s.subject,
-      receivedAt: received.receivedAt,
-      disposition: s.block ? 'block' : s.disposition,
-      labelId: s.labelId,
-      labelName: (s.labelId && names.get(s.labelId)) ?? null,
-      stage: s.stage,
-      reason: s.reason,
-    });
-  }
-  return { sender: (await senderProfile(db, scope, accountId, sender))!, messages };
+  const messages = (await pendingSuggestions(db, { accountId, sender, limit: 200 })).map((s) => ({
+    decisionId: s.decisionId,
+    messageId: s.messageId,
+    subject: s.subject,
+    receivedAt: s.receivedAt,
+    labelId: s.labelId,
+  }));
+  return { messages };
 }
 
 const MAX_ITEMS = 500;
@@ -163,23 +136,14 @@ export async function listSuggestions(
     disposition: s.block ? 'block' : s.disposition,
     labelId: s.labelId,
     labelName: (s.labelId && names.get(`${s.accountId}\n${s.labelId}`)) ?? null,
-    unsubscribe: s.unsubscribe,
     stage: s.stage,
     confidence: s.confidence,
     alternatives: alternatives(s),
     preview: previews.get(`${s.accountId}\n${s.messageId}`) || null,
   }));
   const { reviewed, right } = await accuracy(db, 0, scope.accounts);
-  const [examples] = (await db
-    .select({
-      captured: sql<number>`count(*) FILTER (WHERE ${exampleRows.status} = 'captured')`.mapWith(Number),
-      pending: sql<number>`count(*) FILTER (WHERE ${exampleRows.status} = 'pending')`.mapWith(Number),
-    })
-    .from(exampleRows)
-    .where(within(scope, exampleRows.accountId))) as [{ captured: number | null; pending: number | null }];
   return {
     labels: Object.fromEntries([...labels].map(([id, list]) => [id, list.map((l) => ({ id: l.id, name: l.name, disposition: outcomeOf(l) }))])),
-    examples: { captured: examples.captured ?? 0, pending: examples.pending ?? 0 },
     proposals: await proposalSummaries(db, scope, labels),
     items,
     waiting: waitingNow.length,

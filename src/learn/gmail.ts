@@ -141,7 +141,6 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
         sender,
         label: label.id,
         ...(place === label.disposition ? {} : { disposition: place }),
-        scope: 'once',
         decisionId: decision.id,
         messageId: change.messageId,
         via: 'gmail',

@@ -11,8 +11,6 @@ export default read({
   path: '/api/decisions',
   query: z.object({
     days,
-    stage: filter,
-    disposition: filter,
     status: filter,
     q: filter,
     fact: filter,
@@ -20,15 +18,13 @@ export default read({
     offset: z.coerce.number().int().nonnegative().catch(0),
   }),
   reply: DecisionPage,
-  run: async ({ db, now }, scope, { days, stage, disposition, status, q, fact, limit, offset }) =>
+  run: async ({ db, now }, scope, { days, status, q, fact, limit, offset }) =>
     ok(
       await listDecisions(
         db,
         scope,
         {
           days,
-          ...(stage ? { stage } : {}),
-          ...(disposition ? { disposition } : {}),
           ...(status ? { status } : {}),
           ...(q ? { search: q } : {}),
           ...(fact ? { fact } : {}),

@@ -253,6 +253,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
       person,
       signedInAs: session,
       controls,
+      said: (error) => failed(request, error).error,
       now,
     };
     const sessionCookie = (value: string, maxAge: number) =>

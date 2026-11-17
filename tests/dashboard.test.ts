@@ -130,7 +130,6 @@ describe('tracking', () => {
     expect(await raw(db).get('SELECT decision_id, status FROM actions')).toEqual({ decision_id: 1, status: 'done' });
     expect((await summarize(db, await everything(db), 7, NOW)).recent.find((r) => r.id === 1)).toMatchObject({
       actionId: 1,
-      actionType: 'archive',
       actionStatus: 'done',
     });
   });
@@ -159,10 +158,7 @@ describe('tracking', () => {
     expect(await ids('suggested')).toEqual([3, 2, 1]);
     expect(await ids('done')).toEqual([done]);
     expect(await ids('nonsense')).toEqual([]);
-    expect((await listDecisions(db, await everything(db), { days: 7, status: 'done' }, NOW)).rows[0]).toMatchObject({
-      actionId: archived,
-      actionType: 'archive',
-    });
+    expect((await listDecisions(db, await everything(db), { days: 7, status: 'done' }, NOW)).rows[0]).toMatchObject({ actionId: archived });
 
     await setActionStatus(db, archived, 'undone');
     expect(await ids('undone')).toEqual([done]);
@@ -408,11 +404,9 @@ describe('dashboard server', () => {
     const base = await start();
     type Page = { total: number; rows: { id: number; messageId: string; subject: string }[] };
     expect((await get<Page>(`${base}/api/decisions?days=7`)).rows.map((r) => r.id)).toEqual([3, 2, 1]);
-    expect((await get<Page>(`${base}/api/decisions?days=7&stage=model`)).rows.map((r) => r.messageId)).toEqual(['c']);
-    expect((await get<Page>(`${base}/api/decisions?days=7&disposition=archive`)).total).toBe(2);
     expect((await get<Page>(`${base}/api/decisions?days=7&q=EXAMPLE+news`)).rows.map((r) => r.messageId)).toEqual(['a']);
     expect((await get<Page>(`${base}/api/decisions?days=7&q=${encodeURIComponent('%')}`)).total).toBe(0);
-    expect((await get<Page>(`${base}/api/decisions?days=7&stage=${encodeURIComponent("x' OR 1=1 --")}`)).total).toBe(0);
+    expect((await get<Page>(`${base}/api/decisions?days=7&status=${encodeURIComponent("x' OR 1=1 --")}`)).total).toBe(0);
 
     const paged = await get<Page>(`${base}/api/decisions?days=7&limit=1&offset=1`);
     expect(paged.total).toBe(3);

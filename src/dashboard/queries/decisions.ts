@@ -21,9 +21,8 @@ import {
 } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import { hashOf, openEnvelope } from '../../store/content.ts';
-import { DISPOSITIONS } from '../../triage/types.ts';
 import { type Scope, within } from '../scope.ts';
-import { type DecisionRow, FACT_FILTERS, FACT_FILTER_KEYS, type ListedDecision, STAGES } from '../types.ts';
+import { type DecisionRow, FACT_FILTERS, FACT_FILTER_KEYS, type ListedDecision } from '../types.ts';
 import { factsWhere } from '../../store/messages.ts';
 import { contacts } from '../../store/senders.ts';
 
@@ -57,7 +56,6 @@ const DECISION_FIELDS = {
   outcomeDetail: decisions.outcomeDetail,
   byUser: decisions.byUser,
   actionId: actions.id,
-  actionType: actions.type,
   actionStatus: actions.status,
 };
 
@@ -95,12 +93,12 @@ export const toDecisionRow = (db: Sql, { block, subscription, ...r }: DecisionFi
   ...openEnvelope(db, r.accountId, r.messageId, r),
   disposition: block ? 'block' : r.disposition,
   unsubscribe: subscription === 'unsubscribe',
+  // Anything but a skip's own sentence can be the text of an error from Gmail.
+  outcomeDetail: r.outcome === 'skipped' ? r.outcomeDetail : null,
 });
 
 interface DecisionFilter {
   days: number;
-  stage?: string;
-  disposition?: string;
   /** `suggested`, `done`, `undone` or `changed`. */
   status?: string;
   /** Case-insensitive substring of the subject, sender address or sender name. Reads every decision the rest of the filter leaves. */
@@ -124,14 +122,6 @@ export async function listDecisions(
   now: number = Date.now(),
 ): Promise<{ total: number; rows: ListedDecision[] }> {
   const where: (SQL | undefined)[] = [within(scope, decisions.accountId), gte(decisions.decidedAt, now - filter.days * DAY_MS)];
-  if (filter.stage !== undefined) {
-    if (!isOneOf(STAGES, filter.stage)) return { total: 0, rows: [] };
-    where.push(eq(decisions.stage, filter.stage));
-  }
-  if (filter.disposition !== undefined) {
-    if (!isOneOf(DISPOSITIONS, filter.disposition)) return { total: 0, rows: [] };
-    where.push(eq(decisions.disposition, filter.disposition));
-  }
   if (filter.status !== undefined) {
     const clause = STATUS_WHERE[filter.status];
     if (clause === undefined) return { total: 0, rows: [] };

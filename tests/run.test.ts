@@ -490,7 +490,7 @@ describe('teaching from Gmail', () => {
     expect(mailbox.labels.get('news')).toContain('INBOX');
     expect(await pass(true)).toBe(0);
 
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'ada@example.org', label: 'newsletter', scope: 'sender', messageId: 'ada', carryOut: true });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'ada@example.org', label: 'newsletter', messageId: 'ada', carryOut: true });
     await undo({ db, mailbox, now: () => clock }, (await lastStandingChange(db, ACCOUNT, 'ada'))!.id);
     expect(await pass(true)).toBe(0);
     expect(mailbox.labels.get('ada')).not.toContain('INBOX');
@@ -995,7 +995,6 @@ describe('correcting what sift did', () => {
       accountId: ACCOUNT,
       sender: 'news@example.com',
       label: 'personal',
-      scope: 'sender',
       messageId: 'news',
       carryOut: true,
     });
@@ -1077,7 +1076,7 @@ describe('examples', () => {
       ...options(),
       model: async () => ({ model: 'test/model', judge: async () => ({ label: 'newsletter', reason: 'r' }) }),
     });
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter' });
 
     inbox = [];
     bodies.clear();

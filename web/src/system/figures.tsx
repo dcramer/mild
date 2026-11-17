@@ -9,27 +9,14 @@ export function Figures({ children, className }: { children: ReactNode; classNam
 
 /**
  * One number and what it counts, with a short note under it that says what it is out of. `look` highlights
- * the one the reader should see first (one a screen); `failure` is a count of things gone wrong. With
- * `href` the number is a link to the list it counts.
+ * the one the reader should see first (one a screen). With `href` the number is a link to the list it counts.
  */
-export function Figure({
-  label,
-  value,
-  note,
-  tone,
-  href,
-}: {
-  label: string;
-  value: string;
-  note?: string | null;
-  tone?: 'look' | 'failure' | undefined;
-  href?: string;
-}) {
+export function Figure({ label, value, note, tone, href }: { label: string; value: string; note?: string | null; tone?: 'look' | undefined; href?: string }) {
   const shown = tone === 'look' ? <Highlight className="mx-0 inline-block px-1.5 py-0">{value}</Highlight> : value;
   return (
     <div className="flex flex-col gap-1">
       <dt className="slug whitespace-nowrap text-muted-foreground">{label}</dt>
-      <dd className={cn('figure', tone === 'failure' && 'text-destructive')}>
+      <dd className="figure">
         {href ? (
           <a href={href} className="underline decoration-current/35 decoration-2 underline-offset-[0.15em] hover:decoration-current">
             {shown}

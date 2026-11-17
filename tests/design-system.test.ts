@@ -166,10 +166,9 @@ describe('red means a failure the reader can do something about', () => {
     for (const path of SCREENS) {
       const source = readFileSync(path, 'utf8');
       const file = `web/src/${relative(WEB, path)}`;
-      for (const said of source.matchAll(/<Failure\b([^>]*)>([\s\S]*?)<\/Failure>/g)) {
+      for (const said of source.matchAll(/<Failure\b[^>]*>([\s\S]*?)<\/Failure>/g)) {
         const line = source.slice(0, said.index).split('\n').length;
-        if (/\binline\b/.test(said[1]!)) failures.push(`${file}:${line} <Failure inline>: what Sift did not manage is history, said plainly.`);
-        else if (!/^\{[\s\S]*\b(error|failed)\b[\s\S]*\}$/.test(said[2]!.trim()))
+        if (!/^\{[\s\S]*\b(error|failed)\b[\s\S]*\}$/.test(said[1]!.trim()))
           failures.push(`${file}:${line} <Failure> holds words of its own: it holds the error of a press or a load.`);
       }
     }
@@ -213,7 +212,7 @@ test('keys are for working through a list, and screens bind none of their own', 
     const file = relative(WEB, path);
     return [
       ...(/<Table keys\b/.test(source) && !LISTS.has(file)
-        ? [`web/src/${file}: <Table keys> is only for Suggestions and Activity (docs/DESIGN.md, Keys).`]
+        ? [`web/src/${file}: <Table keys> is only for For review and Activity (docs/DESIGN.md, Keys).`]
         : []),
       ...(/\bshortcut=|\buseShortcut\(/.test(source) ? [`web/src/${file}: a screen binds no key; keys belong to the parts (docs/DESIGN.md, Keys).`] : []),
     ];

@@ -148,12 +148,11 @@ describe('when a rule changes', () => {
 
   it('never touches mail the user answered for', async () => {
     const sale = await decided('sales@example.com', MARKETING);
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'sales@example.com', label: 'newsletter', scope: 'sender' });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'sales@example.com', label: 'newsletter' });
     const answered = await decided('shop@example.com', { stage: 'rules', disposition: 'keep', labelId: 'transactional' });
     // An earlier answer of the user's, corrected again.
     await raw(db).run('UPDATE decisions SET by_user = true WHERE message_id = ?', answered);
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'shop@example.com', label: 'marketing', scope: 'sender', messageId: answered });
-    for (const rule of await listRules(db, ACCOUNT)) await removeRule(db, rule.id);
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'shop@example.com', label: 'marketing', messageId: answered });
 
     const before = await count();
     expect(await redecideWaiting(db, ACCOUNT)).toBe(0);
@@ -167,11 +166,7 @@ describe('when a rule changes', () => {
     await addRule(db, ACCOUNT, { match: { from: ['sales@example.com'] }, labelId: 'newsletter' }, 'user');
     // The user answers after the waiting mail was listed and before its new decision is recorded.
     meanwhile = async (on) =>
-      void (await applyFeedback(
-        on,
-        { accountId: ACCOUNT, sender: 'sales@example.com', label: 'personal', scope: 'once', messageId: sale, carryOut: true },
-        70,
-      ));
+      void (await applyFeedback(on, { accountId: ACCOUNT, sender: 'sales@example.com', label: 'personal', messageId: sale, carryOut: true }, 70));
     expect(await redecideWaiting(db, ACCOUNT, 70)).toBe(0);
     expect(await current(sale)).toMatchObject({ stage: 'rules', label_id: 'personal', carry_out: true });
   });

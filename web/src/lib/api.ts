@@ -55,8 +55,6 @@ export type Days = 1 | 7 | 30 | 90;
 
 interface DecisionQuery {
   days: Days;
-  stage: string;
-  disposition: string;
   status: string;
   search: string;
   /** Empty for none. */
@@ -173,29 +171,21 @@ async function post<T = unknown>(path: string, body: unknown): Promise<T> {
 export const api = {
   summary: (days: Days, signal: AbortSignal) => get<Summary>('/api/summary', { days }, signal),
   decisions: (q: DecisionQuery, signal: AbortSignal) =>
-    get<DecisionPage>(
-      '/api/decisions',
-      { days: q.days, stage: q.stage, disposition: q.disposition, status: q.status, q: q.search, fact: q.fact, limit: q.limit, offset: q.offset },
-      signal,
-    ),
+    get<DecisionPage>('/api/decisions', { days: q.days, status: q.status, q: q.search, fact: q.fact, limit: q.limit, offset: q.offset }, signal),
   message: (account: string, id: string, signal: AbortSignal) => get<MessageDetail>('/api/message', { account, id }, signal),
-  /** Where a frame loads a message as its HTML, fetched from Gmail each time it is shown. */
+  /** Where a frame loads a message as the HTML Sift holds for it. */
   messageHtml: (account: string, id: string) => `/api/message/html?${new URLSearchParams({ account, id })}`,
   /** `name` lists only their mail under that name. */
   sender: (account: string, address: string, signal: AbortSignal, name?: string) =>
     get<SenderPage>('/api/sender', name === undefined ? { account, address } : { account, address, name }, signal),
   domain: (account: string, domain: string, signal: AbortSignal) => get<SenderPage>('/api/domain', { account, domain }, signal),
-  /** Give a sender or a domain a standing; `none` takes back the rule that said so. */
   /** A standing is given by adding its rule; this takes it back. */
   clearStanding: (accountId: string, who: { address: string } | { domain: string }) => post('/api/standing/clear', { accountId, ...who }),
   rules: (signal: AbortSignal) => get<{ rules: RuleSummary[] }>('/api/rules', {}, signal),
   suggestions: (includeKept: boolean, fact: FactFilter | '', signal: AbortSignal) =>
     get<Suggestions>('/api/suggestions', { ...(includeKept ? { kept: 1 } : {}), ...(fact ? { fact } : {}) }, signal),
   suggestion: (account: string, sender: string, signal: AbortSignal) => get<SuggestionDetail>('/api/suggestion', { account, sender }, signal),
-  /**
-   * Say what a message is. Resolves with what sift learned and, when the message had already been acted on,
-   * what was done about that in Gmail.
-   */
+  /** Say what a message is. */
   feedback: (answer: FeedbackRequest) => post<FeedbackReply>('/api/feedback', answer),
   manage: (signal: AbortSignal) => get<ManageState>('/api/manage', {}, signal),
   /** The models the reader's own sign-ins offer, and the one to suggest first. */
