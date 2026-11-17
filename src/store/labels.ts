@@ -163,7 +163,7 @@ function normalise(disposition: Disposition, block: boolean, markRead: boolean):
  * Throws if the name is unusable or already taken.
  */
 /** Labels an account may have. Each is a choice the model weighs on every message and the reader answers with, so a long list makes both worse. */
-export const MAX_LABELS = 12;
+export const MAX_LABELS = 30;
 
 export async function addLabel(
   db: Sql,
