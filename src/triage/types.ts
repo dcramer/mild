@@ -56,8 +56,6 @@ export interface Decision {
   /** Human-readable explanation, stored in the audit log. */
   reason: string;
   ruleId?: string;
-  /** The judged rule the model was shown as a prior, whether or not it agreed. */
-  priorRuleId?: string;
   confidence?: number;
 }
 

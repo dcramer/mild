@@ -477,7 +477,6 @@ describe('dashboard server', () => {
           checkedAt: null,
           history: [],
         },
-        settling: null,
         createdAt: NOW,
       },
     ]);
@@ -561,7 +560,7 @@ describe('dashboard server', () => {
     const { store, db } = await seededStore();
     const base = await start({}, store);
     const { id: proposal } = (await raw(db).get<{ id: number }>(
-      `INSERT INTO proposals (account_id, kind, match, conditions, label_id, disposition, agreed, created_at) VALUES (?, 'rule', '{"from":"news@example.com"}', ?, 'newsletter', 'keep', 2, 1) RETURNING id`,
+      `INSERT INTO proposals (account_id, match, conditions, label_id, disposition, agreed, created_at) VALUES (?, '{"from":"news@example.com"}', ?, 'newsletter', 'keep', 2, 1) RETURNING id`,
       ACCOUNT,
       conditionsHash(db, { from: 'news@example.com' }),
     ))!;
@@ -571,7 +570,7 @@ describe('dashboard server', () => {
     const fromNews = async () => (await listRuleSummaries(db, await everything(db))).filter((r) => r.match['fromDomain'] === 'example.com');
 
     // Accepting it without a rule in hand is not a way to make one.
-    expect((await post('/api/proposals', { id: proposal, accept: true })).status).toBe(409);
+    expect((await post('/api/proposals', { id: proposal, accept: true })).status).toBe(400);
     // A rule made some other way, or the dialog closed, leaves it open.
     expect((await post('/api/rules', { accountId: ACCOUNT, match: { from: 'other@example.com' }, label: 'newsletter' })).status).toBe(200);
     expect(await open()).toEqual([proposal]);
@@ -591,31 +590,6 @@ describe('dashboard server', () => {
     // Made once: the same proposal again makes no second rule.
     expect((await post('/api/rules', { accountId: ACCOUNT, match: { fromDomain: 'example.org' }, label: 'transactional', proposal })).status).toBe(409);
     expect((await listRuleSummaries(db, await everything(db))).filter((r) => r.match['fromDomain'] === 'example.org')).toEqual([]);
-  });
-
-  it('says what a judged rule will do once it stops reading, and does that when accepted', async () => {
-    const { store, db } = await seededStore();
-    const base = await start({}, store);
-    const ruleId = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, whenLabel: 'security', disposition: 'archive' }, 'user');
-    const { id: proposal } = (await raw(db).get<{ id: number }>(
-      `INSERT INTO proposals (account_id, kind, match, conditions, label_id, rule_id, agreed, created_at) VALUES (?, 'always', '{"from":"news@example.com"}', ?, 'security', ?, 10, 1) RETURNING id`,
-      ACCOUNT,
-      conditionsHash(db, { from: 'news@example.com' }),
-      ruleId,
-    ))!;
-    // Shown on its rule, not on For review. Account alerts keeps its mail, but this rule archives it, and will archive all of it.
-    expect(((await (await fetch(`${base}/api/suggestions`)).json()) as { proposals: unknown[] }).proposals).toEqual([]);
-    const rules = ((await (await fetch(`${base}/api/rules`)).json()) as { rules: { id: string; settling: unknown }[] }).rules;
-    expect(rules.find((r) => r.id === ruleId)?.settling).toEqual({ proposal, agreed: 10, does: 'archive' });
-    const accepted = await fetch(`${base}/api/proposals`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' },
-      body: JSON.stringify({ id: proposal, accept: true }),
-    });
-    expect(accepted.status).toBe(200);
-    expect((await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from'] === 'news@example.com')).toMatchObject([
-      { kind: 'action', whenLabel: null, disposition: 'archive', source: 'user' },
-    ]);
   });
 
   it("tells the page only that something failed when it is Sift's own error, and logs why", async () => {

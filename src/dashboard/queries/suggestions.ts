@@ -194,14 +194,14 @@ async function proposalSummaries(db: Sql, scope: Scope, labels: Map<string, Labe
   for (const p of await listProposals(db)) {
     const label = labels.get(p.accountId)?.find((l) => l.id === p.labelId);
     // A proposal whose label has been removed has nothing to offer.
-    if (p.kind !== 'rule' || !sees(scope, p.accountId) || !label) continue;
+    if (!sees(scope, p.accountId) || !label) continue;
     summaries.push({
       id: p.id,
       accountId: p.accountId,
       match: p.match,
       labelId: p.labelId,
       labelName: label.name,
-      disposition: p.disposition!,
+      disposition: p.disposition,
       labelDisposition: outcomeOf(label),
       agreed: p.agreed,
     });

@@ -136,7 +136,6 @@ export function modelStage(deps: ModelStageDeps): Stage<Decision | Unfinished> {
       const base = {
         subscription: 'preserve' as const,
         stage: 'model' as const,
-        ...(prior ? { priorRuleId: prior.rule.id } : {}),
         ...(verdict.confidence === undefined ? {} : { confidence: verdict.confidence }),
       };
       // The model found the owner's condition met: the rule's outcome applies. A rule that waits for a label

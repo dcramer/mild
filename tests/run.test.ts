@@ -732,22 +732,20 @@ describe('inference tier', () => {
     mailbox.labels.set('u1', ['INBOX']);
     await runOnce(await active(true), { ...options(), model: model('newsletter') });
     expect(judged).toEqual(['u1']);
-    expect(withReason(await raw(db).get(`SELECT stage, disposition, rule_id, prior_rule_id, reason FROM decisions WHERE message_id = 'u1'`))).toEqual({
+    expect(withReason(await raw(db).get(`SELECT stage, disposition, rule_id, reason FROM decisions WHERE message_id = 'u1'`))).toEqual({
       stage: 'model',
       disposition: 'archive',
       rule_id: ruleId,
-      prior_rule_id: ruleId,
       reason: 'rule: from news@example.com, when it is Newsletters. Newsletters: looks like a mailing',
     });
 
     inbox = [message('u2', 'News <news@example.com>')];
     mailbox.labels.set('u2', ['INBOX']);
     await runOnce(await active(true), { ...options(), model: model('security') });
-    expect(withReason(await raw(db).get(`SELECT disposition, label_id, rule_id, prior_rule_id, reason FROM decisions WHERE message_id = 'u2'`))).toEqual({
+    expect(withReason(await raw(db).get(`SELECT disposition, label_id, rule_id, reason FROM decisions WHERE message_id = 'u2'`))).toEqual({
       disposition: 'keep',
       label_id: 'security',
       rule_id: null,
-      prior_rule_id: ruleId,
       reason: 'not the usual Newsletters. Account alerts: looks like a mailing',
     });
     expect(mailbox.labels.get('u2')).toContain('INBOX');

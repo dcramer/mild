@@ -169,6 +169,20 @@
       "when": 1794881803376,
       "tag": "0023_label_proposals_row_security",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794886436214,
+      "tag": "0024_drop_stop_reading_proposals",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1794886437583,
+      "tag": "0025_proposals_are_rules",
+      "breakpoints": true
     }
   ]
 }

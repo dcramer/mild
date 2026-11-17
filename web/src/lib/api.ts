@@ -237,8 +237,8 @@ export const api = {
   ruleInbox: (id: string, signal: AbortSignal) => get<RuleInbox>('/api/rules/inbox', { id }, signal),
   /** Apply the rule to messages from its inbox preview. */
   applyRule: (id: string, messageIds: readonly string[]) => post<{ deciding: number; reading: number }>('/api/rules/apply', { id, messageIds }),
-  /** Dismiss a proposal, or accept one of kind `always`. A proposed rule is made with `addRule`. */
-  resolveProposal: (id: number, accept: boolean) => post('/api/proposals', { id, accept }),
+  /** Dismiss a proposal. A proposed rule is made with `addRule`. */
+  dismissProposal: (id: number) => post('/api/proposals', { id }),
   /** `message`: what the page will not show by itself, if anything. */
   undo: (id: number) => post<{ message: string | null }>('/api/undo', { id }),
   backfill: (days: number) => post('/api/backfill', { days }),

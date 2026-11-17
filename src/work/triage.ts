@@ -10,7 +10,6 @@ import { listLabels } from '../store/labels.ts';
 import { listUnsettledDecisions, recordDecision, settleDecision } from '../store/decisions.ts';
 import { type QueuedMessage, listUndecided } from '../store/messages.ts';
 import { excuseRuns, finishRun, startRun } from '../store/runs.ts';
-import { proposeSettled } from '../store/proposals.ts';
 import { blockSender, countRuleHit, listRules } from '../store/rules.ts';
 import { cachedCorrespondent } from '../store/senders.ts';
 import { passedDmarc } from '../triage/features.ts';
@@ -68,8 +67,6 @@ export interface TriageReport {
   retrying: number;
   /** Changes that did not land after `CHANGE_TRIES`, reported and given up on. */
   troubled: number;
-  /** Rules sift proposed this pass, for the user to accept. */
-  proposed: number;
   /** Senders blocked this pass. */
   blocked: number;
   /** Mailing lists left this pass. */
@@ -156,7 +153,6 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     skipped: 0,
     retrying: 0,
     troubled: 0,
-    proposed: 0,
     blocked: 0,
     unsubscribed: 0,
     unjudged: 0,
@@ -279,9 +275,6 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     });
     span.set({ 'sift.stage': decision.stage, 'sift.disposition': decision.disposition, 'sift.decision_id': decisionId });
     if (decision.ruleId) await countRuleHit(db, decision.ruleId);
-    if (decision.stage === 'model' && decision.priorRuleId) {
-      if (await proposeSettled(db, account.id, decision.priorRuleId, now())) report.proposed++;
-    }
     report.decided[decision.disposition]++;
     const status = into ? await carryOut(decisionId, facts.messageId, decision, into) : null;
     // Blocking acts on the sender's address, so the address must be proven: a message that only claims to be

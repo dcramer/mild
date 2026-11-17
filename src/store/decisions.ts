@@ -40,7 +40,6 @@ export async function recordDecision(
       labelId: decision.labelId ?? null,
       block: decision.block ?? false,
       markRead: decision.markRead ?? false,
-      priorRuleId: decision.priorRuleId ?? null,
       byUser: options.byUser ?? false,
     })
     .returning({ id: decisions.id });
@@ -126,7 +125,6 @@ export async function currentDecision(
     ...(row.block ? { block: true } : {}),
     ...(row.markRead ? { markRead: true } : {}),
     ...(row.ruleId === null ? {} : { ruleId: row.ruleId }),
-    ...(row.priorRuleId === null ? {} : { priorRuleId: row.priorRuleId }),
     ...(row.confidence === null ? {} : { confidence: row.confidence }),
   };
   return { id: row.id, decision, carryOut: row.carryOut, runId: row.runId, answered: answers.length > 0 || rows.some((r) => r.decision.byUser) };

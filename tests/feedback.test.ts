@@ -10,7 +10,7 @@ import { people } from '../src/store/people.ts';
 import { accuracy, applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { listAccounts, recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
-import { listProposals, madeFromProposal, resolveProposal } from '../src/store/proposals.ts';
+import { dismissProposal, listProposals, madeFromProposal } from '../src/store/proposals.ts';
 import { MAX_ATTEMPTS, startRun } from '../src/store/runs.ts';
 import { addRule, listRules, setRule } from '../src/store/rules.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
@@ -379,12 +379,11 @@ describe('an answer pressed in the dashboard', () => {
     expect(await against('news@example.com', 'newsletter', 'keep', 51)).toBe(true);
     expect(await ruleFor('news@example.com')).toEqual([]);
     const [proposal] = await listProposals(db, ACCOUNT);
-    expect(proposal).toMatchObject({ kind: 'rule', match: { from: 'news@example.com' }, labelId: 'newsletter', disposition: 'keep', agreed: 2 });
+    expect(proposal).toMatchObject({ match: { from: 'news@example.com' }, labelId: 'newsletter', disposition: 'keep', agreed: 2 });
     // A third refreshes the count; it opens no second proposal.
     expect(await against('news@example.com', 'newsletter', 'keep', 52)).toBe(false);
     expect(await listProposals(db, ACCOUNT)).toMatchObject([{ id: proposal!.id, agreed: 3 }]);
 
-    await expect(resolveProposal(db, proposal!.id, true)).rejects.toThrow('rule dialog');
     expect(await madeFromProposal(db, proposal!.id, 'other@example.org')).toBe(false);
     expect(await madeFromProposal(db, proposal!.id, ACCOUNT)).toBe(true);
     expect(await listProposals(db, ACCOUNT)).toEqual([]);
@@ -403,7 +402,7 @@ describe('an answer pressed in the dashboard', () => {
   it('does not propose again what the user dismissed, nor where the sender has a rule for all their mail or that label', async () => {
     await against('news@example.com', 'newsletter', 'keep', 50);
     await against('news@example.com', 'newsletter', 'keep', 51);
-    await resolveProposal(db, (await listProposals(db, ACCOUNT))[0]!.id, false);
+    expect(await dismissProposal(db, (await listProposals(db, ACCOUNT))[0]!.id)).toBe(true);
     expect(await against('news@example.com', 'newsletter', 'keep', 52)).toBe(false);
     expect(await listProposals(db, ACCOUNT)).toEqual([]);
 

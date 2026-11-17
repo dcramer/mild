@@ -86,7 +86,7 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
         <Button disabled={busy} onClick={() => setOpen(true)}>
           Make a rule…
         </Button>
-        <Button variant="quiet" busy={busy} onClick={() => run(() => api.resolveProposal(proposal.id, false))}>
+        <Button variant="quiet" busy={busy} onClick={() => run(() => api.dismissProposal(proposal.id))}>
           Dismiss
         </Button>
       </span>

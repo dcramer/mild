@@ -22,7 +22,6 @@ const STANDING = {
   confidence: decisions.confidence,
   reason: decisions.reason,
   runId: decisions.runId,
-  priorRuleId: decisions.priorRuleId,
   ruleId: decisions.ruleId,
 };
 
@@ -165,7 +164,6 @@ async function redecide(db: Sql, accountId: string, now: number): Promise<number
             : outcome),
           stage: base.stage,
           ...(base.confidence === null ? {} : { confidence: base.confidence }),
-          ...(base.priorRuleId === null ? {} : { priorRuleId: base.priorRuleId }),
           reason: held
             ? `${label.name} is now ${WILL[outcome.disposition]}, but ${unsure ? 'Sift was not sure enough to act on it' : known ? 'you have written to this sender' : 'whether you have written to this sender is not known'}. Before: ${before}`
             : outcome.ruleId

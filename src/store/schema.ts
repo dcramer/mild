@@ -43,8 +43,6 @@ export const ACTION_STATUSES = ['pending', 'done', 'failed', 'unknown', 'undone'
 export const RULE_SOURCES = ['user', 'learned', 'correction'] as const;
 /** `changed`: edited in Gmail. `gone`: deleted there. `outdated`: the rule no longer says what the filter does. */
 export const FILTER_STATES = ['active', 'changed', 'gone', 'outdated'] as const;
-/** `rule`: make one for its match. `always`: stop checking a judged rule the model has agreed with every time. */
-export const PROPOSAL_KINDS = ['rule', 'always'] as const;
 const PROPOSAL_STATUSES = ['open', 'accepted', 'dismissed'] as const;
 /** right: sift's suggestion was what they wanted. wrong: it was not. answered: sift had no suggestion. */
 export const VERDICTS = ['right', 'wrong', 'answered'] as const;
@@ -265,7 +263,6 @@ export const decisions = pgTable(
     block: boolean('block').notNull().default(false),
     markRead: boolean('mark_read').notNull().default(false),
     ruleId: text('rule_id'),
-    priorRuleId: text('prior_rule_id'), // the judged rule the model was shown, whether or not it agreed
     confidence: doublePrecision('confidence'),
     reason: text('reason').notNull(), // encrypted: it names the rule's sender and says what the model read (src/store/content.ts)
     runId: integer('run_id'), // the model call that reached it; null when no model was asked
@@ -298,9 +295,6 @@ export const decisions = pgTable(
     index('decisions_unsettled')
       .on(t.accountId)
       .where(sql`${t.carryOut} AND ${t.outcome} IS NULL`),
-    index('decisions_prior')
-      .on(t.priorRuleId, t.id)
-      .where(sql`${t.priorRuleId} IS NOT NULL`),
     own(),
   ],
 ).enableRLS();
@@ -397,12 +391,10 @@ export const proposals = pgTable(
     id: id(),
     userId: userId(),
     accountId: text('account_id').notNull(),
-    kind: text('kind', { enum: PROPOSAL_KINDS }).notNull(),
     match: text('match').notNull(), // encrypted, and found by its keyed hash, as a rule's
     conditions: text('conditions').notNull(),
     labelId: text('label_id').notNull(),
-    ruleId: text('rule_id'), // the judged rule an `always` would stop checking
-    disposition: text('disposition', { enum: DECIDED }), // what a `rule` does to the label's mail, which the label would not
+    disposition: text('disposition', { enum: DECIDED }).notNull(), // what the rule does to the label's mail, which the label would not
     agreed: integer('agreed').notNull(), // how many decisions in a row it rests on
     status: text('status', { enum: PROPOSAL_STATUSES }).notNull().default('open'),
     createdAt: time('created_at').notNull(),
@@ -411,12 +403,8 @@ export const proposals = pgTable(
   (t) => [
     mailbox(t),
     label('proposals_label', t, t.labelId),
-    foreignKey({ columns: [t.userId, t.ruleId], foreignColumns: [rules.userId, rules.id] }).onDelete('cascade'),
-    unique('proposals_once').on(t.userId, t.accountId, t.kind, t.conditions),
-    oneOf('proposals_kind', t.kind, PROPOSAL_KINDS),
+    unique('proposals_once').on(t.userId, t.accountId, t.conditions),
     oneOf('proposals_status', t.status, PROPOSAL_STATUSES),
-    check('proposals_always_has_rule', sql`(${t.kind} = 'always') = (${t.ruleId} IS NOT NULL)`),
-    check('proposals_rule_has_action', sql`(${t.kind} = 'rule') = (${t.disposition} IS NOT NULL)`),
     oneOf('proposals_disposition', t.disposition, DECIDED),
     own(),
   ],

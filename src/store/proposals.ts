@@ -1,23 +1,19 @@
-import { type PROPOSAL_KINDS, and, decisions, desc, eq, feedback, messages, proposals } from './query.ts';
+import { and, decisions, desc, eq, feedback, messages, proposals } from './query.ts';
 import type { Sql } from './sql.ts';
 import { conditionsHash, hashOf, openJson, proposalName, sealJson } from './content.ts';
-import type { Rule, RuleMatch } from '../triage/stages/rules.ts';
-import type { DecidedDisposition, Label } from '../triage/types.ts';
+import type { RuleMatch } from '../triage/stages/rules.ts';
+import type { DecidedDisposition } from '../triage/types.ts';
 import { listLabels } from './labels.ts';
-import { hasRuleFor, listRules, removeRule, setRule } from './rules.ts';
-import { Refusal } from '../refusal.ts';
+import { hasRuleFor } from './rules.ts';
 
-type ProposalKind = (typeof PROPOSAL_KINDS)[number];
-
+/** A rule Sift thinks is worth having: "from them, when it is this label → what the user has been doing to it". */
 export interface Proposal {
   id: number;
   accountId: string;
-  kind: ProposalKind;
   match: RuleMatch;
   labelId: string;
-  ruleId: string | null;
-  /** With `rule`: what the user has been doing to the label's mail instead of what the label does. */
-  disposition: DecidedDisposition | null;
+  /** What the user has been doing to the label's mail instead of what the label does. */
+  disposition: DecidedDisposition;
   /** How many decisions in a row it rests on. */
   agreed: number;
   createdAt: number;
@@ -26,10 +22,8 @@ export interface Proposal {
 const COLUMNS = {
   id: proposals.id,
   accountId: proposals.accountId,
-  kind: proposals.kind,
   match: proposals.match,
   labelId: proposals.labelId,
-  ruleId: proposals.ruleId,
   disposition: proposals.disposition,
   agreed: proposals.agreed,
   createdAt: proposals.createdAt,
@@ -54,22 +48,17 @@ async function propose(db: Sql, p: Omit<Proposal, 'id' | 'createdAt'>, now: numb
   const [existing] = await db
     .select({ id: proposals.id, status: proposals.status })
     .from(proposals)
-    .where(and(eq(proposals.accountId, p.accountId), eq(proposals.kind, p.kind), eq(proposals.conditions, conditionsHash(db, p.match))));
+    .where(and(eq(proposals.accountId, p.accountId), eq(proposals.conditions, conditionsHash(db, p.match))));
   if (existing) {
     if (existing.status === 'open')
-      await db
-        .update(proposals)
-        .set({ agreed: p.agreed, labelId: p.labelId, ruleId: p.ruleId, disposition: p.disposition })
-        .where(eq(proposals.id, existing.id));
+      await db.update(proposals).set({ agreed: p.agreed, labelId: p.labelId, disposition: p.disposition }).where(eq(proposals.id, existing.id));
     return false;
   }
   await db.insert(proposals).values({
     accountId: p.accountId,
-    kind: p.kind,
     match: sealJson(db, proposalName(db, p.accountId), p.match),
     conditions: conditionsHash(db, p.match),
     labelId: p.labelId,
-    ruleId: p.ruleId,
     disposition: p.disposition,
     agreed: p.agreed,
     createdAt: now,
@@ -111,66 +100,20 @@ export async function proposeFromCorrections(db: Sql, accountId: string, address
   const run = recent.findIndex((r) => r.disposition !== first.disposition);
   const agreed = run === -1 ? recent.length : run;
   if (agreed < PROPOSE_AFTER) return false;
-  return await propose(db, { accountId, kind: 'rule', match, labelId, ruleId: null, disposition: first.disposition, agreed }, now);
-}
-
-/** How many times in a row the model must agree with a `usually` rule before sift proposes to stop checking it. */
-const SETTLED_AFTER = 10;
-
-/** Propose dropping the "when it is L" from a rule once every message it was checked against turned out to be L, for long enough. */
-export async function proposeSettled(db: Sql, accountId: string, ruleId: string, now: number = Date.now()): Promise<boolean> {
-  const rule = (await listRules(db, accountId)).find((r) => r.id === ruleId);
-  if (!rule || rule.whenLabel === undefined) return false;
-  const recent = await db
-    .select({ ruleId: decisions.ruleId })
-    .from(decisions)
-    .where(eq(decisions.priorRuleId, ruleId))
-    .orderBy(desc(decisions.id))
-    .limit(SETTLED_AFTER);
-  if (recent.length < SETTLED_AFTER || !recent.every((r) => r.ruleId === ruleId)) return false;
-  return await propose(db, { accountId, kind: 'always', match: rule.match, labelId: rule.whenLabel, ruleId, disposition: null, agreed: recent.length }, now);
-}
-
-/** What a judged rule does to everything it matches once it stops waiting for its label: its own action, or the label's. */
-export function settledAction(rule: Pick<Rule, 'disposition'>, label: Pick<Label, 'disposition'>): DecidedDisposition {
-  const does = rule.disposition ?? label.disposition;
-  return does === 'review' ? 'keep' : does;
+  return await propose(db, { accountId, match, labelId, disposition: first.disposition, agreed }, now);
 }
 
 /**
- * Dismiss a proposal, or accept one of kind `always`: the rule that waited for a label then acts on
- * everything it matches. A proposed rule is not accepted here but made from it (`madeFromProposal`), so
- * the user sees and can change the rule first. Returns false if it was not open.
+ * Dismiss a proposal. A proposal is never accepted here but made into a rule in the rule dialog
+ * (`madeFromProposal`), so the user sees and can change the rule first. Returns false if it was not open.
  */
-export async function resolveProposal(db: Sql, id: number, accept: boolean, now: number = Date.now()): Promise<boolean> {
-  const [row] = await db
-    .select(COLUMNS)
-    .from(proposals)
-    .where(and(eq(proposals.id, id), eq(proposals.status, 'open')));
-  if (!row) return false;
-  const p = opened(db, row);
-  if (accept) {
-    if (p.kind === 'rule') throw new Refusal('A proposed rule is made from the rule dialog.');
-    const existing = (await listRules(db, p.accountId)).find((r) => r.id === p.ruleId)!;
-    const label = (await listLabels(db, p.accountId)).find((l) => l.id === p.labelId)!;
-    // Takes this proposal with it.
-    await removeRule(db, existing.id);
-    await setRule(
-      db,
-      p.accountId,
-      p.match,
-      {
-        disposition: settledAction(existing, label),
-        ...(existing.subscription ? { subscription: existing.subscription } : {}),
-        ...(existing.markRead ? { markRead: true } : {}),
-      },
-      'user',
-      now,
-    );
-    return true;
-  }
-  await db.update(proposals).set({ status: 'dismissed', resolvedAt: now }).where(eq(proposals.id, id));
-  return true;
+export async function dismissProposal(db: Sql, id: number, now: number = Date.now()): Promise<boolean> {
+  const done = await db
+    .update(proposals)
+    .set({ status: 'dismissed', resolvedAt: now })
+    .where(and(eq(proposals.id, id), eq(proposals.status, 'open')))
+    .returning({ id: proposals.id });
+  return done.length > 0;
 }
 
 /** Mark a proposed rule for `accountId` accepted, once a rule has been made from it. Returns false if there is no such proposal open. */
@@ -178,7 +121,7 @@ export async function madeFromProposal(db: Sql, id: number, accountId: string, n
   const done = await db
     .update(proposals)
     .set({ status: 'accepted', resolvedAt: now })
-    .where(and(eq(proposals.id, id), eq(proposals.accountId, accountId), eq(proposals.kind, 'rule'), eq(proposals.status, 'open')))
+    .where(and(eq(proposals.id, id), eq(proposals.accountId, accountId), eq(proposals.status, 'open')))
     .returning({ id: proposals.id });
   return done.length > 0;
 }

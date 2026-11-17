@@ -8,7 +8,6 @@ import * as schema from '../src/store/schema.ts';
 import { addMailbox, connectAccount, connectedAddresses, deleteUser, recordSync, removeMailbox } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { listLabels, updateLabel } from '../src/store/labels.ts';
-import { addRule, removeRule } from '../src/store/rules.ts';
 import { accounts, labels } from '../src/store/query.ts';
 import { DatabaseInUse, moveAside, pglite, roleBypass, verified } from '../src/store/db.ts';
 import { openStore, storeOn } from '../src/store/store.ts';
@@ -16,7 +15,6 @@ import { loadKeyring } from '../src/secrets.ts';
 import type { Disposition } from '../src/triage/types.ts';
 import { freshStore, onePerson, openUserDb, raw, recordEverything, rowsBy, superuser } from './fixtures.ts';
 import { facts, withSampleLabels } from './helpers.ts';
-import { conditionsHash } from '../src/store/content.ts';
 
 const MIGRATIONS = new URL('../src/store/migrations/', import.meta.url);
 const scratch = () => mkdtempSync(join(tmpdir(), 'sift-db-'));
@@ -190,25 +188,16 @@ describe("a mailbox's data", () => {
 });
 
 describe('a proposal', () => {
-  it('to stop checking a rule goes with the rule, and only a proposed rule names what it does', async () => {
+  it('names what the rule it proposes would do', async () => {
     const { db } = await onePerson('alpha@example.org');
-    const rule = await addRule(db, 'alpha@example.org', { match: { from: 'news@example.com' }, whenLabel: 'newsletter' }, 'user', 0);
-    const propose = (kind: string, ruleId: string | null, disposition: string | null = null) =>
+    const propose = (disposition: string | null) =>
       raw(db).run(
-        `INSERT INTO proposals (account_id, kind, match, conditions, label_id, rule_id, disposition, agreed, created_at) VALUES ('alpha@example.org', ?, ?, ?, 'newsletter', ?, ?, 1, 0)`,
-        kind,
-        JSON.stringify({ from: `${kind}@example.com` }),
-        conditionsHash(db, { from: `${kind}@example.com` }),
-        ruleId,
+        `INSERT INTO proposals (account_id, match, conditions, label_id, disposition, agreed, created_at) VALUES ('alpha@example.org', '{}', 'c', 'newsletter', ?, 2, 0)`,
         disposition,
       );
-    await expect(propose('rule', rule, 'keep')).rejects.toThrow();
-    await expect(propose('rule', null)).rejects.toThrow();
-    await expect(propose('always', null)).rejects.toThrow();
-    await expect(propose('always', rule, 'keep')).rejects.toThrow();
-    await propose('always', rule);
-    await removeRule(db, rule);
-    expect(await raw(db).all('SELECT id FROM proposals')).toEqual([]);
+    await expect(propose(null)).rejects.toThrow();
+    await expect(propose('review')).rejects.toThrow();
+    await propose('keep');
   });
 });
 

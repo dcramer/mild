@@ -199,7 +199,7 @@ describe("when a label's outcome changes", () => {
   it('waiting mail with that label gets the new outcome under the same label, without a model', async () => {
     const sale = await decided('sales@example.com', MARKETING);
     const run = await startRun(db, { accountId: ACCOUNT, messageId: sale, model: 'p/m', now: 0 });
-    await raw(db).run(`UPDATE decisions SET run_id = ?, prior_rule_id = 'r-prior' WHERE message_id = ?`, run, sale);
+    await raw(db).run(`UPDATE decisions SET run_id = ? WHERE message_id = ?`, run, sale);
     const other = await decided('news@example.com', { disposition: 'archive', labelId: 'newsletter', subscription: 'preserve' });
     await updateLabel(db, ACCOUNT, 'marketing', { disposition: 'keep', unsubscribe: false });
 
@@ -211,11 +211,10 @@ describe("when a label's outcome changes", () => {
       rule_id: null,
       subscription: 'preserve',
       reason: 'Marketing is now kept. Before: Marketing: a sale',
-      // Still what that model call decided, with the rule it was shown.
+      // Still what that model call decided.
       run_id: run,
       carry_out: false,
     });
-    expect(await raw(db).get('SELECT prior_rule_id FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1', sale)).toEqual({ prior_rule_id: 'r-prior' });
     expect(await current(other)).toMatchObject({ disposition: 'archive', reason: 'Marketing: a sale' });
     expect(await waiting()).toEqual([sale, other].toSorted());
     expect(await redecideWaiting(db, ACCOUNT)).toBe(0);

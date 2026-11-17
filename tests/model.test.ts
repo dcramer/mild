@@ -21,8 +21,7 @@ import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { listLabels, updateLabel } from '../src/store/labels.ts';
 import { openUserDb, raw } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
-import { listProposals, proposeSettled, resolveProposal } from '../src/store/proposals.ts';
-import { addRule, listRules } from '../src/store/rules.ts';
+import { addRule } from '../src/store/rules.ts';
 import { contactOf, contacts, domainFacts, rememberCorrespondent, senderFacts } from '../src/store/senders.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../src/triage/prompt.ts';
@@ -319,40 +318,6 @@ describe('preferences in the database', () => {
     // The database holds it too, whatever code writes the row.
     await expect(raw(db).run("UPDATE labels SET disposition = 'archive' WHERE id = 'everything_else'")).rejects.toThrow();
     await expect(raw(db).run("UPDATE labels SET gmail_label = 'sift/rest' WHERE id = 'everything_else'")).rejects.toThrow();
-  });
-
-  const ids = (n: number, prefix = 'm') => Array.from({ length: n }, (_, i) => `${prefix}${i}`);
-
-  it('proposes to stop waiting for the label once every message a rule was checked against had it', async () => {
-    const db = await seeded();
-    const ruleId = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, whenLabel: 'newsletter' }, 'user');
-    const checked = async (id: string, agreed: boolean) => {
-      await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id })], '2');
-      await recordDecision(db, ACCOUNT, id, {
-        disposition: 'archive',
-        subscription: 'preserve',
-        stage: 'model',
-        labelId: agreed ? 'newsletter' : 'transactional',
-        priorRuleId: ruleId,
-        ...(agreed ? { ruleId } : {}),
-        reason: 'r',
-      });
-      return await proposeSettled(db, ACCOUNT, ruleId);
-    };
-    for (const id of ids(5)) expect(await checked(id, true)).toBe(false);
-    // One disagreement starts the count again.
-    expect(await checked('odd', false)).toBe(false);
-    for (const id of ids(9, 'n')) expect(await checked(id, true)).toBe(false);
-    expect(await checked('tenth', true)).toBe(true);
-    const [proposal] = await listProposals(db, ACCOUNT);
-    expect(proposal).toMatchObject({ kind: 'always', ruleId, agreed: 10 });
-
-    await resolveProposal(db, proposal!.id, true);
-    // The rule no longer waits to be told: it archives everything from them, as Newsletters would have been.
-    const [rule] = await listRules(db, ACCOUNT);
-    expect(rule).toMatchObject({ match: { from: 'news@example.com' }, disposition: 'archive', source: 'user' });
-    expect(rule).not.toHaveProperty('whenLabel');
-    expect(rule).not.toHaveProperty('labelId');
   });
 
   it('keeps only the extras that go with what a label does', async () => {
