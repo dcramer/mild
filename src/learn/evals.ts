@@ -15,13 +15,12 @@ import {
 } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import { mailboxAliases } from '../store/accounts.ts';
-import { shotCandidates } from '../store/examples.ts';
+import { examplesFor } from '../store/examples.ts';
 import { listLabels } from '../store/labels.ts';
 import { getFacts } from '../store/messages.ts';
 import { hashOf, openEnvelope, openPart, traceIds } from '../store/content.ts';
 import { invokeAgent } from '../telemetry.ts';
 import { deriveFacts } from '../triage/facts.ts';
-import { pickShots } from '../triage/fewshot.ts';
 import { PROMPT_TEMPLATE } from '../triage/prompt.ts';
 import { type Scorecard, score } from '../triage/score.ts';
 import { type Evidence, type Judge, type JudgeFailure, describeFailure } from '../triage/stages/model.ts';
@@ -150,7 +149,7 @@ export async function continueEval(deps: EvalDeps, runId: number, until: number)
     if (!example?.labelId || !facts) return;
     // Only what had been answered when the message arrived, as new mail would have had. Answers given later,
     // often in one go for a sender's waiting mail, would show the model the answer to a message just like it.
-    const shots = run.fewShot ? pickShots(await shotCandidates(db, facts, facts.receivedAt), facts, labels) : [];
+    const shots = run.fewShot ? await examplesFor(db, facts, labels, facts.receivedAt) : [];
     const started = performance.now();
     const evidence = await storedEvidence(db, facts, openPart(db, run.accountId, messageId, 'text', example.bodyText));
     // A conversation per message of the run, named by where it is in the run rather than by the message.

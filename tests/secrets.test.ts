@@ -8,7 +8,18 @@ import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
 import { credentialStore } from '../src/model/credentials.ts';
 import { type Keyring, loadKeyring, openSecret, openToRekey, readSecret, rekeySecrets, writeSecret } from '../src/secrets.ts';
 import { credentials, rekeyCredentials } from '../src/store/credentials.ts';
-import { conditionsHash, openJson, openPart, proposalName, rekeyContent, ruleDraftName, ruleName, sealJson, sealPart } from '../src/store/content.ts';
+import {
+  conditionsHash,
+  exampleKeys,
+  openJson,
+  openPart,
+  proposalName,
+  rekeyContent,
+  ruleDraftName,
+  ruleName,
+  sealJson,
+  sealPart,
+} from '../src/store/content.ts';
 import { getRuleFilter, setRuleFilter } from '../src/store/filters.ts';
 import { finishLabelProposal, latestLabelProposal, startLabelProposal } from '../src/store/labels.ts';
 import { listProposals } from '../src/store/proposals.ts';
@@ -23,8 +34,8 @@ import { listDecisions } from '../src/dashboard/queries/decisions.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { hasRuleFor, listRules, setRule, startRuleDraft } from '../src/store/rules.ts';
 import { getAction, insertPendingAction } from '../src/store/actions.ts';
-import { everything, facts, storeExample, withSampleLabels } from './helpers.ts';
-import { shotCandidates } from '../src/store/examples.ts';
+import { SAMPLE_LABELS, everything, facts, storeExample, withSampleLabels } from './helpers.ts';
+import { examplesFor } from '../src/store/examples.ts';
 import { freshStore, raw } from './fixtures.ts';
 
 const dir = () => mkdtempSync(join(tmpdir(), 'sift-secrets-'));
@@ -263,8 +274,35 @@ describe('mail', () => {
     expect(row!.facts.listId).not.toContain('example.com');
     expect(await storedFacts(db, 'alpha@example.org', 'm3')).toMatchObject({ listId: 'news.example.com' });
     await storeExample(db, 'alpha@example.org', { id: 'm4', from: 'list@example.net', label: 'newsletter', headers: { 'list-id': '<news.example.com>' } });
-    const [shot] = await shotCandidates(db, facts({ accountId: 'alpha@example.org', from: { address: 'list@example.net', domain: 'example.net' } }));
+    const [shot] = await examplesFor(
+      db,
+      facts({ accountId: 'alpha@example.org', from: { address: 'list@example.net', domain: 'example.net' } }),
+      SAMPLE_LABELS,
+    );
     expect(shot).toMatchObject({ messageId: 'm4', facts: { listId: 'news.example.com' } });
+  });
+
+  it('hashes what examples are found by for answers given before there were these hashes, and again under a new key', async () => {
+    const { as } = await alpha(A);
+    await withSampleLabels(await as(A), 'alpha@example.org');
+    // As migration 0041 left every example it found.
+    await raw(await as(A)).run(
+      `INSERT INTO examples (account_id, message_id, label_id, marked_at, status) VALUES ('alpha@example.org', 'm1', 'newsletter', 1, 'captured')`,
+    );
+    const stored = async () => await raw(await as(A)).get<{ name_hash: string; subject_hash: string }>('SELECT name_hash, subject_hash FROM examples');
+    expect(await stored()).toEqual({ name_hash: 'unset:', subject_hash: 'unset:' });
+    const like = (db: Sql) =>
+      exampleKeys(db, facts({ from: { address: 'other@example.com', domain: 'example.com', name: 'Example  NEWS' }, subject: 'Re: Weekly digest' }));
+
+    await rekeyContent(await as(A));
+    const underA = await stored();
+    expect(JSON.stringify(underA)).not.toMatch(/example|news|digest/i);
+    expect(underA).toEqual({ name_hash: like(await as(A)).nameHash, subject_hash: like(await as(A)).subjectHash });
+
+    await rekeyContent(await as(B_AFTER_A));
+    const underB = await stored();
+    expect(underB!.subject_hash).not.toBe(underA!.subject_hash);
+    expect(underB).toEqual({ name_hash: like(await as(B)).nameHash, subject_hash: like(await as(B)).subjectHash });
   });
 
   it('brings mail recorded before there was a key under it, for every person in the store', async () => {

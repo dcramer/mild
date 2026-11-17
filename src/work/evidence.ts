@@ -5,6 +5,7 @@ import type { MessageContent } from '../gmail/body.ts';
 import { mailboxAliases } from '../store/accounts.ts';
 import { recordFacts } from '../store/messages.ts';
 import { cachedCorrespondent, domainFacts, rememberCorrespondent, senderFacts } from '../store/senders.ts';
+import { answersUnderName } from '../store/examples.ts';
 import { type ThreadFacts, deriveFacts, threadFacts } from '../triage/facts.ts';
 import type { Evidence } from '../triage/stages/model.ts';
 import type { MessageFacts } from '../triage/types.ts';
@@ -47,6 +48,7 @@ export async function gatherEvidence(sources: EvidenceSources, facts: MessageFac
   const now = (sources.now ?? Date.now)();
   const sender = await senderFacts(db, facts.accountId, facts.from.address, now);
   const domain = await domainFacts(db, facts.accountId, facts.from.domain, now);
+  const underName = await answersUnderName(db, facts.accountId, facts.from);
   return {
     facts,
     known,
@@ -56,6 +58,7 @@ export async function gatherEvidence(sources: EvidenceSources, facts: MessageFac
       userHasWritten,
       standing: { standing: sender.standing, why: sender.why },
       ownerLabels: sender.answered,
+      underName,
       firstSeenAt: sender.firstSeenAt,
     },
     ...(domain

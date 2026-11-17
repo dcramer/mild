@@ -26,7 +26,7 @@ import {
   suggestionBodies,
 } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
-import { hashOf, openEnvelope, openPart } from '../store/content.ts';
+import { exampleKeysOf, hashOf, openEnvelope, openPart } from '../store/content.ts';
 import { listLabels } from '../store/labels.ts';
 import { recordDecision } from '../store/decisions.ts';
 import { proposeFromCorrections } from '../store/proposals.ts';
@@ -255,7 +255,7 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
       const marked = { labelId: label.id, markedAt: now, ...held };
       await tx
         .insert(examples)
-        .values({ accountId: target.accountId, messageId: target.messageId, ...marked })
+        .values({ accountId: target.accountId, messageId: target.messageId, ...marked, ...(await exampleKeysOf(tx, target.accountId, target.messageId)) })
         .onConflictDoUpdate({ target: [examples.userId, examples.accountId, examples.messageId], set: marked });
       await tx.delete(suggestionBodies).where(waiting);
     }

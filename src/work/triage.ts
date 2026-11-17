@@ -5,7 +5,7 @@ import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import { planAction } from '../actions/plan.ts';
 import type { Account } from '../store/accounts.ts';
 import { traceIds } from '../store/content.ts';
-import { shotCandidates } from '../store/examples.ts';
+import { examplesFor } from '../store/examples.ts';
 import { listLabels } from '../store/labels.ts';
 import { listUnsettledDecisions, recordDecision, settleDecision } from '../store/decisions.ts';
 import { type QueuedMessage, listUndecided } from '../store/messages.ts';
@@ -115,7 +115,7 @@ async function cascadeFor(
         const hit = priorRule(rules, labels, facts, options);
         return hit?.label ? { rule: hit.rule, label: hit.label } : null;
       },
-      examples: async (facts) => await shotCandidates(db, facts),
+      examples: async (facts) => await examplesFor(db, facts, labels),
     });
     stages.push({ name: stage.name, decide: async (facts) => (asking() ? await stage.decide(facts) : { unfinished: 'the model was not asked' }) });
   }

@@ -478,6 +478,10 @@ export const examples = pgTable(
     status: text('status', { enum: EXAMPLE_STATUSES }).notNull().default('pending'),
     bodyText: text('body_text'), // the readable text, as the model would be shown it
     bodyHtml: text('body_html'), // its HTML part as Gmail holds it, cleaned only when shown; null when it has none
+    // What mail like it is found by (`exampleKeys`, src/store/content.ts), as keyed hashes: its sender's name, and its subject
+    // with the numbers taken out. Null when it has none worth matching; `unset:` until the start-up pass hashes it.
+    nameHash: text('name_hash').default('unset:'),
+    subjectHash: text('subject_hash').default('unset:'),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.accountId, t.messageId] }),
@@ -488,6 +492,16 @@ export const examples = pgTable(
     index('examples_pending')
       .on(t.accountId)
       .where(sql`${t.status} = 'pending'`),
+    // The newest examples like a message, and the newest of each label, are read by these for every message the model judges.
+    index('examples_by_name')
+      .on(t.accountId, t.nameHash, t.markedAt)
+      .where(sql`${t.status} = 'captured'`),
+    index('examples_by_subject')
+      .on(t.accountId, t.subjectHash, t.markedAt)
+      .where(sql`${t.status} = 'captured'`),
+    index('examples_by_label')
+      .on(t.accountId, t.labelId, t.markedAt)
+      .where(sql`${t.status} = 'captured'`),
     own(),
   ],
 ).enableRLS();

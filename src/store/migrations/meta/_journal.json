@@ -288,6 +288,13 @@
       "when": 1794935875019,
       "tag": "0040_every_person_has_a_primary_mailbox",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1794939453959,
+      "tag": "0041_examples_like_a_message",
+      "breakpoints": true
     }
   ]
 }

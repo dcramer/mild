@@ -5,7 +5,7 @@ import type { Mailbox } from '../src/actions/mailbox.ts';
 import { recordSync, listAccounts } from '../src/store/accounts.ts';
 import { examples, labels } from '../src/store/query.ts';
 import { recordDecision } from '../src/store/decisions.ts';
-import { sealPart } from '../src/store/content.ts';
+import { exampleKeysOf, sealPart } from '../src/store/content.ts';
 import type { Address, Label, MessageFacts } from '../src/triage/types.ts';
 
 const header = (a: Address) => (a.name ? `${a.name} <${a.address}>` : a.address);
@@ -81,6 +81,7 @@ export async function storeExample(
     markedAt: example.markedAt ?? 0,
     status: 'captured',
     bodyText: sealPart(db, accountId, example.id, 'text', example.body ?? `Body of ${example.id}`),
+    ...(await exampleKeysOf(db, accountId, example.id)),
   });
 }
 

@@ -1,14 +1,14 @@
-import { type EXAMPLE_STATUSES, type SQL, and, asc, desc, eq, examples, isNotNull, lt, lte, messages, sql } from './query.ts';
+import { type EXAMPLE_STATUSES, type SQL, and, asc, count, desc, eq, examples, inArray, isNotNull, lt, lte, messages, sql } from './query.ts';
 import type { Sql } from './sql.ts';
-import { hashOf, openEnvelope, openFacts, openPart } from './content.ts';
-import { MAX_SHOTS, type Shot, excerptOf } from '../triage/fewshot.ts';
-import type { MessageFacts } from '../triage/types.ts';
+import { exampleKeys, hashOf, openEnvelope, openFacts, openPart } from './content.ts';
+import { type Candidate, PER_LOOKUP, type Shot, excerptOf, nameKey, pickShots, withinBudget } from '../triage/fewshot.ts';
+import { isSharedDomain } from '../triage/standing.ts';
+import type { Address, Label, MessageFacts } from '../triage/types.ts';
 
-const SHOT = {
+const CANDIDATE = {
   messageId: examples.messageId,
   headers: messages.headers,
   facts: messages.facts,
-  body: examples.bodyText,
   labelId: examples.labelId,
   markedAt: examples.markedAt,
 };
@@ -16,12 +16,17 @@ const SHOT = {
 const withMessage = and(eq(messages.accountId, examples.accountId), eq(messages.id, examples.messageId));
 
 /**
- * Stored examples that might help judge `facts`: the newest from its sender, from its sender's domain,
- * and of each label, answered before `before` when it is given. More than the prompt takes; `pickShots` chooses among them.
+ * The examples the model is shown beside `facts` (`pickShots`): found by index, a few at a time, as the newest
+ * under the same sender name, with the same kind of subject, from the same sender, from the same domain, and
+ * of each label, answered before `before` when it is given. Only the ones picked have their text read.
  */
-export async function shotCandidates(db: Sql, facts: Pick<MessageFacts, 'accountId' | 'from'>, before?: number): Promise<Shot[]> {
-  // One more than the prompt takes, so leaving out the message under judgement still fills it.
-  const limit = MAX_SHOTS + 1;
+export async function examplesFor(
+  db: Sql,
+  facts: Pick<MessageFacts, 'accountId' | 'messageId' | 'from' | 'subject'>,
+  labels: readonly Label[],
+  before?: number,
+): Promise<Shot[]> {
+  const { nameHash, subjectHash } = exampleKeys(db, facts);
   const captured = (also?: SQL) =>
     and(
       eq(examples.accountId, facts.accountId),
@@ -30,39 +35,82 @@ export async function shotCandidates(db: Sql, facts: Pick<MessageFacts, 'account
       before === undefined ? undefined : lt(examples.markedAt, before),
       also,
     );
-  const newest = (also: SQL) =>
-    db
-      .select(SHOT)
+  // One more than each lookup gives, so leaving out the message under judgement still fills it.
+  const newest = async (also: SQL) =>
+    await db
+      .select(CANDIDATE)
       .from(examples)
       .innerJoin(messages, withMessage)
       .where(captured(also))
       .orderBy(desc(examples.markedAt), asc(examples.messageId))
-      .limit(limit);
+      .limit(PER_LOOKUP + 1);
+  // Ranked on the examples alone, so only the few kept are joined to their messages.
   const ranked = db
     .select({
-      ...SHOT,
+      messageId: examples.messageId,
       nth: sql<number>`row_number() OVER (PARTITION BY ${examples.labelId} ORDER BY ${examples.markedAt} DESC, ${examples.messageId})`.as('nth'),
     })
     .from(examples)
-    .innerJoin(messages, withMessage)
     .where(captured())
     .as('ranked');
   const rows = [
+    ...(nameHash === null ? [] : await newest(eq(examples.nameHash, nameHash))),
+    ...(subjectHash === null ? [] : await newest(eq(examples.subjectHash, subjectHash))),
     ...(await newest(eq(messages.senderHash, hashOf(db, facts.from.address)))),
-    ...(await newest(eq(messages.domainHash, hashOf(db, facts.from.domain)))),
-    ...(await db.select().from(ranked).where(lte(ranked.nth, 2))),
+    ...(isSharedDomain(facts.from.domain) ? [] : await newest(eq(messages.domainHash, hashOf(db, facts.from.domain)))),
+    ...(await db
+      .select(CANDIDATE)
+      .from(ranked)
+      .innerJoin(examples, and(eq(examples.accountId, facts.accountId), eq(examples.messageId, ranked.messageId)))
+      .innerJoin(messages, withMessage)
+      .where(lte(ranked.nth, PER_LOOKUP))),
   ];
-  return [...new Map(rows.map((r) => [r.messageId, openEnvelope(db, facts.accountId, r.messageId, r)] as const)).values()].map((r) => ({
+  const candidates = [...new Map(rows.map((r) => [r.messageId, openEnvelope(db, facts.accountId, r.messageId, r)] as const)).values()].map((r): Candidate => ({
     messageId: r.messageId,
     fromAddress: r.fromAddress,
     fromDomain: r.fromDomain,
     ...(r.fromName ? { fromName: r.fromName } : {}),
     subject: r.subject,
-    excerpt: excerptOf(openPart(db, facts.accountId, r.messageId, 'text', r.body)?.slice(0, 2000) ?? ''),
     facts: openFacts(r.facts, r.headers),
     labelId: r.labelId!,
     markedAt: r.markedAt,
   }));
+  const picked = pickShots(candidates, facts, labels);
+  if (picked.length === 0) return [];
+  const bodies = new Map(
+    (
+      await db
+        .select({ messageId: examples.messageId, body: examples.bodyText })
+        .from(examples)
+        .where(
+          and(
+            eq(examples.accountId, facts.accountId),
+            inArray(
+              examples.messageId,
+              picked.map((p) => p.messageId),
+            ),
+          ),
+        )
+    ).map((r) => [r.messageId, r.body]),
+  );
+  return withinBudget(
+    picked.map((p) => ({
+      ...p,
+      excerpt: excerptOf(openPart(db, facts.accountId, p.messageId, 'text', bodies.get(p.messageId) ?? null)?.slice(0, 2000) ?? ''),
+    })),
+  );
+}
+
+/** How the owner answered for earlier mail under the same sender name as `from`, by label, most first. */
+export async function answersUnderName(db: Sql, accountId: string, from: Address): Promise<{ id: string; messages: number }[]> {
+  const name = nameKey(from);
+  if (name === null) return [];
+  return (await db
+    .select({ id: examples.labelId, messages: count() })
+    .from(examples)
+    .where(and(eq(examples.accountId, accountId), eq(examples.status, 'captured'), eq(examples.nameHash, hashOf(db, name)), isNotNull(examples.labelId)))
+    .groupBy(examples.labelId)
+    .orderBy(desc(count()), asc(examples.labelId))) as { id: string; messages: number }[];
 }
 
 interface StoredExample {

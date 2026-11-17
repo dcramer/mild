@@ -132,6 +132,30 @@ describe('prompt', () => {
     expect(prompt([removed])).not.toContain('The owner labelled earlier mail');
   });
 
+  it('says how the owner labelled mail under the sender name only where that differs from all their mail', () => {
+    const prompt = (underName: { id: string; messages: number }[]) =>
+      buildPrompt({
+        evidence: evidence({
+          messagesSeen: 9,
+          userHasWritten: false,
+          ownerLabels: [
+            { id: 'marketing', messages: 6 },
+            { id: 'transactional', messages: 2 },
+          ],
+          underName,
+        }),
+        labels: SAMPLE_LABELS,
+      });
+    expect(prompt([{ id: 'transactional', messages: 2 }])).toContain('The owner labelled earlier mail under this sender name: transactional 2\n');
+    expect(
+      prompt([
+        { id: 'marketing', messages: 6 },
+        { id: 'transactional', messages: 2 },
+      ]),
+    ).not.toContain('under this sender name');
+    expect(prompt([])).not.toContain('under this sender name');
+  });
+
   it('shows Leave in inbox as none of the other labels, and what the owner answered with it under the same name', () => {
     const inbox = { id: 'everything_else', name: 'Leave in inbox', description: '', disposition: 'keep' as const };
     expect(buildPrompt({ evidence: evidence(), labels: [...SAMPLE_LABELS, inbox] })).toContain('- leave_in_inbox (Leave in inbox): none of the other labels\n');

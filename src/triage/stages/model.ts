@@ -1,7 +1,7 @@
 import type { Facts } from '../facts.ts';
 import type { Standing } from '../standing.ts';
 import { type RuleHit, describeRule, ruleOutcome } from './rules.ts';
-import { type Shot, pickShots } from '../fewshot.ts';
+import type { Shot } from '../fewshot.ts';
 import { type Decision, type Label, type MessageFacts, type Stage, type Unfinished, labelled } from '../types.ts';
 
 /** Everything the model is shown about one message. Gathered by deterministic code, never by the model. */
@@ -19,6 +19,8 @@ export interface Evidence {
     standing?: { standing: Standing; why: string };
     /** What the owner said their earlier mail was, by an answer or a rule, by label id, most first. Never a model's guess. */
     ownerLabels?: { id: string; messages: number }[];
+    /** What the owner answered for their earlier mail under this message's sender name, by label id, most first. */
+    underName?: { id: string; messages: number }[];
     firstSeenAt?: number | null;
   };
   /** The same for everyone at the sender's domain. Absent for a domain anyone can get an address at. */
@@ -112,8 +114,8 @@ interface ModelStageDeps {
   prior?: (facts: MessageFacts) => (RuleHit & { label: Label }) | null;
   judge: Judge;
   labels: readonly Label[];
-  /** Port for labelled examples that might help with this message. The stage picks from what it returns. Omitted: none are shown. */
-  examples?: (facts: MessageFacts) => readonly Shot[] | Promise<readonly Shot[]>;
+  /** Port for the labelled examples to show with this message, already chosen (`pickShots`) and cut to size. Omitted: none are shown. */
+  examples?: (facts: MessageFacts) => Promise<readonly Shot[]>;
 }
 
 /**
@@ -129,7 +131,7 @@ export function modelStage(deps: ModelStageDeps): Stage<Decision | Unfinished> {
       const evidence: Evidence = prior
         ? { ...gathered, prior: { labelId: prior.label.id, labelName: prior.label.name, ...(prior.rule.when ? { when: prior.rule.when } : {}) } }
         : gathered;
-      const examples = deps.examples ? pickShots(await deps.examples(facts), facts, deps.labels) : [];
+      const examples = deps.examples ? await deps.examples(facts) : [];
       const verdict = await deps.judge({ evidence, labels: deps.labels, ...(examples.length > 0 ? { examples } : {}) });
       if ('failed' in verdict) return { unfinished: verdict.failed };
 

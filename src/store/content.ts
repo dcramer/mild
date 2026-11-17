@@ -1,6 +1,7 @@
 import { currentPrefix, keyedHash, openSecret, openToRekey, sealSecret, staleSecret } from '../secrets.ts';
 import type { Facts } from '../triage/facts.ts';
 import { envelopeOf, parseListId } from '../triage/features.ts';
+import { nameKey, subjectPattern } from '../triage/fewshot.ts';
 import type { Address, MessageFacts } from '../triage/types.ts';
 import {
   actions,
@@ -118,6 +119,25 @@ export function sealMessage(db: Sql, accountId: string, messageId: string, messa
   };
 }
 
+/** What an example is found by when the model judges mail like it (`examplesFor`): its sender's name and its kind of subject, hashed. */
+export function exampleKeys(db: Sql, message: Pick<MessageFacts, 'from' | 'subject'>): { nameHash: string | null; subjectHash: string | null } {
+  const name = nameKey(message.from);
+  const pattern = subjectPattern(message.subject);
+  return { nameHash: name === null ? null : hashOf(db, name), subjectHash: pattern === null ? null : hashOf(db, pattern) };
+}
+
+const keysOfStored = (db: Sql, accountId: string, messageId: string, headers: string) =>
+  exampleKeys(db, envelopeOf(JSON.parse(openPart(db, accountId, messageId, 'headers', headers)!) as Record<string, string>)!);
+
+/** `exampleKeys` of a recorded message, for its example. */
+export async function exampleKeysOf(db: Sql, accountId: string, messageId: string): Promise<ReturnType<typeof exampleKeys>> {
+  const [row] = await db
+    .select({ headers: messages.headers })
+    .from(messages)
+    .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
+  return keysOfStored(db, accountId, messageId, row!.headers);
+}
+
 /** Stands in for a list id in stored facts, which ask only whether there is one; `openFacts` puts it back from the headers. */
 const LISTED = 'listed';
 
@@ -202,9 +222,13 @@ const BATCH = 500;
 export async function rekeyContent(db: Sql, write = true): Promise<number> {
   const prefix = currentPrefix(db.keys);
   await rekeyConditions(db, prefix, write);
-  if (prefix === null) return 0;
-  await rekeyLog(db, prefix, write);
-  return await rekeyMail(db, prefix, write);
+  let touched = 0;
+  if (prefix !== null) {
+    await rekeyLog(db, prefix, write);
+    touched = await rekeyMail(db, prefix, write);
+  }
+  if (write) await keyExamples(db);
+  return touched;
 }
 
 const UNSET = 'unset:';
@@ -415,6 +439,31 @@ async function rekeyMail(db: Sql, prefix: string, write: boolean): Promise<numbe
   }
 
   // Who the owner has written to is a cache kept only as hashes, which a new key makes useless: it refills as mail arrives.
-  if (write && touched.size > 0) await db.delete(correspondents);
+  // Examples are found by hashes too, which `keyExamples` makes again.
+  if (write && touched.size > 0) {
+    await db.delete(correspondents);
+    await db.update(examples).set({ nameHash: UNSET, subjectHash: UNSET });
+  }
   return touched.size;
+}
+
+/** Hash what examples are found by where it is `unset:`: answers given before there were these hashes, and every one under a new key. */
+async function keyExamples(db: Sql): Promise<void> {
+  const unset = or(eq(examples.nameHash, UNSET), eq(examples.subjectHash, UNSET));
+  for (;;) {
+    const rows = await db
+      .select({ accountId: examples.accountId, messageId: examples.messageId, headers: messages.headers })
+      .from(examples)
+      .innerJoin(messages, and(eq(messages.accountId, examples.accountId), eq(messages.id, examples.messageId)))
+      .where(unset)
+      .limit(BATCH);
+    if (rows.length === 0) return;
+    await db.transaction(async (tx) => {
+      for (const r of rows)
+        await tx
+          .update(examples)
+          .set(keysOfStored(db, r.accountId, r.messageId, r.headers))
+          .where(and(eq(examples.accountId, r.accountId), eq(examples.messageId, r.messageId)));
+    });
+  }
 }

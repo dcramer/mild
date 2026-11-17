@@ -3,9 +3,19 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { triageAccount } from '../src/work/triage.ts';
 import { addMailbox, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { openUserDb, raw } from './fixtures.ts';
-import { shotCandidates } from '../src/store/examples.ts';
+import { examplesFor } from '../src/store/examples.ts';
 import { deriveFacts, factLine } from '../src/triage/facts.ts';
-import { MAX_EXCERPT_CHARS, MAX_SHOTS, SHOT_TOKEN_BUDGET, type Shot, excerptOf, pickShots } from '../src/triage/fewshot.ts';
+import {
+  MAX_EXCERPT_CHARS,
+  MAX_SHOTS,
+  SHOT_TOKEN_BUDGET,
+  type Shot,
+  excerptOf,
+  nameKey,
+  pickShots,
+  subjectPattern,
+  withinBudget,
+} from '../src/triage/fewshot.ts';
 import { buildPrompt } from '../src/triage/prompt.ts';
 import { type JudgeInput, modelStage } from '../src/triage/stages/model.ts';
 import { FakeMailbox, facts, storeExample, SAMPLE_LABELS } from './helpers.ts';
@@ -75,14 +85,76 @@ describe('choosing examples', () => {
   });
 
   it('stops at a few examples and at the token budget', () => {
-    const many = Array.from({ length: 20 }, (_, i) => shot(`s${i}`, `s${i}@example.com`, 'newsletter', i));
+    const many = Array.from({ length: 20 }, (_, i) => shot(`s${i}`, `s@example${i}.org`, SAMPLE_LABELS[i % SAMPLE_LABELS.length]!.id, i));
     expect(pickShots(many, judged, SAMPLE_LABELS)).toHaveLength(MAX_SHOTS);
 
     const long = many.map((s) => ({ ...s, excerpt: 'x'.repeat(MAX_EXCERPT_CHARS), subject: 'y'.repeat(900) }));
-    const picked = pickShots(long, judged, SAMPLE_LABELS);
+    const picked = withinBudget(pickShots(long, judged, SAMPLE_LABELS));
     expect(picked.length).toBeLessThan(MAX_SHOTS);
     expect(picked.length).toBeGreaterThan(0);
     expect(picked.reduce((sum, s) => sum + (s.subject.length + s.excerpt.length + factLine(s.facts).length) / 4, 0)).toBeLessThanOrEqual(SHOT_TOKEN_BUDGET);
+  });
+
+  describe('by what mail is like, not only who sent it', () => {
+    const shop = { address: 'orders@shop.example.com', domain: 'shop.example.com' };
+    const receipt = facts({ messageId: 'now', from: { ...shop, name: 'Shop Receipts' }, subject: 'Your order #5521 has shipped' });
+    const fromShop = (id: string, name: string, subject: string, labelId: string, markedAt: number) =>
+      shot(id, shop.address, labelId, markedAt, { fromName: name, subject });
+
+    it("puts the sender's mail under the same name before their newer mail of another kind", () => {
+      const picked = pickShots(
+        [
+          fromShop('deal-1', 'Shop Deals', '20% off this weekend', 'marketing', 9),
+          fromShop('deal-2', 'Shop Deals', 'New arrivals', 'marketing', 8),
+          fromShop('receipt-1', 'Shop Receipts', 'Thanks for your order', 'transactional', 2),
+        ],
+        receipt,
+        SAMPLE_LABELS,
+      );
+      expect(ids(picked)).toEqual(['receipt-1', 'deal-1']);
+    });
+
+    it('finds the same kind of subject from anyone, before the newest of each label', () => {
+      const picked = pickShots(
+        [
+          shot('elsewhere', 'store@example.net', 'transactional', 1, { subject: 'Your order #77 has shipped' }),
+          shot('note', 'ada@example.org', 'personal', 9),
+          shot('sale', 'sales@example.net', 'transactional', 8),
+        ],
+        receipt,
+        SAMPLE_LABELS,
+      );
+      expect(ids(picked)).toEqual(['elsewhere', 'note', 'sale']);
+    });
+
+    it('shows an email found more than one way once, and no more than two from the sender', () => {
+      const picked = pickShots(
+        [
+          fromShop('r1', 'Shop Receipts', 'Your order #1 has shipped', 'transactional', 5),
+          fromShop('r2', 'Shop Receipts', 'Your order #2 has shipped', 'transactional', 4),
+          fromShop('r3', 'Shop Receipts', 'Your order #3 has shipped', 'transactional', 3),
+          fromShop('deal', 'Shop Deals', 'New arrivals', 'marketing', 6),
+          shot('note', 'ada@example.org', 'personal', 1),
+        ],
+        receipt,
+        SAMPLE_LABELS,
+      );
+      expect(ids(picked)).toEqual(['r1', 'r2', 'note']);
+    });
+  });
+
+  it('keys a name by the domain that vouches for it, or the address where anyone can get one', () => {
+    expect(nameKey({ address: 'a@shop.example.com', domain: 'shop.example.com', name: '  Shop   RECEIPTS ' })).toBe('shop.example.com shop receipts');
+    expect(nameKey({ address: 'pal@gmail.com', domain: 'gmail.com', name: 'Pal' })).toBe('pal@gmail.com pal');
+    expect(nameKey({ address: 'a@example.com', domain: 'example.com' })).toBeNull();
+  });
+
+  it('takes the numbers and reply marks out of a subject, and leaves too short a one unmatched', () => {
+    expect(subjectPattern('Your order #48213 has shipped!')).toBe('your order # has shipped');
+    expect(subjectPattern('RE: Fwd: Your order #9 has shipped')).toBe('your order # has shipped');
+    expect(subjectPattern('Invoice INV-2024-001 for $12.99')).toBe('invoice # for #');
+    expect(subjectPattern('Hello')).toBeNull();
+    expect(subjectPattern('Re: 12345')).toBeNull();
   });
 
   it('cuts an excerpt to one short line', () => {
@@ -192,17 +264,14 @@ describe('the model stage', () => {
   const f = facts({ messageId: 'now' });
   const evidence = { facts: f, known: deriveFacts(f), body: null, sender: { messagesSeen: 1, userHasWritten: false } };
 
-  it('hands the judge the examples it picked from what the port supplied, and none without a port', async () => {
+  it('hands the judge the examples the port chose, and none without a port', async () => {
     const seen: JudgeInput[] = [];
     const judge = async (input: JudgeInput) => {
       seen.push(input);
       return { label: 'newsletter', reason: 'r' };
     };
     const deps = { gather: async () => evidence, judge, labels: SAMPLE_LABELS };
-    await modelStage({
-      ...deps,
-      examples: () => [shot('now', 'news@example.com', 'newsletter', 2), shot('before', 'news@example.com', 'marketing', 1)],
-    }).decide(f);
+    await modelStage({ ...deps, examples: async () => [shot('before', 'news@example.com', 'marketing', 1)] }).decide(f);
     await modelStage(deps).decide(f);
     expect(seen[0]?.examples?.map((s) => s.messageId)).toEqual(['before']);
     expect(seen[1]).not.toHaveProperty('examples');
@@ -230,10 +299,10 @@ describe('stored examples', () => {
     await raw(db).run(`UPDATE examples SET status = 'pending', body_text = NULL WHERE message_id = 'e2'`);
   });
 
-  it('offers captured examples from the sender, the domain and each label, with an excerpt and never the whole text', async () => {
-    const candidates = await shotCandidates(db, facts({ accountId: ACCOUNT, from: { address: 'other@example.com', domain: 'example.com' } }));
-    expect(candidates.map((c) => c.messageId).toSorted()).toEqual(['e1', 'e4', 'e5']);
-    expect(candidates.find((c) => c.messageId === 'e1')).toEqual({
+  it('picks captured examples from the domain and each label, with an excerpt and never the whole text', async () => {
+    const shots = await examplesFor(db, facts({ accountId: ACCOUNT, from: { address: 'other@example.com', domain: 'example.com' } }), SAMPLE_LABELS);
+    expect(shots.map((c) => c.messageId)).toEqual(['e1', 'e5']);
+    expect(shots[0]).toEqual({
       messageId: 'e1',
       fromAddress: 'news@example.com',
       fromDomain: 'example.com',
@@ -244,6 +313,35 @@ describe('stored examples', () => {
       labelId: 'newsletter',
       markedAt: 1,
     });
+  });
+
+  it('finds an older answer about the same kind of mail by its subject, from anyone, and none answered after `before`', async () => {
+    await storeExample(db, ACCOUNT, { id: 'shipped', from: 'store@example.net', label: 'transactional', subject: 'Your order #77 has shipped', markedAt: 6 });
+    for (const [i, id] of ['t1', 't2', 't3'].entries())
+      await storeExample(db, ACCOUNT, { id, from: `shop${i}@example.net`, label: 'transactional', markedAt: 10 + i });
+    const receipt = facts({
+      accountId: ACCOUNT,
+      messageId: 'now',
+      from: { address: 'orders@example.com', domain: 'example.com' },
+      subject: 'Your order #5 has shipped',
+    });
+    expect((await examplesFor(db, receipt, SAMPLE_LABELS)).map((c) => c.messageId)).toEqual(['shipped', 'e1', 't3', 'e5']);
+    expect((await examplesFor(db, receipt, SAMPLE_LABELS, 6)).map((c) => c.messageId)).toEqual(['e1', 'e5']);
+  });
+
+  it('keys an answer given in the dashboard by its sender name and kind of subject', async () => {
+    await storeExample(db, ACCOUNT, {
+      id: 'mine',
+      from: 'orders@example.com',
+      label: 'transactional',
+      name: 'Shop Receipts',
+      subject: 'Order 1 shipped',
+      markedAt: 7,
+    });
+    const row = await raw(db).get<{ name_hash: string | null; subject_hash: string | null }>(
+      `SELECT name_hash, subject_hash FROM examples WHERE message_id = 'mine'`,
+    );
+    expect(row).toEqual({ name_hash: 'example.com shop receipts', subject_hash: 'order # shipped' });
   });
 
   it('reach the judge during every pass', async () => {
