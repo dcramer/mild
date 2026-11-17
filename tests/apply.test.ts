@@ -3,7 +3,7 @@ import type { RawMessage } from '../src/gmail/api.ts';
 import type { Sql } from '../src/store/sql.ts';
 import { pendingSuggestions } from '../src/learn/feedback.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
-import { addMailbox, listAccounts, recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule } from '../src/store/rules.ts';
 import type { MessageFacts } from '../src/triage/types.ts';
@@ -12,14 +12,13 @@ import { removeRule } from '../src/store/rules.ts';
 import { inboxQuery, ruleInbox } from '../src/work/apply.ts';
 import { continueRuleRun } from '../src/work/inbox.ts';
 import { triageAccount } from '../src/work/triage.ts';
-import { openUserDb, raw } from './fixtures.ts';
-import { FakeMailbox, facts } from './helpers.ts';
+import { firstAccount, openUserDb, raw } from './fixtures.ts';
+import { ACCOUNT, FakeMailbox, facts, quietSources, testModel } from './helpers.ts';
 
-const ACCOUNT = 'me@example.org';
 let db: Sql;
 
 const message = (id: string, address: string, subject = `Subject ${id}`) =>
-  facts({ accountId: ACCOUNT, messageId: id, threadId: `t-${id}`, from: { address, domain: address.split('@')[1]! }, subject, receivedAt: 1000 });
+  facts({ messageId: id, threadId: `t-${id}`, from: { address, domain: address.split('@')[1]! }, subject, receivedAt: 1000 });
 
 const asGmail = (m: MessageFacts): RawMessage => ({
   id: m.messageId,
@@ -69,7 +68,6 @@ const decisionsOf = async (id: string) =>
 
 beforeEach(async () => {
   db = await openUserDb(ACCOUNT);
-  await addMailbox(db, ACCOUNT, '1');
 });
 
 describe('searching the inbox for a rule', () => {
@@ -157,7 +155,7 @@ describe('applying a rule to the inbox', () => {
     const mailbox = new FakeMailbox();
     mailbox.labels.set('seen', ['INBOX']);
     mailbox.labels.set('unseen', ['INBOX']);
-    await triageAccount({ db, mailbox: null, answers: mailbox }, (await listAccounts(db))[0]!);
+    await triageAccount({ db, mailbox: null, answers: mailbox }, await firstAccount(db));
     expect(mailbox.labels.get('seen')).not.toContain('INBOX');
     expect(mailbox.labels.get('unseen')).not.toContain('INBOX');
     expect(await pendingSuggestions(db)).toEqual([]);
@@ -179,13 +177,10 @@ describe('applying a rule to the inbox', () => {
     const mailbox = new FakeMailbox();
     mailbox.labels.set('sale', ['INBOX']);
     mailbox.labels.set('note', ['INBOX']);
-    const sources = { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } };
-    const model = {
-      judge: async ({ evidence }: { evidence: { facts: MessageFacts } }) =>
-        evidence.facts.messageId === 'sale' ? { label: 'marketing', reason: 'a sale' } : { label: 'personal', reason: 'from a person', confidence: 0.95 },
-      model: 'test/model',
-    };
-    await triageAccount({ db, mailbox: null, answers: mailbox, model, sources }, (await listAccounts(db))[0]!);
+    const model = testModel(async ({ evidence }) =>
+      evidence.facts.messageId === 'sale' ? { label: 'marketing', reason: 'a sale' } : { label: 'personal', reason: 'from a person', confidence: 0.95 },
+    );
+    await triageAccount({ db, mailbox: null, answers: mailbox, model, sources: quietSources() }, await firstAccount(db));
     expect(await decisionsOf('sale')).toEqual([{ stage: 'model', disposition: 'spam', label_id: 'marketing', rule_id: rule, carry_out: true, by_user: true }]);
     expect(mailbox.labels.get('sale')).toContain('SPAM');
     // What the model found it to be is a suggestion, as any mail is while Sift is off.

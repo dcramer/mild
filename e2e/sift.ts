@@ -175,6 +175,111 @@ export async function boxOf(target: Locator) {
 /** The open message panel. */
 export const panel = (page: Page) => page.getByRole('dialog').filter({ has: page.getByRole('combobox', { name: 'What this message is' }) });
 
+/** The open message panel's heading: the subject of the message it shows. */
+export const panelHeading = (page: Page, subject: string) => panel(page).getByRole('heading', { name: subject, level: 2 });
+
+/** Opens the message in the list by its subject, once the panel shows it. */
+export async function openMessage(page: Page, subject: string) {
+  await page.getByRole('cell', { name: subject }).click();
+  await expect(panelHeading(page, subject)).toBeVisible();
+  return panel(page);
+}
+
+/** The seed's own account, as it is in an address. */
+const ME = encodeURIComponent('me@example.org');
+
+/** What opens message `id` (`m6`) over a page, for after its `?` or `&`. */
+export const messageQuery = (id: string) => `message=${id}&account=${ME}`;
+
+/** A sender's page, by their address. */
+export const senderPage = (address: string) => `/sender/${ME}/${encodeURIComponent(address)}`;
+
+/** A domain's page. */
+export const domainPage = (domain: string) => `/domain/${ME}/${domain}`;
+
+/** For review's rows of mail, without its header. */
+export const reviewRows = (page: Page) => page.getByRole('row').filter({ has: page.getByRole('combobox', { name: 'What this message is' }) });
+
+export const reviewSearch = (page: Page) => page.getByRole('searchbox', { name: 'Search senders and subjects' });
+
+/** The masthead's link to For review, whose name ends in how many messages wait. */
+export const forReviewLink = (page: Page) => page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: /^For review/ });
+
+/** A toast, named by what it is about: a rule's by the rule, a label's by the label. */
+export const toast = (page: Page, name: string) => page.getByRole('region', { name: 'Notifications' }).getByRole('dialog', { name, exact: true });
+
+/** The section under a heading, with everything in it. */
+export const section = (within: Page | Locator, heading: string) =>
+  within.getByRole('heading', { name: heading, exact: true }).locator('xpath=ancestor::section[1]');
+
+export const settings = (page: Page) => page.getByRole('dialog', { name: 'Settings', exact: true });
+
+/** Settings' Active section: This browser has a Turn on and Turn off of its own, for keyboard shortcuts. */
+export const settingsActive = (page: Page) => section(settings(page), 'Active');
+
+/** The question Turn on asks in Settings before Sift changes anything in Gmail. */
+export const turnOnQuestion = (page: Page) => settingsActive(page).getByRole('group', { name: 'Archive, label and mark spam on new mail by itself?' });
+
+export const goThrough = (page: Page) => page.getByRole('dialog', { name: 'Go through your inbox?' });
+
+/** Opens Settings from the account menu, over the page showing. */
+export async function settingsFromMenu(page: Page) {
+  await page.getByRole('button', { name: /^Account, / }).click();
+  await page.getByRole('menuitem', { name: 'Settings' }).click();
+  await expect(settings(page)).toBeVisible();
+}
+
+/** Closes Settings, which takes it out of the address. */
+export async function closeSettings(page: Page) {
+  await settings(page).getByRole('button', { name: 'Close' }).click();
+  await expect(settings(page)).toHaveCount(0);
+  await param(page, 'settings').toBeNull();
+}
+
+/** In open Settings, Turn on and Turn on again to confirm, which leaves the offer to go through the inbox open. */
+export async function confirmTurnOn(page: Page) {
+  await settingsActive(page).getByRole('button', { name: 'Turn on', exact: true }).click();
+  await turnOnQuestion(page).getByRole('button', { name: 'Turn on', exact: true }).click();
+}
+
+/** Opens Settings, turns Sift on and says Not now to going through the inbox. */
+export async function turnOn(page: Page) {
+  await page.goto('/?settings=1');
+  await confirmTurnOn(page);
+  await goThrough(page).getByRole('button', { name: 'Not now' }).click();
+  await expect(settingsActive(page).getByText('On', { exact: true })).toBeVisible();
+}
+
+export const addLabelsDialog = (page: Page) => page.getByRole('dialog', { name: 'Add labels' });
+
+export const addALabelDialog = (page: Page) => page.getByRole('dialog', { name: 'Add a label' });
+
+/** From the open Add labels, Write one yourself, with a name and nothing else. */
+export async function writeLabel(page: Page, name: string) {
+  await addLabelsDialog(page).getByRole('button', { name: 'Write one yourself' }).click();
+  const manual = addALabelDialog(page);
+  await manual.getByRole('textbox', { name: 'Name' }).fill(name);
+  await manual.getByRole('button', { name: 'Add label', exact: true }).click();
+  await expect(manual).toHaveCount(0);
+}
+
+/** The first step of setting up a mailbox: its heading, and the box its words go in. */
+export const WANT = 'What do you want from Sift?';
+
+/** Setting up, asks for labels for `words`, and waits for the step that offers them. */
+export async function suggestLabels(page: Page, words: string) {
+  await page.getByRole('textbox', { name: WANT }).fill(words);
+  await page.getByRole('button', { name: 'Suggest labels' }).click();
+  await expect(page.getByRole('heading', { name: 'Your labels', level: 1 })).toBeVisible();
+}
+
+/** Answers requests to `url` with the server's own reply, its JSON as `change` makes it. */
+export const patchJson = (page: Page, url: string, change: (json: any) => object) =>
+  page.route(url, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: change(await response.json()) });
+  });
+
 /**
  * The page as someone whose model is through a ChatGPT plan sees it: the seed's own model is behind an API key,
  * and no harness can sign in to ChatGPT, so Settings' data says so instead. Their model is `gpt-5.6-luna`, at $0.40 per 1,000.
@@ -182,16 +287,9 @@ export const panel = (page: Page) => page.getByRole('dialog').filter({ has: page
 export async function throughChatGPT(page: Page) {
   const model = 'openai-codex/gpt-5.6-luna';
   const chatgpt = { provider: 'openai-codex', label: 'ChatGPT', how: 'device-code' };
-  await page.route('**/api/manage*', async (route) => {
-    const response = await route.fetch();
-    const state = await response.json();
-    await route.fulfill({
-      response,
-      json: { ...state, model: { ...state.model, chosen: model, choices: [chatgpt, ...state.model.choices], signedIn: ['openai-codex'] } },
-    });
-  });
-  await page.route('**/api/models*', async (route) => {
-    const response = await route.fetch();
-    await route.fulfill({ response, json: { ...(await response.json()), models: [model], shortlist: { 'openai-codex': [model] }, costs: { [model]: 0.4 } } });
-  });
+  await patchJson(page, '**/api/manage*', (state) => ({
+    ...state,
+    model: { ...state.model, chosen: model, choices: [chatgpt, ...state.model.choices], signedIn: ['openai-codex'] },
+  }));
+  await patchJson(page, '**/api/models*', (models) => ({ ...models, models: [model], shortlist: { 'openai-codex': [model] }, costs: { [model]: 0.4 } }));
 }

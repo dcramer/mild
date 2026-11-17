@@ -1,5 +1,4 @@
-import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseEnv } from 'node:util';
 import { describe, expect, it, vi } from 'vitest';
@@ -34,11 +33,10 @@ import { listDecisions } from '../src/dashboard/queries/decisions.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { hasRuleFor, listRules, setRule, startRuleDraft } from '../src/store/rules.ts';
 import { getAction, insertPendingAction } from '../src/store/actions.ts';
-import { SAMPLE_LABELS, everything, facts, storeExample, withSampleLabels } from './helpers.ts';
+import { SAMPLE_LABELS, everything, facts, storeExample, tempDir, withSampleLabels } from './helpers.ts';
 import { examplesFor } from '../src/store/examples.ts';
 import { freshStore, raw } from './fixtures.ts';
 
-const dir = () => mkdtempSync(join(tmpdir(), 'sift-secrets-'));
 const NONE = loadKeyring({});
 const A = loadKeyring({ SIFT_KEY: 'key-a' });
 const B_AFTER_A = loadKeyring({ SIFT_KEY: 'key-b', SIFT_OLD_KEYS: 'key-a, key-b' });
@@ -46,16 +44,16 @@ const B = loadKeyring({ SIFT_KEY: 'key-b' });
 
 describe('secrets', () => {
   it('stores plain text when there is no key', () => {
-    const path = join(dir(), 'token.json');
+    const path = join(tempDir(), 'token.json');
     writeSecret(path, '{"a":1}', NONE);
     expect(readFileSync(path, 'utf8')).toBe('{"a":1}');
     expect(readSecret(path, NONE)).toBe('{"a":1}');
-    expect(readSecret(join(dir(), 'missing'), NONE)).toBeNull();
+    expect(readSecret(join(tempDir(), 'missing'), NONE)).toBeNull();
     expect(rekeySecrets([path], NONE)).toEqual({ encrypted: [], rotated: [] });
   });
 
   it('round-trips through an encrypted, owner-only file that names its key', () => {
-    const path = join(dir(), 'token.json');
+    const path = join(tempDir(), 'token.json');
     writeSecret(path, 'refresh-token-value', A);
     const stored = readFileSync(path, 'utf8');
     expect(stored).not.toContain('refresh-token-value');
@@ -74,7 +72,7 @@ describe('secrets', () => {
   });
 
   it('reads with an old key and re-encrypts with the current one', () => {
-    const home = dir();
+    const home = tempDir();
     const [token, key] = [join(home, 'token.json'), join(home, 'dashboard-key')];
     writeSecret(token, 'one', A);
     writeSecret(key, 'two', B);
@@ -89,7 +87,7 @@ describe('secrets', () => {
   });
 
   it('encrypts plain values once a key is set', () => {
-    const path = join(dir(), 'google-client.json');
+    const path = join(tempDir(), 'google-client.json');
     writeFileSync(path, '{"web":{}}');
     expect(readSecret(path, A)).toBe('{"web":{}}');
     expect(rekeySecrets([path], A)).toEqual({ encrypted: [path], rotated: [] });
@@ -98,7 +96,7 @@ describe('secrets', () => {
   });
 
   it('fails on a wrong or missing key, naming every file and what to do, and rewrites nothing', () => {
-    const home = dir();
+    const home = tempDir();
     const [locked, plain] = [join(home, 'token.json'), join(home, 'dashboard-key')];
     writeSecret(locked, 'one', A);
     writeFileSync(plain, 'two');
@@ -113,7 +111,7 @@ describe('secrets', () => {
   });
 
   it('refuses a value that was altered or moved to another file', () => {
-    const home = dir();
+    const home = tempDir();
     const [mine, theirs] = [join(home, 'a%40example.com.json'), join(home, 'b%40example.com.json')];
     writeSecret(mine, 'one', A);
     writeFileSync(theirs, readFileSync(mine));
@@ -139,7 +137,7 @@ describe('credentials', () => {
   }
 
   it("keeps the Google client in a file, and sign-ins in their person's database, encrypted", async () => {
-    const config = loadConfig({ SIFT_HOME: dir(), SIFT_KEY: 'key-a' });
+    const config = loadConfig({ SIFT_HOME: tempDir(), SIFT_KEY: 'key-a' });
     installClient(config, JSON.stringify({ web: { client_id: 'id', client_secret: 'client-secret-value' } }));
     expect(secretPaths(config).filter((p) => p !== config.dashboardKeyPath)).toEqual([config.googleClientPath]);
     expect(readFileSync(config.googleClientPath, 'utf8')).toMatch(/^sift-secret:v1:[0-9a-f]{8}:[\w-]+:[\w-]+\n$/);
@@ -496,19 +494,19 @@ describe('mail', () => {
 describe('.env', () => {
   it('reads the home then the working directory, never replacing what is set', () => {
     const names = ['SIFT_TEST_SET', 'SIFT_TEST_HOME', 'SIFT_TEST_BOTH', 'SIFT_TEST_CWD'];
-    const [home, cwd] = [dir(), dir()];
+    const [home, cwd] = [tempDir(), tempDir()];
     writeFileSync(join(home, '.env'), 'SIFT_TEST_SET=home\nSIFT_TEST_HOME=home\nSIFT_TEST_BOTH=home\n');
     writeFileSync(join(cwd, '.env'), 'SIFT_TEST_BOTH=cwd\nSIFT_TEST_CWD=cwd\n');
     vi.stubEnv('SIFT_TEST_SET', 'environment');
     // Written by the code under test, not stubbed: stubbing each first marks it for removal after the test.
     for (const name of names.slice(1)) vi.stubEnv(name, undefined);
     loadEnvFiles(home, cwd);
-    loadEnvFiles(dir(), dir());
+    loadEnvFiles(tempDir(), tempDir());
     expect(names.map((name) => process.env[name])).toEqual(['environment', 'home', 'home', 'cwd']);
   });
 
   it('adds the key to an existing .env without losing what it held, owner-only', () => {
-    const cwd = dir();
+    const cwd = tempDir();
     writeFileSync(join(cwd, '.env'), 'OTHER=1', { mode: 0o644 });
     const path = saveKeyFile(cwd, 'key-a');
     expect(parseEnv(readFileSync(path, 'utf8'))).toEqual({ OTHER: '1', SIFT_KEY: 'key-a' });

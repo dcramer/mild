@@ -10,31 +10,27 @@ import { summarize } from '../src/dashboard/queries/summary.ts';
 import { usage } from '../src/dashboard/queries/usage.ts';
 import type { SenderPage } from '../src/dashboard/types.ts';
 import { people } from '../src/store/people.ts';
-import { addMailbox, connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
+import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
-import { finishRun, startRun } from '../src/store/runs.ts';
-import { builtAssets, openUserDb, raw, startDashboard, onePerson, unmarked } from './fixtures.ts';
+import { builtAssets, firstAccount, modelRun, openUserDb, raw, startDashboard, onePerson, unmarked } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 import { addRule, removeRule } from '../src/store/rules.ts';
-import { everything, facts } from './helpers.ts';
+import { ACCOUNT, DAY, everything, facts, quietSources, testModel } from './helpers.ts';
 import { conditionsHash } from '../src/store/content.ts';
-import type { JudgeInput } from '../src/triage/stages/model.ts';
 import { triageAccount } from '../src/work/triage.ts';
 
-const ACCOUNT = 'me@example.org';
-const DAY = 86_400_000;
 const NOW = Date.UTC(2026, 5, 15, 12);
 
-async function modelRun(db: Sql, messageId: string, costUsd: number, outcome: 'judged' | 'failed' = 'judged'): Promise<number> {
-  const run = await startRun(db, { accountId: ACCOUNT, messageId, model: 'test-model', now: NOW - 2 * DAY });
-  await finishRun(db, run, {
-    ...(outcome === 'failed' ? { error: 'failed' } : {}),
+/** A model call two days ago that cost `costUsd`. */
+const charged = async (db: Sql, messageId: string, costUsd: number, error?: string) =>
+  await modelRun(db, {
+    messageId,
+    model: 'test-model',
+    at: NOW - 2 * DAY,
     usage: { model: 'test-model', inputTokens: 900, outputTokens: 100, costUsd },
-    now: NOW - 2 * DAY,
+    error,
   });
-  return run;
-}
 
 async function seededStore(): Promise<{ store: Store; db: Sql }> {
   const { store, db } = await onePerson(ACCOUNT);
@@ -62,7 +58,6 @@ async function seededStore(): Promise<{ store: Store; db: Sql }> {
     NOW,
   );
   const base = { subscription: 'preserve', reason: 'test' } as const;
-  const judged = async (messageId: string, costUsd: number, outcome: 'judged' | 'failed' = 'judged') => await modelRun(db, messageId, costUsd, outcome);
   await recordDecision(
     db,
     ACCOUNT,
@@ -76,10 +71,10 @@ async function seededStore(): Promise<{ store: Store; db: Sql }> {
     ACCOUNT,
     'c',
     { ...base, disposition: 'review', stage: 'model', confidence: 0.4 },
-    { now: NOW - 2 * DAY, durationMs: 1500, runId: await judged('c', 0.02) },
+    { now: NOW - 2 * DAY, durationMs: 1500, runId: await charged(db, 'c', 0.02) },
   );
   // A call that failed costs too, and decided nothing.
-  await judged('b', 0.01, 'failed');
+  await charged(db, 'b', 0.01, 'failed');
   await recordDecision(db, ACCOUNT, 'old', { ...base, disposition: 'keep', stage: 'rules' }, { now: NOW - 40 * DAY });
   return { store, db };
 }
@@ -88,7 +83,6 @@ const seeded = async () => (await seededStore()).db;
 describe('tracking', () => {
   it('stores the headers with each message, and never a body', async () => {
     const db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1');
     await recordSync(
       db,
       ACCOUNT,
@@ -183,11 +177,12 @@ describe('tracking', () => {
       [20 * DAY, 0.04, false],
       [40 * DAY, 1, false],
     ] as const) {
-      const run = await startRun(db, { accountId: ACCOUNT, messageId: 'a', model: 'test-model', now: NOW - ago });
-      await finishRun(db, run, {
-        ...(error ? { error: 'failed' } : {}),
+      await modelRun(db, {
+        messageId: 'a',
+        model: 'test-model',
+        at: NOW - ago,
         usage: { model: 'test-model', inputTokens: 1, outputTokens: 1, costUsd },
-        now: NOW - ago,
+        error: error ? 'failed' : undefined,
       });
     }
     const used = await usage(db, await everything(db), NOW);
@@ -227,8 +222,8 @@ describe('tracking', () => {
     await recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'keep', stage: 'classifier' }, { now: NOW });
     // A message the model could not judge, answered by the user: no model decided it, but neither did sift.
     await recordSync(db, ACCOUNT, [facts({ messageId: 'failed', receivedAt: NOW })], '3', NOW);
-    await modelRun(db, 'failed', 0.005, 'failed');
-    await modelRun(db, 'failed', 0.005, 'failed');
+    await charged(db, 'failed', 0.005, 'failed');
+    await charged(db, 'failed', 0.005, 'failed');
     await recordDecision(db, ACCOUNT, 'failed', { ...base, disposition: 'archive', stage: 'rules' }, { carryOut: true, byUser: true, now: NOW });
 
     const summary = await summarize(db, await everything(db), 7, NOW);
@@ -534,14 +529,9 @@ describe('dashboard server', () => {
     await recordSync(db, ACCOUNT, [facts({ messageId: 'sale', from }), facts({ messageId: 'receipt', from })], '1', NOW);
     const id = await addRule(db, ACCOUNT, { match: { fromDomain: ['shop.example.com'] }, labelId: 'newsletter', when: 'a sale' }, 'user', NOW);
     const usage = { model: 'test/model', inputTokens: 1, outputTokens: 1, costUsd: 0.03 };
-    const model = {
-      model: 'test/model',
-      judge: async ({ evidence }: JudgeInput) => ({ label: evidence.facts.messageId === 'sale' ? 'newsletter' : 'personal', reason: 'r', usage }),
-    };
-    const sources = { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } };
-    await triageAccount({ db, mailbox: null, model, sources, now: () => NOW }, (await listAccounts(db))[0]!);
-    const before = await startRun(db, { accountId: ACCOUNT, messageId: 'sale', model: 'test/model', ruleId: id, now: NOW - 31 * DAY });
-    await finishRun(db, before, { usage: { ...usage, costUsd: 1 }, now: NOW - 31 * DAY });
+    const model = testModel(async ({ evidence }) => ({ label: evidence.facts.messageId === 'sale' ? 'newsletter' : 'personal', reason: 'r', usage }));
+    await triageAccount({ db, mailbox: null, model, sources: quietSources(), now: () => NOW }, await firstAccount(db));
+    await modelRun(db, { messageId: 'sale', ruleId: id, at: NOW - 31 * DAY, usage: { ...usage, costUsd: 1 } });
 
     const [rule] = await listRuleSummaries(db, await everything(db), NOW);
     expect(rule).toMatchObject({ id, checks: 2 });

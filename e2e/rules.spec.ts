@@ -1,5 +1,5 @@
-import { addRule, fact, openRule, ruleDialog, rulePanel, ruleRows } from './rule.ts';
-import { expect, panel, param, pointAt, query, row, test, throughChatGPT, tooltip } from './sift.ts';
+import { addRule, fact, openRule, removeQuestion, removeRule, ruleDialog, ruleId, rulePanel, ruleRows, writeRule } from './rule.ts';
+import { expect, forReviewLink, panel, panelHeading, param, pointAt, query, row, test, throughChatGPT, toast, tooltip } from './sift.ts';
 
 test.describe('Rules', () => {
   test('a rule written by hand opens on its panel, and takes the mail it covers off For review', async ({ page }) => {
@@ -32,7 +32,7 @@ test.describe('Rules', () => {
     await expect(fact(opened, 'Matched, 30 days')).toHaveText('1');
     await expect(fact(opened, 'All time')).toHaveText('1');
     await expect(opened.getByRole('cell', { name: '48 hours only: 30% off' })).toBeVisible();
-    expect(openRule(page)).toMatch(/^r-/);
+    await param(page, 'rule').toMatch(/^r-/);
 
     await opened.getByRole('button', { name: 'Close' }).click();
     await expect(opened).toHaveCount(0);
@@ -43,8 +43,8 @@ test.describe('Rules', () => {
     const first = (text: string) => rules.findIndex((rule) => rule.startsWith(text));
     expect(first('deals@promo.example.com')).toBeLessThan(first('anyone at promo.example.com'));
 
-    await page.getByRole('link', { name: 'For review' }).click();
-    await expect(page.getByRole('link', { name: 'For review 11' })).toBeVisible();
+    await forReviewLink(page).click();
+    await expect(forReviewLink(page)).toHaveAccessibleName('For review 11');
     await expect(row(page, 'Notes from the review')).toBeVisible();
     await expect(row(page, '48 hours only: 30% off')).toHaveCount(0);
   });
@@ -62,9 +62,7 @@ test.describe('Rules', () => {
     await pointAt(news.getByText(/^(just now|\d+ min ago)$/));
     await expect(tooltip(page)).toHaveText(/^[A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M$/);
 
-    await page.getByRole('button', { name: 'Add a rule' }).click();
-    const dialog = ruleDialog(page);
-    await dialog.getByRole('button', { name: 'Write it yourself' }).click();
+    const dialog = await writeRule(page);
     await dialog.getByRole('textbox', { name: 'Value 1' }).fill('deals@promo.example.com');
     await dialog.getByRole('combobox', { name: 'Label it as' }).click();
     await page.getByRole('option', { name: 'Marketing' }).click();
@@ -86,9 +84,7 @@ test.describe('Rules', () => {
   test('through a ChatGPT plan, what the model cost is marked as API prices', async ({ page }) => {
     await throughChatGPT(page);
     await page.goto('/rules');
-    await page.getByRole('button', { name: 'Add a rule' }).click();
-    const dialog = ruleDialog(page);
-    await dialog.getByRole('button', { name: 'Write it yourself' }).click();
+    const dialog = await writeRule(page);
     await dialog.getByRole('textbox', { name: 'Value 1' }).fill('deals@promo.example.com');
     await dialog.getByRole('combobox', { name: 'Label it as' }).click();
     await page.getByRole('option', { name: 'Marketing' }).click();
@@ -134,9 +130,7 @@ test.describe('Rules', () => {
 
   test('several values read back as one rule, and the list says its name', async ({ page }) => {
     await page.goto('/rules');
-    await page.getByRole('button', { name: 'Add a rule' }).click();
-    const dialog = ruleDialog(page);
-    await dialog.getByRole('button', { name: 'Write it yourself' }).click();
+    const dialog = await writeRule(page);
     await dialog.getByRole('textbox', { name: 'Value 1' }).fill('example.com');
     await expect(dialog.getByText('Mail from anyone at example.com.')).toBeVisible();
     await dialog.getByRole('button', { name: 'Add a condition' }).click();
@@ -158,9 +152,7 @@ test.describe('Rules', () => {
   test('a rule with the conditions of one already there replaces it', async ({ page }) => {
     await page.goto('/rules');
     await expect(row(page, 'anyone at promo.example.com')).toContainText('Spam');
-    await page.getByRole('button', { name: 'Add a rule' }).click();
-    const dialog = ruleDialog(page);
-    await dialog.getByRole('button', { name: 'Write it yourself' }).click();
+    const dialog = await writeRule(page);
     await dialog.getByRole('textbox', { name: 'Value 1' }).fill('promo.example.com');
     await expect(dialog.getByText('Mail from anyone at promo.example.com.')).toBeVisible();
     await expect(dialog.getByRole('group', { name: 'Replaces' })).toHaveText(/Spam$/);
@@ -192,9 +184,7 @@ test.describe('Rules', () => {
   });
 
   test("a rule's panel steps through the list, is its own address, and closes to the list", async ({ page }) => {
-    await page.goto('/rules');
-    await page.getByRole('cell', { name: 'anyone at news.example.com' }).click();
-    const news = rulePanel(page, 'anyone at news.example.com');
+    const news = await openRule(page, 'anyone at news.example.com');
     await expect(news.getByText('1 of 4')).toBeVisible();
     await expect(news.getByRole('button', { name: 'Previous' })).toBeDisabled();
     await expect(fact(news, 'Then')).toHaveText('Archive as Newsletters');
@@ -203,13 +193,11 @@ test.describe('Rules', () => {
     await expect(news.getByRole('listitem', { name: /: 0 changed in gmail, 2 left alone$/ })).toHaveCount(1);
     await expect(news.getByText('Model cost, 30 days')).toHaveCount(0);
     await expect(news.getByRole('cell', { name: 'This week in widgets' })).toBeVisible();
-    const first = openRule(page);
+    const first = await ruleId(page);
 
     await news.getByRole('button', { name: 'Next' }).click();
-    const shop = rulePanel(page, 'orders@shop.example.com');
-    await expect(shop.getByText('2 of 4')).toBeVisible();
-    const second = openRule(page);
-    expect(second).not.toBe(first);
+    await expect(rulePanel(page, 'orders@shop.example.com').getByText('2 of 4')).toBeVisible();
+    await param(page, 'rule').not.toBe(first);
 
     await page.goto(`/rules?rule=${first}`);
     await expect(news).toBeVisible();
@@ -221,17 +209,15 @@ test.describe('Rules', () => {
 
   test("a message the rule decided opens over the rule's panel, and closing it returns there", async ({ page }) => {
     await page.goto('/rules');
-    await page.getByRole('button', { name: 'Add a rule' }).click();
-    const dialog = ruleDialog(page);
-    await dialog.getByRole('button', { name: 'Write it yourself' }).click();
+    const dialog = await writeRule(page);
     await dialog.getByRole('textbox', { name: 'Value 1' }).fill('sale@store.example.com');
     await addRule(dialog);
     const opened = rulePanel(page, 'sale@store.example.com');
-    const rule = openRule(page);
+    const rule = await ruleId(page);
 
     await opened.getByRole('cell', { name: 'Winter sale starts now' }).click();
     const message = panel(page);
-    await expect(message.getByRole('heading', { name: 'Winter sale starts now' })).toBeVisible();
+    await expect(panelHeading(page, 'Winter sale starts now')).toBeVisible();
     await param(page, 'message').toBe('m8');
 
     await message.getByRole('button', { name: 'Close' }).click();
@@ -242,9 +228,7 @@ test.describe('Rules', () => {
 
   test('Apply to your inbox says about how many and shows the newest, then applies in the background until stopped', async ({ page }) => {
     await page.goto('/rules');
-    await page.getByRole('button', { name: 'Add a rule' }).click();
-    const dialog = ruleDialog(page);
-    await dialog.getByRole('button', { name: 'Write it yourself' }).click();
+    const dialog = await writeRule(page);
     await dialog.getByRole('textbox', { name: 'Value 1' }).fill('sale@store.example.com');
     await expect(dialog.getByRole('checkbox', { name: 'Apply to mail already there' })).toBeChecked();
     await dialog.getByRole('button', { name: 'Add rule', exact: true }).click();
@@ -264,19 +248,16 @@ test.describe('Rules', () => {
   });
 
   test('removing a rule from its panel asks in place, and Cancel keeps it', async ({ page }) => {
-    await page.goto('/rules');
-    await page.getByRole('cell', { name: 'anyone at promo.example.com' }).click();
-    const opened = rulePanel(page, 'anyone at promo.example.com');
-    const ask = opened.getByRole('group', { name: 'Remove this rule?' });
+    const opened = await openRule(page, 'anyone at promo.example.com');
+    const ask = removeQuestion(opened);
 
     await opened.getByRole('button', { name: 'Remove', exact: true }).click();
     await ask.getByRole('button', { name: 'Cancel' }).click();
     await expect(ask).toHaveCount(0);
     await expect(opened).toBeVisible();
 
-    await opened.getByRole('button', { name: 'Remove', exact: true }).click();
-    await ask.getByRole('button', { name: 'Remove', exact: true }).click();
-    await expect(page.getByRole('dialog', { name: 'Mail from anyone at promo.example.com', exact: true })).toBeVisible();
+    await removeRule(opened);
+    await expect(toast(page, 'Mail from anyone at promo.example.com')).toBeVisible();
     await expect(opened).toHaveCount(0);
     await query(page).toBe('');
     await expect(ruleRows(page)).toHaveCount(3);
@@ -287,7 +268,7 @@ test.describe('Rules', () => {
     await page.goto('/rules');
     const promo = row(page, 'anyone at promo.example.com');
     await promo.getByRole('button', { name: 'Remove' }).click();
-    const ask = promo.getByRole('group', { name: 'Remove this rule?' });
+    const ask = removeQuestion(promo);
     await expect(ask).toBeVisible();
     await expect(rulePanel(page, 'anyone at promo.example.com')).toHaveCount(0);
 
@@ -297,8 +278,7 @@ test.describe('Rules', () => {
     await page.keyboard.press('Escape');
     await expect(ask).toHaveCount(0);
 
-    await promo.getByRole('button', { name: 'Remove' }).click();
-    await ask.getByRole('button', { name: 'Remove', exact: true }).click();
+    await removeRule(promo);
     await expect(promo).toHaveCount(0);
     await expect(ruleRows(page)).toHaveCount(3);
     await expect(rulePanel(page, 'anyone at promo.example.com')).toHaveCount(0);
@@ -306,28 +286,24 @@ test.describe('Rules', () => {
   });
 
   test('Escape on Remove this rule? in a panel takes back the question and leaves the panel open', async ({ page }) => {
-    await page.goto('/rules');
-    await page.getByRole('cell', { name: 'anyone at promo.example.com' }).click();
-    const opened = rulePanel(page, 'anyone at promo.example.com');
+    const opened = await openRule(page, 'anyone at promo.example.com');
     await opened.getByRole('button', { name: 'Remove', exact: true }).click();
-    await expect(opened.getByRole('group', { name: 'Remove this rule?' })).toBeVisible();
+    await expect(removeQuestion(opened)).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(opened.getByRole('group', { name: 'Remove this rule?' })).toHaveCount(0);
+    await expect(removeQuestion(opened)).toHaveCount(0);
     await opened.getByRole('button', { name: 'Previous' }).click({ timeout: 2000 });
     await expect(rulePanel(page, 'anyone at ci.example.org')).toBeVisible();
   });
 
   test('Undo takes the rule back, and its panel goes from the page and the address', async ({ page }) => {
     await page.goto('/rules');
-    await page.getByRole('button', { name: 'Add a rule' }).click();
-    const dialog = ruleDialog(page);
-    await dialog.getByRole('button', { name: 'Write it yourself' }).click();
+    const dialog = await writeRule(page);
     await dialog.getByRole('textbox', { name: 'Value 1' }).fill('someone@example.com');
     await addRule(dialog);
     await expect(rulePanel(page, 'someone@example.com')).toBeVisible();
 
     await page.getByRole('button', { name: 'Undo' }).click();
-    await expect(page.getByRole('dialog', { name: 'Rule taken back' })).toBeVisible();
+    await expect(toast(page, 'Rule taken back')).toBeVisible();
     await expect(rulePanel(page, 'someone@example.com')).toHaveCount(0);
     await expect(ruleRows(page)).toHaveCount(4);
     await query(page).toBe('');

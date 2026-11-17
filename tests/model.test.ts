@@ -2,7 +2,7 @@ import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCal
 import { describe, expect, it, vi } from 'vitest';
 import { gatherEvidence } from '../src/work/evidence.ts';
 import { MAX_BODY_CHARS, extractText } from '../src/gmail/body.ts';
-import { type SignIns, credentialStore } from '../src/model/credentials.ts';
+import { credentialStore } from '../src/model/credentials.ts';
 import { createJudge } from '../src/model/judge.ts';
 import {
   finishChatGPTRedirect,
@@ -17,7 +17,7 @@ import {
   startChatGPTRedirect,
   shortlistModels,
 } from '../src/model/models.ts';
-import { addMailbox, recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/accounts.ts';
 import { listLabels, updateLabel } from '../src/store/labels.ts';
 import { openUserDb, raw } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
@@ -26,13 +26,10 @@ import { contactOf, contacts, domainFacts, rememberCorrespondent, senderFacts } 
 import { deriveFacts } from '../src/triage/facts.ts';
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../src/triage/prompt.ts';
 import { type Evidence, type JudgeFailure, type Verdict, modelStage } from '../src/triage/stages/model.ts';
-import { facts, SAMPLE_LABELS } from './helpers.ts';
-
-const ACCOUNT = 'me@example.org';
-const b64 = (text: string) => Buffer.from(text).toString('base64url');
+import { ACCOUNT, DAY, b64, facts, memorySignIns, SAMPLE_LABELS } from './helpers.ts';
 
 function evidence(overrides: Partial<Evidence['sender']> = {}, body: string | null = 'Our autumn sale starts today.'): Evidence {
-  const f = facts({ accountId: ACCOUNT, headers: { 'list-unsubscribe': '<https://example.com/u>' } });
+  const f = facts({ headers: { 'list-unsubscribe': '<https://example.com/u>' } });
   return { facts: f, known: deriveFacts(f), body, sender: { messagesSeen: 1, userHasWritten: false, ...overrides } };
 }
 
@@ -169,14 +166,13 @@ describe('prompt', () => {
 
   it('states only the facts that are there, each kind of signal on one line', () => {
     const f = facts({
-      accountId: ACCOUNT,
       from: { address: 'billing@pay.example.com', domain: 'pay.example.com' },
       to: [
         { address: ACCOUNT, domain: 'example.org' },
         { address: 'team@example.org', domain: 'example.org' },
       ],
       labelIds: ['INBOX', 'IMPORTANT', 'CATEGORY_UPDATES'],
-      receivedAt: 31 * 86_400_000,
+      receivedAt: 31 * DAY,
       headers: {
         'list-id': 'Billing <billing.example.com>',
         precedence: 'bulk',
@@ -193,7 +189,7 @@ describe('prompt', () => {
         sender: {
           messagesSeen: 6,
           userHasWritten: false,
-          firstSeenAt: 1 * 86_400_000,
+          firstSeenAt: DAY,
           standing: { standing: 'known', why: 'they send more than one kind of mail' },
         },
         domain: { messages: 9, senders: 2, standing: 'unwanted', why: 'a rule archives their mail', ownerLabels: [] },
@@ -343,7 +339,6 @@ describe('judge', () => {
 describe('preferences in the database', () => {
   async function seeded() {
     const db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1');
     return db;
   }
   it('lets the user change a label, but nothing of Leave in inbox', async () => {
@@ -407,16 +402,15 @@ describe('contact', () => {
 
   it('is read for many senders at once, each in their own account', async () => {
     const d = await openUserDb(ACCOUNT);
-    await addMailbox(d, ACCOUNT, '1');
     const from = (address: string) => ({ address, domain: address.split('@')[1]! });
     await recordSync(
       d,
       ACCOUNT,
       [
-        facts({ accountId: ACCOUNT, messageId: 'a', from: from('new@example.com') }),
-        ...['b', 'c', 'd', 'e', 'f'].map((id) => facts({ accountId: ACCOUNT, messageId: id, from: from('deals@example.com') })),
-        facts({ accountId: ACCOUNT, messageId: 'g', from: from('ada@example.org') }),
-        facts({ accountId: ACCOUNT, messageId: 'h', from: from('ada@example.org') }),
+        facts({ messageId: 'a', from: from('new@example.com') }),
+        ...['b', 'c', 'd', 'e', 'f'].map((id) => facts({ messageId: id, from: from('deals@example.com') })),
+        facts({ messageId: 'g', from: from('ada@example.org') }),
+        facts({ messageId: 'h', from: from('ada@example.org') }),
       ],
       '2',
     );
@@ -438,7 +432,6 @@ describe('contact', () => {
 describe('standing', () => {
   const db = async () => {
     const d = await openUserDb(ACCOUNT);
-    await addMailbox(d, ACCOUNT, '1');
     return d;
   };
   const mail = async (
@@ -450,7 +443,7 @@ describe('standing', () => {
     stage: 'model' | 'rules' = 'model',
   ) => {
     const domain = address.split('@')[1]!;
-    await recordSync(d, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id, from: { address, domain }, receivedAt: at })], '2');
+    await recordSync(d, ACCOUNT, [facts({ messageId: id, from: { address, domain }, receivedAt: at })], '2');
     return await recordDecision(d, ACCOUNT, id, { disposition: 'keep', subscription: 'preserve', stage, ...(labelId ? { labelId } : {}), reason: 'r' });
   };
 
@@ -547,8 +540,7 @@ describe('standing', () => {
 describe('gatherEvidence', () => {
   it('caches whether the owner has written to a sender and counts history', async () => {
     const db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1');
-    const f = facts({ accountId: ACCOUNT });
+    const f = facts();
     await recordSync(db, ACCOUNT, [f], '2');
     let lookups = 0;
     const fail = async () => {
@@ -569,27 +561,13 @@ describe('gatherEvidence', () => {
 
   it('reports unknown instead of failing when a lookup errors', async () => {
     const db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1');
     const fail = async () => {
       throw new Error('network');
     };
-    const result = await gatherEvidence({ db, api: { getContent: fail, getThread: fail }, mailbox: { hasSentTo: fail } }, facts({ accountId: ACCOUNT }));
+    const result = await gatherEvidence({ db, api: { getContent: fail, getThread: fail }, mailbox: { hasSentTo: fail } }, facts());
     expect(result).toMatchObject({ body: null, sender: { userHasWritten: null } });
   });
 });
-
-/** Sign-ins kept in memory, as a person's database keeps them. */
-function memorySignIns(): SignIns & { stored: Map<string, string> } {
-  const stored = new Map<string, string>();
-  return {
-    stored,
-    read: async (provider) => stored.get(provider) ?? null,
-    write: async (provider, text) => void stored.set(provider, text),
-    remove: async (provider) => void stored.delete(provider),
-    keys: async () => [...stored.keys()].toSorted(),
-    exclusive: (work) => work(),
-  };
-}
 
 describe('model credentials', () => {
   it('keeps the newest of rotated credentials, one change at a time', async () => {

@@ -2,7 +2,7 @@ import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { continueInboxRun } from '../src/work/inbox.ts';
 import { REACH, goingInboxRuns, inboxProgress, modelShare, startInboxRuns, stopInboxRuns } from '../src/store/inbox.ts';
-import { averageCall, finishRun, startRun } from '../src/store/runs.ts';
+import { averageCall } from '../src/store/runs.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { type RunOptions, tick } from '../src/work/run.ts';
 import { triageAccount } from '../src/work/triage.ts';
@@ -11,18 +11,17 @@ import { people } from '../src/store/people.ts';
 import type { RawMessage } from '../src/gmail/api.ts';
 import { continueEval, startEval } from '../src/learn/evals.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
-import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
+import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { MAX_LABELS, listLabels } from '../src/store/labels.ts';
 import { LEAVE_IN_INBOX } from '../src/triage/types.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { EXAMPLE_KEEP_DAYS } from '../src/store/examples.ts';
 import { preferences, setActive } from '../src/store/preferences.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
-import { FakeMailbox, facts, storeExample, withSampleLabels } from './helpers.ts';
-import { type Reply, builtAssets, raw, startDashboard, onePerson, withReason } from './fixtures.ts';
+import { ACCOUNT, DAY, FakeMailbox, UNSURE, facts, quietSources, rawMessage, storeExample, testModel } from './helpers.ts';
+import { type Reply, builtAssets, firstAccount, modelRun, raw, startDashboard, onePerson, withReason } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 
-const ACCOUNT = 'me@example.org';
 let db: Sql;
 let store: Store;
 let calls: string[];
@@ -220,7 +219,6 @@ describe('managing sift from the dashboard', () => {
     await storeExample(db, ACCOUNT, { id: 'e2', from: 'ada@example.org', label: 'personal', markedAt: 2 });
     await storeExample(db, ACCOUNT, { id: 'e3', from: 'bob@example.org', label: 'personal', markedAt: 3 });
     await connectAccount(store, 'other@example.org', '1', 0, 1);
-    await withSampleLabels(db, 'other@example.org');
     await storeExample(db, 'other@example.org', { id: 'o1', from: 'cy@example.org', label: 'personal', markedAt: 4 });
 
     const listed = await call('GET', `/api/examples?account=${encodeURIComponent(ACCOUNT)}`);
@@ -251,7 +249,7 @@ describe('managing sift from the dashboard', () => {
   it('decides waiting suggestions again when a rule or a label changes, and says how many', async () => {
     const { call } = await start();
     const from = { address: 'sales@example.com', domain: 'example.com' };
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'w1', from }), facts({ accountId: ACCOUNT, messageId: 'w2', from })], '2');
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'w1', from }), facts({ messageId: 'w2', from })], '2');
     const marketing = {
       disposition: 'archive',
       subscription: 'unsubscribe',
@@ -300,7 +298,7 @@ describe('managing sift from the dashboard', () => {
   it('removes a label: its rules and examples go, mail waiting with it is left for the reader, and earlier mail keeps its name', async () => {
     const { call } = await start();
     const from = { address: 'sales@example.com', domain: 'example.com' };
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'w1', from })], '2');
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'w1', from })], '2');
     const marketing = {
       disposition: 'archive',
       subscription: 'preserve',
@@ -455,7 +453,6 @@ describe('managing sift from the dashboard', () => {
     const { call } = await start();
     const OTHER = 'other@example.org';
     await connectAccount(store, OTHER, '1', 0, 1);
-    await withSampleLabels(db, OTHER);
     expect((await call('POST', '/api/labels/add', { labels: [{ name: 'Travel', description: 'Bookings.', disposition: 'keep' }] })).body).toEqual({
       ids: ['travel'],
     });
@@ -510,7 +507,7 @@ describe('managing sift from the dashboard', () => {
   });
 
   it('puts a corrected message right in Gmail, and still saves the answer if it cannot', async () => {
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'done' }), facts({ accountId: ACCOUNT, messageId: 'gone' })], '2');
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'done' }), facts({ messageId: 'gone' })], '2');
     for (const id of ['done', 'gone'])
       await recordDecision(
         db,
@@ -531,7 +528,7 @@ describe('managing sift from the dashboard', () => {
   });
 
   it('keeps mail Sift marked for review while on waiting, and takes the mark back when it is answered', async () => {
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'asked' }), facts({ accountId: ACCOUNT, messageId: 'acted' })], '2');
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'asked' }), facts({ messageId: 'acted' })], '2');
     await recordDecision(
       db,
       ACCOUNT,
@@ -603,7 +600,7 @@ describe('managing sift from the dashboard', () => {
   it("lists what a rule decided and has not moved, passes the inbox on for the rule's mailbox, and applies it there in the background", async () => {
     const { call } = await start();
     const id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'w1', subject: 'Waiting' }), facts({ accountId: ACCOUNT, messageId: 'w2' })], '2');
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'w1', subject: 'Waiting' }), facts({ messageId: 'w2' })], '2');
     const byRule = { disposition: 'archive', subscription: 'preserve', stage: 'rules', labelId: 'newsletter', ruleId: id, reason: 'rule' } as const;
     await recordDecision(db, ACCOUNT, 'w1', byRule, { now: 5 });
     await recordDecision(db, ACCOUNT, 'w2', byRule, { now: 5, carryOut: true });
@@ -632,19 +629,18 @@ describe('managing sift from the dashboard', () => {
     await recordSync(
       db,
       ACCOUNT,
-      ['u1', 'u2', 'u3', 'u4'].map((messageId) => facts({ accountId: ACCOUNT, messageId })),
+      ['u1', 'u2', 'u3', 'u4'].map((messageId) => facts({ messageId })),
       '2',
     );
     const byRule = { disposition: 'archive', subscription: 'preserve', stage: 'model', labelId: 'newsletter', ruleId: id, reason: 'rule' } as const;
     const usage = { model: 'test-model', inputTokens: 10, outputTokens: 1, costUsd: 0.004 };
-    const run = await startRun(db, { accountId: ACCOUNT, messageId: 'u1', model: 'test-model', ruleId: id, now });
-    await finishRun(db, run, { usage, now });
+    const run = await modelRun(db, { messageId: 'u1', model: 'test-model', ruleId: id, at: now, usage });
     // A check that found the condition unmet decided nothing for the rule, and still cost.
-    await finishRun(db, await startRun(db, { accountId: ACCOUNT, messageId: 'u3', model: 'test-model', ruleId: id, now }), { usage, now });
+    await modelRun(db, { messageId: 'u3', model: 'test-model', ruleId: id, at: now, usage });
     await settleDecision(db, await recordDecision(db, ACCOUNT, 'u1', byRule, { now, carryOut: true, runId: run }), 'done');
     await recordDecision(db, ACCOUNT, 'u2', byRule, { now });
     // Older than the chart, and the user's own answer: neither counts.
-    await recordDecision(db, ACCOUNT, 'u3', byRule, { now: now - 40 * 86_400_000 });
+    await recordDecision(db, ACCOUNT, 'u3', byRule, { now: now - 40 * DAY });
     await recordDecision(db, ACCOUNT, 'u4', byRule, { now, byUser: true });
     const { daily } = (await call('GET', `/api/rules/usage?id=${id}`)).body as { daily: { changed: number; left: number; costUsd: number }[] };
     expect(daily).toHaveLength(30);
@@ -900,17 +896,7 @@ describe('signing in with Google', () => {
 });
 
 describe('going through the inbox', () => {
-  const gmailMessage = (id: string, from = 'news@example.com', labelIds = ['INBOX']): RawMessage => ({
-    id,
-    threadId: `t${id}`,
-    labelIds,
-    internalDate: 5,
-    headers: [
-      { name: 'From', value: from },
-      { name: 'Subject', value: id },
-    ],
-  });
-  const unsure = async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 });
+  const unsure = async () => UNSURE;
   let mailbox: FakeMailbox;
   let asked: string[];
   let listed: string[];
@@ -945,15 +931,12 @@ describe('going through the inbox', () => {
         api,
         mailbox: options.on ? mailbox : null,
         answers: mailbox,
-        sources: { api: { getContent: async () => null, getThread: async () => null }, mailbox },
-        model: {
-          model: 'test/model',
-          judge: async (input) => (asked.push(input.evidence.facts.messageId), await (options.judge ?? unsure)()),
-        },
+        sources: quietSources(mailbox),
+        model: testModel(async (input) => (asked.push(input.evidence.facts.messageId), await (options.judge ?? unsure)())),
         ...(options.until === undefined ? {} : { until: options.until }),
         now: options.now ?? (() => 100),
       },
-      (await listAccounts(db))[0]!,
+      await firstAccount(db),
       run,
     );
   const begin = async (acts: boolean, { most = 10, at = 50 } = {}) => {
@@ -962,13 +945,13 @@ describe('going through the inbox', () => {
   };
 
   it('lists the inbox and decides what Sift never saw, without moving the sync cursor', async () => {
-    inGmail(gmailMessage('a'), gmailMessage('b'), gmailMessage('c'));
-    gmail['gone'] = gmailMessage('gone', 'news@example.com', ['SENT']);
+    inGmail(rawMessage('a'), rawMessage('b'), rawMessage('c'));
+    gmail['gone'] = rawMessage('gone', { labelIds: ['SENT'] });
     const run = await begin(false);
     expect(await goOn(run)).toMatchObject({ from: 0, to: 4, of: 4 });
     expect(listed).toEqual(['', '2']);
     expect(asked.toSorted()).toEqual(['a', 'b', 'c']);
-    expect((await listAccounts(db))[0]?.historyId).toBe('1');
+    expect((await firstAccount(db)).historyId).toBe('1');
     // Recorded to suggest about only, so a pass that came to them first would not act either.
     expect(await raw(db).all('SELECT id, suggest_only FROM messages ORDER BY id')).toEqual([
       { id: 'a', suggest_only: true },
@@ -979,7 +962,7 @@ describe('going through the inbox', () => {
   });
 
   it('goes no further than its most, newest first', async () => {
-    inGmail(gmailMessage('a'), gmailMessage('b'), gmailMessage('c'));
+    inGmail(rawMessage('a'), rawMessage('b'), rawMessage('c'));
     const run = await begin(false, { most: 2 });
     expect(await goOn(run)).toMatchObject({ to: 2, of: 2 });
     expect(listed).toEqual(['']);
@@ -987,11 +970,11 @@ describe('going through the inbox', () => {
   });
 
   it('decides again what waits on the user, but not what they answered or what was decided since it began', async () => {
-    inGmail(gmailMessage('waiting'), gmailMessage('answered'), gmailMessage('since'));
+    inGmail(rawMessage('waiting'), rawMessage('answered'), rawMessage('since'));
     await recordSync(
       db,
       ACCOUNT,
-      ['waiting', 'answered', 'since'].map((messageId) => facts({ accountId: ACCOUNT, messageId })),
+      ['waiting', 'answered', 'since'].map((messageId) => facts({ messageId })),
       '2',
     );
     const said = { disposition: 'review', subscription: 'preserve', stage: 'model', reason: 'unsure' } as const;
@@ -1005,7 +988,7 @@ describe('going through the inbox', () => {
 
   it('carries out what it decides only when Sift was on at the press and still is', async () => {
     await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
-    inGmail(gmailMessage('a'), gmailMessage('b'), gmailMessage('c'));
+    inGmail(rawMessage('a'), rawMessage('b'), rawMessage('c'));
     // Off at the press: a suggestion, even with Sift turned on since.
     await goOn(await begin(false), { on: true });
     expect(mailbox.modifyCalls).toBe(0);
@@ -1020,12 +1003,11 @@ describe('going through the inbox', () => {
   });
 
   it('takes back what Sift did before carrying out something different', async () => {
-    inGmail(gmailMessage('a'));
+    inGmail(rawMessage('a', { labelIds: ['INBOX'] }));
     await setActive(db, true);
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'a' })], '2');
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'a' })], '2');
     // Sift could not place it, and marked it for the user in Gmail.
-    const sources = { api: { getContent: async () => null, getThread: async () => null }, mailbox };
-    await triageAccount({ db, mailbox, model: { model: 'test/model', judge: unsure }, sources, now: () => 10 }, (await listAccounts(db))[0]!);
+    await triageAccount({ db, mailbox, model: testModel(), sources: quietSources(mailbox), now: () => 10 }, await firstAccount(db));
     const marked = mailbox.labels.get('a')!;
     expect(marked.length).toBeGreaterThan(1);
     // Now a rule says what it is.
@@ -1037,7 +1019,7 @@ describe('going through the inbox', () => {
   });
 
   it('stops at its time limit, and carries on from there', async () => {
-    inGmail(gmailMessage('a'), gmailMessage('b'), gmailMessage('c'), gmailMessage('d'), gmailMessage('e'));
+    inGmail(rawMessage('a'), rawMessage('b'), rawMessage('c'), rawMessage('d'), rawMessage('e'));
     const run = await begin(false);
     expect(await goOn(run, { until: 0, now: () => 0 })).toMatchObject({ to: 0, of: 0 });
     expect(listed).toEqual([]);
@@ -1051,7 +1033,7 @@ describe('going through the inbox', () => {
   });
 
   it('leaves what the model was not asked about for the next piece, in order', async () => {
-    inGmail(...Array.from({ length: 13 }, (_, i) => gmailMessage(`m${i}`)));
+    inGmail(...Array.from({ length: 13 }, (_, i) => rawMessage(`m${i}`)));
     const run = await begin(false, { most: 20 });
     const down = async (): Promise<Awaited<ReturnType<typeof unsure>>> => {
       throw new Error('provider down');
@@ -1065,7 +1047,7 @@ describe('going through the inbox', () => {
   });
 
   it('stops when the person stops it, keeping what it decided', async () => {
-    inGmail(gmailMessage('a'), gmailMessage('b'), gmailMessage('c'), gmailMessage('d'), gmailMessage('e'));
+    inGmail(rawMessage('a'), rawMessage('b'), rawMessage('c'), rawMessage('d'), rawMessage('e'));
     const run = await begin(false);
     await goOn(run, { judge: async () => (await stopInboxRuns(db, null, 70), await unsure()) });
     expect(asked).toHaveLength(4);
@@ -1078,7 +1060,7 @@ describe('going through the inbox', () => {
     const { call } = await startDashboard(people(store), { controls });
     const importing = async () => ((await call('GET', '/api/suggestions')).body as { importing: boolean }).importing;
     expect(await importing()).toBe(false);
-    inGmail(gmailMessage('a'), gmailMessage('b'), gmailMessage('c'), gmailMessage('d'), gmailMessage('e'));
+    inGmail(rawMessage('a'), rawMessage('b'), rawMessage('c'), rawMessage('d'), rawMessage('e'));
     const run = await begin(false);
     expect(await importing()).toBe(true);
     let clock = 100;
@@ -1099,19 +1081,21 @@ describe('going through the inbox', () => {
     await recordSync(
       db,
       ACCOUNT,
-      ids.map((messageId) => facts({ accountId: ACCOUNT, messageId })),
+      ids.map((messageId) => facts({ messageId })),
       '2',
     );
     for (const [i, id] of ids.entries()) {
-      const run = await startRun(db, { accountId: ACCOUNT, messageId: id, model: 'test/model', now: 10 });
-      await finishRun(db, run, { usage: { model: 'test/model', inputTokens: 1000, outputTokens: 100, costUsd: i < 10 ? 0.001 : 0.003 }, now: 11 });
+      const run = await modelRun(db, {
+        messageId: id,
+        at: 10,
+        usage: { model: 'test/model', inputTokens: 1000, outputTokens: 100, costUsd: i < 10 ? 0.001 : 0.003 },
+      });
       // Half went to the model.
       const said = { disposition: 'keep', subscription: 'preserve', stage: i % 2 ? 'model' : 'rules', reason: 'r' } as const;
       await recordDecision(db, ACCOUNT, id, said, { carryOut: false, now: 10, ...(i % 2 ? { runId: run } : {}) });
     }
     // A provider that reported no usage says nothing.
-    const silent = await startRun(db, { accountId: ACCOUNT, messageId: 'e0', model: 'test/model', now: 10 });
-    await finishRun(db, silent, { now: 11 });
+    await modelRun(db, { messageId: 'e0', at: 10 });
     expect(await averageCall(db, 'test/model')).toEqual({ costUsd: expect.closeTo(0.002), inputTokens: 1000, outputTokens: 100 });
     // Calls on another model still say how big the person's calls are.
     expect(await averageCall(db, 'other/model')).toBeNull();
@@ -1157,7 +1141,6 @@ describe('ticks', () => {
   });
 
   it('deletes examples a year after their answer, when it starts and once a day after', async () => {
-    const DAY = 86_400_000;
     await storeExample(db, ACCOUNT, { id: 'old', from: 'a@example.org', label: 'personal', markedAt: 0 });
     await storeExample(db, ACCOUNT, { id: 'soon', from: 'd@example.org', label: 'personal', markedAt: 2 * DAY + DAY / 5 });
     await storeExample(db, ACCOUNT, { id: 'mid', from: 'b@example.org', label: 'personal', markedAt: 5 * DAY });

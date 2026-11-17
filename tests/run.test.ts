@@ -11,33 +11,28 @@ import { userChanges } from '../src/learn/gmail.ts';
 import { lastStandingChange } from '../src/store/actions.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { passStatus } from '../src/work/status.ts';
-import { addMailbox, connectAccount, deleteUser, recordSync, removeMailbox } from '../src/store/accounts.ts';
-import { freshStore, onePerson, openUserDb, raw, withReason } from './fixtures.ts';
+import { connectAccount, deleteUser, recordSync, removeMailbox } from '../src/store/accounts.ts';
+import { freshStore, modelRun, onePerson, openUserDb, raw, withReason } from './fixtures.ts';
 import { addLabels, updateLabel } from '../src/store/labels.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { setActive } from '../src/store/preferences.ts';
-import { MAX_ATTEMPTS, finishRun, startRun } from '../src/store/runs.ts';
+import { MAX_ATTEMPTS, startRun } from '../src/store/runs.ts';
 import { listProposals } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
-import { FakeMailbox, everything, facts } from './helpers.ts';
+import { ACCOUNT, FakeMailbox, UNSURE, everything, facts, rawMessage, testModel } from './helpers.ts';
 import { listSuggestions } from '../src/dashboard/queries/suggestions.ts';
 
-const ACCOUNT = 'me@example.org';
-
-function message(id: string, from: string, subject = `Subject ${id}`): RawMessage {
-  return {
-    id,
-    threadId: `t-${id}`,
-    labelIds: ['INBOX', 'UNREAD'],
-    internalDate: 1000,
+/** Mail from a list, addressed to the owner by name. */
+function message(id: string, from: string, subject?: string): RawMessage {
+  return rawMessage(id, {
     headers: [
       { name: 'From', value: from },
       { name: 'To', value: 'Me <me@example.org>' },
-      { name: 'Subject', value: subject },
+      { name: 'Subject', value: subject ?? `Subject ${id}` },
       { name: 'List-Id', value: '<news.example.com>' },
     ],
-  };
+  });
 }
 
 let db: Sql;
@@ -67,7 +62,7 @@ function api(): GmailApi {
 }
 
 /** A model that can place nothing. Mail sift asks about comes from a model's "unsure"; with no model, nothing is asked. */
-const unsure = async () => ({ model: 'test/model', judge: async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 }) });
+const unsure = async () => testModel();
 
 const options = (): RunOptions => ({
   ephemeral: memoryEphemeral(),
@@ -85,7 +80,6 @@ const decisions = async () =>
 
 beforeEach(async () => {
   db = await openUserDb(ACCOUNT);
-  await addMailbox(db, ACCOUNT, '1');
   mailbox = new FakeMailbox();
   logs = [];
   cursor = 1;
@@ -264,7 +258,7 @@ describe('a tick', () => {
     mailbox.labels.set('third', ['INBOX', 'UNREAD']);
     let clock = 0;
     // Each message the model is asked about takes a second.
-    const slow = async () => ({ model: 'test/model', judge: async () => ((clock += 1000), { label: 'unsure', reason: 'r', confidence: 0.2 }) });
+    const slow = async () => testModel(async () => ((clock += 1000), UNSURE));
     const limited: RunOptions = { ...options(), now: () => clock, model: slow };
     expect(await tick(store, limited, 1500)).toMatchObject([{ unfinished: true }]);
     // Two were asked about by 2000; the third is still due.
@@ -283,7 +277,7 @@ describe('a tick', () => {
       ...api(),
       getContent: async (id) => (read.push(id), { text: `Body ${id}`, html: null, facts: { hasAttachments: false } }),
     });
-    const slow = async () => ({ model: 'test/model', judge: async () => ((clock += 1000), { label: 'unsure', reason: 'r', confidence: 0.2 }) });
+    const slow = async () => testModel(async () => ((clock += 1000), UNSURE));
     const limited: RunOptions = { ...options(), connect: () => ({ api: reading(), mailbox }), now: () => clock, model: slow };
     expect(await tick(store, limited, 500)).toMatchObject([{ unfinished: true }]);
     expect(read).toEqual(['ada']);
@@ -294,7 +288,7 @@ describe('a tick', () => {
     const { store, db: own } = await onePerson(ACCOUNT);
     await addRule(own, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'learned');
     let clock = 0;
-    const slow = async () => ({ model: 'test/model', judge: async () => ((clock += 1000), { label: 'unsure', reason: 'r', confidence: 0.2 }) });
+    const slow = async () => testModel(async () => ((clock += 1000), UNSURE));
     const reading = (): GmailApi => ({ ...api(), getContent: async (id) => ({ text: `Body ${id}`, html: null, facts: { hasAttachments: false } }) });
     const limited: RunOptions = { ...options(), connect: () => ({ api: reading(), mailbox }), now: () => clock, model: slow };
     // Older than `news`, so the rule places it in the first pass and the model runs out of time on these.
@@ -576,7 +570,7 @@ describe('telling the user from sift in history', () => {
     await recordSync(
       db,
       ACCOUNT,
-      ['a', 'b', 'c', 'd'].map((messageId) => facts({ accountId: ACCOUNT, messageId })),
+      ['a', 'b', 'c', 'd'].map((messageId) => facts({ messageId })),
       '2',
     );
     await act('a', { add: ['L1'], remove: ['INBOX', 'UNREAD'] }, 'done', 200);
@@ -676,13 +670,11 @@ describe('triage queue', () => {
 
 describe('inference tier', () => {
   const judged: string[] = [];
-  const model = (label: string) => async () => ({
-    model: 'test/model',
-    judge: async ({ evidence }: { evidence: { facts: { messageId: string } } }) => {
+  const model = (label: string) => async () =>
+    testModel(async ({ evidence }) => {
       judged.push(evidence.facts.messageId);
       return { label, reason: 'looks like a mailing', confidence: 0.9, usage: { model: 'test/model', inputTokens: 800, outputTokens: 20, costUsd: 0.002 } };
-    },
-  });
+    });
 
   it('classifies what no rule covers, does what the label says and records the cost', async () => {
     judged.length = 0;
@@ -805,25 +797,18 @@ describe('a failed model call', () => {
   /** A provider that is down. */
   const failing =
     (asked: string[] = []) =>
-    async () => ({
-      model: 'test/model',
-      judge: async ({ evidence }: { evidence: { facts: { messageId: string } } }) => (asked.push(evidence.facts.messageId), { failed: 'rate limited', usage }),
-    });
+    async () =>
+      testModel(async ({ evidence }) => (asked.push(evidence.facts.messageId), { failed: 'rate limited', usage }));
   /** A model that answers, but never with a verdict sift can use. */
-  const unusable = async () => ({
-    model: 'test/model',
-    judge: async () => ({ failed: 'the model did not return a usable verdict', usage, unusable: true as const }),
-  });
+  const unusable = async () => testModel(async () => ({ failed: 'the model did not return a usable verdict', usage, unusable: true as const }));
   /** A model that answers for every message but those in `failing`, where the provider errs. */
   const flaky =
     (failing: string[], asked: string[] = []) =>
-    async () => ({
-      model: 'test/model',
-      judge: async ({ evidence }: { evidence: { facts: { messageId: string } } }) => {
+    async () =>
+      testModel(async ({ evidence }) => {
         asked.push(evidence.facts.messageId);
         return failing.includes(evidence.facts.messageId) ? { failed: 'rate limited' } : { label: 'newsletter', reason: 'r' };
-      },
-    });
+      });
   const excused = async () =>
     (await raw(db).all<{ message_id: string }>('SELECT message_id FROM model_runs WHERE retried_at IS NOT NULL ORDER BY id')).map((r) => r.message_id);
 
@@ -852,12 +837,10 @@ describe('a failed model call', () => {
 
   it('keeps why a call that threw failed as a status and kind, never what it said', async () => {
     inbox = [inbox[0]!];
-    const throwing = async () => ({
-      model: 'test/model',
-      judge: async () => {
+    const throwing = async () =>
+      testModel(async () => {
         throw Object.assign(new Error('429 Too Many Requests while reading "Weekly digest"'), { status: 429 });
-      },
-    });
+      });
     await runOnce(db, { ...options(), model: throwing });
     expect(await runs()).toEqual([{ message_id: 'news', model: 'test/model', error: 'HTTP 429 rate limited', cost_usd: 0 }]);
   });
@@ -884,8 +867,7 @@ describe('a failed model call', () => {
   it('counts a billed verdict that was never recorded as a try', async () => {
     inbox = [inbox[0]!];
     await runOnce(db, options());
-    for (let i = 0; i < MAX_ATTEMPTS; i++)
-      await finishRun(db, await startRun(db, { accountId: ACCOUNT, messageId: 'news', model: 'test/model', now: 0 }), { usage, now: 0 });
+    for (let i = 0; i < MAX_ATTEMPTS; i++) await modelRun(db, { messageId: 'news', at: 0, usage });
     expect((await listUndecided(db, ACCOUNT, 10)).map((m) => m.outOfTries)).toEqual([true]);
   });
 
@@ -1034,7 +1016,7 @@ describe('blocking', () => {
     const m = message(id, 'Bank <alerts@example.net>', 'Verify your account');
     return { ...m, headers: [...m.headers, { name: 'Authentication-Results', value: `mx.google.com; dmarc=${authenticated ? 'pass' : 'fail'}` }] };
   };
-  const phishing = async () => ({ model: 'test/model', judge: async () => ({ label: 'phishing', reason: 'asks for a password', confidence: 0.95 }) });
+  const phishing = async () => testModel(async () => ({ label: 'phishing', reason: 'asks for a password', confidence: 0.95 }));
   beforeEach(async () => {
     await updateLabel(db, ACCOUNT, 'phishing', { block: true });
   });
@@ -1050,7 +1032,7 @@ describe('blocking', () => {
     let asked = 0;
     inbox = [phish('p2', true)];
     mailbox.labels.set('p2', ['INBOX']);
-    await runOnce(await active(true), { ...options(), model: async () => ({ model: 'test/model', judge: async () => (asked++, { failed: 'not expected' }) }) });
+    await runOnce(await active(true), { ...options(), model: async () => testModel(async () => (asked++, { failed: 'not expected' })) });
     expect(asked).toBe(0);
     expect(await raw(db).get(`SELECT stage, disposition, block FROM decisions WHERE message_id = 'p2'`)).toEqual({
       stage: 'rules',
@@ -1088,7 +1070,7 @@ describe('examples', () => {
     bodies.set('news', 'The full text of the newsletter.');
     await runOnce(await active(false), {
       ...options(),
-      model: async () => ({ model: 'test/model', judge: async () => ({ label: 'newsletter', reason: 'r' }) }),
+      model: async () => testModel(async () => ({ label: 'newsletter', reason: 'r' })),
     });
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', messageId: 'news' });
 

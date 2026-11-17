@@ -1,7 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, param, path, query, test } from './sift.ts';
-
-const settings = (page: Page) => page.getByRole('dialog', { name: 'Settings' });
+import { closeSettings, expect, param, path, query, settings, settingsFromMenu, test } from './sift.ts';
 
 /** Confirms a removal in the open dialog `title` by typing `address`. */
 async function confirmRemoval(page: Page, title: string, address: string, action: string) {
@@ -63,8 +61,7 @@ test.describe('Connecting another mailbox', () => {
     // Where Google's return sends someone still signed in when it did not work out.
     await page.goto(`/?settings=1&signin=${encodeURIComponent('bravo@example.net is already connected to Sift by someone else.')}`);
     await expect(settings(page).getByText('bravo@example.net is already connected to Sift by someone else.')).toBeVisible();
-    await settings(page).getByRole('button', { name: 'Close' }).click();
-    await expect(settings(page)).toHaveCount(0);
+    await closeSettings(page);
     await query(page).toBe('');
   });
 });
@@ -77,7 +74,7 @@ test.describe('The primary mailbox', () => {
     await primary.click();
     await page.getByRole('option', { name: 'me@work.example.org', exact: true }).click();
     await expect(primary).toContainText('me@work.example.org');
-    await settings(page).getByRole('button', { name: 'Close' }).click();
+    await closeSettings(page);
     await expect(page.getByRole('button', { name: 'Account, me@work.example.org' })).toBeVisible();
 
     await page.goto('/?settings=1');
@@ -86,7 +83,7 @@ test.describe('The primary mailbox', () => {
     await confirmRemoval(page, 'Remove me@work.example.org', 'me@work.example.org', 'Remove mailbox');
     // With one mailbox left there is nothing to choose.
     await expect(primary).toHaveCount(0);
-    await settings(page).getByRole('button', { name: 'Close' }).click();
+    await closeSettings(page);
     await expect(page.getByRole('button', { name: 'Account, me@example.org' })).toBeVisible();
   });
 });
@@ -94,12 +91,9 @@ test.describe('The primary mailbox', () => {
 test.describe('Settings', () => {
   test('closes to the page it opened over, with nothing left in the address', async ({ page }) => {
     await page.goto('/activity');
-    await page.getByRole('button', { name: 'Account, me@example.org' }).click();
-    await page.getByRole('menuitem', { name: 'Settings' }).click();
-    await expect(settings(page)).toBeVisible();
+    await settingsFromMenu(page);
     await param(page, 'settings').toBe('1');
-    await settings(page).getByRole('button', { name: 'Close' }).click();
-    await expect(settings(page)).toHaveCount(0);
+    await closeSettings(page);
     await path(page).toBe('/activity');
     await query(page).toBe('');
   });

@@ -1,6 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 import { generateDrizzleJson, generateMigration } from 'drizzle-kit/api';
 import { describe, expect, it } from 'vitest';
@@ -17,10 +15,9 @@ import type { Sql } from '../src/store/sql.ts';
 import type { Disposition } from '../src/triage/types.ts';
 import { startRun } from '../src/store/runs.ts';
 import { freshStore, onePerson, openUserDb, raw, recordEverything, rowsBy, superuser } from './fixtures.ts';
-import { facts, withSampleLabels } from './helpers.ts';
+import { facts, tempDir, withSampleLabels } from './helpers.ts';
 
 const MIGRATIONS = new URL('../src/store/migrations/', import.meta.url);
-const scratch = () => mkdtempSync(join(tmpdir(), 'sift-db-'));
 
 describe('migrations', () => {
   it('have been generated for everything in the schema', async () => {
@@ -41,7 +38,7 @@ describe('migrations', () => {
   });
 
   it('keep the database where they were applied, and refuse one a newer sift has migrated', async () => {
-    const paths = { databaseDir: scratch(), keys: loadKeyring({}) };
+    const paths = { databaseDir: tempDir(), keys: loadKeyring({}) };
     const first = await openStore(paths);
     await connectAccount(first, 'me@example.org', '1', 0);
     await first.close();
@@ -56,7 +53,7 @@ describe('migrations', () => {
   });
 
   it('start over in a new database once the old one is moved aside, which is refused while it is open', async () => {
-    const paths = { databaseDir: scratch(), keys: loadKeyring({}) };
+    const paths = { databaseDir: tempDir(), keys: loadKeyring({}) };
     const first = await openStore(paths);
     await connectAccount(first, 'me@example.org', '1', 0);
     expect(() => moveAside(paths.databaseDir)).toThrow(DatabaseInUse);
@@ -69,7 +66,7 @@ describe('migrations', () => {
   });
 
   it('refuse a database made by migrations since replaced, rather than run them again over it', async () => {
-    const paths = { databaseDir: scratch(), keys: loadKeyring({}) };
+    const paths = { databaseDir: tempDir(), keys: loadKeyring({}) };
     await (await openStore(paths)).close();
     const raw = new PGlite(paths.databaseDir);
     await raw.query(`UPDATE drizzle.__drizzle_migrations SET hash = 'replaced' WHERE id = 1`);
@@ -325,7 +322,6 @@ describe('a new mailbox', () => {
 
   it('made before Everything Else existed is given it by a migration, after its own labels, and it becomes Leave in inbox', async () => {
     const { db } = await onePerson('alpha@example.org');
-    await withSampleLabels(db, 'alpha@example.org');
     await raw(db).run(`DELETE FROM labels WHERE id = 'everything_else'`);
     const migration = readFileSync(new URL('0030_every_mailbox_has_everything_else.sql', MIGRATIONS), 'utf8');
     await (await superuser()).exec(migration);
@@ -374,7 +370,7 @@ describe('a new mailbox', () => {
 
 describe('the database in the home directory', () => {
   it('is refused to a second opener while the first has it, and free again once closed', async () => {
-    const paths = { databaseDir: scratch(), keys: loadKeyring({}) };
+    const paths = { databaseDir: tempDir(), keys: loadKeyring({}) };
     const first = await openStore(paths);
     await expect(openStore(paths)).rejects.toThrow(`Another Sift (process ${process.pid}) has the database open`);
     await first.close();

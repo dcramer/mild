@@ -1,15 +1,15 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { Controls, SignIn } from '../src/dashboard/controls.ts';
+import type { Controls } from '../src/dashboard/controls.ts';
 import { people } from '../src/store/people.ts';
 import { connectAccount, connectedAddresses, listUsers, mailboxesOf, personOf, recordSync, userOf } from '../src/store/accounts.ts';
 import { finishLabelProposal, listLabels, startLabelProposal } from '../src/store/labels.ts';
 import { preferences, setModel } from '../src/store/preferences.ts';
 import type { Store } from '../src/store/store.ts';
-import { freshStore, raw, rowsBy, startDashboard } from './fixtures.ts';
+import { freshStore, googleSignIn, raw, rowsBy, startDashboard } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
-import { facts, withSampleLabels } from './helpers.ts';
+import { codeSignIn, facts, withSampleLabels } from './helpers.ts';
 import { conditionsHash } from '../src/store/content.ts';
 import { startEval } from '../src/learn/evals.ts';
 import { startInboxRuns } from '../src/store/inbox.ts';
@@ -79,13 +79,6 @@ const call = (method: 'GET' | 'POST', path: string, who: string | null, body?: u
   return dashboard.call(method, path, body, who ? { cookie: cookies[who]! } : {});
 };
 
-const signIn: SignIn = {
-  hasClient: () => true,
-  url: (_redirect, state) => `https://accounts.example/auth?state=${state}`,
-  // The code stands in for the Google account that came back.
-  complete: async (_redirect, code) => code,
-};
-
 beforeEach(async () => {
   store = await freshStore();
   calls = [];
@@ -136,14 +129,8 @@ beforeEach(async () => {
       expired: [ALPHA_WORK, BRAVO],
     }),
   };
-  dashboard = await startDashboard(people(store), { controls, signIn, sessionSecret: 'secret', now: () => 2000 });
-  for (const who of [ALPHA, ALPHA_WORK, BRAVO]) {
-    const login = await dashboard.call('GET', '/auth/login');
-    const state = new URL(String(login.headers['location'])).searchParams.get('state');
-    const started = String(login.headers['set-cookie']).split(';')[0]!;
-    const back = await dashboard.call('GET', `/auth/callback?state=${state}&code=${encodeURIComponent(who)}`, undefined, { cookie: started });
-    cookies[who] = String(back.headers['set-cookie']).split(';')[0] ?? '';
-  }
+  dashboard = await startDashboard(people(store), { controls, signIn: codeSignIn, sessionSecret: 'secret', now: () => 2000 });
+  for (const who of [ALPHA, ALPHA_WORK, BRAVO]) cookies[who] = String((await googleSignIn(dashboard, who)).headers['set-cookie']).split(';')[0] ?? '';
 });
 
 const READS = (account: string, mark: string) => [

@@ -11,14 +11,12 @@ import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { deleteExamples } from '../src/store/examples.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { addRule } from '../src/store/rules.ts';
-import { MAX_ATTEMPTS, finishRun, startRun } from '../src/store/runs.ts';
+import { MAX_ATTEMPTS, startRun } from '../src/store/runs.ts';
 import type { Decision } from '../src/triage/types.ts';
-import { raw, onePerson } from './fixtures.ts';
-import { facts } from './helpers.ts';
+import { modelRun, raw, onePerson } from './fixtures.ts';
+import { ACCOUNT, DAY, facts } from './helpers.ts';
 import type { Store } from '../src/store/store.ts';
 
-const ACCOUNT = 'me@example.org';
-const DAY = 86_400_000;
 const OLD = 10 * DAY;
 const NOW = OLD + (RETENTION_DAYS + 1) * DAY;
 const RECENT = NOW - 10 * DAY;
@@ -29,7 +27,7 @@ let store: Store;
 const archive: Decision = { disposition: 'archive', subscription: 'preserve', labelId: 'newsletter', stage: 'model', reason: 'test' };
 
 async function message(id: string, at = OLD, from = `${id}@example.com`): Promise<void> {
-  await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id, receivedAt: at, from: { address: from, domain: 'example.com' } })], '1', at);
+  await recordSync(db, ACCOUNT, [facts({ messageId: id, receivedAt: at, from: { address: from, domain: 'example.com' } })], '1', at);
 }
 
 /** A message sift decided and changed long ago. */
@@ -56,7 +54,7 @@ beforeEach(async () => {
 describe('pruneOld', () => {
   it('forgets an old message with its decisions, changes and model runs', async () => {
     await acted('gone');
-    await finishRun(db, await startRun(db, { accountId: ACCOUNT, messageId: 'gone', model: 'p/m', now: OLD }), { now: OLD });
+    await modelRun(db, { messageId: 'gone', model: 'p/m', at: OLD });
     await acted('fresh');
     await message('new', RECENT);
     await recordDecision(db, ACCOUNT, 'new', archive, { carryOut: true, now: RECENT });

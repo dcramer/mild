@@ -1,18 +1,13 @@
-import { choose, expect, panel, query, row, test } from './sift.ts';
+import { addLabelsDialog, choose, expect, panel, query, row, test, writeLabel } from './sift.ts';
 
 test.describe('For review', () => {
   test('adding a label from a row opens only the dialog, and leaves the page as it was', async ({ page }) => {
     await page.goto('/');
     await choose(row(page, 'Notes from the review'), 'Add a label…');
-    const dialog = page.getByRole('dialog', { name: 'Add labels' });
-    await expect(dialog).toBeVisible();
+    await expect(addLabelsDialog(page)).toBeVisible();
     await expect(panel(page)).toHaveCount(0);
 
-    await dialog.getByRole('button', { name: 'Write one yourself' }).click();
-    const manual = page.getByRole('dialog', { name: 'Add a label' });
-    await manual.getByRole('textbox', { name: 'Name' }).fill('Field trips');
-    await manual.getByRole('button', { name: 'Add label', exact: true }).click();
-    await expect(manual).toHaveCount(0);
+    await writeLabel(page, 'Field trips');
     await expect(panel(page)).toHaveCount(0);
     await query(page).toBe('');
 
@@ -24,7 +19,7 @@ test.describe('For review', () => {
   test('closing the add-label dialog leaves the page as it was', async ({ page }) => {
     await page.goto('/');
     await choose(row(page, 'Notes from the review'), 'Add a label…');
-    const dialog = page.getByRole('dialog', { name: 'Add labels' });
+    const dialog = addLabelsDialog(page);
     await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(dialog).toHaveCount(0);
     await expect(panel(page)).toHaveCount(0);

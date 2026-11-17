@@ -3,14 +3,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { undo } from '../src/actions/executor.ts';
 import { checkRuleFilters, removeRuleFilter, retryRuleFilters, writeRuleFilter } from '../src/actions/rule-filters.ts';
 import { FILTER_CHECK_MINUTES, checkFiltersWhenDue } from '../src/work/filters.ts';
-import { addMailbox } from '../src/store/accounts.ts';
 import { openUserDb, raw, unmarked } from './fixtures.ts';
 import { getRuleFilter, ruleFilterStatus } from '../src/store/filters.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { addRule, removeRule, setRule } from '../src/store/rules.ts';
 import { type FilterableRule, filterFor } from '../src/triage/filter.ts';
 import { validateFilter } from '../src/actions/filters.ts';
-import { FakeMailbox, SAMPLE_LABELS } from './helpers.ts';
+import { ACCOUNT, FakeMailbox, SAMPLE_LABELS } from './helpers.ts';
 
 const rule = (overrides: Partial<FilterableRule> = {}): FilterableRule => ({
   id: 'r1',
@@ -129,7 +128,6 @@ describe('whether a rule can be a Gmail filter', () => {
   });
 });
 
-const ACCOUNT = 'me@example.org';
 let db: Sql;
 let mailbox: FakeMailbox;
 let clock: number;
@@ -142,7 +140,6 @@ const actions = async () =>
 
 beforeEach(async () => {
   db = await openUserDb(ACCOUNT);
-  await addMailbox(db, ACCOUNT, '1');
   mailbox = new FakeMailbox();
   clock = 1000;
 });

@@ -11,7 +11,7 @@ import { draftRule } from '../src/learn/rules.ts';
 import { createRuleDrafter } from '../src/model/draft-rule.ts';
 import { createJudge } from '../src/model/judge.ts';
 import { createProposer } from '../src/model/propose.ts';
-import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
+import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { hashOf, traceIds } from '../src/store/content.ts';
 import { VERDICT_TOOL } from '../src/triage/prompt.ts';
 import { PROPOSAL_PROMPT, PROPOSAL_TOOL } from '../src/triage/proposal.ts';
@@ -20,10 +20,9 @@ import { deriveFacts } from '../src/triage/facts.ts';
 import { loadKeyring } from '../src/secrets.ts';
 import { checkedIn, continued, flushTelemetry, identify, logged, reportError, scrub, startTelemetry, traced, tracedFetch } from '../src/telemetry.ts';
 import { triageAccount } from '../src/work/triage.ts';
-import { freshStore, openUserDb, raw } from './fixtures.ts';
-import { facts, SAMPLE_LABELS, storeExample, withSampleLabels } from './helpers.ts';
+import { firstAccount, freshStore, openUserDb, personWith, raw } from './fixtures.ts';
+import { ACCOUNT, facts, quietSources, SAMPLE_LABELS, storeExample } from './helpers.ts';
 
-const ACCOUNT = 'me@example.org';
 const SENDER = 'billing@shop.example.com';
 const SUBJECT = 'Your invoice 8812 is overdue';
 const BODY = 'Pay 4,200 by Friday or your account at Acme closes.';
@@ -59,15 +58,12 @@ async function delivered() {
 
 /** A person's database with a key, so hashes are hashes. */
 async function keyedPerson() {
-  const store = await freshStore(loadKeyring({ SIFT_KEY: 'telemetry-key' }));
-  const db = await store.user(await connectAccount(store, ACCOUNT, '1', 0));
+  const { store, db } = await personWith(loadKeyring({ SIFT_KEY: 'telemetry-key' }), ACCOUNT);
   const other = await store.user(await connectAccount(store, 'you@example.org', '1', 0));
-  await withSampleLabels(db, ACCOUNT);
   return { db, other };
 }
 
 const message = facts({
-  accountId: ACCOUNT,
   messageId: 'abc123',
   from: { address: SENDER, domain: 'shop.example.com', name: 'Acme Billing' },
   subject: SUBJECT,
@@ -129,8 +125,10 @@ describe('the model call, as Sentry is sent it', () => {
     const { db } = await keyedPerson();
     await recordSync(db, ACCOUNT, [message], '2', 0);
     const { models, model } = answering();
-    const sources = { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } };
-    await triageAccount({ db, mailbox: null, model: { judge: createJudge(models, model), model: 'faux/model' }, sources }, (await listAccounts(db))[0]!);
+    await triageAccount(
+      { db, mailbox: null, model: { judge: createJudge(models, model), model: 'faux/model' }, sources: quietSources() },
+      await firstAccount(db),
+    );
 
     const { attributes, text } = await delivered();
     const run = await raw(db).get<{ id: number }>('SELECT id FROM model_runs');

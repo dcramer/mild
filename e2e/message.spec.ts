@@ -1,7 +1,28 @@
 import type { Page } from '@playwright/test';
-import { boxOf, choose, expect, panel, param, path, PHONE, query, row, sideScroll, test } from './sift.ts';
+import { addRule, makeRule, ruleDialog, rulePanel, writeRule } from './rule.ts';
+import {
+  addLabelsDialog,
+  boxOf,
+  choose,
+  expect,
+  forReviewLink,
+  messageQuery,
+  openMessage,
+  panel,
+  panelHeading,
+  param,
+  path,
+  PHONE,
+  query,
+  reviewRows,
+  row,
+  senderPage,
+  sideScroll,
+  test,
+  writeLabel,
+} from './sift.ts';
 
-const DEALS = '/?message=m4&account=me%40example.org';
+const DEALS = `/?${messageQuery('m4')}`;
 
 /**
  * Every request beyond `origin` the browser did not refuse under the content security policy. A refused one is
@@ -42,7 +63,7 @@ test.describe('A message as its HTML', () => {
     const tab = await opened;
     await expect.poll(() => tab.url()).toBe('https://shop.example.com/sale');
     await tab.close();
-    await expect(panel(page).getByRole('heading', { name: '48 hours only: 30% off' })).toBeVisible();
+    await expect(panelHeading(page, '48 hours only: 30% off')).toBeVisible();
     await param(page, 'message').toBe('m4');
   });
 
@@ -64,11 +85,11 @@ test.describe('A message as its HTML', () => {
   });
 
   test('mail held as text alone, or not held, has nothing to choose', async ({ page }) => {
-    await page.goto('/?message=m6&account=me%40example.org');
+    await page.goto(`/?${messageQuery('m6')}`);
     await expect(panel(page).getByText('Are you free for lunch on Thursday?')).toBeVisible();
     await expect(panel(page).getByRole('radiogroup', { name: 'Read it as' })).toHaveCount(0);
 
-    await page.goto('/activity?show=all&message=m1&account=me%40example.org');
+    await page.goto(`/activity?show=all&${messageQuery('m1')}`);
     await expect(panel(page).getByText('Sift does not hold this message’s text.')).toBeVisible();
     await expect(panel(page).getByRole('radiogroup', { name: 'Read it as' })).toHaveCount(0);
   });
@@ -104,11 +125,11 @@ test.describe('What Sift saw', () => {
     ])
       await expect(seen(page).filter({ has: page.getByRole('cell', { name: words }) })).toHaveCount(1);
 
-    await page.goto('/?message=m7&account=me%40example.org');
+    await page.goto(`/?${messageQuery('m7')}`);
     await expect(seen(page)).toHaveCount(1);
     await expect(seen(page)).toContainText('Has attachments');
 
-    await page.goto('/?message=m6&account=me%40example.org');
+    await page.goto(`/?${messageQuery('m6')}`);
     await expect(seen(page)).toHaveCount(1);
     await expect(seen(page)).toContainText('Is a reply');
   });
@@ -116,9 +137,9 @@ test.describe('What Sift saw', () => {
   test('a rule from a fact opens over the panel, and closing it leaves the panel open', async ({ page }) => {
     await page.goto(DEALS);
     await panel(page).getByRole('button', { name: 'Make a rule for mail that has a one-click unsubscribe' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Add a rule' });
+    const dialog = ruleDialog(page);
     await expect(dialog.getByRole('textbox')).toHaveValue('Mail from deals@promo.example.com that has a one-click unsubscribe: ');
-    await expect(page).toHaveURL(/\/\?message=m4&account=me%40example\.org$/);
+    await expect(page).toHaveURL(DEALS);
 
     await dialog.getByRole('button', { name: 'Write it yourself' }).click();
     await expect(dialog.getByRole('textbox', { name: 'Value 1' })).toHaveValue('deals@promo.example.com');
@@ -126,10 +147,10 @@ test.describe('What Sift saw', () => {
 
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
-    await expect(panel(page).getByRole('heading', { name: '48 hours only: 30% off' })).toBeVisible();
-    await expect(page).toHaveURL(/\/\?message=m4&account=me%40example\.org$/);
+    await expect(panelHeading(page, '48 hours only: 30% off')).toBeVisible();
+    await expect(page).toHaveURL(DEALS);
 
-    await panel(page).getByRole('button', { name: 'Make a rule…' }).click();
+    await makeRule(panel(page));
     await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(dialog).toHaveCount(0);
     await expect(panel(page)).toBeVisible();
@@ -138,21 +159,17 @@ test.describe('What Sift saw', () => {
 
   test('a rule added from the panel opens over it, and Escape closes the rule, then the panel', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('cell', { name: 'Winter sale starts now' }).click();
-    await panel(page).getByRole('button', { name: 'Make a rule…' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Add a rule' });
+    const dialog = await makeRule(await openMessage(page, 'Winter sale starts now'));
     await dialog.getByRole('button', { name: 'Write it yourself' }).click();
-    // Looking at the inbox asks Gmail, which is not here.
-    await dialog.getByRole('checkbox', { name: 'Apply to mail already there' }).uncheck();
-    await dialog.getByRole('button', { name: 'Add rule', exact: true }).click();
-    const sheet = page.getByRole('dialog', { name: 'sale@store.example.com', exact: true });
+    await addRule(dialog);
+    const sheet = rulePanel(page, 'sale@store.example.com');
     await expect(sheet).toContainText('Marketing');
     await param(page, 'message').toBe('m8');
     await param(page, 'rule').not.toBeNull();
 
     await page.keyboard.press('Escape');
     await expect(sheet).toHaveCount(0);
-    await expect(panel(page).getByRole('heading', { name: 'Winter sale starts now' })).toBeVisible();
+    await expect(panelHeading(page, 'Winter sale starts now')).toBeVisible();
     await param(page, 'rule').toBeNull();
 
     await page.keyboard.press('Escape');
@@ -162,15 +179,11 @@ test.describe('What Sift saw', () => {
   });
 
   test('a label added from the panel leaves the panel open on the message', async ({ page }) => {
-    await page.goto('/?message=m7&account=me%40example.org');
+    await page.goto(`/?${messageQuery('m7')}`);
     await choose(panel(page), 'Add a label…');
-    const dialog = page.getByRole('dialog', { name: 'Add labels' });
-    await dialog.getByRole('button', { name: 'Write one yourself' }).click();
-    const manual = page.getByRole('dialog', { name: 'Add a label' });
-    await manual.getByRole('textbox', { name: 'Name' }).fill('Field trips');
-    await manual.getByRole('button', { name: 'Add label', exact: true }).click();
-    await expect(manual).toHaveCount(0);
-    await expect(panel(page).getByRole('heading', { name: 'Notes from the review' })).toBeVisible();
+    await expect(addLabelsDialog(page)).toBeVisible();
+    await writeLabel(page, 'Field trips');
+    await expect(panelHeading(page, 'Notes from the review')).toBeVisible();
     await param(page, 'message').toBe('m7');
 
     await choose(panel(page), 'Field trips');
@@ -179,21 +192,18 @@ test.describe('What Sift saw', () => {
 
   test('a rule on a fact alone is for mail from anyone, and re-decides what is waiting', async ({ page }) => {
     await page.goto('/rules');
-    await page.getByRole('button', { name: 'Add a rule' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Add a rule' });
-    await dialog.getByRole('button', { name: 'Write it yourself' }).click();
+    const dialog = await writeRule(page);
     await dialog.getByRole('combobox', { name: 'Condition 1' }).click();
     await page.getByRole('option', { name: 'is in Promotions' }).click();
     await expect(dialog.getByText('From anyone.')).toBeVisible();
-    await dialog.getByRole('checkbox', { name: 'Apply to mail already there' }).uncheck();
-    await dialog.getByRole('button', { name: 'Add rule', exact: true }).click();
+    await addRule(dialog);
     await expect(dialog).toHaveCount(0);
-    const sheet = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'mail that is in Promotions' }) });
+    const sheet = rulePanel(page, 'mail that is in Promotions');
     await sheet.getByRole('button', { name: 'Close' }).click();
     await expect(sheet).toHaveCount(0);
 
     await expect(row(page, 'mail that is in Promotions')).toContainText('Archive');
-    await expect(page.getByRole('link', { name: 'For review 10' })).toBeVisible();
+    await expect(forReviewLink(page)).toHaveAccessibleName('For review 10');
   });
 
   test('For review narrowed to replies shows only Ada’s, with a chip that clears it', async ({ page }) => {
@@ -201,21 +211,20 @@ test.describe('What Sift saw', () => {
     await page.getByRole('button', { name: 'Filters' }).click();
     await page.getByRole('radio', { name: 'Is a reply' }).click();
     await param(page, 'fact').toBe('reply');
-    const mail = page.getByRole('row').filter({ has: page.getByRole('combobox', { name: 'What this message is' }) });
-    await expect(mail).toHaveCount(1);
+    await expect(reviewRows(page)).toHaveCount(1);
     await expect(row(page, 'Lunch on Thursday?')).toBeVisible();
 
     await page.getByRole('button', { name: /^Filters/ }).click();
     await page.getByRole('button', { name: 'Clear Mail that is a reply' }).click();
     await param(page, 'fact').toBeNull();
-    await expect(mail).toHaveCount(9);
+    await expect(reviewRows(page)).toHaveCount(9);
   });
 });
 
 test.describe('A message opened by its address', () => {
   test('opens over For review, and Close leaves For review with nothing in the address', async ({ page }) => {
-    await page.goto('/?message=m6&account=me%40example.org');
-    await expect(panel(page).getByRole('heading', { name: 'Lunch on Thursday?' })).toBeVisible();
+    await page.goto(`/?${messageQuery('m6')}`);
+    await expect(panelHeading(page, 'Lunch on Thursday?')).toBeVisible();
     await panel(page).getByRole('button', { name: 'Close' }).click();
     await expect(panel(page)).toHaveCount(0);
     await path(page).toBe('/');
@@ -224,14 +233,13 @@ test.describe('A message opened by its address', () => {
   });
 
   test('Escape closes it, and opening a row afterwards opens that row', async ({ page }) => {
-    await page.goto('/?message=m6&account=me%40example.org');
-    await expect(panel(page).getByRole('heading', { name: 'Lunch on Thursday?' })).toBeVisible();
+    await page.goto(`/?${messageQuery('m6')}`);
+    await expect(panelHeading(page, 'Lunch on Thursday?')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(panel(page)).toHaveCount(0);
     await query(page).toBe('');
 
-    await page.getByRole('cell', { name: 'Notes from the review' }).click();
-    await expect(panel(page).getByRole('heading', { name: 'Notes from the review' })).toBeVisible();
+    await openMessage(page, 'Notes from the review');
     await panel(page).getByRole('button', { name: 'Close' }).click();
     await expect(panel(page)).toHaveCount(0);
     await query(page).toBe('');
@@ -241,15 +249,14 @@ test.describe('A message opened by its address', () => {
 test.describe('A message opened from a list', () => {
   test('a row of For review opens it, Back closes it, and Forward opens it again', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('cell', { name: 'Notes from the review' }).click();
-    await expect(panel(page).getByRole('heading', { name: 'Notes from the review' })).toBeVisible();
+    await openMessage(page, 'Notes from the review');
     await param(page, 'message').toBe('m7');
     await page.goBack();
     await expect(panel(page)).toHaveCount(0);
     await query(page).toBe('');
 
     await page.goForward();
-    await expect(panel(page).getByRole('heading', { name: 'Notes from the review' })).toBeVisible();
+    await expect(panelHeading(page, 'Notes from the review')).toBeVisible();
     await panel(page).getByRole('button', { name: 'Close' }).click();
     await expect(panel(page)).toHaveCount(0);
     await query(page).toBe('');
@@ -257,11 +264,10 @@ test.describe('A message opened from a list', () => {
 
   test('the sender link in the panel’s header goes to the sender, closing the panel', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('cell', { name: 'Notes from the review' }).click();
-    await panel(page).getByRole('link', { name: 'Grace Hopper' }).click();
+    await (await openMessage(page, 'Notes from the review')).getByRole('link', { name: 'Grace Hopper' }).click();
     await expect(page.getByRole('heading', { name: 'Grace Hopper', level: 1 })).toBeVisible();
     await expect(panel(page)).toHaveCount(0);
-    await path(page).toBe('/sender/me%40example.org/grace%40example.net');
+    await path(page).toBe(senderPage('grace@example.net'));
     await param(page, 'message').toBeNull();
   });
 });

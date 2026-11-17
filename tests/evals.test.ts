@@ -1,15 +1,14 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MAX_EVAL_EXAMPLES, type EvalRequest, continueEval, getEvalRun, listEvalRuns, startEval } from '../src/learn/evals.ts';
-import { addMailbox, recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/accounts.ts';
 import { openUserDb, raw } from './fixtures.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import { score } from '../src/triage/score.ts';
 import type { JudgeFailure, JudgeInput, Verdict } from '../src/triage/stages/model.ts';
-import { facts, storeExample } from './helpers.ts';
+import { ACCOUNT, facts, storeExample, testModel } from './helpers.ts';
 
-const ACCOUNT = 'me@example.org';
 const free = { costUsd: 0, inputTokens: 0, outputTokens: 0 };
 
 describe('scoring', () => {
@@ -53,12 +52,7 @@ describe('replaying the model over stored examples', () => {
       const label = answers[input.evidence.facts.messageId];
       return label === undefined ? { failed: 'provider error' } : { label, reason: 'r', confidence: 0.8, usage };
     };
-  const deps = (answers: Record<string, string>) => ({
-    db,
-    judge: judge(answers),
-    model: 'test/model',
-    now: () => 500,
-  });
+  const deps = (answers: Record<string, string>) => ({ db, ...testModel(judge(answers)), now: () => 500 });
   /** Start a run and carry it to its end, as its jobs would. */
   const runEval = async (given: Parameters<typeof continueEval>[0], request: EvalRequest) => {
     const id = await startEval(given, request);
@@ -68,7 +62,6 @@ describe('replaying the model over stored examples', () => {
 
   beforeEach(async () => {
     db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1');
     seen = [];
     // Each arrives, then is answered before the next arrives.
     await storeExample(db, ACCOUNT, { id: 'e1', from: 'news@example.com', label: 'newsletter', body: 'Issue 12.', receivedAt: 10, markedAt: 11 });
@@ -114,14 +107,9 @@ describe('replaying the model over stored examples', () => {
 
   it('counts the mail the sender had sent when the message arrived, not what came after', async () => {
     const news = { address: 'list@example.com', domain: 'example.com' };
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'old', from: news, receivedAt: 10 })], '3');
-    await recordSync(
-      db,
-      ACCOUNT,
-      [facts({ accountId: ACCOUNT, messageId: 'judged', from: news, receivedAt: 20, headers: { 'list-id': '<l.example.com>' } })],
-      '4',
-    );
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'later', from: news, receivedAt: 30 })], '5');
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'old', from: news, receivedAt: 10 })], '3');
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'judged', from: news, receivedAt: 20, headers: { 'list-id': '<l.example.com>' } })], '4');
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'later', from: news, receivedAt: 30 })], '5');
     await raw(db).run(
       `INSERT INTO examples (account_id, message_id, label_id, marked_at, status, body_text)
        VALUES (?, 'judged', 'personal', 99, 'captured', 'Hello.')`,
@@ -150,7 +138,7 @@ describe('replaying the model over stored examples', () => {
       running--;
       return { label: 'personal', reason: 'r' };
     };
-    await runEval({ db, judge: slow, model: 'test/model' }, { accountId: ACCOUNT, fewShot: false, limit: 10 });
+    await runEval({ db, ...testModel(slow) }, { accountId: ACCOUNT, fewShot: false, limit: 10 });
     expect(seen.map((s) => s.evidence.facts.messageId).toSorted()).toEqual(['x10', 'x11', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7', 'x8', 'x9']);
     expect(most).toBeGreaterThan(1);
     expect(most).toBeLessThanOrEqual(4);
@@ -176,7 +164,7 @@ describe('replaying the model over stored examples', () => {
     const throwing = async () => {
       throw Object.assign(new Error('503 upstream: cannot read "Your invoice from example.com"'), { status: 503 });
     };
-    const id = await runEval({ db, judge: throwing, model: 'test/model' }, { accountId: ACCOUNT, fewShot: false });
+    const id = await runEval({ db, ...testModel(throwing) }, { accountId: ACCOUNT, fewShot: false });
     const { run, results } = (await getEvalRun(db, id))!;
     expect(run).toMatchObject({ status: 'done', total: 4, score: { total: 4, failed: 4 } });
     expect(new Set(results.map((r) => r.error))).toEqual(new Set(['HTTP 503 unavailable']));
@@ -184,7 +172,7 @@ describe('replaying the model over stored examples', () => {
 
   it('keeps the cost of a call that was billed but answered unusably', async () => {
     const unusable = async (): Promise<JudgeFailure> => ({ failed: 'the model did not return a usable verdict', usage });
-    const id = await runEval({ db, judge: unusable, model: 'test/model' }, { accountId: ACCOUNT, fewShot: false });
+    const id = await runEval({ db, ...testModel(unusable) }, { accountId: ACCOUNT, fewShot: false });
     const { run, results } = (await getEvalRun(db, id))!;
     expect(run.score).toMatchObject({ failed: 4, costUsd: 0.004, inputTokens: 4000 });
     expect(results.every((r) => r.got === null && r.costUsd === 0.001 && r.error === 'the model did not return a usable verdict')).toBe(true);
@@ -207,12 +195,7 @@ describe('replaying the model over stored examples', () => {
     for (let i = 0; i < 6; i++) await storeExample(db, ACCOUNT, { id: `x${i}`, from: `s${i}@example.org`, label: 'personal', markedAt: 100 + i });
     let clock = 0;
     // Each call takes a second.
-    const given = {
-      db,
-      judge: async (input: JudgeInput) => (seen.push(input), (clock += 1000), { label: 'personal', reason: 'r' }),
-      model: 'test/model',
-      now: () => clock,
-    };
+    const given = { db, ...testModel(async (input) => (seen.push(input), (clock += 1000), { label: 'personal', reason: 'r' })), now: () => clock };
     const id = await startEval(given, { accountId: ACCOUNT, fewShot: false });
     expect(await continueEval(given, id, 1500)).toBe(false);
     expect(seen.length).toBeLessThan(10);

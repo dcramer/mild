@@ -1,15 +1,30 @@
-import type { Page } from '@playwright/test';
-import { ruleToast } from './rule.ts';
-import { boxOf, expect, panel, param, path, PHONE, query, row, sideScroll, test } from './sift.ts';
+import type { Locator, Page } from '@playwright/test';
+import { ruleDialog, standing } from './rule.ts';
+import {
+  boxOf,
+  domainPage,
+  expect,
+  messageQuery,
+  openMessage,
+  panel,
+  panelHeading,
+  param,
+  patchJson,
+  path,
+  PHONE,
+  query,
+  row,
+  senderPage,
+  sideScroll,
+  test,
+  toast,
+} from './sift.ts';
 
-const SENDER = '/sender/me%40example.org/notifications%40code.example.com';
-const DOMAIN = '/domain/me%40example.org/code.example.com';
+const SENDER = senderPage('notifications@code.example.com');
+const DOMAIN = domainPage('code.example.com');
 
-/** The rows of the page's lists that hold mail, not the day headings between them. */
-const rows = (page: Page) => page.getByRole('row').filter({ has: page.getByRole('cell') });
-
-/** One of a sender's or domain's standings; `aria-pressed` says whether it is theirs. */
-const standing = (page: Page, name: string) => page.getByRole('group', { name: /stands$/ }).getByRole('button', { name, exact: true });
+/** The rows of the page's lists, or of one table, that hold mail: not the headers or the day headings between them. */
+const rows = (page: Page, within: Page | Locator = page) => within.getByRole('row').filter({ has: page.getByRole('cell') });
 
 test.describe('Activity, after a pass with Sift on', () => {
   test.use({ variant: 'on' });
@@ -44,19 +59,20 @@ test.describe('Activity', () => {
   test('search narrows by subject and by sender, and is kept in the address', async ({ page }) => {
     await page.goto('/activity?show=all');
     await expect(rows(page)).toHaveCount(21);
-    await page.getByRole('searchbox', { name: 'Search subject or sender' }).fill('widgets');
+    const search = page.getByRole('searchbox', { name: 'Search subject or sender' });
+    await search.fill('widgets');
     await expect(rows(page)).toHaveCount(2);
     await param(page, 'q').toBe('widgets');
 
-    await page.getByRole('searchbox', { name: 'Search subject or sender' }).fill('ops.example.com');
+    await search.fill('ops.example.com');
     await expect(rows(page)).toHaveCount(2);
     await expect(row(page, 'Replica lag on db-3')).toBeVisible();
 
-    await page.getByRole('searchbox', { name: 'Search subject or sender' }).fill('nothing like this');
+    await search.fill('nothing like this');
     await expect(page.getByText('Nothing matches.')).toBeVisible();
 
     await page.reload();
-    await expect(page.getByRole('searchbox', { name: 'Search subject or sender' })).toHaveValue('nothing like this');
+    await expect(search).toHaveValue('nothing like this');
     await expect(page.getByText('Nothing matches.')).toBeVisible();
   });
 
@@ -85,15 +101,13 @@ test.describe('Activity', () => {
 
   test('a row opens its message, Next steps down the list, and Close returns to the list as it was', async ({ page }) => {
     await page.goto('/activity?show=all');
-    await page.getByRole('cell', { name: 'Winter sale starts now' }).click();
-    const open = panel(page);
-    await expect(open.getByRole('heading', { name: 'Winter sale starts now' })).toBeVisible();
+    const open = await openMessage(page, 'Winter sale starts now');
     await param(page, 'message').toBe('m8');
     await param(page, 'show').toBe('all');
     await expect(open).toContainText('of 21');
 
     await open.getByRole('button', { name: 'J Next' }).click();
-    await expect(open.getByRole('heading', { name: 'Notes from the review' })).toBeVisible();
+    await expect(panelHeading(page, 'Notes from the review')).toBeVisible();
     await param(page, 'message').toBe('m7');
 
     await open.getByRole('button', { name: 'Close' }).click();
@@ -104,16 +118,15 @@ test.describe('Activity', () => {
 
   test('Back closes a message opened from the list', async ({ page }) => {
     await page.goto('/activity?show=all');
-    await page.getByRole('cell', { name: 'Lunch on Thursday?' }).click();
-    await expect(panel(page).getByRole('heading', { name: 'Lunch on Thursday?' })).toBeVisible();
+    await openMessage(page, 'Lunch on Thursday?');
     await page.goBack();
     await expect(panel(page)).toHaveCount(0);
     await expect(page).toHaveURL(/\/activity\?show=all$/);
   });
 
   test('a message opened by its address on Activity closes to Activity alone', async ({ page }) => {
-    await page.goto('/activity?message=m6&account=me%40example.org');
-    await expect(panel(page).getByRole('heading', { name: 'Lunch on Thursday?' })).toBeVisible();
+    await page.goto(`/activity?${messageQuery('m6')}`);
+    await expect(panelHeading(page, 'Lunch on Thursday?')).toBeVisible();
     await panel(page).getByRole('button', { name: 'Close' }).click();
     await expect(panel(page)).toHaveCount(0);
     await path(page).toBe('/activity');
@@ -123,10 +136,7 @@ test.describe('Activity', () => {
 
   test('the page of a long list is in the address, and narrowing the list goes back to its first', async ({ page }) => {
     // The seed has 21 decisions, under one page; the server says there are more.
-    await page.route('**/api/decisions?**', async (route) => {
-      const response = await route.fetch();
-      await route.fulfill({ response, json: { ...(await response.json()), total: 120 } });
-    });
+    await patchJson(page, '**/api/decisions?**', (decisions) => ({ ...decisions, total: 120 }));
     await page.goto('/activity?show=all');
     await expect(page.getByText('1–50 of 120')).toBeVisible();
     await page.getByRole('button', { name: 'Older' }).click();
@@ -155,23 +165,24 @@ test.describe('A sender', () => {
     await expect(names.getByRole('row', { name: /^github-actions\[bot\] 2 · 25%/ })).toContainText('Notifications');
     await expect(names.getByRole('row', { name: /^Ada Lovelace 1 · 13%/ })).toContainText('Unlabelled');
 
-    for (const name of ['Trust', 'Unwanted', 'Block']) await expect(standing(page, name)).toHaveAttribute('aria-pressed', 'false');
+    for (const name of ['Trust', 'Unwanted', 'Block'])
+      await expect(standing(page, 'notifications@code.example.com', name)).toHaveAttribute('aria-pressed', 'false');
   });
 
   test('From narrows their mail to one name, and is kept in the address', async ({ page }) => {
     await page.goto(SENDER);
-    const mail = page.getByRole('table').nth(1);
-    await expect(mail.getByRole('row').filter({ has: page.getByRole('cell') })).toHaveCount(8);
+    const mail = rows(page, page.getByRole('table').nth(1));
+    await expect(mail).toHaveCount(8);
     await page.getByRole('combobox', { name: 'From' }).click();
     await page.getByRole('option', { name: 'Dependabot' }).click();
-    await expect(mail.getByRole('row').filter({ has: page.getByRole('cell') })).toHaveCount(3);
+    await expect(mail).toHaveCount(3);
     await param(page, 'name').toBe('Dependabot');
   });
 
   test("a toast is a slip in the bottom right: its words, then its presses under them, above a panel's footer", async ({ page }) => {
     await page.goto(SENDER);
-    await standing(page, 'Block').click();
-    const said = ruleToast(page, 'Mail from notifications@code.example.com: send it to spam');
+    await standing(page, 'notifications@code.example.com', 'Block').click();
+    const said = toast(page, 'Mail from notifications@code.example.com: send it to spam');
     const box = await boxOf(said);
     const words = await boxOf(said.getByText('Mail from notifications@code.example.com: send it to spam', { exact: true }));
     const undo = await boxOf(said.getByRole('button', { name: 'Undo' }));
@@ -183,18 +194,17 @@ test.describe('A sender', () => {
 
   test('Unwanted is on in one press, with the rule said in its toast and nothing opened over their page', async ({ page }) => {
     await page.goto(SENDER);
-    await standing(page, 'Unwanted').click();
-    await expect(ruleToast(page, 'Mail from notifications@code.example.com: archive it')).toContainText('Rule added');
-    await expect(standing(page, 'Unwanted')).toHaveAttribute('aria-pressed', 'true');
-    await expect(standing(page, 'Trust')).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.getByRole('dialog', { name: 'Add a rule' })).toHaveCount(0);
+    await standing(page, 'notifications@code.example.com', 'Unwanted').click();
+    await expect(toast(page, 'Mail from notifications@code.example.com: archive it')).toContainText('Rule added');
+    await expect(standing(page, 'notifications@code.example.com', 'Unwanted')).toHaveAttribute('aria-pressed', 'true');
+    await expect(standing(page, 'notifications@code.example.com', 'Trust')).toHaveAttribute('aria-pressed', 'false');
+    await expect(ruleDialog(page)).toHaveCount(0);
     await query(page).toBe('');
   });
 
   test('a message opened from their mail closes back to their page', async ({ page }) => {
     await page.goto(SENDER);
-    await page.getByRole('cell', { name: 'Bump zod from 4.0.0 to 4.0.2' }).click();
-    await expect(panel(page).getByRole('heading', { name: 'Bump zod from 4.0.0 to 4.0.2' })).toBeVisible();
+    await openMessage(page, 'Bump zod from 4.0.0 to 4.0.2');
     await param(page, 'account').toBe('me@example.org');
 
     await panel(page).getByRole('button', { name: 'Close' }).click();
@@ -221,16 +231,14 @@ test.describe('A sender', () => {
 
   test('All their mail, in a message opened from For review, goes to the sender, and Back returns to the message', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('cell', { name: 'Lunch on Thursday?' }).click();
-    await expect(panel(page).getByRole('heading', { name: 'Lunch on Thursday?' })).toBeVisible();
-    await panel(page).getByRole('link', { name: 'All their mail' }).click();
+    await (await openMessage(page, 'Lunch on Thursday?')).getByRole('link', { name: 'All their mail' }).click();
     await expect(page.getByRole('heading', { name: 'Ada Lovelace', level: 1 })).toBeVisible();
     await expect(panel(page)).toHaveCount(0);
-    await path(page).toBe('/sender/me%40example.org/ada%40example.org');
+    await path(page).toBe(senderPage('ada@example.org'));
     await query(page).toBe('');
 
     await page.goBack();
-    await expect(panel(page).getByRole('heading', { name: 'Lunch on Thursday?' })).toBeVisible();
+    await expect(panelHeading(page, 'Lunch on Thursday?')).toBeVisible();
     await panel(page).getByRole('button', { name: 'Close' }).click();
     await expect(panel(page)).toHaveCount(0);
     await path(page).toBe('/');
@@ -245,13 +253,7 @@ test.describe('Who sent it is a link wherever it is named', () => {
     await sent.getByRole('link', { name: 'Ada Lovelace' }).click();
     await expect(page.getByRole('heading', { name: 'notifications@code.example.com', level: 1 })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'From' })).toContainText('Ada Lovelace');
-    await expect(
-      page
-        .getByRole('table')
-        .nth(1)
-        .getByRole('row')
-        .filter({ has: page.getByRole('cell') }),
-    ).toHaveCount(1);
+    await expect(rows(page, page.getByRole('table').nth(1))).toHaveCount(1);
     await expect(panel(page)).toHaveCount(0);
 
     await page.goBack();
@@ -268,13 +270,13 @@ test.describe('Who sent it is a link wherever it is named', () => {
   });
 
   test('a name an address writes under alone does not narrow its page', async ({ page }) => {
-    await page.goto('/sender/me%40example.org/ada%40example.org?name=Someone');
+    await page.goto(`${senderPage('ada@example.org')}?name=Someone`);
     await expect(page.getByRole('heading', { name: 'Ada Lovelace', level: 1 })).toBeVisible();
     await expect(page.getByRole('cell', { name: 'Lunch on Thursday?' })).toBeVisible();
   });
 
   test("the address in a message's header goes to the sender", async ({ page }) => {
-    await page.goto('/?message=m6&account=me%40example.org');
+    await page.goto(`/?${messageQuery('m6')}`);
     await panel(page).getByRole('link', { name: 'ada@example.org' }).click();
     await expect(page.getByRole('heading', { name: 'Ada Lovelace', level: 1 })).toBeVisible();
     await expect(panel(page)).toHaveCount(0);
@@ -295,7 +297,7 @@ test.describe('Who sent it is a link wherever it is named', () => {
   test('the sender in a rule For review offers goes to the sender', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('listitem').filter({ hasText: 'Make a rule…' }).getByRole('link', { name: 'billing@utility.example.net' }).click();
-    await path(page).toBe('/sender/me%40example.org/billing%40utility.example.net');
+    await path(page).toBe(senderPage('billing@utility.example.net'));
   });
 });
 
@@ -312,21 +314,15 @@ test.describe('A domain', () => {
         .getByRole('row')
         .filter({ has: page.getByRole('link', { name: 'Dependabot' }) }),
     ).toContainText('notifications@code.example.com');
-    await expect(
-      page
-        .getByRole('table')
-        .nth(2)
-        .getByRole('row')
-        .filter({ has: page.getByRole('cell') }),
-    ).toHaveCount(8);
-    for (const name of ['Trust', 'Unwanted', 'Block']) await expect(standing(page, name)).toHaveAttribute('aria-pressed', 'false');
+    await expect(rows(page, page.getByRole('table').nth(2))).toHaveCount(8);
+    for (const name of ['Trust', 'Unwanted', 'Block']) await expect(standing(page, 'code.example.com', name)).toHaveAttribute('aria-pressed', 'false');
   });
 
   test('Block is on for everyone at the domain in one press', async ({ page }) => {
     await page.goto(DOMAIN);
-    await standing(page, 'Block').click();
-    await expect(ruleToast(page, 'Mail from code.example.com: send it to spam')).toContainText('Rule added');
-    await expect(standing(page, 'Block')).toHaveAttribute('aria-pressed', 'true');
+    await standing(page, 'code.example.com', 'Block').click();
+    await expect(toast(page, 'Mail from code.example.com: send it to spam')).toContainText('Rule added');
+    await expect(standing(page, 'code.example.com', 'Block')).toHaveAttribute('aria-pressed', 'true');
   });
 });
 
@@ -335,8 +331,8 @@ test.describe('On a phone', () => {
 
   test("a rule's toast says Rule added above the rule, where after it the two would wrap apart", async ({ page }) => {
     await page.goto(SENDER);
-    await standing(page, 'Block').click();
-    const said = ruleToast(page, 'Mail from notifications@code.example.com: send it to spam');
+    await standing(page, 'notifications@code.example.com', 'Block').click();
+    const said = toast(page, 'Mail from notifications@code.example.com: send it to spam');
     const kind = await boxOf(said.getByText('Rule added', { exact: true }));
     const rule = await boxOf(said.getByText('Mail from notifications@code.example.com: send it to spam', { exact: true }));
     expect(kind.y + kind.height / 2).toBeLessThan(rule.y);
@@ -346,7 +342,7 @@ test.describe('On a phone', () => {
     await page.goto('/');
     await page.getByRole('row').filter({ hasText: 'Lunch on Thursday?' }).click();
     const open = panel(page);
-    await expect(open.getByRole('heading', { name: 'Lunch on Thursday?' })).toBeVisible();
+    await expect(panelHeading(page, 'Lunch on Thursday?')).toBeVisible();
     expect((await boxOf(open)).width).toBeCloseTo(390, 0);
     await sideScroll(page).toBe(0);
 
@@ -360,7 +356,7 @@ test.describe('On a phone', () => {
     await page.getByRole('row').filter({ hasText: 'Winter sale starts now' }).getByRole('link', { name: 'Store' }).click();
     await expect(page.getByRole('heading', { name: 'Store', level: 1 })).toBeVisible();
     await expect(panel(page)).toHaveCount(0);
-    await path(page).toBe('/sender/me%40example.org/sale%40store.example.com');
+    await path(page).toBe(senderPage('sale@store.example.com'));
     await param(page, 'message').toBeNull();
   });
 

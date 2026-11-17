@@ -2,24 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { syncAccount } from '../src/work/sync.ts';
 import { type GmailApi, HistoryExpiredError, type HistoryPage, type RawMessage } from '../src/gmail/api.ts';
 import { pullChanges, toFacts } from '../src/gmail/sync.ts';
-import { addMailbox, listAccounts, setMailboxAliases } from '../src/store/accounts.ts';
-import { openUserDb, raw } from './fixtures.ts';
+import { addMailbox, setMailboxAliases } from '../src/store/accounts.ts';
+import { firstAccount, openUserDb, raw } from './fixtures.ts';
+import { ACCOUNT, DAY, rawMessage } from './helpers.ts';
 import { parseAddressList } from '../src/triage/features.ts';
-
-function gmailMessage(id: string, overrides: Partial<RawMessage> = {}): RawMessage {
-  return {
-    id,
-    threadId: `t-${id}`,
-    labelIds: ['INBOX', 'UNREAD'],
-    internalDate: 1000,
-    headers: [
-      { name: 'From', value: 'News <news@example.com>' },
-      { name: 'To', value: 'me@example.org' },
-      { name: 'Subject', value: `Subject ${id}` },
-    ],
-    ...overrides,
-  };
-}
 
 interface Fake {
   historyId?: string;
@@ -40,7 +26,7 @@ function fakeApi(fake: Fake): GmailApi & { calls: string[] } {
     calls,
     async getProfile() {
       calls.push('profile');
-      return { emailAddress: 'me@example.org', historyId: fake.historyId ?? '900' };
+      return { emailAddress: ACCOUNT, historyId: fake.historyId ?? '900' };
     },
     async listHistory(start, pageToken) {
       calls.push(`history:${start}:${pageToken ?? ''}`);
@@ -73,7 +59,7 @@ function fakeApi(fake: Fake): GmailApi & { calls: string[] } {
     },
     async listSendAs() {
       if (fake.sendAs instanceof Error) throw fake.sendAs;
-      return fake.sendAs ?? ['me@example.org'];
+      return fake.sendAs ?? [ACCOUNT];
     },
   };
 }
@@ -155,7 +141,7 @@ describe('toFacts', () => {
   it('lowercases header names and keeps the first of repeated headers', () => {
     const facts = toFacts(
       'acct',
-      gmailMessage('m', {
+      rawMessage('m', {
         headers: [
           { name: 'FROM', value: '"Ada, L" <Ada@Example.com>' },
           { name: 'To', value: '"Doe, J" <j@example.org>, k@example.org' },
@@ -178,7 +164,7 @@ describe('toFacts', () => {
   });
 
   it('returns null without a usable sender', () => {
-    expect(toFacts('acct', gmailMessage('m', { headers: [{ name: 'Subject', value: 'x' }] }))).toBeNull();
+    expect(toFacts('acct', rawMessage('m', { headers: [{ name: 'Subject', value: 'x' }] }))).toBeNull();
   });
 });
 
@@ -189,130 +175,127 @@ describe('parseAddressList', () => {
   });
 });
 
-const DAY = 86_400_000;
-
 const page = (ids: string[], historyId: string): Record<string, HistoryPage> => ({
   '': { additions: ids.map((id) => ({ id, labelIds: ['INBOX'] })), historyId },
 });
 
+/** The person's database, its mailbox's cursor at 500. */
+async function synced() {
+  const db = await openUserDb(ACCOUNT);
+  await addMailbox(db, ACCOUNT, '500');
+  return db;
+}
+
 describe('syncAccount', () => {
   it('records new inbox mail and advances the cursor', async () => {
-    const db = await openUserDb('me@example.org');
-    await addMailbox(db, 'me@example.org', '500');
+    const db = await synced();
     const api = fakeApi({
       pages: page(['a', 'archived', 'gone', 'nosender'], '520'),
-      messages: { a: gmailMessage('a'), archived: gmailMessage('archived', { labelIds: ['UNREAD'] }), nosender: gmailMessage('nosender', { headers: [] }) },
+      messages: { a: rawMessage('a'), archived: rawMessage('archived', { labelIds: ['UNREAD'] }), nosender: rawMessage('nosender', { headers: [] }) },
     });
 
-    const report = await syncAccount(db, api, (await listAccounts(db))[0]!);
+    const report = await syncAccount(db, api, await firstAccount(db));
     expect(report.added.map((m) => m.messageId)).toEqual(['a']);
     expect(report.skipped).toBe(3);
-    expect((await listAccounts(db))[0]?.historyId).toBe('520');
+    expect((await firstAccount(db)).historyId).toBe('520');
     expect(await raw(db).all('SELECT id, domain_hash FROM messages')).toEqual([{ id: 'a', domain_hash: 'example.com' }]);
   });
 
   it('does not report a redelivered message as new', async () => {
-    const db = await openUserDb('me@example.org');
-    await addMailbox(db, 'me@example.org', '500');
-    const fake = { pages: page(['a'], '520'), messages: { a: gmailMessage('a') } };
-    await syncAccount(db, fakeApi(fake), (await listAccounts(db))[0]!);
-    const again = await syncAccount(db, fakeApi(fake), (await listAccounts(db))[0]!);
+    const db = await synced();
+    const fake = { pages: page(['a'], '520'), messages: { a: rawMessage('a') } };
+    await syncAccount(db, fakeApi(fake), await firstAccount(db));
+    const again = await syncAccount(db, fakeApi(fake), await firstAccount(db));
     expect(again.added).toEqual([]);
     expect(await raw(db).get('SELECT count(*) AS n FROM messages')).toEqual({ n: 1 });
   });
 
   it('records every page of a busy day in one pass and leaves the cursor alone if a later page fails', async () => {
-    const db = await openUserDb('me@example.org');
-    await addMailbox(db, 'me@example.org', '500');
+    const db = await synced();
     const pages: Record<string, HistoryPage> = {
       '': { additions: [{ id: 'a', labelIds: ['INBOX'] }], historyId: '510', nextPageToken: 'p2' },
       p2: { additions: [{ id: 'b', labelIds: ['INBOX'] }], historyId: '520', nextPageToken: 'p3' },
     };
-    const messages = { a: gmailMessage('a'), b: gmailMessage('b'), c: gmailMessage('c') };
-    await expect(syncAccount(db, fakeApi({ pages, messages }), (await listAccounts(db))[0]!)).rejects.toThrow('unexpected page');
-    expect((await listAccounts(db))[0]?.historyId).toBe('500');
+    const messages = { a: rawMessage('a'), b: rawMessage('b'), c: rawMessage('c') };
+    await expect(syncAccount(db, fakeApi({ pages, messages }), await firstAccount(db))).rejects.toThrow('unexpected page');
+    expect((await firstAccount(db)).historyId).toBe('500');
     expect(await raw(db).get('SELECT count(*) AS n FROM messages')).toEqual({ n: 0 });
 
     pages['p3'] = { additions: [{ id: 'c', labelIds: ['INBOX'] }], historyId: '530' };
-    const report = await syncAccount(db, fakeApi({ pages, messages }), (await listAccounts(db))[0]!);
+    const report = await syncAccount(db, fakeApi({ pages, messages }), await firstAccount(db));
     expect(report.added.map((m) => m.messageId)).toEqual(['a', 'b', 'c']);
-    expect((await listAccounts(db))[0]?.historyId).toBe('530');
+    expect((await firstAccount(db)).historyId).toBe('530');
   });
 
   it('after an expired cursor, records what the search finds, skips what it already had, and carries on from the new cursor', async () => {
-    const db = await openUserDb('me@example.org');
-    await addMailbox(db, 'me@example.org', '500');
-    const messages = { a: gmailMessage('a'), b: gmailMessage('b'), c: gmailMessage('c') };
-    await syncAccount(db, fakeApi({ pages: page(['a'], '520'), messages }), (await listAccounts(db))[0]!);
+    const db = await synced();
+    const messages = { a: rawMessage('a'), b: rawMessage('b'), c: rawMessage('c') };
+    await syncAccount(db, fakeApi({ pages: page(['a'], '520'), messages }), await firstAccount(db));
 
     const recovering = fakeApi({ expired: true, historyId: '900', search: ['b', 'a'], messages });
-    const recovered = await syncAccount(db, recovering, (await listAccounts(db))[0]!);
+    const recovered = await syncAccount(db, recovering, await firstAccount(db));
     expect(recovered.mode).toBe('recovery');
     expect(recovered.added.map((m) => m.messageId)).toEqual(['b']);
     expect(recovering.calls).toEqual(['history:520:', 'profile', 'search:newer_than:7d']);
-    expect((await listAccounts(db))[0]?.historyId).toBe('900');
+    expect((await firstAccount(db)).historyId).toBe('900');
 
     const next = fakeApi({ pages: page(['c'], '910'), messages });
-    const after = await syncAccount(db, next, (await listAccounts(db))[0]!);
+    const after = await syncAccount(db, next, await firstAccount(db));
     expect(after.mode).toBe('incremental');
     expect(after.added.map((m) => m.messageId)).toEqual(['c']);
     expect(next.calls).toEqual(['history:900:']);
   });
 
   it('keeps what it fetched before a failure, and fetches only the rest next time', async () => {
-    const db = await openUserDb('me@example.org');
-    await addMailbox(db, 'me@example.org', '500');
+    const db = await synced();
     const ids = Array.from({ length: 120 }, (_, i) => `m${i}`);
-    const messages = Object.fromEntries(ids.map((id) => [id, gmailMessage(id)]));
+    const messages = Object.fromEntries(ids.map((id) => [id, rawMessage(id)]));
     const failing = fakeApi({ pages: page(ids, '520'), messages });
     let reads = 0;
     failing.getMetadata = async (id) => {
       if (++reads > 110) throw new Error('rate limited');
       return messages[id] ?? null;
     };
-    await expect(syncAccount(db, failing, (await listAccounts(db))[0]!)).rejects.toThrow('rate limited');
-    expect((await listAccounts(db))[0]?.historyId).toBe('500');
+    await expect(syncAccount(db, failing, await firstAccount(db))).rejects.toThrow('rate limited');
+    expect((await firstAccount(db)).historyId).toBe('500');
     expect(await raw(db).get('SELECT count(*) AS n FROM messages')).toEqual({ n: 100 });
 
     const read: string[] = [];
     const next = fakeApi({ pages: page(ids, '520'), messages });
     next.getMetadata = async (id) => (read.push(id), messages[id] ?? null);
-    const report = await syncAccount(db, next, (await listAccounts(db))[0]!);
+    const report = await syncAccount(db, next, await firstAccount(db));
     expect(read).toEqual(ids.slice(100));
     expect(report.added.map((m) => m.messageId)).toEqual(ids.slice(100));
-    expect((await listAccounts(db))[0]?.historyId).toBe('520');
+    expect((await firstAccount(db)).historyId).toBe('520');
   });
 
   it('stops at its time limit with what it fetched recorded and the cursor where it was', async () => {
-    const db = await openUserDb('me@example.org');
-    await addMailbox(db, 'me@example.org', '500');
-    const messages = { a: gmailMessage('a'), b: gmailMessage('b'), c: gmailMessage('c') };
+    const db = await synced();
+    const messages = { a: rawMessage('a'), b: rawMessage('b'), c: rawMessage('c') };
     let clock = 0;
     const api = fakeApi({ pages: page(['a', 'b', 'c'], '520'), messages });
     api.getMetadata = async (id) => ((clock += 1000), messages[id as 'a'] ?? null);
-    const report = await syncAccount(db, api, (await listAccounts(db))[0]!, () => clock, 1500);
+    const report = await syncAccount(db, api, await firstAccount(db), () => clock, 1500);
     expect(report).toMatchObject({ unfinished: true });
     expect(report.added.map((m) => m.messageId)).toEqual(['a', 'b']);
-    expect((await listAccounts(db))[0]?.historyId).toBe('500');
+    expect((await firstAccount(db)).historyId).toBe('500');
     expect(await raw(db).all('SELECT id FROM messages ORDER BY id')).toEqual([{ id: 'a' }, { id: 'b' }]);
   });
 
   it('leaves the cursor alone when the search after an expired cursor fails', async () => {
-    const db = await openUserDb('me@example.org');
-    await addMailbox(db, 'me@example.org', '500');
+    const db = await synced();
     const api = fakeApi({ expired: true, historyId: '900' });
     api.searchInbox = async () => {
       throw new Error('network');
     };
-    await expect(syncAccount(db, api, (await listAccounts(db))[0]!)).rejects.toThrow('network');
-    expect((await listAccounts(db))[0]?.historyId).toBe('500');
+    await expect(syncAccount(db, api, await firstAccount(db))).rejects.toThrow('network');
+    expect((await firstAccount(db)).historyId).toBe('500');
   });
 
   it('records that the user opened a message, once, whichever page or pass says so', async () => {
-    const db = await openUserDb('me@example.org');
-    await addMailbox(db, 'me@example.org', '500');
-    const messages = { a: gmailMessage('a'), b: gmailMessage('b', { labelIds: ['INBOX'] }) };
-    await syncAccount(db, fakeApi({ pages: page(['a'], '510'), messages }), (await listAccounts(db))[0]!, () => 1000);
+    const db = await synced();
+    const messages = { a: rawMessage('a'), b: rawMessage('b', { labelIds: ['INBOX'] }) };
+    await syncAccount(db, fakeApi({ pages: page(['a'], '510'), messages }), await firstAccount(db), () => 1000);
 
     // `a` is opened, `b` arrives and is opened before sift has seen it, and a message sift never recorded is opened.
     const pages: Record<string, HistoryPage> = {
@@ -328,14 +311,14 @@ describe('syncAccount', () => {
       },
     };
     const reads = async () => await raw(db).all('SELECT id, read_at FROM messages ORDER BY id');
-    await syncAccount(db, fakeApi({ pages, messages }), (await listAccounts(db))[0]!, () => 2000);
+    await syncAccount(db, fakeApi({ pages, messages }), await firstAccount(db), () => 2000);
     expect(await reads()).toEqual([
       { id: 'a', read_at: 2000 },
       { id: 'b', read_at: 2000 },
     ]);
 
     // The same history again, as after a crash before the cursor moved, and the user marking it unread and reading it again.
-    await syncAccount(db, fakeApi({ pages, messages }), (await listAccounts(db))[0]!, () => 3000);
+    await syncAccount(db, fakeApi({ pages, messages }), await firstAccount(db), () => 3000);
     expect(await reads()).toEqual([
       { id: 'a', read_at: 2000 },
       { id: 'b', read_at: 2000 },
@@ -343,18 +326,16 @@ describe('syncAccount', () => {
   });
 
   it('learns nothing about reading from a search after an expired cursor', async () => {
-    const db = await openUserDb('me@example.org');
-    await addMailbox(db, 'me@example.org', '500');
-    const api = fakeApi({ expired: true, search: ['a'], messages: { a: gmailMessage('a', { labelIds: ['INBOX'] }) } });
-    await syncAccount(db, api, (await listAccounts(db))[0]!);
+    const db = await synced();
+    const api = fakeApi({ expired: true, search: ['a'], messages: { a: rawMessage('a', { labelIds: ['INBOX'] }) } });
+    await syncAccount(db, api, await firstAccount(db));
     expect(await raw(db).get('SELECT read_at FROM messages')).toEqual({ read_at: null });
   });
 
   it("records the owner's send-as addresses on the first sync of a day, and counts mail to them as the owner's", async () => {
-    const db = await openUserDb('me@example.org');
-    await addMailbox(db, 'me@example.org', '500');
+    const db = await synced();
     const toAlias = (id: string) =>
-      gmailMessage(id, {
+      rawMessage(id, {
         headers: [
           { name: 'From', value: 'ada@example.com' },
           { name: 'To', value: 'Me <me@example.com>' },
@@ -364,23 +345,13 @@ describe('syncAccount', () => {
     const addressed = async () => await raw(db).all("SELECT id, facts->>'addressed' AS addressed FROM messages ORDER BY id");
     const aliases = async () => (await raw(db).get<{ aliases: string[] }>('SELECT aliases FROM mailboxes'))!.aliases;
 
-    await syncAccount(db, fakeApi({ pages: page(['a'], '510'), messages, sendAs: ['me@example.org'] }), (await listAccounts(db))[0]!, () => DAY);
+    await syncAccount(db, fakeApi({ pages: page(['a'], '510'), messages, sendAs: [ACCOUNT] }), await firstAccount(db), () => DAY);
     expect(await addressed()).toEqual([{ id: 'a', addressed: 'neither' }]);
 
     // Added the same day: not looked up again until the next.
-    await syncAccount(
-      db,
-      fakeApi({ pages: page(['b'], '520'), messages, sendAs: ['me@example.org', 'me@example.com'] }),
-      (await listAccounts(db))[0]!,
-      () => DAY + 1000,
-    );
+    await syncAccount(db, fakeApi({ pages: page(['b'], '520'), messages, sendAs: [ACCOUNT, 'me@example.com'] }), await firstAccount(db), () => DAY + 1000);
     expect(await aliases()).toEqual([]);
-    await syncAccount(
-      db,
-      fakeApi({ pages: page(['c'], '530'), messages, sendAs: ['me@example.org', 'me@example.com'] }),
-      (await listAccounts(db))[0]!,
-      () => 2 * DAY,
-    );
+    await syncAccount(db, fakeApi({ pages: page(['c'], '530'), messages, sendAs: [ACCOUNT, 'me@example.com'] }), await firstAccount(db), () => 2 * DAY);
     expect(await aliases()).toEqual(['me@example.com']);
     expect(await addressed()).toEqual([
       { id: 'a', addressed: 'neither' },
@@ -390,20 +361,19 @@ describe('syncAccount', () => {
   });
 
   it('keeps the last send-as addresses and goes on syncing when they cannot be read', async () => {
-    const db = await openUserDb('me@example.org');
-    await addMailbox(db, 'me@example.org', '500');
-    await setMailboxAliases(db, 'me@example.org', ['me@example.com']);
+    const db = await synced();
+    await setMailboxAliases(db, ACCOUNT, ['me@example.com']);
     const messages = {
-      a: gmailMessage('a', {
+      a: rawMessage('a', {
         headers: [
           { name: 'From', value: 'ada@example.com' },
           { name: 'Cc', value: 'me@example.com' },
         ],
       }),
     };
-    const report = await syncAccount(db, fakeApi({ pages: page(['a'], '520'), messages, sendAs: new Error('network') }), (await listAccounts(db))[0]!);
+    const report = await syncAccount(db, fakeApi({ pages: page(['a'], '520'), messages, sendAs: new Error('network') }), await firstAccount(db));
     expect(report.added.map((m) => m.messageId)).toEqual(['a']);
-    expect((await listAccounts(db))[0]?.historyId).toBe('520');
+    expect((await firstAccount(db)).historyId).toBe('520');
     expect(await raw(db).get("SELECT aliases, facts->>'addressed' AS addressed FROM mailboxes, messages")).toEqual({
       aliases: ['me@example.com'],
       addressed: 'cc',
@@ -411,13 +381,12 @@ describe('syncAccount', () => {
   });
 
   it('leaves the cursor alone when a fetch fails', async () => {
-    const db = await openUserDb('me@example.org');
-    await addMailbox(db, 'me@example.org', '500');
+    const db = await synced();
     const api = fakeApi({ pages: page(['a'], '520') });
     api.getMetadata = async () => {
       throw new Error('network');
     };
-    await expect(syncAccount(db, api, (await listAccounts(db))[0]!)).rejects.toThrow('network');
-    expect((await listAccounts(db))[0]?.historyId).toBe('500');
+    await expect(syncAccount(db, api, await firstAccount(db))).rejects.toThrow('network');
+    expect((await firstAccount(db)).historyId).toBe('500');
   });
 });

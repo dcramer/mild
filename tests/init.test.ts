@@ -1,5 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseEnv } from 'node:util';
 import { describe, expect, it } from 'vitest';
@@ -8,8 +7,7 @@ import type { Ui } from '../src/cli/ui.ts';
 import { DEFAULT_SETTINGS, type Config, loadConfig, readSettings, resolveHome, saveSetting } from '../src/config.ts';
 import { loadKeyring } from '../src/secrets.ts';
 import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
-
-const freshHome = () => mkdtempSync(join(tmpdir(), 'sift-home-'));
+import { tempDir } from './helpers.ts';
 
 /**
  * A wizard run with scripted answers. `state` is what already exists; the fakes change it as the real
@@ -33,7 +31,7 @@ function wizard(
     keyFails?: boolean;
   } = {},
 ) {
-  const config = loadConfig({ SIFT_HOME: freshHome(), ...(state.key ? { SIFT_KEY: state.key } : {}) });
+  const config = loadConfig({ SIFT_HOME: tempDir(), ...(state.key ? { SIFT_KEY: state.key } : {}) });
   const said: string[] = [];
   const asked: string[] = [];
   const calls: string[] = [];
@@ -305,7 +303,7 @@ describe('settings', () => {
   });
 
   it('keeps everything in the home directory and needs no environment variables', () => {
-    const home = freshHome();
+    const home = tempDir();
     const config = loadConfig({ SIFT_HOME: home });
     for (const path of [config.envPath, config.databaseDir, config.googleClientPath]) {
       expect(path.startsWith(`${home}/`)).toBe(true);
@@ -314,7 +312,7 @@ describe('settings', () => {
   });
 
   it("writes one setting at a time to the home's .env, keeping every other line", () => {
-    const config = loadConfig({ SIFT_HOME: freshHome() });
+    const config = loadConfig({ SIFT_HOME: tempDir() });
     writeFileSync(config.envPath, 'SIFT_OLD_KEYS=old\nSIFT_DASHBOARD_PORT=9000\n');
     saveSetting(config, 'SIFT_DASHBOARD_PORT', '9100');
     saveSetting(config, 'SIFT_DASHBOARD_HOST', 'box.example.ts.net');
@@ -338,7 +336,7 @@ describe('settings', () => {
   });
 
   it('installs a pasted Web application client, or one given as a path, and refuses a Desktop one', () => {
-    const config = loadConfig({ SIFT_HOME: freshHome() });
+    const config = loadConfig({ SIFT_HOME: tempDir() });
     const web = JSON.stringify({ web: { client_id: 'id', client_secret: 'secret' } }, null, 2);
     const desktop = JSON.stringify({ installed: { client_id: 'id', client_secret: 'secret' } });
 
@@ -349,8 +347,8 @@ describe('settings', () => {
     installClient(config, `  ${web}\n`);
     expect(loadClientSecrets(config, {})).toEqual({ clientId: 'id', clientSecret: 'secret' });
 
-    const other = loadConfig({ SIFT_HOME: freshHome() });
-    const file = join(freshHome(), 'client.json');
+    const other = loadConfig({ SIFT_HOME: tempDir() });
+    const file = join(tempDir(), 'client.json');
     writeFileSync(file, web);
     installClient(other, file);
     expect(loadClientSecrets(other, {}).clientId).toBe('id');
@@ -368,13 +366,13 @@ describe('settings from the environment', () => {
   };
 
   it('are read from their variables', () => {
-    const config = loadConfig({ SIFT_HOME: freshHome(), SIFT_DASHBOARD_PORT: '9100', ...DATABASE });
+    const config = loadConfig({ SIFT_HOME: tempDir(), SIFT_DASHBOARD_PORT: '9100', ...DATABASE });
     expect(config.settings).toMatchObject({ dashboardPort: 9100 });
     expect([config.databaseUrl, config.databaseMigrationUrl]).toEqual([DATABASE.DATABASE_URL, DATABASE.DATABASE_MIGRATION_URL]);
   });
 
   it("never copies one into the home's .env when another is saved", () => {
-    const config = loadConfig({ SIFT_HOME: freshHome(), ...DATABASE });
+    const config = loadConfig({ SIFT_HOME: tempDir(), ...DATABASE });
     saveSetting(config, 'SIFT_DASHBOARD_HOST', 'box.example.ts.net');
     expect(readFileSync(config.envPath, 'utf8')).toBe('SIFT_DASHBOARD_HOST=box.example.ts.net\n');
     expect(config.settings.databaseUrl).toBe(DATABASE.DATABASE_URL);

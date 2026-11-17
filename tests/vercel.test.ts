@@ -1,11 +1,10 @@
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { HEADERS } from '../src/dashboard/server.ts';
 import { READS, WRITES } from '../src/dashboard/api/index.ts';
 import type { Work } from '../src/work/run.ts';
 import { MAX_DURATION_S, admit, cron, fanOut, respond, work } from '../src/vercel/host.ts';
+import { tempDir } from './helpers.ts';
 
 /** `vercel.json`: what Vercel does without sift seeing the request. */
 const vercel = JSON.parse(readFileSync('vercel.json', 'utf8')) as {
@@ -73,7 +72,7 @@ describe('the Vercel host', () => {
   });
 
   it('until it is set up, says to whoever opens it every variable still missing, before opening anything', async () => {
-    vi.stubEnv('SIFT_HOME', mkdtempSync(join(tmpdir(), 'sift-vercel-')));
+    vi.stubEnv('SIFT_HOME', tempDir());
     const missing = async () => {
       const reply = await respond(new Request('https://sift.example.com/api/session'));
       expect(reply.status).toBe(503);

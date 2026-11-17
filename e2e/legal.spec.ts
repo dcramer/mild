@@ -1,4 +1,4 @@
-import { boxOf, expect, path, PHONE, test } from './sift.ts';
+import { boxOf, expect, patchJson, path, PHONE, test } from './sift.ts';
 
 test.describe('A Sift run as a service', () => {
   test.use({ cloud: true });
@@ -7,10 +7,7 @@ test.describe('A Sift run as a service', () => {
     page,
   }) => {
     // The seeded dashboard has no Google sign-in, so its session reply is made into a signed-out visitor's.
-    await page.route('**/api/session?*', async (route) => {
-      const response = await route.fetch();
-      await route.fulfill({ response, json: { ...(await response.json()), required: true, email: null, canSignIn: true } });
-    });
+    await patchJson(page, '**/api/session?*', (session) => ({ ...session, required: true, email: null, canSignIn: true }));
     await page.goto('/');
     await page.getByRole('contentinfo').getByRole('link', { name: 'Security' }).click();
     await expect(page.getByRole('heading', { name: 'Security', level: 1 })).toBeVisible();

@@ -1,4 +1,4 @@
-import { expect, PHONE, pointAt, sideScroll, test, tooltip } from './sift.ts';
+import { expect, PHONE, pointAt, settings, sideScroll, test, tooltip } from './sift.ts';
 
 test.describe("The masthead's line", () => {
   test('says how long since Sift synced and what the model cost over 30 days, and the cost previews each window', async ({ page }) => {
@@ -35,6 +35,6 @@ test.describe("The masthead's line", () => {
     await expect(menu.getByText('me@example.org')).toBeVisible();
     await expect(menu.getByRole('button', { name: 'Sign out' })).toBeVisible();
     await menu.getByRole('button', { name: 'Settings' }).click();
-    await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
+    await expect(settings(page)).toBeVisible();
   });
 });

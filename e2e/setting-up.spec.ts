@@ -1,15 +1,8 @@
 import type { Page } from '@playwright/test';
-import { expect, param, path, PHONE, query, refused, sideScroll, test } from './sift.ts';
+import { closeSettings, expect, param, path, PHONE, query, refused, settings, sideScroll, suggestLabels, test, WANT } from './sift.ts';
 
-const WANT = 'What do you want from Sift?';
 const steps = (page: Page) => page.locator('ol > li');
 const current = (page: Page) => page.locator('[aria-current="step"]');
-
-async function suggest(page: Page, words: string) {
-  await page.getByRole('textbox', { name: WANT }).fill(words);
-  await page.getByRole('button', { name: 'Suggest labels' }).click();
-  await expect(page.getByRole('heading', { name: 'Your labels', level: 1 })).toBeVisible();
-}
 
 test.describe('Setting up a mailbox with no labels', () => {
   test.use({ variant: 'bare' });
@@ -39,7 +32,7 @@ test.describe('Setting up a mailbox with no labels', () => {
 
   test('from what you want to For review', async ({ page }) => {
     await page.goto('/');
-    await suggest(page, 'No more sales pitches');
+    await suggestLabels(page, 'No more sales pitches');
     await expect(current(page)).toHaveText('3Your labels');
     await expect(page.getByText('“No more sales pitches”')).toBeVisible();
     await expect(page.getByRole('checkbox', { name: 'Use Sales pitches' })).toBeChecked();
@@ -63,17 +56,17 @@ test.describe('Setting up a mailbox with no labels', () => {
 
   test('the newest of the inbox is gone through to suggest about, and Settings says how far it has got', async ({ page }) => {
     await page.goto('/');
-    await suggest(page, 'No more sales pitches');
+    await suggestLabels(page, 'No more sales pitches');
     await page.getByRole('button', { name: 'Use this label' }).click();
     await page.getByRole('button', { name: 'Go through 300' }).click();
     await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toBeVisible();
     await page.goto('/?settings=1');
-    await expect(page.getByRole('dialog', { name: 'Settings', exact: true }).getByText('Going through your inbox')).toBeVisible();
+    await expect(settings(page).getByText('Going through your inbox')).toBeVisible();
   });
 
   test('a suggestion edited before it is used is made as edited', async ({ page }) => {
     await page.goto('/');
-    await suggest(page, 'No more sales pitches');
+    await suggestLabels(page, 'No more sales pitches');
     await page.getByRole('button', { name: 'Edit Sales pitches' }).click();
     const edit = page.getByRole('dialog', { name: 'Sales pitches' });
     await edit.getByRole('textbox', { name: 'Name' }).fill('Pitches');
@@ -97,14 +90,14 @@ test.describe('Setting up a mailbox with no labels', () => {
 
   test('every suggestion unticked leaves nothing to use', async ({ page }) => {
     await page.goto('/');
-    await suggest(page, 'No more sales pitches');
+    await suggestLabels(page, 'No more sales pitches');
     await page.getByRole('checkbox', { name: 'Use Sales pitches' }).uncheck();
     await expect(page.getByRole('button', { name: 'Use these labels' })).toBeDisabled();
   });
 
   test('words the labels would not cover get the note and Start over alone, which keeps the words', async ({ page }) => {
     await page.goto('/');
-    await suggest(page, 'Just my receipts');
+    await suggestLabels(page, 'Just my receipts');
     await expect(page.getByText('Not in these labels')).toBeVisible();
     await expect(page.getByText('Your Receipts and transactions label covers receipts already.')).toBeVisible();
     await expect(page.getByRole('checkbox')).toHaveCount(0);
@@ -130,13 +123,11 @@ test.describe('Setting up a mailbox with no labels', () => {
 
   test('Settings opens over a step, and closing it returns to the same step', async ({ page }) => {
     await page.goto('/');
-    await suggest(page, 'No more sales pitches');
+    await suggestLabels(page, 'No more sales pitches');
     await page.getByRole('button', { name: 'Settings' }).click();
-    const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
-    await expect(settings).toBeVisible();
+    await expect(settings(page)).toBeVisible();
     await param(page, 'settings').toBe('1');
-    await settings.getByRole('button', { name: 'Close' }).click();
-    await expect(settings).toHaveCount(0);
+    await closeSettings(page);
     await query(page).toBe('');
     await expect(page.getByRole('heading', { name: 'Your labels', level: 1 })).toBeVisible();
     await expect(page.getByRole('checkbox', { name: 'Use Sales pitches' })).toBeChecked();
@@ -146,7 +137,7 @@ test.describe('Setting up a mailbox with no labels', () => {
     await page.setViewportSize(PHONE);
     await page.goto('/');
     await expect(page.getByText('Step 2 of 4: What you want')).toBeVisible();
-    await suggest(page, 'No more sales pitches');
+    await suggestLabels(page, 'No more sales pitches');
     await expect(page.getByText('Step 3 of 4: Your labels')).toBeVisible();
     // A string, as e2e is typed without the DOM.
     await sideScroll(page).toBe(0);
@@ -182,9 +173,8 @@ test.describe('A model signed out after setting up', () => {
 
   test('Settings’ Connect a model closes Settings onto the step', async ({ page }) => {
     await page.getByRole('button', { name: 'Settings' }).click();
-    const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
-    await settings.getByRole('button', { name: 'Connect a model' }).click();
-    await expect(settings).toHaveCount(0);
+    await settings(page).getByRole('button', { name: 'Connect a model' }).click();
+    await expect(settings(page)).toHaveCount(0);
     await query(page).toBe('');
     await expect(page.getByRole('heading', { name: 'No model connected', level: 1 })).toBeVisible();
   });

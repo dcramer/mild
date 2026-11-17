@@ -1,12 +1,11 @@
 import { globSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import type { SignIn } from '../src/dashboard/controls.ts';
 import { type Ephemeral, memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { type RunOptions, tick } from '../src/work/run.ts';
 import { startInboxRuns } from '../src/store/inbox.ts';
 import { people } from '../src/store/people.ts';
-import { onePerson, startDashboard } from './fixtures.ts';
-import { FakeMailbox } from './helpers.ts';
+import { googleSignIn, onePerson, startDashboard } from './fixtures.ts';
+import { ACCOUNT, FakeMailbox, codeSignIn, testModel } from './helpers.ts';
 
 /**
  * Module state that holds between calls, allowed because any instance computes the same: a cache, not a
@@ -33,25 +32,14 @@ describe('nothing is kept in module memory between calls', () => {
   });
 });
 
-const ACCOUNT = 'me@example.org';
-
 describe('a flow whose steps reach different instances', () => {
-  const signIn: SignIn = {
-    hasClient: () => true,
-    url: (_redirect, state) => `https://accounts.example/auth?state=${state}`,
-    // The code stands in for the Google account that came back.
-    complete: async (_redirect, code) => code,
-  };
   /** Sign in on one dashboard and come back from Google to another; true when the second signs the browser in. */
   const signInAcross = async (first: Ephemeral, second: Ephemeral) => {
     const { store } = await onePerson(ACCOUNT);
-    const options = { signIn, sessionSecret: 'secret' };
+    const options = { signIn: codeSignIn, sessionSecret: 'secret' };
     const one = await startDashboard(people(store), { ...options, ephemeral: first });
     const two = await startDashboard(people(store), { ...options, ephemeral: second });
-    const login = await one.call('GET', '/auth/login');
-    const state = new URL(String(login.headers['location'])).searchParams.get('state');
-    const started = String(login.headers['set-cookie']).split(';')[0]!;
-    const back = await two.call('GET', `/auth/callback?state=${state}&code=${encodeURIComponent(ACCOUNT)}`, undefined, { cookie: started });
+    const back = await googleSignIn(one, ACCOUNT, two);
     return String(back.headers['set-cookie']).includes('sift_session=ey');
   };
 
@@ -70,7 +58,7 @@ describe('a flow whose steps reach different instances', () => {
     const instance = (): RunOptions => ({
       ephemeral,
       log: () => {},
-      model: async () => ({ model: 'test/model', judge: async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 }) }),
+      model: async () => testModel(),
       connect: () => ({
         api: {
           getProfile: async () => ({ emailAddress: ACCOUNT, historyId: '1' }),

@@ -1,23 +1,90 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { type Scope, scopeFor } from '../src/dashboard/scope.ts';
+import type { SignIn } from '../src/dashboard/controls.ts';
 import type { Sql } from '../src/store/sql.ts';
 import type { ExistingFilter, FilterProposal } from '../src/actions/filters.ts';
 import type { Mailbox } from '../src/actions/mailbox.ts';
+import type { RawMessage } from '../src/gmail/api.ts';
+import type { SignIns } from '../src/model/credentials.ts';
 import { recordSync, listAccounts } from '../src/store/accounts.ts';
 import { examples, labels } from '../src/store/query.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { exampleKeysOf, sealPart } from '../src/store/content.ts';
+import type { Judge, Verdict } from '../src/triage/stages/model.ts';
 import type { Address, Label, MessageFacts } from '../src/triage/types.ts';
+
+/** The mailbox a test's person signs in with, unless it needs another. */
+export const ACCOUNT = 'me@example.org';
+export const DAY = 86_400_000;
+
+export const tempDir = () => mkdtempSync(join(tmpdir(), 'sift-'));
+
+/** Text as a Gmail message part carries it. */
+export const b64 = (text: string) => Buffer.from(text).toString('base64url');
+
+/** A verdict that places nothing: the model was not sure. */
+export const UNSURE: Verdict = { label: 'unsure', reason: 'cannot tell', confidence: 0.2 };
+
+/** The model tier, with calls recorded as `test/model`. */
+export const testModel = (judge: Judge = async () => UNSURE) => ({ model: 'test/model', judge });
+
+/** What the model's evidence is read from, finding no body, no thread, and no mail the owner sent unless `mailbox` says. */
+export const quietSources = (mailbox: Pick<Mailbox, 'hasSentTo'> = { hasSentTo: async () => false }) => ({
+  api: { getContent: async () => null, getThread: async () => null },
+  mailbox,
+});
+
+/** A message as Gmail's metadata read returns it. `from` is the From header; `headers` replaces all of them. */
+export function rawMessage(
+  id: string,
+  { from = 'News <news@example.com>', subject = `Subject ${id}`, ...overrides }: Partial<RawMessage> & { from?: string; subject?: string } = {},
+): RawMessage {
+  return {
+    id,
+    threadId: `t-${id}`,
+    labelIds: ['INBOX', 'UNREAD'],
+    internalDate: 1000,
+    headers: [
+      { name: 'From', value: from },
+      { name: 'To', value: ACCOUNT },
+      { name: 'Subject', value: subject },
+    ],
+    ...overrides,
+  };
+}
+
+/** A Google sign-in whose code stands in for the Google account that came back. */
+export const codeSignIn: SignIn = {
+  hasClient: () => true,
+  url: (_redirect, state) => `https://accounts.example/auth?state=${state}`,
+  complete: async (_redirect, code) => code,
+};
+
+/** Sign-ins kept in memory, as a person's database keeps them. */
+export function memorySignIns(): SignIns & { stored: Map<string, string> } {
+  const stored = new Map<string, string>();
+  return {
+    stored,
+    read: async (provider) => stored.get(provider) ?? null,
+    write: async (provider, text) => void stored.set(provider, text),
+    remove: async (provider) => void stored.delete(provider),
+    keys: async () => [...stored.keys()].toSorted(),
+    exclusive: (work) => work(),
+  };
+}
 
 const header = (a: Address) => (a.name ? `${a.name} <${a.address}>` : a.address);
 
 /** A synthetic message, with headers that say what it does, as Gmail's would. Tests never use real mail. */
 export function facts(overrides: Partial<MessageFacts> = {}): MessageFacts {
   const message = {
-    accountId: 'acct',
+    accountId: ACCOUNT,
     messageId: 'm1',
     threadId: 't1',
     from: { address: 'news@example.com', domain: 'example.com' },
-    to: [{ address: 'me@example.org', domain: 'example.org' }],
+    to: [{ address: ACCOUNT, domain: 'example.org' }],
     cc: [],
     subject: 'Weekly digest',
     labelIds: ['INBOX', 'UNREAD'],

@@ -1,13 +1,31 @@
 import type { Locator, Page } from '@playwright/test';
-import { expect } from './sift.ts';
+import { expect, param } from './sift.ts';
 
 export const ruleDialog = (page: Page) => page.getByRole('dialog', { name: 'Add a rule' });
 
-/** The toast for a rule just added, named by the rule it says. */
-export const ruleToast = (page: Page, rule: string) => page.getByRole('region', { name: 'Notifications' }).getByRole('dialog', { name: rule, exact: true });
+/** Presses `within`'s Make a rule…, which opens the dialog started on what that place knows. */
+export async function makeRule(within: Locator) {
+  await within.getByRole('button', { name: 'Make a rule…' }).click();
+  return ruleDialog(within.page());
+}
+
+/** On Rules, Add a rule and Write it yourself: the dialog, on its empty form. */
+export async function writeRule(page: Page) {
+  await page.getByRole('button', { name: 'Add a rule' }).click();
+  const dialog = ruleDialog(page);
+  await dialog.getByRole('button', { name: 'Write it yourself' }).click();
+  return dialog;
+}
 
 /** A rule's panel, by its title: its name, or its conditions. */
 export const rulePanel = (page: Page, title: string) => page.getByRole('dialog', { name: title, exact: true });
+
+/** Opens a rule's panel from the Rules list. */
+export async function openRule(page: Page, title: string) {
+  await page.goto('/rules');
+  await page.getByRole('cell', { name: title }).click();
+  return rulePanel(page, title);
+}
 
 /** What a panel's `term` says. */
 export const fact = (within: Locator, term: string) =>
@@ -31,18 +49,32 @@ export async function addRule(dialog: Locator) {
   ).toBeVisible();
 }
 
-/** The rule a panel shows, from the address that holds it open. */
-export const openRule = (page: Page) => new URL(page.url()).searchParams.get('rule');
-
-/** Settings, Active, Turn on, Turn on again to confirm, and Not now to going through the inbox. Add to Gmail is offered only while Sift is on. */
-export async function turnOn(page: Page) {
-  await page.goto('/?settings=1');
-  const settings = page.getByRole('dialog', { name: 'Settings' });
-  await settings.getByRole('button', { name: 'Turn on', exact: true }).click();
-  await settings.getByRole('group', { name: 'Archive, label and mark spam on new mail by itself?' }).getByRole('button', { name: 'Turn on' }).click();
-  await page.getByRole('dialog', { name: 'Go through your inbox?' }).getByRole('button', { name: 'Not now' }).click();
-  await expect(settings.getByText('On', { exact: true })).toBeVisible();
+/** The rule whose panel is open, once the address holds one. */
+export async function ruleId(page: Page) {
+  await param(page, 'rule').toMatch(/^r-/);
+  return new URL(page.url()).searchParams.get('rule')!;
 }
 
 /** The rows of the Rules list, top to bottom, without its header. */
 export const ruleRows = (page: Page) => page.getByRole('main').getByRole('rowgroup').last().getByRole('row');
+
+/** Goes to Rules, which lists the seed's four rules and nothing more. */
+export async function seededRulesOnly(page: Page) {
+  await page.goto('/rules');
+  await expect(ruleRows(page)).toHaveCount(4);
+}
+
+/** Presses Remove in a rule's row or panel, and Remove again in the question it asks there. */
+export async function removeRule(within: Locator) {
+  await within.getByRole('button', { name: 'Remove', exact: true }).click();
+  await removeQuestion(within).getByRole('button', { name: 'Remove', exact: true }).click();
+}
+
+export const removeQuestion = (within: Locator) => within.getByRole('group', { name: 'Remove this rule?' });
+
+/** The rule For review proposes from what the seed's user has been doing. */
+export const proposal = (page: Page) => page.getByRole('listitem').filter({ hasText: 'Keep Receipts from billing@utility.example.net?' });
+
+/** A standing button (Trust, Unwanted, Block) in the group for `who`; `aria-pressed` says whether it is theirs. */
+export const standing = (page: Page, who: string, name: string) =>
+  page.getByRole('group', { name: `Where ${who} stands`, exact: true }).getByRole('button', { name, exact: true });

@@ -1,22 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { chatgptPending, checkChatGPT, finishChatGPT, forgetChatGPT, startChatGPT } from '../src/app/chatgpt.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import type { SignIns } from '../src/model/credentials.ts';
+import { memorySignIns } from './helpers.ts';
 
 const DEVICE = '00000000-0000-4000-8000-000000000001';
 const access = `x.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'acct-1' } })).toString('base64url')}.y`;
-
-function memorySignIns(): SignIns & { stored: Map<string, string> } {
-  const stored = new Map<string, string>();
-  return {
-    stored,
-    read: async (provider) => stored.get(provider) ?? null,
-    write: async (provider, text) => void stored.set(provider, text),
-    remove: async (provider) => void stored.delete(provider),
-    keys: async () => [...stored.keys()],
-    exclusive: (work) => work(),
-  };
-}
 
 describe('a ChatGPT sign-in between requests', () => {
   it('is kept in the ephemeral store, and asked about once per interval by whichever request comes next', async () => {

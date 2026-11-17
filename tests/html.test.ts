@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { gatherEvidence } from '../src/work/evidence.ts';
 import { readContent } from '../src/gmail/body.ts';
-import { addMailbox, recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/accounts.ts';
 import { openUserDb } from './fixtures.ts';
 import { storedFacts } from '../src/store/messages.ts';
 import { describeFacts } from '../src/triage/facts.ts';
 import { htmlFacts } from '../src/triage/html.ts';
-import { facts } from './helpers.ts';
-
-const b64 = (text: string) => Buffer.from(text).toString('base64url');
+import { ACCOUNT, b64, facts } from './helpers.ts';
 
 const CAMPAIGN = `<html><body>
   <a href="https://example.us1.list-manage.com/track/click?u=abc&amp;id=1">Shop the sale</a>
@@ -100,10 +98,8 @@ describe('readContent', () => {
 
 describe('content facts', () => {
   it('are recorded with the message once it has been read; the model is shown an attachment and no tracking', async () => {
-    const ACCOUNT = 'me@example.org';
     const db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1');
-    const f = facts({ accountId: ACCOUNT });
+    const f = facts();
     await recordSync(db, ACCOUNT, [f], '2');
     expect(await storedFacts(db, ACCOUNT, f.messageId)).not.toHaveProperty('trackingPixel');
 

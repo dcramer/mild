@@ -1,11 +1,9 @@
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
 import { buildSignIn } from '../src/app/google-sign-in.ts';
 import { loadConfig } from '../src/config.ts';
 import { userOf } from '../src/store/accounts.ts';
 import { freshStore } from './fixtures.ts';
+import { tempDir } from './helpers.ts';
 
 // The code stands in for the Google account that came back.
 vi.mock('../src/gmail/auth.ts', () => ({
@@ -17,7 +15,7 @@ vi.mock('../src/gmail/auth.ts', () => ({
 
 it('lets in every account Google does: arriving alone, a person of its own; added, another mailbox of whoever added it', async () => {
   const store = await freshStore();
-  const signIn = buildSignIn(loadConfig({ SIFT_HOME: mkdtempSync(join(tmpdir(), 'sift-home-')) }), store);
+  const signIn = buildSignIn(loadConfig({ SIFT_HOME: tempDir() }), store);
   await signIn.complete('', 'me@example.org', '', null);
   await signIn.complete('', 'work@example.com', '', 'me@example.org');
   await signIn.complete('', 'friend@example.net', '', null);

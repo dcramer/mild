@@ -16,9 +16,7 @@ import {
   startWords,
 } from '../web/src/lib/rule-start.ts';
 import { onePerson } from './fixtures.ts';
-import { everything } from './helpers.ts';
-
-const ACCOUNT = 'me@example.org';
+import { ACCOUNT, everything } from './helpers.ts';
 
 describe('where each way into the rule dialog starts it', () => {
   it('starts a proposal on its sender, waiting for its label and then doing what the label does', () => {

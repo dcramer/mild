@@ -1,16 +1,37 @@
 import type { Page } from '@playwright/test';
-import { choose, expect, panel, param, PHONE, query, refused, row, settled, test } from './sift.ts';
-
-/** The section of the Labels screen for one outcome ("Archived"), with its rows. */
-const group = (page: Page, title: string) => page.getByRole('heading', { name: title, exact: true }).locator('xpath=ancestor::section[1]');
+import {
+  addALabelDialog,
+  addLabelsDialog,
+  choose,
+  expect,
+  messageQuery,
+  openMessage,
+  panel,
+  param,
+  PHONE,
+  query,
+  refused,
+  row,
+  section,
+  settled,
+  suggestLabels,
+  test,
+  toast,
+  writeLabel,
+} from './sift.ts';
 
 /** The label's panel on the Labels screen. Not the toast saying it was removed, a dialog named by the label too, which is never modal. */
 const labelPanel = (page: Page, name: string) => page.getByRole('dialog', { name, exact: true }).and(page.locator(':not([aria-modal="false"])'));
 
-/** "12 of 30" beside `Add labels`: how many labels there are. */
-async function labelCount(page: Page) {
-  const text = await page.getByText(/^\d+ of \d+$/).textContent();
-  return Number(text?.split(' ')[0]);
+/** "12 of 30" beside `Add labels`: how many labels there are, of how many there may be. */
+const labelCount = (page: Page) => page.getByText(/^\d+ of \d+$/);
+
+/** In the open Add labels, asks the model for labels for `words`. */
+async function askForLabels(page: Page, words: string) {
+  const dialog = addLabelsDialog(page);
+  await dialog.getByRole('textbox', { name: 'What mail, and what should happen to it?' }).fill(words);
+  await dialog.getByRole('button', { name: 'Suggest labels' }).click();
+  return dialog;
 }
 
 async function openLabel(page: Page, name: string) {
@@ -39,7 +60,7 @@ test.describe('Labels', () => {
 
   test('changing what Sift does with a label moves it, and stays changed', async ({ page }) => {
     await page.goto('/labels');
-    await expect(group(page, 'Archived').getByText('Newsletters', { exact: true })).toBeVisible();
+    await expect(section(page, 'Archived').getByText('Newsletters', { exact: true })).toBeVisible();
 
     const opened = await openLabel(page, 'Newsletters');
     await param(page, 'label').toBe('newsletter');
@@ -61,10 +82,10 @@ test.describe('Labels', () => {
     await opened.getByRole('button', { name: 'Close' }).click();
     await expect(opened).toHaveCount(0);
     await param(page, 'label').toBeNull();
-    await expect(group(page, 'Kept in your inbox').getByText('Newsletters', { exact: true })).toBeVisible();
+    await expect(section(page, 'Kept in your inbox').getByText('Newsletters', { exact: true })).toBeVisible();
 
     await page.reload();
-    await expect(group(page, 'Kept in your inbox').getByText('Newsletters', { exact: true })).toBeVisible();
+    await expect(section(page, 'Kept in your inbox').getByText('Newsletters', { exact: true })).toBeVisible();
     await expect(labelPanel(page, 'Newsletters')).toHaveCount(0);
   });
 
@@ -88,7 +109,7 @@ test.describe('Labels', () => {
     await opened.getByRole('button', { name: 'Save' }).click();
     await expect(opened.getByRole('button', { name: 'Save' })).toBeDisabled();
     await opened.getByRole('button', { name: 'Close' }).click();
-    await expect(group(page, 'Marked spam').getByText('Marketing', { exact: true })).toBeVisible();
+    await expect(section(page, 'Marked spam').getByText('Marketing', { exact: true })).toBeVisible();
   });
 
   test('a renamed label keeps its place in the list and its panel', async ({ page }) => {
@@ -101,9 +122,9 @@ test.describe('Labels', () => {
     await expect(page.getByRole('dialog', { name: 'Digests' })).toBeVisible();
     await param(page, 'label').toBe('newsletter');
     await page.getByRole('dialog', { name: 'Digests' }).getByRole('button', { name: 'Close' }).click();
-    const listed = group(page, 'Archived').getByRole('row', { name: /^Digests / });
+    const listed = section(page, 'Archived').getByRole('row', { name: /^Digests / });
     await expect(listed).toContainText('Weekly roundups I read on Sundays.');
-    await expect(group(page, 'Archived').getByText('Newsletters', { exact: true })).toHaveCount(0);
+    await expect(section(page, 'Archived').getByText('Newsletters', { exact: true })).toHaveCount(0);
   });
 
   test('a label cannot be saved without a name', async ({ page }) => {
@@ -115,13 +136,10 @@ test.describe('Labels', () => {
 
   test('suggested labels: one kept, with a note for what the labels already cover', async ({ page }) => {
     await page.goto('/labels');
-    await expect(group(page, 'Archived')).toBeVisible();
-    const before = await labelCount(page);
+    await expect(labelCount(page)).toHaveText(/^10 of /);
 
     await page.getByRole('button', { name: 'Add labels' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Add labels' });
-    await dialog.getByRole('textbox', { name: 'What mail, and what should happen to it?' }).fill('Archive sales pitches and my receipts');
-    await dialog.getByRole('button', { name: 'Suggest labels' }).click();
+    const dialog = await askForLabels(page, 'Archive sales pitches and my receipts');
 
     await expect(dialog.getByText('Not in these labels')).toBeVisible();
     await expect(dialog.getByText('Your Receipts and transactions label covers receipts already.')).toBeVisible();
@@ -129,18 +147,16 @@ test.describe('Labels', () => {
     await dialog.getByRole('button', { name: 'Add this label' }).click();
 
     await expect(dialog).toHaveCount(0);
-    await expect(group(page, 'Archived').getByText('Sales pitches', { exact: true })).toBeVisible();
+    await expect(section(page, 'Archived').getByText('Sales pitches', { exact: true })).toBeVisible();
     // Made in both mailboxes, so no "Only in".
-    await expect(group(page, 'Archived').getByRole('row').filter({ hasText: 'Sales pitches' })).not.toContainText('Only in');
-    await expect.poll(() => labelCount(page)).toBe(before + 1);
+    await expect(section(page, 'Archived').getByRole('row').filter({ hasText: 'Sales pitches' })).not.toContainText('Only in');
+    await expect(labelCount(page)).toHaveText(/^11 of /);
   });
 
   test('a suggestion left unticked is not added', async ({ page }) => {
     await page.goto('/labels');
     await page.getByRole('button', { name: 'Add labels' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Add labels' });
-    await dialog.getByRole('textbox', { name: 'What mail, and what should happen to it?' }).fill('No more sales pitches');
-    await dialog.getByRole('button', { name: 'Suggest labels' }).click();
+    const dialog = await askForLabels(page, 'No more sales pitches');
     await dialog.getByRole('checkbox', { name: 'Use Sales pitches' }).uncheck();
     await expect(dialog.getByRole('button', { name: 'Add these labels' })).toBeDisabled();
   });
@@ -148,36 +164,30 @@ test.describe('Labels', () => {
   test('words the labels already cover get the note alone, and Back keeps the words', async ({ page }) => {
     await page.goto('/labels');
     await page.getByRole('button', { name: 'Add labels' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Add labels' });
-    const words = dialog.getByRole('textbox', { name: 'What mail, and what should happen to it?' });
-    await words.fill('Keep my receipts');
-    await dialog.getByRole('button', { name: 'Suggest labels' }).click();
+    const dialog = await askForLabels(page, 'Keep my receipts');
 
     await expect(dialog.getByText('Your Receipts and transactions label covers receipts already.')).toBeVisible();
     await expect(dialog.getByRole('checkbox')).toHaveCount(0);
     await expect(dialog.getByRole('button', { name: /^(Add|Save)/ })).toHaveCount(0);
     await dialog.getByRole('button', { name: 'Back' }).click();
-    await expect(words).toHaveValue('Keep my receipts');
+    await expect(dialog.getByRole('textbox', { name: 'What mail, and what should happen to it?' })).toHaveValue('Keep my receipts');
   });
 
   refused('words the model makes nothing of say so, and the dialog stays', async ({ page }) => {
     await page.goto('/labels');
     await page.getByRole('button', { name: 'Add labels' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Add labels' });
-    await dialog.getByRole('textbox', { name: 'What mail, and what should happen to it?' }).fill('Something about the weather');
-    await dialog.getByRole('button', { name: 'Suggest labels' }).click();
+    const dialog = await askForLabels(page, 'Something about the weather');
     await expect(dialog.getByText('The model could not suggest labels (the model did not suggest any usable labels). Try again.')).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Suggest labels' })).toBeEnabled();
   });
 
   test('a label written by hand', async ({ page }) => {
     await page.goto('/labels');
-    await expect(group(page, 'Archived')).toBeVisible();
-    const before = await labelCount(page);
+    await expect(labelCount(page)).toHaveText(/^10 of /);
     await page.getByRole('button', { name: 'Add labels' }).click();
-    await page.getByRole('dialog', { name: 'Add labels' }).getByRole('button', { name: 'Write one yourself' }).click();
+    await addLabelsDialog(page).getByRole('button', { name: 'Write one yourself' }).click();
 
-    const manual = page.getByRole('dialog', { name: 'Add a label' });
+    const manual = addALabelDialog(page);
     const add = manual.getByRole('button', { name: 'Add label', exact: true });
     await expect(add).toBeDisabled();
     await manual.getByRole('textbox', { name: 'Name' }).fill('Field trips');
@@ -187,27 +197,25 @@ test.describe('Labels', () => {
     await add.click();
 
     await expect(manual).toHaveCount(0);
-    await expect(group(page, 'Kept in your inbox').getByRole('row').filter({ hasText: 'Field trips' })).toContainText(
+    await expect(section(page, 'Kept in your inbox').getByRole('row').filter({ hasText: 'Field trips' })).toContainText(
       'Permission slips and trip plans from school.',
     );
-    await expect.poll(() => labelCount(page)).toBe(before + 1);
+    await expect(labelCount(page)).toHaveText(/^11 of /);
     await query(page).toBe('');
   });
 
   test('closing Add labels adds nothing and opens no panel', async ({ page }) => {
     await page.goto('/labels');
     await page.getByRole('button', { name: 'Add labels' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Add labels' });
-    await dialog.getByRole('button', { name: 'Close' }).click();
-    await expect(dialog).toHaveCount(0);
+    await addLabelsDialog(page).getByRole('button', { name: 'Close' }).click();
+    await expect(addLabelsDialog(page)).toHaveCount(0);
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await query(page).toBe('');
   });
 
   test('removing a label asks in place, then closes its panel with a toast', async ({ page }) => {
     await page.goto('/labels');
-    await expect(group(page, 'Archived')).toBeVisible();
-    const before = await labelCount(page);
+    await expect(labelCount(page)).toHaveText(/^10 of /);
     const opened = await openLabel(page, 'Newsletters');
 
     await opened.getByRole('button', { name: 'Remove', exact: true }).click();
@@ -222,10 +230,10 @@ test.describe('Labels', () => {
     await ask.getByRole('button', { name: 'Remove', exact: true }).click();
 
     await expect(opened).toHaveCount(0);
-    await expect(page.getByRole('region', { name: 'Notifications' }).getByRole('dialog', { name: 'Newsletters', exact: true })).toContainText('Label removed');
+    await expect(toast(page, 'Newsletters')).toContainText('Label removed');
     await param(page, 'label').toBeNull();
     await expect(page.getByRole('main').getByText('Newsletters', { exact: true })).toHaveCount(0);
-    await expect.poll(() => labelCount(page)).toBe(before - 1);
+    await expect(labelCount(page)).toHaveText(/^9 of /);
 
     await page.goto('/rules');
     await expect(page.getByRole('heading', { name: 'Rules' })).toBeVisible();
@@ -290,78 +298,66 @@ test.describe('Labels', () => {
 });
 
 test.describe('Adding a label from an open message', () => {
+  const AT = `/?${messageQuery('m6')}`;
   const open = async (page: Page) => {
     await page.goto('/');
-    await page.getByRole('cell', { name: 'Lunch on Thursday?' }).click();
-    await expect(panel(page)).toBeVisible();
-    return page.url();
+    await openMessage(page, 'Lunch on Thursday?');
+    await expect(page).toHaveURL(AT);
   };
 
   test('the new label is a choice in the same panel, on the same message', async ({ page }) => {
-    const at = await open(page);
+    await open(page);
     await choose(panel(page), 'Add a label…');
-    const dialog = page.getByRole('dialog', { name: 'Add labels' });
-    await expect(dialog).toBeVisible();
+    await expect(addLabelsDialog(page)).toBeVisible();
+    await writeLabel(page, 'Field trips');
 
-    await dialog.getByRole('button', { name: 'Write one yourself' }).click();
-    const manual = page.getByRole('dialog', { name: 'Add a label' });
-    await manual.getByRole('textbox', { name: 'Name' }).fill('Field trips');
-    await manual.getByRole('button', { name: 'Add label', exact: true }).click();
-
-    await expect(manual).toHaveCount(0);
     await settled(page);
     await expect(panel(page)).toBeVisible();
-    await expect(page).toHaveURL(at);
+    await expect(page).toHaveURL(AT);
     await choose(panel(page), 'Field trips');
     await expect(panel(page).getByRole('combobox', { name: 'What this message is' })).toHaveText(/Field trips/);
   });
 
   test('a suggested label is a choice in the same panel', async ({ page }) => {
-    const at = await open(page);
+    await open(page);
     await choose(panel(page), 'Add a label…');
-    const dialog = page.getByRole('dialog', { name: 'Add labels' });
-    await dialog.getByRole('textbox', { name: 'What mail, and what should happen to it?' }).fill('No more sales pitches');
-    await dialog.getByRole('button', { name: 'Suggest labels' }).click();
+    const dialog = await askForLabels(page, 'No more sales pitches');
     await dialog.getByRole('button', { name: 'Add this label' }).click();
 
     await expect(dialog).toHaveCount(0);
     await settled(page);
-    await expect(page).toHaveURL(at);
+    await expect(page).toHaveURL(AT);
     await panel(page).getByRole('combobox', { name: 'What this message is' }).click();
     await expect(page.getByRole('option', { name: 'Sales pitches', exact: true })).toBeVisible();
   });
 
   test('closing the dialog leaves the panel as it was', async ({ page }) => {
-    const at = await open(page);
+    await open(page);
     await choose(panel(page), 'Add a label…');
-    const dialog = page.getByRole('dialog', { name: 'Add labels' });
+    const dialog = addLabelsDialog(page);
     await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(dialog).toHaveCount(0);
     await settled(page);
     await expect(panel(page)).toBeVisible();
-    await expect(page).toHaveURL(at);
+    await expect(page).toHaveURL(AT);
   });
 
   test('Escape closes only the dialog', async ({ page }) => {
-    const at = await open(page);
+    await open(page);
     await choose(panel(page), 'Add a label…');
-    const dialog = page.getByRole('dialog', { name: 'Add labels' });
+    const dialog = addLabelsDialog(page);
     await expect(dialog.getByRole('textbox', { name: 'What mail, and what should happen to it?' })).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await settled(page);
     await expect(panel(page)).toBeVisible();
-    await expect(page).toHaveURL(at);
+    await expect(page).toHaveURL(AT);
   });
 
   test('closing the panel after adding a label keeps it closed', async ({ page }) => {
     await open(page);
     await choose(panel(page), 'Add a label…');
-    await page.getByRole('dialog', { name: 'Add labels' }).getByRole('button', { name: 'Write one yourself' }).click();
-    const manual = page.getByRole('dialog', { name: 'Add a label' });
-    await manual.getByRole('textbox', { name: 'Name' }).fill('Field trips');
-    await manual.getByRole('button', { name: 'Add label', exact: true }).click();
-    await expect(manual).toHaveCount(0);
+    await writeLabel(page, 'Field trips');
 
     await panel(page).getByRole('button', { name: 'Close' }).first().click();
     await expect(panel(page)).toHaveCount(0);
@@ -377,8 +373,7 @@ refused.describe('A mailbox with one label', () => {
 
   refused('removing it is refused, and says why', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('textbox', { name: 'What do you want from Sift?' }).fill('No more sales pitches');
-    await page.getByRole('button', { name: 'Suggest labels' }).click();
+    await suggestLabels(page, 'No more sales pitches');
     await page.getByRole('button', { name: 'Use this label' }).click();
     await page.getByRole('button', { name: 'New mail only' }).click();
     await page.goto('/labels');

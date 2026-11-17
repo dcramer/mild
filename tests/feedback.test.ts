@@ -8,7 +8,7 @@ import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { summarize } from '../src/dashboard/queries/summary.ts';
 import { people } from '../src/store/people.ts';
 import { accuracy, applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
-import { listAccounts, recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { senderFacts } from '../src/store/senders.ts';
 import { dismissProposal, listProposals, madeFromProposal } from '../src/store/proposals.ts';
@@ -16,11 +16,10 @@ import { MAX_ATTEMPTS, startRun } from '../src/store/runs.ts';
 import { addRule, listRules, setRule } from '../src/store/rules.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
 import type { Decision, Disposition } from '../src/triage/types.ts';
-import { everything, facts, FakeMailbox } from './helpers.ts';
-import { raw, startDashboard, onePerson, withReason } from './fixtures.ts';
+import { ACCOUNT, DAY, everything, facts, FakeMailbox } from './helpers.ts';
+import { firstAccount, raw, startDashboard, onePerson, withReason } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 
-const ACCOUNT = 'me@example.org';
 let db: Sql;
 let store: Store;
 let serial = 0;
@@ -28,12 +27,7 @@ let serial = 0;
 /** Record a message from `address` and what sift would do with it, as a suggestion. */
 async function suggest(address: string, disposition: Disposition, extra: Partial<Decision> = {}): Promise<number> {
   const id = `m${++serial}`;
-  await recordSync(
-    db,
-    ACCOUNT,
-    [facts({ accountId: ACCOUNT, messageId: id, from: { address, domain: address.split('@')[1] ?? '' }, subject: `Subject ${id}` })],
-    '2',
-  );
+  await recordSync(db, ACCOUNT, [facts({ messageId: id, from: { address, domain: address.split('@')[1] ?? '' }, subject: `Subject ${id}` })], '2');
   return await recordDecision(db, ACCOUNT, id, { disposition, subscription: 'preserve', stage: 'model', reason: 'looks like it', ...extra }, { now: serial });
 }
 
@@ -86,7 +80,7 @@ describe('suggestions', () => {
       { disposition: 'keep', subscription: 'preserve', stage: 'model', reason: 'changed its mind', labelId: 'personal' },
       { now: 9 },
     );
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'acted' })], '3');
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'acted' })], '3');
     await recordDecision(db, ACCOUNT, 'acted', { disposition: 'archive', subscription: 'preserve', stage: 'model', reason: 'r' }, { carryOut: true });
 
     const pending = await pendingSuggestions(db);
@@ -203,7 +197,7 @@ describe('an answer pressed in the dashboard', () => {
   it('is carried out on its message even while sift is off, and makes no rule', async () => {
     const decisionId = await suggest('news@example.com', 'archive', NEWS);
     // sift's own decision, left over from when it was on: while off it must still be left alone.
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'left', from: { address: 'other@example.com', domain: 'example.com' } })], '3');
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'left', from: { address: 'other@example.com', domain: 'example.com' } })], '3');
     await recordDecision(
       db,
       ACCOUNT,
@@ -223,7 +217,7 @@ describe('an answer pressed in the dashboard', () => {
     const mailbox = new FakeMailbox();
     mailbox.labels.set('m1', ['INBOX']);
     mailbox.labels.set('left', ['INBOX']);
-    await triageAccount({ db, mailbox: null, answers: mailbox }, (await listAccounts(db))[0]!);
+    await triageAccount({ db, mailbox: null, answers: mailbox }, await firstAccount(db));
     expect(mailbox.labels.get('m1')).not.toContain('INBOX');
     expect(mailbox.labels.get('left')).toEqual(['INBOX']);
     expect(await raw(db).get(`SELECT by_user, carry_out, outcome FROM decisions WHERE message_id = 'm1' ORDER BY id DESC LIMIT 1`)).toEqual({
@@ -234,7 +228,7 @@ describe('an answer pressed in the dashboard', () => {
   });
 
   it('answers mail the model could never judge before a pass leaves it to the user, as mail sift had no suggestion for', async () => {
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'stuck', from: { address: 'news@example.com', domain: 'example.com' } })], '3');
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'stuck', from: { address: 'news@example.com', domain: 'example.com' } })], '3');
     for (let i = 0; i < MAX_ATTEMPTS; i++) await startRun(db, { accountId: ACCOUNT, messageId: 'stuck', model: 'test/model', now: 0 });
     await expect(
       applyFeedback(db, { accountId: ACCOUNT, sender: 'other@example.com', label: 'newsletter', messageId: 'stuck', carryOut: true }),
@@ -258,7 +252,7 @@ describe('an answer pressed in the dashboard', () => {
 
     const mailbox = new FakeMailbox();
     mailbox.labels.set('stuck', ['INBOX']);
-    await triageAccount({ db, mailbox: null, answers: mailbox }, (await listAccounts(db))[0]!);
+    await triageAccount({ db, mailbox: null, answers: mailbox }, await firstAccount(db));
     expect(mailbox.labels.get('stuck')).not.toContain('INBOX');
   });
 
@@ -290,7 +284,7 @@ describe('an answer pressed in the dashboard', () => {
 
     const mailbox = new FakeMailbox();
     mailbox.labels.set('m1', ['INBOX']);
-    await triageAccount({ db, mailbox: null, answers: mailbox }, (await listAccounts(db))[0]!);
+    await triageAccount({ db, mailbox: null, answers: mailbox }, await firstAccount(db));
     expect(mailbox.labels.get('m1')).toContain('INBOX');
   });
 
@@ -413,7 +407,7 @@ describe('accuracy', () => {
       { stage: 'model', reviewed: 3, right: 2 },
       { stage: 'fallback', reviewed: 0, right: 0 },
     ]);
-    expect((await summarize(db, await everything(db), 7, 200 + 30 * 86_400_000)).accuracy).toMatchObject({ reviewed: 0, right: 0, byLabel: [] });
+    expect((await summarize(db, await everything(db), 7, 200 + 30 * DAY)).accuracy).toMatchObject({ reviewed: 0, right: 0, byLabel: [] });
   });
 });
 
@@ -421,12 +415,7 @@ describe('correcting a decision that is not waiting', () => {
   /** A message sift already acted on. */
   async function acted(address: string, labelId: string) {
     const id = `a${++serial}`;
-    await recordSync(
-      db,
-      ACCOUNT,
-      [facts({ accountId: ACCOUNT, messageId: id, from: { address, domain: address.split('@')[1] ?? '' }, subject: `Subject ${id}` })],
-      '2',
-    );
+    await recordSync(db, ACCOUNT, [facts({ messageId: id, from: { address, domain: address.split('@')[1] ?? '' }, subject: `Subject ${id}` })], '2');
     await recordDecision(
       db,
       ACCOUNT,
@@ -534,7 +523,7 @@ describe('reading a suggestion', () => {
     expect((await stored()).map((r) => (r as { message_id: string }).message_id)).toEqual(['m2', 'm4']);
 
     // Never answered: it still goes after the limit.
-    await keepSuggestionBodies(db, api, ACCOUNT, () => 1000 + (KEEP_BODY_DAYS + 1) * 86_400_000);
+    await keepSuggestionBodies(db, api, ACCOUNT, () => 1000 + (KEEP_BODY_DAYS + 1) * DAY);
     expect(await stored()).toEqual([]);
   });
 

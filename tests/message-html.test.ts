@@ -7,9 +7,8 @@ import { people } from '../src/store/people.ts';
 import type { Sql } from '../src/store/sql.ts';
 import type { Store } from '../src/store/store.ts';
 import { onePerson, startDashboard } from './fixtures.ts';
-import { facts } from './helpers.ts';
+import { ACCOUNT, b64, facts } from './helpers.ts';
 
-const ACCOUNT = 'me@example.org';
 const MARKER = 'only-in-the-html-7f3a';
 const HTML = `<!DOCTYPE html><html><head><title>Sale</title><meta http-equiv="refresh" content="0;url=https://tracker.example.com/"><base href="https://tracker.example.com/"></head>
 <body style="margin:0"><table bgcolor="#ffffff"><tr><td style="color:#333;background:url(https://cdn.example.com/bg.png)">
@@ -76,7 +75,6 @@ describe('cleaning a message for the frame', () => {
   });
 
   it("reads a message's text and its HTML part, each as it is", () => {
-    const b64 = (text: string) => Buffer.from(text).toString('base64url');
     const payload = {
       mimeType: 'multipart/alternative',
       parts: [
@@ -98,7 +96,7 @@ describe('the frame route', () => {
     await recordSync(
       db,
       ACCOUNT,
-      ['m1', 'plain', 'unheld'].map((messageId) => facts({ accountId: ACCOUNT, messageId })),
+      ['m1', 'plain', 'unheld'].map((messageId) => facts({ messageId })),
       '2',
       1000,
     );

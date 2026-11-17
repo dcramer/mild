@@ -3,8 +3,8 @@ import type { Controls } from '../src/dashboard/controls.ts';
 import { people } from '../src/store/people.ts';
 import type { Store } from '../src/store/store.ts';
 import { onePerson, startDashboard } from './fixtures.ts';
+import { ACCOUNT } from './helpers.ts';
 
-const ACCOUNT = 'me@example.org';
 let store: Store;
 
 beforeEach(async () => {

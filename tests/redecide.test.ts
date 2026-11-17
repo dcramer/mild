@@ -2,7 +2,7 @@ import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
-import { addMailbox, recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/accounts.ts';
 import { openUserDb, raw, withReason } from './fixtures.ts';
 import { startRun } from '../src/store/runs.ts';
 import { recordDecision } from '../src/store/decisions.ts';
@@ -11,7 +11,7 @@ import { addRule, listRules, removeRule } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import type * as Senders from '../src/store/senders.ts';
 import type { Decision } from '../src/triage/types.ts';
-import { facts } from './helpers.ts';
+import { ACCOUNT, facts } from './helpers.ts';
 
 /** Run once, on the handle redecide is using, the next time it reads whether the user writes to a sender. */
 let meanwhile: ((db: Sql) => Promise<void>) | null = null;
@@ -28,7 +28,6 @@ vi.mock('../src/store/senders.ts', async (actual) => {
   };
 });
 
-const ACCOUNT = 'me@example.org';
 let db: Sql;
 let serial: number;
 
@@ -37,12 +36,7 @@ const MARKETING = { disposition: 'archive', labelId: 'marketing', gmailLabel: 's
 /** A message from `address` with the decision sift suggested for it. Returns the message id. */
 async function decided(address: string, decision: Partial<Decision> = {}, at = ++serial): Promise<string> {
   const id = `m${++serial}`;
-  await recordSync(
-    db,
-    ACCOUNT,
-    [facts({ accountId: ACCOUNT, messageId: id, from: { address, domain: address.split('@')[1] ?? '' }, subject: `Subject ${id}` })],
-    '2',
-  );
+  await recordSync(db, ACCOUNT, [facts({ messageId: id, from: { address, domain: address.split('@')[1] ?? '' }, subject: `Subject ${id}` })], '2');
   await recordDecision(
     db,
     ACCOUNT,
@@ -66,7 +60,6 @@ const waiting = async () => (await pendingSuggestions(db)).map((s) => s.messageI
 beforeEach(async () => {
   meanwhile = null;
   db = await openUserDb(ACCOUNT);
-  await addMailbox(db, ACCOUNT, '1');
   serial = 0;
 });
 

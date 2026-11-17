@@ -1,8 +1,7 @@
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { beforeEach, inject, onTestFinished } from 'vitest';
@@ -14,12 +13,14 @@ import { PARSERS, pglite } from '../src/store/db.ts';
 import type { Sql } from '../src/store/sql.ts';
 import { type Store, storeOn } from '../src/store/store.ts';
 import { type Keyring, loadKeyring } from '../src/secrets.ts';
-import { connectAccount, recordSync } from '../src/store/accounts.ts';
+import { type Account, connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import { conditionsHash } from '../src/store/content.ts';
-import { withSampleLabels } from './helpers.ts';
+import { finishRun, startRun } from '../src/store/runs.ts';
+import type { Usage } from '../src/triage/stages/model.ts';
+import { ACCOUNT, tempDir, withSampleLabels } from './helpers.ts';
 
 /*
  * One database per test file, loaded from the image global-setup.ts migrated once for the whole run,
@@ -51,7 +52,7 @@ export async function freshStore(keys: Keyring = loadKeyring({})): Promise<Store
 
 type Value = string | number | bigint | boolean | null | Uint8Array;
 /** A value for a `?`, or an object of them for `:name` parameters. */
-export type Bind = Value | Record<string, Value>;
+type Bind = Value | Record<string, Value>;
 
 /** `?`, `?N` and `:name` placeholders as `$n`, outside quoted text and `::` casts. */
 export function toPostgres(sql: string): { text: string; names: string[] } {
@@ -83,10 +84,6 @@ export function toPostgres(sql: string): { text: string; names: string[] } {
 }
 
 /**
- * SQL text run as `db`'s person, held to row-level security as sift's own queries are: for a test to set
- * up rows or read back what was stored. `?` placeholders, or `:name` ones given one object.
- */
-/**
  * What a database with no key holds of an encrypted column, read with `raw`, as the code reads it: the
  * value without the mark that says it is plain. Throws if it has no mark, so a test still sees it is stored as one.
  */
@@ -101,6 +98,10 @@ export const withReason = <T>(row: T): T => {
   return r?.reason === undefined ? row : { ...r, reason: unmarked(r.reason) };
 };
 
+/**
+ * SQL text run as `db`'s person, held to row-level security as sift's own queries are: for a test to set
+ * up rows or read back what was stored. `?` placeholders, or `:name` ones given one object.
+ */
 export function raw(db: Sql) {
   const query = async (text: string, params: Bind[]) => {
     const { text: statement, names } = toPostgres(text);
@@ -132,11 +133,13 @@ export async function openUserDb(...accounts: string[]): Promise<Sql> {
 
 /** A stand-in for the built web app: `files` by path, and a page unless they give one. */
 export function builtAssets(files: Record<string, string> = {}): string {
-  const dir = mkdtempSync(join(tmpdir(), 'sift-web-'));
+  const dir = tempDir();
   mkdirSync(join(dir, 'assets'));
   for (const [path, text] of Object.entries({ 'index.html': '<!doctype html>page', ...files })) writeFileSync(join(dir, path), text);
   return dir;
 }
+
+type Dashboard = Awaited<ReturnType<typeof startDashboard>>;
 
 export type Reply = { status: number; text: string; body: Record<string, unknown>; headers: Record<string, string | string[] | undefined> };
 
@@ -174,14 +177,56 @@ export async function startDashboard(people: People, options: DashboardOptions &
   return { port, base: `http://127.0.0.1:${port}`, call, handle: dashboard.handle };
 }
 
+/**
+ * Sign in as `who` on `start`, given `codeSignIn`, and come back from Google to `back`. Returns the callback's
+ * reply, whose cookie is the session when it signed the browser in.
+ */
+export async function googleSignIn(start: Pick<Dashboard, 'call'>, who: string, back = start): Promise<Reply> {
+  const login = await start.call('GET', '/auth/login');
+  const state = new URL(String(login.headers['location'])).searchParams.get('state');
+  const started = String(login.headers['set-cookie']).split(';')[0]!;
+  return await back.call('GET', `/auth/callback?state=${state}&code=${encodeURIComponent(who)}`, undefined, { cookie: started });
+}
+
 /** A store whose one person, the owner, has `accounts`; and that person's own database. */
-export async function onePerson(...accounts: string[]): Promise<{ store: Store; db: Sql }> {
-  const store = await freshStore();
+export const onePerson = (...accounts: string[]) => personWith(loadKeyring({}), ...accounts);
+
+/** `onePerson`, with the store's keys `keys`, so what is sealed is encrypted and hashes are hashes. */
+export async function personWith(keys: Keyring, ...accounts: string[]): Promise<{ store: Store; db: Sql }> {
+  const store = await freshStore(keys);
   let user: number | undefined;
   for (const account of accounts) user = await connectAccount(store, account, '1', 0, user);
   const db = await store.user(user ?? 1);
   for (const account of accounts) await withSampleLabels(db, account);
   return { store, db };
+}
+
+export const firstAccount = async (db: Sql): Promise<Account> => (await listAccounts(db))[0]!;
+
+/** A model call about a message, started and finished at `at`. Returns its id. */
+export async function modelRun(
+  db: Sql,
+  {
+    accountId = ACCOUNT,
+    messageId,
+    model = 'test/model',
+    ruleId,
+    at,
+    usage,
+    error,
+  }: {
+    accountId?: string;
+    messageId: string;
+    model?: string;
+    ruleId?: string;
+    at: number;
+    usage?: Usage;
+    error?: string;
+  },
+): Promise<number> {
+  const run = await startRun(db, { accountId, messageId, model, ruleId, now: at });
+  await finishRun(db, run, { error, usage, now: at });
+  return run;
 }
 
 /**

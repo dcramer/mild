@@ -6,9 +6,8 @@ import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { recordSync } from '../src/store/accounts.ts';
 import { getAction, insertPendingAction } from '../src/store/actions.ts';
 import { openUserDb, raw } from './fixtures.ts';
-import { everything, facts, FakeMailbox } from './helpers.ts';
+import { ACCOUNT, everything, facts, FakeMailbox } from './helpers.ts';
 
-const ACCOUNT = 'me@example.org';
 const ONE_CLICK = {
   'list-unsubscribe': '<mailto:leave@example.com>, <https://lists.example.com/u/token123>',
   'list-unsubscribe-post': 'List-Unsubscribe=One-Click',
@@ -37,7 +36,7 @@ const deps = () => ({
 });
 
 async function message(id: string, headers: Record<string, string>, from = 'news@example.com') {
-  await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: id, from: { address: from, domain: from.split('@')[1] ?? '' }, headers })], '2');
+  await recordSync(db, ACCOUNT, [facts({ messageId: id, from: { address: from, domain: from.split('@')[1] ?? '' }, headers })], '2');
 }
 
 beforeEach(async () => {

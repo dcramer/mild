@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
-import { addMailbox, recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/accounts.ts';
 import { openUserDb, raw } from './fixtures.ts';
 import { storedFacts } from '../src/store/messages.ts';
 import { gatherEvidence } from '../src/work/evidence.ts';
@@ -8,13 +8,11 @@ import { FACT_FILTERS as FACT_FILTER_CONDITIONS } from '../src/dashboard/types.t
 import { RULE_FACTS, deriveFacts, describeFacts, factCondition, matchesFacts, threadFacts } from '../src/triage/facts.ts';
 import { sealFacts } from '../src/store/content.ts';
 import { FACTS, FACT_FILTER_WORDS } from '../web/src/lib/format.ts';
-import { everything, facts } from './helpers.ts';
+import { ACCOUNT, everything, facts } from './helpers.ts';
 
-const ACCOUNT = 'me@example.org';
 const me = { address: ACCOUNT, domain: 'example.org' };
 
 const campaign = facts({
-  accountId: ACCOUNT,
   to: [me],
   labelIds: ['INBOX', 'UNREAD', 'CATEGORY_PROMOTIONS'],
   headers: {
@@ -48,7 +46,7 @@ describe('deriveFacts', () => {
   });
 
   it('finds nothing in a plain message from a person', () => {
-    expect(deriveFacts(facts({ accountId: ACCOUNT, to: [me], labelIds: ['INBOX'] }))).toEqual({
+    expect(deriveFacts(facts({ to: [me], labelIds: ['INBOX'] }))).toEqual({
       unsubscribe: 'none',
       listId: null,
       markedBulk: false,
@@ -78,9 +76,9 @@ describe('deriveFacts', () => {
   it('tells direct mail from a copy from a list or blind copy, counting a tagged address as the owner', () => {
     const other = { address: 'team@example.com', domain: 'example.com' };
     const tagged = { address: 'me+shop@example.org', domain: 'example.org' };
-    expect(deriveFacts(facts({ accountId: ACCOUNT, to: [tagged] })).addressed).toBe('to');
-    expect(deriveFacts(facts({ accountId: ACCOUNT, to: [other], cc: [me] })).addressed).toBe('cc');
-    expect(deriveFacts(facts({ accountId: ACCOUNT, to: [other] })).addressed).toBe('neither');
+    expect(deriveFacts(facts({ to: [tagged] })).addressed).toBe('to');
+    expect(deriveFacts(facts({ to: [other], cc: [me] })).addressed).toBe('cc');
+    expect(deriveFacts(facts({ to: [other] })).addressed).toBe('neither');
   });
 
   it('counts a dot-variant or googlemail.com address as the owner on gmail.com only', () => {
@@ -94,9 +92,9 @@ describe('deriveFacts', () => {
   it("counts the owner's send-as addresses as the owner", () => {
     const alias = { address: 'ada@example.com', domain: 'example.com' };
     const other = { address: 'team@example.com', domain: 'example.com' };
-    expect(deriveFacts(facts({ accountId: ACCOUNT, to: [alias] }), {}, ['ada@example.com']).addressed).toBe('to');
-    expect(deriveFacts(facts({ accountId: ACCOUNT, to: [other], cc: [alias] }), {}, ['ada@example.com']).addressed).toBe('cc');
-    expect(deriveFacts(facts({ accountId: ACCOUNT, to: [alias] })).addressed).toBe('neither');
+    expect(deriveFacts(facts({ to: [alias] }), {}, ['ada@example.com']).addressed).toBe('to');
+    expect(deriveFacts(facts({ to: [other], cc: [alias] }), {}, ['ada@example.com']).addressed).toBe('cc');
+    expect(deriveFacts(facts({ to: [alias] })).addressed).toBe('neither');
   });
 
   it('recognises a bulk service by its own headers, its envelope sender or what signed the message', () => {
@@ -112,7 +110,7 @@ describe('deriveFacts', () => {
 
   it('reads authentication results only from the header Gmail wrote, not one the sender put in', () => {
     const forged = 'mx.example.org; dkim=pass header.d=amazonses.com; spf=pass smtp.mailfrom=example.com; dmarc=pass header.from=example.com';
-    expect(deriveFacts(facts({ accountId: ACCOUNT, headers: { 'authentication-results': forged } }))).toMatchObject({
+    expect(deriveFacts(facts({ headers: { 'authentication-results': forged } }))).toMatchObject({
       dmarc: 'none',
       spf: 'none',
       dkim: 'none',
@@ -130,7 +128,6 @@ describe('deriveFacts', () => {
 describe('recorded facts', () => {
   it('stores them with the message and returns them with its detail', async () => {
     const db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1');
     await recordSync(db, ACCOUNT, [campaign], '2');
     expect((await raw(db).get<{ facts: unknown }>('SELECT facts FROM messages'))!.facts).toEqual(sealFacts(deriveFacts(campaign)));
     expect((await messageDetail(db, await everything(db), ACCOUNT, campaign.messageId))?.facts).toMatchObject({
@@ -197,8 +194,7 @@ describe('thread context', () => {
 
   const setup = async (headers: Record<string, string>) => {
     const db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1');
-    const message = facts({ accountId: ACCOUNT, messageId: 'reply', threadId: 't9', headers });
+    const message = facts({ messageId: 'reply', threadId: 't9', headers });
     await recordSync(db, ACCOUNT, [message], '2');
     const asked: string[] = [];
     const sources = (getThread: (id: string) => Promise<typeof thread | null>) => ({

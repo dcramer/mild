@@ -3,17 +3,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { draftRule } from '../src/learn/rules.ts';
 import { createRuleDrafter } from '../src/model/draft-rule.ts';
 import { loadKeyring } from '../src/secrets.ts';
-import { connectAccount, recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { senderDirectory } from '../src/store/senders.ts';
 import { FILL_TOOL, FIND_TOOL, type FoundSender, MAX_LOOKUPS, type RuleDrafter, readRuleDraft, searchSenders } from '../src/triage/rule-draft.ts';
-import { freshStore, raw } from './fixtures.ts';
-import { SAMPLE_LABELS, facts, withSampleLabels } from './helpers.ts';
+import { personWith, raw } from './fixtures.ts';
+import { SAMPLE_LABELS, facts } from './helpers.ts';
 
 const reportError = vi.hoisted(() => vi.fn());
 vi.mock('../src/telemetry.ts', async (actual) => ({ ...(await actual<object>()), reportError }));
 
 const ACCOUNT = 'me@example.com';
+const KEYS = loadKeyring({ SIFT_KEY: 'draft-key' });
 const LABELS = SAMPLE_LABELS.filter((l) => l.id === 'newsletter' || l.id === 'marketing');
 const DOMAIN = [{ by: 'from', value: 'example.org' }];
 const BLANK = {
@@ -125,9 +126,7 @@ describe('looking up senders', () => {
   });
 
   it('lists everyone a mailbox has mail from, with their newest mail and the label it last got', async () => {
-    const store = await freshStore(loadKeyring({ SIFT_KEY: 'draft-key' }));
-    const db = await store.user(await connectAccount(store, ACCOUNT, '1', 0));
-    await withSampleLabels(db, ACCOUNT);
+    const { db } = await personWith(KEYS, ACCOUNT);
     const from = { address: 'digest@example.org', domain: 'example.org', name: 'Example Digest' };
     await recordSync(
       db,
@@ -224,12 +223,7 @@ describe('the model filling in a rule', () => {
 });
 
 describe('asking for a rule', () => {
-  async function person() {
-    const store = await freshStore(loadKeyring({ SIFT_KEY: 'draft-key' }));
-    const db = await store.user(await connectAccount(store, ACCOUNT, '1', 0));
-    await withSampleLabels(db, ACCOUNT);
-    return db;
-  }
+  const person = async () => (await personWith(KEYS, ACCOUNT)).db;
   const usage = { model: 'p/m', inputTokens: 10, outputTokens: 20, costUsd: 0.01 };
 
   it('records the call with what it cost and how many look-ups it made, its words encrypted, and makes no rule', async () => {
