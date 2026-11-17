@@ -4,8 +4,7 @@ import { Clause, Document, TextLink } from '@/system';
 // "we" is that person and there is no company behind it. Google's verification reads these pages: the
 // Limited Use statement must stay word for word, and what they say sift keeps must stay true of the code.
 // The security page is held to docs/security.md and AGENTS.md's safety rules the same way.
-const UPDATED = 'November 15, 2026';
-const SECURITY_UPDATED = 'November 17, 2026';
+const UPDATED = 'November 17, 2026';
 const SOURCE = 'https://github.com/dcramer/sift';
 const USER_DATA_POLICY = 'https://developers.google.com/terms/api-services-user-data-policy';
 const PERMISSIONS = 'https://myaccount.google.com/permissions';
@@ -73,8 +72,9 @@ export function PrivacyView() {
             <li>
               <strong>An AI model provider.</strong> When none of your rules decides a message, Sift asks a language model which of your labels it is. The model
               is sent the message’s sender, subject, the facts from its headers, the start of its text, your guidance and a few of your past examples, and
-              answers with a label. The provider is the one we chose for this copy of Sift (OpenAI or Anthropic), under terms that do not let it train its
-              models on what Sift sends. The model can only answer: it cannot act on your mailbox.
+              answers with a label. The provider is the one you connect (ChatGPT, OpenAI, Anthropic, OpenRouter or Vercel AI Gateway), and its terms for your
+              account decide what it keeps and whether it may train on it. The model can only answer: it cannot act on your mailbox. The{' '}
+              <TextLink href="/security">security page</TextLink> lists what it is sent.
             </li>
             <li>
               <strong>Senders you unsubscribe from.</strong> Only where your label or rule says to, Sift sends the sender’s own one-click unsubscribe request,
@@ -191,7 +191,7 @@ export function TermsView() {
 export function SecurityView() {
   return (
     <main>
-      <Document title="Security" updated={SECURITY_UPDATED}>
+      <Document title="Security" updated={UPDATED}>
         <p>
           Sift can read your Gmail and keeps some of your mail. This is how that access is limited, how what it holds is protected, and where that protection
           ends. Sift is <TextLink href={SOURCE}>open source</TextLink>: everything here can be checked in its code.
@@ -199,8 +199,10 @@ export function SecurityView() {
 
         <Clause title="What Sift can do to your mail">
           <ul>
+            <li>It asks Google only to read and label mail and to manage filters. It never deletes or trashes mail.</li>
             <li>
-              It asks Google only to read and label mail and to manage filters. It cannot send mail, and it never deletes or trashes it, replies or forwards.
+              Today it cannot send mail at all. If Sift ever sends, such as a daily digest to your own address or forwarding that a rule of yours asks for,
+              Google will ask you to allow it first, and it will send only what you set up.
             </li>
             <li>Until you turn it on, it changes nothing in Gmail but the messages you answer for yourself.</li>
             <li>
@@ -220,33 +222,70 @@ export function SecurityView() {
 
         <Clause title="The AI model">
           <p>
-            The model is shown a message and answers which of your labels it is. That is all it can do: it has no way to change your mailbox, send anything,
-            open a link or run anything, so a message written to give it instructions has nothing to work with. What happens to a label’s mail is set by you,
-            never by the model. When it is unsure, or the call fails, the message is left alone for you.
+            You choose it. Each person connects their own, by signing in with ChatGPT or with an API key from OpenAI, Anthropic, OpenRouter or Vercel AI
+            Gateway, and picks which of that provider’s models to use. Sift calls it with your sign-in, so the provider’s terms for your account decide what it
+            keeps and whether it may train on it. API accounts at OpenAI and Anthropic are not trained on by default; a ChatGPT sign-in follows your ChatGPT
+            data controls.
+          </p>
+          <p>A message goes to the model only when none of your rules decides it. The model is sent:</p>
+          <ul>
+            <li>your labels and what each is for;</li>
+            <li>
+              the message’s sender, recipients and subject, what its headers say (such as whether it passed authentication or came from a mailing list), and its
+              text, up to 4,000 characters;
+            </li>
+            <li>
+              what Sift knows of the sender: how much mail they have sent, whether you have written to them, how you labelled their earlier mail, and any rule
+              you have for them;
+            </li>
+            <li>up to six messages you answered for before, each as its sender, its subject and its first 300 characters.</li>
+          </ul>
+          <p>
+            When you ask the model to suggest labels, it sees only what you wrote, none of your mail. When you describe a rule, it also sees your labels and can
+            look up senders in your own record.
+          </p>
+          <p>
+            All it can do is answer: it has no way to change your mailbox, send anything, open a link or run anything, so a message written to give it
+            instructions has nothing to work with. What happens to a label’s mail is set by you, never by the model. When it is unsure, or the call fails, the
+            message is left alone for you.
           </p>
         </Clause>
 
-        <Clause title="How your data is kept">
+        <Clause title="Encryption">
+          <p>
+            Sift encrypts what it stores on its server with AES-256-GCM, under a key for the whole install. The key is kept in the server’s environment, never
+            in the database or the code, so a copy of the database or a backup reveals no mail on its own.
+          </p>
           <ul>
             <li>
-              Every row of your data carries your account. Each query Sift makes is limited to whoever is signed in, and the database enforces the same limit
-              again by itself, so one mistake in the code does not show anyone your mail. Every request the dashboard answers is tested as two people, one
-              asking for the other’s mail.
+              Encrypted: your Google and model sign-ins; the text of the mail Sift keeps; every message’s headers, which say who sent it, to whom and about
+              what; and anything else that names a sender, such as a rule’s conditions or the reason for a decision.
+            </li>
+            <li>Each value is sealed to the person and the thing it belongs to. Moved into another account, or onto another message, it does not open.</li>
+            <li>
+              Senders are looked up by a code made with a key derived for you alone. The database can tell that two messages share a sender without showing who
+              it is, and does not show that two people hear from the same sender.
             </li>
             <li>
-              Your Google access, your model sign-ins, the text of the mail Sift keeps and anything that names a sender (headers, rules, the reason for a
-              decision) are encrypted with AES-256. The key is held in the server’s settings, never in the database, and each value is sealed to the person and
-              the thing it belongs to, so it cannot be moved into someone else’s account.
+              Not encrypted: your labels, the parts of rules written in your own words, and what was decided and done, when. What is kept, and for how long, is
+              in the <TextLink href="/privacy">privacy policy</TextLink>.
             </li>
             <li>
-              Senders are looked up by a code made with a key of yours, so the database does not show who writes to you, or that two people hear from the same
-              sender.
-            </li>
-            <li>
-              Left readable: your labels, your rules in your own words, and what was decided and done, when. What is kept and for how long is in the{' '}
-              <TextLink href="/privacy">privacy policy</TextLink>.
+              Google and the model provider are reached only over HTTPS. Hosted, the database connection is encrypted too, and the host encrypts its disks.
             </li>
           </ul>
+          <p>
+            It is not end-to-end encryption: the server holds the key, so it can read what it stores. It has to, because it judges new mail by your past answers
+            while you are away. Encryption protects a leaked copy of the database, not a server someone else controls.
+          </p>
+        </Clause>
+
+        <Clause title="Keeping people apart">
+          <p>
+            Every row of your data carries your account. Each query Sift makes is limited to whoever is signed in, and the database enforces the same limit
+            again by itself, so one mistake in the code does not show anyone your mail. Every request the dashboard answers is tested as two people, one asking
+            for the other’s mail.
+          </p>
         </Clause>
 
         <Clause title="The dashboard">
@@ -284,10 +323,7 @@ export function SecurityView() {
           <ul>
             <li>Someone with both the database and the key can read everything stored, your Google access included.</li>
             <li>Whoever controls the server Sift runs on, since it holds the key and your Google access.</li>
-            <li>
-              Mail while it is being classified: it is read from Gmail, and the model provider is sent what the model needs. Sift is not end-to-end encrypted,
-              because it uses your past answers to judge new mail while you are away.
-            </li>
+            <li>Mail while it is being classified: it is read from Gmail, and the model provider is sent what is listed above.</li>
           </ul>
         </Clause>
 
