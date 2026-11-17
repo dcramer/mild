@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { type RuleMatch, type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, conditionsOf, count, describeMatch, factAnswers, factWords, money, outcomeName, plural, shortDate, willBe } from '@/lib/format.ts';
 import { setParams, useParam } from '@/lib/route.ts';
@@ -193,6 +194,47 @@ function InInbox({ rule }: { rule: RuleSummary }) {
   );
 }
 
+/** A rule that waits for its label becoming one that acts on all it matches, said as what happens now and what will. */
+export function StopReadingDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => void }) {
+  const { busy, error, run } = useAction();
+  const toast = useToast();
+  const whose = describeMatch(rule.match);
+  const does = willBe(rule.settling?.does ?? 'keep');
+  const stop = () =>
+    run(
+      () => api.resolveProposal(rule.settling!.proposal, true),
+      () => {
+        toast(`Stopped reading mail ${whose}`);
+        onClose();
+      },
+    );
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Stop reading mail ${whose}?`}
+      footer={
+        <>
+          <Button variant="ink" busy={busy} onClick={stop}>
+            Stop reading them
+          </Button>
+          <Button variant="quiet" onClick={onClose}>
+            Cancel
+          </Button>
+          <Failure>{error}</Failure>
+        </>
+      }
+    >
+      <Facts>
+        <Fact term="Now">
+          A model reads each message, and those it says are {rule.labelName} are {does}.
+        </Fact>
+        <Fact term="After">Every message is {does}, without being read.</Fact>
+      </Facts>
+    </Dialog>
+  );
+}
+
 /** One rule, opened from the Rules list or wherever it was just made. */
 export function RulePanel({
   rule,
@@ -212,6 +254,7 @@ export function RulePanel({
 }) {
   const remove = useAction();
   const toast = useToast();
+  const [stopping, setStopping] = useState(false);
   const action = rule.disposition;
   // An action rule that keeps mail changes nothing in the inbox.
   const moves = !(rule.kind === 'action' && action === 'keep');
@@ -241,12 +284,26 @@ export function RulePanel({
               ))}
             </Fact>
           ) : null}
-          {rule.kind === 'when-label' || rule.when ? <Fact term="Reading">Sift reads each message it matches.</Fact> : null}
+          {rule.kind === 'when-label' || rule.when ? (
+            <Fact term="Reading">
+              Sift reads each message it matches.
+              {rule.settling ? (
+                <>
+                  {' '}
+                  The last {count(rule.settling.agreed)} were all {rule.labelName}.
+                  <span className="mt-2 block">
+                    <Button onClick={() => setStopping(true)}>Stop reading them…</Button>
+                  </span>
+                </>
+              ) : null}
+            </Fact>
+          ) : null}
           <Fact term="Used">{rule.hits === 0 ? 'Never' : `${plural(rule.hits, 'time')}${rule.lastHitAt ? `, last ${ago(rule.lastHitAt)}` : ''}`}</Fact>
           <Fact term="Made by">
             {MADE_BY[rule.source] ?? rule.source}, {shortDate(rule.createdAt)}
           </Fact>
         </Facts>
+        {stopping && rule.settling ? <StopReadingDialog rule={rule} onClose={() => setStopping(false)} /> : null}
         <InGmail rule={rule} active={active} />
         {moves ? <InInbox rule={rule} /> : null}
         <div>

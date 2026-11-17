@@ -5,7 +5,7 @@ import { type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { setParams, useParam } from '@/lib/route.ts';
 import { filterStanding } from '@/views/gmail-filter.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
-import { RulePanel, Who, whoText } from '@/views/rule-panel.tsx';
+import { RulePanel, StopReadingDialog, Who, whoText } from '@/views/rule-panel.tsx';
 import { ago, count, describeMatch, outcomeName } from '@/lib/format.ts';
 import {
   Blank,
@@ -78,6 +78,7 @@ export function Rules() {
   const [gmail, setGmail] = useParam('gmail', GMAIL);
   const [open, setOpen] = useParam('rule');
   const [adding, setAdding] = useState(false);
+  const [stopping, setStopping] = useState<RuleSummary | null>(null);
   const accountId = manage.data?.accounts[0]?.id;
   const labels = accountId ? (manage.data?.labels[accountId] ?? []).map((l) => [l.id, l.name] as const) : [];
   const needle = search.trim().toLowerCase();
@@ -169,6 +170,11 @@ export function Rules() {
                     <FilterMark rule={rule} />
                   </span>
                   {rule.when ? <Sub className="whitespace-normal">only when it is {rule.when}</Sub> : null}
+                  {rule.settling ? (
+                    <Sub className="whitespace-normal">
+                      The last {count(rule.settling.agreed)} were all {rule.labelName}
+                    </Sub>
+                  ) : null}
                 </Td>
                 <Td phone="hide" num quiet className="md:w-44">
                   {rule.hits === 0 ? (
@@ -180,7 +186,14 @@ export function Rules() {
                     </>
                   )}
                 </Td>
-                <RowActions>{removeButton(rule)}</RowActions>
+                <RowActions>
+                  {rule.settling ? (
+                    <Button variant="quiet" onClick={() => setStopping(rule)}>
+                      Stop reading…
+                    </Button>
+                  ) : null}
+                  {removeButton(rule)}
+                </RowActions>
               </Tr>
             ))}
           </tbody>
@@ -197,6 +210,7 @@ export function Rules() {
           onClose={() => setParams({ rule: '', apply: '' })}
         />
       ) : null}
+      {stopping ? <StopReadingDialog rule={stopping} onClose={() => setStopping(null)} /> : null}
       {adding && accountId ? (
         <AddRuleDialog accountId={accountId} labels={manage.data?.labels[accountId] ?? []} onClose={() => setAdding(false)} onAdded={reload} />
       ) : null}

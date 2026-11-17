@@ -378,6 +378,11 @@ export const RuleSummary = z.object({
   /** The rule's filter in Gmail, while there is one. */
   filterId: z.string().nullable(),
   filter: RuleFilter,
+  /**
+   * Sift proposes to stop reading the mail this rule waits for a label on: the model gave it that label the last
+   * `agreed` times. `does`: what the rule would then do to all of it.
+   */
+  settling: z.object({ proposal: z.number(), agreed: z.number(), does: z.string() }).nullable(),
   createdAt: z.number(),
 });
 export type RuleSummary = z.infer<typeof RuleSummary>;
@@ -433,16 +438,14 @@ export const SuggestionItem = z.object({
 });
 export type SuggestionItem = z.infer<typeof SuggestionItem>;
 
-/** A rule sift thinks is worth having, for the user to accept or dismiss. */
+/** A rule Sift thinks is worth having, for the user to accept or dismiss. One to stop reading mail is on its rule instead. */
 const ProposalSummary = z.object({
   id: z.number(),
   accountId: z.string(),
-  /** `rule`: do to the label's mail what the user has been doing instead. `always`: stop having the model check a rule it has always agreed with. */
-  kind: z.enum(['rule', 'always']),
   match,
   labelId: z.string(),
   labelName: z.string(),
-  /** For `rule` what the user has been doing to the label's mail; for `always` what the rule will do to all of it. */
+  /** What the user has been doing to the label's mail, which the rule would do. */
   disposition: z.string(),
   /** What the label does. */
   labelDisposition: z.string(),

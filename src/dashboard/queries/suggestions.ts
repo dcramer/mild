@@ -20,8 +20,7 @@ import { listLabels } from '../../store/labels.ts';
 import { preferences } from '../../store/preferences.ts';
 import { hashOf, openPart } from '../../store/content.ts';
 import type { Label } from '../../triage/types.ts';
-import { listProposals, settledAction } from '../../store/proposals.ts';
-import { listRules } from '../../store/rules.ts';
+import { listProposals } from '../../store/proposals.ts';
 import { contacts } from '../../store/senders.ts';
 import { type Scope, sees, within } from '../scope.ts';
 import { FACT_FILTERS, type FactFilter, type SuggestionDetail, type SuggestionItem, type Suggestions } from '../types.ts';
@@ -195,16 +194,14 @@ async function proposalSummaries(db: Sql, scope: Scope, labels: Map<string, Labe
   for (const p of await listProposals(db)) {
     const label = labels.get(p.accountId)?.find((l) => l.id === p.labelId);
     // A proposal whose label has been removed has nothing to offer.
-    if (!sees(scope, p.accountId) || !label) continue;
-    const rule = p.ruleId === null ? undefined : (await listRules(db, p.accountId)).find((r) => r.id === p.ruleId)!;
+    if (p.kind !== 'rule' || !sees(scope, p.accountId) || !label) continue;
     summaries.push({
       id: p.id,
       accountId: p.accountId,
-      kind: p.kind,
       match: p.match,
       labelId: p.labelId,
       labelName: label.name,
-      disposition: rule ? settledAction(rule, label) : p.disposition!,
+      disposition: p.disposition!,
       labelDisposition: outcomeOf(label),
       agreed: p.agreed,
     });

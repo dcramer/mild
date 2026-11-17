@@ -25,7 +25,9 @@ import { connectAccount } from '../../../../src/store/accounts.ts';
 import { setModel } from '../../../../src/store/preferences.ts';
 import { listProposals } from '../../../../src/store/proposals.ts';
 import { openStore } from '../../../../src/store/store.ts';
-import { addRule } from '../../../../src/store/rules.ts';
+import { addRule, countRuleHit } from '../../../../src/store/rules.ts';
+import { proposals } from '../../../../src/store/query.ts';
+import { conditionsHash, proposalName, sealJson } from '../../../../src/store/content.ts';
 import type { JudgeInput } from '../../../../src/triage/stages/model.ts';
 import { FakeMailbox } from '../../../../tests/helpers.ts';
 
@@ -202,6 +204,21 @@ if ((await listProposals(db, ACCOUNT)).length !== 1) throw new Error('seed answe
 // lands and is then deleted in Gmail, which a check notices; Gmail does not answer for the news one.
 // A rule added after the passes, so it decides nothing, that cannot be one (Gmail cannot mark spam).
 await addRule(db, ACCOUNT, { match: { fromDomain: 'promo.example.com' }, disposition: 'spam' }, 'user');
+// A rule waiting for Notifications that the model has agreed with ten times, and Sift's proposal to stop reading that
+// mail. Written here, as ten passes of mail would take: what proposes it is tested in tests/model.test.ts.
+const appMatch = { from: 'updates@app.example.com' };
+const appRule = await addRule(db, ACCOUNT, { match: appMatch, whenLabel: 'notification' }, 'user');
+for (let i = 0; i < 10; i++) await countRuleHit(db, appRule);
+await db.insert(proposals).values({
+  accountId: ACCOUNT,
+  kind: 'always',
+  match: sealJson(db, proposalName(db, ACCOUNT), appMatch),
+  conditions: conditionsHash(db, appMatch),
+  labelId: 'notification',
+  ruleId: appRule,
+  agreed: 10,
+  createdAt: now,
+});
 await writeRuleFilter({ db, mailbox, now: () => now - 3 * HOUR }, ordersRule);
 mailbox.filters = [];
 await checkRuleFilters({ db, mailbox, now: () => now - 150 * 60_000 }, ACCOUNT, false);

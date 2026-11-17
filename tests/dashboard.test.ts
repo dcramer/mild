@@ -477,6 +477,7 @@ describe('dashboard server', () => {
           checkedAt: null,
           history: [],
         },
+        settling: null,
         createdAt: NOW,
       },
     ]);
@@ -602,9 +603,10 @@ describe('dashboard server', () => {
       conditionsHash(db, { from: 'news@example.com' }),
       ruleId,
     ))!;
-    // Account alerts keeps its mail, but this rule archives it, and will archive all of it.
-    const listed = (await (await fetch(`${base}/api/suggestions`)).json()) as { proposals: unknown[] };
-    expect(listed.proposals).toMatchObject([{ id: proposal, kind: 'always', labelName: 'Account alerts', disposition: 'archive' }]);
+    // Shown on its rule, not on For review. Account alerts keeps its mail, but this rule archives it, and will archive all of it.
+    expect(((await (await fetch(`${base}/api/suggestions`)).json()) as { proposals: unknown[] }).proposals).toEqual([]);
+    const rules = ((await (await fetch(`${base}/api/rules`)).json()) as { rules: { id: string; settling: unknown }[] }).rules;
+    expect(rules.find((r) => r.id === ruleId)?.settling).toEqual({ proposal, agreed: 10, does: 'archive' });
     const accepted = await fetch(`${base}/api/proposals`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' },

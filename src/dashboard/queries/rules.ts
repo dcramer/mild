@@ -1,4 +1,5 @@
-import { alias, and, asc, count, decisions, desc, eq, labels, max, messages, rules, sql } from '../../store/query.ts';
+import { alias, and, asc, count, decisions, desc, eq, labels, max, messages, proposals, rules, sql } from '../../store/query.ts';
+import { settledAction } from '../../store/proposals.ts';
 import type { Sql } from '../../store/sql.ts';
 import type { RuleMatch } from '../../triage/stages/rules.ts';
 import { openEnvelope, openJson, ruleName } from '../../store/content.ts';
@@ -20,6 +21,9 @@ export async function listRuleSummaries(db: Sql, scope: Scope): Promise<RuleSumm
       labelName: labels.name,
       override: rules.disposition,
       labelDoes: sql<string | null>`CASE WHEN ${labels.block} THEN 'block' ELSE ${labels.disposition} END`,
+      labelDisposition: labels.disposition,
+      proposal: proposals.id,
+      agreed: proposals.agreed,
       markRead: sql<boolean>`coalesce(${rules.markRead} OR ${labels.markRead}, false)`,
       unsubscribe: sql<boolean>`coalesce(${rules.subscription} = 'unsubscribe' OR ${labels.unsubscribe}, false)`,
       condition: rules.condition,
@@ -34,6 +38,7 @@ export async function listRuleSummaries(db: Sql, scope: Scope): Promise<RuleSumm
     })
     .from(rules)
     .leftJoin(labels, and(eq(labels.accountId, rules.accountId), eq(labels.id, sql`coalesce(${rules.labelId}, ${rules.whenLabel})`)))
+    .leftJoin(proposals, and(eq(proposals.accountId, rules.accountId), eq(proposals.ruleId, rules.id), eq(proposals.status, 'open')))
     .where(within(scope, rules.accountId))
     .orderBy(asc(rules.accountId), asc(rules.position), asc(rules.id));
   return rows.map((r) => ({
@@ -55,6 +60,10 @@ export async function listRuleSummaries(db: Sql, scope: Scope): Promise<RuleSumm
     lastHitAt: r.lastHitAt,
     filterId: r.filterId,
     filter: filters.get(r.id) ?? { state: 'none', possible: false, reason: null, plan: null, differs: [], checkedAt: null, history: [] },
+    settling:
+      r.proposal === null || r.agreed === null || r.labelDisposition === null
+        ? null
+        : { proposal: r.proposal, agreed: r.agreed, does: settledAction({ disposition: r.override ?? undefined }, { disposition: r.labelDisposition }) },
     createdAt: r.createdAt,
   }));
 }

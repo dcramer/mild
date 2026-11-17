@@ -5,7 +5,7 @@ Wherever sift offers to make a rule outside the Rules screen, the press opens th
 ## Sub-features
 
 - `shortcut-proposal`: For review's proposal line (`Keep Receipts from …?`). `Make a rule…` opens the dialog on the proposal's sender, waiting for its label (`Only when it is this label`), then doing what the user has been doing; adding resolves the proposal, whatever the user changed; `Cancel` leaves it. `Dismiss` is one press and makes no rule.
-- `shortcut-stop-reading`: a `Stop checking?` line (a rule that waits for a label, after ten agreeing messages). `Stop reading them…` opens a dialog that says what happens `Now` and `After`; `Stop reading them` in it changes the rule.
+- `shortcut-stop-reading`: on Rules, the row `updates@app.example.com as Notifications`, with `The last 10 were all Notifications` under it and a quiet `Stop reading…` (on a phone, `Stop reading them…` in its panel's `Reading`). It opens a dialog that says what happens `Now` and `After`; `Stop reading them` in it turns the rule into one that archives all that mail, and the line is gone.
 - `shortcut-message`: the message panel's `Make a rule…`, on the sender and the label the message has.
 - `shortcut-fact`: a `What sift saw` row's `Rule…`, on the sender and that fact, or on the list (see message-facts.md).
 - `shortcut-standing`: `Trust`, `Unwanted`, `Block` on a sender's or domain's page, on that address or domain, no label, and `Keep`, `Archive` or `Spam`. Adding one opens the rule's panel (`?rule=<id>`). Pressing the standing that is on takes it back in one press.
@@ -35,4 +35,4 @@ Preconditions:
 
 ## Gotchas
 
-- The seed has no `Stop checking?` proposal: it needs ten messages a judged rule was checked against. Prove it with `tests/dashboard.test.ts`.
+- The seed writes the stop-reading proposal and the rule's ten uses directly; ten passes of that mail would make the same. What proposes it is in `tests/model.test.ts`.

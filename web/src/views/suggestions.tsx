@@ -5,20 +5,7 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { SenderCell, SenderCellLoading } from '@/components/sender.tsx';
 import { useParam } from '@/lib/route.ts';
 import { type SuggestionItem, type Suggestions, type Summary, api, useAction, useLoaded } from '@/lib/api.ts';
-import {
-  ACTIONS,
-  FACT_FILTER_OPTIONS,
-  ago,
-  count,
-  describeMatch,
-  factFilterName,
-  money,
-  outcomeName,
-  percent,
-  plural,
-  sureness,
-  willBe,
-} from '@/lib/format.ts';
+import { ACTIONS, FACT_FILTER_OPTIONS, ago, count, describeMatch, factFilterName, money, outcomeName, percent, plural, sureness } from '@/lib/format.ts';
 import {
   AnswerPicker,
   Button,
@@ -26,10 +13,7 @@ import {
   Callout,
   CalloutKey,
   Check,
-  Dialog,
   Empty,
-  Fact,
-  Facts,
   Failure,
   FilterGroup,
   ListView,
@@ -45,7 +29,6 @@ import {
   Td,
   Th,
   Tr,
-  useToast,
 } from '@/system';
 import { AddLabelDialog } from '@/views/label-panel.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
@@ -66,47 +49,6 @@ function Week({ summary }: { summary: Summary | null }) {
 }
 
 type Proposal = Suggestions['proposals'][number];
-
-/** A judged rule becoming one that acts on all it matches, said as what happens now and what will. */
-function StopReadingDialog({ proposal, onClose }: { proposal: Proposal; onClose: () => void }) {
-  const { busy, error, run } = useAction();
-  const toast = useToast();
-  const whose = describeMatch(proposal.match);
-  const does = willBe(proposal.disposition);
-  const stop = () =>
-    run(
-      () => api.resolveProposal(proposal.id, true),
-      () => {
-        toast(`Stopped reading mail ${whose}`);
-        onClose();
-      },
-    );
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title={`Stop reading mail ${whose}?`}
-      footer={
-        <>
-          <Button variant="ink" busy={busy} onClick={stop}>
-            Stop reading them
-          </Button>
-          <Button variant="quiet" onClick={onClose}>
-            Cancel
-          </Button>
-          <Failure>{error}</Failure>
-        </>
-      }
-    >
-      <Facts>
-        <Fact term="Now">
-          A model reads each message, and those it says are {proposal.labelName} are {does}.
-        </Fact>
-        <Fact term="After">Every message is {does}, without being read.</Fact>
-      </Facts>
-    </Dialog>
-  );
-}
 
 /** What the user has been doing to a label's mail, and what the label does instead: "You kept the last 2, but the label archives them". */
 const USER_DID: Record<string, (n: string) => string> = {
@@ -132,34 +74,23 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
   return (
     <li className="row flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
       <p className="min-w-0 flex-1 basis-80">
-        {proposal.kind === 'rule' ? (
-          <>
-            <span className="font-semibold">
-              {outcomeName(proposal.disposition)} {proposal.labelName} {describeMatch(proposal.match)}?
-            </span>{' '}
-            <span className="text-muted-foreground">
-              You {USER_DID[proposal.disposition]?.(n)}, but the label {LABEL_DOES[proposal.labelDisposition]}.
-            </span>
-          </>
-        ) : (
-          <>
-            <span className="font-semibold">Stop checking?</span>{' '}
-            <span className="text-muted-foreground">
-              The last {n} from {describeMatch(proposal.match).replace(/^from /, '')} were {proposal.labelName}.
-            </span>
-          </>
-        )}
+        <span className="font-semibold">
+          {outcomeName(proposal.disposition)} {proposal.labelName} {describeMatch(proposal.match)}?
+        </span>{' '}
+        <span className="text-muted-foreground">
+          You {USER_DID[proposal.disposition]?.(n)}, but the label {LABEL_DOES[proposal.labelDisposition]}.
+        </span>
         <Failure>{error}</Failure>
       </p>
       <span className="flex items-center gap-1.5">
         <Button disabled={busy} onClick={() => setOpen(true)}>
-          {proposal.kind === 'rule' ? 'Make a rule…' : 'Stop reading them…'}
+          Make a rule…
         </Button>
         <Button variant="quiet" busy={busy} onClick={() => run(() => api.resolveProposal(proposal.id, false))}>
           Dismiss
         </Button>
       </span>
-      {!open ? null : proposal.kind === 'rule' ? (
+      {open ? (
         <AddRuleDialog
           accountId={proposal.accountId}
           labels={labels}
@@ -167,9 +98,7 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
           proposal={proposal.id}
           onClose={() => setOpen(false)}
         />
-      ) : (
-        <StopReadingDialog proposal={proposal} onClose={() => setOpen(false)} />
-      )}
+      ) : null}
     </li>
   );
 }
