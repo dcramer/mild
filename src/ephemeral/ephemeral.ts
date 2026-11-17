@@ -3,7 +3,7 @@ import { Refusal } from '../refusal.ts';
 /**
  * What sift keeps only briefly and shares between every request and piece of work: sign-ins in progress, which pass
  * holds a mailbox, Gmail quota, how the last pass went. Every key expires. Losing any of it costs a retry,
- * never part of the record, which is the database's alone (docs/RUNTIME.md).
+ * never part of the record, which is the database's alone (docs/runtime.md).
  */
 export interface Ephemeral {
   get<T>(key: string): Promise<T | null>;

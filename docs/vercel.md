@@ -1,6 +1,6 @@
 # Vercel
 
-Sift on Vercel instead of a machine of your own. How it runs there is [RUNTIME.md](RUNTIME.md); this is how to set it up. It runs in production there; the Deploy Button is untried ([TODO.md](../TODO.md)).
+Sift on Vercel instead of a machine of your own. How it runs there is [runtime.md](runtime.md); this is how to set it up. It runs in production there; the Deploy Button is untried ([TODO.md](../TODO.md)).
 
 What it needs: the **Pro** plan (Hobby runs crons once a day; Sift ticks each minute), a Postgres database (Neon) and a Redis database, both from the Vercel Marketplace, and a Google OAuth client of your own.
 
@@ -12,7 +12,7 @@ It copies this repository to your GitHub account, adds Neon and Upstash for Redi
 
 Upstash is expected to set `REDIS_URL`; if the site says it is missing, copy the store's `redis://`/`rediss://` address into it and deploy again.
 
-[deploy]: https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift&project-name=sift&repository-name=sift&env=SIFT_GOOGLE_CLIENT_ID%2CSIFT_GOOGLE_CLIENT_SECRET%2CSIFT_KEY%2CSIFT_SESSION_SECRET%2CCRON_SECRET&envDescription=Your%20Google%20OAuth%20client%20and%20three%20secrets.&envLink=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift%2Fblob%2Fmain%2Fdocs%2FVERCEL.md%23one-click&products=%5B%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22neon%22%2C%22integrationSlug%22%3A%22neon%22%7D%2C%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22upstash-kv%22%2C%22integrationSlug%22%3A%22upstash%22%7D%5D
+[deploy]: https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift&project-name=sift&repository-name=sift&env=SIFT_GOOGLE_CLIENT_ID%2CSIFT_GOOGLE_CLIENT_SECRET%2CSIFT_KEY%2CSIFT_SESSION_SECRET%2CCRON_SECRET&envDescription=Your%20Google%20OAuth%20client%20and%20three%20secrets.&envLink=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift%2Fblob%2Fmain%2Fdocs%2Fvercel.md%23one-click&products=%5B%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22neon%22%2C%22integrationSlug%22%3A%22neon%22%7D%2C%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22upstash-kv%22%2C%22integrationSlug%22%3A%22upstash%22%7D%5D
 
 ## 1. The project
 
@@ -43,12 +43,12 @@ In the project's Environment Variables, for Production:
 | `DATABASE_MIGRATION_URL` | Optional, and better: Neon's unpooled address for the owner role, with `DATABASE_URL` then a role that owns nothing (`CREATE ROLE sift LOGIN PASSWORD '…'`), so row-level security holds Sift itself. |
 | `REDIS_URL` | The Redis database's `redis://` or `rediss://` address. |
 | `SIFT_GOOGLE_CLIENT_ID`, `SIFT_GOOGLE_CLIENT_SECRET` | From step 2. |
-| `SIFT_KEY` | Encrypts the credentials Sift stores ([SECRETS.md](SECRETS.md)). `openssl rand -base64 32` |
+| `SIFT_KEY` | Encrypts the credentials Sift stores ([secrets.md](secrets.md)). `openssl rand -base64 32` |
 | `SIFT_SESSION_SECRET` | Signs sessions; changing it signs everyone out. `openssl rand -base64 32` |
 | `CRON_SECRET` | Vercel sends it with each cron call and Sift with each piece of work it hands out; nothing without it can start work. `openssl rand -hex 32` |
 | `SIFT_DASHBOARD_HOST` | Only with a domain of your own: that domain. |
-| `SIFT_CHATGPT_SIGN_IN` | Only to change how people sign in to ChatGPT ([CLI.md](CLI.md#models)). |
-| `SENTRY_DSN` | Optional: a Sentry project's DSN, to send errors and traces there ([ARCHITECTURE.md](ARCHITECTURE.md#errors-and-traces)). Each deployment is tagged with its `VERCEL_ENV`. |
+| `SIFT_CHATGPT_SIGN_IN` | Only to change how people sign in to ChatGPT ([cli.md](cli.md#models)). |
+| `SENTRY_DSN` | Optional: a Sentry project's DSN, to send errors and traces there ([architecture.md](architecture.md#errors-and-traces)). Each deployment is tagged with its `VERCEL_ENV`. |
 
 Until every required one is set, the site lists those still missing; `CRON_SECRET` is among them, since without it nothing runs.
 

@@ -150,7 +150,7 @@ async function createKey(deps: InitDeps): Promise<void> {
   const { ui } = deps;
   if (deps.config.keys.current) {
     ui.info(
-      `A key is set. Replacing it needs the old one kept as ${paint.cmd('SIFT_OLD_KEYS')} until sift run has re-encrypted everything: see docs/SECRETS.md.`,
+      `A key is set. Replacing it needs the old one kept as ${paint.cmd('SIFT_OLD_KEYS')} until sift run has re-encrypted everything: see docs/secrets.md.`,
     );
     return;
   }

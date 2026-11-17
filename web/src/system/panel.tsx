@@ -39,7 +39,7 @@ export function Panel({
   onNext?: (() => void) | undefined;
   /** For one item that is a few facts and a short form (a label), rather than something to read beside the list. */
   narrow?: boolean;
-  /** K and J step through the list, and the footer shows them. Only for a list someone works through (docs/DESIGN.md, Keys). */
+  /** K and J step through the list, and the footer shows them. Only for a list someone works through (docs/design.md, Keys). */
   keys?: boolean;
   children: ReactNode;
 }) {

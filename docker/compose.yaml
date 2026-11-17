@@ -12,7 +12,7 @@ services:
     tmpfs: [/tmp]
     # Inside a container sift listens on every interface; the mapping below decides who can reach it.
     command: [run, --host, 0.0.0.0]
-    # Passed through from the shell or a .env beside this file when set. See docs/SECRETS.md.
+    # Passed through from the shell or a .env beside this file when set. See docs/secrets.md.
     environment: [SIFT_KEY, SIFT_OLD_KEYS]
     ports:
       # This machine only. To reach the dashboard from other devices, publish on the address they use

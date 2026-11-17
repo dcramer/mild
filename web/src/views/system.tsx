@@ -143,7 +143,7 @@ export function SystemView() {
     });
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-14 px-4 py-8 md:px-6">
-      <PageHeader title="Design system" meta="Every part, in every state. The rules for using them are in docs/DESIGN.md." />
+      <PageHeader title="Design system" meta="Every part, in every state. The rules for using them are in docs/design.md." />
 
       <Section title="Ink">
         <Sheet>

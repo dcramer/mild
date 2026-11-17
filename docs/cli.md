@@ -1,6 +1,6 @@
 # Command line
 
-The CLI sets Sift up and starts it. Rules, labels, the record of changes, undo and the choice of model are in the [dashboard](DASHBOARD.md) and have no command.
+The CLI sets Sift up and starts it. Rules, labels, the record of changes, undo and the choice of model are in the [dashboard](dashboard.md) and have no command.
 
 From a checkout, `pnpm sift <command>` runs it from source.
 

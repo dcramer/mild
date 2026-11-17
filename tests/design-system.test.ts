@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, test } from 'vitest';
 
-// docs/DESIGN.md as checks. Screens kept drifting from the system one view at a time (grey fills, a stray
+// docs/design.md as checks. Screens kept drifting from the system one view at a time (grey fills, a stray
 // shadow, red and yellow written by hand, type set by eye), so what a screen may write is decided here.
 
 const WEB = new URL('../web/src/', import.meta.url).pathname;
@@ -99,7 +99,7 @@ describe('one type scale', () => {
 
   test('nothing is set under 12px', () => {
     const small = [...css.matchAll(/font-size:\s*([\d.]+)px/g)].map((match) => Number(match[1])).filter((px) => px < 12);
-    expect(small, 'docs/DESIGN.md: nothing under 12px.').toEqual([]);
+    expect(small, 'docs/design.md: nothing under 12px.').toEqual([]);
   });
 });
 
@@ -133,7 +133,7 @@ describe('as little chrome as it takes', () => {
     const shadows = [...css.matchAll(/box-shadow:\s*([^;]+);/g)]
       .map((match) => match[1])
       .filter((value) => !/^\S+px \S+px 0 0 var\(--edge\)$/.test(value ?? ''));
-    expect(shadows, 'docs/DESIGN.md: --edge, hard and offset, on a sheet and what floats. Buttons have none.').toEqual([]);
+    expect(shadows, 'docs/design.md: --edge, hard and offset, on a sheet and what floats. Buttons have none.').toEqual([]);
     const failures = check(ALL, [[/^shadow(-|$)/, 'the one shadow is the .sheet edge in web/src/index.css.']]);
     expect(failures, failures.join('\n')).toEqual([]);
   });
@@ -179,7 +179,7 @@ describe('red means a failure the reader can do something about', () => {
 test('whatever can be pressed shows the pointer', () => {
   // A choice in a menu or a select is pressed like a button. Only a disabled one keeps the arrow, through a variant.
   const bare = [...SYSTEM].flatMap((path) => words(path)).filter(({ word }) => word === 'cursor-default');
-  const failures = bare.map(({ file, line }) => `web/src/${file}:${line} cursor-default: an interactive element takes cursor-pointer (docs/DESIGN.md).`);
+  const failures = bare.map(({ file, line }) => `web/src/${file}:${line} cursor-default: an interactive element takes cursor-pointer (docs/design.md).`);
   expect(failures, failures.join('\n')).toEqual([]);
 });
 
@@ -201,7 +201,7 @@ test('every part is on the specimen page', () => {
   // Toaster is mounted once by the app; the specimen page shows toasts through useToast.
   const specimen = readFileSync(join(WEB, 'views/system.tsx'), 'utf8');
   const missing = parts.filter((name) => name !== 'Toaster' && !new RegExp(`<${name}\\b`).test(specimen));
-  expect(missing, 'add each to web/src/views/system.tsx, in its states (docs/DESIGN.md)').toEqual([]);
+  expect(missing, 'add each to web/src/views/system.tsx, in its states (docs/design.md)').toEqual([]);
 });
 
 test('keys are for working through a list, and screens bind none of their own', () => {
@@ -212,9 +212,9 @@ test('keys are for working through a list, and screens bind none of their own', 
     const file = relative(WEB, path);
     return [
       ...(/<Table keys\b/.test(source) && !LISTS.has(file)
-        ? [`web/src/${file}: <Table keys> is only for For review and Activity (docs/DESIGN.md, Keys).`]
+        ? [`web/src/${file}: <Table keys> is only for For review and Activity (docs/design.md, Keys).`]
         : []),
-      ...(/\bshortcut=|\buseShortcut\(/.test(source) ? [`web/src/${file}: a screen binds no key; keys belong to the parts (docs/DESIGN.md, Keys).`] : []),
+      ...(/\bshortcut=|\buseShortcut\(/.test(source) ? [`web/src/${file}: a screen binds no key; keys belong to the parts (docs/design.md, Keys).`] : []),
     ];
   });
   expect(failures, failures.join('\n')).toEqual([]);

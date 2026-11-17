@@ -5,7 +5,7 @@ import { traced } from '../telemetry.ts';
 export type Pace = (units: number) => Promise<void>;
 
 /**
- * Google allows each user 6,000 quota units a minute ([docs/GMAIL.md](../../docs/GMAIL.md)); past that it
+ * Google allows each user 6,000 quota units a minute ([docs/gmail.md](../../docs/gmail.md)); past that it
  * answers 429, which a pass treats as any failure. A bucket of 1,000 refilling at 4,800 a minute keeps any
  * 60 seconds under 6,000, and a call waits for its units instead of failing.
  */

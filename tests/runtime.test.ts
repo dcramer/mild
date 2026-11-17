@@ -9,7 +9,7 @@ import { FakeMailbox } from './helpers.ts';
 
 /**
  * Module state that holds between calls, allowed because any instance computes the same: a cache, not a
- * record of what happened (docs/RUNTIME.md).
+ * record of what happened (docs/runtime.md).
  */
 const CACHES: Record<string, string[]> = {
   // Keys derived from SIFT_KEY.

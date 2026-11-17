@@ -1,6 +1,6 @@
 import { Blank, Copyable, Failure, Splash, Sub, TextLink } from '@/system';
 
-const GUIDE = 'https://github.com/dcramer/sift/blob/main/docs/VERCEL.md';
+const GUIDE = 'https://github.com/dcramer/sift/blob/main/docs/vercel.md';
 
 /** In place of everything while Sift cannot say who is signed in: what it still needs, what went wrong, or that it is on its way. */
 export function Boot({ missing, error, online }: { missing: string[] | null; error: string | null; online: boolean }) {

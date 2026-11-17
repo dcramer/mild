@@ -108,7 +108,7 @@
           "error",
           {
             "patterns": [
-              { "group": ["@base-ui/**"], "message": "Only web/src/system imports Base UI. Use or extend a part from '@/system' (docs/DESIGN.md)." }
+              { "group": ["@base-ui/**"], "message": "Only web/src/system imports Base UI. Use or extend a part from '@/system' (docs/design.md)." }
             ]
           }
         ]

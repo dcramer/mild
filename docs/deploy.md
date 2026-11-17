@@ -35,7 +35,7 @@ This writes the archive as the container's user (uid 1000), so the current direc
 What the archive is:
 
 - **Mail.** With `SIFT_KEY` set, the text of mail and everything that names a sender are encrypted; labels and what was decided and done are not. Without the key, all of it is plain. Encrypt the archive or keep it somewhere you would keep mail.
-- **Credentials**, encrypted only if `SIFT_KEY` is set ([SECRETS.md](SECRETS.md)), and then useless without that key. Keep the key somewhere other than the archive. A `.env` in the home directory is in the archive.
+- **Credentials**, encrypted only if `SIFT_KEY` is set ([secrets.md](secrets.md)), and then useless without that key. Keep the key somewhere other than the archive. A `.env` in the home directory is in the archive.
 
 ## Restore
 

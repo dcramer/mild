@@ -8,7 +8,7 @@ import { basename } from 'node:path';
  *   sift-secret:v1:<key id>:<nonce>:<ciphertext and tag>
  *
  * AES-256-GCM, with a name as associated data (a file's name, or the person and slot a row is for) so
- * one credential cannot be put in another's place. See docs/SECRETS.md.
+ * one credential cannot be put in another's place. See docs/secrets.md.
  */
 const PREFIX = 'sift-secret:v1:';
 

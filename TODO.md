@@ -1,6 +1,6 @@
 # TODO
 
-The working list for sift. Remove an item when it lands; add what you find. Design and current state are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), the dashboard's parts in [docs/DESIGN.md](docs/DESIGN.md), and what Gmail's API can and cannot do in [docs/GMAIL.md](docs/GMAIL.md).
+The working list for sift. Remove an item when it lands; add what you find. Design and current state are in [docs/architecture.md](docs/architecture.md), the dashboard's parts in [docs/design.md](docs/design.md), and what Gmail's API can and cannot do in [docs/gmail.md](docs/gmail.md).
 
 ## Direction
 
@@ -57,7 +57,7 @@ Built: For review as one row per message, with a sender's mail of one label fold
 
 - [ ] **Screens for what the teaching loop now has.** All of this is in the API and nowhere on a page: test runs (start one, watch it, compare two), stored examples (list, delete, how long they are kept), accuracy per tier on a page, and how many suggestions changed after a rule or label edit.
 - [ ] Test runs: replay the whole cascade and not only the model, cancel a run, prune old runs. A run's prompt still has less than new mail's: no standing and none of the sender's other labelled mail.
-- [ ] The emails shown to the model as examples: check with test runs whether six, and two from the same sender, are the right numbers. If a line of facts and the first 300 characters are not enough for the model to compare, give it a way to read one example in full, by a short handle (`E1`) rather than a message id; that reverses "the model has no tools" (AGENTS.md, ARCHITECTURE.md).
+- [ ] The emails shown to the model as examples: check with test runs whether six, and two from the same sender, are the right numbers. If a line of facts and the first 300 characters are not enough for the model to compare, give it a way to read one example in full, by a short handle (`E1`) rather than a message id; that reverses "the model has no tools" (AGENTS.md, architecture.md).
 - [ ] A removed rule sift made leaves its mail looking as if the user's rule decided it, so it never returns to For review.
 - [ ] From Gmail: snooze may read as archive then un-archive (two answers); `sift/did/*` stays on mail the user moved back; mail sift could not place that the user archives without labelling is skipped.
 - [ ] Use when the user read a message (`messages.read_at`, recorded from Gmail's history) in a sender's standing; it is not known for mail pulled in from before sift was connected.
@@ -93,7 +93,7 @@ The dashboard manages sift, behind Google sign-in. That sign-in also connects th
 - [ ] Try a second account end to end.
 - [ ] Use Tailscale's identity headers to skip the Google round trip for viewers on the tailnet.
 - [ ] Try a label's description, or a rule's "only when", on recent mail before saving it: what the model would now say about a few messages, beside what it said. Not when changing provider: there it tells the reader nothing they can act on.
-- [ ] Revisit Vercel's UI SDK as the behaviour layer under `web/src/system` once it is past beta and works under the content security policy (evaluated 2026-11-15; see docs/ARCHITECTURE.md).
+- [ ] Revisit Vercel's UI SDK as the behaviour layer under `web/src/system` once it is past beta and works under the content security policy (evaluated 2026-11-15; see docs/architecture.md).
 
 ## Inference tier
 
@@ -129,13 +129,13 @@ sift has run for real, off, on the owner's inbox: sync, the model, suggestions a
 
 - [ ] The person's words to the label model, and what it suggests, are encrypted, but the labels made from them (names, descriptions) are plain. Decide one way.
 - [ ] **Shared sender reputation**, if ever wanted, is a table of its own with an install-wide hash, written only from what people reported (blocked, marked spam), from senders that passed DMARC, counted only past several different people, and stated in the privacy policy. The per-person hashes are never joined across people.
-- [ ] **Vercel, the rest.** Sift runs in production there ([docs/VERCEL.md](docs/VERCEL.md)); check what RUNTIME.md still lists as untried. The Deploy Button (docs/VERCEL.md) is untried: check that it adds Neon and Upstash, and that Upstash sets `REDIS_URL` (Vercel's own chatbot template relies on it; no vendor page says so).
+- [ ] **Vercel, the rest.** Sift runs in production there ([docs/vercel.md](docs/vercel.md)); check what runtime.md still lists as untried. The Deploy Button (docs/vercel.md) is untried: check that it adds Neon and Upstash, and that Upstash sets `REDIS_URL` (Vercel's own chatbot template relies on it; no vendor page says so).
   - **Setup in the browser.** No `sift init`: the Google client and settings entered in the dashboard (model sign-in already is), with the first visitor claiming the install safely.
   - **A public address.** It no longer sits behind a tailnet, so sign-in is the only gate; review the session and write protections with that in mind.
   - **Google verification.** Hosting one Google client for other people means restricted-scope verification and a yearly security assessment (CASA).
 - [ ] **Cloudflare**, if ever: Workers are not Node (`node:crypto`, `node:fs` for the page, `pg`, the model library, the Google client), so it needs a third `Driver` (Hyperdrive or Neon's serverless driver) and Upstash's HTTP client for `Ephemeral`.
 - [ ] **Fewer Gmail calls.** Each pass fetches a new Google access token for each mailbox (`clientFor`, a new client per pass); keeping it until it expires needs it encrypted in `Ephemeral`. An idle pass still opens the model sign-in and lists waiting suggestions and their text.
-- [ ] Restrict the core container's egress to Google and the model providers. The unsubscribe request is the one call to an arbitrary host and needs a relay container of its own first; the plan is in [docs/DEPLOY.md](docs/DEPLOY.md).
+- [ ] Restrict the core container's egress to Google and the model providers. The unsubscribe request is the one call to an arbitrary host and needs a relay container of its own first; the plan is in [docs/deploy.md](docs/deploy.md).
 - [ ] `.env` cannot set `SIFT_HOME`: the home is resolved before `.env` is read. `sift status` says nothing about plain credential files when a key is set.
 - [ ] Publish the image (registry, tags, multi-arch). It is 337 MB, most of it Node itself.
 - [ ] Optional Pub/Sub push for lower latency, keeping polling as the fallback. It needs a Google Cloud topic, so it is a lot of setup for a self-hosted tool.

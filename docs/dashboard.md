@@ -28,10 +28,10 @@ Mail Sift acts on gets its label (`sift/newsletters`) and, if Sift moved it, a s
 
 ## Working on the page
 
-The page is a React app in `web/`, styled with Tailwind and built from Sift's own design system ([DESIGN.md](DESIGN.md), every part shown at `/system`).
+The page is a React app in `web/`, styled with Tailwind and built from Sift's own design system ([design.md](design.md), every part shown at `/system`).
 
 - `sift run` builds it the first time and whenever its sources are newer than the build. `pnpm build:web` does the same by hand, into `web/dist`.
 - `pnpm dev` runs Sift from source and reloads the page when either the server or the page changes. Give it `--home <scratch>`.
 - It is served under a content security policy that allows no inline script, no inline style and nothing from another origin. A violation shows in the browser console, not in the build.
 
-Why it is built this way is in [ARCHITECTURE.md](ARCHITECTURE.md#dashboard).
+Why it is built this way is in [architecture.md](architecture.md#dashboard).

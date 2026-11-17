@@ -13,7 +13,7 @@ import { buildSignIn } from './google-sign-in.ts';
 import { site } from './site.ts';
 import { logged } from '../telemetry.ts';
 
-/** What a host gives sift: `sift run` on a machine, or a function on Vercel (docs/RUNTIME.md). */
+/** What a host gives sift: `sift run` on a machine, or a function on Vercel (docs/runtime.md). */
 export interface Host {
   config: Config;
   store: Store;
