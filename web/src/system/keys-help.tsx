@@ -13,10 +13,10 @@ export function ShortcutList() {
   void useShortcut('?', 'Show every key', () => setKeys((open) => (open ? null : liveShortcuts())), { everywhere: true });
   return (
     <Dialog open={keys !== null} onClose={() => setKeys(null)} title="Keys" subtitle="Where you are now. Turn them off in Settings.">
-      <ul className="flex flex-col">
+      <ul className="grid grid-cols-[max-content_1fr] gap-x-4">
         {(keys ?? []).map((entry) => (
-          <li key={`${entry.key} ${entry.label}`} className="row flex items-center gap-4 py-2">
-            <span className="flex w-12 justify-end">
+          <li key={`${entry.key} ${entry.label}`} className="row col-span-2 grid grid-cols-subgrid items-center py-2">
+            <span>
               <Kbd>{entry.key}</Kbd>
             </span>
             {entry.label}
