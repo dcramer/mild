@@ -121,7 +121,7 @@ describe('prompt', () => {
 
   it('copes with a missing body', () => {
     const prompt = buildPrompt({ evidence: evidence({}, null), labels: DEFAULT_LABELS });
-    expect(prompt).toContain('(body unavailable)');
+    expect(prompt).toContain('Body: (unavailable)');
   });
 });
 

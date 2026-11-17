@@ -10,6 +10,7 @@ const SHOT = {
   fromDomain: messages.fromDomain,
   fromName: messages.fromName,
   subject: messages.subject,
+  facts: messages.facts,
   body: examples.bodyText,
   labelId: examples.labelId,
   markedAt: examples.markedAt,
@@ -54,6 +55,7 @@ export async function shotCandidates(db: Sql, facts: Pick<MessageFacts, 'account
     ...(r.fromName ? { fromName: r.fromName } : {}),
     subject: r.subject,
     excerpt: excerptOf(openPart(db, facts.accountId, r.messageId, 'text', r.body)?.slice(0, 2000) ?? ''),
+    facts: r.facts,
     labelId: r.labelId!,
     markedAt: r.markedAt,
   }));

@@ -1,6 +1,7 @@
+import { type Facts, factLine } from './facts.ts';
 import type { Label, MessageFacts } from './types.ts';
 
-/** A message the owner labelled, cut down to what the model is shown of it. Everything but `labelId` is untrusted. */
+/** A message the owner labelled, cut down to what the model is shown of it. Everything but `labelId` and `facts` is untrusted. */
 export interface Shot {
   messageId: string;
   fromAddress: string;
@@ -9,6 +10,7 @@ export interface Shot {
   subject: string;
   /** The start of the message text. */
   excerpt: string;
+  facts: Facts;
   /** The owner's answer. */
   labelId: string;
   /** When the owner answered, epoch milliseconds. */
@@ -20,7 +22,8 @@ export const MAX_EXCERPT_CHARS = 300;
 /** For every example together, at roughly four characters a token. Keeps the examples a small part of the call. */
 export const SHOT_TOKEN_BUDGET = 1200;
 
-const tokens = (shot: Shot) => Math.ceil((shot.fromAddress.length + (shot.fromName?.length ?? 0) + shot.subject.length + shot.excerpt.length + 60) / 4);
+const tokens = (shot: Shot) =>
+  Math.ceil((shot.fromAddress.length + (shot.fromName?.length ?? 0) + shot.subject.length + shot.excerpt.length + factLine(shot.facts).length + 70) / 4);
 
 /** The start of a message's text on one line. */
 export function excerptOf(body: string): string {
