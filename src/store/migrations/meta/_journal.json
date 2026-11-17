@@ -204,6 +204,13 @@
       "when": 1794897363898,
       "tag": "0028_square_virginia_dare",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1794897729379,
+      "tag": "0029_rule_values_are_lists",
+      "breakpoints": true
     }
   ]
 }

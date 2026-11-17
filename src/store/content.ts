@@ -207,6 +207,12 @@ export async function rekeyContent(db: Sql, write = true): Promise<number> {
 
 const UNSET = 'unset:';
 
+/** A match stored before a condition held a list (migration 0029), with each value as a list of it. */
+function asLists(stored: unknown): RuleMatch {
+  const match = stored as Record<string, unknown>;
+  return Object.fromEntries(Object.entries(match).map(([key, value]) => [key, typeof value === 'string' ? [value] : value])) as RuleMatch;
+}
+
 /**
  * Rules, proposals, label proposals and rule drafts: few, so read whole. Their conditions are hashed again with the key, and those a
  * migration could not hash (`unset:`) are hashed here even without one.
@@ -219,8 +225,8 @@ async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): 
   const ruleUpdates = ruleRows
     .filter((r) => r.conditions.startsWith(UNSET) || behind(r.match) || behind(r.except) || behind(r.filter) || behind(r.name))
     .map((r) => {
-      const match = JSON.parse(reopen(db, ruleName(db, r.id, 'match'), r.match)) as RuleMatch;
-      const except = JSON.parse(reopen(db, ruleName(db, r.id, 'except'), r.except)) as RuleMatch[];
+      const match = asLists(JSON.parse(reopen(db, ruleName(db, r.id, 'match'), r.match)));
+      const except = (JSON.parse(reopen(db, ruleName(db, r.id, 'except'), r.except)) as unknown[]).map(asLists);
       const filter = r.filter === null ? null : reopen(db, ruleName(db, r.id, 'filter'), r.filter);
       const name = r.name === null ? null : reopen(db, ruleName(db, r.id, 'name'), r.name);
       return {
@@ -240,7 +246,7 @@ async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): 
   const proposalUpdates = proposalRows
     .filter((r) => r.conditions.startsWith(UNSET) || behind(r.match))
     .map((r) => {
-      const match = JSON.parse(reopen(db, proposalName(db, r.accountId), r.match)) as RuleMatch;
+      const match = asLists(JSON.parse(reopen(db, proposalName(db, r.accountId), r.match)));
       return { id: r.id, set: { match: sealJson(db, proposalName(db, r.accountId), match), conditions: conditionsHash(db, match) } };
     });
   const labelProposalRows = await db

@@ -8,7 +8,8 @@ import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
 import { credentialStore } from '../src/model/credentials.ts';
 import { type Keyring, loadKeyring, openSecret, openToRekey, readSecret, rekeySecrets, writeSecret } from '../src/secrets.ts';
 import { credentials, rekeyCredentials } from '../src/store/credentials.ts';
-import { openPart, rekeyContent, sealPart } from '../src/store/content.ts';
+import { conditionsHash, openPart, proposalName, rekeyContent, ruleName, sealJson, sealPart } from '../src/store/content.ts';
+import { listProposals } from '../src/store/proposals.ts';
 import { rekeyStore } from '../src/store/rekey.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { suggestionBodies } from '../src/store/query.ts';
@@ -338,6 +339,31 @@ describe('mail', () => {
     expect(await hasRuleFor(db, 'alpha@example.org', { from: ['a@example.com'] })).toBe(false);
     await rekeyContent(db);
     expect(await hasRuleFor(db, 'alpha@example.org', { from: ['a@example.com'] })).toBe(true);
+  });
+
+  it('reads a rule or proposal stored with one value per condition as a list of it', async () => {
+    const { as } = await alpha(A);
+    const db = await as(A);
+    await withSampleLabels(db, 'alpha@example.org');
+    const old = { from: 'a@example.com', subjectContains: 'Weekly' };
+    await raw(db).run(
+      `INSERT INTO rules (id, account_id, position, match, except_matches, conditions, disposition, source, created_at) VALUES ('r', 'alpha@example.org', 0, ?, ?, 'unset:r', 'archive', 'user', 0)`,
+      sealJson(db, ruleName(db, 'r', 'match'), old),
+      sealJson(db, ruleName(db, 'r', 'except'), [{ fromName: 'Example' }]),
+    );
+    await raw(db).run(
+      `INSERT INTO proposals (account_id, match, conditions, label_id, disposition, agreed, created_at) VALUES ('alpha@example.org', ?, 'unset:p', 'newsletter', 'archive', 3, 0)`,
+      sealJson(db, proposalName(db, 'alpha@example.org'), { from: 'b@example.com' }),
+    );
+    await rekeyContent(db);
+    expect((await listRules(db, 'alpha@example.org'))[0]).toMatchObject({
+      match: { from: ['a@example.com'], subjectContains: ['Weekly'] },
+      except: [{ fromName: ['Example'] }],
+    });
+    expect(await raw(db).get('SELECT conditions FROM rules')).toEqual({
+      conditions: conditionsHash(db, { from: ['a@example.com'], subjectContains: ['Weekly'] }, [{ fromName: ['Example'] }]),
+    });
+    expect((await listProposals(db, 'alpha@example.org'))[0]).toMatchObject({ match: { from: ['b@example.com'] } });
   });
 
   it('finds mail by its subject, which the database cannot read', async () => {
