@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { people } from '../src/store/people.ts';
-import { connectAccount, connectedAddresses, listUsers, personOf, recordSync, userOf } from '../src/store/accounts.ts';
+import { connectAccount, connectedAddresses, listUsers, mailboxesOf, personOf, recordSync, userOf } from '../src/store/accounts.ts';
 import { finishLabelProposal, listLabels, startLabelProposal } from '../src/store/labels.ts';
 import { preferences, setModel } from '../src/store/preferences.ts';
 import type { Store } from '../src/store/store.ts';
@@ -174,10 +174,16 @@ describe('users and their mailboxes', () => {
     expect(await userOf(central, ALPHA_WORK)).toEqual({ id: 1, owner: true });
     expect(await userOf(central, BRAVO)).toMatchObject({ owner: false });
     expect((await userOf(central, BRAVO))!.id).not.toBe(1);
-    expect(await connectedAddresses(central, 1)).toEqual([ALPHA, ALPHA_WORK]);
+    expect(await mailboxesOf(central, 1)).toEqual([
+      { id: ALPHA, primary: true },
+      { id: ALPHA_WORK, primary: false },
+    ]);
     // Connecting again, even as someone else's, leaves it where it was.
     await connectAccount(store, BRAVO, '9', 5, 1);
-    expect(await connectedAddresses(central, 1)).toEqual([ALPHA, ALPHA_WORK]);
+    expect(await mailboxesOf(central, 1)).toEqual([
+      { id: ALPHA, primary: true },
+      { id: ALPHA_WORK, primary: false },
+    ]);
     expect(await userOf(central, 'nobody@example.com')).toBeNull();
   });
 

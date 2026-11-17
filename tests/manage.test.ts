@@ -683,6 +683,11 @@ describe('signing in with Google', () => {
         await connectAccount(store, 'work@example.com', '1', 0, 1);
         return 'work@example.com';
       }
+      // Already someone else's: connecting it again leaves it theirs.
+      if (code === 'taken') {
+        await connectAccount(store, 'bravo@example.net', '1', 0);
+        return 'bravo@example.net';
+      }
       return ACCOUNT;
     },
   };
@@ -788,6 +793,16 @@ describe('signing in with Google', () => {
     expect(added.headers['location']).toBe('/?settings=1');
     expect(String(added.headers['set-cookie'])).not.toContain('sift_session');
     expect((await call('GET', '/api/session', undefined, cookie)).body).toMatchObject({ email: ACCOUNT });
+
+    // Someone else's is refused, rather than signing in as them; said in Settings, as is any failure while signed in.
+    const taken = await callback(call, await call('GET', '/auth/login?add=1', undefined, cookie), 'taken', cookie);
+    expect(decodeURIComponent(String(taken.headers['location']))).toBe('/?settings=1&signin=bravo@example.net is already connected to Sift by someone else.');
+    expect(String(taken.headers['set-cookie'])).not.toContain('sift_session');
+    const asked = await call('GET', '/auth/login?add=1', undefined, cookie);
+    const denied = await call('GET', `/auth/callback?state=${stateFrom(asked.headers)}&error=access_denied`, undefined, {
+      cookie: `${cookie.cookie}; ${cookieFrom(asked.headers)}`,
+    });
+    expect(denied.headers['location']).toBe('/?settings=1&signin=Google%20did%20not%20grant%20access.');
   });
 
   it('completes a sign-in only in the browser that started it', async () => {

@@ -5,7 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { generateDrizzleJson, generateMigration } from 'drizzle-kit/api';
 import { describe, expect, it } from 'vitest';
 import * as schema from '../src/store/schema.ts';
-import { addMailbox, connectAccount, connectedAddresses, deleteUser, makePrimary, primaryOf, recordSync, removeMailbox } from '../src/store/accounts.ts';
+import { addMailbox, connectAccount, connectedAddresses, deleteUser, mailboxesOf, makePrimary, recordSync, removeMailbox } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { listLabels, updateLabel } from '../src/store/labels.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
@@ -13,6 +13,7 @@ import { accounts, labels } from '../src/store/query.ts';
 import { DatabaseInUse, moveAside, pglite, roleBypass, verified } from '../src/store/db.ts';
 import { openStore, storeOn } from '../src/store/store.ts';
 import { loadKeyring } from '../src/secrets.ts';
+import type { Sql } from '../src/store/sql.ts';
 import type { Disposition } from '../src/triage/types.ts';
 import { freshStore, onePerson, openUserDb, raw, recordEverything, rowsBy, superuser } from './fixtures.ts';
 import { facts, withSampleLabels } from './helpers.ts';
@@ -189,6 +190,7 @@ describe("a mailbox's data", () => {
 });
 
 describe('a primary mailbox', () => {
+  const primaryOf = async (central: Sql, person: number) => (await mailboxesOf(central, person)).find((m) => m.primary)?.id;
   it('is the first one a person connects, is theirs to change, and goes to the one connected longest when removed', async () => {
     const store = await freshStore();
     const alpha = await connectAccount(store, 'alpha@example.org', '1', 0);
@@ -269,6 +271,12 @@ describe('a new mailbox', () => {
     const [alpha, beta] = [await listLabels(db, 'alpha@example.org'), await listLabels(db, 'beta@example.org')];
     expect(beta).toEqual(alpha);
     expect(beta.find((l) => l.id === 'newsletter')).toMatchObject({ name: 'Reading', gmailLabel: 'sift/newsletters' });
+    // One by the same name, from a mailbox set up on its own, is not copied twice.
+    await raw(db).run(
+      `UPDATE labels SET id = 'reading-elsewhere', gmail_label = 'sift/reading-elsewhere' WHERE account_id = 'beta@example.org' AND id = 'newsletter'`,
+    );
+    await connectAccount(store, 'delta@example.org', '1', 0, person);
+    expect((await listLabels(db, 'delta@example.org')).filter((l) => l.name === 'Reading')).toHaveLength(1);
     // Someone else's are not theirs.
     expect((await listLabels(await store.user(await connectAccount(store, 'gamma@example.org', '1', 0)), 'gamma@example.org')).map((l) => l.id)).toEqual([
       'everything_else',

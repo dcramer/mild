@@ -57,6 +57,17 @@ test.describe('Removing a mailbox', () => {
   });
 });
 
+test.describe('Connecting another mailbox', () => {
+  test('that Google did not complete says why in Settings, until Settings closes', async ({ page }) => {
+    // Where Google's return sends someone still signed in when it did not work out.
+    await page.goto(`/?settings=1&signin=${encodeURIComponent('bravo@example.net is already connected to Sift by someone else.')}`);
+    await expect(settings(page).getByText('bravo@example.net is already connected to Sift by someone else.')).toBeVisible();
+    await settings(page).getByRole('button', { name: 'Close' }).click();
+    await expect(settings(page)).toHaveCount(0);
+    expect(new URL(page.url()).search).toBe('');
+  });
+});
+
 test.describe('The primary mailbox', () => {
   test('is chosen in Settings, names the account at the top, and passes on when it is removed', async ({ page }) => {
     await page.goto('/?settings=1');

@@ -28,7 +28,10 @@ const toRow = (accountId: string, l: Label, position: number) => ({
 /** A new mailbox's one label, written with it (`ensureMailbox`). */
 export const inboxRow = (accountId: string) => toRow(accountId, leaveInInbox, MAX_LABELS);
 
-/** The labels of the person's other mailboxes, each once, as rows for `accountId`. Where two mailboxes have one, the first mailbox's wins. */
+/**
+ * The labels of the person's other mailboxes, each once, as rows for `accountId`. Where two mailboxes have one
+ * (by id, or by name, as `draft` refuses a second), the first mailbox's wins.
+ */
 export async function labelsOfTheirOtherMailboxes(db: Sql, accountId: string): Promise<ReturnType<typeof toRow>[]> {
   const rows = await db
     .select({
@@ -44,9 +47,16 @@ export async function labelsOfTheirOtherMailboxes(db: Sql, accountId: string): P
     .from(labels)
     .where(and(ne(labels.accountId, accountId), ne(labels.id, LEAVE_IN_INBOX), isNull(labels.removedAt)))
     .orderBy(asc(labels.accountId), asc(labels.position), asc(labels.id));
-  const seen = new Set<string>();
+  const ids = new Set<string>();
+  const names = new Set<string>();
   return rows
-    .filter((r) => !seen.has(r.id) && seen.add(r.id))
+    .filter((r) => {
+      const name = r.name.toLowerCase();
+      if (ids.has(r.id) || names.has(name)) return false;
+      ids.add(r.id);
+      names.add(name);
+      return true;
+    })
     .slice(0, MAX_LABELS)
     .map((r, position) => ({ ...r, accountId, position }));
 }

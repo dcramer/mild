@@ -285,7 +285,8 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
       const state = query.get('state') ?? '';
       // Taken, so it completes once.
       const entry = state ? await ephemeral!.take<{ verifier: string; redirectUri: string; addTo: string | null; expires: number }>(pendingKey(state)) : null;
-      const fail = (message: string) => redirect(`/?signin=${encodeURIComponent(message)}`, signInCookie('', 0));
+      // Someone still signed in was adding a mailbox or signing in again, so it is said in Settings, where mailboxes are; the sign-in page is only for someone signed out.
+      const fail = (message: string) => redirect(`/?${session ? 'settings=1&' : ''}signin=${encodeURIComponent(message)}`, signInCookie('', 0));
       const code = query.get('code');
       if (!entry || entry.expires < now()) return fail('That sign-in expired. Try again.');
       if (!same(cookie(request, 'sift_signin') ?? '', state)) return fail('That sign-in was started in another browser. Start it again here.');
@@ -297,7 +298,9 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
         const who = await people.signedIn(email);
         if (!who) return fail('Google did not complete the sign-in.');
         // A mailbox added joins whoever is signed in, who stays signed in as themselves, back in Settings where they added it.
-        if (entry.addTo !== null && who.id === person?.id) return redirect('/?settings=1', signInCookie('', 0));
+        // One already someone else's never changes hands, and signing in as them instead is not what was asked.
+        if (entry.addTo !== null)
+          return who.id === person?.id ? redirect('/?settings=1', signInCookie('', 0)) : fail(`${email} is already connected to Sift by someone else.`);
         return redirect('/', sessionCookie(signSession({ email, person: who.id }, secret, now()), SESSION_DAYS * 86_400), signInCookie('', 0));
       } catch (error) {
         report(request, error);

@@ -4,6 +4,7 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { ProviderList, costLine, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { type ManageState, type Removed, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, money, plural } from '@/lib/format.ts';
+import { useParam } from '@/lib/route.ts';
 import {
   Button,
   ConfirmButton,
@@ -284,6 +285,8 @@ function Mailboxes({ state, signedInAs, reload }: { state: ManageState; signedIn
   const [notRevoked, setNotRevoked] = useState<string | null>(null);
   const { busy, error, run } = useAction();
   const primary = state.accounts.find((a) => a.primary)?.email;
+  // Google's return, when adding one did not work out.
+  const [failed] = useParam('signin');
   return (
     <SettingsGroup title="Mailboxes" note="Anyone signed in as one of these sees all of them.">
       <Sheet>
@@ -304,7 +307,7 @@ function Mailboxes({ state, signedInAs, reload }: { state: ManageState; signedIn
             />
           </SettingRow>
         ))}
-        <SettingRow title="Another Gmail account">
+        <SettingRow title="Another Gmail account" note={failed ? <Failure>{failed}</Failure> : undefined}>
           <Button href="/auth/login?add=1">Connect</Button>
         </SettingRow>
       </Sheet>
@@ -416,7 +419,7 @@ function DeleteAccount({ email, onClose }: { email: string; onClose: () => void 
 
 function Account({ state, signedInAs }: { state: ManageState; signedInAs: string | null }) {
   const [deleting, setDeleting] = useState(false);
-  const email = signedInAs ?? state.accounts[0]?.email ?? '';
+  const email = state.accounts.find((a) => a.primary)?.email ?? signedInAs ?? state.accounts[0]?.email ?? '';
   return (
     <SettingsGroup title="Your account">
       <Sheet>

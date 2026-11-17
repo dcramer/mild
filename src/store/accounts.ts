@@ -109,13 +109,9 @@ export async function makePrimary(central: Sql, userId: number, email: string): 
   });
 }
 
-/** A person's primary mailbox, or null if they have none left. */
-export async function primaryOf(central: Sql, userId: number): Promise<string | null> {
-  const [row] = await central
-    .select({ id: accounts.id })
-    .from(accounts)
-    .where(and(eq(accounts.userId, userId), eq(accounts.primary, true)));
-  return row?.id ?? null;
+/** A person's mailboxes, by address, and which is their primary one. */
+export async function mailboxesOf(central: Sql, userId: number): Promise<{ id: string; primary: boolean }[]> {
+  return await central.select({ id: accounts.id, primary: accounts.primary }).from(accounts).where(eq(accounts.userId, userId)).orderBy(asc(accounts.id));
 }
 
 /**
@@ -153,13 +149,9 @@ export async function listUsers(central: Sql): Promise<User[]> {
   return await central.select({ id: users.id, owner: users.owner }).from(users).orderBy(asc(users.id));
 }
 
-/** Every connected address, everyone's; or one person's, given `userId`. */
-export async function connectedAddresses(central: Sql, userId?: number): Promise<string[]> {
-  const rows = await central
-    .select({ id: accounts.id })
-    .from(accounts)
-    .where(userId === undefined ? undefined : eq(accounts.userId, userId))
-    .orderBy(asc(accounts.id));
+/** Every connected address, everyone's. */
+export async function connectedAddresses(central: Sql): Promise<string[]> {
+  const rows = await central.select({ id: accounts.id }).from(accounts).orderBy(asc(accounts.id));
   return rows.map((r) => r.id);
 }
 

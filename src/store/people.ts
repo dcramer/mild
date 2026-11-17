@@ -1,4 +1,4 @@
-import { connectedAddresses, deleteUser, makePrimary, owner, primaryOf, removeMailbox, userOf } from './accounts.ts';
+import { deleteUser, mailboxesOf, makePrimary, owner, removeMailbox, userOf } from './accounts.ts';
 import type { Sql } from './sql.ts';
 import type { Store } from './store.ts';
 
@@ -40,11 +40,12 @@ export function people(store: Store): People {
   const person = async (user: { id: number; owner: boolean } | null): Promise<Person | null> => {
     if (!user) return null;
     const readable = new Set([user.id]);
+    const mailboxes = await mailboxesOf(store.central, user.id);
     return {
       id: user.id,
       owner: user.owner,
-      accounts: await connectedAddresses(store.central, user.id),
-      primary: await primaryOf(store.central, user.id),
+      accounts: mailboxes.map((m) => m.id),
+      primary: mailboxes.find((m) => m.primary)?.id ?? null,
       open: async (id) => {
         if (!readable.has(id)) throw new Error(`Person ${user.id} may not open person ${id}'s database.`);
         return await store.user(id);

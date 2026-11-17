@@ -104,7 +104,8 @@ const NAMES: Record<(typeof SECTIONS)[number], string> = {
 const pathOf = (section: (typeof SECTIONS)[number]) => (section === 'suggestions' ? '' : section);
 /** Settings opens over whatever is showing, setting up included, so nothing has to be finished to reach it. */
 const openSettings = () => setParams({ settings: '1' }, { state: { panel: true } });
-const closeSettings = () => ((window.history.state as { panel?: boolean } | null)?.panel ? window.history.back() : setParams({ settings: '' }));
+// A failed sign-in said in Settings (`signin`) goes with it.
+const closeSettings = () => ((window.history.state as { panel?: boolean } | null)?.panel ? window.history.back() : setParams({ settings: '', signin: '' }));
 
 /** Shows the sign-in screen until the viewer is signed in, then the dashboard. */
 export function App() {
@@ -196,6 +197,8 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
     show(items[index], takeOver ? undefined : { state: { panel: true } });
   };
   const accounts = manage.data?.accounts ?? [];
+  // Who they are, not which mailbox they happened to sign in with.
+  const name = accounts.find((a) => a.primary)?.email ?? signedInAs;
   const synced = accounts.map((a) => a.lastSyncedAt).filter((at) => at !== null);
 
   return (
@@ -213,7 +216,7 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
           ) : expired.length > 0 ? (
             // Signing in again is what renews sift's access; Google asks which account. Named when it is one that is not the viewer's own.
             <Notice tone="look" href="/auth/login" action="Reconnect">
-              Google sign-in expired{expired.length > 1 ? ` for ${expired.length} accounts` : expired[0] === signedInAs ? '' : ` for ${expired[0]}`}
+              Google sign-in expired{expired.length > 1 ? ` for ${expired.length} accounts` : expired[0] === name ? '' : ` for ${expired[0]}`}
             </Notice>
           ) : null
         }
@@ -225,10 +228,9 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
           ) : null
         }
         account={
-          signedInAs
+          name
             ? {
-                // Who they are, not which mailbox they happened to sign in with.
-                name: accounts.find((a) => a.primary)?.email ?? signedInAs,
+                name,
                 items: [
                   { label: 'Settings', onSelect: openSettings },
                   {
