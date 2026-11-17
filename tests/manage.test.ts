@@ -2,7 +2,7 @@ import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MAX_BACKFILL, backfill } from '../src/work/backfill.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { type RunOptions, tick } from '../src/work/run.ts';
+import { type RunOptions, askForBackfill, pullingIn, tick } from '../src/work/run.ts';
 import { triageAccount } from '../src/work/triage.ts';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { people } from '../src/store/people.ts';
@@ -23,6 +23,7 @@ const ACCOUNT = 'me@example.org';
 let db: Sql;
 let store: Store;
 let calls: string[];
+let pulling: string[];
 
 const controls: Controls = {
   models: async () => ({ models: ['p/small', 'p/large'], shortlist: { p: ['p/small', 'p/large'] }, costs: { 'p/small': 0.4 } }),
@@ -36,6 +37,7 @@ const controls: Controls = {
     return null;
   },
   backfill: async (days) => void calls.push(`backfill ${days}`),
+  pullingIn: async () => pulling,
   putBack: async (_db, _account, messageId) => {
     calls.push(`putBack ${messageId}`);
     if (messageId === 'gone') throw new Error('The message no longer exists.');
@@ -62,6 +64,7 @@ const controls: Controls = {
 beforeEach(async () => {
   ({ store, db } = await onePerson(ACCOUNT));
   calls = [];
+  pulling = [];
 });
 
 async function start(options: { withControls?: boolean } = {}) {
@@ -730,6 +733,31 @@ describe('older mail', () => {
     expect(await backfill(db, api, ACCOUNT, 30)).toBe(true);
     expect(page).toBe(2);
     expect(await raw(db).get('SELECT count(*) AS n FROM messages')).toEqual({ n: MAX_BACKFILL });
+  });
+
+  it('is said to be coming until it is all in and the model has decided it', async () => {
+    const { call } = await start();
+    const importing = async () => ((await call('GET', '/api/suggestions')).body as { importing: boolean }).importing;
+    expect(await importing()).toBe(false);
+    pulling = [ACCOUNT];
+    expect(await importing()).toBe(true);
+    pulling = [];
+    await backfill(db, { searchInbox: async () => ({ ids: ['old'] }), getMetadata: async (id) => gmailMessage(id) }, ACCOUNT, 7);
+    // In, but not yet read by the model.
+    expect(await importing()).toBe(true);
+    const sources = { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } };
+    const model = { model: 'test/model', judge: async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 }) };
+    await triageAccount({ db, mailbox: new FakeMailbox(), model, sources }, (await listAccounts(db))[0]!);
+    expect(await importing()).toBe(false);
+  });
+
+  it('is asked for until a tick has pulled it all in', async () => {
+    const ephemeral = memoryEphemeral();
+    await askForBackfill(ephemeral, ACCOUNT, 7);
+    expect(await pullingIn(ephemeral, [ACCOUNT, 'other@example.org'])).toEqual([ACCOUNT]);
+    const api = { searchInbox: async () => ({ ids: ['old'] }), getMetadata: async (id: string) => gmailMessage(id) };
+    await tick(store, { ephemeral, connect: async () => ({ api, mailbox: new FakeMailbox() }), log: () => {} } as unknown as RunOptions, 60_000);
+    expect(await pullingIn(ephemeral, [ACCOUNT])).toEqual([]);
   });
 
   it('is only ever suggested about, even while sift is on', async () => {

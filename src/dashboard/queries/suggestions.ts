@@ -8,9 +8,12 @@ import {
   isNotNull,
   max,
   messages as messageRows,
+  not,
+  notExists,
   sql,
   suggestionBodies,
 } from '../../store/query.ts';
+import { outOfTries } from '../../store/runs.ts';
 import type { Sql } from '../../store/sql.ts';
 import { accuracy, pendingSuggestions } from '../../learn/feedback.ts';
 import { listLabels } from '../../store/labels.ts';
@@ -56,7 +59,37 @@ const MAX_ITEMS = 500;
  * What is waiting on the user, one group per sender, since an answer is about a sender. A group shows
  * the guess sift made for most of that sender's waiting mail. Biggest groups first: they teach the most.
  */
-export async function listSuggestions(db: Sql, scope: Scope, options: { includeKept?: boolean; fact?: FactFilter } = {}): Promise<Suggestions> {
+/**
+ * Mail pulled in from before Sift was connected that the model has yet to decide. Each becomes a suggestion
+ * on a later pass, unless the model keeps failing on it.
+ */
+async function pulledInWaiting(db: Sql, scope: Scope): Promise<boolean> {
+  const [row] = await db
+    .select({ id: messageRows.id })
+    .from(messageRows)
+    .where(
+      and(
+        within(scope, messageRows.accountId),
+        eq(messageRows.suggestOnly, true),
+        notExists(
+          db
+            .select({ id: decisions.id })
+            .from(decisions)
+            .where(and(eq(decisions.accountId, messageRows.accountId), eq(decisions.messageId, messageRows.id))),
+        ),
+        not(outOfTries(db, messageRows.accountId, messageRows.id)),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
+/** `pullingIn`: whether older mail asked for in these mailboxes is not yet all in. */
+export async function listSuggestions(
+  db: Sql,
+  scope: Scope,
+  options: { includeKept?: boolean; fact?: FactFilter; pullingIn?: boolean } = {},
+): Promise<Suggestions> {
   const accounts = scope.accounts.map((id) => ({ id }));
   const labels = new Map<string, Label[]>();
   for (const { id } of accounts) labels.set(id, await listLabels(db, id));
@@ -157,6 +190,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
     waiting: waitingNow.length,
     accuracy: { reviewed, right },
     active: (await preferences(db)).active,
+    importing: options.pullingIn === true || (await pulledInWaiting(db, scope)),
   };
 }
 

@@ -466,6 +466,8 @@ export const Suggestions = z.object({
   examples: z.object({ captured: z.number(), pending: z.number() }),
   /** Whether Sift is on for the viewer. Off, nothing listed has been done in Gmail. */
   active: z.boolean(),
+  /** Older mail the owner asked for is still being pulled in, or waits for the model: more suggestions are coming. */
+  importing: z.boolean(),
 });
 export type Suggestions = z.infer<typeof Suggestions>;
 

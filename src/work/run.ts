@@ -144,6 +144,12 @@ export async function askForBackfill(ephemeral: Ephemeral, account: string, days
   await ephemeral.set(backfillKey(account), days, BACKFILL_MS);
 }
 
+/** Those of `mailboxes` whose older mail is asked for and not yet all pulled in. */
+export async function pullingIn(ephemeral: Ephemeral, mailboxes: readonly string[]): Promise<string[]> {
+  const asked = await Promise.all(mailboxes.map(async (mailbox) => ((await ephemeral.get<number>(backfillKey(mailbox))) === null ? [] : [mailbox])));
+  return asked.flat();
+}
+
 /** Run `work` unless something else is doing it now, holding it until a little past `until`. Null when it was. */
 async function unlessUnderWay<T>(options: RunOptions, lock: string, until: number, work: () => Promise<T>): Promise<T | null> {
   const ms = Math.min(until - (options.now ?? Date.now)(), LONGEST_HOLD_MS) + HOLD_PAST_LIMIT_MS;

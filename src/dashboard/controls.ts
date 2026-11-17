@@ -29,6 +29,8 @@ export interface Controls {
   undo(db: Sql, actionId: number): Promise<string | null>;
   /** Ask for the last `days` days of everyone's inbox as suggestions; the ticks that follow pull them in. */
   backfill(days: number): Promise<void>;
+  /** Those of `mailboxes` whose older mail is asked for and not yet all in. What is in still waits for the model. */
+  pullingIn(mailboxes: readonly string[]): Promise<string[]>;
   /**
    * After the user has corrected a decision: take back what sift last did to that message, so the new
    * decision can be carried out from where the message started. Resolves with whether anything was taken back.

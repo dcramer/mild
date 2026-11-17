@@ -278,7 +278,7 @@ Everything that manages Sift: answer suggestions, turn Sift on or off for the vi
 
 **What it counts.** Messages, not decisions: a message is counted once, where Sift first decided it, so an answer or a decision made again after a rule changed does not count it twice. "Without a model" is those Sift first decided with no model call (not the user's own answer); a model's cost is "for" every message it was asked about, failed calls included. Failed, in Activity, is a change that failed or was never confirmed; one still waiting for a pass (an answer, or anything left while Sift was off) shows as waiting, among the changes.
 
-**Older mail.** Pulling in the last N days records those messages as suggest-only. They are decided on the next pass and are never acted on, even when Sift is on.
+**Older mail.** Pulling in the last N days records those messages as suggest-only. They are decided on the next pass and are never acted on, even when Sift is on. Until the request is taken (`pullingIn`) and the model has decided all of them, Suggestions says the mail is still coming instead of that nothing waits.
 
 **The page**
 

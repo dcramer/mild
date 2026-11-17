@@ -4,7 +4,7 @@ import type { Config } from '../config.ts';
 import { type Ephemeral, holding } from '../ephemeral/ephemeral.ts';
 import type { Controls } from '../dashboard/controls.ts';
 import { forgetPassStatus, passStatus } from '../work/status.ts';
-import { askForBackfill } from '../work/run.ts';
+import { askForBackfill, pullingIn } from '../work/run.ts';
 import { applyRule, ruleInbox } from '../work/apply.ts';
 import { createGmailApi } from '../gmail/api.ts';
 import { startEval } from '../learn/evals.ts';
@@ -134,6 +134,7 @@ export async function buildControls(
         for (const account of await listAccounts(await store.user(user.id))) await askForBackfill(live.ephemeral, account.id, days);
       live.kick();
     },
+    pullingIn: async (mailboxes) => await pullingIn(live.ephemeral, mailboxes),
     putBack: async (db, accountId, messageId) => {
       const last = await lastStandingChange(db, accountId, messageId);
       if (last) await undo({ db, mailbox: (await gmailFor(config, live.ephemeral, db, accountId)).mailbox }, last.id);

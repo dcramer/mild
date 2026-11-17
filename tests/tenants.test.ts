@@ -111,6 +111,8 @@ beforeEach(async () => {
     },
     applyRule: async (_db, id) => (calls.push(`apply ${id}`), { deciding: 1, reading: 0 }),
     backfill: async () => void calls.push('backfill'),
+    // Answers about Bravo's mailbox whoever asks: only the route's own check keeps it from Alpha.
+    pullingIn: async () => [BRAVO],
     startEval: async (_db, { accountId }) => (calls.push(`eval ${accountId}`), 1),
     revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), !unreachable.includes(email)),
     // Whatever is asked for, it would answer with that person's mail: only the route's own check keeps it from the wrong person.
@@ -204,6 +206,9 @@ describe("nobody sees or changes another person's mail", () => {
         }
       }
     }
+    // Older mail still coming in is only said to the person whose mailbox it is.
+    expect(JSON.parse((await call('GET', '/api/suggestions', ALPHA)).text)).toMatchObject({ importing: false });
+    expect(JSON.parse((await call('GET', '/api/suggestions', BRAVO)).text)).toMatchObject({ importing: true });
     // Guidelines and a model sign-in are each person's own.
     expect((await call('GET', '/api/manage', BRAVO)).text).not.toContain('alpha-own-words');
     expect((await call('GET', '/api/manage', ALPHA)).text).toContain('alpha-own-words');
