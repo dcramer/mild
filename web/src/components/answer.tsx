@@ -1,5 +1,5 @@
 import { api, useAction } from '@/lib/api.ts';
-import { outcomeName } from '@/lib/format.ts';
+import { outcomeName, plural } from '@/lib/format.ts';
 import { Meter, type Pick, useToast } from '@/system';
 
 /** A message whose label the user can say, as the list and the panel both hold it. */
@@ -82,5 +82,14 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
     return [likely, rest];
   };
 
-  return { answer, choices, busy, error };
+  /** One answer for several messages, as a folded row gives it. */
+  const answerAll = (targets: readonly Answerable[], labelId: string) =>
+    run(async () => {
+      await Promise.all(targets.map((t) => say(t, labelId)));
+      const label = labels.find((l) => l.id === labelId);
+      toast(`${label ? `${outcomeName(label.disposition)} as ${label.name}` : 'Answered'}: ${plural(targets.length, 'message')}`);
+      onDone();
+    });
+
+  return { answer, answerAll, choices, busy, error };
 }

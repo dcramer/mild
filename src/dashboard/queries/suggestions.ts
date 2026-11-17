@@ -56,10 +56,6 @@ export async function suggestionDetail(db: Sql, scope: Scope, accountId: string,
 const MAX_ITEMS = 500;
 
 /**
- * What is waiting on the user, one group per sender, since an answer is about a sender. A group shows
- * the guess sift made for most of that sender's waiting mail. Biggest groups first: they teach the most.
- */
-/**
  * Mail pulled in from before Sift was connected that the model has yet to decide. Each becomes a suggestion
  * on a later pass, unless the model keeps failing on it.
  */

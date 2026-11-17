@@ -49,6 +49,7 @@ import {
 } from '@/system';
 import { AddLabelDialog } from '@/views/label-panel.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
+import { fold } from '@/lib/fold.ts';
 import { proposalStart } from '@/lib/rule-start.ts';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 
@@ -187,25 +188,39 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
   );
 }
 
+const answerableOf = (i: SuggestionItem): Answerable => ({
+  accountId: i.accountId,
+  sender: i.sender,
+  messageId: i.messageId,
+  decisionId: i.decisionId,
+  labelId: i.labelId,
+});
+
 /**
  * One suggestion: who, what, when, and what sift says it is with how sure, in a dropdown with what else it
- * might be, and a check that commits. Pressing the row opens the message.
+ * might be, and a check that commits. Pressing the row opens the message. With `rest`, the row stands for
+ * the sender's other waiting mail Sift gave the same label too, says how many and what they are about,
+ * and its answer is for all of them.
  */
 function SuggestionRow({
   item,
+  rest,
   labels,
   waiting,
   onOpen,
   onAnswered,
 }: {
   item: SuggestionItem;
+  rest: readonly SuggestionItem[];
   labels: readonly AnswerLabel[];
   waiting: readonly Answerable[];
   onOpen: () => void;
   onAnswered: () => void;
 }) {
-  const target = { accountId: item.accountId, sender: item.sender, messageId: item.messageId, decisionId: item.decisionId, labelId: item.labelId };
-  const { answer, choices, busy, error } = useAnswer(labels, waiting, onAnswered);
+  const target = answerableOf(item);
+  const { answer, answerAll, choices, busy, error } = useAnswer(labels, waiting, onAnswered);
+  const folded = rest.length > 0;
+  const subjects = [item, ...rest].map((i) => i.subject || '(no subject)').join(' · ');
   // A message none of the labels fits gets a new one; it is then among the choices.
   const [adding, setAdding] = useState(false);
   const groups = choices(target, sureness(item), item.alternatives);
@@ -232,14 +247,23 @@ function SuggestionRow({
         }
       >
         <OnPhone>
-          <span className="w-full truncate text-base text-foreground">{item.subject || '(no subject)'}</span>
-          {item.preview ? <span className="w-full truncate">{item.preview}</span> : null}
+          <span className="w-full truncate text-base text-foreground">{folded ? plural(rest.length + 1, 'message') : item.subject || '(no subject)'}</span>
+          {folded ? <span className="w-full truncate">{subjects}</span> : item.preview ? <span className="w-full truncate">{item.preview}</span> : null}
         </OnPhone>
       </SenderCell>
       {/* What it is about, and as much of what it says as fits: enough to answer without opening it. */}
       <Td phone="hide" className="max-w-0 md:w-full">
-        <span className="block truncate">{item.subject || '(no subject)'}</span>
-        {item.preview ? <Sub>{item.preview}</Sub> : null}
+        {folded ? (
+          <>
+            <span className="block truncate">{plural(rest.length + 1, 'message')}</span>
+            <Sub>{subjects}</Sub>
+          </>
+        ) : (
+          <>
+            <span className="block truncate">{item.subject || '(no subject)'}</span>
+            {item.preview ? <Sub>{item.preview}</Sub> : null}
+          </>
+        )}
         <Failure className="mt-1">{error}</Failure>
       </Td>
       <Td phone="hide" num quiet>
@@ -254,7 +278,7 @@ function SuggestionRow({
           groups={groups}
           empty={<Look>Which label?</Look>}
           busy={busy}
-          onSubmit={(id) => answer(target, id)}
+          onSubmit={(id) => (folded ? answerAll([item, ...rest].map(answerableOf), id) : answer(target, id))}
           extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
         />
       </RowActions>
@@ -289,13 +313,8 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
       (needle === '' || [i.sender, i.senderName ?? '', i.subject].some((text) => text.toLowerCase().includes(needle))),
   );
   const refs = shown.map((i) => ({ accountId: i.accountId, messageId: i.messageId, subject: i.subject }));
-  const answerable = (data?.items ?? []).map((i) => ({
-    accountId: i.accountId,
-    sender: i.sender,
-    messageId: i.messageId,
-    decisionId: i.decisionId,
-    labelId: i.labelId,
-  }));
+  const answerable = (data?.items ?? []).map(answerableOf);
+  const rows = fold(shown);
 
   return (
     <ListView
@@ -391,13 +410,14 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
             </Tr>
           </thead>
           <tbody>
-            {shown.map((item, index) => (
+            {rows.map(({ item, rest }) => (
               <SuggestionRow
                 key={`${item.accountId}/${item.messageId}`}
                 item={item}
+                rest={rest}
                 labels={data?.labels[item.accountId] ?? []}
                 waiting={answerable}
-                onOpen={() => onOpen(refs, index)}
+                onOpen={() => onOpen(refs, shown.indexOf(item))}
                 onAnswered={reload}
               />
             ))}
