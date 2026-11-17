@@ -5,9 +5,17 @@ import { cn } from '@/lib/utils';
 const FIELD =
   'border border-(--frame) bg-transparent placeholder:text-muted-foreground/70 hover:border-foreground/30 focus:border-foreground/45 disabled:opacity-45';
 
-/** A line of text typed by the reader. Inside a `Field` it takes the field's label; on its own give it an `aria-label`. */
+/**
+ * A line of text typed by the reader. Inside a `Field` it takes the field's label; on its own give it an `aria-label`.
+ * Its words are a select's size, so the two read as one row; on a touch screen 16px, below which a phone zooms in on a tap.
+ */
 export function Input({ className, ...props }: ComponentProps<'input'>) {
-  return <input className={cn('field focus-within-shown h-(--control) min-w-0 rounded-(--corner) px-3 text-base', FIELD, className)} {...props} />;
+  return (
+    <input
+      className={cn('field focus-within-shown h-(--control) min-w-0 rounded-(--corner) px-3 text-sm pointer-coarse:text-base', FIELD, className)}
+      {...props}
+    />
+  );
 }
 
 /** Longer text. */
