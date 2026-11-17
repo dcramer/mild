@@ -2,25 +2,7 @@ import { currentPrefix, keyedHash, openSecret, openToRekey, sealSecret, staleSec
 import type { Facts } from '../triage/facts.ts';
 import { parseListId } from '../triage/features.ts';
 import type { Address } from '../triage/types.ts';
-import {
-  actions,
-  and,
-  asc,
-  correspondents,
-  decisions,
-  eq,
-  examples,
-  gt,
-  messages,
-  notLike,
-  or,
-  preferences,
-  proposals,
-  rules,
-  sql,
-  suggestionBodies,
-} from './query.ts';
-import { rekeyCredentials } from './credentials.ts';
+import { actions, and, asc, correspondents, decisions, eq, examples, gt, messages, notLike, or, proposals, rules, sql, suggestionBodies } from './query.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
 import type { Sql } from './sql.ts';
 
@@ -196,29 +178,17 @@ const stale = (db: Sql, stored: string | null) => stored !== null && db.keys.cur
 /** Mail records are read this many at a time: a mailbox can have many thousands. */
 const BATCH = 500;
 
-/** What `preferences.keyed_with` says when everything of a person's is under `keys`. */
-export const markOf = (keys: Sql['keys']): string => keys.current?.id ?? 'plain';
-
-/** Whether anything of this person's may not be under the current key yet: after an upgrade, or a new key. One row read. */
-export async function needsKeying(db: Sql): Promise<boolean> {
-  const [row] = await db.select({ keyedWith: preferences.keyedWith }).from(preferences);
-  return row?.keyedWith !== markOf(db.keys);
-}
-
 /**
- * Bring everything of this person's under the current key: encrypt what is plain, encrypt again what an
- * old key encrypted, and hash again everything found by hash, since the hashes come from the key. Throws,
- * naming it, if a value does not open with the handle's keys. Then `preferences` says it is done.
+ * Bring everything `db` holds of its messages' content under the current key, as `rekeyCredentials` does
+ * for sign-ins. Throws if one does not open with the handle's keys. `write: false` only checks. Returns
+ * how many messages had something to bring under it.
  */
-export async function bringUnderKey(db: Sql): Promise<{ credentials: string[]; messages: number }> {
+export async function rekeyContent(db: Sql, write = true): Promise<number> {
   const prefix = currentPrefix(db.keys);
-  const credentials = await rekeyCredentials(db);
-  await rekeyConditions(db, prefix);
-  const messages = prefix === null ? 0 : await rekeyMail(db, prefix);
-  if (prefix !== null) await rekeyLog(db, prefix);
-  const keyedWith = markOf(db.keys);
-  await db.insert(preferences).values({ keyedWith }).onConflictDoUpdate({ target: preferences.userId, set: { keyedWith } });
-  return { credentials, messages };
+  await rekeyConditions(db, prefix, write);
+  if (prefix === null) return 0;
+  await rekeyLog(db, prefix, write);
+  return await rekeyMail(db, prefix, write);
 }
 
 const UNSET = 'unset:';
@@ -227,7 +197,7 @@ const UNSET = 'unset:';
  * Rules and proposals: few, so read whole. Their conditions are hashed again with the key, and those a
  * migration could not hash (`unset:`) are hashed here even without one.
  */
-async function rekeyConditions(db: Sql, prefix: string | null): Promise<void> {
+async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): Promise<void> {
   const behind = (stored: string | null) => stored !== null && prefix !== null && !stored.startsWith(prefix);
   const ruleRows = await db
     .select({ id: rules.id, match: rules.match, except: rules.except, filter: rules.filterWritten, conditions: rules.conditions })
@@ -257,14 +227,15 @@ async function rekeyConditions(db: Sql, prefix: string | null): Promise<void> {
       const match = JSON.parse(reopen(db, proposalName(db, r.accountId), r.match)) as RuleMatch;
       return { id: r.id, set: { match: sealJson(db, proposalName(db, r.accountId), match), conditions: conditionsHash(db, match) } };
     });
-  await db.transaction(async (tx) => {
-    for (const { id, set } of ruleUpdates) await tx.update(rules).set(set).where(eq(rules.id, id));
-    for (const { id, set } of proposalUpdates) await tx.update(proposals).set(set).where(eq(proposals.id, id));
-  });
+  if (write)
+    await db.transaction(async (tx) => {
+      for (const { id, set } of ruleUpdates) await tx.update(rules).set(set).where(eq(rules.id, id));
+      for (const { id, set } of proposalUpdates) await tx.update(proposals).set(set).where(eq(proposals.id, id));
+    });
 }
 
 /** Changes made and decisions reached: one row each, so read in batches like mail records. */
-async function rekeyLog(db: Sql, prefix: string): Promise<void> {
+async function rekeyLog(db: Sql, prefix: string, write: boolean): Promise<void> {
   for (let after = 0; ;) {
     const rows = await db
       .select({ id: actions.id, accountId: actions.accountId, payload: actions.payload })
@@ -274,9 +245,10 @@ async function rekeyLog(db: Sql, prefix: string): Promise<void> {
       .limit(BATCH);
     if (rows.length === 0) break;
     const sealed = rows.map((r) => ({ id: r.id, payload: seal(db, actionName(db, r.accountId), reopen(db, actionName(db, r.accountId), r.payload)) }));
-    await db.transaction(async (tx) => {
-      for (const { id, payload } of sealed) await tx.update(actions).set({ payload }).where(eq(actions.id, id));
-    });
+    if (write)
+      await db.transaction(async (tx) => {
+        for (const { id, payload } of sealed) await tx.update(actions).set({ payload }).where(eq(actions.id, id));
+      });
     after = rows.at(-1)!.id;
   }
   for (let after = 0; ;) {
@@ -291,15 +263,16 @@ async function rekeyLog(db: Sql, prefix: string): Promise<void> {
       id: r.id,
       reason: sealPart(db, r.accountId, r.messageId, 'reason', forRekey(db, r.accountId, r.messageId, 'reason', r.reason))!,
     }));
-    await db.transaction(async (tx) => {
-      for (const { id, reason } of sealed) await tx.update(decisions).set({ reason }).where(eq(decisions.id, id));
-    });
+    if (write)
+      await db.transaction(async (tx) => {
+        for (const { id, reason } of sealed) await tx.update(decisions).set({ reason }).where(eq(decisions.id, id));
+      });
     after = rows.at(-1)!.id;
   }
 }
 
 /** Mail records, bodies and correspondents. Returns how many messages had something to bring under the key. */
-async function rekeyMail(db: Sql, prefix: string): Promise<number> {
+async function rekeyMail(db: Sql, prefix: string, write: boolean): Promise<number> {
   const touched = new Set<string>();
   const bodies = [
     {
@@ -329,13 +302,14 @@ async function rekeyMail(db: Sql, prefix: string): Promise<number> {
       })),
   );
   for (const { row } of reseal) touched.add(`${row.accountId}\n${row.messageId}`);
-  await db.transaction(async (tx) => {
-    for (const { table, row, text, html } of reseal)
-      await tx
-        .update(table)
-        .set({ bodyText: text, bodyHtml: html })
-        .where(and(eq(table.accountId, row.accountId), eq(table.messageId, row.messageId)));
-  });
+  if (write)
+    await db.transaction(async (tx) => {
+      for (const { table, row, text, html } of reseal)
+        await tx
+          .update(table)
+          .set({ bodyText: text, bodyHtml: html })
+          .where(and(eq(table.accountId, row.accountId), eq(table.messageId, row.messageId)));
+    });
 
   // Every part of a record is written together, so its subject and sender say whether the rest is under the
   // current key and its hashes made with it. Hashes made before addresses were encrypted are not.
@@ -373,13 +347,14 @@ async function rekeyMail(db: Sql, prefix: string): Promise<number> {
       };
     });
     for (const r of records) touched.add(`${r.accountId}\n${r.id}`);
-    await db.transaction(async (tx) => {
-      for (const r of records)
-        await tx
-          .update(messages)
-          .set(r.sealed)
-          .where(and(eq(messages.accountId, r.accountId), eq(messages.id, r.id)));
-    });
+    if (write)
+      await db.transaction(async (tx) => {
+        for (const r of records)
+          await tx
+            .update(messages)
+            .set(r.sealed)
+            .where(and(eq(messages.accountId, r.accountId), eq(messages.id, r.id)));
+      });
     const last: { accountId: string; id: string } = rows.at(-1)!;
     after = { accountId: last.accountId, id: last.id };
   }
@@ -389,12 +364,13 @@ async function rekeyMail(db: Sql, prefix: string): Promise<number> {
     await db.select({ accountId: correspondents.accountId, address: correspondents.address, hash: correspondents.addressHash }).from(correspondents)
   ).filter((r) => !r.address.startsWith(prefix));
   const rewritten = cached.map((r) => ({ ...r, sealed: sealCorrespondent(db, r.accountId, reopen(db, correspondentName(db, r.accountId), r.address)) }));
-  await db.transaction(async (tx) => {
-    for (const r of rewritten)
-      await tx
-        .update(correspondents)
-        .set(r.sealed)
-        .where(and(eq(correspondents.accountId, r.accountId), eq(correspondents.addressHash, r.hash)));
-  });
+  if (write)
+    await db.transaction(async (tx) => {
+      for (const r of rewritten)
+        await tx
+          .update(correspondents)
+          .set(r.sealed)
+          .where(and(eq(correspondents.accountId, r.accountId), eq(correspondents.addressHash, r.hash)));
+    });
   return touched.size;
 }

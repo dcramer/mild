@@ -3,7 +3,6 @@ import { ensureMailbox } from './accounts.ts';
 import { openDatabase } from './db.ts';
 import { accounts, eq, preferences } from './query.ts';
 import { type Driver, type Sql, handle } from './sql.ts';
-import { markOf } from './content.ts';
 
 /**
  * The database. `central` says who the people are and which mailboxes are whose, and sees no one's
@@ -40,11 +39,7 @@ export function storeOn(driver: Driver, keys: Keyring): Store {
     // A mailbox is added to `accounts` first, so one can be missing here after a crash in between.
     const theirs = await central.select({ id: accounts.id, createdAt: accounts.createdAt }).from(accounts).where(eq(accounts.userId, id));
     await db.transaction(async (tx) => {
-      // Someone new has nothing stored yet, so nothing to bring under the key.
-      await tx
-        .insert(preferences)
-        .values({ keyedWith: markOf(keys) })
-        .onConflictDoNothing();
+      await tx.insert(preferences).values({}).onConflictDoNothing();
       for (const mailbox of theirs) await ensureMailbox(tx, mailbox);
     });
     return db;

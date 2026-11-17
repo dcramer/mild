@@ -130,7 +130,7 @@ export const mailboxes = pgTable(
 const mailbox = (t: { userId: AnyPgColumn; accountId: AnyPgColumn }) =>
   foreignKey({ columns: [t.userId, t.accountId], foreignColumns: [mailboxes.userId, mailboxes.id] }).onDelete('cascade');
 
-/** Their own choices: the model their mail is judged with (`provider/model-id`). And which key their data is under. */
+/** Their own choices: the model their mail is judged with (`provider/model-id`). */
 export const preferences = pgTable(
   'preferences',
   {
@@ -138,8 +138,6 @@ export const preferences = pgTable(
     // false (off): their decisions are only suggestions. true (on): sift carries them out in their mailboxes.
     active: boolean('active').notNull().default(false),
     model: text('model'),
-    // The id of the key everything of theirs is encrypted and hashed with, `plain` without one; null until a tick has seen to it (src/store/content.ts).
-    keyedWith: text('keyed_with'),
   },
   () => [own()],
 ).enableRLS();
