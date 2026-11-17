@@ -418,7 +418,7 @@ function OlderMail() {
         title="Pull in older mail"
         note={
           <>
-            Up to 300 messages from before Sift started, as suggestions to teach it with, one model call each. Never acted on.
+            Up to 300 messages from before Sift started, for review, to teach it with, one model call each. Never acted on.
             <Failure>{error}</Failure>
           </>
         }

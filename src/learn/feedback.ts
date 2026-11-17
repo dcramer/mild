@@ -277,7 +277,7 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
   if (from !== undefined && from !== input.sender) throw new Refusal('That message is not from that sender.');
   if (targets.length === 0 && !given && !fresh)
     throw new Refusal(
-      input.scope === 'subject' ? `Nothing waiting from ${input.sender} has "${contains}" in the subject.` : 'That suggestion is no longer waiting.',
+      input.scope === 'subject' ? `Nothing waiting from ${input.sender} has "${contains}" in the subject.` : 'That message is no longer waiting for review.',
     );
   const match: RuleMatch | null =
     input.scope === 'sender' || input.scope === 'label'

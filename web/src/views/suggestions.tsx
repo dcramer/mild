@@ -269,7 +269,7 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
 
   return (
     <ListView
-      title="Suggestions"
+      title="For review"
       actions={<Week summary={summary.data} />}
       intro={
         <>

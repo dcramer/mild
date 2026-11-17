@@ -27,14 +27,14 @@ What the seed leaves (through three real ticks with sift off, `tick`, with a sta
 | --- | --- | --- | --- |
 | `m1`, `m2` | `digest@news.example.com` | label rule → Newsletters | Activity only |
 | `m3` | `orders@shop.example.com` | label rule → Receipts and transactions | Activity only |
-| `m4` | `deals@promo.example.com` | nothing | Suggestions, `Which label?` |
+| `m4` | `deals@promo.example.com` | nothing | For review, `Which label?` |
 | `m5` | `builds@ci.example.org` | action rule → archive | Activity only |
-| `m6` | `ada@example.org` | nothing | Suggestions, `Which label?` |
-| `m7` | `grace@example.net` | nothing | Suggestions, `Which label?` |
-| `m8` | `sale@store.example.com` | stand-in model → Marketing, confidence 0.95 | Suggestions, `Marketing` (sure) |
+| `m6` | `ada@example.org` | nothing | For review, `Which label?` |
+| `m7` | `grace@example.net` | nothing | For review, `Which label?` |
+| `m8` | `sale@store.example.com` | stand-in model → Marketing, confidence 0.95 | For review, `Marketing` (sure) |
 | `m9`, `m10` | `alerts@ops.example.com` | the stand-in model answers unusably, three passes running | Activity › Failed, under `Not judged`, with Retry and the page's Retry all |
-| `m11`–`m13` | `billing@utility.example.net` | nothing; then each answered as Receipts and transactions, as the dashboard answers | Activity only; the three alike open a proposal, `Make a rule?` on Suggestions |
-| `m14`–`m21` | `notifications@code.example.com`, as Dependabot (3), Security alerts (2), github-actions[bot] (2) and Ada Lovelace (1) | stand-in model, by name → Notifications, Security and account, Notifications; Ada's it cannot place | Suggestions, one row for the address; its page lists the four names (`/sender/me%40example.org/notifications%40code.example.com`) |
+| `m11`–`m13` | `billing@utility.example.net` | nothing; then each answered as Receipts and transactions, as the dashboard answers | Activity only; the three alike open a proposal, `Make a rule?` on For review |
+| `m14`–`m21` | `notifications@code.example.com`, as Dependabot (3), Security alerts (2), github-actions[bot] (2) and Ada Lovelace (1) | stand-in model, by name → Notifications, Security and account, Notifications; Ada's it cannot place | For review, one row for the address; its page lists the four names (`/sender/me%40example.org/notifications%40code.example.com`) |
 
 Three rules were written to the fake Gmail as filters, through the real `writeRuleFilter`, so the Rules list shows a filter in each state: `anyone at ci.example.org` landed (grey funnel); `orders@shop.example.com` landed and was then deleted in Gmail, which a check noticed (yellow); and Gmail did not answer for `anyone at news.example.com`, nor had it kept the filter when asked at once (`failed`: red, and the line above the list). `anyone at promo.example.com` → Spam, added after the passes, cannot be a filter. Each rule's panel has the history. That is the only way to see a filter here: the dashboard's own Add to Gmail fails, as there is no Gmail behind it.
 
@@ -61,7 +61,7 @@ $V ab "$RUN" press j               # page keys work: J/K move, A agrees, 1–9 p
 
 `ab` is agent-browser (`npx agent-browser@0.39.2`) in this run's own browser session; any agent-browser command works after it (`agent-browser skills get core` for the full set). Use `127.0.0.1`, which is where the cookie was set, not `localhost`.
 
-Find elements by role and accessible name, not refs or CSS: refs change on every snapshot. A control with a shortcut has its keycap in its name (`Save answer ↵`, `Archive E`); `--name` matches part of a name, so the words alone find it. The names the page uses are in [features/](features/README.md). Routes: `/` (Suggestions), `/activity`, `/labels`, `/rules`, `/sender/<account>/<address>`, `/domain/<account>/<domain>`, and `/system` (the design-system specimen, no sign-in). An open message is `?message=<id>&account=me%40example.org` on any route, and Settings `?settings=1`.
+Find elements by role and accessible name, not refs or CSS: refs change on every snapshot. A control with a shortcut has its keycap in its name (`Save answer ↵`, `Archive E`); `--name` matches part of a name, so the words alone find it. The names the page uses are in [features/](features/README.md). Routes: `/` (For review), `/activity`, `/labels`, `/rules`, `/sender/<account>/<address>`, `/domain/<account>/<domain>`, and `/system` (the design-system specimen, no sign-in). An open message is `?message=<id>&account=me%40example.org` on any route, and Settings `?settings=1`.
 
 Phone width: `$V ab "$RUN" set viewport 390 844`. AGENTS.md asks what every part does on a phone.
 

@@ -1,6 +1,6 @@
 # Answer a suggestion
 
-A message sift could not place, or placed wrongly, waits in Suggestions. The user opens it, chooses what it is, and presses the check. sift records the label, carries out that label's action on the message on the next pass (even while sift is off), keeps the message as an example, makes no rule, and moves on to the next one.
+A message sift could not place, or placed wrongly, waits in For review. The user opens it, chooses what it is, and presses the check. sift records the label, carries out that label's action on the message on the next pass (even while sift is off), keeps the message as an example, makes no rule, and moves on to the next one.
 
 ## Sub-features
 
@@ -11,14 +11,14 @@ A message sift could not place, or placed wrongly, waits in Suggestions. The use
 
 ## How to get to it (user POV)
 
-- Suggestions, a row, then the dropdown and the check at the top of the panel.
+- For review, a row, then the dropdown and the check at the top of the panel.
 - From any screen with `?message=<id>&account=me%40example.org` in the address.
 
 ## Driving it with verify.sh
 
 Preconditions:
 
-- Fresh seed. The `Suggestions` link reads `Suggestions 4`.
+- Fresh seed. The `For review` link reads `For review 4`.
 
 - **Open.** `ab open "$B/"`, then `ab find role cell click --name "48 hours only: 30% off"`. The address gains `?message=m4`, a level-2 heading reads `48 hours only: 30% off`, the dropdown reads `Which label?`, and the check is disabled.
 - **Choose and save.** `ab find role combobox click --name "What this message is"`, `ab find role option click --name "Marketing"`, then `ab find role button click --name "Save: Marketing"`. A toast reads `Archive as Marketing`; the panel shows the next waiting message (`?message=m6`, `Lunch on Thursday?`).

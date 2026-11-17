@@ -93,7 +93,7 @@ export async function startEval(deps: Pick<EvalDeps, 'db' | 'model' | 'now'>, re
     .where(and(eq(exampleRows.accountId, request.accountId), eq(exampleRows.status, 'captured'), isNotNull(exampleRows.labelId)))
     .orderBy(desc(exampleRows.markedAt), exampleRows.messageId)
     .limit(limit);
-  if (examples.length === 0) throw new Refusal('There are no stored examples to test against yet. Answer some suggestions first.');
+  if (examples.length === 0) throw new Refusal('There are no stored examples to test against yet. Answer some mail in For review first.');
 
   const shown = (await listLabels(db, request.accountId)).map((l) => ({ id: l.id, name: l.name, description: l.description }));
   const [{ id }] = (await db

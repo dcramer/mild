@@ -42,7 +42,7 @@ const match = z.object({
 });
 export type RuleMatch = z.infer<typeof match>;
 
-/** The facts Suggestions and Activity can be narrowed by (`?fact=`), each a condition on what sift recorded about the message. */
+/** The facts For review and Activity can be narrowed by (`?fact=`), each a condition on what sift recorded about the message. */
 export const FACT_FILTERS = {
   reply: { isReply: true },
   list: { listId: true },

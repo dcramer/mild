@@ -95,7 +95,7 @@ class ScreenBoundary extends Component<{ at: string; children: ReactNode }, { fa
 
 const SECTIONS = ['suggestions', 'activity', 'labels', 'rules'] as const;
 const NAMES: Record<(typeof SECTIONS)[number], string> = {
-  suggestions: 'Suggestions',
+  suggestions: 'For review',
   activity: 'Activity',
   labels: 'Labels',
   rules: 'Rules',

@@ -20,12 +20,12 @@ On the Rules screen the user writes a rule directly: a condition, then what it s
 
 Preconditions:
 
-- Fresh seed. Suggestions shows 4 waiting, one from `deals@promo.example.com`.
+- Fresh seed. For review shows 4 waiting, one from `deals@promo.example.com`.
 
 - **Open the dialog.** `ab open "$B/rules"`, then `ab find role button click --name "Add a rule"`. A level-2 heading `Add a rule` appears with `Add rule` disabled; `Match mail` reads `from`, `Label it as` reads `No label, just act`, `What happens to it` reads `Archive`.
 - **Value.** `ab find role textbox fill "promo.example.com" --name "Value to match"`. `Add rule` is enabled.
 - **Add.** `ab find role button click --name "Add rule"`. The dialog closes and a row reads `anyone at promo.example.com` with `Archive`.
-- **Effect on what is waiting.** `ab open "$B/"`. The link reads `Suggestions 3` and there is no Deals row.
+- **Effect on what is waiting.** `ab open "$B/"`. The link reads `For review 3` and there is no Deals row.
 - **Stored.** `verify.sh sql "$RUN" "SELECT match, disposition, label_id, source FROM rules WHERE match->>'fromDomain' = 'promo.example.com'"` returns `{"fromDomain":"promo.example.com"}`, `archive`, null, `user`. `actions` is empty.
 
 ## Gotchas

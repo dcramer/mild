@@ -10,7 +10,7 @@ An opened message shows the text sift holds, or the message as its HTML, fetched
 
 ## How to get to it (user POV)
 
-- Open any message from Suggestions or Activity, then `HTML`.
+- Open any message from For review or Activity, then `HTML`.
 
 ## Driving it with verify.sh
 

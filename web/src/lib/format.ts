@@ -191,7 +191,7 @@ export const factConditions = (answers: readonly FactAnswer[]): RuleFacts =>
 /** An answer as one string, for a select's value. */
 export const factParam = ({ key, index }: FactAnswer) => `${key}:${index}`;
 
-/** The facts Suggestions and Activity can be narrowed by (`FACT_FILTERS`, src/dashboard/types.ts), in the words of the conditions they are. */
+/** The facts For review and Activity can be narrowed by (`FACT_FILTERS`, src/dashboard/types.ts), in the words of the conditions they are. */
 export const FACT_FILTER_WORDS = [
   ['reply', 'is a reply'],
   ['list', 'came through a mailing list'],

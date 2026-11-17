@@ -30,5 +30,5 @@ Preconditions:
 
 - Changing the outcome leaves the extras as they were: Keep with unsubscribe still checked is `KEEP + unsubscribe`.
 - `Block` is spam plus blocking the sender, stored as `disposition = 'spam'`, `block = 1`.
-- Changing a label re-decides waiting suggestions with that label; in the fresh seed none are waiting, so the Suggestions count does not move.
+- Changing a label re-decides waiting suggestions with that label; in the fresh seed none are waiting, so the For review count does not move.
 - Removing a label is not built.

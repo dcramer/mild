@@ -10,7 +10,7 @@ import { Control, ControlBar } from './controls.tsx';
  * stay with the text.
  *
  * `keys`: J and K move through it, with the page's controls bar under it. Only for a list someone works
- * through one item after another (Suggestions, Activity); every other list is pressed or tabbed through.
+ * through one item after another (For review, Activity); every other list is pressed or tabbed through.
  *
  * On a phone a table keeps its first column and drops those marked `phone="hide"`; what they said goes
  * under the first column in an `OnPhone`, and the row opens for the rest. A table not given that scrolls sideways.

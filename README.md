@@ -6,7 +6,7 @@ It suggests before it acts. Every decision appears in a dashboard, you correct t
 
 **Status: early.** In use on one real inbox, with Sift off; it has not yet been turned on against a real mailbox. Open work is in [TODO.md](TODO.md).
 
-![Suggestions](docs/images/suggestions.png)
+![For review](docs/images/suggestions.png)
 
 ## Set up
 

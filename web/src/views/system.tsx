@@ -165,7 +165,7 @@ export function SystemView() {
             </p>
           </Row>
           <Row label="statement" note="A page’s title, and nothing else.">
-            <p className="statement">Suggestions</p>
+            <p className="statement">For review</p>
           </Row>
           <Row label="figure">
             <p className="figure">
@@ -439,7 +439,7 @@ export function SystemView() {
       <Section title="List view" meta="how every screen shows many of one thing">
         <Sheet className="p-5">
           <ListView
-            title="Suggestions"
+            title="For review"
             actions={<span className="text-muted-foreground">This week 84% without a model</span>}
             search={{ value: search, onChange: setSearch, placeholder: 'Search' }}
             filters={{
@@ -653,7 +653,7 @@ export function SystemView() {
       <div className="grid gap-14 lg:grid-cols-2">
         <Section title="Toast" meta="what a press did, after the list moved on: one line, the newest replacing the last">
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => toast('12 messages pulled in', { description: 'They show under Suggestions as Sift decides them.' })}>A result</Button>
+            <Button onClick={() => toast('12 messages pulled in', { description: 'They show under For review as Sift decides them.' })}>A result</Button>
             <Button onClick={answer}>With Undo</Button>
             <Button onClick={() => toast('Could not undo', { tone: 'failure', description: 'Gmail answered 503.' })}>Failure</Button>
             <Button
@@ -716,7 +716,7 @@ export function SystemView() {
           <Masthead
             current="system"
             items={[
-              { to: 'system', label: 'Suggestions', count: 12 },
+              { to: 'system', label: 'For review', count: 12 },
               { to: 'system/activity', label: 'Activity' },
               { to: 'system/rules', label: 'Rules' },
             ]}
