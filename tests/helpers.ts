@@ -14,6 +14,8 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { exampleKeysOf, sealPart } from '../src/store/content.ts';
 import type { Judge, Verdict } from '../src/triage/stages/model.ts';
 import type { Address, Label, MessageFacts } from '../src/triage/types.ts';
+import { type PassResult, type RunOptions, dueWork, runWork } from '../src/work/run.ts';
+import type { Store } from '../src/store/store.ts';
 
 /** The mailbox a test's person signs in with, unless it needs another. */
 export const ACCOUNT = 'me@example.org';
@@ -335,4 +337,17 @@ export async function withSampleLabels(db: Sql): Promise<void> {
       })),
     )
     .onConflictDoNothing();
+}
+
+/**
+ * Each piece due, one after another in this process, each starting nothing after `limitMs` from its own start:
+ * what Workflow runs do on a host, without Workflow.
+ */
+export async function workDue(store: Store, options: RunOptions, limitMs: number, people?: readonly number[]): Promise<PassResult[]> {
+  const results: PassResult[] = [];
+  for (const piece of await dueWork(store, options, people)) {
+    const result = await runWork(store, piece, options, (options.now ?? Date.now)() + limitMs);
+    if (result) results.push(result);
+  }
+  return results;
 }

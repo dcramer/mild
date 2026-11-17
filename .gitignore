@@ -24,3 +24,6 @@ setup.json
 .next
 next-env.d.ts
 /.swc
+
+# Workflow writes its routes into the app at build.
+/app/.well-known/workflow/

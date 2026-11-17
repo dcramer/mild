@@ -1,6 +1,6 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { type RunOptions, runOnce, tick } from '../src/work/run.ts';
+import { type RunOptions, runOnce } from '../src/work/run.ts';
 import { startInboxRuns } from '../src/store/inbox.ts';
 import type { Store } from '../src/store/store.ts';
 import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
@@ -20,7 +20,7 @@ import { MAX_ATTEMPTS, startRun } from '../src/store/runs.ts';
 import { listProposals } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
-import { ACCOUNT, FakeMailbox, UNSURE, everything, facts, rawMessage, testModel } from './helpers.ts';
+import { ACCOUNT, FakeMailbox, UNSURE, everything, facts, rawMessage, testModel, workDue } from './helpers.ts';
 import { listSuggestions } from '../src/dashboard/queries/suggestions.ts';
 
 /** Mail from a list, addressed to the owner by name. */
@@ -231,24 +231,20 @@ describe('a tick', () => {
     let connected = 0;
     await startInboxRuns(own, [NEW], { acts: false, most: 10, now: 0 });
     const counting: RunOptions = { ...options(), model: unsure, connect: () => (connected++, { api: api(), mailbox }) };
-    expect(await tick(store, counting, Infinity, [newcomer])).toEqual([]);
+    expect(await workDue(store, counting, Infinity, [newcomer])).toEqual([]);
     expect(connected).toBe(0);
     await addLabels(own, [{ name: 'Pitches', description: 'From strangers.', disposition: 'archive' }]);
-    expect(await tick(store, counting, Infinity, [newcomer])).toMatchObject([{ email: NEW }]);
+    expect(await workDue(store, counting, Infinity, [newcomer])).toMatchObject([{ email: NEW }]);
     expect(connected).toBe(2);
   });
 
-  it('skips a mailbox another pass holds, and a finished pass lets go', async () => {
+  it('does what is due for the people it is asked about, or everyone', async () => {
     const { store } = await onePerson(ACCOUNT);
     let connected = 0;
     const counting: RunOptions = { ...options(), connect: () => (connected++, { api: api(), mailbox }) };
-    const token = await counting.ephemeral.claim(`lock:pass:${ACCOUNT}`, 10_000);
-    expect(await tick(store, counting, Infinity)).toEqual([]);
-    expect(connected).toBe(0);
-    await counting.ephemeral.release(`lock:pass:${ACCOUNT}`, token!);
-    expect(await tick(store, counting, Infinity)).toMatchObject([{ email: ACCOUNT }]);
-    expect(await tick(store, counting, Infinity, [await person(store)])).toMatchObject([{ email: ACCOUNT }]);
-    expect(await tick(store, counting, Infinity, [999])).toEqual([]);
+    expect(await workDue(store, counting, Infinity)).toMatchObject([{ email: ACCOUNT }]);
+    expect(await workDue(store, counting, Infinity, [await person(store)])).toMatchObject([{ email: ACCOUNT }]);
+    expect(await workDue(store, counting, Infinity, [999])).toEqual([]);
     expect(connected).toBe(2);
   });
 
@@ -260,11 +256,11 @@ describe('a tick', () => {
     // Each message the model is asked about takes a second.
     const slow = async () => testModel(async () => ((clock += 1000), UNSURE));
     const limited: RunOptions = { ...options(), now: () => clock, model: slow };
-    expect(await tick(store, limited, 1500)).toMatchObject([{ unfinished: true }]);
+    expect(await workDue(store, limited, 1500)).toMatchObject([{ unfinished: true }]);
     // Two were asked about by 2000; the third is still due.
     expect(await raw(own).all('SELECT message_id FROM decisions')).toHaveLength(2);
     expect(logs.at(-1)).toContain('out of time, carrying on');
-    const [next] = await tick(store, limited, Infinity);
+    const [next] = await workDue(store, limited, Infinity);
     expect(next?.unfinished).toBeUndefined();
     expect(await raw(own).all('SELECT message_id FROM decisions')).toHaveLength(3);
   });
@@ -279,7 +275,7 @@ describe('a tick', () => {
     });
     const slow = async () => testModel(async () => ((clock += 1000), UNSURE));
     const limited: RunOptions = { ...options(), connect: () => ({ api: reading(), mailbox }), now: () => clock, model: slow };
-    expect(await tick(store, limited, 500)).toMatchObject([{ unfinished: true }]);
+    expect(await workDue(store, limited, 500)).toMatchObject([{ unfinished: true }]);
     expect(read).toEqual(['ada']);
     expect(await raw(own).all('SELECT message_id, body_text FROM suggestion_bodies')).toEqual([{ message_id: 'ada', body_text: 'sift-plain:Body ada' }]);
   });
@@ -299,12 +295,12 @@ describe('a tick', () => {
     };
     backlog('b1');
     backlog('b2');
-    expect(await tick(store, limited, 500)).toMatchObject([{ unfinished: true }]);
+    expect(await workDue(store, limited, 500)).toMatchObject([{ unfinished: true }]);
     expect(await raw(own).all("SELECT message_id FROM decisions WHERE stage = 'rules'")).toEqual([{ message_id: 'news' }]);
     expect(await raw(own).all("SELECT message_id FROM suggestion_bodies WHERE message_id = 'news'")).toEqual([]);
     backlog('b3');
     backlog('b4');
-    expect(await tick(store, limited, 500)).toMatchObject([{ unfinished: true }]);
+    expect(await workDue(store, limited, 500)).toMatchObject([{ unfinished: true }]);
     expect(await raw(own).all("SELECT body_text FROM suggestion_bodies WHERE message_id = 'news'")).toEqual([{ body_text: 'sift-plain:Body news' }]);
   });
 
@@ -317,8 +313,8 @@ describe('a tick', () => {
       model: unsure,
       connect: () => ({ api: { ...api(), searchInbox: async (query) => (searched.push(query), { ids: [] }) }, mailbox }),
     };
-    await tick(store, reading, Infinity);
-    await tick(store, reading, Infinity);
+    await workDue(store, reading, Infinity);
+    await workDue(store, reading, Infinity);
     expect(searched).toEqual(['']);
     expect(await raw(own).all('SELECT finished_at, stopped FROM inbox_runs')).toEqual([{ finished_at: 5000, stopped: false }]);
   });
@@ -331,7 +327,7 @@ describe('a tick', () => {
       ...options(),
       connect: () => ({ api: { ...api(), searchInbox: async (query) => (searched.push(query), { ids: [] }) }, mailbox }),
     };
-    await tick(store, reading, Infinity);
+    await workDue(store, reading, Infinity);
     expect(searched).toEqual([]);
     expect(await raw(own).all('SELECT finished_at FROM inbox_runs')).toEqual([{ finished_at: null }]);
   });
@@ -358,7 +354,7 @@ describe('a mailbox removed while a pass runs', () => {
   it('is skipped, not reported, and the rest of the tick goes on; so is a person deleted meanwhile', async () => {
     const { store } = await onePerson(ACCOUNT, 'other@example.org');
     const bravo = await connectAccount(store, 'bravo@example.net', '1', 0);
-    const results = await tick(
+    const results = await workDue(
       store,
       {
         ...options(),

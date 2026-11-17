@@ -12,5 +12,5 @@ export function proxy(request: NextRequest) {
   return response;
 }
 
-// The API and sign-in send their own headers; built files need none.
-export const config = { matcher: ['/((?!api/|auth/|_next/static/|_next/image).*)'] };
+// The API and sign-in send their own headers; built files and Workflow's routes need none.
+export const config = { matcher: ['/((?!api/|auth/|_next/static/|_next/image|\\.well-known/workflow/).*)'] };

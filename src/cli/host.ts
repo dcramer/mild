@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { type Duplex, Readable } from 'node:stream';
 import nextModule from 'next';
+import { getWorld } from 'workflow/runtime';
 import type { Config, Env } from '../config.ts';
 import { HEADERS } from '../dashboard/policy.ts';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
@@ -41,20 +42,32 @@ export interface Page {
   handle: (req: IncomingMessage, res: ServerResponse) => Promise<void>;
   /** The development server's live reload. */
   upgrade: (req: IncomingMessage, socket: Duplex, head: Buffer) => Promise<void>;
-  /** Next.js keeps the process alive until it is closed. */
+  /** Next.js, and Workflow's world, keep the process alive until closed. */
   close: () => Promise<void>;
 }
 
 // Node gives `next`'s exports as the default import; its types, read as CommonJS under NodeNext, put them under `default`.
 const createNext = nextModule as unknown as (typeof nextModule)['default'];
 
-/** Next.js for this checkout: the built page, or with `dev` the development server, which rebuilds as the page's code changes. */
-async function nextPage(dev: boolean): Promise<Page> {
+/**
+ * Next.js for this checkout: the built page, or with `dev` the development server, which rebuilds as the page's
+ * code changes. It also serves Workflow's flow route, where the Local World delivers each run, kept in `workflowDir`.
+ */
+async function nextPage(dev: boolean, workflow: { dir: string; url: string }): Promise<Page> {
   if (!dev) await ensurePageBuilt();
-  Object.assign(process.env, NO_TELEMETRY);
+  // Naming the world keeps `withWorkflow` (next.config.js) from putting its data in the build folder.
+  Object.assign(process.env, NO_TELEMETRY, { WORKFLOW_TARGET_WORLD: 'local', WORKFLOW_LOCAL_DATA_DIR: workflow.dir, WORKFLOW_LOCAL_BASE_URL: workflow.url });
   const app = createNext({ dev, dir: ROOT });
   await app.prepare();
-  return { handle: app.getRequestHandler(), upgrade: app.getUpgradeHandler(), close: () => app.close() };
+  return {
+    handle: app.getRequestHandler(),
+    upgrade: app.getUpgradeHandler(),
+    close: async () => {
+      await app.close();
+      // The world Next.js's copy opened, found where Workflow keeps it: until closed it retries deliveries to the closed listener.
+      await (await getWorld()).close?.();
+    },
+  };
 }
 
 /** The site as a `node:http` server, for `sift run`: the API and sign-in from `respond`, everything else from the page. */
@@ -114,6 +127,12 @@ function dashboardAddresses(config: Config, port: number) {
   return { allowedHosts: [...machineNames(), ...(host && host !== 'all' ? [host] : [])], signInAddresses: signInAddresses(port) };
 }
 
+/** The listener at `address`, as this machine reaches it. */
+function fromHere(address: string, port: number): string {
+  const host = address === '::' || address === '0.0.0.0' ? '127.0.0.1' : address.includes(':') ? `[${address}]` : address;
+  return `http://${host}:${port}`;
+}
+
 /** Serve the dashboard from this process and say where it is, so one process keeps Sift online. */
 export async function serveDashboard(
   config: Config,
@@ -123,7 +142,7 @@ export async function serveDashboard(
   const { port } = options;
   // --host replaces the setting: a container listens on every interface and its port mapping decides who can reach it.
   const listen = options.host ? [options.host] : await listenAddresses(config.settings);
-  const page = await nextPage(options.dev ?? false);
+  const page = await nextPage(options.dev ?? false, { dir: config.workflowDir, url: fromHere(listen[0]!, port) });
   const servers = listen.map(() => dashboardListener(sift.respond, page));
   await Promise.all(
     servers.map(

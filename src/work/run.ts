@@ -38,18 +38,6 @@ export interface RunOptions {
 }
 
 const DAY_MS = 86_400_000;
-/**
- * How long a piece of work holds its lock past its own time limit: a model call under way may run a
- * minute over. A host that cuts the work off leaves the lock to run out about when the next tick wants it.
- */
-const HOLD_PAST_LIMIT_MS = 60_000;
-/** The longest a lock is held, for work with no limit (`runOnce`). */
-const LONGEST_HOLD_MS = 15 * 60_000;
-/**
- * How many pieces of work one tick does at once: enough that one mailbox's backlog (a minute-long model
- * call, a sync waiting on Gmail's quota) does not hold up everyone's new mail.
- */
-const AT_ONCE = 4;
 const today = (options: Pick<RunOptions, 'now'>) => Math.floor((options.now ?? Date.now)() / DAY_MS);
 /** A person's upkeep done today. */
 const upkeepKey = (person: number, day: number) => `upkeep:${person}:${day}`;
@@ -72,19 +60,19 @@ export interface PassResult {
 /** Whether a person is still there: one deleted while a pass ran is skipped, not reported. */
 const stillThere = async (store: Store, id: number) => (await listUsers(store.central)).some((u) => u.id === id);
 
-/** One pass over each mailbox in one person's database, one after another. A mailbox another pass holds is left out. */
+/** One pass over each mailbox in one person's database, one after another, with no time limit. */
 export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[]> {
   const results: PassResult[] = [];
   for (const account of await listAccounts(db)) {
-    const result = await unlessUnderWay(options, `lock:pass:${account.id}`, Infinity, () => passMailbox(db, account, options, Infinity));
+    const result = await passMailbox(db, account, options, Infinity);
     if (result) results.push(result);
   }
   return results;
 }
 
 /**
- * A piece of work a tick found due: ids only, so it can be handed to a call of its own (Vercel), and
- * whatever runs it opens everything it touches from them.
+ * A piece of work a tick found due: ids only, so it can be the argument of a Workflow run of its own
+ * (`src/app/flow.ts`), and whatever runs it opens everything it touches from them.
  */
 export type Work =
   | { kind: 'pass'; person: number; account: string }
@@ -116,24 +104,6 @@ export async function dueWork(store: Store, options: RunOptions, people?: readon
   return due;
 }
 
-/**
- * Do what is due here, `AT_ONCE` at a time, each piece starting nothing after `limitMs` from its own start,
- * as it would in a call of its own. Ticks may overlap; each piece holds a lock, so one under way is skipped.
- */
-export async function tick(store: Store, options: RunOptions, limitMs: number, people?: readonly number[]): Promise<PassResult[]> {
-  const due = await dueWork(store, options, people);
-  const results: PassResult[] = [];
-  const now = options.now ?? Date.now;
-  const worker = async () => {
-    for (let work = due.shift(); work; work = due.shift()) {
-      const result = await runWork(store, work, options, now() + limitMs);
-      if (result) results.push(result);
-    }
-  };
-  await Promise.all(Array.from({ length: AT_ONCE }, worker));
-  return results;
-}
-
 const describeWork = (work: Work) =>
   work.kind === 'pass'
     ? `${work.account}: pass`
@@ -143,21 +113,10 @@ const describeWork = (work: Work) =>
         ? 'A test run'
         : 'Deleting old records';
 
-/** Run `work` unless something else is doing it now, holding it until a little past `until`. Null when it was. */
-async function unlessUnderWay<T>(options: RunOptions, lock: string, until: number, work: () => Promise<T>): Promise<T | null> {
-  const ms = Math.min(until - (options.now ?? Date.now)(), LONGEST_HOLD_MS) + HOLD_PAST_LIMIT_MS;
-  const token = await options.ephemeral.claim(lock, ms);
-  if (token === null) return null;
-  try {
-    return await work();
-  } finally {
-    await options.ephemeral.release(lock, token);
-  }
-}
-
 /**
  * Run one piece of due work, starting nothing after `until`. Everything it touches is opened here from the
- * piece's ids. A failure is logged; the piece is due again at the next tick.
+ * piece's ids. A failure is logged; the piece is due again at the next tick. One piece at a time is the caller's
+ * to hold to: a Workflow run's key (`src/app/flow.ts`).
  */
 export const runWork = (store: Store, work: Work, options: RunOptions, until: number): Promise<PassResult | null> =>
   traced('sift.work', work.kind, {}, async (span) => {
@@ -182,16 +141,15 @@ export const runWork = (store: Store, work: Work, options: RunOptions, until: nu
           return null;
         }
         case 'pass':
-          return account ? await unlessUnderWay(options, `lock:pass:${account.id}`, until, () => passMailbox(db, account, options, until)) : null;
+          return account ? await passMailbox(db, account, options, until) : null;
         case 'inbox':
-          if (account) await unlessUnderWay(options, `lock:inbox:${work.run}`, until, () => goThroughInbox(db, account, work.run, options, until));
+          if (account) await goThroughInbox(db, account, work.run, options, until);
           return null;
-        case 'eval':
-          await unlessUnderWay(options, `lock:eval:${work.person}:${work.run}`, until, async () => {
-            const tier = options.model ? await options.model(db) : null;
-            if (tier) await continueEval({ db, judge: tier.judge, model: tier.model, ...(options.now ? { now: options.now } : {}) }, work.run, until);
-          });
+        case 'eval': {
+          const tier = options.model ? await options.model(db) : null;
+          if (tier) await continueEval({ db, judge: tier.judge, model: tier.model, ...(options.now ? { now: options.now } : {}) }, work.run, until);
           return null;
+        }
       }
     } catch (error) {
       // A person deleted meanwhile has nothing left to report.

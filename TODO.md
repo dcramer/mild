@@ -96,7 +96,7 @@ Sift has run on the owner's inbox while off. Nothing that changes the mailbox ha
 
 - [ ] **A contact for the hosted Sift.** Its terms, privacy policy and security page (`web/src/views/legal.tsx`) send questions to the repository's public issues and security reports to GitHub's private reporting, for want of an address of its own. Give it one (a setting beside `SIFT_CLOUD`) and name it in those pages and in the Google consent screen.
 - [ ] The person's words to the label model, and what it suggests, are encrypted, but the labels made from them (names, descriptions) are plain. Decide one way.
-- [ ] **Vercel.** Not yet seen: `waitUntil` keeping a long piece going past the reply for its whole limit. The Deploy Button ([docs/vercel.md](docs/vercel.md)) is untried: check that it adds Neon and Upstash, and that Upstash sets `REDIS_URL`.
+- [ ] **Vercel.** Not yet seen: a Workflow run on the Vercel World (the cron's tick beginning runs, a step opening the instance's Sift), and whether Workflow's own spans reach Sentry linked to the tick that began them. The Deploy Button ([docs/vercel.md](docs/vercel.md)) is untried: check that it adds Neon and Upstash, and that Upstash sets `REDIS_URL`.
   - **Setup in the browser.** No `sift init`: the Google client and settings entered in the dashboard, with the first visitor claiming the install safely.
   - **A public address.** Sign-in is the only gate there; review the session and write protections with that in mind.
 - [ ] **Fewer Gmail calls.** Each pass fetches a new Google access token for each mailbox (`clientFor`); keeping it until it expires needs it encrypted in `Ephemeral`. An idle pass still opens the model sign-in and lists waiting suggestions and their text.

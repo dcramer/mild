@@ -11,12 +11,18 @@ export const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 /** Next.js reports how it is used to Vercel unless told not to; Sift sends nothing it is not asked to. */
 export const NO_TELEMETRY = { NEXT_TELEMETRY_DISABLED: '1' };
 
-/** What the page is built from: its own code, and the server's that it takes types and its policy from. */
+/**
+ * What the page is built from: its own code, the server's that it takes types and its policy from, and the
+ * Workflow code that runs in Next.js here (the rest of src/ in its build is the Vercel host's).
+ */
 const SOURCES = [
   'app',
   'web/src',
   'public',
   'proxy.ts',
+  'instrumentation.ts',
+  'src/app/flow.ts',
+  'src/app/process.ts',
   'next.config.js',
   'postcss.config.mjs',
   'package.json',

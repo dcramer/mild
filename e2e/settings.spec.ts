@@ -204,3 +204,18 @@ test.describe('Settings', () => {
     await query(page).toBe(at);
   });
 });
+
+test.describe('Check now', () => {
+  test.use({ work: true });
+
+  test('passes the mailboxes in a Workflow run, and says when', async ({ page }) => {
+    await page.goto('/?settings=1');
+    const check = settingsActive(page).getByText('Check for mail').locator('xpath=ancestor::*[.//button][1]');
+    await expect(check.getByText('Starting.')).toBeVisible();
+    await check.getByRole('button', { name: 'Check now' }).click();
+    await expect(async () => {
+      await page.reload();
+      await expect(check.getByText('Last checked just now.')).toBeVisible({ timeout: 1000 });
+    }).toPass();
+  });
+});

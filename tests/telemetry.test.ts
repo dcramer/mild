@@ -18,7 +18,7 @@ import { PROPOSAL_PROMPT, PROPOSAL_TOOL } from '../src/triage/proposal.ts';
 import { FILL_TOOL, FIND_TOOL } from '../src/triage/rule-draft.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
 import { loadKeyring } from '../src/secrets.ts';
-import { checkedIn, continued, flushTelemetry, identify, logged, reportError, scrub, startTelemetry, traced, tracedFetch } from '../src/telemetry.ts';
+import { checkedIn, flushTelemetry, identify, logged, reportError, scrub, startTelemetry, traced, tracedFetch } from '../src/telemetry.ts';
 import { triageAccount } from '../src/work/triage.ts';
 import { firstAccount, freshStore, openUserDb, personWith, raw } from './fixtures.ts';
 import { ACCOUNT, facts, quietSources, SAMPLE_LABELS, storeExample } from './helpers.ts';
@@ -317,7 +317,7 @@ describe('the rest of what a trace shows', () => {
       await ephemeral.get('signin:secret-state');
       await ephemeral.set('signin:secret-state', { a: 1 }, 60_000);
       await ephemeral.take('signin:secret-state');
-      await ephemeral.claim(`lock:pass:${ACCOUNT}`, 1000);
+      await ephemeral.claim('upkeep:1:20000', 1000);
     });
 
     const { spans, text } = await delivered();
@@ -325,31 +325,25 @@ describe('the rest of what a trace shows', () => {
       ['signin', 'cache.get', false],
       ['signin', 'cache.put', undefined],
       ['signin', 'cache.get', true],
-      ['SET lock', 'db', undefined],
+      ['SET upkeep', 'db', undefined],
       ['pass', 'sift.work', undefined],
     ]);
     for (const content of ['secret-state', ACCOUNT]) expect(text).not.toContain(content);
   });
 
-  it('follows a piece of work handed to the deployment, and leaves the query off the request', async () => {
-    const received: Headers[] = [];
-    const server = createServer((request, response) => {
-      received.push(new Headers(request.headers as Record<string, string>));
-      response.writeHead(202).end();
-    });
+  it('names a call out by its address, and leaves the query off', async () => {
+    const server = createServer((_request, response) => response.writeHead(202).end());
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const { port } = server.address() as AddressInfo;
     try {
-      await traced('sift.tick', 'tick', {}, () => tracedFetch(`http://127.0.0.1:${port}/api/work?code=secret`, { method: 'POST' }, true));
-      await continued(received[0]!, () => traced('sift.work', 'pass', {}, async () => {}));
+      await traced('sift.work', 'pass', {}, () => tracedFetch(`http://127.0.0.1:${port}/token?code=secret`, { method: 'POST' }));
     } finally {
       server.close();
     }
 
-    const { spans, attributes, text } = await delivered();
-    const url = `http://127.0.0.1:${port}/api/work`;
+    const { attributes, text } = await delivered();
+    const url = `http://127.0.0.1:${port}/token`;
     expect(attributes(`POST ${url}`)).toMatchObject({ 'sentry.op': 'http.client', 'url.full': url, 'server.port': port, 'http.response.status_code': 202 });
-    expect(new Set(spans.map((s) => s.trace_id)).size).toBe(1);
     expect(text).not.toContain('secret');
   });
 

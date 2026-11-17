@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { RETENTION_DAYS, pruneOld } from '../src/work/retention.ts';
 import { KEEP_BODY_DAYS } from '../src/work/bodies.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { type RunOptions, dueWork, tick, upkeep } from '../src/work/run.ts';
+import { type RunOptions, dueWork, upkeep } from '../src/work/run.ts';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { recordSync } from '../src/store/accounts.ts';
 import { type ActionType, finishAction, insertPendingAction, unsubscribedAt } from '../src/store/actions.ts';
@@ -14,7 +14,7 @@ import { addRule } from '../src/store/rules.ts';
 import { MAX_ATTEMPTS, startRun } from '../src/store/runs.ts';
 import type { Decision } from '../src/triage/types.ts';
 import { modelRun, raw, onePerson } from './fixtures.ts';
-import { ACCOUNT, DAY, facts } from './helpers.ts';
+import { ACCOUNT, DAY, facts, workDue } from './helpers.ts';
 import type { Store } from '../src/store/store.ts';
 
 const OLD = 10 * DAY;
@@ -163,12 +163,12 @@ describe('retention', () => {
       now: () => now,
     });
     await acted('first');
-    await tick(store, at(NOW), Infinity);
+    await workDue(store, at(NOW), Infinity);
     // Something else grows old after the first prune: it stays until the next day.
     await acted('second');
-    await tick(store, at(NOW), Infinity);
+    await workDue(store, at(NOW), Infinity);
     expect(await left('messages', 'id')).toEqual(['second']);
-    await tick(store, at(NOW + DAY), Infinity);
+    await workDue(store, at(NOW + DAY), Infinity);
     expect(logs.filter((line) => line.startsWith('Forgot'))).toEqual([
       'Forgot 1 message with nothing newer than 365 days',
       'Forgot 1 message with nothing newer than 365 days',
@@ -181,7 +181,7 @@ describe('retention', () => {
     const upkeepDue = async () => (await dueWork(store, options)).filter((work) => work.kind === 'upkeep');
     expect(await upkeepDue()).toHaveLength(1);
     expect(await upkeepDue()).toHaveLength(1);
-    await tick(store, options, Infinity);
+    await workDue(store, options, Infinity);
     expect(await upkeepDue()).toEqual([]);
   });
 });

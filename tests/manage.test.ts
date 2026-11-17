@@ -5,7 +5,6 @@ import { continueInboxRun } from '../src/work/inbox.ts';
 import { REACH, goingInboxRuns, inboxProgress, modelShare, startInboxRuns, stopInboxRuns } from '../src/store/inbox.ts';
 import { averageCall } from '../src/store/runs.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { type RunOptions, tick } from '../src/work/run.ts';
 import { triageAccount } from '../src/work/triage.ts';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { people } from '../src/store/people.ts';
@@ -19,7 +18,7 @@ import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { EXAMPLE_KEEP_DAYS } from '../src/store/examples.ts';
 import { preferences, setActive } from '../src/store/preferences.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
-import { ACCOUNT, DAY, FakeMailbox, UNSURE, facts, quietSources, rawMessage, storeExample, testModel } from './helpers.ts';
+import { ACCOUNT, DAY, FakeMailbox, UNSURE, facts, quietSources, rawMessage, storeExample, testModel, workDue } from './helpers.ts';
 import { type Reply, firstAccount, modelRun, raw, startDashboard, onePerson, withReason } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 
@@ -1106,21 +1105,6 @@ describe('going through the inbox', () => {
 });
 
 describe('ticks', () => {
-  it('ticks that overlap skip work another has under way', async () => {
-    let passes = 0;
-    const options: RunOptions = {
-      ephemeral: memoryEphemeral(),
-      connect: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 5));
-        passes++;
-        throw new Error('offline');
-      },
-      log: () => {},
-    };
-    await Promise.all([tick(store, options, Infinity), tick(store, options, Infinity), tick(store, options, Infinity)]);
-    expect(passes).toBe(1);
-  });
-
   it('deletes examples a year after their answer, when it starts and once a day after', async () => {
     await storeExample(db, ACCOUNT, { id: 'old', from: 'a@example.org', label: 'personal', markedAt: 0 });
     await storeExample(db, ACCOUNT, { id: 'soon', from: 'd@example.org', label: 'personal', markedAt: 2 * DAY + DAY / 5 });
@@ -1133,7 +1117,7 @@ describe('ticks', () => {
     const ticksAt = async (times: number[]) => {
       const ephemeral = memoryEphemeral();
       for (const at of times)
-        await tick(
+        await workDue(
           store,
           {
             ephemeral,

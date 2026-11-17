@@ -4,7 +4,7 @@
  *
  *   node .claude/skills/verify-sift/scripts/seed.ts <home> <gmail.json> [--bare | --on]
  *
- * The mail goes through the real pass (`tick`, with sift off), so decisions, labels, suggestion
+ * The mail goes through the real pass (`workDue`, with sift off), so decisions, labels, suggestion
  * bodies and proposals are what sift itself would record. Only Gmail is faked, at the `GmailApi` and
  * `Mailbox` ports. Writes the fake Gmail's filters to <gmail.json>, for serve.ts to carry on from, and prints one
  * line: the `sift_session` cookie value for the connected account.
@@ -16,7 +16,6 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { existsSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadConfig } from '../../../../src/config.ts';
-import { tick } from '../../../../src/work/run.ts';
 import { checkRuleFilters, writeRuleFilter } from '../../../../src/actions/rule-filters.ts';
 import { memoryEphemeral } from '../../../../src/ephemeral/ephemeral.ts';
 import { applyFeedback, pendingSuggestions } from '../../../../src/learn/feedback.ts';
@@ -34,7 +33,7 @@ import { openStore } from '../../../../src/store/store.ts';
 import { addRule } from '../../../../src/store/rules.ts';
 import type { JudgeInput } from '../../../../src/triage/stages/model.ts';
 import { LEAVE_IN_INBOX } from '../../../../src/triage/types.ts';
-import { FakeMailbox, withSampleLabels } from '../../../../tests/helpers.ts';
+import { FakeMailbox, withSampleLabels, workDue } from '../../../../tests/helpers.ts';
 
 const ACCOUNT = 'me@example.org';
 const WORK = 'me@work.example.org';
@@ -192,7 +191,7 @@ const standIn = async () => ({
 // Four passes: three use up the Ops alerts' tries with the model, and the fourth leaves them to the user.
 const ephemeral = memoryEphemeral();
 for (let pass = 0; pass < 4; pass++) {
-  for (const result of await tick(store, { ephemeral, model: standIn, connect: () => ({ api, mailbox }), log: () => {} }, Infinity))
+  for (const result of await workDue(store, { ephemeral, model: standIn, connect: () => ({ api, mailbox }), log: () => {} }, Infinity))
     if (result.error) throw new Error(`seed pass failed: ${result.error}`);
 }
 if (mailbox.modifyCalls > 0) throw new Error('seed pass changed the fake mailbox while sift was off');
@@ -221,7 +220,7 @@ if (variant === '--on') {
   inbox.push(...later);
   for (const { raw } of later) mailbox.labels.set(raw.id, [...raw.labelIds]);
   arriving = later;
-  for (const result of await tick(store, { ephemeral, model: standIn, connect: () => ({ api, mailbox }), log: () => {} }, Infinity))
+  for (const result of await workDue(store, { ephemeral, model: standIn, connect: () => ({ api, mailbox }), log: () => {} }, Infinity))
     if (result.error) throw new Error(`seed pass failed: ${result.error}`);
   const [lin, sale] = later.map((m) => m.raw.id);
   if (!mailbox.labels.get(lin ?? '')?.some((l) => l.endsWith('sift/review'))) throw new Error('the pass with sift on did not leave Lin for the user');

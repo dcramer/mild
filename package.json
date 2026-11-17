@@ -12,8 +12,8 @@
     "sift": "node --disable-warning=ExperimentalWarning src/cli/main.ts",
     "typecheck": "tsc --noEmit && next typegen && tsc --noEmit -p tsconfig.web.json",
     "lint": "oxlint",
-    "format": "oxlint --fix && oxfmt src tests web/src app proxy.ts next.config.js vitest.config.ts playwright.config.ts e2e .claude/skills/verify-sift/scripts",
-    "format:check": "oxfmt --check src tests web/src app proxy.ts next.config.js vitest.config.ts playwright.config.ts e2e .claude/skills/verify-sift/scripts",
+    "format": "oxlint --fix && oxfmt src tests web/src app proxy.ts instrumentation.ts next.config.js vitest.config.ts playwright.config.ts e2e .claude/skills/verify-sift/scripts",
+    "format:check": "oxfmt --check src tests web/src app proxy.ts instrumentation.ts next.config.js vitest.config.ts playwright.config.ts e2e .claude/skills/verify-sift/scripts",
     "test": "vitest run",
     "e2e": "playwright test",
     "knip": "knip",
@@ -38,6 +38,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@workflow/vitest": "5.0.9",
     "cn": "^0.5.2",
     "drizzle-kit": "0.31.11",
     "knip": "^6.45.1",
@@ -69,6 +70,7 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "redis": "^5.12.2",
+    "workflow": "5.5.0",
     "zod": "^4.6.7"
   },
   "simple-git-hooks": {
@@ -79,7 +81,7 @@
       "oxlint --fix",
       "oxfmt"
     ],
-    "{proxy,vitest.config,playwright.config}.ts": [
+    "{proxy,instrumentation,vitest.config,playwright.config}.ts": [
       "oxlint --fix",
       "oxfmt"
     ],

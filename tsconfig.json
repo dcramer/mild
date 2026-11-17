@@ -21,6 +21,6 @@
     "typeRoots": ["./node_modules/@types"],
     "types": ["node"]
   },
-  "include": ["src", "api", "tests", "vitest.config.ts", "playwright.config.ts", "e2e", ".claude/skills/verify-sift/scripts"],
+  "include": ["src", "api", "instrumentation.ts", "tests", "vitest.config.ts", "playwright.config.ts", "e2e", ".claude/skills/verify-sift/scripts"],
   "exclude": ["node_modules"]
 }

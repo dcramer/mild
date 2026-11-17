@@ -40,8 +40,11 @@ const FRAME_ONLY = [...directives(FRAME_POLICY)].filter((d) => !onPage.has(d));
  */
 const framePolicy = (text: string) => text.includes('/api/message/html?') || FRAME_ONLY.some((d) => text.includes(`directive: "${d}"`));
 
-/** Starts verify-sift's `serve.ts` (the dashboard alone, with a fake Gmail behind its filter control) on a copy of the seeded home. */
-async function start(variant: Variant, cloud: boolean) {
+/**
+ * Starts verify-sift's `serve.ts` (the dashboard alone, with a fake Gmail behind its filter control) on a copy of the seeded home;
+ * with `work`, also beginning what is due as Workflow runs when the page presses for it.
+ */
+async function start(variant: Variant, cloud: boolean, work: boolean) {
   const template = JSON.parse(process.env[`${TEMPLATES}_${variant}`] ?? 'null') as { dir: string; cookie: string } | null;
   if (!template) throw new Error('e2e/global-setup.ts did not run');
   const dir = mkdtempSync(join(tmpdir(), 'sift-e2e-run-'));
@@ -51,7 +54,14 @@ async function start(variant: Variant, cloud: boolean) {
     const port = await freePort();
     const child = spawn(
       'node',
-      ['--disable-warning=ExperimentalWarning', join(SCRIPTS, 'serve.ts'), join(dir, 'home'), String(port), join(dir, 'gmail.json')],
+      [
+        '--disable-warning=ExperimentalWarning',
+        join(SCRIPTS, 'serve.ts'),
+        join(dir, 'home'),
+        String(port),
+        join(dir, 'gmail.json'),
+        ...(work ? ['--work'] : []),
+      ],
       {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, SIFT_CLOUD: String(cloud) },
@@ -86,14 +96,15 @@ async function start(variant: Variant, cloud: boolean) {
  * Every test gets a signed-in page on its own seeded dashboard, at `/`-relative URLs, and fails if the page logs
  * an error or throws: a content security policy violation shows up only there.
  */
-export const test = base.extend<{ variant: Variant; cloud: boolean; allow: string[]; sift: Awaited<ReturnType<typeof start>> }>({
+export const test = base.extend<{ variant: Variant; cloud: boolean; work: boolean; allow: string[]; sift: Awaited<ReturnType<typeof start>> }>({
   variant: ['full', { option: true }],
   /** `SIFT_CLOUD`: a Sift run as a service. False is someone's own copy. */
   cloud: [false, { option: true }],
+  work: [false, { option: true }],
   /** Console errors a test expects, by part of their text: `status of 409` where the server refuses and the page says why. */
   allow: [[], { option: true }],
-  sift: async ({ variant, cloud }, use) => {
-    const sift = await start(variant, cloud);
+  sift: async ({ variant, cloud, work }, use) => {
+    const sift = await start(variant, cloud, work);
     await use(sift);
     await sift.stop();
   },

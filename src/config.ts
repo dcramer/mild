@@ -84,6 +84,8 @@ export interface Config {
   setupStatePath: string;
   /** The secret in the dashboard's access link. */
   dashboardKeyPath: string;
+  /** Workflow's Local World: the runs `sift run` has begun, and the key its deliveries carry. */
+  workflowDir: string;
   /** From `SIFT_KEY` and `SIFT_OLD_KEYS`: what the credentials above are encrypted with. */
   keys: Keyring;
   settings: Settings;
@@ -111,6 +113,7 @@ export function loadConfig(env: Env = process.env): Config {
     googleClientPath: join(home, 'google-client.json'),
     setupStatePath: join(home, 'setup.json'),
     dashboardKeyPath: join(home, 'dashboard-key'),
+    workflowDir: join(home, 'workflow'),
     keys: loadKeyring(env),
     settings,
   };
