@@ -856,6 +856,7 @@ export function SystemView() {
         <p className="flex flex-wrap gap-x-5 gap-y-2 text-muted-foreground">
           <FinePrint />
         </p>
+        <FinePrint list />
         <PageFoot />
       </Section>
 

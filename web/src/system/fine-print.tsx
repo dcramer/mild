@@ -1,13 +1,38 @@
 import { TextLink } from './type.tsx';
 
-/** The terms, the privacy policy and the security page, as links in a line: wherever someone may look for them. `source` adds the code. */
-export function FinePrint({ source = false }: { source?: boolean }) {
+const LINKS = [
+  { href: '/terms', label: 'Terms' },
+  { href: '/privacy', label: 'Privacy' },
+  { href: '/security', label: 'Security' },
+];
+const SOURCE = { href: 'https://github.com/dcramer/sift', label: 'Open source' };
+
+/**
+ * The terms, the privacy policy and the security page, wherever someone may look for them: as links in a
+ * line, or as a `list`, one a row at the reading size, where they sit under bigger links (the phone menu).
+ * `source` adds the code.
+ */
+export function FinePrint({ source = false, list = false }: { source?: boolean; list?: boolean }) {
+  const links = source ? [...LINKS, SOURCE] : LINKS;
+  if (list)
+    return (
+      <ul className="flex flex-col text-muted-foreground">
+        {links.map((link) => (
+          <li key={link.href}>
+            <a href={link.href} className="flex min-h-11 items-center hover:text-foreground">
+              {link.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    );
   return (
     <>
-      <TextLink href="/terms">Terms</TextLink>
-      <TextLink href="/privacy">Privacy</TextLink>
-      <TextLink href="/security">Security</TextLink>
-      {source ? <TextLink href="https://github.com/dcramer/sift">Open source</TextLink> : null}
+      {links.map((link) => (
+        <TextLink key={link.href} href={link.href}>
+          {link.label}
+        </TextLink>
+      ))}
     </>
   );
 }
