@@ -23,7 +23,7 @@ async function failedWith(error: string | Error): Promise<unknown> {
     typeof error === 'string' ? models : throwing,
     faux.getModel(),
   )({
-    evidence: { facts: f, known: deriveFacts(f), body: SECRET, sender: { messagesSeen: 1, userHasWritten: false, pastDispositions: {} } },
+    evidence: { facts: f, known: deriveFacts(f), body: SECRET, sender: { messagesSeen: 1, userHasWritten: false } },
     labels: DEFAULT_LABELS,
   });
   return (verdict as { failed?: unknown }).failed;

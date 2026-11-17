@@ -2,7 +2,7 @@ import type { Facts } from '../facts.ts';
 import type { Standing } from '../standing.ts';
 import { type RuleHit, describeRule, ruleOutcome } from './rules.ts';
 import { type Shot, pickShots } from '../fewshot.ts';
-import { type Decision, type Disposition, type Label, type MessageFacts, type Stage, type Unfinished, labelled } from '../types.ts';
+import { type Decision, type Label, type MessageFacts, type Stage, type Unfinished, labelled } from '../types.ts';
 
 /** Everything the model is shown about one message. Gathered by deterministic code, never by the model. */
 export interface Evidence {
@@ -15,16 +15,14 @@ export interface Evidence {
     messagesSeen: number;
     /** Whether the account owner has ever written to this address. Null if that could not be checked. */
     userHasWritten: boolean | null;
-    /** What sift did with earlier mail from this address. */
-    pastDispositions: Partial<Record<Disposition, number>>;
     /** How the owner regards them, and why. Absent when it was not worked out. */
     standing?: { standing: Standing; why: string };
-    /** What their earlier mail was, by label id, most first. */
-    pastLabels?: { id: string; messages: number }[];
+    /** What the owner said their earlier mail was, by an answer or a rule, by label id, most first. Never a model's guess. */
+    ownerLabels?: { id: string; messages: number }[];
     firstSeenAt?: number | null;
   };
   /** The same for everyone at the sender's domain. Absent for a domain anyone can get an address at. */
-  domain?: { messages: number; senders: number; standing: Standing; why: string; pastLabels: { id: string; messages: number }[] };
+  domain?: { messages: number; senders: number; standing: Standing; why: string; ownerLabels: { id: string; messages: number }[] };
   /** What the owner's rule says this sender's mail usually is. The model may find this message is something else. */
   prior?: { labelId: string; labelName: string; when?: string };
 }

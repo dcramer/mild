@@ -1,23 +1,17 @@
 import { createHash } from 'node:crypto';
 import {
   type EVAL_STATUSES,
-  alias,
   and,
   correspondents,
   count,
-  decisions,
   desc,
   eq,
   evalResults,
   evalRuns,
   examples as exampleRows,
   isNotNull,
-  lt,
   lte,
-  max,
   messages,
-  min,
-  ne,
   sql,
 } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
@@ -58,39 +52,16 @@ export interface EvalRequest {
 
 /**
  * What the model would have been shown when this message arrived, from what is stored: the recorded
- * headers, the example's text, and the sender's history up to the message's first decision. Nothing the
- * user's answer changed afterwards is in it, and Gmail is not asked.
+ * headers, the example's text, how much the sender had sent by then and whether the owner has written to
+ * them. Nothing the user's answer changed afterwards is in it, and Gmail is not asked. Less than new mail
+ * gets: no standing, and none of the sender's other labelled mail.
  */
 async function storedEvidence(db: Sql, facts: MessageFacts, body: string | null): Promise<Evidence> {
-  const { accountId, messageId } = facts;
-  const [{ first } = { first: null }] = await db
-    .select({ first: min(decisions.id) })
-    .from(decisions)
-    .where(and(eq(decisions.accountId, accountId), eq(decisions.messageId, messageId)));
+  const { accountId } = facts;
   const [{ n } = { n: 0 }] = await db
     .select({ n: count() })
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.fromAddress, facts.from.address), lte(messages.receivedAt, facts.receivedAt)));
-  const x = alias(decisions, 'x');
-  const past = await db
-    .select({ disposition: decisions.disposition, n: count() })
-    .from(decisions)
-    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
-    .where(
-      and(
-        eq(decisions.accountId, accountId),
-        eq(messages.fromAddress, facts.from.address),
-        ne(decisions.messageId, messageId),
-        eq(
-          decisions.id,
-          db
-            .select({ id: max(x.id) })
-            .from(x)
-            .where(and(eq(x.accountId, decisions.accountId), eq(x.messageId, decisions.messageId), lt(x.id, first ?? 0))),
-        ),
-      ),
-    )
-    .groupBy(decisions.disposition);
   const [written] = await db
     .select({ yes: correspondents.userHasWritten })
     .from(correspondents)
@@ -102,7 +73,6 @@ async function storedEvidence(db: Sql, facts: MessageFacts, body: string | null)
     sender: {
       messagesSeen: Math.max(1, n),
       userHasWritten: written?.yes ?? null,
-      pastDispositions: Object.fromEntries(past.map((r) => [r.disposition, r.n])),
     },
   };
 }

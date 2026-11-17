@@ -73,7 +73,7 @@ describe('examples in the prompt', () => {
     facts: f,
     known: deriveFacts(f),
     body: 'The email itself.',
-    sender: { messagesSeen: 1, userHasWritten: false, pastDispositions: {} },
+    sender: { messagesSeen: 1, userHasWritten: false },
   };
 
   it('shows only its facts, sender, subject, an excerpt and the label, fenced as untrusted, before the email', () => {
@@ -139,7 +139,7 @@ describe('examples in the prompt', () => {
 
 describe('the model stage', () => {
   const f = facts({ messageId: 'now' });
-  const evidence = { facts: f, known: deriveFacts(f), body: null, sender: { messagesSeen: 1, userHasWritten: false, pastDispositions: {} } };
+  const evidence = { facts: f, known: deriveFacts(f), body: null, sender: { messagesSeen: 1, userHasWritten: false } };
 
   it('hands the judge the examples it picked from what the port supplied, and none without a port', async () => {
     const seen: JudgeInput[] = [];

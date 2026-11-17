@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { MAX_EVAL_EXAMPLES, type EvalRequest, continueEval, getEvalRun, listEvalRuns, startEval } from '../src/learn/evals.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
 import { openUserDb, raw } from './fixtures.ts';
-import { recordDecision } from '../src/store/decisions.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import { score } from '../src/triage/score.ts';
@@ -115,7 +114,7 @@ describe('replaying the model over stored examples', () => {
     expect(run.withSenderExample).toEqual({ answered: 2, right: 2 });
   });
 
-  it('rebuilds the sender history as it stood when the message arrived, without what the answer changed', async () => {
+  it('counts the mail the sender had sent when the message arrived, not what came after', async () => {
     const news = { address: 'list@example.com', domain: 'example.com' };
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'old', from: news, receivedAt: 10 })], '3');
     await recordSync(
@@ -125,12 +124,6 @@ describe('replaying the model over stored examples', () => {
       '4',
     );
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'later', from: news, receivedAt: 30 })], '5');
-    const agent = { subscription: 'preserve', stage: 'model', reason: 'r' } as const;
-    await recordDecision(db, ACCOUNT, 'old', { ...agent, disposition: 'archive' });
-    await recordDecision(db, ACCOUNT, 'judged', { ...agent, disposition: 'review' });
-    // After the user answered: the earlier message was corrected and a later one arrived.
-    await recordDecision(db, ACCOUNT, 'old', { ...agent, stage: 'rules', disposition: 'keep' });
-    await recordDecision(db, ACCOUNT, 'later', { ...agent, stage: 'rules', disposition: 'keep' });
     await raw(db).run(
       `INSERT INTO examples (account_id, message_id, disposition, label_id, marked_at, status, body_text)
        VALUES (?, 'judged', 'keep', 'personal', 9, 'captured', 'Hello.')`,
@@ -144,7 +137,7 @@ describe('replaying the model over stored examples', () => {
       facts: { messageId: 'judged', from: news },
       known: { listId: 'l.example.com' },
       body: 'Hello.',
-      sender: { messagesSeen: 2, userHasWritten: true, pastDispositions: { archive: 1 } },
+      sender: { messagesSeen: 2, userHasWritten: true },
     });
   });
 

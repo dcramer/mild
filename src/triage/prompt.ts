@@ -39,9 +39,6 @@ export function buildPrompt(input: JudgeInput): string {
   const { facts, sender } = evidence;
   const people = (list: typeof facts.to) => (list.length === 0 ? '(none)' : list.map((a) => a.address).join(', '));
   const written = sender.userHasWritten === null ? 'unknown' : sender.userHasWritten ? 'yes' : 'no';
-  const past = Object.entries(sender.pastDispositions)
-    .map(([disposition, n]) => `${disposition} ${n}`)
-    .join(', ');
 
   return [
     '# Labels',
@@ -56,8 +53,7 @@ export function buildPrompt(input: JudgeInput): string {
     ...describeFacts(evidence.known),
     `Messages seen from this sender: ${sender.messagesSeen}`,
     `Owner has written to this sender: ${written}`,
-    `Earlier mail from this sender was: ${past === '' ? '(no history)' : past}`,
-    ...(sender.pastLabels && sender.pastLabels.length > 0 ? [`Earlier mail from this sender was labelled: ${tally(sender.pastLabels)}`] : []),
+    ...(sender.ownerLabels && sender.ownerLabels.length > 0 ? [`The owner labelled earlier mail from this sender: ${tally(sender.ownerLabels)}`] : []),
     ...(sender.firstSeenAt
       ? [`First heard from this sender: ${Math.max(0, Math.round((facts.receivedAt - sender.firstSeenAt) / 86_400_000))} days before this message`]
       : []),
@@ -65,7 +61,7 @@ export function buildPrompt(input: JudgeInput): string {
     ...(evidence.domain
       ? [
           `Others at ${facts.from.domain}: ${evidence.domain.messages} messages from ${evidence.domain.senders} addresses${
-            evidence.domain.pastLabels.length > 0 ? `, labelled ${tally(evidence.domain.pastLabels)}` : ''
+            evidence.domain.ownerLabels.length > 0 ? `, the owner labelled ${tally(evidence.domain.ownerLabels)}` : ''
           }; the domain's standing: ${evidence.domain.standing} (${evidence.domain.why})`,
         ]
       : []),
@@ -123,7 +119,7 @@ export const PROMPT_TEMPLATE = `${SYSTEM_PROMPT}\n\n${buildPrompt({
     },
     known: blank,
     body: '',
-    sender: { messagesSeen: 0, userHasWritten: null, pastDispositions: {} },
+    sender: { messagesSeen: 0, userHasWritten: null },
   },
   labels: [],
   examples: [{ messageId: '', fromAddress: '', fromDomain: '', subject: '', excerpt: '', facts: blank, labelId: '', markedAt: 0 }],

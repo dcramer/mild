@@ -8,6 +8,7 @@ import {
   decisions,
   desc,
   eq,
+  exists,
   feedback,
   ilike,
   inArray,
@@ -15,11 +16,12 @@ import {
   max,
   messages,
   min,
+  or,
   sql,
+  type SQL,
 } from './query.ts';
 import type { Sql } from './sql.ts';
 import { type Standing, isSharedDomain, standingOf } from '../triage/standing.ts';
-import type { Disposition } from '../triage/types.ts';
 import { listLabels } from './labels.ts';
 import { listRules } from './rules.ts';
 
@@ -36,26 +38,6 @@ const current = (db: Sql) =>
   );
 
 const ofMessage = (t: typeof decisions) => and(eq(messages.accountId, t.accountId), eq(messages.id, t.messageId));
-
-/** What sift has recorded about mail from an address: how much, and what was done with it. */
-export async function senderHistory(
-  db: Sql,
-  accountId: string,
-  address: string,
-): Promise<{ messagesSeen: number; pastDispositions: Partial<Record<Disposition, number>> }> {
-  const [{ n }] = (await db
-    .select({ n: count() })
-    .from(messages)
-    .where(and(eq(messages.accountId, accountId), eq(messages.fromAddress, address)))) as [{ n: number }];
-  // The current decision for each earlier message from this sender.
-  const rows = await db
-    .select({ disposition: decisions.disposition, n: count() })
-    .from(decisions)
-    .innerJoin(messages, ofMessage(decisions))
-    .where(and(eq(decisions.accountId, accountId), eq(messages.fromAddress, address), current(db)))
-    .groupBy(decisions.disposition);
-  return { messagesSeen: n, pastDispositions: Object.fromEntries(rows.map((r) => [r.disposition, r.n])) };
-}
 
 const CORRESPONDENT_TTL_MS = 7 * 86_400_000;
 
@@ -136,7 +118,12 @@ export interface SenderFacts {
   senders: number;
   /** What their mail currently is, by label id, most first. */
   labels: { id: string; messages: number }[];
-  /** Share of labelled mail that got the commonest label. Null with fewer than three labelled. */
+  /**
+   * What the owner said their mail is, by an answer or a rule, by label id, most first. Unlike `labels`, no
+   * model's guess: what the model is shown of a sender's history, so an early guess is not handed back to it as fact.
+   */
+  answered: { id: string; messages: number }[];
+  /** Share of the mail the owner labelled that got the commonest label. Null with fewer than three labelled. */
   consistency: number | null;
   /** The owner's answers about their mail: sift right, sift wrong. */
   answers: { right: number; wrong: number };
@@ -164,13 +151,27 @@ async function facts(db: Sql, accountId: string, who: { address: string } | { do
     .where(and(eq(messages.accountId, accountId), eq(column, value)))) as [
     { n: number; first: number | null; last: number | null; recent: number; senders: number },
   ];
-  const labels = (await db
-    .select({ id: decisions.labelId, messages: count() })
-    .from(decisions)
-    .innerJoin(messages, ofMessage(decisions))
-    .where(and(eq(decisions.accountId, accountId), eq(column, value), isNotNull(decisions.labelId), current(db)))
-    .groupBy(decisions.labelId)
-    .orderBy(desc(count()), asc(decisions.labelId))) as SenderFacts['labels'];
+  const tally = async (also?: SQL) =>
+    (await db
+      .select({ id: decisions.labelId, messages: count() })
+      .from(decisions)
+      .innerJoin(messages, ofMessage(decisions))
+      .where(and(eq(decisions.accountId, accountId), eq(column, value), isNotNull(decisions.labelId), current(db), also))
+      .groupBy(decisions.labelId)
+      .orderBy(desc(count()), asc(decisions.labelId))) as SenderFacts['labels'];
+  const labels = await tally();
+  // An answer is recorded as a decision of the rules stage, as a rule's is; agreeing with sift leaves its decision standing, with a `right` answer on it.
+  const answered = await tally(
+    or(
+      eq(decisions.stage, 'rules'),
+      exists(
+        db
+          .select({ id: feedback.id })
+          .from(feedback)
+          .where(and(eq(feedback.decisionId, decisions.id), eq(feedback.verdict, 'right'))),
+      ),
+    ),
+  );
   const [answers] = (await db
     .select({
       right: sql<number>`count(*) FILTER (WHERE ${feedback.verdict} = 'right')`.mapWith(Number),
@@ -199,8 +200,8 @@ async function facts(db: Sql, accountId: string, who: { address: string } | { do
     return keys.length === 1 && r.whenLabel === undefined && r.when === undefined && ('address' in who ? r.match.from === value : r.match.fromDomain === value);
   });
   const does = rule ? (rule.disposition ?? (rule.labelId ? dispositions.get(rule.labelId) : undefined)) : undefined;
-  const labelled = labels.reduce((sum, l) => sum + l.messages, 0);
-  const consistency = labelled >= 3 ? (labels[0]?.messages ?? 0) / labelled : null;
+  const labelled = answered.reduce((sum, l) => sum + l.messages, 0);
+  const consistency = labelled >= 3 ? (answered[0]?.messages ?? 0) / labelled : null;
   return {
     messages: seen.n,
     firstSeenAt: seen.first,
@@ -208,6 +209,7 @@ async function facts(db: Sql, accountId: string, who: { address: string } | { do
     recent: seen.recent,
     senders: seen.senders,
     labels,
+    answered,
     consistency,
     answers,
     userHasWritten,
