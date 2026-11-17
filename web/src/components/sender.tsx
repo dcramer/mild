@@ -120,7 +120,8 @@ export function SenderLink({ accountId, address, children, className }: { accoun
   );
 }
 
-const SENDER_CELL = 'max-w-0 md:w-[24%] md:min-w-52';
+/** The width of the first column of a list of mail, for a cell that is not a `SenderCell`. */
+export const SENDER_CELL = 'max-w-0 md:w-[24%] md:min-w-52';
 
 /**
  * The first cell of a row of mail: who sent it, by name and address, since a name alone could be anyone.
