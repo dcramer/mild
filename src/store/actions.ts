@@ -123,7 +123,7 @@ export async function lastStandingChange(db: Sql, accountId: string, messageId: 
 }
 
 /** Actions whose outcome was never confirmed, oldest first. Optionally limited to one message. */
-export async function listOpenActions(db: Sql, scope?: { accountId: string; messageId: string }): Promise<ActionRecord[]> {
+export async function listOpenActions(db: Sql, scope?: { accountId: string; messageId?: string }): Promise<ActionRecord[]> {
   const rows = await db
     .select(COLUMNS)
     .from(actions)
@@ -131,7 +131,7 @@ export async function listOpenActions(db: Sql, scope?: { accountId: string; mess
       and(
         inArray(actions.status, ['pending', 'unknown']),
         isNotNull(actions.messageId),
-        scope ? and(eq(actions.accountId, scope.accountId), eq(actions.messageId, scope.messageId)) : undefined,
+        scope ? and(eq(actions.accountId, scope.accountId), scope.messageId === undefined ? undefined : eq(actions.messageId, scope.messageId)) : undefined,
       ),
     )
     .orderBy(asc(actions.id));

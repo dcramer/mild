@@ -1,3 +1,4 @@
+import type { Sql } from '../store/sql.ts';
 import { finishAction, insertPendingAction, openPayload } from '../store/actions.ts';
 import { filterHistory, filterVerdicts, getRuleFilter, listRuleFilters, setRuleFilter } from '../store/filters.ts';
 import { reportError } from '../telemetry.ts';
@@ -78,21 +79,29 @@ export async function writeRuleFilter(deps: ActionDeps, ruleId: string, accountI
 const FILTER_TRIES = 3;
 
 /**
- * Ask Gmail again for each rule's last filter change the user asked for, where Gmail did not take it and the
- * rule still asks for it. Only while Sift is on, as writing a filter needs.
+ * The rules whose last filter change the user asked for Gmail did not take, short of `FILTER_TRIES` in a row, that
+ * still ask for it: `add` to write the rule's filter, otherwise to take it out.
  */
-export async function retryRuleFilters(deps: ActionDeps, accountId: string): Promise<void> {
-  await settleRuleFilters(deps, accountId);
-  const verdicts = await filterVerdicts(deps.db);
-  for (const [ruleId, changes] of await filterHistory(deps.db, accountId)) {
+export async function filterRetries(db: Sql, accountId: string): Promise<{ ruleId: string; add: boolean; tries: number }[]> {
+  const verdicts = await filterVerdicts(db);
+  const due: { ruleId: string; add: boolean; tries: number }[] = [];
+  for (const [ruleId, changes] of await filterHistory(db, accountId)) {
     const last = changes.at(-1)!;
     if (last.status !== 'failed') continue;
     const tries = changes.length - changes.findLastIndex((c) => c.type !== last.type || c.status !== 'failed') - 1;
-    const rule = await getRuleFilter(deps.db, ruleId, accountId);
+    const rule = await getRuleFilter(db, ruleId, accountId);
     if (tries >= FILTER_TRIES || !rule) continue;
     const add = last.type === 'filter' && !rule.filterId && verdicts.get(ruleId)?.possible;
     const remove = last.type === 'unfilter' && rule.filterId;
-    if (!add && !remove) continue;
+    if (add || remove) due.push({ ruleId, add: Boolean(add), tries });
+  }
+  return due;
+}
+
+/** Ask Gmail again for each of `filterRetries`. Only while Sift is on, as writing a filter needs. */
+export async function retryRuleFilters(deps: ActionDeps, accountId: string): Promise<void> {
+  await settleRuleFilters(deps, accountId);
+  for (const { ruleId, add, tries } of await filterRetries(deps.db, accountId)) {
     try {
       await (add ? writeRuleFilter(deps, ruleId, accountId) : removeRuleFilter(deps, ruleId, accountId));
     } catch (error) {
@@ -155,6 +164,14 @@ async function confirmed(deps: ActionDeps, accountId: string, actionId: number):
   return row?.status === 'done';
 }
 
+/** The account's filter changes that were never read back, oldest first. */
+export const openFilterChanges = (db: Sql, accountId: string) =>
+  db
+    .select({ id: actions.id, type: actions.type, payload: actions.payload, error: actions.error })
+    .from(actions)
+    .where(and(eq(actions.accountId, accountId), inArray(actions.type, ['filter', 'unfilter']), inArray(actions.status, ['pending', 'unknown'])))
+    .orderBy(asc(actions.id));
+
 /**
  * Settle the account's filter changes that were never read back (Gmail errored after the call, or sift
  * stopped), by finding them in Gmail. A filter that landed goes on its rule if the rule has none and still
@@ -162,11 +179,7 @@ async function confirmed(deps: ActionDeps, accountId: string, actionId: number):
  * nothing in sift to show or remove it. An action stays open until that is done, so it is tried again.
  */
 async function settleRuleFilters(deps: ActionDeps, accountId: string): Promise<void> {
-  const open = await deps.db
-    .select({ id: actions.id, type: actions.type, payload: actions.payload, error: actions.error })
-    .from(actions)
-    .where(and(eq(actions.accountId, accountId), inArray(actions.type, ['filter', 'unfilter']), inArray(actions.status, ['pending', 'unknown'])))
-    .orderBy(asc(actions.id));
+  const open = await openFilterChanges(deps.db, accountId);
   if (open.length === 0) return;
   const existing = await deps.mailbox.listFilters();
   for (const { id, type, payload, error } of open as { id: number; type: 'filter' | 'unfilter'; payload: string; error: string | null }[]) {

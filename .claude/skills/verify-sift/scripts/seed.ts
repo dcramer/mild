@@ -150,7 +150,8 @@ let cursor = 1;
 let arriving = inbox;
 const find = (id: string) => inbox.find((m) => m.raw.id === id);
 const api: GmailApi = {
-  getProfile: async () => ({ emailAddress: ACCOUNT, historyId: String(cursor) }),
+  // Mail arriving moves Gmail's history past the cursor, as the timed tick looks for.
+  getProfile: async () => ({ emailAddress: ACCOUNT, historyId: String(arriving.length > 0 ? cursor + 1 : cursor) }),
   listHistory: async () => {
     const additions = arriving.map((m) => ({ id: m.raw.id, labelIds: m.raw.labelIds }));
     arriving = [];
