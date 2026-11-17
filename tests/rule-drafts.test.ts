@@ -30,15 +30,18 @@ const BLANK = {
 };
 
 describe('the rule the model fills in', () => {
-  const read = (args: Partial<typeof BLANK> | Record<string, unknown>) => readRuleDraft({ ...BLANK, ...args }, LABELS);
+  const read = (args: Partial<typeof BLANK> | Record<string, unknown>) => {
+    const result = readRuleDraft({ ...BLANK, ...args }, LABELS);
+    return 'draft' in result ? result.draft : result;
+  };
 
   const by = (...conditions: [string, string][]) => ({ conditions: conditions.map(([kind, value]) => ({ by: kind, value })) });
 
   it('takes an address as one sender and anything else as everyone at a domain, never one anyone can get an address at', () => {
     expect(read(by(['from', 'News@Example.org']))).toEqual({ match: { from: ['news@example.org'] }, disposition: 'archive' });
     expect(read(by(['from', '@example.org']))).toEqual({ match: { fromDomain: ['example.org'] }, disposition: 'archive' });
-    expect(read(by(['from', 'gmail.com']))).toBeNull();
-    expect(read(by(['from', 'not a domain']))).toBeNull();
+    expect(read(by(['from', 'gmail.com']))).toEqual({ unusable: '`from` is a domain anyone can get an address at; name the address' });
+    expect(read(by(['from', 'not a domain']))).toEqual({ unusable: '`from` is neither an address nor a domain' });
   });
 
   it('holds several values of a kind as alternatives, and refuses the rule when one of them is not a rule’s', () => {
@@ -53,8 +56,10 @@ describe('the rule the model fills in', () => {
       name: 'Example mail',
       disposition: 'archive',
     });
-    expect(read(by(['from', 'example.org'], ['from', 'gmail.com']))).toBeNull();
-    expect(read(by(['from', 'example.org'], ['cc', 'me@example.com']))).toBeNull();
+    expect(read(by(['from', 'example.org'], ['from', 'gmail.com']))).toHaveProperty('unusable');
+    expect(read(by(['from', 'example.org'], ['cc', 'me@example.com']))).toEqual({ unusable: 'a condition is of a kind a rule cannot hold' });
+    expect(read(by(['from', 'example.org'], ['to', 'example.com']))).toEqual({ unusable: '`to` is not an address' });
+    expect(read(by(['from', 'example.org'], ['subjectContains', ' ']))).toEqual({ unusable: 'a condition has no value' });
   });
 
   it('holds a name only beside an address or domain, and facts in the words they are offered in', () => {
@@ -65,8 +70,8 @@ describe('the rule the model fills in', () => {
       disposition: 'archive',
     });
     expect(read({ conditions: [], facts: ['has a tracking pixel'] })).toEqual({ match: { facts: { trackingPixel: true } }, disposition: 'archive' });
-    expect(read(by(['subjectContains', 'Weekly'], ['senderName', 'Example']))).toBeNull();
-    expect(read({ conditions: [] })).toBeNull();
+    expect(read(by(['subjectContains', 'Weekly'], ['senderName', 'Example']))).toEqual({ unusable: "a sender's name counts only beside a `from`" });
+    expect(read({ conditions: [] })).toEqual({ unusable: 'the rule names no condition, so it would match all mail' });
   });
 
   it('names a label by its id, and lets the label decide unless the rule waits for it', () => {
@@ -81,9 +86,9 @@ describe('the rule the model fills in', () => {
       disposition: 'keep',
       markRead: true,
     });
-    expect(read({ label: 'Newsletters', onlyOnceLabelled: true, action: '' })).toBeNull();
-    expect(read({ label: 'Receipts' })).toBeNull();
-    expect(read({ action: '' })).toBeNull();
+    expect(read({ label: 'Newsletters', onlyOnceLabelled: true, action: '' })).toEqual({ unusable: 'a rule that waits for a label needs an `action`' });
+    expect(read({ label: 'Receipts' })).toEqual({ unusable: '`label` is not one of theirs' });
+    expect(read({ action: '' })).toEqual({ unusable: 'a rule with no label needs an `action`' });
   });
 
   it('says what else is needed, and never marks spam read', () => {
@@ -182,11 +187,28 @@ describe('the model filling in a rule', () => {
     ]);
     expect(await draft(input, async () => [])).toMatchObject({ failed: 'the model did not fill in a rule', lookups: MAX_LOOKUPS });
     expect(complete.mock.calls.at(-1)?.[1].tools?.map((t) => t.name)).toEqual([FILL_TOOL]);
+  });
+
+  it('sends an unusable rule back once with what is wrong, then gives up saying why', async () => {
+    const { provider, complete, draft } = faux();
+    const shared = fauxToolCall(FILL_TOOL, { ...BLANK, conditions: [{ by: 'from', value: 'gmail.com' }] });
+    provider.setResponses([
+      fauxAssistantMessage([shared], { stopReason: 'toolUse' }),
+      fauxAssistantMessage([fauxToolCall(FILL_TOOL, { ...BLANK, conditions: [{ by: 'from', value: 'friend@gmail.com' }] })], { stopReason: 'toolUse' }),
+    ]);
+    expect(await draft(input, async () => [])).toMatchObject({ draft: { match: { from: ['friend@gmail.com'] } }, lookups: 0 });
+    const told = complete.mock.calls[1]?.[1].messages.at(-1);
+    expect(told).toMatchObject({ role: 'toolResult', toolName: FILL_TOOL, toolCallId: shared.id, isError: true });
+    expect(JSON.stringify(told)).toContain('a domain anyone can get an address at');
 
     provider.setResponses([
-      fauxAssistantMessage([fauxToolCall(FILL_TOOL, { ...BLANK, conditions: [{ by: 'from', value: 'gmail.com' }] })], { stopReason: 'toolUse' }),
+      fauxAssistantMessage([fauxToolCall(FILL_TOOL, { ...BLANK, action: '' })], { stopReason: 'toolUse' }),
+      fauxAssistantMessage([fauxToolCall(FILL_TOOL, { ...BLANK, action: '' })], { stopReason: 'toolUse' }),
     ]);
-    expect(await draft(input, async () => [])).toMatchObject({ failed: 'the model did not fill in a usable rule', lookups: 0 });
+    expect(await draft(input, async () => [])).toMatchObject({
+      failed: 'the model did not fill in a usable rule: a rule with no label needs an `action`',
+      lookups: 0,
+    });
   });
 });
 

@@ -151,28 +151,29 @@ const DOMAIN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
 /** The kinds of condition the model names values for. `from` takes an address or a domain. */
 export const BY = ['from', 'senderName', 'senderNameContains', 'listId', 'to', 'subjectContains'] as const;
 
-/** Where one condition's value goes in a match, or null when it is not one a rule can hold. */
-function named(by: unknown, value: string): [Named, string] | null {
-  if (value === '') return null;
+/** Where one condition's value goes in a match, or what is wrong with it. Never the value: the model is told, and so are the record and Sentry. */
+function named(by: unknown, value: string): [Named, string] | string {
+  if (value === '') return 'a condition has no value';
   if (by === 'from') {
     if (ADDRESS.test(value)) return ['from', value.toLowerCase()];
     const domain = value.replace(/^@/, '').toLowerCase();
-    return DOMAIN.test(domain) && !isSharedDomain(domain) ? ['fromDomain', domain] : null;
+    if (!DOMAIN.test(domain)) return '`from` is neither an address nor a domain';
+    return isSharedDomain(domain) ? '`from` is a domain anyone can get an address at; name the address' : ['fromDomain', domain];
   }
-  if (by === 'to') return ADDRESS.test(value) ? ['to', value.toLowerCase()] : null;
+  if (by === 'to') return ADDRESS.test(value) ? ['to', value.toLowerCase()] : '`to` is not an address';
   if (by === 'senderName') return ['fromName', value];
   if (by === 'senderNameContains') return ['fromNameContains', value];
   if (by === 'listId' || by === 'subjectContains') return [by, value];
-  return null;
+  return 'a condition is of a kind a rule cannot hold';
 }
 
-/** The conditions as a match; null when any is not one a rule can hold, rather than make a wider rule than they asked for. */
-function matchOf(raw: unknown): RuleMatch | null {
+/** The conditions as a match, or what is wrong with one, rather than make a wider rule than they asked for. */
+function matchOf(raw: unknown): RuleMatch | string {
   const match: RuleMatch = {};
   for (const condition of (Array.isArray(raw) ? raw : []).slice(0, MAX_CONDITIONS)) {
     const { by, value } = (condition ?? {}) as Record<string, unknown>;
     const one = named(by, tidy(value, MAX_VALUE));
-    if (one === null) return null;
+    if (typeof one === 'string') return one;
     const [key, given] = one;
     match[key] = [...(match[key] ?? []), given];
   }
@@ -189,27 +190,31 @@ function factsOf(raw: unknown): RuleFacts {
   return facts;
 }
 
-/** The rule in the tool's arguments, with labels named by their id; null when it is not one the dialog can hold. */
-export function readRuleDraft(args: unknown, labels: RuleDraftInput['labels']): RuleDraft | null {
-  if (args === null || typeof args !== 'object') return null;
+/**
+ * The rule in the tool's arguments, with labels named by their id; or, when it is not one the dialog can hold,
+ * what is wrong with it, in words for the model to correct it by.
+ */
+export function readRuleDraft(args: unknown, labels: RuleDraftInput['labels']): { draft: RuleDraft } | { unusable: string } {
+  if (args === null || typeof args !== 'object') return { unusable: 'the rule is not an object' };
   const raw = args as Record<string, unknown>;
   const named = matchOf(raw['conditions']);
-  if (named === null) return null;
+  if (typeof named === 'string') return { unusable: named };
   const facts = factsOf(raw['facts']);
   const match = tidyMatch({ ...named, ...(Object.keys(facts).length > 0 ? { facts } : {}) });
-  if (Object.keys(match).length === 0 || nameAlone(match)) return null;
+  if (Object.keys(match).length === 0) return { unusable: 'the rule names no condition, so it would match all mail' };
+  if (nameAlone(match)) return { unusable: "a sender's name counts only beside a `from`" };
 
   const labelName = tidy(raw['label'], MAX_VALUE).toLowerCase();
   const label = labelName === '' ? undefined : labels.find((l) => l.name.toLowerCase() === labelName);
-  if (labelName !== '' && !label) return null;
+  if (labelName !== '' && !label) return { unusable: '`label` is not one of theirs' };
   const waits = label !== undefined && raw['onlyOnceLabelled'] === true;
   const disposition = DECIDED.find((a) => a === raw['action']);
   const acts = !label || waits;
-  if (acts && !disposition) return null;
+  if (acts && !disposition) return { unusable: waits ? 'a rule that waits for a label needs an `action`' : 'a rule with no label needs an `action`' };
   const when = tidy(raw['when'], MAX_VALUE);
   const note = tidy(raw['note'], MAX_NOTE);
   const name = tidy(raw['name'], MAX_NAME);
-  return {
+  const draft: RuleDraft = {
     match,
     ...(name === '' ? {} : { name }),
     ...(label && !waits ? { label: label.id } : {}),
@@ -220,4 +225,5 @@ export function readRuleDraft(args: unknown, labels: RuleDraftInput['labels']): 
     ...(acts && raw['unsubscribe'] === true ? { unsubscribe: true as const } : {}),
     ...(note === '' ? {} : { note }),
   };
+  return { draft };
 }

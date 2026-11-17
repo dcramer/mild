@@ -19,6 +19,9 @@ import { chat, executeTool } from './chat.ts';
 /** One attempt per turn, as for the judge; the person asks again. */
 const CALL = { timeoutMs: 60_000, maxRetries: 0 };
 
+/** Rules filled in before giving up: one more after an unusable one, which is told what is wrong with it. */
+const MAX_FILLS = 2;
+
 const find: Tool = {
   name: FIND_TOOL,
   description: 'Find senders Sift has recorded mail from, by words in their name, address, mailing list or newest subject.',
@@ -77,7 +80,8 @@ const add = (a: Usage | undefined, b: Usage): Usage =>
 /**
  * A RuleDrafter backed by a pi-ai model: a conversation of a few turns with the person's words and labels,
  * and two tools. One looks up senders in the person's own record and changes nothing; the other records
- * the rule, which is checked here before use. The last turn offers only the second.
+ * the rule, which is checked here before use and sent back once with what is wrong when it cannot be. The last
+ * turn offers only the second.
  */
 export function createRuleDrafter(models: Models, model: Model<Api>): RuleDrafter {
   return async (input, findSenders) => {
@@ -88,6 +92,7 @@ export function createRuleDrafter(models: Models, model: Model<Api>): RuleDrafte
     };
     let usage: Usage | undefined;
     let lookups = 0;
+    let fills = 0;
     const spent = () => ({ lookups, ...(usage ? { usage } : {}) });
     for (;;) {
       const last = lookups >= MAX_LOOKUPS;
@@ -107,16 +112,30 @@ export function createRuleDrafter(models: Models, model: Model<Api>): RuleDrafte
         return { failed: failure(message.errorMessage ?? message.stopReason), ...spent() };
       const calls = message.content.filter((block): block is ToolCall => block.type === 'toolCall');
       const filled = calls.find((c) => c.name === FILL_TOOL);
-      if (filled)
-        return await executeTool(FILL_TOOL, filled.id, async (span) => {
-          const draft = readRuleDraft(filled.arguments, input.labels);
-          if (draft) return { draft, ...spent() };
-          span.fail();
-          return { failed: 'the model did not fill in a usable rule', ...spent() };
+      let unusable: string | undefined;
+      if (filled) {
+        const read = await executeTool(FILL_TOOL, filled.id, async (span) => {
+          const result = readRuleDraft(filled.arguments, input.labels);
+          if ('unusable' in result) span.fail();
+          return result;
         });
+        if ('draft' in read) return { draft: read.draft, ...spent() };
+        unusable = read.unusable;
+        fills += 1;
+        if (fills >= MAX_FILLS) return { failed: `the model did not fill in a usable rule: ${unusable}`, ...spent() };
+      }
       const asked = calls.filter((c) => c.name === FIND_TOOL);
-      if (last || asked.length === 0) return { failed: 'the model did not fill in a rule', ...spent() };
+      if (!filled && (last || asked.length === 0)) return { failed: 'the model did not fill in a rule', ...spent() };
       context.messages.push(message);
+      if (filled)
+        context.messages.push({
+          role: 'toolResult',
+          toolCallId: filled.id,
+          toolName: FILL_TOOL,
+          content: [{ type: 'text', text: `That rule cannot be used: ${unusable}. Fill it in again.` }],
+          isError: true,
+          timestamp: Date.now(),
+        });
       for (const c of asked) {
         lookups += 1;
         const query = typeof c.arguments['query'] === 'string' ? c.arguments['query'] : '';
