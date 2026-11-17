@@ -30,7 +30,7 @@ export async function listRuleSummaries(db: Sql, scope: Scope): Promise<RuleSumm
       lastHitAt: sql<number | null>`${db
         .select({ at: max(decisions.decidedAt) })
         .from(decisions)
-        .where(eq(decisions.ruleId, rules.id))}`.mapWith(Number),
+        .where(and(eq(decisions.accountId, rules.accountId), eq(decisions.ruleId, rules.id)))}`.mapWith(Number),
     })
     .from(rules)
     .leftJoin(labels, and(eq(labels.accountId, rules.accountId), eq(labels.id, sql`coalesce(${rules.labelId}, ${rules.whenLabel})`)))

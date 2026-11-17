@@ -134,6 +134,13 @@
       "when": 1794878621287,
       "tag": "0018_drop_write_only_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794879430470,
+      "tag": "0019_gmail_label_from_the_label",
+      "breakpoints": true
     }
   ]
 }

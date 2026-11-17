@@ -1,7 +1,10 @@
-import { type DECISION_OUTCOMES, and, asc, decisions, desc, eq, feedback, isNull } from './query.ts';
+import { type DECISION_OUTCOMES, and, asc, decisions, desc, eq, feedback, isNull, labels } from './query.ts';
 import type { Sql } from './sql.ts';
 import { openPart, sealPart } from './content.ts';
 import type { Decision, Disposition } from '../triage/types.ts';
+
+/** A decision's label, whose Gmail label is the one the decision applies. */
+const ofLabel = and(eq(labels.accountId, decisions.accountId), eq(labels.id, decisions.labelId));
 
 type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
 
@@ -27,7 +30,6 @@ export async function recordDecision(
       stage: decision.stage,
       disposition: decision.disposition,
       subscription: decision.subscription,
-      gmailLabel: decision.gmailLabel ?? null,
       ruleId: decision.ruleId ?? null,
       confidence: decision.confidence ?? null,
       reason: sealPart(db, accountId, messageId, 'reason', decision.reason)!,
@@ -68,10 +70,11 @@ export async function listUnsettledDecisions(db: Sql, accountId: string, options
       id: decisions.id,
       messageId: decisions.messageId,
       disposition: decisions.disposition,
-      gmailLabel: decisions.gmailLabel,
+      gmailLabel: labels.gmailLabel,
       markRead: decisions.markRead,
     })
     .from(decisions)
+    .leftJoin(labels, ofLabel)
     .where(
       and(
         eq(decisions.accountId, accountId),
@@ -100,12 +103,13 @@ export async function currentDecision(
   messageId: string,
 ): Promise<{ id: number; decision: Decision; carryOut: boolean; runId: number | null; answered: boolean } | null> {
   const rows = await db
-    .select()
+    .select({ decision: decisions, gmailLabel: labels.gmailLabel })
     .from(decisions)
+    .leftJoin(labels, ofLabel)
     .where(and(eq(decisions.accountId, accountId), eq(decisions.messageId, messageId)))
     .orderBy(desc(decisions.id));
-  const [row] = rows;
-  if (!row) return null;
+  if (!rows[0]) return null;
+  const { decision: row, gmailLabel } = rows[0];
   const answers = await db
     .select({ id: feedback.id })
     .from(feedback)
@@ -118,12 +122,12 @@ export async function currentDecision(
     stage: row.stage,
     reason: openPart(db, accountId, messageId, 'reason', row.reason)!,
     ...(row.labelId === null ? {} : { labelId: row.labelId }),
-    ...(row.gmailLabel === null ? {} : { gmailLabel: row.gmailLabel }),
+    ...(gmailLabel === null ? {} : { gmailLabel }),
     ...(row.block ? { block: true } : {}),
     ...(row.markRead ? { markRead: true } : {}),
     ...(row.ruleId === null ? {} : { ruleId: row.ruleId }),
     ...(row.priorRuleId === null ? {} : { priorRuleId: row.priorRuleId }),
     ...(row.confidence === null ? {} : { confidence: row.confidence }),
   };
-  return { id: row.id, decision, carryOut: row.carryOut, runId: row.runId, answered: answers.length > 0 || rows.some((r) => r.byUser) };
+  return { id: row.id, decision, carryOut: row.carryOut, runId: row.runId, answered: answers.length > 0 || rows.some((r) => r.decision.byUser) };
 }

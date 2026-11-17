@@ -637,8 +637,7 @@ const EvalRun = z.object({
   accountId: z.string(),
   startedAt: z.number(),
   finishedAt: z.number().nullable(),
-  /** `interrupted`: sift stopped while it was going. */
-  status: z.enum(['running', 'done', 'failed', 'interrupted']),
+  status: z.enum(['running', 'done', 'failed']),
   error: z.string().nullable(),
   /** What it ran with. Runs that agree on all of these were asked the same question the same way. */
   model: z.string(),

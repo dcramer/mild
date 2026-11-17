@@ -46,7 +46,7 @@ const DECISION_FIELDS = {
   subscription: decisions.subscription,
   labelId: decisions.labelId,
   labelName: labels.name,
-  gmailLabel: decisions.gmailLabel,
+  gmailLabel: labels.gmailLabel,
   reason: decisions.reason,
   confidence: decisions.confidence,
   model: modelRuns.model,

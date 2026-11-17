@@ -50,8 +50,7 @@ const PROPOSAL_STATUSES = ['open', 'accepted', 'dismissed'] as const;
 export const VERDICTS = ['right', 'wrong', 'answered'] as const;
 const FEEDBACK_VIA = ['dashboard', 'gmail'] as const;
 export const EXAMPLE_STATUSES = ['pending', 'captured', 'gone'] as const;
-/** interrupted: sift stopped while it ran. */
-export const EVAL_STATUSES = ['running', 'done', 'failed', 'interrupted'] as const;
+export const EVAL_STATUSES = ['running', 'done', 'failed'] as const;
 
 /** What sift's own queries run as: it owns nothing and cannot bypass row-level security. */
 export const siftApp = pgRole('sift_app', { createRole: false });
@@ -253,7 +252,6 @@ export const decisions = pgTable(
     disposition: text('disposition', { enum: DISPOSITIONS }).notNull(),
     subscription: text('subscription', { enum: SUBSCRIPTION_ACTIONS }).notNull(),
     labelId: text('label_id'),
-    gmailLabel: text('gmail_label'),
     block: boolean('block').notNull().default(false),
     markRead: boolean('mark_read').notNull().default(false),
     ruleId: text('rule_id'),

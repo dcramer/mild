@@ -606,13 +606,10 @@ describe('inference tier', () => {
     inbox = [inbox[0]!];
     await runOnce(await active(true), { ...options(), model: model('newsletter') });
 
-    expect(
-      await raw(db).get('SELECT stage, disposition, label_id, gmail_label, model, cost_usd, d.outcome FROM decisions d JOIN model_runs r ON r.id = d.run_id'),
-    ).toEqual({
+    expect(await raw(db).get('SELECT stage, disposition, label_id, model, cost_usd, d.outcome FROM decisions d JOIN model_runs r ON r.id = d.run_id')).toEqual({
       stage: 'model',
       disposition: 'archive',
       label_id: 'newsletter',
-      gmail_label: 'sift/newsletters',
       model: 'test/model',
       cost_usd: 0.002,
       outcome: 'done',
@@ -685,11 +682,10 @@ describe('inference tier', () => {
     mailbox.labels.set('g1', ['INBOX', 'UNREAD']);
     await runOnce(await active(true), { ...options(), model: model('newsletter') });
     expect(judged).toEqual([]);
-    expect(withReason(await raw(db).get(`SELECT stage, disposition, label_id, gmail_label, rule_id, reason FROM decisions WHERE message_id = 'g1'`))).toEqual({
+    expect(withReason(await raw(db).get(`SELECT stage, disposition, label_id, rule_id, reason FROM decisions WHERE message_id = 'g1'`))).toEqual({
       stage: 'rules',
       disposition: 'archive',
       label_id: null,
-      gmail_label: null,
       rule_id: ruleId,
       reason: 'rule: from news@example.com: archive it',
     });
