@@ -36,7 +36,7 @@ function isPixel(tag: string): boolean {
  * The part of a host that names who runs it, near enough: the last two labels, or three under a
  * two-letter country code with a short second level (`example.co.uk`). Not the public suffix list.
  */
-function site(host: string): string {
+export function site(host: string): string {
   const labels = host.split('.');
   const country = labels.length >= 3 && labels.at(-1)!.length === 2 && labels.at(-2)!.length <= 3;
   return labels.slice(country ? -3 : -2).join('.');

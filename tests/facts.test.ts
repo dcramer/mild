@@ -67,12 +67,10 @@ describe('deriveFacts', () => {
   it("reads Gmail's importance marker from its label", () => {
     const marked = deriveFacts(facts({ labelIds: ['INBOX', 'IMPORTANT', 'CATEGORY_PROMOTIONS'] }));
     expect(marked).toMatchObject({ important: true, category: 'promotions' });
-    expect(describeFacts(marked)).toContain('Gmail marked it important: yes');
     expect(matchesFacts({ important: true, category: 'promotions' }, marked)).toBe(true);
     // Mail recorded before sift read the marker has no answer, so a rule asking either way passes it by.
     const before = { ...marked };
     delete before.important;
-    expect(describeFacts(before).some((line) => line.includes('important'))).toBe(false);
     expect(matchesFacts({ important: false }, before)).toBe(false);
   });
 

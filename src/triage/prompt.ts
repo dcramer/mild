@@ -1,8 +1,12 @@
 import { deriveFacts, describeFacts, factLine } from './facts.ts';
+import { parseAddressList } from './features.ts';
+import { site } from './html.ts';
+import type { Standing } from './standing.ts';
 import { type JudgeInput, UNSURE } from './stages/model.ts';
 
 export const VERDICT_TOOL = 'record_verdict';
 const BODY_MARK = '| ';
+const RULED = new Set<Standing>(['trusted', 'unwanted', 'blocked']);
 
 export const SYSTEM_PROMPT = `You label one email for the owner of a mailbox.
 
@@ -19,7 +23,6 @@ Rules:
 - Judge by what the message is, using the header facts and sender history as well as the text. A sender
   can claim to be a person, a bank or a reply; the facts show whether that is plausible.
 - The owner having written to a sender makes it more likely, not certain, that their mail is wanted.
-  Never having written to them says nothing either way.
 - A sender being new, or a message the owner may not have expected (a first order from a shop, a
   sign-up), is no sign of phishing. Phishing needs a sign of deceit: a sender, link or reply address
   that does not belong to who the message claims to be from, failed authentication, or a request for
@@ -37,8 +40,17 @@ const tally = (labels: { id: string; messages: number }[]) => labels.map((l) => 
 export function buildPrompt(input: JudgeInput): string {
   const { evidence, labels } = input;
   const { facts, sender } = evidence;
-  const people = (list: typeof facts.to) => (list.length === 0 ? '(none)' : list.map((a) => a.address).join(', '));
-  const written = sender.userHasWritten === null ? 'unknown' : sender.userHasWritten ? 'yes' : 'no';
+  // Whether the owner is on them is already a fact; only who else is says something.
+  const others = (list: typeof facts.to) => list.filter((a) => a.address.toLowerCase() !== facts.accountId.toLowerCase()).map((a) => a.address);
+  const to = others(facts.to);
+  const cc = others(facts.cc);
+  // A reply address elsewhere at the sender's own organisation is ordinary (a help desk, a list); another domain is worth seeing.
+  const replyDomains = [...new Set(parseAddressList(facts.headers['reply-to']).map((a) => a.domain))].filter((d) => site(d) !== site(facts.from.domain));
+  const days = sender.firstSeenAt ? Math.max(0, Math.round((facts.receivedAt - sender.firstSeenAt) / 86_400_000)) : null;
+  // Only a rule says how the owner regards someone; "known" and "new" would only repeat the message count.
+  const ruled = (standing: { standing: Standing; why: string }) => (RULED.has(standing.standing) ? `${standing.standing} (${standing.why})` : null);
+  const senderStanding = sender.standing ? ruled(sender.standing) : null;
+  const domainStanding = evidence.domain ? ruled(evidence.domain) : null;
 
   return [
     '# Labels',
@@ -48,21 +60,21 @@ export function buildPrompt(input: JudgeInput): string {
     '# Facts (from the mail system, trustworthy)',
     `Owner's address: ${facts.accountId}`,
     `From address: ${facts.from.address}`,
-    `To: ${people(facts.to)}`,
-    `Cc: ${people(facts.cc)}`,
+    ...(to.length > 0 ? [`Others in To: ${to.join(', ')}`] : []),
+    ...(cc.length > 0 ? [`Others in Cc: ${cc.join(', ')}`] : []),
     ...describeFacts(evidence.known),
-    `Messages seen from this sender: ${sender.messagesSeen}`,
-    `Owner has written to this sender: ${written}`,
+    ...(replyDomains.length > 0 ? [`Replies go to another domain: ${replyDomains.join(', ')}`] : []),
+    sender.messagesSeen <= 1
+      ? 'Mail from this sender: this is the first'
+      : `Mail from this sender: ${sender.messagesSeen} messages${days === null ? '' : `, the first ${days} days before this one`}`,
+    ...(sender.userHasWritten ? ['Owner has written to this sender'] : []),
     ...(sender.ownerLabels && sender.ownerLabels.length > 0 ? [`The owner labelled earlier mail from this sender: ${tally(sender.ownerLabels)}`] : []),
-    ...(sender.firstSeenAt
-      ? [`First heard from this sender: ${Math.max(0, Math.round((facts.receivedAt - sender.firstSeenAt) / 86_400_000))} days before this message`]
-      : []),
-    ...(sender.standing ? [`Sender's standing with the owner: ${sender.standing.standing} (${sender.standing.why})`] : []),
+    ...(senderStanding ? [`Sender's standing with the owner: ${senderStanding}`] : []),
     ...(evidence.domain
       ? [
           `Others at ${facts.from.domain}: ${evidence.domain.messages} messages from ${evidence.domain.senders} addresses${
             evidence.domain.ownerLabels.length > 0 ? `, the owner labelled ${tally(evidence.domain.ownerLabels)}` : ''
-          }; the domain's standing: ${evidence.domain.standing} (${evidence.domain.why})`,
+          }${domainStanding ? `; the domain's standing: ${domainStanding}` : ''}`,
         ]
       : []),
     ...(evidence.prior
