@@ -229,6 +229,18 @@ describe('judge', () => {
     expect(verdict).toHaveProperty('usage.inputTokens', expect.any(Number));
   });
 
+  it('asks for the reason before the label, so the label follows from it', async () => {
+    const faux = fauxProvider();
+    const models = createModels();
+    models.setProvider(faux.provider);
+    faux.setResponses([fauxAssistantMessage([fauxToolCall(VERDICT_TOOL, { reason: 'r', label: 'marketing', confidence: 0.9 })], { stopReason: 'toolUse' })]);
+    const complete = vi.spyOn(models, 'complete');
+    await createJudge(models, faux.getModel())({ evidence: evidence(), labels: DEFAULT_LABELS });
+    const parameters = complete.mock.calls[0]?.[1].tools?.find((t) => t.name === VERDICT_TOOL)?.parameters as { properties: object; required: string[] };
+    expect(Object.keys(parameters.properties)).toEqual(['reason', 'label', 'confidence']);
+    expect(parameters.required).toEqual(['reason', 'label', 'confidence']);
+  });
+
   it('makes one attempt with a timeout, leaving retries to the queue', async () => {
     const { faux, ask } = setup();
     let given: { timeoutMs?: number; maxRetries?: number } | undefined;

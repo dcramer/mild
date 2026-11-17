@@ -20,14 +20,16 @@ export function createJudge(models: Models, model: Model<Api>): Judge {
     const tool: Tool = {
       name: VERDICT_TOOL,
       description: 'Record which label this email gets.',
+      // The model writes the properties in this order: the reason comes first so the label follows from it,
+      // rather than being explained after it was chosen.
       parameters: {
         type: 'object',
         properties: {
+          reason: { type: 'string', description: 'One short sentence: what this email is, and so which label fits.' },
           label: { type: 'string', enum: ids, description: 'The id of the single best label.' },
           confidence: { type: 'number', minimum: 0, maximum: 1, description: 'How sure you are, from 0 to 1.' },
-          reason: { type: 'string', description: 'One short sentence explaining the choice.' },
         },
-        required: ['label', 'confidence', 'reason'],
+        required: ['reason', 'label', 'confidence'],
         additionalProperties: false,
       },
       constrainedSampling: { type: 'json_schema', strict: 'prefer' },
