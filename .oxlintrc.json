@@ -51,8 +51,10 @@
           {
             "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." }, 
               { "group": ["node:*", "@googleapis/*", "googleapis", "google-auth-library", "@earendil-works/*"], "message": "triage/ is pure: no I/O. Inject what you need through a port (see src/triage/stages)." },
+              { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "triage/ is pure: no I/O. Inject what you need through a port (see src/triage/stages)." },
               {
-                "group": ["**/gmail/**", "**/store/**", "**/actions/**", "**/agent/**", "**/work/**", "**/learn/**", "**/cli/**", "**/config.ts"],
+                // Every module in src/ but this one; a new one goes here too.
+                "group": ["**/actions/**", "**/app/**", "**/cli/**", "**/dashboard/**", "**/ephemeral/**", "**/gmail/**", "**/learn/**", "**/model/**", "**/store/**", "**/vercel/**", "**/work/**", "**/config.ts", "**/refusal.ts", "**/secrets.ts", "**/telemetry.ts"],
                 "message": "triage/ is pure and depends on nothing else in src/."
               }
             ]
@@ -85,9 +87,10 @@
           {
             "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." }, 
               {
-                "group": ["**/gmail/**", "**/actions/**", "**/agent/**", "**/work/**", "@googleapis/*", "googleapis", "google-auth-library"],
+                "group": ["**/gmail/**", "**/actions/**", "**/work/**", "@googleapis/*", "googleapis", "google-auth-library"],
                 "message": "dashboard/ shows the database and records what the user teaches sift (src/learn). It never reaches Gmail or changes the mailbox."
               },
+              { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. The dashboard reaches it through Controls (src/dashboard/controls.ts)." },
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
               { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/app and src/work/run.ts hold the store. Take the Sql you are given; the dashboard asks People (src/store/people.ts)." }
             ]
@@ -170,12 +173,51 @@
       }
     },
     {
-      "files": ["src/gmail/**/*.ts", "src/*.ts"],
-      "rules": { "no-restricted-imports": ["error", { "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." }, { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }] }] }
+      "files": ["src/gmail/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." },
+              { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
+              { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
+              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/app and src/work/run.ts hold the store. Take the Sql you are given." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/*.ts", "src/ephemeral/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." },
+              { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." },
+              { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
+              { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
+              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/app and src/work/run.ts hold the store. Take the Sql you are given." }
+            ]
+          }
+        ]
+      }
     },
     {
       "files": ["src/telemetry.ts"],
-      "rules": { "no-restricted-imports": ["error", { "patterns": [{ "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }] }] }
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." },
+              { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
+              { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
+              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/app and src/work/run.ts hold the store. Take the Sql you are given." }
+            ]
+          }
+        ]
+      }
     }
   ],
   "ignorePatterns": ["node_modules/**", "web/dist/**"]
