@@ -122,3 +122,24 @@ export const settled = (page: Page) =>
 
 /** The open message panel. */
 export const panel = (page: Page) => page.getByRole('dialog').filter({ has: page.getByRole('combobox', { name: 'What this message is' }) });
+
+/**
+ * The page as someone whose model is through a ChatGPT plan sees it: the seed's own model is behind an API key,
+ * and no harness can sign in to ChatGPT, so Settings' data says so instead. Their model is `gpt-5.6-luna`, at $0.40 per 1,000.
+ */
+export async function throughChatGPT(page: Page) {
+  const model = 'openai-codex/gpt-5.6-luna';
+  const chatgpt = { provider: 'openai-codex', label: 'ChatGPT', how: 'device-code' };
+  await page.route('**/api/manage*', async (route) => {
+    const response = await route.fetch();
+    const state = await response.json();
+    await route.fulfill({
+      response,
+      json: { ...state, model: { ...state.model, chosen: model, choices: [chatgpt, ...state.model.choices], signedIn: ['openai-codex'] } },
+    });
+  });
+  await page.route('**/api/models*', async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...(await response.json()), models: [model], shortlist: { 'openai-codex': [model] }, costs: { [model]: 0.4 } } });
+  });
+}

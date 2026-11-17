@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, panel, settled, test } from './sift.ts';
+import { expect, panel, settled, test, throughChatGPT } from './sift.ts';
 
 const settings = (page: Page) => page.getByRole('dialog', { name: 'Settings', exact: true });
 /** Settings' Active group: This browser has a Turn on and Turn off of its own, for keyboard shortcuts. */
@@ -33,21 +33,7 @@ test.describe('Settings', () => {
   });
 
   test('through a ChatGPT plan, prices are said to be API prices the plan covers', async ({ page }) => {
-    const MODEL = 'openai-codex/gpt-5.6-luna';
-    const chatgpt = { provider: 'openai-codex', label: 'ChatGPT', how: 'device-code' };
-    await page.route('**/api/manage*', async (route) => {
-      const response = await route.fetch();
-      const state = await response.json();
-      await route.fulfill({
-        response,
-        json: { ...state, model: { ...state.model, chosen: MODEL, choices: [chatgpt, ...state.model.choices], signedIn: ['openai-codex'] } },
-      });
-    });
-    await page.route('**/api/models*', async (route) => {
-      const response = await route.fetch();
-      const listed = await response.json();
-      await route.fulfill({ response, json: { ...listed, models: [MODEL], shortlist: { 'openai-codex': [MODEL] }, costs: { [MODEL]: 0.4 } } });
-    });
+    await throughChatGPT(page);
     await page.route('**/api/usage*', async (route) => {
       const response = await route.fetch();
       await route.fulfill({ response, json: { ...(await response.json()), day: 0.1, week: 1, month: 4.2 } });

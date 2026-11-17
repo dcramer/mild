@@ -1,7 +1,7 @@
 import { type InboxEstimate, type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, money, plural } from '@/lib/format.ts';
 import { Blank, Button, Dialog, Failure, Figure, Figures, SettingRow, Share } from '@/system';
-import { costOfMessages, priceNote, subscription } from '@/components/model-connect.tsx';
+import { costOfMessages, priceNote, subscription } from '@/lib/prices.ts';
 
 type Reach = 'inbox' | 'recent';
 

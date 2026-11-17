@@ -7,7 +7,7 @@ import { filterStanding } from '@/views/gmail-filter.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { RulePanel, Who, checked, whoText } from '@/views/rule-panel.tsx';
 import type { OpenMessages } from '@/views/message-panel.tsx';
-import { INBOX, MADE_BY, ago, count, dateTime, describeMatch, doesName, inboxFirst, money, outcomeName, plural } from '@/lib/format.ts';
+import { INBOX, MADE_BY, ago, count, dateTime, describeMatch, doesName, inboxFirst, outcomeName, plural } from '@/lib/format.ts';
 import {
   Heads,
   Blank,
@@ -28,6 +28,8 @@ import {
   Tr,
   useToast,
 } from '@/system';
+import { usePlan } from '@/components/model-connect.tsx';
+import { approx, atApiPrices } from '@/lib/prices.ts';
 
 const SOURCES = [['', 'Anyone'] as const, ...MADE_BY];
 
@@ -66,6 +68,7 @@ function Result({ rule }: { rule: RuleSummary }) {
 
 /** Everything sift knows without asking a model: the user's rules and the ones it learned. */
 export function Rules({ onOpen }: { onOpen: OpenMessages }) {
+  const plan = usePlan();
   const { data, error, loading, reload } = useLoaded('rules', (signal) => api.rules(signal));
   const manage = useLoaded('rule-accounts', (signal) => api.manage(signal), 60_000);
   const remove = useAction();
@@ -164,7 +167,11 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
               Last used
             </Th>
             {costs ? (
-              <Th phone="hide" num says="What the model cost checking a rule’s condition over the last 30 days, whether the mail met it or not">
+              <Th
+                phone="hide"
+                num
+                says={`What the model cost checking a rule’s condition over the last 30 days, whether the mail met it or not.${plan ? ` ${atApiPrices(plan)}` : ''}`}
+              >
                 Cost 30D
               </Th>
             ) : null}
@@ -193,7 +200,7 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
                 </Td>
                 {costs ? (
                   <Td phone="hide" num className="md:w-28" says={checked(rule) ? `${plural(rule.checks, 'message')} checked` : null}>
-                    {checked(rule) ? money(rule.checkCost) : null}
+                    {checked(rule) ? approx(rule.checkCost, plan) : null}
                   </Td>
                 ) : null}
                 <RowActions>{removeButton(rule)}</RowActions>

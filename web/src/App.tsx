@@ -7,7 +7,7 @@ import type { MessageRef } from '@/views/message-panel.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
 import { SetUp } from '@/components/set-up.tsx';
 import { SiftStatus, UsageDetail } from '@/components/status.tsx';
-import { subscription } from '@/components/model-connect.tsx';
+import { subscription } from '@/lib/prices.ts';
 import { Boot } from '@/views/boot.tsx';
 
 // The home page comes with the app. Every other screen is its own file, fetched when first needed and,

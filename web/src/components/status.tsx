@@ -1,7 +1,7 @@
 import { RefreshCwIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { ManageState, Usage } from '@/lib/api.ts';
-import { atApiPrices } from '@/components/model-connect.tsx';
+import { approx, atApiPrices } from '@/lib/prices.ts';
 import { ago, dateTime, money } from '@/lib/format.ts';
 import { Figure, Figures, HoverCard, Spark, Tooltip } from '@/system';
 
@@ -57,7 +57,7 @@ export function SiftStatus({ accounts, usage, plan }: { accounts: Accounts; usag
           <span aria-hidden>·</span>
           <HoverCard href="/activity" card={<UsageDetail usage={usage} plan={plan} />}>
             {/* Through a plan, only about what the API would have charged: the card says so. */}
-            <span className="text-foreground">{plan ? `≈${money(usage.month)}` : money(usage.month)}</span> <span className="text-label">30D</span>
+            <span className="text-foreground">{approx(usage.month, plan)}</span> <span className="text-label">30D</span>
           </HoverCard>
         </>
       ) : null}

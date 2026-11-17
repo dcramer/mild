@@ -7,6 +7,8 @@ import { useParam } from '@/lib/route.ts';
 import { FACT_FILTER_OPTIONS, HANDLED, PERIODS, count, inboxFirst, labelSeries, factFilterName, longDay, money, moneyTick, shortDay } from '@/lib/format.ts';
 import { Button, Empty, FilterGroup, ListView, Reserve, Select, StackedBars, useToast } from '@/system';
 import type { OpenMessages } from '@/views/message-panel.tsx';
+import { usePlan } from '@/components/model-connect.tsx';
+import { costName } from '@/lib/prices.ts';
 
 const PAGE = 50;
 /** What the list shows. Changed: what sift did, or tried to do, in Gmail. Everything adds suggestions and mail left alone. */
@@ -17,6 +19,7 @@ const VIEWS = [
 
 /** What sift did to mail, by day, newest first, with a way to undo it. */
 export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
+  const plan = usePlan();
   const [chosen, setChosen] = useParam('days');
   const days = (PERIODS.some(([key]) => key === chosen) ? Number(chosen) : 7) as Days;
   const [view, setView] = useParam('show', VIEWS);
@@ -114,7 +117,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
                     values,
                   };
                 })}
-                line={{ name: 'Model cost', values: daily.map((day) => day.costUsd), format: money, tick: moneyTick }}
+                line={{ name: costName(plan), values: daily.map((day) => day.costUsd), format: money, tick: moneyTick }}
               />
             ) : null}
           </div>

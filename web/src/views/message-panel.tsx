@@ -31,6 +31,8 @@ import {
   Tr,
   useToast,
 } from '@/system';
+import { usePlan } from '@/components/model-connect.tsx';
+import { AT_API_PRICES } from '@/lib/prices.ts';
 
 /** Open the message panel on one item of a list, so it can step through the rest. */
 export type OpenMessages = (items: MessageRef[], index: number) => void;
@@ -55,10 +57,12 @@ const NOT_DONE: Record<string, string> = {
 };
 
 function DecisionEvent({ d }: { d: Decision }) {
+  // Through a plan, the call was paid for by it: its cost is only what the API would have charged.
+  const plan = usePlan(d.model ?? '');
   const facts = [
     d.ruleId ? `rule ${d.ruleId}` : null,
     d.confidence === null ? null : `confidence ${d.confidence.toFixed(2)}`,
-    d.model ? `${d.model}, ${count(d.inputTokens + d.outputTokens)} tokens, ${money(d.costUsd)}` : null,
+    d.model ? `${d.model}, ${count(d.inputTokens + d.outputTokens)} tokens, ${money(d.costUsd)}${plan ? ` ${AT_API_PRICES}` : ''}` : null,
     d.durationMs === null ? null : `${count(d.durationMs)} ms`,
   ].filter(Boolean);
   return (

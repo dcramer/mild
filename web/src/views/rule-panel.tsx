@@ -51,6 +51,8 @@ import {
   TrGroup,
   useToast,
 } from '@/system';
+import { usePlan } from '@/components/model-connect.tsx';
+import { AT_API_PRICES, approx, costName, priceNote } from '@/lib/prices.ts';
 
 const QUIET: Record<string, string> = {
   fromDomain: 'anyone at',
@@ -102,6 +104,7 @@ export function whoText(match: RuleMatch): string {
  * starts it. Nothing moves until that press: then it is the user's, carried out whether Sift is on or off.
  */
 function ApplyDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => void }) {
+  const plan = usePlan();
   // Each look searches Gmail, so it is not repeated on a timer.
   const inbox = useLoaded(`rule-inbox ${rule.id}`, (signal) => api.ruleInbox(rule.id, signal), 0);
   const apply = useAction();
@@ -168,7 +171,7 @@ function ApplyDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => void
                 note={sample.most === null ? null : `the newest ${count(sample.most)}`}
               />
               {sample.reading > 0 ? <Figure label="Need the model" value={sample.exact ? count(sample.reading) : `About ${roughly(sample.reading)}`} /> : null}
-              {cost ? <Figure label="About" value={money(cost)} tone="look" /> : null}
+              {cost ? <Figure label="About" value={money(cost)} tone="look" note={priceNote(null, plan)} /> : null}
             </Figures>
             {sample.examples.length > 0 ? (
               <Table>
@@ -265,6 +268,7 @@ function InInbox({ rule, onOpen }: { rule: RuleSummary; onOpen: OpenMessages }) 
  * checks, what checking cost. A rule is usually opened to see whether it is doing anything.
  */
 function Use({ rule }: { rule: RuleSummary }) {
+  const plan = usePlan();
   const usage = useLoaded(`rule-usage ${rule.id}`, (signal) => api.ruleUsage(rule.id, signal));
   const daily = usage.data?.daily ?? [];
   const matched = daily.reduce((sum, day) => sum + day.changed + day.left, 0);
@@ -275,7 +279,13 @@ function Use({ rule }: { rule: RuleSummary }) {
         <Failure>{usage.error}</Failure>
         <Figures>
           <Figure label="Matched, 30 days" value={count(matched)} note={rule.lastHitAt ? `last ${ago(rule.lastHitAt)}` : null} />
-          {checked(rule) ? <Figure label="Cost, 30 days" value={money(rule.checkCost)} note={`${plural(rule.checks, 'message')} checked`} /> : null}
+          {checked(rule) ? (
+            <Figure
+              label="Cost, 30 days"
+              value={approx(rule.checkCost, plan)}
+              note={`${plural(rule.checks, 'message')} checked${plan ? `, ${AT_API_PRICES}` : ''}`}
+            />
+          ) : null}
           <Figure label="All time" value={count(rule.hits)} note={`since ${shortDate(rule.createdAt)}`} />
         </Figures>
         {matched > 0 ? (
@@ -283,7 +293,7 @@ function Use({ rule }: { rule: RuleSummary }) {
             compact
             series={HANDLED}
             rows={daily.map((day) => ({ key: day.day, label: shortDay(day.day), title: longDay(day.day), values: { changed: day.changed, left: day.left } }))}
-            {...(cost > 0 ? { line: { name: 'Model cost', values: daily.map((day) => day.costUsd), format: money, tick: moneyTick } } : {})}
+            {...(cost > 0 ? { line: { name: costName(plan), values: daily.map((day) => day.costUsd), format: money, tick: moneyTick } } : {})}
           />
         ) : null}
       </div>

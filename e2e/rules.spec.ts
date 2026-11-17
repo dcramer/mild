@@ -1,5 +1,5 @@
 import { addRule, fact, openRule, ruleDialog, rulePanel, ruleRows } from './rule.ts';
-import { expect, panel, row, test } from './sift.ts';
+import { expect, panel, row, test, throughChatGPT } from './sift.ts';
 
 test.describe('Rules', () => {
   test('a rule written by hand opens on its panel, and takes the mail it covers off For review', async ({ page }) => {
@@ -81,6 +81,31 @@ test.describe('Rules', () => {
     await expect(page.getByText('0 messages checked', { exact: true })).toBeVisible();
     // The rules no model checks leave the column empty.
     await expect(news.getByText(/\$/)).toHaveCount(0);
+  });
+
+  test('through a ChatGPT plan, what the model cost is marked as API prices', async ({ page }) => {
+    await throughChatGPT(page);
+    await page.goto('/rules');
+    await page.getByRole('button', { name: 'Add a rule' }).click();
+    const dialog = ruleDialog(page);
+    await dialog.getByRole('button', { name: 'Write it yourself' }).click();
+    await dialog.getByRole('textbox', { name: 'Value 1' }).fill('deals@promo.example.com');
+    await dialog.getByRole('combobox', { name: 'Label it as' }).click();
+    await page.getByRole('option', { name: 'Marketing' }).click();
+    await dialog.getByRole('textbox', { name: 'Only when it is, in your words' }).fill('a sale that ends today');
+    await addRule(dialog);
+    const opened = rulePanel(page, 'deals@promo.example.com');
+    await expect(fact(opened, 'Cost, 30 days')).toHaveText('≈$0');
+    await expect(opened.getByText('0 messages checked, at API prices', { exact: true })).toBeVisible();
+    await opened.getByRole('button', { name: 'Close' }).click();
+
+    const deals = ruleRows(page).filter({ hasText: 'deals@promo.example.com' });
+    await expect(deals.getByText('≈$0', { exact: true })).toBeVisible();
+    await page.getByRole('main').getByRole('columnheader', { name: 'Cost 30D', exact: true }).hover();
+    await expect(page.getByText(/At API prices, which your ChatGPT plan covers\.$/)).toBeVisible();
+
+    await page.goto('/activity');
+    await expect(page.getByRole('listitem', { name: /model cost at api prices$/ }).first()).toBeAttached();
   });
 
   test('Fill in the rule drafts the form from the words, and says what it left out', async ({ page }) => {
