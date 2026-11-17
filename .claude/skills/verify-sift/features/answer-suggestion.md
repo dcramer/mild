@@ -22,7 +22,7 @@ Preconditions:
 
 - **Open.** `ab open "$B/"`, then `ab find role cell click --name "48 hours only: 30% off"`. The address gains `?message=m4`, a level-2 heading reads `48 hours only: 30% off`, the dropdown reads `Which label?`, and the check is disabled.
 - **Choose and save.** `ab find role combobox click --name "What this message is"`, `ab find role option click --name "Marketing"`, then `ab find role button click --name "Save: Marketing"`. A toast reads `Archive as Marketing`. Deals was the last row, so the panel closes (the address is `/` again) and the link's count is one fewer.
-- **A rule, on purpose.** `ab open "$B/?message=m6&account=me%40example.org"`, `ab find role button click --name "Make a rule…"` (the open panel hides the proposal line's button of the same name). The rule dialog opens over the panel with the value reading `ada@example.org`; the address keeps `?message=m6`. `Cancel`.
+- **A rule, on purpose.** `ab open "$B/?message=m6&account=me%40example.org"`, `ab find role button click --name "Make a rule…"` (the open panel hides the proposal line's button of the same name). The rule dialog opens over the panel on `What should it do?`, already saying the rule; `Write it yourself` shows `Value 1` reading `ada@example.org`; the address keeps `?message=m6`. `ab press Escape`.
 - **Second view.** `ab open "$B/rules"`. As many rules as before: answering made none.
 - **Stored.** `verify.sh sql "$RUN" "SELECT label_id, carry_out, by_user FROM decisions WHERE message_id = 'm4' ORDER BY id DESC LIMIT 1"` returns `marketing`, `true`, `true`. `SELECT message_id, label_id FROM examples` returns `m4` with `marketing`.
 
