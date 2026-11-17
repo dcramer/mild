@@ -33,8 +33,8 @@ const ACCOUNT = 'me@example.org';
 const WORK = 'me@work.example.org';
 const OTHER = 'bravo@example.net';
 
-const [home, gmailFile] = process.argv.slice(2);
-if (!home || !gmailFile) throw new Error('usage: seed.ts <home> <gmail.json>');
+const [home, gmailFile, variant] = process.argv.slice(2);
+if (!home || !gmailFile) throw new Error('usage: seed.ts <home> <gmail.json> [--bare]');
 process.env['SIFT_HOME'] = resolve(home);
 const config = loadConfig();
 if (existsSync(config.databaseDir)) throw new Error(`${config.databaseDir} already exists. Seed an empty home.`);
@@ -213,8 +213,8 @@ await writeRuleFilter({ db, mailbox, now: () => now - HOUR }, newsRule).catch(()
 // A second mailbox of the same person, with no mail (connected after the passes, so none comes to it), to remove; and a second person, who owns nothing yet and
 // takes over the install when the first deletes their account. Neither can be signed in to here.
 await connectAccount(store, WORK, '1', now - 23 * HOUR, user);
-// With labels of its own, or every screen would be the setting-up steps.
-await withSampleLabels(db, WORK);
+// With labels of its own, or every screen would be the setting-up steps; `--bare` leaves it without, to show them.
+if (variant !== '--bare') await withSampleLabels(db, WORK);
 await connectAccount(store, OTHER, '1', now - 22 * HOUR);
 // A model in use, so the dashboard is not behind its setting-up steps. The key is made up, and this
 // instance runs no passes, so nothing ever calls Anthropic with it.

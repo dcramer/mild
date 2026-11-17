@@ -65,7 +65,7 @@ const faux = fauxProvider();
 const models = createModels();
 models.setProvider(faux.provider);
 // The rest of what `fill_rule` requires (src/model/draft-rule.ts), unused.
-const blank = { facts: [], name: '', label: '', onlyOnceLabelled: false, when: '', markRead: true, unsubscribe: false };
+const blank = { reading: '', facts: [], name: '', label: '', onlyOnceLabelled: false, when: '', markRead: true, unsubscribe: false };
 const lookUp = (context: { messages: readonly { role: string; content: unknown }[] }) => {
   const asked = context.messages.find((m) => m.role === 'user')?.content;
   const words = String(asked).split('\n')[1] ?? '';

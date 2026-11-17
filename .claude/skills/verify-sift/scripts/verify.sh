@@ -3,7 +3,7 @@
 #   home/       the sift home (seeded, synthetic)     removed by `down`
 #   evidence/   screenshots, snapshots, query output   kept by `down`
 #   pid port cookie dashboard.log gmail.json (the fake Gmail's filters)
-# Usage: verify.sh up <dir> | doctor <dir> | ab <dir> <agent-browser args...> | sql <dir> <query> | down <dir>
+# Usage: verify.sh up <dir> [--bare] | doctor <dir> | ab <dir> <agent-browser args...> | sql <dir> <query> | down <dir>
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
@@ -37,7 +37,7 @@ case "$cmd" in
   up)
     [ ! -e "$dir/home" ] || { echo "up: $dir/home exists. Use a new directory per run." >&2; exit 1; }
     mkdir -p "$dir/evidence"
-    node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/seed.ts" "$dir/home" "$dir/gmail.json" > "$dir/cookie"
+    node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/seed.ts" "$dir/home" "$dir/gmail.json" "${3:-}" > "$dir/cookie"
     port="$(node -e 'const s=require("node:net").createServer().listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')"
     echo "$port" > "$dir/port"
     # `sift dashboard`, not `run`: there is no Gmail behind this home, so a pass would only fail. serve.ts is that

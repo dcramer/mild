@@ -22,7 +22,7 @@ Preconditions:
 
 - **Remove a mailbox.** `ab open "$B/?settings=1"`, then `ab find role button click --name "Remove me@work.example.org"`. A dialog `Remove me@work.example.org` says the filters and labels stay in Gmail; `Remove mailbox` is disabled. `ab find role textbox fill --name "The address" "me@work.example.org"`, then `ab find role button click --name "Remove mailbox"`. Mailboxes lists only `me@example.org`.
 - **Stored.** `verify.sh sql "$RUN" "SELECT id FROM accounts ORDER BY id"` returns `bravo@example.net`, `me@example.org`. `SELECT count(*) AS n FROM labels WHERE account_id = 'me@work.example.org'` is `0`.
-- **Delete the account.** `ab find role button click --name "Delete account…"`, type `me@example.org` into `The address`, `ab find role button click --name "Delete everything"`. The page goes to the sign-in screen.
+- **Delete the account.** `ab find role button click --name "Delete account…"`, type `me@example.org` into `The address`, `ab find role button click --name "Delete everything"`. The page goes to the sign-in screen, which here reads `No Google client yet.` (the harness has no Google client).
 - **Stored.** `SELECT id, owner FROM users` returns only Bravo's, owner `true`. `SELECT count(*) AS n FROM messages` is `0` and `SELECT count(*) AS n FROM credentials` is `0`. `curl` with the old cookie to `/api/manage` answers 401.
 
 ## Gotchas

@@ -37,7 +37,8 @@ An H1 and one paragraph of what the user gets, then four H2s in order: `Sub-feat
 - [Add a rule](./add-rule.md): a rule made on the Rules screen, and its effect on what is waiting.
 - [Rules from a shortcut](./rule-shortcuts.md): every other press that makes a rule opens the rule dialog in place, started on what that place knows: a proposal, a message, a fact, a standing.
 - [A rule as a Gmail filter](./gmail-filter.md): whether a rule is a filter in Gmail, adding and removing one, and removing a rule that is one.
-- [Edit a label](./edit-label.md): change what a label does.
+- [Edit a label](./edit-label.md): change what a label does, add labels, suggested or by hand, and remove one.
+- [Setting up](./setting-up.md): the steps shown until a model is in use and every mailbox has labels.
 - [Read a message as its HTML](./message-html.md): the Text and HTML choice in the message panel, and that nothing remote loads.
 - [What sift saw in a message](./message-facts.md): the facts shown on an opened message, rules on them, and lists narrowed by them.
 - [Remove a mailbox, delete the account](./remove-mailbox.md): what sift holds about a mailbox, or a whole person, goes.
