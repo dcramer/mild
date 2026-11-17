@@ -351,8 +351,11 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
               {profile.domain ? (
                 <>
                   {title ? <span aria-hidden>·</span> : null}
-                  <TextLink href={`/domain/${encodeURIComponent(accountId)}/${encodeURIComponent(profile.domain.name)}`}>{profile.domain.name}</TextLink>
-                  <ContactHint contact={profile.domain.contact} />
+                  {/* The hint belongs to the domain: on a phone it wraps with it, never onto a line of its own. */}
+                  <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                    <TextLink href={`/domain/${encodeURIComponent(accountId)}/${encodeURIComponent(profile.domain.name)}`}>{profile.domain.name}</TextLink>
+                    <ContactHint contact={profile.domain.contact} />
+                  </span>
                 </>
               ) : null}
             </>

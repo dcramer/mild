@@ -4,8 +4,9 @@ import { setParams } from '@/lib/route.ts';
 import { type LabelSummary, type RuleDraft, type RuleFilter, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
 import { type By, type Condition, type RuleStart, conditionsOf, matchOf, replacedBy, startWords } from '@/lib/rule-start.ts';
 import { FACTS, type FactAnswer, type FactKey, describeMatch, factAnswers, factConditions, factParam, factWords, outcomeName } from '@/lib/format.ts';
-import { Button, Check, Dialog, Does, Failure, Field, Form, Input, Note, Select, TextArea, useToast } from '@/system';
+import { Button, Check, Dialog, Does, Failure, Field, FieldGroup, Form, Input, Note, Select, useToast } from '@/system';
 import { useFilterOffer } from '@/views/gmail-filter.tsx';
+import { DescribeStep } from '@/components/describe.tsx';
 
 const BY = [
   ['from', 'from'],
@@ -194,45 +195,21 @@ export function AddRuleDialog({
   if (offer) return <Dialog open onClose={onClose} {...filterStep(offer.id, offer.filter, 'Not now')} />;
   if (describing)
     return (
-      <Dialog
-        open
-        onClose={onClose}
+      <DescribeStep
         title="Add a rule"
-        footer={
-          <>
-            <Button variant="ink" busy={drafting.busy} disabled={goal.trim() === ''} onClick={describe}>
-              Fill it in
-            </Button>
-            <Button variant="quiet" onClick={() => setDescribing(false)}>
-              Fill it in yourself
-            </Button>
-            <Failure>{drafting.error}</Failure>
-          </>
-        }
-      >
-        <Form onSubmit={describe}>
-          <Field
-            label="What should it do?"
-            hint={
-              drafting.busy
-                ? 'This can take a minute.'
-                : 'Name a sender as you know them: Sift finds their address in your mail. You see the rule before it is added.'
-            }
-          >
-            <TextArea
-              autoFocus
-              aria-label="What should the rule do?"
-              className="min-h-28"
-              maxLength={2000}
-              placeholder="Archive receipts from example.com and mark them read"
-              value={goal}
-              // What it was opened from ends where the reader carries on.
-              onFocus={(event) => event.currentTarget.setSelectionRange(goal.length, goal.length)}
-              onChange={(event) => setGoal(event.target.value)}
-            />
-          </Field>
-        </Form>
-      </Dialog>
+        question="What should it do?"
+        hint="Name a sender as you know them: Sift finds their address in your mail. You see the rule before it is added."
+        placeholder="Archive receipts from example.com and mark them read"
+        value={goal}
+        onChange={setGoal}
+        go="Fill in the rule"
+        onGo={describe}
+        manual="Write it yourself"
+        onManual={() => setDescribing(false)}
+        busy={drafting.busy}
+        error={drafting.error}
+        onClose={onClose}
+      />
     );
   return (
     <Dialog
@@ -245,10 +222,7 @@ export function AddRuleDialog({
             Add rule
           </Button>
           <Button variant="quiet" onClick={() => setDescribing(true)}>
-            Describe it
-          </Button>
-          <Button variant="quiet" onClick={onClose}>
-            Cancel
+            Describe it instead
           </Button>
           <Failure>{error}</Failure>
         </>
@@ -260,118 +234,124 @@ export function AddRuleDialog({
             {note}
           </Note>
         ) : null}
-        <Field inline label="Mail" hint={hint}>
-          <div className="flex w-full flex-col items-start gap-2">
-            {rows.map((row, at) => (
-              <span key={at} className="flex w-full min-w-0 items-center gap-1">
-                {/* A kind stays whole beside its value; a long answer about a fact is cut short before the X is. */}
-                <span className={isNamed(row) ? 'shrink-0' : 'flex min-w-0'}>
-                  <Select
-                    label={`Condition ${at + 1}`}
-                    value={isNamed(row) ? row.by : factParam(row.fact)}
-                    options={kinds(row)}
-                    onChange={(next) => change(at, retype(row, next))}
-                  />
+        <FieldGroup title="Which mail">
+          <Field inline label="Mail" hint={hint}>
+            <div className="flex w-full flex-col items-start gap-2">
+              {rows.map((row, at) => (
+                <span key={at} className="flex w-full min-w-0 items-center gap-1">
+                  {/* A kind stays whole beside its value; a long answer about a fact is cut short before the X is. */}
+                  <span className={isNamed(row) ? 'shrink-0' : 'flex min-w-0'}>
+                    <Select
+                      label={`Condition ${at + 1}`}
+                      value={isNamed(row) ? row.by : factParam(row.fact)}
+                      options={kinds(row)}
+                      onChange={(next) => change(at, retype(row, next))}
+                    />
+                  </span>
+                  {isNamed(row) ? (
+                    <Input
+                      autoFocus={at === rows.length - 1 && (grown || at === 0)}
+                      className="min-w-0 flex-1"
+                      aria-label={`Value ${at + 1}`}
+                      placeholder={PLACEHOLDER[row.by]}
+                      value={row.value}
+                      onChange={(event) => change(at, { by: row.by, value: event.target.value })}
+                    />
+                  ) : null}
+                  <Button
+                    variant="quiet"
+                    size="icon"
+                    className="ml-auto shrink-0"
+                    aria-label={`Remove condition ${at + 1}`}
+                    onClick={() => setRows(rows.filter((_, i) => i !== at))}
+                  >
+                    <XIcon aria-hidden />
+                  </Button>
                 </span>
-                {isNamed(row) ? (
-                  <Input
-                    autoFocus={at === rows.length - 1 && (grown || at === 0)}
-                    className="min-w-0 flex-1"
-                    aria-label={`Value ${at + 1}`}
-                    placeholder={PLACEHOLDER[row.by]}
-                    value={row.value}
-                    onChange={(event) => change(at, { by: row.by, value: event.target.value })}
-                  />
-                ) : null}
-                <Button
-                  variant="quiet"
-                  size="icon"
-                  className="ml-auto shrink-0"
-                  aria-label={`Remove condition ${at + 1}`}
-                  onClick={() => setRows(rows.filter((_, i) => i !== at))}
-                >
-                  <XIcon aria-hidden />
-                </Button>
+              ))}
+              <Button variant="quiet" className="-ml-3" onClick={grow}>
+                <PlusIcon aria-hidden />
+                Add a condition
+              </Button>
+            </div>
+          </Field>
+          {replaces ? (
+            <Field inline label="Replaces">
+              <span className="flex min-h-(--control) items-center gap-1">
+                {replaces.labelName ? <span>{replaces.labelName}</span> : null}
+                {replaces.labelName && replacing ? <span className="text-muted-foreground">·</span> : null}
+                {replacing ? <Does action={replacing}>{outcomeName(replacing)}</Does> : null}
               </span>
-            ))}
-            <Button variant="quiet" className="-ml-3" onClick={grow}>
-              <PlusIcon aria-hidden />
-              Add a condition
-            </Button>
-          </div>
-        </Field>
-        {replaces ? (
-          <Field inline label="Replaces">
-            <span className="flex min-h-(--control) items-center gap-1">
-              {replaces.labelName ? <span>{replaces.labelName}</span> : null}
-              {replaces.labelName && replacing ? <span className="text-muted-foreground">·</span> : null}
-              {replacing ? <Does action={replacing}>{outcomeName(replacing)}</Does> : null}
-            </span>
+            </Field>
+          ) : null}
+        </FieldGroup>
+        <FieldGroup title="What it is">
+          <Field inline label="When it is" hint={waitsFor ? 'A model reads each message it matches to tell.' : undefined}>
+            <Select
+              label="Only when it is this label"
+              value={whenLabel}
+              options={[['', 'Any label'] as const, ...labels.map((l) => [l.id, l.name] as const)]}
+              onChange={setWhenLabel}
+            />
           </Field>
-        ) : null}
-        <Field inline label="When it is" hint={waitsFor ? 'A model reads each message it matches to tell.' : undefined}>
-          <Select
-            label="Only when it is this label"
-            value={whenLabel}
-            options={[['', 'Any label'] as const, ...labels.map((l) => [l.id, l.name] as const)]}
-            onChange={setWhenLabel}
-          />
-        </Field>
-        {waitsFor ? null : (
-          <>
-            <Field
-              inline
-              label="Only when"
-              hint={
-                needsLabel
-                  ? 'Choose a label below for this to describe.'
-                  : condition.trim() !== ''
-                    ? 'A model reads each message it matches to check.'
-                    : undefined
-              }
-            >
-              <Input
-                className="w-full"
-                aria-label="Only when it is, in your words"
-                placeholder="optional: it is a notice for a lot I did not bid on"
-                value={condition}
-                onChange={(event) => setCondition(event.target.value)}
-              />
+          {waitsFor ? null : (
+            <>
+              <Field
+                inline
+                label="Only when"
+                hint={
+                  needsLabel
+                    ? 'Choose a label below for this to describe.'
+                    : condition.trim() !== ''
+                      ? 'A model reads each message it matches to check.'
+                      : undefined
+                }
+              >
+                <Input
+                  className="w-full"
+                  aria-label="Only when it is, in your words"
+                  placeholder="optional: it is a notice for a lot I did not bid on"
+                  value={condition}
+                  onChange={(event) => setCondition(event.target.value)}
+                />
+              </Field>
+              <Field inline label="Label as">
+                <Select
+                  label="Label it as"
+                  value={label}
+                  options={[['', 'No label, just act'] as const, ...labels.map((l) => [l.id, l.name] as const)]}
+                  onChange={setLabel}
+                />
+              </Field>
+            </>
+          )}
+        </FieldGroup>
+        <FieldGroup title="What happens">
+          {chosen ? null : (
+            <>
+              <Field inline label="Then">
+                <Select label="What happens to it" value={action || 'archive'} options={ACTIONS.map((a) => [a, outcomeName(a)] as const)} onChange={setThen} />
+              </Field>
+              <Field inline label="Also">
+                <div className="flex flex-col gap-2">
+                  <Check checked={markRead} onChange={setMarkRead}>
+                    Mark it read
+                  </Check>
+                  <Check checked={unsubscribe} onChange={setUnsubscribe}>
+                    Unsubscribe, when the sender offers a safe way
+                  </Check>
+                </div>
+              </Field>
+            </>
+          )}
+          {moves ? (
+            <Field inline label="Inbox" hint="You see what it covers before anything moves.">
+              <Check checked={applyNow} onChange={setApplyNow}>
+                Apply to mail already there
+              </Check>
             </Field>
-            <Field inline label="Label as">
-              <Select
-                label="Label it as"
-                value={label}
-                options={[['', 'No label, just act'] as const, ...labels.map((l) => [l.id, l.name] as const)]}
-                onChange={setLabel}
-              />
-            </Field>
-          </>
-        )}
-        {chosen ? null : (
-          <>
-            <Field inline label="Then">
-              <Select label="What happens to it" value={action || 'archive'} options={ACTIONS.map((a) => [a, outcomeName(a)] as const)} onChange={setThen} />
-            </Field>
-            <Field inline label="Also">
-              <div className="flex flex-col gap-2">
-                <Check checked={markRead} onChange={setMarkRead}>
-                  Mark it read
-                </Check>
-                <Check checked={unsubscribe} onChange={setUnsubscribe}>
-                  Unsubscribe, when the sender offers a safe way
-                </Check>
-              </div>
-            </Field>
-          </>
-        )}
-        {moves ? (
-          <Field inline label="Inbox" hint="You see what it covers before anything moves.">
-            <Check checked={applyNow} onChange={setApplyNow}>
-              Apply to mail already there
-            </Check>
-          </Field>
-        ) : null}
+          ) : null}
+        </FieldGroup>
       </Form>
     </Dialog>
   );

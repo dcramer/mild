@@ -1,6 +1,7 @@
 import { type ReactNode, useState } from 'react';
 import { type LabelProposal, type LabelSummary, api, useAction } from '@/lib/api.ts';
 import { type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
+import { DescribeStep } from '@/components/describe.tsx';
 import { ACTIONS, type ActionKey, EXPLAIN, count, percent, plural } from '@/lib/format.ts';
 import { ActionIcon, Button, Check, Code, Dialog, Failure, Field, Figure, Figures, Form, Input, Panel, Select, TextArea } from '@/system';
 
@@ -180,7 +181,6 @@ export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onS
     onClose();
   };
   const suggest = () =>
-    text.trim() !== '' &&
     run(async () => {
       const proposal = await api.proposeLabels(text.trim());
       setSuggestions(proposal.drafts.map(suggestionOf));
@@ -263,36 +263,20 @@ export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onS
     );
 
   return (
-    <Dialog
-      open
-      onClose={onClose}
+    <DescribeStep
       title="Add labels"
-      footer={
-        <>
-          <Button variant="ink" busy={busy} disabled={text.trim() === ''} onClick={suggest}>
-            Suggest labels
-          </Button>
-          {busy ? (
-            <span className="text-sm text-muted-foreground">This can take a minute.</span>
-          ) : (
-            <Button variant="quiet" onClick={() => setStage({ at: 'manual' })}>
-              Write one yourself
-            </Button>
-          )}
-          <Failure>{error}</Failure>
-        </>
-      }
-    >
-      <Form onSubmit={suggest}>
-        <p className="text-muted-foreground">Describe the mail you want a label for, and what should happen to it. Sift suggests one label or several.</p>
-        <TextArea
-          aria-label="Describe the mail"
-          className="min-h-28 max-md:min-h-48"
-          maxLength={2000}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-        />
-      </Form>
-    </Dialog>
+      question="What mail, and what should happen to it?"
+      hint="Sift suggests one label or several, none overlapping the ones you have. You choose which to add."
+      placeholder="Keep my travel bookings where I see them, but not the deals"
+      value={text}
+      onChange={setText}
+      go="Suggest labels"
+      onGo={suggest}
+      manual="Write one yourself"
+      onManual={() => setStage({ at: 'manual' })}
+      busy={busy}
+      error={error}
+      onClose={onClose}
+    />
   );
 }

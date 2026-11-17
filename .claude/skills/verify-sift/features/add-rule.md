@@ -22,7 +22,7 @@ Preconditions:
 
 - Fresh seed (counts in [README.md](README.md)). For review has a row from `deals@promo.example.com`; Rules has, among others, `anyone at promo.example.com` → `Spam`.
 
-- **Open the dialog.** `ab open "$B/rules"`, then `ab find role button click --name "Add a rule"`. A level-2 heading `Add a rule` appears with `Add rule` disabled; `Match mail` reads `from`, `Label it as` reads `No label, just act`, `What happens to it` reads `Archive`.
+- **Open the dialog.** `ab open "$B/rules"`, then `ab find role button click --name "Add a rule"`. It opens on `What should it do?` with `Fill in the rule` (which calls the model; the seed's key is made up, so it fails here) and `Write it yourself`: `ab find role button click --name "Write it yourself"`. The form is in three parts, `Which mail`, `What it is` and `What happens`, with `Add rule` disabled; `Match mail` reads `from`, `Label it as` reads `No label, just act`, `What happens to it` reads `Archive`.
 - **Value.** `ab find role textbox fill "deals@promo.example.com" --name "Value to match"`. The hint reads `Only this address`; `Add rule` is enabled.
 - **Add.** `ab find role button click --name "Add rule"`. A toast reads `Rule added` and `Apply to your inbox` opens over the list; it reads Gmail, so here it says `Sift has no access to me@example.org.` Press `Cancel`. The new rule's panel is open: `Then` `Archive`, `Used` `1 time, last just now`, and `In your inbox` `1` lists `48 hours only: 30% off` (decided, not moved: sift is off). `Close`: the list has `deals@promo.example.com` above `anyone at promo.example.com`.
 - **Effect on what is waiting.** `ab open "$B/"`. The link's count is one fewer and there is no Deals row.
@@ -31,7 +31,7 @@ Preconditions:
 
 ## Gotchas
 
-- `Escape` may not close the dialog; use `Cancel`.
+- The dialog has no Cancel: close it with its close button (top right) or `Escape`.
 - Writing a rule to Gmail as a filter needs Google and sift on, so it cannot be shown here.
 - `anyone at promo.example.com` has exactly the conditions of the seed's Spam rule, so adding it replaces that rule (`Replaces` in the dialog) and the count stays the same. Use an address with no rule to prove adding.
 - Removing a rule asks Gmail for its filter first, even with none recorded; here the fake answers (SKILL.md). Removing one that is a filter is in [gmail-filter.md](gmail-filter.md).

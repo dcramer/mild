@@ -27,6 +27,7 @@ import {
   Facts,
   Failure,
   Field,
+  FieldGroup,
   Figure,
   Figures,
   FilterGroup,
@@ -380,6 +381,23 @@ export function SystemView() {
             </div>
           </Row>
         </Sheet>
+      </Section>
+
+      <Section title="FieldGroup" meta="a long form in parts, each under its name">
+        <div className="max-w-xl">
+          <Form onSubmit={() => {}}>
+            <FieldGroup title="Which mail">
+              <Field inline label="Sender">
+                <Input aria-label="Sender" className="w-full" defaultValue="example.com" />
+              </Field>
+            </FieldGroup>
+            <FieldGroup title="What happens">
+              <Field inline label="Then">
+                <Select label="Then" value={choice} options={ACTIONS} onChange={setChoice} />
+              </Field>
+            </FieldGroup>
+          </Form>
+        </div>
       </Section>
 
       <Section title="Form" meta="fields, one under another, the action last">

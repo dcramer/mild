@@ -63,6 +63,19 @@ export function Field({
   );
 }
 
+/**
+ * A part of a long form under its own name, for a form a reader would otherwise read as one column of
+ * questions: a rule's which mail, what it is and what happens. A rule above each part after the first.
+ */
+export function FieldGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-4 border-t border-(--rule) pt-5 first:border-t-0 first:pt-0">
+      <h3 className="name text-base">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
 /** A form's questions, one under another, with what finishes it last. */
 export function Form({ onSubmit, children }: { onSubmit: () => void; children: ReactNode }) {
   return (
