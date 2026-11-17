@@ -29,12 +29,29 @@ import { type LabelDraft, LabelFields } from '@/views/label-panel.tsx';
 type Choice = ManageState['model']['choices'][number];
 type Account = { name: string; onSettings: () => void; onSignOut: () => void } | undefined;
 
+/** Things people want of their inbox, to start from. Each one goes once its words are in the box, and the next takes its place. */
 const EXAMPLES = [
   'Get sales pitches out of my inbox',
   'Never miss mail from a person',
   'Keep receipts out of the way',
   'Quiet the notifications from tools I use',
+  'Catch scams and phishing',
+  'Keep recruiters out of my inbox',
+  'Never miss a bill or a failed payment',
+  'Keep shipping updates out of the way',
+  'Keep security alerts about my accounts where I see them',
+  'Unsubscribe me from lists I never signed up for',
+  'Keep calendar invitations from people',
+  'Archive automated reports and digests',
+  'Keep mail that asks me to review or approve something',
+  'Archive social network notifications',
+  'Keep mail from my kids’ school',
+  'Keep replies to emails I sent',
+  'Keep newsletters I read, and archive the rest',
+  'Archive surveys and feedback requests',
 ];
+/** How many to offer at once. */
+const OFFERED = 6;
 
 const DAYS = [
   ['7', 'The last week'],
@@ -51,15 +68,18 @@ const DAYS = [
 export function SetUp({ signedInAs, onSettings, children }: { signedInAs: string | null; onSettings: () => void; children: ReactNode }) {
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const proposal = useLoaded('labelProposal', (signal) => api.labelProposal(signal), 300_000);
-  // Making the labels lifts the last step at the next load, so the one after it is held here.
-  const [teaching, setTeaching] = useState(false);
+  // Each press moves to the next step itself rather than waiting for the next load, which would show a step
+  // from before it: suggestions just made, labels just made, older mail asked for.
+  const [fresh, setFresh] = useState<LabelProposal | null>(null);
   const [asking, setAsking] = useState(false);
+  const [made, setMade] = useState(false);
+  const [teaching, setTeaching] = useState(false);
   const state = manage.data;
-  // Until it is known, the dashboard draws its loading screens: almost everyone is set up, and this is met once.
-  if (!state) return children;
+  // Nothing until it is known which: the dashboard drawn first would be replaced by a step a moment later.
+  if (!state) return manage.error ? children : null;
   const inUse = state.model.chosen?.split('/')[0] ?? null;
   const walled = inUse === null || !state.model.signedIn.includes(inUse);
-  const bare = state.accounts.some((a) => !(state.labels[a.id] ?? []).some((l) => l.gmailLabel !== null));
+  const bare = !made && state.accounts.some((a) => !(state.labels[a.id] ?? []).some((l) => l.gmailLabel !== null));
   if (!walled && !bare && !teaching) return children;
   const account: Account = signedInAs
     ? { name: signedInAs, onSettings, onSignOut: () => void api.signOut().then(() => window.location.assign('/')) }
@@ -70,7 +90,9 @@ export function SetUp({ signedInAs, onSettings, children }: { signedInAs: string
 
   if (walled) return <Connect state={state} lost={lost ? inUse : null} steps={lost ? undefined : steps} account={account} reload={manage.reload} />;
   if (teaching) return <Teach state={state} steps={steps} account={account} onDone={() => setTeaching(false)} />;
-  const suggested = proposal.data?.proposal ?? null;
+  // Suggestions kept from an earlier visit decide the step, so it waits for them.
+  if (!proposal.data && !proposal.error && !fresh) return null;
+  const suggested = fresh ?? proposal.data?.proposal ?? null;
   if (suggested && !asking)
     return (
       <Labels
@@ -80,8 +102,8 @@ export function SetUp({ signedInAs, onSettings, children }: { signedInAs: string
         account={account}
         onStartOver={() => setAsking(true)}
         onDone={() => {
+          setMade(true);
           if (state.owner) setTeaching(true);
-          manage.reload();
         }}
       />
     );
@@ -90,9 +112,9 @@ export function SetUp({ signedInAs, onSettings, children }: { signedInAs: string
       start={suggested?.goal ?? ''}
       steps={steps}
       account={account}
-      onSuggested={() => {
+      onSuggested={(next) => {
+        setFresh(next);
         setAsking(false);
-        proposal.reload();
       }}
     />
   );
@@ -166,11 +188,21 @@ function Provider({
   );
 }
 
-function Want({ start, steps, account, onSuggested }: { start: string; steps: readonly string[]; account: Account; onSuggested: () => void }) {
+function Want({
+  start,
+  steps,
+  account,
+  onSuggested,
+}: {
+  start: string;
+  steps: readonly string[];
+  account: Account;
+  onSuggested: (proposal: LabelProposal) => void;
+}) {
   const [goal, setGoal] = useState(start);
   const { busy, error, run } = useAction();
   const ready = goal.trim() !== '';
-  const suggest = () => ready && run(() => api.proposeLabels(goal.trim()), onSuggested);
+  const suggest = () => ready && run(async () => onSuggested(await api.proposeLabels(goal.trim())));
   return (
     <Onboarding
       steps={steps}
@@ -188,14 +220,16 @@ function Want({ start, steps, account, onSuggested }: { start: string; steps: re
           onChange={(event) => setGoal(event.target.value)}
         />
         <ul className="-ml-3 flex flex-col items-start" aria-label="Examples">
-          {EXAMPLES.map((example) => (
-            <li key={example}>
-              <Button variant="quiet" onClick={() => setGoal((g) => (g.trim() ? `${g.trim()} ${example}.` : `${example}.`))}>
-                <PlusIcon aria-hidden />
-                {example}
-              </Button>
-            </li>
-          ))}
+          {EXAMPLES.filter((example) => !goal.toLowerCase().includes(example.toLowerCase()))
+            .slice(0, OFFERED)
+            .map((example) => (
+              <li key={example}>
+                <Button variant="quiet" onClick={() => setGoal((g) => (g.trim() ? `${g.trim()} ${example}.` : `${example}.`))}>
+                  <PlusIcon aria-hidden />
+                  {example}
+                </Button>
+              </li>
+            ))}
         </ul>
       </Form>
       <Onward next={{ label: 'Suggest labels', busy, disabled: !ready, onPress: suggest }} error={error} waiting={busy ? 'This can take a minute.' : null} />

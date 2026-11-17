@@ -26,10 +26,11 @@ export function LabelsView() {
   const [adding, setAdding] = useState<string | null>(null);
   const [open, setOpen] = useParam('label');
   const accounts = data?.accounts ?? [];
-  // Alphabetical, so a label stays where it is when what it does changes.
+  // Everything else first, as what all the other labels are carved out of; then alphabetical, so a label stays
+  // where it is when what it does changes.
   const all = accounts
     .flatMap((account) => (data?.labels[account.id] ?? []).map((label) => ({ account, label })))
-    .toSorted((a, b) => a.label.name.localeCompare(b.label.name));
+    .toSorted((a, b) => Number(b.label.gmailLabel === null) - Number(a.label.gmailLabel === null) || a.label.name.localeCompare(b.label.name));
   const mail = all.reduce((sum, { label }) => sum + label.messages, 0);
   const first = accounts[0];
   const at = all.findIndex(({ label }) => label.id === open);
