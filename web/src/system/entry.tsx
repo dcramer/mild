@@ -1,13 +1,14 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useContext } from 'react';
 import { Sheet } from './sheet.tsx';
-import { FinePrint } from './fine-print.tsx';
+import { Cloud, FinePrint } from './fine-print.tsx';
 import { Wordmark } from './type.tsx';
 
 /**
  * The one sheet someone sees in place of the dashboard when sign-in cannot start here. The name sits
- * across its top edge, like a label stuck to it; under it the terms, privacy policy and security page.
+ * across its top edge, like a label stuck to it; under it the terms, privacy policy and security page, on a service (`Cloud`).
  */
 export function Entry({ children }: { children: ReactNode }) {
+  const cloud = useContext(Cloud);
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-[36rem] flex-col justify-center px-5 py-12">
       <div className="relative">
@@ -16,9 +17,11 @@ export function Entry({ children }: { children: ReactNode }) {
         </h1>
         <Sheet className="entry gap-5 px-6 pt-12 pb-6">{children}</Sheet>
       </div>
-      <p className="mt-6 flex flex-wrap items-baseline gap-x-4 gap-y-1 px-6 text-sm text-muted-foreground">
-        <FinePrint />
-      </p>
+      {cloud ? (
+        <p className="mt-6 flex flex-wrap items-baseline gap-x-4 gap-y-1 px-6 text-sm text-muted-foreground">
+          <FinePrint />
+        </p>
+      ) : null}
     </main>
   );
 }

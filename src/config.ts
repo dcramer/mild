@@ -38,6 +38,12 @@ export interface Settings {
    * Nothing that identifies mail is in them; senders, domains and messages are keyed hashes.
    */
   sentryDsn?: string;
+  /**
+   * Set when this Sift is a service for other people: the address they write to with questions and
+   * security reports. Only then does the page have terms, a privacy policy and a security page, which
+   * speak for whoever runs it. Unset: someone's own copy, where they would speak to its own owner.
+   */
+  cloud?: string;
 }
 
 /** Each setting's variable, and what its text must be. Hosts that run sift for you (Vercel) configure it only this way. */
@@ -49,6 +55,7 @@ const ENVIRONMENT = {
   REDIS_URL: 'redisUrl',
   SIFT_CHATGPT_SIGN_IN: 'chatgptSignIn',
   SENTRY_DSN: 'sentryDsn',
+  SIFT_CLOUD: 'cloud',
 } as const satisfies Record<string, keyof Settings>;
 export type Variable = keyof typeof ENVIRONMENT;
 
@@ -163,6 +170,10 @@ export function readSettings(env: NodeJS.ProcessEnv): Settings {
       case 'SENTRY_DSN':
         if (!/^https?:\/\/[^@\s/]+@[^@\s/]+\/\S+$/.test(text)) throw bad(variable, "a Sentry DSN, as the project's Client Keys page gives it (https://…@…/…)");
         settings.sentryDsn = text;
+        break;
+      case 'SIFT_CLOUD':
+        if (!/^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/.test(text)) throw bad(variable, 'the email address people write to about this Sift');
+        settings.cloud = text;
         break;
     }
   }

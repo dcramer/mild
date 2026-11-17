@@ -33,6 +33,7 @@ import {
   Figure,
   Figures,
   FilterGroup,
+  Cloud,
   FinePrint,
   Form,
   Highlight,
@@ -848,13 +849,17 @@ export function SystemView() {
 
       <Section
         title="FinePrint, PageFoot"
-        meta="the terms, privacy and security: at the foot of every dashboard screen, under the sections in the phone menu, under Splash and Entry"
+        meta="the terms, privacy and security, on a Sift run as a service: at the foot of every dashboard screen, under the sections in the phone menu, under Splash and Entry"
       >
         <p className="flex flex-wrap gap-x-5 gap-y-2 text-muted-foreground">
           <FinePrint />
         </p>
         <FinePrint list />
         <PageFoot />
+        <p className="slug text-muted-foreground">Someone's own copy: only the code</p>
+        <Cloud value={false}>
+          <PageFoot />
+        </Cloud>
       </Section>
 
       <Section title="Entry" meta="the page in place of the dashboard when sign-in cannot start here; centred in the window">

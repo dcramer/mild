@@ -643,6 +643,8 @@ export const Session = z.object({
   reason: z.enum(['no-client', 'address']).nullable(),
   /** Addresses sign-in works at. */
   addresses: z.array(z.string()),
+  /** `SIFT_CLOUD`: where to write to whoever runs this Sift as a service. Null on someone's own copy, which has no terms, privacy policy or security page. */
+  cloud: z.string().nullable(),
 });
 export type Session = z.infer<typeof Session>;
 

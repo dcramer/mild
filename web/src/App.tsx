@@ -2,7 +2,7 @@ import { Component, type ReactNode, Suspense, useEffect, useRef, useState } from
 import { api, useLoaded, useOnline } from '@/lib/api.ts';
 import { setParams, useParam, useRoute } from '@/lib/route.ts';
 import { lazyView } from '@/lib/lazy.tsx';
-import { ListView, Loading, Masthead, Note, Notice, PageFoot, PageHeader } from '@/system';
+import { Cloud, ListView, Loading, Masthead, Note, Notice, PageFoot, PageHeader } from '@/system';
 import type { MessageRef } from '@/views/message-panel.tsx';
 import { SuggestionsView } from '@/views/suggestions.tsx';
 import { SetUp } from '@/components/set-up.tsx';
@@ -113,17 +113,20 @@ const closeSettings = () => ((window.history.state as { panel?: boolean } | null
 /** Shows the sign-in screen until the viewer is signed in, then the dashboard. */
 export function App() {
   const route = useRoute();
-  // These are open to anyone and hold no data, so they are rendered outside the gate and ask the API for nothing, not even who is signed in.
-  // Google reads the privacy policy and the terms before it lets anyone outside a test list sign in.
-  const Open = { system: SystemView, privacy: PrivacyView, terms: TermsView, security: SecurityView }[route[0] ?? ''] ?? null;
-  if (Open)
+  // Open to anyone and holding no data, so it asks the API for nothing, not even who is signed in. Its parts are shown
+  // as a service shows them, with the terms, privacy and security in the fine print.
+  if (route[0] === 'system')
     return (
-      <Suspense fallback={null}>
-        <Open />
-      </Suspense>
+      <Cloud value>
+        <Suspense fallback={null}>
+          <SystemView />
+        </Suspense>
+      </Cloud>
     );
   return <Gate route={route} />;
 }
+
+const LEGAL: Record<string, typeof PrivacyView> = { privacy: PrivacyView, terms: TermsView, security: SecurityView };
 
 function Gate({ route }: { route: string[] }) {
   const [settings] = useParam('settings');
@@ -134,15 +137,27 @@ function Gate({ route }: { route: string[] }) {
   // before 400ms and show nothing in between; a cold start on Vercel may not.
   if (!session.data)
     return session.missing || session.error || !online || slow ? <Boot missing={session.missing} error={session.error} online={online} /> : null;
-  if (session.data.required && session.data.email === null) {
+  const { cloud } = session.data;
+  // Open to anyone, signed in or not: Google reads the privacy policy and the terms before it lets anyone outside a test list sign in.
+  // Someone's own copy has none, and the address is the dashboard's.
+  const Legal = LEGAL[route[0] ?? ''];
+  if (Legal && cloud !== null)
     return (
       <Suspense fallback={null}>
-        <SignInScreen session={session.data} error={new URLSearchParams(window.location.search).get('signin')} />
+        <Legal contact={cloud} />
       </Suspense>
+    );
+  if (session.data.required && session.data.email === null) {
+    return (
+      <Cloud value={cloud !== null}>
+        <Suspense fallback={null}>
+          <SignInScreen session={session.data} error={new URLSearchParams(window.location.search).get('signin')} />
+        </Suspense>
+      </Cloud>
     );
   }
   return (
-    <>
+    <Cloud value={cloud !== null}>
       <SetUp signedInAs={session.data.email} onSettings={openSettings}>
         <Dashboard signedInAs={session.data.email} route={route} />
       </SetUp>
@@ -151,7 +166,7 @@ function Gate({ route }: { route: string[] }) {
           <SettingsPanel onClose={closeSettings} />
         </Suspense>
       ) : null}
-    </>
+    </Cloud>
   );
 }
 
