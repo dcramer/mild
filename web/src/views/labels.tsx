@@ -78,7 +78,7 @@ export function LabelsView() {
           </span>
           <Button
             disabled={!data || data.accounts.length === 0 || full}
-            {...(full ? { why: `Sift keeps at most ${data?.labelLimit} labels. Change one that is no longer used instead.` } : {})}
+            {...(full ? { why: `Sift keeps at most ${data?.labelLimit} labels. Remove one you no longer use first.` } : {})}
             onClick={() => setAdding(true)}
           >
             <PlusIcon aria-hidden />

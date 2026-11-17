@@ -24,7 +24,7 @@ import { hashOf, hashCorrespondent, newestOfGroup, openNewest } from './content.
 import { parseListId } from '../triage/features.ts';
 import type { FoundSender } from '../triage/rule-draft.ts';
 import { type Standing, isSharedDomain, standingOf } from '../triage/standing.ts';
-import { listLabels } from './labels.ts';
+import { labelNames, listLabels } from './labels.ts';
 import { listRules } from './rules.ts';
 
 const later = alias(decisions, 'later');
@@ -245,7 +245,7 @@ const sent = alias(messages, 'sent');
  * of each and the caller searches it.
  */
 export async function senderDirectory(db: Sql, accountId: string): Promise<FoundSender[]> {
-  const names = new Map((await listLabels(db, accountId)).map((l) => [l.id, l.name]));
+  const names = await labelNames(db, accountId);
   const rows = await db
     .select({
       newest: newestOfGroup(),

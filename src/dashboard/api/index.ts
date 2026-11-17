@@ -17,6 +17,7 @@ import labelsAddWrite from './routes/labels/add/post.ts';
 import labelsWrite from './routes/labels/post.ts';
 import labelsProposalRead from './routes/labels/proposal/get.ts';
 import labelsProposeWrite from './routes/labels/propose/post.ts';
+import labelsRemoveWrite from './routes/labels/remove/post.ts';
 import mailboxRemoveWrite from './routes/mailbox/remove/post.ts';
 import manageRead from './routes/manage/get.ts';
 import messageRead from './routes/message/get.ts';
@@ -78,6 +79,7 @@ export const WRITES: readonly Write[] = [
   labelsAddWrite,
   labelsAcceptWrite,
   labelsProposeWrite,
+  labelsRemoveWrite,
   mailboxRemoveWrite,
   modelWrite,
   modelChatgptWrite,

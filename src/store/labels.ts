@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull, labelProposals, labels } from './query.ts';
+import { and, asc, desc, eq, examples, inArray, isNotNull, isNull, labelProposals, labels, or, rules, sql } from './query.ts';
 import { labelProposalName, openJson, sealJson } from './content.ts';
 import type { LabelDraft } from '../triage/proposal.ts';
 import type { Usage } from '../triage/stages/model.ts';
@@ -33,7 +33,7 @@ const toRow = (accountId: string, l: Label, position: number) => ({
 /** A new mailbox's one label, written with it (`ensureMailbox`). */
 export const everythingElseRow = (accountId: string) => toRow(accountId, everythingElse, MAX_LABELS);
 
-/** An account's labels in order. */
+/** An account's labels in order, leaving out removed ones. */
 export async function listLabels(db: Sql, accountId: string): Promise<Label[]> {
   const rows = await db
     .select({
@@ -47,7 +47,7 @@ export async function listLabels(db: Sql, accountId: string): Promise<Label[]> {
       unsubscribe: labels.unsubscribe,
     })
     .from(labels)
-    .where(eq(labels.accountId, accountId))
+    .where(and(eq(labels.accountId, accountId), isNull(labels.removedAt)))
     .orderBy(asc(labels.position), asc(labels.id));
   return rows.map((r) => ({
     id: r.id,
@@ -59,6 +59,12 @@ export async function listLabels(db: Sql, accountId: string): Promise<Label[]> {
     ...(r.markRead ? { markRead: true } : {}),
     ...(r.unsubscribe ? { unsubscribe: true } : {}),
   }));
+}
+
+/** What each of an account's labels is called, removed ones too, for naming what mail was. */
+export async function labelNames(db: Sql, accountId: string): Promise<Map<string, string>> {
+  const rows = await db.select({ id: labels.id, name: labels.name }).from(labels).where(eq(labels.accountId, accountId));
+  return new Map(rows.map((r) => [r.id, r.name]));
 }
 
 /** Names in Gmail that sift uses for something other than a label of the user's. */
@@ -89,7 +95,7 @@ function draft(existing: readonly Label[], label: NewLabel): Label {
   const name = label.name.trim();
   const id = slug(name);
   if (id === '' || RESERVED.has(id)) throw new Refusal(`"${name}" cannot be used as a label name.`);
-  if (existing.length >= MAX_LABELS) throw new Refusal(`Sift keeps at most ${MAX_LABELS} labels. Change one that is no longer used instead.`);
+  if (existing.length >= MAX_LABELS) throw new Refusal(`Sift keeps at most ${MAX_LABELS} labels. Remove one you no longer use first.`);
   if (existing.some((l) => l.id === id || l.id.replace(/_/g, '-') === id || l.gmailLabel === `sift/${id}` || l.name.toLowerCase() === name.toLowerCase()))
     throw new Refusal(`There is already a label "${name}".`);
   return {
@@ -103,13 +109,46 @@ function draft(existing: readonly Label[], label: NewLabel): Label {
   };
 }
 
-/** Add labels of the user's own, all or none. Throws if a name is unusable or already taken. */
+/** Add labels of the user's own, all or none. Throws if a name is unusable or already taken. A removed label's name brings it back, as this. */
 export async function addLabels(db: Sql, accountId: string, added: readonly NewLabel[]): Promise<Label[]> {
   const existing = await listLabels(db, accountId);
   const created: Label[] = [];
   for (const label of added) created.push(draft([...existing, ...created], label));
-  if (created.length > 0) await db.insert(labels).values(created.map((l, index) => toRow(accountId, l, existing.length + index)));
+  if (created.length > 0)
+    await db
+      .insert(labels)
+      .values(created.map((l, index) => toRow(accountId, l, existing.length + index)))
+      .onConflictDoUpdate({
+        target: [labels.userId, labels.accountId, labels.id],
+        set: {
+          name: sql`excluded.name`,
+          description: sql`excluded.description`,
+          disposition: sql`excluded.disposition`,
+          block: sql`excluded.block`,
+          markRead: sql`excluded.mark_read`,
+          unsubscribe: sql`excluded.unsubscribe`,
+          position: sql`excluded.position`,
+          removedAt: null,
+        },
+      });
   return created;
+}
+
+/**
+ * Remove a label: nothing is offered it again, and rules that name it and examples of it go. What mail was
+ * said to be stays named. Gmail filters of those rules are the caller's to take out first. False if there
+ * is no such label.
+ */
+export async function removeLabel(db: Sql, accountId: string, id: string, now: number): Promise<boolean> {
+  const removed = await db
+    .update(labels)
+    .set({ removedAt: now })
+    .where(and(eq(labels.accountId, accountId), eq(labels.id, id), isNull(labels.removedAt)))
+    .returning({ id: labels.id });
+  if (removed.length === 0) return false;
+  await db.delete(rules).where(and(eq(rules.accountId, accountId), or(eq(rules.labelId, id), eq(rules.whenLabel, id))));
+  await db.delete(examples).where(and(eq(examples.accountId, accountId), eq(examples.labelId, id)));
+  return true;
 }
 
 /** Whether the account has a label besides Everything Else. Until it does, Sift reads nothing from its Gmail. */

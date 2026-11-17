@@ -173,6 +173,9 @@ async function redecide(db: Sql, accountId: string, now: number): Promise<number
         const changed = !same(base, derived) || derived.ruleId !== undefined;
         if (fromRule || changed) next = changed ? derived : { ...derived, reason: base.reason };
         runId = base.runId;
+      } else if (base?.labelId) {
+        // Labels are never deleted, so one not found here was removed.
+        next = { disposition: 'review', subscription: 'preserve', stage: 'fallback', reason: 'the label it was given has been removed' };
       } else if (fromRule) {
         next = { disposition: 'review', subscription: 'preserve', stage: 'fallback', reason: 'the rule that decided this no longer applies' };
       }

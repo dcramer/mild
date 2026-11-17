@@ -124,6 +124,14 @@ describe('prompt', () => {
     expect(SYSTEM_PROMPT).toContain('untrusted');
   });
 
+  it('leaves a removed label out of what the sender was labelled before', () => {
+    const removed = { id: 'gone', messages: 5 };
+    const prompt = (ownerLabels: { id: string; messages: number }[]) =>
+      buildPrompt({ evidence: evidence({ messagesSeen: 8, userHasWritten: false, ownerLabels }, 'Hello'), labels: SAMPLE_LABELS });
+    expect(prompt([removed, { id: 'newsletter', messages: 3 }])).toContain('The owner labelled earlier mail from this sender: newsletter 3\n');
+    expect(prompt([removed])).not.toContain('The owner labelled earlier mail');
+  });
+
   it('states only the facts that are there, each kind of signal on one line', () => {
     const f = facts({
       accountId: ACCOUNT,

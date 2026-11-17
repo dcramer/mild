@@ -203,6 +203,8 @@ export const api = {
   /** Change a label in every mailbox that has it. */
   saveLabel: (id: string, change: { name?: string; description?: string; disposition?: string; markRead?: boolean; unsubscribe?: boolean }) =>
     post('/api/labels', { id, ...change }),
+  /** Remove a label from every mailbox that has it, with the rules that name it. */
+  removeLabel: (id: string) => post('/api/labels/remove', { id }),
   /** Add labels in every mailbox: by hand, or kept from what the model suggested. */
   addLabels: (labels: { name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }[]) =>
     post<{ ids: string[] }>('/api/labels/add', { labels }),

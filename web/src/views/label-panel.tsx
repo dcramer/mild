@@ -3,7 +3,25 @@ import { type LabelProposal, type LabelSummary, api, useAction } from '@/lib/api
 import { type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
 import { DescribeStep } from '@/components/describe.tsx';
 import { ACTIONS, type ActionKey, EXPLAIN, count, percent, plural } from '@/lib/format.ts';
-import { ActionIcon, Button, Check, Code, Dialog, Failure, Field, Figure, Figures, Form, Input, Note, Panel, Select, TextArea } from '@/system';
+import {
+  ActionIcon,
+  Button,
+  Check,
+  Code,
+  ConfirmButton,
+  Dialog,
+  Failure,
+  Field,
+  Figure,
+  Figures,
+  Form,
+  Input,
+  Note,
+  Panel,
+  Select,
+  TextArea,
+  useToast,
+} from '@/system';
 
 const canMarkRead = (does: string) => does === 'keep' || does === 'archive';
 /** Wrong often enough to look at: under 85% right, over at least ten answers. */
@@ -115,6 +133,8 @@ export function LabelPanel({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const toast = useToast();
+  const remove = useAction();
   const initial = {
     name: label.name,
     description: label.description,
@@ -156,6 +176,29 @@ export function LabelPanel({
             <Failure>{error}</Failure>
           </div>
         </Form>
+        {/* Everything Else is what mail is when it is none of the others. */}
+        {label.gmailLabel === null ? null : (
+          <div>
+            <ConfirmButton
+              question={label.rules > 0 ? `Remove ${label.name} and its ${plural(label.rules, 'rule')}?` : `Remove ${label.name}?`}
+              variant="plain"
+              disabled={remove.busy}
+              onConfirm={() =>
+                remove.run(
+                  () => api.removeLabel(label.id),
+                  () => {
+                    toast(`Label removed: ${label.name}`);
+                    onSaved();
+                    onClose();
+                  },
+                )
+              }
+            >
+              Remove
+            </ConfirmButton>
+            <Failure>{remove.error}</Failure>
+          </div>
+        )}
       </div>
     </Panel>
   );

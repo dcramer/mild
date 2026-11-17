@@ -37,12 +37,18 @@ Rules:
   label is worse than "${UNSURE}": the owner would rather look at one message too many than miss one that mattered.
 - The reason is one short sentence. Do not quote the email at length.`;
 
-const tally = (labels: { id: string; messages: number }[]) => labels.map((l) => `${l.id} ${l.messages}`).join(', ');
-
 /** The user message for one classification. Pure: the same evidence always produces the same text. */
 export function buildPrompt(input: JudgeInput): string {
   const { evidence, labels } = input;
   const { facts, sender } = evidence;
+  // A removed label is in a sender's history but is no longer an answer.
+  const earlier = (counts: { id: string; messages: number }[] = []) =>
+    counts
+      .filter((c) => labels.some((l) => l.id === c.id))
+      .map((c) => `${c.id} ${c.messages}`)
+      .join(', ');
+  const senderLabels = earlier(sender.ownerLabels);
+  const domainLabels = earlier(evidence.domain?.ownerLabels);
   // Whether the owner is on them is already a fact; only who else is says something.
   const others = (list: typeof facts.to) => list.filter((a) => a.address.toLowerCase() !== facts.accountId.toLowerCase()).map((a) => a.address);
   const to = others(facts.to);
@@ -93,12 +99,12 @@ export function buildPrompt(input: JudgeInput): string {
       ? 'Mail from this sender: this is the first'
       : `Mail from this sender: ${sender.messagesSeen} messages${days === null ? '' : `, the first ${days} days before this one`}`,
     ...(sender.userHasWritten ? ['Owner has written to this sender'] : []),
-    ...(sender.ownerLabels && sender.ownerLabels.length > 0 ? [`The owner labelled earlier mail from this sender: ${tally(sender.ownerLabels)}`] : []),
+    ...(senderLabels ? [`The owner labelled earlier mail from this sender: ${senderLabels}`] : []),
     ...(senderStanding ? [`Sender's standing with the owner: ${senderStanding}`] : []),
     ...(evidence.domain
       ? [
           `Others at ${facts.from.domain}: ${evidence.domain.messages} messages from ${evidence.domain.senders} addresses${
-            evidence.domain.ownerLabels.length > 0 ? `, the owner labelled ${tally(evidence.domain.ownerLabels)}` : ''
+            domainLabels ? `, the owner labelled ${domainLabels}` : ''
           }${domainStanding ? `; the domain's standing: ${domainStanding}` : ''}`,
         ]
       : []),

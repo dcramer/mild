@@ -11,6 +11,7 @@ import { continueEval, startEval } from '../src/learn/evals.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
 import { connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { MAX_LABELS, listLabels } from '../src/store/labels.ts';
+import { EVERYTHING_ELSE } from '../src/triage/types.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { EXAMPLE_KEEP_DAYS } from '../src/store/examples.ts';
 import { preferences, setActive } from '../src/store/preferences.ts';
@@ -284,6 +285,53 @@ describe('managing sift from the dashboard', () => {
       reason: 'rule: from sales@example.com, is a reply: keep it',
     });
     expect(await latest('w2')).toEqual({ stage: 'model', disposition: 'keep', label_id: 'marketing' });
+  });
+
+  it('removes a label: its rules and examples go, mail waiting with it is left for the reader, and earlier mail keeps its name', async () => {
+    const { call } = await start();
+    const from = { address: 'sales@example.com', domain: 'example.com' };
+    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'w1', from })], '2');
+    const marketing = {
+      disposition: 'archive',
+      subscription: 'preserve',
+      stage: 'model',
+      confidence: 0.95,
+      reason: 'Marketing: a sale',
+      labelId: 'marketing',
+    } as const;
+    await recordDecision(db, ACCOUNT, 'w1', marketing, { now: 10 });
+    await storeExample(db, ACCOUNT, { id: 'e1', from: from.address, label: 'marketing' });
+    await storeExample(db, ACCOUNT, { id: 'e2', from: from.address, label: 'newsletter' });
+    const rule = await addRule(db, ACCOUNT, { match: { from: [from.address] }, whenLabel: 'marketing', disposition: 'spam' }, 'user');
+    const kept = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+    calls = [];
+
+    expect((await call('POST', '/api/labels/remove', { id: 'marketing' })).body).toEqual({ ok: true, rules: 1, redecided: 1 });
+    expect(calls).toEqual([`filter ${rule} off`]);
+    expect((await listLabels(db, ACCOUNT)).map((l) => l.id)).not.toContain('marketing');
+    expect((await listRules(db, ACCOUNT)).map((r) => r.id)).toEqual([kept]);
+    expect(await raw(db).all('SELECT message_id FROM examples ORDER BY message_id')).toEqual([{ message_id: 'e2' }]);
+    expect(
+      withReason(await raw(db).get(`SELECT stage, disposition, label_id, reason FROM decisions WHERE message_id = 'w1' ORDER BY id DESC LIMIT 1`)),
+    ).toEqual({
+      stage: 'fallback',
+      disposition: 'review',
+      label_id: null,
+      reason: 'the label it was given has been removed',
+    });
+    // What Sift said of it before still names the label.
+    const before = await raw(db).get(`SELECT label_id FROM decisions WHERE message_id = 'w1' ORDER BY id LIMIT 1`);
+    expect(before).toEqual({ label_id: 'marketing' });
+    expect(await raw(db).get(`SELECT name FROM labels WHERE id = 'marketing' AND account_id = ?`, ACCOUNT)).toEqual({ name: 'Marketing' });
+
+    expect((await call('POST', '/api/labels/remove', { id: 'marketing' })).status).toBe(409);
+    expect((await call('POST', '/api/labels/remove', { id: EVERYTHING_ELSE })).status).toBe(409);
+    expect((await call('POST', '/api/labels', { id: 'marketing', name: 'Sales' })).status).toBe(409);
+
+    // The name again brings it back, as the label it is now.
+    const again = await call('POST', '/api/labels/add', { labels: [{ name: 'Marketing', description: 'Sales pitches.', disposition: 'keep' }] });
+    expect(again.body).toEqual({ ids: ['marketing'] });
+    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'marketing')).toMatchObject({ description: 'Sales pitches.', disposition: 'keep' });
   });
 
   it('edits labels and rules', async () => {

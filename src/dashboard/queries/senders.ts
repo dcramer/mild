@@ -2,7 +2,7 @@ import { alias, and, asc, count, decisions, desc, eq, isNotNull, max, messages }
 import { hashOf, newestOfGroup, openEnvelope, openNewest } from '../../store/content.ts';
 import type { Sql } from '../../store/sql.ts';
 import { contacts, domainFacts, senderFacts } from '../../store/senders.ts';
-import { listLabels } from '../../store/labels.ts';
+import { labelNames } from '../../store/labels.ts';
 import { plainName } from '../../triage/stages/rules.ts';
 import { type Scope, narrow } from '../scope.ts';
 import type { SenderPage, SenderProfile } from '../types.ts';
@@ -80,7 +80,7 @@ async function profileOf(db: Sql, scope: Scope, accountId: string, who: { addres
   if (!here) return null;
   const known = 'address' in who ? await senderFacts(db, accountId, who.address, now) : await domainFacts(db, accountId, who.domain, now);
   if (!known) return null;
-  const names = new Map((await listLabels(db, accountId)).map((l) => [l.id, l.name]));
+  const names = await labelNames(db, accountId);
   const domainName = 'address' in who ? (who.address.split('@')[1] ?? '') : who.domain;
   const ofDomain = 'address' in who ? await domainFacts(db, accountId, domainName, now) : null;
   const rules = (await listRuleSummaries(db, here))
@@ -132,7 +132,7 @@ export async function senderPage(
   const profile = await profileOf(db, scope, accountId, who, now);
   if (!profile) return null;
   const filter = 'address' in who ? { sender: who.address } : { domain: who.domain };
-  const named = 'address' in who ? await namesOf(db, accountId, who.address, new Map((await listLabels(db, accountId)).map((l) => [l.id, l.name]))) : null;
+  const named = 'address' in who ? await namesOf(db, accountId, who.address, await labelNames(db, accountId)) : null;
   const writing =
     'domain' in who
       ? (

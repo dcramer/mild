@@ -363,6 +363,9 @@ describe("nobody sees or changes another person's mail", () => {
     expect((await call('POST', '/api/labels/accept', BRAVO, { labels: [label] })).status).toBe(409);
     expect(calls).toEqual([`propose ${BRAVO}`]);
     expect((await listLabels(bravo, BRAVO)).map((l) => l.name)).toEqual(expect.arrayContaining(['Bravo reading', 'Bravo only']));
+    // Alpha has a label by this id too.
+    expect((await call('POST', '/api/labels/remove', BRAVO, { id: 'newsletter' })).status).toBe(200);
+    expect((await listLabels(bravo, BRAVO)).map((l) => l.id)).not.toContain('newsletter');
     expect(await labels()).toBe(before);
   });
 

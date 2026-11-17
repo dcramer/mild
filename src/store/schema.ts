@@ -203,6 +203,8 @@ export const labels = pgTable(
     unsubscribe: boolean('unsubscribe').notNull().default(false),
     gmailLabel: text('gmail_label'), // null only for Everything Else
     position: integer('position').notNull(),
+    // Kept so what was said of mail stays named; offered to nothing. Adding the name again brings it back.
+    removedAt: time('removed_at'),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.accountId, t.id] }),
@@ -217,7 +219,7 @@ export const labels = pgTable(
   ],
 ).enableRLS();
 
-/** What a row says mail is: one of its mailbox's labels. Labels are never deleted. */
+/** What a row says mail is: one of its mailbox's labels. Labels are never deleted, only removed (`removed_at`). */
 const label = (name: string, t: { userId: AnyPgColumn; accountId: AnyPgColumn }, column: AnyPgColumn) =>
   foreignKey({ name, columns: [t.userId, t.accountId, column], foreignColumns: [labels.userId, labels.accountId, labels.id] });
 
