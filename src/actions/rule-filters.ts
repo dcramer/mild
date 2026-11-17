@@ -56,8 +56,9 @@ export async function writeRuleFilter(deps: ActionDeps, ruleId: string): Promise
     const id = twin?.id ?? (await deps.mailbox.createFilter(filter));
     got = (await deps.mailbox.listFilters()).find((f) => f.id === id);
   } catch (error) {
-    // It may exist in Gmail all the same: settleRuleFilters finds it there.
     await finishAction(deps.db, actionId, 'unknown', null, message(error), clock(deps));
+    // It may exist in Gmail all the same.
+    if ((await confirmed(deps, row.accountId, actionId)) && (await getRuleFilter(deps.db, ruleId))?.filterId) return;
     throw error;
   }
   if (!got) {
@@ -99,6 +100,7 @@ async function takeOut(deps: ActionDeps, accountId: string, ruleId: string, filt
     still = (await deps.mailbox.listFilters()).some((f) => f.id === filterId);
   } catch (error) {
     await finishAction(deps.db, actionId, 'unknown', null, message(error), clock(deps));
+    if (await confirmed(deps, accountId, actionId)) return;
     throw error;
   }
   if (still) {
@@ -109,6 +111,20 @@ async function takeOut(deps: ActionDeps, accountId: string, ruleId: string, filt
 }
 
 /**
+ * Whether a filter change whose call errored went through, asked of Gmail at once rather than left open.
+ * False when it did not, or Gmail cannot be asked either; the next check settles that one.
+ */
+async function confirmed(deps: ActionDeps, accountId: string, actionId: number): Promise<boolean> {
+  try {
+    await settleRuleFilters(deps, accountId);
+  } catch {
+    return false;
+  }
+  const [row] = await deps.db.select({ status: actions.status }).from(actions).where(eq(actions.id, actionId));
+  return row?.status === 'done';
+}
+
+/**
  * Settle the account's filter changes that were never read back (Gmail errored after the call, or sift
  * stopped), by finding them in Gmail. A filter that landed goes on its rule if the rule has none and still
  * asks for exactly it; otherwise it is taken out, since a filter with no rule keeps acting on mail with
@@ -116,18 +132,19 @@ async function takeOut(deps: ActionDeps, accountId: string, ruleId: string, filt
  */
 async function settleRuleFilters(deps: ActionDeps, accountId: string): Promise<void> {
   const open = await deps.db
-    .select({ id: actions.id, type: actions.type, payload: actions.payload })
+    .select({ id: actions.id, type: actions.type, payload: actions.payload, error: actions.error })
     .from(actions)
     .where(and(eq(actions.accountId, accountId), inArray(actions.type, ['filter', 'unfilter']), inArray(actions.status, ['pending', 'unknown'])))
     .orderBy(asc(actions.id));
   if (open.length === 0) return;
   const existing = await deps.mailbox.listFilters();
-  for (const { id, type, payload } of open as { id: number; type: 'filter' | 'unfilter'; payload: ActionPayload }[]) {
+  for (const { id, type, payload, error } of open as { id: number; type: 'filter' | 'unfilter'; payload: ActionPayload; error: string | null }[]) {
     const { ruleId, id: filterId, criteria = {}, action = {} } = payload.filter!;
     const rule = await getRuleFilter(deps.db, ruleId);
     if (type === 'unfilter') {
       if (existing.some((f) => f.id === filterId)) {
-        await finishAction(deps.db, id, 'failed', null, 'the filter was still there when read back', clock(deps));
+        // The call's own error, where it gave one, says more than the read-back.
+        await finishAction(deps.db, id, 'failed', null, error ?? 'the filter was still there when read back', clock(deps));
         continue;
       }
       if (rule?.filterId === filterId) await setRuleFilter(deps.db, ruleId, NONE, clock(deps));
@@ -136,7 +153,7 @@ async function settleRuleFilters(deps: ActionDeps, accountId: string): Promise<v
     }
     const landed = existing.find((f) => sameFilter(f, { criteria, action }));
     if (!landed) {
-      await finishAction(deps.db, id, 'failed', null, 'the filter was not there when read back', clock(deps));
+      await finishAction(deps.db, id, 'failed', null, error ?? 'the filter was not there when read back', clock(deps));
       continue;
     }
     const owned = (await listRuleFilters(deps.db, accountId)).some((r) => r.filterId === landed.id);

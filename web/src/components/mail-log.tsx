@@ -31,14 +31,15 @@ function Happened({ row, stacked }: { row: DecisionRow; stacked?: boolean }) {
   return <span className={tone === 'quiet' ? 'text-muted-foreground' : undefined}>{what}</span>;
 }
 
-/** Whether Gmail took the filter, and, when it did not, what went wrong. */
+/**
+ * Whether Gmail took the filter, and, when it did not, what went wrong. One Gmail could not even be asked
+ * about is failed too; should the next check find it landed after all, it reads as added.
+ */
 function FilterHappened({ change, stacked }: { change: FilterChange; stacked?: boolean }) {
   if (change.status === 'done') return <span>{change.type === 'filter' ? 'Added to Gmail' : 'Removed from Gmail'}</span>;
-  // `unknown`: Gmail did not answer; the next check finds out whether it took.
-  const word = change.status === 'failed' ? <Failure inline>Failed</Failure> : <span className="text-muted-foreground">Not confirmed</span>;
   return (
     <span title={change.error ?? undefined}>
-      {word}
+      <Failure inline>Failed</Failure>
       {stacked && change.error ? <Sub>{change.error}</Sub> : null}
     </span>
   );

@@ -99,17 +99,11 @@ export function InGmail({ rule, active }: { rule: RuleSummary; active: boolean }
   return (
     <div className="flex flex-col items-start gap-2">
       <span className={!rule.filterId && !possible ? 'text-muted-foreground' : undefined}>{said}</span>
-      {failed?.status === 'failed' ? (
+      {failed ? (
         <Failure>
           {failed.type === 'filter' ? 'Could not add it to Gmail' : 'Could not remove it from Gmail'}
           {failed.error ? `: ${failed.error}` : '.'}
         </Failure>
-      ) : failed ? (
-        // Gmail did not answer; the next check finds out whether it took.
-        <span className="text-muted-foreground">
-          {failed.type === 'filter' ? 'Adding it to Gmail is not confirmed' : 'Removing it from Gmail is not confirmed'}
-          {failed.error ? `: ${failed.error}` : '.'}
-        </span>
       ) : null}
       {rule.filterId ? (
         <Button

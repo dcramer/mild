@@ -174,22 +174,36 @@ describe("a rule's Gmail filter", () => {
     expect((await actions()).map((a) => `${a.type} ${a.status}`)).toEqual(['filter done', 'unfilter done', 'filter done']);
   });
 
-  it('records a call that failed as unknown and leaves the rule without a filter', async () => {
+  it('asks Gmail at once whether a call that errored went through', async () => {
     const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
     const create = mailbox.createFilter.bind(mailbox);
     mailbox.createFilter = async (filter) => {
       await create(filter);
       throw new Error('timeout');
     };
-    await expect(writeRuleFilter(deps(), id)).rejects.toThrow('timeout');
-    expect((await actions()).map((a) => `${a.type} ${a.status}`)).toEqual(['filter unknown']);
-    expect(await getRuleFilter(db, id)).toMatchObject({ filterId: null, state: null });
-
-    // It did land in Gmail. Asking again adopts it instead of making a second.
-    mailbox.createFilter = create;
     await writeRuleFilter(deps(), id);
     expect(mailbox.filters).toHaveLength(1);
     expect(await getRuleFilter(db, id)).toMatchObject({ filterId: mailbox.filters[0]!.id, state: 'active' });
+    expect((await actions()).map((a) => `${a.type} ${a.status}`)).toEqual(['filter done']);
+
+    const remove = mailbox.deleteFilter.bind(mailbox);
+    mailbox.deleteFilter = async (filterId) => {
+      await remove(filterId);
+      throw new Error('timeout');
+    };
+    expect(await removeRuleFilter(deps(), id)).toBe(true);
+    expect(mailbox.filters).toEqual([]);
+    expect((await actions()).map((a) => `${a.type} ${a.status}`)).toEqual(['filter done', 'unfilter done']);
+  });
+
+  it('records a call that errored and did not go through as failed, with its error', async () => {
+    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    mailbox.createFilter = async () => {
+      throw new Error('timeout');
+    };
+    await expect(writeRuleFilter(deps(), id)).rejects.toThrow('timeout');
+    expect(await raw(db).all('SELECT type, status, error FROM actions')).toEqual([{ type: 'filter', status: 'failed', error: 'timeout' }]);
+    expect(await getRuleFilter(db, id)).toMatchObject({ filterId: null, state: null });
   });
 
   describe('made in Gmail when reading it back failed', () => {
@@ -198,8 +212,9 @@ describe("a rule's Gmail filter", () => {
       id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
       const list = mailbox.listFilters.bind(mailbox);
       let calls = 0;
+      // Reading back fails, and so does asking again at once.
       mailbox.listFilters = async () => {
-        if (++calls === 2) throw new Error('timeout');
+        if (++calls === 2 || calls === 3) throw new Error('timeout');
         return await list();
       };
       await expect(writeRuleFilter(deps(), id)).rejects.toThrow('timeout');
