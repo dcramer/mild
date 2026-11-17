@@ -1,6 +1,7 @@
 import { Trash2Icon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
+import { GoThroughInbox, InboxRow } from '@/components/inbox.tsx';
 import { ProviderList, costLine, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { type ManageState, type Removed, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, money, plural } from '@/lib/format.ts';
@@ -27,19 +28,20 @@ import {
   useToast,
 } from '@/system';
 
-const DAYS = [
-  ['1', 'The last day'],
-  ['3', 'The last 3 days'],
-  ['7', 'The last week'],
-  ['14', 'The last 2 weeks'],
-  ['30', 'The last month'],
-] as const;
-
 /** Whether sift is on for the reader's own mail: what they come to Settings for first. */
 function Active({ state, reload }: { state: ManageState; reload: () => void }) {
   const { busy, error, run } = useAction();
   const { active, activity } = state;
-  const save = (active: boolean) => run(() => api.setActive(active), reload);
+  const [goingThrough, setGoingThrough] = useState(false);
+  const save = (active: boolean) =>
+    run(
+      () => api.setActive(active),
+      () => {
+        reload();
+        // What is already in the inbox stays as it was unless Sift goes through it now.
+        if (active && !state.inbox.going) setGoingThrough(true);
+      },
+    );
 
   return (
     <SettingsGroup title="Active" note="Whether Sift changes your Gmail.">
@@ -73,6 +75,7 @@ function Active({ state, reload }: { state: ManageState; reload: () => void }) {
             </ConfirmButton>
           )}
         </SettingRow>
+        <InboxRow state={state} reload={reload} onGoThrough={() => setGoingThrough(true)} />
         {activity.running ? (
           <SettingRow title="Check for mail" note={activity.lastPassAt ? `Last checked ${ago(activity.lastPassAt)}.` : 'Starting.'}>
             <Button disabled={busy} onClick={() => run(() => api.checkNow(), reload)}>
@@ -82,6 +85,7 @@ function Active({ state, reload }: { state: ManageState; reload: () => void }) {
         ) : null}
       </Sheet>
       <Failure>{error}</Failure>
+      {goingThrough ? <GoThroughInbox model={state.model.chosen} onClose={() => setGoingThrough(false)} onStarted={reload} /> : null}
     </SettingsGroup>
   );
 }
@@ -337,7 +341,6 @@ function Mailboxes({ state, signedInAs, reload }: { state: ManageState; signedIn
           <p>{notRevoked}</p>
         </Note>
       ) : null}
-      {state.owner ? <OlderMail /> : null}
     </SettingsGroup>
   );
 }
@@ -432,38 +435,6 @@ function Account({ state, signedInAs }: { state: ManageState; signedInAs: string
       </Sheet>
       {deleting ? <DeleteAccount email={email} onClose={() => setDeleting(false)} /> : null}
     </SettingsGroup>
-  );
-}
-
-function OlderMail() {
-  const { busy, error, run } = useAction();
-  const toast = useToast();
-  const [days, setDays] = useState<(typeof DAYS)[number][0]>('7');
-  return (
-    <Sheet>
-      <SettingRow
-        title="Pull in older mail"
-        note={
-          <>
-            Up to 300 messages from before Sift started, for review, to teach it with, one model call each. Never acted on.
-            <Failure>{error}</Failure>
-          </>
-        }
-      >
-        <Select label="How far back" value={days} options={DAYS} onChange={setDays} />
-        <Button
-          busy={busy}
-          onClick={() =>
-            run(async () => {
-              await api.backfill(Number(days));
-              toast(`Pulling in the last ${plural(Number(days), 'day')}`);
-            })
-          }
-        >
-          Pull in
-        </Button>
-      </SettingRow>
-    </Sheet>
   );
 }
 

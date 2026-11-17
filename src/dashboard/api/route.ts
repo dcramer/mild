@@ -55,11 +55,11 @@ export interface Frame<Q extends z.ZodType = z.ZodType> {
 
 /**
  * Whose data a write touches. An account: only someone who has that mailbox may make it. `self`: the
- * signed-in person's own (their model and its sign-in), so anyone signed in may. `install`: it applies
- * to everyone, so only the install's owner may. `anyone`: nothing of anybody's. Null: the body names
+ * signed-in person's own (their model and its sign-in), so anyone signed in may. `anyone`: nothing of
+ * anybody's. Null: the body names
  * nothing that exists, which the route itself reports.
  */
-type Touches = { account: string } | 'self' | 'install' | 'anyone' | null;
+type Touches = { account: string } | 'self' | 'anyone' | null;
 
 /**
  * A POST. The server parses the body through `body` (a body it refuses, or one with a field it does not
@@ -113,8 +113,7 @@ export const days = z.enum(['1', '7', '30', '90'], { error: 'must be 1, 7, 30 or
 /** What most writes answer. */
 export const done = z.object({ ok: z.literal(true) });
 
-/** What a write touches, for `touches`: the install's own settings, or only the signed-in person's own data. */
-export const install = () => 'install' as const;
+/** What a write touches, for `touches`: only the signed-in person's own data. */
 export const self = () => 'self' as const;
 /** A write that takes nothing. */
 export const nothing = z.strictObject({});

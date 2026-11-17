@@ -158,6 +158,7 @@ const api: GmailApi = {
     return { additions, historyId: String(++cursor) };
   },
   searchInbox: async () => ({ ids: [] }),
+  inboxSize: async () => inbox.length,
   getMetadata: async (id) => find(id)?.raw ?? null,
   getLabelIds: async (id) => mailbox.labels.get(id) ?? null,
   listLabels: async () => [],

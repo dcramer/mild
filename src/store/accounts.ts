@@ -241,9 +241,15 @@ export async function recordSynced(db: Sql, accountId: string, messages: readonl
 }
 
 /**
- * Record older mail the user asked to pull in. It does not move the sync cursor, and these messages are
- * only ever suggested about. Returns how many were not already known.
+ * Record mail an inbox run found that Sift had not seen. It does not move the sync cursor. `suggestOnly`
+ * when the run only suggests, so a pass that decides it first never carries it out either. Returns how many were not already known.
  */
-export async function recordBackfill(db: Sql, accountId: string, messages: readonly MessageFacts[], now: number = Date.now()): Promise<number> {
-  return await db.transaction(async (tx) => await insertMessages(tx, accountId, messages, now, true));
+export async function recordFromInbox(
+  db: Sql,
+  accountId: string,
+  messages: readonly MessageFacts[],
+  suggestOnly: boolean,
+  now: number = Date.now(),
+): Promise<number> {
+  return await db.transaction(async (tx) => await insertMessages(tx, accountId, messages, now, suggestOnly));
 }

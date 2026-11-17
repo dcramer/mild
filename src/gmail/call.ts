@@ -10,6 +10,7 @@ const ROUTES = {
   'users.messages.modify': ['POST', '/users/me/messages/{id}/modify'],
   'users.threads.get': ['GET', '/users/me/threads/{id}'],
   'users.labels.list': ['GET', '/users/me/labels'],
+  'users.labels.get': ['GET', '/users/me/labels/{id}'],
   'users.labels.create': ['POST', '/users/me/labels'],
   'users.settings.sendAs.list': ['GET', '/users/me/settings/sendAs'],
   'users.settings.filters.list': ['GET', '/users/me/settings/filters'],

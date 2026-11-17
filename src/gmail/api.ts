@@ -79,6 +79,8 @@ export interface GmailApi {
   /** Throws HistoryExpiredError when `startHistoryId` is too old. */
   listHistory(startHistoryId: string, pageToken?: string): Promise<HistoryPage>;
   searchInbox(query: string, pageToken?: string): Promise<MessageIdPage>;
+  /** How many messages are in the inbox, as Gmail counts them for its label. */
+  inboxSize(): Promise<number>;
   /** Null when the message no longer exists. Does not mark it read. */
   getMetadata(messageId: string): Promise<RawMessage | null>;
   /** The message's labels now, or null when it no longer exists. Does not mark it read. */
@@ -149,6 +151,11 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
       );
       const ids = (data.messages ?? []).map((m) => m.id).filter((id) => typeof id === 'string');
       return { ids, ...(data.nextPageToken ? { nextPageToken: data.nextPageToken } : {}) };
+    },
+
+    async inboxSize() {
+      const data = await call('users.labels.get', 1, () => client.users.labels.get({ userId, id: 'INBOX' }));
+      return data.messagesTotal ?? 0;
     },
 
     async getLabelIds(messageId) {

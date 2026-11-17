@@ -54,7 +54,7 @@ Until every required one is set, the site lists those still missing; `CRON_SECRE
 
 ## 4. Deploy again
 
-Redeploy production, so the build sees the variables: it migrates the database before the new functions serve anything. Open your address and sign in with Google (the first account becomes the owner); the page walks through connecting a model, saying what you want, choosing your labels and pulling in recent mail to teach it with. Until you turn Sift on, under Settings, Gmail changes only for mail you answer in the dashboard.
+Redeploy production, so the build sees the variables: it migrates the database before the new functions serve anything. Open your address and sign in with Google (the first account becomes the owner); the page walks through connecting a model, saying what you want, choosing your labels and having Sift go through recent mail to teach it with. Until you turn Sift on, under Settings, Gmail changes only for mail you answer in the dashboard.
 
 Mail is checked each minute. Logs are the project's function logs.
 

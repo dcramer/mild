@@ -1,6 +1,7 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { type RunOptions, askForBackfill, runOnce, tick } from '../src/work/run.ts';
+import { type RunOptions, runOnce, tick } from '../src/work/run.ts';
+import { startInboxRuns } from '../src/store/inbox.ts';
 import type { Store } from '../src/store/store.ts';
 import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
 import { undo } from '../src/actions/executor.ts';
@@ -55,6 +56,7 @@ function api(): GmailApi {
       return { additions, labelChanges: mailbox.history.splice(0), historyId: String(++cursor) };
     },
     searchInbox: async () => ({ ids: [] }),
+    inboxSize: async () => inbox.length,
     getMetadata: async (id) => inbox.find((m) => m.id === id) ?? null,
     getLabelIds: async (id) => mailbox.labels.get(id) ?? null,
     listLabels: async () => [...new Set([...mailbox.labels.values()].flat())].filter((id) => id.startsWith('L:')).map((id) => ({ id, name: id.slice(2) })),
@@ -227,15 +229,14 @@ describe('runOnce', () => {
 describe('a tick', () => {
   const person = async (store: Store) => (await raw(store.central).get<{ id: number }>('SELECT id FROM users'))!.id;
 
-  it('reads nothing from Gmail for a mailbox until it has a label of its own, older mail asked for or not', async () => {
+  it('reads nothing from Gmail for a mailbox until it has a label of its own, its inbox asked to be gone through or not', async () => {
     const store = await freshStore();
     const NEW = 'new@example.net';
     const newcomer = await connectAccount(store, NEW, '1', 0);
     const own = await store.user(newcomer);
     let connected = 0;
-    const ephemeral = memoryEphemeral();
-    await askForBackfill(ephemeral, NEW, 7);
-    const counting: RunOptions = { ...options(), ephemeral, connect: () => (connected++, { api: api(), mailbox }) };
+    await startInboxRuns(own, [NEW], { acts: false, most: 10, now: 0 });
+    const counting: RunOptions = { ...options(), model: unsure, connect: () => (connected++, { api: api(), mailbox }) };
     expect(await tick(store, counting, Infinity, [newcomer])).toEqual([]);
     expect(connected).toBe(0);
     await addLabels(own, NEW, [{ name: 'Pitches', description: 'From strangers.', disposition: 'archive' }]);
@@ -313,19 +314,32 @@ describe('a tick', () => {
     expect(await raw(own).all("SELECT body_text FROM suggestion_bodies WHERE message_id = 'news'")).toEqual([{ body_text: 'sift-plain:Body news' }]);
   });
 
-  it('pulls in older mail that was asked for, until it is all in', async () => {
-    const { store } = await onePerson(ACCOUNT);
-    const ephemeral = memoryEphemeral();
-    await askForBackfill(ephemeral, ACCOUNT, 7);
+  it('goes through an inbox it was asked to, until it is all done', async () => {
+    const { store, db: own } = await onePerson(ACCOUNT);
+    await startInboxRuns(own, [ACCOUNT], { acts: false, most: 10, now: 0 });
     const searched: string[] = [];
     const reading: RunOptions = {
       ...options(),
-      ephemeral,
+      model: unsure,
       connect: () => ({ api: { ...api(), searchInbox: async (query) => (searched.push(query), { ids: [] }) }, mailbox }),
     };
     await tick(store, reading, Infinity);
     await tick(store, reading, Infinity);
-    expect(searched).toEqual(['newer_than:7d']);
+    expect(searched).toEqual(['']);
+    expect(await raw(own).all('SELECT finished_at, stopped FROM inbox_runs')).toEqual([{ finished_at: 5000, stopped: false }]);
+  });
+
+  it('waits to go through an inbox while there is no model to ask', async () => {
+    const { store, db: own } = await onePerson(ACCOUNT);
+    await startInboxRuns(own, [ACCOUNT], { acts: false, most: 10, now: 0 });
+    const searched: string[] = [];
+    const reading: RunOptions = {
+      ...options(),
+      connect: () => ({ api: { ...api(), searchInbox: async (query) => (searched.push(query), { ids: [] }) }, mailbox }),
+    };
+    await tick(store, reading, Infinity);
+    expect(searched).toEqual([]);
+    expect(await raw(own).all('SELECT finished_at FROM inbox_runs')).toEqual([{ finished_at: null }]);
   });
 });
 

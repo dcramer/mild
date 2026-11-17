@@ -3,6 +3,7 @@ import { useState, useSyncExternalStore } from 'react';
 
 export type {
   Contact,
+  InboxEstimate,
   DecisionPage,
   DecisionRow,
   FactFilter,
@@ -31,6 +32,7 @@ export type {
 } from '../../../src/dashboard/types.ts';
 import type {
   DecisionPage,
+  InboxEstimate,
   FactFilter,
   FeedbackReply,
   FeedbackRequest,
@@ -261,7 +263,9 @@ export const api = {
   dismissProposal: (id: number) => post('/api/proposals', { id }),
   /** `message`: what the page will not show by itself, if anything. */
   undo: (id: number) => post<{ message: string | null }>('/api/undo', { id }),
-  backfill: (days: number) => post('/api/backfill', { days }),
+  inboxEstimate: (reach: 'inbox' | 'recent', signal: AbortSignal) => get<InboxEstimate>('/api/inbox', { reach }, signal),
+  startInbox: (reach: 'inbox' | 'recent') => post('/api/inbox/start', { reach }),
+  stopInbox: () => post('/api/inbox/stop', {}),
   checkNow: () => post('/api/check', {}),
   session: (signal: AbortSignal) => get<Session>('/api/session', {}, signal),
   signOut: () => post('/api/signout', {}),

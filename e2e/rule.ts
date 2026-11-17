@@ -37,12 +37,13 @@ export async function addRule(dialog: Locator) {
 /** The rule a panel shows, from the address that holds it open. */
 export const openRule = (page: Page) => new URL(page.url()).searchParams.get('rule');
 
-/** Settings, Active, Turn on, and Turn on again to confirm. Add to Gmail is offered only while Sift is on. */
+/** Settings, Active, Turn on, Turn on again to confirm, and Not now to going through the inbox. Add to Gmail is offered only while Sift is on. */
 export async function turnOn(page: Page) {
   await page.goto('/?settings=1');
   const settings = page.getByRole('dialog', { name: 'Settings' });
   await settings.getByRole('button', { name: 'Turn on', exact: true }).click();
   await settings.getByRole('group', { name: 'Archive, label and mark spam on new mail by itself?' }).getByRole('button', { name: 'Turn on' }).click();
+  await page.getByRole('dialog', { name: 'Go through your inbox?' }).getByRole('button', { name: 'Not now' }).click();
   await expect(settings.getByText('On', { exact: true })).toBeVisible();
 }
 

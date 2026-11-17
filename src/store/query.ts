@@ -8,6 +8,7 @@ export {
   type SQL,
   and,
   asc,
+  avg,
   count,
   countDistinct,
   desc,
@@ -28,6 +29,7 @@ export {
   notInArray,
   notLike,
   or,
+  sum,
 } from 'drizzle-orm';
 export { alias } from 'drizzle-orm/pg-core';
 export { sql } from './own.ts';

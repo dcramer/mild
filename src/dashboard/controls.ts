@@ -1,5 +1,6 @@
 import type { Sql } from '../store/sql.ts';
-import type { LabelProposal, RuleDraft, RuleInbox } from './types.ts';
+import type { Reach } from '../store/inbox.ts';
+import type { InboxEstimate, LabelProposal, RuleDraft, RuleInbox } from './types.ts';
 
 /**
  * What the dashboard can ask the rest of sift to do. The dashboard itself may not import Gmail, the
@@ -27,10 +28,11 @@ export interface Controls {
    * as undone), or null when there is nothing more to say.
    */
   undo(db: Sql, actionId: number): Promise<string | null>;
-  /** Ask for the last `days` days of everyone's inbox as suggestions; the ticks that follow pull them in. */
-  backfill(days: number): Promise<void>;
-  /** Those of `mailboxes` whose older mail is asked for and not yet all in. What is in still waits for the model. */
-  pullingIn(mailboxes: readonly string[]): Promise<string[]>;
+  /**
+   * What going through the newest `reach` of these of the person's inboxes would take, read from Gmail: how
+   * many messages, how many of those likely need the model, and about what that costs.
+   */
+  inboxEstimate(db: Sql, mailboxes: readonly string[], reach: Reach): Promise<InboxEstimate>;
   /**
    * After the user has corrected a decision: take back what sift last did to that message, so the new
    * decision can be carried out from where the message started.

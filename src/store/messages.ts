@@ -46,7 +46,7 @@ const toMessage = (db: Sql, accountId: string, stored: Row): MessageFacts => {
 
 export interface QueuedMessage {
   facts: MessageFacts;
-  /** Pulled in from before sift was connected: suggest, never act. */
+  /** First recorded by an inbox run that only suggests: suggest, never act. */
   suggestOnly: boolean;
   /** The rule the user applied to their inbox when this was pulled in: what it decides here is carried out. */
   applyRule: string | null;
@@ -77,6 +77,15 @@ export async function listUndecided(db: Sql, accountId: string, limit: number): 
     .orderBy(desc(messages.receivedAt), asc(messages.id))
     .limit(limit);
   return rows.map((r) => ({ suggestOnly: r.suggestOnly, applyRule: r.applyRule, outOfTries: r.outOfTries, facts: toMessage(db, accountId, r) }));
+}
+
+/** One recorded message as `listUndecided` gives it, decided or not; null if Sift never saw it. */
+export async function queuedMessage(db: Sql, accountId: string, messageId: string): Promise<QueuedMessage | null> {
+  const [r] = await db
+    .select({ ...COLUMNS, outOfTries: outOfTries(db, messages.accountId, messages.id).mapWith(Boolean) })
+    .from(messages)
+    .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
+  return r ? { suggestOnly: r.suggestOnly, applyRule: r.applyRule, outOfTries: r.outOfTries, facts: toMessage(db, accountId, r) } : null;
 }
 
 /** The facts recorded for a message, or null if sift has not seen it. */

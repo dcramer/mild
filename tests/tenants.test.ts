@@ -12,6 +12,7 @@ import { addRule, listRules } from '../src/store/rules.ts';
 import { facts, withSampleLabels } from './helpers.ts';
 import { conditionsHash } from '../src/store/content.ts';
 import { startEval } from '../src/learn/evals.ts';
+import { startInboxRuns } from '../src/store/inbox.ts';
 import * as api from '../src/dashboard/api/index.ts';
 
 // Two people. Alpha set sift up and has two mailboxes; Bravo arrived later with one.
@@ -94,6 +95,8 @@ beforeEach(async () => {
   await connectAccount(store, BRAVO, '1', 2);
   for (const account of [ALPHA, ALPHA_WORK, BRAVO]) await seed(account);
   await setModel(await dbOf(ALPHA), 'alpha-own-words/model');
+  // Bravo's inbox is being gone through.
+  await startInboxRuns(await dbOf(BRAVO), [BRAVO], { acts: false, most: 10, now: 0 });
 
   const controls: Controls = {
     models: async () => ({ models: [], shortlist: {}, costs: {} }),
@@ -116,9 +119,8 @@ beforeEach(async () => {
       };
     },
     applyRule: async (_db, id) => (calls.push(`apply ${id}`), { deciding: 1, reading: 0 }),
-    backfill: async () => void calls.push('backfill'),
-    // Answers about Bravo's mailbox whoever asks: only the route's own check keeps it from Alpha.
-    pullingIn: async () => [BRAVO],
+    // Reads Gmail for whichever mailboxes it is given: only the route's scope keeps it to the asker's.
+    inboxEstimate: async (_db, mailboxes) => (calls.push(`estimate ${mailboxes.join(',')}`), { messages: 1, model: 1, cost: null, quota: false }),
     startEval: async (_db, { accountId }) => (calls.push(`eval ${accountId}`), 1),
     proposeLabels: async (_db, { accountId, goal }) => (calls.push(`propose ${accountId}`), { id: 1, goal, drafts: [], at: 0 }),
     draftRule: async (_db, { accountId }) => (calls.push(`draft ${accountId}`), { match: { from: ['x@example.com'] }, disposition: 'archive' }),
@@ -166,6 +168,7 @@ const READS = (account: string, mark: string) => [
   `/api/message/html?account=${encodeURIComponent(account)}&id=m-${mark}`,
   `/api/rules/waiting?id=${ids[account]!.rule}`,
   `/api/rules/inbox?id=${ids[account]!.rule}`,
+  '/api/inbox?reach=inbox',
 ];
 
 describe('users and their mailboxes', () => {
@@ -223,7 +226,7 @@ describe("nobody sees or changes another person's mail", () => {
         }
       }
     }
-    // Older mail still coming in is only said to the person whose mailbox it is.
+    // Mail still coming from going through an inbox is only said to the person whose inbox it is.
     expect(JSON.parse((await call('GET', '/api/suggestions', ALPHA)).text)).toMatchObject({ importing: false });
     expect(JSON.parse((await call('GET', '/api/suggestions', BRAVO)).text)).toMatchObject({ importing: true });
     // Guidelines and a model sign-in are each person's own.
@@ -382,10 +385,15 @@ describe("nobody sees or changes another person's mail", () => {
     expect(await labels()).toBe(before);
   });
 
-  it('lets only the person who set sift up change what applies to everyone', async () => {
-    expect((await call('POST', '/api/backfill', BRAVO, { days: 1 })).status, 'as a guest').toBe(403);
-    expect((await call('POST', '/api/backfill', ALPHA_WORK, { days: 1 })).status, 'as the owner').toBe(200);
-    expect(calls.filter((c) => c !== 'check')).toEqual(['backfill']);
+  it("goes through only the asker's own inboxes, and stops only theirs", async () => {
+    expect((await call('GET', '/api/inbox?reach=inbox', ALPHA_WORK)).status).toBe(200);
+    expect(calls).toEqual([`estimate ${ALPHA},${ALPHA_WORK}`]);
+    expect((await call('POST', '/api/inbox/start', ALPHA, { reach: 'recent' })).status).toBe(200);
+    expect(
+      (await raw(await dbOf(ALPHA)).all<{ account_id: string }>('SELECT account_id FROM inbox_runs ORDER BY account_id')).map((r) => r.account_id),
+    ).toEqual([ALPHA, ALPHA_WORK]);
+    expect((await call('POST', '/api/inbox/stop', ALPHA, {})).status).toBe(200);
+    expect(await raw(await dbOf(BRAVO)).all('SELECT stopped, finished_at FROM inbox_runs')).toEqual([{ stopped: false, finished_at: null }]);
     // Asking sift to look now is nobody's secret.
     expect((await call('POST', '/api/check', BRAVO, {})).status).toBe(200);
   });

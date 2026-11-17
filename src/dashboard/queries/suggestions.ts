@@ -1,4 +1,5 @@
 import { alias, and, count, decisions, eq, isNotNull, max, messages as messageRows, not, notExists, suggestionBodies } from '../../store/query.ts';
+import { goingInboxRuns } from '../../store/inbox.ts';
 import { outOfTries } from '../../store/runs.ts';
 import type { Sql } from '../../store/sql.ts';
 import { accuracy, pendingSuggestions } from '../../learn/feedback.ts';
@@ -28,10 +29,11 @@ export async function suggestionDetail(db: Sql, scope: Scope, accountId: string,
 const MAX_ITEMS = 500;
 
 /**
- * Mail pulled in from before Sift was connected that the model has yet to decide. Each becomes a suggestion
- * on a later pass, unless the model keeps failing on it.
+ * Sift is going through the inbox, or mail it found there only to suggest about waits for the model. Each
+ * becomes a suggestion on a later pass, unless the model keeps failing on it.
  */
 async function pulledInWaiting(db: Sql, scope: Scope): Promise<boolean> {
+  if ((await goingInboxRuns(db)).some((run) => sees(scope, run.accountId))) return true;
   const [row] = await db
     .select({ id: messageRows.id })
     .from(messageRows)
@@ -52,12 +54,7 @@ async function pulledInWaiting(db: Sql, scope: Scope): Promise<boolean> {
   return row !== undefined;
 }
 
-/** `pullingIn`: whether older mail asked for in these mailboxes is not yet all in. */
-export async function listSuggestions(
-  db: Sql,
-  scope: Scope,
-  options: { includeKept?: boolean; fact?: FactFilter; pullingIn?: boolean } = {},
-): Promise<Suggestions> {
+export async function listSuggestions(db: Sql, scope: Scope, options: { includeKept?: boolean; fact?: FactFilter } = {}): Promise<Suggestions> {
   const accounts = scope.accounts.map((id) => ({ id }));
   const labels = new Map<string, Label[]>();
   for (const { id } of accounts) labels.set(id, await listLabels(db, id));
@@ -149,7 +146,7 @@ export async function listSuggestions(
     waiting: waitingNow.length,
     accuracy: { reviewed, right },
     active: (await preferences(db)).active,
-    importing: options.pullingIn === true || (await pulledInWaiting(db, scope)),
+    importing: await pulledInWaiting(db, scope),
   };
 }
 

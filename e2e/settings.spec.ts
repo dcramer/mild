@@ -7,13 +7,46 @@ const active = (page: Page) => settings(page).getByRole('heading', { name: 'Acti
 const offCallout = (page: Page) => page.getByRole('heading', { name: 'Sift is off' });
 const QUESTION = 'Archive, label and mark spam on new mail by itself?';
 
+const goThrough = (page: Page) => page.getByRole('dialog', { name: 'Go through your inbox?' });
+
 async function turnOn(page: Page) {
   await active(page).getByRole('button', { name: 'Turn on', exact: true }).click();
   await active(page).getByRole('group', { name: QUESTION }).getByRole('button', { name: 'Turn on', exact: true }).click();
+  await goThrough(page).getByRole('button', { name: 'Not now' }).click();
   await expect(active(page).getByRole('button', { name: 'Turn off' })).toBeVisible();
 }
 
 test.describe('Settings', () => {
+  test('turning Sift on offers to go through the inbox, with what it would cost', async ({ page }) => {
+    await page.goto('/?settings=1');
+    await active(page).getByRole('button', { name: 'Turn on', exact: true }).click();
+    await active(page).getByRole('group', { name: QUESTION }).getByRole('button', { name: 'Turn on', exact: true }).click();
+    await expect(goThrough(page).getByText('$3.10')).toBeVisible();
+    await expect(goThrough(page).getByText('1,830')).toBeVisible();
+    await goThrough(page).getByRole('button', { name: 'Go through 2,412' }).click();
+    await expect(goThrough(page)).toHaveCount(0);
+    await expect(active(page).getByText('On', { exact: true })).toBeVisible();
+    await expect(active(page).getByText('Going through your inbox')).toBeVisible();
+    await expect(active(page).getByText('Reading your inbox · 0 found')).toBeVisible();
+    // Only one at a time: the row is where it is going, not a press to start another.
+    await expect(active(page).getByRole('button', { name: /^Go through/ })).toHaveCount(0);
+  });
+
+  test('goes through the inbox from Settings, and stops', async ({ page }) => {
+    await page.goto('/?settings=1');
+    await expect(active(page).getByText('2,412 messages. Going through them costs about $3.10.')).toBeVisible();
+    await active(page).getByRole('button', { name: 'Go through…' }).click();
+    await goThrough(page).getByRole('button', { name: 'Go through 2,412' }).click();
+    await active(page).getByRole('button', { name: 'Stop' }).click();
+    await expect(active(page).getByText('Stopped after 0 messages', { exact: false })).toBeVisible();
+    await expect(active(page).getByRole('button', { name: 'Go through again…' })).toBeVisible();
+    // Off, what it goes through is only suggested about; Not now leaves it.
+    await active(page).getByRole('button', { name: 'Go through again…' }).click();
+    await goThrough(page).getByRole('button', { name: 'Not now' }).click();
+    await expect(goThrough(page)).toHaveCount(0);
+    await expect(active(page).getByText('Off', { exact: true })).toBeVisible();
+  });
+
   test('For review says Sift is off, and its button opens Settings', async ({ page }) => {
     await page.goto('/');
     await expect(offCallout(page)).toBeVisible();

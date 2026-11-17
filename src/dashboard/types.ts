@@ -467,7 +467,7 @@ export const Suggestions = z.object({
   labels: z.record(z.string(), z.array(z.object({ id: z.string(), name: z.string(), disposition: z.string() }))),
   /** Whether Sift is on for the viewer. Off, nothing listed has been done in Gmail. */
   active: z.boolean(),
-  /** Older mail the owner asked for is still being pulled in, or waits for the model: more suggestions are coming. */
+  /** Sift is going through the inbox, or mail it found there waits for the model: more suggestions are coming. */
   importing: z.boolean(),
 });
 export type Suggestions = z.infer<typeof Suggestions>;
@@ -557,6 +557,29 @@ export type RuleDraft = z.infer<typeof RuleDraft>;
 export const SignInCode = z.object({ code: z.string().optional(), url: z.string(), expiresAt: z.number() });
 export type SignInCode = z.infer<typeof SignInCode>;
 
+/** Going through the viewer's inboxes: where it has got, all mailboxes together, or how it went last. */
+const InboxProgress = z.object({
+  /** `listed` false: still reading what is in the inbox, so `total` is what has been found so far. `spent` in dollars. */
+  going: z.object({ listed: z.boolean(), done: z.number(), total: z.number(), spent: z.number(), startedAt: z.number() }).nullable(),
+  /** `total`: how many it went through, which is fewer than were there when it was stopped. */
+  last: z.object({ finishedAt: z.number(), total: z.number(), spent: z.number(), stopped: z.boolean() }).nullable(),
+});
+
+/** GET /api/inbox: what going through the viewer's inboxes would take. */
+export const InboxEstimate = z.object({
+  messages: z.number(),
+  /** Of `messages`, about how many need the model: as many as did lately. */
+  model: z.number(),
+  /** About what those calls cost, in dollars; null when the price is not known or the model is on a plan's quota. */
+  cost: z.number().nullable(),
+  /** The model is reached through a subscription (ChatGPT): it uses the plan's quota instead of money. */
+  quota: z.boolean(),
+});
+export type InboxEstimate = z.infer<typeof InboxEstimate>;
+
+/** Which of the newest messages a press goes through: the whole inbox, or enough to teach with. */
+export const InboxReach = z.enum(['inbox', 'recent']);
+
 /** GET /api/manage: everything the Settings view shows. */
 export const ManageState = z.object({
   /** Whether the viewer owns the install, and so may change what applies to all of it. */
@@ -576,6 +599,7 @@ export const ManageState = z.object({
   labels: z.record(z.string(), z.array(LabelSummary)),
   /** How many labels an account may have. */
   labelLimit: z.number(),
+  inbox: InboxProgress,
 });
 export type ManageState = z.infer<typeof ManageState>;
 

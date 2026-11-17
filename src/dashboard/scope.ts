@@ -8,7 +8,7 @@ import { type eq, inArray } from '../store/query.ts';
 export interface Scope {
   /** Account ids. Empty means nothing is visible. */
   readonly accounts: readonly string[];
-  /** May change what applies to the whole install: the interval, pulling in older mail. */
+  /** Owns the install: others signed in to it keep their own mail when this person deletes their account. */
   readonly owner: boolean;
 }
 

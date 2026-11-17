@@ -88,9 +88,9 @@ export async function createSift(host: Host): Promise<Sift> {
   // Bound below, before any request can reach `kick`.
   let sift: Sift | undefined;
   const { start } = host;
-  // What a person starts in the dashboard (check now, a test run, older mail) begins now, not at the next tick.
+  // What a person starts in the dashboard (check now, a test run, going through the inbox) begins now, not at the next tick.
   const kick = start && ((person?: number) => start(sift!, person === undefined ? undefined : [person]));
-  const controls = await buildControls(config, store, {
+  const controls = await buildControls(config, {
     ephemeral,
     deviceId: deviceId(host.sessionSecret),
     running: Boolean(start),

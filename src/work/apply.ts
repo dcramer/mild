@@ -9,11 +9,10 @@ import { cachedCorrespondent } from '../store/senders.ts';
 import type { Sql } from '../store/sql.ts';
 import { type RuleMatch, priorRule, rulesStage } from '../triage/stages/rules.ts';
 import type { Decision, MessageFacts } from '../triage/types.ts';
-import { MAX_BACKFILL } from './backfill.ts';
 import { Refusal } from '../refusal.ts';
 
-/** What one press looks at in the inbox: the same bound as pulling in older mail, on Gmail calls and on what it can send to a model. */
-const MOST = MAX_BACKFILL;
+/** What one press looks at in the inbox: a bound on Gmail calls, on how long the list is to read, and on what it can send to a model. */
+const MOST = 300;
 
 /** What the rule would do to one message: decide it now, or wait for a model to say what it is. */
 type Plan = { decide: Decision; again: boolean } | { read: true };

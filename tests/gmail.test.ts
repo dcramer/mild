@@ -53,6 +53,9 @@ function fakeApi(fake: Fake): GmailApi & { calls: string[] } {
       calls.push(`search:${query}${pageToken ? `:${pageToken}` : ''}`);
       return fake.searchPages?.[pageToken ?? ''] ?? { ids: fake.search ?? [] };
     },
+    async inboxSize() {
+      return fake.search?.length ?? 0;
+    },
     async getMetadata(id) {
       return fake.messages?.[id] ?? null;
     },

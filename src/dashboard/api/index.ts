@@ -1,7 +1,6 @@
 import type { Frame, Read, Write } from './route.ts';
 import accountDeleteWrite from './routes/account/delete/post.ts';
 import activeWrite from './routes/active/post.ts';
-import backfillWrite from './routes/backfill/post.ts';
 import checkWrite from './routes/check/post.ts';
 import decisionsRead from './routes/decisions/get.ts';
 import domainRead from './routes/domain/get.ts';
@@ -12,6 +11,9 @@ import examplesDeleteAllWrite from './routes/examples/delete-all/post.ts';
 import examplesDeleteWrite from './routes/examples/delete/post.ts';
 import examplesRead from './routes/examples/get.ts';
 import feedbackWrite from './routes/feedback/post.ts';
+import inboxRead from './routes/inbox/get.ts';
+import inboxStartWrite from './routes/inbox/start/post.ts';
+import inboxStopWrite from './routes/inbox/stop/post.ts';
 import labelsAcceptWrite from './routes/labels/accept/post.ts';
 import labelsAddWrite from './routes/labels/add/post.ts';
 import labelsWrite from './routes/labels/post.ts';
@@ -57,6 +59,7 @@ export const READS: readonly Read[] = [
   evalRead,
   evalsRead,
   examplesRead,
+  inboxRead,
   labelsProposalRead,
   manageRead,
   messageRead,
@@ -73,12 +76,13 @@ export const READS: readonly Read[] = [
 export const WRITES: readonly Write[] = [
   accountDeleteWrite,
   activeWrite,
-  backfillWrite,
   checkWrite,
   evalsRunWrite,
   examplesDeleteWrite,
   examplesDeleteAllWrite,
   feedbackWrite,
+  inboxStartWrite,
+  inboxStopWrite,
   labelsWrite,
   labelsAddWrite,
   labelsAcceptWrite,

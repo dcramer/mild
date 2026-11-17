@@ -177,7 +177,7 @@ export const messages = pgTable(
     headers: text('headers').notNull(),
     labelIds: jsonb('label_ids').$type<string[]>().notNull().default([]), // when synced; a snapshot, not current state
     syncedAt: time('synced_at').notNull(),
-    suggestOnly: boolean('suggest_only').notNull().default(false), // pulled in from before sift was connected: suggest, never carry out
+    suggestOnly: boolean('suggest_only').notNull().default(false), // first recorded by an inbox run that only suggests: a pass never carries it out
     applyRule: text('apply_rule'), // pulled in by "Apply to inbox" on this rule: what it decides here is carried out, Sift on or off
     facts: jsonb('facts').$type<Facts>().notNull(),
     readAt: time('read_at'), // when a sync saw the user had opened it
@@ -540,6 +540,37 @@ export const evalRuns = pgTable(
     examples: jsonb('examples').$type<string[]>().notNull().default([]), // message ids of the examples it judges, chosen at the start
   },
   (t) => [unique('eval_runs_own').on(t.userId, t.id), mailbox(t), oneOf('eval_runs_status', t.status, EVAL_STATUSES), own()],
+).enableRLS();
+
+/**
+ * A press of "Go through inbox": every message in the inbox when it began (the newest `most`), each decided
+ * as if it had just arrived. It goes on over ticks until `next` reaches the end of `messages`, or the person stops it.
+ */
+export const inboxRuns = pgTable(
+  'inbox_runs',
+  {
+    id: id(),
+    userId: userId(),
+    accountId: text('account_id').notNull(),
+    startedAt: time('started_at').notNull(),
+    finishedAt: time('finished_at'), // null while it goes on
+    stopped: boolean('stopped').notNull().default(false),
+    // Whether Sift was on at the press: what it decides is carried out only then, and only while Sift stays on.
+    acts: boolean('acts').notNull(),
+    most: integer('most').notNull(),
+    listed: boolean('listed').notNull().default(false), // every id it will go through is in `messages`
+    pageToken: text('page_token'), // where listing the inbox got to
+    messages: jsonb('messages').$type<string[]>().notNull().default([]), // newest first, as Gmail lists them
+    next: integer('next').notNull().default(0), // how many of `messages` it has been through
+  },
+  (t) => [
+    unique('inbox_runs_own').on(t.userId, t.id),
+    mailbox(t),
+    uniqueIndex('inbox_runs_one_going')
+      .on(t.userId, t.accountId)
+      .where(sql`${t.finishedAt} IS NULL`),
+    own(),
+  ],
 ).enableRLS();
 
 /**

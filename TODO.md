@@ -30,6 +30,9 @@ The working list for sift. Remove an item when it lands; add what you find. What
 
 ## Teaching loop
 
+- [ ] **Going through the inbox again costs again.** Every message is put to the model anew, even one judged with the same model, labels and examples. Decide whether to keep a judgement made since the last change to any of those, and say in the estimate how many that leaves.
+- [ ] **An inbox run that acts fills Activity** with a decision per message, most of them agreeing with the last. Decide whether a decision that changed nothing is listed, and whether a run's changes can be undone as one (as with applying a rule).
+
 - [ ] **Screens for what the API already has:** test runs (start one, watch it, compare two), stored examples (list, delete, how long they are kept), accuracy per tier, and how many suggestions changed after a rule or label edit.
 - [ ] Test runs: replay the whole cascade and not only the model, cancel a run, prune old runs. A run's prompt has less than new mail's: no standing and none of the sender's other labelled mail.
 - [ ] The emails shown to the model as examples: check with test runs whether six, two from the same sender, and two found each way (same name, same kind of subject) are right, and whether subjects that share most words but not all should match. If a line of facts and the first 300 characters are not enough, let the model read one in full by a short handle (`E1`), which would be the judge's first tool besides recording its verdict (AGENTS.md, architecture.md).

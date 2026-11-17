@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { lastSyncedAt, listAccounts } from '../../../../store/accounts.ts';
+import { inboxProgress } from '../../../../store/inbox.ts';
 import { MAX_LABELS } from '../../../../store/labels.ts';
 import { preferences } from '../../../../store/preferences.ts';
 import { listLabelSummaries } from '../../../queries/labels.ts';
@@ -27,6 +28,10 @@ async function manageState({ db, controls, person }: Context, scope: Scope): Pro
     ),
     labels: Object.fromEntries(await Promise.all(accounts.map(async (a) => [a.id, await listLabelSummaries(db, scope, a.id)] as const))),
     labelLimit: MAX_LABELS,
+    inbox: await inboxProgress(
+      db,
+      accounts.map((a) => a.id),
+    ),
   };
 }
 

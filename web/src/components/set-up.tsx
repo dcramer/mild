@@ -2,8 +2,9 @@ import { ArrowRightIcon, ArrowUpRightIcon, PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { type Next, ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { type LabelProposal, type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
-import { plural } from '@/lib/format.ts';
-import { Button, Dialog, Failure, Field, Form, Note, Onboarding, Select, TextArea, useToast } from '@/system';
+import { count } from '@/lib/format.ts';
+import { InboxFigures, useInboxEstimate } from '@/components/inbox.tsx';
+import { Button, Dialog, Failure, Form, Note, Onboarding, TextArea } from '@/system';
 import { type LabelDraft, LabelFields } from '@/views/label-panel.tsx';
 import { type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
 
@@ -31,17 +32,11 @@ const EXAMPLES = [
 /** How many to offer at once. */
 const OFFERED = 6;
 
-const DAYS = [
-  ['7', 'The last week'],
-  ['14', 'The last 2 weeks'],
-  ['30', 'The last month'],
-] as const;
-
 /**
  * Nothing of the dashboard shows until Sift can work: a model in use, and labels in every mailbox (Sift
  * reads nothing from a mailbox without them). The steps come in order; one already done is ticked and
- * skipped. A model that is lost later (its sign-in removed or expired) brings back only that step. The
- * owner, once their labels are made, may pull in older mail. Settings opens over it.
+ * skipped. A model that is lost later (its sign-in removed or expired) brings back only that step. Once
+ * the labels are made, Sift may go through the newest of the inbox to suggest about. Settings opens over it.
  */
 export function SetUp({ signedInAs, onSettings, children }: { signedInAs: string | null; onSettings: () => void; children: ReactNode }) {
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
@@ -66,7 +61,7 @@ export function SetUp({ signedInAs, onSettings, children }: { signedInAs: string
         onSignOut: () => void api.signOut().then(() => window.location.assign('/')),
       }
     : undefined;
-  const steps = ['Connect a model', 'What you want', 'Your labels', ...(state.owner ? ['Older mail'] : [])];
+  const steps = ['Connect a model', 'What you want', 'Your labels', 'Older mail'];
   // A model signed out after setting up is the only thing to do: no steps.
   const lost = walled && !bare && inUse !== null;
 
@@ -85,7 +80,7 @@ export function SetUp({ signedInAs, onSettings, children }: { signedInAs: string
         onStartOver={() => setAsking(true)}
         onDone={() => {
           setMade(true);
-          if (state.owner) setTeaching(true);
+          setTeaching(true);
         }}
       />
     );
@@ -301,34 +296,26 @@ function EditDraft({ draft: start, onClose, onSave }: { draft: LabelDraft; onClo
 
 function Teach({ state, steps, account, onDone }: { state: ManageState; steps: readonly string[]; account: Account; onDone: () => void }) {
   const { busy, error, run } = useAction();
-  const toast = useToast();
-  const [days, setDays] = useState<(typeof DAYS)[number][0]>('7');
+  const estimate = useInboxEstimate('recent');
+  const messages = estimate.data?.messages ?? null;
   return (
     <Onboarding
       steps={steps}
       current={3}
       title="Older mail"
-      intro={`Sift reads new mail from now on. Pull in recent mail from ${new Intl.ListFormat('en', { type: 'conjunction' }).format(state.accounts.map((a) => a.email))} as well, and answer what Sift says about it: it learns from your answers.`}
+      intro={`Sift reads new mail from now on. Have it go through the newest mail already in ${new Intl.ListFormat('en', { type: 'conjunction' }).format(state.accounts.map((a) => a.email))} as well, and answer what it says: it learns from your answers.`}
       account={account}
     >
-      <Form onSubmit={() => {}}>
-        <Field label="How far back" hint="Up to 300 messages, one model call each.">
-          <Select label="How far back" value={days} options={DAYS} onChange={setDays} />
-        </Field>
-      </Form>
+      <InboxFigures estimate={estimate.data} model={state.model.chosen} />
       <Onward
         next={{
-          label: 'Pull in mail',
+          label: messages === null ? 'Go through' : `Go through ${count(messages)}`,
           busy,
-          onPress: () =>
-            run(async () => {
-              await api.backfill(Number(days));
-              toast(`Pulling in the last ${plural(Number(days), 'day')}`);
-              onDone();
-            }),
+          disabled: !messages,
+          onPress: () => run(() => api.startInbox('recent'), onDone),
         }}
         back={{ label: 'New mail only', onPress: onDone }}
-        error={error}
+        error={error ?? estimate.error}
       />
     </Onboarding>
   );

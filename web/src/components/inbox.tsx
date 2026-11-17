@@ -1,0 +1,137 @@
+import { type InboxEstimate, type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
+import { ago, count, money, plural } from '@/lib/format.ts';
+import { Blank, Button, Dialog, Failure, Figure, Figures, SettingRow, Share } from '@/system';
+
+type Reach = 'inbox' | 'recent';
+
+/** What going through the newest of the inbox would take. Read from Gmail, so it is not asked for again for a while. */
+export function useInboxEstimate(reach: Reach) {
+  return useLoaded(`inbox-${reach}`, (signal) => api.inboxEstimate(reach, signal), 300_000);
+}
+
+/** How many messages, how many need the model, and about what that costs on `model` (`provider/model-id`). */
+export function InboxFigures({ estimate, model }: { estimate: InboxEstimate | null; model: string | null }) {
+  if (!estimate)
+    return (
+      <Figures>
+        <Figure label="In your inbox" value="–" />
+        <Figure label="Need the model" value="–" />
+      </Figures>
+    );
+  const on = model ? `on ${model.slice(model.indexOf('/') + 1)}` : null;
+  return (
+    <Figures>
+      <Figure label="In your inbox" value={count(estimate.messages)} />
+      <Figure label="Need the model" value={count(estimate.model)} />
+      {estimate.quota ? (
+        <Figure label="Cost" value="Your plan" tone="look" note="Uses its quota" />
+      ) : estimate.cost === null ? null : (
+        <Figure label="About" value={money(estimate.cost)} tone="look" note={on} />
+      )}
+    </Figures>
+  );
+}
+
+/** Asked when Sift is turned on, and from Settings: go through what is already in the inbox, as if it had just arrived. */
+export function GoThroughInbox({ model, onClose, onStarted }: { model: string | null; onClose: () => void; onStarted: () => void }) {
+  const estimate = useInboxEstimate('inbox');
+  const { busy, error, run } = useAction();
+  const messages = estimate.data?.messages ?? null;
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Go through your inbox?"
+      footer={
+        <>
+          <Button
+            variant="ink"
+            busy={busy}
+            disabled={!messages}
+            onClick={() =>
+              run(
+                () => api.startInbox('inbox'),
+                () => {
+                  onStarted();
+                  onClose();
+                },
+              )
+            }
+          >
+            {messages === null ? 'Go through' : `Go through ${count(messages)}`}
+          </Button>
+          <Button variant="quiet" onClick={onClose}>
+            Not now
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <InboxFigures estimate={estimate.data} model={model} />
+        <Failure>{error ?? estimate.error}</Failure>
+      </div>
+    </Dialog>
+  );
+}
+
+/** Roughly how long the rest will take, from how fast it has gone so far. */
+function timeLeft(going: NonNullable<ManageState['inbox']['going']>, now: number): string | null {
+  const elapsed = now - going.startedAt;
+  if (going.done === 0 || elapsed <= 0) return null;
+  const minutes = Math.round(((going.total - going.done) * (elapsed / going.done)) / 60_000);
+  if (minutes < 1) return 'less than a minute left';
+  if (minutes < 90) return `about ${plural(minutes, 'minute')} left`;
+  return `about ${plural(Math.round(minutes / 60), 'hour')} left`;
+}
+
+/** The inbox in Settings: what going through it would cost, where it has got, or when it last did. */
+export function InboxRow({ state, reload, onGoThrough }: { state: ManageState; reload: () => void; onGoThrough: () => void }) {
+  const { going, last } = state.inbox;
+  const { busy, error, run } = useAction();
+  const estimate = useInboxEstimate('inbox');
+  if (going)
+    return (
+      <SettingRow
+        title="Going through your inbox"
+        note={
+          <div className="flex flex-col gap-2 pt-1">
+            <Share part={going.done} whole={going.listed ? going.total : 0} />
+            <span className="tabular-nums">
+              {going.listed
+                ? [`${count(going.done)} of ${count(going.total)}`, `${money(going.spent)} so far`, timeLeft(going, Date.now())].filter(Boolean).join(' · ')
+                : `Reading your inbox · ${count(going.total)} found`}
+            </span>
+            <Failure>{error}</Failure>
+          </div>
+        }
+      >
+        <Button busy={busy} onClick={() => run(() => api.stopInbox(), reload)}>
+          Stop
+        </Button>
+      </SettingRow>
+    );
+  const said = estimate.data;
+  const costs = !said
+    ? null
+    : said.quota
+      ? 'Going through them uses your plan’s quota.'
+      : said.cost === null
+        ? null
+        : `Going through them costs about ${money(said.cost)}.`;
+  return (
+    <SettingRow
+      title="Your inbox"
+      note={
+        last ? (
+          `${last.stopped ? 'Stopped after' : 'Went through'} ${plural(last.total, 'message')} ${ago(last.finishedAt)} · ${money(last.spent)}`
+        ) : said ? (
+          [`${plural(said.messages, 'message')}.`, costs].filter(Boolean).join(' ')
+        ) : (
+          <Blank />
+        )
+      }
+    >
+      <Button onClick={onGoThrough}>{last ? 'Go through again…' : 'Go through…'}</Button>
+    </SettingRow>
+  );
+}

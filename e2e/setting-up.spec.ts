@@ -47,8 +47,8 @@ test.describe('Setting up a mailbox with no labels', () => {
 
     await expect(page.getByRole('heading', { name: 'Older mail', level: 1 })).toBeVisible();
     await expect(current(page)).toHaveText('4Older mail');
-    await expect(page.getByRole('combobox', { name: 'How far back' })).toHaveText(/The last week/);
-    await expect(page.getByRole('button', { name: 'Pull in mail' })).toBeVisible();
+    await expect(page.getByText('$0.39')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Go through 300' })).toBeVisible();
     await page.getByRole('button', { name: 'New mail only' }).click();
 
     await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toBeVisible();
@@ -59,6 +59,16 @@ test.describe('Setting up a mailbox with no labels', () => {
     // Made only in the mailbox that had no labels.
     await page.goto('/labels');
     await expect(page.getByRole('row', { name: /^Sales pitches / })).toContainText('Only in me@work.example.org');
+  });
+
+  test('the newest of the inbox is gone through to suggest about, and Settings says how far it has got', async ({ page }) => {
+    await page.goto('/');
+    await suggest(page, 'No more sales pitches');
+    await page.getByRole('button', { name: 'Use this label' }).click();
+    await page.getByRole('button', { name: 'Go through 300' }).click();
+    await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toBeVisible();
+    await page.goto('/?settings=1');
+    await expect(page.getByRole('dialog', { name: 'Settings', exact: true }).getByText('Going through your inbox')).toBeVisible();
   });
 
   test('a suggestion edited before it is used is made as edited', async ({ page }) => {

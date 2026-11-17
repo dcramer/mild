@@ -4,7 +4,8 @@ import type { Config } from '../config.ts';
 import { type Ephemeral, holding } from '../ephemeral/ephemeral.ts';
 import type { Controls } from '../dashboard/controls.ts';
 import { forgetPassStatus, passStatus } from '../work/status.ts';
-import { askForBackfill, pullingIn } from '../work/run.ts';
+import { REACH, costPerCall, modelShare } from '../store/inbox.ts';
+import { hasOwnLabels } from '../store/labels.ts';
 import { applyRule, ruleInbox } from '../work/apply.ts';
 import { createGmailApi } from '../gmail/api.ts';
 import { startEval } from '../learn/evals.ts';
@@ -19,14 +20,17 @@ import { createJudge } from '../model/judge.ts';
 import { createProposer } from '../model/propose.ts';
 import { createRuleDrafter } from '../model/draft-rule.ts';
 import { costPerThousand, modelChoices, offerModel, openModels, resolveModel, saveApiKey, shortlistModels } from '../model/models.ts';
-import { listAccounts, listUsers, personOf } from '../store/accounts.ts';
+import { listAccounts, personOf } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
 import { credentials } from '../store/credentials.ts';
 import { getRuleFilter } from '../store/filters.ts';
 import { preferences } from '../store/preferences.ts';
 import type { Sql } from '../store/sql.ts';
-import type { Store } from '../store/store.ts';
 import { Refusal } from '../refusal.ts';
+
+const DAY_MS = 86_400_000;
+/** How far back an estimate looks for how much mail went to the model: recent enough to reflect the rules as they are. */
+const ESTIMATE_DAYS = 30;
 
 /** A Gmail client for one of the person's mailboxes, with the sign-in kept in their database. */
 async function gmailClient(config: Config, db: Sql, email: string) {
@@ -73,7 +77,6 @@ export async function openModelTier(config: Config, ephemeral: Ephemeral, db: Sq
 /** What the dashboard may ask this process to do. See `Controls`. */
 export async function buildControls(
   config: Config,
-  store: Store,
   live: { ephemeral: Ephemeral; deviceId: string; kick?: (person?: number) => void; running: boolean },
 ): Promise<Controls> {
   const choices = modelChoices(config.settings.chatgptSignIn ?? 'device-code');
@@ -137,13 +140,19 @@ export async function buildControls(
       if (outcome.status === 'skipped') return 'Already put back by hand';
       throw new Refusal(outcome.reason);
     },
-    backfill: async (days) => {
-      if (!live.kick) throw new Refusal('Only the dashboard is running here, so nothing can pull in mail.');
-      for (const user of await listUsers(store.central))
-        for (const account of await listAccounts(await store.user(user.id))) await askForBackfill(live.ephemeral, account.id, days);
-      live.kick();
+    inboxEstimate: async (db, mailboxes, reach) => {
+      let messages = 0;
+      for (const account of await listAccounts(db)) {
+        if (!mailboxes.includes(account.id) || !(await hasOwnLabels(db, account.id))) continue;
+        messages += Math.min(await (await gmailFor(config, live.ephemeral, db, account.id)).api.inboxSize(), REACH[reach]);
+      }
+      // As much of it as went to the model lately; with nothing to go by, all of it.
+      const model = Math.round(messages * ((await modelShare(db, Date.now() - ESTIMATE_DAYS * DAY_MS)) ?? 1));
+      const { model: spec } = await preferences(db);
+      const quota = spec !== null && choices.some((c) => c.provider === spec.split('/')[0] && c.how !== 'key');
+      const each = spec === null || quota ? null : ((await costPerCall(db, spec)) ?? (await costEach(db)));
+      return { messages, model, cost: each === null ? null : model * each, quota };
     },
-    pullingIn: async (mailboxes) => await pullingIn(live.ephemeral, mailboxes),
     putBack: async (db, accountId, messageId) => {
       const last = await lastStandingChange(db, accountId, messageId);
       if (last) await undo({ db, mailbox: (await gmailFor(config, live.ephemeral, db, accountId)).mailbox }, last.id);

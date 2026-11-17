@@ -17,7 +17,7 @@ const LIMIT_MS = (MAX_DURATION_S - 60) * 1000;
 const Piece = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('pass'), person: z.int().positive(), account: z.string().min(3) }),
   z.strictObject({ kind: z.literal('upkeep'), person: z.int().positive() }),
-  z.strictObject({ kind: z.literal('backfill'), person: z.int().positive(), account: z.string().min(3), days: z.int().min(1).max(30) }),
+  z.strictObject({ kind: z.literal('inbox'), person: z.int().positive(), account: z.string().min(3), run: z.int().positive() }),
   z.strictObject({ kind: z.literal('eval'), person: z.int().positive(), run: z.int().positive() }),
 ]) satisfies z.ZodType<Work>;
 

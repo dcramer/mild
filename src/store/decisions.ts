@@ -100,7 +100,16 @@ export async function currentDecision(
   db: Sql,
   accountId: string,
   messageId: string,
-): Promise<{ id: number; decision: Decision; carryOut: boolean; runId: number | null; answered: boolean } | null> {
+): Promise<{
+  id: number;
+  decision: Decision;
+  carryOut: boolean;
+  /** Null while it waits to be carried out, and for a suggestion. */
+  outcome: (typeof DECISION_OUTCOMES)[number] | null;
+  decidedAt: number;
+  runId: number | null;
+  answered: boolean;
+} | null> {
   const rows = await db
     .select({ decision: decisions, gmailLabel: labels.gmailLabel })
     .from(decisions)
@@ -127,5 +136,13 @@ export async function currentDecision(
     ...(row.ruleId === null ? {} : { ruleId: row.ruleId }),
     ...(row.confidence === null ? {} : { confidence: row.confidence }),
   };
-  return { id: row.id, decision, carryOut: row.carryOut, runId: row.runId, answered: answers.length > 0 || rows.some((r) => r.decision.byUser) };
+  return {
+    id: row.id,
+    decision,
+    carryOut: row.carryOut,
+    outcome: row.outcome,
+    decidedAt: row.decidedAt,
+    runId: row.runId,
+    answered: answers.length > 0 || rows.some((r) => r.decision.byUser),
+  };
 }

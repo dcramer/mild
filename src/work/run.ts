@@ -17,7 +17,8 @@ import { captureExamples } from './examples.ts';
 import { PRUNE_PER_RUN, RETENTION_DAYS, pruneOld } from './retention.ts';
 import { continueEval, goingEvals } from '../learn/evals.ts';
 import { hasOwnLabels } from '../store/labels.ts';
-import { backfill } from './backfill.ts';
+import { continueInboxRun } from './inbox.ts';
+import { goingInboxRuns } from '../store/inbox.ts';
 import { checkFiltersWhenDue } from './filters.ts';
 import { recordPassStatus } from './status.ts';
 import { type SyncReport, syncAccount } from './sync.ts';
@@ -52,9 +53,6 @@ const AT_ONCE = 4;
 const today = (options: Pick<RunOptions, 'now'>) => Math.floor((options.now ?? Date.now)() / DAY_MS);
 /** A person's upkeep done today. */
 const upkeepKey = (person: number, day: number) => `upkeep:${person}:${day}`;
-/** Older mail asked for and not yet all pulled in, by mailbox; given up after a day. */
-const backfillKey = (account: string) => `backfill:${account}`;
-const BACKFILL_MS = 86_400_000;
 
 export interface PassResult {
   email: string;
@@ -91,7 +89,7 @@ export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[
 export type Work =
   | { kind: 'pass'; person: number; account: string }
   | { kind: 'upkeep'; person: number }
-  | { kind: 'backfill'; person: number; account: string; days: number }
+  | { kind: 'inbox'; person: number; account: string; run: number }
   | { kind: 'eval'; person: number; run: number };
 
 /**
@@ -105,12 +103,12 @@ export async function dueWork(store: Store, options: RunOptions, people?: readon
     if (people && !people.includes(person)) continue;
     const db = await store.user(person);
     if ((await options.ephemeral.get(upkeepKey(person, day))) === null) due.push({ kind: 'upkeep', person });
+    const runs = await goingInboxRuns(db);
     for (const account of await listAccounts(db)) {
       // Nothing is read from Gmail for a mailbox until the person has said, with a label of their own, what they want of it.
       if (!(await hasOwnLabels(db, account.id))) continue;
       due.push({ kind: 'pass', person, account: account.id });
-      const days = await options.ephemeral.get<number>(backfillKey(account.id));
-      if (days !== null) due.push({ kind: 'backfill', person, account: account.id, days });
+      for (const run of runs) if (run.accountId === account.id) due.push({ kind: 'inbox', person, account: account.id, run: run.id });
     }
     for (const run of await goingEvals(db)) due.push({ kind: 'eval', person, run });
   }
@@ -138,22 +136,11 @@ export async function tick(store: Store, options: RunOptions, limitMs: number, p
 const describeWork = (work: Work) =>
   work.kind === 'pass'
     ? `${work.account}: pass`
-    : work.kind === 'backfill'
-      ? `${work.account}: pulling in older mail`
+    : work.kind === 'inbox'
+      ? `${work.account}: going through the inbox`
       : work.kind === 'eval'
         ? 'A test run'
         : 'Deleting old records';
-
-/** Ask for the last `days` days of a mailbox's inbox to be pulled in, by the ticks that follow. */
-export async function askForBackfill(ephemeral: Ephemeral, account: string, days: number): Promise<void> {
-  await ephemeral.set(backfillKey(account), days, BACKFILL_MS);
-}
-
-/** Those of `mailboxes` whose older mail is asked for and not yet all pulled in. */
-export async function pullingIn(ephemeral: Ephemeral, mailboxes: readonly string[]): Promise<string[]> {
-  const asked = await Promise.all(mailboxes.map(async (mailbox) => ((await ephemeral.get<number>(backfillKey(mailbox))) === null ? [] : [mailbox])));
-  return asked.flat();
-}
 
 /** Run `work` unless something else is doing it now, holding it until a little past `until`. Null when it was. */
 async function unlessUnderWay<T>(options: RunOptions, lock: string, until: number, work: () => Promise<T>): Promise<T | null> {
@@ -195,12 +182,8 @@ export const runWork = (store: Store, work: Work, options: RunOptions, until: nu
         }
         case 'pass':
           return account ? await unlessUnderWay(options, `lock:pass:${account.id}`, until, () => passMailbox(db, account, options, until)) : null;
-        case 'backfill':
-          if (account)
-            await unlessUnderWay(options, `lock:backfill:${account.id}`, until, async () => {
-              const { api } = await options.connect(db, account);
-              if (await backfill(db, api, account.id, work.days, until, options.now)) await options.ephemeral.take(backfillKey(account.id));
-            });
+        case 'inbox':
+          if (account) await unlessUnderWay(options, `lock:inbox:${account.id}`, until, () => goThroughInbox(db, account, work.run, options, until));
           return null;
         case 'eval':
           await unlessUnderWay(options, `lock:eval:${work.person}:${work.run}`, until, async () => {
@@ -240,6 +223,38 @@ function readingOnce(api: GmailApi): { api: GmailApi; held: (messageId: string) 
     return read;
   };
   return { api: { ...api, getContent }, held: (messageId) => done.has(messageId) };
+}
+
+/**
+ * Go on with an inbox run over one mailbox, with what a pass would use: its model, Gmail read once per
+ * message, and the mailbox only while Sift is on. Without a model it waits; deciding only what rules cover
+ * would leave the rest behind it.
+ */
+async function goThroughInbox(db: Sql, account: Account, run: number, options: RunOptions, until: number): Promise<void> {
+  const tier = options.model ? await options.model(db) : null;
+  if (!tier) return;
+  const { active } = await preferences(db);
+  const leave = options.unsubscribe;
+  const { api: gmail, mailbox } = await options.connect(db, account);
+  const { api, held } = readingOnce(gmail);
+  const went = await continueInboxRun(
+    {
+      db,
+      api,
+      mailbox: active ? mailbox : null,
+      answers: mailbox,
+      ...(leave ? { unsubscribe: (accountId: string, messageId: string) => leave(db, accountId, messageId) } : {}),
+      sources: { api, mailbox },
+      model: { judge: tier.judge, model: tier.model },
+      until,
+      ...(options.now ? { now: options.now } : {}),
+    },
+    account,
+    run,
+  );
+  // The text the model read is kept for what is now waiting on the person; the rest waits for a pass.
+  await keepSuggestionBodies(db, api, account.id, options.now, { held, fetch: false });
+  if (went && went.to > went.from) options.log(`${account.email}: went through ${went.to} of ${went.of} in the inbox`);
 }
 
 /** One pass, its outcome kept for the dashboard. Null when the mailbox was removed while it ran. */

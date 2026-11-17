@@ -9,7 +9,7 @@ Every request and every piece of work starts with nothing in memory and keeps no
 | Kind | Where | Lost when |
 | --- | --- | --- |
 | The record: mail, decisions, actions, rules, credentials, preferences, test runs | Postgres | Never, short of retention |
-| Brief: locks, sign-ins in progress, quota, pass status, older mail asked for | `Ephemeral`, every key with a TTL | Expiry or restart; nothing breaks but a retry |
+| Brief: locks, sign-ins in progress, quota, pass status | `Ephemeral`, every key with a TTL | Expiry or restart; nothing breaks but a retry |
 
 Postgres holds nothing brief; `Ephemeral` holds nothing that cannot be lost. There is no queue: what is due is found in those two places.
 
@@ -30,7 +30,7 @@ What is due:
 | --- | --- | --- |
 | A pass per mailbox | every mailbox with a label of its own | `lock:pass:<mailbox>` |
 | Upkeep per person | `upkeep:<person>:<day>`, claimed when it starts and let go if it fails | the claim |
-| Older mail | `backfill:<mailbox>`, set when asked for, taken when all is in | `lock:backfill:<mailbox>` |
+| Going through an inbox, its next slice | `inbox_runs` not finished | `lock:inbox:<mailbox>` |
 | A test run's next slice | runs marked running | `lock:eval:<person>:<run>` |
 
 Work left unfinished is due again at the next tick. Ticks may overlap; a lock held means something else has that piece. A lock lasts the piece's limit and a minute more, so one left by a call the host cut off runs out about when the next tick wants it. A ChatGPT device code is asked about when the page reloads while the person enters it, at most once per OpenAI's interval.

@@ -1,8 +1,10 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MAX_BACKFILL, backfill } from '../src/work/backfill.ts';
+import { continueInboxRun } from '../src/work/inbox.ts';
+import { REACH, costPerCall, goingInboxRuns, inboxProgress, modelShare, startInboxRuns, stopInboxRuns } from '../src/store/inbox.ts';
+import { finishRun, startRun } from '../src/store/runs.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { type RunOptions, askForBackfill, pullingIn, tick } from '../src/work/run.ts';
+import { type RunOptions, tick } from '../src/work/run.ts';
 import { triageAccount } from '../src/work/triage.ts';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
 import { people } from '../src/store/people.ts';
@@ -24,7 +26,6 @@ const ACCOUNT = 'me@example.org';
 let db: Sql;
 let store: Store;
 let calls: string[];
-let pulling: string[];
 
 const controls: Controls = {
   models: async () => ({ models: ['p/small', 'p/large'], shortlist: { p: ['p/small', 'p/large'] }, costs: { 'p/small': 0.4 } }),
@@ -37,8 +38,7 @@ const controls: Controls = {
     calls.push(`undo ${id}`);
     return null;
   },
-  backfill: async (days) => void calls.push(`backfill ${days}`),
-  pullingIn: async () => pulling,
+  inboxEstimate: async (_db, _mailboxes, reach) => (calls.push(`estimate ${reach}`), { messages: 40, model: 30, cost: 0.03, quota: false }),
   putBack: async (_db, _account, messageId) => {
     calls.push(`putBack ${messageId}`);
     if (messageId === 'gone') throw new Error('The message no longer exists.');
@@ -77,7 +77,6 @@ const controls: Controls = {
 beforeEach(async () => {
   ({ store, db } = await onePerson(ACCOUNT));
   calls = [];
-  pulling = [];
 });
 
 async function start(options: { withControls?: boolean } = {}) {
@@ -555,7 +554,7 @@ describe('managing sift from the dashboard', () => {
     expect((await call('GET', '/api/suggestions')).body).toMatchObject({ waiting: 0 });
   });
 
-  it('asks the running sift to undo, pull in older mail and check now', async () => {
+  it('asks the running sift to undo and check now', async () => {
     const { call } = await start();
     await raw(db).run(
       `INSERT INTO actions (id, account_id, type, payload, original_labels, status, created_at) VALUES (3, ?, 'archive', '{}', '[]', 'done', 1)`,
@@ -564,10 +563,8 @@ describe('managing sift from the dashboard', () => {
     expect((await call('POST', '/api/undo', { id: 3 })).body).toEqual({ message: null });
     // A change that is not in this person's database is not passed on.
     expect(await call('POST', '/api/undo', { id: 404 })).toMatchObject({ status: 409, body: { error: 'There is no change #404.' } });
-    expect((await call('POST', '/api/backfill', { days: 7 })).body).toEqual({ ok: true });
-    expect((await call('POST', '/api/backfill', { days: 400 })).status).toBe(400);
     expect((await call('POST', '/api/check', {})).status).toBe(200);
-    expect(calls).toEqual(['undo 3', 'backfill 7', 'check']);
+    expect(calls).toEqual(['undo 3', 'check']);
   });
 
   it('refuses every write that did not come from its own page', async () => {
@@ -581,7 +578,8 @@ describe('managing sift from the dashboard', () => {
       '/api/rules/filter',
       '/api/rules/apply',
       '/api/undo',
-      '/api/backfill',
+      '/api/inbox/start',
+      '/api/inbox/stop',
       '/api/check',
       '/api/feedback',
     ]) {
@@ -852,101 +850,239 @@ describe('signing in with Google', () => {
   });
 });
 
-describe('older mail', () => {
-  const gmailMessage = (id: string): RawMessage => ({
+describe('going through the inbox', () => {
+  const gmailMessage = (id: string, from = 'news@example.com', labelIds = ['INBOX']): RawMessage => ({
     id,
     threadId: `t${id}`,
-    labelIds: ['INBOX'],
+    labelIds,
     internalDate: 5,
     headers: [
-      { name: 'From', value: 'news@example.com' },
+      { name: 'From', value: from },
       { name: 'Subject', value: id },
     ],
   });
+  const unsure = async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 });
+  let mailbox: FakeMailbox;
+  let asked: string[];
+  let listed: string[];
+  let gmail: Record<string, RawMessage>;
+  beforeEach(() => {
+    mailbox = new FakeMailbox();
+    asked = [];
+    listed = [];
+    gmail = {};
+  });
+  /** Gmail holding `ids` in the inbox, listed two to a page. */
+  const inGmail = (...messages: RawMessage[]) => {
+    for (const m of messages) {
+      gmail[m.id] = m;
+      mailbox.labels.set(m.id, [...m.labelIds]);
+    }
+  };
+  const api = {
+    searchInbox: async (_query: string, pageToken?: string) => {
+      const ids = Object.keys(gmail);
+      const from = Number(pageToken ?? 0);
+      listed.push(pageToken ?? '');
+      return { ids: ids.slice(from, from + 2), ...(from + 2 < ids.length ? { nextPageToken: String(from + 2) } : {}) };
+    },
+    getMetadata: async (id: string) => gmail[id] ?? null,
+  };
+  /** One piece of work on the run, with Sift on or off; the model is `judge`. */
+  const goOn = async (run: number, options: { on?: boolean; judge?: typeof unsure; until?: number; now?: () => number } = {}) =>
+    await continueInboxRun(
+      {
+        db,
+        api,
+        mailbox: options.on ? mailbox : null,
+        answers: mailbox,
+        sources: { api: { getContent: async () => null, getThread: async () => null }, mailbox },
+        model: {
+          model: 'test/model',
+          judge: async (input) => (asked.push(input.evidence.facts.messageId), await (options.judge ?? unsure)()),
+        },
+        ...(options.until === undefined ? {} : { until: options.until }),
+        now: options.now ?? (() => 100),
+      },
+      (await listAccounts(db))[0]!,
+      run,
+    );
+  const begin = async (acts: boolean, { most = 10, at = 50 } = {}) => {
+    await startInboxRuns(db, [ACCOUNT], { acts, most, now: at });
+    return (await goingInboxRuns(db))[0]!.id;
+  };
 
-  it('is pulled in without moving the sync cursor, and only once', async () => {
-    const api = {
-      searchInbox: async (query: string) => (calls.push(query), { ids: ['a', 'b', 'gone'] }),
-      getMetadata: async (id: string) => (calls.push(id), id === 'gone' ? null : gmailMessage(id)),
-    };
-    expect(await backfill(db, api, ACCOUNT, 7)).toBe(true);
-    expect(await backfill(db, api, ACCOUNT, 7)).toBe(true);
-    // The second time it reads only what it could not record.
-    expect(calls).toEqual(['newer_than:7d', 'a', 'b', 'gone', 'newer_than:7d', 'gone']);
+  it('lists the inbox and decides what Sift never saw, without moving the sync cursor', async () => {
+    inGmail(gmailMessage('a'), gmailMessage('b'), gmailMessage('c'));
+    gmail['gone'] = gmailMessage('gone', 'news@example.com', ['SENT']);
+    const run = await begin(false);
+    expect(await goOn(run)).toMatchObject({ from: 0, to: 4, of: 4 });
+    expect(listed).toEqual(['', '2']);
+    expect(asked.toSorted()).toEqual(['a', 'b', 'c']);
     expect((await listAccounts(db))[0]?.historyId).toBe('1');
+    // Recorded to suggest about only, so a pass that came to them first would not act either.
     expect(await raw(db).all('SELECT id, suggest_only FROM messages ORDER BY id')).toEqual([
       { id: 'a', suggest_only: true },
       { id: 'b', suggest_only: true },
+      { id: 'c', suggest_only: true },
     ]);
+    expect(await raw(db).all('SELECT finished_at FROM inbox_runs')).toEqual([{ finished_at: 100 }]);
   });
 
-  it('stops at its time limit with what it fetched kept, and carries on from there', async () => {
+  it('goes no further than its most, newest first', async () => {
+    inGmail(gmailMessage('a'), gmailMessage('b'), gmailMessage('c'));
+    const run = await begin(false, { most: 2 });
+    expect(await goOn(run)).toMatchObject({ to: 2, of: 2 });
+    expect(listed).toEqual(['']);
+    expect(asked.toSorted()).toEqual(['a', 'b']);
+  });
+
+  it('decides again what waits on the user, but not what they answered or what was decided since it began', async () => {
+    inGmail(gmailMessage('waiting'), gmailMessage('answered'), gmailMessage('since'));
+    await recordSync(
+      db,
+      ACCOUNT,
+      ['waiting', 'answered', 'since'].map((messageId) => facts({ accountId: ACCOUNT, messageId })),
+      '2',
+    );
+    const said = { disposition: 'review', subscription: 'preserve', stage: 'model', reason: 'unsure' } as const;
+    await recordDecision(db, ACCOUNT, 'waiting', said, { carryOut: false, now: 10 });
+    await recordDecision(db, ACCOUNT, 'answered', said, { carryOut: false, byUser: true, now: 10 });
+    await recordDecision(db, ACCOUNT, 'since', said, { carryOut: false, now: 60 });
+    await goOn(await begin(false));
+    expect(asked).toEqual(['waiting']);
+    expect(await raw(db).all("SELECT count(*) AS n FROM decisions WHERE message_id = 'waiting'")).toEqual([{ n: 2 }]);
+  });
+
+  it('carries out what it decides only when Sift was on at the press and still is', async () => {
+    await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+    inGmail(gmailMessage('a'), gmailMessage('b'), gmailMessage('c'));
+    // Off at the press: a suggestion, even with Sift turned on since.
+    await goOn(await begin(false), { on: true });
+    expect(mailbox.modifyCalls).toBe(0);
+    // On at the press, and still on.
+    await goOn(await begin(true, { at: 150 }), { on: true, now: () => 200 });
+    expect(await raw(db).all('SELECT message_id, carry_out, outcome FROM decisions WHERE decided_at = 200 ORDER BY message_id')).toEqual([
+      { message_id: 'a', carry_out: true, outcome: 'done' },
+      { message_id: 'b', carry_out: true, outcome: 'done' },
+      { message_id: 'c', carry_out: true, outcome: 'done' },
+    ]);
+    expect(mailbox.labels.get('a')).not.toContain('INBOX');
+  });
+
+  it('takes back what Sift did before carrying out something different', async () => {
+    inGmail(gmailMessage('a'));
+    await setActive(db, true);
+    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'a' })], '2');
+    // Sift could not place it, and marked it for the user in Gmail.
+    const sources = { api: { getContent: async () => null, getThread: async () => null }, mailbox };
+    await triageAccount({ db, mailbox, model: { model: 'test/model', judge: unsure }, sources, now: () => 10 }, (await listAccounts(db))[0]!);
+    const marked = mailbox.labels.get('a')!;
+    expect(marked.length).toBeGreaterThan(1);
+    // Now a rule says what it is.
+    await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+    await goOn(await begin(true), { on: true, now: () => 200 });
+    const now = mailbox.labels.get('a')!;
+    expect(now).not.toContain('INBOX');
+    expect(now.filter((l) => marked.includes(l))).toEqual([]);
+  });
+
+  it('stops at its time limit, and carries on from there', async () => {
+    inGmail(gmailMessage('a'), gmailMessage('b'), gmailMessage('c'), gmailMessage('d'), gmailMessage('e'));
+    const run = await begin(false);
+    expect(await goOn(run, { until: 0, now: () => 0 })).toMatchObject({ to: 0, of: 0 });
+    expect(listed).toEqual([]);
+    // Four at a time, each model call taking 10.
     let clock = 0;
-    const read: string[] = [];
-    const api = {
-      searchInbox: async () => ({ ids: ['a', 'b', 'c'] }),
-      getMetadata: async (id: string) => (read.push(id), (clock += 1000), gmailMessage(id)),
-    };
-    expect(await backfill(db, api, ACCOUNT, 7, 1500, () => clock)).toBe(false);
-    expect(await raw(db).all('SELECT id FROM messages ORDER BY id')).toEqual([{ id: 'a' }, { id: 'b' }]);
-    expect(await backfill(db, api, ACCOUNT, 7, Infinity, () => clock)).toBe(true);
-    expect(read).toEqual(['a', 'b', 'c']);
+    const slow = async () => ((clock += 10), await unsure());
+    expect(await goOn(run, { until: 15, now: () => clock, judge: slow })).toMatchObject({ from: 0, to: 4, of: 5 });
+    expect(await goOn(run)).toMatchObject({ from: 4, to: 5 });
+    expect(asked.toSorted()).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(await goOn(run)).toBeNull();
   });
 
-  it('stops at the cap', async () => {
-    let page = 0;
-    const api = {
-      searchInbox: async () => ({ ids: Array.from({ length: 200 }, (_, i) => `p${page}-${i}`), nextPageToken: `t${++page}` }),
-      getMetadata: async (id: string) => gmailMessage(id),
+  it('leaves what the model was not asked about for the next piece, in order', async () => {
+    inGmail(...Array.from({ length: 13 }, (_, i) => gmailMessage(`m${i}`)));
+    const run = await begin(false, { most: 20 });
+    const down = async (): Promise<Awaited<ReturnType<typeof unsure>>> => {
+      throw new Error('provider down');
     };
-    expect(await backfill(db, api, ACCOUNT, 30)).toBe(true);
-    expect(page).toBe(2);
-    expect(await raw(db).get('SELECT count(*) AS n FROM messages')).toEqual({ n: MAX_BACKFILL });
+    // Three failures in a row and each of the four stops asking: the thirteenth is not asked.
+    expect(await goOn(run, { judge: down })).toMatchObject({ to: 12, of: 13 });
+    expect(asked).toHaveLength(12);
+    await goOn(run);
+    expect(asked.at(-1)).toBe('m12');
+    expect(await raw(db).all('SELECT finished_at FROM inbox_runs')).toEqual([{ finished_at: 100 }]);
   });
 
-  it('is said to be coming until it is all in and the model has decided it', async () => {
-    const { call } = await start();
+  it('stops when the person stops it, keeping what it decided', async () => {
+    inGmail(gmailMessage('a'), gmailMessage('b'), gmailMessage('c'), gmailMessage('d'), gmailMessage('e'));
+    const run = await begin(false);
+    await goOn(run, { judge: async () => (await stopInboxRuns(db, 70), await unsure()) });
+    expect(asked).toHaveLength(4);
+    expect(await raw(db).all('SELECT next, finished_at, stopped FROM inbox_runs')).toEqual([{ next: 4, finished_at: 70, stopped: true }]);
+    expect(await goOn(run)).toBeNull();
+    expect(await inboxProgress(db, [ACCOUNT])).toEqual({ going: null, last: { finishedAt: 70, total: 4, spent: 0, stopped: true } });
+  });
+
+  it('says where it has got, what it has spent, and that more suggestions are coming', async () => {
+    const { call } = await startDashboard(people(store), { controls });
     const importing = async () => ((await call('GET', '/api/suggestions')).body as { importing: boolean }).importing;
     expect(await importing()).toBe(false);
-    pulling = [ACCOUNT];
+    inGmail(gmailMessage('a'), gmailMessage('b'), gmailMessage('c'), gmailMessage('d'), gmailMessage('e'));
+    const run = await begin(false);
     expect(await importing()).toBe(true);
-    pulling = [];
-    await backfill(db, { searchInbox: async () => ({ ids: ['old'] }), getMetadata: async (id) => gmailMessage(id) }, ACCOUNT, 7);
-    // In, but not yet read by the model.
-    expect(await importing()).toBe(true);
-    const sources = { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } };
-    const model = { model: 'test/model', judge: async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 }) };
-    await triageAccount({ db, mailbox: new FakeMailbox(), model, sources }, (await listAccounts(db))[0]!);
+    let clock = 100;
+    await goOn(run, { until: 115, now: () => clock, judge: async () => ((clock += 10), await unsure()) });
+    await raw(db).run("UPDATE model_runs SET cost_usd = 0.01 WHERE message_id IN ('a', 'b')");
+    expect((await call('GET', '/api/manage')).body).toMatchObject({
+      inbox: { going: { listed: true, done: 4, total: 5, spent: 0.02, startedAt: 50 }, last: null },
+    });
+    await goOn(run);
     expect(await importing()).toBe(false);
+    expect((await call('GET', '/api/manage')).body).toMatchObject({ inbox: { going: null, last: { total: 5, spent: 0.02, stopped: false } } });
   });
 
-  it('is asked for until a tick has pulled it all in', async () => {
-    const ephemeral = memoryEphemeral();
-    await askForBackfill(ephemeral, ACCOUNT, 7);
-    expect(await pullingIn(ephemeral, [ACCOUNT, 'other@example.org'])).toEqual([ACCOUNT]);
-    const api = { searchInbox: async () => ({ ids: ['old'] }), getMetadata: async (id: string) => gmailMessage(id) };
-    await tick(store, { ephemeral, connect: async () => ({ api, mailbox: new FakeMailbox() }), log: () => {} } as unknown as RunOptions, 60_000);
-    expect(await pullingIn(ephemeral, [ACCOUNT])).toEqual([]);
+  it('estimates from what model calls cost lately and how much mail went to the model, once there are enough of each', async () => {
+    expect(await costPerCall(db, 'test/model')).toBeNull();
+    expect(await modelShare(db, 0)).toBeNull();
+    const ids = Array.from({ length: 20 }, (_, i) => `e${i}`);
+    await recordSync(
+      db,
+      ACCOUNT,
+      ids.map((messageId) => facts({ accountId: ACCOUNT, messageId })),
+      '2',
+    );
+    for (const [i, id] of ids.entries()) {
+      const run = await startRun(db, { accountId: ACCOUNT, messageId: id, model: 'test/model', now: 10 });
+      await finishRun(db, run, { usage: { model: 'test/model', inputTokens: 1, outputTokens: 1, costUsd: i < 10 ? 0.001 : 0.003 }, now: 11 });
+      // Half went to the model.
+      const said = { disposition: 'keep', subscription: 'preserve', stage: i % 2 ? 'model' : 'rules', reason: 'r' } as const;
+      await recordDecision(db, ACCOUNT, id, said, { carryOut: false, now: 10, ...(i % 2 ? { runId: run } : {}) });
+    }
+    expect(await costPerCall(db, 'test/model')).toBeCloseTo(0.002);
+    expect(await costPerCall(db, 'other/model')).toBeNull();
+    expect(await modelShare(db, 0)).toBe(0.5);
+    expect(await modelShare(db, 11)).toBeNull();
   });
 
-  it('is only ever suggested about, even while sift is on', async () => {
-    await backfill(db, { searchInbox: async () => ({ ids: ['old'] }), getMetadata: async (id) => gmailMessage(id) }, ACCOUNT, 7);
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'new' })], '2');
-    const mailbox = new FakeMailbox();
-    mailbox.labels.set('old', ['INBOX']);
-    mailbox.labels.set('new', ['INBOX']);
-    // A model that can place neither, so each gets a decision: what is being tested is which may be acted on.
-    const sources = { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } };
-    const model = {
-      model: 'test/model',
-      judge: async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 }),
-    };
-    await triageAccount({ db, mailbox, model, sources }, (await listAccounts(db))[0]!);
-    expect(await raw(db).all('SELECT message_id, carry_out, outcome FROM decisions ORDER BY message_id')).toEqual([
-      { message_id: 'new', carry_out: true, outcome: 'done' },
-      { message_id: 'old', carry_out: false, outcome: null },
+  it('is started for each mailbox of the person, once at a time, and acts only if Sift was on', async () => {
+    const { call } = await startDashboard(people(store), { controls });
+    expect((await call('POST', '/api/inbox/start', { reach: 'recent' })).body).toEqual({ ok: true });
+    expect(await call('POST', '/api/inbox/start', { reach: 'inbox' })).toMatchObject({
+      status: 409,
+      body: { error: 'Sift is already going through your inbox.' },
+    });
+    expect(await raw(db).all('SELECT account_id, acts, most FROM inbox_runs')).toEqual([{ account_id: ACCOUNT, acts: false, most: REACH.recent }]);
+    expect((await call('POST', '/api/inbox/stop', {})).body).toEqual({ ok: true });
+    await setActive(db, true);
+    await call('POST', '/api/inbox/start', { reach: 'inbox' });
+    expect(await raw(db).all('SELECT acts, most, stopped FROM inbox_runs ORDER BY id')).toEqual([
+      { acts: false, most: REACH.recent, stopped: true },
+      { acts: true, most: REACH.inbox, stopped: false },
     ]);
-    expect(mailbox.labels.get('old')).toEqual(['INBOX']);
+    expect((await call('GET', '/api/inbox?reach=inbox')).body).toEqual({ messages: 40, model: 30, cost: 0.03, quota: false });
+    expect(calls).toEqual(['check', 'check', 'estimate inbox']);
   });
 });
 

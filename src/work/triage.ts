@@ -1,5 +1,5 @@
 import type { Sql } from '../store/sql.ts';
-import { execute } from '../actions/executor.ts';
+import { execute, undo } from '../actions/executor.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import { planAction } from '../actions/plan.ts';
@@ -19,7 +19,7 @@ import { type Evidence, type Judge, type JudgeFailure, describeFailure, modelSta
 import type { Decision, Disposition, MessageFacts, Stage, Unfinished } from '../triage/types.ts';
 import { type EvidenceSources, gatherEvidence } from './evidence.ts';
 import { type Traced, invokeAgent, reportError, traced } from '../telemetry.ts';
-import { changeTries } from '../store/actions.ts';
+import { changeTries, lastStandingChange } from '../store/actions.ts';
 
 /** How many passes try a mailbox change that did not land. Gmail failing one change is almost always passing, and the user is not asked to look. */
 export const CHANGE_TRIES = 3;
@@ -27,7 +27,7 @@ export const CHANGE_TRIES = 3;
 /** Read access to the account's mail, for the model's evidence and for rules on what only the whole message shows. It never changes the mailbox. */
 type Sources = Omit<EvidenceSources, 'db' | 'now'>;
 
-type TriageDeps = {
+export type TriageDeps = {
   db: Sql;
   /** Null while sift is off: decisions are recorded and nothing in the mailbox changes. */
   mailbox: Mailbox | null;
@@ -138,6 +138,17 @@ async function cascadeFor(
   };
 }
 
+export const emptyReport = (): TriageReport => ({
+  decided: { keep: 0, archive: 0, spam: 0, review: 0 },
+  acted: 0,
+  skipped: 0,
+  retrying: 0,
+  troubled: 0,
+  blocked: 0,
+  unsubscribed: 0,
+  unjudged: 0,
+});
+
 /**
  * Decide every recorded message that has no decision yet and, when a mailbox is given, carry the
  * decisions out. Each decision is recorded before anything is changed; if the change cannot be
@@ -145,18 +156,86 @@ async function cascadeFor(
  * call is recorded as a run; one that fails decides nothing, so the message is asked about again next pass.
  */
 export async function triageAccount(deps: TriageDeps, account: Account, limit = 200): Promise<TriageReport> {
+  const report = emptyReport();
+  const carryOut = carrier(deps, account, report);
+  const box = deps.mailbox ?? deps.answers;
+  if (box)
+    for (const pending of await listUnsettledDecisions(deps.db, account.id, deps.mailbox ? {} : { byUserOnly: true })) {
+      if (over(deps, report)) break;
+      await carryOut(pending.id, pending.messageId, pending, box);
+    }
+  const decider = await deciderFor(deps, account, report);
+  for (const listed of await listUndecided(deps.db, account.id, limit)) {
+    if (over(deps, report)) break;
+    await decider.decide(listed);
+  }
+  await decider.done();
+  return report;
+}
+
+/** Whether `until` has passed; the report then says work was left. */
+function over(deps: Pick<TriageDeps, 'now' | 'until'>, report: TriageReport): boolean {
+  if (deps.until === undefined || (deps.now ?? Date.now)() < deps.until) return false;
+  report.unfinished = true;
+  return true;
+}
+
+/** Carries a recorded decision out in `box`, settles it, and counts what happened in `report`. */
+function carrier(deps: TriageDeps, account: Account, report: TriageReport) {
+  const { db } = deps;
+  const now = deps.now ?? Date.now;
+  return async (decisionId: number, messageId: string, decision: Pick<Decision, 'disposition' | 'gmailLabel' | 'markRead'>, box: Mailbox) => {
+    const action = planAction(decision);
+    if (!action) {
+      await settleDecision(db, decisionId, 'none');
+      return 'none';
+    }
+    const outcome = await execute({ db, mailbox: box, now }, account.id, messageId, action, decisionId);
+    if (outcome.status === 'failed' || outcome.status === 'unknown') {
+      // Left unsettled, so the next pass asks again, from the labels as they are then.
+      const { tries } = await changeTries(db, decisionId);
+      if (tries < CHANGE_TRIES) {
+        report.retrying++;
+        return outcome.status;
+      }
+      reportError(new Error(`A change was not made after ${tries} tries: ${outcome.reason}`));
+      report.troubled++;
+    }
+    // An earlier try that could not be read back may have landed after all, leaving nothing to do now.
+    const landed = outcome.status === 'skipped' && (await changeTries(db, decisionId)).landed;
+    const settled = landed ? 'done' : outcome.status === 'unknown' ? 'failed' : outcome.status;
+    await settleDecision(db, decisionId, settled, settled === 'done' || outcome.status === 'done' ? null : outcome.reason);
+    if (outcome.status === 'done' || landed) report.acted++;
+    else if (outcome.status === 'skipped') report.skipped++;
+    return landed ? 'done' : outcome.status;
+  };
+}
+
+/**
+ * What a message was decided before, for deciding it again: `carriedOut` when Sift's change to it stands in
+ * Gmail, which is taken back before a different decision is carried out.
+ */
+export interface Prior {
+  decision: Pick<Decision, 'disposition' | 'labelId' | 'markRead'>;
+  carriedOut: boolean;
+}
+
+/** What became of one message: `held` when the model was not asked (the provider is down), so it is to be tried again. */
+export type Decided = 'decided' | 'unjudged' | 'held' | 'waits';
+
+/**
+ * Decides one message after another, as a pass does: the cascade, the model's run recorded, the decision
+ * recorded and, where it may be, carried out. Its own state (the run being asked, the provider's errors in a
+ * row) is its own, so several can work side by side.
+ */
+export async function deciderFor(
+  deps: TriageDeps,
+  account: Account,
+  report: TriageReport,
+): Promise<{ decide: (listed: QueuedMessage, prior?: Prior) => Promise<Decided>; done: () => Promise<void> }> {
   const { db, mailbox } = deps;
   const now = deps.now ?? Date.now;
-  const report: TriageReport = {
-    decided: { keep: 0, archive: 0, spam: 0, review: 0 },
-    acted: 0,
-    skipped: 0,
-    retrying: 0,
-    troubled: 0,
-    blocked: 0,
-    unsubscribed: 0,
-    unjudged: 0,
-  };
+  const carryOut = carrier(deps, account, report);
 
   // Provider errors since the model last answered. Only a failure of the message itself counts against it:
   // an unusable answer, or an error while the model answers other calls in the same pass. The rest are an
@@ -187,45 +266,7 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     },
   });
   const model = deps.model && judged(deps.model);
-
-  const carryOut = async (decisionId: number, messageId: string, decision: Pick<Decision, 'disposition' | 'gmailLabel' | 'markRead'>, box: Mailbox) => {
-    const action = planAction(decision);
-    if (!action) {
-      await settleDecision(db, decisionId, 'none');
-      return 'none';
-    }
-    const outcome = await execute({ db, mailbox: box, now }, account.id, messageId, action, decisionId);
-    if (outcome.status === 'failed' || outcome.status === 'unknown') {
-      // Left unsettled, so the next pass asks again, from the labels as they are then.
-      const { tries } = await changeTries(db, decisionId);
-      if (tries < CHANGE_TRIES) {
-        report.retrying++;
-        return outcome.status;
-      }
-      reportError(new Error(`A change was not made after ${tries} tries: ${outcome.reason}`));
-      report.troubled++;
-    }
-    // An earlier try that could not be read back may have landed after all, leaving nothing to do now.
-    const landed = outcome.status === 'skipped' && (await changeTries(db, decisionId)).landed;
-    const settled = landed ? 'done' : outcome.status === 'unknown' ? 'failed' : outcome.status;
-    await settleDecision(db, decisionId, settled, settled === 'done' || outcome.status === 'done' ? null : outcome.reason);
-    if (outcome.status === 'done' || landed) report.acted++;
-    else if (outcome.status === 'skipped') report.skipped++;
-    return landed ? 'done' : outcome.status;
-  };
-
-  const over = () => {
-    if (deps.until === undefined || now() < deps.until) return false;
-    report.unfinished = true;
-    return true;
-  };
-
   const box = mailbox ?? deps.answers;
-  if (box)
-    for (const pending of await listUnsettledDecisions(db, account.id, mailbox ? {} : { byUserOnly: true })) {
-      if (over()) break;
-      await carryOut(pending.id, pending.messageId, pending, box);
-    }
 
   const { model: _given, ...modelless } = deps;
   const decide = await cascadeFor(model ? { ...deps, model } : modelless, account.id, () => asking);
@@ -234,15 +275,29 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
   const decideByRules = await cascadeFor(modelless, account.id);
   const unjudged = (decision: Decision | Unfinished): Decision | Unfinished =>
     'unfinished' in decision || decision.stage !== 'fallback' ? decision : { ...decision, reason: 'the model failed on it each time it was asked' };
+
+  // Sift's change from before stands: take it back first, unless the new decision would make the same one.
+  const carryOver = async (decisionId: number, messageId: string, decision: Decision, into: Mailbox, prior: Prior | undefined) => {
+    if (!prior?.carriedOut) return await carryOut(decisionId, messageId, decision, into);
+    const { disposition, labelId, markRead } = prior.decision;
+    if (disposition === decision.disposition && (labelId ?? null) === (decision.labelId ?? null) && Boolean(markRead) === Boolean(decision.markRead)) {
+      await settleDecision(db, decisionId, 'none');
+      return 'none';
+    }
+    const last = await lastStandingChange(db, account.id, messageId);
+    if (last) await undo({ db, mailbox: into, now }, last.id);
+    return await carryOut(decisionId, messageId, decision, into);
+  };
+
   // One span per message: what each tier made of it, the model's call, and what was changed in the mailbox.
-  const decideOne = async ({ facts, suggestOnly, applyRule, outOfTries }: QueuedMessage, span: Traced) => {
+  const decideOne = async ({ facts, suggestOnly, applyRule, outOfTries }: QueuedMessage, prior: Prior | undefined, span: Traced): Promise<Decided> => {
     const started = performance.now();
     runId = undefined;
     const decision = outOfTries ? unjudged(await decideByRules(facts)) : await decide(facts);
     if ('unfinished' in decision) {
       span.set({ 'sift.outcome': 'unfinished' });
       // Not asked, because the provider is down: it stays in the queue, unrecorded, for the next pass.
-      if (runId === undefined) return;
+      if (runId === undefined) return 'held';
       report.unjudged++;
       report.failure = decision.unfinished;
       if (errors.length >= FAILURES_IN_A_ROW) {
@@ -250,11 +305,11 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
         errors = [];
         asking = false;
       }
-      return;
+      return 'unjudged';
     }
     // With no model, mail no rule covers is not anyone's to answer yet: it stays in the queue, unrecorded, for a
     // model once one is connected, or a rule added meanwhile. A model's own "unsure" is recorded and asked about.
-    if (decision.stage === 'fallback' && !model && !outOfTries) return;
+    if (decision.stage === 'fallback' && !model && !outOfTries) return 'waits';
     // The user applied this rule to their inbox and the model has now said what the mail is: theirs to carry out, Sift on or off.
     const pressed = applyRule !== null && decision.ruleId === applyRule && Boolean(box);
     const into = pressed ? box : suggestOnly ? null : mailbox;
@@ -269,7 +324,7 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     span.set({ 'sift.stage': decision.stage, 'sift.disposition': decision.disposition, 'sift.decision_id': decisionId });
     if (decision.ruleId) await countRuleHit(db, decision.ruleId);
     report.decided[decision.disposition]++;
-    const status = into ? await carryOut(decisionId, facts.messageId, decision, into) : null;
+    const status = into ? await carryOver(decisionId, facts.messageId, decision, into, prior) : null;
     // Blocking acts on the sender's address, so the address must be proven: a message that only claims to be
     // from someone would otherwise get that someone blocked. And only once the message itself was marked spam.
     if (
@@ -289,11 +344,13 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
       (await deps.unsubscribe(account.id, facts.messageId)).status === 'done'
     )
       report.unsubscribed++;
+    return 'decided';
   };
-  for (const listed of await listUndecided(db, account.id, limit)) {
-    if (over()) break;
-    await traced('sift.triage', 'triage', traceIds(db, listed.facts.messageId, listed.facts.from), (span) => decideOne(listed, span));
-  }
-  if (!answered) await excuseRuns(db, errors, now());
-  return report;
+  return {
+    decide: (listed, prior) =>
+      traced('sift.triage', 'triage', traceIds(db, listed.facts.messageId, listed.facts.from), (span) => decideOne(listed, prior, span)),
+    done: async () => {
+      if (!answered) await excuseRuns(db, errors, now());
+    },
+  };
 }

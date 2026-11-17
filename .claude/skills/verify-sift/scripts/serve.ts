@@ -7,8 +7,8 @@
  * Everything else is the real command's parts: the same store, controls, server, sign-in and policy. The one
  * control replaced is `ruleFilter`, which adds and removes a rule's Gmail filter (and is asked before any rule is
  * removed). It runs the real filter code against a fake mailbox holding the filters the seed left in
- * <gmail.json>, and writes them back there after each call. Every other control that reaches Gmail still finds
- * no access. `draftRule` runs the real drafting (look-ups of the seeded senders, the `fill_rule` arguments read by
+ * <gmail.json>, and writes them back there after each call. `inboxEstimate` answers for a fixed inbox of
+ * 2,412 messages (the newest 300 while setting up). Every other control that reaches Gmail still finds no access. `draftRule` runs the real drafting (look-ups of the seeded senders, the `fill_rule` arguments read by
  * `readRuleDraft`, the `rule_drafts` row) with a stand-in model: it looks up the second line of its prompt (the
  * words the person typed), then fills in a rule archiving and marking read mail from the first sender found, with
  * a note naming the second. Nothing found fills in `nobody@example.com`. `proposeLabels` runs the real suggesting
@@ -48,7 +48,7 @@ const config = loadConfig();
 const store = await openStore(config);
 const ephemeral = memoryEphemeral();
 const host = nodeHost(config, store, ephemeral, Number(port), (line) => ui.plain(line));
-const built = await buildControls(config, store, { ephemeral, deviceId: 'verify-sift', running: false });
+const built = await buildControls(config, { ephemeral, deviceId: 'verify-sift', running: false });
 
 const saved = JSON.parse(readFileSync(gmailFile, 'utf8')) as Record<string, ExistingFilter[]>;
 const mailboxes = new Map<string, FakeMailbox>();
@@ -97,6 +97,9 @@ const suggest = (context: { messages: readonly { role: string; content: unknown 
 };
 const controls = {
   ...built,
+  // What Gmail would say of an inbox of 2,412 messages, with three in four needing the model at about a tenth of a cent each.
+  inboxEstimate: async (_db: Parameters<typeof built.inboxEstimate>[0], _mailboxes: readonly string[], reach: 'inbox' | 'recent') =>
+    reach === 'inbox' ? { messages: 2412, model: 1830, cost: 3.1, quota: false } : { messages: 300, model: 228, cost: 0.39, quota: false },
   proposeLabels: async (db: Parameters<typeof built.proposeLabels>[0], request: { accountId: string; goal: string }) => {
     faux.setResponses([suggest]);
     return await proposeLabels({ db, propose: createProposer(models, faux.getModel()), model: 'faux/stand-in' }, request);

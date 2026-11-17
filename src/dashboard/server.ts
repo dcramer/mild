@@ -177,7 +177,7 @@ const hostname = (host: string | null | undefined) => (host ?? '').replace(/:\d+
  * session.
  *
  * What it may do: change what sift has been taught and how it is set up. It never reaches Gmail itself;
- * the few things that do (signing in, undo, pulling in older mail) are handed in and audited as usual.
+ * the few things that do (signing in, undo, reading the inbox) are handed in and audited as usual.
  */
 export function createDashboard(people: People, options: DashboardOptions = {}): Dashboard {
   const now = options.now ?? Date.now;
@@ -211,7 +211,6 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
   const refusal = async (route: Write, ctx: Context, body: unknown, scope: Scope, someone: boolean): Promise<{ status: number; error: string } | null> => {
     const whose = await route.touches(ctx, body);
     if (whose === 'self') return someone ? null : { status: 401, error: 'Sign in to use the dashboard.' };
-    if (whose === 'install') return scope.owner ? null : { status: 403, error: 'Only the person who set Sift up can change this.' };
     if (whose === null || whose === 'anyone' || sees(scope, whose.account)) return null;
     return { status: 404, error: 'There is no such thing here.' };
   };

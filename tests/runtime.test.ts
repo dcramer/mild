@@ -2,7 +2,8 @@ import { globSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { SignIn } from '../src/dashboard/controls.ts';
 import { type Ephemeral, memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { type RunOptions, askForBackfill, tick } from '../src/work/run.ts';
+import { type RunOptions, tick } from '../src/work/run.ts';
+import { startInboxRuns } from '../src/store/inbox.ts';
 import { people } from '../src/store/people.ts';
 import { onePerson, startDashboard } from './fixtures.ts';
 import { FakeMailbox } from './helpers.ts';
@@ -61,19 +62,21 @@ describe('a flow whose steps reach different instances', () => {
     expect(await signInAcross(memoryEphemeral(), memoryEphemeral())).toBe(false);
   });
 
-  it('pulls in older mail one instance was asked for, on another', async () => {
-    const { store } = await onePerson(ACCOUNT);
+  it('goes through an inbox one instance was asked to, on another', async () => {
+    const { store, db } = await onePerson(ACCOUNT);
     const ephemeral = memoryEphemeral();
     const searched: string[] = [];
     // Each instance builds its own options; only the store and the ephemeral store are shared.
     const instance = (): RunOptions => ({
       ephemeral,
       log: () => {},
+      model: async () => ({ model: 'test/model', judge: async () => ({ label: 'unsure', reason: 'cannot tell', confidence: 0.2 }) }),
       connect: () => ({
         api: {
           getProfile: async () => ({ emailAddress: ACCOUNT, historyId: '1' }),
           listHistory: async () => ({ additions: [], historyId: '1' }),
           searchInbox: async (query) => (searched.push(query), { ids: [] }),
+          inboxSize: async () => 0,
           getMetadata: async () => null,
           getLabelIds: async () => null,
           listLabels: async () => [],
@@ -84,9 +87,9 @@ describe('a flow whose steps reach different instances', () => {
         mailbox: new FakeMailbox(),
       }),
     });
-    await askForBackfill(instance().ephemeral, ACCOUNT, 7);
+    await startInboxRuns(db, [ACCOUNT], { acts: false, most: 10, now: 0 });
     await tick(store, instance(), Infinity);
     await tick(store, instance(), Infinity);
-    expect(searched).toEqual(['newer_than:7d']);
+    expect(searched).toEqual(['']);
   });
 });
