@@ -789,7 +789,7 @@ export function SystemView() {
         </Sheet>
       </Section>
 
-      <Section title="Document" meta="a page read from top to bottom: /terms, /privacy">
+      <Section title="Document" meta="a page read from top to bottom: /terms, /privacy, /security">
         <Sheet>
           <Document title="Terms of service" updated="November 15, 2026">
             <p>These terms are between you and whoever runs this copy of Sift.</p>

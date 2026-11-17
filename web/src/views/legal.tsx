@@ -3,7 +3,10 @@ import { Clause, Document, TextLink } from '@/system';
 // Each copy of sift is run by whoever set it up, on their own machine, with their own Google client, so
 // "we" is that person and there is no company behind it. Google's verification reads these pages: the
 // Limited Use statement must stay word for word, and what they say sift keeps must stay true of the code.
+// The security page is held to docs/security.md and AGENTS.md's safety rules the same way.
 const UPDATED = 'November 15, 2026';
+const SECURITY_UPDATED = 'November 17, 2026';
+const SOURCE = 'https://github.com/dcramer/sift';
 const USER_DATA_POLICY = 'https://developers.google.com/terms/api-services-user-data-policy';
 const PERMISSIONS = 'https://myaccount.google.com/permissions';
 
@@ -179,6 +182,120 @@ export function TermsView() {
 
         <Clause title="Changes">
           <p>When these terms change, the date above changes with them. Using Sift after that means you accept the new terms.</p>
+        </Clause>
+      </Document>
+    </main>
+  );
+}
+
+export function SecurityView() {
+  return (
+    <main>
+      <Document title="Security" updated={SECURITY_UPDATED}>
+        <p>
+          Sift can read your Gmail and keeps some of your mail. This is how that access is limited, how what it holds is protected, and where that protection
+          ends. Sift is <TextLink href={SOURCE}>open source</TextLink>: everything here can be checked in its code.
+        </p>
+
+        <Clause title="What Sift can do to your mail">
+          <ul>
+            <li>
+              It asks Google only to read and label mail and to manage filters. It cannot send mail, and it never deletes or trashes it, replies or forwards.
+            </li>
+            <li>Until you turn it on, it changes nothing in Gmail but the messages you answer for yourself.</li>
+            <li>
+              It changes only messages still in your inbox, and reads their labels again just before. Each change is recorded before it is made and checked
+              against Gmail after, and you can undo it from the dashboard.
+            </li>
+            <li>
+              It unsubscribes only where your label or rule says to, and only through the sender’s own one-click unsubscribe address, over HTTPS to the public
+              internet. It never opens a link from a message.
+            </li>
+            <li>
+              Anything that acts on a sender’s address, such as blocking or unsubscribing, needs the message to have passed its domain’s authentication (DMARC),
+              so a forged sender cannot turn it on someone else.
+            </li>
+          </ul>
+        </Clause>
+
+        <Clause title="The AI model">
+          <p>
+            The model is shown a message and answers which of your labels it is. That is all it can do: it has no way to change your mailbox, send anything,
+            open a link or run anything, so a message written to give it instructions has nothing to work with. What happens to a label’s mail is set by you,
+            never by the model. When it is unsure, or the call fails, the message is left alone for you.
+          </p>
+        </Clause>
+
+        <Clause title="How your data is kept">
+          <ul>
+            <li>
+              Every row of your data carries your account. Each query Sift makes is limited to whoever is signed in, and the database enforces the same limit
+              again by itself, so one mistake in the code does not show anyone your mail. Every request the dashboard answers is tested as two people, one
+              asking for the other’s mail.
+            </li>
+            <li>
+              Your Google access, your model sign-ins, the text of the mail Sift keeps and anything that names a sender (headers, rules, the reason for a
+              decision) are encrypted with AES-256. The key is held in the server’s settings, never in the database, and each value is sealed to the person and
+              the thing it belongs to, so it cannot be moved into someone else’s account.
+            </li>
+            <li>
+              Senders are looked up by a code made with a key of yours, so the database does not show who writes to you, or that two people hear from the same
+              sender.
+            </li>
+            <li>
+              Left readable: your labels, your rules in your own words, and what was decided and done, when. What is kept and for how long is in the{' '}
+              <TextLink href="/privacy">privacy policy</TextLink>.
+            </li>
+          </ul>
+        </Clause>
+
+        <Clause title="The dashboard">
+          <ul>
+            <li>You sign in with Google, and see only your own mailboxes. A sign-in lasts 30 days, in a cookie the page’s scripts cannot read.</li>
+            <li>A change is accepted only from the dashboard’s own page, so another site cannot make one on your behalf.</li>
+            <li>The page runs only its own code and loads nothing from any other site.</li>
+            <li>
+              An email opened in the dashboard is shown walled off from the rest of the page: nothing in it runs and nothing loads, not even its images, so
+              opening it does not tell the sender you read it.
+            </li>
+          </ul>
+        </Clause>
+
+        <Clause title="Who sees what">
+          <ul>
+            <li>Nobody running Sift reads your mail, and there is no tool for doing so.</li>
+            <li>
+              The server’s logs may name a mailbox, never a sender. Error reports, which go to Sentry, name a message or sender only by a meaningless id, carry
+              nothing from your mail, and have email addresses removed before they leave.
+            </li>
+            <li>An error from the model provider is recorded as its kind, never its text, which can quote your mail.</li>
+          </ul>
+        </Clause>
+
+        <Clause title="How it is built">
+          <p>
+            Only one part of the code can reach Google, only one can change your mailbox, and only one can call a model; checks on every change refuse code that
+            crosses those lines. Every Gmail filter is checked before it is written, whoever proposed it. Every change runs the type checks, the tests and the
+            browser tests before it is committed, and again on GitHub.
+          </p>
+        </Clause>
+
+        <Clause title="What it does not protect against">
+          <ul>
+            <li>Someone with both the database and the key can read everything stored, your Google access included.</li>
+            <li>Whoever controls the server Sift runs on, since it holds the key and your Google access.</li>
+            <li>
+              Mail while it is being classified: it is read from Gmail, and the model provider is sent what the model needs. Sift is not end-to-end encrypted,
+              because it uses your past answers to judge new mail while you are away.
+            </li>
+          </ul>
+        </Clause>
+
+        <Clause title="If something is wrong">
+          <p>
+            To cut Sift off at once, remove its access in your <TextLink href={PERMISSIONS}>Google account’s permissions</TextLink>; that ends every token it
+            was given. Report a security problem to the support address Google shows when you sign in to Sift, not in a public issue.
+          </p>
         </Clause>
       </Document>
     </main>

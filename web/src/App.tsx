@@ -23,6 +23,7 @@ const RuleSheet = lazyView(() => import('@/views/rule-panel.tsx').then((m) => m.
 const SystemView = lazyView(() => import('@/views/system.tsx').then((m) => m.SystemView));
 const PrivacyView = lazyView(() => import('@/views/legal.tsx').then((m) => m.PrivacyView));
 const TermsView = lazyView(() => import('@/views/legal.tsx').then((m) => m.TermsView));
+const SecurityView = lazyView(() => import('@/views/legal.tsx').then((m) => m.SecurityView));
 
 const SCREENS: Record<string, { preload: () => Promise<unknown> }> = {
   activity: ActivityView,
@@ -33,6 +34,7 @@ const SCREENS: Record<string, { preload: () => Promise<unknown> }> = {
   system: SystemView,
   privacy: PrivacyView,
   terms: TermsView,
+  security: SecurityView,
 };
 // The screen the address asks for starts loading with the app, not after its first render.
 void SCREENS[window.location.pathname.split('/')[1] ?? '']?.preload().catch(() => {});
@@ -112,7 +114,7 @@ export function App() {
   const route = useRoute();
   // These are open to anyone and hold no data, so they are rendered outside the gate and ask the API for nothing, not even who is signed in.
   // Google reads the privacy policy and the terms before it lets anyone outside a test list sign in.
-  const Open = route[0] === 'system' ? SystemView : route[0] === 'privacy' ? PrivacyView : route[0] === 'terms' ? TermsView : null;
+  const Open = { system: SystemView, privacy: PrivacyView, terms: TermsView, security: SecurityView }[route[0] ?? ''] ?? null;
   if (Open)
     return (
       <Suspense fallback={null}>

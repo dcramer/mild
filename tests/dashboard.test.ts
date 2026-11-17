@@ -359,6 +359,7 @@ describe('dashboard server', () => {
       '/system',
       '/privacy',
       '/terms',
+      '/security',
       '/decisions?q=digest&message=a',
       '/sender/me%40example.org/news%40example.com',
       '/domain/me%40example.org/example.com',

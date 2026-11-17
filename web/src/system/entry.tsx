@@ -4,7 +4,7 @@ import { TextLink, Wordmark } from './type.tsx';
 
 /**
  * The one sheet someone sees in place of the dashboard when sign-in cannot start here. The name sits
- * across its top edge, like a label stuck to it; under it the terms and privacy policy.
+ * across its top edge, like a label stuck to it; under it the terms, privacy policy and security page.
  */
 export function Entry({ children }: { children: ReactNode }) {
   return (
@@ -18,6 +18,7 @@ export function Entry({ children }: { children: ReactNode }) {
       <p className="mt-6 flex flex-wrap items-baseline gap-x-4 gap-y-1 px-6 text-sm text-muted-foreground">
         <TextLink href="/terms">Terms</TextLink>
         <TextLink href="/privacy">Privacy</TextLink>
+        <TextLink href="/security">Security</TextLink>
       </p>
     </main>
   );
