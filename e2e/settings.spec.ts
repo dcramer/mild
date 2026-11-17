@@ -32,6 +32,29 @@ test.describe('Settings', () => {
     await expect(active(page).getByRole('button', { name: /^Go through/ })).toHaveCount(0);
   });
 
+  test('through a ChatGPT plan, prices are said to be API prices the plan covers', async ({ page }) => {
+    const MODEL = 'openai-codex/gpt-5.6-luna';
+    const chatgpt = { provider: 'openai-codex', label: 'ChatGPT', how: 'device-code' };
+    await page.route('**/api/manage*', async (route) => {
+      const response = await route.fetch();
+      const state = await response.json();
+      await route.fulfill({
+        response,
+        json: { ...state, model: { ...state.model, chosen: MODEL, choices: [chatgpt, ...state.model.choices], signedIn: ['openai-codex'] } },
+      });
+    });
+    await page.route('**/api/models*', async (route) => {
+      const response = await route.fetch();
+      const listed = await response.json();
+      await route.fulfill({ response, json: { ...listed, models: [MODEL], shortlist: { 'openai-codex': [MODEL] }, costs: { [MODEL]: 0.4 } } });
+    });
+    await page.goto('/?settings=1');
+    await expect(settings(page).getByText('About $0.40 per 1,000 messages at API prices, which your ChatGPT plan covers.')).toBeVisible();
+    await expect(active(page).getByText('2,412 messages. About $3.10 at API prices, which your ChatGPT plan covers.')).toBeVisible();
+    await active(page).getByRole('button', { name: 'Go through…' }).click();
+    await expect(goThrough(page).getByText('on gpt-5.6-luna, at API prices')).toBeVisible();
+  });
+
   test('goes through the inbox from Settings, and stops', async ({ page }) => {
     await page.goto('/?settings=1');
     await expect(active(page).getByText('2,412 messages. Going through them costs about $3.10.')).toBeVisible();

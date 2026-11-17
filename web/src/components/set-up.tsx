@@ -306,7 +306,7 @@ function Teach({ state, steps, account, onDone }: { state: ManageState; steps: r
       intro={`Sift reads new mail from now on. Have it go through the newest mail already in ${new Intl.ListFormat('en', { type: 'conjunction' }).format(state.accounts.map((a) => a.email))} as well, and answer what it says: it learns from your answers.`}
       account={account}
     >
-      <InboxFigures estimate={estimate.data} model={state.model.chosen} />
+      <InboxFigures estimate={estimate.data} model={state.model} />
       <Onward
         next={{
           label: messages === null ? 'Go through' : `Go through ${count(messages)}`,

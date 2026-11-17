@@ -1,6 +1,7 @@
 import { type InboxEstimate, type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, money, plural } from '@/lib/format.ts';
 import { Blank, Button, Dialog, Failure, Figure, Figures, SettingRow, Share } from '@/system';
+import { costOfMessages, priceNote, subscription } from '@/components/model-connect.tsx';
 
 type Reach = 'inbox' | 'recent';
 
@@ -9,8 +10,8 @@ export function useInboxEstimate(reach: Reach) {
   return useLoaded(`inbox-${reach}`, (signal) => api.inboxEstimate(reach, signal), 300_000);
 }
 
-/** How many messages, how many need the model, and about what that costs on `model` (`provider/model-id`). */
-export function InboxFigures({ estimate, model }: { estimate: InboxEstimate | null; model: string | null }) {
+/** How many messages, how many need the model, and about what that costs on the model in use. */
+export function InboxFigures({ estimate, model }: { estimate: InboxEstimate | null; model: ManageState['model'] }) {
   if (!estimate)
     return (
       <Figures>
@@ -18,18 +19,17 @@ export function InboxFigures({ estimate, model }: { estimate: InboxEstimate | nu
         <Figure label="Need the model" value="–" />
       </Figures>
     );
-  const on = model ? `on ${model.slice(model.indexOf('/') + 1)}` : null;
   return (
     <Figures>
       <Figure label="In your inbox" value={count(estimate.messages)} />
       <Figure label="Need the model" value={count(estimate.model)} />
-      {estimate.cost === null ? null : <Figure label="About" value={money(estimate.cost)} tone="look" note={on} />}
+      {estimate.cost === null ? null : <Figure label="About" value={money(estimate.cost)} tone="look" note={priceNote(model.chosen, subscription(model))} />}
     </Figures>
   );
 }
 
 /** Asked when Sift is turned on, and from Settings: go through what is already in the inbox, as if it had just arrived. */
-export function GoThroughInbox({ model, onClose, onStarted }: { model: string | null; onClose: () => void; onStarted: () => void }) {
+export function GoThroughInbox({ model, onClose, onStarted }: { model: ManageState['model']; onClose: () => void; onStarted: () => void }) {
   const estimate = useInboxEstimate('inbox');
   const { busy, error, run } = useAction();
   const messages = estimate.data?.messages ?? null;
@@ -107,7 +107,7 @@ export function InboxRow({ state, reload, onGoThrough }: { state: ManageState; r
       </SettingRow>
     );
   const said = estimate.data;
-  const costs = !said || said.cost === null ? null : `Going through them costs about ${money(said.cost)}.`;
+  const costs = !said || said.cost === null ? null : costOfMessages(said.cost, subscription(state.model));
   return (
     <SettingRow
       title="Your inbox"

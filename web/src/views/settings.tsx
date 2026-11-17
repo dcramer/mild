@@ -85,7 +85,7 @@ function Active({ state, reload }: { state: ManageState; reload: () => void }) {
         ) : null}
       </Sheet>
       <Failure>{error}</Failure>
-      {goingThrough ? <GoThroughInbox model={state.model.chosen} onClose={() => setGoingThrough(false)} onStarted={reload} /> : null}
+      {goingThrough ? <GoThroughInbox model={state.model} onClose={() => setGoingThrough(false)} onStarted={reload} /> : null}
     </SettingsGroup>
   );
 }

@@ -63,11 +63,35 @@ const KEY_PAGE: Record<string, string> = {
   openrouter: 'https://openrouter.ai/settings/keys',
 };
 
-/** What classifying with a model costs: a ChatGPT plan's quota, or about so much per 1,000 messages. Null when the catalog has no price. */
+/**
+ * The way in to the model in use when it is a subscription (ChatGPT), whose plan is not charged by the message:
+ * a price through it is only what the same use would cost through the API, and is said to be.
+ */
+export function subscription(model: Pick<ManageState['model'], 'choices' | 'chosen'>): Choice | null {
+  const provider = model.chosen?.split('/')[0];
+  return model.choices.find((c) => c.provider === provider && c.how !== 'key') ?? null;
+}
+
+/** Said after a price through a subscription. */
+const AT_API_PRICES = 'at API prices';
+
+/** What classifying with a model costs, about so much per 1,000 messages. Null when the catalog has no price. */
 export function costLine(choice: Choice | undefined, costs: Record<string, number>, model: string): string | null {
-  if (choice && choice.how !== 'key') return `Uses your ${choice.label} quota.`;
   const cost = costs[model];
-  return cost === undefined ? null : `About ${money(cost)} per 1,000 messages.`;
+  if (cost === undefined) return null;
+  if (choice && choice.how !== 'key') return `About ${money(cost)} per 1,000 messages ${AT_API_PRICES}, which your ${choice.label} plan covers.`;
+  return `About ${money(cost)} per 1,000 messages.`;
+}
+
+/** What going through so many messages would cost, as the inbox's row says it. */
+export function costOfMessages(usd: number, subscribed: Choice | null): string {
+  return subscribed ? `About ${money(usd)} ${AT_API_PRICES}, which your ${subscribed.label} plan covers.` : `Going through them costs about ${money(usd)}.`;
+}
+
+/** Under a price figure: the model it is for and, through a subscription, that it is an API price. */
+export function priceNote(model: string | null, subscribed: Choice | null): string | null {
+  const on = model ? `on ${model.slice(model.indexOf('/') + 1)}` : null;
+  return subscribed ? [on, AT_API_PRICES].filter(Boolean).join(', ') : on;
 }
 
 /** The press a step ends with: a link out, or something done here. */
@@ -120,12 +144,12 @@ export function useProviderConnect(choice: Choice, model: ManageState['model'], 
 
   if (signedIn) {
     const cost = costLine(choice, costs, chosen);
-    const per = (m: string) => (costs[m] === undefined ? null : `${money(costs[m])} per 1,000 messages`);
+    const per = (m: string) => (costs[m] === undefined ? null : `${money(costs[m])} per 1,000 messages${chatgpt ? ` ${AT_API_PRICES}` : ''}`);
     const notes = Object.fromEntries(
       shortlist.map((m, index) => {
         const price = per(m);
-        if (index === 0) return [m, chatgpt || !price ? 'Recommended' : `Recommended · about ${price}`];
-        return [m, chatgpt ? 'Uses more of your quota' : price ? `About ${price}` : ''];
+        if (index === 0) return [m, price ? `Recommended · about ${price}` : 'Recommended'];
+        return [m, price ? `About ${price}` : ''];
       }),
     );
     const every = <Select label="Model" value={chosen} options={mine.map((m) => [m, short(m)] as const)} onChange={setPicked} />;
