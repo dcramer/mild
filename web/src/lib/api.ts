@@ -7,7 +7,6 @@ export type {
   DecisionRow,
   FactFilter,
   FeedbackRequest,
-  FilterChange,
   LabelSummary,
   ListedDecision,
   ManageState,
@@ -32,7 +31,6 @@ import type {
   FactFilter,
   FeedbackReply,
   FeedbackRequest,
-  FilterChange,
   ManageState,
   MessageDetail,
   Models,
@@ -172,8 +170,6 @@ async function post<T = unknown>(path: string, body: unknown): Promise<T> {
 
 export const api = {
   summary: (days: Days, signal: AbortSignal) => get<Summary>('/api/summary', { days }, signal),
-  /** Gmail filters written or taken out in the period, newest first. */
-  filters: (days: Days, signal: AbortSignal) => get<{ changes: FilterChange[] }>('/api/filters', { days }, signal),
   decisions: (q: DecisionQuery, signal: AbortSignal) =>
     get<DecisionPage>(
       '/api/decisions',

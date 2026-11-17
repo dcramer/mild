@@ -13,7 +13,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadConfig } from '../../../../src/config.ts';
 import { tick } from '../../../../src/work/run.ts';
-import { writeRuleFilter } from '../../../../src/actions/rule-filters.ts';
+import { checkRuleFilters, writeRuleFilter } from '../../../../src/actions/rule-filters.ts';
 import { memoryEphemeral } from '../../../../src/ephemeral/ephemeral.ts';
 import { applyFeedback, pendingSuggestions } from '../../../../src/learn/feedback.ts';
 import type { GmailApi, RawMessage } from '../../../../src/gmail/api.ts';
@@ -107,7 +107,7 @@ const user = await connectAccount(store, ACCOUNT, '1', now - 24 * HOUR);
 const db = await store.user(user);
 // One of each kind of rule: a label, an action, and an action for mail that turns out to be a label.
 const newsRule = await addRule(db, ACCOUNT, { match: { fromDomain: 'news.example.com' }, labelId: 'newsletter' }, 'user');
-await addRule(db, ACCOUNT, { match: { from: 'orders@shop.example.com' }, labelId: 'transactional' }, 'user');
+const ordersRule = await addRule(db, ACCOUNT, { match: { from: 'orders@shop.example.com' }, labelId: 'transactional' }, 'user');
 const ciRule = await addRule(db, ACCOUNT, { match: { fromDomain: 'ci.example.org' }, disposition: 'archive' }, 'user');
 
 /**
@@ -196,7 +196,13 @@ for (const waiting of await pendingSuggestions(db, { accountId: ACCOUNT, sender:
     now,
   );
 if ((await listProposals(db, ACCOUNT)).length !== 1) throw new Error('seed answers did not propose a rule');
-// Two rules written to the fake Gmail as filters, as the dashboard asks: the CI one lands; Gmail does not answer for the news one.
+// Three rules written to the fake Gmail as filters, as the dashboard asks: the CI one lands; the Shop one
+// lands and is then deleted in Gmail, which a check notices; Gmail does not answer for the news one.
+// A rule added after the passes, so it decides nothing, that cannot be one (Gmail cannot mark spam).
+await addRule(db, ACCOUNT, { match: { fromDomain: 'promo.example.com' }, disposition: 'spam' }, 'user');
+await writeRuleFilter({ db, mailbox, now: () => now - 3 * HOUR }, ordersRule);
+mailbox.filters = [];
+await checkRuleFilters({ db, mailbox, now: () => now - 150 * 60_000 }, ACCOUNT, false);
 await writeRuleFilter({ db, mailbox, now: () => now - 2 * HOUR }, ciRule);
 mailbox.createFilter = async () => {
   throw new Error('Gmail did not answer');

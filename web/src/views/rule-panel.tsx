@@ -246,10 +246,8 @@ export function RulePanel({
           <Fact term="Made by">
             {MADE_BY[rule.source] ?? rule.source}, {shortDate(rule.createdAt)}
           </Fact>
-          <Fact term="In Gmail">
-            <InGmail rule={rule} active={active} />
-          </Fact>
         </Facts>
+        <InGmail rule={rule} active={active} />
         {moves ? <InInbox rule={rule} /> : null}
         <div>
           <ConfirmButton

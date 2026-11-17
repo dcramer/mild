@@ -97,19 +97,21 @@ interface RuleFilterStatus {
   plan: FilterPlan | null;
   differs: string[];
   checkedAt: number | null;
-  last: { type: 'filter' | 'unfilter'; status: string; error: string | null; at: number } | null;
+  history: { type: 'filter' | 'unfilter'; status: string; error: string | null; at: number }[];
 }
 
 /** Every rule's standing as a Gmail filter, by rule id, for the dashboard. */
 export async function ruleFilterStatus(db: Sql): Promise<Map<string, RuleFilterStatus>> {
-  const last = new Map<string, RuleFilterStatus['last']>();
+  const history = new Map<string, RuleFilterStatus['history']>();
   const changes = await db
     .select({ accountId: actions.accountId, type: actions.type, status: actions.status, error: actions.error, at: actions.createdAt, payload: actions.payload })
     .from(actions)
     .where(inArray(actions.type, ['filter', 'unfilter']))
     .orderBy(asc(actions.id));
-  for (const { accountId, payload, ...change } of changes)
-    last.set(openPayload(db, accountId, payload).filter!.ruleId, change as NonNullable<RuleFilterStatus['last']>);
+  for (const { accountId, payload, ...change } of changes) {
+    const { ruleId } = openPayload(db, accountId, payload).filter!;
+    history.set(ruleId, [...(history.get(ruleId) ?? []), change as RuleFilterStatus['history'][number]]);
+  }
   const status = new Map<string, RuleFilterStatus>();
   for (const account of await listAccounts(db)) {
     for (const [ruleId, verdict] of await filterVerdicts(db, account.id)) {
@@ -121,7 +123,7 @@ export async function ruleFilterStatus(db: Sql): Promise<Map<string, RuleFilterS
         plan: verdict.possible ? verdict.plan : null,
         differs: verdict.possible ? verdict.differs : [],
         checkedAt: row!.checkedAt,
-        last: last.get(ruleId) ?? null,
+        history: history.get(ruleId) ?? [],
       });
     }
   }

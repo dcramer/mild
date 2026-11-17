@@ -141,7 +141,6 @@ const READS = (account: string, mark: string) => [
   '/api/suggestions?kept=1',
   '/api/suggestions?kept=1&fact=not-to-you',
   '/api/decisions?days=90&fact=not-to-you',
-  '/api/filters?days=90',
   '/api/unjudged',
   '/api/manage',
   '/api/examples',

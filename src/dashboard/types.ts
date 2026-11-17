@@ -345,8 +345,8 @@ export const RuleFilter = z.object({
   differs: z.array(z.string()),
   /** When sift last compared it with Gmail. */
   checkedAt: z.number().nullable(),
-  /** The latest time sift wrote the filter to Gmail (`filter`) or took it out, and how that went. */
-  last: z.object({ type: z.enum(['filter', 'unfilter']), status: z.string(), error: z.string().nullable(), at: z.number() }).nullable(),
+  /** Each time sift wrote the filter to Gmail (`filter`) or took it out, and how that went, oldest first. */
+  history: z.array(z.object({ type: z.enum(['filter', 'unfilter']), status: z.string(), error: z.string().nullable(), at: z.number() })),
 });
 export type RuleFilter = z.infer<typeof RuleFilter>;
 
@@ -576,21 +576,6 @@ export const Models = z.object({
   error: z.string().optional(),
 });
 export type Models = z.infer<typeof Models>;
-
-/** Sift writing a rule to Gmail as a filter (`filter`), or taking one out, as the audit log has it. */
-export const FilterChange = z.object({
-  id: z.number(),
-  accountId: z.string(),
-  type: z.enum(['filter', 'unfilter']),
-  status: z.string(),
-  error: z.string().nullable(),
-  at: z.number(),
-  /** Null once the rule is removed. */
-  ruleId: z.string().nullable(),
-  /** What the filter matched, as written to Gmail: for one taken out, as it was last written. */
-  criteria: z.object({ from: z.string().optional(), to: z.string().optional(), subject: z.string().optional() }),
-});
-export type FilterChange = z.infer<typeof FilterChange>;
 
 /** Mail the model failed on every time it was tried. `error` is what went wrong the last time. */
 export const UnjudgedRow = z.object({

@@ -1,4 +1,4 @@
-import { ArrowRightIcon, MegaphoneIcon, PlusIcon, ReplyIcon, SparkleIcon, Trash2Icon } from 'lucide-react';
+import { ArrowRightIcon, FunnelIcon, MegaphoneIcon, PlusIcon, ReplyIcon, SparkleIcon, Trash2Icon } from 'lucide-react';
 import { Fragment, type ReactNode, useState } from 'react';
 import { StatusWord, TierLabel, Verdict } from '@/components/bits.tsx';
 import { ContactHint } from '@/components/sender.tsx';
@@ -244,7 +244,7 @@ export function SystemView() {
             ))}
             <StatusWord row={{ carryOut: true, outcome: 'failed', actionStatus: null, outcomeDetail: 'Gmail answered 503' }} />
           </Row>
-          <Row label="hint" note="An icon after a name; pointing at it says what it means. Look is yellow.">
+          <Row label="hint" note="An icon after a name; pointing at it says what it means. Look is yellow; failure red.">
             <span className="flex items-center gap-2 font-medium">
               Store
               <Hint icon={SparkleIcon} says="The first time Sift has seen them" tone="look" />
@@ -256,6 +256,10 @@ export function SystemView() {
             <span className="flex items-center gap-2 font-medium">
               Ada Lovelace
               <Hint icon={ReplyIcon} says="You have written to them" />
+            </span>
+            <span className="flex items-center gap-2 font-medium">
+              anyone at news.example.com
+              <Hint icon={FunnelIcon} says="Not added to Gmail" tone="failure" />
             </span>
           </Row>
           <Row label="tier">

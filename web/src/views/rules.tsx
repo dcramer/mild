@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { setParams, useParam } from '@/lib/route.ts';
+import { filterStanding, standingWords } from '@/views/gmail-filter.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { RulePanel, Who, whoText } from '@/views/rule-panel.tsx';
 import { ago, count, describeMatch, outcomeName } from '@/lib/format.ts';
@@ -16,6 +17,7 @@ import {
   FilterGroup,
   Hint,
   ListView,
+  TextLink,
   Loading,
   RowActions,
   Sub,
@@ -32,6 +34,25 @@ const SOURCES = [
   ['correction', 'You, correcting Sift'],
   ['learned', 'Sift, by blocking'],
 ] as const;
+
+const GMAIL = [
+  ['', 'Any'],
+  ['filter', 'Is a filter'],
+  ['could', 'Could be one'],
+  ['cannot', 'Cannot be one'],
+  ['look', 'Needs a look'],
+] as const;
+
+/** A rule's standing as a Gmail filter as an icon, only where it is one or should have been. */
+function FilterMark({ rule }: { rule: RuleSummary }) {
+  const standing = filterStanding(rule);
+  if (standing === 'could' || standing === 'cannot') return null;
+  return (
+    <span className="ml-2 inline-flex align-[-0.1em]">
+      <Hint icon={FunnelIcon} says={standingWords(rule)} tone={standing === 'failed' ? 'failure' : standing === 'look' ? 'look' : 'plain'} />
+    </span>
+  );
+}
 
 /** The rule's own action: an action rule's, or an exception to its label's. */
 const own = (rule: RuleSummary) => (rule.kind === 'label' ? rule.override : rule.disposition);
@@ -57,6 +78,7 @@ export function Rules() {
   const [search, setSearch] = useParam('q');
   const [label, setLabel] = useParam('label');
   const [source, setSource] = useParam('by', SOURCES);
+  const [gmail, setGmail] = useParam('gmail', GMAIL);
   const [open, setOpen] = useParam('rule');
   const [adding, setAdding] = useState(false);
   const accountId = manage.data?.accounts[0]?.id;
@@ -67,10 +89,18 @@ export function Rules() {
       (r) =>
         (label === '' || r.labelId === label || r.whenLabel === label) &&
         (source === '' || r.source === source) &&
+        (gmail === '' ||
+          (gmail === 'filter'
+            ? r.filterId !== null
+            : gmail === 'look'
+              ? ['failed', 'look'].includes(filterStanding(r))
+              : !r.filterId && filterStanding(r) === gmail)) &&
         (needle === '' || [whoText(r.match), r.labelName ?? ''].some((text) => text.toLowerCase().includes(needle))),
     )
     .toSorted((a, b) => b.hits - a.hits);
   const at = rules.findIndex((r) => r.id === open);
+  const failedFilters = (data?.rules ?? []).filter((r) => filterStanding(r) === 'failed').length;
+
   const removeButton = (rule: RuleSummary) => (
     <ConfirmButton
       question="Remove this rule?"
@@ -103,17 +133,25 @@ export function Rules() {
         active: [
           ...(label === '' ? [] : [{ label: `Label: ${labels.find(([id]) => id === label)?.[1] ?? label}`, clear: () => setLabel('') }]),
           ...(source === '' ? [] : [{ label: `Made by: ${SOURCES.find(([key]) => key === source)?.[1]}`, clear: () => setSource('') }]),
+          ...(gmail === '' ? [] : [{ label: `In Gmail: ${GMAIL.find(([key]) => key === gmail)?.[1]}`, clear: () => setGmail('') }]),
         ],
         panel: (
           <>
             <FilterGroup label="Label" value={label} options={[['', 'Any'] as const, ...labels]} onChange={setLabel} />
             <FilterGroup label="Made by" value={source} options={SOURCES} onChange={setSource} />
+            <FilterGroup label="In Gmail" value={gmail} options={GMAIL} onChange={setGmail} />
           </>
         ),
       }}
     >
       {error ? <ErrorNote message={error} /> : null}
       <Failure>{remove.error}</Failure>
+      {failedFilters > 0 && gmail !== 'look' ? (
+        <Failure>
+          Gmail did not take the filter change for {failedFilters === 1 ? '1 rule' : `${count(failedFilters)} rules`}.{' '}
+          <TextLink href="/rules?gmail=look">See {failedFilters === 1 ? 'it' : 'them'}</TextLink>
+        </Failure>
+      ) : null}
       {loading ? (
         <Loading>
           <Td className="max-w-0 md:w-full">
@@ -143,11 +181,7 @@ export function Rules() {
                     {rule.kind === 'when-label' ? <span className="text-muted-foreground"> as {rule.labelName}</span> : null}
                     <ArrowRightIcon aria-label="is" className="mx-2 inline size-4 align-[-0.15em] text-muted-foreground" />
                     <Result rule={rule} />
-                    {rule.filterId ? (
-                      <span className="ml-2 inline-flex align-[-0.1em]">
-                        <Hint icon={FunnelIcon} says="Also a filter in Gmail" />
-                      </span>
-                    ) : null}
+                    <FilterMark rule={rule} />
                   </span>
                   {rule.when ? <Sub className="whitespace-normal">only when it is {rule.when}</Sub> : null}
                 </Td>

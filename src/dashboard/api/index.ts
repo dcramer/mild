@@ -9,7 +9,6 @@ import domainRead from './routes/domain/get.ts';
 import evalRead from './routes/eval/get.ts';
 import evalsRead from './routes/evals/get.ts';
 import evalsRunWrite from './routes/evals/run/post.ts';
-import filtersRead from './routes/filters/get.ts';
 import examplesDeleteAllWrite from './routes/examples/delete-all/post.ts';
 import examplesDeleteWrite from './routes/examples/delete/post.ts';
 import examplesRead from './routes/examples/get.ts';
@@ -54,7 +53,6 @@ export const READS: readonly Read[] = [
   evalRead,
   evalsRead,
   examplesRead,
-  filtersRead,
   manageRead,
   messageRead,
   modelsRead,

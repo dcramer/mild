@@ -484,7 +484,7 @@ describe('dashboard server', () => {
           plan: { criteria: { from: '@example.com' }, gmailLabel: 'sift/newsletters', archive: true },
           differs: ['Mail the filter archives never reaches Sift: it is not recorded, counted or unsubscribed from.'],
           checkedAt: null,
-          last: null,
+          history: [],
         },
         createdAt: NOW,
       },

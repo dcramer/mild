@@ -41,10 +41,13 @@ export function Code({ children }: { children: ReactNode }) {
   return <code className="rounded-[2px] bg-foreground/8 px-[0.35em] py-[0.1em] font-mono text-[0.9em]">{children}</code>;
 }
 
-/** One thing about what it follows, as a small icon after it, said in words when pointed at. `look` is yellow. */
-export function Hint({ icon: Icon, says, tone = 'plain' }: { icon: LucideIcon; says: string; tone?: 'plain' | 'look' }) {
+/** One thing about what it follows, as a small icon after it, said in words when pointed at. `look` is yellow; `failure` red. */
+export function Hint({ icon: Icon, says, tone = 'plain' }: { icon: LucideIcon; says: string; tone?: 'plain' | 'look' | 'failure' }) {
   return (
-    <span title={says} className={cn('inline-flex shrink-0', tone === 'look' ? 'text-highlight' : 'text-muted-foreground')}>
+    <span
+      title={says}
+      className={cn('inline-flex shrink-0', tone === 'look' ? 'text-highlight' : tone === 'failure' ? 'text-destructive' : 'text-muted-foreground')}
+    >
       <Icon aria-hidden className="size-3.5" strokeWidth={2.25} />
       <span className="sr-only">{says}</span>
     </span>

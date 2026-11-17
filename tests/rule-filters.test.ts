@@ -9,8 +9,7 @@ import { getRuleFilter, ruleFilterStatus } from '../src/store/filters.ts';
 import { DEFAULT_LABELS, updateLabel } from '../src/store/labels.ts';
 import { addRule, removeRule, setRule } from '../src/store/rules.ts';
 import { type FilterableRule, filterFor } from '../src/triage/filter.ts';
-import { listFilterChanges } from '../src/dashboard/queries/rules.ts';
-import { FakeMailbox, everything } from './helpers.ts';
+import { FakeMailbox } from './helpers.ts';
 
 const rule = (overrides: Partial<FilterableRule> = {}): FilterableRule => ({
   id: 'r1',
@@ -273,32 +272,17 @@ describe("a rule's Gmail filter", () => {
     expect((await actions()).map((a) => `${a.type} ${a.status}`)).toEqual(['filter done', 'unfilter done', 'filter done', 'unfilter done']);
   });
 
-  it('lists the filters written and taken out in a period, newest first, by what they matched', async () => {
-    const DAY = 86_400_000;
-    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
-    await writeRuleFilter(deps(), id);
-    clock = 3 * DAY;
-    await removeRuleFilter(deps(), id);
-    await removeRule(db, id);
-    const listed = async (days: number) => listFilterChanges(db, await everything(db), days, 4 * DAY);
-    expect(await listed(7)).toMatchObject([
-      { type: 'unfilter', status: 'done', ruleId: null, criteria: { from: 'news@example.com' }, at: 3 * DAY },
-      { type: 'filter', status: 'done', ruleId: null, criteria: { from: 'news@example.com' }, at: 1000 },
-    ]);
-    expect(await listed(1)).toMatchObject([{ type: 'unfilter', criteria: { from: 'news@example.com' } }]);
-  });
-
   it('tells the dashboard the filter it would write, and when it last wrote or took one out', async () => {
     const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
     expect((await ruleFilterStatus(db)).get(id)).toMatchObject({
       plan: { criteria: { from: 'news@example.com' }, gmailLabel: 'sift/newsletters', archive: true },
-      last: null,
+      history: [],
     });
     await writeRuleFilter(deps(), id);
-    expect((await ruleFilterStatus(db)).get(id)?.last).toEqual({ type: 'filter', status: 'done', error: null, at: clock });
+    expect((await ruleFilterStatus(db)).get(id)?.history).toEqual([{ type: 'filter', status: 'done', error: null, at: clock }]);
     mailbox.failFilters = true;
     await expect(removeRuleFilter(deps(), id)).rejects.toThrow('network down');
-    expect((await ruleFilterStatus(db)).get(id)?.last).toMatchObject({ type: 'unfilter', status: 'unknown', error: 'network down' });
+    expect((await ruleFilterStatus(db)).get(id)?.history.at(-1)).toMatchObject({ type: 'unfilter', status: 'unknown', error: 'network down' });
   });
 
   it('keeps the rule marked as a filter when Gmail could not be reached to remove it', async () => {

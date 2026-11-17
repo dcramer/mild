@@ -50,7 +50,7 @@ function canonical(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   const entries = Object.entries(value).filter(([, v]) => v !== undefined);
   return `{${entries
-    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .toSorted(([a], [b]) => (a < b ? -1 : 1))
     .map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`)
     .join(',')}}`;
 }
