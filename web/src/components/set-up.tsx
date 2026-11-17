@@ -2,29 +2,10 @@ import { ArrowRightIcon, ArrowUpRightIcon, PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { type Next, ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { type LabelProposal, type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ACTIONS, plural } from '@/lib/format.ts';
-import { cn } from '@/lib/utils';
-import {
-  Button,
-  Check,
-  Dialog,
-  Does,
-  Failure,
-  Field,
-  Form,
-  OnPhone,
-  Onboarding,
-  RowActions,
-  Select,
-  Sub,
-  Table,
-  Td,
-  TextArea,
-  Th,
-  Tr,
-  useToast,
-} from '@/system';
+import { plural } from '@/lib/format.ts';
+import { Button, Dialog, Failure, Field, Form, Onboarding, Select, TextArea, useToast } from '@/system';
 import { type LabelDraft, LabelFields } from '@/views/label-panel.tsx';
+import { type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
 
 type Choice = ManageState['model']['choices'][number];
 type Account = { name: string; onSettings: () => void; onSignOut: () => void } | undefined;
@@ -237,19 +218,6 @@ function Want({
   );
 }
 
-type Draft = LabelDraft & { on: boolean };
-
-const draftOf = (d: LabelProposal['drafts'][number]): Draft => ({
-  name: d.name,
-  description: d.description,
-  disposition: d.disposition,
-  markRead: d.markRead ?? false,
-  unsubscribe: d.unsubscribe ?? false,
-  on: true,
-});
-
-const word = (key: string) => ACTIONS.find(([k]) => k === key)?.[1] ?? key;
-
 function Labels({
   proposal,
   steps,
@@ -263,70 +231,18 @@ function Labels({
   onStartOver: () => void;
   onDone: () => void;
 }) {
-  const [drafts, setDrafts] = useState(() => proposal.drafts.map(draftOf));
+  const [suggestions, setSuggestions] = useState(() => proposal.drafts.map(suggestionOf));
   const [editing, setEditing] = useState<number | null>(null);
   const { busy, error, run } = useAction();
-  const kept = drafts.filter((d) => d.on);
-  const change = (index: number, next: Partial<Draft>) => setDrafts((all) => all.map((d, i) => (i === index ? { ...d, ...next } : d)));
-  const use = () =>
-    kept.length > 0 &&
-    run(
-      () =>
-        api.acceptLabels(
-          kept.map((d) => ({
-            name: d.name.trim(),
-            description: d.description.trim(),
-            disposition: d.disposition,
-            ...(d.markRead ? { markRead: true } : {}),
-            ...(d.unsubscribe ? { unsubscribe: true } : {}),
-          })),
-        ),
-      onDone,
-    );
+  const kept = keptLabels(suggestions);
+  const change = (index: number, next: Partial<Suggestion>) => setSuggestions((all) => all.map((d, i) => (i === index ? { ...d, ...next } : d)));
+  const use = () => kept.length > 0 && run(() => api.acceptLabels(kept), onDone);
   return (
     <Onboarding steps={steps} current={2} title="Your labels" intro={`“${proposal.goal}”`} account={account}>
-      <Table>
-        <thead className="sr-only">
-          <Tr>
-            <Th>Label</Th>
-            <Th>Then</Th>
-            <Th>Edit</Th>
-          </Tr>
-        </thead>
-        <tbody>
-          {drafts.map((draft, i) => (
-            <Tr key={i}>
-              <Td>
-                <span className="flex items-start gap-3">
-                  <span className="flex h-6 items-center">
-                    <Check checked={draft.on} onChange={(on) => change(i, { on })}>
-                      <span className="sr-only">Use {draft.name}</span>
-                    </Check>
-                  </span>
-                  <span className={cn('min-w-0', !draft.on && 'opacity-45')}>
-                    <span className="name">{draft.name}</span>
-                    <Sub className="whitespace-normal">{draft.description}</Sub>
-                    <OnPhone>
-                      <Does action={draft.disposition}>{word(draft.disposition)}</Does>
-                    </OnPhone>
-                  </span>
-                </span>
-              </Td>
-              <Td phone="hide" className={cn('w-px whitespace-nowrap', !draft.on && 'opacity-45')}>
-                <Does action={draft.disposition}>{word(draft.disposition)}</Does>
-              </Td>
-              <RowActions phone="keep">
-                <Button variant="quiet" aria-label={`Edit ${draft.name}`} onClick={() => setEditing(i)}>
-                  Edit
-                </Button>
-              </RowActions>
-            </Tr>
-          ))}
-        </tbody>
-      </Table>
+      <SuggestionList suggestions={suggestions} onChange={change} onEdit={setEditing} />
       <Onward
         next={{
-          label: kept.length === 0 ? 'Use these labels' : kept.length === 1 ? 'Use this label' : `Use these ${kept.length} labels`,
+          label: keepWord('Use', kept.length),
           busy,
           disabled: kept.length === 0,
           onPress: use,
@@ -336,7 +252,7 @@ function Labels({
       />
       {editing === null ? null : (
         <EditDraft
-          draft={drafts[editing]}
+          draft={suggestions[editing]}
           onClose={() => setEditing(null)}
           onSave={(draft) => {
             change(editing, draft);

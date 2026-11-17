@@ -292,7 +292,7 @@ describe('preferences in the database', () => {
     await addMailbox(db, ACCOUNT, '1');
     return db;
   }
-  it('lets the user change a label, but never what Everything else does', async () => {
+  it('lets the user change a label, but never what Everything Else does', async () => {
     const db = await seeded();
     expect(await updateLabel(db, ACCOUNT, 'cold_outreach', { disposition: 'keep', name: 'Pitches', description: 'Things I read.' })).toBe(true);
     // The id and the Gmail label never change, so nothing already labelled is orphaned.

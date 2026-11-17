@@ -12,7 +12,7 @@ import { Refusal } from '../refusal.ts';
  */
 const everythingElse: Label = {
   id: EVERYTHING_ELSE,
-  name: 'Everything else',
+  name: 'Everything Else',
   description: 'Mail that is plainly none of the other labels.',
   disposition: 'keep',
 };
@@ -112,7 +112,7 @@ export async function addLabels(db: Sql, accountId: string, added: readonly NewL
   return created;
 }
 
-/** Whether the account has a label besides Everything else. Until it does, Sift reads nothing from its Gmail. */
+/** Whether the account has a label besides Everything Else. Until it does, Sift reads nothing from its Gmail. */
 export async function hasOwnLabels(db: Sql, accountId: string): Promise<boolean> {
   return (await listLabels(db, accountId)).some((l) => l.id !== EVERYTHING_ELSE);
 }
@@ -130,7 +130,7 @@ export async function updateLabel(
   const current = (await listLabels(db, accountId)).find((l) => l.id === id);
   if (!current) return false;
   const acts = (change.disposition ?? 'keep') !== 'keep' || change.block || change.markRead || change.unsubscribe;
-  if (id === EVERYTHING_ELSE && acts) throw new Refusal('Everything else always stays in the inbox. Make a label for the mail you want moved.');
+  if (id === EVERYTHING_ELSE && acts) throw new Refusal('Everything Else always stays in the inbox. Make a label for the mail you want moved.');
   const disposition = change.disposition ?? current.disposition;
   // Changing what a label does drops a block unless the change asks for one.
   const extras = normalise(

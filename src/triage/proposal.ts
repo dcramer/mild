@@ -37,7 +37,7 @@ How the labels are used:
 - The label decides what happens to the email: keep (it stays in the inbox), archive (it leaves the inbox
   but stays in Gmail and in search), or spam. A label may also mark its mail read, and may unsubscribe
   from the sender's mailing list.
-- There is already a label "Everything else" that keeps mail none of the labels fit. Mail needs no label to
+- There is already a label "Everything Else" that keeps mail none of the labels fit. Mail needs no label to
   stay in the inbox.
 - The owner can also make rules for one sender or domain ("from this address: archive"). What depends on
   who sent the mail belongs in a rule, not a label.
@@ -52,10 +52,11 @@ What makes a good label:
   a person wrote to them among automated mail that is archived.
 - Spam is only for deceit: scams and phishing. Unsubscribe only where the sender never had the owner's
   permission, such as cold outreach; unsubscribing from a scam confirms the address works.
-- Propose between one and ${MAX_DRAFTS} labels, fewer if fewer serve what they said. None may repeat a
-  label they already have.
+- Propose between one and ${MAX_DRAFTS} labels, fewer if fewer serve what they said. None may repeat or
+  overlap a label they already have: no email should fit both a new label and one of theirs. Where what
+  they ask is already covered, say so in the reason and propose only what is not.
 
-Call ${PROPOSAL_TOOL} exactly once. Names are short and plain. A description is one or two sentences:
+Call ${PROPOSAL_TOOL} exactly once. Names are short and plain, in Title Case ("Cold Outreach"). A description is one or two sentences:
 what belongs, and what looks similar but does not. The reason says in a few words which part of what the
 owner said the label serves.`;
 

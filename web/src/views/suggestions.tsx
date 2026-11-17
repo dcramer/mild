@@ -30,7 +30,7 @@ import {
   Th,
   Tr,
 } from '@/system';
-import { AddLabelDialog } from '@/views/label-panel.tsx';
+import { AddLabelsDialog } from '@/views/label-panel.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { fold } from '@/lib/fold.ts';
 import { proposalStart } from '@/lib/rule-start.ts';
@@ -197,7 +197,7 @@ function SuggestionRow({
           extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
         />
       </RowActions>
-      {adding ? <AddLabelDialog accountId={item.accountId} onClose={() => setAdding(false)} onSaved={onAnswered} /> : null}
+      {adding ? <AddLabelsDialog onClose={() => setAdding(false)} onSaved={onAnswered} /> : null}
     </Tr>
   );
 }

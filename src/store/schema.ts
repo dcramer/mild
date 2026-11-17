@@ -201,7 +201,7 @@ export const labels = pgTable(
     block: boolean('block').notNull().default(false),
     markRead: boolean('mark_read').notNull().default(false),
     unsubscribe: boolean('unsubscribe').notNull().default(false),
-    gmailLabel: text('gmail_label'), // null only for Everything else
+    gmailLabel: text('gmail_label'), // null only for Everything Else
     position: integer('position').notNull(),
   },
   (t) => [

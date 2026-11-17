@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useAnswer } from '@/components/answer.tsx';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { MessageBody, SeenFacts } from '@/components/message-parts.tsx';
-import { AddLabelDialog } from '@/views/label-panel.tsx';
+import { AddLabelsDialog } from '@/views/label-panel.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { type RuleStart, keepStart, messageStart } from '@/lib/rule-start.ts';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
@@ -247,7 +247,7 @@ function Body({
           </div>
           <Failure>{error}</Failure>
           <Failure>{keep.error}</Failure>
-          {adding ? <AddLabelDialog accountId={detail.accountId} onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
+          {adding ? <AddLabelsDialog onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
           {ruling ? (
             <AddRuleDialog
               accountId={detail.accountId}

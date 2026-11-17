@@ -527,7 +527,7 @@ export const LabelSummary = z.object({
   markRead: z.boolean(),
   /** Also leave the sender's mailing list, where that can be done safely. */
   unsubscribe: z.boolean(),
-  /** Null for Everything else. */
+  /** Null for Everything Else. */
   gmailLabel: z.string().nullable(),
   /** Rules that say mail is this label. */
   rules: z.number(),

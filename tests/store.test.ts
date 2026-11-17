@@ -202,18 +202,18 @@ describe('a proposal', () => {
 });
 
 describe('a new mailbox', () => {
-  it('starts with Everything else alone, once, and keeps its labels when connected again', async () => {
+  it('starts with Everything Else alone, once, and keeps its labels when connected again', async () => {
     const store = await freshStore();
     const db = await store.user(await connectAccount(store, 'alpha@example.org', '1', 0));
     expect(await listLabels(db, 'alpha@example.org')).toEqual([
-      { id: 'everything_else', name: 'Everything else', description: expect.any(String), disposition: 'keep' },
+      { id: 'everything_else', name: 'Everything Else', description: expect.any(String), disposition: 'keep' },
     ]);
     await withSampleLabels(db, 'alpha@example.org');
     await updateLabel(db, 'alpha@example.org', 'newsletter', { name: 'Reading' });
     await connectAccount(store, 'alpha@example.org', '9', 5);
     await addMailbox(db, 'alpha@example.org', '10');
     expect((await listLabels(db, 'alpha@example.org')).map((l) => l.name)).toContain('Reading');
-    // Everything else is listed after the person's own.
+    // Everything Else is listed after the person's own.
     expect((await listLabels(db, 'alpha@example.org')).at(-1)?.id).toBe('everything_else');
     // A store opened afresh puts back a mailbox missing from a person's database, with its one label.
     await raw(db).run('DELETE FROM mailboxes');

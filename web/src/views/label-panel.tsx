@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from 'react';
-import { type LabelSummary, api, useAction } from '@/lib/api.ts';
+import { type LabelProposal, type LabelSummary, api, useAction } from '@/lib/api.ts';
+import { type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
 import { ACTIONS, type ActionKey, EXPLAIN, count, percent, plural } from '@/lib/format.ts';
 import { ActionIcon, Button, Check, Code, Dialog, Failure, Field, Figure, Figures, Form, Input, Panel, Select, TextArea } from '@/system';
 
@@ -17,7 +18,7 @@ export interface LabelDraft {
 }
 
 /**
- * What a label is and what happens to it: the fields for adding one and for changing one. Everything else,
+ * What a label is and what happens to it: the fields for adding one and for changing one. Everything Else,
  * the only label with no Gmail label (`gmailLabel` null), always keeps, so its action is not offered.
  */
 export function LabelFields({ draft, onChange, gmailLabel }: { draft: LabelDraft; onChange: (draft: LabelDraft) => void; gmailLabel?: string | null }) {
@@ -97,7 +98,6 @@ export function LabelFields({ draft, onChange, gmailLabel }: { draft: LabelDraft
  * first because a label is usually opened for one of them: it is often wrong, or takes much of the mail.
  */
 export function LabelPanel({
-  accountId,
   label,
   mail,
   position,
@@ -106,7 +106,6 @@ export function LabelPanel({
   onClose,
   onSaved,
 }: {
-  accountId: string;
   label: LabelSummary;
   mail: number;
   position: string;
@@ -127,7 +126,7 @@ export function LabelPanel({
   const ready = changed && draft.name.trim() !== '';
   const { busy, error, run } = useAction();
   // No toast: the panel shows what was saved.
-  const save = () => run(() => api.saveLabel(accountId, label.id, { ...draft, name: draft.name.trim(), description: draft.description.trim() }), onSaved);
+  const save = () => run(() => api.saveLabel(label.id, { ...draft, name: draft.name.trim(), description: draft.description.trim() }), onSaved);
 
   return (
     <Panel narrow open onClose={onClose} title={label.name} position={position} onPrevious={onPrevious} onNext={onNext}>
@@ -161,38 +160,138 @@ export function LabelPanel({
   );
 }
 
-/** Add a label. Changing one is in its panel. */
-export function AddLabelDialog({ accountId, onClose, onSaved }: { accountId: string; onClose: () => void; onSaved: () => void }) {
+type Stage = { at: 'describe' } | { at: 'suggested'; proposal: LabelProposal } | { at: 'edit'; proposal: LabelProposal; index: number } | { at: 'manual' };
+
+const BLANK: LabelDraft = { name: '', description: '', disposition: 'keep', markRead: false, unsubscribe: false };
+
+/**
+ * Add labels, made in every mailbox: describe the mail and what should happen to it, and keep what fits of
+ * the one label or several the model suggests (it is shown the labels there are, so it does not repeat
+ * them); or write one by hand. Changing a label is in its panel.
+ */
+export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [stage, setStage] = useState<Stage>({ at: 'describe' });
+  const [text, setText] = useState('');
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [draft, setDraft] = useState<LabelDraft>(BLANK);
   const { busy, error, run } = useAction();
-  const [draft, setDraft] = useState<LabelDraft>({ name: '', description: '', disposition: 'keep', markRead: false, unsubscribe: false });
-  const ready = draft.name.trim() !== '';
-  const add = () =>
-    run(
-      () => api.addLabel({ accountId, ...draft, name: draft.name.trim(), description: draft.description.trim() }),
-      () => {
-        onSaved();
-        onClose();
-      },
+  const done = () => {
+    onSaved();
+    onClose();
+  };
+  const suggest = () =>
+    text.trim() !== '' &&
+    run(async () => {
+      const proposal = await api.proposeLabels(text.trim());
+      setSuggestions(proposal.drafts.map(suggestionOf));
+      setStage({ at: 'suggested', proposal });
+    });
+  const kept = keptLabels(suggestions);
+  const change = (index: number, next: Partial<Suggestion>) => setSuggestions((all) => all.map((s, i) => (i === index ? { ...s, ...next } : s)));
+
+  if (stage.at === 'manual') {
+    const ready = draft.name.trim() !== '';
+    const add = () => ready && run(() => api.addLabels([{ ...draft, name: draft.name.trim(), description: draft.description.trim() }]), done);
+    return (
+      <Dialog
+        open
+        onClose={onClose}
+        title="Add a label"
+        footer={
+          <>
+            <Button variant="ink" busy={busy} disabled={!ready} onClick={add}>
+              Add label
+            </Button>
+            <Button variant="quiet" onClick={() => setStage({ at: 'describe' })}>
+              Describe it instead
+            </Button>
+            <Failure>{error}</Failure>
+          </>
+        }
+      >
+        <Form onSubmit={add}>
+          <LabelFields draft={draft} onChange={setDraft} />
+        </Form>
+      </Dialog>
     );
+  }
+
+  if (stage.at === 'edit') {
+    const editing = suggestions[stage.index];
+    const back = () => setStage({ at: 'suggested', proposal: stage.proposal });
+    return (
+      <Dialog
+        open
+        onClose={onClose}
+        title={editing.name || 'Add labels'}
+        footer={
+          <Button variant="ink" disabled={editing.name.trim() === ''} onClick={back}>
+            Done
+          </Button>
+        }
+      >
+        <Form onSubmit={back}>
+          <LabelFields draft={editing} onChange={(next) => change(stage.index, next)} />
+        </Form>
+      </Dialog>
+    );
+  }
+
+  if (stage.at === 'suggested')
+    return (
+      <Dialog
+        open
+        onClose={onClose}
+        title="Add labels"
+        footer={
+          <>
+            <Button variant="ink" busy={busy} disabled={kept.length === 0} onClick={() => run(() => api.addLabels(kept), done)}>
+              {keepWord('Add', kept.length)}
+            </Button>
+            <Button variant="quiet" onClick={() => setStage({ at: 'describe' })}>
+              Back
+            </Button>
+            <Failure>{error}</Failure>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-muted-foreground">“{stage.proposal.goal}”</p>
+          <SuggestionList suggestions={suggestions} onChange={change} onEdit={(index) => setStage({ at: 'edit', proposal: stage.proposal, index })} />
+        </div>
+      </Dialog>
+    );
+
   return (
     <Dialog
       open
       onClose={onClose}
-      title="Add a label"
+      title="Add labels"
       footer={
         <>
-          <Button variant="ink" busy={busy} disabled={!ready} onClick={add}>
-            Add label
+          <Button variant="ink" busy={busy} disabled={text.trim() === ''} onClick={suggest}>
+            Suggest labels
           </Button>
-          <Button variant="quiet" onClick={onClose}>
-            Cancel
-          </Button>
+          {busy ? (
+            <span className="text-sm text-muted-foreground">This can take a minute.</span>
+          ) : (
+            <Button variant="quiet" onClick={() => setStage({ at: 'manual' })}>
+              Write one yourself
+            </Button>
+          )}
           <Failure>{error}</Failure>
         </>
       }
     >
-      <Form onSubmit={() => ready && add()}>
-        <LabelFields draft={draft} onChange={setDraft} />
+      <Form onSubmit={suggest}>
+        <p className="text-muted-foreground">Describe the mail you want a label for, and what should happen to it. Sift suggests one label or several.</p>
+        <TextArea
+          aria-label="Describe the mail"
+          className="min-h-28 max-md:min-h-48"
+          maxLength={2000}
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+        />
       </Form>
     </Dialog>
   );

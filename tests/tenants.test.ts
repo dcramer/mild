@@ -265,12 +265,6 @@ describe("nobody sees or changes another person's mail", () => {
         { accountId: ALPHA, sender: `sender@${MARK[ALPHA]}.example.com`, disposition: 'keep', scope: 'sender', messageId: `m-${MARK[ALPHA]}` },
         { accountId: NOBODY, sender: `sender@${MARK[ALPHA]}.example.com`, disposition: 'keep', scope: 'sender', messageId: `m-${MARK[ALPHA]}` },
       ],
-      ['/api/labels', { accountId: ALPHA, id: 'newsletter', disposition: 'keep' }, { accountId: NOBODY, id: 'newsletter', disposition: 'keep' }],
-      [
-        '/api/labels/add',
-        { accountId: ALPHA, name: 'Mine now', description: '', disposition: 'keep' },
-        { accountId: NOBODY, name: 'Mine now', description: '', disposition: 'keep' },
-      ],
       [
         '/api/rules',
         { accountId: ALPHA, match: { from: 'x@example.com' }, disposition: 'spam' },

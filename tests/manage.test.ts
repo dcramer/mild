@@ -255,7 +255,7 @@ describe('managing sift from the dashboard', () => {
     const latest = async (id: string) =>
       await raw(db).get('SELECT stage, disposition, label_id FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1', id);
 
-    const label = await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'keep' });
+    const label = await call('POST', '/api/labels', { id: 'marketing', disposition: 'keep' });
     expect(label.body).toEqual({ ok: true, redecided: 2 });
     expect(await latest('w1')).toEqual({ stage: 'model', disposition: 'keep', label_id: 'marketing' });
 
@@ -286,22 +286,19 @@ describe('managing sift from the dashboard', () => {
   it('edits labels and rules', async () => {
     const { call } = await start();
 
-    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'newsletter', disposition: 'keep', name: 'Reading' })).status).toBe(200);
+    expect((await call('POST', '/api/labels', { id: 'newsletter', disposition: 'keep', name: 'Reading' })).status).toBe(200);
     expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'newsletter')).toMatchObject({
       disposition: 'keep',
       name: 'Reading',
       gmailLabel: 'sift/newsletters',
     });
-    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'nonsense', disposition: 'keep' })).status).toBe(409);
-    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'newsletter', disposition: 'delete' })).status).toBe(400);
+    expect((await call('POST', '/api/labels', { id: 'nonsense', disposition: 'keep' })).status).toBe(409);
+    expect((await call('POST', '/api/labels', { id: 'newsletter', disposition: 'delete' })).status).toBe(400);
 
     const mine = await call('POST', '/api/labels/add', {
-      accountId: ACCOUNT,
-      name: 'Investor updates',
-      description: 'Updates from companies I invested in.',
-      disposition: 'keep',
+      labels: [{ name: 'Investor updates', description: 'Updates from companies I invested in.', disposition: 'keep' }],
     });
-    expect(mine.body).toEqual({ id: 'investor-updates' });
+    expect(mine.body).toEqual({ ids: ['investor-updates'] });
     expect((await listLabels(db, ACCOUNT)).at(-2)).toEqual({
       id: 'investor-updates',
       name: 'Investor updates',
@@ -310,12 +307,11 @@ describe('managing sift from the dashboard', () => {
       gmailLabel: 'sift/investor-updates',
     });
     for (const taken of ['investor updates', 'Review', 'Did', 'Cold outreach', '!!!'])
-      expect((await call('POST', '/api/labels/add', { accountId: ACCOUNT, name: taken, description: '', disposition: 'keep' })).status).toBe(409);
-    expect((await call('POST', '/api/labels/add', { accountId: 'nobody@example.org', name: 'X', description: '', disposition: 'keep' })).status).toBe(404);
+      expect((await call('POST', '/api/labels/add', { labels: [{ name: taken, description: '', disposition: 'keep' }] })).status).toBe(409);
     // Up to the limit, and no further.
     for (let n = (await listLabels(db, ACCOUNT)).length; n < MAX_LABELS; n++)
-      expect((await call('POST', '/api/labels/add', { accountId: ACCOUNT, name: `Extra ${n}`, description: '', disposition: 'keep' })).status).toBe(200);
-    const full = await call('POST', '/api/labels/add', { accountId: ACCOUNT, name: 'One too many', description: '', disposition: 'keep' });
+      expect((await call('POST', '/api/labels/add', { labels: [{ name: `Extra ${n}`, description: '', disposition: 'keep' }] })).status).toBe(200);
+    const full = await call('POST', '/api/labels/add', { labels: [{ name: 'One too many', description: '', disposition: 'keep' }] });
     expect(full.status).toBe(409);
     expect((await listLabels(db, ACCOUNT)).length).toBe(MAX_LABELS);
 
@@ -372,20 +368,47 @@ describe('managing sift from the dashboard', () => {
     expect((await call('POST', '/api/rules/remove', { id: added.body['id'] })).status).toBe(409);
   });
 
+  it('makes and changes a label in every mailbox of the person, all or none', async () => {
+    const { call } = await start();
+    const OTHER = 'other@example.org';
+    await connectAccount(store, OTHER, '1', 0, 1);
+    await withSampleLabels(db, OTHER);
+    expect((await call('POST', '/api/labels/add', { labels: [{ name: 'Travel', description: 'Bookings.', disposition: 'keep' }] })).body).toEqual({
+      ids: ['travel'],
+    });
+    for (const account of [ACCOUNT, OTHER]) expect((await listLabels(db, account)).map((l) => l.id)).toContain('travel');
+    expect((await call('POST', '/api/labels', { id: 'travel', disposition: 'archive', name: 'Trips' })).status).toBe(200);
+    for (const account of [ACCOUNT, OTHER])
+      expect((await listLabels(db, account)).find((l) => l.id === 'travel')).toMatchObject({ name: 'Trips', disposition: 'archive' });
+    // A name one mailbox already has refuses the lot.
+    await call('POST', '/api/labels', { id: 'newsletter', name: 'Reading' });
+    expect(
+      (
+        await call('POST', '/api/labels/add', {
+          labels: [
+            { name: 'Shopping', description: '', disposition: 'keep' },
+            { name: 'Reading', description: '', disposition: 'keep' },
+          ],
+        })
+      ).status,
+    ).toBe(409);
+    for (const account of [ACCOUNT, OTHER]) expect((await listLabels(db, account)).map((l) => l.id)).not.toContain('shopping');
+  });
+
   it('sets what a label does, including blocking and marking read', async () => {
     const { call } = await start();
     const does = async () => (await listLabels(db, ACCOUNT)).find((l) => l.id === 'marketing');
-    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'block' })).status).toBe(200);
+    expect((await call('POST', '/api/labels', { id: 'marketing', disposition: 'block' })).status).toBe(200);
     expect(await does()).toMatchObject({ disposition: 'spam', block: true });
-    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'archive', markRead: true })).status).toBe(200);
+    expect((await call('POST', '/api/labels', { id: 'marketing', disposition: 'archive', markRead: true })).status).toBe(200);
     expect(await does()).toMatchObject({ disposition: 'archive', markRead: true });
     expect(await does()).not.toHaveProperty('block');
     const shown = ((await call('GET', '/api/manage')).body['labels'] as Record<string, { id: string; disposition: string; markRead: boolean }[]>)[ACCOUNT];
     expect(shown?.find((l) => l.id === 'marketing')).toMatchObject({ disposition: 'archive', markRead: true });
     expect(shown?.find((l) => l.id === 'phishing')).toMatchObject({ disposition: 'spam', markRead: false });
-    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'personal', unsubscribe: true })).status).toBe(200);
+    expect((await call('POST', '/api/labels', { id: 'personal', unsubscribe: true })).status).toBe(200);
     expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'personal')).toMatchObject({ disposition: 'keep', unsubscribe: true });
-    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'personal', unsubscribe: 'yes' })).status).toBe(400);
+    expect((await call('POST', '/api/labels', { id: 'personal', unsubscribe: 'yes' })).status).toBe(400);
     const extra = await call('POST', '/api/rules', {
       accountId: ACCOUNT,
       match: { from: 'x@example.com' },
@@ -395,10 +418,10 @@ describe('managing sift from the dashboard', () => {
     });
     expect((await listRules(db, ACCOUNT)).find((r) => r.id === extra.body['id'])).toMatchObject({ subscription: 'unsubscribe', markRead: true });
     // "Leave it for me" is no longer something a label can be set to do.
-    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', disposition: 'review' })).status).toBe(400);
-    expect((await call('POST', '/api/labels', { accountId: ACCOUNT, id: 'marketing', markRead: 'yes' })).status).toBe(400);
-    expect((await call('POST', '/api/labels/add', { accountId: ACCOUNT, name: 'Scams', description: '', disposition: 'block' })).body).toEqual({
-      id: 'scams',
+    expect((await call('POST', '/api/labels', { id: 'marketing', disposition: 'review' })).status).toBe(400);
+    expect((await call('POST', '/api/labels', { id: 'marketing', markRead: 'yes' })).status).toBe(400);
+    expect((await call('POST', '/api/labels/add', { labels: [{ name: 'Scams', description: '', disposition: 'block' }] })).body).toEqual({
+      ids: ['scams'],
     });
     expect((await listLabels(db, ACCOUNT)).at(-2)).toMatchObject({ id: 'scams', disposition: 'spam', block: true });
   });

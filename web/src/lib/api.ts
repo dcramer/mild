@@ -210,13 +210,12 @@ export const api = {
   finishChatGPT: (address: string) => post('/api/model/chatgpt/finish', { address }),
   saveModelKey: (provider: string, key: string) => post('/api/model/key', { provider, key }),
   signOutModel: (provider: string) => post('/api/model/signout', { provider }),
-  saveLabel: (
-    accountId: string,
-    id: string,
-    change: { name?: string; description?: string; disposition?: string; markRead?: boolean; unsubscribe?: boolean },
-  ) => post('/api/labels', { accountId, id, ...change }),
-  addLabel: (label: { accountId: string; name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }) =>
-    post<{ id: string }>('/api/labels/add', label),
+  /** Change a label in every mailbox that has it. */
+  saveLabel: (id: string, change: { name?: string; description?: string; disposition?: string; markRead?: boolean; unsubscribe?: boolean }) =>
+    post('/api/labels', { id, ...change }),
+  /** Add labels in every mailbox: by hand, or kept from what the model suggested. */
+  addLabels: (labels: { name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }[]) =>
+    post<{ ids: string[] }>('/api/labels/add', { labels }),
   /** Ask the model for labels from what the person wants. Its own call; it can take a minute. */
   proposeLabels: (goal: string) => post<LabelProposal>('/api/labels/propose', { goal }),
   /** The latest labels the model suggested, so a reload keeps them. */

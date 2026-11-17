@@ -70,7 +70,7 @@ describe('asking for labels', () => {
       { drafts: [{ name: 'Cold outreach', description: 'Pitches.', disposition: 'archive', why: 'w' }], usage }
     );
     const proposal = await proposeLabels({ db, propose, model: 'p/m', now: () => 5 }, { accountId: ACCOUNT, goal: 'Stop pitches from Acme' });
-    // Everything else is the prompt's to explain, not one of the person's labels.
+    // Everything Else is the prompt's to explain, not one of the person's labels.
     expect(asked).toEqual([{ goal: 'Stop pitches from Acme', labels: [] }]);
     expect(await latestLabelProposal(db, [ACCOUNT])).toEqual(proposal);
     const row = await raw(db).get('SELECT * FROM label_proposals');

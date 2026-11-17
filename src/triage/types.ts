@@ -73,7 +73,7 @@ export interface Label {
   description: string;
   /** What sift does with mail that carries this label. */
   disposition: Disposition;
-  /** Absent only for Everything else, which would be on most of the inbox and say nothing. */
+  /** Absent only for Everything Else, which would be on most of the inbox and say nothing. */
   gmailLabel?: string;
   /** With `spam`: block the sender, so their later mail is spam without being judged again. */
   block?: boolean;
