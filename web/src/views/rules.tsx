@@ -160,8 +160,8 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
             <Th>
               <span className="sr-only">Rule</span>
             </Th>
-            <Th phone="hide" num says="Mail the rule has decided since it was made">
-              Messages
+            <Th phone="hide" num says="Messages the rule has decided since it was made">
+              Decisions
             </Th>
             <Th phone="hide" num>
               Last used

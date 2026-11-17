@@ -52,8 +52,8 @@ test.describe('Rules', () => {
   test('heads its figures, says the exact time when pointed at, and costs a rule a model checks', async ({ page }) => {
     await page.goto('/rules');
     const head = (name: string) => page.getByRole('main').getByRole('columnheader', { name, exact: true });
-    await expect(head('Messages')).toBeVisible();
-    await expect(head('Messages')).toHaveCSS('text-transform', 'uppercase');
+    await expect(head('Decisions')).toBeVisible();
+    await expect(head('Decisions')).toHaveCSS('text-transform', 'uppercase');
     await expect(head('Last used')).toBeVisible();
     // No rule has a condition for a model to check, so nothing here costs anything.
     await expect(head('Cost 30D')).toHaveCount(0);
