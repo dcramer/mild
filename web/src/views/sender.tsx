@@ -3,7 +3,7 @@ import { ErrorNote, StatusWord, Verdict } from '@/components/bits.tsx';
 import { ContactHint, SENDER_CELL, SenderCell } from '@/components/sender.tsx';
 import { type Given, type ListedDecision, type SenderPage, api, useAction, useLoaded } from '@/lib/api.ts';
 import { INBOX, ago, count, dateTime, describeMatch, doesName, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
-import { type RuleStart, messageStart, nameStart, standingStart, startWords } from '@/lib/rule-start.ts';
+import { type RuleStart, addedWords, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
 import { nextMail } from '@/lib/next-mail.ts';
 import { messageKey, setParams, useParam } from '@/lib/route.ts';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
@@ -323,8 +323,8 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
             }),
           reload,
         );
-      toast('Rule added', {
-        description: startWords(standingStart(who, standing), manage.data?.labels[accountId] ?? []),
+      toast(addedWords(standingStart(who, standing), manage.data?.labels[accountId] ?? []), {
+        description: given.was ? 'Rule replaced' : 'Rule added',
         undo: takeBack,
         // Mail already in the inbox stays until the rule is applied there, as the dialog offers.
         ...(standing === 'trusted' ? {} : { action: { label: 'Apply to inbox…', onPress: () => setParams({ rule: given.id, apply: '1' }) } }),

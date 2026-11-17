@@ -143,7 +143,7 @@ test.describe('What Sift saw', () => {
     // Looking at the inbox asks Gmail, which is not here.
     await dialog.getByRole('checkbox', { name: 'Apply to mail already there' }).uncheck();
     await dialog.getByRole('button', { name: 'Add rule', exact: true }).click();
-    const sheet = page.getByRole('dialog', { name: 'sale@store.example.com' });
+    const sheet = page.getByRole('dialog', { name: 'sale@store.example.com', exact: true });
     await expect(sheet).toContainText('Marketing');
     expect(search(page).get('message')).toBe('m8');
     expect(search(page).has('rule')).toBe(true);

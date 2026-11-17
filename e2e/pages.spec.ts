@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { ruleToast } from './rule.ts';
 import { expect, panel, row, test } from './sift.ts';
 
 const SENDER = '/sender/me%40example.org/notifications%40code.example.com';
@@ -152,7 +153,7 @@ test.describe('A sender', () => {
   test('Unwanted is on in one press, with the rule said in its toast and nothing opened over their page', async ({ page }) => {
     await page.goto(SENDER);
     await standing(page, 'Unwanted').click();
-    await expect(page.getByRole('dialog', { name: 'Rule added' })).toContainText('Mail from notifications@code.example.com: archive it.');
+    await expect(ruleToast(page, 'Mail from notifications@code.example.com: archive it')).toContainText('Rule added');
     await expect(standing(page, 'Unwanted')).toHaveAttribute('aria-pressed', 'true');
     await expect(standing(page, 'Trust')).toHaveAttribute('aria-pressed', 'false');
     await expect(page.getByRole('dialog', { name: 'Add a rule' })).toHaveCount(0);
@@ -232,7 +233,7 @@ test.describe('A domain', () => {
   test('Block is on for everyone at the domain in one press', async ({ page }) => {
     await page.goto(DOMAIN);
     await standing(page, 'Block').click();
-    await expect(page.getByRole('dialog', { name: 'Rule added' })).toContainText('Mail from code.example.com: send it to spam.');
+    await expect(ruleToast(page, 'Mail from code.example.com: send it to spam')).toContainText('Rule added');
     await expect(standing(page, 'Block')).toHaveAttribute('aria-pressed', 'true');
   });
 });

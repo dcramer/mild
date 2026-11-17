@@ -1,4 +1,4 @@
-import { addRule, fact, openRule, ruleDialog, rulePanel, ruleRows } from './rule.ts';
+import { addRule, fact, openRule, ruleDialog, rulePanel, ruleRows, ruleToast } from './rule.ts';
 import { expect, panel, row, test } from './sift.ts';
 
 const PROPOSAL = 'Keep Receipts from billing@utility.example.net?';
@@ -35,6 +35,7 @@ test.describe('Rules from a shortcut', () => {
     await dialog.getByRole('textbox', { name: 'Value 1' }).fill('utility.example.net');
     await expect(dialog.getByText('Mail from anyone at utility.example.net.')).toBeVisible();
     await addRule(dialog);
+    await expect(ruleToast(page, 'Mail from utility.example.net, once it is Receipts: leave it in the inbox')).toContainText('Rule added');
 
     const opened = rulePanel(page, 'anyone at utility.example.net');
     await expect(fact(opened, 'Then')).toHaveText('Leave in inbox');
@@ -125,25 +126,26 @@ test.describe('Rules from a shortcut', () => {
   }) => {
     await page.goto('/sender/me%40example.org/ada%40example.org');
     const standing = page.getByRole('group', { name: 'Where Ada Lovelace stands' });
-    const said = page.getByRole('dialog', { name: 'Rule added' });
     const pressed = async (on: string | null) => {
       for (const name of ['Trust', 'Unwanted', 'Block'])
         await expect(standing.getByRole('button', { name })).toHaveAttribute('aria-pressed', String(name === on));
     };
 
     await standing.getByRole('button', { name: 'Trust' }).click();
-    await expect(said).toContainText('Mail from ada@example.org: leave it in the inbox.');
+    const kept = ruleToast(page, 'Mail from ada@example.org: leave it in the inbox');
+    await expect(kept).toContainText('Rule added');
     // Keeping mail moves nothing, so there is nothing in the inbox to apply it to.
-    await expect(said.getByRole('button', { name: 'Apply to inbox…' })).toHaveCount(0);
+    await expect(kept.getByRole('button', { name: 'Apply to inbox…' })).toHaveCount(0);
     await expect(ruleDialog(page)).toHaveCount(0);
     await pressed('Trust');
     await expect(page.getByRole('main').getByRole('link', { name: 'Mail from ada@example.org: Leave in inbox' })).toBeVisible();
 
     await standing.getByRole('button', { name: 'Block' }).click();
-    await expect(said).toContainText('Mail from ada@example.org: send it to spam.');
-    await expect(said.getByRole('button', { name: 'Apply to inbox…' })).toBeVisible();
+    const blocked = ruleToast(page, 'Mail from ada@example.org: send it to spam');
+    await expect(blocked).toContainText('Rule replaced');
+    await expect(blocked.getByRole('button', { name: 'Apply to inbox…' })).toBeVisible();
     await pressed('Block');
-    await said.getByRole('button', { name: 'Undo' }).click();
+    await blocked.getByRole('button', { name: 'Undo' }).click();
     await pressed('Trust');
 
     await standing.getByRole('button', { name: 'Trust' }).click();
@@ -203,7 +205,7 @@ test.describe('Rules from a shortcut', () => {
     await expect(standing.getByRole('button', { name: 'Block' })).toHaveAttribute('aria-pressed', 'true');
 
     await standing.getByRole('button', { name: 'Unwanted' }).click();
-    await expect(page.getByRole('dialog', { name: 'Rule added' })).toContainText('Mail from promo.example.com: archive it.');
+    await expect(ruleToast(page, 'Mail from promo.example.com: archive it')).toContainText('Rule replaced');
     await expect(standing.getByRole('button', { name: 'Unwanted' })).toHaveAttribute('aria-pressed', 'true');
     await expect(standing.getByRole('button', { name: 'Block' })).toHaveAttribute('aria-pressed', 'false');
     await expect(ruleDialog(page)).toHaveCount(0);

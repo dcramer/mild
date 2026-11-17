@@ -133,10 +133,20 @@ function which(conditions: readonly Condition[]): string[] {
 const DO = { keep: 'leave it in the inbox', archive: 'archive it', spam: 'send it to spam' } as const;
 
 /** What the rule dialog starts on, said as someone would describe the rule, for the box it opens on. */
-export function startWords(start: RuleStart, labels: readonly { id: string; name: string }[]): string {
+export const startWords = (start: RuleStart, labels: readonly { id: string; name: string }[]): string => said(start, labels);
+
+/**
+ * A rule just added, for the toast that says so: the reader should not have to open Rules to learn what it was.
+ * Its name, if it has one, stands for the mail it covers, as everywhere else; a condition in words is said with its label.
+ */
+export const addedWords = (rule: RuleStart, labels: readonly { id: string; name: string }[], given: { name?: string; when?: string } = {}): string =>
+  said(rule, labels, given).replace(/[.: ]+$/, '');
+
+function said(start: RuleStart, labels: readonly { id: string; name: string }[], { name, when }: { name?: string; when?: string } = {}): string {
   const named = (id: string | undefined) => labels.find((l) => l.id === id)?.name;
-  const mail = ['Mail', ...which(start.conditions), ...(start.facts.length > 0 ? [`that ${start.facts.map(factWords).join(' and ')}`] : [])].join(' ');
-  const label = named(start.label);
+  const mail =
+    name?.trim() || ['Mail', ...which(start.conditions), ...(start.facts.length > 0 ? [`that ${start.facts.map(factWords).join(' and ')}`] : [])].join(' ');
+  const label = when?.trim() && named(start.label) ? `${named(start.label)}, if it is “${when.trim()}”` : named(start.label);
   const waits = named(start.whenLabel);
   if (waits) return `${mail}, once it is ${waits}: ${DO[start.action ?? 'keep']}.`;
   if (start.label === INBOX) return `${mail}: ${DO.keep}.`;

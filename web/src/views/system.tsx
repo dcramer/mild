@@ -684,7 +684,7 @@ export function SystemView() {
             <Button
               onClick={() => {
                 toast('Could not undo', { tone: 'failure', description: 'Gmail answered 503.' });
-                toast('Rule added');
+                toast('Mail from deals@example.com: archive it', { description: 'Rule added' });
                 answer();
               }}
             >

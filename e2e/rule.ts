@@ -3,6 +3,9 @@ import { expect } from './sift.ts';
 
 export const ruleDialog = (page: Page) => page.getByRole('dialog', { name: 'Add a rule' });
 
+/** The toast for a rule just added, named by the rule it says. */
+export const ruleToast = (page: Page, rule: string) => page.getByRole('region', { name: 'Notifications' }).getByRole('dialog', { name: rule, exact: true });
+
 /** A rule's panel, by its title: its name, or its conditions. */
 export const rulePanel = (page: Page, title: string) => page.getByRole('dialog', { name: title, exact: true });
 
@@ -23,7 +26,12 @@ export async function addRule(dialog: Locator) {
   const apply = dialog.getByRole('checkbox', { name: 'Apply to mail already there' });
   if ((await apply.count()) > 0) await apply.uncheck();
   await add.click();
-  await expect(dialog.page().getByRole('dialog', { name: 'Rule added' })).toBeVisible();
+  await expect(
+    dialog
+      .page()
+      .getByRole('region', { name: 'Notifications' })
+      .getByText(/^Rule (added|replaced)$/),
+  ).toBeVisible();
 }
 
 /** The rule a panel shows, from the address that holds it open. */

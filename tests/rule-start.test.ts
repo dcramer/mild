@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { listRuleSummaries } from '../src/dashboard/queries/rules.ts';
 import { addRule, setRule } from '../src/store/rules.ts';
 import {
+  addedWords,
   factStart,
   keepStart,
   listStart,
@@ -83,6 +84,16 @@ describe('where each way into the rule dialog starts it', () => {
   it('says a rule that leaves mail in the inbox as that, not as a label', () => {
     expect(startWords({ conditions: [{ by: 'from', value: 'bills@example.com' }], facts: [], label: 'everything_else' }, [])).toBe(
       'Mail from bills@example.com: leave it in the inbox.',
+    );
+  });
+
+  it('says a rule just added as the rule, by its name if it has one, with no full stop', () => {
+    const labels = [{ id: 'receipts', name: 'Receipts' }];
+    const from = [{ by: 'from' as const, value: 'shop.example.com' }];
+    expect(addedWords({ conditions: from, facts: [], action: 'spam' }, labels)).toBe('Mail from shop.example.com: send it to spam');
+    expect(addedWords({ conditions: from, facts: [], label: 'receipts' }, labels, { name: ' Shop receipts ' })).toBe('Shop receipts is Receipts');
+    expect(addedWords({ conditions: from, facts: [], label: 'receipts' }, labels, { name: '', when: 'an order that shipped' })).toBe(
+      'Mail from shop.example.com is Receipts, if it is “an order that shipped”',
     );
   });
 

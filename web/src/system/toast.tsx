@@ -15,7 +15,7 @@ interface Own {
 
 /**
  * What a press did, said once in one line, after the list it changed has moved on: "Archive as Marketing",
- * "Rule added". A new one replaces the last, so Undo (and Z, Gmail's key for it) always takes back the
+ * "Mail from shop.example.com: archive it". A new one replaces the last, so Undo (and Z, Gmail's key for it) always takes back the
  * latest. It floats as a menu does, framed with the one shadow, and Undo is in the highlighter: it is the
  * one thing on it waiting on the reader. It sits clear of the bottom edge so a panel's footer stays
  * pressable. A failure is set on red, with dark words as on the highlighter, and stays until dismissed. Wrap the app in `Toaster`

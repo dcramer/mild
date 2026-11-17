@@ -2,7 +2,7 @@ import { PlusIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { paramNow, setParams } from '@/lib/route.ts';
 import { type LabelSummary, type RuleDraft, type RuleFilter, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
-import { type By, type Condition, type RuleStart, conditionsOf, matchOf, replacedBy, startWords } from '@/lib/rule-start.ts';
+import { type By, type Condition, type RuleStart, addedWords, conditionsOf, matchOf, replacedBy, startWords } from '@/lib/rule-start.ts';
 import {
   FACTS,
   type FactAnswer,
@@ -211,8 +211,17 @@ export function AddRuleDialog({
       () => {
         // Removing a rule that replaced another would not bring the other back, so only a new one can be undone.
         const fresh = added?.replaced === false ? added.id : null;
-        // The dialog just showed the rule, so the toast need not say it again.
-        toast('Rule added', fresh === null ? {} : { undo: () => takeBack(fresh) });
+        const rule: RuleStart = {
+          conditions: rows.filter(isNamed),
+          facts,
+          ...(chosen ? { label: chosen.id } : {}),
+          ...(waitsFor ? { whenLabel: waitsFor.id } : {}),
+          ...(action ? { action } : {}),
+        };
+        toast(addedWords(rule, labels, { name, when: condition }), {
+          description: added?.replaced ? 'Rule replaced' : 'Rule added',
+          ...(fresh === null ? {} : { undo: () => takeBack(fresh) }),
+        });
         onAdded?.(match, { ...(waitsFor ? { whenLabel: waitsFor.id } : {}), ...(action ? { disposition: action } : {}) });
         if (added?.filter) setOffer({ id: added.id, filter: added.filter });
         else opened(added?.id);
