@@ -328,11 +328,13 @@ export function MessagePanel({
   index,
   onIndex,
   onClose,
+  onClosing,
 }: {
   items: readonly MessageRef[];
   index: number;
   onIndex: (index: number) => void;
   onClose: () => void;
+  onClosing: () => void;
 }) {
   const item = items[index];
   // Another message from the same sender, looked at without leaving this place in the list.
@@ -349,6 +351,7 @@ export function MessagePanel({
       open
       keys
       onClose={onClose}
+      onClosing={onClosing}
       title={(data?.subject ?? (picked ? '' : item.subject)) || '(no subject)'}
       subtitle={
         data ? (

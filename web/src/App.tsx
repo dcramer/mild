@@ -1,4 +1,4 @@
-import { Component, type ReactNode, Suspense, useEffect, useState } from 'react';
+import { Component, type ReactNode, Suspense, useEffect, useRef, useState } from 'react';
 import { api, useLoaded, useOnline } from '@/lib/api.ts';
 import { ago } from '@/lib/format.ts';
 import { setParams, useParam, useRoute } from '@/lib/route.ts';
@@ -185,11 +185,15 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
   // A list can be pressed while the last panel is still sliding away, its message still in the address. That
   // press gets a panel of its own, since the closing one would only finish closing and then go Back; and it
   // takes over the closing one's history entry, or closing it would go Back to the message just closed.
+  // A message opened over one still open (from a rule made from it) gets an entry of its own, so Back returns there.
   const [opened, setOpened] = useState(0);
+  const closing = useRef(false);
   const openMessages = (items: MessageRef[], index: number) => {
+    const takeOver = closing.current;
+    closing.current = false;
     setList(items);
     setOpened((n) => n + 1);
-    show(items[index], messageId === '' ? { state: { panel: true } } : undefined);
+    show(items[index], takeOver ? undefined : { state: { panel: true } });
   };
   const accounts = manage.data?.accounts ?? [];
   const synced = accounts.map((a) => a.lastSyncedAt).filter((at) => at !== null);
@@ -253,14 +257,14 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
             ) : section === 'labels' ? (
               <LabelsView />
             ) : (
-              <Rules />
+              <Rules onOpen={openMessages} />
             )}
           </Suspense>
         </ScreenBoundary>
       </main>
       {ruleId !== '' && route[0] !== 'rules' ? (
         <Suspense fallback={null}>
-          <RuleSheet id={ruleId} onClose={() => setParams({ rule: '', apply: '' })} />
+          <RuleSheet id={ruleId} onOpen={openMessages} onClose={() => setParams({ rule: '', apply: '' })} />
         </Suspense>
       ) : null}
       {open ? (
@@ -271,8 +275,13 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
             items={open.items}
             index={open.index}
             onIndex={(index) => show(open.items[index])}
+            onClosing={() => (closing.current = true)}
             // Opened from a list here, the entry before this one is that list: go back to it, so Back and Close agree.
-            onClose={() => ((window.history.state as { panel?: boolean } | null)?.panel ? window.history.back() : show(undefined))}
+            onClose={() => {
+              closing.current = false;
+              if ((window.history.state as { panel?: boolean } | null)?.panel) window.history.back();
+              else show(undefined);
+            }}
           />
         </Suspense>
       ) : null}

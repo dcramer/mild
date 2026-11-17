@@ -6,6 +6,7 @@ import { setParams, useParam } from '@/lib/route.ts';
 import { filterStanding } from '@/views/gmail-filter.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { RulePanel, Who, whoText } from '@/views/rule-panel.tsx';
+import type { OpenMessages } from '@/views/message-panel.tsx';
 import { MADE_BY, ago, count, describeMatch, outcomeName } from '@/lib/format.ts';
 import {
   Blank,
@@ -62,7 +63,7 @@ function Result({ rule }: { rule: RuleSummary }) {
 }
 
 /** Everything sift knows without asking a model: the user's rules and the ones it learned. */
-export function Rules() {
+export function Rules({ onOpen }: { onOpen: OpenMessages }) {
   const { data, error, loading, reload } = useLoaded('rules', (signal) => api.rules(signal));
   const manage = useLoaded('rule-accounts', (signal) => api.manage(signal), 60_000);
   const remove = useAction();
@@ -187,6 +188,7 @@ export function Rules() {
           rule={rules[at]}
           active={manage.data?.active ?? false}
           position={`${at + 1} of ${rules.length}`}
+          onOpen={onOpen}
           onPrevious={at > 0 ? () => setOpen(rules[at - 1].id) : undefined}
           onNext={at < rules.length - 1 ? () => setOpen(rules[at + 1].id) : undefined}
           onClose={() => setParams({ rule: '', apply: '' })}

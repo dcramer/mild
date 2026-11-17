@@ -17,6 +17,7 @@ import { Backdrop, LayerBody, LayerHeader, useLayerOpen } from './layer.tsx';
 export function Panel({
   open,
   onClose,
+  onClosing,
   title,
   subtitle,
   position,
@@ -28,6 +29,8 @@ export function Panel({
 }: {
   open: boolean;
   onClose: () => void;
+  /** The reader dismissed it, and it is sliding away; `onClose` follows once it has. */
+  onClosing?: () => void;
   title: string;
   subtitle?: ReactNode;
   /** Where this is in the list, in words: "3 of 12". */
@@ -43,7 +46,7 @@ export function Panel({
   const popup = useRef<HTMLDivElement>(null);
   const stepping = onPrevious !== undefined || onNext !== undefined;
   return (
-    <Base.Root {...useLayerOpen(open, onClose)}>
+    <Base.Root {...useLayerOpen(open, onClose, onClosing)}>
       <Base.Portal>
         <Backdrop />
         {/* The panel takes the focus itself, not its first button, so Enter answers and does not press Next. */}

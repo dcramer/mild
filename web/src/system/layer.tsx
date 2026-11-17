@@ -23,9 +23,9 @@ export function Backdrop() {
 /**
  * The Root's open state for a layer that is drawn already open. Base UI does not animate a popup that
  * mounts open, so it opens on the next frame; and a layer the reader dismisses (Escape, a press outside,
- * the close button) slides away before `onClose` takes it off the page.
+ * the close button) slides away before `onClose` takes it off the page; `onClosing` is told as it starts to.
  */
-export function useLayerOpen(open: boolean, onClose: () => void) {
+export function useLayerOpen(open: boolean, onClose: () => void, onClosing?: () => void) {
   const [shown, setShown] = useState(false);
   const [leaving, setLeaving] = useState(false);
   useEffect(() => {
@@ -38,10 +38,15 @@ export function useLayerOpen(open: boolean, onClose: () => void) {
   return {
     open: open && shown && !leaving,
     onOpenChange: (next: boolean) => {
-      if (!next) setLeaving(true);
+      if (next) return;
+      setLeaving(true);
+      onClosing?.();
     },
     onOpenChangeComplete: (next: boolean) => {
-      if (!next && leaving) onClose();
+      if (next || !leaving) return;
+      // Still drawn after `onClose`, it is still wanted (Back went to another message): open again.
+      setLeaving(false);
+      onClose();
     },
   };
 }

@@ -1,6 +1,7 @@
 import { type RuleMatch, type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, saidOf, count, describeMatch, factAnswers, factWords, madeBy, money, outcomeName, plural, shortDate, willBe } from '@/lib/format.ts';
-import { setParams, useParam } from '@/lib/route.ts';
+import { useParam } from '@/lib/route.ts';
+import type { OpenMessages } from '@/views/message-panel.tsx';
 import { InGmail } from '@/views/gmail-filter.tsx';
 import { Blank, Button, ConfirmButton, Dialog, Does, Empty, Fact, Facts, Failure, Loading, Panel, Section, Table, Td, Tr, TrGroup, useToast } from '@/system';
 
@@ -45,9 +46,6 @@ export function whoText(match: RuleMatch): string {
   const asked = factAnswers(match.facts).map(factWords);
   return [...(named ? [named] : []), ...(asked.length > 0 ? [`${said.length > 0 ? 'that' : 'mail that'} ${asked.join(' and ')}`] : [])].join(', ');
 }
-
-/** A message opened over the rule, in the panel every list opens one in. */
-const openMessage = (accountId: string, messageId: string) => setParams({ message: messageId, account: accountId }, { state: { panel: true } });
 
 /** "Archive 20 as Marketing", and what a model must read first. */
 function applyWords(rule: RuleSummary, deciding: number, reading: number): string {
@@ -158,7 +156,7 @@ function ApplyDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => void
 }
 
 /** Mail the rule decided that is still waiting in the inbox, and the press that applies the rule there. */
-function InInbox({ rule }: { rule: RuleSummary }) {
+function InInbox({ rule, onOpen }: { rule: RuleSummary; onOpen: OpenMessages }) {
   const waiting = useLoaded(`rule-waiting ${rule.id}`, (signal) => api.ruleWaiting(rule.id, signal));
   const [applying, setApplying] = useParam('apply');
   const { total = 0, messages = [] } = waiting.data ?? {};
@@ -178,8 +176,8 @@ function InInbox({ rule }: { rule: RuleSummary }) {
           <p className="text-muted-foreground">This rule decided these, but they came before it or while Sift was off, so they were not moved.</p>
           <Table>
             <tbody>
-              {messages.map((m) => (
-                <Tr key={m.messageId} onOpen={() => openMessage(m.accountId, m.messageId)}>
+              {messages.map((m, index) => (
+                <Tr key={m.messageId} onOpen={() => onOpen(messages, index)}>
                   <Td className="w-full max-w-0 truncate">{m.subject || '(no subject)'}</Td>
                   <Td num quiet>
                     {ago(m.receivedAt)}
@@ -203,6 +201,7 @@ export function RulePanel({
   position,
   onPrevious,
   onNext,
+  onOpen,
   onClose,
 }: {
   rule: RuleSummary;
@@ -211,6 +210,8 @@ export function RulePanel({
   position?: string;
   onPrevious?: (() => void) | undefined;
   onNext?: (() => void) | undefined;
+  /** Opens a message the rule decided, over the rule. */
+  onOpen: OpenMessages;
   onClose: () => void;
 }) {
   const remove = useAction();
@@ -256,7 +257,7 @@ export function RulePanel({
           </Fact>
         </Facts>
         <InGmail rule={rule} active={active} />
-        {moves ? <InInbox rule={rule} /> : null}
+        {moves ? <InInbox rule={rule} onOpen={onOpen} /> : null}
         <div>
           <ConfirmButton
             question="Remove this rule?"
@@ -282,9 +283,9 @@ export function RulePanel({
 }
 
 /** A rule opened by id away from the Rules list, as when one has just been made. */
-export function RuleSheet({ id, onClose }: { id: string; onClose: () => void }) {
+export function RuleSheet({ id, onOpen, onClose }: { id: string; onOpen: OpenMessages; onClose: () => void }) {
   const rules = useLoaded('rules', (signal) => api.rules(signal));
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const rule = rules.data?.rules.find((r) => r.id === id);
-  return rule ? <RulePanel key={rule.id} rule={rule} active={manage.data?.active ?? false} onClose={onClose} /> : null;
+  return rule ? <RulePanel key={rule.id} rule={rule} active={manage.data?.active ?? false} onOpen={onOpen} onClose={onClose} /> : null;
 }
