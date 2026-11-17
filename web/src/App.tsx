@@ -19,6 +19,7 @@ const SenderView = lazyView(() => import('@/views/sender.tsx').then((m) => m.Sen
 const MessagePanel = lazyView(() => import('@/views/message-panel.tsx').then((m) => m.MessagePanel));
 const SignInScreen = lazyView(() => import('@/views/sign-in.tsx').then((m) => m.SignInScreen));
 // The specimen page is the largest screen and no part of using sift, so it is never fetched ahead.
+const RuleSheet = lazyView(() => import('@/views/rule-panel.tsx').then((m) => m.RuleSheet));
 const SystemView = lazyView(() => import('@/views/system.tsx').then((m) => m.SystemView));
 const PrivacyView = lazyView(() => import('@/views/legal.tsx').then((m) => m.PrivacyView));
 const TermsView = lazyView(() => import('@/views/legal.tsx').then((m) => m.TermsView));
@@ -169,6 +170,8 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
   // it; the list it was opened from, for previous and next, is only known when it was opened from one here.
   const [list, setList] = useState<MessageRef[]>([]);
   const [messageId] = useParam('message');
+  // A rule opened away from the Rules list, as when one has just been made; the list opens its own.
+  const [ruleId] = useParam('rule');
   const [accountId] = useParam('account');
   const listed = list.findIndex((item) => item.messageId === messageId && item.accountId === accountId);
   const open = messageId === '' ? null : listed === -1 ? { items: [{ accountId, messageId, subject: '' }], index: 0 } : { items: list, index: listed };
@@ -244,6 +247,11 @@ function Dashboard({ signedInAs, route }: { signedInAs: string | null; route: st
           </Suspense>
         </ScreenBoundary>
       </main>
+      {ruleId !== '' && route[0] !== 'rules' ? (
+        <Suspense fallback={null}>
+          <RuleSheet id={ruleId} onClose={() => setParams({ rule: '', apply: '' })} />
+        </Suspense>
+      ) : null}
       {open ? (
         // The panel lies over the page, so nothing moves while its code arrives.
         <Suspense fallback={null}>

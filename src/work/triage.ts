@@ -201,9 +201,8 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
 
   const { model: _given, ...modelless } = deps;
   const decide = await cascadeFor(model ? { ...deps, model } : modelless, account.id, () => asking);
-  for (const { facts, suggestOnly } of await listUndecided(db, account.id, limit)) {
+  for (const { facts, suggestOnly, applyRule } of await listUndecided(db, account.id, limit)) {
     if (over()) break;
-    const act = mailbox !== null && !suggestOnly;
     const started = performance.now();
     runId = undefined;
     const decision = await decide(facts);
@@ -222,8 +221,13 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     // With no model, mail no rule covers is not anyone's to answer yet: it stays in the queue, unrecorded, for a
     // model once one is connected, or a rule added meanwhile. A model's own "unsure" is recorded and asked about.
     if (decision.stage === 'fallback' && !model) continue;
+    // The user applied this rule to their inbox and the model has now said what the mail is: theirs to carry out, Sift on or off.
+    const pressed = applyRule !== null && decision.ruleId === applyRule && Boolean(box);
+    const into = pressed ? box : suggestOnly ? null : mailbox;
+    const act = Boolean(into);
     const decisionId = await recordDecision(db, account.id, facts.messageId, decision, {
       carryOut: act,
+      byUser: pressed,
       durationMs: Math.round(performance.now() - started),
       now: now(),
       ...(runId === undefined ? {} : { runId }),
@@ -236,7 +240,7 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
       if (proposed) report.proposed++;
     }
     report.decided[decision.disposition]++;
-    const status = act ? await carryOut(decisionId, facts.messageId, decision, mailbox) : null;
+    const status = into ? await carryOut(decisionId, facts.messageId, decision, into) : null;
     // Blocking acts on the sender's address, so the address must be proven: a message that only claims to be
     // from someone would otherwise get that someone blocked. And only once the message itself was marked spam.
     if (

@@ -1,4 +1,5 @@
 import type { Sql } from '../store/sql.ts';
+import type { RuleInbox } from './types.ts';
 
 /**
  * What the dashboard can ask the rest of sift to do. The dashboard itself may not import Gmail, the
@@ -43,6 +44,13 @@ export interface Controls {
    * the user when the rule cannot be a filter or Gmail refused.
    */
   ruleFilter(db: Sql, ruleId: string, on: boolean): Promise<void>;
+  /** The mail in the inbox now that a rule would decide, read from the rule's mailbox in Gmail. Nothing is changed. */
+  ruleInbox(db: Sql, ruleId: string): Promise<RuleInbox>;
+  /**
+   * Apply a rule to messages from its inbox preview, as the user's press: carried out on the pass this starts,
+   * Sift on or off. Mail a model must read first is carried out once it has.
+   */
+  applyRule(db: Sql, ruleId: string, messageIds: readonly string[]): Promise<{ deciding: number; reading: number }>;
   /**
    * Revoke sift's Gmail access to one of this person's mailboxes at Google, before it is removed, and stop
    * reporting on it. Resolves false when Google could not be reached; the mailbox is removed anyway.

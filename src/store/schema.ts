@@ -181,6 +181,7 @@ export const messages = pgTable(
     labelIds: jsonb('label_ids').$type<string[]>().notNull().default([]), // when synced; a snapshot, not current state
     syncedAt: time('synced_at').notNull(),
     suggestOnly: boolean('suggest_only').notNull().default(false), // pulled in from before sift was connected: suggest, never carry out
+    applyRule: text('apply_rule'), // pulled in by "Apply to inbox" on this rule: what it decides here is carried out, Sift on or off
     facts: jsonb('facts').$type<Facts>().notNull(),
     readAt: time('read_at'), // when a sync saw the user had opened it
   },

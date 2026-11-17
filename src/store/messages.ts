@@ -14,6 +14,7 @@ const COLUMNS = {
   ...ENVELOPE_COLUMNS,
   labelIds: messages.labelIds,
   suggestOnly: messages.suggestOnly,
+  applyRule: messages.applyRule,
   facts: messages.facts,
 };
 
@@ -30,6 +31,7 @@ interface Row {
   headers: string;
   labelIds: string[];
   suggestOnly: boolean;
+  applyRule: string | null;
   facts: Facts;
 }
 
@@ -54,6 +56,8 @@ interface QueuedMessage {
   facts: MessageFacts;
   /** Pulled in from before sift was connected: suggest, never act. */
   suggestOnly: boolean;
+  /** The rule the user applied to their inbox when this was pulled in: what it decides here is carried out. */
+  applyRule: string | null;
 }
 
 /**
@@ -79,7 +83,7 @@ export async function listUndecided(db: Sql, accountId: string, limit: number): 
     )
     .orderBy(desc(messages.receivedAt), asc(messages.id))
     .limit(limit);
-  return rows.map((r) => ({ suggestOnly: r.suggestOnly, facts: toMessage(db, accountId, r) }));
+  return rows.map((r) => ({ suggestOnly: r.suggestOnly, applyRule: r.applyRule, facts: toMessage(db, accountId, r) }));
 }
 
 /** The facts recorded for a message, or null if sift has not seen it. */
@@ -96,6 +100,14 @@ export async function recordFacts(db: Sql, accountId: string, messageId: string,
   await db
     .update(messages)
     .set({ facts })
+    .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
+}
+
+/** The user applied `ruleId` to their inbox: once a model has said what this message is, what that rule decides is carried out. */
+export async function markApplying(db: Sql, accountId: string, messageId: string, ruleId: string): Promise<void> {
+  await db
+    .update(messages)
+    .set({ applyRule: ruleId })
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
 }
 

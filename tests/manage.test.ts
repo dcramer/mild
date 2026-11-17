@@ -48,6 +48,11 @@ const controls: Controls = {
     calls.push(`filter ${ruleId} ${on ? 'on' : 'off'}`);
     await raw(target).run(`UPDATE rules SET filter_id = ?, filter_state = ? WHERE id = ?`, on ? 'f1' : null, on ? 'active' : null, ruleId);
   },
+  ruleInbox: async (_db, ruleId) => (
+    calls.push(`inbox ${ruleId}`),
+    { matches: [{ accountId: ACCOUNT, messageId: 'g1', subject: 'Found', receivedAt: 1, seen: false, reads: true }], capped: false, costEach: 0.001 }
+  ),
+  applyRule: async (_db, ruleId, ids) => (calls.push(`apply ${ruleId} ${ids.join(',')}`), { deciding: 0, reading: ids.length }),
   revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), true),
   checkNow: async () => void calls.push('check'),
   activity: async () => ({ running: true, lastPassAt: 5, problems: [], expired: [ACCOUNT] }),
@@ -369,6 +374,7 @@ describe('managing sift from the dashboard', () => {
       '/api/rules',
       '/api/rules/remove',
       '/api/rules/filter',
+      '/api/rules/apply',
       '/api/undo',
       '/api/backfill',
       '/api/check',
@@ -380,6 +386,24 @@ describe('managing sift from the dashboard', () => {
     expect((await call('POST', '/api/nope', {})).status).toBe(405);
     expect((await preferences(db)).active).toBe(false);
     expect(calls).toEqual([]);
+  });
+
+  it("lists what a rule decided and has not moved, and passes the inbox and the press on for the rule's mailbox", async () => {
+    const { call } = await start();
+    const id = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, labelId: 'newsletter' }, 'user');
+    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'w1', subject: 'Waiting' }), facts({ accountId: ACCOUNT, messageId: 'w2' })], '2');
+    const byRule = { disposition: 'archive', subscription: 'preserve', stage: 'rules', labelId: 'newsletter', ruleId: id, reason: 'rule' } as const;
+    await recordDecision(db, ACCOUNT, 'w1', byRule, { now: 5 });
+    await recordDecision(db, ACCOUNT, 'w2', byRule, { now: 5, carryOut: true });
+    expect((await call('GET', `/api/rules/waiting?id=${id}`)).body).toEqual({
+      total: 1,
+      messages: [{ accountId: ACCOUNT, messageId: 'w1', subject: 'Waiting', receivedAt: 0 }],
+    });
+    expect((await call('GET', `/api/rules/inbox?id=${id}`)).body).toMatchObject({ matches: [{ messageId: 'g1', reads: true }], costEach: 0.001 });
+    expect((await call('GET', '/api/rules/inbox?id=r-nobody')).status).toBe(404);
+    expect((await call('POST', '/api/rules/apply', { id, messageIds: ['g1'] })).body).toEqual({ deciding: 0, reading: 1 });
+    expect((await call('POST', '/api/rules/apply', { id, messageIds: [] })).status).toBe(400);
+    expect(calls).toEqual([`inbox ${id}`, `apply ${id} g1`]);
   });
 
   it('writes a rule to Gmail as a filter only while sift is on, and removes the filter with the rule', async () => {

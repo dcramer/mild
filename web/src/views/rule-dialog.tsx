@@ -1,5 +1,6 @@
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
+import { setParams } from '@/lib/route.ts';
 import { type LabelSummary, type RuleFilter, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
 import { type By, type RuleStart, replacedBy } from '@/lib/rule-start.ts';
 import { FACTS, type FactAnswer, type FactKey, factConditions, factParam, factWords, outcomeName } from '@/lib/format.ts';
@@ -64,13 +65,21 @@ export function AddRuleDialog({
   const [markRead, setMarkRead] = useState(false);
   const [unsubscribe, setUnsubscribe] = useState(false);
   const [offer, setOffer] = useState<{ id: string; filter: RuleFilter } | null>(null);
-  const filterStep = useFilterOffer(onClose);
+  const [applyNow, setApplyNow] = useState(true);
+  // Once it is made, the rule opens wherever this was, with what it covers in the inbox; ticked, the look at the inbox too.
+  const opened = (id: string | undefined) => {
+    onClose();
+    if (id) setParams({ rule: id, apply: applyNow && moves ? '1' : '' });
+  };
+  const filterStep = useFilterOffer(() => opened(offer?.id));
   // A rule that waits for a label takes the label a tier gives, so it names none of its own.
   const waitsFor = labels.find((l) => l.id === whenLabel);
   const chosen = waitsFor ? undefined : labels.find((l) => l.id === label);
   // A rule with no label is only an action, so it needs one; a condition in words needs a label to describe.
   const action: '' | Action = chosen ? '' : then || 'archive';
   const needsLabel = !waitsFor && condition.trim() !== '' && !chosen;
+  // An action alone that keeps mail changes nothing in the inbox.
+  const moves = chosen !== undefined || waitsFor !== undefined || action !== 'keep';
   const named = by === 'from' ? fromMatch(value) : value.trim() === '' ? {} : { [by]: value.trim() };
   const match = facts.length > 0 ? { ...named, facts: factConditions(facts) } : named;
   const ready = (value.trim() !== '' || facts.length > 0) && !needsLabel;
@@ -111,7 +120,7 @@ export function AddRuleDialog({
         toast('Rule added', fresh === null ? {} : { undo: () => takeBack(fresh) });
         onAdded?.(match, { ...(waitsFor ? { whenLabel: waitsFor.id } : {}), ...(action ? { disposition: action } : {}) });
         if (added?.filter) setOffer({ id: added.id, filter: added.filter });
-        else onClose();
+        else opened(added?.id);
       },
     );
   };
@@ -248,6 +257,13 @@ export function AddRuleDialog({
             </Field>
           </>
         )}
+        {moves ? (
+          <Field inline label="Inbox" hint="You see what it covers before anything moves.">
+            <Check checked={applyNow} onChange={setApplyNow}>
+              Apply to mail already there
+            </Check>
+          </Field>
+        ) : null}
       </Form>
     </Dialog>
   );

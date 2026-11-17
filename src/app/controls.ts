@@ -5,6 +5,7 @@ import { type Ephemeral, holding } from '../ephemeral/ephemeral.ts';
 import type { Controls } from '../dashboard/controls.ts';
 import { forgetPassStatus, passStatus } from '../work/status.ts';
 import { askForBackfill } from '../work/run.ts';
+import { applyRule, ruleInbox } from '../work/apply.ts';
 import { createGmailApi } from '../gmail/api.ts';
 import { startEval } from '../learn/evals.ts';
 import { clientFor, loadClientSecrets, revokeGrant } from '../gmail/auth.ts';
@@ -68,6 +69,13 @@ export async function buildControls(
   const choices = modelChoices(config.settings.chatgptSignIn ?? 'device-code');
   /** Pass the person's mailboxes now, not at the next tick. Nothing does while only the dashboard runs. */
   const passNow = async (db: Sql) => live.kick?.(await personOf(db));
+  /** One model call with the person's model, in dollars; null when they have none or its price is not known. */
+  const costEach = async (db: Sql) => {
+    const { model: spec } = await preferences(db);
+    if (!spec) return null;
+    const perThousand = costPerThousand(resolveModel(await modelsFor(config, live.ephemeral, db), spec).cost);
+    return perThousand === null ? null : perThousand / 1000;
+  };
   return {
     models: async (db) => {
       const available = (await (await modelsFor(config, live.ephemeral, db)).getAvailable()).filter((m) => offerModel(m.provider, m.id));
@@ -145,6 +153,21 @@ export async function buildControls(
       const deps = { db, mailbox: (await gmailFor(config, live.ephemeral, db, rule.accountId)).mailbox };
       if (on) await writeRuleFilter(deps, ruleId);
       else await removeRuleFilter(deps, ruleId);
+    },
+    ruleInbox: async (db, ruleId) => {
+      const rule = await getRuleFilter(db, ruleId);
+      if (!rule) throw new Error('That rule no longer exists.');
+      const { api } = await gmailFor(config, live.ephemeral, db, rule.accountId);
+      const { matches, capped } = await ruleInbox(db, api, rule.accountId, ruleId);
+      return { matches: matches.map((m) => ({ accountId: rule.accountId, ...m })), capped, costEach: await costEach(db) };
+    },
+    applyRule: async (db, ruleId, messageIds) => {
+      const rule = await getRuleFilter(db, ruleId);
+      if (!rule) throw new Error('That rule no longer exists.');
+      const { api } = await gmailFor(config, live.ephemeral, db, rule.accountId);
+      const applied = await applyRule(db, api, rule.accountId, ruleId, messageIds);
+      await passNow(db);
+      return applied;
     },
     revokeGmail: async (db, email) => {
       await forgetPassStatus(live.ephemeral, email);

@@ -1,0 +1,1 @@
+ALTER TABLE "messages" ADD COLUMN "apply_rule" text;

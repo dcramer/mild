@@ -1,25 +1,22 @@
 import { ArrowRightIcon, FunnelIcon, PlusIcon, Trash2Icon } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
-import { type RuleMatch, type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
-import { useParam } from '@/lib/route.ts';
-import { InGmail } from '@/views/gmail-filter.tsx';
+import { type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
+import { setParams, useParam } from '@/lib/route.ts';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
-import { ago, count, describeMatch, factAnswers, factWords, outcomeName, plural, shortDate } from '@/lib/format.ts';
+import { RulePanel, Who, whoText } from '@/views/rule-panel.tsx';
+import { ago, count, describeMatch, outcomeName } from '@/lib/format.ts';
 import {
   Blank,
   Button,
   ConfirmButton,
   Does,
   Empty,
-  Fact,
-  Facts,
   Failure,
   FilterGroup,
   Hint,
   ListView,
   Loading,
-  Panel,
   RowActions,
   Sub,
   Table,
@@ -36,38 +33,6 @@ const SOURCES = [
   ['learned', 'Sift, by blocking'],
 ] as const;
 
-const MADE_BY: Record<string, string> = { user: 'You', correction: 'Your answers', learned: 'Sift, when it blocked them' };
-const QUIET: Record<string, string> = { fromDomain: 'anyone at', to: 'sent to', listId: 'the list', subjectContains: 'subject has' };
-
-/** What a rule matches: an address alone, or a quiet word and the value; then what the mail must be, in words. */
-function Who({ match: { facts, ...match } }: { match: RuleMatch }) {
-  const named = Object.entries(match);
-  const asked = factAnswers(facts).map(factWords);
-  return (
-    <span className="name">
-      {named.map(([key, value], index) => (
-        <span key={key}>
-          {index > 0 ? <span className="font-normal text-muted-foreground">, </span> : null}
-          {QUIET[key] ? <span className="font-normal text-muted-foreground">{QUIET[key]} </span> : null}
-          {key === 'subjectContains' ? `“${value}”` : value}
-        </span>
-      ))}
-      {asked.length > 0 ? (
-        <span className="font-normal">
-          <span className="text-muted-foreground">{named.length > 0 ? ', that ' : 'mail that '}</span>
-          {asked.join(' and ')}
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
-function whoText({ facts, ...match }: RuleMatch): string {
-  const named = Object.entries(match).map(([key, value]) => `${QUIET[key] ? `${QUIET[key]} ` : ''}${key === 'subjectContains' ? `“${value}”` : value}`);
-  const asked = factAnswers(facts).map(factWords);
-  return [...named, ...(asked.length > 0 ? [`${named.length > 0 ? 'that' : 'mail that'} ${asked.join(' and ')}`] : [])].join(', ');
-}
-
 /** The rule's own action: an action rule's, or an exception to its label's. */
 const own = (rule: RuleSummary) => (rule.kind === 'label' ? rule.override : rule.disposition);
 
@@ -80,66 +45,6 @@ function Result({ rule }: { rule: RuleSummary }) {
       {rule.kind === 'label' && action ? <span className="text-muted-foreground"> · </span> : null}
       {action ? <Does action={action}>{outcomeName(action)}</Does> : null}
     </>
-  );
-}
-
-function RulePanel({
-  rule,
-  active,
-  position,
-  onPrevious,
-  onNext,
-  onClose,
-  remove,
-}: {
-  rule: RuleSummary;
-  /** Whether Sift is on, which writing a filter to Gmail needs. */
-  active: boolean;
-  position: string;
-  onPrevious: (() => void) | undefined;
-  onNext: (() => void) | undefined;
-  onClose: () => void;
-  remove: ReactNode;
-}) {
-  const action = rule.disposition;
-  return (
-    <Panel open onClose={onClose} title={whoText(rule.match)} position={position} onPrevious={onPrevious} onNext={onNext}>
-      <div className="flex flex-col gap-8">
-        <Facts>
-          {rule.kind === 'action' ? null : <Fact term={rule.kind === 'when-label' ? 'When it is' : 'Is'}>{rule.labelName}</Fact>}
-          {action ? (
-            <Fact term="Then">
-              <Does action={action}>{outcomeName(action)}</Does>
-              {rule.override && rule.kind === 'label' ? <span className="text-muted-foreground"> instead of the label’s</span> : null}
-              {[rule.markRead ? 'marked read' : null, rule.unsubscribe ? 'unsubscribed' : null].filter(Boolean).map((extra) => (
-                <span key={extra} className="text-muted-foreground">
-                  , {extra}
-                </span>
-              ))}
-            </Fact>
-          ) : null}
-          {rule.when ? <Fact term="Only when it is">{rule.when}</Fact> : null}
-          {rule.except.length > 0 ? (
-            <Fact term="Unless">
-              {rule.except.map((except, index) => (
-                <span key={index} className="block">
-                  <Who match={except} />
-                </span>
-              ))}
-            </Fact>
-          ) : null}
-          {rule.kind === 'when-label' || rule.when ? <Fact term="Reading">Sift reads each message it matches.</Fact> : null}
-          <Fact term="Used">{rule.hits === 0 ? 'Never' : `${plural(rule.hits, 'time')}${rule.lastHitAt ? `, last ${ago(rule.lastHitAt)}` : ''}`}</Fact>
-          <Fact term="Made by">
-            {MADE_BY[rule.source] ?? rule.source}, {shortDate(rule.createdAt)}
-          </Fact>
-          <Fact term="In Gmail">
-            <InGmail rule={rule} active={active} />
-          </Fact>
-        </Facts>
-        <div>{remove}</div>
-      </div>
-    </Panel>
   );
 }
 
@@ -166,20 +71,16 @@ export function Rules() {
     )
     .toSorted((a, b) => b.hits - a.hits);
   const at = rules.findIndex((r) => r.id === open);
-  const removeButton = (rule: RuleSummary, inPanel: boolean) => (
+  const removeButton = (rule: RuleSummary) => (
     <ConfirmButton
       question="Remove this rule?"
-      variant={inPanel ? 'plain' : 'quiet'}
-      {...(inPanel ? {} : { icon: <Trash2Icon aria-hidden /> })}
+      variant="quiet"
+      icon={<Trash2Icon aria-hidden />}
       disabled={remove.busy}
       onConfirm={() =>
         remove.run(
           () => api.removeRule(rule.id),
-          () => {
-            toast(`Rule removed: ${describeMatch(rule.match)}`);
-            if (inPanel) setOpen('');
-            reload();
-          },
+          () => toast(`Rule removed: ${describeMatch(rule.match)}`),
         )
       }
     >
@@ -260,7 +161,7 @@ export function Rules() {
                     </>
                   )}
                 </Td>
-                <RowActions>{removeButton(rule, false)}</RowActions>
+                <RowActions>{removeButton(rule)}</RowActions>
               </Tr>
             ))}
           </tbody>
@@ -274,8 +175,7 @@ export function Rules() {
           position={`${at + 1} of ${rules.length}`}
           onPrevious={at > 0 ? () => setOpen(rules[at - 1].id) : undefined}
           onNext={at < rules.length - 1 ? () => setOpen(rules[at + 1].id) : undefined}
-          onClose={() => setOpen('')}
-          remove={removeButton(rules[at], true)}
+          onClose={() => setParams({ rule: '', apply: '' })}
         />
       ) : null}
       {adding && accountId ? (

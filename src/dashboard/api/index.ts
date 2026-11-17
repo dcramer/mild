@@ -27,10 +27,13 @@ import modelWrite from './routes/model/post.ts';
 import modelSignoutWrite from './routes/model/signout/post.ts';
 import modelsRead from './routes/models/get.ts';
 import proposalsWrite from './routes/proposals/post.ts';
+import rulesApplyWrite from './routes/rules/apply/post.ts';
 import rulesFilterWrite from './routes/rules/filter/post.ts';
+import rulesInboxRead from './routes/rules/inbox/get.ts';
 import rulesRead from './routes/rules/get.ts';
 import rulesWrite from './routes/rules/post.ts';
 import rulesRemoveWrite from './routes/rules/remove/post.ts';
+import rulesWaitingRead from './routes/rules/waiting/get.ts';
 import senderRead from './routes/sender/get.ts';
 import standingClearWrite from './routes/standing/clear/post.ts';
 import suggestionRead from './routes/suggestion/get.ts';
@@ -56,6 +59,8 @@ export const READS: readonly Read[] = [
   messageRead,
   modelsRead,
   rulesRead,
+  rulesInboxRead,
+  rulesWaitingRead,
   senderRead,
   suggestionRead,
   suggestionsRead,
@@ -82,6 +87,7 @@ export const WRITES: readonly Write[] = [
   modelSignoutWrite,
   proposalsWrite,
   rulesWrite,
+  rulesApplyWrite,
   rulesFilterWrite,
   rulesRemoveWrite,
   standingClearWrite,

@@ -1,8 +1,9 @@
-import { actions, and, asc, decisions, eq, inArray, labels, max, rules, sql } from '../../store/query.ts';
+import { actions, alias, and, asc, count, decisions, desc, eq, inArray, labels, max, messages, rules, sql } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
+import { openEnvelope } from '../../store/content.ts';
 import { ruleFilterStatus } from '../../store/filters.ts';
 import { type Scope, within } from '../scope.ts';
-import type { FilterChange, RuleSummary } from '../types.ts';
+import type { FilterChange, RuleSummary, RuleWaiting } from '../types.ts';
 import { DAY_MS } from './decisions.ts';
 
 /** Every rule in evaluation order, with its label, what it does, and how often and how recently it decided a message. */
@@ -84,4 +85,37 @@ export async function listFilterChanges(db: Sql, scope: Scope, days: number, now
       listed.push({ ...change, type: type as FilterChange['type'], ruleId: kept.has(ruleId) ? ruleId : null, criteria: written.get(ruleId) ?? {} });
   }
   return listed.toReversed();
+}
+
+/** Shown of what a rule has decided and not carried out; the count says how many in all. */
+const MOST_WAITING = 50;
+
+/**
+ * Mail a rule decided that Sift has not moved and the user has not answered: it came while Sift was off, or
+ * before the rule and was decided again when it was made. Newest first.
+ */
+export async function ruleWaiting(db: Sql, scope: Scope, ruleId: string): Promise<RuleWaiting> {
+  const later = alias(decisions, 'later');
+  const where = and(
+    within(scope, decisions.accountId),
+    eq(decisions.ruleId, ruleId),
+    eq(decisions.carryOut, false),
+    eq(decisions.byUser, false),
+    eq(
+      decisions.id,
+      db
+        .select({ id: max(later.id) })
+        .from(later)
+        .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
+    ),
+  );
+  const [total] = await db.select({ n: count() }).from(decisions).where(where);
+  const rows = await db
+    .select({ accountId: decisions.accountId, messageId: decisions.messageId, subject: messages.subject, receivedAt: messages.receivedAt })
+    .from(decisions)
+    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .where(where)
+    .orderBy(desc(messages.receivedAt))
+    .limit(MOST_WAITING);
+  return { total: total?.n ?? 0, messages: rows.map((r) => ({ ...r, ...openEnvelope(db, r.accountId, r.messageId, r) })) };
 }
