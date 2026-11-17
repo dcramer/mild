@@ -2,12 +2,15 @@
 /**
  * Verification scaffolding: fills an empty sift home with synthetic mail and prints a session cookie for it.
  *
- *   node .claude/skills/verify-sift/scripts/seed.ts <home> <gmail.json>
+ *   node .claude/skills/verify-sift/scripts/seed.ts <home> <gmail.json> [--bare | --on]
  *
  * The mail goes through the real pass (`tick`, with sift off), so decisions, labels, suggestion
  * bodies and proposals are what sift itself would record. Only Gmail is faked, at the `GmailApi` and
  * `Mailbox` ports. Writes the fake Gmail's filters to <gmail.json>, for serve.ts to carry on from, and prints one
  * line: the `sift_session` cookie value for the connected account.
+ *
+ * `--on` then turns sift on and runs one more pass over two new messages: Lin's, which it cannot place, so it is left
+ * for the user with sift's Gmail label; and the Store's last-day sale, archived as Marketing and then undone.
  */
 import { createHmac, randomBytes } from 'node:crypto';
 import { existsSync, writeFileSync } from 'node:fs';
@@ -23,7 +26,9 @@ import { credentials } from '../../../../src/store/credentials.ts';
 import { writeSecret } from '../../../../src/secrets.ts';
 import { connectAccount } from '../../../../src/store/accounts.ts';
 import { listLabels, removeLabel } from '../../../../src/store/labels.ts';
-import { setModel } from '../../../../src/store/preferences.ts';
+import { setActive, setModel } from '../../../../src/store/preferences.ts';
+import { lastStandingChange } from '../../../../src/store/actions.ts';
+import { undo } from '../../../../src/actions/executor.ts';
 import { listProposals } from '../../../../src/store/proposals.ts';
 import { openStore } from '../../../../src/store/store.ts';
 import { addRule } from '../../../../src/store/rules.ts';
@@ -36,7 +41,7 @@ const WORK = 'me@work.example.org';
 const OTHER = 'bravo@example.net';
 
 const [home, gmailFile, variant] = process.argv.slice(2);
-if (!home || !gmailFile) throw new Error('usage: seed.ts <home> <gmail.json> [--bare]');
+if (!home || !gmailFile) throw new Error('usage: seed.ts <home> <gmail.json> [--bare | --on]');
 process.env['SIFT_HOME'] = resolve(home);
 const config = loadConfig();
 if (existsSync(config.databaseDir)) throw new Error(`${config.databaseDir} already exists. Seed an empty home.`);
@@ -142,10 +147,16 @@ for (const { raw } of inbox) mailbox.labels.set(raw.id, [...raw.labelIds]);
 // Ada's mail is a reply: the owner has written to her.
 mailbox.sentTo.add('ada@example.org');
 let cursor = 1;
+// What the next sync finds added to the inbox.
+let arriving = inbox;
 const find = (id: string) => inbox.find((m) => m.raw.id === id);
 const api: GmailApi = {
   getProfile: async () => ({ emailAddress: ACCOUNT, historyId: String(cursor) }),
-  listHistory: async () => ({ additions: cursor++ === 1 ? inbox.map((m) => ({ id: m.raw.id, labelIds: m.raw.labelIds })) : [], historyId: String(cursor) }),
+  listHistory: async () => {
+    const additions = arriving.map((m) => ({ id: m.raw.id, labelIds: m.raw.labelIds }));
+    arriving = [];
+    return { additions, historyId: String(++cursor) };
+  },
   searchInbox: async () => ({ ids: [] }),
   getMetadata: async (id) => find(id)?.raw ?? null,
   getLabelIds: async (id) => mailbox.labels.get(id) ?? null,
@@ -200,6 +211,23 @@ for (const waiting of await pendingSuggestions(db, { accountId: ACCOUNT, sender:
     now,
   );
 if ((await listProposals(db, ACCOUNT)).length !== 1) throw new Error('seed answers did not propose a rule');
+if (variant === '--on') {
+  await setActive(db, true);
+  const later = [
+    mail('Lin <lin@example.com>', 'Quick question', 'Do you have a minute today?'),
+    mail('Store <sale@store.example.com>', 'Last day of the sale', 'It ends tonight.', list('store.example.com'), ['CATEGORY_PROMOTIONS']),
+  ];
+  inbox.push(...later);
+  for (const { raw } of later) mailbox.labels.set(raw.id, [...raw.labelIds]);
+  arriving = later;
+  for (const result of await tick(store, { ephemeral, model: standIn, connect: () => ({ api, mailbox }), log: () => {} }, Infinity))
+    if (result.error) throw new Error(`seed pass failed: ${result.error}`);
+  const [lin, sale] = later.map((m) => m.raw.id);
+  if (!mailbox.labels.get(lin ?? '')?.some((l) => l.endsWith('sift/review'))) throw new Error('the pass with sift on did not leave Lin for the user');
+  const archived = await lastStandingChange(db, ACCOUNT, sale ?? '');
+  if (archived?.type !== 'archive') throw new Error('the pass with sift on did not archive the sale');
+  await undo({ db, mailbox }, archived.id);
+}
 // Three rules written to the fake Gmail as filters, as the dashboard asks: the CI one lands; the Shop one
 // lands and is then deleted in Gmail, which a check notices; Gmail does not answer for the news one.
 // A rule added after the passes, so it decides nothing, that cannot be one (Gmail cannot mark spam).

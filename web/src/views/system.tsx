@@ -221,6 +221,11 @@ export function SystemView() {
             ))}
             <Does action="review">{outcomeName('review')}</Does>
           </Row>
+          <Row label="undone" note="A change that was taken back, in a log.">
+            <Does action="archive" struck>
+              Archived
+            </Does>
+          </Row>
           <Row label="verdict" note="What Sift says mail is and does: the action, then the label. At any size; a sender's next mail is a heading.">
             <Verdict labelId="newsletters" labelName="Newsletters" disposition="archive" />
             <Verdict labelId={null} labelName={null} disposition="review" />

@@ -296,8 +296,9 @@ export const CONTACT_SAYS = {
   'one-way': 'They write often and you have never written back',
 } as const;
 
-const DID: Record<string, string> = { archive: 'Archived', spam: 'Marked spam', block: 'Blocked', keep: 'Kept' };
-const DOING: Record<string, string> = { archive: 'archive', spam: 'mark spam', block: 'block', keep: 'keep' };
+// Mail no tier could place is left in the inbox with Sift's own Gmail label: what Sift did there is ask.
+const DID: Record<string, string> = { archive: 'Archived', spam: 'Marked spam', block: 'Blocked', keep: 'Kept', review: 'Asked you' };
+const DOING: Record<string, string> = { archive: 'archive', spam: 'mark spam', block: 'block', keep: 'keep', review: 'ask you' };
 /**
  * What happened to a message, as a log says it: "Archived", "Not archived", "Waiting to archive". `tone`
  * says how to show it: an undone change is struck through, what did not happen is quiet, the rest are plain.
@@ -311,8 +312,7 @@ export function happened(d: { carryOut: boolean; outcome: string | null; actionS
   const inbox = doesName(d.labelId, d.disposition) === INBOX_NAME;
   const doing = inbox ? 'leave in inbox' : DOING[d.disposition];
   const did = inbox ? 'Left in inbox' : DID[d.disposition];
-  if (d.disposition === 'review') return { text: outcomeName('review'), tone: 'quiet' };
-  if (s === 'failed') return { text: `Not ${(did ?? d.disposition).toLowerCase()}`, tone: 'quiet' };
+  if (s === 'failed') return { text: d.disposition === 'review' ? 'Not asked' : `Not ${(did ?? d.disposition).toLowerCase()}`, tone: 'quiet' };
   if (s === 'undone') return { text: did ?? d.disposition, tone: 'undone' };
   if (s === 'waiting') return { text: `Waiting to ${doing ?? d.disposition}`, tone: 'quiet' };
   if (s === 'suggested') return { text: `Would ${doing ?? d.disposition}`, tone: 'quiet' };

@@ -9,8 +9,11 @@ const SCRIPTS = resolve(import.meta.dirname, '../.claude/skills/verify-sift/scri
 export const SEED = join(SCRIPTS, 'seed.ts');
 /** The environment variable, one per variant, global setup leaves each seeded home's place and cookie in. */
 export const TEMPLATES = 'SIFT_E2E_TEMPLATE';
-/** `full` is verify-sift's seed (its SKILL.md says what is in it); `bare` leaves the work mailbox without labels, so the page is the setting-up steps. */
-export type Variant = 'full' | 'bare';
+/**
+ * `full` is verify-sift's seed (its SKILL.md says what is in it); `bare` leaves the work mailbox without labels, so the page is the setting-up steps;
+ * `on` has had a pass with Sift on (`--on` in the seed).
+ */
+export type Variant = 'full' | 'bare' | 'on';
 
 const freePort = () =>
   new Promise<number>((done, fail) => {

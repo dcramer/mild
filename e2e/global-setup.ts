@@ -13,7 +13,7 @@ import { SEED, TEMPLATES, type Variant } from './sift.ts';
 export default async function setup() {
   await ensureWebBuilt();
   const root = mkdtempSync(join(tmpdir(), 'sift-e2e-'));
-  const variants: Record<Variant, string[]> = { full: [], bare: ['--bare'] };
+  const variants: Record<Variant, string[]> = { full: [], bare: ['--bare'], on: ['--on'] };
   await Promise.all(
     Object.entries(variants).map(async ([name, args]) => {
       const dir = join(root, name);

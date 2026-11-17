@@ -27,6 +27,21 @@ async function addAsIs(page: Page) {
   return who;
 }
 
+test.describe('Activity, after a pass with Sift on', () => {
+  test.use({ variant: 'on' });
+
+  test('mail Sift could not place says it asked you, and an undone change is struck through', async ({ page }) => {
+    await page.goto('/activity');
+    await expect(page.getByRole('radio', { name: 'Changed' })).toBeChecked();
+    await expect(row(page, 'Quick question')).toContainText('Asked you');
+    await expect(row(page, 'Quick question')).not.toContainText('Unlabelled');
+    await expect(row(page, 'Last day of the sale').getByText('Archived', { exact: true }).filter({ visible: true })).toHaveCSS(
+      'text-decoration-line',
+      'line-through',
+    );
+  });
+});
+
 test.describe('Activity', () => {
   test('lists nothing changed while Sift is off, and every decision under Everything', async ({ page }) => {
     await page.goto('/activity');
@@ -39,7 +54,7 @@ test.describe('Activity', () => {
     await expect(page.getByRole('columnheader', { name: 'Today' })).toBeVisible();
     await expect(row(page, 'Winter sale starts now')).toContainText('Would archive');
     await expect(row(page, 'Winter sale starts now')).toContainText('Marketing');
-    await expect(row(page, 'Lunch on Thursday?')).toContainText('Unlabelled');
+    await expect(row(page, 'Lunch on Thursday?')).toContainText('Would ask you');
   });
 
   test('search narrows by subject and by sender, and is kept in the address', async ({ page }) => {

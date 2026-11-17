@@ -22,7 +22,9 @@ function Happened({ row, stacked, labelled }: { row: DecisionRow; stacked?: bool
     ) : null;
   const what = (
     <>
-      <Does action={row.disposition}>{text}</Does>
+      <Does action={row.disposition} struck={tone === 'undone'}>
+        {text}
+      </Does>
       {row.byUser ? <span className="text-muted-foreground/70"> · you</span> : null}
       {label}
     </>

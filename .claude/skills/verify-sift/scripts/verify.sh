@@ -3,7 +3,7 @@
 #   home/       the sift home (seeded, synthetic)     removed by `down`
 #   evidence/   screenshots, snapshots, query output   kept by `down`
 #   pid port cookie dashboard.log gmail.json (the fake Gmail's filters)
-# Usage: verify.sh up <dir> [--bare] | doctor <dir> | ab <dir> <agent-browser args...> | sql <dir> <query> | down <dir>
+# Usage: verify.sh up <dir> [--bare | --on] | doctor <dir> | ab <dir> <agent-browser args...> | sql <dir> <query> | down <dir>
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
