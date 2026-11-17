@@ -152,16 +152,16 @@ describe('credentials', () => {
     const [alpha, beta] = [await as(1, A), await as(2, A)];
     await (await credentials(alpha, 'gmail')).write('alpha@example.org', 'alpha-token');
     const [stolen] = await stored(1);
-    await raw(beta).run('INSERT INTO credentials (kind, key, value, updated_at) VALUES (?, ?, ?, 0)', 'gmail', 'alpha@example.org', stolen!.value);
+    await raw(beta).run('INSERT INTO credentials (kind, key, value) VALUES (?, ?, ?)', 'gmail', 'alpha@example.org', stolen!.value);
     await expect((await credentials(beta, 'gmail')).read('alpha@example.org')).rejects.toThrow('person 2 gmail alpha@example.org');
-    await raw(alpha).run(`INSERT INTO credentials (kind, key, value, updated_at) VALUES ('model', 'openai', ?, 0)`, stolen!.value);
+    await raw(alpha).run(`INSERT INTO credentials (kind, key, value) VALUES ('model', 'openai', ?)`, stolen!.value);
     await expect((await credentials(alpha, 'model')).read('openai')).rejects.toThrow('person 1 model openai');
   });
 
   it('refuses a plain value once there is a key, so none can be put in place of a sealed one', async () => {
     const { as } = await people();
     const alpha = await as(1, A);
-    await raw(alpha).run(`INSERT INTO credentials (kind, key, value, updated_at) VALUES ('model', 'openai', ?, 0)`, '{"type":"api_key","key":"planted"}');
+    await raw(alpha).run(`INSERT INTO credentials (kind, key, value) VALUES ('model', 'openai', ?)`, '{"type":"api_key","key":"planted"}');
     await expect((await credentials(alpha, 'model')).read('openai')).rejects.toThrow('person 1 model openai is stored unencrypted');
     expect(await (await credentials(await as(1, NONE), 'model')).read('openai')).toBe('{"type":"api_key","key":"planted"}');
     expect(openToRekey('x', 'plain', A)).toBe('plain');

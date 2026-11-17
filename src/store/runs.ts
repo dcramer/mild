@@ -1,4 +1,4 @@
-import { type AnyColumn, type RUN_OUTCOMES, and, count, decisions, eq, inArray, isNull, messages, modelRuns, notExists, sql } from './query.ts';
+import { type AnyColumn, and, count, decisions, eq, inArray, isNull, messages, modelRuns, notExists, sql } from './query.ts';
 import type { Sql } from './sql.ts';
 import type { Usage } from '../triage/stages/model.ts';
 
@@ -6,8 +6,6 @@ import type { Usage } from '../triage/stages/model.ts';
 export const MAX_ATTEMPTS = 3;
 /** Enough for what a provider says went wrong. */
 const MAX_ERROR = 500;
-
-type RunOutcome = (typeof RUN_OUTCOMES)[number];
 
 /**
  * A call that counts against its message: one no decision came of (it failed, was cut short, or its
@@ -43,11 +41,10 @@ export async function startRun(db: Sql, run: { accountId: string; messageId: str
   return row!.id;
 }
 
-export async function finishRun(db: Sql, id: number, result: { outcome: RunOutcome; error?: string; usage?: Usage; now: number }): Promise<void> {
+export async function finishRun(db: Sql, id: number, result: { error?: string; usage?: Usage; now: number }): Promise<void> {
   await db
     .update(modelRuns)
     .set({
-      outcome: result.outcome,
       error: result.error?.slice(0, MAX_ERROR) ?? null,
       inputTokens: result.usage?.inputTokens ?? 0,
       outputTokens: result.usage?.outputTokens ?? 0,

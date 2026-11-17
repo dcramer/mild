@@ -291,7 +291,7 @@ describe('judge', () => {
 describe('preferences in the database', () => {
   async function seeded() {
     const db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1', 0);
+    await addMailbox(db, ACCOUNT, '1');
     return db;
   }
   const modelDecision = async (db: Awaited<ReturnType<typeof seeded>>, id: string, labelId: string, disposition: 'keep' | 'archive' | 'review') => {
@@ -467,7 +467,7 @@ describe('contact', () => {
 
   it('is read for many senders at once, each in their own account', async () => {
     const d = await openUserDb(ACCOUNT);
-    await addMailbox(d, ACCOUNT, '1', 0);
+    await addMailbox(d, ACCOUNT, '1');
     const from = (address: string) => ({ address, domain: address.split('@')[1]! });
     await recordSync(
       d,
@@ -498,7 +498,7 @@ describe('contact', () => {
 describe('standing', () => {
   const db = async () => {
     const d = await openUserDb(ACCOUNT);
-    await addMailbox(d, ACCOUNT, '1', 0);
+    await addMailbox(d, ACCOUNT, '1');
     return d;
   };
   const mail = async (
@@ -593,7 +593,7 @@ describe('standing', () => {
 describe('gatherEvidence', () => {
   it('caches whether the owner has written to a sender and counts history', async () => {
     const db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1', 0);
+    await addMailbox(db, ACCOUNT, '1');
     const f = facts({ accountId: ACCOUNT });
     await recordSync(db, ACCOUNT, [f], '2');
     let lookups = 0;
@@ -615,7 +615,7 @@ describe('gatherEvidence', () => {
 
   it('reports unknown instead of failing when a lookup errors', async () => {
     const db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1', 0);
+    await addMailbox(db, ACCOUNT, '1');
     const fail = async () => {
       throw new Error('network');
     };

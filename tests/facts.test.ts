@@ -130,7 +130,7 @@ describe('deriveFacts', () => {
 describe('recorded facts', () => {
   it('stores them with the message and returns them with its detail', async () => {
     const db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1', 0);
+    await addMailbox(db, ACCOUNT, '1');
     await recordSync(db, ACCOUNT, [campaign], '2');
     expect((await raw(db).get<{ facts: unknown }>('SELECT facts FROM messages'))!.facts).toEqual(sealFacts(deriveFacts(campaign)));
     expect((await messageDetail(db, await everything(db), ACCOUNT, campaign.messageId))?.facts).toMatchObject({
@@ -197,7 +197,7 @@ describe('thread context', () => {
 
   const setup = async (headers: Record<string, string>) => {
     const db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1', 0);
+    await addMailbox(db, ACCOUNT, '1');
     const message = facts({ accountId: ACCOUNT, messageId: 'reply', threadId: 't9', headers });
     await recordSync(db, ACCOUNT, [message], '2');
     const asked: string[] = [];

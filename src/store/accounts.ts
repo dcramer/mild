@@ -37,7 +37,7 @@ export async function connectAccount(store: Store, email: string, historyId: str
     await tx.insert(accounts).values({ id: email, userId: person, createdAt: now });
     return person;
   });
-  await addMailbox(await store.user(user), email, historyId, now);
+  await addMailbox(await store.user(user), email, historyId);
   return user;
 }
 
@@ -45,18 +45,18 @@ export async function connectAccount(store: Store, email: string, historyId: str
  * A mailbox in one person's own database, with the starting labels, unless it is there already. Its
  * `accounts` row must exist. Returns whether it was new.
  */
-export async function ensureMailbox(db: Sql, mailbox: { id: string; historyId?: string | null; createdAt: number }): Promise<boolean> {
+export async function ensureMailbox(db: Sql, mailbox: { id: string; historyId?: string | null }): Promise<boolean> {
   return await db.transaction(async (tx) => {
     const added = await tx.insert(mailboxes).values(mailbox).onConflictDoNothing().returning({ id: mailboxes.id });
-    if (added.length > 0) await tx.insert(labels).values(defaultLabelRows(mailbox.id, mailbox.createdAt));
+    if (added.length > 0) await tx.insert(labels).values(defaultLabelRows(mailbox.id));
     return added.length > 0;
   });
 }
 
 /** A mailbox in one person's own database, or its cursor reset if it is there already. */
-export async function addMailbox(db: Sql, id: string, historyId: string, now: number = Date.now()): Promise<void> {
+export async function addMailbox(db: Sql, id: string, historyId: string): Promise<void> {
   await db.transaction(async (tx) => {
-    if (!(await ensureMailbox(tx, { id, historyId, createdAt: now }))) await tx.update(mailboxes).set({ historyId }).where(eq(mailboxes.id, id));
+    if (!(await ensureMailbox(tx, { id, historyId }))) await tx.update(mailboxes).set({ historyId }).where(eq(mailboxes.id, id));
   });
 }
 

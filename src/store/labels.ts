@@ -96,7 +96,7 @@ export const DEFAULT_LABELS: readonly Label[] = [
   },
 ];
 
-const toRow = (accountId: string, l: Label, position: number, now: number) => ({
+const toRow = (accountId: string, l: Label, position: number) => ({
   accountId,
   id: l.id,
   name: l.name,
@@ -104,14 +104,13 @@ const toRow = (accountId: string, l: Label, position: number, now: number) => ({
   disposition: l.disposition,
   gmailLabel: l.gmailLabel,
   position,
-  updatedAt: now,
   block: l.block ?? false,
   markRead: l.markRead ?? false,
   unsubscribe: l.unsubscribe ?? false,
 });
 
 /** A new mailbox's labels, written with it (`ensureMailbox`). */
-export const defaultLabelRows = (accountId: string, now: number) => DEFAULT_LABELS.map((l, index) => toRow(accountId, l, index, now));
+export const defaultLabelRows = (accountId: string) => DEFAULT_LABELS.map((l, index) => toRow(accountId, l, index));
 
 /** An account's labels in order. */
 export async function listLabels(db: Sql, accountId: string): Promise<Label[]> {
@@ -170,7 +169,6 @@ export async function addLabel(
   db: Sql,
   accountId: string,
   label: { name: string; description: string; disposition: Disposition; block?: boolean; markRead?: boolean; unsubscribe?: boolean },
-  now: number = Date.now(),
 ): Promise<Label> {
   const name = label.name.trim();
   const id = slug(name);
@@ -189,7 +187,7 @@ export async function addLabel(
     ...extras,
     ...(label.unsubscribe ? { unsubscribe: true } : {}),
   };
-  await db.insert(labels).values(toRow(accountId, created, existing.length, now));
+  await db.insert(labels).values(toRow(accountId, created, existing.length));
   return created;
 }
 
@@ -202,7 +200,6 @@ export async function updateLabel(
   accountId: string,
   id: string,
   change: { name?: string; description?: string; disposition?: Disposition; block?: boolean; markRead?: boolean; unsubscribe?: boolean },
-  now: number = Date.now(),
 ): Promise<boolean> {
   const current = (await listLabels(db, accountId)).find((l) => l.id === id);
   if (!current) return false;
@@ -222,7 +219,6 @@ export async function updateLabel(
       block: extras.block ?? false,
       markRead: extras.markRead ?? false,
       unsubscribe: change.unsubscribe ?? current.unsubscribe ?? false,
-      updatedAt: now,
     })
     .where(and(eq(labels.accountId, accountId), eq(labels.id, id)));
   return true;

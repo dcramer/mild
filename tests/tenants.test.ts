@@ -54,7 +54,7 @@ async function seed(account: string): Promise<void> {
     conditionsHash(db, { from: `proposed@${mark}.example.com` }),
   ))!;
   await raw(db).run(
-    `INSERT INTO examples (account_id, message_id, disposition, label_id, marked_at, status, body_text, body_html) VALUES (?, ?, 'archive', 'newsletter', 1000, 'captured', ?, ?)`,
+    `INSERT INTO examples (account_id, message_id, label_id, marked_at, status, body_text, body_html) VALUES (?, ?, 'newsletter', 1000, 'captured', ?, ?)`,
     account,
     `m-${mark}`,
     `Body ${mark}`,
@@ -64,7 +64,7 @@ async function seed(account: string): Promise<void> {
   await recordSync(db, account, [facts({ accountId: account, messageId: `u-${mark}`, subject: `Unjudged ${mark}`, from: sender })], '3', 1000);
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
     const run = await startRun(db, { accountId: account, messageId: `u-${mark}`, model: 'p/m', now: 1000 });
-    await finishRun(db, run, { outcome: 'failed', error: `failed for ${mark}`, now: 1000 });
+    await finishRun(db, run, { error: `failed for ${mark}`, now: 1000 });
   }
   ids[account] = { rule, action, proposal };
 }
@@ -390,7 +390,7 @@ describe('removing a mailbox and deleting an account', () => {
 
   beforeEach(async () => {
     for (const account of [ALPHA, ALPHA_WORK, BRAVO])
-      await raw(await dbOf(account)).run(`INSERT INTO credentials (kind, key, value, updated_at) VALUES ('gmail', ?, 'token', 0)`, account);
+      await raw(await dbOf(account)).run(`INSERT INTO credentials (kind, key, value) VALUES ('gmail', ?, 'token')`, account);
   });
 
   it('removes a mailbox, revoking its access first, and leaves the rest of the person and everyone else', async () => {

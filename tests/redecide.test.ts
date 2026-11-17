@@ -65,7 +65,7 @@ const waiting = async () => (await pendingSuggestions(db)).map((s) => s.messageI
 
 beforeEach(async () => {
   db = await openUserDb(ACCOUNT);
-  await addMailbox(db, ACCOUNT, '1', 0);
+  await addMailbox(db, ACCOUNT, '1');
   serial = 0;
 });
 

@@ -16,9 +16,9 @@ export default write({
   }),
   reply: z.object({ id: z.string() }),
   touches: named,
-  run: async ({ db, now }, { accountId, name, description, disposition, markRead, unsubscribe }) => {
+  run: async ({ db }, { accountId, name, description, disposition, markRead, unsubscribe }) => {
     if (!(await listAccounts(db)).some((a) => a.id === accountId)) return null;
     const label = { name, description, ...fromOutcome(disposition), ...(markRead ? { markRead } : {}), ...(unsubscribe ? { unsubscribe } : {}) };
-    return { id: (await addLabel(db, accountId, label, now())).id };
+    return { id: (await addLabel(db, accountId, label)).id };
   },
 });

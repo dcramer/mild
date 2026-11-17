@@ -33,7 +33,7 @@ describe('migrations', () => {
   it('enforce what the schema says', async () => {
     const db = await openUserDb('acct');
     const insert = (account: string, id: string, disposition: Disposition) =>
-      db.insert(labels).values({ accountId: account, id, name: 'N', description: '', disposition, gmailLabel: 'sift/n', position: 0, updatedAt: 0 }).execute();
+      db.insert(labels).values({ accountId: account, id, name: 'N', description: '', disposition, gmailLabel: 'sift/n', position: 0 }).execute();
     await insert('acct', 'n', 'archive');
     await expect(insert('acct', 'x', 'delete' as Disposition)).rejects.toThrow();
     await expect(insert('missing', 'y', 'keep')).rejects.toThrow();
@@ -116,9 +116,9 @@ describe("a person's data", () => {
       expect(await raw(other).all('SELECT id FROM mailboxes WHERE id = ?', 'alpha@example.org')).toEqual([]);
     }
     // Nor can a person write a row as someone else, into someone else's mailbox, or over their rows.
-    await expect(
-      raw(bravo).run('INSERT INTO credentials (user_id, kind, key, value, updated_at) VALUES (?, ?, ?, ?, 0)', alphaId, 'model', 'openai', 'x'),
-    ).rejects.toThrow('row-level security');
+    await expect(raw(bravo).run('INSERT INTO credentials (user_id, kind, key, value) VALUES (?, ?, ?, ?)', alphaId, 'model', 'openai', 'x')).rejects.toThrow(
+      'row-level security',
+    );
     await expect(
       raw(bravo).run(
         `INSERT INTO correspondents (account_id, address_hash, domain_hash, user_has_written, checked_at) VALUES ('alpha@example.org', 'y@example.com', 'example.com', true, 0)`,
@@ -216,7 +216,7 @@ describe('a new mailbox', () => {
     expect((await listLabels(db, 'alpha@example.org')).map((l) => l.id)).toEqual(ids);
     await updateLabel(db, 'alpha@example.org', 'newsletter', { name: 'Reading' });
     await connectAccount(store, 'alpha@example.org', '9', 5);
-    await addMailbox(db, 'alpha@example.org', '10', 6);
+    await addMailbox(db, 'alpha@example.org', '10');
     expect((await listLabels(db, 'alpha@example.org')).map((l) => l.name)).toContain('Reading');
     // A store opened afresh puts back a mailbox missing from a person's database, labels and all.
     await raw(db).run('DELETE FROM mailboxes');

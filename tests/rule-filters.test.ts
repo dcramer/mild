@@ -126,7 +126,7 @@ const actions = async () =>
 
 beforeEach(async () => {
   db = await openUserDb(ACCOUNT);
-  await addMailbox(db, ACCOUNT, '1', 0);
+  await addMailbox(db, ACCOUNT, '1');
   mailbox = new FakeMailbox();
   clock = 1000;
 });

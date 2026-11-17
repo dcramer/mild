@@ -159,8 +159,7 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
       const run = await startRun(db, { accountId, messageId, model: tier.model, now: now() });
       const verdict = await tier.judge(input).catch((error: unknown): JudgeFailure => ({ failed: describeFailure(error) }));
       const usage = verdict.usage ? { usage: verdict.usage } : {};
-      if ('failed' in verdict) await finishRun(db, run, { outcome: 'failed', error: verdict.failed, ...usage, now: now() });
-      else await finishRun(db, run, { outcome: 'judged', ...usage, now: now() });
+      await finishRun(db, run, { ...('failed' in verdict ? { error: verdict.failed } : {}), ...usage, now: now() });
       if ('failed' in verdict && !verdict.unusable) errors.push(run);
       else {
         errors = [];

@@ -132,9 +132,7 @@ describe("a person's handle, without row-level security", () => {
   });
 
   it('writes their id on every row it adds, and never lets anyone set it', async () => {
-    await alpha
-      .insert(labels)
-      .values({ accountId: ALPHA, id: 'l', name: 'L', description: '', disposition: 'keep', gmailLabel: 'sift/l', position: 0, updatedAt: 0 });
+    await alpha.insert(labels).values({ accountId: ALPHA, id: 'l', name: 'L', description: '', disposition: 'keep', gmailLabel: 'sift/l', position: 0 });
     // Each mailbox starts with the default labels; the one added here is the only 'l'.
     expect((await everyone('labels')).filter((r) => r['id'] === 'l').map((r) => r['user_id'])).toEqual([1]);
     const forged = {

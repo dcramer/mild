@@ -68,7 +68,7 @@ describe('replaying the model over stored examples', () => {
 
   beforeEach(async () => {
     db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1', 0);
+    await addMailbox(db, ACCOUNT, '1');
     seen = [];
     // Each arrives, then is answered before the next arrives.
     await storeExample(db, ACCOUNT, { id: 'e1', from: 'news@example.com', label: 'newsletter', body: 'Issue 12.', receivedAt: 10, markedAt: 11 });
@@ -123,8 +123,8 @@ describe('replaying the model over stored examples', () => {
     );
     await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'later', from: news, receivedAt: 30 })], '5');
     await raw(db).run(
-      `INSERT INTO examples (account_id, message_id, disposition, label_id, marked_at, status, body_text)
-       VALUES (?, 'judged', 'keep', 'personal', 99, 'captured', 'Hello.')`,
+      `INSERT INTO examples (account_id, message_id, label_id, marked_at, status, body_text)
+       VALUES (?, 'judged', 'personal', 99, 'captured', 'Hello.')`,
       ACCOUNT,
     );
     await rememberCorrespondent(db, ACCOUNT, news.address, true);

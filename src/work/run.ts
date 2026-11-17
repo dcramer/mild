@@ -259,7 +259,7 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
     // Out of time, the text the model read is still kept for the mail it left waiting, and nothing more is fetched.
     await keepSuggestionBodies(db, api, account.id, options.now, { held, fetch: !out });
     if (out) return finish(result, active, options, true);
-    result.captured = await captureExamples(db, api, account.id, options.now);
+    result.captured = await captureExamples(db, api, account.id);
     try {
       const filters = await checkFiltersWhenDue(deps, account.id, active);
       if (filters) result.filters = filters;

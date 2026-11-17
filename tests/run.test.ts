@@ -82,7 +82,7 @@ const decisions = async () =>
 
 beforeEach(async () => {
   db = await openUserDb(ACCOUNT);
-  await addMailbox(db, ACCOUNT, '1', 0);
+  await addMailbox(db, ACCOUNT, '1');
   mailbox = new FakeMailbox();
   logs = [];
   cursor = 1;
@@ -354,7 +354,7 @@ describe('teaching from Gmail', () => {
       rule_id: null,
       reason: 'you said this is Newsletters, and to keep it',
     });
-    expect(await raw(db).all('SELECT message_id, disposition FROM examples')).toEqual([{ message_id: 'news', disposition: 'keep' }]);
+    expect(await raw(db).all('SELECT message_id FROM examples')).toEqual([{ message_id: 'news' }]);
     expect(await listRules(db, ACCOUNT)).toHaveLength(2);
     expect(mailbox.modifyCalls).toBe(calls);
     expect(logs.at(-1)).toMatch(/learned from 1 message you moved or relabelled in Gmail/);
@@ -455,10 +455,7 @@ describe('teaching from Gmail', () => {
       { message_id: 'news', verdict: 'right', disposition: 'archive', label_id: 'newsletter', via: 'gmail' },
       { message_id: 'ada', verdict: 'right', disposition: 'archive', label_id: 'personal', via: 'gmail' },
     ]);
-    expect(await raw(db).all('SELECT message_id, disposition FROM examples ORDER BY message_id')).toEqual([
-      { message_id: 'ada', disposition: 'archive' },
-      { message_id: 'news', disposition: 'archive' },
-    ]);
+    expect(await raw(db).all('SELECT message_id FROM examples ORDER BY message_id')).toEqual([{ message_id: 'ada' }, { message_id: 'news' }]);
 
     mailbox.history.push(...again);
     expect(await pass(false)).toBe(0);
@@ -739,7 +736,7 @@ describe('inference tier', () => {
 });
 
 describe('a failed model call', () => {
-  const runs = async () => await raw(db).all('SELECT message_id, model, outcome, error, cost_usd FROM model_runs ORDER BY id');
+  const runs = async () => await raw(db).all('SELECT message_id, model, error, cost_usd FROM model_runs ORDER BY id');
   const usage = { model: 'test/model', inputTokens: 900, outputTokens: 5, costUsd: 0.001 };
   /** A provider that is down. */
   const failing =
@@ -778,7 +775,6 @@ describe('a failed model call', () => {
       Array.from({ length: 3 }, () => ({
         message_id: 'news',
         model: 'test/model',
-        outcome: 'failed',
         error: 'the model did not return a usable verdict',
         cost_usd: 0.001,
       })),
@@ -799,7 +795,7 @@ describe('a failed model call', () => {
       },
     });
     await runOnce(db, { ...options(), model: throwing });
-    expect(await runs()).toEqual([{ message_id: 'news', model: 'test/model', outcome: 'failed', error: 'HTTP 429 rate limited', cost_usd: 0 }]);
+    expect(await runs()).toEqual([{ message_id: 'news', model: 'test/model', error: 'HTTP 429 rate limited', cost_usd: 0 }]);
   });
 
   it('uses up no tries while the provider is down: a pass in which the model never answers', async () => {
@@ -817,7 +813,7 @@ describe('a failed model call', () => {
     await runOnce(db, { ...options(), model: flaky(['m2', 'm4', 'm5', 'm6', 'm7'], asked) });
     expect(asked).toEqual(['m1', 'm2', 'm3', 'm4', 'm5', 'm6']);
     expect(await excused()).toEqual(['m4', 'm5', 'm6']);
-    expect(await raw(db).all(`SELECT message_id FROM model_runs WHERE outcome = 'failed' AND retried_at IS NULL`)).toEqual([{ message_id: 'm2' }]);
+    expect(await raw(db).all(`SELECT message_id FROM model_runs WHERE error IS NOT NULL AND retried_at IS NULL`)).toEqual([{ message_id: 'm2' }]);
     expect((await listUndecided(db, ACCOUNT, 10)).map((m) => m.facts.messageId)).toEqual(['m2', 'm4', 'm5', 'm6', 'm7']);
   });
 
@@ -825,7 +821,7 @@ describe('a failed model call', () => {
     inbox = [inbox[0]!];
     await runOnce(db, options());
     for (let i = 0; i < MAX_ATTEMPTS; i++)
-      await finishRun(db, await startRun(db, { accountId: ACCOUNT, messageId: 'news', model: 'test/model', now: 0 }), { outcome: 'judged', usage, now: 0 });
+      await finishRun(db, await startRun(db, { accountId: ACCOUNT, messageId: 'news', model: 'test/model', now: 0 }), { usage, now: 0 });
     expect(await listUndecided(db, ACCOUNT, 10)).toEqual([]);
   });
 
@@ -864,7 +860,7 @@ describe('a failed model call', () => {
     expect(await putBackInQueue(db, ACCOUNT, 'news', 6000)).toBe(false);
     await runOnce(db, { ...options(), model: async () => ({ model: 'test/model', judge: async () => ({ label: 'newsletter', reason: 'r' }) }) });
     expect(await decisions()).toMatchObject([{ message_id: 'news', stage: 'model' }]);
-    expect((await runs()).at(-1)).toEqual({ message_id: 'news', model: 'test/model', outcome: 'judged', error: null, cost_usd: 0 });
+    expect((await runs()).at(-1)).toEqual({ message_id: 'news', model: 'test/model', error: null, cost_usd: 0 });
   });
 });
 
@@ -1022,9 +1018,8 @@ describe('examples', () => {
     bodies.clear();
     const [result] = await runOnce(await active(false), options());
     expect(result?.captured).toBe(0);
-    expect(await raw(db).get('SELECT label_id, disposition, body_text FROM examples')).toEqual({
+    expect(await raw(db).get('SELECT label_id, body_text FROM examples')).toEqual({
       label_id: 'newsletter',
-      disposition: 'archive',
       body_text: 'sift-plain:The full text of the newsletter.',
     });
     expect(mailbox.modifyCalls).toBe(0);

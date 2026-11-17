@@ -53,7 +53,7 @@ const decisionsOf = async (id: string) =>
 
 beforeEach(async () => {
   db = await openUserDb(ACCOUNT);
-  await addMailbox(db, ACCOUNT, '1', 0);
+  await addMailbox(db, ACCOUNT, '1');
 });
 
 describe('searching the inbox for a rule', () => {

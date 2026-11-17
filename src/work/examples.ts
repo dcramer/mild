@@ -10,7 +10,7 @@ const PER_PASS = 50;
  * training data. A message that no longer exists is recorded as gone, keeping the answer. A failed
  * fetch leaves the example pending for the next pass. Returns how many were captured.
  */
-export async function captureExamples(db: Sql, api: Pick<GmailApi, 'getContent'>, accountId: string, now: () => number = Date.now): Promise<number> {
+export async function captureExamples(db: Sql, api: Pick<GmailApi, 'getContent'>, accountId: string): Promise<number> {
   const pending = await db
     .select({ messageId: examples.messageId })
     .from(examples)
@@ -22,7 +22,7 @@ export async function captureExamples(db: Sql, api: Pick<GmailApi, 'getContent'>
     const example = and(eq(examples.accountId, accountId), eq(examples.messageId, messageId));
     const content = await api.getContent(messageId);
     if (content === null) {
-      await db.update(examples).set({ status: 'gone', capturedAt: now() }).where(example);
+      await db.update(examples).set({ status: 'gone' }).where(example);
       continue;
     }
     await db
@@ -31,7 +31,6 @@ export async function captureExamples(db: Sql, api: Pick<GmailApi, 'getContent'>
         status: 'captured',
         bodyText: sealPart(db, accountId, messageId, 'text', content.text),
         bodyHtml: sealPart(db, accountId, messageId, 'html', content.html),
-        capturedAt: now(),
       })
       .where(example);
     captured++;

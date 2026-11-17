@@ -37,7 +37,7 @@ export function storeOn(driver: Driver, keys: Keyring): Store {
   const open = async (id: number) => {
     const db = handle(driver, id, keys);
     // A mailbox is added to `accounts` first, so one can be missing here after a crash in between.
-    const theirs = await central.select({ id: accounts.id, createdAt: accounts.createdAt }).from(accounts).where(eq(accounts.userId, id));
+    const theirs = await central.select({ id: accounts.id }).from(accounts).where(eq(accounts.userId, id));
     await db.transaction(async (tx) => {
       await tx.insert(preferences).values({}).onConflictDoNothing();
       for (const mailbox of theirs) await ensureMailbox(tx, mailbox);

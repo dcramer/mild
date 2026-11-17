@@ -102,7 +102,7 @@ describe('content facts', () => {
   it('are recorded with the message once it has been read; the model is shown an attachment and no tracking', async () => {
     const ACCOUNT = 'me@example.org';
     const db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1', 0);
+    await addMailbox(db, ACCOUNT, '1');
     const f = facts({ accountId: ACCOUNT });
     await recordSync(db, ACCOUNT, [f], '2');
     expect(await storedFacts(db, ACCOUNT, f.messageId)).not.toHaveProperty('trackingPixel');

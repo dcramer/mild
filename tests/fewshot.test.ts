@@ -214,7 +214,7 @@ describe('stored examples', () => {
   let db: Sql;
   beforeEach(async () => {
     db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1', 0);
+    await addMailbox(db, ACCOUNT, '1');
     await storeExample(db, ACCOUNT, {
       id: 'e1',
       from: 'news@example.com',

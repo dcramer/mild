@@ -26,7 +26,11 @@ const NOW = Date.UTC(2026, 5, 15, 12);
 
 async function modelRun(db: Sql, messageId: string, costUsd: number, outcome: 'judged' | 'failed' = 'judged'): Promise<number> {
   const run = await startRun(db, { accountId: ACCOUNT, messageId, model: 'test-model', now: NOW - 2 * DAY });
-  await finishRun(db, run, { outcome, usage: { model: 'test-model', inputTokens: 900, outputTokens: 100, costUsd }, now: NOW - 2 * DAY });
+  await finishRun(db, run, {
+    ...(outcome === 'failed' ? { error: 'failed' } : {}),
+    usage: { model: 'test-model', inputTokens: 900, outputTokens: 100, costUsd },
+    now: NOW - 2 * DAY,
+  });
   return run;
 }
 
@@ -82,7 +86,7 @@ const seeded = async () => (await seededStore()).db;
 describe('tracking', () => {
   it('stores the headers with each message, and never a body', async () => {
     const db = await openUserDb(ACCOUNT);
-    await addMailbox(db, ACCOUNT, '1', 0);
+    await addMailbox(db, ACCOUNT, '1');
     await recordSync(
       db,
       ACCOUNT,

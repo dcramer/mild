@@ -169,7 +169,7 @@ describe('teaching', () => {
     expect(await listRules(db, ACCOUNT)).toEqual([]);
     expect(await raw(db).all('SELECT verdict, disposition, label_id FROM feedback')).toEqual([{ verdict: 'wrong', disposition: 'keep', label_id: 'personal' }]);
     // The message itself is what the model is shown next time.
-    expect(await raw(db).get('SELECT disposition, label_id FROM examples')).toEqual({ disposition: 'keep', label_id: 'personal' });
+    expect(await raw(db).get('SELECT label_id FROM examples')).toEqual({ label_id: 'personal' });
     expect(await accuracy(db)).toMatchObject({ reviewed: 1, right: 0 });
   });
 
@@ -202,7 +202,7 @@ describe('teaching', () => {
   it('keeps a relabelled message as an example of the label it was given', async () => {
     const decisionId = await suggest('scam@example.net', 'archive', { labelId: 'marketing' });
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'scam@example.net', label: 'phishing', scope: 'once', decisionId });
-    expect(await raw(db).get('SELECT disposition, label_id FROM examples')).toEqual({ disposition: 'spam', label_id: 'phishing' });
+    expect(await raw(db).get('SELECT label_id FROM examples')).toEqual({ label_id: 'phishing' });
   });
 
   it('an answer about one message is recorded but makes no rule', async () => {
@@ -308,8 +308,7 @@ describe('an answer pressed in the dashboard', () => {
       label_id: 'newsletter',
       via: 'dashboard',
     });
-    expect(await raw(db).get(`SELECT disposition, label_id FROM examples WHERE message_id = 'stuck'`)).toEqual({
-      disposition: 'archive',
+    expect(await raw(db).get(`SELECT label_id FROM examples WHERE message_id = 'stuck'`)).toEqual({
       label_id: 'newsletter',
     });
     expect(await listUnjudged(db, scope, 10)).toEqual([]);
@@ -369,7 +368,7 @@ describe('an answer pressed in the dashboard', () => {
       label_id: 'newsletter',
     });
     expect(await raw(db).get(`SELECT verdict, disposition, label_id FROM feedback`)).toEqual({ verdict: 'right', disposition: 'keep', label_id: 'newsletter' });
-    expect(await raw(db).get(`SELECT disposition, label_id FROM examples WHERE message_id = 'm1'`)).toEqual({ disposition: 'keep', label_id: 'newsletter' });
+    expect(await raw(db).get(`SELECT label_id FROM examples WHERE message_id = 'm1'`)).toEqual({ label_id: 'newsletter' });
   });
 
   it('answers that keep mail its label would move propose no rule that would move it', async () => {
@@ -477,7 +476,7 @@ describe('correcting a decision that is not waiting', () => {
     // The rule says what happens to their mail; what this message is was corrected on the message alone.
     expect(await ruleFor('bids@example.com')).toEqual([{ disposition: 'keep', source: 'correction' }]);
     expect(await raw(db).get('SELECT verdict, disposition, label_id FROM feedback')).toEqual({ verdict: 'wrong', disposition: 'keep', label_id: 'personal' });
-    expect(await raw(db).get('SELECT disposition, label_id FROM examples')).toEqual({ disposition: 'keep', label_id: 'personal' });
+    expect(await raw(db).get('SELECT label_id FROM examples')).toEqual({ label_id: 'personal' });
     expect(await accuracy(db)).toMatchObject({ reviewed: 1, right: 0 });
   });
 
@@ -681,9 +680,9 @@ describe('examples', () => {
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'keep', { labelId: 'personal' });
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' }, 50);
-    expect(await raw(db).all('SELECT message_id, disposition, label_id, status, body_text FROM examples ORDER BY message_id')).toEqual([
-      { message_id: 'm1', disposition: 'archive', label_id: 'newsletter', status: 'pending', body_text: null },
-      { message_id: 'm2', disposition: 'archive', label_id: 'newsletter', status: 'pending', body_text: null },
+    expect(await raw(db).all('SELECT message_id, label_id, status, body_text FROM examples ORDER BY message_id')).toEqual([
+      { message_id: 'm1', label_id: 'newsletter', status: 'pending', body_text: null },
+      { message_id: 'm2', label_id: 'newsletter', status: 'pending', body_text: null },
     ]);
   });
 
@@ -708,10 +707,10 @@ describe('examples', () => {
     );
     await suggest('news@example.com', 'archive', NEWS); // m3: not kept yet
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', scope: 'sender' }, 50);
-    expect(await raw(db).all('SELECT message_id, status, body_text, body_html, captured_at FROM examples ORDER BY message_id')).toEqual([
-      { message_id: 'm1', status: 'captured', body_text: 'sift-plain:Text of m1', body_html: 'sift-plain:<p>m1</p>', captured_at: 50 },
-      { message_id: 'm2', status: 'pending', body_text: null, body_html: null, captured_at: null },
-      { message_id: 'm3', status: 'pending', body_text: null, body_html: null, captured_at: null },
+    expect(await raw(db).all('SELECT message_id, status, body_text, body_html FROM examples ORDER BY message_id')).toEqual([
+      { message_id: 'm1', status: 'captured', body_text: 'sift-plain:Text of m1', body_html: 'sift-plain:<p>m1</p>' },
+      { message_id: 'm2', status: 'pending', body_text: null, body_html: null },
+      { message_id: 'm3', status: 'pending', body_text: null, body_html: null },
     ]);
 
     const fetched: string[] = [];
@@ -737,12 +736,12 @@ describe('examples', () => {
         return id === 'm2' ? null : { text: 'Hello there.', html: '<p>Hello there.</p>', facts: { hasAttachments: false } };
       },
     };
-    await expect(captureExamples(db, api, ACCOUNT, () => 99)).rejects.toThrow('network');
-    const stored = await raw(db).all('SELECT message_id, status, body_text, body_html, captured_at FROM examples ORDER BY message_id');
+    await expect(captureExamples(db, api, ACCOUNT)).rejects.toThrow('network');
+    const stored = await raw(db).all('SELECT message_id, status, body_text, body_html FROM examples ORDER BY message_id');
     expect(stored).toEqual([
-      { message_id: 'm1', status: 'captured', body_text: 'sift-plain:Hello there.', body_html: 'sift-plain:<p>Hello there.</p>', captured_at: 99 },
-      { message_id: 'm2', status: 'gone', body_text: null, body_html: null, captured_at: 99 },
-      { message_id: 'm3', status: 'pending', body_text: null, body_html: null, captured_at: null },
+      { message_id: 'm1', status: 'captured', body_text: 'sift-plain:Hello there.', body_html: 'sift-plain:<p>Hello there.</p>' },
+      { message_id: 'm2', status: 'gone', body_text: null, body_html: null },
+      { message_id: 'm3', status: 'pending', body_text: null, body_html: null },
     ]);
 
     failing = false;

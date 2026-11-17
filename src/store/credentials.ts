@@ -36,10 +36,10 @@ export async function credentials(db: Sql, kind: CredentialKind): Promise<Creden
     write: async (key, text) => {
       await db
         .insert(credentialRows)
-        .values({ kind, key, value: sealSecret(name(kind, key), text, keys), updatedAt: Date.now() })
+        .values({ kind, key, value: sealSecret(name(kind, key), text, keys) })
         .onConflictDoUpdate({
           target: [credentialRows.userId, credentialRows.kind, credentialRows.key],
-          set: { value: sql`excluded.value`, updatedAt: sql`excluded.updated_at` },
+          set: { value: sql`excluded.value` },
         });
     },
     remove: async (key) => {

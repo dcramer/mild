@@ -345,9 +345,9 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
       // A message gone from Gmail was kept empty; fetching it again records it as gone.
       const held =
         kept && (kept.html !== null || openPart(tx, target.accountId, target.messageId, 'text', kept.text) !== '')
-          ? { status: 'captured' as const, bodyText: kept.text, bodyHtml: kept.html, capturedAt: now }
+          ? { status: 'captured' as const, bodyText: kept.text, bodyHtml: kept.html }
           : {};
-      const marked = { disposition: wanted, labelId: is, markedAt: now, ...held };
+      const marked = { labelId: is, markedAt: now, ...held };
       await tx
         .insert(examples)
         .values({ accountId: target.accountId, messageId: target.messageId, ...marked })

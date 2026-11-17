@@ -77,12 +77,10 @@ export async function storeExample(
   await db.insert(examples).values({
     accountId,
     messageId: example.id,
-    disposition: 'keep',
     labelId: example.label,
     markedAt: example.markedAt ?? 0,
     status: 'captured',
     bodyText: sealPart(db, accountId, example.id, 'text', example.body ?? `Body of ${example.id}`),
-    capturedAt: example.markedAt ?? 0,
   });
 }
 

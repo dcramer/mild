@@ -52,7 +52,6 @@ const FEEDBACK_VIA = ['dashboard', 'gmail'] as const;
 export const EXAMPLE_STATUSES = ['pending', 'captured', 'gone'] as const;
 /** interrupted: sift stopped while it ran. */
 export const EVAL_STATUSES = ['running', 'done', 'failed', 'interrupted'] as const;
-export const RUN_OUTCOMES = ['judged', 'failed'] as const;
 
 /** What sift's own queries run as: it owns nothing and cannot bypass row-level security. */
 export const siftApp = pgRole('sift_app', { createRole: false });
@@ -117,7 +116,6 @@ export const mailboxes = pgTable(
     lastSyncedAt: time('last_synced_at'),
     filtersCheckedAt: time('filters_checked_at'),
     aliases: jsonb('aliases').$type<string[]>().notNull().default([]), // Gmail send-as addresses besides the id, as of the last sync that could read them
-    createdAt: time('created_at').notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),
@@ -153,7 +151,6 @@ export const credentials = pgTable(
     kind: text('kind', { enum: CREDENTIAL_KINDS }).notNull(),
     key: text('key').notNull(),
     value: text('value').notNull(),
-    updatedAt: time('updated_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.kind, t.key] }), oneOf('credentials_kind', t.kind, CREDENTIAL_KINDS), own()],
 ).enableRLS();
@@ -209,7 +206,6 @@ export const labels = pgTable(
     unsubscribe: boolean('unsubscribe').notNull().default(false),
     gmailLabel: text('gmail_label').notNull(),
     position: integer('position').notNull(),
-    updatedAt: time('updated_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.accountId, t.id] }), mailbox(t), oneOf('labels_disposition', t.disposition, DISPOSITIONS), own()],
 ).enableRLS();
@@ -228,8 +224,7 @@ export const modelRuns = pgTable(
     messageId: text('message_id').notNull(),
     model: text('model').notNull(),
     startedAt: time('started_at').notNull(),
-    finishedAt: time('finished_at'),
-    outcome: text('outcome', { enum: RUN_OUTCOMES }), // null: the pass stopped part-way, which counts as failed
+    finishedAt: time('finished_at'), // null: the pass stopped part-way. An error says it failed; no decision pointing at it says it reached none
     error: text('error'),
     inputTokens: integer('input_tokens').notNull().default(0),
     outputTokens: integer('output_tokens').notNull().default(0),
@@ -240,7 +235,6 @@ export const modelRuns = pgTable(
     unique('model_runs_own').on(t.userId, t.id),
     mailbox(t),
     message(t),
-    oneOf('model_runs_outcome', t.outcome, RUN_OUTCOMES),
     index('model_runs_message').on(t.accountId, t.messageId),
     index('model_runs_time').on(t.accountId, t.startedAt),
     own(),
@@ -468,20 +462,17 @@ export const examples = pgTable(
     userId: userId(),
     accountId: text('account_id').notNull(),
     messageId: text('message_id').notNull(),
-    disposition: text('disposition', { enum: DECIDED }).notNull(),
     labelId: text('label_id'),
     markedAt: time('marked_at').notNull(),
     status: text('status', { enum: EXAMPLE_STATUSES }).notNull().default('pending'),
     bodyText: text('body_text'), // the readable text, as the model would be shown it
     bodyHtml: text('body_html'), // its HTML part as Gmail holds it, cleaned only when shown; null when it has none
-    capturedAt: time('captured_at'),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.accountId, t.messageId] }),
     mailbox(t),
     message(t),
     label('examples_label', t, t.labelId),
-    oneOf('examples_disposition', t.disposition, DECIDED),
     oneOf('examples_status', t.status, EXAMPLE_STATUSES),
     index('examples_pending')
       .on(t.accountId)

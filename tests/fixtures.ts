@@ -222,7 +222,7 @@ export async function recordEverything(db: Sql, account: string): Promise<void> 
     account,
   ))!;
   for (const [statement, ...params] of [
-    [`INSERT INTO credentials (kind, key, value, updated_at) VALUES ('gmail', ?, 'x', 0)`, account],
+    [`INSERT INTO credentials (kind, key, value) VALUES ('gmail', ?, 'x')`, account],
     [
       `INSERT INTO actions (account_id, message_id, type, payload, original_labels, status, created_at, decision_id) VALUES (?, ?, 'archive', '{}', '[]', 'done', 0, ?)`,
       account,
@@ -245,9 +245,9 @@ export async function recordEverything(db: Sql, account: string): Promise<void> 
       account,
       decision,
     ],
-    [`INSERT INTO examples (account_id, message_id, disposition, label_id, marked_at) VALUES (?, ?, 'archive', 'newsletter', 0)`, account, message],
+    [`INSERT INTO examples (account_id, message_id, label_id, marked_at) VALUES (?, ?, 'newsletter', 0)`, account, message],
     [`INSERT INTO suggestion_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, ?, 'Hello.', 0)`, account, message],
-    [`INSERT INTO model_runs (account_id, message_id, model, started_at, outcome, error) VALUES (?, ?, 'p/m', 0, 'failed', 'e')`, account, message],
+    [`INSERT INTO model_runs (account_id, message_id, model, started_at, error) VALUES (?, ?, 'p/m', 0, 'e')`, account, message],
     [
       `INSERT INTO eval_results (run_id, message_id, expected, got, duration_ms, shots, sender_shots) VALUES (?, ?, 'newsletter', 'newsletter', 1, 0, 0)`,
       run,

@@ -56,7 +56,7 @@ beforeEach(async () => {
 describe('pruneOld', () => {
   it('forgets an old message with its decisions, changes and model runs', async () => {
     await acted('gone');
-    await finishRun(db, await startRun(db, { accountId: ACCOUNT, messageId: 'gone', model: 'p/m', now: OLD }), { outcome: 'judged', now: OLD });
+    await finishRun(db, await startRun(db, { accountId: ACCOUNT, messageId: 'gone', model: 'p/m', now: OLD }), { now: OLD });
     await acted('fresh');
     await message('new', RECENT);
     await recordDecision(db, ACCOUNT, 'new', archive, { carryOut: true, now: RECENT });
