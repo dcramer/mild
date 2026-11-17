@@ -17,7 +17,7 @@ A key beside what it protects protects nothing, so the key belongs in the enviro
 
 To set one yourself, `openssl rand -base64 32`, and give the result to Sift as `SIFT_KEY`: in the environment, or in a `.env` file. Sift reads `.env` from the home directory and then from the directory it was started in; a variable already set is never replaced. `.env` in the home directory is the convenient place and the weak one, since a copy of the home then carries its own key. With Docker, set it on the container (the compose file passes `SIFT_KEY` and `SIFT_OLD_KEYS` through).
 
-At the next `sift run`, or on Vercel the next deploy's build, everything stored plain is encrypted and every keyed hash made again, and it says so. Without a key Sift still runs, stores these plain (the files owner-only), and says so at start.
+At the next `sift run`, or on Vercel the next deploy's build, everything stored plain is encrypted and every keyed hash made again, and it says so. After that each start or build reads one row per person (`preferences.keyed_with`) until the key changes. Without a key Sift still runs, stores these plain (the files owner-only), and says so at start.
 
 ## Rotating
 

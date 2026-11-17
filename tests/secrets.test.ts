@@ -8,7 +8,7 @@ import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
 import { credentialStore } from '../src/model/credentials.ts';
 import { type Keyring, loadKeyring, openSecret, openToRekey, readSecret, rekeySecrets, writeSecret } from '../src/secrets.ts';
 import { credentials, rekeyCredentials } from '../src/store/credentials.ts';
-import { openPart, rekeyContent, sealPart } from '../src/store/content.ts';
+import { bringUnderKey, needsKeying, openPart, sealPart } from '../src/store/content.ts';
 import { rekeyStore } from '../src/store/rekey.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { suggestionBodies } from '../src/store/query.ts';
@@ -274,12 +274,12 @@ describe('mail', () => {
   it('remembers who the owner has written to by hash, and hashes again under a new key', async () => {
     const { as } = await alpha();
     await rememberCorrespondent(await as(NONE), 'alpha@example.org', 'friend@example.net', true, 0);
-    expect(await rekeyContent(await as(A))).toBe(2);
+    expect((await bringUnderKey(await as(A))).messages).toBe(2);
     const db = await as(A);
     expect(JSON.stringify(await raw(db).all('SELECT * FROM correspondents'))).not.toContain('example.net');
     expect(await cachedCorrespondent(db, 'alpha@example.org', 'friend@example.net', 0)).toBe(true);
     expect(await senderFacts(db, 'alpha@example.org', 'news@example.com')).toMatchObject({ messages: 2 });
-    expect(await rekeyContent(await as(B_AFTER_A))).toBe(2);
+    expect((await bringUnderKey(await as(B_AFTER_A))).messages).toBe(2);
     expect(await cachedCorrespondent(await as(B), 'alpha@example.org', 'friend@example.net', 0)).toBe(true);
     expect(await senderFacts(await as(B), 'alpha@example.org', 'news@example.com')).toMatchObject({ messages: 2 });
   });
@@ -312,21 +312,36 @@ describe('mail', () => {
     expect((await listRules(db, 'alpha@example.org'))[0]).toMatchObject({ id, match: { from: 'news@example.com' }, disposition: 'keep' });
     expect((await listDecisions(db, await everything(db), { days: 36_500 }, 0)).rows[0]).toMatchObject({ reason: 'rule: from news@example.com' });
 
-    await rekeyContent(await as(B_AFTER_A));
+    await bringUnderKey(await as(B_AFTER_A));
     const b = await as(B);
     expect(await hasRuleFor(b, 'alpha@example.org', { from: 'news@example.com' })).toBe(true);
     expect(await getAction(b, action)).toMatchObject({ payload: { unsubscribe: 'news.example.com' } });
   });
 
-  it('hashes at start the conditions a migration could not, with or without a key', async () => {
+  it('hashes the conditions a migration could not, with or without a key', async () => {
     const { as } = await alpha();
     const db = await as(NONE);
     await raw(db).run(
       `INSERT INTO rules (id, account_id, position, match, except_matches, conditions, disposition, source, created_at) VALUES ('r', 'alpha@example.org', 0, '{"from": "a@example.com"}', '[]', 'unset:x', 'archive', 'user', 0)`,
     );
     expect(await hasRuleFor(db, 'alpha@example.org', { from: 'a@example.com' })).toBe(false);
-    await rekeyContent(db);
+    await bringUnderKey(db);
     expect(await hasRuleFor(db, 'alpha@example.org', { from: 'a@example.com' })).toBe(true);
+  });
+
+  it('needs bringing under the key only after an upgrade or a new key, and not again once it is', async () => {
+    const { as } = await alpha(A);
+    const store = await freshStore(A);
+    await connectAccount(store, 'carol@example.org', '1', 0);
+    expect(await needsKeying(await store.user(2))).toBe(false);
+    // alpha's person was made by a store without a key, so their data is due under A.
+    expect(await needsKeying(await as(A))).toBe(true);
+    await bringUnderKey(await as(A));
+    expect(await needsKeying(await as(A))).toBe(false);
+    expect(await needsKeying(await as(B_AFTER_A))).toBe(true);
+    expect(await bringUnderKey(await as(B_AFTER_A))).toMatchObject({ messages: 2 });
+    expect(await needsKeying(await as(B))).toBe(false);
+    expect(await needsKeying(await as(NONE))).toBe(true);
   });
 
   it('finds mail by its subject, which the database cannot read', async () => {
@@ -347,7 +362,7 @@ describe('mail', () => {
     const forged = `sift-secret:v1:${A.current!.id}:AAAAAAAAAAAAAAAA:AAAA`;
     await recordSync(db, 'alpha@example.org', [facts({ accountId: 'alpha@example.org', messageId: 'm3', subject: forged })], '3', 0);
     expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm3')).toMatchObject({ subject: forged });
-    expect(await rekeyContent(await as(A))).toBe(3);
+    expect((await bringUnderKey(await as(A))).messages).toBe(3);
     expect(await messageDetail(await as(A), await everything(db), 'alpha@example.org', 'm3')).toMatchObject({ subject: forged });
   });
 
@@ -371,9 +386,8 @@ describe('mail', () => {
     await hold(await as(NONE), 'm1', 'Hello', '<p>Hello</p>');
     await hold(await as(A), 'm2', 'Plain', null);
     await expect(messageDetail(await as(A), await everything(await as(A)), 'alpha@example.org', 'm1')).rejects.toThrow('stored unencrypted');
-    expect(await rekeyContent(await as(B_AFTER_A), false)).toBe(2);
-    expect(await rekeyContent(await as(B_AFTER_A))).toBe(2);
-    expect(await rekeyContent(await as(B))).toBe(0);
+    expect((await bringUnderKey(await as(B_AFTER_A))).messages).toBe(2);
+    expect((await bringUnderKey(await as(B))).messages).toBe(0);
     for (const row of await stored()) expect(row.body_text).toMatch(/^sift-secret:v1:/);
     for (const row of await raw(await as(B)).all<{ subject: string }>('SELECT subject FROM messages')) expect(row.subject).toMatch(/^sift-secret:v1:/);
     expect(await messageDetail(await as(B), await everything(await as(B)), 'alpha@example.org', 'm1')).toMatchObject({ body: 'Hello', hasHtml: true });
