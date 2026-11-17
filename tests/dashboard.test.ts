@@ -91,12 +91,12 @@ describe('tracking', () => {
     );
     const row = (await raw(db).get('SELECT * FROM messages'))!;
     expect(row).toMatchObject({
-      subject: 'Weekly digest',
+      subject: 'sift-plain:Weekly digest',
       list_id: 'dev.lists.example.com',
       synced_at: NOW,
       label_ids: ['INBOX', 'UNREAD'],
-      headers: { 'list-id': '<dev.lists.example.com>' },
-      cc_addresses: [{ address: 'c@example.org', domain: 'example.org' }],
+      headers: 'sift-plain:{"list-id":"<dev.lists.example.com>"}',
+      cc_addresses: 'sift-plain:[{"address":"c@example.org","domain":"example.org"}]',
     });
     expect(Object.keys(row).some((k) => /body|snippet|content/.test(k))).toBe(false);
   });

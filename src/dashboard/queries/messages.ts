@@ -2,7 +2,7 @@ import { actions, and, asc, decisions, eq, examples, messages, modelRuns, sql, s
 import type { Sql } from '../../store/sql.ts';
 import { unsubscribedAt } from '../../store/actions.ts';
 import { storedFacts } from '../../store/messages.ts';
-import { openBody } from '../../store/bodies.ts';
+import { openEnvelope, openPart } from '../../store/content.ts';
 import { bulkSignals, passedDmarc } from '../../triage/features.ts';
 import { type Scope, sees } from '../scope.ts';
 import type { MessageDetail } from '../types.ts';
@@ -12,7 +12,7 @@ import { senderProfile } from './senders.ts';
 /** One message with its full history, or null if sift has not seen it. */
 export async function messageDetail(db: Sql, scope: Scope, accountId: string, messageId: string): Promise<MessageDetail | null> {
   if (!sees(scope, accountId)) return null;
-  const [m] = await db
+  const [stored] = await db
     .select({
       threadId: messages.threadId,
       fromAddress: messages.fromAddress,
@@ -27,7 +27,8 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
   const facts = await storedFacts(db, accountId, messageId);
-  if (!m || !facts) return null;
+  if (!stored || !facts) return null;
+  const m = openEnvelope(db, accountId, messageId, stored);
 
   const ofMessage = and(eq(decisions.accountId, accountId), eq(decisions.messageId, messageId));
   const shown = await decisionsJoined(db).where(ofMessage).orderBy(asc(decisions.id));
@@ -80,7 +81,7 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
     facts,
     unsubscribe: await canUnsubscribe(db, accountId, m.fromAddress, m.headers),
     sender: (await senderProfile(db, scope, accountId, m.fromAddress))!,
-    decisions: shown.map((r) => ({ ...toDecisionRow(r), ...costs.get(r.id)! })),
+    decisions: shown.map((r) => ({ ...toDecisionRow(db, r), ...costs.get(r.id)! })),
     actions: changes.map(({ payload, ...a }) => ({ ...a, added: payload.add, removed: payload.remove })),
   };
 }
@@ -91,14 +92,14 @@ async function storedBody(db: Sql, accountId: string, messageId: string): Promis
     .select({ text: suggestionBodies.bodyText, html: suggestionBodies.bodyHtml })
     .from(suggestionBodies)
     .where(and(eq(suggestionBodies.accountId, accountId), eq(suggestionBodies.messageId, messageId)));
-  if (held) return { text: openBody(db, accountId, messageId, 'text', held.text)!, html: openBody(db, accountId, messageId, 'html', held.html) };
+  if (held) return { text: openPart(db, accountId, messageId, 'text', held.text)!, html: openPart(db, accountId, messageId, 'html', held.html) };
   const [kept] = await db
     .select({ text: examples.bodyText, html: examples.bodyHtml })
     .from(examples)
     .where(and(eq(examples.accountId, accountId), eq(examples.messageId, messageId), eq(examples.status, 'captured')));
   return kept?.text == null
     ? null
-    : { text: openBody(db, accountId, messageId, 'text', kept.text)!, html: openBody(db, accountId, messageId, 'html', kept.html) };
+    : { text: openPart(db, accountId, messageId, 'text', kept.text)!, html: openPart(db, accountId, messageId, 'html', kept.html) };
 }
 
 /** The HTML of one of the scope's messages, as sift holds it; null when it holds none. */

@@ -14,7 +14,7 @@ import {
 import type { Sql } from '../../store/sql.ts';
 import { accuracy, pendingSuggestions } from '../../learn/feedback.ts';
 import { listLabels } from '../../store/labels.ts';
-import { openBody } from '../../store/bodies.ts';
+import { openPart } from '../../store/content.ts';
 import type { Label } from '../../triage/types.ts';
 import { listProposals, settledAction } from '../../store/proposals.ts';
 import { listRules } from '../../store/rules.ts';
@@ -115,7 +115,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
         .from(suggestionBodies)
         .where(within(scope, suggestionBodies.accountId))
     ).map(
-      (r) => [`${r.accountId}\n${r.messageId}`, openBody(db, r.accountId, r.messageId, 'text', r.text)!.slice(0, 400).replace(/\s+/g, ' ').trim()] as const,
+      (r) => [`${r.accountId}\n${r.messageId}`, openPart(db, r.accountId, r.messageId, 'text', r.text)!.slice(0, 400).replace(/\s+/g, ' ').trim()] as const,
     ),
   );
   const known = await contacts(

@@ -13,6 +13,7 @@ export {
   desc,
   eq,
   exists,
+  gt,
   gte,
   ilike,
   inArray,
@@ -26,6 +27,7 @@ export {
   not,
   notExists,
   notInArray,
+  notLike,
   or,
 } from 'drizzle-orm';
 export { alias } from 'drizzle-orm/pg-core';

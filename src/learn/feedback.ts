@@ -25,6 +25,7 @@ import {
   suggestionBodies,
 } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
+import { openEnvelope } from '../store/content.ts';
 import { listLabels } from '../store/labels.ts';
 import { recordDecision } from '../store/decisions.ts';
 import { proposeFromAnswers } from '../store/proposals.ts';
@@ -76,8 +77,8 @@ const SUGGESTION = {
   subject: messages.subject,
 };
 
-const toSuggestion = ({ subscription, ...r }: Omit<Suggestion, 'unsubscribe'> & { subscription: SubscriptionAction }): Suggestion => ({
-  ...r,
+const toSuggestion = (db: Sql, { subscription, ...r }: Omit<Suggestion, 'unsubscribe'> & { subscription: SubscriptionAction }): Suggestion => ({
+  ...openEnvelope(db, r.accountId, r.messageId, r),
   unsubscribe: subscription === 'unsubscribe',
 });
 
@@ -123,7 +124,7 @@ export async function pendingSuggestions(
     )
     .orderBy(desc(decisions.decidedAt), desc(decisions.id))
     .limit(filter.limit ?? 5000);
-  return rows.map(toSuggestion);
+  return rows.map((r) => toSuggestion(db, r));
 }
 
 /** How far an answer reaches, which is also what kind of rule it makes. `once` makes none. */
@@ -168,7 +169,7 @@ async function currentDecision(db: Sql, accountId: string, messageId: string): P
     .where(and(eq(decisions.accountId, accountId), eq(decisions.messageId, messageId)))
     .orderBy(desc(decisions.id))
     .limit(1);
-  return row ? toSuggestion(row) : null;
+  return row ? toSuggestion(db, row) : null;
 }
 
 export interface FeedbackInput {

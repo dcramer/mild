@@ -1,6 +1,7 @@
 import { and, decisions, desc, eq, messages, modelRuns, notExists, sql } from '../../store/query.ts';
 import { outOfTries } from '../../store/runs.ts';
 import type { Sql } from '../../store/sql.ts';
+import { openEnvelope } from '../../store/content.ts';
 import { type Scope, within } from '../scope.ts';
 import type { UnjudgedRow } from '../types.ts';
 
@@ -38,5 +39,5 @@ export async function listUnjudged(db: Sql, scope: Scope, limit: number): Promis
     )
     .orderBy(desc(messages.receivedAt))
     .limit(limit);
-  return rows.map((r) => ({ ...r, triedAt: Number(r.triedAt) }));
+  return rows.map((r) => ({ ...openEnvelope(db, r.accountId, r.messageId, r), triedAt: Number(r.triedAt) }));
 }

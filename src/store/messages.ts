@@ -2,19 +2,16 @@ import { type SQL, and, asc, decisions, desc, eq, lt, messages, not, notExists, 
 import { outOfTries } from './runs.ts';
 import type { Sql } from './sql.ts';
 import type { Facts, RuleFacts } from '../triage/facts.ts';
-import type { Address, MessageFacts } from '../triage/types.ts';
+import type { MessageFacts } from '../triage/types.ts';
+import { ENVELOPE_COLUMNS, openEnvelope } from './content.ts';
 
 const COLUMNS = {
   id: messages.id,
   threadId: messages.threadId,
   fromAddress: messages.fromAddress,
   fromDomain: messages.fromDomain,
-  fromName: messages.fromName,
   receivedAt: messages.receivedAt,
-  subject: messages.subject,
-  to: messages.to,
-  cc: messages.cc,
-  headers: messages.headers,
+  ...ENVELOPE_COLUMNS,
   labelIds: messages.labelIds,
   suggestOnly: messages.suggestOnly,
   facts: messages.facts,
@@ -28,27 +25,30 @@ interface Row {
   fromName: string | null;
   receivedAt: number;
   subject: string;
-  to: Address[];
-  cc: Address[];
-  headers: Record<string, string>;
+  to: string;
+  cc: string;
+  headers: string;
   labelIds: string[];
   suggestOnly: boolean;
   facts: Facts;
 }
 
-const toMessage = (accountId: string, r: Row): MessageFacts => ({
-  accountId,
-  messageId: r.id,
-  threadId: r.threadId,
-  from: { address: r.fromAddress, domain: r.fromDomain, ...(r.fromName ? { name: r.fromName } : {}) },
-  to: r.to,
-  cc: r.cc,
-  subject: r.subject,
-  labelIds: r.labelIds,
-  headers: r.headers,
-  receivedAt: r.receivedAt,
-  known: r.facts,
-});
+const toMessage = (db: Sql, accountId: string, stored: Row): MessageFacts => {
+  const r = openEnvelope(db, accountId, stored.id, stored);
+  return {
+    accountId,
+    messageId: r.id,
+    threadId: r.threadId,
+    from: { address: r.fromAddress, domain: r.fromDomain, ...(r.fromName ? { name: r.fromName } : {}) },
+    to: r.to,
+    cc: r.cc,
+    subject: r.subject,
+    labelIds: r.labelIds,
+    headers: r.headers,
+    receivedAt: r.receivedAt,
+    known: r.facts,
+  };
+};
 
 interface QueuedMessage {
   facts: MessageFacts;
@@ -79,7 +79,7 @@ export async function listUndecided(db: Sql, accountId: string, limit: number): 
     )
     .orderBy(desc(messages.receivedAt), asc(messages.id))
     .limit(limit);
-  return rows.map((r) => ({ suggestOnly: r.suggestOnly, facts: toMessage(accountId, r) }));
+  return rows.map((r) => ({ suggestOnly: r.suggestOnly, facts: toMessage(db, accountId, r) }));
 }
 
 /** The facts recorded for a message, or null if sift has not seen it. */
@@ -105,7 +105,7 @@ export async function getFacts(db: Sql, accountId: string, messageId: string): P
     .select(COLUMNS)
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
-  return row ? toMessage(accountId, row) : null;
+  return row ? toMessage(db, accountId, row) : null;
 }
 
 /** Delete the text of waiting mail fetched before `cutoff`, every mailbox's. Returns how many went. */

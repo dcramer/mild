@@ -616,9 +616,9 @@ describe('reading a suggestion', () => {
 
     expect(await keepSuggestionBodies(db, api, ACCOUNT, () => 1000)).toBe(3);
     expect(await stored()).toEqual([
-      { message_id: 'm1', body_text: 'Text of m1', body_html: '<p>Text of m1</p>' },
-      { message_id: 'm2', body_text: 'Text of m2', body_html: null },
-      { message_id: 'm4', body_text: '', body_html: null },
+      { message_id: 'm1', body_text: 'sift-plain:Text of m1', body_html: 'sift-plain:<p>Text of m1</p>' },
+      { message_id: 'm2', body_text: 'sift-plain:Text of m2', body_html: null },
+      { message_id: 'm4', body_text: 'sift-plain:', body_html: null },
     ]);
     expect(await keepSuggestionBodies(db, api, ACCOUNT, () => 1000)).toBe(0);
     expect(fetched.toSorted()).toEqual(['m1', 'm2', 'm4']);
@@ -690,7 +690,7 @@ describe('examples', () => {
     await expect(captureExamples(db, api, ACCOUNT, () => 99)).rejects.toThrow('network');
     const stored = await raw(db).all('SELECT message_id, status, body_text, body_html, captured_at FROM examples ORDER BY message_id');
     expect(stored).toEqual([
-      { message_id: 'm1', status: 'captured', body_text: 'Hello there.', body_html: '<p>Hello there.</p>', captured_at: 99 },
+      { message_id: 'm1', status: 'captured', body_text: 'sift-plain:Hello there.', body_html: 'sift-plain:<p>Hello there.</p>', captured_at: 99 },
       { message_id: 'm2', status: 'gone', body_text: null, body_html: null, captured_at: 99 },
       { message_id: 'm3', status: 'pending', body_text: null, body_html: null, captured_at: null },
     ]);

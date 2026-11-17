@@ -10,7 +10,7 @@ import { type Builder, owned } from './own.ts';
 export interface Sql extends Builder {
   /** Whose rows this handle reads and writes; null for the central handle, which reads no one's. */
   readonly person: number | null;
-  /** The install's keys, for what is stored encrypted: sign-ins (src/store/credentials.ts), message bodies (src/store/bodies.ts). */
+  /** The install's keys, for what is stored encrypted: sign-ins (src/store/credentials.ts), mail (src/store/content.ts). */
   readonly keys: Keyring;
   /**
    * All of `work` or none of it. `work` awaits nothing but `tx`: a Gmail or model call inside it would

@@ -25,7 +25,7 @@ import { mailboxAliases } from '../store/accounts.ts';
 import { shotCandidates } from '../store/examples.ts';
 import { listLabels } from '../store/labels.ts';
 import { getFacts } from '../store/messages.ts';
-import { openBody } from '../store/bodies.ts';
+import { openEnvelope, openPart } from '../store/content.ts';
 import { deriveFacts } from '../triage/facts.ts';
 import { pickShots } from '../triage/fewshot.ts';
 import { PROMPT_TEMPLATE } from '../triage/prompt.ts';
@@ -182,7 +182,7 @@ export async function continueEval(deps: EvalDeps, runId: number, until: number)
     const started = performance.now();
     const answer = await deps
       .judge({
-        evidence: await storedEvidence(db, facts, openBody(db, run.accountId, messageId, 'text', example.bodyText)),
+        evidence: await storedEvidence(db, facts, openPart(db, run.accountId, messageId, 'text', example.bodyText)),
         labels,
         ...(shots.length > 0 ? { examples: shots } : {}),
       })
@@ -276,11 +276,12 @@ const RUN = {
 };
 
 async function results(db: Sql, runId: number): Promise<EvalResult[]> {
-  return await db
+  const rows = await db
     .select({
+      accountId: evalRuns.accountId,
       messageId: evalResults.messageId,
       fromAddress: sql<string>`coalesce(${messages.fromAddress}, '')`,
-      subject: sql<string>`coalesce(${messages.subject}, '')`,
+      subject: messages.subject,
       expected: evalResults.expected,
       got: evalResults.got,
       error: evalResults.error,
@@ -297,6 +298,7 @@ async function results(db: Sql, runId: number): Promise<EvalResult[]> {
     .leftJoin(messages, and(eq(messages.accountId, evalRuns.accountId), eq(messages.id, evalResults.messageId)))
     .where(eq(evalResults.runId, runId))
     .orderBy(evalResults.messageId);
+  return rows.map(({ accountId, ...r }) => ({ ...r, subject: openEnvelope(db, accountId, r.messageId, r).subject ?? '' }));
 }
 
 function toRun(row: Omit<EvalRun, 'score' | 'withSenderExample'>, judged: readonly EvalResult[]): EvalRun {

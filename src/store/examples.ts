@@ -1,6 +1,6 @@
 import { type EXAMPLE_STATUSES, type SQL, and, asc, desc, eq, examples, isNotNull, lt, lte, messages, sql } from './query.ts';
 import type { Sql } from './sql.ts';
-import { openBody } from './bodies.ts';
+import { openEnvelope, openPart } from './content.ts';
 import { MAX_SHOTS, type Shot, excerptOf } from '../triage/fewshot.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
@@ -47,13 +47,13 @@ export async function shotCandidates(db: Sql, facts: Pick<MessageFacts, 'account
     ...(await newest(eq(messages.fromDomain, facts.from.domain))),
     ...(await db.select().from(ranked).where(lte(ranked.nth, 2))),
   ];
-  return [...new Map(rows.map((r) => [r.messageId, r] as const)).values()].map((r) => ({
+  return [...new Map(rows.map((r) => [r.messageId, openEnvelope(db, facts.accountId, r.messageId, r)] as const)).values()].map((r) => ({
     messageId: r.messageId,
     fromAddress: r.fromAddress,
     fromDomain: r.fromDomain,
     ...(r.fromName ? { fromName: r.fromName } : {}),
     subject: r.subject,
-    excerpt: excerptOf(openBody(db, facts.accountId, r.messageId, 'text', r.body)?.slice(0, 2000) ?? ''),
+    excerpt: excerptOf(openPart(db, facts.accountId, r.messageId, 'text', r.body)?.slice(0, 2000) ?? ''),
     labelId: r.labelId!,
     markedAt: r.markedAt,
   }));
@@ -73,7 +73,7 @@ interface StoredExample {
 
 /** What is held as examples, newest answers first, without the content. */
 export async function listExamples(db: Sql, accountId?: string, limit = 500): Promise<StoredExample[]> {
-  return await db
+  const rows = await db
     .select({
       accountId: examples.accountId,
       messageId: examples.messageId,
@@ -89,6 +89,7 @@ export async function listExamples(db: Sql, accountId?: string, limit = 500): Pr
     .where(accountId === undefined ? undefined : eq(examples.accountId, accountId))
     .orderBy(desc(examples.markedAt), asc(examples.messageId))
     .limit(limit);
+  return rows.map((r) => openEnvelope(db, r.accountId, r.messageId, r));
 }
 
 /**

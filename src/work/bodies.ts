@@ -2,7 +2,7 @@ import { and, eq, suggestionBodies } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { pendingSuggestions } from '../learn/feedback.ts';
-import { sealBody } from '../store/bodies.ts';
+import { sealPart } from '../store/content.ts';
 
 const PER_PASS = 50;
 export const KEEP_BODY_DAYS = 30;
@@ -35,8 +35,8 @@ export async function keepSuggestionBodies(db: Sql, api: Pick<GmailApi, 'getCont
     // A message that has gone is stored empty, so it is not asked for again on every pass.
     const content = await api.getContent(suggestion.messageId);
     const body = {
-      bodyText: sealBody(db, accountId, suggestion.messageId, 'text', content?.text ?? '')!,
-      bodyHtml: sealBody(db, accountId, suggestion.messageId, 'html', content?.html ?? null),
+      bodyText: sealPart(db, accountId, suggestion.messageId, 'text', content?.text ?? '')!,
+      bodyHtml: sealPart(db, accountId, suggestion.messageId, 'html', content?.html ?? null),
       fetchedAt: now(),
     };
     await db

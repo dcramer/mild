@@ -8,11 +8,13 @@ import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
 import { credentialStore } from '../src/model/credentials.ts';
 import { type Keyring, loadKeyring, openSecret, openToRekey, readSecret, rekeySecrets, writeSecret } from '../src/secrets.ts';
 import { credentials, rekeyCredentials } from '../src/store/credentials.ts';
-import { openBody, rekeyBodies, sealBody } from '../src/store/bodies.ts';
+import { openPart, rekeyContent, sealPart } from '../src/store/content.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { suggestionBodies } from '../src/store/query.ts';
 import type { Sql } from '../src/store/sql.ts';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
+import { listDecisions } from '../src/dashboard/queries/decisions.ts';
+import { recordDecision } from '../src/store/decisions.ts';
 import { everything, facts } from './helpers.ts';
 import { freshStore, raw } from './fixtures.ts';
 
@@ -173,16 +175,19 @@ describe('credentials', () => {
   });
 });
 
-describe('message bodies', () => {
-  async function alpha() {
+describe('mail', () => {
+  /** Two messages recorded with `keys`. */
+  async function alpha(keys = NONE) {
     const store = await freshStore();
     await connectAccount(store, 'alpha@example.org', '1', 0);
     const as = async (keys: Keyring) => await (await freshStore(keys)).user(1);
     const plain = await as(NONE);
     await recordSync(
-      plain,
+      await as(keys),
       'alpha@example.org',
-      ['m1', 'm2'].map((messageId) => facts({ accountId: 'alpha@example.org', messageId })),
+      ['m1', 'm2'].map((messageId) =>
+        facts({ accountId: 'alpha@example.org', messageId, from: { address: 'news@example.com', domain: 'example.com', name: 'Example News' } }),
+      ),
       '2',
       0,
     );
@@ -190,8 +195,8 @@ describe('message bodies', () => {
       await db.insert(suggestionBodies).values({
         accountId: 'alpha@example.org',
         messageId,
-        bodyText: sealBody(db, 'alpha@example.org', messageId, 'text', text)!,
-        bodyHtml: sealBody(db, 'alpha@example.org', messageId, 'html', html),
+        bodyText: sealPart(db, 'alpha@example.org', messageId, 'text', text)!,
+        bodyHtml: sealPart(db, 'alpha@example.org', messageId, 'html', html),
         fetchedAt: 0,
       });
     const stored = async () =>
@@ -201,8 +206,45 @@ describe('message bodies', () => {
     return { as, hold, stored };
   }
 
+  it('keeps the subject, name, recipients and headers encrypted, each for its own message', async () => {
+    const { as } = await alpha(A);
+    const db = await as(A);
+    const [m1] = await raw(db).all('SELECT subject, from_name, to_addresses, cc_addresses, headers FROM messages ORDER BY id');
+    for (const value of Object.values(m1!)) expect(value).toMatch(/^sift-secret:v1:/);
+    expect(JSON.stringify(m1)).not.toMatch(/Weekly|me@example.org|Example News/);
+    expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm1')).toMatchObject({
+      subject: 'Weekly digest',
+      fromName: 'Example News',
+      to: [{ address: 'me@example.org' }],
+      headers: {},
+    });
+    await expect(messageDetail(await as(B), await everything(db), 'alpha@example.org', 'm1')).rejects.toThrow('SIFT_KEY');
+  });
+
+  it('finds mail by its subject, which the database cannot read', async () => {
+    const { as } = await alpha(A);
+    const db = await as(A);
+    for (const messageId of ['m1', 'm2'])
+      await recordDecision(db, 'alpha@example.org', messageId, { disposition: 'keep', subscription: 'preserve', stage: 'rules', reason: 'test' }, { now: 0 });
+    expect(await listDecisions(db, await everything(db), { days: 36_500, search: 'DIGEST', limit: 1, offset: 1 }, 0)).toMatchObject({
+      total: 2,
+      rows: [{ messageId: 'm1', subject: 'Weekly digest' }],
+    });
+    expect((await listDecisions(db, await everything(db), { days: 36_500, search: 'nothing like it' }, 0)).total).toBe(0);
+  });
+
+  it('takes a subject that only looks encrypted for what it says, without a key', async () => {
+    const { as } = await alpha();
+    const db = await as(NONE);
+    const forged = `sift-secret:v1:${A.current!.id}:AAAAAAAAAAAAAAAA:AAAA`;
+    await recordSync(db, 'alpha@example.org', [facts({ accountId: 'alpha@example.org', messageId: 'm3', subject: forged })], '3', 0);
+    expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm3')).toMatchObject({ subject: forged });
+    expect(await rekeyContent(await as(A))).toBe(3);
+    expect(await messageDetail(await as(A), await everything(db), 'alpha@example.org', 'm3')).toMatchObject({ subject: forged });
+  });
+
   it('keeps the text and HTML encrypted, with no HTML as null, and opens them only for their own message', async () => {
-    const { as, hold, stored } = await alpha();
+    const { as, hold, stored } = await alpha(A);
     const db = await as(A);
     await hold(db, 'm1', 'Hello', '<p>Hello</p>');
     await hold(db, 'm2', 'Plain', null);
@@ -212,7 +254,7 @@ describe('message bodies', () => {
     expect(m2!.body_html).toBeNull();
     expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm1')).toMatchObject({ body: 'Hello', hasHtml: true });
     expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm2')).toMatchObject({ body: 'Plain', hasHtml: false });
-    expect(() => openBody(db, 'alpha@example.org', 'm2', 'text', m1!.body_text)).toThrow('SIFT_KEY');
+    expect(() => openPart(db, 'alpha@example.org', 'm2', 'text', m1!.body_text)).toThrow('SIFT_KEY');
     await expect(messageDetail(await as(B), await everything(db), 'alpha@example.org', 'm1')).rejects.toThrow('SIFT_KEY');
   });
 
@@ -221,10 +263,11 @@ describe('message bodies', () => {
     await hold(await as(NONE), 'm1', 'Hello', '<p>Hello</p>');
     await hold(await as(A), 'm2', 'Plain', null);
     await expect(messageDetail(await as(A), await everything(await as(A)), 'alpha@example.org', 'm1')).rejects.toThrow('stored unencrypted');
-    expect(await rekeyBodies(await as(B_AFTER_A), false)).toBe(2);
-    expect(await rekeyBodies(await as(B_AFTER_A))).toBe(2);
-    expect(await rekeyBodies(await as(B))).toBe(0);
+    expect(await rekeyContent(await as(B_AFTER_A), false)).toBe(2);
+    expect(await rekeyContent(await as(B_AFTER_A))).toBe(2);
+    expect(await rekeyContent(await as(B))).toBe(0);
     for (const row of await stored()) expect(row.body_text).toMatch(/^sift-secret:v1:/);
+    for (const row of await raw(await as(B)).all<{ subject: string }>('SELECT subject FROM messages')) expect(row.subject).toMatch(/^sift-secret:v1:/);
     expect(await messageDetail(await as(B), await everything(await as(B)), 'alpha@example.org', 'm1')).toMatchObject({ body: 'Hello', hasHtml: true });
   });
 });

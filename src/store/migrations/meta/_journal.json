@@ -64,6 +64,13 @@
       "when": 1794869469273,
       "tag": "0008_refetch_suggestion_bodies",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794873569537,
+      "tag": "0009_naive_stingray",
+      "breakpoints": true
     }
   ]
 }

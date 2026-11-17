@@ -6,7 +6,6 @@ import {
   decisions,
   desc,
   eq,
-  ilike,
   inArray,
   isNotNull,
   isNull,
@@ -21,6 +20,7 @@ import {
   gte,
 } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
+import { openEnvelope } from '../../store/content.ts';
 import { DISPOSITIONS } from '../../triage/types.ts';
 import { type Scope, within } from '../scope.ts';
 import { type DecisionRow, FACT_FILTERS, FACT_FILTER_KEYS, type ListedDecision, STAGES, type ChangeRow } from '../types.ts';
@@ -117,8 +117,8 @@ export async function retryDecision(db: Sql, scope: Scope, id: number): Promise<
 
 type DecisionFields = Awaited<ReturnType<typeof decisionsJoined>>[number];
 
-export const toDecisionRow = ({ block, subscription, ...r }: DecisionFields): DecisionRow => ({
-  ...r,
+export const toDecisionRow = (db: Sql, { block, subscription, ...r }: DecisionFields): DecisionRow => ({
+  ...openEnvelope(db, r.accountId, r.messageId, r),
   disposition: block ? 'block' : r.disposition,
   unsubscribe: subscription === 'unsubscribe',
 });
@@ -129,7 +129,7 @@ interface DecisionFilter {
   disposition?: string;
   /** `suggested`, `done`, `undone` or `trouble`. */
   status?: string;
-  /** Case-insensitive substring of the subject, sender address or sender name. */
+  /** Case-insensitive substring of the subject, sender address or sender name. Reads every decision the rest of the filter leaves. */
   search?: string;
   accountId?: string;
   /** Exact sender address. */
@@ -170,18 +170,24 @@ export async function listDecisions(
     if (!isOneOf(FACT_FILTER_KEYS, filter.fact)) return { total: 0, rows: [] };
     where.push(factsWhere(FACT_FILTERS[filter.fact]));
   }
-  const search = filter.search?.trim();
-  if (search) {
-    // Backslash is ILIKE's escape character unless told otherwise.
-    const pattern = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
-    where.push(or(ilike(messages.subject, pattern), ilike(messages.fromAddress, pattern), ilike(sql`coalesce(${messages.fromName}, '')`, pattern)));
-  }
   const clause = and(...where);
   const limit = Math.min(Math.max(Math.trunc(filter.limit ?? 50), 1), 200);
   const offset = Math.max(Math.trunc(filter.offset ?? 0), 0);
 
-  const [{ total }] = (await db.select({ total: count() }).from(decisionsJoined(db).where(clause).as('matching'))) as [{ total: number }];
-  const rows = (await decisionsJoined(db).where(clause).orderBy(desc(decisions.id)).limit(limit).offset(offset)).map(toDecisionRow);
+  const search = filter.search?.trim().toLowerCase();
+  let total: number;
+  let rows: DecisionRow[];
+  if (search) {
+    // Subjects and names are encrypted, so the database cannot look inside them.
+    const found = (await decisionsJoined(db).where(clause).orderBy(desc(decisions.id)))
+      .map((r) => toDecisionRow(db, r))
+      .filter((r) => [r.subject, r.fromAddress, r.fromName ?? ''].some((s) => s.toLowerCase().includes(search)));
+    total = found.length;
+    rows = found.slice(offset, offset + limit);
+  } else {
+    [{ total }] = (await db.select({ total: count() }).from(decisionsJoined(db).where(clause).as('matching'))) as [{ total: number }];
+    rows = (await decisionsJoined(db).where(clause).orderBy(desc(decisions.id)).limit(limit).offset(offset)).map((r) => toDecisionRow(db, r));
+  }
   const known = await contacts(
     db,
     rows.map((r) => ({ accountId: r.accountId, address: r.fromAddress })),
@@ -210,7 +216,7 @@ export async function listChanges(db: Sql, scope: Scope, limit: number): Promise
     .orderBy(desc(actions.id))
     .limit(limit);
   return rows.map(({ payload, ...r }) => ({
-    ...r,
+    ...openEnvelope(db, r.accountId, r.messageId!, r),
     messageId: r.messageId!,
     undoOf: payload.undoOf ?? null,
   }));

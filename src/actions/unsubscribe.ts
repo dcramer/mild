@@ -3,6 +3,7 @@ import { request } from 'node:https';
 import { isIP } from 'node:net';
 import { and, eq, messages } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
+import { openEnvelope } from '../store/content.ts';
 import { finishAction, insertPendingAction, lastUnsubscribeFailure, unsubscribedAt } from '../store/actions.ts';
 import { bulkSignals, passedDmarc } from '../triage/features.ts';
 
@@ -87,11 +88,12 @@ const postOneClick: PostOneClick = (url, address) =>
  */
 export async function unsubscribe(deps: UnsubscribeDeps, accountId: string, messageId: string): Promise<UnsubscribeOutcome> {
   const now = deps.now ?? Date.now;
-  const [message] = await deps.db
+  const [stored] = await deps.db
     .select({ fromAddress: messages.fromAddress, headers: messages.headers })
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
-  if (!message) return { status: 'refused', reason: 'There is no such message.' };
+  if (!stored) return { status: 'refused', reason: 'There is no such message.' };
+  const message = openEnvelope(deps.db, accountId, messageId, stored);
   const signals = bulkSignals(message.headers);
   if (!signals.oneClickUnsubscribeUrl) {
     return {

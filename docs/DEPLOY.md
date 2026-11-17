@@ -34,7 +34,7 @@ This writes the archive as the container's user (uid 1000), so the current direc
 
 What the archive is:
 
-- **Mail.** The database is not encrypted: senders, subjects and the full text of mail you answered for. Encrypt the archive or keep it somewhere you would keep mail.
+- **Mail.** With `SIFT_KEY` set, the text of mail and every subject, sender name and recipient are encrypted; sender addresses, labels, rules and decisions are not. Without the key, all of it is plain. Encrypt the archive or keep it somewhere you would keep mail.
 - **Credentials**, encrypted only if `SIFT_KEY` is set ([SECRETS.md](SECRETS.md)), and then useless without that key. Keep the key somewhere other than the archive. A `.env` in the home directory is in the archive.
 
 ## Restore

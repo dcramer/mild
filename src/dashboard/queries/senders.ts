@@ -1,4 +1,5 @@
-import { and, asc, count, desc, eq, isNotNull, max, messages } from '../../store/query.ts';
+import { alias, and, asc, count, desc, eq, isNotNull, max, messages, sql } from '../../store/query.ts';
+import { openPart } from '../../store/content.ts';
 import type { Sql } from '../../store/sql.ts';
 import { pendingSuggestions } from '../../learn/feedback.ts';
 import { contacts, domainFacts, senderFacts } from '../../store/senders.ts';
@@ -7,6 +8,8 @@ import { type Scope, narrow } from '../scope.ts';
 import type { SenderPage, SenderProfile } from '../types.ts';
 import { listDecisions } from './decisions.ts';
 import { listRuleSummaries } from './rules.ts';
+
+const withName = alias(messages, 'named');
 
 /** What sift knows about one sender. */
 async function profileOf(db: Sql, scope: Scope, accountId: string, who: { address: string } | { domain: string }, now: number): Promise<SenderProfile | null> {
@@ -60,26 +63,41 @@ export async function senderPage(
   const profile = await profileOf(db, scope, accountId, who, now);
   if (!profile) return null;
   const filter = 'address' in who ? { sender: who.address } : { domain: who.domain };
-  const name =
+  const [named] =
     'address' in who
-      ? ((
-          await db
-            .select({ fromName: messages.fromName })
-            .from(messages)
-            .where(and(eq(messages.accountId, accountId), eq(messages.fromAddress, who.address), isNotNull(messages.fromName)))
-            .orderBy(desc(messages.receivedAt))
-            .limit(1)
-        )[0]?.fromName ?? null)
-      : null;
+      ? await db
+          .select({ id: messages.id, fromName: messages.fromName })
+          .from(messages)
+          .where(and(eq(messages.accountId, accountId), eq(messages.fromAddress, who.address), isNotNull(messages.fromName)))
+          .orderBy(desc(messages.receivedAt))
+          .limit(1)
+      : [];
+  const name = named ? openPart(db, accountId, named.id, 'name', named.fromName) : null;
+  // A name is encrypted for its message, so each address's comes with the id of the newest message that gave one.
+  const newestNamed = <T>(column: typeof withName.id | typeof withName.fromName) =>
+    sql<T>`(${db
+      .select({ value: column })
+      .from(withName)
+      .where(and(eq(withName.accountId, messages.accountId), eq(withName.fromAddress, messages.fromAddress), isNotNull(withName.fromName)))
+      .orderBy(desc(withName.receivedAt))
+      .limit(1)})`;
   const writing =
     'domain' in who
-      ? await db
-          .select({ address: messages.fromAddress, name: max(messages.fromName), messages: count(), lastSeenAt: max(messages.receivedAt) })
-          .from(messages)
-          .where(and(eq(messages.accountId, accountId), eq(messages.fromDomain, who.domain)))
-          .groupBy(messages.fromAddress)
-          .orderBy(desc(count()), asc(messages.fromAddress))
-          .limit(100)
+      ? (
+          await db
+            .select({
+              address: messages.fromAddress,
+              nameId: newestNamed<string | null>(withName.id),
+              name: newestNamed<string | null>(withName.fromName),
+              messages: count(),
+              lastSeenAt: max(messages.receivedAt),
+            })
+            .from(messages)
+            .where(and(eq(messages.accountId, accountId), eq(messages.fromDomain, who.domain)))
+            .groupBy(messages.accountId, messages.fromAddress)
+            .orderBy(desc(count()), asc(messages.fromAddress))
+            .limit(100)
+        ).map(({ nameId, name, ...s }) => ({ ...s, name: nameId === null ? null : openPart(db, accountId, nameId, 'name', name) }))
       : [];
   const known = await contacts(
     db,

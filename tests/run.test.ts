@@ -1005,7 +1005,7 @@ describe('examples', () => {
     expect(await raw(db).get('SELECT label_id, disposition, body_text FROM examples')).toEqual({
       label_id: 'newsletter',
       disposition: 'archive',
-      body_text: 'The full text of the newsletter.',
+      body_text: 'sift-plain:The full text of the newsletter.',
     });
     expect(mailbox.modifyCalls).toBe(0);
   });

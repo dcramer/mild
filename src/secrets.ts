@@ -108,6 +108,9 @@ export function openToRekey(name: string, stored: string, keys: Keyring): string
   return text;
 }
 
+/** How every value under the current key starts, for finding the ones that are not in a query. Null without a key. */
+export const currentPrefix = (keys: Keyring): string | null => (keys.current ? `${PREFIX}${keys.current.id}:` : null);
+
 /** Whether a stored secret is not yet under the current key: plain, or encrypted with an old one. */
 export const staleSecret = (stored: string, keys: Keyring): boolean => keys.current !== null && keyIdOf(stored) !== keys.current.id;
 

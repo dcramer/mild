@@ -34,7 +34,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import type { Facts } from '../triage/facts.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
-import { type Address, DECIDED, DISPOSITIONS, STAGE_NAMES, SUBSCRIPTION_ACTIONS } from '../triage/types.ts';
+import { DECIDED, DISPOSITIONS, STAGE_NAMES, SUBSCRIPTION_ACTIONS } from '../triage/types.ts';
 import type { ActionPayload } from './actions.ts';
 
 export const CREDENTIAL_KINDS = ['gmail', 'model'] as const;
@@ -170,13 +170,14 @@ export const messages = pgTable(
     threadId: text('thread_id').notNull(),
     fromAddress: text('from_address').notNull(),
     fromDomain: text('from_domain').notNull(),
+    // These five are encrypted, each on its own (src/store/content.ts); to, cc and headers as JSON.
     fromName: text('from_name'),
     listId: text('list_id'),
     receivedAt: time('received_at').notNull(),
-    subject: text('subject').notNull().default(''),
-    to: jsonb('to_addresses').$type<Address[]>().notNull().default([]),
-    cc: jsonb('cc_addresses').$type<Address[]>().notNull().default([]),
-    headers: jsonb('headers').$type<Record<string, string>>().notNull().default({}), // the triage headers only (see METADATA_HEADERS)
+    subject: text('subject').notNull(),
+    to: text('to_addresses').notNull(),
+    cc: text('cc_addresses').notNull(),
+    headers: text('headers').notNull(), // the triage headers only (see METADATA_HEADERS)
     labelIds: jsonb('label_ids').$type<string[]>().notNull().default([]), // when synced; a snapshot, not current state
     syncedAt: time('synced_at').notNull(),
     suggestOnly: boolean('suggest_only').notNull().default(false), // pulled in from before sift was connected: suggest, never carry out
