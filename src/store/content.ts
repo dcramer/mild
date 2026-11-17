@@ -66,6 +66,16 @@ export function hashOf(db: Sql, value: string): string {
   return keyedHash(db.keys, db.person, value.toLowerCase());
 }
 
+/**
+ * What a trace may say of a message (src/telemetry.ts): its id, sender and domain as the keyed hashes
+ * `hashOf` gives, so a trace leads back to them only here, where `messages` is searched by the same
+ * sender and domain hashes. Without a key `hashOf` is the value itself, so a trace then names none of them.
+ */
+export function traceIds(db: Sql, messageId: string, from?: Pick<Address, 'address' | 'domain'>): Record<string, string> {
+  if (!db.keys.current) return {};
+  return { 'sift.message': hashOf(db, messageId), ...(from ? { 'sift.sender': hashOf(db, from.address), 'sift.domain': hashOf(db, from.domain) } : {}) };
+}
+
 /** A cached correspondent as stored: only the hashes it is found by. A new key empties the cache (`rekeyMail`). */
 export const hashCorrespondent = (db: Sql, address: string): { addressHash: string; domainHash: string } => ({
   addressHash: hashOf(db, address),

@@ -48,6 +48,7 @@ In the project's Environment Variables, for Production:
 | `CRON_SECRET` | Vercel sends it with each cron call and Sift with each piece of work it hands out; nothing without it can start work. `openssl rand -hex 32` |
 | `SIFT_DASHBOARD_HOST` | Only with a domain of your own: that domain. |
 | `SIFT_CHATGPT_SIGN_IN` | Only to change how people sign in to ChatGPT ([CLI.md](CLI.md#models)). |
+| `SENTRY_DSN` | Optional: a Sentry project's DSN, to send errors and traces there ([ARCHITECTURE.md](ARCHITECTURE.md#errors-and-traces)). Each deployment is tagged with its `VERCEL_ENV`. |
 
 Until every required one is set, the site lists those still missing; `CRON_SECRET` is among them, since without it nothing runs.
 

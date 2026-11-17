@@ -1,6 +1,6 @@
 import { and, eq, messages } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
-import { openEnvelope } from '../store/content.ts';
+import { openEnvelope, traceIds } from '../store/content.ts';
 import {
   type ActionPayload,
   type ActionRecord,
@@ -14,6 +14,7 @@ import {
 } from '../store/actions.ts';
 import type { Mailbox } from './mailbox.ts';
 import { Refusal } from '../refusal.ts';
+import { traced } from '../telemetry.ts';
 
 export interface MessageAction {
   /** `label` leaves the message where it is; `archive` and `spam` take it out of the inbox. */
@@ -47,16 +48,22 @@ const clock = (deps: ActionDeps) => (deps.now ?? Date.now)();
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const applied = (labels: string[], change: LabelChange) => change.add.every((l) => labels.includes(l)) && !change.remove.some((l) => labels.includes(l));
 
+type Target = { accountId: string; messageId: string; type: ActionType; undoOf?: number; decisionId?: number };
+
+/** The single path for changing a message, as a span of its own. */
+const applyChange = (deps: ActionDeps, target: Target, current: string[], requested: LabelChange): Promise<Outcome> =>
+  traced('sift.action', target.type, { ...traceIds(deps.db, target.messageId), 'sift.decision_id': target.decisionId }, async (span) => {
+    const outcome = await changeLabels(deps, target, current, requested);
+    span.set({ 'sift.status': outcome.status, ...(outcome.status === 'skipped' ? {} : { 'sift.action_id': outcome.actionId }) });
+    if (outcome.status === 'failed' || outcome.status === 'unknown') span.fail();
+    return outcome;
+  });
+
 /**
- * The single path for changing a message: write intent, change, read back, record the outcome.
- * Only the part of `change` that differs from `current` is sent, so unrelated labels and unread state are untouched.
+ * Write intent, change, read back, record the outcome. Only the part of `change` that differs from
+ * `current` is sent, so unrelated labels and unread state are untouched.
  */
-async function applyChange(
-  deps: ActionDeps,
-  target: { accountId: string; messageId: string; type: ActionType; undoOf?: number; decisionId?: number },
-  current: string[],
-  requested: LabelChange,
-): Promise<Outcome> {
+async function changeLabels(deps: ActionDeps, target: Target, current: string[], requested: LabelChange): Promise<Outcome> {
   const change: LabelChange = {
     add: requested.add.filter((l) => !current.includes(l)),
     remove: requested.remove.filter((l) => current.includes(l)),

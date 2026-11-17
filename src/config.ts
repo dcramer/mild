@@ -33,6 +33,11 @@ export interface Settings {
    * address of the page that fails to load. Switching signs everyone out of ChatGPT.
    */
   chatgptSignIn?: 'device-code' | 'redirect';
+  /**
+   * Where to send errors and traces (src/telemetry.ts): a Sentry project's DSN. Unset: nothing is sent.
+   * Nothing that identifies mail is in them; senders, domains and messages are keyed hashes.
+   */
+  sentryDsn?: string;
 }
 
 /** Each setting's variable, and what its text must be. Hosts that run sift for you (Vercel) configure it only this way. */
@@ -43,6 +48,7 @@ const ENVIRONMENT = {
   DATABASE_MIGRATION_URL: 'databaseMigrationUrl',
   REDIS_URL: 'redisUrl',
   SIFT_CHATGPT_SIGN_IN: 'chatgptSignIn',
+  SENTRY_DSN: 'sentryDsn',
 } as const satisfies Record<string, keyof Settings>;
 export type Variable = keyof typeof ENVIRONMENT;
 
@@ -153,6 +159,10 @@ export function readSettings(env: NodeJS.ProcessEnv): Settings {
       case 'SIFT_CHATGPT_SIGN_IN':
         if (text !== 'device-code' && text !== 'redirect') throw bad(variable, '"device-code" or "redirect"');
         settings.chatgptSignIn = text;
+        break;
+      case 'SENTRY_DSN':
+        if (!/^https?:\/\/[^@\s/]+@[^@\s/]+\/\S+$/.test(text)) throw bad(variable, "a Sentry DSN, as the project's Client Keys page gives it (https://…@…/…)");
+        settings.sentryDsn = text;
         break;
     }
   }

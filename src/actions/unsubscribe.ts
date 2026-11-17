@@ -3,9 +3,10 @@ import { request } from 'node:https';
 import { isIP } from 'node:net';
 import { and, eq, messages } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
-import { openEnvelope } from '../store/content.ts';
+import { openEnvelope, traceIds } from '../store/content.ts';
 import { finishAction, insertPendingAction, lastUnsubscribeFailure, unsubscribedAt } from '../store/actions.ts';
 import { bulkSignals, passedDmarc } from '../triage/features.ts';
+import { traced } from '../telemetry.ts';
 
 export type UnsubscribeOutcome =
   /** The sender's server accepted the request. */
@@ -86,7 +87,15 @@ const postOneClick: PostOneClick = (url, address) =>
  * sift does not send mail. Recorded as an action before the request, never repeated for a sender it
  * worked for, and not retried for a week for one it failed for.
  */
-export async function unsubscribe(deps: UnsubscribeDeps, accountId: string, messageId: string): Promise<UnsubscribeOutcome> {
+export const unsubscribe = (deps: UnsubscribeDeps, accountId: string, messageId: string): Promise<UnsubscribeOutcome> =>
+  traced('sift.action', 'unsubscribe', traceIds(deps.db, messageId), async (span) => {
+    const outcome = await leave(deps, accountId, messageId);
+    span.set({ 'sift.status': outcome.status, ...('actionId' in outcome ? { 'sift.action_id': outcome.actionId } : {}) });
+    if (outcome.status === 'failed') span.fail();
+    return outcome;
+  });
+
+async function leave(deps: UnsubscribeDeps, accountId: string, messageId: string): Promise<UnsubscribeOutcome> {
   const now = deps.now ?? Date.now;
   const [stored] = await deps.db
     .select({ headers: messages.headers })

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { type Config, type Variable } from '../config.ts';
+import { type Config, type Variable, readSettings } from '../config.ts';
 import { type Ui, paint } from './ui.ts';
 
 /** Who may sign in to the user's Google app. Decides the last tasks of the Google setup. */
@@ -81,6 +81,17 @@ const steps = (deps: InitDeps): Step[] => [
 /** The steps above, then the Gmail account, which is connected in the browser. */
 const STEPS = 4;
 
+/** Steps setup works without, offered once it is finished. */
+const later = (deps: InitDeps): Step[] => [
+  {
+    title: 'Sentry',
+    missing: () => false,
+    value: () =>
+      deps.config.settings.sentryDsn ? `Errors and traces sent${paint.dim(` · ${new URL(deps.config.settings.sentryDsn).host}`)}` : paint.dim('off'),
+    run: () => chooseSentry(deps),
+  },
+];
+
 /**
  * Set sift up. A first run walks through every step, and one that was stopped part-way carries on with
  * what is missing. Once the dashboard has an address and the Google client is finished, it lists the
@@ -106,14 +117,15 @@ export async function runInit(deps: InitDeps): Promise<void> {
     else if (!googleReady(deps)) ui.skip('Needs step 3 finished');
     else ui.info('Connected in the browser: signing in to the dashboard with Google is what connects the account.');
   } else {
+    const listed = [...all, ...later(deps)];
     ui.fields([
-      ...all.map((step) => [step.title, step.value()] as const),
+      ...listed.map((step) => [step.title, step.value()] as const),
       ['Gmail account', accounts.length > 0 ? accounts.join(', ') : paint.dim('connected by signing in to the dashboard')],
     ]);
     ui.blank();
-    const step = await ui.select<Step | null>('Change a step?', [{ label: 'No', value: null }, ...all.map((step) => ({ label: step.title, value: step }))]);
+    const step = await ui.select<Step | null>('Change a step?', [{ label: 'No', value: null }, ...listed.map((step) => ({ label: step.title, value: step }))]);
     if (step) {
-      ui.step(all.indexOf(step) + 1, STEPS, step.title);
+      ui.step(listed.indexOf(step) + 1, listed.length, step.title);
       await step.run();
     }
   }
@@ -154,6 +166,23 @@ async function createKey(deps: InitDeps): Promise<void> {
   }
   ui.ok(`Saved as ${paint.cmd('SIFT_KEY')} in ${paint.path(path)}`);
   ui.info('Sift reads it only when started from this directory, and cannot open your credentials without it. Keep a copy somewhere else.');
+}
+
+/** Ask for a Sentry DSN until one is accepted, or none, which turns it off. */
+async function chooseSentry(deps: InitDeps): Promise<void> {
+  const { ui } = deps;
+  ui.info('Sends errors, and a trace of each pass with each model call’s tokens and cost. Messages, subjects and addresses are left out.');
+  for (;;) {
+    const dsn = (await ui.text('Sentry DSN (empty for none):')).trim();
+    try {
+      readSettings({ SENTRY_DSN: dsn });
+    } catch (error) {
+      ui.fail(reason(error));
+      continue;
+    }
+    deps.saveSetting('SENTRY_DSN', dsn || undefined);
+    return dsn ? ui.ok(`Sent to ${paint.bold(new URL(dsn).host)} from the next start`) : ui.ok('Off');
+  }
 }
 
 /**

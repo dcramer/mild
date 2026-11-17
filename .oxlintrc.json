@@ -34,6 +34,11 @@
       "rules": { "no-console": "error" }
     },
     {
+      // Overrides below replace this list for their own files, so each repeats the Sentry pattern.
+      "files": ["src/**/*.ts"],
+      "rules": { "no-restricted-imports": ["error", { "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." }] }] }
+    },
+    {
       // Everything the CLI prints goes through its ui, which handles colour, the gutter and piped output.
       "files": ["src/cli/ui.ts"],
       "rules": { "no-console": "off" }
@@ -44,7 +49,7 @@
         "no-restricted-imports": [
           "error",
           {
-            "patterns": [
+            "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." }, 
               { "group": ["node:*", "@googleapis/*", "googleapis", "google-auth-library", "@earendil-works/*"], "message": "triage/ is pure: no I/O. Inject what you need through a port (see src/triage/stages)." },
               {
                 "group": ["**/gmail/**", "**/store/**", "**/actions/**", "**/agent/**", "**/work/**", "**/learn/**", "**/cli/**", "**/config.ts"],
@@ -61,7 +66,7 @@
         "no-restricted-imports": [
           "error",
           {
-            "patterns": [
+            "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." }, 
               {
                 "group": ["**/gmail/**", "**/actions/**", "**/store/**", "**/work/**", "@googleapis/*", "googleapis", "google-auth-library"],
                 "message": "model/ only turns evidence into a verdict. It never reaches Gmail, the database or anything that acts."
@@ -78,7 +83,7 @@
         "no-restricted-imports": [
           "error",
           {
-            "patterns": [
+            "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." }, 
               {
                 "group": ["**/gmail/**", "**/actions/**", "**/agent/**", "**/work/**", "@googleapis/*", "googleapis", "google-auth-library"],
                 "message": "dashboard/ shows the database and records what the user teaches sift (src/learn). It never reaches Gmail or changes the mailbox."
@@ -115,7 +120,7 @@
         "no-restricted-imports": [
           "error",
           {
-            "patterns": [
+            "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." }, 
               { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." },
               { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
               {
@@ -130,7 +135,7 @@
     {
       // The database, the handle and the builder's hold on each person (own.ts), and the schema.
       "files": ["src/store/db.ts", "src/store/sql.ts", "src/store/own.ts", "src/store/query.ts", "src/store/schema.ts"],
-      "rules": { "no-restricted-imports": ["error", { "patterns": [{ "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." }, { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." }] }] }
+      "rules": { "no-restricted-imports": ["error", { "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." }, { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." }, { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." }] }] }
     },
     {
       "files": ["src/actions/**/*.ts", "src/work/**/*.ts", "src/learn/**/*.ts"],
@@ -138,7 +143,7 @@
         "no-restricted-imports": [
           "error",
           {
-            "patterns": [
+            "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." }, 
               { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." },
               { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
@@ -155,7 +160,7 @@
         "no-restricted-imports": [
           "error",
           {
-            "patterns": [
+            "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." }, 
               { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." },
               { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }
@@ -166,6 +171,10 @@
     },
     {
       "files": ["src/gmail/**/*.ts", "src/*.ts"],
+      "rules": { "no-restricted-imports": ["error", { "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." }, { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }] }] }
+    },
+    {
+      "files": ["src/telemetry.ts"],
       "rules": { "no-restricted-imports": ["error", { "patterns": [{ "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." }] }] }
     }
   ],

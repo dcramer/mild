@@ -21,6 +21,7 @@ import { checkFiltersWhenDue } from './filters.ts';
 import { recordPassStatus } from './status.ts';
 import { type SyncReport, syncAccount } from './sync.ts';
 import { type TriageReport, triageAccount } from './triage.ts';
+import { reportError, traced } from '../telemetry.ts';
 
 export interface RunOptions {
   ephemeral: Ephemeral;
@@ -159,38 +160,43 @@ async function unlessUnderWay<T>(options: RunOptions, lock: string, until: numbe
  * Run one piece of due work, starting nothing after `until`. Everything it touches is opened here from the
  * piece's ids. A failure is logged; the piece is due again at the next tick.
  */
-export async function runWork(store: Store, work: Work, options: RunOptions, until: number): Promise<PassResult | null> {
-  try {
-    if (!(await stillThere(store, work.person))) return null;
-    const db = await store.user(work.person);
-    const account = 'account' in work ? (await listAccounts(db)).find((a) => a.id === work.account) : undefined;
-    switch (work.kind) {
-      case 'upkeep':
-        await upkeep(db, options);
-        return null;
-      case 'pass':
-        return account ? await unlessUnderWay(options, `lock:pass:${account.id}`, until, () => passMailbox(db, account, options, until)) : null;
-      case 'backfill':
-        if (account)
-          await unlessUnderWay(options, `lock:backfill:${account.id}`, until, async () => {
-            const { api } = await options.connect(db, account);
-            if (await backfill(db, api, account.id, work.days, until, options.now)) await options.ephemeral.take(backfillKey(account.id));
+export const runWork = (store: Store, work: Work, options: RunOptions, until: number): Promise<PassResult | null> =>
+  traced('sift.work', work.kind, { 'sift.person': work.person }, async (span) => {
+    try {
+      if (!(await stillThere(store, work.person))) return null;
+      const db = await store.user(work.person);
+      const account = 'account' in work ? (await listAccounts(db)).find((a) => a.id === work.account) : undefined;
+      if (account) span.set({ 'user.email': account.email });
+      switch (work.kind) {
+        case 'upkeep':
+          await upkeep(db, options);
+          return null;
+        case 'pass':
+          return account ? await unlessUnderWay(options, `lock:pass:${account.id}`, until, () => passMailbox(db, account, options, until)) : null;
+        case 'backfill':
+          if (account)
+            await unlessUnderWay(options, `lock:backfill:${account.id}`, until, async () => {
+              const { api } = await options.connect(db, account);
+              if (await backfill(db, api, account.id, work.days, until, options.now)) await options.ephemeral.take(backfillKey(account.id));
+            });
+          return null;
+        case 'eval':
+          await unlessUnderWay(options, `lock:eval:${work.person}:${work.run}`, until, async () => {
+            const tier = options.model ? await options.model(db) : null;
+            if (tier) await continueEval({ db, judge: tier.judge, model: tier.model, ...(options.now ? { now: options.now } : {}) }, work.run, until);
           });
-        return null;
-      case 'eval':
-        await unlessUnderWay(options, `lock:eval:${work.person}:${work.run}`, until, async () => {
-          const tier = options.model ? await options.model(db) : null;
-          if (tier) await continueEval({ db, judge: tier.judge, model: tier.model, ...(options.now ? { now: options.now } : {}) }, work.run, until);
-        });
-        return null;
+          return null;
+      }
+    } catch (error) {
+      // A person deleted meanwhile has nothing left to report.
+      if (await stillThere(store, work.person)) {
+        span.fail();
+        reportError(error);
+        options.log(`${describeWork(work)} failed, will retry: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return null;
     }
-  } catch (error) {
-    // A person deleted meanwhile has nothing left to report.
-    if (await stillThere(store, work.person))
-      options.log(`${describeWork(work)} failed, will retry: ${error instanceof Error ? error.message : String(error)}`);
-    return null;
-  }
-}
+  });
 
 /**
  * Gmail for one pass, reading each message whole at most once: the model, the examples and the bodies kept
@@ -265,6 +271,7 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
       if (filters) result.filters = filters;
     } catch (error) {
       // The mail was still triaged; the filters are looked at again next pass.
+      reportError(error);
       options.log(`${account.email}: could not check Gmail filters: ${error instanceof Error ? error.message : String(error)}`);
     }
     return finish(result, active, options, false);
@@ -276,7 +283,10 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
     if (result.error.includes('invalid_grant')) {
       result.expired = true;
       options.log(`${account.email}: Google sign-in has expired. Sign in to the dashboard again.`);
-    } else options.log(`${account.email}: pass failed, will retry: ${result.error}`);
+    } else {
+      reportError(error);
+      options.log(`${account.email}: pass failed, will retry: ${result.error}`);
+    }
   }
   return result;
 }

@@ -10,6 +10,7 @@ import { paint, ui } from '../ui.ts';
 import { createSift } from '../../app/sift.ts';
 import { checkSecrets } from '../secrets-check.ts';
 import { nodeHost, portOption, serveDashboard } from '../host.ts';
+import { flushTelemetry, startTelemetry } from '../../telemetry.ts';
 
 /** A minute: new mail is classified soon after it lands, and a quiet pass costs a history read per mailbox. */
 const INTERVAL_MS = 60_000;
@@ -27,6 +28,7 @@ export async function run(args: string[]): Promise<void> {
     },
   });
   const config = loadConfig();
+  startTelemetry(config.settings.sentryDsn);
   const store = await openStore(config);
   if (store.warning) ui.warn(store.warning);
   const ephemeral = await openEphemeral(config.settings.redisUrl);
@@ -84,5 +86,6 @@ export async function run(args: string[]): Promise<void> {
   } finally {
     await ephemeral.close();
     await store.close();
+    await flushTelemetry();
   }
 }

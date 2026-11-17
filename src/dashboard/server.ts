@@ -6,6 +6,7 @@ import { FRAMES, READS, WRITES } from './api/index.ts';
 import type { Context, Write } from './api/route.ts';
 import { frameNote } from './mail-html.ts';
 import { Refusal } from '../refusal.ts';
+import { type Traced, reportError, traced } from '../telemetry.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { type Scope, narrow, scopeFor, sees } from './scope.ts';
 
@@ -41,6 +42,8 @@ const FRAME_HEADERS = {
 };
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+/** Answered here rather than by a route module. */
+const SIGN_IN_PATHS = new Set(['/auth/login', '/auth/callback', '/api/session', '/api/signout']);
 
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { ...HEADERS, 'content-type': 'application/json', 'cache-control': 'no-store', ...headers } });
@@ -192,6 +195,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
   const failed = (request: Request, error: unknown): { status: number; error: string } => {
     if (error instanceof Refusal) return { status: 409, error: error.message };
     report(request, error);
+    reportError(error);
     return { status: 500, error: 'Sift could not do that. Why is in its log.' };
   };
   /** A sign-in in flight, by the state Google echoes back: the PKCE verifier and where to return to. */
@@ -212,7 +216,10 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     return { status: 404, error: 'There is no such thing here.' };
   };
 
-  const handle = async (request: Request): Promise<Response> => {
+  /** Named by its route, never by a path a stranger chose. */
+  const routeOf = (path: string) => (reads.has(path) || writes.has(path) || frames.has(path) || SIGN_IN_PATHS.has(path) ? path : 'other');
+
+  const handle = async (request: Request, span: Traced): Promise<Response> => {
     // The Host header, not the URL: a `node:http` adapter cannot always build a URL from it.
     const hostHeader = request.headers.get('host');
     if (!answers(hostHeader)) {
@@ -238,6 +245,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     // What this request may see: the mailboxes of whoever is signed in, in their own database and no
     // one else's. With no sign-in set up (tests, tools) it is the owner's.
     const person = signIn ? known : await people.owner();
+    if (person) span.set({ 'user.email': session ?? undefined, 'sift.person': person.id });
     const whole = person ? scopeFor(person.accounts, person.owner) : scopeFor([], !signIn);
     const ctx: Context = {
       db: person ? await person.open(person.id) : people.nobody,
@@ -371,10 +379,17 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
 
   return {
     answers,
-    handle: (request) =>
-      handle(request).catch((error: unknown) => {
-        const { status, ...body } = failed(request, error);
-        return json(status, body);
-      }),
+    handle: (request) => {
+      const { pathname } = new URL(request.url);
+      return traced('http.server', `${request.method} ${routeOf(pathname)}`, { 'http.request.method': request.method }, async (span) => {
+        const response = await handle(request, span).catch((error: unknown) => {
+          const { status, ...body } = failed(request, error);
+          return json(status, body);
+        });
+        span.set({ 'http.response.status_code': response.status });
+        if (response.status >= 500) span.fail();
+        return response;
+      });
+    },
   };
 }

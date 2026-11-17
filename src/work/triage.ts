@@ -4,10 +4,11 @@ import type { Mailbox } from '../actions/mailbox.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import { planAction } from '../actions/plan.ts';
 import type { Account } from '../store/accounts.ts';
+import { traceIds } from '../store/content.ts';
 import { shotCandidates } from '../store/examples.ts';
 import { listLabels } from '../store/labels.ts';
 import { listUnsettledDecisions, recordDecision, settleDecision } from '../store/decisions.ts';
-import { listUndecided } from '../store/messages.ts';
+import { type QueuedMessage, listUndecided } from '../store/messages.ts';
 import { excuseRuns, finishRun, startRun } from '../store/runs.ts';
 import { proposeForSender, proposeSettled } from '../store/proposals.ts';
 import { blockSender, countRuleHit, listRules } from '../store/rules.ts';
@@ -18,6 +19,7 @@ import { priorRule, readsMessage, rulesStage, settle } from '../triage/stages/ru
 import { type Evidence, type Judge, type JudgeFailure, describeFailure, modelStage } from '../triage/stages/model.ts';
 import type { Decision, Disposition, MessageFacts, Stage, Unfinished } from '../triage/types.ts';
 import { type EvidenceSources, gatherEvidence } from './evidence.ts';
+import { type Traced, traced } from '../telemetry.ts';
 
 /** Read access to the account's mail, for the model's evidence and for rules on what only the whole message shows. It never changes the mailbox. */
 type Sources = Omit<EvidenceSources, 'db' | 'now'>;
@@ -114,13 +116,22 @@ async function cascadeFor(
     });
     stages.push({ name: stage.name, decide: async (facts) => (asking() ? await stage.decide(facts) : { unfinished: 'the model was not asked' }) });
   }
+  const tiers = stages.map((stage): Stage<Decision | Unfinished> => ({
+    name: stage.name,
+    decide: (facts) =>
+      traced('sift.tier', stage.name, {}, async (span) => {
+        const result = await stage.decide(facts);
+        span.set({ 'sift.outcome': result === null ? 'abstained' : 'unfinished' in result ? 'unfinished' : result.disposition });
+        return result;
+      }),
+  }));
   return async (facts) => {
     evidence = undefined;
     await read(facts);
     const message = gather && reading && facts.known?.hasAttachments === undefined ? { ...facts, known: (await gather(facts)).known } : facts;
     // Reading the message for the model may have added to what is known about it.
     const settled = async () => (evidence ? { ...facts, known: (await evidence).known } : message);
-    return await triage(stages, message, async (decision) => (await read(facts), settle(rules, labels, await settled(), decision, options)));
+    return await triage(tiers, message, async (decision) => (await read(facts), settle(rules, labels, await settled(), decision, options)));
   };
 }
 
@@ -157,7 +168,17 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
     judge: async (input) => {
       const { accountId, messageId } = input.evidence.facts;
       const run = await startRun(db, { accountId, messageId, model: tier.model, now: now() });
-      const verdict = await tier.judge(input).catch((error: unknown): JudgeFailure => ({ failed: describeFailure(error) }));
+      // The run's id is on the agent's span and, carried, on the model call's: a trace finds its row in `model_runs`.
+      const verdict = await traced(
+        'gen_ai.invoke_agent',
+        'invoke_agent triage',
+        { 'gen_ai.operation.name': 'invoke_agent', 'gen_ai.agent.name': 'triage', 'sift.run_id': run },
+        async (span) => {
+          const settled = await tier.judge(input).catch((error: unknown): JudgeFailure => ({ failed: describeFailure(error) }));
+          if ('failed' in settled) span.fail();
+          return settled;
+        },
+      );
       const usage = verdict.usage ? { usage: verdict.usage } : {};
       await finishRun(db, run, { ...('failed' in verdict ? { error: verdict.failed } : {}), ...usage, now: now() });
       if ('failed' in verdict && !verdict.unusable) errors.push(run);
@@ -200,14 +221,15 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
 
   const { model: _given, ...modelless } = deps;
   const decide = await cascadeFor(model ? { ...deps, model } : modelless, account.id, () => asking);
-  for (const { facts, suggestOnly, applyRule } of await listUndecided(db, account.id, limit)) {
-    if (over()) break;
+  // One span per message: what each tier made of it, the model's call, and what was changed in the mailbox.
+  const decideOne = async ({ facts, suggestOnly, applyRule }: QueuedMessage, span: Traced) => {
     const started = performance.now();
     runId = undefined;
     const decision = await decide(facts);
     if ('unfinished' in decision) {
+      span.set({ 'sift.outcome': 'unfinished' });
       // Not asked, because the provider is down: it stays in the queue, unrecorded, for the next pass.
-      if (runId === undefined) continue;
+      if (runId === undefined) return;
       report.unjudged++;
       report.failure = decision.unfinished;
       if (errors.length >= FAILURES_IN_A_ROW) {
@@ -215,11 +237,11 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
         errors = [];
         asking = false;
       }
-      continue;
+      return;
     }
     // With no model, mail no rule covers is not anyone's to answer yet: it stays in the queue, unrecorded, for a
     // model once one is connected, or a rule added meanwhile. A model's own "unsure" is recorded and asked about.
-    if (decision.stage === 'fallback' && !model) continue;
+    if (decision.stage === 'fallback' && !model) return;
     // The user applied this rule to their inbox and the model has now said what the mail is: theirs to carry out, Sift on or off.
     const pressed = applyRule !== null && decision.ruleId === applyRule && Boolean(box);
     const into = pressed ? box : suggestOnly ? null : mailbox;
@@ -231,6 +253,7 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
       now: now(),
       ...(runId === undefined ? {} : { runId }),
     });
+    span.set({ 'sift.stage': decision.stage, 'sift.disposition': decision.disposition, 'sift.decision_id': decisionId });
     if (decision.ruleId) await countRuleHit(db, decision.ruleId);
     if (decision.stage === 'model') {
       const proposed = decision.priorRuleId
@@ -259,6 +282,10 @@ export async function triageAccount(deps: TriageDeps, account: Account, limit = 
       (await deps.unsubscribe(account.id, facts.messageId)).status === 'done'
     )
       report.unsubscribed++;
+  };
+  for (const listed of await listUndecided(db, account.id, limit)) {
+    if (over()) break;
+    await traced('sift.triage', 'triage', traceIds(db, listed.facts.messageId, listed.facts.from), (span) => decideOne(listed, span));
   }
   if (!answered) await excuseRuns(db, errors, now());
   return report;

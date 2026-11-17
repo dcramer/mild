@@ -42,6 +42,7 @@ Enforced by `no-restricted-imports` in `.oxlintrc.json`. They are the security m
 - `src/dashboard/` never imports Gmail, action or work code (`src/work/`). Anything it needs from them is passed in as `Controls` (`src/dashboard/controls.ts`) by the process that starts it, so mailbox changes still go through the executor.
 - `src/store/` is the only module that opens a database. Everything else takes an `Sql` (`src/store/sql.ts`) and builds its queries on it with `src/store/query.ts`; a transaction awaits nothing but the database. The handle holds every query to its person (`src/store/own.ts`), and row-level security holds them again underneath. Never name a table in SQL text.
 - `src/model/` is the only module that imports pi-ai. It turns evidence into a verdict and nothing else: it never imports Gmail, the store, actions or the work code. The model gets no tools. Never give it one that sends, forwards, fetches a URL, runs a command or changes the mailbox; if a future agent needs tools, it gets its own sandbox (see TODO.md).
+- `src/telemetry.ts` is the only module that imports Sentry, so everything sent passes its scrubber. A span names a message, sender or domain only by `traceIds` (`src/store/content.ts`), and never carries what came from mail or the model's prompt and answer.
 
 ## Safety rules
 
@@ -87,7 +88,7 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 
 | Rule | Enforced by |
 | --- | --- |
-| Module boundaries (`triage/` pure, Google only in `gmail/`, pi-ai only in `model/`, `dashboard/` never reaches Gmail or actions) | `no-restricted-imports`, `.oxlintrc.json` |
+| Module boundaries (`triage/` pure, Google only in `gmail/`, pi-ai only in `model/`, Sentry only in `telemetry.ts`, `dashboard/` never reaches Gmail or actions) | `no-restricted-imports`, `.oxlintrc.json` |
 | Only `web/src/system/` imports Base UI | `no-restricted-imports`, `.oxlintrc.json` |
 | Only `src/store/` imports a database driver (`pg`, PGlite, Drizzle), and inside it only the handle, its builder and the schema | `no-restricted-imports`, `.oxlintrc.json` |
 | Queries are built on the handle, never SQL text naming a table | `sql` refuses a person's table; `tests/own.test.ts` reads `src/` for one written |

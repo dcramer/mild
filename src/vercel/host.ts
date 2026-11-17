@@ -6,6 +6,7 @@ import { z } from 'zod';
 import type { Work } from '../work/run.ts';
 import { type Sift, createSift } from '../app/sift.ts';
 import { openStore } from '../store/store.ts';
+import { flushTelemetry, startTelemetry } from '../telemetry.ts';
 
 /** The time limit of every route, as `vercel.json` sets it. */
 export const MAX_DURATION_S = 300;
@@ -80,6 +81,7 @@ function loadVercelConfig() {
 
 async function open(): Promise<Sift> {
   const config = loadVercelConfig();
+  startTelemetry(config.settings.sentryDsn, process.env['VERCEL_ENV'] ? { environment: process.env['VERCEL_ENV'] } : {});
   const store = await openStore(config);
   const ephemeral = await openEphemeral(required('REDIS_URL'));
   const production = process.env['VERCEL_PROJECT_PRODUCTION_URL'];
@@ -113,13 +115,19 @@ export async function respond(request: Request): Promise<Response> {
       headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
     });
   }
-  return await opened.respond(request);
+  try {
+    return await opened.respond(request);
+  } finally {
+    // An instance may be frozen once it has answered: what is waiting is sent first.
+    waitUntil(flushTelemetry());
+  }
 }
 
 /** Vercel Cron, each minute: hands out what is due. */
 export async function cron(request: Request): Promise<Response> {
   if (!fromSift(request)) return new Response(null, { status: 401 });
   await fanOut((await sift()).due);
+  waitUntil(flushTelemetry());
   return new Response(null, { status: 204 });
 }
 
@@ -131,10 +139,19 @@ export async function admit(request: Request): Promise<Work | Response> {
   return piece.success ? piece.data : new Response(null, { status: 400 });
 }
 
+/** `work`, then what it left for Sentry sent before the instance can be frozen. */
+async function sentAfter(work: Promise<unknown>): Promise<void> {
+  try {
+    await work;
+  } finally {
+    await flushTelemetry();
+  }
+}
+
 /** One piece of work, taken at once and done after the reply, within this call's own time limit. */
 export async function work(request: Request): Promise<Response> {
   const piece = await admit(request);
   if (piece instanceof Response) return piece;
-  waitUntil((await sift()).work(piece));
+  waitUntil(sentAfter((await sift()).work(piece)));
   return new Response(null, { status: 202 });
 }

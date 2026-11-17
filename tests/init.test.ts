@@ -127,6 +127,7 @@ const GOOGLE = [...COMMON, TEST_USER, 'done'];
 /** Positions in the list of steps a finished setup offers to change. */
 const KEY_STEP = 1;
 const CLIENT_STEP = 3;
+const SENTRY_STEP = 4;
 const links = (said: string[]) => said.filter((line) => line.startsWith('link: ')).map((line) => line.slice(6).replace('https://console.cloud.google.com', ''));
 
 describe('sift init', () => {
@@ -239,6 +240,26 @@ describe('sift init', () => {
     expect(set.text()).toContain(`Encryption key: Credentials encrypted · key ${set.config.keys.current!.id}`);
     expect(set.text()).toContain('SIFT_OLD_KEYS');
     expect(set.calls).toEqual([]);
+  });
+
+  it('leaves Sentry out of the walk-through, and sets or clears its DSN when it is picked', async () => {
+    const first = wizard([...GOOGLE]);
+    await runInit(first.deps);
+    expect(first.asked).not.toContain('Sentry DSN (empty for none):');
+
+    const dsn = 'https://key@o1.ingest.example.org/2';
+    const set = wizard(['not a dsn', dsn], { client: true, accounts: ['me@example.org'], change: SENTRY_STEP });
+    await runInit(set.deps);
+    expect(set.text()).toContain('Sentry: off');
+    expect(set.text()).toContain('fail: SENTRY_DSN must be a Sentry DSN');
+    expect(set.text()).toContain('ok: Sent to o1.ingest.example.org from the next start');
+    expect(parseEnv(readFileSync(set.config.envPath, 'utf8'))).toEqual({ SENTRY_DSN: dsn });
+
+    const cleared = wizard([''], { client: true, accounts: ['me@example.org'], change: SENTRY_STEP });
+    saveSetting(cleared.config, 'SENTRY_DSN', dsn);
+    await runInit(cleared.deps);
+    expect(cleared.text()).toContain('Sentry: Errors and traces sent · o1.ingest.example.org');
+    expect(parseEnv(readFileSync(cleared.config.envPath, 'utf8'))).toEqual({});
   });
 
   it('asks again when what was pasted is not a client, and stops on s', async () => {

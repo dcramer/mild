@@ -45,7 +45,7 @@ Nothing needs an environment variable. Everything Sift keeps is in one directory
 
 | File | What it is |
 | --- | --- |
-| `.env` | Settings, as variables: the dashboard's port and address (`SIFT_DASHBOARD_PORT`, `SIFT_DASHBOARD_HOST`), a Postgres or Redis server (`DATABASE_URL`, `REDIS_URL`), and `SIFT_CHATGPT_SIGN_IN`. The environment wins over it. Whether Sift is on is each person's, under Settings in the dashboard. |
+| `.env` | Settings, as variables: the dashboard's port and address (`SIFT_DASHBOARD_PORT`, `SIFT_DASHBOARD_HOST`), a Postgres or Redis server (`DATABASE_URL`, `REDIS_URL`), `SIFT_CHATGPT_SIGN_IN`, and `SENTRY_DSN` (set from `sift init` once setup is finished). The environment wins over it. Whether Sift is on is each person's, under Settings in the dashboard. |
 | `database/` | The database (PGlite), unless `DATABASE_URL` names a Postgres server: who has which mailbox, and for each person their sign-ins (encrypted), model, labels, rules, the record of every message, decision and change, and the full content of mail they answered for. |
 | `database.lock` | Which process has the database open. |
 | `google-client.json`, `dashboard-key` | The Google client and the session secret. Owner-only. |

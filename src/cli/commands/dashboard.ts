@@ -6,10 +6,12 @@ import { ui } from '../ui.ts';
 import { createSift } from '../../app/sift.ts';
 import { checkSecrets } from '../secrets-check.ts';
 import { nodeHost, portOption, serveDashboard } from '../host.ts';
+import { flushTelemetry, startTelemetry } from '../../telemetry.ts';
 
 export async function dashboard(args: string[]): Promise<void> {
   const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string' } } });
   const config = loadConfig();
+  startTelemetry(config.settings.sentryDsn);
   const port = portOption(values.port) ?? config.settings.dashboardPort;
   const store = await openStore(config);
   if (store.warning) ui.warn(store.warning);
@@ -28,4 +30,5 @@ export async function dashboard(args: string[]): Promise<void> {
   stop();
   await ephemeral.close();
   await store.close();
+  await flushTelemetry();
 }

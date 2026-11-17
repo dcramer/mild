@@ -44,7 +44,7 @@ const toMessage = (db: Sql, accountId: string, stored: Row): MessageFacts => {
   };
 };
 
-interface QueuedMessage {
+export interface QueuedMessage {
   facts: MessageFacts;
   /** Pulled in from before sift was connected: suggest, never act. */
   suggestOnly: boolean;
