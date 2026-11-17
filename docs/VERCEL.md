@@ -1,6 +1,6 @@
 # Vercel
 
-Sift on Vercel instead of a machine of your own. How it runs there is [RUNTIME.md](RUNTIME.md); this is how to set it up. Not yet run on Vercel end to end: see [TODO.md](../TODO.md).
+Sift on Vercel instead of a machine of your own. How it runs there is [RUNTIME.md](RUNTIME.md); this is how to set it up. It runs in production there; the Deploy Button is untried ([TODO.md](../TODO.md)).
 
 What it needs: the **Pro** plan (Hobby runs crons once a day; Sift ticks each minute), a Postgres database (Neon) and a Redis database, both from the Vercel Marketplace, and a Google OAuth client of your own.
 
@@ -54,7 +54,7 @@ Until every required one is set, the site lists those still missing; `CRON_SECRE
 
 ## 4. Deploy again
 
-Redeploy production, so the build sees the variables: it migrates the database before the new functions serve anything. Open your address, sign in with Google (the first account becomes the owner), choose a model under Settings, and pull in recent mail to teach it with. Nothing in Gmail changes until you turn Sift on, under Settings.
+Redeploy production, so the build sees the variables: it migrates the database before the new functions serve anything. Open your address and sign in with Google (the first account becomes the owner); the page walks through connecting a model, saying what you want, choosing your labels and pulling in recent mail to teach it with. Nothing in Gmail changes until you turn Sift on, under Settings.
 
 Mail is checked each minute. Logs are the project's function logs.
 

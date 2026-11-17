@@ -10,7 +10,7 @@ docker compose -f docker/compose.yaml build
 docker compose -f docker/compose.yaml run --rm -it sift init
 ```
 
-The container cannot write the encryption key anywhere but the volume, so `init` prints it: put it in `docker/.env` as `SIFT_KEY=…`, where compose passes it in, and run `init` again. For the model step choose the device-code login.
+The container cannot write the encryption key anywhere but the volume, so `init` prints it: put it in `docker/.env` as `SIFT_KEY=…`, where compose passes it in, and run `init` again. The model is connected later, on the dashboard's setting-up page.
 
 ```bash
 docker compose -f docker/compose.yaml up

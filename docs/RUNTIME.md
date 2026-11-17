@@ -28,8 +28,8 @@ What is due:
 
 | Work | Found from | Held by |
 | --- | --- | --- |
-| A pass per mailbox | every mailbox | `lock:pass:<mailbox>` |
-| Upkeep per person | `upkeep:<person>:<day>`, claimed by the first tick of a day | the claim |
+| A pass per mailbox | every mailbox with a label of its own | `lock:pass:<mailbox>` |
+| Upkeep per person | `upkeep:<person>:<day>`, claimed when it starts and let go if it fails | the claim |
 | Older mail | `backfill:<mailbox>`, set when asked for, taken when all is in | `lock:backfill:<mailbox>` |
 | A test run's next slice | runs marked running | `lock:eval:<person>:<run>` |
 
@@ -58,7 +58,7 @@ Setting it up, and every variable it needs: [VERCEL.md](VERCEL.md). Vercel compi
 
 A piece handed to `api/work` names a person and their mailbox by id; Sift opens that person's database and finds the mailbox among their own, so even a forged piece cannot reach across people. `api/site` keeps the dashboard's own checks: a session for every `/api/` route, the Host one of the deployment's names, writes only from the page.
 
-Not yet tried on Vercel itself: that a rewrite keeps the address the browser asked for in `request.url` (Vercel's guide for Express relies on it), and `waitUntil` keeping a piece going past the reply.
+Sift runs in production on Vercel. Not yet seen there: `waitUntil` keeping a long piece going past the reply for the whole of its limit.
 
 ## Many mailboxes on Vercel
 

@@ -62,6 +62,8 @@ Not done. The compose file drops capabilities and mounts the filesystem read-onl
 | `gmail.googleapis.com`, `oauth2.googleapis.com` | Gmail, and refreshing its token |
 | `api.openai.com`, and `auth.openai.com` for a ChatGPT subscription (`chatgpt.com` too by device code) | The model |
 | `api.anthropic.com` | The model |
+| `openrouter.ai`, `ai-gateway.vercel.sh` | The model, through OpenRouter or Vercel AI Gateway |
+| The ingest host of `SENTRY_DSN`, when it is set | Errors and traces |
 | Whatever host a sender's `List-Unsubscribe` names, port 443 | One-click unsubscribe |
 
 The browser, not Sift, talks to `accounts.google.com` during sign-in. Confirm the list against a real run's connections before enforcing it; it is read from the code, not measured.

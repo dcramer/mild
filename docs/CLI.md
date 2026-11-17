@@ -21,7 +21,7 @@ From a checkout, `pnpm sift <command>` runs it from source.
 
 | Option | Effect |
 | --- | --- |
-| `--once` | One pass over every account, then exit, without serving the dashboard. Exits 1 if an account failed. |
+| `--once` | One tick, then exit, without serving the dashboard: everything due (a pass for each mailbox with a label of its own, upkeep, older mail, test runs), each piece stopped after 5 minutes. Exits 1 if a piece failed. |
 | `--port <port>` | The dashboard's port for this run. |
 | `--host <address>` | Listen on this address instead of `SIFT_DASHBOARD_HOST`. A container uses `0.0.0.0` and lets its port mapping decide who can reach it. |
 | `--no-dashboard` | Read and classify mail without serving the dashboard. |
@@ -45,7 +45,7 @@ Nothing needs an environment variable. Everything Sift keeps is in one directory
 
 | File | What it is |
 | --- | --- |
-| `.env` | Settings, as variables: the dashboard's port and address (`SIFT_DASHBOARD_PORT`, `SIFT_DASHBOARD_HOST`), a Postgres or Redis server (`DATABASE_URL`, `REDIS_URL`), `SIFT_CHATGPT_SIGN_IN`, and `SENTRY_DSN` (set from `sift init` once setup is finished). The environment wins over it. Whether Sift is on is each person's, under Settings in the dashboard. |
+| `.env` | Settings, as variables: the dashboard's port and address (`SIFT_DASHBOARD_PORT`, `SIFT_DASHBOARD_HOST`), a Postgres server and the role that migrates it (`DATABASE_URL`, `DATABASE_MIGRATION_URL`), a Redis server (`REDIS_URL`), `SIFT_CHATGPT_SIGN_IN`, and `SENTRY_DSN` (set from `sift init` once setup is finished). The environment wins over it. Whether Sift is on is each person's, under Settings in the dashboard. |
 | `database/` | The database (PGlite), unless `DATABASE_URL` names a Postgres server: who has which mailbox, and for each person their sign-ins (encrypted), model, labels, rules, the record of every message, decision and change, and the full content of mail they answered for. |
 | `database.lock` | Which process has the database open. |
 | `google-client.json`, `dashboard-key` | The Google client and the session secret. Owner-only. |

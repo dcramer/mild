@@ -1,6 +1,6 @@
 # Sift
 
-Sift helps you manage a Gmail inbox, on a machine you own or on Vercel. Each new message gets a label (Newsletters, Receipts, Cold outreach, or one of your own), and the label decides what happens: keep, archive, mark spam or block the sender. A language model is asked only about mail no rule covers, and what it answers consistently becomes a rule, so it is asked less over time.
+Sift helps you manage a Gmail inbox, on a machine you own or on Vercel. You say what you want from it, a language model suggests labels from that, and you keep the ones that fit. Each new message gets one of your labels, or Everything Else, and the label decides what happens: keep, archive, mark spam or block the sender. Your rules say what mail is, or what to do with it, without a model; the model is asked about the rest. Where you keep giving a label's mail from one sender another action, Sift proposes the rule that does it.
 
 It suggests before it acts. Every decision appears in a dashboard, you correct the wrong ones, and nothing in Gmail changes until you turn Sift on. It never deletes mail and cannot send any. Every change it makes can be undone.
 
@@ -34,7 +34,7 @@ Settings are environment variables, kept in `.env` in Sift's home directory (`~/
 pnpm sift run
 ```
 
-Open the address it prints and sign in with Google. Signing in is what connects your Gmail account. Then choose a model under Settings (a ChatGPT subscription or an API key); without one, mail no rule covers waits. Sift handles mail that arrives from then on, and pulls in recent mail only when you ask.
+Open the address it prints and sign in with Google. Signing in is what connects your Gmail account. The dashboard then walks you through setting up: connect a model (a ChatGPT subscription or an API key), say what you want, choose your labels, and pull in recent mail to answer if you like. Sift reads nothing from Gmail until you have a label of your own, and from then on handles mail as it arrives.
 
 ## More
 
