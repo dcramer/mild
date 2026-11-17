@@ -775,7 +775,7 @@ export function SystemView() {
         </Section>
       </div>
 
-      <Section title="Column heads" meta="shown where a figure means nothing without one; dotted where they say more">
+      <Section title="Column heads" meta="shown where a figure means nothing without one">
         <Table>
           <thead>
             <Tr>

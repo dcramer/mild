@@ -97,9 +97,17 @@ describe('one type scale', () => {
     expect(failures, failures.join('\n')).toEqual([]);
   });
 
-  test('nothing is set under 12px', () => {
-    const small = [...css.matchAll(/font-size:\s*([\d.]+)px/g)].map((match) => Number(match[1])).filter((px) => px < 12);
-    expect(small, 'docs/design.md: nothing under 12px.').toEqual([]);
+  test('cn knows each step of the scale as a size, so a colour beside it does not remove it', () => {
+    const named = readFileSync(join(WEB, 'lib/utils.ts'), 'utf8');
+    const own = scale.filter((name) => !['text-sm', 'text-base'].includes(name)).filter((name) => !named.includes(`'${name.slice('text-'.length)}'`));
+    expect(own, 'add each to the font-size group in web/src/lib/utils.ts').toEqual([]);
+  });
+
+  test('nothing is set under 12px but a column head', () => {
+    const small = [...css.matchAll(/(--text-[a-z]+|font-size):\s*([\d.]+)px/g)].filter((match) => Number(match[2]) < 12).map((match) => match[1]);
+    expect(small, 'docs/design.md: nothing under 12px but a column head.').toEqual(['--text-head']);
+    const heads = ALL.filter((path) => /\btext-head\b/.test(readFileSync(path, 'utf8'))).map((path) => relative(WEB, path));
+    expect(heads, 'text-head is for Th alone, in capitals.').toEqual(['system/table.tsx']);
   });
 });
 

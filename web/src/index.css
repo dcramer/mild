@@ -11,6 +11,9 @@
    Not inline: a size class reads its variable, so a part can set the scale for what is inside it (`.entry`). */
 @theme {
   --text-*: initial;
+  /* Column heads alone, in capitals, which read larger than their size: under the 12px floor. */
+  --text-head: 11px;
+  --text-head--line-height: 1.4;
   --text-label: 12px;
   --text-label--line-height: calc(1 / 0.75);
   --text-sm: 14px;

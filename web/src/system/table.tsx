@@ -104,15 +104,15 @@ type Cell<T extends 'th' | 'td'> = Omit<ComponentProps<T>, 'title'> & {
 };
 
 /**
- * A column head: small capitals in quiet ink, over what it heads. `num` lines up over figures;
- * `phone="hide"` drops the column on a phone. With `says` it is underlined in dots and says more when pointed at.
+ * A column head: small, tight capitals in quiet ink, over what it heads. `num` lines up over figures;
+ * `phone="hide"` drops the column on a phone; `says` says more when pointed at.
  */
 export function Th({ num, phone, says, className, children, ...props }: Cell<'th'> & { num?: boolean }) {
   return (
     <th
       scope="col"
       className={cn(
-        'h-9 px-3 text-label font-normal tracking-[0.08em] whitespace-nowrap text-muted-foreground uppercase',
+        'h-9 px-3 text-head font-semibold tracking-[0.04em] whitespace-nowrap text-muted-foreground uppercase',
         EDGES,
         num && 'text-right',
         phone && PHONE[phone],
@@ -120,13 +120,7 @@ export function Th({ num, phone, says, className, children, ...props }: Cell<'th
       )}
       {...props}
     >
-      {says ? (
-        <Tooltip says={says} className="underline decoration-foreground/35 decoration-dotted underline-offset-4">
-          {children}
-        </Tooltip>
-      ) : (
-        children
-      )}
+      {says ? <Tooltip says={says}>{children}</Tooltip> : children}
     </th>
   );
 }
