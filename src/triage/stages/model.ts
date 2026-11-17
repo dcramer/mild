@@ -106,6 +106,8 @@ export interface JudgeInput {
   labels: readonly Label[];
   /** Mail the owner labelled before, shown to the model as examples. Already chosen and cut to size. */
   examples?: readonly Shot[];
+  /** The rule whose condition in words the call checks, so the rule's cost can be told apart. */
+  checks?: string;
 }
 
 interface ModelStageDeps {
@@ -132,7 +134,12 @@ export function modelStage(deps: ModelStageDeps): Stage<Decision | Unfinished> {
         ? { ...gathered, prior: { labelId: prior.label.id, labelName: prior.label.name, ...(prior.rule.when ? { when: prior.rule.when } : {}) } }
         : gathered;
       const examples = deps.examples ? await deps.examples(facts) : [];
-      const verdict = await deps.judge({ evidence, labels: deps.labels, ...(examples.length > 0 ? { examples } : {}) });
+      const verdict = await deps.judge({
+        evidence,
+        labels: deps.labels,
+        ...(examples.length > 0 ? { examples } : {}),
+        ...(prior?.rule.when === undefined ? {} : { checks: prior.rule.id }),
+      });
       if ('failed' in verdict) return { unfinished: verdict.failed };
 
       const base = {

@@ -137,7 +137,7 @@ export function Masthead({
                     <Button
                       key={item.label}
                       disabled={item.disabled}
-                      title={item.note}
+                      {...(item.note ? { why: item.note } : {})}
                       className="justify-center"
                       onClick={() => {
                         setOpen(false);

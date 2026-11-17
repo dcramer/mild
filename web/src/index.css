@@ -196,7 +196,7 @@
     }
   }
 
-  /* Column heads and a figure's label: the reading face at the supporting size. A heading is a `.heading`. */
+  /* A figure's label: the reading face at the supporting size. A heading is a `.heading`; a column head is `Th`. */
   .slug {
     font-size: var(--text-sm);
     font-weight: 400;

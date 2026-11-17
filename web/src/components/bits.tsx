@@ -1,6 +1,6 @@
 import type { DecisionRow } from '@/lib/api.ts';
 import { INBOX_NAME, type Status, STATUS_NAMES, doesName, outcomeName, status } from '@/lib/format.ts';
-import { Does, Note, Sub } from '@/system';
+import { Does, Note, Sub, Tooltip } from '@/system';
 
 /**
  * What sift says mail is and does with it, the same words everywhere: "Archive as Marketing", or "Leave in
@@ -41,9 +41,9 @@ export function Verdict({
 export function StatusWord({ row }: { row: Pick<DecisionRow, 'carryOut' | 'outcome' | 'actionStatus' | 'outcomeDetail'> }) {
   const s: Status = status(row);
   return (
-    <span className="text-muted-foreground" title={row.outcomeDetail ?? undefined}>
+    <Tooltip says={row.outcomeDetail} className="text-muted-foreground">
       {STATUS_NAMES[s]}
-    </span>
+    </Tooltip>
   );
 }
 

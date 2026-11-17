@@ -4,10 +4,13 @@ test.describe("The masthead's line", () => {
   test('says how long since Sift synced and what the model cost over 30 days, and the cost previews each window', async ({ page }) => {
     await page.goto('/');
     const banner = page.getByRole('banner');
-    // Read out as "Synced just now"; each mailbox's own time when pointed at.
-    await expect(banner.getByTitle(/^me@example\.org: /).filter({ visible: true })).toHaveText(/^Synced(just now|\d+ min ago)$/);
     const cost = banner.getByRole('link', { name: /30D$/ }).filter({ visible: true });
     await expect(cost).toHaveText('$0 30D');
+    // Read out as "Synced just now"; each mailbox's own time when pointed at. Pointed at once the cost has
+    // arrived, which moves it left.
+    const synced = banner.getByText(/^Synced(just now|\d+ min ago)$/).filter({ visible: true });
+    await synced.hover();
+    await expect(page.getByText(/^me@example\.org: /)).toBeVisible();
     await expect(cost).toHaveAttribute('href', '/activity');
     await expect(page.getByText(/without a model/)).toHaveCount(0);
 

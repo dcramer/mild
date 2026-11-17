@@ -2,7 +2,7 @@ import { RefreshCwIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { ManageState, Usage } from '@/lib/api.ts';
 import { ago, dateTime, money } from '@/lib/format.ts';
-import { Figure, Figures, HoverCard, Spark } from '@/system';
+import { Figure, Figures, HoverCard, Spark, Tooltip } from '@/system';
 
 type Accounts = ManageState['accounts'];
 
@@ -42,11 +42,11 @@ export function SiftStatus({ accounts, usage }: { accounts: Accounts; usage: Usa
       {accounts.length === 0 ? (
         'No account connected'
       ) : (
-        <span className="flex items-center gap-1.5" title={synced.map((a) => `${a.email}: ${dateTime(a.at)}`).join('\n') || undefined}>
+        <Tooltip says={synced.map((a) => `${a.email}: ${dateTime(a.at)}`).join('\n')} className="flex items-center gap-1.5">
           <RefreshCwIcon aria-hidden className="size-3.5" />
           <span className="sr-only">Synced</span>
           {synced.length > 0 ? ago(Math.min(...synced.map((a) => a.at))) : 'Not synced yet'}
-        </span>
+        </Tooltip>
       )}
       {usage ? (
         <>

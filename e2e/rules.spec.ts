@@ -48,6 +48,39 @@ test.describe('Rules', () => {
     await expect(row(page, '48 hours only: 30% off')).toHaveCount(0);
   });
 
+  test('heads its figures, says the exact time when pointed at, and costs a rule a model checks', async ({ page }) => {
+    await page.goto('/rules');
+    const head = (name: string) => page.getByRole('main').getByRole('columnheader', { name, exact: true });
+    await expect(head('Messages')).toBeVisible();
+    await expect(head('Messages')).toHaveCSS('text-transform', 'uppercase');
+    await expect(head('Last used')).toBeVisible();
+    // No rule has a condition for a model to check, so nothing here costs anything.
+    await expect(head('Cost 30D')).toHaveCount(0);
+
+    const news = ruleRows(page).filter({ hasText: 'anyone at news.example.com' });
+    await news.getByText(/^(just now|\d+ min ago)$/).hover();
+    await expect(page.getByText(/^[A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2}/)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Add a rule' }).click();
+    const dialog = ruleDialog(page);
+    await dialog.getByRole('button', { name: 'Write it yourself' }).click();
+    await dialog.getByRole('textbox', { name: 'Value 1' }).fill('deals@promo.example.com');
+    await dialog.getByRole('combobox', { name: 'Label it as' }).click();
+    await page.getByRole('option', { name: 'Marketing' }).click();
+    await dialog.getByRole('textbox', { name: 'Only when it is, in your words' }).fill('a sale that ends today');
+    await addRule(dialog);
+    const opened = rulePanel(page, 'deals@promo.example.com');
+    await expect(fact(opened, 'Cost, 30 days')).toHaveText('$0 · 0 messages checked');
+    await opened.getByRole('button', { name: 'Close' }).click();
+
+    await expect(head('Cost 30D')).toBeVisible();
+    const deals = ruleRows(page).filter({ hasText: 'deals@promo.example.com' });
+    await deals.getByText('$0', { exact: true }).hover();
+    await expect(page.getByText('0 messages checked', { exact: true })).toBeVisible();
+    // The rules no model checks leave the column empty.
+    await expect(news.getByText(/\$/)).toHaveCount(0);
+  });
+
   test('Fill in the rule drafts the form from the words, and says what it left out', async ({ page }) => {
     await page.goto('/rules');
     await page.getByRole('button', { name: 'Add a rule' }).click();

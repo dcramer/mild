@@ -112,7 +112,7 @@ describe('where each way into the rule dialog starts it', () => {
     await addRule(db, ACCOUNT, { match: { from: ['x@example.com'] }, except: [{ subjectContains: ['sale'] }], disposition: 'keep' }, 'user');
     await addRule(db, 'work@example.org', { match: { from: ['x@example.com'] }, disposition: 'spam' }, 'user');
     const mine = await addRule(db, ACCOUNT, { match: { from: ['x@example.com'], facts: { isReply: false } }, labelId: 'newsletter' }, 'user');
-    const rules = await listRuleSummaries(db, await everything(db));
+    const rules = await listRuleSummaries(db, await everything(db), Date.now());
 
     expect(replacedBy(rules, ACCOUNT, { facts: { isReply: false }, from: ['x@example.com'] }, null)?.id).toBe(mine);
     expect(replacedBy(rules, ACCOUNT, { from: ['x@example.com'] }, null)).toBeUndefined();
@@ -120,7 +120,7 @@ describe('where each way into the rule dialog starts it', () => {
     expect(replacedBy(rules, ACCOUNT, { from: ['x@example.com'] }, 'newsletter')?.id).toBe(waiting);
     expect(replacedBy(rules, ACCOUNT, { from: ['x@example.com'] }, 'marketing')).toBeUndefined();
     const both = await addRule(db, ACCOUNT, { match: { from: ['x@example.com', 'y@example.com'] }, disposition: 'archive' }, 'user');
-    const again = await listRuleSummaries(db, await everything(db));
+    const again = await listRuleSummaries(db, await everything(db), Date.now());
     expect(replacedBy(again, ACCOUNT, { from: ['Y@example.com', 'x@example.com'] }, null)?.id).toBe(both);
     expect(await setRule(db, ACCOUNT, { from: ['Y@example.com', 'x@example.com'] }, { disposition: 'keep' }, 'user')).toBe(both);
     expect(await setRule(db, ACCOUNT, { from: ['x@example.com'] }, { whenLabel: 'newsletter', disposition: 'keep' }, 'user')).toBe(waiting);

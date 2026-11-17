@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { Tooltip } from './tooltip.tsx';
 
 const NAMES = ['', 'Unsure', 'Fairly sure', 'Sure'] as const;
 
@@ -8,13 +9,15 @@ const NAMES = ['', 'Unsure', 'Fairly sure', 'Sure'] as const;
  */
 export function Meter({ level }: { level: 1 | 2 | 3 }) {
   return (
-    <span role="img" aria-label={NAMES[level]} title={NAMES[level]} className="inline-flex shrink-0 items-end gap-[2px]">
-      {[1, 2, 3].map((step) => (
-        <span
-          key={step}
-          className={cn('w-[3px]', step === 1 ? 'h-[6px]' : step === 2 ? 'h-[9px]' : 'h-3', step <= level ? 'bg-muted-foreground' : 'bg-foreground/20')}
-        />
-      ))}
-    </span>
+    <Tooltip says={NAMES[level]} className="inline-flex shrink-0">
+      <span role="img" aria-label={NAMES[level]} className="inline-flex items-end gap-[2px]">
+        {[1, 2, 3].map((step) => (
+          <span
+            key={step}
+            className={cn('w-[3px]', step === 1 ? 'h-[6px]' : step === 2 ? 'h-[9px]' : 'h-3', step <= level ? 'bg-muted-foreground' : 'bg-foreground/20')}
+          />
+        ))}
+      </span>
+    </Tooltip>
   );
 }

@@ -383,6 +383,9 @@ export const RuleSummary = z.object({
   source: z.string(),
   hits: z.number(),
   lastHitAt: z.number().nullable(),
+  /** Model calls that checked the rule's condition over the last 30 days, met or not, and what they cost in dollars. */
+  checks: z.number(),
+  checkCost: z.number(),
   /** The rule's filter in Gmail, while there is one. */
   filterId: z.string().nullable(),
   filter: RuleFilter,

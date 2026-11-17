@@ -83,7 +83,7 @@ async function profileOf(db: Sql, scope: Scope, accountId: string, who: { addres
   const names = await labelNames(db, accountId);
   const domainName = 'address' in who ? (who.address.split('@')[1] ?? '') : who.domain;
   const ofDomain = 'address' in who ? await domainFacts(db, accountId, domainName, now) : null;
-  const rules = (await listRuleSummaries(db, here))
+  const rules = (await listRuleSummaries(db, here, now))
     .filter(
       (r) =>
         r.accountId === accountId &&

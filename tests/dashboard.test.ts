@@ -10,7 +10,7 @@ import { summarize } from '../src/dashboard/queries/summary.ts';
 import { usage } from '../src/dashboard/queries/usage.ts';
 import type { SenderPage } from '../src/dashboard/types.ts';
 import { people } from '../src/store/people.ts';
-import { addMailbox, connectAccount, recordSync } from '../src/store/accounts.ts';
+import { addMailbox, connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { finishRun, startRun } from '../src/store/runs.ts';
@@ -19,6 +19,8 @@ import type { Store } from '../src/store/store.ts';
 import { addRule, removeRule } from '../src/store/rules.ts';
 import { everything, facts } from './helpers.ts';
 import { conditionsHash } from '../src/store/content.ts';
+import type { JudgeInput } from '../src/triage/stages/model.ts';
+import { triageAccount } from '../src/work/triage.ts';
 
 const ACCOUNT = 'me@example.org';
 const DAY = 86_400_000;
@@ -490,7 +492,7 @@ describe('dashboard server', () => {
     const db = await seeded();
     const id = await addRule(db, ACCOUNT, { match: { fromDomain: ['example.com'] }, labelId: 'cold_outreach' }, 'user', NOW);
     await recordDecision(db, ACCOUNT, 'waiting', { disposition: 'archive', subscription: 'preserve', stage: 'rules', ruleId: id, reason: 'r' }, { now: NOW });
-    expect(await listRuleSummaries(db, await everything(db))).toEqual([
+    expect(await listRuleSummaries(db, await everything(db), NOW)).toEqual([
       {
         id,
         accountId: ACCOUNT,
@@ -509,6 +511,8 @@ describe('dashboard server', () => {
         source: 'user',
         hits: 0,
         lastHitAt: NOW,
+        checks: 0,
+        checkCost: 0,
         filterId: null,
         filter: {
           state: 'none',
@@ -522,6 +526,26 @@ describe('dashboard server', () => {
         createdAt: NOW,
       },
     ]);
+  });
+
+  it("counts every call that checked a rule's condition over 30 days, met or not, and what they cost", async () => {
+    const { db } = await onePerson(ACCOUNT);
+    const from = { address: 'deals@shop.example.com', domain: 'shop.example.com' };
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'sale', from }), facts({ messageId: 'receipt', from })], '1', NOW);
+    const id = await addRule(db, ACCOUNT, { match: { fromDomain: ['shop.example.com'] }, labelId: 'newsletter', when: 'a sale' }, 'user', NOW);
+    const usage = { model: 'test/model', inputTokens: 1, outputTokens: 1, costUsd: 0.03 };
+    const model = {
+      model: 'test/model',
+      judge: async ({ evidence }: JudgeInput) => ({ label: evidence.facts.messageId === 'sale' ? 'newsletter' : 'personal', reason: 'r', usage }),
+    };
+    const sources = { api: { getContent: async () => null, getThread: async () => null }, mailbox: { hasSentTo: async () => false } };
+    await triageAccount({ db, mailbox: null, model, sources, now: () => NOW }, (await listAccounts(db))[0]!);
+    const before = await startRun(db, { accountId: ACCOUNT, messageId: 'sale', model: 'test/model', ruleId: id, now: NOW - 31 * DAY });
+    await finishRun(db, before, { usage: { ...usage, costUsd: 1 }, now: NOW - 31 * DAY });
+
+    const [rule] = await listRuleSummaries(db, await everything(db), NOW);
+    expect(rule).toMatchObject({ id, checks: 2 });
+    expect(rule!.checkCost).toBeCloseTo(0.06);
   });
 
   it('breaks an address down by the names it writes under, and lists its mail under one name', async () => {
@@ -572,7 +596,7 @@ describe('dashboard server', () => {
         headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' },
         body: JSON.stringify(body),
       });
-    const theirs = async () => (await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from']?.[0] === 'news@example.com');
+    const theirs = async () => (await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => r.match['from']?.[0] === 'news@example.com');
     await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     // Trust is given in the rule dialog, as what Trust starts it on: a rule for exactly them that only keeps their mail, which is Leave in inbox. It replaces the rule for exactly them.
     // It says it replaced one, so the page offers no Undo: removing it would not bring the old rule back.
@@ -616,7 +640,7 @@ describe('dashboard server', () => {
       });
       return { status: response.status, body: await response.json() };
     };
-    const theirs = async () => (await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from']?.[0] === 'news@example.com');
+    const theirs = async () => (await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => r.match['from']?.[0] === 'news@example.com');
 
     const fresh = await give({ address: 'News@example.com', standing: 'trusted' });
     expect(fresh).toEqual({ status: 200, body: { id: expect.any(String), was: null } });
@@ -653,7 +677,7 @@ describe('dashboard server', () => {
     const post = (path: string, body: object) =>
       fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' }, body: JSON.stringify(body) });
     const open = async () => ((await (await fetch(`${base}/api/suggestions`)).json()) as { proposals: { id: number }[] }).proposals.map((p) => p.id);
-    const fromNews = async () => (await listRuleSummaries(db, await everything(db))).filter((r) => r.match['fromDomain']?.[0] === 'example.com');
+    const fromNews = async () => (await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => r.match['fromDomain']?.[0] === 'example.com');
 
     // Accepting it without a rule in hand is not a way to make one.
     expect((await post('/api/proposals', { id: proposal, accept: true })).status).toBe(400);
@@ -670,12 +694,12 @@ describe('dashboard server', () => {
     const made = await post('/api/rules', { accountId: ACCOUNT, match: { fromDomain: ['example.com'] }, label: 'transactional', proposal });
     expect(made.status).toBe(200);
     expect(await fromNews()).toMatchObject([{ labelId: 'transactional', source: 'user' }]);
-    expect((await listRuleSummaries(db, await everything(db))).filter((r) => r.match['from']?.[0] === 'news@example.com')).toEqual([]);
+    expect((await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => r.match['from']?.[0] === 'news@example.com')).toEqual([]);
     expect(await open()).toEqual([]);
     expect(await raw(db).get('SELECT status FROM proposals WHERE id = ?', proposal)).toEqual({ status: 'accepted' });
     // Made once: the same proposal again makes no second rule.
     expect((await post('/api/rules', { accountId: ACCOUNT, match: { fromDomain: ['example.org'] }, label: 'transactional', proposal })).status).toBe(409);
-    expect((await listRuleSummaries(db, await everything(db))).filter((r) => r.match['fromDomain']?.[0] === 'example.org')).toEqual([]);
+    expect((await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => r.match['fromDomain']?.[0] === 'example.org')).toEqual([]);
   });
 
   it("tells the page only that something failed when it is Sift's own error, and logs why", async () => {

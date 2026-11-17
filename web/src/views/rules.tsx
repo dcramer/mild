@@ -5,9 +5,9 @@ import { type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { setParams, useParam } from '@/lib/route.ts';
 import { filterStanding } from '@/views/gmail-filter.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
-import { RulePanel, Who, whoText } from '@/views/rule-panel.tsx';
+import { RulePanel, Who, checked, whoText } from '@/views/rule-panel.tsx';
 import type { OpenMessages } from '@/views/message-panel.tsx';
-import { INBOX, MADE_BY, ago, count, describeMatch, doesName, inboxFirst, outcomeName } from '@/lib/format.ts';
+import { INBOX, MADE_BY, ago, count, dateTime, describeMatch, doesName, inboxFirst, money, outcomeName, plural } from '@/lib/format.ts';
 import {
   Blank,
   Button,
@@ -89,6 +89,7 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
     )
     .toSorted((a, b) => b.hits - a.hits);
   const at = rules.findIndex((r) => r.id === open);
+  const costs = (data?.rules ?? []).some(checked);
 
   const removeButton = (rule: RuleSummary) => (
     <ConfirmButton
@@ -140,7 +141,10 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
           <Td className="max-w-0 md:w-full">
             <Blank />
           </Td>
-          <Td phone="hide" num className="md:w-44">
+          <Td phone="hide" num className="md:w-28">
+            <Blank word />
+          </Td>
+          <Td phone="hide" num className="md:w-32">
             <Blank word />
           </Td>
         </Loading>
@@ -148,11 +152,25 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
         <Empty>{data && data.rules.length > 0 ? 'No rule matches.' : 'No rules yet.'}</Empty>
       ) : (
         <Table>
-          <thead className="sr-only">
+          <thead className="max-md:sr-only">
             <Tr>
-              <Th>Rule</Th>
-              <Th phone="hide">Used</Th>
-              <Th phone="hide">Remove</Th>
+              <Th>
+                <span className="sr-only">Rule</span>
+              </Th>
+              <Th phone="hide" num says="Mail the rule has decided since it was made">
+                Messages
+              </Th>
+              <Th phone="hide" num>
+                Last used
+              </Th>
+              {costs ? (
+                <Th phone="hide" num says="What the model cost checking a rule’s condition over the last 30 days, whether the mail met it or not">
+                  Cost 30D
+                </Th>
+              ) : null}
+              <Th phone="hide">
+                <span className="sr-only">Remove</span>
+              </Th>
             </Tr>
           </thead>
           <tbody>
@@ -168,16 +186,17 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
                   </span>
                   {rule.when ? <Sub className="whitespace-normal">only when it is {rule.when}</Sub> : null}
                 </Td>
-                <Td phone="hide" num quiet className="md:w-44">
-                  {rule.hits === 0 ? (
-                    'Never used'
-                  ) : (
-                    <>
-                      <span className="text-foreground">{count(rule.hits)}</span>
-                      {rule.lastHitAt ? ` · ${ago(rule.lastHitAt)}` : null}
-                    </>
-                  )}
+                <Td phone="hide" num className="md:w-28">
+                  {count(rule.hits)}
                 </Td>
+                <Td phone="hide" num quiet className="md:w-32" says={rule.lastHitAt ? dateTime(rule.lastHitAt) : null}>
+                  {rule.lastHitAt ? ago(rule.lastHitAt) : 'Never'}
+                </Td>
+                {costs ? (
+                  <Td phone="hide" num className="md:w-28" says={checked(rule) ? `${plural(rule.checks, 'message')} checked` : null}>
+                    {checked(rule) ? money(rule.checkCost) : null}
+                  </Td>
+                ) : null}
                 <RowActions>{removeButton(rule)}</RowActions>
               </Tr>
             ))}

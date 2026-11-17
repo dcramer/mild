@@ -1,14 +1,20 @@
-import { alias, and, asc, count, decisions, desc, eq, labels, max, messages, rules, sql } from '../../store/query.ts';
+import { alias, and, asc, count, decisions, desc, eq, gte, labels, max, messages, modelRuns, rules, sql } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import type { RuleMatch } from '../../triage/stages/rules.ts';
 import { openEnvelope, openJson, ruleName } from '../../store/content.ts';
 import { ruleFilterStatus } from '../../store/filters.ts';
 import { type Scope, within } from '../scope.ts';
 import type { RuleSummary, RuleWaiting } from '../types.ts';
+import { DAY_MS } from './decisions.ts';
+import { MONTH } from './usage.ts';
 
-/** Every rule in evaluation order, with its label, what it does, and how often and how recently it decided a message. */
-export async function listRuleSummaries(db: Sql, scope: Scope): Promise<RuleSummary[]> {
+/**
+ * Every rule in evaluation order, with its label, what it does, how often and how recently it decided a
+ * message, and what checking its condition cost over the last 30 days.
+ */
+export async function listRuleSummaries(db: Sql, scope: Scope, now: number): Promise<RuleSummary[]> {
   const filters = await ruleFilterStatus(db);
+  const checking = and(eq(modelRuns.accountId, rules.accountId), eq(modelRuns.ruleId, rules.id), gte(modelRuns.startedAt, now - MONTH * DAY_MS));
   const rows = await db
     .select({
       id: rules.id,
@@ -32,6 +38,11 @@ export async function listRuleSummaries(db: Sql, scope: Scope): Promise<RuleSumm
         .select({ at: max(decisions.decidedAt) })
         .from(decisions)
         .where(and(eq(decisions.accountId, rules.accountId), eq(decisions.ruleId, rules.id)))}`.mapWith(Number),
+      checks: sql<number>`${db.select({ n: count() }).from(modelRuns).where(checking)}`.mapWith(Number),
+      checkCost: sql<number>`${db
+        .select({ usd: sql`coalesce(sum(${modelRuns.costUsd}), 0)` })
+        .from(modelRuns)
+        .where(checking)}`.mapWith(Number),
     })
     .from(rules)
     .leftJoin(labels, and(eq(labels.accountId, rules.accountId), eq(labels.id, sql`coalesce(${rules.labelId}, ${rules.whenLabel})`)))
@@ -55,6 +66,8 @@ export async function listRuleSummaries(db: Sql, scope: Scope): Promise<RuleSumm
     source: r.source,
     hits: r.hits,
     lastHitAt: r.lastHitAt,
+    checks: r.checks,
+    checkCost: r.checkCost,
     filterId: r.filterId,
     filter: filters.get(r.id) ?? { state: 'none', possible: false, reason: null, plan: null, differs: [], checkedAt: null, history: [] },
     createdAt: r.createdAt,

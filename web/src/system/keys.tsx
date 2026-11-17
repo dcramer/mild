@@ -1,5 +1,6 @@
 import { type ReactNode, createContext, useContext, useEffect, useId, useRef, useSyncExternalStore } from 'react';
 import { Kbd } from './type.tsx';
+import { TOUCH } from './touch.ts';
 
 /**
  * Keyboard shortcuts. A control asks for its key with `useShortcut`, which binds the key and hands back
@@ -51,9 +52,6 @@ const subscribe = (listener: () => void) => {
   return () => void listeners.delete(listener);
 };
 export const useShortcutsOn = () => useSyncExternalStore(subscribe, () => on);
-
-// A screen worked by finger has no keyboard to speak of: the keys still work if one is attached, and no hint is drawn.
-const TOUCH = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
 
 /** Whether key hints are drawn: shortcuts are on, and this is not a touch screen. For a hint on a key the browser handles itself, such as Escape. */
 export const useHintsShown = () => useShortcutsOn() && !TOUCH;

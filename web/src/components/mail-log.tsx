@@ -94,7 +94,7 @@ export function MailLog({
                     <Happened row={row} stacked labelled={labelled} />
                   </span>
                 </Td>
-                <Td phone="hide" num quiet title={dateTime(row.decidedAt)}>
+                <Td phone="hide" num quiet says={dateTime(row.decidedAt)}>
                   {clock(row.decidedAt)}
                 </Td>
                 <RowActions>

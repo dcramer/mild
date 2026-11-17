@@ -1,6 +1,7 @@
 import { PreviewCard as Base } from '@base-ui/react/preview-card';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { TOUCH } from './touch.ts';
 
 /**
  * A link that shows a little about where it goes when the pointer rests on it or it takes focus. The
@@ -8,6 +9,12 @@ import { cn } from '@/lib/utils';
  * never shows it. `card` is rendered only while open, so it may load what it shows.
  */
 export function HoverCard({ href, children, card, className }: { href: string; children: ReactNode; card: ReactNode; className?: string }) {
+  if (TOUCH)
+    return (
+      <a href={href} className={className}>
+        {children}
+      </a>
+    );
   return (
     <Base.Root>
       <Base.Trigger href={href} delay={350} className={cn('underline-offset-4 hover:underline focus-visible:underline', className)}>

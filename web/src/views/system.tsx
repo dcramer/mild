@@ -72,6 +72,7 @@ import {
   Th,
   Timeline,
   TimelineEvent,
+  Tooltip,
   Tr,
   TrGroup,
   useToast,
@@ -202,8 +203,8 @@ export function SystemView() {
               , a key <Kbd>Enter</Kbd>.
             </p>
           </Row>
-          <Row label="slug" note="Column heads and a figure’s label. Not headings.">
-            <p className="slug text-muted-foreground">Sender · Messages</p>
+          <Row label="slug" note="A figure’s label. Not a heading, and not a column head, which is Th.">
+            <p className="slug text-muted-foreground">Their next mail</p>
           </Row>
           <Row label="look" note="What is left to the reader, in a line of text.">
             <p>
@@ -762,9 +763,52 @@ export function SystemView() {
                 news@example.com
               </HoverCard>
             </p>
+            <p>
+              Synced{' '}
+              <Tooltip says="Nov 13, 2026, 3:21 PM" className="text-muted-foreground">
+                11 h ago
+              </Tooltip>
+            </p>
           </div>
         </Section>
       </div>
+
+      <Section title="Column heads" meta="shown where a figure means nothing without one; dotted where they say more">
+        <Table>
+          <thead>
+            <Tr>
+              <Th>
+                <span className="sr-only">Rule</span>
+              </Th>
+              <Th phone="hide" num says="Mail the rule has decided since it was made">
+                Messages
+              </Th>
+              <Th phone="hide" num>
+                Last used
+              </Th>
+              <Th phone="hide" num>
+                Cost 30D
+              </Th>
+            </Tr>
+          </thead>
+          <tbody>
+            <Tr>
+              <Td className="max-w-0 md:w-full">
+                <span className="name">news@example.com</span>
+              </Td>
+              <Td phone="hide" num>
+                4
+              </Td>
+              <Td phone="hide" num quiet says="Nov 17, 2026, 10:42 AM">
+                6 min ago
+              </Td>
+              <Td phone="hide" num says="31 messages checked">
+                $0.42
+              </Td>
+            </Tr>
+          </tbody>
+        </Table>
+      </Section>
 
       <Section title="Navigation">
         <Sheet className="px-4">

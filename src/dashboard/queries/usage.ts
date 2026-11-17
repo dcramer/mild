@@ -5,7 +5,8 @@ import type { Usage } from '../types.ts';
 import { DAY_MS } from './decisions.ts';
 import { localDay } from './summary.ts';
 
-const MONTH = 30;
+/** Days the masthead's cost and each rule's cover. */
+export const MONTH = 30;
 
 /** What the viewer's model calls cost, failed ones included: over the last day, week and 30 days, and per day for those 30. */
 export async function usage(db: Sql, scope: Scope, now: number): Promise<Usage> {

@@ -15,6 +15,7 @@ import { openStore, storeOn } from '../src/store/store.ts';
 import { loadKeyring } from '../src/secrets.ts';
 import type { Sql } from '../src/store/sql.ts';
 import type { Disposition } from '../src/triage/types.ts';
+import { startRun } from '../src/store/runs.ts';
 import { freshStore, onePerson, openUserDb, raw, recordEverything, rowsBy, superuser } from './fixtures.ts';
 import { facts, withSampleLabels } from './helpers.ts';
 
@@ -225,6 +226,30 @@ describe('a primary mailbox', () => {
     await (await superuser()).exec(migration);
     await (await superuser()).exec(migration);
     expect([await primaryOf(store.central, alpha), await primaryOf(store.central, bravo)]).toEqual(['alpha@work.example.com', 'bravo@work.example.net']);
+  });
+});
+
+describe('a model call', () => {
+  it('made before calls said which rule they checked is given the rule whose condition it met, by a migration', async () => {
+    const account = 'alpha@example.org';
+    const { db } = await onePerson(account);
+    await recordSync(db, account, [facts({ messageId: 'a' }), facts({ messageId: 'b' })], '1', 1);
+    const checked = await addRule(db, account, { match: { fromDomain: ['example.com'] }, labelId: 'newsletter', when: 'a sale' }, 'user');
+    const waits = await addRule(db, account, { match: { from: ['news@example.com'] }, whenLabel: 'newsletter', disposition: 'archive' }, 'user');
+    const decided = async (messageId: string, ruleId: string) => {
+      const runId = await startRun(db, { accountId: account, messageId, model: 'test/model', now: 2 });
+      await recordDecision(db, account, messageId, { disposition: 'keep', subscription: 'preserve', stage: 'model', ruleId, reason: 'r' }, { now: 3, runId });
+      return runId;
+    };
+    const runs = [await decided('a', checked), await decided('b', waits)];
+    const migration = readFileSync(new URL('0045_rule_runs_from_decisions.sql', MIGRATIONS), 'utf8');
+    await (await superuser()).exec(migration);
+    await (await superuser()).exec(migration);
+    expect(await raw(db).all('SELECT id, rule_id FROM model_runs ORDER BY id')).toEqual([
+      { id: runs[0], rule_id: checked },
+      // A rule that waits for a label asks no model a question of its own.
+      { id: runs[1], rule_id: null },
+    ]);
   });
 });
 

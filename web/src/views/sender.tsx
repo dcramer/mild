@@ -279,7 +279,7 @@ function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMess
               <Td phone="hide" className="whitespace-nowrap">
                 <StatusWord row={row} />
               </Td>
-              <Td phone="hide" num quiet title={dateTime(row.receivedAt)}>
+              <Td phone="hide" num quiet says={dateTime(row.receivedAt)}>
                 {ago(row.receivedAt)}
               </Td>
             </Tr>

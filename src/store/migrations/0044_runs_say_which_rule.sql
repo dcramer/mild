@@ -1,0 +1,2 @@
+ALTER TABLE "model_runs" ADD COLUMN "rule_id" text;--> statement-breakpoint
+CREATE INDEX "model_runs_rule" ON "model_runs" USING btree ("account_id","rule_id","started_at") WHERE "model_runs"."rule_id" IS NOT NULL;

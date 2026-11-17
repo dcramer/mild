@@ -33,10 +33,10 @@ export const outOfTries = (db: Sql, accountId: AnyColumn, messageId: AnyColumn) 
     .where(and(forMessage(accountId, messageId), counted(db)))}) >= ${MAX_ATTEMPTS}`;
 
 /** Stamped before the call, so a pass that stops part-way leaves a run that counts as failed. */
-export async function startRun(db: Sql, run: { accountId: string; messageId: string; model: string; now: number }): Promise<number> {
+export async function startRun(db: Sql, run: { accountId: string; messageId: string; model: string; ruleId?: string; now: number }): Promise<number> {
   const [row] = await db
     .insert(modelRuns)
-    .values({ accountId: run.accountId, messageId: run.messageId, model: run.model, startedAt: run.now })
+    .values({ accountId: run.accountId, messageId: run.messageId, model: run.model, ruleId: run.ruleId ?? null, startedAt: run.now })
     .returning({ id: modelRuns.id });
   return row!.id;
 }

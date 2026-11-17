@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TOUCH } from './touch.ts';
 
 interface Series {
   key: string;
@@ -115,7 +116,7 @@ export function StackedBars({ series, rows, line, compact }: { series: readonly 
             style={{ left: `${x(at)}%`, bottom: `${100 - y(line.values[at] ?? 0)}%` }}
           />
         ) : null}
-        {shown && at !== null ? (
+        {shown && at !== null && !TOUCH ? (
           <div
             aria-hidden
             className="sheet pointer-events-none absolute top-0 z-10 flex w-max flex-col gap-1 bg-popover px-3 py-2 text-sm tabular-nums"

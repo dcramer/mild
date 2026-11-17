@@ -114,6 +114,7 @@ describe('as little chrome as it takes', () => {
     'select.tsx',
     'toast.tsx',
     'hover-card.tsx',
+    'tooltip.tsx',
     'nav.tsx',
     'chart.tsx',
     'confirm.tsx',
@@ -190,6 +191,16 @@ test('a sender in a list is a SenderCell, name over address, the same on every p
     (path) => `web/src/${relative(WEB, path)}: a row names its sender with SenderCell (web/src/components/sender.tsx).`,
   );
   expect(failures).toEqual([]);
+});
+
+test('a tooltip is a Tooltip, never a title, so none shows on a touch screen', () => {
+  // A frame's title names it for a screen reader, and shows nothing.
+  const failures = ALL.flatMap((path) =>
+    [...readFileSync(path, 'utf8').matchAll(/<(?!iframe\b)[a-z][a-z0-9]*\b[^<>]*?\stitle=/g)].map(
+      (match) => `web/src/${relative(WEB, path)}:${readFileSync(path, 'utf8').slice(0, match.index).split('\n').length}: use a Tooltip`,
+    ),
+  );
+  expect(failures, failures.join('\n')).toEqual([]);
 });
 
 test('every part is on the specimen page', () => {

@@ -25,8 +25,9 @@ test.describe('Removing a mailbox', () => {
 
     await expect(confirm).toHaveCount(0);
     await expect(settings(page).getByText('me@work.example.org')).toHaveCount(0);
-    await expect(settings(page).getByRole('button', { name: 'Remove me@example.org' })).toBeDisabled();
-    await expect(settings(page).getByTitle('You cannot delete your only remaining mailbox.')).toBeVisible();
+    const only = settings(page).getByRole('button', { name: 'Remove me@example.org' });
+    await expect(only).toBeDisabled();
+    await expect(only).toHaveAccessibleDescription('You cannot delete your only remaining mailbox.');
     expect(new URL(page.url()).searchParams.get('settings')).toBe('1');
   });
 

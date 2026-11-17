@@ -1,6 +1,7 @@
 import { type ComponentProps, type ReactNode, useId, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { useShortcut } from './keys.tsx';
+import { Tooltip } from './tooltip.tsx';
 
 const BASE =
   'press inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 border border-transparent font-semibold whitespace-nowrap select-none aria-disabled:pointer-events-none disabled:pointer-events-none [&_svg]:size-[1.15em] [&_svg]:shrink-0';
@@ -93,11 +94,11 @@ export function Button({ variant = 'plain', size = 'md', busy = false, shortcut,
   );
   if (!explained) return pressable;
   return (
-    <span title={why} className="inline-flex cursor-not-allowed">
+    <Tooltip says={why} className="inline-flex cursor-not-allowed">
       {pressable}
       <span id={reason} className="sr-only">
         {why}
       </span>
-    </span>
+    </Tooltip>
   );
 }

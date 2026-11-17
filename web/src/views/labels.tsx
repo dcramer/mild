@@ -134,7 +134,7 @@ export function LabelsView() {
                           <Sub className="max-md:line-clamp-2 max-md:whitespace-normal">{about(label)}</Sub>
                           {only ? <Sub>Only in {only.join(', ')}</Sub> : null}
                         </Td>
-                        <Td phone="hide" num className="w-48" title={`${percent(label.messages, mail)} of the mail`}>
+                        <Td phone="hide" num className="w-48" says={`${percent(label.messages, mail)} of the mail`}>
                           <span className="flex items-center justify-end gap-3">
                             <span className="w-24">
                               <Share part={label.messages} whole={mail} />
@@ -146,9 +146,7 @@ export function LabelsView() {
                           phone="hide"
                           num
                           className="w-28"
-                          title={
-                            label.record.reviewed > 0 ? `${count(label.record.right)} of ${count(label.record.reviewed)} you have ever checked` : undefined
-                          }
+                          says={label.record.reviewed > 0 ? `${count(label.record.right)} of ${count(label.record.reviewed)} you have ever checked` : undefined}
                         >
                           <Right label={label} />
                         </Td>

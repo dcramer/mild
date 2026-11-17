@@ -8,5 +8,5 @@ export default read({
   path: '/api/rules',
   query: z.object({}),
   reply: z.object({ rules: z.array(RuleSummary) }),
-  run: async ({ db }, scope) => ok({ rules: await listRuleSummaries(db, scope) }),
+  run: async ({ db, now }, scope) => ok({ rules: await listRuleSummaries(db, scope, now()) }),
 });

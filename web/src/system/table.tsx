@@ -2,6 +2,7 @@ import { type ComponentProps, type ReactNode, useEffect, useRef, useState } from
 import { cn } from '@/lib/utils';
 import { RowActive, useLayerMoves, useOnPage, useShortcut } from './keys.tsx';
 import { Control, ControlBar } from './controls.tsx';
+import { Tooltip } from './tooltip.tsx';
 
 /**
  * Rows of the same kind of thing. It has no surface of its own: on the page it sits flush with the
@@ -96,19 +97,42 @@ export const rowHolding = (name: string) => document.querySelector<HTMLElement>(
 const EDGES = 'first:pl-[calc(var(--gutter)+var(--bleed))] last:pr-[calc(var(--gutter)+var(--bleed))]';
 const PHONE = { hide: 'hidden md:table-cell' } as const;
 
-/** A column head. `num` lines up over figures; `phone="hide"` drops the column on a phone. */
-export function Th({ num, phone, className, ...props }: ComponentProps<'th'> & { num?: boolean; phone?: keyof typeof PHONE }) {
+type Cell<T extends 'th' | 'td'> = Omit<ComponentProps<T>, 'title'> & {
+  phone?: keyof typeof PHONE;
+  /** What the column or the value means beyond its words, in a `Tooltip`. */
+  says?: ReactNode;
+};
+
+/**
+ * A column head: small capitals in quiet ink, over what it heads. `num` lines up over figures;
+ * `phone="hide"` drops the column on a phone. With `says` it is underlined in dots and says more when pointed at.
+ */
+export function Th({ num, phone, says, className, children, ...props }: Cell<'th'> & { num?: boolean }) {
   return (
     <th
       scope="col"
-      className={cn('slug h-9 px-3 whitespace-nowrap text-muted-foreground', EDGES, num && 'text-right', phone && PHONE[phone], className)}
+      className={cn(
+        'h-9 px-3 text-label font-normal tracking-[0.08em] whitespace-nowrap text-muted-foreground uppercase',
+        EDGES,
+        num && 'text-right',
+        phone && PHONE[phone],
+        className,
+      )}
       {...props}
-    />
+    >
+      {says ? (
+        <Tooltip says={says} className="underline decoration-foreground/35 decoration-dotted underline-offset-4">
+          {children}
+        </Tooltip>
+      ) : (
+        children
+      )}
+    </th>
   );
 }
 
 /** A cell. `num` for figures, which line up on the right; `quiet` for what supports the row without being its point. */
-export function Td({ num, quiet, phone, className, ...props }: ComponentProps<'td'> & { num?: boolean; quiet?: boolean; phone?: keyof typeof PHONE }) {
+export function Td({ num, quiet, phone, says, className, children, ...props }: Cell<'td'> & { num?: boolean; quiet?: boolean }) {
   return (
     <td
       className={cn(
@@ -120,7 +144,9 @@ export function Td({ num, quiet, phone, className, ...props }: ComponentProps<'t
         className,
       )}
       {...props}
-    />
+    >
+      {says ? <Tooltip says={says}>{children}</Tooltip> : children}
+    </td>
   );
 }
 

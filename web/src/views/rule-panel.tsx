@@ -30,6 +30,9 @@ const QUIET: Record<string, string> = {
   subjectContains: 'subject has',
 };
 
+/** Whether checking the rule's condition costs anything: only a model can say whether mail meets one. */
+export const checked = (rule: RuleSummary) => rule.when !== null || rule.checks > 0;
+
 /** What a rule matches: an address alone, or a quiet word and the value; then what the mail must be, in words. */
 export function Who({ accountId, match }: { accountId: string; match: RuleMatch }) {
   const named = saidOf(match);
@@ -269,6 +272,11 @@ export function RulePanel({
           ) : null}
           {rule.kind === 'when-label' || rule.when ? <Fact term="Reading">Sift reads each message it matches.</Fact> : null}
           <Fact term="Used">{rule.hits === 0 ? 'Never' : `${plural(rule.hits, 'time')}${rule.lastHitAt ? `, last ${ago(rule.lastHitAt)}` : ''}`}</Fact>
+          {checked(rule) ? (
+            <Fact term="Cost, 30 days">
+              {money(rule.checkCost)} <span className="text-muted-foreground">· {plural(rule.checks, 'message')} checked</span>
+            </Fact>
+          ) : null}
           <Fact term="Made by">
             {madeBy(rule.source)}, {shortDate(rule.createdAt)}
           </Fact>

@@ -248,6 +248,7 @@ export const modelRuns = pgTable(
     outputTokens: integer('output_tokens').notNull().default(0),
     costUsd: doublePrecision('cost_usd').notNull().default(0),
     retriedAt: time('retried_at'), // the user put the message back in the queue: this failure no longer counts
+    ruleId: text('rule_id'), // the rule whose condition in words the call checked, met or not; what that rule costs. Not a key: a removed rule's calls were still paid for
   },
   (t) => [
     unique('model_runs_own').on(t.userId, t.id),
@@ -255,6 +256,9 @@ export const modelRuns = pgTable(
     message(t),
     index('model_runs_message').on(t.accountId, t.messageId),
     index('model_runs_time').on(t.accountId, t.startedAt),
+    index('model_runs_rule')
+      .on(t.accountId, t.ruleId, t.startedAt)
+      .where(sql`${t.ruleId} IS NOT NULL`),
     own(),
   ],
 ).enableRLS();

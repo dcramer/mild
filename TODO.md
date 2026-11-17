@@ -4,7 +4,7 @@ The working list for sift. Remove an item when it lands; add what you find. What
 
 ## Labels and rules
 
-- [ ] **Rules in the user's words.** A label rule can carry a condition in the user's words, which the model applies. Let one name an action without a label (today it needs one, if only Leave in inbox); decide what it costs to show; propose a plain rule when the condition always holds.
+- [ ] **Rules in the user's words.** A label rule can carry a condition in the user's words, which the model applies. Let one name an action without a label (today it needs one, if only Leave in inbox); propose a plain rule when the condition always holds.
 - [ ] **A sender's page says the kinds of rule in Sift's words**, not the user's. Its list of names counts mail with an action and no label as undecided (`unplaced`, `web/src/views/sender.tsx`).
 - [ ] **Standing.** The server counts a label rule whose label archives as Unwanted (`src/store/senders.ts` gives the rule its label's action), while the sender page lights a standing only for an action rule for exactly them; make them agree. Add standing that is earned (answers that keep agreeing) beside the one given, and a list of all senders and domains to browse by standing.
 - [ ] **Use whether the user reads a sender's mail** (`messages.read_at`; not known for mail from before Sift was connected): in their standing, and to propose unsubscribing from a sender whose mail goes unopened and is never moved back. Suggested labels unsubscribe only where the sender never had permission, so lists the user was added to stay subscribed today.
