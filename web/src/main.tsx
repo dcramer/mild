@@ -1,11 +1,11 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { CSPProvider } from '@base-ui/react/csp-provider';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import { App } from './App.tsx';
 import { queryClient } from './lib/api.ts';
 import { Toaster } from './system/index.ts';
+import { NoInlineStyles } from './system/csp.tsx';
 import { ShortcutList } from './system/keys-help.tsx';
 
 // Installed, the app opens from files the service worker kept, even when sift cannot be reached. Not
@@ -22,14 +22,13 @@ const root = document.getElementById('root');
 if (!root) throw new Error('index.html has no #root element');
 createRoot(root).render(
   <StrictMode>
-    {/* The dashboard's content security policy forbids inline <style>; index.css carries the one rule Base UI would inject. */}
-    <CSPProvider disableStyleElements>
+    <NoInlineStyles>
       <QueryClientProvider client={queryClient}>
         <Toaster>
           <App />
           <ShortcutList />
         </Toaster>
       </QueryClientProvider>
-    </CSPProvider>
+    </NoInlineStyles>
   </StrictMode>,
 );

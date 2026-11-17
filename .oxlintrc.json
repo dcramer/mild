@@ -102,7 +102,7 @@
       "rules": { "react/react-in-jsx-scope": "off" }
     },
     {
-      "files": ["web/src/views/**/*.tsx", "web/src/components/**/*.tsx", "web/src/lib/**/*.ts", "web/src/lib/**/*.tsx", "web/src/App.tsx"],
+      "files": ["web/src/views/**/*.tsx", "web/src/components/**/*.tsx", "web/src/lib/**/*.ts", "web/src/lib/**/*.tsx", "web/src/App.tsx", "web/src/main.tsx"],
       "rules": {
         "no-restricted-imports": [
           "error",
