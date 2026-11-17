@@ -13,9 +13,7 @@ export function SignInScreen({ session, error }: { session: Session; error: stri
   if (session.canSignIn)
     return (
       <Splash title="Your inbox, without the pesky salespeople.">
-        <p className="max-w-[36rem] text-muted-foreground">
-          Sift labels each message and archives the kinds you don't want. It only suggests until you turn it on.
-        </p>
+        <p className="max-w-[36rem] text-muted-foreground">Sift labels each message and archives the kinds you don't want.</p>
         {failed}
         <div>
           <Button variant="mark" size="lg" href="/auth/login" className="w-full sm:w-auto">

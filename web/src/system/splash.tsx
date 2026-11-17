@@ -3,7 +3,7 @@ import { TextLink, Wordmark } from './type.tsx';
 
 /**
  * The first page of someone not signed in: the name, one line set as large as anything gets, then a
- * sentence and the one action. No sheet: it is the whole page. The terms and privacy at its foot.
+ * sentence and the one action. No sheet: it is the whole page. The terms, privacy and source at its foot.
  */
 export function Splash({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
@@ -18,6 +18,7 @@ export function Splash({ title, children }: { title: ReactNode; children: ReactN
       <footer className="flex gap-4 pb-8 text-sm text-muted-foreground">
         <TextLink href="/terms">Terms</TextLink>
         <TextLink href="/privacy">Privacy</TextLink>
+        <TextLink href="https://github.com/dcramer/sift">Open source</TextLink>
       </footer>
     </div>
   );
