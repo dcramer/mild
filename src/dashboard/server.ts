@@ -109,6 +109,8 @@ export interface DashboardOptions {
   ephemeral?: Ephemeral;
   /** Addresses Google can sign the user in at, to suggest when they opened the dashboard at one it cannot. */
   signInAddresses?: readonly string[];
+  /** `SIFT_CLOUD`: where the people of a Sift run as a service write to whoever runs it. */
+  cloud?: string;
   /** What the dashboard can ask the rest of sift to do. Without it the page can look but not manage. */
   controls?: Controls;
   /** Where an error goes that is Sift's own, not a `Refusal`: the page is told only that something failed. */
@@ -189,6 +191,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
   const { ephemeral } = options;
   if (signIn && !ephemeral) throw new Error('signIn needs an ephemeral store');
   const log = options.log ?? (() => {});
+  const cloud = options.cloud ?? null;
   const report = (request: Request, error: unknown) =>
     log(`${request.method} ${new URL(request.url).pathname}: ${error instanceof Error ? error.message : String(error)}`);
   /** What the page is told of an error: a refusal's own words, anything else only that it failed. */
@@ -265,7 +268,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
 
     if (signIn && method === 'GET' && url.pathname === '/api/session') {
       const reason = !signIn.hasClient() ? 'no-client' : !googleCanReturnHere ? 'address' : null;
-      return json(200, { required: true, email: session, canSignIn: reason === null, reason, addresses: options.signInAddresses ?? [] });
+      return json(200, { required: true, email: session, canSignIn: reason === null, reason, addresses: options.signInAddresses ?? [], cloud });
     }
     if (signIn && method === 'GET' && url.pathname === '/auth/login') {
       if (!signIn.hasClient() || !googleCanReturnHere) return redirect('/');
@@ -309,7 +312,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     if (signIn && session === null && url.pathname.startsWith('/api/')) return json(401, { error: 'Sign in to use the dashboard.' });
     if (signIn && method === 'POST' && url.pathname === '/api/signout') return json(200, { ok: true }, { 'set-cookie': sessionCookie('', 0) });
     if (!signIn && method === 'GET' && url.pathname === '/api/session')
-      return json(200, { required: false, email: null, canSignIn: false, reason: null, addresses: [] });
+      return json(200, { required: false, email: null, canSignIn: false, reason: null, addresses: [], cloud });
 
     if (method === 'POST') {
       const handler = writes.get(url.pathname);

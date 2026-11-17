@@ -8,7 +8,7 @@ export { Dialog } from './dialog.tsx';
 export { Disclosure } from './disclosure.tsx';
 export { Clause, Document } from './document.tsx';
 export { Fact, Facts } from './facts.tsx';
-export { FinePrint, PageFoot } from './fine-print.tsx';
+export { Cloud, FinePrint, PageFoot } from './fine-print.tsx';
 export { Check, Field, FieldGroup, Form, Input, TextArea } from './field.tsx';
 export { Figure, Figures } from './figures.tsx';
 export { HoverCard } from './hover-card.tsx';

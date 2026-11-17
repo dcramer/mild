@@ -1,22 +1,27 @@
 import { Clause, Document, TextLink } from '@/system';
 
-// Each copy of sift is run by whoever set it up, on their own machine, with their own Google client, so
-// "we" is that person and there is no company behind it. Google's verification reads these pages: the
-// Limited Use statement must stay word for word, and what they say sift keeps must stay true of the code.
-// The security page is held to docs/security.md and AGENTS.md's safety rules the same way.
+// Shown only on a Sift run as a service for other people (`SIFT_CLOUD`), whose value is `contact`: "we" is
+// whoever runs it, with their own Google client. Google's verification reads these pages: the Limited Use
+// statement must stay word for word, and what they say sift keeps must stay true of the code. The security
+// page is held to docs/security.md and AGENTS.md's safety rules the same way.
 const UPDATED = 'November 17, 2026';
 const SOURCE = 'https://github.com/dcramer/sift';
 const USER_DATA_POLICY = 'https://developers.google.com/terms/api-services-user-data-policy';
 const PERMISSIONS = 'https://myaccount.google.com/permissions';
 
-export function PrivacyView() {
+/** Where to write to whoever runs this Sift. */
+function Contact({ to }: { to: string }) {
+  return <TextLink href={`mailto:${to}`}>{to}</TextLink>;
+}
+
+export function PrivacyView({ contact }: { contact: string }) {
   return (
     <main>
       <Document title="Privacy policy" updated={UPDATED}>
         <p>
-          Sift helps manage a Gmail inbox: it classifies mail, and, as you tell it to, archives it, marks it as spam or unsubscribes from it. Each copy of Sift
-          is run by the person or organisation that set it up (“we”), on a machine of their own. There is no Sift company, and nothing you give this copy is
-          sent to the people who write Sift.
+          Sift helps manage a Gmail inbox: it classifies mail, and, as you tell it to, archives it, marks it as spam or unsubscribes from it. This Sift is run
+          by the person or organisation that set it up (“we”, at <Contact to={contact} />
+          ). Sift is <TextLink href={SOURCE}>open source</TextLink>, and anyone can run a copy: this policy is ours, for this one.
         </p>
 
         <Clause title="What Sift reads">
@@ -59,7 +64,7 @@ export function PrivacyView() {
         <Clause title="How it is used">
           <p>
             Only to classify your mail the way you set it up, and to show you what Sift did and what it would do. It is not used for advertising, not sold, and
-            not used to train AI models beyond teaching your own copy of Sift, through your examples, what your mail is.
+            not used to train AI models beyond teaching Sift, through your examples, what your own mail is.
           </p>
           <p>
             No person reads your mail through Sift but you, unless you ask us to (to look into a problem, say), it is needed to keep Sift secure, or the law
@@ -114,8 +119,8 @@ export function PrivacyView() {
 
         <Clause title="Changes and contact">
           <p>
-            When this policy changes, the date above changes with it. Questions and requests go to the support address Google shows when you sign in to Sift.
-            See also the <TextLink href="/terms">terms of service</TextLink>.
+            When this policy changes, the date above changes with it. Questions and requests go to <Contact to={contact} />. See also the{' '}
+            <TextLink href="/terms">terms of service</TextLink>.
           </p>
         </Clause>
       </Document>
@@ -123,13 +128,13 @@ export function PrivacyView() {
   );
 }
 
-export function TermsView() {
+export function TermsView({ contact }: { contact: string }) {
   return (
     <main>
       <Document title="Terms of service" updated={UPDATED}>
         <p>
-          These terms are between you and the person or organisation running this copy of Sift (“we”). By signing in, you agree to them and to the{' '}
-          <TextLink href="/privacy">privacy policy</TextLink>.
+          These terms are between you and the person or organisation running this Sift (“we”, at <Contact to={contact} />
+          ). By signing in, you agree to them and to the <TextLink href="/privacy">privacy policy</TextLink>.
         </p>
 
         <Clause title="What Sift does">
@@ -148,7 +153,7 @@ export function TermsView() {
           <ul>
             <li>Sign in only with a Gmail account that is yours, or that you are allowed to manage.</li>
             <li>Check what Sift suggests before turning it on. A model can be wrong, and a rule does what it says even when that is not what you meant.</li>
-            <li>Don’t use Sift to break the law, to reach anyone else’s mail, or to interfere with this copy of Sift or the machine it runs on.</li>
+            <li>Don’t use Sift to break the law, to reach anyone else’s mail, or to interfere with this Sift or what it runs on.</li>
           </ul>
         </Clause>
 
@@ -176,7 +181,7 @@ export function TermsView() {
         <Clause title="Ending">
           <p>
             You can stop at any time by deleting your account under Settings, which deletes your data, or by removing Sift’s access in your{' '}
-            <TextLink href={PERMISSIONS}>Google account</TextLink>. We may end your access to this copy of Sift at any time.
+            <TextLink href={PERMISSIONS}>Google account</TextLink>. We may end your access to this Sift at any time.
           </p>
         </Clause>
 
@@ -188,7 +193,7 @@ export function TermsView() {
   );
 }
 
-export function SecurityView() {
+export function SecurityView({ contact }: { contact: string }) {
   return (
     <main>
       <Document title="Security" updated={UPDATED}>
@@ -330,7 +335,7 @@ export function SecurityView() {
         <Clause title="If something is wrong">
           <p>
             To cut Sift off at once, remove its access in your <TextLink href={PERMISSIONS}>Google account’s permissions</TextLink>; that ends every token it
-            was given. Report a security problem to the support address Google shows when you sign in to Sift, not in a public issue.
+            was given. Report a security problem in this Sift to <Contact to={contact} />, not in a public issue.
           </p>
         </Clause>
       </Document>

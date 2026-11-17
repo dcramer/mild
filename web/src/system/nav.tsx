@@ -1,8 +1,8 @@
 import { Dialog } from '@base-ui/react/dialog';
 import { MenuIcon, XIcon } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useContext, useEffect, useState } from 'react';
 import { Button } from './button.tsx';
-import { FinePrint } from './fine-print.tsx';
+import { Cloud, FinePrint } from './fine-print.tsx';
 import { Avatar, Menu, type MenuItem } from './menu.tsx';
 import { Wordmark } from './type.tsx';
 
@@ -62,6 +62,7 @@ export function Masthead({
   account?: { name: string; items: readonly MenuItem[] } | undefined;
 }) {
   const [open, setOpen] = useState(false);
+  const cloud = useContext(Cloud);
   // Going somewhere closes the panel.
   useEffect(() => setOpen(false), [current]);
   const here = items.find((item) => item.to === current);
@@ -126,9 +127,11 @@ export function Masthead({
                 ))}
               </ul>
             </nav>
-            <div className="mt-8">
-              <FinePrint list />
-            </div>
+            {cloud ? (
+              <div className="mt-8">
+                <FinePrint list />
+              </div>
+            ) : null}
             {detail ? <div className="sheet mt-auto p-4 text-sm">{detail}</div> : null}
             {account ? (
               <div className={`${detail ? 'mt-6' : 'mt-auto'} flex flex-col gap-4 border-t border-(--rule) pt-5`}>

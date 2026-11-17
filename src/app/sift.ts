@@ -102,6 +102,7 @@ export async function createSift(host: Host): Promise<Sift> {
     signIn: buildSignIn(config, store),
     sessionSecret: host.sessionSecret,
     signInAddresses: host.signInAddresses,
+    ...(config.settings.cloud ? { cloud: config.settings.cloud } : {}),
     ephemeral,
     log,
   });

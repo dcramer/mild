@@ -757,6 +757,12 @@ describe('signing in with Google', () => {
     expect((await preferences(db)).active).toBe(false);
   });
 
+  it('tells anyone where to write to whoever runs a Sift that is a service, and nothing on someone own copy', async () => {
+    expect((await (await startWithSignIn()).call('GET', '/api/session')).body).toMatchObject({ cloud: null });
+    const service = await startDashboard(people(store), { signIn, sessionSecret: SECRET, cloud: 'support@example.com' });
+    expect((await service.call('GET', '/api/session')).body).toMatchObject({ email: null, cloud: 'support@example.com' });
+  });
+
   it('signs in through Google and returns to the address the browser used', async () => {
     const { call, port } = await startWithSignIn();
     const login = await call('GET', '/auth/login');

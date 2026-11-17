@@ -333,6 +333,8 @@ describe('settings', () => {
     expect(() => readSettings({ REDIS_URL: 'http://x' })).toThrow('REDIS_URL must be an address starting redis:// or rediss://');
     expect(() => readSettings({ SIFT_CHATGPT_SIGN_IN: 'on' })).toThrow('SIFT_CHATGPT_SIGN_IN must be "device-code" or "redirect".');
     expect(readSettings({ SIFT_CHATGPT_SIGN_IN: 'redirect', SIFT_DASHBOARD_PORT: '' }).chatgptSignIn).toBe('redirect');
+    expect(() => readSettings({ SIFT_CLOUD: '1' })).toThrow('SIFT_CLOUD must be the email address people write to about this Sift.');
+    expect(readSettings({ SIFT_CLOUD: 'support@example.com' }).cloud).toBe('support@example.com');
   });
 
   it('installs a pasted Web application client, or one given as a path, and refuses a Desktop one', () => {

@@ -1,3 +1,4 @@
+import { createContext, useContext } from 'react';
 import { TextLink } from './type.tsx';
 
 const LINKS = [
@@ -8,12 +9,19 @@ const LINKS = [
 const SOURCE = { href: 'https://github.com/dcramer/sift', label: 'Open source' };
 
 /**
+ * Whether this Sift is run as a service for other people (`SIFT_CLOUD`). Only then are there terms, a
+ * privacy policy and a security page: on someone's own copy they would be addressed to themselves.
+ */
+export const Cloud = createContext(false);
+
+/**
  * The terms, the privacy policy and the security page, wherever someone may look for them: as links in a
  * line, or as a `list`, one a row at the reading size, where they sit under bigger links (the phone menu).
- * `source` adds the code.
+ * `source` adds the code. Off `Cloud`, only the code.
  */
 export function FinePrint({ source = false, list = false }: { source?: boolean; list?: boolean }) {
-  const links = source ? [...LINKS, SOURCE] : LINKS;
+  const links = [...(useContext(Cloud) ? LINKS : []), ...(source ? [SOURCE] : [])];
+  if (links.length === 0) return null;
   if (list)
     return (
       <ul className="flex flex-col text-muted-foreground">
