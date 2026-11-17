@@ -1076,7 +1076,7 @@ describe('examples', () => {
       ...options(),
       model: async () => ({ model: 'test/model', judge: async () => ({ label: 'newsletter', reason: 'r' }) }),
     });
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter' });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', messageId: 'news' });
 
     inbox = [];
     bodies.clear();

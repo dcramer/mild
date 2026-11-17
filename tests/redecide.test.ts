@@ -148,7 +148,7 @@ describe('when a rule changes', () => {
 
   it('never touches mail the user answered for', async () => {
     const sale = await decided('sales@example.com', MARKETING);
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'sales@example.com', label: 'newsletter' });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'sales@example.com', label: 'newsletter', messageId: sale });
     const answered = await decided('shop@example.com', { stage: 'rules', disposition: 'keep', labelId: 'transactional' });
     // An earlier answer of the user's, corrected again.
     await raw(db).run('UPDATE decisions SET by_user = true WHERE message_id = ?', answered);

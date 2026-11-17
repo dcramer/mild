@@ -478,7 +478,7 @@ describe('managing sift from the dashboard', () => {
     // A rule or a label changing does not answer it for the user.
     expect(await redecideWaiting(db, ACCOUNT)).toBe(0);
 
-    const reply = await call('POST', '/api/feedback', { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal' });
+    const reply = await call('POST', '/api/feedback', { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', messageId: 'asked' });
     expect(reply.body).toEqual({ notFixed: null });
     expect(calls).toEqual(['putBack asked']);
     expect(await raw(db).get("SELECT disposition, label_id, carry_out, by_user FROM decisions WHERE message_id = 'asked' ORDER BY id DESC LIMIT 1")).toEqual({

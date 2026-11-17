@@ -36,6 +36,12 @@ async function suggest(address: string, disposition: Disposition, extra: Partial
   return await recordDecision(db, ACCOUNT, id, { disposition, subscription: 'preserve', stage: 'model', reason: 'looks like it', ...extra }, { now: serial });
 }
 
+/** Answer each of a sender's waiting messages in turn, as pressing every row would. */
+async function answerEach(sender: string, label: string, now = Date.now()): Promise<void> {
+  for (const { messageId } of await pendingSuggestions(db, { accountId: ACCOUNT, sender }))
+    await applyFeedback(db, { accountId: ACCOUNT, sender, label, messageId }, now);
+}
+
 beforeEach(async () => {
   ({ store, db } = await onePerson(ACCOUNT));
   serial = 0;
@@ -131,7 +137,7 @@ describe('suggestions', () => {
 describe('teaching', () => {
   it('saying what a message is corrects sift and teaches by example, with no rule tying the sender to a label', async () => {
     const decisionId = await suggest('ada@example.org', 'archive', { labelId: 'marketing' });
-    const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'ada@example.org', label: 'personal', decisionId }, 50);
+    const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'ada@example.org', label: 'personal', decisionId, messageId: 'm1' }, 50);
 
     expect(result).toEqual({ corrected: null, carrying: 0, asked: [] });
     expect(await listRules(db, ACCOUNT)).toEqual([]);
@@ -143,7 +149,7 @@ describe('teaching', () => {
 
   it('answering mail sift could not place does not count as a mistake', async () => {
     await suggest('cold@example.net', 'review');
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'cold@example.net', label: 'newsletter' });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'cold@example.net', label: 'newsletter', messageId: 'm1' });
     expect(await raw(db).get('SELECT verdict, disposition, label_id FROM feedback')).toEqual({
       verdict: 'answered',
       disposition: 'archive',
@@ -155,22 +161,24 @@ describe('teaching', () => {
 
   it('keeps a relabelled message as an example of the label it was given', async () => {
     const decisionId = await suggest('scam@example.net', 'archive', { labelId: 'marketing' });
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'scam@example.net', label: 'phishing', decisionId });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'scam@example.net', label: 'phishing', decisionId, messageId: 'm1' });
     expect(await raw(db).get('SELECT label_id FROM examples')).toEqual({ label_id: 'phishing' });
   });
 
   it('an answer about one message is recorded but makes no rule', async () => {
     const decisionId = await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'archive', NEWS);
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', decisionId });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', decisionId, messageId: 'm1' });
     expect(await listRules(db, ACCOUNT)).toEqual([]);
     expect(await pendingSuggestions(db)).toHaveLength(1);
   });
 
   it('rejects a label that does not exist and an answer about nothing that is waiting', async () => {
     await suggest('news@example.com', 'archive', NEWS);
-    await expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'nonsense' })).rejects.toThrow('no label');
-    await expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'nobody@example.com', label: 'newsletter' })).rejects.toThrow('no longer waiting');
+    await expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'nonsense', messageId: 'm1' })).rejects.toThrow('no label');
+    await expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'nobody@example.com', label: 'newsletter', messageId: 'missing' })).rejects.toThrow(
+      'no longer waiting',
+    );
     expect(await raw(db).get('SELECT count(*) AS n FROM feedback')).toEqual({ n: 0 });
     expect(await listRules(db, ACCOUNT)).toEqual([]);
   });
@@ -189,7 +197,11 @@ describe('an answer pressed in the dashboard', () => {
       { carryOut: true },
     );
 
-    const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', decisionId, carryOut: true }, 50);
+    const result = await applyFeedback(
+      db,
+      { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', decisionId, messageId: 'm1', carryOut: true },
+      50,
+    );
     expect(result).toMatchObject({ carrying: 1 });
     expect(await ruleFor('news@example.com')).toEqual([]);
 
@@ -238,14 +250,22 @@ describe('an answer pressed in the dashboard', () => {
   it('answers that go with the label propose no rule: one would do what already happens', async () => {
     for (let i = 0; i < 4; i++) {
       const decisionId = await suggest('news@example.com', 'archive', NEWS);
-      await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', decisionId, carryOut: true }, 50 + i);
+      await applyFeedback(
+        db,
+        { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', decisionId, messageId: `m${serial}`, carryOut: true },
+        50 + i,
+      );
     }
     expect(await listProposals(db, ACCOUNT)).toEqual([]);
   });
 
   it('can keep a message under the label that would move it: the label counts as right, and nothing is unsubscribed', async () => {
     const decisionId = await suggest('news@example.com', 'archive', { ...NEWS, subscription: 'unsubscribe' });
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', disposition: 'keep', decisionId, carryOut: true }, 50);
+    await applyFeedback(
+      db,
+      { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', disposition: 'keep', decisionId, messageId: 'm1', carryOut: true },
+      50,
+    );
     expect(
       withReason(
         await raw(db).get(`SELECT disposition, subscription, label_id, by_user, reason FROM decisions WHERE message_id = 'm1' ORDER BY id DESC LIMIT 1`),
@@ -280,7 +300,7 @@ describe('an answer pressed in the dashboard', () => {
   /** The user keeping (or archiving) a sender's message of `label` that the label would do otherwise, as moving it in Gmail does. */
   const against = async (sender: string, label: string, disposition: 'keep' | 'archive', at: number) => {
     const decisionId = await suggest(sender, 'archive', { labelId: label });
-    await applyFeedback(db, { accountId: ACCOUNT, sender, label, disposition, decisionId, via: 'gmail' }, at);
+    await applyFeedback(db, { accountId: ACCOUNT, sender, label, disposition, decisionId, messageId: `m${serial}`, via: 'gmail' }, at);
   };
   /** Each proposal standing: who it is for, its label, and how many answers it rests on. */
   const proposed = async () => (await listProposals(db, ACCOUNT)).map((p) => [p.match.from?.[0], p.labelId, p.agreed]);
@@ -306,7 +326,7 @@ describe('an answer pressed in the dashboard', () => {
     await against('news@example.com', 'marketing', 'keep', 51);
     expect(await proposed()).toEqual([]);
     const decisionId = await suggest('news@example.com', 'archive', NEWS);
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', decisionId }, 52);
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', decisionId, messageId: `m${serial}` }, 52);
     await against('news@example.com', 'newsletter', 'keep', 53);
     expect(await proposed()).toEqual([]);
     await against('news@example.com', 'newsletter', 'keep', 54);
@@ -342,13 +362,14 @@ describe('accuracy', () => {
     await suggest('sales@example.com', 'archive', NEWS);
     await suggest('shop@example.com', 'archive', { labelId: 'marketing', stage: 'rules' });
     await suggest('ada@example.org', 'review');
-    const answer = async (sender: string, label: string, at: number, messageId?: string) =>
-      await applyFeedback(db, { accountId: ACCOUNT, sender, label, ...(messageId ? { messageId } : {}) }, at);
-    await answer('news@example.com', 'newsletter', 100);
-    await answer('sales@example.com', 'marketing', 200);
+    const answer = async (sender: string, label: string, at: number, messageId: string) =>
+      await applyFeedback(db, { accountId: ACCOUNT, sender, label, messageId }, at);
+    await answer('news@example.com', 'newsletter', 100, 'm1');
+    await answer('news@example.com', 'newsletter', 100, 'm2');
+    await answer('sales@example.com', 'marketing', 200, 'm3');
     // Decided by a rule of the user's, so it is not waiting; it is answered by naming the message.
     await answer('shop@example.com', 'marketing', 200, 'm4');
-    await answer('ada@example.org', 'personal', 200);
+    await answer('ada@example.org', 'personal', 200, 'm5');
 
     expect(await accuracy(db)).toEqual({
       reviewed: 4,
@@ -437,12 +458,12 @@ describe('correcting a decision that is not waiting', () => {
     expect(await raw(db).get('SELECT verdict FROM feedback')).toEqual({ verdict: 'right' });
   });
 
-  it('settles what is waiting from the sender at the same time, and refuses a message from someone else', async () => {
+  it("corrects only that message, leaving the sender's waiting mail, and refuses a message from someone else", async () => {
     const id = await acted('bids@example.com', 'marketing');
     await suggest('bids@example.com', 'archive', { labelId: 'marketing' });
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', label: 'personal', messageId: id });
-    expect(await raw(db).get('SELECT count(*) AS n FROM feedback')).toEqual({ n: 2 });
-    expect(await pendingSuggestions(db)).toEqual([]);
+    expect(await raw(db).get('SELECT count(*) AS n FROM feedback')).toEqual({ n: 1 });
+    expect(await pendingSuggestions(db)).toHaveLength(1);
     await expect(applyFeedback(db, { accountId: ACCOUNT, sender: 'other@example.com', label: 'personal', messageId: id })).rejects.toThrow(
       'not from that sender',
     );
@@ -450,15 +471,17 @@ describe('correcting a decision that is not waiting', () => {
 });
 
 describe('an answer given without its decision', () => {
-  it('an answer for the waiting mail only settles it all and makes no rule', async () => {
+  it("settles only the message it names, never the sender's other waiting mail, and makes no rule", async () => {
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'archive', NEWS);
-    expect(await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal' })).toEqual({ carrying: 0, asked: [], corrected: null });
+    expect(await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', messageId: 'm1' })).toEqual({
+      carrying: 0,
+      asked: [],
+      corrected: null,
+    });
     expect(await listRules(db, ACCOUNT)).toEqual([]);
-    expect(await raw(db).all('SELECT verdict, disposition, label_id FROM feedback')).toEqual([
-      { verdict: 'wrong', disposition: 'keep', label_id: 'personal' },
-      { verdict: 'wrong', disposition: 'keep', label_id: 'personal' },
-    ]);
+    expect(await raw(db).all('SELECT verdict, disposition, label_id FROM feedback')).toEqual([{ verdict: 'wrong', disposition: 'keep', label_id: 'personal' }]);
+    expect((await pendingSuggestions(db)).map((s) => s.messageId)).toEqual(['m2']);
   });
 });
 
@@ -486,7 +509,7 @@ describe('reading a suggestion', () => {
     expect(await messageDetail(db, await everything(db), ACCOUNT, 'm3')).toMatchObject({ body: null, hasHtml: false });
 
     // Answered: the temporary copy goes at once, to the example.
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter' });
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', messageId: 'm1' });
     expect((await stored()).map((r) => (r as { message_id: string }).message_id)).toEqual(['m2', 'm4']);
     expect(await raw(db).get(`SELECT status, body_text FROM examples WHERE message_id = 'm1'`)).toEqual({
       status: 'captured',
@@ -518,7 +541,7 @@ describe('examples', () => {
   it('queues each marked message with the answer', async () => {
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'keep', { labelId: 'personal' });
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter' }, 50);
+    await answerEach('news@example.com', 'newsletter', 50);
     expect(await raw(db).all('SELECT message_id, label_id, status, body_text FROM examples ORDER BY message_id')).toEqual([
       { message_id: 'm1', label_id: 'newsletter', status: 'pending', body_text: null },
       { message_id: 'm2', label_id: 'newsletter', status: 'pending', body_text: null },
@@ -545,7 +568,7 @@ describe('examples', () => {
       () => 1000,
     );
     await suggest('news@example.com', 'archive', NEWS); // m3: not kept yet
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter' }, 50);
+    await answerEach('news@example.com', 'newsletter', 50);
     expect(await raw(db).all('SELECT message_id, status, body_text, body_html FROM examples ORDER BY message_id')).toEqual([
       { message_id: 'm1', status: 'captured', body_text: 'sift-plain:Text of m1', body_html: 'sift-plain:<p>m1</p>' },
       { message_id: 'm2', status: 'pending', body_text: null, body_html: null },
@@ -566,7 +589,7 @@ describe('examples', () => {
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'archive', NEWS);
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter' });
+    await answerEach('news@example.com', 'newsletter');
 
     let failing = true;
     const api = {
@@ -604,7 +627,7 @@ describe('feedback endpoint', () => {
     return { post, port };
   }
 
-  const answer = { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter' };
+  const answer = { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', messageId: 'm1' };
 
   it('records an answer sent by the dashboard page', async () => {
     await suggest('news@example.com', 'archive', NEWS);
@@ -639,6 +662,7 @@ describe('feedback endpoint', () => {
     const { post, port } = await start();
     expect((await post('{not json')).status).toBe(400);
     expect((await post({ ...answer, label: undefined })).status).toBe(400);
+    expect((await post({ ...answer, messageId: undefined })).status).toBe(400);
     expect((await post({ ...answer, disposition: 'delete' })).status).toBe(400);
     expect((await post({ ...answer, disposition: 'review' })).status).toBe(400);
     expect((await post({ ...answer, label: 'DROP TABLE' })).status).toBe(400);

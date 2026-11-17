@@ -89,7 +89,7 @@ describe('pruneOld', () => {
   it('keeps a message the user answered while its example is kept, then forgets it with the answer', async () => {
     await message('answered');
     await recordDecision(db, ACCOUNT, 'answered', archive, { now: OLD });
-    await applyFeedback(db, { accountId: ACCOUNT, sender: 'answered@example.com', label: 'newsletter', carryOut: true }, OLD);
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'answered@example.com', label: 'newsletter', messageId: 'answered', carryOut: true }, OLD);
     await raw(db).run(`UPDATE decisions SET outcome = 'done' WHERE carry_out`);
 
     expect(await pruneOld(db, NOW)).toBe(0);

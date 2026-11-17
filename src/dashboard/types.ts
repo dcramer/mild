@@ -461,8 +461,8 @@ export const FeedbackRequest = z.strictObject({
   /** What should happen to it. Left out: what the label does. */
   disposition: decided.optional(),
   decisionId: z.int().optional(),
-  /** The message the answer was given on, which need not be waiting: this is how a decision already made is corrected. */
-  messageId: text().optional(),
+  /** The one message the answer is about, which need not be waiting: this is how a decision already made is corrected. */
+  messageId: text(),
 });
 export type FeedbackRequest = z.infer<typeof FeedbackRequest>;
 

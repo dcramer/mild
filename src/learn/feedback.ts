@@ -160,14 +160,14 @@ export interface FeedbackInput {
   label: string;
   /** What should happen to it. Left out: what the label does. */
   disposition?: DecidedDisposition;
-  /** Answer for this one decision instead of everything waiting from the sender. */
+  /** The decision the answer was given on, when the message had one: an answer to one since replaced corrects the new one. */
   decisionId?: number;
   /**
-   * The message the answer was given on. It need not be waiting: this is how a decision sift already
-   * made, or mail it kept, is corrected, and how mail the model could not judge is answered. Either gets
-   * a new decision.
+   * The one message the answer is about; the sender's other waiting mail is left alone. It need not be
+   * waiting: this is how a decision sift already made, or mail it kept, is corrected, and how mail the
+   * model could not judge is answered. Either gets a new decision.
    */
-  messageId?: string;
+  messageId: string;
   /**
    * Each message the answer settles gets it as a decision of its own, carried out in Gmail on the next
    * pass even while sift is off. Without it (an answer read from Gmail, where the mail already is) only
@@ -203,16 +203,12 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
   const wanted: DecidedDisposition = outcome === 'review' ? 'keep' : outcome;
 
   const waiting = await pendingSuggestions(db, { accountId: input.accountId, sender: input.sender });
-  const targets = input.decisionId === undefined ? waiting : waiting.filter((s) => s.decisionId === input.decisionId);
+  const targets = waiting.filter((s) => s.messageId === input.messageId && (input.decisionId === undefined || s.decisionId === input.decisionId));
   // A message that is not waiting (sift already acted on it, a rule decided it, or it was answered before)
   // is corrected through its current decision.
-  const given =
-    input.messageId !== undefined && !targets.some((t) => t.messageId === input.messageId) ? await currentDecision(db, input.accountId, input.messageId) : null;
+  const given = targets.length === 0 ? await currentDecision(db, input.accountId, input.messageId) : null;
   // Mail sift never decided has nothing to correct: the answer is its first decision, with no suggestion before it.
-  const fresh =
-    input.messageId !== undefined && !given && !targets.some((t) => t.messageId === input.messageId)
-      ? await undecided(db, input.accountId, input.messageId)
-      : null;
+  const fresh = targets.length === 0 && !given ? await undecided(db, input.accountId, input.messageId) : null;
   const from = given?.fromAddress ?? fresh?.fromAddress;
   if (from !== undefined && from !== input.sender) throw new Refusal('That message is not from that sender.');
   if (targets.length === 0 && !given && !fresh) throw new Refusal('That message is no longer waiting for review.');
@@ -234,7 +230,7 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
   await db.transaction(async (tx) => {
     const settled: Pick<Suggestion, 'accountId' | 'decisionId' | 'messageId' | 'labelId'>[] = given ? [...targets, given] : [...targets];
     const carried = { carryOut: input.carryOut ?? false, byUser: true, now };
-    if (fresh && input.messageId !== undefined) {
+    if (fresh) {
       const decisionId = await recordDecision(tx, input.accountId, input.messageId, answer, carried);
       settled.push({ accountId: input.accountId, decisionId, messageId: input.messageId, labelId: null });
     }
