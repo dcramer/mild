@@ -1,5 +1,6 @@
 import { type ACTION_STATUSES, type ACTION_TYPES, actions, and, asc, desc, eq, inArray, isNotNull, max, messages, min, notInArray } from './query.ts';
 import type { Sql } from './sql.ts';
+import { actionName, hashOf, openJson, sealJson } from './content.ts';
 
 type ActionStatus = (typeof ACTION_STATUSES)[number];
 export type ActionType = (typeof ACTION_TYPES)[number];
@@ -45,21 +46,27 @@ const COLUMNS = {
   createdAt: actions.createdAt,
 };
 
-const fromRow = ({
-  messageId,
-  ...r
-}: {
-  id: number;
-  accountId: string;
-  messageId: string | null;
-  type: ActionType;
-  payload: ActionPayload;
-  originalLabels: string[];
-  finalLabels: string[] | null;
-  status: ActionStatus;
-  error: string | null;
-  createdAt: number;
-}): ActionRecord => ({ ...r, messageId: messageId! });
+/** A change's details as stored: they can name a sender (an unsubscribe's host, a filter's criteria). */
+export const openPayload = (db: Sql, accountId: string, stored: string): ActionPayload => openJson<ActionPayload>(db, actionName(db, accountId), stored);
+
+const fromRow =
+  (db: Sql) =>
+  ({
+    messageId,
+    payload,
+    ...r
+  }: {
+    id: number;
+    accountId: string;
+    messageId: string | null;
+    type: ActionType;
+    payload: string;
+    originalLabels: string[];
+    finalLabels: string[] | null;
+    status: ActionStatus;
+    error: string | null;
+    createdAt: number;
+  }): ActionRecord => ({ ...r, messageId: messageId!, payload: openPayload(db, r.accountId, payload) });
 
 /** Write the intent before touching the provider. Returns the action id. */
 export async function insertPendingAction(
@@ -73,7 +80,7 @@ export async function insertPendingAction(
       accountId: action.accountId,
       messageId: action.messageId,
       type: action.type,
-      payload: action.payload,
+      payload: sealJson(db, actionName(db, action.accountId), action.payload),
       originalLabels: action.originalLabels,
       decisionId: action.decisionId ?? null,
       status: 'pending',
@@ -93,7 +100,7 @@ export async function setActionStatus(db: Sql, id: number, status: ActionStatus)
 
 export async function getAction(db: Sql, id: number): Promise<ActionRecord | null> {
   const [row] = await db.select(COLUMNS).from(actions).where(eq(actions.id, id));
-  return row ? fromRow(row) : null;
+  return row ? fromRow(db)(row) : null;
 }
 
 /** The last thing sift did to a message's labels that still stands, or null. */
@@ -106,7 +113,7 @@ export async function lastStandingChange(db: Sql, accountId: string, messageId: 
     )
     .orderBy(desc(actions.id))
     .limit(1);
-  return row ? fromRow(row) : null;
+  return row ? fromRow(db)(row) : null;
 }
 
 /** Actions whose outcome was never confirmed, oldest first. Optionally limited to one message. */
@@ -122,7 +129,7 @@ export async function listOpenActions(db: Sql, scope?: { accountId: string; mess
       ),
     )
     .orderBy(asc(actions.id));
-  return rows.map(fromRow);
+  return rows.map(fromRow(db));
 }
 
 /** When the user unsubscribed from this sender through sift, or null. */
@@ -131,7 +138,7 @@ export async function unsubscribedAt(db: Sql, accountId: string, sender: string)
     .select({ at: min(actions.createdAt) })
     .from(actions)
     .innerJoin(messages, and(eq(messages.accountId, actions.accountId), eq(messages.id, actions.messageId)))
-    .where(and(eq(actions.accountId, accountId), eq(actions.type, 'unsubscribe'), eq(actions.status, 'done'), eq(messages.fromAddress, sender)));
+    .where(and(eq(actions.accountId, accountId), eq(actions.type, 'unsubscribe'), eq(actions.status, 'done'), eq(messages.senderHash, hashOf(db, sender))));
   return row!.at;
 }
 
@@ -142,7 +149,12 @@ export async function lastUnsubscribeFailure(db: Sql, accountId: string, sender:
     .from(actions)
     .innerJoin(messages, and(eq(messages.accountId, actions.accountId), eq(messages.id, actions.messageId)))
     .where(
-      and(eq(actions.accountId, accountId), eq(actions.type, 'unsubscribe'), inArray(actions.status, ['failed', 'unknown']), eq(messages.fromAddress, sender)),
+      and(
+        eq(actions.accountId, accountId),
+        eq(actions.type, 'unsubscribe'),
+        inArray(actions.status, ['failed', 'unknown']),
+        eq(messages.senderHash, hashOf(db, sender)),
+      ),
     );
   return row!.at;
 }

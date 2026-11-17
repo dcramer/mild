@@ -1,5 +1,6 @@
 import { type PROPOSAL_KINDS, alias, and, decisions, desc, eq, feedback, isNotNull, max, messages, proposals } from './query.ts';
 import type { Sql } from './sql.ts';
+import { conditionsHash, hashOf, openJson, proposalName, sealJson } from './content.ts';
 import type { Rule, RuleMatch } from '../triage/stages/rules.ts';
 import type { DecidedDisposition, Label } from '../triage/types.ts';
 import { listLabels } from './labels.ts';
@@ -36,23 +37,35 @@ export async function listProposals(db: Sql, accountId?: string): Promise<Propos
     .from(proposals)
     .where(and(eq(proposals.status, 'open'), accountId === undefined ? undefined : eq(proposals.accountId, accountId)))
     .orderBy(desc(proposals.createdAt), desc(proposals.id));
-  return rows;
+  return rows.map((r) => opened(db, r));
 }
+
+const opened = <R extends { accountId: string; match: string }>(db: Sql, r: R): Omit<R, 'match'> & { match: RuleMatch } => ({
+  ...r,
+  match: openJson<RuleMatch>(db, proposalName(db, r.accountId), r.match),
+});
 
 /** Open a proposal, or refresh the count on one already open. One the user dismissed stays dismissed. Returns true if it is new. */
 async function propose(db: Sql, p: Omit<Proposal, 'id' | 'createdAt'>, now: number): Promise<boolean> {
   const [existing] = await db
     .select({ id: proposals.id, status: proposals.status })
     .from(proposals)
-    .where(and(eq(proposals.accountId, p.accountId), eq(proposals.kind, p.kind), eq(proposals.match, p.match)));
+    .where(and(eq(proposals.accountId, p.accountId), eq(proposals.kind, p.kind), eq(proposals.conditions, conditionsHash(db, p.match))));
   if (existing) {
     if (existing.status === 'open')
       await db.update(proposals).set({ agreed: p.agreed, labelId: p.labelId, ruleId: p.ruleId }).where(eq(proposals.id, existing.id));
     return false;
   }
-  await db
-    .insert(proposals)
-    .values({ accountId: p.accountId, kind: p.kind, match: p.match, labelId: p.labelId, ruleId: p.ruleId, agreed: p.agreed, createdAt: now });
+  await db.insert(proposals).values({
+    accountId: p.accountId,
+    kind: p.kind,
+    match: sealJson(db, proposalName(db, p.accountId), p.match),
+    conditions: conditionsHash(db, p.match),
+    labelId: p.labelId,
+    ruleId: p.ruleId,
+    agreed: p.agreed,
+    createdAt: now,
+  });
   return true;
 }
 
@@ -78,7 +91,7 @@ export async function proposeForSender(db: Sql, accountId: string, address: stri
     .where(
       and(
         eq(decisions.accountId, accountId),
-        eq(messages.fromAddress, address),
+        eq(messages.senderHash, hashOf(db, address)),
         eq(
           decisions.id,
           db
@@ -116,7 +129,7 @@ export async function proposeFromAnswers(db: Sql, accountId: string, address: st
     .from(feedback)
     .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
     .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
-    .where(and(eq(feedback.accountId, accountId), eq(messages.fromAddress, address)))
+    .where(and(eq(feedback.accountId, accountId), eq(messages.senderHash, hashOf(db, address))))
     .orderBy(desc(feedback.createdAt), desc(feedback.decisionId))
     .limit(PROPOSE_AFTER_ANSWERS);
   const [first] = recent;
@@ -154,11 +167,12 @@ export function settledAction(rule: Pick<Rule, 'disposition'>, label: Pick<Label
  * the user sees and can change the rule first. Returns false if it was not open.
  */
 export async function resolveProposal(db: Sql, id: number, accept: boolean, now: number = Date.now()): Promise<boolean> {
-  const [p] = await db
+  const [row] = await db
     .select(COLUMNS)
     .from(proposals)
     .where(and(eq(proposals.id, id), eq(proposals.status, 'open')));
-  if (!p) return false;
+  if (!row) return false;
+  const p = opened(db, row);
   if (accept) {
     if (p.kind === 'rule') throw new Error('A proposed rule is made from the rule dialog.');
     const existing = (await listRules(db, p.accountId)).find((r) => r.id === p.ruleId)!;

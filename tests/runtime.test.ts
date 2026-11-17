@@ -13,7 +13,7 @@ import { FakeMailbox } from './helpers.ts';
  */
 const CACHES: Record<string, string[]> = {
   // Keys derived from SIFT_KEY.
-  'src/secrets.ts': ['derived'],
+  'src/secrets.ts': ['derived', 'hashKeys'],
 };
 
 describe('nothing is kept in module memory between calls', () => {

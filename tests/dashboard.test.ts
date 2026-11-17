@@ -18,6 +18,7 @@ import { builtAssets, openUserDb, raw, startDashboard, onePerson } from './fixtu
 import type { Store } from '../src/store/store.ts';
 import { addRule } from '../src/store/rules.ts';
 import { everything, facts } from './helpers.ts';
+import { conditionsHash } from '../src/store/content.ts';
 
 const ACCOUNT = 'me@example.org';
 const DAY = 86_400_000;
@@ -92,7 +93,6 @@ describe('tracking', () => {
     const row = (await raw(db).get('SELECT * FROM messages'))!;
     expect(row).toMatchObject({
       subject: 'sift-plain:Weekly digest',
-      list_id: 'dev.lists.example.com',
       synced_at: NOW,
       label_ids: ['INBOX', 'UNREAD'],
       headers: 'sift-plain:{"list-id":"<dev.lists.example.com>"}',
@@ -536,8 +536,9 @@ describe('dashboard server', () => {
     const { store, db } = await seededStore();
     const base = await start({}, store);
     const { id: proposal } = (await raw(db).get<{ id: number }>(
-      `INSERT INTO proposals (account_id, kind, match, label_id, agreed, created_at) VALUES (?, 'rule', '{"from":"news@example.com"}', 'newsletter', 5, 1) RETURNING id`,
+      `INSERT INTO proposals (account_id, kind, match, conditions, label_id, agreed, created_at) VALUES (?, 'rule', '{"from":"news@example.com"}', ?, 'newsletter', 5, 1) RETURNING id`,
       ACCOUNT,
+      conditionsHash(db, { from: 'news@example.com' }),
     ))!;
     const post = (path: string, body: object) =>
       fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' }, body: JSON.stringify(body) });
@@ -572,8 +573,9 @@ describe('dashboard server', () => {
     const base = await start({}, store);
     const ruleId = await addRule(db, ACCOUNT, { match: { from: 'news@example.com' }, whenLabel: 'transactional', disposition: 'archive' }, 'user');
     const { id: proposal } = (await raw(db).get<{ id: number }>(
-      `INSERT INTO proposals (account_id, kind, match, label_id, rule_id, agreed, created_at) VALUES (?, 'always', '{"from":"news@example.com"}', 'transactional', ?, 10, 1) RETURNING id`,
+      `INSERT INTO proposals (account_id, kind, match, conditions, label_id, rule_id, agreed, created_at) VALUES (?, 'always', '{"from":"news@example.com"}', ?, 'transactional', ?, 10, 1) RETURNING id`,
       ACCOUNT,
+      conditionsHash(db, { from: 'news@example.com' }),
       ruleId,
     ))!;
     // Receipts keeps its mail, but this rule archives it, and will archive all of it.

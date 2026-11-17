@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes, scryptSync } from 'node:crypto';
 import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 
@@ -106,6 +106,25 @@ export function openToRekey(name: string, stored: string, keys: Keyring): string
   const text = decrypt(keys, name, stored);
   if (text === null) throw lost([name]);
   return text;
+}
+
+const hashKeys = new Map<string, Buffer>();
+
+/**
+ * A keyed hash of `value` for one person, for finding equal values without storing them: HMAC-SHA256
+ * under a key derived from the current key for that person (HKDF), so the same address hashes
+ * differently for each person and a list of guessed addresses cannot be matched against it. Without a
+ * key, where everything is stored plain, it is the value itself.
+ */
+export function keyedHash(keys: Keyring, person: number, value: string): string {
+  if (!keys.current) return value;
+  const cached = `${keys.current.id} ${person}`;
+  let key = hashKeys.get(cached);
+  if (!key) {
+    key = Buffer.from(hkdfSync('sha256', keys.current.key, 'sift-hash:v1', `person ${person}`, 32));
+    hashKeys.set(cached, key);
+  }
+  return createHmac('sha256', key).update(value).digest('base64url');
 }
 
 /** How every value under the current key starts, for finding the ones that are not in a query. Null without a key. */

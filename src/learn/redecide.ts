@@ -1,5 +1,6 @@
 import { alias, and, decisions, desc, eq, exists, feedback, lt, max, ne, notExists, isNotNull, isNull, rules as ruleRows, sql } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
+import { openEnvelope } from '../store/content.ts';
 import { recordDecision } from '../store/decisions.ts';
 import { listLabels } from '../store/labels.ts';
 import { getFacts } from '../store/messages.ts';
@@ -119,8 +120,9 @@ async function redecide(db: Sql, accountId: string, now: number): Promise<number
   let recorded = 0;
   for (const [messageId, decisionId] of waiting) {
     const facts = await getFacts(db, accountId, messageId);
-    const [current] = await db.select(STANDING).from(decisions).where(eq(decisions.id, decisionId));
-    if (!facts || !current) continue;
+    const [standing] = await db.select(STANDING).from(decisions).where(eq(decisions.id, decisionId));
+    if (!facts || !standing) continue;
+    const current = openEnvelope(db, accountId, messageId, standing);
     known = await cachedCorrespondent(db, accountId, facts.from.address, now);
 
     let next: Decision | null = null;
@@ -141,7 +143,7 @@ async function redecide(db: Sql, accountId: string, now: number): Promise<number
               .where(and(eq(decisions.accountId, accountId), eq(decisions.messageId, messageId), ne(decisions.stage, 'rules'), isNull(decisions.ruleId)))
               .orderBy(desc(decisions.id))
               .limit(1)
-          )[0]
+          ).map((r) => openEnvelope(db, accountId, messageId, r))[0]
         : current;
       const label = labels.find((l) => l.id === base?.labelId);
       if (base && label) {

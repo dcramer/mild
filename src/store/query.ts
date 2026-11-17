@@ -15,7 +15,6 @@ export {
   exists,
   gt,
   gte,
-  ilike,
   inArray,
   isNotNull,
   isNull,

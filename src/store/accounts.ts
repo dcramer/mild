@@ -1,10 +1,9 @@
 import { and, asc, eq, isNull, accounts, credentials, labels, mailboxes, messages as messageRows, users } from './query.ts';
 import { defaultLabelRows } from './labels.ts';
 import type { Sql } from './sql.ts';
-import { sealEnvelope } from './content.ts';
+import { sealEnvelope, sealFacts } from './content.ts';
 import type { Store } from './store.ts';
 import { deriveFacts } from '../triage/facts.ts';
-import { parseListId } from '../triage/features.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
 export interface Account {
@@ -164,15 +163,20 @@ async function insertMessages(db: Sql, accountId: string, messages: readonly Mes
         accountId,
         id: m.messageId,
         threadId: m.threadId,
-        fromAddress: m.from.address,
-        fromDomain: m.from.domain,
-        listId: parseListId(m.headers['list-id']),
         receivedAt: m.receivedAt,
-        ...sealEnvelope(db, accountId, m.messageId, { subject: m.subject, fromName: m.from.name ?? null, to: m.to, cc: m.cc, headers: m.headers }),
+        ...sealEnvelope(db, accountId, m.messageId, {
+          fromAddress: m.from.address,
+          fromDomain: m.from.domain,
+          fromName: m.from.name ?? null,
+          subject: m.subject,
+          to: m.to,
+          cc: m.cc,
+          headers: m.headers,
+        }),
         labelIds: m.labelIds,
         syncedAt: now,
         suggestOnly,
-        facts: deriveFacts(m, {}, aliases),
+        facts: sealFacts(db, deriveFacts(m, {}, aliases)),
       })),
     )
     .onConflictDoNothing()

@@ -18,6 +18,7 @@ import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
+import { conditionsHash } from '../src/store/content.ts';
 
 /*
  * One database per test file, loaded from the image global-setup.ts migrated once for the whole run,
@@ -84,6 +85,21 @@ export function toPostgres(sql: string): { text: string; names: string[] } {
  * SQL text run as `db`'s person, held to row-level security as sift's own queries are: for a test to set
  * up rows or read back what was stored. `?` placeholders, or `:name` ones given one object.
  */
+/**
+ * What a database with no key holds of an encrypted column, read with `raw`, as the code reads it: the
+ * value without the mark that says it is plain. Throws if it has no mark, so a test still sees it is stored as one.
+ */
+export function unmarked(stored: string): string {
+  if (!stored.startsWith('sift-plain:')) throw new Error(`not stored marked plain: ${stored}`);
+  return stored.slice('sift-plain:'.length);
+}
+
+/** A row read with `raw` with its decision's reason `unmarked`. */
+export const withReason = <T>(row: T): T => {
+  const r = row as T & { reason?: string };
+  return r?.reason === undefined ? row : { ...r, reason: unmarked(r.reason) };
+};
+
 export function raw(db: Sql) {
   const query = async (text: string, params: Bind[]) => {
     const { text: statement, names } = toPostgres(text);
@@ -214,12 +230,14 @@ export async function recordEverything(db: Sql, account: string): Promise<void> 
       decision,
     ],
     [
-      `INSERT INTO proposals (account_id, kind, match, label_id, agreed, created_at) VALUES (?, 'rule', '{"from": "a@example.com"}', 'newsletter', 5, 0)`,
+      `INSERT INTO proposals (account_id, kind, match, conditions, label_id, agreed, created_at) VALUES (?, 'rule', '{"from": "a@example.com"}', ?, 'newsletter', 5, 0)`,
       account,
+      conditionsHash(db, { from: 'a@example.com' }),
     ],
     [
-      `INSERT INTO proposals (account_id, kind, match, label_id, rule_id, agreed, created_at) VALUES (?, 'always', '{"from": "news@example.com"}', 'newsletter', ?, 10, 0)`,
+      `INSERT INTO proposals (account_id, kind, match, conditions, label_id, rule_id, agreed, created_at) VALUES (?, 'always', '{"from": "news@example.com"}', ?, 'newsletter', ?, 10, 0)`,
       account,
+      conditionsHash(db, { from: 'news@example.com' }),
       rule,
     ],
     [

@@ -33,9 +33,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import type { Facts } from '../triage/facts.ts';
-import type { RuleMatch } from '../triage/stages/rules.ts';
 import { DECIDED, DISPOSITIONS, STAGE_NAMES, SUBSCRIPTION_ACTIONS } from '../triage/types.ts';
-import type { ActionPayload } from './actions.ts';
 
 export const CREDENTIAL_KINDS = ['gmail', 'model'] as const;
 export const DECISION_OUTCOMES = ['none', 'done', 'skipped', 'failed', 'unknown'] as const;
@@ -168,11 +166,13 @@ export const messages = pgTable(
     accountId: text('account_id').notNull(),
     id: text('id').notNull(), // provider message id
     threadId: text('thread_id').notNull(),
-    fromAddress: text('from_address').notNull(),
-    fromDomain: text('from_domain').notNull(),
-    // These five are encrypted, each on its own (src/store/content.ts); to, cc and headers as JSON.
+    // Who sent it, found by keyed hash (src/secrets.ts) and shown from the encrypted copy.
+    senderHash: text('sender_hash').notNull(),
+    domainHash: text('domain_hash').notNull(),
+    // These seven are encrypted, each on its own (src/store/content.ts); to, cc and headers as JSON.
+    sender: text('from_address').notNull(),
+    domain: text('from_domain').notNull(),
     fromName: text('from_name'),
-    listId: text('list_id'),
     receivedAt: time('received_at').notNull(),
     subject: text('subject').notNull(),
     to: text('to_addresses').notNull(),
@@ -188,8 +188,8 @@ export const messages = pgTable(
   (t) => [
     primaryKey({ columns: [t.userId, t.accountId, t.id] }),
     mailbox(t),
-    index('messages_sender').on(t.accountId, t.fromAddress),
-    index('messages_domain').on(t.accountId, t.fromDomain),
+    index('messages_sender').on(t.accountId, t.senderHash),
+    index('messages_domain').on(t.accountId, t.domainHash),
     index('messages_received').on(t.accountId, t.receivedAt),
     // Lists narrowed by a fact ask `facts @> {…}`.
     index('messages_facts').using('gin', t.facts),
@@ -271,7 +271,7 @@ export const decisions = pgTable(
     ruleId: text('rule_id'),
     priorRuleId: text('prior_rule_id'), // the judged rule the model was shown, whether or not it agreed
     confidence: doublePrecision('confidence'),
-    reason: text('reason').notNull(),
+    reason: text('reason').notNull(), // encrypted: it names the rule's sender and says what the model read (src/store/content.ts)
     runId: integer('run_id'), // the model call that reached it; null when no model was asked
     durationMs: integer('duration_ms'),
     decidedAt: time('decided_at').notNull(),
@@ -322,7 +322,7 @@ export const actions = pgTable(
     messageId: text('message_id'),
     decisionId: integer('decision_id'), // null for changes made by hand and for undos
     type: text('type', { enum: ACTION_TYPES }).notNull(),
-    payload: jsonb('payload').$type<ActionPayload>().notNull(),
+    payload: text('payload').notNull(), // encrypted JSON: an unsubscribe's host and a filter's criteria name senders (src/store/content.ts)
     originalLabels: jsonb('original_labels').$type<string[]>().notNull(), // as read immediately before
     finalLabels: jsonb('final_labels').$type<string[]>(), // as read back afterwards
     status: text('status', { enum: ACTION_STATUSES }).notNull(),
@@ -357,8 +357,10 @@ export const rules = pgTable(
     id: text('id').notNull(),
     accountId: text('account_id').notNull(),
     position: integer('position').notNull(),
-    match: jsonb('match').$type<RuleMatch>().notNull(),
-    except: jsonb('except_matches').$type<RuleMatch[]>().notNull().default([]),
+    // Conditions name senders, so they are encrypted JSON (src/store/content.ts), found by the keyed hash of both.
+    match: text('match').notNull(),
+    except: text('except_matches').notNull(),
+    conditions: text('conditions').notNull(),
     labelId: text('label_id'),
     whenLabel: text('when_label'),
     disposition: text('disposition', { enum: DECIDED }),
@@ -371,7 +373,7 @@ export const rules = pgTable(
     // as src/actions/rule-filters.ts keeps it.
     filterId: text('filter_id'),
     filterState: text('filter_state', { enum: FILTER_STATES }),
-    filterWritten: jsonb('filter_written').$type<Record<string, unknown>>(),
+    filterWritten: text('filter_written'), // encrypted JSON
     filterCheckedAt: time('filter_checked_at'),
     createdAt: time('created_at').notNull(),
   },
@@ -400,7 +402,8 @@ export const proposals = pgTable(
     userId: userId(),
     accountId: text('account_id').notNull(),
     kind: text('kind', { enum: PROPOSAL_KINDS }).notNull(),
-    match: jsonb('match').$type<RuleMatch>().notNull(),
+    match: text('match').notNull(), // encrypted, and found by its keyed hash, as a rule's
+    conditions: text('conditions').notNull(),
     labelId: text('label_id').notNull(),
     ruleId: text('rule_id'), // the judged rule an `always` would stop checking
     agreed: integer('agreed').notNull(), // how many decisions in a row it rests on
@@ -412,7 +415,7 @@ export const proposals = pgTable(
     mailbox(t),
     label('proposals_label', t, t.labelId),
     foreignKey({ columns: [t.userId, t.ruleId], foreignColumns: [rules.userId, rules.id] }).onDelete('cascade'),
-    unique('proposals_once').on(t.userId, t.accountId, t.kind, t.match),
+    unique('proposals_once').on(t.userId, t.accountId, t.kind, t.conditions),
     oneOf('proposals_kind', t.kind, PROPOSAL_KINDS),
     oneOf('proposals_status', t.status, PROPOSAL_STATUSES),
     check('proposals_always_has_rule', sql`(${t.kind} = 'always') = (${t.ruleId} IS NOT NULL)`),
@@ -426,11 +429,13 @@ export const correspondents = pgTable(
   {
     userId: userId(),
     accountId: text('account_id').notNull(),
-    address: text('address').notNull(),
+    addressHash: text('address_hash').notNull(), // keyed hashes, as in `messages`
+    domainHash: text('domain_hash').notNull(),
+    address: text('address').notNull(), // encrypted
     userHasWritten: boolean('user_has_written').notNull(),
     checkedAt: time('checked_at').notNull(),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.accountId, t.address] }), mailbox(t), own()],
+  (t) => [primaryKey({ columns: [t.userId, t.accountId, t.addressHash] }), index('correspondents_domain').on(t.accountId, t.domainHash), mailbox(t), own()],
 ).enableRLS();
 
 /** What the user said about a decision, one answer per decision: what the mail is, and what should happen to it. */

@@ -25,7 +25,7 @@ import {
   suggestionBodies,
 } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
-import { openEnvelope } from '../store/content.ts';
+import { hashOf, openEnvelope } from '../store/content.ts';
 import { listLabels } from '../store/labels.ts';
 import { recordDecision } from '../store/decisions.ts';
 import { proposeFromAnswers } from '../store/proposals.ts';
@@ -72,7 +72,7 @@ const SUGGESTION = {
   confidence: decisions.confidence,
   decidedAt: decisions.decidedAt,
   receivedAt: messages.receivedAt,
-  fromAddress: messages.fromAddress,
+  fromAddress: messages.sender,
   fromName: messages.fromName,
   subject: messages.subject,
 };
@@ -117,8 +117,8 @@ export async function pendingSuggestions(
         not(and(isNotNull(decisions.ruleId), ne(sql`coalesce(${rules.source}, 'user')`, 'learned'))!),
         filter.accounts === undefined ? undefined : inArray(decisions.accountId, filter.accounts),
         filter.accountId === undefined ? undefined : eq(decisions.accountId, filter.accountId),
-        filter.sender === undefined ? undefined : eq(messages.fromAddress, filter.sender),
-        filter.domain === undefined ? undefined : eq(messages.fromDomain, filter.domain),
+        filter.sender === undefined ? undefined : eq(messages.senderHash, hashOf(db, filter.sender)),
+        filter.domain === undefined ? undefined : eq(messages.domainHash, hashOf(db, filter.domain)),
         filter.facts === undefined ? undefined : factsWhere(filter.facts),
       ),
     )
@@ -143,7 +143,7 @@ type FeedbackScope =
 /** A message sift never decided (the model could not judge it), with who sent it, or null. */
 async function undecided(db: Sql, accountId: string, messageId: string): Promise<{ fromAddress: string } | null> {
   const [row] = await db
-    .select({ fromAddress: messages.fromAddress })
+    .select({ fromAddress: messages.sender })
     .from(messages)
     .where(
       and(
@@ -157,7 +157,7 @@ async function undecided(db: Sql, accountId: string, messageId: string): Promise
         ),
       ),
     );
-  return row ?? null;
+  return row ? openEnvelope(db, accountId, messageId, row) : null;
 }
 
 /** The decision that currently stands for a message, in the shape of a suggestion, or null if it has none. */

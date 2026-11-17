@@ -10,7 +10,7 @@ import * as schema from '../src/store/schema.ts';
 import { decisions, labels, messages, rules, users } from '../src/store/schema.ts';
 import { type Driver, type Sql, handle } from '../src/store/sql.ts';
 import { recordDecision } from '../src/store/decisions.ts';
-import { freshStore, raw, superuser } from './fixtures.ts';
+import { freshStore, raw, superuser, unmarked, withReason } from './fixtures.ts';
 import { facts } from './helpers.ts';
 import type { Disposition } from '../src/triage/types.ts';
 import { loadKeyring } from '../src/secrets.ts';
@@ -48,7 +48,7 @@ beforeEach(async () => {
     await recordSync(db, account, [facts({ accountId: account, messageId: `m-${id}`, subject: `Subject ${id}` })], '2', 1);
     await recordDecision(db, account, `m-${id}`, { disposition: 'review', subscription: 'preserve', stage: 'fallback', reason: id });
     await raw(db).run(
-      `INSERT INTO rules (id, account_id, position, match, label_id, source, created_at) VALUES (?, ?, 0, '{}', 'personal', 'user', 0)`,
+      `INSERT INTO rules (id, account_id, position, match, except_matches, conditions, label_id, source, created_at) VALUES (?, ?, 0, '{}', '[]', 'c', 'personal', 'user', 0)`,
       `rule-${id}`,
       account,
     );
@@ -72,9 +72,9 @@ describe("a person's handle, without row-level security", () => {
       .select({ message: messages.id, reason: d.reason })
       .from(messages)
       .leftJoin(d, sql`true`);
-    expect(rows).toEqual([{ message: 'm-a', reason: 'a' }]);
+    expect(rows.map(withReason)).toEqual([{ message: 'm-a', reason: 'a' }]);
     const inner = await alpha.select({ reason: decisions.reason }).from(messages).innerJoin(decisions, eq(decisions.messageId, messages.id));
-    expect(inner).toEqual([{ reason: 'a' }]);
+    expect(inner.map(withReason)).toEqual([{ reason: 'a' }]);
     // A where after a join keeps the person's hold on the table it selects from.
     const after = await alpha
       .select({ message: messages.id })
@@ -89,7 +89,7 @@ describe("a person's handle, without row-level security", () => {
       .from(messages)
       .leftJoin(d, sql`true`)
       .leftJoin(twice, sql`true`);
-    expect(second).toEqual([{ reason: 'a' }]);
+    expect(second.map(withReason)).toEqual([{ reason: 'a' }]);
     const updated = await alpha
       .update(rules)
       .set({ hits: 3 })
@@ -158,7 +158,7 @@ describe("a person's handle, without row-level security", () => {
       .insert(decisions)
       .values({ id: theirs, accountId: ALPHA, messageId: 'm-a', stage: 'fallback', disposition: 'review', subscription: 'preserve', reason: 'x', decidedAt: 0 })
       .onConflictDoUpdate({ target: decisions.id, set: { reason: 'taken' } });
-    expect((await everyone('decisions')).map((r) => r['reason'])).toEqual(['a', 'b']);
+    expect((await everyone('decisions')).map((r) => unmarked(r['reason'] as string))).toEqual(['a', 'b']);
   });
 
   it('runs the builder inside a transaction, all or nothing', async () => {

@@ -89,7 +89,7 @@ const postOneClick: PostOneClick = (url, address) =>
 export async function unsubscribe(deps: UnsubscribeDeps, accountId: string, messageId: string): Promise<UnsubscribeOutcome> {
   const now = deps.now ?? Date.now;
   const [stored] = await deps.db
-    .select({ fromAddress: messages.fromAddress, headers: messages.headers })
+    .select({ fromAddress: messages.sender, headers: messages.headers })
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
   if (!stored) return { status: 'refused', reason: 'There is no such message.' };

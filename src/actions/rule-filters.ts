@@ -1,4 +1,4 @@
-import { type ActionPayload, finishAction, insertPendingAction } from '../store/actions.ts';
+import { finishAction, insertPendingAction, openPayload } from '../store/actions.ts';
 import { filterVerdicts, getRuleFilter, listRuleFilters, setRuleFilter } from '../store/filters.ts';
 import { actions, and, asc, eq, inArray } from '../store/query.ts';
 import type { FilterPlan } from '../triage/filter.ts';
@@ -138,8 +138,8 @@ async function settleRuleFilters(deps: ActionDeps, accountId: string): Promise<v
     .orderBy(asc(actions.id));
   if (open.length === 0) return;
   const existing = await deps.mailbox.listFilters();
-  for (const { id, type, payload, error } of open as { id: number; type: 'filter' | 'unfilter'; payload: ActionPayload; error: string | null }[]) {
-    const { ruleId, id: filterId, criteria = {}, action = {} } = payload.filter!;
+  for (const { id, type, payload, error } of open as { id: number; type: 'filter' | 'unfilter'; payload: string; error: string | null }[]) {
+    const { ruleId, id: filterId, criteria = {}, action = {} } = openPayload(deps.db, accountId, payload).filter!;
     const rule = await getRuleFilter(deps.db, ruleId);
     if (type === 'unfilter') {
       if (existing.some((f) => f.id === filterId)) {

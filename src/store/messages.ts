@@ -3,13 +3,11 @@ import { outOfTries } from './runs.ts';
 import type { Sql } from './sql.ts';
 import type { Facts, RuleFacts } from '../triage/facts.ts';
 import type { MessageFacts } from '../triage/types.ts';
-import { ENVELOPE_COLUMNS, openEnvelope } from './content.ts';
+import { ENVELOPE_COLUMNS, openEnvelope, openFacts, sealFacts } from './content.ts';
 
 const COLUMNS = {
   id: messages.id,
   threadId: messages.threadId,
-  fromAddress: messages.fromAddress,
-  fromDomain: messages.fromDomain,
   receivedAt: messages.receivedAt,
   ...ENVELOPE_COLUMNS,
   labelIds: messages.labelIds,
@@ -48,7 +46,7 @@ const toMessage = (db: Sql, accountId: string, stored: Row): MessageFacts => {
     labelIds: r.labelIds,
     headers: r.headers,
     receivedAt: r.receivedAt,
-    known: r.facts,
+    known: openFacts(r.facts, r.headers),
   };
 };
 
@@ -89,17 +87,17 @@ export async function listUndecided(db: Sql, accountId: string, limit: number): 
 /** The facts recorded for a message, or null if sift has not seen it. */
 export async function storedFacts(db: Sql, accountId: string, messageId: string): Promise<Facts | null> {
   const [row] = await db
-    .select({ facts: messages.facts })
+    .select({ facts: messages.facts, headers: messages.headers })
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
-  return row?.facts ?? null;
+  return row ? openFacts(row.facts, openEnvelope(db, accountId, messageId, { headers: row.headers }).headers) : null;
 }
 
 /** Replace a message's recorded facts, once reading the whole message has added to them. */
 export async function recordFacts(db: Sql, accountId: string, messageId: string, facts: Facts): Promise<void> {
   await db
     .update(messages)
-    .set({ facts })
+    .set({ facts: sealFacts(db, facts) })
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
 }
 

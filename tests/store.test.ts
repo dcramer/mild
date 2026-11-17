@@ -16,6 +16,7 @@ import { loadKeyring } from '../src/secrets.ts';
 import type { Disposition } from '../src/triage/types.ts';
 import { freshStore, onePerson, openUserDb, raw, recordEverything, rowsBy, superuser } from './fixtures.ts';
 import { facts } from './helpers.ts';
+import { conditionsHash } from '../src/store/content.ts';
 
 const MIGRATIONS = new URL('../src/store/migrations/', import.meta.url);
 const scratch = () => mkdtempSync(join(tmpdir(), 'sift-db-'));
@@ -106,7 +107,7 @@ describe("a person's data", () => {
     const alpha = await store.user(alphaId);
     const bravo = await store.user(await connectAccount(store, 'bravo@example.net', '1', 0));
     await raw(alpha).run(
-      `INSERT INTO correspondents (account_id, address, user_has_written, checked_at) VALUES ('alpha@example.org', 'x@example.com', true, 0)`,
+      `INSERT INTO correspondents (account_id, address_hash, domain_hash, address, user_has_written, checked_at) VALUES ('alpha@example.org', 'x', 'example.com', 'x@example.com', true, 0)`,
     );
 
     expect(await raw(alpha).all('SELECT address FROM correspondents')).toEqual([{ address: 'x@example.com' }]);
@@ -119,7 +120,9 @@ describe("a person's data", () => {
       raw(bravo).run('INSERT INTO credentials (user_id, kind, key, value, updated_at) VALUES (?, ?, ?, ?, 0)', alphaId, 'model', 'openai', 'x'),
     ).rejects.toThrow('row-level security');
     await expect(
-      raw(bravo).run(`INSERT INTO correspondents (account_id, address, user_has_written, checked_at) VALUES ('alpha@example.org', 'y@example.com', true, 0)`),
+      raw(bravo).run(
+        `INSERT INTO correspondents (account_id, address_hash, domain_hash, address, user_has_written, checked_at) VALUES ('alpha@example.org', 'y', 'example.com', 'y@example.com', true, 0)`,
+      ),
     ).rejects.toThrow();
     expect(await raw(bravo).run('UPDATE correspondents SET user_has_written = false')).toEqual({ changes: 0 });
     expect(await raw(alpha).get('SELECT user_has_written FROM correspondents')).toEqual({ user_has_written: true });
@@ -192,9 +195,10 @@ describe('a proposal', () => {
     const rule = await addRule(db, 'alpha@example.org', { match: { from: 'news@example.com' }, whenLabel: 'newsletter' }, 'user', 0);
     const propose = (kind: string, ruleId: string | null) =>
       raw(db).run(
-        `INSERT INTO proposals (account_id, kind, match, label_id, rule_id, agreed, created_at) VALUES ('alpha@example.org', ?, ?, 'newsletter', ?, 1, 0)`,
+        `INSERT INTO proposals (account_id, kind, match, conditions, label_id, rule_id, agreed, created_at) VALUES ('alpha@example.org', ?, ?, ?, 'newsletter', ?, 1, 0)`,
         kind,
         JSON.stringify({ from: `${kind}@example.com` }),
+        conditionsHash(db, { from: `${kind}@example.com` }),
         ruleId,
       );
     await expect(propose('rule', rule)).rejects.toThrow();
@@ -229,7 +233,7 @@ describe('a new mailbox', () => {
     ).rejects.toThrow();
     await expect(
       raw(db).run(
-        `INSERT INTO rules (id, account_id, position, match, when_label, source, created_at) VALUES ('r', 'alpha@example.org', 0, '{}', 'nonsense', 'user', 0)`,
+        `INSERT INTO rules (id, account_id, position, match, except_matches, conditions, when_label, source, created_at) VALUES ('r', 'alpha@example.org', 0, '{}', '[]', 'c', 'nonsense', 'user', 0)`,
       ),
     ).rejects.toThrow();
   });

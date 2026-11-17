@@ -4,7 +4,7 @@ import { undo } from '../src/actions/executor.ts';
 import { checkRuleFilters, removeRuleFilter, writeRuleFilter } from '../src/actions/rule-filters.ts';
 import { FILTER_CHECK_MINUTES, checkFiltersWhenDue } from '../src/work/filters.ts';
 import { addMailbox } from '../src/store/accounts.ts';
-import { openUserDb, raw } from './fixtures.ts';
+import { openUserDb, raw, unmarked } from './fixtures.ts';
 import { getRuleFilter, ruleFilterStatus } from '../src/store/filters.ts';
 import { DEFAULT_LABELS, updateLabel } from '../src/store/labels.ts';
 import { addRule, removeRule, setRule } from '../src/store/rules.ts';
@@ -120,7 +120,11 @@ let db: Sql;
 let mailbox: FakeMailbox;
 let clock: number;
 const deps = () => ({ db, mailbox, now: () => clock });
-const actions = async () => await raw(db).all<{ type: string; status: string }>('SELECT type, status, message_id, payload FROM actions ORDER BY id');
+const actions = async () =>
+  (await raw(db).all<{ type: string; status: string; payload: string }>('SELECT type, status, message_id, payload FROM actions ORDER BY id')).map((r) => ({
+    ...r,
+    payload: JSON.parse(unmarked(r.payload)),
+  }));
 
 beforeEach(async () => {
   db = await openUserDb(ACCOUNT);

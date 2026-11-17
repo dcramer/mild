@@ -12,14 +12,13 @@ import {
   isNotNull,
   lte,
   messages,
-  sql,
 } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import { mailboxAliases } from '../store/accounts.ts';
 import { shotCandidates } from '../store/examples.ts';
 import { listLabels } from '../store/labels.ts';
 import { getFacts } from '../store/messages.ts';
-import { openEnvelope, openPart } from '../store/content.ts';
+import { hashOf, openEnvelope, openPart } from '../store/content.ts';
 import { deriveFacts } from '../triage/facts.ts';
 import { pickShots } from '../triage/fewshot.ts';
 import { PROMPT_TEMPLATE } from '../triage/prompt.ts';
@@ -61,11 +60,11 @@ async function storedEvidence(db: Sql, facts: MessageFacts, body: string | null)
   const [{ n } = { n: 0 }] = await db
     .select({ n: count() })
     .from(messages)
-    .where(and(eq(messages.accountId, accountId), eq(messages.fromAddress, facts.from.address), lte(messages.receivedAt, facts.receivedAt)));
+    .where(and(eq(messages.accountId, accountId), eq(messages.senderHash, hashOf(db, facts.from.address)), lte(messages.receivedAt, facts.receivedAt)));
   const [written] = await db
     .select({ yes: correspondents.userHasWritten })
     .from(correspondents)
-    .where(and(eq(correspondents.accountId, accountId), eq(correspondents.address, facts.from.address)));
+    .where(and(eq(correspondents.accountId, accountId), eq(correspondents.addressHash, hashOf(db, facts.from.address))));
   return {
     facts,
     known: deriveFacts(facts, {}, await mailboxAliases(db, accountId)),
@@ -250,7 +249,7 @@ async function results(db: Sql, runId: number): Promise<EvalResult[]> {
     .select({
       accountId: evalRuns.accountId,
       messageId: evalResults.messageId,
-      fromAddress: sql<string>`coalesce(${messages.fromAddress}, '')`,
+      fromAddress: messages.sender,
       subject: messages.subject,
       expected: evalResults.expected,
       got: evalResults.got,
@@ -268,7 +267,10 @@ async function results(db: Sql, runId: number): Promise<EvalResult[]> {
     .leftJoin(messages, and(eq(messages.accountId, evalRuns.accountId), eq(messages.id, evalResults.messageId)))
     .where(eq(evalResults.runId, runId))
     .orderBy(evalResults.messageId);
-  return rows.map(({ accountId, ...r }) => ({ ...r, subject: openEnvelope(db, accountId, r.messageId, r).subject ?? '' }));
+  return rows.map(({ accountId, ...r }) => {
+    const opened = openEnvelope(db, accountId, r.messageId, r);
+    return { ...opened, fromAddress: opened.fromAddress ?? '', subject: opened.subject ?? '' };
+  });
 }
 
 function toRun(row: Omit<EvalRun, 'score' | 'withSenderExample'>, judged: readonly EvalResult[]): EvalRun {

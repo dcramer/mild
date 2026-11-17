@@ -1,5 +1,6 @@
 import { type DECISION_OUTCOMES, and, asc, decisions, desc, eq, feedback, isNull } from './query.ts';
 import type { Sql } from './sql.ts';
+import { openPart, sealPart } from './content.ts';
 import type { Decision, Disposition } from '../triage/types.ts';
 
 type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
@@ -29,7 +30,7 @@ export async function recordDecision(
       gmailLabel: decision.gmailLabel ?? null,
       ruleId: decision.ruleId ?? null,
       confidence: decision.confidence ?? null,
-      reason: decision.reason,
+      reason: sealPart(db, accountId, messageId, 'reason', decision.reason)!,
       runId: options.runId ?? null,
       durationMs: options.durationMs ?? null,
       decidedAt: options.now ?? Date.now(),
@@ -115,7 +116,7 @@ export async function currentDecision(
     disposition: row.disposition,
     subscription: row.subscription,
     stage: row.stage,
-    reason: row.reason,
+    reason: openPart(db, accountId, messageId, 'reason', row.reason)!,
     ...(row.labelId === null ? {} : { labelId: row.labelId }),
     ...(row.gmailLabel === null ? {} : { gmailLabel: row.gmailLabel }),
     ...(row.block ? { block: true } : {}),

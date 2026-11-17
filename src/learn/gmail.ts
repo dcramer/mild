@@ -1,5 +1,7 @@
 import { actions, and, decisions, desc, eq, feedback, gte, isNotNull, messages, ne } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
+import { openPayload } from '../store/actions.ts';
+import { openEnvelope } from '../store/content.ts';
 import { listLabels } from '../store/labels.ts';
 import type { DecidedDisposition } from '../triage/types.ts';
 import { applyFeedback } from './feedback.ts';
@@ -33,14 +35,15 @@ export async function userChanges(db: Sql, accountId: string, history: readonly 
   }
   // A change whose outcome was never confirmed may have landed, so it counts; one that failed did not.
   const own = await db
-    .select({ messageId: actions.messageId, payload: actions.payload })
+    .select({ messageId: actions.messageId, stored: actions.payload })
     .from(actions)
     .where(and(eq(actions.accountId, accountId), isNotNull(actions.messageId), gte(actions.createdAt, since), ne(actions.status, 'failed')));
   for (const action of own) {
     const messageId = action.messageId!;
     if (!tally.has(messageId)) continue;
-    for (const label of action.payload.add) count(messageId, `+${label}`, -1);
-    for (const label of action.payload.remove) count(messageId, `-${label}`, -1);
+    const payload = openPayload(db, accountId, action.stored);
+    for (const label of payload.add) count(messageId, `+${label}`, -1);
+    for (const label of payload.remove) count(messageId, `-${label}`, -1);
   }
 
   const changes: MessageChange[] = [];
@@ -86,7 +89,7 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
         disposition: decisions.disposition,
         carryOut: decisions.carryOut,
         byUser: decisions.byUser,
-        fromAddress: messages.fromAddress,
+        fromAddress: messages.sender,
       })
       .from(decisions)
       .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
@@ -94,6 +97,7 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
       .orderBy(desc(decisions.id))
       .limit(1);
     if (!decision) continue;
+    const sender = openEnvelope(db, accountId, change.messageId, { fromAddress: decision.fromAddress }).fromAddress;
     const touched = [...change.added, ...change.removed];
     const moved = moves(touched);
     if (!moved && !touched.some(isUserLabel)) continue;
@@ -134,7 +138,7 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
       db,
       {
         accountId,
-        sender: decision.fromAddress,
+        sender,
         label: label.id,
         ...(place === label.disposition ? {} : { disposition: place }),
         scope: 'once',

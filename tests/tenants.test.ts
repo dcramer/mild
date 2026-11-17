@@ -10,6 +10,7 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { MAX_ATTEMPTS, finishRun, startRun } from '../src/store/runs.ts';
 import { facts } from './helpers.ts';
+import { conditionsHash } from '../src/store/content.ts';
 
 // Two people. Alpha set sift up and has two mailboxes; Bravo arrived later with one.
 const ALPHA = 'alpha@example.org';
@@ -47,9 +48,10 @@ async function seed(account: string): Promise<void> {
     decision,
   ))!;
   const { id: proposal } = (await raw(db).get<{ id: number }>(
-    `INSERT INTO proposals (account_id, kind, match, label_id, agreed, created_at) VALUES (?, 'rule', ?, 'newsletter', 5, 1000) RETURNING id`,
+    `INSERT INTO proposals (account_id, kind, match, conditions, label_id, agreed, created_at) VALUES (?, 'rule', ?, ?, 'newsletter', 5, 1000) RETURNING id`,
     account,
     JSON.stringify({ from: `proposed@${mark}.example.com` }),
+    conditionsHash(db, { from: `proposed@${mark}.example.com` }),
   ))!;
   await raw(db).run(
     `INSERT INTO examples (account_id, message_id, disposition, label_id, marked_at, status, body_text, body_html) VALUES (?, ?, 'archive', 'newsletter', 1000, 'captured', ?, ?)`,

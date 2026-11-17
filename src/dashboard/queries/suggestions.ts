@@ -14,7 +14,7 @@ import {
 import type { Sql } from '../../store/sql.ts';
 import { accuracy, pendingSuggestions } from '../../learn/feedback.ts';
 import { listLabels } from '../../store/labels.ts';
-import { openPart } from '../../store/content.ts';
+import { hashOf, openPart } from '../../store/content.ts';
 import type { Label } from '../../triage/types.ts';
 import { listProposals, settledAction } from '../../store/proposals.ts';
 import { listRules } from '../../store/rules.ts';
@@ -77,7 +77,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
       .where(
         and(
           eq(decisions.accountId, accountId),
-          eq(messageRows.fromAddress, address),
+          eq(messageRows.senderHash, hashOf(db, address)),
           isNotNull(decisions.labelId),
           eq(
             decisions.id,

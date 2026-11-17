@@ -18,7 +18,7 @@ import { redecideWaiting } from '../src/learn/redecide.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import type { Decision, Disposition } from '../src/triage/types.ts';
 import { everything, facts, FakeMailbox } from './helpers.ts';
-import { raw, startDashboard, onePerson } from './fixtures.ts';
+import { raw, startDashboard, onePerson, withReason } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -336,7 +336,9 @@ describe('an answer pressed in the dashboard', () => {
       50,
     );
     expect(
-      await raw(db).get(`SELECT disposition, subscription, label_id, by_user, reason FROM decisions WHERE message_id = 'm1' ORDER BY id DESC LIMIT 1`),
+      withReason(
+        await raw(db).get(`SELECT disposition, subscription, label_id, by_user, reason FROM decisions WHERE message_id = 'm1' ORDER BY id DESC LIMIT 1`),
+      ),
     ).toEqual({ disposition: 'keep', subscription: 'preserve', label_id: 'newsletter', by_user: true, reason: 'you said this is Newsletters, and to keep it' });
     expect(await raw(db).get(`SELECT verdict, disposition, label_id FROM feedback`)).toEqual({ verdict: 'right', disposition: 'keep', label_id: 'newsletter' });
 
@@ -444,7 +446,7 @@ describe('correcting a decision that is not waiting', () => {
     return id;
   }
   const decisionsFor = async (id: string) =>
-    await raw(db).all('SELECT stage, disposition, label_id, carry_out, outcome, reason FROM decisions WHERE message_id = ? ORDER BY id', id);
+    (await raw(db).all('SELECT stage, disposition, label_id, carry_out, outcome, reason FROM decisions WHERE message_id = ? ORDER BY id', id)).map(withReason);
 
   it('records what the user said as a new decision, makes the rule, and names the message to put right', async () => {
     const id = await acted('bids@example.com', 'marketing');
@@ -559,7 +561,8 @@ describe('how far an answer reaches', () => {
     ]);
 
     // The narrower rule wins whichever was written first.
-    await raw(db).run(`UPDATE rules SET position = 99 WHERE match ->> 'subjectContains' IS NOT NULL`);
+    const narrower = (await listRules(db, ACCOUNT)).find((r) => r.match.subjectContains !== undefined)!;
+    await raw(db).run(`UPDATE rules SET position = 99 WHERE id = ?`, narrower.id);
     await recordSync(
       db,
       ACCOUNT,

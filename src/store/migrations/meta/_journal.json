@@ -78,6 +78,34 @@
       "when": 1794874347136,
       "tag": "0010_apply_rule",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794875528614,
+      "tag": "0011_forget_correspondents",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794875536732,
+      "tag": "0012_hash_senders",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794875547029,
+      "tag": "0013_fill_hashes",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794875548263,
+      "tag": "0014_require_hashes",
+      "breakpoints": true
     }
   ]
 }

@@ -15,7 +15,7 @@ import { EXAMPLE_KEEP_DAYS } from '../src/store/examples.ts';
 import { preferences, setActive } from '../src/store/preferences.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { FakeMailbox, facts, storeExample } from './helpers.ts';
-import { type Reply, builtAssets, raw, startDashboard, onePerson } from './fixtures.ts';
+import { type Reply, builtAssets, raw, startDashboard, onePerson, withReason } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 
 const ACCOUNT = 'me@example.org';
@@ -204,7 +204,7 @@ describe('managing sift from the dashboard', () => {
     expect((await call('GET', '/api/suggestions?fact=nonsense')).status).toBe(400);
     const keepReplies = await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: from.address, facts: { isReply: true } }, disposition: 'keep' });
     expect(keepReplies.body).toMatchObject({ redecided: 1 });
-    expect(await raw(db).get(`SELECT stage, disposition, reason FROM decisions WHERE message_id = 'w1' ORDER BY id DESC LIMIT 1`)).toEqual({
+    expect(withReason(await raw(db).get(`SELECT stage, disposition, reason FROM decisions WHERE message_id = 'w1' ORDER BY id DESC LIMIT 1`))).toEqual({
       stage: 'rules',
       disposition: 'keep',
       reason: 'rule: from sales@example.com, is a reply: keep it',

@@ -20,7 +20,7 @@ import {
   gte,
 } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
-import { openEnvelope } from '../../store/content.ts';
+import { hashOf, openEnvelope } from '../../store/content.ts';
 import { DISPOSITIONS } from '../../triage/types.ts';
 import { type Scope, within } from '../scope.ts';
 import { type DecisionRow, FACT_FILTERS, FACT_FILTER_KEYS, type ListedDecision, STAGES } from '../types.ts';
@@ -51,7 +51,7 @@ const DECISION_FIELDS = {
   confidence: decisions.confidence,
   model: modelRuns.model,
   costUsd: sql<number>`coalesce(${modelRuns.costUsd}, 0)`.mapWith(Number),
-  fromAddress: messages.fromAddress,
+  fromAddress: messages.sender,
   fromName: messages.fromName,
   subject: messages.subject,
   carryOut: decisions.carryOut,
@@ -164,8 +164,8 @@ export async function listDecisions(
     where.push(clause);
   }
   if (filter.accountId !== undefined) where.push(eq(decisions.accountId, filter.accountId));
-  if (filter.sender !== undefined) where.push(eq(messages.fromAddress, filter.sender));
-  if (filter.domain !== undefined) where.push(eq(messages.fromDomain, filter.domain));
+  if (filter.sender !== undefined) where.push(eq(messages.senderHash, hashOf(db, filter.sender)));
+  if (filter.domain !== undefined) where.push(eq(messages.domainHash, hashOf(db, filter.domain)));
   if (filter.fact !== undefined) {
     if (!isOneOf(FACT_FILTER_KEYS, filter.fact)) return { total: 0, rows: [] };
     where.push(factsWhere(FACT_FILTERS[filter.fact]));

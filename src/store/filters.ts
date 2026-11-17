@@ -1,5 +1,7 @@
 import { type FILTER_STATES, actions, and, asc, eq, inArray, isNotNull, mailboxes, rules as ruleRows } from './query.ts';
 import type { Sql } from './sql.ts';
+import { openJson, ruleName, sealJson } from './content.ts';
+import { openPayload } from './actions.ts';
 import { type FilterPlan, type FilterVerdict, filterFor } from '../triage/filter.ts';
 import type { RuleMatch } from '../triage/stages/rules.ts';
 import { listAccounts } from './accounts.ts';
@@ -31,18 +33,28 @@ const COLUMNS = {
   checkedAt: ruleRows.filterCheckedAt,
 };
 
+const opened = (
+  db: Sql,
+  { match, written, ...r }: { ruleId: string; match: string; written: string | null } & Omit<RuleFilterRow, 'match' | 'written'>,
+): RuleFilterRow => ({
+  ...r,
+  match: openJson<RuleMatch>(db, ruleName(db, r.ruleId, 'match'), match),
+  written: written === null ? null : openJson<Record<string, unknown>>(db, ruleName(db, r.ruleId, 'filter'), written),
+});
+
 export async function getRuleFilter(db: Sql, ruleId: string): Promise<RuleFilterRow | null> {
   const [row] = await db.select(COLUMNS).from(ruleRows).where(eq(ruleRows.id, ruleId));
-  return row ?? null;
+  return row ? opened(db, row) : null;
 }
 
 /** The account's rules that have a filter in Gmail, as far as sift knows. */
 export async function listRuleFilters(db: Sql, accountId: string): Promise<RuleFilterRow[]> {
-  return await db
+  const rows = await db
     .select(COLUMNS)
     .from(ruleRows)
     .where(and(eq(ruleRows.accountId, accountId), isNotNull(ruleRows.filterId)))
     .orderBy(asc(ruleRows.position), asc(ruleRows.id));
+  return rows.map((r) => opened(db, r));
 }
 
 export async function setRuleFilter(
@@ -53,7 +65,12 @@ export async function setRuleFilter(
 ): Promise<void> {
   await db
     .update(ruleRows)
-    .set({ filterId: value.filterId, filterState: value.state, filterWritten: value.written, filterCheckedAt: now })
+    .set({
+      filterId: value.filterId,
+      filterState: value.state,
+      filterWritten: value.written === null ? null : sealJson(db, ruleName(db, ruleId, 'filter'), value.written),
+      filterCheckedAt: now,
+    })
     .where(eq(ruleRows.id, ruleId));
 }
 
@@ -87,11 +104,12 @@ interface RuleFilterStatus {
 export async function ruleFilterStatus(db: Sql): Promise<Map<string, RuleFilterStatus>> {
   const last = new Map<string, RuleFilterStatus['last']>();
   const changes = await db
-    .select({ type: actions.type, status: actions.status, error: actions.error, at: actions.createdAt, payload: actions.payload })
+    .select({ accountId: actions.accountId, type: actions.type, status: actions.status, error: actions.error, at: actions.createdAt, payload: actions.payload })
     .from(actions)
     .where(inArray(actions.type, ['filter', 'unfilter']))
     .orderBy(asc(actions.id));
-  for (const { payload, ...change } of changes) last.set(payload.filter!.ruleId, change as NonNullable<RuleFilterStatus['last']>);
+  for (const { accountId, payload, ...change } of changes)
+    last.set(openPayload(db, accountId, payload).filter!.ruleId, change as NonNullable<RuleFilterStatus['last']>);
   const status = new Map<string, RuleFilterStatus>();
   for (const account of await listAccounts(db)) {
     for (const [ruleId, verdict] of await filterVerdicts(db, account.id)) {

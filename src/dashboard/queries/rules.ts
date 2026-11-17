@@ -1,6 +1,8 @@
 import { actions, alias, and, asc, count, decisions, desc, eq, inArray, labels, max, messages, rules, sql } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
-import { openEnvelope } from '../../store/content.ts';
+import type { RuleMatch } from '../../triage/stages/rules.ts';
+import { openPayload } from '../../store/actions.ts';
+import { openEnvelope, openJson, ruleName } from '../../store/content.ts';
 import { ruleFilterStatus } from '../../store/filters.ts';
 import { type Scope, within } from '../scope.ts';
 import type { FilterChange, RuleSummary, RuleWaiting } from '../types.ts';
@@ -39,8 +41,8 @@ export async function listRuleSummaries(db: Sql, scope: Scope): Promise<RuleSumm
   return rows.map((r) => ({
     id: r.id,
     accountId: r.accountId,
-    match: r.match,
-    except: r.except,
+    match: openJson<RuleMatch>(db, ruleName(db, r.id, 'match'), r.match),
+    except: openJson<RuleMatch[]>(db, ruleName(db, r.id, 'except'), r.except),
     kind: r.labelId !== null ? 'label' : r.whenLabel !== null ? 'when-label' : 'action',
     labelId: r.labelId,
     whenLabel: r.whenLabel,
@@ -79,7 +81,7 @@ export async function listFilterChanges(db: Sql, scope: Scope, days: number, now
   const written = new Map<string, FilterChange['criteria']>();
   const listed: FilterChange[] = [];
   for (const { payload, type, ...change } of changes) {
-    const { ruleId, criteria } = payload.filter!;
+    const { ruleId, criteria } = openPayload(db, change.accountId, payload).filter!;
     if (type === 'filter' && criteria) written.set(ruleId, criteria);
     if (change.at >= now - days * DAY_MS)
       listed.push({ ...change, type: type as FilterChange['type'], ruleId: kept.has(ruleId) ? ruleId : null, criteria: written.get(ruleId) ?? {} });

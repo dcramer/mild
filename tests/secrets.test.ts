@@ -13,8 +13,12 @@ import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { suggestionBodies } from '../src/store/query.ts';
 import type { Sql } from '../src/store/sql.ts';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
+import { cachedCorrespondent, domainFacts, rememberCorrespondent, senderFacts } from '../src/store/senders.ts';
+import { storedFacts } from '../src/store/messages.ts';
 import { listDecisions } from '../src/dashboard/queries/decisions.ts';
 import { recordDecision } from '../src/store/decisions.ts';
+import { hasRuleFor, listRules, setRule } from '../src/store/rules.ts';
+import { getAction, insertPendingAction } from '../src/store/actions.ts';
 import { everything, facts } from './helpers.ts';
 import { freshStore, raw } from './fixtures.ts';
 
@@ -219,6 +223,97 @@ describe('mail', () => {
       headers: {},
     });
     await expect(messageDetail(await as(B), await everything(db), 'alpha@example.org', 'm1')).rejects.toThrow('SIFT_KEY');
+  });
+
+  it('finds a sender by a hash of their address that differs for each person, and shows it decrypted', async () => {
+    const { as } = await alpha(A);
+    const store = await freshStore(A);
+    await connectAccount(store, 'bravo@example.org', '1', 0);
+    const bravo = await store.user(2);
+    await recordSync(bravo, 'bravo@example.org', [facts({ accountId: 'bravo@example.org', messageId: 'b1' })], '2', 0);
+    const db = await as(A);
+    const SELECT = 'SELECT from_address, from_domain, sender_hash, domain_hash FROM messages ORDER BY id';
+    const [m1, m2] = await raw(db).all<{ sender_hash: string }>(SELECT);
+    const [b1] = await raw(bravo).all<{ sender_hash: string }>(SELECT);
+    expect(JSON.stringify([m1, m2, b1])).not.toContain('example.com');
+    expect(m1!.sender_hash).toBe(m2!.sender_hash);
+    expect(b1!.sender_hash).not.toBe(m1!.sender_hash);
+    expect(await senderFacts(db, 'alpha@example.org', 'NEWS@example.com')).toMatchObject({ messages: 2 });
+    expect(await domainFacts(db, 'alpha@example.org', 'example.com')).toMatchObject({ messages: 2, senders: 1 });
+    expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm1')).toMatchObject({ fromAddress: 'news@example.com' });
+  });
+
+  it('keeps a list id as its hash, and gives it back from the headers', async () => {
+    const { as } = await alpha(A);
+    const db = await as(A);
+    await recordSync(
+      db,
+      'alpha@example.org',
+      [facts({ accountId: 'alpha@example.org', messageId: 'm3', headers: { 'list-id': '<news.example.com>' } })],
+      '3',
+      0,
+    );
+    const row = await raw(db).get<{ facts: { listId: string } }>("SELECT facts FROM messages WHERE id = 'm3'");
+    expect(row!.facts.listId).not.toContain('example.com');
+    expect(await storedFacts(db, 'alpha@example.org', 'm3')).toMatchObject({ listId: 'news.example.com' });
+  });
+
+  it('remembers who the owner has written to by hash, and hashes again under a new key', async () => {
+    const { as } = await alpha();
+    await rememberCorrespondent(await as(NONE), 'alpha@example.org', 'friend@example.net', true, 0);
+    expect(await rekeyContent(await as(A))).toBe(2);
+    const db = await as(A);
+    expect(JSON.stringify(await raw(db).all('SELECT * FROM correspondents'))).not.toContain('example.net');
+    expect(await cachedCorrespondent(db, 'alpha@example.org', 'friend@example.net', 0)).toBe(true);
+    expect(await senderFacts(db, 'alpha@example.org', 'news@example.com')).toMatchObject({ messages: 2 });
+    expect(await rekeyContent(await as(B_AFTER_A))).toBe(2);
+    expect(await cachedCorrespondent(await as(B), 'alpha@example.org', 'friend@example.net', 0)).toBe(true);
+    expect(await senderFacts(await as(B), 'alpha@example.org', 'news@example.com')).toMatchObject({ messages: 2 });
+  });
+
+  it('keeps rules, changes and reasons encrypted, and finds a rule by its hashed conditions under each key', async () => {
+    const { as } = await alpha(A);
+    const db = await as(A);
+    const id = await setRule(db, 'alpha@example.org', { from: 'news@example.com' }, { disposition: 'archive' }, 'user', 0);
+    expect(await setRule(db, 'alpha@example.org', { from: 'news@example.com' }, { disposition: 'keep' }, 'user', 0)).toBe(id);
+    await recordDecision(
+      db,
+      'alpha@example.org',
+      'm1',
+      { disposition: 'archive', subscription: 'preserve', stage: 'rules', reason: 'rule: from news@example.com' },
+      { now: 0 },
+    );
+    const action = await insertPendingAction(
+      db,
+      {
+        accountId: 'alpha@example.org',
+        messageId: 'm1',
+        type: 'unsubscribe',
+        payload: { add: [], remove: [], unsubscribe: 'news.example.com' },
+        originalLabels: [],
+      },
+      0,
+    );
+    const stored = await raw(db).all('SELECT r.match, r.except_matches, r.conditions, d.reason, a.payload FROM rules r, decisions d, actions a');
+    expect(JSON.stringify(stored)).not.toContain('example.com');
+    expect((await listRules(db, 'alpha@example.org'))[0]).toMatchObject({ id, match: { from: 'news@example.com' }, disposition: 'keep' });
+    expect((await listDecisions(db, await everything(db), { days: 36_500 }, 0)).rows[0]).toMatchObject({ reason: 'rule: from news@example.com' });
+
+    await rekeyContent(await as(B_AFTER_A));
+    const b = await as(B);
+    expect(await hasRuleFor(b, 'alpha@example.org', { from: 'news@example.com' })).toBe(true);
+    expect(await getAction(b, action)).toMatchObject({ payload: { unsubscribe: 'news.example.com' } });
+  });
+
+  it('hashes at start the conditions a migration could not, with or without a key', async () => {
+    const { as } = await alpha();
+    const db = await as(NONE);
+    await raw(db).run(
+      `INSERT INTO rules (id, account_id, position, match, except_matches, conditions, disposition, source, created_at) VALUES ('r', 'alpha@example.org', 0, '{"from": "a@example.com"}', '[]', 'unset:x', 'archive', 'user', 0)`,
+    );
+    expect(await hasRuleFor(db, 'alpha@example.org', { from: 'a@example.com' })).toBe(false);
+    await rekeyContent(db);
+    expect(await hasRuleFor(db, 'alpha@example.org', { from: 'a@example.com' })).toBe(true);
   });
 
   it('finds mail by its subject, which the database cannot read', async () => {

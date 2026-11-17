@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
 import { addMailbox, recordSync } from '../src/store/accounts.ts';
-import { openUserDb, raw } from './fixtures.ts';
+import { openUserDb, raw, withReason } from './fixtures.ts';
 import { startRun } from '../src/store/runs.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { updateLabel } from '../src/store/labels.ts';
@@ -54,9 +54,11 @@ async function decided(address: string, decision: Partial<Decision> = {}, at = +
 }
 
 const current = async (messageId: string) =>
-  await raw(db).get(
-    'SELECT stage, disposition, label_id, rule_id, subscription, reason, run_id, carry_out FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1',
-    messageId,
+  withReason(
+    await raw(db).get(
+      'SELECT stage, disposition, label_id, rule_id, subscription, reason, run_id, carry_out FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1',
+      messageId,
+    ),
   );
 const count = async () => (await raw(db).get<{ n: number }>('SELECT count(*) AS n FROM decisions'))!.n;
 const waiting = async () => (await pendingSuggestions(db)).map((s) => s.messageId).toSorted();

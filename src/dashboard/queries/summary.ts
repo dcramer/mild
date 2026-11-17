@@ -21,6 +21,7 @@ import {
   sql,
 } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
+import { oneSender, openSender } from '../../store/content.ts';
 import { outOfTries } from '../../store/runs.ts';
 import { accuracy } from '../../learn/feedback.ts';
 import { type Scope, within } from '../scope.ts';
@@ -193,22 +194,22 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
     topSenders: (
       await db
         .select({
-          address: messages.fromAddress,
+          one: oneSender(),
           n: count(),
           last: sql<string | null>`${db
             .select({ disposition: decisions.disposition })
             .from(decisions)
             .innerJoin(sent, and(eq(sent.accountId, decisions.accountId), eq(sent.id, decisions.messageId)))
-            .where(and(eq(sent.fromAddress, messages.fromAddress), within(scope, decisions.accountId)))
+            .where(and(eq(sent.senderHash, messages.senderHash), within(scope, decisions.accountId)))
             .orderBy(desc(decisions.id))
             .limit(1)}`,
         })
         .from(messages)
         .where(and(gte(messages.receivedAt, since), within(scope, messages.accountId)))
-        .groupBy(messages.fromAddress)
-        .orderBy(desc(count()), asc(messages.fromAddress))
+        .groupBy(messages.senderHash)
+        .orderBy(desc(count()), asc(messages.senderHash))
         .limit(10)
-    ).map((r) => ({ address: r.address, messages: r.n, lastDisposition: r.last })),
+    ).map((r) => ({ address: openSender(db, r.one), messages: r.n, lastDisposition: r.last })),
     recent: (await listDecisions(db, scope, { days, limit: 10 }, now)).rows,
     accuracy: { ...answered, byStage: STAGES.map((stage) => answered.byStage.find((r) => r.stage === stage) ?? { stage, reviewed: 0, right: 0 }) },
   };

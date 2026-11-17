@@ -1,5 +1,6 @@
 import { and, eq, messages } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
+import { openEnvelope } from '../store/content.ts';
 import {
   type ActionPayload,
   type ActionRecord,
@@ -148,12 +149,13 @@ export async function execute(deps: ActionDeps, accountId: string, messageId: st
 /** Spam is the costliest mistake, so every doubt refuses: unknown sender, failed lookup, or any prior correspondence. */
 async function spamRefusal(deps: ActionDeps, accountId: string, messageId: string): Promise<string | null> {
   const [row] = await deps.db
-    .select({ fromAddress: messages.fromAddress })
+    .select({ fromAddress: messages.sender })
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
   if (!row) return 'sender is unknown, so spam is refused';
   try {
-    if (await deps.mailbox.hasSentTo(row.fromAddress)) return 'you have written to this sender, so spam is refused';
+    if (await deps.mailbox.hasSentTo(openEnvelope(deps.db, accountId, messageId, row).fromAddress))
+      return 'you have written to this sender, so spam is refused';
   } catch (error) {
     return `could not check correspondence with the sender (${message(error)}), so spam is refused`;
   }

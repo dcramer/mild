@@ -18,7 +18,7 @@ export async function listUnjudged(db: Sql, scope: Scope, limit: number): Promis
     .select({
       accountId: messages.accountId,
       messageId: messages.id,
-      fromAddress: messages.fromAddress,
+      fromAddress: messages.sender,
       fromName: messages.fromName,
       subject: messages.subject,
       error: latest<string | null>(modelRuns.error),

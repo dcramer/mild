@@ -1,6 +1,6 @@
 import { actions, and, asc, decisions, eq, examples, messages, modelRuns, sql, suggestionBodies } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
-import { unsubscribedAt } from '../../store/actions.ts';
+import { unsubscribedAt, openPayload } from '../../store/actions.ts';
 import { storedFacts } from '../../store/messages.ts';
 import { openEnvelope, openPart } from '../../store/content.ts';
 import { bulkSignals, passedDmarc } from '../../triage/features.ts';
@@ -15,12 +15,11 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
   const [stored] = await db
     .select({
       threadId: messages.threadId,
-      fromAddress: messages.fromAddress,
+      fromAddress: messages.sender,
       fromName: messages.fromName,
       to: messages.to,
       cc: messages.cc,
       subject: messages.subject,
-      listId: messages.listId,
       receivedAt: messages.receivedAt,
       headers: messages.headers,
     })
@@ -73,7 +72,7 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
     to: m.to,
     cc: m.cc,
     subject: m.subject,
-    listId: m.listId,
+    listId: facts.listId,
     receivedAt: m.receivedAt,
     headers: m.headers,
     body: body?.text ?? null,
@@ -82,7 +81,10 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
     unsubscribe: await canUnsubscribe(db, accountId, m.fromAddress, m.headers),
     sender: (await senderProfile(db, scope, accountId, m.fromAddress))!,
     decisions: shown.map((r) => ({ ...toDecisionRow(db, r), ...costs.get(r.id)! })),
-    actions: changes.map(({ payload, ...a }) => ({ ...a, added: payload.add, removed: payload.remove })),
+    actions: changes.map(({ payload: stored, ...a }) => {
+      const payload = openPayload(db, accountId, stored);
+      return { ...a, added: payload.add, removed: payload.remove };
+    }),
   };
 }
 

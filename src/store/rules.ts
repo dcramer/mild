@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { type RULE_SOURCES, and, asc, eq, proposals, rules, sql } from './query.ts';
 import type { Sql } from './sql.ts';
+import { conditionsHash, openJson, ruleName, sealJson } from './content.ts';
 import { type Rule, type RuleMatch, asksFacts } from '../triage/stages/rules.ts';
 import { listLabels } from './labels.ts';
 
@@ -31,20 +32,23 @@ export async function listRules(db: Sql, accountId: string): Promise<StoredRule[
     .from(rules)
     .where(eq(rules.accountId, accountId))
     .orderBy(asc(rules.position), asc(rules.id));
-  return rows.map((r) => ({
-    id: r.id,
-    match: r.match,
-    ...(r.except.length > 0 ? { except: r.except } : {}),
-    ...(r.labelId ? { labelId: r.labelId } : {}),
-    ...(r.whenLabel ? { whenLabel: r.whenLabel } : {}),
-    ...(r.disposition ? { disposition: r.disposition } : {}),
-    subscription: r.subscription,
-    ...(r.markRead ? { markRead: true } : {}),
-    ...(r.condition ? { when: r.condition } : {}),
-    ...(r.source === 'learned' ? { learned: true } : {}),
-    source: r.source,
-    hits: r.hits,
-  }));
+  return rows.map((r) => {
+    const except = openJson<RuleMatch[]>(db, ruleName(db, r.id, 'except'), r.except);
+    return {
+      id: r.id,
+      match: openJson<RuleMatch>(db, ruleName(db, r.id, 'match'), r.match),
+      ...(except.length > 0 ? { except } : {}),
+      ...(r.labelId ? { labelId: r.labelId } : {}),
+      ...(r.whenLabel ? { whenLabel: r.whenLabel } : {}),
+      ...(r.disposition ? { disposition: r.disposition } : {}),
+      subscription: r.subscription,
+      ...(r.markRead ? { markRead: true } : {}),
+      ...(r.condition ? { when: r.condition } : {}),
+      ...(r.source === 'learned' ? { learned: true } : {}),
+      source: r.source,
+      hits: r.hits,
+    };
+  });
 }
 
 /** What a rule says, apart from its conditions. */
@@ -74,8 +78,9 @@ export async function addRule(db: Sql, accountId: string, rule: Omit<Rule, 'id' 
     id,
     accountId,
     position: next,
-    match: rule.match,
-    except: rule.except ?? [],
+    match: sealJson(db, ruleName(db, id, 'match'), rule.match),
+    except: sealJson(db, ruleName(db, id, 'except'), rule.except ?? []),
+    conditions: conditionsHash(db, rule.match, rule.except),
     labelId: rule.labelId ?? null,
     whenLabel: rule.whenLabel ?? null,
     disposition: rule.disposition ?? null,
@@ -114,7 +119,7 @@ async function ruleMatching(
   const [row] = await db
     .select({ id: rules.id, source: rules.source })
     .from(rules)
-    .where(and(eq(rules.accountId, accountId), eq(rules.match, match), eq(rules.except, []), sql`${rules.whenLabel} IS NOT DISTINCT FROM ${whenLabel}`))
+    .where(and(eq(rules.accountId, accountId), eq(rules.conditions, conditionsHash(db, match)), sql`${rules.whenLabel} IS NOT DISTINCT FROM ${whenLabel}`))
     .orderBy(asc(rules.position))
     .limit(1);
   return row;
@@ -125,7 +130,7 @@ export async function hasRuleFor(db: Sql, accountId: string, match: RuleMatch): 
   const found = await db
     .select({ id: rules.id })
     .from(rules)
-    .where(and(eq(rules.accountId, accountId), eq(rules.match, match), eq(rules.except, [])))
+    .where(and(eq(rules.accountId, accountId), eq(rules.conditions, conditionsHash(db, match))))
     .limit(1);
   return found.length > 0;
 }
@@ -139,7 +144,7 @@ export async function setRule(db: Sql, accountId: string, match: RuleMatch, rule
   await db
     .update(proposals)
     .set({ status: 'accepted', resolvedAt: now })
-    .where(and(eq(proposals.accountId, accountId), eq(proposals.match, match), eq(proposals.status, 'open')));
+    .where(and(eq(proposals.accountId, accountId), eq(proposals.conditions, conditionsHash(db, match)), eq(proposals.status, 'open')));
   const existing = await ruleMatching(db, accountId, match, rule.whenLabel ?? null);
   if (!existing) return await addRule(db, accountId, { match, ...rule }, source, now);
   await check(db, accountId, rule);

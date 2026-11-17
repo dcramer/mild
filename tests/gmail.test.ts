@@ -205,7 +205,7 @@ describe('syncAccount', () => {
     expect(report.added.map((m) => m.messageId)).toEqual(['a']);
     expect(report.skipped).toBe(3);
     expect((await listAccounts(db))[0]?.historyId).toBe('520');
-    expect(await raw(db).all('SELECT id, from_domain FROM messages')).toEqual([{ id: 'a', from_domain: 'example.com' }]);
+    expect(await raw(db).all('SELECT id, domain_hash FROM messages')).toEqual([{ id: 'a', domain_hash: 'example.com' }]);
   });
 
   it('does not report a redelivered message as new', async () => {

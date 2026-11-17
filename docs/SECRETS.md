@@ -4,9 +4,10 @@ Four kinds of thing would let someone else act as you, and Sift encrypts each wh
 
 - in the home directory, the install's own: `google-client.json` (your Google OAuth client) and `dashboard-key` (signs dashboard sessions, unless `SIFT_SESSION_SECRET` gives the key: a host that keeps no files between starts needs that);
 - in the database, as each person's own rows (`credentials`), theirs: a Gmail refresh token per mailbox, and their model sign-ins (API keys, a ChatGPT sign-in);
-- in the database, the text and HTML of the mail Sift holds for them (`suggestion_bodies`, `examples`), and the subject, sender name, recipients and headers of every message it records. A message with no HTML has none stored, not an empty one.
+- in the database, the text and HTML of the mail Sift holds for them (`suggestion_bodies`, `examples`), and the sender, subject, recipients and headers of every message it records. A message with no HTML has none stored, not an empty one;
+- in the database, everything else that names a sender: rule and proposal conditions, the Gmail filter written for a rule, a change's details, a decision's reason, who the owner has written to. Senders, domains and conditions are found by a keyed hash beside the encrypted copy ([SECURITY.md](SECURITY.md)).
 
-A person's sign-ins and mail are their own rows, which row-level security keeps from everyone else. The rest of the database (sender addresses, labels, rules, decisions) is not encrypted.
+A person's sign-ins and mail are their own rows, which row-level security keeps from everyone else. The rest of the database (labels, conditions in your own words, what was decided and done, when) is not encrypted.
 
 A key beside what it protects protects nothing, so the key belongs in the environment, not in the home's `.env`. It guards a copied home directory or backup. It does not guard against someone who can read the running process's environment.
 
@@ -16,7 +17,7 @@ A key beside what it protects protects nothing, so the key belongs in the enviro
 
 To set one yourself, `openssl rand -base64 32`, and give the result to Sift as `SIFT_KEY`: in the environment, or in a `.env` file. Sift reads `.env` from the home directory and then from the directory it was started in; a variable already set is never replaced. `.env` in the home directory is the convenient place and the weak one, since a copy of the home then carries its own key. With Docker, set it on the container (the compose file passes `SIFT_KEY` and `SIFT_OLD_KEYS` through).
 
-At the next `sift run`, everything stored plain is encrypted, and says so. Without a key Sift still runs, stores these plain (the files owner-only), and says so at start.
+At the next `sift run`, everything stored plain is encrypted and every keyed hash made again, and it says so. Without a key Sift still runs, stores these plain (the files owner-only), and says so at start.
 
 ## Rotating
 

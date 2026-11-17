@@ -1,5 +1,5 @@
 import { alias, and, asc, count, desc, eq, isNotNull, max, messages, sql } from '../../store/query.ts';
-import { openPart } from '../../store/content.ts';
+import { hashOf, openPart, oneSender, openSender } from '../../store/content.ts';
 import type { Sql } from '../../store/sql.ts';
 import { pendingSuggestions } from '../../learn/feedback.ts';
 import { contacts, domainFacts, senderFacts } from '../../store/senders.ts';
@@ -68,7 +68,7 @@ export async function senderPage(
       ? await db
           .select({ id: messages.id, fromName: messages.fromName })
           .from(messages)
-          .where(and(eq(messages.accountId, accountId), eq(messages.fromAddress, who.address), isNotNull(messages.fromName)))
+          .where(and(eq(messages.accountId, accountId), eq(messages.senderHash, hashOf(db, who.address)), isNotNull(messages.fromName)))
           .orderBy(desc(messages.receivedAt))
           .limit(1)
       : [];
@@ -78,7 +78,7 @@ export async function senderPage(
     sql<T>`(${db
       .select({ value: column })
       .from(withName)
-      .where(and(eq(withName.accountId, messages.accountId), eq(withName.fromAddress, messages.fromAddress), isNotNull(withName.fromName)))
+      .where(and(eq(withName.accountId, messages.accountId), eq(withName.senderHash, messages.senderHash), isNotNull(withName.fromName)))
       .orderBy(desc(withName.receivedAt))
       .limit(1)})`;
   const writing =
@@ -86,18 +86,22 @@ export async function senderPage(
       ? (
           await db
             .select({
-              address: messages.fromAddress,
+              one: oneSender(),
               nameId: newestNamed<string | null>(withName.id),
               name: newestNamed<string | null>(withName.fromName),
               messages: count(),
               lastSeenAt: max(messages.receivedAt),
             })
             .from(messages)
-            .where(and(eq(messages.accountId, accountId), eq(messages.fromDomain, who.domain)))
-            .groupBy(messages.accountId, messages.fromAddress)
-            .orderBy(desc(count()), asc(messages.fromAddress))
+            .where(and(eq(messages.accountId, accountId), eq(messages.domainHash, hashOf(db, who.domain))))
+            .groupBy(messages.accountId, messages.senderHash)
+            .orderBy(desc(count()), asc(messages.senderHash))
             .limit(100)
-        ).map(({ nameId, name, ...s }) => ({ ...s, name: nameId === null ? null : openPart(db, accountId, nameId, 'name', name) }))
+        ).map(({ one, nameId, name, ...s }) => ({
+          address: openSender(db, one),
+          ...s,
+          name: nameId === null ? null : openPart(db, accountId, nameId, 'name', name),
+        }))
       : [];
   const known = await contacts(
     db,

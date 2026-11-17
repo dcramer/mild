@@ -11,7 +11,7 @@ import { lastStandingChange } from '../src/store/actions.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { passStatus } from '../src/work/status.ts';
 import { addMailbox, connectAccount, deleteUser, recordSync, removeMailbox } from '../src/store/accounts.ts';
-import { onePerson, openUserDb, raw } from './fixtures.ts';
+import { onePerson, openUserDb, raw, withReason } from './fixtures.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { listUndecided } from '../src/store/messages.ts';
 import { setActive } from '../src/store/preferences.ts';
@@ -295,9 +295,11 @@ describe('teaching from Gmail', () => {
       'SELECT d.message_id, f.verdict, f.disposition, f.label_id, f.via FROM feedback f JOIN decisions d ON d.id = f.decision_id ORDER BY f.id',
     );
   const latest = async (id: string) =>
-    await raw(db).get(
-      'SELECT stage, disposition, label_id, carry_out, by_user, rule_id, reason FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1',
-      id,
+    withReason(
+      await raw(db).get(
+        'SELECT stage, disposition, label_id, carry_out, by_user, rule_id, reason FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1',
+        id,
+      ),
     );
   const count = async (table: string) => (await raw(db).get<{ n: number }>(`SELECT count(*) AS n FROM ${table}`))!.n;
   // Time moves between passes: which of its own changes sift expects in a history depends on when they were made.
@@ -623,7 +625,7 @@ describe('inference tier', () => {
     expect(await madeFromProposal(db, proposal!.id, ACCOUNT)).toBe(true);
     await arrive('n7');
     expect(judged).not.toContain('n7');
-    expect(await raw(db).get(`SELECT stage, disposition, label_id, reason FROM decisions WHERE message_id = 'n7'`)).toEqual({
+    expect(withReason(await raw(db).get(`SELECT stage, disposition, label_id, reason FROM decisions WHERE message_id = 'n7'`))).toEqual({
       stage: 'rules',
       disposition: 'archive',
       label_id: 'newsletter',
@@ -642,7 +644,7 @@ describe('inference tier', () => {
     await runOnce(await active(false), { ...options(), connect: () => ({ api: reading(), mailbox }), model: model('newsletter') });
     expect(judged).toEqual(['ada']);
     expect(read.toSorted()).toEqual(['ada', 'news']);
-    expect(await raw(db).get(`SELECT stage, label_id, reason FROM decisions WHERE message_id = 'news'`)).toEqual({
+    expect(withReason(await raw(db).get(`SELECT stage, label_id, reason FROM decisions WHERE message_id = 'news'`))).toEqual({
       stage: 'rules',
       label_id: 'transactional',
       reason: 'rule: has attachments is Receipts and transactions',
@@ -671,7 +673,7 @@ describe('inference tier', () => {
     mailbox.labels.set('g1', ['INBOX', 'UNREAD']);
     await runOnce(await active(true), { ...options(), model: model('newsletter') });
     expect(judged).toEqual([]);
-    expect(await raw(db).get(`SELECT stage, disposition, label_id, gmail_label, rule_id, reason FROM decisions WHERE message_id = 'g1'`)).toEqual({
+    expect(withReason(await raw(db).get(`SELECT stage, disposition, label_id, gmail_label, rule_id, reason FROM decisions WHERE message_id = 'g1'`))).toEqual({
       stage: 'rules',
       disposition: 'archive',
       label_id: null,
@@ -690,7 +692,7 @@ describe('inference tier', () => {
     mailbox.labels.set('u1', ['INBOX']);
     await runOnce(await active(true), { ...options(), model: model('newsletter') });
     expect(judged).toEqual(['u1']);
-    expect(await raw(db).get(`SELECT stage, disposition, rule_id, prior_rule_id, reason FROM decisions WHERE message_id = 'u1'`)).toEqual({
+    expect(withReason(await raw(db).get(`SELECT stage, disposition, rule_id, prior_rule_id, reason FROM decisions WHERE message_id = 'u1'`))).toEqual({
       stage: 'model',
       disposition: 'archive',
       rule_id: ruleId,
@@ -701,7 +703,7 @@ describe('inference tier', () => {
     inbox = [message('u2', 'News <news@example.com>')];
     mailbox.labels.set('u2', ['INBOX']);
     await runOnce(await active(true), { ...options(), model: model('transactional') });
-    expect(await raw(db).get(`SELECT disposition, label_id, rule_id, prior_rule_id, reason FROM decisions WHERE message_id = 'u2'`)).toEqual({
+    expect(withReason(await raw(db).get(`SELECT disposition, label_id, rule_id, prior_rule_id, reason FROM decisions WHERE message_id = 'u2'`))).toEqual({
       disposition: 'keep',
       label_id: 'transactional',
       rule_id: null,

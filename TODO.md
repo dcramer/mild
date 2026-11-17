@@ -123,8 +123,7 @@ sift has run for real, off, on the owner's inbox: sync, the model, suggestions a
 
 ## Deployment and isolation
 
-- [ ] **Hash sender addresses**, as [docs/SECURITY.md](docs/SECURITY.md) says. Every sender address and domain, lowercased, as an HMAC with a key derived per person from `SIFT_KEY` (HKDF; nothing derived is stored), beside an encrypted copy: in mail records, cached correspondents, rule and proposal conditions. Rules match by comparing hashes; "the rule for exactly this sender", the sender pages and search look up by exact address or domain. Gmail filters are written from the encrypted copy.
-  - **Shared sender reputation**, if ever wanted, is a table of its own with an install-wide hash, written only from what people reported (blocked, marked spam), from senders that passed DMARC, counted only past several different people, and stated in the privacy policy. The per-person hashes are never joined across people.
+- [ ] **Shared sender reputation**, if ever wanted, is a table of its own with an install-wide hash, written only from what people reported (blocked, marked spam), from senders that passed DMARC, counted only past several different people, and stated in the privacy policy. The per-person hashes are never joined across people.
 - [ ] **Deploy to Vercel for real.** The host is written ([docs/VERCEL.md](docs/VERCEL.md)) and not yet run there: check what RUNTIME.md lists as untried. The Deploy Button (README) is untried too: check that it adds Neon and Upstash, and that Upstash sets `REDIS_URL` (Vercel's own chatbot template relies on it; no vendor page says so).
   - **Setup in the browser.** No `sift init`: the Google client and settings entered in the dashboard (model sign-in already is), with the first visitor claiming the install safely.
   - **A public address.** It no longer sits behind a tailnet, so sign-in is the only gate; review the session and write protections with that in mind.
