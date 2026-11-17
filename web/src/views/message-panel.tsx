@@ -358,11 +358,11 @@ export function MessagePanel({
         data ? (
           <>
             <span className="flex flex-wrap items-center gap-x-2">
-              <SenderLink accountId={data.accountId} address={data.fromAddress} className="text-foreground">
+              <SenderLink accountId={data.accountId} address={data.fromAddress} name={data.fromName} className="text-foreground">
                 {data.fromName ?? data.fromAddress}
               </SenderLink>
               <ContactHint contact={data.sender.contact} />
-              {data.fromName ? <span className="min-w-0 break-all">{data.fromAddress}</span> : null}
+              {data.fromName ? <SenderLink accountId={data.accountId} address={data.fromAddress} className="min-w-0 break-all" /> : null}
               <span aria-hidden className="max-sm:hidden">
                 ·
               </span>

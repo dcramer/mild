@@ -252,9 +252,11 @@ const GROUP = {
 type Named = keyof typeof GROUP;
 
 /** One value of a match, as a sentence reads it. */
-interface Said {
+export interface Said {
   key: Named;
   value: string;
+  /** The value unquoted. */
+  plain: string;
   /** What goes before it: nothing first, "or" after another of the same kind, a comma after a different one. */
   joint: '' | ' or ' | ', ';
   /** The first value under its key, which takes that key's words ("anyone at"). */
@@ -264,14 +266,16 @@ interface Said {
 /** A match's values in the order a sentence reads them, whatever order they were stored in; typed text is quoted. */
 export function saidOf(match: RuleMatch): Said[] {
   const typed = new Set<string>(['fromName', 'fromNameContains', 'subjectContains']);
-  const values = (Object.keys(GROUP) as Named[]).flatMap((key) => (match[key] ?? []).map((value) => ({ key, value: typed.has(key) ? `“${value}”` : value })));
+  const values = (Object.keys(GROUP) as Named[]).flatMap((key) =>
+    (match[key] ?? []).map((value) => ({ key, plain: value, value: typed.has(key) ? `“${value}”` : value })),
+  );
   return values.map((v, at) => {
     const before = values[at - 1];
     return { ...v, joint: !before ? '' : GROUP[before.key] === GROUP[v.key] ? ' or ' : ', ', first: before?.key !== v.key };
   });
 }
 
-const MATCH: Record<Named, string> = {
+export const MATCH_WORDS: Record<Named, string> = {
   from: 'from',
   fromDomain: 'from anyone at',
   fromName: 'named',
@@ -283,7 +287,7 @@ const MATCH: Record<Named, string> = {
 /** A rule's conditions as words to follow "mail": "from news@example.com or anyone at example.org, with a subject containing …, that is a reply". */
 export function describeMatch(match: RuleMatch): string {
   const named = saidOf(match)
-    .map(({ key, value, joint, first }) => `${joint}${first ? `${MATCH[key]} ` : ''}${value}`)
+    .map(({ key, value, joint, first }) => `${joint}${first ? `${MATCH_WORDS[key]} ` : ''}${value}`)
     .join('');
   const asked = factAnswers(match.facts).map(factWords);
   return [...(named ? [named] : []), ...(asked.length > 0 ? [`that ${asked.join(' and ')}`] : [])].join(', ');

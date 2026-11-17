@@ -242,6 +242,67 @@ test.describe('A sender', () => {
   });
 });
 
+test.describe('Who sent it is a link wherever it is named', () => {
+  test("a name goes to the sender's mail under that name, and the address under it to all of it", async ({ page }) => {
+    await page.goto('/');
+    const sent = page.getByRole('row').filter({ hasText: 'Re: Fix the release script' });
+    await sent.getByRole('link', { name: 'Ada Lovelace' }).click();
+    await expect(page.getByRole('heading', { name: 'notifications@code.example.com', level: 1 })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'From' })).toContainText('Ada Lovelace');
+    await expect(
+      page
+        .getByRole('table')
+        .nth(1)
+        .getByRole('row')
+        .filter({ has: page.getByRole('cell') }),
+    ).toHaveCount(1);
+    await expect(panel(page)).toHaveCount(0);
+
+    await page.goBack();
+    await sent.getByRole('link', { name: 'notifications@code.example.com' }).click();
+    await expect(page.getByRole('combobox', { name: 'From' })).toContainText('Every name');
+    expect(new URL(page.url()).pathname).toBe(SENDER);
+  });
+
+  test("a name on its sender's page narrows their mail to it", async ({ page }) => {
+    await page.goto(SENDER);
+    await page.getByRole('table').first().getByRole('link', { name: 'Dependabot' }).click();
+    await expect(page.getByRole('combobox', { name: 'From' })).toContainText('Dependabot');
+    expect(search(page).get('name')).toBe('Dependabot');
+  });
+
+  test('a name an address writes under alone does not narrow its page', async ({ page }) => {
+    await page.goto('/sender/me%40example.org/ada%40example.org?name=Someone');
+    await expect(page.getByRole('heading', { name: 'Ada Lovelace', level: 1 })).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Lunch on Thursday?' })).toBeVisible();
+  });
+
+  test("the address in a message's header goes to the sender", async ({ page }) => {
+    await page.goto('/?message=m6&account=me%40example.org');
+    await panel(page).getByRole('link', { name: 'ada@example.org' }).click();
+    await expect(page.getByRole('heading', { name: 'Ada Lovelace', level: 1 })).toBeVisible();
+    await expect(panel(page)).toHaveCount(0);
+  });
+
+  test("a rule's domain goes to the domain and its address to the sender, not to the rule", async ({ page }) => {
+    await page.goto('/rules');
+    await page.getByRole('link', { name: 'news.example.com' }).click();
+    await expect(page.getByRole('heading', { name: 'news.example.com', level: 1 })).toBeVisible();
+    expect(search(page).get('rule')).toBeNull();
+
+    await page.goBack();
+    await page.getByRole('link', { name: 'orders@shop.example.com' }).click();
+    await expect(page.getByRole('heading', { name: 'Shop', level: 1 })).toBeVisible();
+    expect(search(page).get('rule')).toBeNull();
+  });
+
+  test('the sender in a rule For review offers goes to the sender', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('listitem').filter({ hasText: 'Make a rule…' }).getByRole('link', { name: 'billing@utility.example.net' }).click();
+    expect(new URL(page.url()).pathname).toBe('/sender/me%40example.org/billing%40utility.example.net');
+  });
+});
+
 test.describe('A domain', () => {
   test('shows what its mail is, who writes from it, and their mail', async ({ page }) => {
     await page.goto(DOMAIN);
@@ -304,7 +365,7 @@ test.describe('On a phone', () => {
     await expect(page.getByRole('heading', { name: 'Store', level: 1 })).toBeVisible();
     await expect(panel(page)).toHaveCount(0);
     expect(new URL(page.url()).pathname).toBe('/sender/me%40example.org/sale%40store.example.com');
-    expect(new URL(page.url()).search).toBe('');
+    expect(search(page).get('message')).toBeNull();
   });
 
   test('a sender page fits the screen', async ({ page }) => {

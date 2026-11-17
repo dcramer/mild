@@ -1,6 +1,6 @@
 import { type ReactNode, useState } from 'react';
 import { ErrorNote, StatusWord, Verdict } from '@/components/bits.tsx';
-import { ContactHint, SENDER_CELL, SenderCell } from '@/components/sender.tsx';
+import { ContactHint, DomainLink, NameCell, SenderCell } from '@/components/sender.tsx';
 import { type Given, type ListedDecision, type SenderPage, api, useAction, useLoaded } from '@/lib/api.ts';
 import { INBOX, ago, count, dateTime, describeMatch, doesName, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
 import { type RuleStart, addedWords, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
@@ -191,13 +191,12 @@ function Names({ data, onStart }: { data: SenderPage; onStart: (s: RuleStart) =>
       <tbody>
         {data.names.map((n) => (
           <Tr key={n.name ?? ''}>
-            <Td className="font-medium whitespace-nowrap">
-              {n.name ?? <span className="font-normal text-muted-foreground">No name</span>}
+            <NameCell accountId={data.accountId} address={data.profile.address} name={n.name}>
               <OnPhone>
                 <NameIs name={n} />
                 <span>{count(n.messages)}</span>
               </OnPhone>
-            </Td>
+            </NameCell>
             <Td phone="hide" className="w-full">
               <Share part={n.messages} whole={whole} />
             </Td>
@@ -265,10 +264,9 @@ function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMess
                       {onPhone}
                     </SenderCell>
                   ) : (
-                    <Td className={SENDER_CELL}>
-                      <span className="name block truncate">{row.fromName ?? <span className="font-normal text-muted-foreground">No name</span>}</span>
+                    <NameCell accountId={row.accountId} address={row.fromAddress} name={row.fromName}>
                       {onPhone}
-                    </Td>
+                    </NameCell>
                   )}
                   <Td phone="hide" className="max-w-0 md:w-full">
                     <span className="block truncate">{subject}</span>
@@ -331,8 +329,10 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
       });
     }, reload);
   const [now] = useState(() => Date.now());
-  // Their mail under one name; the rest of the page is the whole address.
-  const [under, setUnder] = useParam('name');
+  // Their mail under one name; the rest of the page is the whole address. A link names the name it was
+  // pressed on, which only narrows the mail where there is a From to show it.
+  const [named, setUnder] = useParam('name');
+  const under = data && data.names.length > 1 ? named : '';
   const narrowed = useLoaded(`sender-page-${accountId}-${key}-under-${under}`, (signal) =>
     'address' in who && under !== '' ? api.sender(accountId, who.address, signal, under) : Promise.resolve(null),
   );
@@ -379,7 +379,7 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
                   {title ? <span aria-hidden>·</span> : null}
                   {/* The hint belongs to the domain: on a phone it wraps with it, never onto a line of its own. */}
                   <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                    <TextLink href={`/domain/${encodeURIComponent(accountId)}/${encodeURIComponent(profile.domain.name)}`}>{profile.domain.name}</TextLink>
+                    <DomainLink accountId={accountId} domain={profile.domain.name} />
                     <ContactHint contact={profile.domain.contact} />
                   </span>
                 </>

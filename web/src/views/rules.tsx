@@ -160,7 +160,7 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
               <Tr key={rule.id} onOpen={() => setOpen(rule.id)}>
                 <Td className="max-w-0 md:w-full">
                   <span className="block break-words md:truncate">
-                    {rule.name ? <span className="name">{rule.name}</span> : <Who match={rule.match} />}
+                    {rule.name ? <span className="name">{rule.name}</span> : <Who accountId={rule.accountId} match={rule.match} />}
                     {rule.kind === 'when-label' ? <span className="text-muted-foreground"> as {rule.labelName}</span> : null}
                     <ArrowRightIcon aria-label="is" className="mx-2 inline size-4 align-[-0.15em] text-muted-foreground" />
                     <Result rule={rule} />

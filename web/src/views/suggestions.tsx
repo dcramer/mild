@@ -2,10 +2,10 @@ import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
-import { SenderCell, SenderCellLoading } from '@/components/sender.tsx';
+import { MatchWords, SenderCell, SenderCellLoading } from '@/components/sender.tsx';
 import { messageKey, useParam } from '@/lib/route.ts';
 import { type SuggestionItem, type Suggestions, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, ago, inboxFirst, count, describeMatch, factFilterName, outcomeName, plural, sureness } from '@/lib/format.ts';
+import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, ago, inboxFirst, count, factFilterName, outcomeName, plural, sureness } from '@/lib/format.ts';
 import {
   AnswerPicker,
   Button,
@@ -63,7 +63,7 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
     <li className="row flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
       <p className="min-w-0 flex-1 basis-80">
         <span className="font-semibold">
-          {outcomeName(proposal.disposition)} {proposal.labelName} {describeMatch(proposal.match)}?
+          {outcomeName(proposal.disposition)} {proposal.labelName} <MatchWords accountId={proposal.accountId} match={proposal.match} />?
         </span>{' '}
         <span className="text-muted-foreground">
           You {USER_DID[proposal.disposition]?.(n)}, but the label {LABEL_DOES[proposal.labelDisposition]}.

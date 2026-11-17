@@ -260,6 +260,6 @@ test.describe('A message opened from a list', () => {
     await expect(page.getByRole('heading', { name: 'Grace Hopper', level: 1 })).toBeVisible();
     await expect(panel(page)).toHaveCount(0);
     expect(new URL(page.url()).pathname).toBe('/sender/me%40example.org/grace%40example.net');
-    expect(new URL(page.url()).search).toBe('');
+    expect(new URL(page.url()).searchParams.get('message')).toBeNull();
   });
 });

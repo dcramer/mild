@@ -16,6 +16,7 @@ import {
   willBe,
 } from '@/lib/format.ts';
 import { messageKey, useParam } from '@/lib/route.ts';
+import { MatchValue } from '@/components/sender.tsx';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 import { InGmail } from '@/views/gmail-filter.tsx';
 import { Blank, Button, ConfirmButton, Dialog, Does, Empty, Fact, Facts, Failure, Loading, Panel, Section, Table, Td, Tr, TrGroup, useToast } from '@/system';
@@ -30,16 +31,16 @@ const QUIET: Record<string, string> = {
 };
 
 /** What a rule matches: an address alone, or a quiet word and the value; then what the mail must be, in words. */
-export function Who({ match }: { match: RuleMatch }) {
+export function Who({ accountId, match }: { accountId: string; match: RuleMatch }) {
   const named = saidOf(match);
   const asked = factAnswers(match.facts).map(factWords);
   return (
     <span className="name">
-      {named.map(({ key, value, joint, first }) => (
-        <span key={`${key} ${value}`}>
-          {joint ? <span className="font-normal text-muted-foreground">{joint}</span> : null}
-          {first && QUIET[key] ? <span className="font-normal text-muted-foreground">{QUIET[key]} </span> : null}
-          {value}
+      {named.map((said) => (
+        <span key={`${said.key} ${said.value}`}>
+          {said.joint ? <span className="font-normal text-muted-foreground">{said.joint}</span> : null}
+          {said.first && QUIET[said.key] ? <span className="font-normal text-muted-foreground">{QUIET[said.key]} </span> : null}
+          <MatchValue accountId={accountId} match={match} said={said} />
         </span>
       ))}
       {asked.length > 0 ? (
@@ -241,7 +242,7 @@ export function RulePanel({
         <Facts>
           {rule.name ? (
             <Fact term="Mail">
-              <Who match={rule.match} />
+              <Who accountId={rule.accountId} match={rule.match} />
             </Fact>
           ) : null}
           {rule.kind === 'action' || inbox ? null : <Fact term={rule.kind === 'when-label' ? 'When it is' : 'Is'}>{rule.labelName}</Fact>}
@@ -261,7 +262,7 @@ export function RulePanel({
             <Fact term="Unless">
               {rule.except.map((except, index) => (
                 <span key={index} className="block">
-                  <Who match={except} />
+                  <Who accountId={rule.accountId} match={except} />
                 </span>
               ))}
             </Fact>
