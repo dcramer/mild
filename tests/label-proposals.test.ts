@@ -8,6 +8,9 @@ import { latestLabelProposal } from '../src/store/labels.ts';
 import { MAX_DRAFTS, PROPOSAL_TOOL, type Proposer, buildProposalPrompt, readDrafts } from '../src/triage/proposal.ts';
 import { freshStore, raw } from './fixtures.ts';
 
+const reportError = vi.hoisted(() => vi.fn());
+vi.mock('../src/telemetry.ts', async (actual) => ({ ...(await actual<object>()), reportError }));
+
 const ACCOUNT = 'me@example.com';
 const PITCHES = { why: 'fewer pitches', name: 'Cold outreach', description: 'Pitches from strangers.', action: 'archive', markRead: false, unsubscribe: true };
 
@@ -79,12 +82,13 @@ describe('asking for labels', () => {
     expect(JSON.stringify(row)).not.toContain('Cold outreach');
   });
 
-  it('records a failed call, refuses with what went wrong, and keeps the last suggestions that came', async () => {
+  it('records and reports a failed call, refuses with what went wrong, and keeps the last suggestions that came', async () => {
     const db = await person();
     const good: Proposer = async () => ({ drafts: [{ name: 'Scams', description: 'Deceit.', disposition: 'spam', why: 'w' }] });
     const first = await proposeLabels({ db, propose: good, model: 'p/m' }, { accountId: ACCOUNT, goal: 'No scams' });
     const failing: Proposer = async () => ({ failed: 'rate limited', usage });
     await expect(proposeLabels({ db, propose: failing, model: 'p/m' }, { accountId: ACCOUNT, goal: 'Again' })).rejects.toThrow('rate limited');
+    expect(reportError).toHaveBeenCalledWith(new Error('Label suggestion failed: rate limited'));
     expect(await raw(db).all('SELECT error, cost_usd FROM label_proposals ORDER BY id')).toEqual([
       { error: null, cost_usd: 0 },
       { error: 'rate limited', cost_usd: 0.01 },

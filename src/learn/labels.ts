@@ -1,7 +1,7 @@
 import { Refusal } from '../refusal.ts';
 import { finishLabelProposal, listLabels, startLabelProposal } from '../store/labels.ts';
 import type { Sql } from '../store/sql.ts';
-import { traced } from '../telemetry.ts';
+import { reportError, traced } from '../telemetry.ts';
 import type { LabelDraft, Proposer } from '../triage/proposal.ts';
 import { EVERYTHING_ELSE } from '../triage/types.ts';
 
@@ -31,6 +31,8 @@ export async function proposeLabels(
   const usage = answer.usage ? { usage: answer.usage } : {};
   if ('failed' in answer) {
     await finishLabelProposal(db, request.accountId, id, { error: answer.failed, ...usage, now: now() });
+    // A refusal is the page's to show and is not reported, but a model that keeps failing is Sift's to fix.
+    reportError(new Error(`Label suggestion failed: ${answer.failed}`));
     throw new Refusal(`The model could not suggest labels (${answer.failed}). Try again.`);
   }
   await finishLabelProposal(db, request.accountId, id, { drafts: answer.drafts, ...usage, now: now() });

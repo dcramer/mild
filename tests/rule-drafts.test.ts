@@ -10,6 +10,9 @@ import { FILL_TOOL, FIND_TOOL, type FoundSender, MAX_LOOKUPS, type RuleDrafter, 
 import { freshStore, raw } from './fixtures.ts';
 import { SAMPLE_LABELS, facts, withSampleLabels } from './helpers.ts';
 
+const reportError = vi.hoisted(() => vi.fn());
+vi.mock('../src/telemetry.ts', async (actual) => ({ ...(await actual<object>()), reportError }));
+
 const ACCOUNT = 'me@example.com';
 const LABELS = SAMPLE_LABELS.filter((l) => l.id === 'newsletter' || l.id === 'marketing');
 const DOMAIN = [{ by: 'from', value: 'example.org' }];
@@ -216,10 +219,11 @@ describe('asking for a rule', () => {
     expect(await raw(db).all('SELECT id FROM rules')).toEqual([]);
   });
 
-  it('records a failed call and refuses with what went wrong', async () => {
+  it('records and reports a failed call, and refuses with what went wrong', async () => {
     const db = await person();
     const failing: RuleDrafter = async () => ({ failed: 'rate limited', usage, lookups: 0 });
     await expect(draftRule({ db, draft: failing, model: 'p/m' }, { accountId: ACCOUNT, goal: 'Archive Acme' })).rejects.toThrow('rate limited');
+    expect(reportError).toHaveBeenCalledWith(new Error('Rule drafting failed: rate limited'));
     expect(await raw(db).all('SELECT error, rule, cost_usd FROM rule_drafts')).toEqual([{ error: 'rate limited', rule: null, cost_usd: 0.01 }]);
   });
 });

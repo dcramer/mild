@@ -3,7 +3,7 @@ import { listLabels } from '../store/labels.ts';
 import { finishRuleDraft, startRuleDraft } from '../store/rules.ts';
 import { senderDirectory } from '../store/senders.ts';
 import type { Sql } from '../store/sql.ts';
-import { traced } from '../telemetry.ts';
+import { reportError, traced } from '../telemetry.ts';
 import { type FoundSender, type RuleDraft, type RuleDrafter, searchSenders } from '../triage/rule-draft.ts';
 
 /**
@@ -35,6 +35,8 @@ export async function draftRule(
   const spent = { lookups: answer.lookups, ...(answer.usage ? { usage: answer.usage } : {}), now: now() };
   if ('failed' in answer) {
     await finishRuleDraft(db, request.accountId, id, { error: answer.failed, ...spent });
+    // A refusal is the page's to show and is not reported, but a model that keeps failing is Sift's to fix.
+    reportError(new Error(`Rule drafting failed: ${answer.failed}`));
     throw new Refusal(`The model could not fill in a rule (${answer.failed}). Try again, or fill it in yourself.`);
   }
   await finishRuleDraft(db, request.accountId, id, { draft: answer.draft, ...spent });
