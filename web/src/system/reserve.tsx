@@ -1,12 +1,12 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { keptHeight } from '@/lib/room.ts';
 
 const WIDE = '(min-width: 64rem)';
 const band = () => (typeof window !== 'undefined' && window.matchMedia(WIDE).matches ? 'wide' : 'narrow');
 
 function remembered(key: string): number | null {
   try {
-    const value = Number(window.localStorage.getItem(key));
-    return Number.isFinite(value) && value > 0 ? value : null;
+    return keptHeight(window.localStorage.getItem(key));
   } catch {
     return null;
   }

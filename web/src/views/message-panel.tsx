@@ -11,6 +11,7 @@ import { type MessageDetail, type RuleMatch, api, useAction, useLoaded } from '@
 import { ago, capitalised, count, dateTime, money, sureness, tier } from '@/lib/format.ts';
 import {
   AnswerPicker,
+  Blank,
   Button,
   Code,
   Disclosure,
@@ -353,7 +354,10 @@ export function MessagePanel({
             </span>
             {addressedTo(data) ? <span className="mt-0.5 block">{addressedTo(data)}</span> : null}
           </>
-        ) : undefined
+        ) : (
+          // Holds the line the sender and date will take, so the message does not drop when they arrive.
+          <Blank />
+        )
       }
       position={items.length > 1 ? `${index + 1} of ${items.length}` : undefined}
       onPrevious={index > 0 ? () => onIndex(index - 1) : undefined}
