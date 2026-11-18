@@ -1,5 +1,5 @@
-import { QueryCache, QueryClient, environmentManager, keepPreviousData, onlineManager, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, useSyncExternalStore } from 'react';
+import { QueryCache, QueryClient, environmentManager, keepPreviousData, onlineManager, useQuery } from '@tanstack/react-query';
+import { useSyncExternalStore } from 'react';
 
 export type {
   Contact,
@@ -350,28 +350,5 @@ export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Prom
     missing: query.error instanceof Refused ? query.error.missing : null,
     loading: query.isPending,
     reload: () => void query.refetch({ cancelRefetch: false }),
-  };
-}
-
-/** Run a change, tracking whether it is in flight and what went wrong. When it is done, everything on screen loads again. */
-export function useAction(): { busy: boolean; error: string | null; run: (work: () => Promise<unknown>, then?: () => void) => void } {
-  const client = useQueryClient();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return {
-    busy,
-    error,
-    run: (work, then) => {
-      setBusy(true);
-      setError(null);
-      work()
-        .then(() => {
-          // Not the model list: it comes from the provider, and is asked for again when a sign-in changes (its key names them).
-          void client.invalidateQueries({ predicate: (query) => !String(query.queryKey[0]).startsWith('models ') });
-          then?.();
-        })
-        .catch((failure: unknown) => setError(failure instanceof Error ? failure.message : String(failure)))
-        .finally(() => setBusy(false));
-    },
   };
 }

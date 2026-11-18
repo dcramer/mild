@@ -1,5 +1,6 @@
 'use client';
-import { type InboxEstimate, type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type InboxEstimate, type ManageState, api, useLoaded } from '@/lib/api.ts';
+import { useAction } from '@/lib/action.ts';
 import { count, money, plural } from '@/lib/format.ts';
 import { Ago, Blank, Button, Dialog, Failure, Figure, Figures, SettingRow, Share } from '@/system';
 import { costOfMessages, priceNote, subscription } from '@/lib/prices.ts';

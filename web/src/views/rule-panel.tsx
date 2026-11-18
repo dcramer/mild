@@ -1,5 +1,6 @@
 'use client';
-import { type ManageState, type RuleMatch, type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type ManageState, type RuleMatch, type RuleSummary, api, useLoaded } from '@/lib/api.ts';
+import { useAction } from '@/lib/action.ts';
 import {
   HANDLED,
   INBOX_NAME,

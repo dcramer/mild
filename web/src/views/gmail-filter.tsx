@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
-import { type RuleFilter, type RuleSummary, api, useAction } from '@/lib/api.ts';
+import { type RuleFilter, type RuleSummary, api } from '@/lib/api.ts';
+import { useAction } from '@/lib/action.ts';
 import { dateTime } from '@/lib/format.ts';
 import { Button, Code, Dialog, Fact, Facts, Failure, Section, Timeline, TimelineEvent, useToast } from '@/system';
 import { reveal } from '@/lib/reveal.ts';

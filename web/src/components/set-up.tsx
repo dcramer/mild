@@ -2,7 +2,8 @@
 import { ArrowRightIcon, ArrowUpRightIcon, PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { type Next, ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
-import { type LabelProposal, type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type LabelProposal, type ManageState, api, useLoaded } from '@/lib/api.ts';
+import { useAction } from '@/lib/action.ts';
 import { count } from '@/lib/format.ts';
 import { InboxFigures, useInboxEstimate } from '@/components/inbox.tsx';
 import { Button, Dialog, Failure, Form, Note, Onboarding, TextArea } from '@/system';

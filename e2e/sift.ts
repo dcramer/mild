@@ -236,6 +236,9 @@ export const forReviewLink = (page: Page) => page.getByRole('navigation', { name
 /** A toast, named by what it is about: a rule's by the rule, a label's by the label. */
 export const toast = (page: Page, name: string) => page.getByRole('region', { name: 'Notifications' }).getByRole('dialog', { name, exact: true });
 
+/** A failure's toast, as it is announced: Base UI hides the toast itself from assistive technology and says it as an alert. */
+export const failureToast = (page: Page, title: string) => page.getByRole('alert').filter({ hasText: title });
+
 /** The section under a heading, with everything in it. */
 export const section = (within: Page | Locator, heading: string) =>
   within.getByRole('heading', { name: heading, exact: true }).locator('xpath=ancestor::section[1]');

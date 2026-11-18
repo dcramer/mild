@@ -9,7 +9,8 @@ import { AddLabelsDialog } from '@/views/label-panel.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { type RuleStart, keepStart, messageStart } from '@/lib/rule-start.ts';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
-import { type Confidential, type MessageDetail, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type Confidential, type MessageDetail, type RuleMatch, api, useLoaded } from '@/lib/api.ts';
+import { useAction } from '@/lib/action.ts';
 import { capitalised, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
 import {
   Ago,
@@ -191,7 +192,7 @@ function Body({
     labelId: current?.labelId ?? null,
     ...(current ? { decisionId: current.id } : {}),
   };
-  const { answer, choices, busy, error } = useAnswer(
+  const { answer, choices } = useAnswer(
     labels,
     waitingNow.map((m) => ({
       accountId: detail.accountId,
@@ -217,8 +218,8 @@ function Body({
   const covers = (match: RuleMatch) =>
     Object.keys(match).length === 1 &&
     ((match.from ?? []).includes(reveal(detail.fromAddress)) || (match.fromDomain ?? []).includes(reveal(detail.fromAddress).split('@')[1] ?? ''));
-  const keepThis = (labelId: string) =>
-    keep.run(async () => {
+  const keepThis = (labelId: string) => {
+    keep.hide([messageKey(detail)], 'Could not save your answer', async () => {
       const reply = await api.feedback({
         accountId: detail.accountId,
         sender: reveal(detail.fromAddress),
@@ -228,8 +229,9 @@ function Body({
         disposition: 'keep',
       });
       if (reply.notFixed !== null) toast('Could not put the message back in Gmail', { tone: 'failure', description: reply.notFixed });
-      onAnswered();
     });
+    onAnswered();
+  };
 
   return (
     // On a phone the answer comes first, then the message, then the rest. On a desktop the message fills the
@@ -248,7 +250,6 @@ function Body({
             value={current?.labelId ?? null}
             groups={groups}
             empty={outcomeName('review')}
-            busy={busy}
             onSubmit={(id) => answer(reveal(target), id)}
             extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
           />
@@ -265,7 +266,7 @@ function Body({
           ) : null}
           <div className="-ml-3 flex flex-wrap items-center gap-1">
             {keepable ? (
-              <Button variant="quiet" busy={keep.busy} onClick={() => setRuling(keepStart(reveal(detail.fromAddress), keepable.id))}>
+              <Button variant="quiet" onClick={() => setRuling(keepStart(reveal(detail.fromAddress), keepable.id))}>
                 Keep as {keepable.name}…
               </Button>
             ) : null}
@@ -273,8 +274,6 @@ function Body({
               Make a rule…
             </Button>
           </div>
-          <Failure>{error}</Failure>
-          <Failure>{keep.error}</Failure>
           {adding ? <AddLabelsDialog onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
           {ruling ? (
             <AddRuleDialog
