@@ -10,6 +10,7 @@ import {
   openMessage,
   panel,
   panelHeading,
+  toasts,
   param,
   path,
   PHONE,
@@ -192,7 +193,7 @@ test.describe('What Sift saw', () => {
     await param(page, 'message').toBe('m7');
 
     await choose(panel(page), 'Field trips');
-    await expect(panel(page).getByRole('button', { name: 'Save: Field trips' })).toBeVisible();
+    await expect(toasts(page)).toContainText('as Field trips');
   });
 
   test('a rule on a fact alone is for mail from anyone, and re-decides what is waiting', async ({ page }) => {

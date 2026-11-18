@@ -166,11 +166,12 @@ async function reason(response: Response): Promise<Said> {
  * A change. The headers mark it as coming from this page, which the server requires of every write.
  * Refused outright while sift is unreachable: a change is never queued to happen later, unseen.
  */
-async function post<T = unknown>(path: string, body: unknown): Promise<T> {
+/** `keepalive`: sent even as the page closes, for a write held back until then. */
+async function post<T = unknown>(path: string, body: unknown, keepalive = false): Promise<T> {
   if (!onlineManager.isOnline()) throw new Unreachable('Sift cannot be reached, so nothing was changed. Try again when it is back.');
   const response = await send(
     path,
-    { method: 'POST', headers: { 'content-type': 'application/json', 'x-sift': '1' }, body: JSON.stringify(body) },
+    { method: 'POST', headers: { 'content-type': 'application/json', 'x-sift': '1' }, body: JSON.stringify(body), keepalive },
     'Sift stopped answering, so this may not have been saved. Check when it is back.',
   );
   const result = (await response.json()) as T & Said;
@@ -209,7 +210,7 @@ export const api = {
     get<Suggestions>('/api/suggestions', { ...(includeKept ? { kept: 1 } : {}), ...(fact ? { fact } : {}) }, signal),
   suggestion: (account: string, sender: string, signal: AbortSignal) => get<SuggestionDetail>('/api/suggestion', { account, sender }, signal),
   /** Say what a message is. */
-  feedback: (answer: FeedbackRequest) => post<FeedbackReply>('/api/feedback', answer),
+  feedback: (answer: FeedbackRequest) => post<FeedbackReply>('/api/feedback', answer, true),
   manage: (signal: AbortSignal) => get<ManageState>('/api/manage', {}, signal),
   /** The models the reader's own sign-ins offer, and the one to suggest first. */
   models: (signal: AbortSignal) => get<Models>('/api/models', {}, signal),
@@ -330,6 +331,8 @@ export interface Loaded<T> {
   reload: () => void;
   /** True only before the first result; refreshes keep showing the previous data. */
   loading: boolean;
+  /** When `data` was read. */
+  at: number;
 }
 
 /**
@@ -349,6 +352,7 @@ export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Prom
     error: query.error?.message ?? null,
     missing: query.error instanceof Refused ? query.error.missing : null,
     loading: query.isPending,
+    at: query.dataUpdatedAt,
     reload: () => void query.refetch({ cancelRefetch: false }),
   };
 }

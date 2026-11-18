@@ -233,8 +233,29 @@ export const reviewSearch = (page: Page) => page.getByRole('searchbox', { name: 
 /** The masthead's link to For review, whose name ends in how many messages wait. */
 export const forReviewLink = (page: Page) => page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: /^For review/ });
 
+/**
+ * Hides the page and shows it again, as switching away and back does: an answer held until its toast goes is sent.
+ * A string, as e2e is typed without the DOM.
+ */
+export const putAway = (page: Page) =>
+  page.evaluate(
+    "for (const state of ['hidden', 'visible']) { Object.defineProperty(document, 'visibilityState', { value: state, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); } delete document.visibilityState",
+  );
+
+/** Counts the answers the page sends. */
+export function answersSent(page: Page) {
+  let sent = 0;
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/feedback') sent++;
+  });
+  return () => sent;
+}
+
+/** Where toasts show. */
+export const toasts = (page: Page) => page.getByRole('region', { name: 'Notifications' });
+
 /** A toast, named by what it is about: a rule's by the rule, a label's by the label. */
-export const toast = (page: Page, name: string) => page.getByRole('region', { name: 'Notifications' }).getByRole('dialog', { name, exact: true });
+export const toast = (page: Page, name: string) => toasts(page).getByRole('dialog', { name, exact: true });
 
 /** A failure's toast, as it is announced: Base UI hides the toast itself from assistive technology and says it as an alert. */
 export const failureToast = (page: Page, title: string) => page.getByRole('alert').filter({ hasText: title });

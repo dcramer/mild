@@ -10,6 +10,7 @@ import {
   reviewRows,
   reviewSearch,
   row,
+  toasts,
   settings,
   sideScroll,
   test,
@@ -30,7 +31,8 @@ test.describe('For review', () => {
 
     // The new label is a choice at once.
     await choose(row(page, 'Notes from the review'), 'Field trips');
-    await expect(row(page, 'Notes from the review').getByRole('button', { name: 'Save: Field trips' })).toBeVisible();
+    await expect(toasts(page)).toContainText('as Field trips');
+    await expect(row(page, 'Notes from the review')).toHaveCount(0);
   });
 
   test('closing the add-label dialog leaves the page as it was', async ({ page }) => {

@@ -1,7 +1,7 @@
 'use client';
 import { Toast as Base } from '@base-ui/react/toast';
 import { XIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useShortcut } from './keys.tsx';
 
@@ -41,7 +41,13 @@ export function Toaster({ children }: { children: ReactNode }) {
 }
 
 function Receipts() {
-  const { toasts } = Base.useToastManager();
+  const { toasts, close } = Base.useToastManager();
+  // A page closed or put away sends what is held: it may never be shown again to be undone.
+  useEffect(() => {
+    const away = () => document.visibilityState === 'hidden' && held !== null && close(SAID);
+    document.addEventListener('visibilitychange', away);
+    return () => document.removeEventListener('visibilitychange', away);
+  }, [close]);
   // Only the newest that can be undone answers to Z, so it undoes the last thing done.
   const front = toasts.find((t) => t.transitionStatus !== 'ending' && !t.limited && t.data?.undo)?.id;
   return toasts.map((toast) => <Receipt key={toast.id} toast={toast} front={toast.id === front} />);
@@ -104,17 +110,35 @@ interface ToastOptions {
   action?: { label: string; onPress: () => void };
   /** Takes back what was done: shown as Undo, and Z presses it. Only where the app can really take it back. */
   undo?: () => void;
+  /**
+   * Called once when it goes without Undo pressed: it timed out, was swiped away, a newer one took its place, or
+   * the page was closed or hidden. A press can wait for this before it is sent, so Undo has nothing to take back.
+   */
+  onGone?: () => void;
 }
 
+const SAID = 'said';
 let failures = 0;
+/** The `onGone` of what is said now, until it goes. */
+let held: (() => void) | null = null;
 
 /** Say what a press did. */
 export function useToast(): (title: string, options?: ToastOptions) => void {
   const manager = Base.useToastManager();
-  return (title, { description, kind, tone, action, undo } = {}) => {
+  return (title, { description, kind, tone, action, undo, onGone } = {}) => {
     const failed = tone === 'failure';
     // What is said replaces what was said last; each failure keeps its own place until dismissed.
-    const id = failed ? `failure-${++failures}` : 'said';
+    const id = failed ? `failure-${++failures}` : SAID;
+    if (!failed) {
+      const replaced = held;
+      held = onGone ?? null;
+      replaced?.();
+    }
+    const gone = () => {
+      if (onGone === undefined || held !== onGone) return;
+      held = null;
+      onGone();
+    };
     const closing = (run: () => void) => () => {
       manager.close(id);
       run();
@@ -122,11 +146,19 @@ export function useToast(): (title: string, options?: ToastOptions) => void {
     manager.add<Own>({
       id,
       title,
+      onClose: gone,
       ...(description || kind ? { description: kind ?? description } : {}),
       ...(failed ? { type: 'failure', priority: 'high' as const, timeout: 0 } : { timeout: TIMEOUT[undo || action ? 1 : 0] }),
       data: {
         ...(kind ? { kind: true } : {}),
-        ...(undo ? { undo: closing(undo) } : {}),
+        ...(undo
+          ? {
+              undo: () => {
+                if (held === onGone) held = null;
+                closing(undo)();
+              },
+            }
+          : {}),
         ...(action ? { action: { label: action.label, onPress: closing(action.onPress) } } : {}),
       },
     });

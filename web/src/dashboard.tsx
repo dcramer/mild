@@ -7,7 +7,8 @@ import { SetUp } from '@/components/set-up.tsx';
 import { SiftStatus, UsageDetail } from '@/components/status.tsx';
 import { api, useLoaded, useOnline } from '@/lib/api.ts';
 import { OpenMessagesContext } from '@/lib/open-messages.ts';
-import { panelEntry, setParams, useHere, useParam } from '@/lib/params.ts';
+import { isMessageKey, panelEntry, setParams, useHere, useParam } from '@/lib/params.ts';
+import { useHidden } from '@/lib/action.ts';
 import { subscription } from '@/lib/prices.ts';
 import { Cloud, Masthead, Notice, PageFoot } from '@/system';
 import { Boot } from '@/views/boot.tsx';
@@ -127,13 +128,15 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const name = accounts.find((a) => a.primary)?.email ?? signedInAs;
   const usage = useLoaded('usage', (signal) => api.usage(signal), 60_000);
   const plan = manage.data ? subscription(manage.data.model) : null;
+  // An answer on its way has left the list, so it leaves the count with it until the count is read again.
+  const waiting = Math.max(0, (manage.data?.waiting ?? 0) - [...useHidden(manage.at)].filter(isMessageKey).length);
 
   return (
     <OpenMessagesContext value={openMessages}>
       <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col px-4 md:px-6">
         <Masthead
           current={section ?? ''}
-          items={SECTIONS.map((s) => ({ ...s, ...(s.to === '' && manage.data?.waiting ? { count: manage.data.waiting } : {}) }))}
+          items={SECTIONS.map((s) => ({ ...s, ...(s.to === '' && waiting ? { count: waiting } : {}) }))}
           status={
             !online ? (
               <Notice>Sift cannot be reached</Notice>
