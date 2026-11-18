@@ -106,9 +106,13 @@ export function GmailFilter({ rule, active }: { rule: RuleSummary; active: boole
         : active
           ? 'Gmail could run this rule itself, as one of your Gmail filters, so it applies the moment mail arrives, even when Sift isn’t running.'
           : 'Once Sift is on, Gmail could run this rule itself, as one of your Gmail filters, so it applies even when Sift isn’t running.';
+  // A press writes to every mailbox, so with several each row has to say whose Gmail it was.
+  const several = new Set(history.map((change) => change.mailbox)).size > 1;
   const events = [
     ...history.map((change) => ({
+      key: `${change.at}/${change.mailbox}/${change.type}`,
       at: change.at,
+      mailbox: several ? change.mailbox : null,
       title:
         change.status === 'done' ? (
           <span className="font-medium">{change.type === 'filter' ? 'Filter added' : 'Filter removed'}</span>
@@ -117,7 +121,9 @@ export function GmailFilter({ rule, active }: { rule: RuleSummary; active: boole
         ),
     })),
     // Noticed by a check, not done by Sift, so the audit log has no row for it.
-    ...(state === 'gone' && checkedAt !== null ? [{ at: checkedAt, title: <span className="font-medium">Filter deleted in Gmail</span> }] : []),
+    ...(state === 'gone' && checkedAt !== null
+      ? [{ key: 'gone', at: checkedAt, mailbox: null, title: <span className="font-medium">Filter deleted in Gmail</span> }]
+      : []),
   ].toSorted((a, b) => a.at - b.at);
 
   return (
@@ -148,7 +154,9 @@ export function GmailFilter({ rule, active }: { rule: RuleSummary; active: boole
       {events.length > 0 ? (
         <Timeline>
           {events.map((event) => (
-            <TimelineEvent key={event.at} at={dateTime(event.at)} title={event.title} />
+            <TimelineEvent key={event.key} at={dateTime(event.at)} title={event.title}>
+              {event.mailbox}
+            </TimelineEvent>
           ))}
         </Timeline>
       ) : null}
