@@ -45,6 +45,9 @@ The working list for sift. Remove an item when it lands; add what you find. What
 
 ## Dashboard
 
+- [ ] **Why a rule can't be a Gmail filter is never said.** The API works it out (`RuleFilter.reason`, `src/dashboard/types.ts`), but a rule's panel leaves the Gmail filter section out when it has no filter and cannot have one (`web/src/views/gmail-filter.tsx`).
+- [ ] **A message's HTML is cut off on a phone.** At 390px m4's card is wider than its frame and loses its right edge. The browser test that it fits a phone checks only the frame's width and that the page doesn't scroll sideways, so it passes anyway.
+- [ ] Adding a rule that moves nothing still leaves `apply=1` in the address; nothing opens.
 - [ ] **The "Your labels" setup step is a dead end when labels can't meet the goal.** Asked for "Never miss mail from a person", the label model rightly answers with no labels and a note that this takes a rule per sender, and the step offers only Start over: no way on to rules, to a label of the person's own, or to the next step. The page is weak visually too (the wordmark's size, the lone note, the one button). Redesign it the usual way: a few directions from the real parts, David's pick (`web/src/components/set-up.tsx`).
 - [ ] **The message panel.** Mail Sift already acted on or kept has no text held, so it opens without it. Correcting one message does not fix the sender's other mail Sift already moved.
 - [ ] **Say why Sift would ask.** For review's meter says only whether Sift would have acted by itself; why it would ask (not sure enough, no label, or a protection: you have written to them, a reply in your thread, could not check) is buried in the reason. Say which wherever such a decision is shown.
