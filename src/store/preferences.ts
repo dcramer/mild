@@ -6,11 +6,17 @@ export interface Preferences {
   active: boolean;
   /** `provider/model-id`, or null for no model: mail no rule covers is then left for them. */
   model: string | null;
+  /** The hour of their day, 0 to 23, a label's digest arrives. */
+  digestHour: number;
+  /** Their IANA time zone, as their browser last said it; null when it never has, which is read as UTC. */
+  timeZone: string | null;
 }
 
 export async function preferences(db: Sql): Promise<Preferences> {
-  const [row] = await db.select({ active: preferenceRows.active, model: preferenceRows.model }).from(preferenceRows);
-  return { active: row!.active, model: row!.model };
+  const [row] = await db
+    .select({ active: preferenceRows.active, model: preferenceRows.model, digestHour: preferenceRows.digestHour, timeZone: preferenceRows.timeZone })
+    .from(preferenceRows);
+  return { active: row!.active, model: row!.model, digestHour: row!.digestHour, timeZone: row!.timeZone };
 }
 
 export async function setActive(db: Sql, active: boolean): Promise<void> {

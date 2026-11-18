@@ -20,6 +20,7 @@ const STANDING = {
   subscription: decisions.subscription,
   labelId: decisions.labelId,
   block: decisions.block,
+  digest: decisions.digest,
   markRead: decisions.markRead,
   confidence: decisions.confidence,
   reason: decisions.reason,
@@ -33,11 +34,15 @@ const answeredDecision = alias(decisions, 'answered');
 const WILL: Record<Disposition, string> = { keep: 'kept', archive: 'archived', spam: 'marked as spam', review: 'left for you' };
 const hides = (disposition: Disposition) => disposition === 'archive' || disposition === 'spam';
 
-const same = (standing: { disposition: Disposition; labelId: string | null; subscription: string; block: boolean; markRead: boolean }, next: Decision) =>
+const same = (
+  standing: { disposition: Disposition; labelId: string | null; subscription: string; block: boolean; digest: boolean; markRead: boolean },
+  next: Decision,
+) =>
   standing.disposition === next.disposition &&
   standing.labelId === (next.labelId ?? null) &&
   standing.subscription === next.subscription &&
   standing.block === (next.block ?? false) &&
+  standing.digest === (next.digest ?? false) &&
   standing.markRead === (next.markRead ?? false);
 
 /**

@@ -386,6 +386,7 @@ describe('preferences in the database', () => {
     // The database holds it too, whatever code writes the row.
     await expect(raw(db).run("UPDATE labels SET disposition = 'archive' WHERE id = 'everything_else'")).rejects.toThrow();
     await expect(raw(db).run("UPDATE labels SET gmail_label = 'sift/rest' WHERE id = 'everything_else'")).rejects.toThrow();
+    await expect(raw(db).run("UPDATE labels SET digest = true WHERE id = 'everything_else'")).rejects.toThrow();
   });
 
   it('keeps only the extras that go with what a label does', async () => {
@@ -397,6 +398,12 @@ describe('preferences in the database', () => {
     await updateLabel(db, 'phishing', { disposition: 'archive', markRead: true });
     expect((await listLabels(db)).find((l) => l.id === 'phishing')).toEqual(expect.objectContaining({ disposition: 'archive', markRead: true }));
     expect((await listLabels(db)).find((l) => l.id === 'phishing')).not.toHaveProperty('block');
+    // A digest goes only with archive, which the database holds too.
+    await updateLabel(db, 'phishing', { digest: true });
+    expect((await listLabels(db)).find((l) => l.id === 'phishing')).toMatchObject({ disposition: 'archive', digest: true });
+    await updateLabel(db, 'phishing', { disposition: 'keep' });
+    expect((await listLabels(db)).find((l) => l.id === 'phishing')).not.toHaveProperty('digest');
+    await expect(raw(db).run("UPDATE labels SET digest = true WHERE id = 'phishing'")).rejects.toThrow();
   });
 });
 

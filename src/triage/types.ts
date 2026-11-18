@@ -50,6 +50,8 @@ export interface Decision {
   gmailLabel?: string;
   /** With `spam`: also treat everything from this sender as spam from now on. */
   block?: boolean;
+  /** With `archive`: also list it in its label's next digest. */
+  digest?: boolean;
   /** With `keep` or `archive`: also mark the message read. */
   markRead?: boolean;
   stage: StageName;
@@ -80,6 +82,8 @@ export interface Label {
   gmailLabel?: string;
   /** With `spam`: block the sender, so their later mail is spam without being judged again. */
   block?: boolean;
+  /** With `archive`: list the mail in one message a day instead (src/work/digest.ts). */
+  digest?: boolean;
   /** With `keep` or `archive`: mark the mail read as well. */
   markRead?: boolean;
   /** Also leave the sender's mailing list, where that can be done safely. */
@@ -90,7 +94,7 @@ export interface Label {
 export function labelled(
   label: Label,
   override?: DecidedDisposition,
-): Pick<Decision, 'disposition' | 'subscription' | 'labelId' | 'gmailLabel' | 'block' | 'markRead'> {
+): Pick<Decision, 'disposition' | 'subscription' | 'labelId' | 'gmailLabel' | 'block' | 'digest' | 'markRead'> {
   const disposition = override ?? label.disposition;
   // Keeping mail its label would move says it is wanted, so the label's unsubscribe and mark read do not come with it.
   const wanted = override === 'keep' && label.disposition !== 'keep';
@@ -99,8 +103,9 @@ export function labelled(
     subscription: label.unsubscribe && !wanted ? 'unsubscribe' : 'preserve',
     labelId: label.id,
     ...(label.gmailLabel ? { gmailLabel: label.gmailLabel } : {}),
-    // An exception replaces the label's action, so it does not inherit the block.
+    // An exception replaces the label's action, so it does not inherit the block or the digest.
     ...(label.block && override === undefined && disposition === 'spam' ? { block: true } : {}),
+    ...(label.digest && override === undefined && disposition === 'archive' ? { digest: true } : {}),
     ...(label.markRead && !wanted && (disposition === 'keep' || disposition === 'archive') ? { markRead: true } : {}),
   };
 }

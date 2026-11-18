@@ -37,7 +37,8 @@ import { DECIDED, DISPOSITIONS, LEAVE_IN_INBOX, STAGE_NAMES, SUBSCRIPTION_ACTION
 
 export const CREDENTIAL_KINDS = ['gmail', 'model'] as const;
 export const DECISION_OUTCOMES = ['none', 'done', 'skipped', 'failed', 'unknown'] as const;
-export const ACTION_TYPES = ['archive', 'spam', 'label', 'undo', 'unsubscribe', 'filter', 'unfilter'] as const;
+/** `digest`: a digest put into the mailbox, which changes no message Sift recorded. */
+export const ACTION_TYPES = ['archive', 'spam', 'label', 'undo', 'unsubscribe', 'filter', 'unfilter', 'digest'] as const;
 export const ACTION_STATUSES = ['pending', 'done', 'failed', 'unknown', 'undone'] as const;
 /** `learned`: sift made it (blocking a sender). */
 export const RULE_SOURCES = ['user', 'learned', 'correction'] as const;
@@ -144,8 +145,10 @@ export const preferences = pgTable(
     // false (off): their decisions are only suggestions. true (on): sift carries them out in their mailboxes.
     active: boolean('active').notNull().default(false),
     model: text('model'),
+    digestHour: integer('digest_hour').notNull().default(7), // the hour of their day a label's digest arrives
+    timeZone: text('time_zone'), // their browser's IANA zone, as last said; null: never said, so UTC
   },
-  () => [own()],
+  (t) => [check('preferences_digest_hour', sql`${t.digestHour} BETWEEN 0 AND 23`), own()],
 ).enableRLS();
 
 /**
@@ -209,6 +212,8 @@ export const labels = pgTable(
     description: text('description').notNull(), // how to recognise it; shown to the model
     disposition: text('disposition', { enum: DISPOSITIONS }).notNull(),
     block: boolean('block').notNull().default(false),
+    // Archived as it arrives, and listed once a day in one message put into the inbox (`digests`).
+    digest: boolean('digest').notNull().default(false),
     markRead: boolean('mark_read').notNull().default(false),
     unsubscribe: boolean('unsubscribe').notNull().default(false),
     gmailLabel: text('gmail_label'), // null only for Leave in inbox
@@ -222,8 +227,9 @@ export const labels = pgTable(
     check('labels_gmail_label', sql`(${t.id} = ${sql.raw(`'${LEAVE_IN_INBOX}'`)}) = (${t.gmailLabel} IS NULL)`),
     check(
       'labels_everything_else_keeps',
-      sql`${t.id} <> ${sql.raw(`'${LEAVE_IN_INBOX}'`)} OR (${t.disposition} = 'keep' AND NOT ${t.block} AND NOT ${t.markRead} AND NOT ${t.unsubscribe})`,
+      sql`${t.id} <> ${sql.raw(`'${LEAVE_IN_INBOX}'`)} OR (${t.disposition} = 'keep' AND NOT ${t.block} AND NOT ${t.digest} AND NOT ${t.markRead} AND NOT ${t.unsubscribe})`,
     ),
+    check('labels_digest_archives', sql`NOT ${t.digest} OR ${t.disposition} = 'archive'`),
     own(),
   ],
 ).enableRLS();
@@ -276,6 +282,7 @@ export const decisions = pgTable(
     subscription: text('subscription', { enum: SUBSCRIPTION_ACTIONS }).notNull(),
     labelId: text('label_id'),
     block: boolean('block').notNull().default(false),
+    digest: boolean('digest').notNull().default(false), // archived to be listed in its label's next digest
     markRead: boolean('mark_read').notNull().default(false),
     ruleId: text('rule_id'),
     confidence: doublePrecision('confidence'),
@@ -301,12 +308,17 @@ export const decisions = pgTable(
     oneOf('decisions_subscription', t.subscription, SUBSCRIPTION_ACTIONS),
     oneOf('decisions_outcome', t.outcome, DECISION_OUTCOMES),
     check('decisions_settled_if_carried_out', sql`${t.carryOut} OR ${t.outcome} IS NULL`),
+    check('decisions_digest_archives', sql`NOT ${t.digest} OR ${t.disposition} = 'archive'`),
     index('decisions_message').on(t.accountId, t.messageId, t.id),
     index('decisions_time').on(t.accountId, t.decidedAt),
     index('decisions_run').on(t.userId, t.runId),
     index('decisions_rule')
       .on(t.accountId, t.ruleId, t.decidedAt)
       .where(sql`${t.ruleId} IS NOT NULL`),
+    // What the next digest of a label lists is looked for every minute until it goes.
+    index('decisions_digest')
+      .on(t.userId, t.labelId)
+      .where(sql`${t.digest}`),
     index('decisions_unsettled')
       .on(t.accountId)
       .where(sql`${t.carryOut} AND ${t.outcome} IS NULL`),
@@ -659,6 +671,46 @@ export const evalResults = pgTable(
   (t) => [
     primaryKey({ columns: [t.userId, t.runId, t.messageId] }),
     foreignKey({ columns: [t.userId, t.runId], foreignColumns: [evalRuns.userId, evalRuns.id] }).onDelete('cascade'),
+    own(),
+  ],
+).enableRLS();
+
+/**
+ * One label's mail of a day, put into the person's primary mailbox as one message: what Sift archived from it in
+ * `(since, until]`, by when the archive was confirmed. Written before the model is asked and before the message
+ * is put in, so a step run again finishes it rather than writing another.
+ */
+export const digests = pgTable(
+  'digests',
+  {
+    id: id(),
+    userId: userId(),
+    labelId: text('label_id').notNull(),
+    accountId: text('account_id').notNull(), // the mailbox it is put in
+    since: time('since').notNull(),
+    until: time('until').notNull(),
+    messageId: text('message_id').notNull(), // the Message-ID it is given, `<digest.…@sift.invalid>`: how sync tells it is Sift's own
+    gmailId: text('gmail_id'), // null until Gmail has it
+    count: integer('count').notNull(),
+    // What the model picked as worth a look, `{ id, why }[]`, encrypted: the reasons come from mail (src/store/content.ts).
+    highlights: text('highlights'),
+    model: text('model'), // null: no model was asked
+    error: text('error'), // why the model's call failed: its status and kind, never the provider's text
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    costUsd: doublePrecision('cost_usd').notNull().default(0),
+    createdAt: time('created_at').notNull(),
+    insertedAt: time('inserted_at'),
+  },
+  (t) => [
+    unique('digests_own').on(t.userId, t.id),
+    unique('digests_message').on(t.userId, t.messageId),
+    mailbox(t),
+    label('digests_label', t, t.labelId),
+    index('digests_label_until').on(t.userId, t.labelId, t.until),
+    index('digests_open')
+      .on(t.userId)
+      .where(sql`${t.gmailId} IS NULL`),
     own(),
   ],
 ).enableRLS();

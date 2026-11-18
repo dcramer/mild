@@ -358,6 +358,20 @@
       "when": 1794977407117,
       "tag": "0050_mailboxes_have_numbers",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1794990284073,
+      "tag": "0051_digests",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1794990284437,
+      "tag": "0052_digests_row_security",
+      "breakpoints": true
     }
   ]
 }

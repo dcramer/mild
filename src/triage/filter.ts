@@ -28,7 +28,10 @@ const DOMAIN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 const no = (reason: string): FilterVerdict => ({ possible: false, reason });
 
 /** What a rule does to mail, with or without a label of its own. */
-const does = (rule: Rule, label: Label | undefined): { disposition: string | undefined; labelId?: string | undefined; markRead?: boolean | undefined } =>
+const does = (
+  rule: Rule,
+  label: Label | undefined,
+): { disposition: string | undefined; labelId?: string | undefined; markRead?: boolean | undefined; digest?: boolean | undefined } =>
   label ? labelled(label, rule.disposition) : { disposition: rule.disposition };
 
 /** Whether one sender value (an address, or a domain) could be the same mail's sender as another. */
@@ -68,6 +71,7 @@ export function filterFor(rule: FilterableRule, labels: readonly Label[], rules:
   if (outcome.disposition !== 'keep' && outcome.disposition !== 'archive') return no('Its label leaves mail for you.');
   const archive = outcome.disposition === 'archive';
   if (rule.markRead || outcome.markRead) return no('It marks mail read, which Sift does not let a filter do.');
+  if (outcome.digest) return no('Its label puts mail in a daily digest, and mail a filter archives never reaches Sift to be listed there.');
   if (rule.learned && archive) return no('Sift learned this rule and holds it back for people you have written to. A filter cannot.');
 
   const { from, fromDomain, fromName, fromNameContains, to, listId, subjectContains } = rule.match;

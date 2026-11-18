@@ -67,6 +67,10 @@ describe('whether a rule can be a Gmail filter', () => {
     expect(reason(rule({ labelId: 'phishing' }))).toMatch(/spam/);
     expect(reason(rule({ disposition: 'spam' }))).toMatch(/spam/);
     expect(reason(rule({ markRead: true }))).toMatch(/marks mail read/);
+    // A filter would archive the mail before Sift sees it, so it would never be listed in the digest.
+    const digesting = SAMPLE_LABELS.map((l) => (l.id === 'newsletter' ? { ...l, digest: true } : l));
+    expect(filterFor(rule(), digesting, [rule()])).toMatchObject({ possible: false, reason: expect.stringMatching(/daily digest/) });
+    expect(filterFor(rule({ disposition: 'archive' }), digesting, [rule({ disposition: 'archive' })])).toMatchObject({ possible: true });
     expect(reason(rule({ match: { listId: ['news.example.com'] } }))).toMatch(/mailing list/);
     expect(reason(rule({ match: { from: ['news@example.com'], fromName: ['News'] } }))).toMatch(/name/);
     expect(reason(rule({ match: { fromDomain: ['example.com'], fromNameContains: ['bot'] } }))).toMatch(/name/);
