@@ -1,5 +1,5 @@
 import { ArrowRightIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useSyncExternalStore } from 'react';
 import type { Session } from '@/lib/api.ts';
 import { Button, Code, Copyable, Entry, Note, Splash } from '@/system';
 
@@ -33,8 +33,12 @@ export function SignInScreen({ session, error }: { session: Session; error: stri
 
 /** Why sign-in cannot start here, and the one thing that fixes it. */
 function Blocked({ session }: { session: Session }) {
+  const port = useSyncExternalStore(
+    () => () => {},
+    () => window.location.port || '8787',
+    () => '8787',
+  );
   if (session.reason === 'address') {
-    const port = window.location.port || '8787';
     return (
       <>
         <p className="statement">Google won't sign you in at this address.</p>

@@ -274,7 +274,7 @@ function Use({ rule }: { rule: RuleSummary }) {
   const matched = daily.reduce((sum, day) => sum + day.changed + day.left, 0);
   const cost = daily.reduce((sum, day) => sum + day.costUsd, 0);
   return (
-    <Reserve id="rule-use" ready={usage.data !== null || usage.error !== null} room={{ narrow: 280, wide: 260 }}>
+    <Reserve id="rule-use" ready={usage.data !== null || usage.error !== null} room="min-h-[280px] lg:min-h-[260px]">
       <div className="flex flex-col gap-5">
         <Failure>{usage.error}</Failure>
         <Figures>

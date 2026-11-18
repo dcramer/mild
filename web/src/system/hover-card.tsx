@@ -1,7 +1,7 @@
 import { PreviewCard as Base } from '@base-ui/react/preview-card';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
-import { TOUCH } from './touch.ts';
+import { useTouch } from './touch.ts';
 
 /**
  * A link that shows a little about where it goes when the pointer rests on it or it takes focus. The
@@ -9,7 +9,7 @@ import { TOUCH } from './touch.ts';
  * never shows it. `card` is rendered only while open, so it may load what it shows.
  */
 export function HoverCard({ href, children, card, className }: { href: string; children: ReactNode; card: ReactNode; className?: string }) {
-  if (TOUCH)
+  if (useTouch())
     return (
       <a href={href} className={className}>
         {children}

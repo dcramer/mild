@@ -3,6 +3,7 @@ import { StrictMode, useEffect } from 'react';
 import { App } from './App.tsx';
 import { queryClient } from './lib/api.ts';
 import { Toaster } from './system/index.ts';
+import { EmptyBefore, emptyIn } from './system/reserve.tsx';
 import { NoInlineStyles } from './system/csp.tsx';
 import { ShortcutList } from './system/keys-help.tsx';
 
@@ -25,10 +26,12 @@ export function Dashboard() {
     <StrictMode>
       <NoInlineStyles>
         <QueryClientProvider client={queryClient}>
-          <Toaster>
-            <App />
-            <ShortcutList />
-          </Toaster>
+          <EmptyBefore value={emptyIn(document.cookie)}>
+            <Toaster>
+              <App />
+              <ShortcutList />
+            </Toaster>
+          </EmptyBefore>
         </QueryClientProvider>
       </NoInlineStyles>
     </StrictMode>

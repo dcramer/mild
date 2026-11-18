@@ -95,7 +95,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
       }}
       intro={
         // The chart arrives after the list is drawn, and would push it down.
-        <Reserve id="activity-intro" ready={summary.data !== null} room={{ narrow: 200, wide: 200 }}>
+        <Reserve id="activity-intro" ready={summary.data !== null} room="min-h-[200px]">
           <div className="flex flex-col gap-6">
             {charted ? (
               <StackedBars

@@ -1,7 +1,7 @@
 import { Tooltip as Base } from '@base-ui/react/tooltip';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
-import { TOUCH } from './touch.ts';
+import { useTouch } from './touch.ts';
 
 /**
  * A few words more about what it wraps, shown when the pointer rests on it. Never on a touch screen, so
@@ -9,7 +9,8 @@ import { TOUCH } from './touch.ts';
  * reader on a phone needs is said where a tap reaches it, such as the panel a row opens.
  */
 export function Tooltip({ says, children, className }: { says: ReactNode; children: ReactNode; className?: string }) {
-  if (TOUCH || says === null || says === undefined || says === '') return <span className={className}>{children}</span>;
+  const touch = useTouch();
+  if (touch || says === null || says === undefined || says === '') return <span className={className}>{children}</span>;
   return (
     <Base.Root>
       <Base.Trigger delay={350} render={<span className={className} />}>

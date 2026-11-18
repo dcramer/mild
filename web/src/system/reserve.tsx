@@ -1,15 +1,27 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { keptHeight } from '@/lib/room.ts';
+import { type ReactNode, createContext, useContext, useEffect, useRef, useState } from 'react';
 
-const WIDE = '(min-width: 64rem)';
-const band = () => (typeof window !== 'undefined' && window.matchMedia(WIDE).matches ? 'wide' : 'narrow');
+/** The cookie naming each `Reserve` that held nothing the last time it filled in, in this browser. */
+const COOKIE = 'sift_empty';
 
-function remembered(key: string): number | null {
-  try {
-    return keptHeight(window.localStorage.getItem(key));
-  } catch {
-    return null;
-  }
+/**
+ * The parts that were empty last time, as this request's cookie names them. The server reads it as the browser does,
+ * so both hold the same room. Given once, where the page starts.
+ */
+export const EmptyBefore = createContext<readonly string[]>([]);
+
+/** The ids a `Cookie` header, or `document.cookie`, names as empty last time. */
+export const emptyIn = (cookies: string): string[] => {
+  const value = cookies.match(/(?:^|; )sift_empty=([^;]*)/)?.[1];
+  return value ? decodeURIComponent(value).split(',').filter(Boolean) : [];
+};
+
+function remember(id: string, empty: boolean) {
+  const kept = new Set(emptyIn(document.cookie));
+  if (kept.has(id) === empty) return;
+  if (empty) kept.add(id);
+  else kept.delete(id);
+  // Only ids: whether a part had anything to show is all the server learns.
+  document.cookie = `${COOKIE}=${encodeURIComponent([...kept].join(','))}; Path=/; Max-Age=31536000; SameSite=Lax`;
 }
 
 /**
@@ -17,9 +29,10 @@ function remembered(key: string): number | null {
  * arrives. Use it for anything above other content whose height depends on what loads: figures, a
  * chart, a notice that may or may not be there.
  *
- * The room held is the height this part last had in this browser, at this width; before that, `room`,
- * which should be the usual height on a narrow and on a wide screen. Only a number is kept, under `id`.
- * `placeholder` is drawn while waiting and must fit inside the room.
+ * `room` is its usual height on a narrow and on a wide screen, as classes (`min-h-[386px] lg:min-h-[206px]`), so the
+ * server holds it too. A part that held nothing the last time it filled in, in this browser, holds no room (Sift is on,
+ * so there is no "Sift is off"); that is kept, under `id`, in a cookie the server reads. `placeholder` is drawn while
+ * waiting and must fit inside the room.
  */
 export function Reserve({
   id,
@@ -30,32 +43,26 @@ export function Reserve({
 }: {
   id: string;
   ready: boolean;
-  room: { narrow: number; wide: number };
+  room: string;
   placeholder?: ReactNode;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [key] = useState(() => `sift:room:${id}:${band()}`);
-  const [held] = useState(() => remembered(key) ?? room[band()]);
+  const before = useContext(EmptyBefore);
+  const [wasEmpty] = useState(() => before.includes(id));
 
   useEffect(() => {
     const element = ref.current;
     if (!ready || !element) return;
-    const keep = () => {
-      try {
-        window.localStorage.setItem(key, String(Math.round(element.offsetHeight)));
-      } catch {
-        // Storage is a convenience: without it the next visit holds the usual room.
-      }
-    };
+    const keep = () => remember(id, element.offsetHeight === 0);
     keep();
     const observer = new ResizeObserver(keep);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [ready, key]);
+  }, [ready, id]);
 
   return (
-    <div ref={ref} aria-busy={!ready} style={ready ? undefined : { minHeight: held }}>
+    <div ref={ref} aria-busy={!ready} className={ready || wasEmpty ? undefined : room}>
       {ready ? children : placeholder}
     </div>
   );

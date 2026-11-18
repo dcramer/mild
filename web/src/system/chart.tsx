@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { TOUCH } from './touch.ts';
+import { styled } from './styled.ts';
+import { useTouch } from './touch.ts';
 
 interface Series {
   key: string;
@@ -19,8 +20,15 @@ interface ChartRow {
 
 /** A series' or a tier's colour, always beside its name. */
 export function Swatch({ color }: { color: string }) {
-  return <span aria-hidden className="size-2.5 shrink-0 rounded-[1px] ring-1 ring-foreground/20" style={{ background: color }} />;
+  return <span aria-hidden className="size-2.5 shrink-0 rounded-[1px] ring-1 ring-foreground/20" ref={styled({ background: color })} />;
 }
+
+/** The gridlines, top to bottom: each one's share of the scale, and where it sits. */
+const GRID = [
+  [1, 'bottom-full'],
+  [0.5, 'bottom-1/2'],
+  [0, 'bottom-0'],
+] as const;
 
 /** The next round number at or above `n`, under 1 too, so a scale ends on a figure worth reading. */
 function ceiling(n: number): number {
@@ -45,6 +53,7 @@ interface Line {
  * tooltip with that day's figures (none that are zero), the segment under the pointer first in weight.
  */
 export function StackedBars({ series, rows, line, compact }: { series: readonly Series[]; rows: readonly ChartRow[]; line?: Line; compact?: boolean }) {
+  const touch = useTouch();
   const [at, setAt] = useState<number | null>(null);
   const [under, setUnder] = useState<string | null>(null);
   const total = (row: ChartRow) => series.reduce((sum, s) => sum + (row.values[s.key] ?? 0), 0);
@@ -64,8 +73,8 @@ export function StackedBars({ series, rows, line, compact }: { series: readonly 
   return (
     <div className="flex flex-col gap-2" onMouseLeave={leave}>
       <div className={`relative ${gutters} ${compact ? 'h-28' : 'h-44'}`}>
-        {[1, 0.5, 0].map((share) => (
-          <div key={share} className="absolute inset-x-0 border-t border-(--rule)" style={{ bottom: `${share * 100}%` }}>
+        {GRID.map(([share, bottom]) => (
+          <div key={share} className={`absolute inset-x-0 border-t border-(--rule) ${bottom}`}>
             <span className="absolute right-full -translate-y-1/2 pr-2 text-label text-muted-foreground tabular-nums">
               {Number.isInteger(max * share) ? (max * share).toLocaleString() : ''}
             </span>
@@ -93,7 +102,7 @@ export function StackedBars({ series, rows, line, compact }: { series: readonly 
                   <span
                     key={s.key}
                     className={`w-full max-w-6 ${position === drawn.length - 1 ? 'rounded-t-[4px]' : ''}`}
-                    style={{ height: `${((row.values[s.key] ?? 0) / max) * 100}%`, minHeight: 2, background: s.color }}
+                    ref={styled({ height: `${((row.values[s.key] ?? 0) / max) * 100}%`, minHeight: '2px', background: s.color })}
                     onMouseEnter={() => setUnder(s.key)}
                     onMouseLeave={() => setUnder(null)}
                   />
@@ -113,18 +122,18 @@ export function StackedBars({ series, rows, line, compact }: { series: readonly 
           <span
             aria-hidden
             className="pointer-events-none absolute size-2.5 -translate-x-1/2 translate-y-1/2 rounded-full bg-foreground ring-2 ring-background"
-            style={{ left: `${x(at)}%`, bottom: `${100 - y(line.values[at] ?? 0)}%` }}
+            ref={styled({ left: `${x(at)}%`, bottom: `${100 - y(line.values[at] ?? 0)}%` })}
           />
         ) : null}
-        {shown && at !== null && !TOUCH ? (
+        {shown && at !== null && !touch ? (
           <div
             aria-hidden
             className="sheet pointer-events-none absolute top-0 z-10 flex w-max flex-col gap-1 bg-popover px-3 py-2 text-sm tabular-nums"
-            style={
+            ref={styled(
               at < rows.length / 2
-                ? { left: `calc(${((at + 1) / rows.length) * 100}% + 8px)` }
-                : { right: `calc(${((rows.length - at) / rows.length) * 100}% + 8px)` }
-            }
+                ? { left: `calc(${((at + 1) / rows.length) * 100}% + 8px)`, right: '' }
+                : { left: '', right: `calc(${((rows.length - at) / rows.length) * 100}% + 8px)` },
+            )}
           >
             <p className="font-medium">{shown.title}</p>
             {series

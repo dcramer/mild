@@ -153,11 +153,11 @@ export async function choose(within: Locator, option: string) {
 /**
  * Waits for whatever the last press set moving to start (two frames) and then to finish. A layer that is
  * dismissed slides away before it leaves the page, so without this "it is still open" passes while it is going.
- * A string, as e2e is typed without the DOM.
+ * Rows pulsing while they load never finish, and move nothing. A string, as e2e is typed without the DOM.
  */
 export const settled = (page: Page) =>
   page.evaluate(
-    'new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))).then(() => Promise.allSettled(document.getAnimations().map((a) => a.finished)))',
+    'new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))).then(() => Promise.allSettled(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished)))',
   );
 
 /** Points at `target` once the page has stopped moving, so what opens on hover is for it, not for whatever slid under the pointer. */
