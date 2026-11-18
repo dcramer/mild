@@ -7,6 +7,7 @@ export { ConfirmButton } from './confirm.tsx';
 export { Copyable } from './copyable.tsx';
 export { Dialog } from './dialog.tsx';
 export { Disclosure } from './disclosure.tsx';
+export { Rope } from './doodle.tsx';
 export { Clause, Document } from './document.tsx';
 export { Fact, Facts } from './facts.tsx';
 export { Cloud, FinePrint, PageFoot } from './fine-print.tsx';

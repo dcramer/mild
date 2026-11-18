@@ -61,6 +61,7 @@ import {
   PageHeader,
   Panel,
   Reserve,
+  Rope,
   RowActions,
   Section,
   Select,
@@ -678,7 +679,18 @@ export function SystemView() {
             </SettingsGroup>
           </Section>
           <Section title="Empty and loading" meta="rows set like the real ones, with a blank for each piece of text">
-            <Empty>Nothing is waiting on you.</Empty>
+            <Empty
+              art={<Rope />}
+              after={
+                <>
+                  <p>Sift is off. Nothing it suggests is done in Gmail until you turn it on.</p>
+                  <Button href="#system">Turn Sift on…</Button>
+                </>
+              }
+            >
+              Nothing is waiting on you.
+            </Empty>
+            <Empty>Nothing waiting matches.</Empty>
             <Loading rows={3}>
               <Td className="max-w-0 md:w-1/3">
                 <span className="name">
@@ -907,7 +919,7 @@ export function SystemView() {
 
         <Section title="Splash" meta="the first page of someone not signed in: the name, one line set large, the one action">
           <div className="sheet [&>div]:min-h-0">
-            <Splash title="Your inbox, without the pesky salespeople.">
+            <Splash title="Your inbox, without the pesky salespeople." art={<Rope queue={6} />}>
               <Button variant="mark" size="lg" className="self-start">
                 Sign in with Google
               </Button>

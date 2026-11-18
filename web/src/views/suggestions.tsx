@@ -24,6 +24,7 @@ import {
   Sub,
   RowActions,
   Reserve,
+  Rope,
   Table,
   Td,
   Th,
@@ -224,6 +225,9 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
       (needle === '' || [i.sender, i.senderName ?? '', i.subject].some((text) => reveal(text).toLowerCase().includes(needle))),
   );
   const answerable = (data?.items ?? []).map(answerableOf);
+  const narrowed = search !== '' || label !== '' || does !== '' || fact !== '' || includeKept;
+  // Nothing at all is waiting: there is nothing to search or narrow.
+  const nothing = data !== null && !loading && data.items.length === 0 && data.proposals.length === 0 && !data.importing && !narrowed;
   const rows = fold(shown);
   // The panel steps through the messages as the list draws them: a folded row's together.
   const order = rows.flatMap(({ item, rest }) => [item, ...rest]);
@@ -235,7 +239,7 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
         <>
           {/* Most people start off, so the room is held for it. */}
           <Reserve id="home-off" ready={manage.data !== null} room="min-h-[386px] lg:min-h-[206px]">
-            {manage.data && !manage.data.active ? (
+            {manage.data && !manage.data.active && !nothing ? (
               <Callout title="Sift is off" action={<Button href="?settings=1">Turn Sift on…</Button>}>
                 <p>
                   Nothing here has been done in Gmail. Each row is what Sift would do with that message. Correct the ones it gets wrong, and turn it on once it
@@ -248,30 +252,36 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
           </Reserve>
         </>
       }
-      search={{ value: search, onChange: setSearch, placeholder: 'Search senders and subjects' }}
-      filters={{
-        active: [
-          ...(label === '' ? [] : [{ label: `Label: ${label === UNSURE ? outcomeName('review') : (names.get(label) ?? label)}`, clear: () => setLabel('') }]),
-          ...(does === '' ? [] : [{ label: `Then: ${DOES.find(([key]) => key === does)?.[1]}`, clear: () => setDoes('') }]),
-          ...(fact === '' ? [] : [{ label: factFilterName(fact), clear: () => setFact('') }]),
-          ...(includeKept ? [{ label: 'With mail Sift would leave in your inbox', clear: () => setIncludeKept(false) }] : []),
-        ],
-        panel: (
-          <>
-            <FilterGroup
-              label="Label"
-              value={label}
-              options={[['', 'Any'] as const, [UNSURE, outcomeName('review')] as const, null, ...inboxFirst(names)]}
-              onChange={setLabel}
-            />
-            <FilterGroup label="Then" value={does} options={DOES} onChange={setDoes} />
-            <FilterGroup label="What Sift saw" value={fact} options={FACT_FILTER_OPTIONS} onChange={setFact} />
-            <Check checked={includeKept} onChange={setIncludeKept}>
-              With mail Sift would leave in your inbox
-            </Check>
-          </>
-        ),
-      }}
+      search={nothing ? undefined : { value: search, onChange: setSearch, placeholder: 'Search senders and subjects' }}
+      filters={
+        nothing
+          ? undefined
+          : {
+              active: [
+                ...(label === ''
+                  ? []
+                  : [{ label: `Label: ${label === UNSURE ? outcomeName('review') : (names.get(label) ?? label)}`, clear: () => setLabel('') }]),
+                ...(does === '' ? [] : [{ label: `Then: ${DOES.find(([key]) => key === does)?.[1]}`, clear: () => setDoes('') }]),
+                ...(fact === '' ? [] : [{ label: factFilterName(fact), clear: () => setFact('') }]),
+                ...(includeKept ? [{ label: 'With mail Sift would leave in your inbox', clear: () => setIncludeKept(false) }] : []),
+              ],
+              panel: (
+                <>
+                  <FilterGroup
+                    label="Label"
+                    value={label}
+                    options={[['', 'Any'] as const, [UNSURE, outcomeName('review')] as const, null, ...inboxFirst(names)]}
+                    onChange={setLabel}
+                  />
+                  <FilterGroup label="Then" value={does} options={DOES} onChange={setDoes} />
+                  <FilterGroup label="What Sift saw" value={fact} options={FACT_FILTER_OPTIONS} onChange={setFact} />
+                  <Check checked={includeKept} onChange={setIncludeKept}>
+                    With mail Sift would leave in your inbox
+                  </Check>
+                </>
+              ),
+            }
+      }
     >
       {error ? <ErrorNote message={error} /> : null}
       {data && data.proposals.length > 0 ? (
@@ -284,13 +294,28 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
       {loading ? (
         loadingRows
       ) : shown.length === 0 ? (
-        <Empty>
-          {(data && data.items.length > 0) || fact !== ''
-            ? 'Nothing waiting matches.'
-            : data?.importing
-              ? 'Sift is going through your inbox. What it reads shows here.'
-              : 'Nothing is waiting on you.'}
-        </Empty>
+        nothing ? (
+          <Empty
+            art={<Rope />}
+            after={
+              manage.data && !manage.data.active ? (
+                <>
+                  <p>Sift is off. Nothing it suggests is done in Gmail until you turn it on.</p>
+                  <Button href="?settings=1">Turn Sift on…</Button>
+                </>
+              ) : null
+            }
+          >
+            Nothing is waiting on you.
+          </Empty>
+        ) : (data && data.items.length > 0) || narrowed ? (
+          <Empty>Nothing waiting matches.</Empty>
+        ) : data?.importing ? (
+          <Empty>Sift is going through your inbox. What it reads shows here.</Empty>
+        ) : (
+          // Only proposals wait.
+          <Empty>Nothing is waiting on you.</Empty>
+        )
       ) : (
         <Table keys>
           <Heads>

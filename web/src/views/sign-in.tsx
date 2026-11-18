@@ -2,7 +2,7 @@
 import { ArrowRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Session } from '@/lib/api.ts';
-import { Button, Code, Copyable, Entry, Note, Splash } from '@/system';
+import { Button, Code, Copyable, Entry, Note, Rope, Splash } from '@/system';
 import { useStarted } from '@/system/started.ts';
 
 /** The only thing an unsigned-in visitor sees. Signing in with Google also connects that Gmail account to sift. */
@@ -14,7 +14,7 @@ export function SignInScreen({ session, error }: { session: Session; error: stri
   ) : null;
   if (session.canSignIn)
     return (
-      <Splash title="Your inbox, without the pesky salespeople.">
+      <Splash title="Your inbox, without the pesky salespeople." art={<Rope queue={6} />}>
         <p className="max-w-[36rem] text-muted-foreground">Sift labels each message and archives the kinds you don't want.</p>
         {failed}
         <div>

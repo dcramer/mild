@@ -3,9 +3,20 @@ import { type ReactNode, useId } from 'react';
 import { cn } from '@/lib/utils';
 import { Table, Tr } from './table.tsx';
 
-/** What a sheet says when it has nothing to show. One plain sentence; say what would put something here if that is not obvious. */
-export function Empty({ children }: { children: ReactNode }) {
-  return <p className="px-(--gutter) py-6 text-muted-foreground">{children}</p>;
+/**
+ * What a sheet says when it has nothing to show. One plain sentence; say what would put something here if that is not obvious.
+ * With `art`, a doodle (docs/brand.md), it is the whole page instead, centred in the room the list would take: only where the
+ * list being empty is the good news. `after` goes under the sentence: what the reader can still do there.
+ */
+export function Empty({ children, art, after }: { children: ReactNode; art?: ReactNode; after?: ReactNode }) {
+  if (!art) return <p className="px-(--gutter) py-6 text-muted-foreground">{children}</p>;
+  return (
+    <div className="flex min-h-[60svh] flex-col items-center justify-center gap-6 px-(--gutter) py-10 text-center">
+      <div className="w-full max-w-[34rem]">{art}</div>
+      <p className="title">{children}</p>
+      {after ? <div className="flex max-w-[30rem] flex-col items-center gap-4 text-balance text-muted-foreground">{after}</div> : null}
+    </div>
+  );
 }
 
 const LINES = ['w-3/4', 'w-1/2', 'w-2/3', 'w-2/5', 'w-3/5'];

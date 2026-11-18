@@ -1,4 +1,20 @@
-import { addLabelsDialog, boxOf, choose, expect, panel, query, reviewRows, reviewSearch, row, test, writeLabel } from './sift.ts';
+import {
+  PHONE,
+  addLabelsDialog,
+  boxOf,
+  choose,
+  expect,
+  panel,
+  patchJson,
+  query,
+  reviewRows,
+  reviewSearch,
+  row,
+  settings,
+  sideScroll,
+  test,
+  writeLabel,
+} from './sift.ts';
 
 test.describe('For review', () => {
   test('adding a label from a row opens only the dialog, and leaves the page as it was', async ({ page }) => {
@@ -27,9 +43,59 @@ test.describe('For review', () => {
   });
 });
 
+test.describe('For review, with nothing waiting', () => {
+  // The seed leaves mail waiting; the server says there is none.
+  test.beforeEach(async ({ page }) => {
+    await patchJson(page, '**/api/suggestions*', (suggestions) => ({ ...suggestions, items: [], proposals: [] }));
+  });
+
+  test('is the rope over the words, with nothing to search, and says Sift is off with the press that turns it on', async ({ page }) => {
+    await page.goto('/');
+    const words = page.getByText('Nothing is waiting on you.');
+    const drawing = words.locator('xpath=..').locator('svg');
+    await expect(drawing).toBeVisible();
+    const box = await boxOf(drawing);
+    expect(box.y + box.height).toBeLessThanOrEqual((await boxOf(words)).y);
+    expect(box.width).toBeGreaterThan(200);
+    await expect(reviewSearch(page)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Filters' })).toHaveCount(0);
+
+    // The callout's key explains rows, and there are none: what is left of it is under the words.
+    await expect(page.getByText('Sift is off. Nothing it suggests is done in Gmail until you turn it on.')).toBeVisible();
+    await expect(page.getByText('Sift is off', { exact: true })).toHaveCount(0);
+    await page.getByRole('link', { name: 'Turn Sift on…' }).click();
+    await expect(settings(page)).toBeVisible();
+  });
+
+  test.describe('On a phone', () => {
+    test.use({ viewport: PHONE });
+
+    test('the rope fits the screen', async ({ page }) => {
+      await page.goto('/');
+      await expect(page.getByText('Nothing is waiting on you.').locator('xpath=..').locator('svg')).toBeVisible();
+      await sideScroll(page).toBe(0);
+    });
+  });
+});
+
+test('a search that matches nothing says so in words alone', async ({ page }) => {
+  await page.goto('/');
+  await reviewSearch(page).fill('nothing sent this');
+  await expect(page.getByText('Nothing waiting matches.')).toBeVisible();
+  await expect(page.getByText('Nothing waiting matches.').locator('xpath=..').locator('svg')).toHaveCount(0);
+});
+
 test.describe('For review, with Sift on', () => {
   // A service worker's page is out of reach of page.route, which holds the list back here.
   test.use({ variant: 'on', serviceWorkers: 'block' });
+
+  test('with nothing waiting, says nothing about turning Sift on', async ({ page }) => {
+    await patchJson(page, '**/api/suggestions*', (suggestions) => ({ ...suggestions, items: [], proposals: [] }));
+    // Whether Sift is on comes with the page, so it is known before the list arrives.
+    await page.goto('/');
+    await expect(page.getByText('Nothing is waiting on you.')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Turn Sift on…' })).toHaveCount(0);
+  });
 
   test('once seen on, holds no room for "Sift is off" while the list loads, so the list does not move when it arrives', async ({ page }) => {
     await page.goto('/');
