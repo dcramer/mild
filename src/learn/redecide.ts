@@ -51,12 +51,12 @@ const same = (standing: { disposition: Disposition; labelId: string | null; subs
  * - the rule that decided it has gone: it goes back to what a tier said before the rule, or to review.
  *
  * Mail a rule decided only because of an earlier call here is included, so removing that rule brings
- * the suggestion back. Mail the user answered for is never touched, including while this runs: it is one
+ * the suggestion back. So is all a rule Sift made decided (`learnedGone`, just removed). Mail the user answered for is never touched, including while this runs: it is one
  * transaction, and each message is checked again just before its decision is recorded. Returns how many
  * decisions were recorded.
  */
-export async function redecideWaiting(db: Sql, accountId: string, now: number = Date.now()): Promise<number> {
-  return await db.transaction(async (tx) => await redecide(tx, accountId, now));
+export async function redecideWaiting(db: Sql, accountId: string, now: number = Date.now(), learnedGone?: string): Promise<number> {
+  return await db.transaction(async (tx) => await redecide(tx, accountId, now, learnedGone));
 }
 
 /**
@@ -74,7 +74,7 @@ async function stillWaiting(db: Sql, accountId: string, messageId: string, decis
   return answered.length === 0;
 }
 
-async function redecide(db: Sql, accountId: string, now: number): Promise<number> {
+async function redecide(db: Sql, accountId: string, now: number, learnedGone: string | undefined): Promise<number> {
   const labels = await listLabels(db);
   const stored = await listRules(db);
   let known: boolean | undefined;
@@ -116,9 +116,32 @@ async function redecide(db: Sql, accountId: string, now: number): Promise<number
         ),
       ),
     );
+  // A rule Sift made decides suggestions, but once it is gone nothing says it was Sift's, and its mail would read
+  // as decided by a rule of the user's: so what it decided and nothing carried out is brought back here, at once.
+  const released: Pick<Suggestion, 'decisionId' | 'messageId'>[] =
+    learnedGone === undefined
+      ? []
+      : await db
+          .select({ decisionId: decisions.id, messageId: decisions.messageId })
+          .from(decisions)
+          .where(
+            and(
+              eq(decisions.accountId, accountId),
+              eq(decisions.ruleId, learnedGone),
+              eq(decisions.carryOut, false),
+              eq(decisions.byUser, false),
+              eq(
+                decisions.id,
+                db
+                  .select({ id: max(x.id) })
+                  .from(x)
+                  .where(and(eq(x.accountId, decisions.accountId), eq(x.messageId, decisions.messageId))),
+              ),
+            ),
+          );
   // Mail Sift marked for review in Gmail while on is the user's to answer; a rule or label changing leaves it there.
   const suggested = (await pendingSuggestions(db, { accountId })).filter((s) => !s.carriedOut);
-  const waiting = new Map([...suggested, ...orphaned].map((s) => [s.messageId, s.decisionId] as const));
+  const waiting = new Map([...suggested, ...orphaned, ...released].map((s) => [s.messageId, s.decisionId] as const));
 
   let recorded = 0;
   for (const [messageId, decisionId] of waiting) {

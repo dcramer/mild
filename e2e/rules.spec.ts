@@ -187,6 +187,39 @@ test.describe('Rules', () => {
     await query(page).toBe('');
   });
 
+  test('a select opened from the keyboard shows focus by its fill, with no outline around its list', async ({ page }) => {
+    await page.goto('/rules');
+    const dialog = await writeRule(page);
+    const label = dialog.getByRole('combobox', { name: 'Label it as' });
+    // Reached by Tab, so the browser shows the focus.
+    await label.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    await expect(label).toBeFocused();
+    await expect(label).toHaveCSS('outline-style', 'solid');
+    await page.keyboard.press('ArrowDown');
+    const list = page.getByRole('listbox');
+    await expect(list).toBeVisible();
+    await expect(list).toHaveCSS('outline-style', 'none');
+    await page.keyboard.press('ArrowDown');
+    for (const option of await list.getByRole('option').all()) await expect(option).toHaveCSS('outline-style', 'none');
+  });
+
+  test('a rule whose label leaves mail in the inbox offers nothing to apply there, and opens on its panel alone', async ({ page }) => {
+    await page.goto('/rules');
+    const dialog = await writeRule(page);
+    await dialog.getByRole('textbox', { name: 'Value 1' }).fill('friend@example.org');
+    await dialog.getByRole('combobox', { name: 'Label it as' }).click();
+    await page.getByRole('option', { name: 'Personal' }).click();
+    await expect(dialog.getByRole('checkbox', { name: 'Apply to mail already there' })).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Add rule', exact: true }).click();
+
+    const opened = rulePanel(page, 'friend@example.org');
+    await expect(opened).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Apply to your inbox' })).toHaveCount(0);
+    await query(page).toBe(`?rule=${await ruleId(page)}`);
+  });
+
   test("a rule's panel steps through the list, is its own address, and closes to the list", async ({ page }) => {
     const news = await openRule(page, 'anyone at news.example.com');
     await expect(news.getByText('1 of 4')).toBeVisible();

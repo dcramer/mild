@@ -85,16 +85,14 @@ export function filterStanding(rule: RuleSummary): 'filter' | 'could' | 'cannot'
 }
 
 /**
- * Whether Gmail runs the rule itself, as one of its own filters, or could; what Sift did about it, and the
- * press to add or remove it. Said so that someone who has never made a Gmail filter knows what one is. Left
- * out for a rule that can never be one and has none.
+ * Whether Gmail runs the rule itself, as one of its own filters, or could, and if not why; what Sift did about
+ * it, and the press to add or remove it. Said so that someone who has never made a Gmail filter knows what one is.
  */
 export function GmailFilter({ rule, active }: { rule: RuleSummary; active: boolean }) {
   const [adding, setAdding] = useState(false);
   const remove = useAction();
   const toast = useToast();
-  const { state, possible, history, checkedAt } = rule.filter;
-  if (!rule.filterId && !possible) return null;
+  const { state, possible, reason, history, checkedAt } = rule.filter;
   const said = rule.filterId
     ? state === 'changed'
       ? 'Its Gmail filter was edited in Gmail, so Sift leaves it as it is.'
@@ -103,9 +101,11 @@ export function GmailFilter({ rule, active }: { rule: RuleSummary; active: boole
         : 'Gmail runs this rule itself, as one of your Gmail filters, so it applies the moment mail arrives, even when Sift isn’t running.'
     : state === 'gone'
       ? 'Its Gmail filter was deleted in Gmail. Sift will not put it back.'
-      : active
-        ? 'Gmail could run this rule itself, as one of your Gmail filters, so it applies the moment mail arrives, even when Sift isn’t running.'
-        : 'Once Sift is on, Gmail could run this rule itself, as one of your Gmail filters, so it applies even when Sift isn’t running.';
+      : !possible
+        ? `Gmail can’t run this rule as one of its filters. ${reason ?? ''}`
+        : active
+          ? 'Gmail could run this rule itself, as one of your Gmail filters, so it applies the moment mail arrives, even when Sift isn’t running.'
+          : 'Once Sift is on, Gmail could run this rule itself, as one of your Gmail filters, so it applies even when Sift isn’t running.';
   const events = [
     ...history.map((change) => ({
       at: change.at,
@@ -137,14 +137,14 @@ export function GmailFilter({ rule, active }: { rule: RuleSummary; active: boole
           >
             Remove filter
           </Button>
-        ) : active ? (
+        ) : active && possible ? (
           <Button variant="plain" onClick={() => setAdding(true)}>
             Add as a Gmail filter…
           </Button>
         ) : undefined
       }
     >
-      <p className={rule.filterId || active ? undefined : 'text-muted-foreground'}>{said}</p>
+      <p className={rule.filterId || (active && possible) ? undefined : 'text-muted-foreground'}>{said}</p>
       {events.length > 0 ? (
         <Timeline>
           {events.map((event) => (

@@ -25,8 +25,8 @@ test.describe('A rule as a Gmail filter', () => {
     await expect(shop.getByRole('button', { name: /Gmail/ })).toHaveCount(0);
 
     const promo = await openRule(page, 'anyone at promo.example.com');
-    // Gmail filters cannot mark mail as spam, and a rule that can never be one says nothing about Gmail.
-    await expect(promo.getByRole('heading', { name: 'Gmail filter' })).toHaveCount(0);
+    await expect(promo.getByText('Gmail can’t run this rule as one of its filters. Gmail filters cannot mark mail as spam.')).toBeVisible();
+    await expect(promo.getByRole('button', { name: /Gmail/ })).toHaveCount(0);
   });
 
   test('Remove filter takes the filter out and keeps the rule', async ({ page }) => {

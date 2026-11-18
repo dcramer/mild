@@ -1,4 +1,24 @@
-import { expect, PHONE, pointAt, settings, sideScroll, test, tooltip } from './sift.ts';
+import { expect, PHONE, patchJson, pointAt, settings, sideScroll, test, tooltip } from './sift.ts';
+
+test.describe('When a Google sign-in expired', () => {
+  // A service worker's page is out of reach of page.route.
+  test.use({ serviceWorkers: 'block' });
+
+  test('Reconnect signs in again and comes back to the same page', async ({ page }) => {
+    await patchJson(page, '**/api/manage*', (manage) => ({ ...manage, activity: { ...manage.activity, expired: ['me@example.org'] } }));
+    await page.clock.install();
+    await page.goto('/rules?rule=r-1');
+    await expect(page.getByRole('heading', { name: 'Rules', level: 1 })).toBeVisible();
+    // The page came drawn with the server's own; a minute on it asks again, and gets the reply above.
+    await page.clock.runFor(60_000);
+    await page.clock.resume();
+    await expect(page.getByRole('banner').getByText('Google sign-in expired').filter({ visible: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Reconnect' }).filter({ visible: true })).toHaveAttribute(
+      'href',
+      `/auth/login?to=${encodeURIComponent('/rules?rule=r-1')}`,
+    );
+  });
+});
 
 test.describe("The masthead's line", () => {
   test('says how long since Sift synced and what the model cost over 30 days, and the cost previews each window', async ({ page }) => {

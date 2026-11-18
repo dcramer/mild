@@ -122,8 +122,10 @@ export async function addRule(
 }
 
 /** Returns false if there was no such rule. Past decisions keep the rule id as history. */
-export async function removeRule(db: Sql, id: string): Promise<boolean> {
-  return (await db.delete(rules).where(eq(rules.id, id)).returning({ id: rules.id })).length > 0;
+/** Whose the removed rule was, or null when there was no such rule. */
+export async function removeRule(db: Sql, id: string): Promise<RuleSource | null> {
+  const [removed] = await db.delete(rules).where(eq(rules.id, id)).returning({ source: rules.source });
+  return removed?.source ?? null;
 }
 
 export async function countRuleHit(db: Sql, id: string): Promise<void> {

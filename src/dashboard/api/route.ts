@@ -118,9 +118,12 @@ export const self = () => 'self' as const;
 /** A write that takes nothing. */
 export const nothing = z.strictObject({});
 
-/** After a rule or label changed: waiting suggestions they now decide differently get a new decision. No model is called. */
-export async function redecide(db: Sql, now: () => number): Promise<number> {
+/**
+ * After a rule or label changed: waiting suggestions they now decide differently get a new decision. No model is
+ * called. `learnedGone` is a rule Sift made that was just removed.
+ */
+export async function redecide(db: Sql, now: () => number, learnedGone?: string): Promise<number> {
   let recorded = 0;
-  for (const account of await listAccounts(db)) recorded += await redecideWaiting(db, account.id, now());
+  for (const account of await listAccounts(db)) recorded += await redecideWaiting(db, account.id, now(), learnedGone);
   return recorded;
 }

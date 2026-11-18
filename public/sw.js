@@ -9,6 +9,31 @@ const forEveryone = (response) => response.ok && !/no-store|private/.test(respon
 /** Drawn for everyone, and with no session to read says Sift cannot be reached: where a screen not kept falls back to. */
 const SHELL = '/sender';
 
+/** A built file's path, as pages, scripts and styles name it (a script names the chunks it loads later without `/_next/`). */
+const BUILT = /static\/(?:chunks|media|css)\/[\w.~-]+/g;
+
+/**
+ * Drops each built file no kept page reaches, through the scripts and styles it names: otherwise every new build
+ * of Sift would add its files and none would go. A page kept from an older build keeps that build's files until
+ * it is drawn again.
+ */
+async function prune() {
+  const cache = await caches.open(CACHE);
+  const kept = new Map((await cache.keys()).map((request) => [new URL(request.url).pathname, request]));
+  const reached = new Set();
+  const next = [...kept.keys()].filter((path) => !path.startsWith('/_next/'));
+  while (next.length > 0) {
+    const response = await cache.match(kept.get(next.pop()));
+    for (const [name] of (await response?.text())?.matchAll(BUILT) ?? []) {
+      const path = `/_next/${name}`;
+      if (reached.has(path)) continue;
+      reached.add(path);
+      if (kept.has(path) && !/\.(woff2?|png|svg|ico)$/.test(path)) next.push(path);
+    }
+  }
+  await Promise.all([...kept].filter(([path]) => path.startsWith('/_next/') && !reached.has(path)).map(([, request]) => cache.delete(request)));
+}
+
 self.addEventListener('install', (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.add(SHELL)).then(() => self.skipWaiting())));
 
 self.addEventListener('activate', (event) => {
@@ -31,7 +56,8 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (forEveryone(response)) void caches.open(CACHE).then((cache) => cache.put(page, response.clone()));
+          const copy = forEveryone(response) ? response.clone() : null;
+          event.waitUntil(caches.open(CACHE).then(async (cache) => (copy ? await cache.put(page, copy) : undefined)).then(prune));
           return response;
         })
         .catch(async () => (await caches.match(page, { cacheName: CACHE })) ?? (await caches.match(SHELL, { cacheName: CACHE })) ?? Response.error()),

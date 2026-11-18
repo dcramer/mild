@@ -51,6 +51,31 @@ test('the app manifest and service worker are files of this server', async ({ pa
   expect(worker.headers()['cache-control']).toMatch(/max-age=0|no-store|no-cache/);
 });
 
+test('the service worker keeps only the built files a page it keeps names', async ({ page }) => {
+  /** Every path the worker keeps. */
+  const kept = () =>
+    page.evaluate<string[]>(`(async () => {
+      const paths = [];
+      for (const name of await caches.keys()) for (const request of await (await caches.open(name)).keys()) paths.push(new URL(request.url).pathname);
+      return paths;
+    })()`);
+  // Kept: drawn the same for everyone, and what a screen not kept falls back to offline.
+  await page.goto('/sender');
+  await expect.poll(() => page.evaluate('navigator.serviceWorker.controller !== null')).toBe(true);
+  // Loaded again through the worker, which keeps the page's files as they come.
+  await page.reload();
+  const chunks = async () => (await kept()).filter((path) => path.startsWith('/_next/static/chunks/'));
+  await expect.poll(async () => (await chunks()).length).toBeGreaterThan(0);
+  const current = await kept();
+  // What an older build of Sift left.
+  await page.evaluate(`(async () => (await caches.open((await caches.keys())[0])).put('/_next/static/chunks/older-build.js', new Response('')))()`);
+  await expect.poll(kept).toContain('/_next/static/chunks/older-build.js');
+
+  await page.reload();
+  await expect.poll(kept).not.toContain('/_next/static/chunks/older-build.js');
+  expect(await kept()).toEqual(expect.arrayContaining(current));
+});
+
 test('built files are kept by the browser for good, read only as what they say they are, and come without their source', async ({ page }) => {
   const built: { url: string; headers: Record<string, string> }[] = [];
   page.on('response', (response) => {
