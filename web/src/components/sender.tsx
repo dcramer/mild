@@ -1,3 +1,4 @@
+'use client';
 import { MegaphoneIcon, ReplyIcon, SparkleIcon } from 'lucide-react';
 import { Fragment, type ReactNode } from 'react';
 import { type Contact, type RuleMatch, type SenderProfile, api, useLoaded } from '@/lib/api.ts';

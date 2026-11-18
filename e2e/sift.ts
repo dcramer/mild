@@ -4,7 +4,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test as base, expect, type Locator, type Page } from '@playwright/test';
-import { FRAME_POLICY, pageHeaders } from '../src/dashboard/policy.ts';
+import { FRAME_POLICY, PAGE_HEADERS } from '../src/dashboard/policy.ts';
 
 const SCRIPTS = resolve(import.meta.dirname, '../.claude/skills/verify-sift/scripts');
 export const SEED = join(SCRIPTS, 'seed.ts');
@@ -28,7 +28,7 @@ const withTimeout = <T>(work: Promise<T>, ms: number, what: string) =>
   Promise.race([work, new Promise<never>((_, fail) => setTimeout(() => fail(new Error(`${what} in ${ms / 1000}s`)), ms).unref())]);
 
 const directives = (policy: string) => new Set(policy.split('; '));
-const onPage = directives(pageHeaders('', false)['content-security-policy']!);
+const onPage = directives(PAGE_HEADERS['content-security-policy']);
 /** Directives only a message's HTML frame has: what it refuses (a remote image in its inline style) is it working. */
 const FRAME_ONLY = [...directives(FRAME_POLICY)].filter((d) => !onPage.has(d));
 

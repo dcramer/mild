@@ -1,6 +1,6 @@
 // JavaScript, not TypeScript: Next.js announces loading a TypeScript config on the terminal `sift run` prints to.
 import { withWorkflow } from 'workflow/next';
-import { HEADERS } from './src/dashboard/policy.ts';
+import { PAGE_HEADERS } from './src/dashboard/policy.ts';
 
 /** @type {import('next').NextConfig} */
 export default withWorkflow({
@@ -9,9 +9,18 @@ export default withWorkflow({
   poweredByHeader: false,
   // Nothing uses next/image, so /_next/image optimizes nothing for anyone.
   images: { unoptimized: true },
-  // What proxy.ts leaves alone: built files, and the page Next.js draws when one is missing, which the API's policy keeps from running.
-  headers: async () =>
-    ['/_next/static/:path*', '/_next/image'].map((source) => ({ source, headers: Object.entries(HEADERS).map(([key, value]) => ({ key, value })) })),
+  // The page and its files. The API and sign-in send their own (src/dashboard/server.ts), the message frame's among them.
+  headers: async () => [{ source: '/((?!api/|auth/).*)', headers: Object.entries(PAGE_HEADERS).map(([key, value]) => ({ key, value })) }],
+  // Workflow builds a route that resumes a run waiting on a webhook. Sift creates none, so a request there finds no page.
+  rewrites: async () => ({
+    beforeFiles: [
+      { source: '/.well-known/workflow/v1/webhook/:path*', destination: '/.well-known/workflow/v1/no-webhook' },
+      { source: '/sender/:account/:address', destination: '/sender' },
+      { source: '/domain/:account/:domain', destination: '/domain' },
+    ],
+    afterFiles: [],
+    fallback: [],
+  }),
   // Loaded from node_modules as they are, not bundled: PGlite and pi-ai load files beside their own modules,
   // and pi-ai names provider SDKs that pnpm-workspace.yaml leaves out of the install.
   serverExternalPackages: [

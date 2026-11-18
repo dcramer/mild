@@ -1,3 +1,4 @@
+'use client';
 import { type KeyboardEvent, type ReactNode, useState } from 'react';
 import { Button } from './button.tsx';
 

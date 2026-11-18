@@ -9,7 +9,7 @@ import { Blank } from './state.tsx';
  * until it is known. No count and no explanation. On a phone the action stays beside a title alone; a title
  * with a line under it keeps its width, and the action goes under it.
  */
-export function PageHeader({ title, badge, meta, actions }: { title: string; badge?: ReactNode; meta?: ReactNode; actions?: ReactNode }) {
+export function PageHeader({ title, badge, meta, actions }: { title: ReactNode; badge?: ReactNode; meta?: ReactNode; actions?: ReactNode }) {
   return (
     <header className="flex flex-wrap items-center gap-x-6 gap-y-3">
       <div className={cn('min-w-0 flex-1', meta === undefined ? 'basis-40' : 'basis-64')}>

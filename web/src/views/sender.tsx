@@ -1,3 +1,5 @@
+'use client';
+import { usePathname } from 'next/navigation';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote, StatusWord, Verdict } from '@/components/bits.tsx';
 import { ContactHint, DomainLink, NameCell, SenderCell } from '@/components/sender.tsx';
@@ -5,9 +7,10 @@ import { type Given, type ListedDecision, type SenderPage, api, useAction, useLo
 import { INBOX, ago, count, dateTime, describeMatch, doesName, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
 import { type RuleStart, addedWords, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
 import { nextMail } from '@/lib/next-mail.ts';
-import { messageKey, setParams, useParam } from '@/lib/route.ts';
+import { messageKey, setParams, useParam } from '@/lib/params.ts';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import {
+  Blank,
   Heads,
   Button,
   ChoiceGroup,
@@ -28,7 +31,8 @@ import {
   Tr,
   useToast,
 } from '@/system';
-import type { OpenMessages } from '@/views/message-panel.tsx';
+import { type OpenMessages, useOpenMessages } from '@/lib/open-messages.ts';
+import { useStarted } from '@/system/started.ts';
 
 const GIVE = [
   ['trusted', 'Trust'],
@@ -289,7 +293,28 @@ function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMess
  * Everything about one sender, or one domain: what Sift will do with their next mail and why, the one
  * place to change that, how much they send and what it is, and their mail.
  */
-export function SenderView({ accountId, who, onOpen }: { accountId: string; who: Who; onOpen: OpenMessages }) {
+/**
+ * A sender's or a domain's page, `/sender/<account>/<address>` or `/domain/<account>/<domain>`. The server draws the
+ * same page for every one of them, so no address is in its HTML: the page reads it from the address bar.
+ */
+export function WhoView({ kind }: { kind: 'sender' | 'domain' }) {
+  // The server drew this page once for every address, so the address is read only once the page has started.
+  const path = usePathname();
+  const [, , account, key] = (useStarted() ? path : '').split('/');
+  if (!account || !key)
+    return (
+      <div className="flex flex-col gap-10">
+        <PageHeader title={<Blank className="w-2/5" />} meta={null} />
+        <Loading />
+      </div>
+    );
+  const accountId = decodeURIComponent(account);
+  const value = decodeURIComponent(key);
+  return <SenderView key={`${kind}/${accountId}/${value}`} accountId={accountId} who={kind === 'sender' ? { address: value } : { domain: value }} />;
+}
+
+function SenderView({ accountId, who }: { accountId: string; who: Who }) {
+  const onOpen = useOpenMessages();
   const key = 'address' in who ? who.address : who.domain;
   const { data, error, loading, reload } = useLoaded(`${'address' in who ? 'sender' : 'domain'}-page-${accountId}-${key}`, (signal) =>
     'address' in who ? api.sender(accountId, who.address, signal) : api.domain(accountId, who.domain, signal),

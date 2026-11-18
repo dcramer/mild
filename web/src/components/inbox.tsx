@@ -1,3 +1,4 @@
+'use client';
 import { type InboxEstimate, type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, count, money, plural } from '@/lib/format.ts';
 import { Blank, Button, Dialog, Failure, Figure, Figures, SettingRow, Share } from '@/system';

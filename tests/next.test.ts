@@ -14,14 +14,24 @@ describe('Next.js answers nothing that skips the API', () => {
     expect(actions).toEqual([]);
   });
 
-  it('has the frame, the page, and the route handlers that hand each request to Sift, and nothing else in app/', () => {
+  it('has the layouts, a page for each screen, and the route handlers that hand each request to Sift, and nothing else in app/', () => {
     // Workflow writes its own routes into app/.well-known/workflow at build, which .gitignore leaves out of OWN.
     expect(OWN.filter((file) => file.startsWith('app/')).toSorted()).toEqual([
-      'app/[[...path]]/page.tsx',
+      'app/(dashboard)/activity/page.tsx',
+      'app/(dashboard)/domain/page.tsx',
+      'app/(dashboard)/labels/page.tsx',
+      'app/(dashboard)/layout.tsx',
+      'app/(dashboard)/page.tsx',
+      'app/(dashboard)/rules/page.tsx',
+      'app/(dashboard)/sender/page.tsx',
       'app/api/[...path]/route.ts',
       'app/api/cron/route.ts',
       'app/auth/[...path]/route.ts',
       'app/layout.tsx',
+      'app/privacy/page.tsx',
+      'app/security/page.tsx',
+      'app/system/page.tsx',
+      'app/terms/page.tsx',
     ]);
   });
 });

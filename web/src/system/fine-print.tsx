@@ -1,4 +1,6 @@
+'use client';
 import { createContext, useContext } from 'react';
+import { Anchor } from './anchor.tsx';
 import { TextLink } from './type.tsx';
 
 const LINKS = [
@@ -27,9 +29,9 @@ export function FinePrint({ source = false, list = false }: { source?: boolean; 
       <ul className="flex flex-col text-muted-foreground">
         {links.map((link) => (
           <li key={link.href}>
-            <a href={link.href} className="flex min-h-11 items-center hover:text-foreground">
+            <Anchor href={link.href} className="flex min-h-11 items-center hover:text-foreground">
               {link.label}
-            </a>
+            </Anchor>
           </li>
         ))}
       </ul>

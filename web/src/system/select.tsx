@@ -1,6 +1,10 @@
+'use client';
 import { Select as Base } from '@base-ui/react/select';
 import { CheckIcon, ChevronDownIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+
+const TRIGGER =
+  'press inline-flex h-(--control) max-w-full cursor-pointer items-center justify-between gap-1.5 pr-2 pl-3 text-sm whitespace-nowrap select-none disabled:pointer-events-none disabled:opacity-45 data-disabled:pointer-events-none data-disabled:opacity-45 border border-transparent bg-(--fill) hover:bg-(--fill-strong) data-popup-open:bg-(--fill-strong)';
 
 /**
  * One choice from a short list. `options` are `[value, label]` pairs; `label` names the control for screen readers.
@@ -25,10 +29,7 @@ export function Select<T extends string>({
   const items = options.flatMap((option) => (option ? [{ value: option[0], label: option[1] }] : []));
   return (
     <Base.Root items={items} value={value} disabled={disabled ?? false} onValueChange={(next) => next !== null && onChange(next)}>
-      <Base.Trigger
-        aria-label={label}
-        className="press inline-flex h-(--control) max-w-full cursor-pointer items-center justify-between gap-1.5 pr-2 pl-3 text-sm whitespace-nowrap select-none data-disabled:pointer-events-none data-disabled:opacity-45 border border-transparent bg-(--fill) hover:bg-(--fill-strong) data-popup-open:bg-(--fill-strong)"
-      >
+      <Base.Trigger aria-label={label} className={TRIGGER}>
         {/* Down a pixel, as a button's words sit: Karla centred on its box reads high. */}
         <span className="relative top-px flex min-w-0 items-center gap-2">
           {icons?.[value] ?? null}

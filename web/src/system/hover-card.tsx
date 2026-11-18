@@ -1,6 +1,8 @@
+'use client';
 import { PreviewCard as Base } from '@base-ui/react/preview-card';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { Anchor } from './anchor.tsx';
 import { useTouch } from './touch.ts';
 
 /**
@@ -11,13 +13,18 @@ import { useTouch } from './touch.ts';
 export function HoverCard({ href, children, card, className }: { href: string; children: ReactNode; card: ReactNode; className?: string }) {
   if (useTouch())
     return (
-      <a href={href} className={className}>
+      <Anchor href={href} {...(className ? { className } : {})}>
         {children}
-      </a>
+      </Anchor>
     );
   return (
     <Base.Root>
-      <Base.Trigger href={href} delay={350} className={cn('underline-offset-4 hover:underline focus-visible:underline', className)}>
+      <Base.Trigger
+        href={href}
+        delay={350}
+        render={<Anchor href={href} />}
+        className={cn('underline-offset-4 hover:underline focus-visible:underline', className)}
+      >
         {children}
       </Base.Trigger>
       <Base.Portal>

@@ -1,4 +1,5 @@
-import { messageKey } from '@/lib/route.ts';
+'use client';
+import { messageKey } from '@/lib/params.ts';
 import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useAnswer } from '@/components/answer.tsx';
@@ -35,7 +36,6 @@ import { usePlan } from '@/components/model-connect.tsx';
 import { AT_API_PRICES } from '@/lib/prices.ts';
 
 /** Open the message panel on one item of a list, so it can step through the rest. */
-export type OpenMessages = (items: MessageRef[], index: number) => void;
 
 export interface MessageRef {
   accountId: string;

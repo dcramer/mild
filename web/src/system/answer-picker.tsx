@@ -1,3 +1,4 @@
+'use client';
 import { Select as Base } from '@base-ui/react/select';
 import { CheckIcon, ChevronDownIcon } from 'lucide-react';
 import { Fragment, type ReactNode, useState } from 'react';

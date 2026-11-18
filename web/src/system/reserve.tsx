@@ -1,27 +1,17 @@
-import { type ReactNode, createContext, useContext, useEffect, useRef, useState } from 'react';
-
-/** The cookie naming each `Reserve` that held nothing the last time it filled in, in this browser. */
-const COOKIE = 'sift_empty';
-
-/**
- * The parts that were empty last time, as this request's cookie names them. The server reads it as the browser does,
- * so both hold the same room. Given once, where the page starts.
- */
-export const EmptyBefore = createContext<readonly string[]>([]);
-
-/** The ids a `Cookie` header, or `document.cookie`, names as empty last time. */
-export const emptyIn = (cookies: string): string[] => {
-  const value = cookies.match(/(?:^|; )sift_empty=([^;]*)/)?.[1];
-  return value ? decodeURIComponent(value).split(',').filter(Boolean) : [];
-};
+'use client';
+import { type ReactNode, useEffect, useRef } from 'react';
+import { EMPTY } from '@/lib/before-paint.ts';
 
 function remember(id: string, empty: boolean) {
-  const kept = new Set(emptyIn(document.cookie));
-  if (kept.has(id) === empty) return;
-  if (empty) kept.add(id);
-  else kept.delete(id);
-  // Only ids: whether a part had anything to show is all the server learns.
-  document.cookie = `${COOKIE}=${encodeURIComponent([...kept].join(','))}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  try {
+    const kept = new Set((window.localStorage.getItem(EMPTY) ?? '').split(',').filter(Boolean));
+    if (kept.has(id) === empty) return;
+    if (empty) kept.add(id);
+    else kept.delete(id);
+    window.localStorage.setItem(EMPTY, [...kept].join(','));
+  } catch {
+    // Storage is a convenience: without it the next visit holds the usual room.
+  }
 }
 
 /**
@@ -30,9 +20,9 @@ function remember(id: string, empty: boolean) {
  * chart, a notice that may or may not be there.
  *
  * `room` is its usual height on a narrow and on a wide screen, as classes (`min-h-[386px] lg:min-h-[206px]`), so the
- * server holds it too. A part that held nothing the last time it filled in, in this browser, holds no room (Sift is on,
- * so there is no "Sift is off"); that is kept, under `id`, in a cookie the server reads. `placeholder` is drawn while
- * waiting and must fit inside the room.
+ * server's page holds it too. A part that held nothing the last time it filled in, in this browser, holds no room (Sift
+ * is on, so there is no "Sift is off"): that is kept under `id`, and the page's head lets it go before anything is
+ * drawn (`web/src/lib/before-paint.ts`). `placeholder` is drawn while waiting and must fit inside the room.
  */
 export function Reserve({
   id,
@@ -48,8 +38,6 @@ export function Reserve({
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const before = useContext(EmptyBefore);
-  const [wasEmpty] = useState(() => before.includes(id));
 
   useEffect(() => {
     const element = ref.current;
@@ -62,7 +50,7 @@ export function Reserve({
   }, [ready, id]);
 
   return (
-    <div ref={ref} aria-busy={!ready} className={ready || wasEmpty ? undefined : room}>
+    <div ref={ref} data-room={id} aria-busy={!ready} className={ready ? undefined : room}>
       {ready ? children : placeholder}
     </div>
   );

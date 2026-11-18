@@ -1,3 +1,4 @@
+'use client';
 import { type ReactNode, useId } from 'react';
 import { cn } from '@/lib/utils';
 import { Table, Tr } from './table.tsx';

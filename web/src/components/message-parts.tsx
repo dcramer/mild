@@ -1,3 +1,4 @@
+'use client';
 import { useState } from 'react';
 import { type MessageDetail, api } from '@/lib/api.ts';
 import { FACTS, type FactAnswer, capitalised, factWords } from '@/lib/format.ts';

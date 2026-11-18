@@ -1,3 +1,4 @@
+'use client';
 import { type ManageState, type RuleMatch, type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import {
   HANDLED,
@@ -21,9 +22,9 @@ import {
   willBe,
 } from '@/lib/format.ts';
 import { Verdict } from '@/components/bits.tsx';
-import { messageKey, useParam } from '@/lib/route.ts';
+import { messageKey, useParam } from '@/lib/params.ts';
 import { MatchValue } from '@/components/sender.tsx';
-import type { OpenMessages } from '@/views/message-panel.tsx';
+import type { OpenMessages } from '@/lib/open-messages.ts';
 import { GmailFilter } from '@/views/gmail-filter.tsx';
 import {
   Th,

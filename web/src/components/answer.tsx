@@ -1,3 +1,4 @@
+'use client';
 import { api, useAction } from '@/lib/api.ts';
 import { INBOX, outcomeName, plural } from '@/lib/format.ts';
 import { Meter, type Pick, useToast } from '@/system';

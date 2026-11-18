@@ -1,8 +1,9 @@
+'use client';
 import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type LabelSummary, api, useLoaded } from '@/lib/api.ts';
-import { useParam } from '@/lib/route.ts';
+import { useParam } from '@/lib/params.ts';
 import { AddLabelsDialog, LabelPanel, weak } from '@/views/label-panel.tsx';
 import { INBOX, count, percent } from '@/lib/format.ts';
 import { Heads, Blank, Button, Empty, ListView, Look, Loading, Section, Share, Sub, Table, Td, Th, Tr } from '@/system';

@@ -1,9 +1,10 @@
+'use client';
 import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
 import { MatchWords, SenderCell, SenderCellLoading } from '@/components/sender.tsx';
-import { messageKey, useParam } from '@/lib/route.ts';
+import { messageKey, useParam } from '@/lib/params.ts';
 import { type SuggestionItem, type Suggestions, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, ago, inboxFirst, count, factFilterName, outcomeName, plural, sureness } from '@/lib/format.ts';
 import {
@@ -33,7 +34,7 @@ import { AddLabelsDialog } from '@/views/label-panel.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { fold } from '@/lib/fold.ts';
 import { proposalStart } from '@/lib/rule-start.ts';
-import type { OpenMessages } from '@/views/message-panel.tsx';
+import { useOpenMessages } from '@/lib/open-messages.ts';
 
 const UNSURE = '-';
 
@@ -196,7 +197,8 @@ function SuggestionRow({
 const DOES = [['', 'Anything'] as const, ...ACTIONS.filter(([key]) => key !== 'keep'), ['review', outcomeName('review')] as const];
 
 /** The home page: what sift would do with each waiting message, for the user to agree with in one press or change. */
-export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
+export function SuggestionsView() {
+  const onOpen = useOpenMessages();
   const [kept, setKept] = useParam('kept');
   const includeKept = kept === '1';
   const setIncludeKept = (on: boolean) => setKept(on ? '1' : '');

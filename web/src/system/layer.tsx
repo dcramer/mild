@@ -1,3 +1,4 @@
+'use client';
 import { Dialog as Base } from '@base-ui/react/dialog';
 import { XIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';

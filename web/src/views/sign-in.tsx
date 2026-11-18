@@ -1,7 +1,9 @@
+'use client';
 import { ArrowRightIcon } from 'lucide-react';
-import { type ReactNode, useSyncExternalStore } from 'react';
+import type { ReactNode } from 'react';
 import type { Session } from '@/lib/api.ts';
 import { Button, Code, Copyable, Entry, Note, Splash } from '@/system';
+import { useStarted } from '@/system/started.ts';
 
 /** The only thing an unsigned-in visitor sees. Signing in with Google also connects that Gmail account to sift. */
 export function SignInScreen({ session, error }: { session: Session; error: string | null }) {
@@ -33,11 +35,7 @@ export function SignInScreen({ session, error }: { session: Session; error: stri
 
 /** Why sign-in cannot start here, and the one thing that fixes it. */
 function Blocked({ session }: { session: Session }) {
-  const port = useSyncExternalStore(
-    () => () => {},
-    () => window.location.port || '8787',
-    () => '8787',
-  );
+  const port = (useStarted() && window.location.port) || '8787';
   if (session.reason === 'address') {
     return (
       <>

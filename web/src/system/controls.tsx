@@ -1,3 +1,4 @@
+'use client';
 import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { keyName, useHintsShown } from './keys.tsx';
