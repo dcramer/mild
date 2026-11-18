@@ -1,3 +1,4 @@
+import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { toFacts } from '../gmail/sync.ts';
 import { type Account, recordFromInbox } from '../store/accounts.ts';
@@ -83,10 +84,10 @@ export async function continueInboxRun(deps: Deps, account: Account, runId: numb
  * starting nothing after `until`. A rule removed meanwhile ends the run. Null when the run is no longer going.
  */
 export async function continueRuleRun(
-  deps: { db: Sql; api: Pick<GmailApi, 'searchInbox' | 'getMetadata'>; until?: number; now?: () => number },
+  deps: { db: Sql; api: Pick<GmailApi, 'searchInbox' | 'getMetadata'>; mailbox: Mailbox; until?: number; now?: () => number },
   runId: number,
 ): Promise<Went | null> {
-  const { db, api } = deps;
+  const { db, api, mailbox } = deps;
   const now = deps.now ?? Date.now;
   const out = () => deps.until !== undefined && now() >= deps.until;
   let run = await goingInboxRun(db, runId);
@@ -98,7 +99,7 @@ export async function continueRuleRun(
   }
   run = await listRun(db, api, run, inboxQuery(given.rule.match), out);
   if (!run.listed) return { from: run.next, to: run.next, of: run.messages.length };
-  return await goThroughSlice(db, run, now, out, async (id) => (await applyTo(db, api, given, id, now()), false));
+  return await goThroughSlice(db, run, now, out, async (id) => (await applyTo(db, { api, mailbox }, given, id, now), false));
 }
 
 /** One message of a run, decided again unless it is left as it is. */
