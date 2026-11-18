@@ -3,6 +3,7 @@ import type { Sql } from '../store/sql.ts';
 import { openEnvelope } from '../store/content.ts';
 import { recordDecision } from '../store/decisions.ts';
 import { listLabels } from '../store/labels.ts';
+import { lastStandingChange } from '../store/actions.ts';
 import { getFacts } from '../store/messages.ts';
 import { countRuleHit, listRules } from '../store/rules.ts';
 import { cachedCorrespondent } from '../store/senders.ts';
@@ -50,13 +51,24 @@ const same = (standing: { disposition: Disposition; labelId: string | null; subs
  *   word; only what follows from it is worked out again;
  * - the rule that decided it has gone: it goes back to what a tier said before the rule, or to review.
  *
+ * Mail Sift marked for review in Gmail while on is settled only by a rule of the user's that decides it by itself,
+ * no model needed: that is recorded as the user's press, to be carried out, and the review mark Sift put on it
+ * is returned in `marks` to take back. Nothing else changes it.
+ *
  * Mail a rule decided only because of an earlier call here is included, so removing that rule brings
- * the suggestion back. So is all a rule Sift made decided (`learnedGone`, just removed). Mail the user answered for is never touched, including while this runs: it is one
- * transaction, and each message is checked again just before its decision is recorded. Returns how many
- * decisions were recorded.
+ * the suggestion back. So is all a rule Sift made decided (`learnedGone`, just removed). Mail the user answered for
+ * is never touched, including while this runs: it is one transaction, and each message is checked again just
+ * before its decision is recorded.
  */
-export async function redecideWaiting(db: Sql, accountId: string, now: number = Date.now(), learnedGone?: string): Promise<number> {
+export async function redecideWaiting(db: Sql, accountId: string, now: number = Date.now(), learnedGone?: string): Promise<Redecided> {
   return await db.transaction(async (tx) => await redecide(tx, accountId, now, learnedGone));
+}
+
+interface Redecided {
+  /** How many decisions were recorded. */
+  recorded: number;
+  /** The changes that marked for review mail a rule of the user's has now settled, to undo in Gmail. */
+  marks: number[];
 }
 
 /**
@@ -74,7 +86,7 @@ async function stillWaiting(db: Sql, accountId: string, messageId: string, decis
   return answered.length === 0;
 }
 
-async function redecide(db: Sql, accountId: string, now: number, learnedGone: string | undefined): Promise<number> {
+async function redecide(db: Sql, accountId: string, now: number, learnedGone: string | undefined): Promise<Redecided> {
   const labels = await listLabels(db);
   const stored = await listRules(db);
   let known: boolean | undefined;
@@ -139,11 +151,12 @@ async function redecide(db: Sql, accountId: string, now: number, learnedGone: st
               ),
             ),
           );
-  // Mail Sift marked for review in Gmail while on is the user's to answer; a rule or label changing leaves it there.
-  const suggested = (await pendingSuggestions(db, { accountId })).filter((s) => !s.carriedOut);
+  const suggested = await pendingSuggestions(db, { accountId });
+  const marked = new Set(suggested.filter((s) => s.carriedOut).map((s) => s.messageId));
   const waiting = new Map([...suggested, ...orphaned, ...released].map((s) => [s.messageId, s.decisionId] as const));
 
   let recorded = 0;
+  const marks: number[] = [];
   for (const [messageId, decisionId] of waiting) {
     const facts = await getFacts(db, accountId, messageId);
     const [standing] = await db.select(STANDING).from(decisions).where(eq(decisions.id, decisionId));
@@ -155,6 +168,16 @@ async function redecide(db: Sql, accountId: string, now: number, learnedGone: st
     // What a model decided, worked out again, is still that call's.
     let runId: number | null = null;
     const ruled = await rules.decide(facts);
+    if (marked.has(messageId)) {
+      // Marked for review in Gmail: only a rule of the user's, deciding it outright, takes it from them.
+      if (!ruled || stored.find((r) => r.id === ruled.ruleId)?.learned || !(await stillWaiting(db, accountId, messageId, decisionId))) continue;
+      const mark = await lastStandingChange(db, accountId, messageId);
+      await recordDecision(db, accountId, messageId, ruled, { carryOut: true, byUser: true, now });
+      if (ruled.ruleId) await countRuleHit(db, ruled.ruleId);
+      if (mark) marks.push(mark.id);
+      recorded++;
+      continue;
+    }
     if (ruled) {
       const learned = stored.find((r) => r.id === ruled.ruleId)?.learned ?? false;
       if (!learned || !same(current, ruled)) next = ruled;
@@ -209,5 +232,5 @@ async function redecide(db: Sql, accountId: string, now: number, learnedGone: st
     if (next.ruleId) await countRuleHit(db, next.ruleId);
     recorded++;
   }
-  return recorded;
+  return { recorded, marks };
 }

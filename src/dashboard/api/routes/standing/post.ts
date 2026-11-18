@@ -19,10 +19,11 @@ export default write({
   /** `theirs`: nothing was written, because their own rule says more than a standing; the page opens the rule dialog instead. */
   reply: z.union([z.object({ id: z.string(), was: Given.nullable() }), z.object({ theirs: z.string() })]),
   touches: self,
-  run: async ({ db, now }, { address, domain, standing }) => {
+  run: async (ctx, { address, domain, standing }) => {
+    const { db, now } = ctx;
     const match = address === undefined ? { fromDomain: [domain!.toLowerCase()] as [string] } : { from: [address.toLowerCase()] as [string] };
     const given = await db.transaction((tx) => giveStanding(tx, match, standing, now()));
-    if ('id' in given) await redecide(db, now);
+    if ('id' in given) await redecide(ctx);
     return given;
   },
 });

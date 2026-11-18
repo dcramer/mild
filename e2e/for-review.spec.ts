@@ -15,6 +15,7 @@ import {
   test,
   writeLabel,
 } from './sift.ts';
+import { addRule, writeRule } from './rule.ts';
 
 test.describe('For review', () => {
   test('adding a label from a row opens only the dialog, and leaves the page as it was', async ({ page }) => {
@@ -40,6 +41,23 @@ test.describe('For review', () => {
     await expect(dialog).toHaveCount(0);
     await expect(panel(page)).toHaveCount(0);
     await query(page).toBe('');
+  });
+});
+
+test.describe('For review, with Sift on', () => {
+  test.use({ variant: 'on' });
+
+  test('a rule made for mail Sift asked about settles it, and it leaves For review', async ({ page }) => {
+    await page.goto('/');
+    await expect(row(page, 'Quick question')).toBeVisible();
+    await page.goto('/rules');
+    const dialog = await writeRule(page);
+    await dialog.getByRole('textbox', { name: 'Value 1' }).fill('lin@example.com');
+    await addRule(dialog);
+
+    await page.goto('/');
+    await expect(reviewRows(page).first()).toBeVisible();
+    await expect(row(page, 'Quick question')).toHaveCount(0);
   });
 });
 

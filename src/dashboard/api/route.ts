@@ -120,10 +120,21 @@ export const nothing = z.strictObject({});
 
 /**
  * After a rule or label changed: waiting suggestions they now decide differently get a new decision. No model is
- * called. `learnedGone` is a rule Sift made that was just removed.
+ * called. `learnedGone` is a rule Sift made that was just removed. Mail Sift marked for review that a rule of the
+ * user's now settles has the mark taken back in Gmail and is carried out now; a mark that could not be taken back
+ * is reported, and the decision stands.
  */
-export async function redecide(db: Sql, now: () => number, learnedGone?: string): Promise<number> {
+export async function redecide({ db, now, controls, said }: Pick<Context, 'db' | 'now' | 'controls' | 'said'>, learnedGone?: string): Promise<number> {
   let recorded = 0;
-  for (const account of await listAccounts(db)) recorded += await redecideWaiting(db, account.id, now(), learnedGone);
+  const marks: number[] = [];
+  for (const account of await listAccounts(db)) {
+    const done = await redecideWaiting(db, account.id, now(), learnedGone);
+    recorded += done.recorded;
+    marks.push(...done.marks);
+  }
+  if (controls && marks.length > 0) {
+    for (const mark of marks) await controls.undo(db, mark).catch(said);
+    await controls.checkNow(db);
+  }
   return recorded;
 }

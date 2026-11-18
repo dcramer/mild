@@ -17,9 +17,10 @@ export default write({
   }),
   reply: z.object({ ok: z.literal(true), redecided: z.number() }),
   touches: self,
-  run: async ({ db, now }, { id, disposition, ...rest }) => {
+  run: async (ctx, { id, disposition, ...rest }) => {
+    const { db } = ctx;
     const change: Parameters<typeof updateLabel>[2] = { ...rest, ...(disposition === undefined ? {} : fromOutcome(disposition)) };
     if (!(await updateLabel(db, id, change))) throw new Refusal(`There is no label "${id}".`);
-    return { ok: true as const, redecided: await redecide(db, now) };
+    return { ok: true as const, redecided: await redecide(ctx) };
   },
 });

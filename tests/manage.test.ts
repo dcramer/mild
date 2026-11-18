@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { continueInboxRun } from '../src/work/inbox.ts';
 import { REACH, goingInboxRuns, inboxProgress, modelShare, startInboxRuns, stopInboxRuns } from '../src/store/inbox.ts';
 import { averageCall } from '../src/store/runs.ts';
+import { finishAction, insertPendingAction } from '../src/store/actions.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { triageAccount } from '../src/work/triage.ts';
 import type { Controls, SignIn } from '../src/dashboard/controls.ts';
@@ -241,6 +242,29 @@ describe('managing sift from the dashboard', () => {
     expect(await raw(db).all('SELECT account_id, message_id FROM examples')).toEqual([{ account_id: 'other@example.org', message_id: 'o1' }]);
     // The message row and its decision are sift's record of what it saw and did; only the stored content goes.
     expect(await raw(db).get(`SELECT count(*) AS n FROM messages WHERE id = 'e1'`)).toEqual({ n: 1 });
+  });
+
+  it('a rule that decides mail Sift marked for review settles it, and has the mark taken back', async () => {
+    const { call } = await start();
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'r1', from: { address: 'sales@example.com', domain: 'example.com' } })], '2');
+    const asked = await recordDecision(
+      db,
+      ACCOUNT,
+      'r1',
+      { disposition: 'review', subscription: 'preserve', stage: 'model', reason: 'unsure' },
+      { carryOut: true },
+    );
+    const mark = await insertPendingAction(
+      db,
+      { accountId: ACCOUNT, messageId: 'r1', type: 'label', payload: { add: ['sift/review'], remove: [] }, originalLabels: ['INBOX'], decisionId: asked },
+      1,
+    );
+    await finishAction(db, mark, 'done', ['INBOX', 'sift/review'], null, 1);
+    await settleDecision(db, asked, 'done');
+
+    expect((await call('POST', '/api/rules', { match: { from: ['sales@example.com'] }, disposition: 'archive' })).body).toMatchObject({ redecided: 1 });
+    expect(calls).toEqual([`undo ${mark}`, 'check']);
+    expect((await call('GET', '/api/suggestions')).body).toMatchObject({ waiting: 0 });
   });
 
   it('removing a rule Sift made brings back the mail it decided', async () => {
@@ -553,7 +577,7 @@ describe('managing sift from the dashboard', () => {
     const { call } = await start();
     expect((await call('GET', '/api/suggestions')).body).toMatchObject({ waiting: 1, items: [{ messageId: 'asked' }] });
     // A rule or a label changing does not answer it for the user.
-    expect(await redecideWaiting(db, ACCOUNT)).toBe(0);
+    expect((await redecideWaiting(db, ACCOUNT)).recorded).toBe(0);
 
     const reply = await call('POST', '/api/feedback', { accountId: ACCOUNT, sender: 'news@example.com', label: 'personal', messageId: 'asked' });
     expect(reply.body).toEqual({ notFixed: null });
