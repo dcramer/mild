@@ -47,6 +47,7 @@ import {
   Hint,
   Look,
   Loading,
+  LoadingBar,
   MailFrame,
   Marked,
   Masthead,
@@ -143,6 +144,7 @@ const VARIANTS = [
 export function SystemView() {
   const [choice, setChoice] = useState<(typeof ACTIONS)[number][0]>('archive');
   const [label, setLabel] = useState<string | null>('newsletter');
+  const [waiting, setWaiting] = useState(false);
   const [standing, setStanding] = useState<string | null>(null);
   const [model, setModel] = useState<'small' | 'medium' | 'large'>('small');
   const [checked, setChecked] = useState(false);
@@ -708,6 +710,17 @@ export function SystemView() {
               </Td>
             </Loading>
             <Loading rows={3} />
+            <div>
+              <Button
+                onClick={() => {
+                  setWaiting(true);
+                  setTimeout(() => setWaiting(false), 3000);
+                }}
+              >
+                Wait three seconds
+              </Button>
+              <LoadingBar on={waiting} />
+            </div>
           </Section>
           <Section title="Reserve" meta="holds the room for what arrives late, so nothing below moves">
             <Reserve id="specimen" ready={false} room="min-h-24" placeholder={<Loading rows={2} />}>
@@ -852,6 +865,9 @@ export function SystemView() {
                 ],
               }}
             />
+          </Sheet>
+          <Sheet className="px-4">
+            <Masthead current="" items={[]} />
           </Sheet>
         </Section>
 

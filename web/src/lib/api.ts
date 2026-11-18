@@ -1,5 +1,6 @@
 import { QueryCache, QueryClient, environmentManager, keepPreviousData, onlineManager, useQuery } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
+import { traceHeaders } from './trace.ts';
 
 export type {
   Contact,
@@ -143,7 +144,7 @@ async function send(path: string, init: RequestInit, unreachable: string): Promi
 async function get<T>(path: string, params: Record<string, string | number>, signal: AbortSignal): Promise<T> {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) if (value !== '') query.set(key, String(value));
-  const response = await send(`${path}?${query}`, { signal }, 'Sift cannot be reached.');
+  const response = await send(`${path}?${query}`, { signal, headers: traceHeaders() }, 'Sift cannot be reached.');
   if (!response.ok) throw new Refused(response.status, await reason(response));
   return (await response.json()) as T;
 }
@@ -171,7 +172,7 @@ async function post<T = unknown>(path: string, body: unknown, keepalive = false)
   if (!onlineManager.isOnline()) throw new Unreachable('Sift cannot be reached, so nothing was changed. Try again when it is back.');
   const response = await send(
     path,
-    { method: 'POST', headers: { 'content-type': 'application/json', 'x-sift': '1' }, body: JSON.stringify(body), keepalive },
+    { method: 'POST', headers: { 'content-type': 'application/json', 'x-sift': '1', ...traceHeaders() }, body: JSON.stringify(body), keepalive },
     'Sift stopped answering, so this may not have been saved. Check when it is back.',
   );
   const result = (await response.json()) as T & Said;

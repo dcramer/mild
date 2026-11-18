@@ -1,4 +1,5 @@
-import { expect, PHONE, patchJson, pointAt, settings, sideScroll, test, tooltip } from './sift.ts';
+import type { Page } from '@playwright/test';
+import { expect, PHONE, patchJson, pointAt, senderPage, settings, sideScroll, test, tooltip } from './sift.ts';
 
 test.describe('When a Google sign-in expired', () => {
   // A service worker's page is out of reach of page.route.
@@ -85,5 +86,44 @@ test.describe('The sections', () => {
       await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible();
     }
     answer();
+  });
+});
+
+test.describe('While the reader waits', () => {
+  // A service worker's page is out of reach of page.route.
+  test.use({ serviceWorkers: 'block' });
+
+  /** Holds every request matching `url` until the returned function is called. */
+  async function hold(page: Page, url: string) {
+    let release = () => {};
+    const released = new Promise<void>((done) => (release = done));
+    await page.route(url, async (route) => {
+      await released;
+      await route.continue();
+    });
+    return release;
+  }
+
+  test('the loading bar runs while a screen has none of its data, and stops when it arrives', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toBeVisible();
+    await expect(page.locator('.loading-bar')).toHaveCount(0);
+
+    const release = await hold(page, '**/api/decisions?*');
+    await page.getByRole('navigation', { name: 'Sections' }).first().getByRole('link', { name: 'Activity' }).click();
+    await expect(page.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
+    await expect(page.locator('.loading-bar')).toHaveCount(1);
+    release();
+    await expect(page.locator('.loading-bar')).toHaveCount(0);
+  });
+
+  test("a sender's page is drawn with the name and the loading bar before the browser knows who is signed in", async ({ page }) => {
+    const release = await hold(page, '**/api/session?*');
+    await page.goto(senderPage('ada@example.org'));
+    await expect(page.getByRole('link', { name: 'sift' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Sections' })).toHaveCount(0);
+    await expect(page.locator('.loading-bar')).toHaveCount(1);
+    release();
+    await expect(page.getByRole('heading', { name: 'Ada Lovelace', level: 1 })).toBeVisible();
   });
 });

@@ -74,6 +74,17 @@ export function Masthead({
   const here = items.find((item) => item.to === current);
   const waiting = items.reduce((sum, item) => sum + (item.count ?? 0), 0);
 
+  // No sections: the page before it knows who is signed in, which may yet be the sign-in page, so the name alone.
+  if (items.length === 0)
+    return (
+      <header className="flex flex-wrap items-center gap-x-5 pt-4 pb-6 md:pt-5 md:pb-7">
+        {/* As tall as the row the menu button (a phone) or the avatar makes, so the name stays put as they arrive. */}
+        <Anchor href="/" aria-label="sift" className="flex min-h-11 items-center md:min-h-(--control)">
+          <Wordmark />
+        </Anchor>
+      </header>
+    );
+
   return (
     <header className="flex flex-wrap items-center gap-x-5 pt-4 pb-6 md:pt-5 md:pb-7">
       <Anchor href={`/${items[0]?.to ?? ''}`} aria-label="sift">

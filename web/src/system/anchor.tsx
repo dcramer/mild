@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import type { ComponentProps, MouseEvent } from 'react';
 import { goToQuery } from '@/lib/params.ts';
+import { LinkPending } from './loading-bar.tsx';
 
 /** Paths Sift's server answers itself (the API, signing in); a link to one loads it. */
 const SERVER = /^\/(api|auth)(\/|$)/;
@@ -14,7 +15,7 @@ const plainPress = (event: MouseEvent) => event.button === 0 && !event.metaKey &
 /**
  * Every link a part draws. To a screen of the dashboard it is Next.js's `Link`, which goes there without loading the
  * page again, and fetches the screen ahead from the build's files: only the frame around it is drawn per request
- * (`app/(dashboard)/layout.tsx`). A link that only changes the query (`?settings=1`) opens what it names over the
+ * (`app/(dashboard)/layout.tsx`); while one it had not fetched is on its way, the `LoadingBar` runs. A link that only changes the query (`?settings=1`) opens what it names over the
  * page, and Back closes it, without asking the server for anything. Anything else is a plain link. A press with a
  * modifier key, or on a link that opens a new tab, is the browser's.
  */
@@ -38,6 +39,7 @@ export function Anchor({ href, onClick, children, ...props }: ComponentProps<'a'
     return (
       <Link href={href} {...(onClick ? { onClick } : {})} {...props}>
         {children}
+        <LinkPending />
       </Link>
     );
   return (

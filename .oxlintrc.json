@@ -150,7 +150,7 @@
         // A Confidential (src/confidential.ts) is opaque to React, but a template literal or String() would take it as text unrevealed.
         "typescript/restrict-template-expressions": ["error", { "allowNumber": true, "allowBoolean": true, "allowNullish": true }],
         "typescript/no-base-to-string": "error",
-        "no-restricted-imports": ["error", { "patterns": [{ "group": ["**/src/plain.ts"], "message": "src/plain.ts reads what Sift stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." }, { "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." }] }]
+        "no-restricted-imports": ["error", { "patterns": [{ "group": ["**/src/plain.ts"], "message": "src/plain.ts reads what Sift stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." }, { "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." }, { "group": ["@sentry/*"], "message": "Only web/src/lib/telemetry.ts talks to Sentry from the page, so that what leaves the browser passes its scrubber." }] }]
       }
     },
     {
@@ -160,6 +160,23 @@
     },
     {
       "files": ["web/src/views/**/*.tsx", "web/src/components/**/*.tsx", "web/src/lib/**/*.ts", "web/src/lib/**/*.tsx", "web/src/App.tsx", "web/src/main.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "group": ["**/src/plain.ts"], "message": "src/plain.ts reads what Sift stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." },
+              { "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." },
+              { "group": ["@base-ui/**"], "message": "Only web/src/system imports Base UI. Use or extend a part from '@/system' (docs/design.md)." },
+              { "group": ["@sentry/*"], "message": "Only web/src/lib/telemetry.ts talks to Sentry from the page, so that what leaves the browser passes its scrubber." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // The page's one way to Sentry: the lists above, but for Sentry.
+      "files": ["web/src/lib/telemetry.ts", "web/src/lib/telemetry-sdk.ts"],
       "rules": {
         "no-restricted-imports": [
           "error",

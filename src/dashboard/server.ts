@@ -6,7 +6,7 @@ import { FRAMES, READS, WRITES } from './api/index.ts';
 import type { Context, Write } from './api/route.ts';
 import { frameNote } from './mail-html.ts';
 import { Refusal } from '../refusal.ts';
-import { identify, httpStatus, reportError, traced } from '../telemetry.ts';
+import { asked, forThePage, identify, httpStatus, reportError, traced } from '../telemetry.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { type Scope, narrow, scopeFor, sees } from './scope.ts';
 import { FRAME_POLICY, NOSNIFF } from './policy.ts';
@@ -252,7 +252,15 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
 
     if (signIn && method === 'GET' && url.pathname === '/api/session') {
       const reason = !signIn.hasClient() ? 'no-client' : !googleCanReturnHere ? 'address' : null;
-      return json(200, { required: true, email: session, canSignIn: reason === null, reason, addresses: options.signInAddresses ?? [], cloud });
+      return json(200, {
+        required: true,
+        email: session,
+        canSignIn: reason === null,
+        reason,
+        addresses: options.signInAddresses ?? [],
+        cloud,
+        telemetry: forThePage(),
+      });
     }
     if (signIn && method === 'GET' && url.pathname === '/auth/login') {
       if (!signIn.hasClient() || !googleCanReturnHere) return redirect('/');
@@ -300,7 +308,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     if (signIn && session === null && url.pathname.startsWith('/api/')) return json(401, { error: 'Sign in to use the dashboard.' });
     if (signIn && method === 'POST' && url.pathname === '/api/signout') return json(200, { ok: true }, { 'set-cookie': sessionCookie('', 0) });
     if (!signIn && method === 'GET' && url.pathname === '/api/session')
-      return json(200, { required: false, email: null, canSignIn: false, reason: null, addresses: [], cloud });
+      return json(200, { required: false, email: null, canSignIn: false, reason: null, addresses: [], cloud, telemetry: forThePage() });
 
     if (method === 'POST') {
       const handler = writes.get(url.pathname);
@@ -384,14 +392,16 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
         'url.scheme': protocol.slice(0, -1),
         'user_agent.original': request.headers.get('user-agent') ?? undefined,
       };
-      return traced('http.server', `${request.method} ${route}`, server, async (span) => {
-        const response = await handle(request).catch((error: unknown) => {
-          const { status, ...body } = failed(request, error);
-          return json(status, body);
-        });
-        httpStatus(span, response.status);
-        return response;
-      });
+      return asked(request.headers, () =>
+        traced('http.server', `${request.method} ${route}`, server, async (span) => {
+          const response = await handle(request).catch((error: unknown) => {
+            const { status, ...body } = failed(request, error);
+            return json(status, body);
+          });
+          httpStatus(span, response.status);
+          return response;
+        }),
+      );
     },
   };
 }

@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
 import { connection } from 'next/server';
 import { type ReactNode, Suspense } from 'react';
-import { Dashboard } from '@/dashboard.tsx';
+import { Dashboard, Opening } from '@/dashboard.tsx';
 import { drawnFor } from '../../src/sift/page-data.ts';
 
 /**
@@ -10,7 +10,7 @@ import { drawnFor } from '../../src/sift/page-data.ts';
  */
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
-    <Suspense>
+    <Suspense fallback={<Opening />}>
       <Drawn>{children}</Drawn>
     </Suspense>
   );

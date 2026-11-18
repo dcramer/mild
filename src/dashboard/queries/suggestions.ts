@@ -1,4 +1,4 @@
-import { alias, and, count, decisions, eq, isNotNull, max, messages as messageRows, not, suggestionBodies } from '../../store/query.ts';
+import { alias, and, count, decisions, eq, inArray, isNotNull, max, messages as messageRows, not, suggestionBodies } from '../../store/query.ts';
 import { noDecision } from '../../store/messages.ts';
 import { goingInboxRuns } from '../../store/inbox.ts';
 import { outOfTries } from '../../store/runs.ts';
@@ -54,31 +54,42 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
   );
   const shown = waitingNow.slice(0, MAX_ITEMS);
   // What each sender's mail has been labelled, by its current decision, to offer as other likely labels.
-  const history = new Map<string, Map<string, number>>();
-  const senders = [...new Set(shown.map((s) => `${s.accountId}\n${plain(s.fromAddress)}`))];
+  const senders = new Map(
+    shown.map((s) => {
+      const key = `${s.accountId}\n${plain(s.fromAddress)}`;
+      return [`${s.accountId}\n${hashOf(db, plain(s.fromAddress))}`, key] as const;
+    }),
+  );
   const later = alias(decisions, 'later');
-  for (const key of senders) {
-    const [accountId = '', address = ''] = key.split('\n');
-    const rows = await db
-      .select({ labelId: decisions.labelId, n: count() })
-      .from(decisions)
-      .innerJoin(messageRows, and(eq(messageRows.accountId, decisions.accountId), eq(messageRows.id, decisions.messageId)))
-      .where(
-        and(
-          eq(decisions.accountId, accountId),
-          eq(messageRows.senderHash, hashOf(db, address)),
-          isNotNull(decisions.labelId),
-          eq(
-            decisions.id,
-            db
-              .select({ id: max(later.id) })
-              .from(later)
-              .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
-          ),
-        ),
-      )
-      .groupBy(decisions.labelId);
-    history.set(key, new Map(rows.map((r) => [r.labelId!, r.n])));
+  const labelled =
+    senders.size === 0
+      ? []
+      : await db
+          .select({ accountId: decisions.accountId, senderHash: messageRows.senderHash, labelId: decisions.labelId, n: count() })
+          .from(decisions)
+          .innerJoin(messageRows, and(eq(messageRows.accountId, decisions.accountId), eq(messageRows.id, decisions.messageId)))
+          .where(
+            and(
+              within(scope, decisions.accountId),
+              inArray(messageRows.senderHash, [...new Set([...senders.keys()].map((key) => key.split('\n')[1]!))]),
+              isNotNull(decisions.labelId),
+              eq(
+                decisions.id,
+                db
+                  .select({ id: max(later.id) })
+                  .from(later)
+                  .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
+              ),
+            ),
+          )
+          .groupBy(decisions.accountId, messageRows.senderHash, decisions.labelId);
+  const history = new Map<string, Map<string, number>>();
+  for (const row of labelled) {
+    const key = senders.get(`${row.accountId}\n${row.senderHash}`);
+    if (!key) continue;
+    const counts = history.get(key) ?? new Map<string, number>();
+    counts.set(row.labelId!, row.n);
+    history.set(key, counts);
   }
   const alternatives = (s: (typeof shown)[number]) => {
     const counts = history.get(`${s.accountId}\n${plain(s.fromAddress)}`) ?? new Map<string, number>();
