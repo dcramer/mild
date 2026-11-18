@@ -106,7 +106,7 @@ test.describe('Activity', () => {
     await param(page, 'show').toBe('all');
     await expect(open).toContainText('of 21');
 
-    await open.getByRole('button', { name: 'J Next' }).click();
+    await open.getByRole('button', { name: 'J → Next' }).click();
     await expect(panelHeading(page, 'Notes from the review')).toBeVisible();
     await param(page, 'message').toBe('m7');
 

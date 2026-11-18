@@ -14,7 +14,7 @@ const Stops = createContext<() => () => void>(() => () => {});
  * past the text on both sides, so a row's hover has room around what it holds; the rules between rows
  * stay with the text.
  *
- * `keys`: J and K move through it, with the page's controls bar under it. Only for a list someone works
+ * `keys`: J and K, or ↓ and ↑, move through it, with the page's controls bar under it. Only for a list someone works
  * through one item after another (For review, Activity); every other list is pressed or tabbed through.
  *
  * On a phone a table keeps its first column and drops those marked `phone="hide"`; what they said goes
@@ -45,8 +45,8 @@ export function Table({ keys = false, children }: { keys?: boolean; children: Re
     return () => setStops((n) => n - 1);
   });
   const live = { enabled: keys && moves && stops > 0, within };
-  const down = useShortcut('j', 'Next row', () => step(1), live);
-  const up = useShortcut('k', 'Previous row', () => step(-1), live);
+  const down = useShortcut(['j', 'ArrowDown'], 'Next row', () => step(1), live);
+  const up = useShortcut(['k', 'ArrowUp'], 'Previous row', () => step(-1), live);
   return (
     <div ref={element} className="bleed">
       {/* The bar below sits outside the sideways scroll, which would otherwise hold it in place instead of the screen. */}
@@ -58,7 +58,7 @@ export function Table({ keys = false, children }: { keys?: boolean; children: Re
       {onPage && (down || up) ? (
         // The page's controls, held at the bottom of the screen while the table is on it.
         <ControlBar className="rule-above sticky bottom-0 z-10 mt-3 hidden bg-background px-(--bleed) py-1.5 md:flex">
-          <Control keys={['j', 'k']} label="Move" />
+          <Control keys={['j', 'k', 'ArrowDown', 'ArrowUp']} label="Move" />
           <Control keys={['Enter']} label="Open" />
           <Control keys={['?']} label="Every key" />
         </ControlBar>
