@@ -20,7 +20,7 @@ Import this repository as a Vercel project and deploy it as it is: Vercel adds d
 
 This first deploy builds without a database. Until steps 2 and 3 are done, the site lists the variables it still needs.
 
-In Settings, Environment Variables, keep **Enable access to System Environment Variables** checked. Workflow knows it is on Vercel only by `VERCEL_DEPLOYMENT_ID`; without it every run fails, and every piece of work with it.
+In Settings, Environment Variables, keep **Enable access to System Environment Variables** checked. Workflow knows it is on Vercel only by `VERCEL_DEPLOYMENT_ID`; without it every run fails, and every piece of work with it. Sift knows it by `VERCEL` (`src/app/instance.ts`); without it, it would open a home directory and PGlite as `sift run` does.
 
 Then, from the project's Storage tab, add Neon and a Redis database. Each sets variables of its own; Sift reads the ones in step 3.
 
