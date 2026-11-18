@@ -181,7 +181,7 @@ export interface RuleHit {
 /** Whether a rule can only apply once something has said what the mail is: a model, for a condition in words; any tier, for `whenLabel`. */
 const isJudged = (rule: Rule) => rule.whenLabel !== undefined || rule.when !== undefined;
 
-type Outcome = Pick<Decision, 'disposition' | 'subscription' | 'labelId' | 'gmailLabel' | 'block' | 'markRead'> & { ruleId: string };
+type Outcome = Pick<Decision, 'disposition' | 'subscription' | 'labelId' | 'gmailLabel' | 'block' | 'digest' | 'markRead'> & { ruleId: string };
 
 /**
  * What a rule does to mail it applies to. `found` is a label the mail is known to be from elsewhere, for
@@ -310,6 +310,6 @@ export function settle(rules: readonly Rule[], labels: readonly Label[], facts: 
   if (!hit) return decision;
   // A rule that names a different label than the tier found is the user saying what this mail is.
   const outcome = hit.rule.whenLabel !== undefined || hit.rule.labelId === undefined ? ruleOutcome({ rule: hit.rule, label: said }) : ruleOutcome(hit);
-  const { block: _block, markRead: _markRead, ...rest } = decision;
+  const { block: _block, digest: _digest, markRead: _markRead, ...rest } = decision;
   return { ...rest, ...outcome, reason: `rule: ${describeRule(hit)}. ${decision.reason}` };
 }

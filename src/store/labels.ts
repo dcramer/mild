@@ -21,6 +21,7 @@ const toRow = (l: Label, position: number) => ({
   gmailLabel: l.gmailLabel ?? null,
   position,
   block: l.block ?? false,
+  digest: l.digest ?? false,
   markRead: l.markRead ?? false,
   unsubscribe: l.unsubscribe ?? false,
 });
@@ -38,6 +39,7 @@ export async function listLabels(db: Sql): Promise<Label[]> {
       disposition: labels.disposition,
       gmailLabel: labels.gmailLabel,
       block: labels.block,
+      digest: labels.digest,
       markRead: labels.markRead,
       unsubscribe: labels.unsubscribe,
     })
@@ -51,6 +53,7 @@ export async function listLabels(db: Sql): Promise<Label[]> {
     disposition: r.disposition,
     ...(r.gmailLabel === null ? {} : { gmailLabel: r.gmailLabel }),
     ...(r.block ? { block: true } : {}),
+    ...(r.digest ? { digest: true } : {}),
     ...(r.markRead ? { markRead: true } : {}),
     ...(r.unsubscribe ? { unsubscribe: true } : {}),
   }));
@@ -63,7 +66,7 @@ export async function labelNames(db: Sql): Promise<Map<string, string>> {
 }
 
 /** Names in Gmail that sift uses for something other than a label of the user's. */
-const RESERVED = new Set(['review', 'did']);
+const RESERVED = new Set(['review', 'did', 'digest']);
 
 const slug = (name: string) =>
   name
@@ -72,10 +75,11 @@ const slug = (name: string) =>
     .replace(/^-+|-+$/g, '')
     .slice(0, 40);
 
-/** The extras that make sense with a disposition: blocking goes with spam, marking read with keep and archive. */
-function normalise(disposition: Disposition, block: boolean, markRead: boolean): { block?: true; markRead?: true } {
+/** The extras that make sense with a disposition: blocking goes with spam, a digest with archive, marking read with keep and archive. */
+function normalise(disposition: Disposition, block: boolean, digest: boolean, markRead: boolean): { block?: true; digest?: true; markRead?: true } {
   return {
     ...(block && disposition === 'spam' ? { block: true as const } : {}),
+    ...(digest && disposition === 'archive' ? { digest: true as const } : {}),
     ...(markRead && (disposition === 'keep' || disposition === 'archive') ? { markRead: true as const } : {}),
   };
 }
@@ -83,7 +87,7 @@ function normalise(disposition: Disposition, block: boolean, markRead: boolean):
 /** Labels a person may have of their own, besides Leave in inbox. Each is a choice the model weighs on every message and the reader answers with, so a long list makes both worse. */
 export const MAX_LABELS = 30;
 
-type NewLabel = { name: string; description: string; disposition: Disposition; block?: boolean; markRead?: boolean; unsubscribe?: boolean };
+type NewLabel = { name: string; description: string; disposition: Disposition; block?: boolean; digest?: boolean; markRead?: boolean; unsubscribe?: boolean };
 
 /** `label` as it would be added beside `existing`. Its id and Gmail label come from the name and never change after. */
 function draft(existing: readonly Label[], label: NewLabel): Label {
@@ -108,7 +112,7 @@ function draft(existing: readonly Label[], label: NewLabel): Label {
     description: label.description.trim(),
     disposition: label.disposition,
     gmailLabel: `sift/${id}`,
-    ...normalise(label.disposition, label.block ?? false, label.markRead ?? false),
+    ...normalise(label.disposition, label.block ?? false, label.digest ?? false, label.markRead ?? false),
     ...(label.unsubscribe ? { unsubscribe: true } : {}),
   };
 }
@@ -129,6 +133,7 @@ export async function addLabels(db: Sql, added: readonly NewLabel[]): Promise<La
           description: sql`excluded.description`,
           disposition: sql`excluded.disposition`,
           block: sql`excluded.block`,
+          digest: sql`excluded.digest`,
           markRead: sql`excluded.mark_read`,
           unsubscribe: sql`excluded.unsubscribe`,
           position: sql`excluded.position`,
@@ -167,17 +172,18 @@ export async function hasOwnLabels(db: Sql): Promise<boolean> {
 export async function updateLabel(
   db: Sql,
   id: string,
-  change: { name?: string; description?: string; disposition?: Disposition; block?: boolean; markRead?: boolean; unsubscribe?: boolean },
+  change: { name?: string; description?: string; disposition?: Disposition; block?: boolean; digest?: boolean; markRead?: boolean; unsubscribe?: boolean },
 ): Promise<boolean> {
   const current = (await listLabels(db)).find((l) => l.id === id);
   if (!current) return false;
   if (id === LEAVE_IN_INBOX)
     throw new Refusal('Leave in inbox is Sift’s own and does not change. Add a label of your own for mail you want treated differently.');
   const disposition = change.disposition ?? current.disposition;
-  // Changing what a label does drops a block unless the change asks for one.
+  // Changing what a label does drops a block or a digest unless the change asks for one.
   const extras = normalise(
     disposition,
     change.block ?? (change.disposition === undefined && (current.block ?? false)),
+    change.digest ?? (change.disposition === undefined && (current.digest ?? false)),
     change.markRead ?? current.markRead ?? false,
   );
   await db
@@ -187,6 +193,7 @@ export async function updateLabel(
       description: change.description?.trim() ?? current.description,
       disposition,
       block: extras.block ?? false,
+      digest: extras.digest ?? false,
       markRead: extras.markRead ?? false,
       unsubscribe: change.unsubscribe ?? current.unsubscribe ?? false,
     })

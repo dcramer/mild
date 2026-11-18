@@ -306,6 +306,11 @@ export async function recordEverything(db: Sql, account: string): Promise<void> 
     [`INSERT INTO rule_drafts (account_id, started_at, model, goal) VALUES (?, 0, 'p/m', 'g')`, account],
     [`INSERT INTO inbox_runs (account_id, started_at, acts, most) VALUES (?, 0, false, 10)`, account],
     [
+      `INSERT INTO digests (label_id, account_id, since, until, message_id, count, created_at) VALUES ('newsletter', ?, 0, 1, ?, 1, 0)`,
+      account,
+      `<digest.${account}@sift.invalid>`,
+    ],
+    [
       `INSERT INTO eval_results (run_id, message_id, expected, got, duration_ms, shots, sender_shots) VALUES (?, ?, 'newsletter', 'newsletter', 1, 0, 0)`,
       run,
       message,

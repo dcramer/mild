@@ -40,6 +40,7 @@ export async function recordDecision(
       carryOut: options.carryOut ?? false,
       labelId: decision.labelId ?? null,
       block: decision.block ?? false,
+      digest: decision.digest ?? false,
       markRead: decision.markRead ?? false,
       byUser: options.byUser ?? false,
     })
@@ -133,6 +134,7 @@ export async function currentDecision(
     ...(row.labelId === null ? {} : { labelId: row.labelId }),
     ...(gmailLabel === null ? {} : { gmailLabel }),
     ...(row.block ? { block: true } : {}),
+    ...(row.digest ? { digest: true } : {}),
     ...(row.markRead ? { markRead: true } : {}),
     ...(row.ruleId === null ? {} : { ruleId: row.ruleId }),
     ...(row.confidence === null ? {} : { confidence: row.confidence }),

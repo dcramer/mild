@@ -46,6 +46,8 @@ export interface Suggestion {
   disposition: Disposition;
   /** With `spam`: sift would also block the sender. */
   block: boolean;
+  /** With `archive`: sift would list it in its label's digest. */
+  digest: boolean;
   /** The label sift gave it, or null if it could not place it. */
   labelId: string | null;
   /** Carried out: Sift was on, so it is in Gmail with the review label, asked about there. */
@@ -67,6 +69,7 @@ const SUGGESTION = {
   stage: decisions.stage,
   disposition: decisions.disposition,
   block: decisions.block,
+  digest: decisions.digest,
   labelId: decisions.labelId,
   carriedOut: decisions.carryOut,
   confidence: decisions.confidence,

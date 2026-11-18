@@ -65,6 +65,13 @@ describe('rules stage', () => {
     expect(archived).not.toHaveProperty('block');
   });
 
+  it("puts a digest label's mail in the digest only when nothing replaced its action", async () => {
+    const digesting = LABELS.map((l) => (l.id === 'newsletter' ? { ...l, digest: true } : l));
+    expect(await rulesStage([newsletters], digesting).decide(facts())).toMatchObject({ disposition: 'archive', digest: true });
+    for (const disposition of ['archive', 'keep'] as const)
+      expect(await rulesStage([{ ...newsletters, disposition }], digesting).decide(facts())).not.toHaveProperty('digest');
+  });
+
   it("lets a rule's own action beat its label's", async () => {
     expect(await decide([{ ...newsletters, disposition: 'keep' }])).toMatchObject({
       labelId: 'newsletter',
