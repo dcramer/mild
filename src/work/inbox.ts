@@ -3,6 +3,7 @@ import type { GmailApi } from '../gmail/api.ts';
 import { toFacts } from '../gmail/sync.ts';
 import { type Account, recordFromInbox } from '../store/accounts.ts';
 import { currentDecision } from '../store/decisions.ts';
+import { isOwnDigest } from '../store/digests.ts';
 import { type InboxRun, addListed, advanceInboxRun, goingInboxRun, isGoing, stopInboxRuns } from '../store/inbox.ts';
 import { queuedMessage } from '../store/messages.ts';
 import type { Sql } from '../store/sql.ts';
@@ -111,8 +112,8 @@ async function goThrough(deps: Deps, decider: Awaited<ReturnType<typeof deciderF
   if (!listed) {
     const raw = await deps.api.getMetadata(messageId);
     const facts = raw ? toFacts(run.accountId, raw) : null;
-    // Gone, or out of the inbox since the run listed it.
-    if (!facts?.labelIds.includes('INBOX')) return 'left';
+    // Gone, or out of the inbox since the run listed it, or a digest Sift put there.
+    if (!facts?.labelIds.includes('INBOX') || (await isOwnDigest(db, facts.headers))) return 'left';
     await recordFromInbox(db, run.accountId, [facts], !run.acts, (deps.now ?? Date.now)());
     listed = await queuedMessage(db, run.accountId, messageId);
     if (!listed) return 'left';

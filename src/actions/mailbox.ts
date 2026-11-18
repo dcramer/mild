@@ -16,4 +16,8 @@ export interface Mailbox {
   deleteFilter(filterId: string): Promise<void>;
   /** Every filter in the account, the user's own included. */
   listFilters(): Promise<ExistingFilter[]>;
+  /** Puts a message Sift wrote into the mailbox, as if it had arrived: not sent, so it reaches no one else. `raw` is RFC 2822. */
+  insertMessage(raw: string, labelIds: readonly string[]): Promise<{ id: string; labelIds: string[] }>;
+  /** The id of the message with this RFC 822 Message-ID, wherever it is in the mailbox, or null. */
+  findByMessageId(messageId: string): Promise<string | null>;
 }

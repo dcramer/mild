@@ -19,6 +19,8 @@ const METADATA_HEADERS = [
   'Authentication-Results',
   'In-Reply-To',
   'References',
+  // How a digest Sift put in the mailbox is told from mail (`isOwnDigest`, src/store/digests.ts).
+  'Message-ID',
   // Which service sent it (see `bulkService` in src/triage/facts.ts).
   'Return-Path',
   'X-Mailer',

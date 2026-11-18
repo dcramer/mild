@@ -4,6 +4,7 @@ import type { GmailApi } from '../gmail/api.ts';
 import { toFacts } from '../gmail/sync.ts';
 import { recordSynced } from '../store/accounts.ts';
 import { lastStandingChange } from '../store/actions.ts';
+import { isOwnDigest } from '../store/digests.ts';
 import { currentDecision, recordDecision } from '../store/decisions.ts';
 import { listLabels } from '../store/labels.ts';
 import { REACH } from '../store/inbox.ts';
@@ -107,7 +108,7 @@ async function factsOf(db: Sql, api: Pick<GmailApi, 'getMetadata'>, accountId: s
   if (stored) return { facts: stored, seen: true };
   const raw = await api.getMetadata(messageId);
   const facts = raw ? toFacts(accountId, raw) : null;
-  return facts && facts.labelIds.includes('INBOX') ? { facts, seen: false } : null;
+  return facts && facts.labelIds.includes('INBOX') && !(await isOwnDigest(db, facts.headers)) ? { facts, seen: false } : null;
 }
 
 /**

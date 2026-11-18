@@ -6,8 +6,9 @@ import type { MessageContent } from '../gmail/body.ts';
 import type { FilterCheck } from '../actions/rule-filters.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
+import type { Highlighter } from '../triage/digest.ts';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
-import { type Account, lastSyncedAt, listAccounts, listUsers } from '../store/accounts.ts';
+import { type Account, lastSyncedAt, listAccounts, listUsers, mailboxesOf } from '../store/accounts.ts';
 import type { Store } from '../store/store.ts';
 import { EXAMPLE_KEEP_DAYS, pruneExamples } from '../store/examples.ts';
 import { latestArrival, listUndecided, purgeSuggestionBodies } from '../store/messages.ts';
@@ -25,6 +26,7 @@ import { type PassStatus, lastPass, recordPassStatus } from './status.ts';
 import { TICK_MS, lookGap } from './gap.ts';
 import { type SyncReport, syncAccount, syncWants } from './sync.ts';
 import { CHANGE_TRIES, type TriageReport, triageAccount } from './triage.ts';
+import { digestsWanted, sendDigests } from './digest.ts';
 import { identify, reportError, traced } from '../telemetry.ts';
 
 export interface RunOptions {
@@ -32,7 +34,7 @@ export interface RunOptions {
   /** Opens a provider connection for an account, with the sign-in kept in `db`, its person's database. */
   connect: (db: Sql, account: Account) => { api: GmailApi; mailbox: Mailbox } | Promise<{ api: GmailApi; mailbox: Mailbox }>;
   /** The inference tier of the person whose database `db` is: null when they have no model, or it cannot be reached. */
-  model?: (db: Sql) => Promise<{ judge: Judge; model: string } | null>;
+  model?: (db: Sql) => Promise<{ judge: Judge; highlight?: Highlighter; model: string } | null>;
   /** Leaves a mailing list, for decisions that say to. Without it sift never unsubscribes. */
   unsubscribe?: (db: Sql, accountId: string, messageId: string) => Promise<UnsubscribeOutcome>;
   log: (line: string) => void;
@@ -80,7 +82,8 @@ export type Work =
   | { kind: 'pass'; person: number; mailbox: number }
   | { kind: 'upkeep'; person: number }
   | { kind: 'inbox'; person: number; mailbox: number; run: number }
-  | { kind: 'eval'; person: number; run: number };
+  | { kind: 'eval'; person: number; run: number }
+  | { kind: 'digest'; person: number };
 
 /**
  * What is due, found in the record and the ephemeral store, so a tick needs nothing remembered from the last, and
@@ -109,6 +112,7 @@ export async function dueWork(store: Store, options: RunOptions, people?: readon
       for (const run of going) due.push({ kind: 'inbox', person, mailbox: account.number, run: run.id });
     }
     if (modelled) for (const run of evals) due.push({ kind: 'eval', person, run });
+    if (reading && (await digestsWanted(db, (options.now ?? Date.now)()))) due.push({ kind: 'digest', person });
   }
   return due;
 }
@@ -120,7 +124,9 @@ export const describeWork = (work: Work) =>
       ? `Mailbox ${work.mailbox}: inbox run ${work.run}`
       : work.kind === 'eval'
         ? 'A test run'
-        : 'Deleting old records';
+        : work.kind === 'digest'
+          ? 'Daily digests'
+          : 'Deleting old records';
 
 /**
  * Run one piece of due work, starting nothing after `until`. Everything it touches is opened here from the
@@ -159,6 +165,10 @@ export const runWork = (store: Store, work: Work, options: RunOptions, until: nu
           if (tier) await continueEval({ db, judge: tier.judge, model: tier.model, ...(options.now ? { now: options.now } : {}) }, work.run, until);
           return null;
         }
+        case 'digest': {
+          await digests(store, db, work.person, options, until);
+          return null;
+        }
       }
     } catch (error) {
       // A person deleted meanwhile has nothing left to report.
@@ -170,6 +180,27 @@ export const runWork = (store: Store, work: Work, options: RunOptions, until: nu
       return null;
     }
   });
+
+/** A person's digests due, each into their primary mailbox, with what their model picks as worth a look. */
+async function digests(store: Store, db: Sql, person: number, options: RunOptions, until: number): Promise<void> {
+  const accounts = await listAccounts(db);
+  const primary = (await mailboxesOf(store.central, person)).find((m) => m.primary)?.id ?? accounts[0]?.id;
+  if (!primary) return;
+  const tier = options.model ? await options.model(db) : null;
+  const sent = await sendDigests({
+    db,
+    primary,
+    mailbox: async (accountId) => {
+      const account = accounts.find((a) => a.id === accountId);
+      if (!account) throw new Error('The digest’s mailbox is no longer connected.');
+      return (await options.connect(db, account)).mailbox;
+    },
+    highlight: tier?.highlight ? { highlight: tier.highlight, model: tier.model } : null,
+    until,
+    ...(options.now ? { now: options.now } : {}),
+  });
+  if (sent > 0) options.log(`${primary}: put ${sent} digest${sent === 1 ? '' : 's'} in the inbox`);
+}
 
 /**
  * Gmail for one pass, reading each message whole at most once: the model, the examples and the bodies kept

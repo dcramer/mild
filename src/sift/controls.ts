@@ -18,6 +18,7 @@ import { pacer } from '../gmail/quota.ts';
 import { chatgptPending, checkChatGPT, finishChatGPT, forgetChatGPT, startChatGPT } from './chatgpt.ts';
 import type { SignIns } from '../model/credentials.ts';
 import { createJudge } from '../model/judge.ts';
+import { createHighlighter } from '../model/digest.ts';
 import { createProposer } from '../model/propose.ts';
 import { createRuleDrafter } from '../model/draft-rule.ts';
 import { type ChosenModel, modelChoices, offerModel, openModels, priceOf, resolveModel, saveApiKey, shortlistModels } from '../model/models.ts';
@@ -73,7 +74,7 @@ async function openModel(config: Config, ephemeral: Ephemeral, db: Sql): Promise
 
 export async function openModelTier(config: Config, ephemeral: Ephemeral, db: Sql) {
   const opened = await openModel(config, ephemeral, db);
-  return opened && { spec: opened.spec, judge: createJudge(opened.models, opened.model) };
+  return opened && { spec: opened.spec, judge: createJudge(opened.models, opened.model), highlight: createHighlighter(opened.models, opened.model) };
 }
 
 /** What the dashboard may ask this process to do. See `Controls`. */

@@ -4,6 +4,7 @@ import type { GmailApi } from '../gmail/api.ts';
 import { type PullResult, pullChanges, toFacts } from '../gmail/sync.ts';
 import { learnFromGmail, userChanges } from '../learn/gmail.ts';
 import { type Account, lastSyncedAt, recordSync, recordSynced, setMailboxAliases } from '../store/accounts.ts';
+import { isOwnDigest, knownDigests } from '../store/digests.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
 const DAY_MS = 86_400_000;
@@ -17,7 +18,7 @@ export interface SyncReport {
   mode: PullResult['mode'];
   /** Messages recorded for the first time, oldest first. */
   added: MessageFacts[];
-  /** Arrivals that had already left the inbox, been deleted, or had no usable sender. */
+  /** Arrivals that had already left the inbox, been deleted, had no usable sender, or were Sift's own digests. */
   skipped: number;
   /** Answers read from what the user did to messages in Gmail. */
   corrections: number;
@@ -41,7 +42,7 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
       // The last list stands until tomorrow's.
     }
   }
-  const pull = await pullChanges(api, account.historyId);
+  const pull = await mailOnly(db, account, await pullChanges(api, account.historyId));
   const byUser = await userChanges(db, account.id, pull.labelChanges, syncedAt ?? 0);
   const known = new Set(
     pull.messageIds.length === 0
@@ -65,7 +66,8 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
     }
     const raw = await api.getMetadata(id);
     const facts = raw?.labelIds.includes('INBOX') ? toFacts(account.id, raw) : null;
-    if (!facts) {
+    // A digest whose Gmail id Sift had not recorded yet when this read it.
+    if (!facts || (await isOwnDigest(db, facts.headers))) {
       skipped++;
       continue;
     }
@@ -90,7 +92,14 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
  * history from the cursor (2 quota units a page) and moves nothing.
  */
 export async function syncWants(db: Sql, api: GmailApi, account: Account): Promise<boolean> {
-  const pull = await pullChanges(api, account.historyId);
+  const pull = await mailOnly(db, account, await pullChanges(api, account.historyId));
   if (pull.mode !== 'incremental' || pull.messageIds.length > 0) return true;
   return (await userChanges(db, account.id, pull.labelChanges, (await lastSyncedAt(db, account.id)) ?? 0)).length > 0;
+}
+
+/** History without Sift's own digests: one arriving, or read, is nothing for a pass to do. */
+async function mailOnly(db: Sql, account: Account, pull: PullResult): Promise<PullResult> {
+  const digests = await knownDigests(db, account.id, [...new Set([...pull.messageIds, ...pull.labelChanges.map((c) => c.messageId)])]);
+  if (digests.size === 0) return pull;
+  return { ...pull, messageIds: pull.messageIds.filter((id) => !digests.has(id)), labelChanges: pull.labelChanges.filter((c) => !digests.has(c.messageId)) };
 }
