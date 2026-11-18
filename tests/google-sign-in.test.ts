@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { buildSignIn } from '../src/app/google-sign-in.ts';
+import { buildSignIn } from '../src/sift/google-sign-in.ts';
 import { loadConfig } from '../src/config.ts';
 import { userOf } from '../src/store/accounts.ts';
 import { freshStore } from './fixtures.ts';

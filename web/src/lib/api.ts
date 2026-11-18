@@ -300,7 +300,7 @@ let browserClient: QueryClient | undefined;
 
 /**
  * Where what the page loaded is kept. The browser keeps one for as long as the page is open. The server never fetches:
- * it makes one for each page it draws, holding only what that page was drawn with (`src/app/page-data.ts`), so that
+ * it makes one for each page it draws, holding only what that page was drawn with (`src/sift/page-data.ts`), so that
  * nothing one draw had is held for the next.
  */
 export const queryClientFor = (): QueryClient => (environmentManager.isServer() ? makeClient() : (browserClient ??= makeClient()));

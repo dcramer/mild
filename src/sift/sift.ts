@@ -48,7 +48,7 @@ export interface Host {
    */
   forwarded: boolean;
   log: (line: string) => void;
-  /** Starts a Workflow run for a piece (`src/app/flow.ts`) that holds `key` until it ends; refused while one holds it already. */
+  /** Starts a Workflow run for a piece (`src/sift/flow.ts`) that holds `key` until it ends; refused while one holds it already. */
   begin: (piece: Work, key: string) => Promise<Beginning>;
   /** How long one piece of work may start work, short of what the host would cut a call off at. */
   limitMs: number;

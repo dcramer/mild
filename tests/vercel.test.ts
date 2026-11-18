@@ -1,10 +1,10 @@
 import { globSync, readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { runKey } from '../src/app/sift.ts';
+import { runKey } from '../src/sift/sift.ts';
 import { READS, WRITES } from '../src/dashboard/api/index.ts';
 import { listAccounts, recordSync } from '../src/store/accounts.ts';
 import type { Store } from '../src/store/store.ts';
-import { cron, respond } from '../src/app/instance.ts';
+import { cron, respond } from '../src/sift/instance.ts';
 import { MAX_DURATION_S } from '../src/vercel/host.ts';
 import type { Work } from '../src/work/run.ts';
 import { onePerson, raw } from './fixtures.ts';
@@ -21,7 +21,7 @@ vi.mock('../src/ephemeral/open.ts', async () => {
   const { memoryEphemeral } = await import('../src/ephemeral/ephemeral.ts');
   return { openEphemeral: async () => memoryEphemeral() };
 });
-vi.mock('../src/app/flow.ts', () => ({
+vi.mock('../src/sift/flow.ts', () => ({
   begin: async (piece: Work, key: string) => (deploy.begun.push([piece, key]), { begun: true }),
 }));
 
@@ -46,7 +46,7 @@ async function instance() {
   deploy.begun = [];
   vi.resetModules();
   delete (globalThis as Record<symbol, unknown>)[Symbol.for('sift.host')];
-  return await import('../src/app/instance.ts');
+  return await import('../src/sift/instance.ts');
 }
 
 /** `vercel.json`: what Vercel does without sift seeing the request. */
@@ -60,6 +60,13 @@ describe('the Vercel host', () => {
     const routes = globSync('app/**/route.ts');
     expect(routes.length).toBeGreaterThan(0);
     for (const file of routes) expect(readFileSync(file, 'utf8'), file).toContain(`export const maxDuration = ${MAX_DURATION_S};`);
+  });
+
+  // Vercel's Next.js builder takes either for the page's own app/ and looks there for each route's source. It then
+  // misses Workflow's `config.json` beside the flow route, so the flow function gets no queue trigger and no run is
+  // ever delivered.
+  it('has no src/app or src/pages', () => {
+    expect(globSync('src/{app,pages}')).toEqual([]);
   });
 
   it('ticks only for a call carrying CRON_SECRET, and for none while it is unset', async () => {
