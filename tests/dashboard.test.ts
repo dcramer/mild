@@ -120,6 +120,8 @@ describe('tracking', () => {
       createFilter: async () => 'f',
       deleteFilter: async () => {},
       listFilters: async () => [],
+      insertMessage: async () => ({ id: 'i', labelIds: [] }),
+      findByMessageId: async () => null,
     };
     await execute({ db, mailbox, now: () => NOW }, ACCOUNT, 'a', { type: 'archive' }, 1);
     expect(await raw(db).get('SELECT decision_id, status FROM actions')).toEqual({ decision_id: 1, status: 'done' });

@@ -79,6 +79,8 @@ export function runKey(piece: Work): string {
       return `eval:${piece.person}:${piece.run}`;
     case 'upkeep':
       return `upkeep:${piece.person}`;
+    case 'digest':
+      return `digest:${piece.person}`;
   }
 }
 
@@ -115,7 +117,7 @@ export async function createSift(host: Host): Promise<Sift> {
             try {
               const tier = await openModelTier(config, ephemeral, db);
               unreachable.delete(person);
-              return tier && { judge: tier.judge, model: tier.spec };
+              return tier && { judge: tier.judge, highlight: tier.highlight, model: tier.spec };
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
               if (unreachable.get(person) !== message) log(`${(await listAccounts(db)).map((a) => a.email).join(', ')}: ${message}`);

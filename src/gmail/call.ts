@@ -8,6 +8,7 @@ const ROUTES = {
   'users.messages.list': ['GET', '/users/me/messages'],
   'users.messages.get': ['GET', '/users/me/messages/{id}'],
   'users.messages.modify': ['POST', '/users/me/messages/{id}/modify'],
+  'users.messages.insert': ['POST', '/users/me/messages'],
   'users.threads.get': ['GET', '/users/me/threads/{id}'],
   'users.labels.list': ['GET', '/users/me/labels'],
   'users.labels.get': ['GET', '/users/me/labels/{id}'],

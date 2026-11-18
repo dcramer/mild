@@ -1,0 +1,41 @@
+import { finishAction, insertPendingAction, openDigestPuts } from '../store/actions.ts';
+import type { Sql } from '../store/sql.ts';
+import type { Mailbox } from './mailbox.ts';
+
+/** Sift's own Gmail label on every digest, so they are found together. `digest` is a name no label of the person's may take. */
+const DIGEST_LABEL = 'sift/digest';
+
+/**
+ * Put a digest into its mailbox, as new unread mail in the inbox, and return Gmail's id for it. Written to the audit log
+ * before the call and settled from Gmail's answer. A try before this one whose answer never came is looked for by the
+ * digest's Message-ID first, so one that landed is not put in twice.
+ */
+export async function putDigest(
+  deps: { db: Sql; mailbox: Mailbox; now?: () => number },
+  digest: { id: number; accountId: string; messageId: string },
+  raw: string,
+): Promise<string> {
+  const { db, mailbox } = deps;
+  const now = deps.now ?? Date.now;
+  const earlier = await openDigestPuts(db, digest.id);
+  if (earlier.length > 0) {
+    const found = await mailbox.findByMessageId(digest.messageId);
+    for (const id of earlier) await finishAction(db, id, found ? 'done' : 'failed', null, found ? null : 'not in Gmail', now());
+    if (found) return found;
+  }
+  const labelIds = ['INBOX', 'UNREAD', await mailbox.ensureLabel(DIGEST_LABEL)];
+  const actionId = await insertPendingAction(
+    db,
+    { accountId: digest.accountId, messageId: null, type: 'digest', payload: { add: labelIds, remove: [], digest: digest.id }, originalLabels: [] },
+    now(),
+  );
+  try {
+    const put = await mailbox.insertMessage(raw, labelIds);
+    await finishAction(db, actionId, 'done', put.labelIds, null, now());
+    return put.id;
+  } catch (error) {
+    // It may have landed with its answer lost; the next try looks for it before putting it in again.
+    await finishAction(db, actionId, 'unknown', null, error instanceof Error ? error.message : String(error), now());
+    throw error;
+  }
+}

@@ -228,6 +228,24 @@ export class FakeMailbox implements Mailbox {
     if (this.failFilters) throw new Error('network down');
     return structuredClone(this.filters);
   }
+
+  /** Messages Sift put in, by id, as the raw text it gave. */
+  inserted = new Map<string, string>();
+  /** `before`: fail without putting it in. `after`: put it in, then fail (a lost response). */
+  failInsert: 'before' | 'after' | null = null;
+
+  async insertMessage(raw: string, labelIds: readonly string[]) {
+    if (this.failInsert === 'before') throw new Error('network down');
+    const id = `inserted-${this.inserted.size + 1}`;
+    this.inserted.set(id, raw);
+    this.labels.set(id, [...labelIds]);
+    if (this.failInsert === 'after') throw new Error('timeout');
+    return { id, labelIds: [...labelIds] };
+  }
+
+  async findByMessageId(messageId: string) {
+    return [...this.inserted].find(([, raw]) => raw.includes(`\r\nMessage-ID: ${messageId}\r\n`))?.[0] ?? null;
+  }
 }
 
 /** A scope that sees every connected account, as the dashboard has when no sign-in is set up. */

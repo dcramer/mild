@@ -73,6 +73,28 @@ export function createGmailMailbox(auth: OAuth2Client, pace: Pace): Mailbox {
       }
     },
 
+    async insertMessage(raw, labelIds) {
+      const data = await call('users.messages.insert', 25, () =>
+        client.users.messages.insert({
+          userId,
+          // Dated when Gmail takes it, so it sorts as the newest mail in the inbox.
+          internalDateSource: 'receivedTime',
+          requestBody: { raw: Buffer.from(raw).toString('base64url'), labelIds: [...labelIds] },
+        }),
+      );
+      if (!data.id) throw new Error('Gmail did not return an id for the inserted message');
+      return { id: data.id, labelIds: data.labelIds ?? [] };
+    },
+
+    async findByMessageId(messageId) {
+      // It goes into a search query, so refuse anything that could change the query's meaning.
+      if (!/^<[\w.-]+@[\w.-]+>$/.test(messageId)) throw new Error('message id cannot be searched safely');
+      const data = await call('users.messages.list', 5, () =>
+        client.users.messages.list({ userId, q: `rfc822msgid:${messageId}`, includeSpamTrash: true, maxResults: 1 }),
+      );
+      return data.messages?.[0]?.id ?? null;
+    },
+
     async listFilters() {
       const data = await call('users.settings.filters.list', 1, () => client.users.settings.filters.list({ userId }));
       return (data.filter ?? []).flatMap((f) => {

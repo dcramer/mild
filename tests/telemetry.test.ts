@@ -10,6 +10,8 @@ import { proposeLabels } from '../src/learn/labels.ts';
 import { draftRule } from '../src/learn/rules.ts';
 import { createRuleDrafter } from '../src/model/draft-rule.ts';
 import { createJudge } from '../src/model/judge.ts';
+import { createHighlighter } from '../src/model/digest.ts';
+import { HIGHLIGHT_TOOL } from '../src/triage/digest.ts';
 import { createProposer } from '../src/model/propose.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
 import { hashOf, traceIds } from '../src/store/content.ts';
@@ -18,7 +20,7 @@ import { PROPOSAL_PROMPT, PROPOSAL_TOOL } from '../src/triage/proposal.ts';
 import { FILL_TOOL, FIND_TOOL } from '../src/triage/rule-draft.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
 import { loadKeyring } from '../src/secrets.ts';
-import { checkedIn, flushTelemetry, identify, logged, reportError, scrub, startTelemetry, traced, tracedFetch } from '../src/telemetry.ts';
+import { checkedIn, flushTelemetry, identify, invokeAgent, logged, reportError, scrub, startTelemetry, traced, tracedFetch } from '../src/telemetry.ts';
 import { triageAccount } from '../src/work/triage.ts';
 import { firstAccount, freshStore, openUserDb, personWith, raw } from './fixtures.ts';
 import { ACCOUNT, facts, quietSources, SAMPLE_LABELS, storeExample } from './helpers.ts';
@@ -207,6 +209,27 @@ describe('each conversation with the model', () => {
     expect(attributes('invoke_agent eval')).toMatchObject({ ...conversation, 'sift.eval_run': run, 'sift.message': hashOf(db, 'abc123') });
     expect(attributes(`chat ${model.id}`)).toMatchObject(conversation);
     for (const content of [SUBJECT, BODY, SENDER, 'abc123']) expect(text).not.toContain(content);
+  });
+
+  it('is a digest’s picks, shown mail, so none of what it was asked or answered', async () => {
+    const { db } = await keyedPerson();
+    const { models, model } = scripted(fauxAssistantMessage([fauxToolCall(HIGHLIGHT_TOOL, { picks: [{ item: 1, why: REASON }] })], { stopReason: 'toolUse' }));
+    const highlight = createHighlighter(models, model);
+    const answer = await invokeAgent('digest', [db.person, 4], { 'sift.digest': 4 }, () =>
+      highlight({
+        label: { name: 'Bills', description: 'Invoices.' },
+        lines: [{ fromName: 'Acme Billing', fromAddress: SENDER, subject: SUBJECT, received: 'Wed 6:00 AM' }],
+      }),
+    );
+    expect(answer).toMatchObject({ picks: [{ item: 1, why: REASON }] });
+
+    const { spans, attributes, text } = await delivered();
+    const id = `digest-${db.person}-4`;
+    expect(attributes('invoke_agent digest')).toMatchObject({ 'gen_ai.agent.name': 'digest', 'gen_ai.conversation.id': id, 'sift.digest': 4 });
+    expect(spans.filter((s) => s.attributes['gen_ai.conversation.id']?.value === id).map((s) => s.name)).toEqual(
+      expect.arrayContaining(['invoke_agent digest', `chat ${model.id}`, `execute_tool ${HIGHLIGHT_TOOL}`]),
+    );
+    for (const content of [SUBJECT, SENDER, REASON, 'Acme Billing']) expect(text).not.toContain(content);
   });
 
   it('is a label proposal, and the next one is another', async () => {
