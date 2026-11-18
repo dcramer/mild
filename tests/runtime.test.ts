@@ -1,9 +1,8 @@
 import { globSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { begin } from '../src/app/process.ts';
 import { createSift, runKey } from '../src/app/sift.ts';
 import { loadConfig } from '../src/config.ts';
-import { fromHere } from '../src/cli/host.ts';
+import { fromHere } from '../src/cli/network.ts';
 import { type Ephemeral, memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import type { RunOptions } from '../src/work/run.ts';
 import { startInboxRuns } from '../src/store/inbox.ts';
@@ -21,6 +20,8 @@ import { ACCOUNT, FakeMailbox, codeSignIn, tempDir, testModel, workDue } from '.
 const CACHES: Record<string, string[]> = {
   // Keys derived from SIFT_KEY.
   'src/secrets.ts': ['derived', 'hashKeys'],
+  // Sift put together over the process's host, again by each copy of the module `next dev` loads.
+  'src/app/instance.ts': ['opened'],
 };
 
 describe('nothing is kept in module memory between calls', () => {
@@ -101,13 +102,6 @@ describe("a piece's run key", () => {
   });
 });
 
-describe('beginning a piece in a process where Workflow has not started', () => {
-  it('rejects, so a tick that catches it goes on to its other pieces', async () => {
-    const pass = { kind: 'pass', person: 1, mailbox: 1 } as const;
-    expect(await begin(pass, 'key').catch((error: unknown) => String(error))).toBe('Error: Workflow has not started in this process.');
-  });
-});
-
 /** Sift as a host puts it together, writing its log to `logged`. */
 const siftOn = (store: Store, logged: string[], begin?: Parameters<typeof createSift>[0]['begin']) =>
   createSift({
@@ -117,9 +111,10 @@ const siftOn = (store: Store, logged: string[], begin?: Parameters<typeof create
     sessionSecret: 'secret',
     allowedHosts: [],
     signInAddresses: [],
+    forwarded: true,
     log: (line) => logged.push(line),
     limitMs: 60_000,
-    ...(begin ? { begin } : {}),
+    begin: begin ?? (async () => ({ begun: true })),
   });
 
 describe('a piece whose key a run holds', () => {

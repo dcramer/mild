@@ -9,6 +9,13 @@ import { type SignIns, credentialStore } from './credentials.ts';
 import { Refusal } from '../refusal.ts';
 import { tracedFetch } from '../telemetry.ts';
 
+/** A person's chosen model, ready to call. */
+export interface ChosenModel {
+  spec: string;
+  models: Models;
+  model: Model<Api>;
+}
+
 // Without this pi-ai imports its OAuth flows through a variable specifier, which Vercel's file
 // tracing cannot follow, so the function is deployed without them and every refresh fails.
 registerLazyOAuthFlows();

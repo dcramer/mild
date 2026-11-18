@@ -206,8 +206,6 @@ test.describe('Settings', () => {
 });
 
 test.describe('Check now', () => {
-  test.use({ work: true });
-
   test('passes the mailboxes in a Workflow run, and says when', async ({ page }) => {
     await page.goto('/?settings=1');
     const check = settingsActive(page).getByText('Check for mail').locator('xpath=ancestor::*[.//button][1]');

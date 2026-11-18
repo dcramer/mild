@@ -80,6 +80,8 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
 export interface DashboardOptions {
   /** Names and addresses, besides localhost, that the dashboard answers to. */
   allowedHosts?: readonly string[];
+  /** False: the scheme in a request's URL, which says only what a proxy claimed, is not believed, and the request is taken as plain HTTP. */
+  forwarded?: boolean;
   /**
    * Google sign-in. When given, the dashboard's data and controls are only for someone signed in as a
    * connected account. Without it (tests, tools) there is no check.
@@ -103,10 +105,7 @@ export interface DashboardOptions {
 export interface Dashboard {
   /** Whether a request with this Host header is for the dashboard. One that is not is refused by `handle`. */
   answers: (host: string | null | undefined) => boolean;
-  /**
-   * Everything but the page's own files. The scheme is the URL's: the host decides it (`sift run` believes
-   * a forwarded one only from this machine; Vercel's URL is the address the browser used).
-   */
+  /** Everything but the page's own files. The scheme is the URL's, where `forwarded` believes it. */
   handle: (request: Request) => Promise<Response>;
 }
 
@@ -217,7 +216,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     const url = new URL(request.url);
     const query = url.searchParams;
 
-    const https = url.protocol === 'https:';
+    const https = options.forwarded !== false && url.protocol === 'https:';
     const origin = `${https ? 'https' : 'http'}://${hostHeader ?? ''}`;
     // Google only returns a browser to localhost or to an HTTPS address.
     const googleCanReturnHere = https || LOCAL_HOSTS.has(host);

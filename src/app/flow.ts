@@ -1,7 +1,7 @@
 import { getRun, start } from 'workflow/api';
 import { HookConflictError } from 'workflow/errors';
 import type { Work } from '../work/run.ts';
-import { type Beginning, offeredSift } from './process.ts';
+import type { Beginning } from './sift.ts';
 
 /** @public Workflow's build registers only an exported workflow. */
 export async function work(piece: Work): Promise<void> {
@@ -9,12 +9,11 @@ export async function work(piece: Work): Promise<void> {
   await doPiece(piece);
 }
 
-/** Runs in the process Workflow delivered the run to, with the Sift its host offered there. */
+/** Runs in the process Workflow delivered the run to, with that process's Sift. */
 async function doPiece(piece: Work): Promise<void> {
   'use step';
-  const open = offeredSift();
-  if (!open) throw new Error('No Sift was offered in this process.');
-  await (await open()).work(piece);
+  // Not a static import: the hosts that instance.ts opens import `begin` from here.
+  await (await import('./instance.ts')).work(piece);
 }
 
 /** Starts a run for `piece`, holding `key` until it ends; refused while a run holds it already. */

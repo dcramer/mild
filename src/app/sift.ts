@@ -8,10 +8,27 @@ import { listAccounts, personOf } from '../store/accounts.ts';
 import { people } from '../store/people.ts';
 import type { Sql } from '../store/sql.ts';
 import type { Store } from '../store/store.ts';
+import type { Mailbox } from '../actions/mailbox.ts';
+import type { Controls } from '../dashboard/controls.ts';
+import type { GmailApi } from '../gmail/api.ts';
+import type { ChosenModel } from '../model/models.ts';
 import { buildControls, gmailFor, openModelTier } from './controls.ts';
 import { buildSignIn } from './google-sign-in.ts';
 import { logged, reportError } from '../telemetry.ts';
-import type { Beginning } from './process.ts';
+
+/** A piece begun, or refused while a run holds its key: the one begun at `since`, when Workflow says which. */
+export type Beginning = { begun: true } | { begun: false; since?: number };
+
+/**
+ * What a test host puts in place of what Sift reaches outside this machine for (verify-sift's `stand-ins.ts`):
+ * each mailbox's Gmail, the model that suggests labels and drafts rules, and what Gmail would count in an inbox
+ * that the stand-in does not hold. A pass is given no model, so the record a test starts from is not judged again.
+ */
+export interface StandIns {
+  gmail: (email: string) => { api: GmailApi; mailbox: Mailbox };
+  model: ChosenModel;
+  inbox: Pick<Controls, 'inboxEstimate' | 'ruleInbox'>;
+}
 
 /** What a host gives sift: `sift run` on a machine, or a function on Vercel (docs/runtime.md). */
 export interface Host {
@@ -24,14 +41,18 @@ export interface Host {
   allowedHosts: readonly string[];
   /** Addresses Google can sign someone in at, suggested when the dashboard is opened at one it cannot. */
   signInAddresses: readonly string[];
-  log: (line: string) => void;
   /**
-   * Starts a Workflow run for a piece (`src/app/flow.ts`) that holds `key` until it ends; refused while one holds
-   * it already. Absent where nothing classifies mail (verify-sift's `serve.ts`).
+   * Whether the scheme a request's URL says was used is believed. Next.js takes it from `X-Forwarded-Proto`,
+   * whoever sent it, so `sift run` believes it only while it listens on loopback, where every peer is this
+   * machine (`tailscale serve` among them). Vercel's edge sets the header itself.
    */
-  begin?: (piece: Work, key: string) => Promise<Beginning>;
+  forwarded: boolean;
+  log: (line: string) => void;
+  /** Starts a Workflow run for a piece (`src/app/flow.ts`) that holds `key` until it ends; refused while one holds it already. */
+  begin: (piece: Work, key: string) => Promise<Beginning>;
   /** How long one piece of work may start work, short of what the host would cut a call off at. */
   limitMs: number;
+  standIns?: StandIns;
 }
 
 export interface Sift {
@@ -75,7 +96,7 @@ const deviceId = (secret: string) => {
 
 /** sift, put together from what the host gives it. Holds nothing between calls but what `host` does. */
 export async function createSift(host: Host): Promise<Sift> {
-  const { config, store, ephemeral } = host;
+  const { config, store, ephemeral, standIns } = host;
   // What the host writes is a log in Sentry too, beside the trace it was written in.
   const log = (line: string) => {
     logged(line);
@@ -86,28 +107,28 @@ export async function createSift(host: Host): Promise<Sift> {
   const options: RunOptions = {
     ephemeral,
     log,
-    model: async (db: Sql) => {
-      const person = await personOf(db);
-      try {
-        const tier = await openModelTier(config, ephemeral, db);
-        unreachable.delete(person);
-        return tier && { judge: tier.judge, model: tier.spec };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (unreachable.get(person) !== message) log(`${(await listAccounts(db)).map((a) => a.email).join(', ')}: ${message}`);
-        unreachable.set(person, message);
-        return null;
-      }
-    },
+    ...(standIns
+      ? {}
+      : {
+          model: async (db: Sql) => {
+            const person = await personOf(db);
+            try {
+              const tier = await openModelTier(config, ephemeral, db);
+              unreachable.delete(person);
+              return tier && { judge: tier.judge, model: tier.spec };
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              if (unreachable.get(person) !== message) log(`${(await listAccounts(db)).map((a) => a.email).join(', ')}: ${message}`);
+              unreachable.set(person, message);
+              return null;
+            }
+          },
+        }),
     unsubscribe: (db, accountId, messageId) => unsubscribe({ db }, accountId, messageId),
-    connect: async (db, account) => {
-      const { api, mailbox } = await gmailFor(config, ephemeral, db, account.email);
-      return { api, mailbox };
-    },
+    connect: async (db, account) => standIns?.gmail(account.email) ?? (await gmailFor(config, ephemeral, db, account.email)),
   };
   const { begin } = host;
   const tick = async (who?: readonly number[]) => {
-    if (!begin) return;
     for (const piece of await dueWork(store, options, who)) {
       // What is not begun is due again at the next tick.
       const beginning = await begin(piece, runKey(piece)).catch((error: unknown) => {
@@ -123,13 +144,14 @@ export async function createSift(host: Host): Promise<Sift> {
   const controls = await buildControls(config, {
     ephemeral,
     deviceId: deviceId(host.sessionSecret),
-    running: Boolean(begin),
     // What a person starts in the dashboard (check now, a test run, going through the inbox) begins now, not at the next tick.
-    ...(begin ? { kick: (person: number) => tick([person]) } : {}),
+    kick: (person: number) => tick([person]),
+    ...(standIns ? { standIns } : {}),
   });
   const dashboard = createDashboard(people(store), {
     allowedHosts: host.allowedHosts,
-    controls,
+    forwarded: host.forwarded,
+    controls: { ...controls, ...standIns?.inbox },
     signIn: buildSignIn(config, store),
     sessionSecret: host.sessionSecret,
     signInAddresses: host.signInAddresses,

@@ -7,7 +7,7 @@ import { type SQL, actions, count, decisions, messages, rules } from '../../stor
 import { openStore } from '../../store/store.ts';
 import { paint, ui } from '../ui.ts';
 import { checkSecrets } from '../secrets-check.ts';
-import { signInAddresses } from '../host.ts';
+import { signInAddresses } from '../network.ts';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 

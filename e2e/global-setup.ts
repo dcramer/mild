@@ -3,15 +3,15 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { ensurePageBuilt } from '../src/cli/page-build.ts';
+import { buildPage } from '../src/cli/next.ts';
 import { SEED, TEMPLATES, type Variant } from './sift.ts';
 
 /**
- * Builds the page once, and seeds each variant once through verify-sift's real passes (several seconds each);
+ * Builds the page once (Next.js's cache keeps that to seconds when little changed), and seeds each variant once through verify-sift's real passes (several seconds each);
  * every test then starts from a copy of one.
  */
 export default async function setup() {
-  await ensurePageBuilt();
+  await buildPage();
   const root = mkdtempSync(join(tmpdir(), 'sift-e2e-'));
   const variants: Record<Variant, string[]> = { full: [], bare: ['--bare'], on: ['--on'] };
   await Promise.all(

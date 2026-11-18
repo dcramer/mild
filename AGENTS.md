@@ -22,11 +22,11 @@ Package manager is **pnpm**. Node 24 (`.nvmrc`). Node runs the server's `.ts` so
 | `pnpm check:fast` | All of it but the tests. |
 | `pnpm vitest run tests/foo.test.ts` | One test file. Add `-t "name"` for one test. |
 | `pnpm coverage` | The unit tests with line and branch coverage, written to `coverage/`. The browser tests, and the Workflow tests' build of `src/`, are not in it. |
-| `pnpm e2e` | The browser tests in `e2e/`: Playwright against a real dashboard per test, on a copy of verify-sift's seed. `pnpm e2e e2e/foo.spec.ts`, `-g "name"` for one, `--headed` to watch. The first time on a machine, `pnpm exec playwright install chromium`. |
+| `pnpm e2e` | The browser tests in `e2e/`: Playwright against the real app per test (verify-sift's `serve.ts`), on a copy of verify-sift's seed, with stand-ins for Gmail and the model. `pnpm e2e e2e/foo.spec.ts`, `-g "name"` for one, `--headed` to watch. The first time on a machine, `pnpm exec playwright install chromium`. |
 | `pnpm format` | `oxlint --fix` then `oxfmt`. |
 | `pnpm sift <command>` | Run the CLI from source. `pnpm start` is `pnpm sift run`. |
-| `pnpm build:web` | Build the page with Next.js, into `.next`. `sift run` and `pnpm e2e` do this themselves when the build is missing or older than the page's sources; restart Sift to pick up a new build. |
-| `pnpm dev` | For working on Sift: `sift run`, restarted when code under `src/` changes, with the page from Next.js's development server, which updates it in place as its code changes. Same origin as normal. Takes `run`'s options; give it `--home <scratch>` unless you mean to use your real mail. |
+| `pnpm build:web` | Build the app with Next.js, into `.next`. `sift run` and `pnpm e2e` build it each time from a checkout, and Next.js's cache makes that seconds; restart Sift to pick up a new build. |
+| `pnpm dev` | For working on Sift: `sift run` with `next dev`, which reloads the page and the server's code under `src/` and `app/` as they change. Same origin as normal. Takes `run`'s options; give it `--home <scratch>` unless you mean to use your real mail. |
 
 Lint warnings are findings to fix. Don't add `oxlint-disable` comments; fix the code or change the rule in `.oxlintrc.json` with a reason.
 
@@ -153,3 +153,13 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | What sift does is shown as the action alone ("Archive"), never with its extras ("+ unsubscribe") | `Does` takes no extras and there is no helper that formats them |
 | The name is "Sift" in every sentence the user reads; only the wordmark is lowercase | Nothing: judgment |
 | Talk to David in plain words: say what a thing does ("the emails you already labelled, shown to the model as examples"), not the term for it ("few-shot", "fixtures", "cascade tier"). A term he has not used needs saying in plain words first | Nothing: judgment |
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

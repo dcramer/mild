@@ -69,7 +69,7 @@ async function serve(): Promise<{ url: string; cookie: string; stop: () => Promi
   await new Promise<void>((ready, fail) => {
     const read = (chunk: Buffer) => {
       log += chunk.toString();
-      if (log.includes('Only the dashboard is running')) ready();
+      if (log.includes('Sift is running on the seeded home')) ready();
     };
     child.stdout?.on('data', read);
     child.stderr?.on('data', read);

@@ -2,12 +2,16 @@ import type * as ChildProcess from 'node:child_process';
 import type * as Os from 'node:os';
 import type { NetworkInterfaceInfo } from 'node:os';
 import { describe, expect, it, vi } from 'vitest';
-import { nodeHost } from '../src/cli/host.ts';
-import { listenAddresses, machineNames, resolveHere } from '../src/cli/network.ts';
-import { DEFAULT_SETTINGS, loadConfig, readSettings } from '../src/config.ts';
-import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { freshStore } from './fixtures.ts';
+import { localHost } from '../src/cli/host.ts';
+import { listenAddress, machineNames, resolveHere } from '../src/cli/network.ts';
+import { DEFAULT_SETTINGS, readSettings } from '../src/config.ts';
 import { tempDir } from './helpers.ts';
+
+// The host's database is the test's own.
+vi.mock('../src/store/store.ts', async (actual) => ({
+  ...(await actual<object>()),
+  openStore: async () => await (await import('./fixtures.ts')).freshStore(),
+}));
 
 // A made-up machine. Read from the real one, the answers changed whenever an interface came or went mid-run
 // (a container's bridge), and a name that resolves, or a Tailscale that answers, belonged to whoever ran it.
@@ -46,14 +50,14 @@ describe('network', () => {
     expect(await resolveHere('no-such-host.invalid')).toBeNull();
   });
 
-  it('listens on localhost alone, one more address, or everything, as the setting says', async () => {
-    expect(await listenAddresses(DEFAULT_SETTINGS)).toEqual(['127.0.0.1']);
-    expect(await listenAddresses({ ...DEFAULT_SETTINGS, dashboardHost: 'all' })).toEqual(['::']);
+  it('listens on one address: localhost, the one the setting names, or everything', async () => {
+    expect(await listenAddress(DEFAULT_SETTINGS)).toBe('127.0.0.1');
+    expect(await listenAddress({ ...DEFAULT_SETTINGS, dashboardHost: 'all' })).toBe('::');
     expect(readSettings({ SIFT_DASHBOARD_HOST: '0.0.0.0' }).dashboardHost).toBe('all');
-    await expect(listenAddresses({ ...DEFAULT_SETTINGS, dashboardHost: '192.0.2.1' })).rejects.toThrow('does not point at this machine');
-    expect(await listenAddresses({ ...DEFAULT_SETTINGS, dashboardHost: '192.168.1.40' })).toEqual(['127.0.0.1', '192.168.1.40']);
-    expect(await listenAddresses({ ...DEFAULT_SETTINGS, dashboardHost: 'devbox.example.net' })).toEqual(['127.0.0.1', '192.168.1.40']);
-    expect(await listenAddresses({ ...DEFAULT_SETTINGS, dashboardHost: '127.0.0.1' })).toEqual(['127.0.0.1']);
+    await expect(listenAddress({ ...DEFAULT_SETTINGS, dashboardHost: '192.0.2.1' })).rejects.toThrow('does not point at this machine');
+    expect(await listenAddress({ ...DEFAULT_SETTINGS, dashboardHost: '192.168.1.40' })).toBe('192.168.1.40');
+    expect(await listenAddress({ ...DEFAULT_SETTINGS, dashboardHost: 'devbox.example.net' })).toBe('192.168.1.40');
+    expect(await listenAddress({ ...DEFAULT_SETTINGS, dashboardHost: '127.0.0.1' })).toBe('127.0.0.1');
   });
 
   it("answers to this machine's own names and addresses, never to localhost", () => {
@@ -62,16 +66,14 @@ describe('network', () => {
 });
 
 describe("sift run's host", () => {
-  const host = async (env: Record<string, string>) => nodeHost(loadConfig(env), await freshStore(), memoryEphemeral(), 8787, () => {});
+  const host = async (env: Record<string, string>) => await localHost({ PORT: '8787', ...env });
 
   it('signs sessions with a key kept in its home, so starting again signs no one out, unless SIFT_SESSION_SECRET gives one', async () => {
-    vi.stubEnv('SIFT_SESSION_SECRET', '');
     const home = tempDir();
     const first = (await host({ SIFT_HOME: home })).sessionSecret;
     expect((await host({ SIFT_HOME: home })).sessionSecret).toBe(first);
     expect((await host({ SIFT_HOME: tempDir() })).sessionSecret).not.toBe(first);
-    vi.stubEnv('SIFT_SESSION_SECRET', 'synthetic-session');
-    expect((await host({ SIFT_HOME: home })).sessionSecret).toBe('synthetic-session');
+    expect((await host({ SIFT_HOME: home, SIFT_SESSION_SECRET: 'synthetic-session' })).sessionSecret).toBe('synthetic-session');
   });
 
   it("answers to this machine's names and the name SIFT_DASHBOARD_HOST gives, and offers sign-in here and over Tailscale", async () => {
@@ -80,5 +82,18 @@ describe("sift run's host", () => {
       signInAddresses: ['http://localhost:8787', 'https://devbox.tail1234.ts.net'],
     });
     expect((await host({ SIFT_HOME: tempDir(), SIFT_DASHBOARD_HOST: '0.0.0.0' })).allowedHosts).toEqual(machineNames());
+  });
+
+  it('believes a forwarded scheme only while it listens on loopback, where every peer is this machine', async () => {
+    expect((await host({ SIFT_HOME: tempDir(), HOSTNAME: '127.0.0.1' })).forwarded).toBe(true);
+    expect((await host({ SIFT_HOME: tempDir(), HOSTNAME: '::1' })).forwarded).toBe(true);
+    expect((await host({ SIFT_HOME: tempDir(), HOSTNAME: '::' })).forwarded).toBe(false);
+    expect((await host({ SIFT_HOME: tempDir(), HOSTNAME: '192.168.1.40' })).forwarded).toBe(false);
+  });
+
+  it("keeps Workflow's runs in its home and has them delivered to its own listener", async () => {
+    const env: Record<string, string> = { SIFT_HOME: tempDir(), HOSTNAME: '::', PORT: '8790' };
+    await localHost(env);
+    expect(env).toMatchObject({ WORKFLOW_LOCAL_DATA_DIR: `${env['SIFT_HOME']}/workflow`, WORKFLOW_LOCAL_BASE_URL: 'http://[::1]:8790' });
   });
 });

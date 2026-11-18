@@ -226,25 +226,29 @@ test.describe('Rules', () => {
     await query(page).toBe(`?rule=${rule}`);
   });
 
-  test('Apply to your inbox says about how many and shows the newest, then applies in the background until stopped', async ({ page }) => {
-    await page.goto('/rules');
-    const dialog = await writeRule(page);
-    await dialog.getByRole('textbox', { name: 'Value 1' }).fill('sale@store.example.com');
-    await expect(dialog.getByRole('checkbox', { name: 'Apply to mail already there' })).toBeChecked();
-    await dialog.getByRole('button', { name: 'Add rule', exact: true }).click();
+  test.describe('while Gmail is still listing the inbox', () => {
+    test.use({ listing: true });
 
-    const apply = page.getByRole('dialog', { name: 'Apply to your inbox' });
-    await expect(apply.getByText('About 1,200')).toBeVisible();
-    await expect(apply.getByRole('rowgroup').last().getByRole('row')).toHaveCount(6);
-    await expect(apply.getByRole('cell', { name: 'Found in Gmail 1' })).toBeVisible();
-    await apply.getByRole('button', { name: 'Archive all' }).click();
-    await expect(apply).toHaveCount(0);
+    test('Apply to your inbox says about how many and shows the newest, then applies in the background until stopped', async ({ page }) => {
+      await page.goto('/rules');
+      const dialog = await writeRule(page);
+      await dialog.getByRole('textbox', { name: 'Value 1' }).fill('sale@store.example.com');
+      await expect(dialog.getByRole('checkbox', { name: 'Apply to mail already there' })).toBeChecked();
+      await dialog.getByRole('button', { name: 'Add rule', exact: true }).click();
 
-    const opened = rulePanel(page, 'sale@store.example.com');
-    await expect(opened.getByText('Finding them in Gmail · 0 so far')).toBeVisible();
-    await opened.getByRole('button', { name: 'Stop' }).click();
-    await expect(opened.getByText('Finding them in Gmail', { exact: false })).toHaveCount(0);
-    await expect(opened.getByRole('button', { name: 'Apply to inbox…' })).toBeVisible();
+      const apply = page.getByRole('dialog', { name: 'Apply to your inbox' });
+      await expect(apply.getByText('About 1,200')).toBeVisible();
+      await expect(apply.getByRole('rowgroup').last().getByRole('row')).toHaveCount(6);
+      await expect(apply.getByRole('cell', { name: 'Found in Gmail 1' })).toBeVisible();
+      await apply.getByRole('button', { name: 'Archive all' }).click();
+      await expect(apply).toHaveCount(0);
+
+      const opened = rulePanel(page, 'sale@store.example.com');
+      await expect(opened.getByText('Finding them in Gmail · 0 so far')).toBeVisible();
+      await opened.getByRole('button', { name: 'Stop' }).click();
+      await expect(opened.getByText('Finding them in Gmail', { exact: false })).toHaveCount(0);
+      await expect(opened.getByRole('button', { name: 'Apply to inbox…' })).toBeVisible();
+    });
   });
 
   test('removing a rule from its panel asks in place, and Cancel keeps it', async ({ page }) => {
@@ -311,8 +315,6 @@ test.describe('Rules', () => {
 });
 
 test.describe('Apply to your inbox, with what is due begun', () => {
-  test.use({ work: true });
-
   test('the press begins the rule’s run as a Workflow run, which finishes when the search finds nothing', async ({ page }) => {
     await page.goto('/rules');
     const dialog = await writeRule(page);
