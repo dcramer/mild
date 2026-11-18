@@ -17,6 +17,7 @@ export default defineConfig({
   // Each test has its own seeded home and server, so they run in parallel without meeting.
   fullyParallel: true,
   forbidOnly: !!process.env['CI'],
+  workers: process.env['CI'] ? '100%' : undefined,
   retries: 0,
   reporter: process.env['CI'] ? [['github'], ['list']] : 'list',
   use: {
