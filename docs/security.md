@@ -13,7 +13,7 @@ Everything stored or sent anywhere (a column, a log line, telemetry, what the mo
 | Message text and HTML, and its headers (sender, recipients, subject, list id) | Encrypted with the install's key, bound to the person, the mailbox, the message and the part | The server |
 | Credentials: Gmail refresh tokens, model sign-ins | Encrypted with the install's key, bound to the person and what each is for | The server, which uses them while the person is away |
 | Sender addresses and domains, in mail records and cached correspondents | A keyed hash per person, which finds and groups them. A record shows its sender from its encrypted headers; a cached correspondent is only its hash | The hash: nobody |
-| Rule and proposal conditions, a rule's name, a change's details (an unsubscribe's host, a filter's criteria), the filter written for a rule, a decision's reason, the person's words to the label and rule models and what those suggested | Encrypted; conditions are found by the keyed hash of them | The server |
+| Rule and proposal conditions, a rule's name, a change's details (an unsubscribe's host, a filter's criteria), the filter written for a rule, a decision's reason, the person's words to the label and rule models and what those suggested, the reasons the model gave for what a digest says is worth a look | Encrypted; conditions are found by the keyed hash of them | The server |
 | What the person writes or Sift decides: labels, a rule's condition in their own words, actions, decisions and outcomes, times, costs | Plain | The server. Conditions and label descriptions are read on every pass, to be given to the model |
 
 **Encrypted** is AES-256-GCM under the install's key, through `src/secrets.ts` ([secrets.md](secrets.md)). What a value is for is its associated data: for a message's parts, the person, the mailbox, the message and the part; for a rule's, the person and the rule; for anything else (a proposal, a change, a label suggestion, a rule draft), the person and the mailbox. So a value moved to another message, rule or mailbox, or read through another person's handle, does not open.
@@ -37,7 +37,8 @@ Decided 2026-11-16: mail is not sealed to a key only the person's browser holds 
 
 - **A leak with the key.** The database and `SIFT_KEY` together open everything stored, including the Gmail token.
 - **A server under someone else's control.** It holds the key and the credentials, and a Gmail token reads the whole mailbox.
-- **Mail while it is being classified.** Sift reads it from Gmail, and the model provider is sent what the model needs.
+- **Mail while it is being classified.** Sift reads it from Gmail, and the model provider is sent what the model needs: to judge a message, the message; for a digest, the sender and subject of each message in it.
+- **A digest once it is in Gmail.** It lists the senders and subjects of mail Sift archived, in the person's own mailbox, as Gmail holds any other mail.
 - **Mail being read in the dashboard.** A message shown as its HTML passes through the server on its way to the browser, like the rest of the page's data. The browser shows it in a sandboxed frame that runs no script and loads nothing from anywhere, so opening it tells no sender it was read.
 
 ## What follows from it

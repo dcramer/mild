@@ -8,10 +8,11 @@ What Sift can use directly, and what it has to do itself. From Google's document
 | --- | --- | --- |
 | Find new mail | `users.history.list` | A history id is "typically valid for at least a week", sometimes only hours. A 404 means resync, which Sift does with a bounded search. 2 quota units. Besides new messages it lists labels added and removed, per message; a record has no time and does not say who made the change, and Sift's own changes appear like anyone's. |
 | Where history starts | `users.getProfile` | The mailbox's current history id, at the first sync and after a resync. 1 unit. |
-| Search | `users.messages.list` | The inbox, for a resync, for going through it and for applying a rule to it; sent mail to one address, for whether the owner has written to it. 5 units. |
+| Search | `users.messages.list` | The inbox, for a resync, for going through it and for applying a rule to it; sent mail to one address, for whether the owner has written to it; a digest by its Message-ID (`rfc822msgid:`), for whether a try whose answer was lost put it in. 5 units. |
 | Read a message | `users.messages.get` | 20 units for metadata, 60 for the full message. Metadata is headers and labels only: whether a message has attachments needs the full message, whose parts carry a `filename`. |
 | Who took part in a thread | `users.threads.get` | `format=minimal` gives each message's id and labels; one the owner sent carries `SENT`. Asked only for a reply the model is about to judge. 40 units (120 for `full`). |
 | Archive, mark spam, mark read, label | `users.messages.modify` | Add or remove label ids: `INBOX`, `SPAM`, `UNREAD`, `STARRED`, `IMPORTANT`, the `CATEGORY_*` tabs and user labels can all be applied. 5 units. |
+| Put a message in the mailbox | `users.messages.insert` | A digest, into the inbox. Works with `gmail.modify` and "does not send a message", so it reaches no one but the owner. 25 units. |
 | Many at once | `users.messages.batchModify` | Up to 1,000 ids, 50 units. Not used yet: Sift changes one message at a time so each has its own audit row. |
 | Labels | `users.labels.*` | Nested names (`sift/newsletters`) are ordinary labels with a slash. `users.labels.get` on `INBOX` counts what is in the inbox (`messagesTotal`) for 1 unit, which is how going through it is priced before a message is read. |
 | Copy a rule to Gmail | `users.settings.filters` | With `gmail.settings.basic`, which Sift already asks for. A filter matches on from, to, subject, a Gmail search query, attachment and size, and can add or remove labels: archive (`INBOX` off), mark read (`UNREAD` off), star, mark important, one user label, never-spam. Up to 1,000 filters; no update, only create, delete, get and list; creating a duplicate is refused. The documentation does not say a filter can add `SPAM`, so Sift never writes one. Filters apply to a message, not its thread, and only to mail that arrives afterwards. `to` matches Cc and Bcc as well as To. |
@@ -29,7 +30,6 @@ Quotas (projects created since 2026-05-01; older ones keep their old quotas):
 
 - **Push** (`users.watch`). Needs a Google Cloud Pub/Sub topic, renewed at least every 7 days, and only says "something changed": the changes still come from `history.list`. Google recommends polling for a client like Sift, which is what it does.
 - **Threads** (`users.threads.modify`). Applies a change to every message in a thread; later messages do not inherit it.
-- **Put a message in the mailbox** (`users.messages.insert`). Works with `gmail.modify` and "does not send a message": how a daily digest could arrive without Sift being able to send. 25 units.
 
 ## Not checked against real Gmail
 
