@@ -59,7 +59,7 @@ Until every required one is set, the site lists those still missing; `CRON_SECRE
 
 Redeploy production, so the build sees the variables: it migrates the database before the new functions serve anything. Open your address and sign in with Google (the first account becomes the owner); the page walks through connecting a model, saying what you want, choosing your labels and having Sift go through recent mail to teach it with. Until you turn Sift on, under Settings, Gmail changes only for mail you answer in the dashboard.
 
-Mail is checked each minute. Logs are the project's function logs.
+Each minute Sift reads its record for work to do; Gmail is read only once a mailbox's gap has passed, a minute while mail keeps coming and up to 10 when it is quiet. Logs are the project's function logs.
 
 ## Previews
 
