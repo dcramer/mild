@@ -9,12 +9,12 @@ import { Refusal } from '../refusal.ts';
 import { identify, httpStatus, reportError, traced } from '../telemetry.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { type Scope, narrow, scopeFor, sees } from './scope.ts';
-import { FRAME_POLICY, HEADERS } from './policy.ts';
+import { FRAME_POLICY, NOSNIFF } from './policy.ts';
 
 /** A message's own HTML, in a frame on the page (`FRAMES`). A link it opens learns nothing of where it was opened from. */
 const FRAME_HEADERS = {
   'content-security-policy': FRAME_POLICY,
-  'x-content-type-options': 'nosniff',
+  ...NOSNIFF,
   'referrer-policy': 'no-referrer',
   // A link's host would otherwise be looked up ahead of a click, which tells its DNS the message was opened.
   'x-dns-prefetch-control': 'off',
@@ -26,8 +26,9 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 /** Answered here rather than by a route module. */
 const SIGN_IN_PATHS = new Set(['/auth/login', '/auth/callback', '/api/session', '/api/signout']);
 
+// Data, fetched by the page: a policy or a referrer policy would govern nothing.
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
-  new Response(JSON.stringify(body), { status, headers: { ...HEADERS, 'content-type': 'application/json', 'cache-control': 'no-store', ...headers } });
+  new Response(JSON.stringify(body), { status, headers: { ...NOSNIFF, 'content-type': 'application/json', 'cache-control': 'no-store', ...headers } });
 
 const redirect = (location: string, ...cookies: string[]) => {
   const headers = new Headers({ location, 'cache-control': 'no-store' });
@@ -363,7 +364,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
         return json(status, body);
       }
     }
-    return new Response('Not found', { status: 404, headers: { ...HEADERS, 'content-type': 'text/plain' } });
+    return new Response('Not found', { status: 404, headers: { ...NOSNIFF, 'content-type': 'text/plain' } });
   };
 
   return {
