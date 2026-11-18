@@ -139,6 +139,17 @@ describe('the timed tick', () => {
     expect(await timedTickPasses()).toBe(true);
   });
 
+  it('begins one when Gmail cannot be reached to look, which the pass then reports', async () => {
+    const down: Partial<RunOptions> = {
+      connect: () => {
+        throw new Error('socket hang up');
+      },
+    };
+    expect(await timedTickPasses(down)).toBe(true);
+    await workDue(store, options(down), Infinity);
+    expect(await passStatus(ephemeral, [ACCOUNT])).toMatchObject({ problems: [`${ACCOUNT}: socket hang up`], expired: [] });
+  });
+
   it('begins one when the last pass ran out of time, or nothing says a pass ever ran', async () => {
     await recordPassStatus(ephemeral, ACCOUNT, { at: clock, unfinished: true });
     expect(await timedTickPasses()).toBe(true);

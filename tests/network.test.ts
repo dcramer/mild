@@ -2,8 +2,12 @@ import type * as ChildProcess from 'node:child_process';
 import type * as Os from 'node:os';
 import type { NetworkInterfaceInfo } from 'node:os';
 import { describe, expect, it, vi } from 'vitest';
+import { nodeHost } from '../src/cli/host.ts';
 import { listenAddresses, machineNames, resolveHere } from '../src/cli/network.ts';
-import { DEFAULT_SETTINGS, readSettings } from '../src/config.ts';
+import { DEFAULT_SETTINGS, loadConfig, readSettings } from '../src/config.ts';
+import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
+import { freshStore } from './fixtures.ts';
+import { tempDir } from './helpers.ts';
 
 // A made-up machine. Read from the real one, the answers changed whenever an interface came or went mid-run
 // (a container's bridge), and a name that resolves, or a Tailscale that answers, belonged to whoever ran it.
@@ -54,5 +58,27 @@ describe('network', () => {
 
   it("answers to this machine's own names and addresses, never to localhost", () => {
     expect(machineNames()).toEqual(['192.168.1.40', '[fe80::1]', '172.17.0.1', 'devbox.example.net', 'devbox', 'devbox.local', 'devbox.tail1234.ts.net']);
+  });
+});
+
+describe("sift run's host", () => {
+  const host = async (env: Record<string, string>) => nodeHost(loadConfig(env), await freshStore(), memoryEphemeral(), 8787, () => {});
+
+  it('signs sessions with a key kept in its home, so starting again signs no one out, unless SIFT_SESSION_SECRET gives one', async () => {
+    vi.stubEnv('SIFT_SESSION_SECRET', '');
+    const home = tempDir();
+    const first = (await host({ SIFT_HOME: home })).sessionSecret;
+    expect((await host({ SIFT_HOME: home })).sessionSecret).toBe(first);
+    expect((await host({ SIFT_HOME: tempDir() })).sessionSecret).not.toBe(first);
+    vi.stubEnv('SIFT_SESSION_SECRET', 'synthetic-session');
+    expect((await host({ SIFT_HOME: home })).sessionSecret).toBe('synthetic-session');
+  });
+
+  it("answers to this machine's names and the name SIFT_DASHBOARD_HOST gives, and offers sign-in here and over Tailscale", async () => {
+    expect(await host({ SIFT_HOME: tempDir(), SIFT_DASHBOARD_HOST: 'mail.example.org' })).toMatchObject({
+      allowedHosts: [...machineNames(), 'mail.example.org'],
+      signInAddresses: ['http://localhost:8787', 'https://devbox.tail1234.ts.net'],
+    });
+    expect((await host({ SIFT_HOME: tempDir(), SIFT_DASHBOARD_HOST: '0.0.0.0' })).allowedHosts).toEqual(machineNames());
   });
 });

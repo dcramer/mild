@@ -118,6 +118,22 @@ describe('execute', () => {
     await reconcile(deps);
     expect(await getAction(db, 1)).toMatchObject({ status: 'failed', error: 'change was not applied' });
   });
+
+  it('settles a change cut short on mail since deleted as failed, and undoes none', async () => {
+    mailbox.failModify = 'after';
+    await execute(deps, ACCOUNT, 'm1', { type: 'archive' });
+    mailbox.labels.delete('m1');
+    await reconcile(deps);
+    expect(await getAction(db, 1)).toMatchObject({ status: 'failed', error: 'message no longer exists' });
+
+    mailbox.failModify = null;
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'm2' })], '3');
+    mailbox.labels.set('m2', ['INBOX']);
+    await execute(deps, ACCOUNT, 'm2', { type: 'archive' });
+    mailbox.labels.delete('m2');
+    await expect(undo(deps, 2)).rejects.toThrow('The message no longer exists.');
+    expect(mailbox.modifyCalls).toBe(2);
+  });
 });
 
 describe('marking read', () => {

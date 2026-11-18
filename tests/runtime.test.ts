@@ -8,6 +8,8 @@ import { type Ephemeral, memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import type { RunOptions } from '../src/work/run.ts';
 import { startInboxRuns } from '../src/store/inbox.ts';
 import { people } from '../src/store/people.ts';
+import { setModel } from '../src/store/preferences.ts';
+import type { Store } from '../src/store/store.ts';
 import { googleSignIn, onePerson, startDashboard } from './fixtures.ts';
 import { ACCOUNT, FakeMailbox, codeSignIn, tempDir, testModel, workDue } from './helpers.ts';
 
@@ -105,28 +107,70 @@ describe('beginning a piece in a process where Workflow has not started', () => 
   });
 });
 
+/** Sift as a host puts it together, writing its log to `logged`. */
+const siftOn = (store: Store, logged: string[], begin?: Parameters<typeof createSift>[0]['begin']) =>
+  createSift({
+    config: loadConfig({ SIFT_HOME: tempDir() }),
+    store,
+    ephemeral: memoryEphemeral(),
+    sessionSecret: 'secret',
+    allowedHosts: [],
+    signInAddresses: [],
+    log: (line) => logged.push(line),
+    limitMs: 60_000,
+    ...(begin ? { begin } : {}),
+  });
+
 describe('a piece whose key a run holds', () => {
   it('is said in the log once that run has gone on longer than any run lasts', async () => {
     const { store } = await onePerson(ACCOUNT);
     const logged: string[] = [];
     let since = Date.now() - 60_000;
-    const sift = await createSift({
-      config: loadConfig({ SIFT_HOME: tempDir() }),
-      store,
-      ephemeral: memoryEphemeral(),
-      sessionSecret: 'secret',
-      allowedHosts: [],
-      signInAddresses: [],
-      log: (line) => logged.push(line),
-      limitMs: 60_000,
-      begin: async () => ({ begun: false, since }),
-    });
+    const sift = await siftOn(store, logged, async () => ({ begun: false, since }));
     const held = () => logged.filter((line) => line.includes('has not ended'));
     await sift.tick();
     expect(held()).toEqual([]);
     since = Date.now() - 2 * 3_600_000;
     await sift.tick();
     expect(held()).toContain('Deleting old records is held back by a run begun 120 minutes ago that has not ended');
+  });
+});
+
+describe('a piece that could not be begun', () => {
+  it('is said in the log and begun at the next tick, and does not hold back the others', async () => {
+    const { store } = await onePerson(ACCOUNT);
+    const logged: string[] = [];
+    const begun: string[] = [];
+    let queue = 'down';
+    const sift = await siftOn(store, logged, async (piece) => {
+      if (piece.kind === 'upkeep' && queue === 'down') throw new Error('queue unavailable');
+      begun.push(piece.kind);
+      return { begun: true };
+    });
+    await sift.tick();
+    expect(begun).toEqual(['pass']);
+    expect(logged).toContain('Could not begin upkeep, will retry: queue unavailable');
+    queue = 'up';
+    await sift.tick();
+    expect(begun).toEqual(['pass', 'upkeep', 'pass']);
+  });
+});
+
+describe("a person's model that cannot be reached", () => {
+  it('is said in the log once, not at every pass, and again when the reason changes', async () => {
+    const { store, db } = await onePerson(ACCOUNT);
+    const logged: string[] = [];
+    const sift = await siftOn(store, logged);
+    const pass = { kind: 'pass', person: db.person!, account: ACCOUNT } as const;
+    // Each pass also fails for want of a Gmail sign-in, and says so each time.
+    const said = () => logged.filter((line) => !line.includes('pass failed'));
+    await setModel(db, 'openai/gpt-5-mini');
+    await sift.work(pass);
+    await sift.work(pass);
+    expect(said()).toEqual([`${ACCOUNT}: Not signed in to openai. Sign in under Settings in the dashboard.`]);
+    await setModel(db, 'openai/no-such-model');
+    await sift.work(pass);
+    expect(said()).toHaveLength(2);
   });
 });
 

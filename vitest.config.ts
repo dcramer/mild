@@ -19,6 +19,12 @@ const shared = {
 
 export default defineConfig({
   test: {
+    // `pnpm coverage`. The browser tests drive the page and its routes against a real server, which this cannot see.
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.ts', 'proxy.ts', 'instrumentation.ts'],
+      reporter: ['text-summary', 'json-summary', 'html'],
+    },
     projects: [
       {
         test: {

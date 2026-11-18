@@ -1,8 +1,49 @@
 import { globSync, readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
+import { runKey } from '../src/app/sift.ts';
 import { READS, WRITES } from '../src/dashboard/api/index.ts';
+import { recordSync } from '../src/store/accounts.ts';
+import type { Store } from '../src/store/store.ts';
 import { MAX_DURATION_S, cron, respond } from '../src/vercel/host.ts';
-import { tempDir } from './helpers.ts';
+import type { Work } from '../src/work/run.ts';
+import { onePerson, raw } from './fixtures.ts';
+import { ACCOUNT, facts, tempDir } from './helpers.ts';
+
+// What only a deploy has: its Postgres (this test's database, or a refusal while `store` is unset), its Redis
+// (memory) and Workflow's queue (`begun`).
+const deploy = vi.hoisted(() => ({ store: undefined as Store | undefined, begun: [] as [Work, string][] }));
+vi.mock('../src/store/store.ts', async (actual) => ({
+  ...(await actual<object>()),
+  openStore: async () => deploy.store ?? Promise.reject(new Error('connect ECONNREFUSED')),
+}));
+vi.mock('../src/ephemeral/open.ts', async () => {
+  const { memoryEphemeral } = await import('../src/ephemeral/ephemeral.ts');
+  return { openEphemeral: async () => memoryEphemeral() };
+});
+vi.mock('../src/app/flow.ts', () => ({
+  begin: async (piece: Work, key: string) => (deploy.begun.push([piece, key]), { begun: true }),
+}));
+
+const SET_UP = {
+  DATABASE_URL: 'postgres://nobody@db.invalid/sift',
+  REDIS_URL: 'redis://redis.invalid',
+  SIFT_GOOGLE_CLIENT_ID: 'id',
+  SIFT_GOOGLE_CLIENT_SECRET: 'secret',
+  SIFT_SESSION_SECRET: 'synthetic-session',
+  CRON_SECRET: 'synthetic-cron',
+  VERCEL_URL: 'sift-abc123.vercel.app',
+  VERCEL_BRANCH_URL: 'sift-git-main.vercel.app',
+  VERCEL_PROJECT_PRODUCTION_URL: 'sift.example.com',
+  SIFT_DASHBOARD_HOST: 'mail.example.org',
+};
+
+/** A new Vercel instance of a project that is set up: the host's module loaded afresh, holding nothing open. */
+async function instance() {
+  for (const [name, value] of Object.entries({ ...SET_UP, SIFT_HOME: tempDir() })) vi.stubEnv(name, value);
+  deploy.begun = [];
+  vi.resetModules();
+  return await import('../src/vercel/host.ts');
+}
 
 /** `vercel.json`: what Vercel does without sift seeing the request. */
 const vercel = JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons: { path: string }[] };
@@ -48,5 +89,52 @@ describe('the Vercel host', () => {
   it("names no dashboard route as one of Next.js's own, which would answer it instead", () => {
     expect(ownRoutes.toSorted()).toEqual(['/api/[...path]', '/api/cron']);
     for (const route of [...READS, ...WRITES]) expect(ownRoutes).not.toContain(route.path);
+  });
+});
+
+describe('a Vercel instance of a project that is set up', () => {
+  it("answers at the deployment's own names and the project's domain, and refuses any other", async () => {
+    deploy.store = (await onePerson(ACCOUNT)).store;
+    const { respond } = await instance();
+    const at = async (host: string) => await respond(new Request(`https://${host}/api/session`, { headers: { host } }));
+    for (const host of ['sift-abc123.vercel.app', 'sift-git-main.vercel.app', 'sift.example.com', 'mail.example.org']) {
+      const reply = await at(host);
+      expect(reply.status, host).toBe(200);
+      expect(await reply.json(), host).toMatchObject({ canSignIn: true, addresses: ['https://sift.example.com'] });
+    }
+    expect((await at('sift.example.net')).status).toBe(403);
+  });
+
+  it('fails a request while its database cannot be reached, and opens it again for the next', async () => {
+    deploy.store = undefined;
+    const { respond } = await instance();
+    const request = () => new Request('https://sift.example.com/api/session', { headers: { host: 'sift.example.com' } });
+    await expect(respond(request())).rejects.toThrow('ECONNREFUSED');
+    deploy.store = (await onePerson(ACCOUNT)).store;
+    expect((await respond(request())).status).toBe(200);
+  });
+
+  it("begins, on Vercel Cron's call, a run for each piece due, keyed as every instance keys it", async () => {
+    const { store, db } = await onePerson(ACCOUNT);
+    deploy.store = store;
+    const { cron } = await instance();
+    const reply = await cron(new Request('https://sift.example.com/api/cron', { headers: { authorization: 'Bearer synthetic-cron' } }));
+    expect(reply.status).toBe(204);
+    const person = db.person!;
+    const due: Work[] = [
+      { kind: 'upkeep', person },
+      { kind: 'pass', person, account: ACCOUNT },
+    ];
+    expect(deploy.begun).toEqual(due.map((piece) => [piece, runKey(piece, SET_UP.SIFT_SESSION_SECRET)]));
+  });
+
+  it("does a Workflow run's piece with the instance's own Sift", async () => {
+    const { store, db } = await onePerson(ACCOUNT);
+    deploy.store = store;
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'waiting', receivedAt: 0 })], '1', 0);
+    await raw(db).run(`INSERT INTO suggestion_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, 'waiting', 'Old text.', 0)`, ACCOUNT);
+    const { forSteps } = await instance();
+    await (await forSteps()).work({ kind: 'upkeep', person: db.person! });
+    expect(await raw(db).all('SELECT message_id FROM suggestion_bodies')).toEqual([]);
   });
 });
