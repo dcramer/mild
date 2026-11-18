@@ -23,7 +23,7 @@ export function Figure({
 }: {
   label: string;
   value: string;
-  note?: string | null;
+  note?: ReactNode;
   tone?: 'look' | undefined;
   href?: string;
   compact?: boolean;

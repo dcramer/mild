@@ -3,8 +3,8 @@ import { RefreshCwIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { ManageState, Usage } from '@/lib/api.ts';
 import { approx, atApiPrices } from '@/lib/prices.ts';
-import { ago, dateTime, money } from '@/lib/format.ts';
-import { Figure, Figures, HoverCard, Spark, Tooltip } from '@/system';
+import { dateTime, money } from '@/lib/format.ts';
+import { Ago, Figure, Figures, HoverCard, Spark, Tooltip } from '@/system';
 
 type Accounts = ManageState['accounts'];
 /** The way in to the model when it is a subscription, whose plan pays for the calls: the sums are API prices. */
@@ -53,7 +53,7 @@ export function SiftStatus({ accounts, usage, plan }: { accounts: Accounts; usag
         <Tooltip says={synced.map((a) => `${a.email}: ${dateTime(a.at)}`).join('\n')} className="flex items-center gap-1.5">
           <RefreshCwIcon aria-hidden className="size-3.5" />
           <span className="sr-only">Synced</span>
-          {synced.length > 0 ? ago(Math.min(...synced.map((a) => a.at))) : 'Not synced yet'}
+          {synced.length > 0 ? <Ago at={Math.min(...synced.map((a) => a.at))} /> : 'Not synced yet'}
         </Tooltip>
       )}
       {usage ? (
