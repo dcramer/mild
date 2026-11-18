@@ -10,8 +10,8 @@
  * - The model that suggests labels and drafts rules, a stand-in. Drafting looks up the second line of its prompt
  *   (the words the person typed), then fills in a rule archiving and marking read mail from the first sender found,
  *   with a note naming the second; nothing found fills in `nobody@example.com`. Suggesting gives Sales pitches when
- *   the words name pitches, and notes that Receipts and transactions covers receipts already when they name
- *   receipts; words naming neither are an unusable answer. A pass is given no model.
+ *   the words name pitches, Build results (Digest) when they name builds, and notes that Receipts and transactions
+ *   covers receipts already when they name receipts; words naming none of these are an unusable answer. A pass is given no model.
  * - What Gmail would count: an inbox of 2,412 messages (the newest 300 while setting up), three in four needing
  *   the model at about a tenth of a cent each; and for any rule about 1,240 messages it would decide, the newest
  *   five `Found in Gmail 1` to `5`, none needing the model.
@@ -87,6 +87,14 @@ const PITCHES = {
   markRead: false,
   unsubscribe: true,
 };
+const BUILDS = {
+  why: 'builds only when one fails',
+  name: 'Build results',
+  description: 'Automated results of builds and test runs, passed or failed.',
+  action: 'digest',
+  markRead: false,
+  unsubscribe: false,
+};
 const answer = (context: Context) => {
   // The stand-in takes a queue of answers, one a call: each puts the next in its place.
   faux.appendResponses([answer]);
@@ -94,7 +102,10 @@ const answer = (context: Context) => {
   if (tools.has(PROPOSAL_TOOL)) {
     const words = typed(context).toLowerCase();
     const note = words.includes('receipt') ? 'Your Receipts and transactions label covers receipts already.' : '';
-    return fauxAssistantMessage([fauxToolCall(PROPOSAL_TOOL, { labels: words.includes('pitch') ? [PITCHES] : [], note })], { stopReason: 'toolUse' });
+    return fauxAssistantMessage(
+      [fauxToolCall(PROPOSAL_TOOL, { labels: [...(words.includes('pitch') ? [PITCHES] : []), ...(words.includes('build') ? [BUILDS] : [])], note })],
+      { stopReason: 'toolUse' },
+    );
   }
   if (tools.has(FILL_TOOL) && context.messages.at(-1)?.role === 'toolResult') {
     const found = [...JSON.stringify(context.messages.at(-1)?.content).matchAll(/<([^>\s]+@[^>\s]+)>|- ([^\s,<]+@[^\s,]+)/g)].map((m) => m[1] ?? m[2]);

@@ -26,6 +26,7 @@ describe('what the model suggests', () => {
             { ...PITCHES, action: 'block' },
             { ...PITCHES, name: '' },
             { ...PITCHES, name: 'Scams', action: 'spam', markRead: true, unsubscribe: false },
+            { ...PITCHES, name: 'Builds', action: 'digest', markRead: true, unsubscribe: false },
           ],
         },
         [],
@@ -33,6 +34,7 @@ describe('what the model suggests', () => {
     ).toEqual([
       { name: 'Cold outreach', description: 'Pitches from strangers.', disposition: 'archive', unsubscribe: true, why: 'fewer pitches' },
       { name: 'Scams', description: 'Pitches from strangers.', disposition: 'spam', why: 'fewer pitches' },
+      { name: 'Builds', description: 'Pitches from strangers.', disposition: 'digest', markRead: true, why: 'fewer pitches' },
     ]);
     expect(readDrafts({ labels: Array.from({ length: 20 }, (_, i) => ({ ...PITCHES, name: `L${i}` })) }, [])).toHaveLength(MAX_DRAFTS);
     expect(readDrafts({ labels: [] }, [])).toBeNull();

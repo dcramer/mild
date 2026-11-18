@@ -7,7 +7,7 @@ export const PROPOSAL_TOOL = 'propose_labels';
 export const MAX_DRAFTS = 8;
 
 /** The actions a proposal may suggest. Blocking is never suggested: a mislabelled security notice would block a real company. */
-export const DRAFT_ACTIONS = ['keep', 'archive', 'spam'] as const;
+export const DRAFT_ACTIONS = ['keep', 'archive', 'digest', 'spam'] as const;
 
 /** A label the model suggests. Nothing is made until the person accepts it, edited or not. */
 export interface LabelDraft {
@@ -36,8 +36,12 @@ How the labels are used:
   when none fits. Each label's description is all it has to go on, so a description says plainly what
   belongs and what does not.
 - Mail needs no label to stay in the inbox. A label is mostly for mail the owner wants out of the way:
-  archive (it leaves the inbox but stays in Gmail and in search) or spam. A label may also mark its mail
-  read, and may unsubscribe from the sender's mailing list.
+  archive (it leaves the inbox but stays in Gmail and in search), digest, or spam. A label may also mark its
+  mail read, and may unsubscribe from the sender's mailing list.
+- Digest takes mail out of the inbox as archive does, and once a day puts one email in the inbox listing
+  it, with what looks worth a look on top. It is the safer choice for mail that is routine but where now and
+  then one matters: notifications, alerts and reports from services (a failed build among passing ones, a
+  payment that did not go through). Archive is for mail the owner never needs to see again.
 - A label can instead keep its mail in the inbox and tag it in Gmail: for a kind of mail the owner asks to
   have tagged, or never wants to miss where another label might take it ("Bills to pay", beside a
   "Receipts" label that archives). Sorting the inbox into categories is not what they want.
