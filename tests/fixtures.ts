@@ -1,10 +1,10 @@
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { readFileSync } from 'node:fs';
-import { request } from 'node:http';
+import { type IncomingMessage, type ServerResponse, createServer, request } from 'node:http';
+import { Readable } from 'node:stream';
 import type { AddressInfo } from 'node:net';
 import { PGlite } from '@electric-sql/pglite';
 import { beforeEach, inject, onTestFinished } from 'vitest';
-import { dashboardListener } from '../src/cli/host.ts';
 import { type DashboardOptions, createDashboard } from '../src/dashboard/server.ts';
 import type { People } from '../src/store/people.ts';
 import { PARSERS, pglite } from '../src/store/db.ts';
@@ -135,13 +135,33 @@ type Dashboard = Awaited<ReturnType<typeof startDashboard>>;
 export type Reply = { status: number; text: string; body: Record<string, unknown>; headers: Record<string, string | string[] | undefined> };
 
 /**
+ * `handle` over `node:http`, as Next.js hands a route handler a request: the URL's scheme is the one a proxy
+ * forwarded, believed or not by the dashboard's `forwarded`.
+ */
+function listener(handle: (request: Request) => Promise<Response>) {
+  return createServer((req: IncomingMessage, res: ServerResponse) => {
+    const headers = new Headers();
+    for (let i = 0; i < req.rawHeaders.length; i += 2) headers.append(req.rawHeaders[i]!, req.rawHeaders[i + 1]!);
+    const scheme = req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+    const body = req.method === 'GET' || req.method === 'HEAD' ? null : Readable.toWeb(req);
+    void handle(new Request(new URL(req.url ?? '/', `${scheme}://localhost`), { method: req.method ?? 'GET', headers, body, duplex: 'half' })).then(
+      async (response) => {
+        const cookies = response.headers.getSetCookie();
+        res.writeHead(response.status, { ...Object.fromEntries(response.headers), ...(cookies.length > 0 ? { 'set-cookie': cookies } : {}) });
+        res.end(Buffer.from(await response.arrayBuffer()));
+      },
+    );
+  });
+}
+
+/**
  * The dashboard on a free port, stopped when the test ends. `call` sends a request as the page would:
  * a write carries the page's own origin and header unless `headers` says otherwise. A string body is
  * sent as it is.
  */
 export async function startDashboard(people: People, options: DashboardOptions = {}) {
   const dashboard = createDashboard(people, { now: () => 77, ephemeral: memoryEphemeral(), ...options });
-  const server = dashboardListener(dashboard.handle);
+  const server = listener(dashboard.handle);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   onTestFinished(() => void server.close());
   const port = (server.address() as AddressInfo).port;

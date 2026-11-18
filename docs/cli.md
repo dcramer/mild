@@ -9,7 +9,7 @@ From a checkout, `pnpm sift <command>` runs it from source.
 | `sift init` | Set Sift up. A first run walks through every step; one stopped part-way carries on from where it stopped. Once setup is finished it lists the steps with what each is set to and redoes the one you pick. |
 | `sift run` | Read and classify mail, and serve the dashboard. The one process to keep running. |
 | `sift status` | What is set up, and how much Sift has recorded. |
-| `sift dev` | `run` for working on Sift: restarts when server code changes; the page comes from Next.js's development server, which updates it in place as page code changes. Takes `run`'s options. |
+| `sift dev` | `run` for working on Sift, with `next dev`, which reloads the page and the server's code as they change. Takes `run`'s options. |
 | `sift reset-db` | Renames the local database folder to `database.<time>`, so Sift starts a new, empty one, and Workflow's runs (`workflow/`) to `workflow.<time>`, since they name the old database's people and mailboxes. For a database an earlier Sift made with migrations since replaced. Refused while Sift has it open; not for a Postgres server. `pnpm db:reset` runs it. |
 
 `--home <dir>` works with every command and says where Sift keeps its files. When working on Sift, give it a scratch directory so your real mail is left alone.
@@ -21,7 +21,9 @@ From a checkout, `pnpm sift <command>` runs it from source.
 | Option | Effect |
 | --- | --- |
 | `--port <port>` | The dashboard's port for this run. |
-| `--host <address>` | Listen on this address instead of `SIFT_DASHBOARD_HOST`. A container uses `0.0.0.0` and lets its port mapping decide who can reach it. |
+| `--host <address>` | Listen on this address instead of the one `SIFT_DASHBOARD_HOST` gives. A container uses `0.0.0.0` and lets its port mapping decide who can reach it. |
+
+`run` migrates the database and brings every stored secret under the current key, then builds the page from a checkout (seconds, with Next.js's cache) and starts Next.js on one address: `localhost`, or the one `SIFT_DASHBOARD_HOST` names (`all` for every interface). Another address on the same machine is not served then, `localhost` included; over Tailscale, leave it unset and use `tailscale serve`, the only way off this machine that Google signs someone in at. Next.js also reads the checkout's own `.env` files, as it does for any app.
 
 Each minute Sift reads its record for every mailbox, and Gmail once the mailbox's gap has passed (a minute while mail keeps coming, up to 10 when it is quiet), and passes over the ones with something to do, each person's mailboxes changed in Gmail only if that person turned Sift on under Settings in the dashboard. A change there applies from the next pass, without a restart; a change to a setting needs one.
 

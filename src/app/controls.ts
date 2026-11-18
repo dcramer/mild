@@ -20,13 +20,14 @@ import type { SignIns } from '../model/credentials.ts';
 import { createJudge } from '../model/judge.ts';
 import { createProposer } from '../model/propose.ts';
 import { createRuleDrafter } from '../model/draft-rule.ts';
-import { modelChoices, offerModel, openModels, priceOf, resolveModel, saveApiKey, shortlistModels } from '../model/models.ts';
+import { type ChosenModel, modelChoices, offerModel, openModels, priceOf, resolveModel, saveApiKey, shortlistModels } from '../model/models.ts';
 import { listAccounts, personOf } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
 import { credentials } from '../store/credentials.ts';
 import { preferences } from '../store/preferences.ts';
 import type { Sql } from '../store/sql.ts';
 import { Refusal } from '../refusal.ts';
+import type { StandIns } from './sift.ts';
 
 const DAY_MS = 86_400_000;
 /** How far back an estimate looks for how much mail went to the model: recent enough to reflect the rules as they are. */
@@ -60,7 +61,7 @@ const modelsFor = async (config: Config, ephemeral: Ephemeral, db: Sql) =>
  * The model tier of the person whose database `db` is, from their own choice and sign-in.
  * Null when they have chosen no model. Throws, with what to do, when they have chosen one they cannot reach.
  */
-async function openModel(config: Config, ephemeral: Ephemeral, db: Sql) {
+async function openModel(config: Config, ephemeral: Ephemeral, db: Sql): Promise<ChosenModel | null> {
   const { model: spec } = await preferences(db);
   if (!spec) return null;
   const models = await modelsFor(config, ephemeral, db);
@@ -77,11 +78,14 @@ export async function openModelTier(config: Config, ephemeral: Ephemeral, db: Sq
 /** What the dashboard may ask this process to do. See `Controls`. */
 export async function buildControls(
   config: Config,
-  live: { ephemeral: Ephemeral; deviceId: string; kick?: (person: number) => Promise<void>; running: boolean },
+  live: { ephemeral: Ephemeral; deviceId: string; kick: (person: number) => Promise<void>; standIns?: StandIns },
 ): Promise<Controls> {
   const choices = modelChoices(config.settings.chatgptSignIn ?? 'device-code');
-  /** Begin what is due for the person now, not at the next tick. Nothing does while only the dashboard runs. */
-  const passNow = async (db: Sql) => live.kick?.(await personOf(db));
+  /** Begin what is due for the person now, not at the next tick. */
+  const passNow = async (db: Sql) => live.kick(await personOf(db));
+  const { standIns } = live;
+  const gmail = async (db: Sql, email: string) => standIns?.gmail(email) ?? (await gmailFor(config, live.ephemeral, db, email));
+  const chosen = async (db: Sql) => standIns?.model ?? (await openModel(config, live.ephemeral, db));
   /** The size of the person's own calls lately, in tokens, which is their mail and their labels more than the model; undefined for a typical call's. */
   const usualCall = async (db: Sql) => {
     const usual = await averageCall(db);
@@ -145,7 +149,7 @@ export async function buildControls(
     undo: async (db, actionId) => {
       const action = await getAction(db, actionId);
       if (!action) throw new Refusal(`There is no change #${actionId}.`);
-      const outcome = await undo({ db, mailbox: (await gmailFor(config, live.ephemeral, db, action.accountId)).mailbox }, actionId);
+      const outcome = await undo({ db, mailbox: (await gmail(db, action.accountId)).mailbox }, actionId);
       if (outcome.status === 'done') return null;
       if (outcome.status === 'skipped') return 'Already put back by hand';
       throw new Refusal(outcome.reason);
@@ -154,7 +158,7 @@ export async function buildControls(
       let messages = 0;
       for (const account of await listAccounts(db)) {
         if (!mailboxes.includes(account.id) || !(await hasOwnLabels(db))) continue;
-        messages += Math.min(await (await gmailFor(config, live.ephemeral, db, account.id)).api.inboxSize(), REACH[reach]);
+        messages += Math.min(await (await gmail(db, account.id)).api.inboxSize(), REACH[reach]);
       }
       // As much of it as went to the model lately; with nothing to go by, all of it.
       const model = Math.round(messages * ((await modelShare(db, Date.now() - ESTIMATE_DAYS * DAY_MS)) ?? 1));
@@ -163,7 +167,7 @@ export async function buildControls(
     },
     putBack: async (db, accountId, messageId) => {
       const last = await lastStandingChange(db, accountId, messageId);
-      if (last) await undo({ db, mailbox: (await gmailFor(config, live.ephemeral, db, accountId)).mailbox }, last.id);
+      if (last) await undo({ db, mailbox: (await gmail(db, accountId)).mailbox }, last.id);
       // The corrected decision is waiting to be carried out; do it now, not at the next interval.
       await passNow(db);
     },
@@ -175,12 +179,12 @@ export async function buildControls(
       return run;
     },
     proposeLabels: async (db, request) => {
-      const opened = await openModel(config, live.ephemeral, db);
+      const opened = await chosen(db);
       if (!opened) throw new Refusal('Choose a model first.');
       return await proposeLabels({ db, propose: createProposer(opened.models, opened.model), model: opened.spec }, request);
     },
     draftRule: async (db, request) => {
-      const opened = await openModel(config, live.ephemeral, db);
+      const opened = await chosen(db);
       if (!opened) throw new Refusal('Choose a model first.');
       return await draftRule({ db, draft: createRuleDrafter(opened.models, opened.model), model: opened.spec }, request);
     },
@@ -188,7 +192,7 @@ export async function buildControls(
       // Every mailbox is tried, so one Gmail refusing does not leave the others as they were.
       let failed: unknown;
       for (const account of await listAccounts(db)) {
-        const deps = { db, mailbox: (await gmailFor(config, live.ephemeral, db, account.id)).mailbox };
+        const deps = { db, mailbox: (await gmail(db, account.id)).mailbox };
         await (on ? writeRuleFilter(deps, ruleId, account.id) : removeRuleFilter(deps, ruleId, account.id)).catch((error: unknown) => {
           failed ??= error;
         });
@@ -198,7 +202,7 @@ export async function buildControls(
     ruleInbox: async (db, ruleId) => {
       const samples = [];
       for (const account of await listAccounts(db)) {
-        const sample = await ruleInbox(db, (await gmailFor(config, live.ephemeral, db, account.id)).api, account.id, ruleId);
+        const sample = await ruleInbox(db, (await gmail(db, account.id)).api, account.id, ruleId);
         samples.push({ ...sample, examples: sample.examples.map((m) => ({ accountId: account.id, ...m })) });
       }
       const capped = samples.some((s) => s.most !== null);
@@ -221,6 +225,6 @@ export async function buildControls(
       return token === null || (token !== undefined && (await revokeGrant(token)));
     },
     checkNow: passNow,
-    activity: async (mailboxes) => ({ running: live.running, ...(await passStatus(live.ephemeral, mailboxes)) }),
+    activity: async (mailboxes) => ({ running: true, ...(await passStatus(live.ephemeral, mailboxes)) }),
   };
 }

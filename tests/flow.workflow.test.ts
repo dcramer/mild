@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { getWorld } from 'workflow/runtime';
 import { begin } from '../src/app/flow.ts';
 import { runKey } from '../src/app/sift.ts';
-import { offerSift } from '../src/app/process.ts';
+import { offerSift } from '../src/app/instance.ts';
 import type { Work } from '../src/work/run.ts';
 
 describe('a piece of work', () => {
@@ -10,13 +10,13 @@ describe('a piece of work', () => {
     const done: Work[] = [];
     let finish!: () => void;
     const held = new Promise<void>((resolve) => (finish = resolve));
-    offerSift(async () => ({
+    offerSift({
       work: async (piece) => {
         done.push(piece);
         await held;
         return null;
       },
-    }));
+    });
     const pass: Work = { kind: 'pass', person: 1, mailbox: 1 };
     const other: Work = { kind: 'pass', person: 1, mailbox: 2 };
 
@@ -39,13 +39,13 @@ describe('a piece of work', () => {
     const done: Work[] = [];
     let finish!: () => void;
     const held = new Promise<void>((resolve) => (finish = resolve));
-    offerSift(async () => ({
+    offerSift({
       work: async (piece) => {
         done.push(piece);
         await held;
         return null;
       },
-    }));
+    });
     const whole: Work = { kind: 'inbox', person: 1, mailbox: 1, run: 1 };
     const rule: Work = { ...whole, run: 2 };
 
@@ -60,7 +60,7 @@ describe('a piece of work', () => {
   });
 
   it('leaves nothing of itself behind once done: its input names the mailbox', async () => {
-    offerSift(async () => ({ work: async () => null }));
+    offerSift({ work: async () => null });
     const since = new Date();
     const pass: Work = { kind: 'pass', person: 1, mailbox: 3 };
     const key = runKey(pass);

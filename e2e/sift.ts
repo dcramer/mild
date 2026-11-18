@@ -40,11 +40,8 @@ const FRAME_ONLY = [...directives(FRAME_POLICY)].filter((d) => !onPage.has(d));
  */
 const framePolicy = (text: string) => text.includes('/api/message/html?') || FRAME_ONLY.some((d) => text.includes(`directive: "${d}"`));
 
-/**
- * Starts verify-sift's `serve.ts` (the dashboard alone, with a fake Gmail behind its filter control) on a copy of the seeded home;
- * with `work`, also beginning what is due as Workflow runs when the page presses for it.
- */
-async function start(variant: Variant, cloud: boolean, work: boolean) {
+/** Starts verify-sift's `serve.ts` (the app, with stand-ins for Gmail and the model) on a copy of the seeded home. */
+async function start(variant: Variant, cloud: boolean, listing: boolean) {
   const template = JSON.parse(process.env[`${TEMPLATES}_${variant}`] ?? 'null') as { dir: string; cookie: string } | null;
   if (!template) throw new Error('e2e/global-setup.ts did not run');
   const dir = mkdtempSync(join(tmpdir(), 'sift-e2e-run-'));
@@ -60,18 +57,20 @@ async function start(variant: Variant, cloud: boolean, work: boolean) {
         join(dir, 'home'),
         String(port),
         join(dir, 'gmail.json'),
-        ...(work ? ['--work'] : []),
+        ...(listing ? ['--listing'] : []),
       ],
       {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, SIFT_CLOUD: String(cloud) },
+        // A group of its own, with the Next.js server it starts, to end together.
+        detached: true,
       },
     );
     let log = '';
     const started = await new Promise<boolean>((ready, fail) => {
       const read = (chunk: Buffer) => {
         log += chunk.toString();
-        if (log.includes('Only the dashboard is running')) ready(true);
+        if (log.includes('Sift is running on the seeded home')) ready(true);
       };
       child.stdout.on('data', read);
       child.stderr.on('data', read);
@@ -85,7 +84,8 @@ async function start(variant: Variant, cloud: boolean, work: boolean) {
     cookie: template.cookie,
     stop: async () => {
       const exited = new Promise((done) => child.once('exit', done));
-      child.kill();
+      // Not Next.js's own stop, which waits for a run's step under way: one may wait on Gmail for good (`listing`).
+      process.kill(-child.pid!, 'SIGKILL');
       await exited;
       rmSync(dir, { recursive: true, force: true });
     },
@@ -96,15 +96,16 @@ async function start(variant: Variant, cloud: boolean, work: boolean) {
  * Every test gets a signed-in page on its own seeded dashboard, at `/`-relative URLs, and fails if the page logs
  * an error or throws: a content security policy violation shows up only there.
  */
-export const test = base.extend<{ variant: Variant; cloud: boolean; work: boolean; allow: string[]; sift: Awaited<ReturnType<typeof start>> }>({
+export const test = base.extend<{ variant: Variant; cloud: boolean; listing: boolean; allow: string[]; sift: Awaited<ReturnType<typeof start>> }>({
   variant: ['full', { option: true }],
   /** `SIFT_CLOUD`: a Sift run as a service. False is someone's own copy. */
   cloud: [false, { option: true }],
-  work: [false, { option: true }],
+  /** Gmail still listing any search of the inbox, for good, so applying a rule goes on until stopped. */
+  listing: [false, { option: true }],
   /** Console errors a test expects, by part of their text: `status of 409` where the server refuses and the page says why. */
   allow: [[], { option: true }],
-  sift: async ({ variant, cloud, work }, use) => {
-    const sift = await start(variant, cloud, work);
+  sift: async ({ variant, cloud, listing }, use) => {
+    const sift = await start(variant, cloud, listing);
     await use(sift);
     await sift.stop();
   },

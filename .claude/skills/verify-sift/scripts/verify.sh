@@ -40,13 +40,14 @@ case "$cmd" in
     node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/seed.ts" "$dir/home" "$dir/gmail.json" "${3:-}" > "$dir/cookie"
     port="$(node -e 'const s=require("node:net").createServer().listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')"
     echo "$port" > "$dir/port"
-    # The dashboard without `run`'s passes: there is no Gmail behind this home, so a pass would only fail. serve.ts
-    # puts a fake Gmail behind its filter control (see it). It rebuilds web/dist if sources are newer.
+    # The real app on this home, as `sift run` starts it, with stand-ins for Gmail and the model (stand-ins.ts says
+    # what they answer) and no minute's tick, on a build of the code as it is now: Next.js's cache makes that seconds.
     cd "$ROOT"
+    pnpm -s build:web > "$dir/build.log" 2>&1 || { tail -20 "$dir/build.log" >&2; exit 1; }
     nohup node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/serve.ts" "$dir/home" "$port" "$dir/gmail.json" > "$dir/dashboard.log" 2>&1 &
     echo $! > "$dir/pid"
     for _ in $(seq 1 240); do
-      grep -q 'Only the dashboard is running' "$dir/dashboard.log" 2>/dev/null && break
+      grep -q 'Sift is running on the seeded home' "$dir/dashboard.log" 2>/dev/null && break
       kill -0 "$(cat "$dir/pid")" 2>/dev/null || { cat "$dir/dashboard.log" >&2; exit 1; }
       sleep 0.5
     done

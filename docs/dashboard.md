@@ -31,7 +31,7 @@ Mail Sift acts on gets its label (`sift/newsletters`) and, if Sift moved it, a s
 The page is a React app in `web/`, styled with Tailwind and built from Sift's own design system ([design.md](design.md), every part shown at `/system`). Next.js builds and serves it; `app/` is its frame.
 
 - `sift run` builds it the first time and whenever its sources are newer than the build. `pnpm build:web` does the same by hand, into `.next`.
-- `pnpm dev` runs Sift from source, restarted when the server changes, and the page from Next.js's development server, which updates it in place. Give it `--home <scratch>`.
+- `pnpm dev` runs Sift from source under `next dev`, which reloads the page and the server as their code changes. Give it `--home <scratch>`.
 - Each screen is a route in `app/`, drawn on the server the same for everyone; what is someone's the page fetches from `/api/`. A hydration mismatch shows only in the browser console, which every browser test (`pnpm e2e`) fails on.
 
 Why it is built this way is in [architecture.md](architecture.md#dashboard).

@@ -57,13 +57,28 @@ export function machineNames(): string[] {
   return [...new Set([...addresses, host, short, `${short}.local`, ...(name ? [name] : [])])];
 }
 
-/** What the dashboard listens on, from `SIFT_DASHBOARD_HOST`. */
-export async function listenAddresses(settings: Settings): Promise<string[]> {
+/**
+ * The one address the dashboard listens on, from `SIFT_DASHBOARD_HOST`: Next.js's server takes one. Loopback unless
+ * it says otherwise, which is also what lets `sift run` believe a scheme forwarded by `tailscale serve` (`Host.forwarded`).
+ */
+export async function listenAddress(settings: Settings): Promise<string> {
   const { dashboardHost } = settings;
-  if (dashboardHost === undefined) return ['127.0.0.1'];
+  if (dashboardHost === undefined) return '127.0.0.1';
   // `::` takes IPv4 as well. A name such as a Tailscale one can resolve to IPv6 first, so IPv4 alone is not enough.
-  if (dashboardHost === 'all') return ['::'];
+  if (dashboardHost === 'all') return '::';
   const address = await resolveHere(dashboardHost);
   if (!address) throw new Error(`SIFT_DASHBOARD_HOST is ${dashboardHost}, which does not point at this machine.`);
-  return address === '127.0.0.1' ? ['127.0.0.1'] : ['127.0.0.1', address];
+  return address;
+}
+
+/** Addresses Google can sign someone in at: this machine, and its Tailscale name over HTTPS. */
+export function signInAddresses(port: number): string[] {
+  const name = tailscaleName();
+  return [`http://localhost:${port}`, ...(name ? [`https://${name}`] : [])];
+}
+
+/** The listener at `address`, as this machine reaches it: a wildcard at its own family's loopback, since `::` may take no IPv4. */
+export function fromHere(address: string, port: number): string {
+  const host = address === '0.0.0.0' ? '127.0.0.1' : address === '::' ? '::1' : address;
+  return `http://${host.includes(':') ? `[${host}]` : host}:${port}`;
 }
