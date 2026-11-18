@@ -158,6 +158,7 @@ async function finish(deps: DigestDeps, record: DigestRecord, zone: string, list
     label: { name: label.name, gmailLabel: label.gmailLabel },
     mailbox: record.accountId,
     since: record.since,
+    until: record.until,
     entries: items.map((i) => ({ mailbox: i.accountId, id: i.messageId, from: i.from, subject: i.subject, receivedAt: i.receivedAt })),
     highlights: record.highlights ?? [],
     timeZone: zone,

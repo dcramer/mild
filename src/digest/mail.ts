@@ -21,6 +21,8 @@ export interface Digest {
   /** The mailbox the digest is put in. */
   mailbox: string;
   since: number;
+  /** When the digest was due: the day it is for. */
+  until: number;
   entries: DigestEntry[];
   highlights: Highlight[];
   /** The person's, so times read as their clock does. */
@@ -39,6 +41,9 @@ export interface DigestMail {
 
 /** Past this, the rest are one link to the label in Gmail: a digest is read on a phone. */
 export const LISTED = 150;
+
+/** A day across a clock change is 25 hours. */
+const ONE_DAY = 25 * 3_600_000;
 
 const FONT = `-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif`;
 const INK = '#111110';
@@ -66,6 +71,8 @@ export function writeDigest(digest: Digest): DigestMail {
   const dayName = new Intl.DateTimeFormat('en-US', { ...zone, weekday: 'long', month: 'long', day: 'numeric' });
   const dayKey = new Intl.DateTimeFormat('en-CA', { ...zone, year: 'numeric', month: '2-digit', day: '2-digit' });
   const moment = new Intl.DateTimeFormat('en-US', { ...zone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const date = new Intl.DateTimeFormat('en-US', { ...zone, weekday: 'short', month: 'short', day: 'numeric' });
+  const dates = new Intl.DateTimeFormat('en-US', { ...zone, month: 'short', day: 'numeric' });
   // A phone would otherwise break "7:00" from its "AM".
   const keepTogether = (time: string) => time.replace(/ (AM|PM)$/, '\u00a0$1');
 
@@ -79,7 +86,9 @@ export function writeDigest(digest: Digest): DigestMail {
   const days = new Set(listed.map((e) => dayKey.format(e.receivedAt)));
   const spansDays = days.size > 1;
 
-  const subject = `${digest.label.name}: ${plural(entries.length, 'message')}${highlights.length > 0 ? `, ${highlights.length} worth a look` : ''}`;
+  // A window longer than a day (the first digest, or days Sift was off) names every day it holds.
+  const span = digest.until - digest.since <= ONE_DAY ? date.format(digest.until) : dates.formatRange(digest.since, digest.until);
+  const subject = `${digest.label.name} digest for ${span}: ${plural(entries.length, 'message')}${highlights.length > 0 ? `, ${highlights.length} worth a look` : ''}`;
   const summary = `${plural(entries.length, 'message')} Sift archived since ${keepTogether(moment.format(digest.since))}`;
   const senders = [...new Set(entries.map(sender))];
   const preheader =
