@@ -98,7 +98,9 @@ export function InboxRow({ state, reload, onGoThrough }: { state: ManageState; r
             <Share part={going.done} whole={going.listed ? going.total : 0} />
             <span className="tabular-nums">
               {going.listed
-                ? [`${count(going.done)} of ${count(going.total)}`, `${money(going.spent)} so far`, timeLeft(going, now)].filter(Boolean).join(' · ')
+                ? [`${count(going.done)} of ${count(going.total)}`, `${money(going.spent)} so far`, now === null ? null : timeLeft(going, now)]
+                    .filter(Boolean)
+                    .join(' · ')
                 : `Reading your inbox · ${count(going.total)} found`}
             </span>
             <Failure>{error}</Failure>

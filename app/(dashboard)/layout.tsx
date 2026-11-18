@@ -1,12 +1,24 @@
 import { headers } from 'next/headers';
-import type { ReactNode } from 'react';
+import { connection } from 'next/server';
+import { type ReactNode, Suspense } from 'react';
 import { Dashboard } from '@/dashboard.tsx';
 import { drawnFor } from '../../src/sift/page-data.ts';
 
 /**
- * The dashboard's screens, in its frame, drawn for whoever asked: so each is a function call per view on Vercel
- * (docs/runtime.md, "What it costs").
+ * The dashboard's frame, drawn for whoever asked, around a screen built once for everyone: going between screens needs
+ * no call to the server, and opening the page is one (docs/runtime.md, "What it costs").
  */
-export default async function DashboardLayout({ children }: { children: ReactNode }) {
+export default function DashboardLayout({ children }: { children: ReactNode }) {
+  return (
+    <Suspense>
+      <Drawn>{children}</Drawn>
+    </Suspense>
+  );
+}
+
+// Partial Prefetching draws each request a second time, as the prefetch it sends with the page; `connection()` keeps
+// the session's three reads out of that one.
+async function Drawn({ children }: { children: ReactNode }) {
+  await connection();
   return <Dashboard drawn={await drawnFor(await headers())}>{children}</Dashboard>;
 }
