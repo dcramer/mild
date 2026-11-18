@@ -688,7 +688,7 @@ export function SystemView() {
           <Loading rows={3} />
         </Section>
         <Section title="Reserve" meta="holds the room for what arrives late, so nothing below moves">
-          <Reserve id="specimen" ready={false} room={{ narrow: 96, wide: 96 }} placeholder={<Loading rows={2} />}>
+          <Reserve id="specimen" ready={false} room="min-h-24" placeholder={<Loading rows={2} />}>
             <span />
           </Reserve>
           <p className="text-muted-foreground">This line stays where it is when the part above fills in.</p>

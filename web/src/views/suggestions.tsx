@@ -229,7 +229,7 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
       intro={
         <>
           {/* Most people start off, so the room is held for it. */}
-          <Reserve id="home-off" ready={data !== null} room={{ narrow: 386, wide: 206 }}>
+          <Reserve id="home-off" ready={data !== null} room="min-h-[386px] lg:min-h-[206px]">
             {data && !data.active ? (
               <Callout title="Sift is off" action={<Button href="?settings=1">Turn Sift on…</Button>}>
                 <p>

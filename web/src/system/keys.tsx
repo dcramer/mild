@@ -1,6 +1,6 @@
 import { type ReactNode, createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Kbd } from './type.tsx';
-import { TOUCH } from './touch.ts';
+import { useTouch } from './touch.ts';
 
 /**
  * Keyboard shortcuts. A control asks for its key with `useShortcut`, which binds the key and hands back
@@ -51,10 +51,19 @@ const subscribe = (listener: () => void) => {
   listeners.add(listener);
   return () => void listeners.delete(listener);
 };
-export const useShortcutsOn = () => useSyncExternalStore(subscribe, () => on);
+// The server draws them on: the choice is kept in the browser.
+export const useShortcutsOn = () =>
+  useSyncExternalStore(
+    subscribe,
+    () => on,
+    () => true,
+  );
 
 /** Whether key hints are drawn: shortcuts are on, and this is not a touch screen. For a hint on a key the browser handles itself, such as Escape. */
-export const useHintsShown = () => useShortcutsOn() && !TOUCH;
+export const useHintsShown = () => {
+  const touch = useTouch();
+  return useShortcutsOn() && !touch;
+};
 
 const NAMES: Record<string, string> = { Enter: '↵', Escape: 'esc', ArrowUp: '↑', ArrowDown: '↓', ' ': 'space' };
 /** A key as it is drawn: letters in capitals, the named keys by their sign. */
@@ -117,7 +126,7 @@ export function useShortcut(
   const here = useContext(Layer).layer;
   const layer = options.everywhere ? EVERYWHERE : here;
   const active = useContext(RowActive) && options.enabled !== false && key !== undefined;
-  const shortcuts = useShortcutsOn();
+  const hints = useHintsShown();
   const latest = useRef({ run, within: options.within });
   useLayoutEffect(() => {
     latest.current = { run, within: options.within };
@@ -127,7 +136,7 @@ export function useShortcut(
     bindings.set(id, { key, label, layer, run: () => latest.current.run(), within: () => latest.current.within?.() ?? null });
     return () => void bindings.delete(id);
   }, [active, id, key, label, layer]);
-  if (!active || key === undefined || !shortcuts || TOUCH) return null;
+  if (!active || key === undefined || !hints) return null;
   return (
     <Kbd className="hidden md:inline-flex" {...(options.tone ? { tone: options.tone } : {})}>
       {keyName(key)}

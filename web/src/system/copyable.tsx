@@ -1,11 +1,17 @@
 import { CheckIcon, CopyIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
+
+const nothing = () => () => {};
 
 /** A value the reader has to carry somewhere else, whole: a command to run, an address to register. */
 export function Copyable({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
-  // The clipboard is only offered to pages on localhost or HTTPS.
-  const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+  // The clipboard is only offered to pages on localhost or HTTPS, which the server cannot tell: it draws no button.
+  const clipboard = useSyncExternalStore(
+    nothing,
+    () => navigator.clipboard as Clipboard | undefined,
+    () => undefined,
+  );
   return (
     <div className="flex items-stretch bg-(--fill)">
       <code className="min-w-0 flex-1 px-3 py-2 font-mono text-sm leading-relaxed break-all select-all">{value}</code>
