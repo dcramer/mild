@@ -188,8 +188,14 @@ export function cleanHtml(html: string): string {
   return out;
 }
 
-/** Under the message's own styles: email is written for white paper, whatever the dashboard's colours. */
-const PAPER = '<style>:root{color-scheme:light;background:#fff;color:#000;scrollbar-width:thin}</style>';
+/**
+ * Under the message's own styles: email is written for white paper, whatever the dashboard's colours. On a
+ * frame narrower than mail is written for, a full-width table is laid out to the frame's width rather than its
+ * content's, so a 600px card inside it marked `max-width: 100%` shrinks as its sender meant: in a table sized by
+ * its content, a percentage resolves against nothing and the card keeps its 600px, wider than a phone.
+ */
+const PAPER =
+  '<style>:root{color-scheme:light;background:#fff;color:#000;scrollbar-width:thin}@media (max-width:640px){table[width="100%"]{table-layout:fixed}}</style>';
 
 /** The document the frame shows: the cleaned message, on white. */
 export function mailDocument(html: string): string {

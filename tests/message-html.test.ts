@@ -69,7 +69,7 @@ describe('cleaning a message for the frame', () => {
 
   it('puts the message on white paper, after its doctype', () => {
     const document = mailDocument(HTML);
-    expect(document.startsWith('<!DOCTYPE html><style>:root{color-scheme:light;background:#fff;color:#000;scrollbar-width:thin}</style><html>')).toBe(true);
+    expect(document).toMatch(/^<!DOCTYPE html><style>:root\{color-scheme:light;background:#fff;color:#000;[^<]*<\/style><html>/);
     expect(document).not.toMatch(/script|refresh|<base|<title|hero\.png|https:\/\/tracker/);
     expect(document).toContain('background:url(https://cdn.example.com/bg.png)');
   });

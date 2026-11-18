@@ -76,6 +76,13 @@ export function useParam<T extends string = string>(name: string, options?: read
   return [value, (next) => setParams({ [name]: next })];
 }
 
+/** The path and query the page is on, for a sign-in to come back to: `/` on the server, which draws no query. */
+export function useHere(): string {
+  const path = usePathname();
+  const query = useSyncExternalStore(subscribe, current, () => '');
+  return path + (query ? `?${query}` : '');
+}
+
 /**
  * Where the page starts, once: Next.js moves the address bar only after it has drawn a screen gone to by a link, so the
  * query is read again then, and whatever was opened over the last screen (`?message=`) is gone with it.

@@ -30,6 +30,9 @@ const SIGN_IN_PATHS = new Set(['/auth/login', '/auth/callback', '/api/session', 
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { ...NOSNIFF, 'content-type': 'application/json', 'cache-control': 'no-store', ...headers } });
 
+/** A path on this site: not `//host` or `/\host`, which a browser reads as another site. */
+const LOCAL_PATH = /^\/(?![/\\])[^\s\\]{0,2000}$/;
+
 const redirect = (location: string, ...cookies: string[]) => {
   const headers = new Headers({ location, 'cache-control': 'no-store' });
   for (const value of cookies) headers.append('set-cookie', value);
@@ -256,10 +259,12 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
       const state = randomBytes(16).toString('hex');
       const verifier = randomBytes(32).toString('base64url');
       const redirectUri = `${origin}/auth/callback`;
-      // Adding a second account is only for someone already signed in.
+      // Adding a second account is only for someone already signed in. `to` is where the browser started, and only
+      // ever a path on this site: anything else would make the sign-in a way to send someone elsewhere.
+      const to = query.get('to') ?? '';
       await ephemeral!.set(
         pendingKey(state),
-        { verifier, redirectUri, addTo: query.get('add') === '1' ? session : null, expires: now() + SIGN_IN_MS },
+        { verifier, redirectUri, addTo: query.get('add') === '1' ? session : null, to: LOCAL_PATH.test(to) ? to : '/', expires: now() + SIGN_IN_MS },
         SIGN_IN_MS,
       );
       return redirect(signIn.url(redirectUri, state, createHash('sha256').update(verifier).digest('base64url')), signInCookie(state, SIGN_IN_MS / 1000));
@@ -267,7 +272,9 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     if (signIn && method === 'GET' && url.pathname === '/auth/callback') {
       const state = query.get('state') ?? '';
       // Taken, so it completes once.
-      const entry = state ? await ephemeral!.take<{ verifier: string; redirectUri: string; addTo: string | null; expires: number }>(pendingKey(state)) : null;
+      const entry = state
+        ? await ephemeral!.take<{ verifier: string; redirectUri: string; addTo: string | null; to: string; expires: number }>(pendingKey(state))
+        : null;
       // Someone still signed in was adding a mailbox or signing in again, so it is said in Settings, where mailboxes are; the sign-in page is only for someone signed out.
       const fail = (message: string) => redirect(`/?${session ? 'settings=1&' : ''}signin=${encodeURIComponent(message)}`, signInCookie('', 0));
       const code = query.get('code');
@@ -284,7 +291,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
         // One already someone else's never changes hands, and signing in as them instead is not what was asked.
         if (entry.addTo !== null)
           return who.id === person?.id ? redirect('/?settings=1', signInCookie('', 0)) : fail(`${email} is already connected to Sift by someone else.`);
-        return redirect('/', sessionCookie(signSession({ email, person: who.id }, secret, now()), SESSION_DAYS * 86_400), signInCookie('', 0));
+        return redirect(entry.to, sessionCookie(signSession({ email, person: who.id }, secret, now()), SESSION_DAYS * 86_400), signInCookie('', 0));
       } catch (error) {
         report(request, error);
         return fail('Google did not complete the sign-in.');

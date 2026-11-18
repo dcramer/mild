@@ -424,14 +424,17 @@ describe('dashboard server', () => {
         facts({ messageId: 'n1', subject: 'Bump zod', receivedAt: NOW - 1000, from: from('Dependabot') }),
         facts({ messageId: 'n2', subject: 'Bump vite', receivedAt: NOW - 2000, from: from(' dependabot  ') }),
         facts({ messageId: 'n3', subject: 'New SSH key', receivedAt: NOW - 3000, from: from('Security alerts') }),
+        facts({ messageId: 'n4', subject: 'Weekly digest', receivedAt: NOW - 4000, from: from('Security alerts') }),
       ],
-      '3',
+      '4',
       NOW,
     );
     const said = { subscription: 'preserve', reason: 'test', stage: 'model' } as const;
     await recordDecision(db, ACCOUNT, 'n1', { ...said, disposition: 'keep', labelId: 'notification' }, { now: NOW });
     await recordDecision(db, ACCOUNT, 'n2', { ...said, disposition: 'review' }, { now: NOW });
     await recordDecision(db, ACCOUNT, 'n3', { ...said, disposition: 'keep', labelId: 'security' }, { now: NOW });
+    // An action rule's: no label, and not undecided.
+    await recordDecision(db, ACCOUNT, 'n4', { ...said, disposition: 'archive', stage: 'rules' }, { now: NOW });
     const base = await start({}, store);
     const page = (name?: string) =>
       get<SenderPage>(
@@ -439,8 +442,14 @@ describe('dashboard server', () => {
       );
 
     expect((await page()).names).toEqual([
-      { name: 'Dependabot', messages: 2, lastSeenAt: NOW - 1000, labels: [{ id: 'notification', name: 'Notifications', messages: 1 }] },
-      { name: 'Security alerts', messages: 1, lastSeenAt: NOW - 3000, labels: [{ id: 'security', name: 'Account alerts', messages: 1 }] },
+      { name: 'Dependabot', messages: 2, lastSeenAt: NOW - 1000, labels: [{ id: 'notification', name: 'Notifications', messages: 1 }], actions: [] },
+      {
+        name: 'Security alerts',
+        messages: 2,
+        lastSeenAt: NOW - 3000,
+        labels: [{ id: 'security', name: 'Account alerts', messages: 1 }],
+        actions: [{ action: 'archive', messages: 1 }],
+      },
     ]);
     expect((await page('DEPENDABOT')).decisions.map((d) => d.messageId).toSorted()).toEqual(['n1', 'n2']);
     // One name, on some of their mail, is not several.

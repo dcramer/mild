@@ -318,6 +318,8 @@ export const SenderPage = z.object({
       messages: z.number(),
       lastSeenAt: z.number(),
       labels: z.array(z.object({ id: z.string(), name: z.string(), messages: z.number() })),
+      /** Mail a rule gave no label, only an action. */
+      actions: z.array(z.object({ action: z.string(), messages: z.number() })),
     }),
   ),
   /** For a domain: who writes from it, most mail first. */

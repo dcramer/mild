@@ -7,7 +7,7 @@ import { SetUp } from '@/components/set-up.tsx';
 import { SiftStatus, UsageDetail } from '@/components/status.tsx';
 import { api, useLoaded, useOnline } from '@/lib/api.ts';
 import { OpenMessagesContext } from '@/lib/open-messages.ts';
-import { panelEntry, setParams, useParam } from '@/lib/params.ts';
+import { panelEntry, setParams, useHere, useParam } from '@/lib/params.ts';
 import { subscription } from '@/lib/prices.ts';
 import { Cloud, Masthead, Notice, PageFoot } from '@/system';
 import { Boot } from '@/views/boot.tsx';
@@ -108,6 +108,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const online = useOnline();
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const expired = manage.data?.activity.expired ?? [];
+  const here = useHere();
   // A list can be pressed while the last panel is still sliding away, its message still in the address. That
   // press gets a panel of its own, since the closing one would only finish closing and then go Back; and it
   // takes over the closing one's history entry, or closing it would go Back to the message just closed.
@@ -138,7 +139,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
               <Notice>Sift cannot be reached</Notice>
             ) : expired.length > 0 ? (
               // Signing in again is what renews sift's access; Google asks which account. Named when it is one that is not the viewer's own.
-              <Notice tone="look" href="/auth/login" action="Reconnect">
+              <Notice tone="look" href={`/auth/login?to=${encodeURIComponent(here)}`} action="Reconnect">
                 Google sign-in expired{expired.length > 1 ? ` for ${expired.length} accounts` : expired[0] === name ? '' : ` for ${expired[0]}`}
               </Notice>
             ) : null

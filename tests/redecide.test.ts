@@ -182,6 +182,18 @@ describe('when a rule changes', () => {
     expect(await current(underLearned)).toMatchObject({ stage: 'rules', disposition: 'keep' });
     expect(await waiting()).toEqual([sale, underLearned].toSorted());
   });
+  it('removing a rule sift learned brings back what it decided, even mail it was the first to decide', async () => {
+    const ruleId = await addRule(db, { match: { from: ['spam@example.com'] }, labelId: 'marketing' }, 'learned');
+    const first = await decided('spam@example.com', { stage: 'rules', ruleId, disposition: 'archive', labelId: 'marketing' });
+    expect(await waiting()).toEqual([first]);
+
+    expect(await removeRule(db, ruleId)).toBe('learned');
+    // Its rule gone, nothing says the rule was Sift's: without being told, the mail would read as the user's.
+    expect(await waiting()).toEqual([]);
+    expect(await redecideWaiting(db, ACCOUNT, 90, ruleId)).toBe(1);
+    expect(await current(first)).toMatchObject({ stage: 'fallback', disposition: 'review', rule_id: null });
+    expect(await waiting()).toEqual([first]);
+  });
 });
 
 describe("when a label's outcome changes", () => {

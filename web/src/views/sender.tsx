@@ -169,11 +169,12 @@ function Labels({ data, onStart }: { data: SenderPage; onStart: (s: RuleStart) =
 
 type Named = SenderPage['names'][number];
 
-/** What a name's mail is: its labels, most first, then whether some has none yet. */
+/** What a name's mail is: its labels, most first, then what rules did to the rest, then whether some has none yet. */
 function NameIs({ name }: { name: Named }) {
-  const unplaced = name.messages - name.labels.reduce((sum, l) => sum + l.messages, 0);
-  const words = [...name.labels.map((l) => l.name), ...(unplaced > 0 ? [outcomeName('review')] : [])];
-  return <span className={name.labels.length === 0 ? 'text-muted-foreground' : ''}>{words.join(' · ')}</span>;
+  const placed = [...name.labels, ...name.actions];
+  const unplaced = name.messages - placed.reduce((sum, l) => sum + l.messages, 0);
+  const words = [...name.labels.map((l) => l.name), ...name.actions.map((a) => doesName(null, a.action)), ...(unplaced > 0 ? [outcomeName('review')] : [])];
+  return <span className={placed.length === 0 ? 'text-muted-foreground' : ''}>{words.join(' · ')}</span>;
 }
 
 /** Each name an address writes under, what its mail is, and a rule started on that name. */

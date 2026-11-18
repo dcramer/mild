@@ -272,6 +272,12 @@
     line-height: var(--text-base--line-height);
     -webkit-font-smoothing: antialiased;
   }
+  /* Focus is a highlighter outline, the same yellow that marks what needs you. In this layer so that a part's
+     `outline-none` wins: a menu, a select's list and their items show focus by their fill instead. */
+  :focus-visible {
+    outline: 2px solid var(--highlight);
+    outline-offset: 2px;
+  }
 }
 
 /* Rows are divided by faint dashes, on the page or in a sheet. A heading is set apart by space.
@@ -302,11 +308,6 @@ thead .row:last-child {
   --inset: var(--bleed);
 }
 
-/* Focus is a highlighter outline, the same yellow that marks what needs you. */
-:focus-visible {
-  outline: 2px solid var(--highlight);
-  outline-offset: 2px;
-}
 /* A row shows the focus as a stronger fill instead: an outline around a table row draws only its top
    and bottom edges, across the page. */
 .row:focus-visible {

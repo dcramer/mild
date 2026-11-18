@@ -77,7 +77,7 @@ export function AddRuleDialog({
   onAdded,
 }: {
   accountId: string;
-  labels: readonly Pick<LabelSummary, 'id' | 'name'>[];
+  labels: readonly Pick<LabelSummary, 'id' | 'name' | 'disposition'>[];
   start?: RuleStart;
   /** Adding the rule accepts this proposal; closing without adding leaves it open. */
   proposal?: number;
@@ -133,8 +133,8 @@ export function AddRuleDialog({
   // A rule with no label is only an action, so it needs one; a condition in words needs a label to describe.
   const action: '' | Action = chosen ? '' : waitsFor ? then || 'archive' : then === 'spam' ? 'spam' : 'archive';
   const needsLabel = !waitsFor && condition.trim() !== '' && !chosen;
-  // Leave in inbox, or an action alone that keeps mail, changes nothing in the inbox.
-  const moves = chosen ? chosen.id !== INBOX : waitsFor !== undefined || action !== 'keep';
+  // A label that leaves mail in the inbox, or an action alone that keeps it, changes nothing there; the rule's panel says the same.
+  const moves = chosen ? chosen.disposition !== 'keep' : waitsFor !== undefined || action !== 'keep';
   const facts = rows.flatMap((row) => (isNamed(row) ? [] : [row.fact]));
   const named = matchOf(rows.filter(isNamed));
   const match = facts.length > 0 ? { ...named, facts: factConditions(facts) } : named;

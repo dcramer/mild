@@ -1,4 +1,4 @@
-import { alias, and, asc, count, decisions, desc, eq, isNotNull, max, messages } from '../../store/query.ts';
+import { alias, and, asc, count, decisions, desc, eq, isNotNull, max, messages, ne, or } from '../../store/query.ts';
 import { hashOf, newestOfGroup, openEnvelope, openNewest } from '../../store/content.ts';
 import type { Sql } from '../../store/sql.ts';
 import { contacts, domainFacts, senderFacts } from '../../store/senders.ts';
@@ -32,15 +32,15 @@ async function namesOf(
     .where(and(eq(messages.accountId, accountId), eq(messages.senderHash, hashOf(db, address))))
     .orderBy(desc(messages.receivedAt))
     .limit(NAMES_FROM);
-  const labelled = await db
-    .select({ messageId: decisions.messageId, labelId: decisions.labelId })
+  const decided = await db
+    .select({ messageId: decisions.messageId, labelId: decisions.labelId, disposition: decisions.disposition })
     .from(decisions)
     .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
     .where(
       and(
         eq(decisions.accountId, accountId),
         eq(messages.senderHash, hashOf(db, address)),
-        isNotNull(decisions.labelId),
+        or(isNotNull(decisions.labelId), ne(decisions.disposition, 'review')),
         eq(
           decisions.id,
           db
@@ -50,27 +50,31 @@ async function namesOf(
         ),
       ),
     );
-  const labelOf = new Map(labelled.map((r) => [r.messageId, r.labelId!]));
-  const names = new Map<string, { name: string | null; messages: number; lastSeenAt: number; labels: Map<string, number> }>();
+  const decisionOf = new Map(decided.map((r) => [r.messageId, r]));
+  const names = new Map<string, { name: string | null; messages: number; lastSeenAt: number; labels: Map<string, number>; actions: Map<string, number> }>();
   let newest: string | null = null;
   for (const row of rows) {
     const name = plain(openEnvelope(db, accountId, row.id, row).fromName)?.trim() || null;
     newest ??= name;
     const key = name === null ? '' : plainName(name);
-    const entry = names.get(key) ?? { name, messages: 0, lastSeenAt: row.receivedAt, labels: new Map<string, number>() };
+    const entry = names.get(key) ?? { name, messages: 0, lastSeenAt: row.receivedAt, labels: new Map<string, number>(), actions: new Map<string, number>() };
     entry.messages++;
-    const label = labelOf.get(row.id);
-    if (label !== undefined) entry.labels.set(label, (entry.labels.get(label) ?? 0) + 1);
+    const decision = decisionOf.get(row.id);
+    const add = (tally: Map<string, number>, id: string) => tally.set(id, (tally.get(id) ?? 0) + 1);
+    if (decision?.labelId) add(entry.labels, decision.labelId);
+    // A rule that only says what happens gives no label: its mail is placed by that action, not undecided.
+    else if (decision) add(entry.actions, decision.disposition);
     names.set(key, entry);
   }
   if ([...names.values()].filter((n) => n.name !== null).length < 2) return { names: [], newest };
   return {
     names: [...names.values()]
       .toSorted((a, b) => b.messages - a.messages || b.lastSeenAt - a.lastSeenAt)
-      .map(({ labels, name, ...n }) => ({
+      .map(({ labels, actions, name, ...n }) => ({
         ...n,
         name: seal(name),
         labels: [...labels].toSorted(([, a], [, b]) => b - a).map(([id, messages]) => ({ id, name: labelNames.get(id) ?? id, messages })),
+        actions: [...actions].toSorted(([, a], [, b]) => b - a).map(([action, messages]) => ({ action, messages })),
       })),
     newest,
   };

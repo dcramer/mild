@@ -243,6 +243,25 @@ describe('managing sift from the dashboard', () => {
     expect(await raw(db).get(`SELECT count(*) AS n FROM messages WHERE id = 'e1'`)).toEqual({ n: 1 });
   });
 
+  it('removing a rule Sift made brings back the mail it decided', async () => {
+    const { call } = await start();
+    const from = { address: 'blocked@example.com', domain: 'example.com' };
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'b1', from })], '2');
+    const id = await addRule(db, { match: { from: [from.address] }, labelId: 'marketing' }, 'learned');
+    await recordDecision(db, ACCOUNT, 'b1', {
+      disposition: 'archive',
+      subscription: 'preserve',
+      stage: 'rules',
+      ruleId: id,
+      reason: 'r',
+      labelId: 'marketing',
+    });
+    expect((await call('GET', '/api/suggestions')).body).toMatchObject({ waiting: 1 });
+
+    expect((await call('POST', '/api/rules/remove', { id })).body).toEqual({ ok: true, redecided: 1 });
+    expect((await call('GET', '/api/suggestions')).body).toMatchObject({ waiting: 1, items: [{ messageId: 'b1' }] });
+  });
+
   it('decides waiting suggestions again when a rule or a label changes, and says how many', async () => {
     const { call } = await start();
     const from = { address: 'sales@example.com', domain: 'example.com' };
@@ -780,6 +799,14 @@ describe('signing in with Google', () => {
     // The same state cannot be used twice, and an unknown one is refused.
     expect(String((await callback(call, login, 'abc')).headers['location'])).toContain('expired');
     expect(completed).toHaveLength(1);
+  });
+
+  it('comes back to where the browser started signing in, and only ever to a page of its own', async () => {
+    const { call } = await startWithSignIn();
+    const from = async (to: string) => (await callback(call, await call('GET', `/auth/login?to=${encodeURIComponent(to)}`), 'abc')).headers['location'];
+    expect(await from('/rules?rule=r-1')).toBe('/rules?rule=r-1');
+    for (const elsewhere of ['//evil.example', '/\\evil.example', 'https://evil.example', 'rules', '/ evil'])
+      expect(await from(elsewhere), elsewhere).toBe('/');
   });
 
   it('uses HTTPS for the return address and the cookie behind Tailscale serve', async () => {

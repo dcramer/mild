@@ -21,6 +21,7 @@ export async function removeFilter({ db, controls }: Context, id: string): Promi
 
 /** Remove a rule, and the Gmail filters written for it, then re-decide what is waiting. Returns how many were re-decided. */
 export async function removeRuleAndFilter(ctx: Context, id: string): Promise<number> {
-  if (!(await removeFilter(ctx, id)) || !(await removeRule(ctx.db, id))) throw new Refusal('That rule no longer exists.');
-  return await redecide(ctx.db, ctx.now);
+  const source = (await removeFilter(ctx, id)) ? await removeRule(ctx.db, id) : null;
+  if (source === null) throw new Refusal('That rule no longer exists.');
+  return await redecide(ctx.db, ctx.now, source === 'learned' ? id : undefined);
 }

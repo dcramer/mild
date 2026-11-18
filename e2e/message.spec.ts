@@ -97,8 +97,13 @@ test.describe('A message as its HTML', () => {
   test('fits a phone', async ({ page }) => {
     await page.setViewportSize(PHONE);
     await page.goto(DEALS);
-    await expect(mailFrame(page, '48 hours only: 30% off').getByRole('heading', { name: '30% off everything' })).toBeVisible();
-    expect((await boxOf(page.locator('iframe'))).width).toBeLessThanOrEqual(390);
+    const frame = mailFrame(page, '48 hours only: 30% off');
+    await expect(frame.getByRole('heading', { name: '30% off everything' })).toBeVisible();
+    const paper = await boxOf(page.locator('iframe'));
+    expect(paper.width).toBeLessThanOrEqual(390);
+    // The card is written to shrink to its frame (max-width: 100%), and does: its right edge is not cut off.
+    const card = await boxOf(frame.locator('table table'));
+    expect(card.x + card.width).toBeLessThanOrEqual(paper.x + paper.width);
     await sideScroll(page).toBe(0);
   });
 });
