@@ -12,6 +12,7 @@ import { Heads, Blank, Button, Empty, ListView, Look, Section, Share, Sub, Table
 const GROUPS = [
   { title: 'Kept in your inbox', has: (l: LabelSummary) => l.disposition === 'keep' },
   { title: 'Archived', has: (l: LabelSummary) => l.disposition === 'archive' },
+  { title: 'In a daily digest', has: (l: LabelSummary) => l.disposition === 'digest' },
   { title: 'Marked spam', has: (l: LabelSummary) => l.disposition === 'spam' || l.disposition === 'block' },
 ] as const;
 

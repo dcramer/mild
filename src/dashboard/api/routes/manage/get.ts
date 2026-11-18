@@ -37,6 +37,7 @@ async function manageState({ db, controls, person }: Context, scope: Scope): Pro
       db,
       accounts.map((a) => a.id),
     ),
+    digest: { hour: own.digestHour, timeZone: own.timeZone },
   };
 }
 

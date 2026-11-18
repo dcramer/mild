@@ -28,7 +28,7 @@ export async function listRuleSummaries(db: Sql, scope: Scope, now: number): Pro
       whenLabel: rules.whenLabel,
       labelName: labels.name,
       override: rules.disposition,
-      labelDoes: sql<string | null>`CASE WHEN ${labels.block} THEN 'block' ELSE ${labels.disposition} END`,
+      labelDoes: sql<string | null>`CASE WHEN ${labels.block} THEN 'block' WHEN ${labels.digest} THEN 'digest' ELSE ${labels.disposition} END`,
       markRead: sql<boolean>`coalesce(${rules.markRead} OR ${labels.markRead}, false)`,
       unsubscribe: sql<boolean>`coalesce(${rules.subscription} = 'unsubscribe' OR ${labels.unsubscribe}, false)`,
       condition: rules.condition,

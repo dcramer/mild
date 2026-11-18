@@ -39,6 +39,7 @@ export function sureness({ confidence, disposition }: { confidence: number | nul
 export const ACTIONS = [
   ['keep', 'Keep'],
   ['archive', 'Archive'],
+  ['digest', 'Digest'],
   ['spam', 'Spam'],
   ['block', 'Block'],
 ] as const;
@@ -73,6 +74,7 @@ export const outcomeName = (key: string) => OUTCOMES[key] ?? key;
 export const EXPLAIN: Record<ActionKey, string> = {
   keep: 'It stays in the inbox, with its label.',
   archive: 'It leaves the inbox and stays findable under its label.',
+  digest: 'It leaves the inbox, and once a day one email lists it, with anything worth a look on top.',
   spam: 'It goes to spam. Never for anyone you have written to.',
   block: 'It goes to spam, and so does everything that sender sends afterwards, without being judged again. Only when the message proves who sent it.',
 };
@@ -80,6 +82,7 @@ export const EXPLAIN: Record<ActionKey, string> = {
 const WILL: Record<string, string> = {
   keep: 'kept',
   archive: 'archived',
+  digest: 'put in the daily digest',
   spam: 'marked spam',
   block: 'marked spam and the sender blocked',
   review: 'left for you',
@@ -303,8 +306,15 @@ export const CONTACT_SAYS = {
 } as const;
 
 // Mail no tier could place is left in the inbox with Sift's own Gmail label: what Sift did there is ask.
-const DID: Record<string, string> = { archive: 'Archived', spam: 'Marked spam', block: 'Blocked', keep: 'Kept', review: 'Asked you' };
-const DOING: Record<string, string> = { archive: 'archive', spam: 'mark spam', block: 'block', keep: 'keep', review: 'ask you' };
+const DID: Record<string, string> = {
+  archive: 'Archived',
+  digest: 'Put in the digest',
+  spam: 'Marked spam',
+  block: 'Blocked',
+  keep: 'Kept',
+  review: 'Asked you',
+};
+const DOING: Record<string, string> = { archive: 'archive', digest: 'put in the digest', spam: 'mark spam', block: 'block', keep: 'keep', review: 'ask you' };
 /**
  * What happened to a message, as a log says it: "Archived", "Not archived", "Waiting to archive". `tone`
  * says how to show it: an undone change is struck through, what did not happen is quiet, the rest are plain.

@@ -44,6 +44,7 @@ const DECISION_FIELDS = {
   stage: decisions.stage,
   disposition: decisions.disposition,
   block: decisions.block,
+  digest: decisions.digest,
   subscription: decisions.subscription,
   labelId: decisions.labelId,
   labelName: labels.name,
@@ -91,9 +92,9 @@ const STATUS_WHERE: Record<string, SQL | undefined> = {
 
 type DecisionFields = Awaited<ReturnType<typeof decisionsJoined>>[number];
 
-export const toDecisionRow = (db: Sql, { block, subscription, ...r }: DecisionFields): DecisionRow => ({
+export const toDecisionRow = (db: Sql, { block, digest, subscription, ...r }: DecisionFields): DecisionRow => ({
   ...openEnvelope(db, r.accountId, r.messageId, r),
-  disposition: block ? 'block' : r.disposition,
+  disposition: block ? 'block' : digest ? 'digest' : r.disposition,
   unsubscribe: subscription === 'unsubscribe',
   // Anything but a skip's own sentence can be the text of an error from Gmail.
   outcomeDetail: r.outcome === 'skipped' ? r.outcomeDetail : null,

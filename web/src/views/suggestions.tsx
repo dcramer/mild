@@ -50,6 +50,7 @@ const USER_DID: Record<string, (n: string) => string> = {
 const LABEL_DOES: Record<string, string> = {
   keep: 'keeps them',
   archive: 'archives them',
+  digest: 'puts them in the daily digest',
   spam: 'marks them spam',
   block: 'marks them spam and blocks the sender',
 };

@@ -3,6 +3,7 @@ import accountDeleteWrite from './routes/account/delete/post.ts';
 import activeWrite from './routes/active/post.ts';
 import checkWrite from './routes/check/post.ts';
 import decisionsRead from './routes/decisions/get.ts';
+import digestWrite from './routes/digest/post.ts';
 import domainRead from './routes/domain/get.ts';
 import evalRead from './routes/eval/get.ts';
 import evalsRead from './routes/evals/get.ts';
@@ -79,6 +80,7 @@ export const WRITES: readonly Write[] = [
   accountDeleteWrite,
   activeWrite,
   checkWrite,
+  digestWrite,
   evalsRunWrite,
   examplesDeleteWrite,
   examplesDeleteAllWrite,
