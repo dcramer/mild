@@ -40,6 +40,7 @@ describe('deriveFacts', () => {
       replyToDiffers: true,
       addressed: 'to',
       isReply: false,
+      origin: 'outside',
       category: 'promotions',
       important: false,
     });
@@ -58,6 +59,7 @@ describe('deriveFacts', () => {
       replyToDiffers: false,
       addressed: 'to',
       isReply: false,
+      origin: 'outside',
       category: null,
       important: false,
     });
@@ -95,6 +97,21 @@ describe('deriveFacts', () => {
     expect(deriveFacts(facts({ to: [alias] }), {}, ['ada@example.com']).addressed).toBe('to');
     expect(deriveFacts(facts({ to: [other], cc: [alias] }), {}, ['ada@example.com']).addressed).toBe('cc');
     expect(deriveFacts(facts({ to: [alias] })).addressed).toBe('neither');
+  });
+
+  it("tells mail from the owner and from the owner's own domain from everyone else's", () => {
+    const from = (address: string, accountId = 'ada@example.com', aliases: string[] = []) =>
+      deriveFacts(facts({ accountId, from: { address, domain: address.split('@')[1]! } }), {}, aliases).origin;
+    expect(from('ada+notes@example.com')).toBe('owner');
+    expect(from('ada@example.net', 'ada@example.com', ['ada@example.net'])).toBe('owner');
+    expect(from('grace@example.com')).toBe('own-domain');
+    expect(from('alerts@ci.example.com')).toBe('own-domain');
+    expect(from('grace@example.net', 'ada@example.com', ['ada@example.net'])).toBe('own-domain');
+    expect(from('grace@example.org')).toBe('outside');
+    // Everyone at gmail.com has nothing in common with the owner but the provider.
+    expect(from('grace@gmail.com', 'ada@gmail.com')).toBe('outside');
+    expect(from('ada@gmail.com', 'ada@example.com', ['ada@gmail.com'])).toBe('owner');
+    expect(from('grace@gmail.com', 'ada@example.com', ['ada@gmail.com'])).toBe('outside');
   });
 
   it('recognises a bulk service by its own headers, its envelope sender or what signed the message', () => {

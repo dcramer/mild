@@ -121,6 +121,17 @@ describe('prompt', () => {
     expect(SYSTEM_PROMPT).toContain('untrusted');
   });
 
+  it("says when the sender is the owner or at the owner's own domain, and how to read that", () => {
+    const trustedPart = (from: string) => {
+      const f = facts({ from: { address: from, domain: from.split('@')[1]! } });
+      return buildPrompt({ evidence: { ...evidence(), facts: f, known: deriveFacts(f) }, labels: SAMPLE_LABELS }).split('# The email (untrusted)')[0]!;
+    };
+    expect(trustedPart('grace@example.org')).toContain("From the owner's own domain\n");
+    expect(trustedPart(ACCOUNT)).toContain("From one of the owner's own addresses\n");
+    expect(trustedPart('grace@example.com')).not.toContain('From the owner');
+    expect(SYSTEM_PROMPT).toContain('fails DMARC');
+  });
+
   it('leaves a removed label out of what the sender was labelled before', () => {
     const removed = { id: 'gone', messages: 5 };
     const prompt = (ownerLabels: { id: string; messages: number }[]) =>

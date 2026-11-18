@@ -1,5 +1,6 @@
 import { bulkSignals, parseAddress, parseAddressList, receivedResults } from './features.ts';
-import type { HtmlFacts } from './html.ts';
+import { type HtmlFacts, site } from './html.ts';
+import { isSharedDomain } from './standing.ts';
 import type { MessageFacts } from './types.ts';
 
 /** `fail` is anything recorded that is not a pass (softfail, neutral, an error). `none`: the receiver recorded no result. */
@@ -53,6 +54,12 @@ export interface Facts extends Partial<ContentFacts>, Partial<ThreadFacts> {
   addressed: 'to' | 'cc' | 'neither';
   /** It answers an earlier message (`In-Reply-To` or `References`). */
   isReply: boolean;
+  /**
+   * Who sent it, beside the owner: one of their own addresses, or someone at their own domain (a
+   * subdomain counts; a domain anyone can get an address at never does). Only DMARC says it is true.
+   * Absent for mail recorded before sift read it.
+   */
+  origin?: 'owner' | 'own-domain' | 'outside';
   /** The inbox tab Gmail filed it under, from its `CATEGORY_*` label. Null: none recorded. */
   category: 'personal' | 'social' | 'promotions' | 'updates' | 'forums' | null;
   /**
@@ -152,6 +159,12 @@ export function deriveFacts(
   const results = receivedResults(headers);
   const owner = new Set([message.accountId, ...aliases].map(canonical));
   const isOwner = (a: { address: string }) => owner.has(canonical(a.address));
+  const ownSites = new Set(
+    [message.accountId, ...aliases]
+      .map((a) => a.slice(a.lastIndexOf('@') + 1).toLowerCase())
+      .filter((d) => d !== '' && !isSharedDomain(d))
+      .map(site),
+  );
   const replyTo = parseAddressList(headers['reply-to']);
   const category = (Object.keys(CATEGORIES) as (keyof typeof CATEGORIES)[]).find((key) => message.labelIds.includes(CATEGORIES[key]));
 
@@ -167,6 +180,7 @@ export function deriveFacts(
     replyToDiffers: replyTo.length > 0 && !replyTo.some((a) => a.address === message.from.address),
     addressed: message.to.some(isOwner) ? 'to' : message.cc.some(isOwner) ? 'cc' : 'neither',
     isReply: (headers['in-reply-to'] ?? headers['references'] ?? '').trim() !== '',
+    origin: isOwner(message.from) ? 'owner' : ownSites.has(site(message.from.domain)) ? 'own-domain' : 'outside',
     category: category ?? null,
     important: message.labelIds.includes('IMPORTANT'),
     ...read,
@@ -185,6 +199,7 @@ export function describeFacts(facts: Facts): string[] {
   const bulk = bulkMarks(facts);
   return [
     `Addressed to the owner: ${addressed}`,
+    ...(facts.origin === 'owner' ? ["From one of the owner's own addresses"] : facts.origin === 'own-domain' ? ["From the owner's own domain"] : []),
     ...(facts.isReply ? ['A reply to an earlier message'] : []),
     ...(facts.earlierInThread === undefined ? [] : [`Earlier messages in its thread: ${facts.earlierInThread}`]),
     ...(facts.ownerInThread === undefined ? [] : [`Owner has written in its thread: ${yesNo(facts.ownerInThread)}`]),
@@ -215,6 +230,7 @@ export function factLine(facts: Facts): string {
   const bulk = bulkMarks(facts);
   return [
     ...(facts.category === null ? [] : [`Gmail ${facts.category}`]),
+    ...(facts.origin === 'owner' ? ['from the owner'] : facts.origin === 'own-domain' ? ["from the owner's domain"] : []),
     { to: 'to the owner', cc: 'owner in Cc', neither: 'not addressed to the owner' }[facts.addressed],
     ...(facts.isReply ? ['a reply'] : []),
     ...(facts.ownerInThread ? ['owner wrote in its thread'] : []),
