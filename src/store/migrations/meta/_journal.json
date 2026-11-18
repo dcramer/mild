@@ -330,6 +330,27 @@
       "when": 1794944303461,
       "tag": "0046_inbox_runs_apply_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1794968255214,
+      "tag": "0047_rule_filters_per_mailbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1794968289291,
+      "tag": "0048_labels_and_rules_are_the_persons",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1794968340830,
+      "tag": "0049_labels_and_rules_leave_the_mailbox",
+      "breakpoints": true
     }
   ]
 }

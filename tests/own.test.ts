@@ -45,13 +45,12 @@ beforeEach(async () => {
   ] as const) {
     const person = await connectAccount(store, account, '1', 0);
     const db = await store.user(person);
-    await withSampleLabels(db, account);
+    await withSampleLabels(db);
     await recordSync(db, account, [facts({ accountId: account, messageId: `m-${id}`, subject: `Subject ${id}` })], '2', 1);
     await recordDecision(db, account, `m-${id}`, { disposition: 'review', subscription: 'preserve', stage: 'fallback', reason: id });
     await raw(db).run(
-      `INSERT INTO rules (id, account_id, position, match, except_matches, conditions, label_id, source, created_at) VALUES (?, ?, 0, '{}', '[]', 'c', 'personal', 'user', 0)`,
+      `INSERT INTO rules (id, position, match, except_matches, conditions, label_id, source, created_at) VALUES (?, 0, '{}', '[]', 'c', 'personal', 'user', 0)`,
       `rule-${id}`,
-      account,
     );
   }
   const driver = await unguarded();
@@ -133,11 +132,10 @@ describe("a person's handle, without row-level security", () => {
   });
 
   it('writes their id on every row it adds, and never lets anyone set it', async () => {
-    await alpha.insert(labels).values({ accountId: ALPHA, id: 'l', name: 'L', description: '', disposition: 'keep', gmailLabel: 'sift/l', position: 0 });
-    // Each mailbox starts with the default labels; the one added here is the only 'l'.
+    await alpha.insert(labels).values({ id: 'l', name: 'L', description: '', disposition: 'keep', gmailLabel: 'sift/l', position: 0 });
+    // Each person starts with the default labels; the one added here is the only 'l'.
     expect((await everyone('labels')).filter((r) => r['id'] === 'l').map((r) => r['user_id'])).toEqual([1]);
     const forged = {
-      accountId: BRAVO,
       id: 'l',
       name: 'L',
       description: '',
@@ -183,7 +181,6 @@ describe('a failed statement', () => {
   it('reports what the database said, not the values it was given', async () => {
     const values = {
       id: 'l',
-      accountId: ALPHA,
       name: 'L',
       description: 'private words',
       disposition: 'nonsense' as Disposition,
@@ -203,7 +200,7 @@ describe('a failed statement', () => {
     const conflict = await alpha
       .insert(labels)
       .values(values)
-      .onConflictDoUpdate({ target: [labels.userId, labels.accountId, labels.id], set: { description: 'private words' } })
+      .onConflictDoUpdate({ target: [labels.userId, labels.id], set: { description: 'private words' } })
       .catch((e: unknown) => e as Error);
     expect((conflict as Error).message).not.toContain('private words');
     await expect(

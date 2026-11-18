@@ -29,8 +29,7 @@ import { createDashboard } from '../../../../src/dashboard/server.ts';
 import { buildControls } from '../../../../src/app/controls.ts';
 import { buildSignIn } from '../../../../src/app/google-sign-in.ts';
 import type { ExistingFilter } from '../../../../src/actions/filters.ts';
-import { Refusal } from '../../../../src/refusal.ts';
-import { getRuleFilter } from '../../../../src/store/filters.ts';
+import { listAccounts } from '../../../../src/store/accounts.ts';
 import { people } from '../../../../src/store/people.ts';
 import { openStore } from '../../../../src/store/store.ts';
 import { FakeMailbox } from '../../../../tests/helpers.ts';
@@ -122,13 +121,16 @@ const controls = {
     faux.setResponses([lookUp, fillIn]);
     return await draftRule({ db, draft: createRuleDrafter(models, faux.getModel()), model: 'faux/stand-in' }, request);
   },
-  // What `ruleFilter` in src/app/controls.ts does, with the fake mailbox in place of the account's Gmail.
+  // What `ruleFilter` in src/app/controls.ts does, with the fake mailboxes in place of each account's Gmail.
   ruleFilter: async (db: Parameters<typeof built.ruleFilter>[0], ruleId: string, on: boolean) => {
-    const rule = await getRuleFilter(db, ruleId);
-    if (!rule) throw new Refusal('That rule no longer exists.');
-    const deps = { db, mailbox: mailboxOf(rule.accountId) };
-    if (on) await writeRuleFilter(deps, ruleId);
-    else await removeRuleFilter(deps, ruleId);
+    let failed: unknown;
+    for (const account of await listAccounts(db)) {
+      const deps = { db, mailbox: mailboxOf(account.id) };
+      await (on ? writeRuleFilter(deps, ruleId, account.id) : removeRuleFilter(deps, ruleId, account.id)).catch((error: unknown) => {
+        failed ??= error;
+      });
+    }
+    if (failed !== undefined) throw failed;
     writeFileSync(gmailFile, JSON.stringify(Object.fromEntries([...mailboxes].map(([id, m]) => [id, m.filters])), null, 1));
   },
 };

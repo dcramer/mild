@@ -27,18 +27,18 @@ const samePlan = (a: FilterPlan, b: FilterPlan) =>
 const NONE = { filterId: null, state: null, written: null };
 
 /**
- * Copy a rule to Gmail as a filter, replacing the one it already has. Throws, with a sentence for the
- * user, when the rule cannot be a filter or Gmail did not keep it. A filter the account already has that
- * does exactly this is taken over instead of duplicated, which Gmail would refuse.
+ * Copy a rule to the Gmail of `accountId` (the mailbox `deps.mailbox` is) as a filter, replacing the one it
+ * already has there. Throws, with a sentence for the user, when the rule cannot be a filter or Gmail did not
+ * keep it. A filter the account already has that does exactly this is taken over instead of duplicated,
+ * which Gmail would refuse.
  */
-export async function writeRuleFilter(deps: ActionDeps, ruleId: string): Promise<void> {
-  const found = await getRuleFilter(deps.db, ruleId);
-  if (!found) throw new Refusal('That rule no longer exists.');
-  await settleRuleFilters(deps, found.accountId);
-  const row = (await getRuleFilter(deps.db, ruleId))!;
-  const verdict = (await filterVerdicts(deps.db, row.accountId)).get(ruleId);
+export async function writeRuleFilter(deps: ActionDeps, ruleId: string, accountId: string): Promise<void> {
+  if (!(await getRuleFilter(deps.db, ruleId, accountId))) throw new Refusal('That rule no longer exists.');
+  await settleRuleFilters(deps, accountId);
+  const row = (await getRuleFilter(deps.db, ruleId, accountId))!;
+  const verdict = (await filterVerdicts(deps.db)).get(ruleId);
   if (!verdict?.possible) throw new Refusal(verdict?.reason ?? 'That rule cannot be a Gmail filter.');
-  if (row.filterId) await removeRuleFilter(deps, ruleId);
+  if (row.filterId) await removeRuleFilter(deps, ruleId, accountId);
 
   const { plan } = verdict;
   const filter = await proposal(deps, plan);
@@ -50,7 +50,7 @@ export async function writeRuleFilter(deps: ActionDeps, ruleId: string): Promise
 
   const actionId = await insertPendingAction(
     deps.db,
-    { accountId: row.accountId, messageId: null, type: 'filter', payload: { add: [], remove: [], filter: { ruleId, ...filter } }, originalLabels: [] },
+    { accountId, messageId: null, type: 'filter', payload: { add: [], remove: [], filter: { ruleId, ...filter } }, originalLabels: [] },
     clock(deps),
   );
   let got: ExistingFilter | undefined;
@@ -60,7 +60,7 @@ export async function writeRuleFilter(deps: ActionDeps, ruleId: string): Promise
   } catch (error) {
     await finishAction(deps.db, actionId, 'unknown', null, message(error), clock(deps));
     // It may exist in Gmail all the same.
-    if ((await confirmed(deps, row.accountId, actionId)) && (await getRuleFilter(deps.db, ruleId))?.filterId) return;
+    if ((await confirmed(deps, accountId, actionId)) && (await getRuleFilter(deps.db, ruleId, accountId))?.filterId) return;
     throw error;
   }
   if (!got) {
@@ -68,7 +68,7 @@ export async function writeRuleFilter(deps: ActionDeps, ruleId: string): Promise
     throw new Refusal('Gmail did not keep the filter.');
   }
   await finishAction(deps.db, actionId, 'done', null, null, clock(deps));
-  await setRuleFilter(deps.db, ruleId, { filterId: got.id, state: 'active', written: { plan, got } satisfies Written }, clock(deps));
+  await setRuleFilter(deps.db, ruleId, accountId, { filterId: got.id, state: 'active', written: { plan, got } satisfies Written }, clock(deps));
 }
 
 /**
@@ -83,32 +83,31 @@ const FILTER_TRIES = 3;
  */
 export async function retryRuleFilters(deps: ActionDeps, accountId: string): Promise<void> {
   await settleRuleFilters(deps, accountId);
-  const verdicts = await filterVerdicts(deps.db, accountId);
+  const verdicts = await filterVerdicts(deps.db);
   for (const [ruleId, changes] of await filterHistory(deps.db, accountId)) {
     const last = changes.at(-1)!;
     if (last.status !== 'failed') continue;
     const tries = changes.length - changes.findLastIndex((c) => c.type !== last.type || c.status !== 'failed') - 1;
-    const rule = await getRuleFilter(deps.db, ruleId);
+    const rule = await getRuleFilter(deps.db, ruleId, accountId);
     if (tries >= FILTER_TRIES || !rule) continue;
     const add = last.type === 'filter' && !rule.filterId && verdicts.get(ruleId)?.possible;
     const remove = last.type === 'unfilter' && rule.filterId;
     if (!add && !remove) continue;
     try {
-      await (add ? writeRuleFilter(deps, ruleId) : removeRuleFilter(deps, ruleId));
+      await (add ? writeRuleFilter(deps, ruleId, accountId) : removeRuleFilter(deps, ruleId, accountId));
     } catch (error) {
       if (tries + 1 >= FILTER_TRIES) reportError(error);
     }
   }
 }
 
-/** Take a rule's filter out of Gmail. Returns false if it had none. Throws if Gmail still has it afterwards. */
-export async function removeRuleFilter(deps: ActionDeps, ruleId: string): Promise<boolean> {
-  const found = await getRuleFilter(deps.db, ruleId);
-  if (!found) throw new Refusal('That rule no longer exists.');
-  await settleRuleFilters(deps, found.accountId);
-  const { accountId, filterId } = (await getRuleFilter(deps.db, ruleId))!;
+/** Take a rule's filter out of the Gmail of `accountId`. Returns false if it had none there. Throws if Gmail still has it afterwards. */
+export async function removeRuleFilter(deps: ActionDeps, ruleId: string, accountId: string): Promise<boolean> {
+  if (!(await getRuleFilter(deps.db, ruleId, accountId))) throw new Refusal('That rule no longer exists.');
+  await settleRuleFilters(deps, accountId);
+  const { filterId } = (await getRuleFilter(deps.db, ruleId, accountId))!;
   if (filterId) await takeOut(deps, accountId, ruleId, filterId);
-  await setRuleFilter(deps.db, ruleId, NONE, clock(deps));
+  await setRuleFilter(deps.db, ruleId, accountId, NONE, clock(deps));
   return filterId !== null;
 }
 
@@ -172,14 +171,14 @@ async function settleRuleFilters(deps: ActionDeps, accountId: string): Promise<v
   const existing = await deps.mailbox.listFilters();
   for (const { id, type, payload, error } of open as { id: number; type: 'filter' | 'unfilter'; payload: string; error: string | null }[]) {
     const { ruleId, id: filterId, criteria = {}, action = {} } = openPayload(deps.db, accountId, payload).filter!;
-    const rule = await getRuleFilter(deps.db, ruleId);
+    const rule = await getRuleFilter(deps.db, ruleId, accountId);
     if (type === 'unfilter') {
       if (existing.some((f) => f.id === filterId)) {
         // The call's own error, where it gave one, says more than the read-back.
         await finishAction(deps.db, id, 'failed', null, error ?? 'the filter was still there when read back', clock(deps));
         continue;
       }
-      if (rule?.filterId === filterId) await setRuleFilter(deps.db, ruleId, NONE, clock(deps));
+      if (rule?.filterId === filterId) await setRuleFilter(deps.db, ruleId, accountId, NONE, clock(deps));
       await finishAction(deps.db, id, 'done', null, null, clock(deps));
       continue;
     }
@@ -190,11 +189,12 @@ async function settleRuleFilters(deps: ActionDeps, accountId: string): Promise<v
     }
     const owned = (await listRuleFilters(deps.db, accountId)).some((r) => r.filterId === landed.id);
     if (!owned) {
-      const verdict = rule && !rule.filterId ? (await filterVerdicts(deps.db, accountId)).get(ruleId) : undefined;
+      const verdict = rule && !rule.filterId ? (await filterVerdicts(deps.db)).get(ruleId) : undefined;
       if (verdict?.possible && sameFilter(landed, await proposal(deps, verdict.plan)))
         await setRuleFilter(
           deps.db,
           ruleId,
+          accountId,
           { filterId: landed.id, state: 'active', written: { plan: verdict.plan, got: landed } satisfies Written },
           clock(deps),
         );
@@ -231,27 +231,27 @@ export async function checkRuleFilters(deps: ActionDeps, accountId: string, fix:
     const written = row.written as Written | null;
     const found = existing.find((f) => f.id === row.filterId);
     if (!found) {
-      await setRuleFilter(deps.db, row.ruleId, { ...NONE, state: 'gone' }, clock(deps));
+      await setRuleFilter(deps.db, row.ruleId, accountId, { ...NONE, state: 'gone' }, clock(deps));
       check.gone++;
       continue;
     }
     if (!written || !sameFilter(found, written.got)) {
-      await setRuleFilter(deps.db, row.ruleId, { ...row, state: 'changed' }, clock(deps));
+      await setRuleFilter(deps.db, row.ruleId, accountId, { ...row, state: 'changed' }, clock(deps));
       if (row.state !== 'changed') check.changed++;
       continue;
     }
     // Asked afresh each time: removing or replacing one filter can clear the way for another rule.
-    const verdict = (await filterVerdicts(deps.db, accountId)).get(row.ruleId);
+    const verdict = (await filterVerdicts(deps.db)).get(row.ruleId);
     if (verdict?.possible && samePlan(verdict.plan, written.plan)) {
-      await setRuleFilter(deps.db, row.ruleId, { ...row, state: 'active' }, clock(deps));
+      await setRuleFilter(deps.db, row.ruleId, accountId, { ...row, state: 'active' }, clock(deps));
       continue;
     }
     if (row.state !== 'outdated') check.outdated++;
-    if (!fix) await setRuleFilter(deps.db, row.ruleId, { ...row, state: 'outdated' }, clock(deps));
-    else if (verdict?.possible) await writeRuleFilter(deps, row.ruleId);
+    if (!fix) await setRuleFilter(deps.db, row.ruleId, accountId, { ...row, state: 'outdated' }, clock(deps));
+    else if (verdict?.possible) await writeRuleFilter(deps, row.ruleId, accountId);
     else {
-      await removeRuleFilter(deps, row.ruleId);
-      await setRuleFilter(deps.db, row.ruleId, { ...NONE, state: 'outdated' }, clock(deps));
+      await removeRuleFilter(deps, row.ruleId, accountId);
+      await setRuleFilter(deps.db, row.ruleId, accountId, { ...NONE, state: 'outdated' }, clock(deps));
     }
   }
   return check;

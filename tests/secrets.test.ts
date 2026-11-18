@@ -260,7 +260,7 @@ describe('mail', () => {
   it('keeps only that there is a list id, and gives it back from the headers, to examples too', async () => {
     const { as } = await alpha(A);
     const db = await as(A);
-    await withSampleLabels(db, 'alpha@example.org');
+    await withSampleLabels(db);
     await recordSync(
       db,
       'alpha@example.org',
@@ -282,7 +282,7 @@ describe('mail', () => {
 
   it('hashes what examples are found by for answers given before there were these hashes, and again under a new key', async () => {
     const { as } = await alpha(A);
-    await withSampleLabels(await as(A), 'alpha@example.org');
+    await withSampleLabels(await as(A));
     // As migration 0041 left every example it found.
     await raw(await as(A)).run(
       `INSERT INTO examples (account_id, message_id, label_id, marked_at, status) VALUES ('alpha@example.org', 'm1', 'newsletter', 1, 'captured')`,
@@ -329,8 +329,8 @@ describe('mail', () => {
   it('keeps rules, changes and reasons encrypted, and finds a rule by its hashed conditions under each key', async () => {
     const { as } = await alpha(A);
     const db = await as(A);
-    const id = await setRule(db, 'alpha@example.org', { from: ['news@example.com'] }, { disposition: 'archive', name: 'Example news' }, 'user', 0);
-    expect(await setRule(db, 'alpha@example.org', { from: ['news@example.com'] }, { disposition: 'keep' }, 'user', 0)).toBe(id);
+    const id = await setRule(db, { from: ['news@example.com'] }, { disposition: 'archive', name: 'Example news' }, 'user', 0);
+    expect(await setRule(db, { from: ['news@example.com'] }, { disposition: 'keep' }, 'user', 0)).toBe(id);
     await recordDecision(
       db,
       'alpha@example.org',
@@ -349,7 +349,7 @@ describe('mail', () => {
       },
       0,
     );
-    await setRuleFilter(db, id, { filterId: 'f1', state: 'active', written: { from: 'news@example.com' } }, 0);
+    await setRuleFilter(db, id, 'alpha@example.org', { filterId: 'f1', state: 'active', written: { from: 'news@example.com' } }, 0);
     const suggested = await startLabelProposal(db, { accountId: 'alpha@example.org', goal: 'Example news out of the way', model: 'test/model', now: 0 });
     const draft = { name: 'Example news', description: 'From news@example.com', disposition: 'archive', why: 'Example news' } as const;
     await finishLabelProposal(db, 'alpha@example.org', suggested, {
@@ -359,12 +359,12 @@ describe('mail', () => {
     });
     await startRuleDraft(db, { accountId: 'alpha@example.org', goal: 'Archive news@example.com', model: 'test/model', now: 0 });
     const stored = await raw(db).all(
-      'SELECT r.match, r.except_matches, r.conditions, r.name, r.filter_written, d.reason, a.payload, l.goal, l.labels, l.note, rd.goal FROM rules r, decisions d, actions a, label_proposals l, rule_drafts rd',
+      'SELECT r.match, r.except_matches, r.conditions, r.name, f.written, d.reason, a.payload, l.goal, l.labels, l.note, rd.goal FROM rules r, rule_filters f, decisions d, actions a, label_proposals l, rule_drafts rd',
     );
     expect(JSON.stringify(stored)).not.toContain('example.com');
     expect(JSON.stringify(stored)).not.toContain('Example news');
     // A rule replaced without a name keeps its own.
-    expect((await listRules(db, 'alpha@example.org'))[0]).toMatchObject({
+    expect((await listRules(db))[0]).toMatchObject({
       id,
       match: { from: ['news@example.com'] },
       labelId: 'everything_else',
@@ -374,10 +374,10 @@ describe('mail', () => {
 
     await rekeyContent(await as(B_AFTER_A));
     const b = await as(B);
-    expect(await hasRuleFor(b, 'alpha@example.org', { from: ['news@example.com'] })).toBe(true);
-    expect((await listRules(b, 'alpha@example.org'))[0]).toMatchObject({ name: 'Example news' });
+    expect(await hasRuleFor(b, { from: ['news@example.com'] })).toBe(true);
+    expect((await listRules(b))[0]).toMatchObject({ name: 'Example news' });
     expect(await getAction(b, action)).toMatchObject({ payload: { unsubscribe: 'news.example.com' } });
-    expect(await getRuleFilter(b, id)).toMatchObject({ written: { from: 'news@example.com' } });
+    expect(await getRuleFilter(b, id, 'alpha@example.org')).toMatchObject({ written: { from: 'news@example.com' } });
     expect(await latestLabelProposal(b, ['alpha@example.org'])).toMatchObject({
       goal: 'Example news out of the way',
       drafts: [draft],
@@ -391,20 +391,20 @@ describe('mail', () => {
     const { as } = await alpha();
     const db = await as(NONE);
     await raw(db).run(
-      `INSERT INTO rules (id, account_id, position, match, except_matches, conditions, disposition, source, created_at) VALUES ('r', 'alpha@example.org', 0, '{"from": ["a@example.com"]}', '[]', 'unset:x', 'archive', 'user', 0)`,
+      `INSERT INTO rules (id, position, match, except_matches, conditions, disposition, source, created_at) VALUES ('r', 0, '{"from": ["a@example.com"]}', '[]', 'unset:x', 'archive', 'user', 0)`,
     );
-    expect(await hasRuleFor(db, 'alpha@example.org', { from: ['a@example.com'] })).toBe(false);
+    expect(await hasRuleFor(db, { from: ['a@example.com'] })).toBe(false);
     await rekeyContent(db);
-    expect(await hasRuleFor(db, 'alpha@example.org', { from: ['a@example.com'] })).toBe(true);
+    expect(await hasRuleFor(db, { from: ['a@example.com'] })).toBe(true);
   });
 
   it('reads a rule or proposal stored with one value per condition as a list of it', async () => {
     const { as } = await alpha(A);
     const db = await as(A);
-    await withSampleLabels(db, 'alpha@example.org');
+    await withSampleLabels(db);
     const old = { from: 'a@example.com', subjectContains: 'Weekly' };
     await raw(db).run(
-      `INSERT INTO rules (id, account_id, position, match, except_matches, conditions, disposition, source, created_at) VALUES ('r', 'alpha@example.org', 0, ?, ?, 'unset:r', 'archive', 'user', 0)`,
+      `INSERT INTO rules (id, position, match, except_matches, conditions, disposition, source, created_at) VALUES ('r', 0, ?, ?, 'unset:r', 'archive', 'user', 0)`,
       sealJson(db, ruleName(db, 'r', 'match'), old),
       sealJson(db, ruleName(db, 'r', 'except'), [{ fromName: 'Example' }]),
     );
@@ -413,7 +413,7 @@ describe('mail', () => {
       sealJson(db, proposalName(db, 'alpha@example.org'), { from: 'b@example.com' }),
     );
     await rekeyContent(db);
-    expect((await listRules(db, 'alpha@example.org'))[0]).toMatchObject({
+    expect((await listRules(db))[0]).toMatchObject({
       match: { from: ['a@example.com'], subjectContains: ['Weekly'] },
       except: [{ fromName: ['Example'] }],
     });
@@ -426,7 +426,7 @@ describe('mail', () => {
   it('keeps the answered one of two proposals for the same mail that hashed apart before conditions held lists', async () => {
     const { as } = await alpha(A);
     const db = await as(A);
-    await withSampleLabels(db, 'alpha@example.org');
+    await withSampleLabels(db);
     await raw(db).run(
       `INSERT INTO proposals (account_id, match, conditions, label_id, disposition, agreed, status, created_at) VALUES ('alpha@example.org', ?, 'unset:p', 'newsletter', 'archive', 3, 'dismissed', 0)`,
       sealJson(db, proposalName(db, 'alpha@example.org'), { from: 'b@example.com' }),

@@ -82,10 +82,10 @@ const MAX_RUN = 20;
  * the sender already has a rule for all their mail or for that label. Returns true if a proposal was opened.
  */
 export async function proposeFromCorrections(db: Sql, accountId: string, address: string, labelId: string, now: number = Date.now()): Promise<boolean> {
-  const label = (await listLabels(db, accountId)).find((l) => l.id === labelId);
+  const label = (await listLabels(db)).find((l) => l.id === labelId);
   if (!label) return false;
   const match = { from: [address] };
-  if ((await hasRuleFor(db, accountId, match)) || (await hasRuleFor(db, accountId, match, labelId))) return false;
+  if ((await hasRuleFor(db, match)) || (await hasRuleFor(db, match, labelId))) return false;
   const recent = await db
     .select({ disposition: feedback.disposition })
     .from(feedback)
@@ -117,11 +117,11 @@ export async function dismissProposal(db: Sql, id: number, now: number = Date.no
 }
 
 /** Mark a proposed rule for `accountId` accepted, once a rule has been made from it. Returns false if there is no such proposal open. */
-export async function madeFromProposal(db: Sql, id: number, accountId: string, now: number = Date.now()): Promise<boolean> {
+export async function madeFromProposal(db: Sql, id: number, now: number = Date.now()): Promise<boolean> {
   const done = await db
     .update(proposals)
     .set({ status: 'accepted', resolvedAt: now })
-    .where(and(eq(proposals.id, id), eq(proposals.accountId, accountId), eq(proposals.status, 'open')))
+    .where(and(eq(proposals.id, id), eq(proposals.status, 'open')))
     .returning({ id: proposals.id });
   return done.length > 0;
 }

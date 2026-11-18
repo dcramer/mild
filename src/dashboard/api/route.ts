@@ -1,4 +1,4 @@
-import { type actions, type decisions, eq, type proposals, type rules } from '../../store/query.ts';
+import { type actions, type decisions, eq, type proposals } from '../../store/query.ts';
 import { z } from 'zod';
 import type { Person } from '../../store/people.ts';
 import type { Sql } from '../../store/sql.ts';
@@ -89,7 +89,7 @@ export const named = (_ctx: Context, body: { accountId: string }): Touches => ({
 
 /** The mailbox that owns the row a write names by `id`. */
 export const ownerOf =
-  (table: typeof rules | typeof proposals | typeof actions | typeof decisions) =>
+  (table: typeof proposals | typeof actions | typeof decisions) =>
   async ({ db }: Context, body: { id: string | number }): Promise<Touches> => {
     const [row] = await db
       .select({ accountId: table.accountId })
@@ -119,9 +119,8 @@ export const self = () => 'self' as const;
 export const nothing = z.strictObject({});
 
 /** After a rule or label changed: waiting suggestions they now decide differently get a new decision. No model is called. */
-export async function redecide(db: Sql, now: () => number, accountId?: string): Promise<number> {
+export async function redecide(db: Sql, now: () => number): Promise<number> {
   let recorded = 0;
-  for (const account of await listAccounts(db))
-    if (accountId === undefined || account.id === accountId) recorded += await redecideWaiting(db, account.id, now());
+  for (const account of await listAccounts(db)) recorded += await redecideWaiting(db, account.id, now());
   return recorded;
 }

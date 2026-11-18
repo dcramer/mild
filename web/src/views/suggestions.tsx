@@ -209,7 +209,7 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
   const [search, setSearch] = useParam('q');
   const [does, setDoes] = useParam('does', DOES);
 
-  const names = new Map(Object.values(data?.labels ?? {}).flatMap((list) => list.map((l) => [l.id, l.name] as const)));
+  const names = new Map((data?.labels ?? []).map((l) => [l.id, l.name] as const));
   const needle = search.trim().toLowerCase();
   const shown = (data?.items ?? []).filter(
     (i) =>
@@ -272,7 +272,7 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
       {data && data.proposals.length > 0 ? (
         <ul className="sheet flex flex-col">
           {data.proposals.map((proposal) => (
-            <ProposalRow key={proposal.id} proposal={proposal} labels={data.labels[proposal.accountId] ?? []} />
+            <ProposalRow key={proposal.id} proposal={proposal} labels={data.labels} />
           ))}
         </ul>
       ) : null}
@@ -321,7 +321,7 @@ export function SuggestionsView({ onOpen }: { onOpen: OpenMessages }) {
                 key={`${item.accountId}/${item.messageId}`}
                 item={item}
                 rest={rest}
-                labels={data?.labels[item.accountId] ?? []}
+                labels={data?.labels ?? []}
                 waiting={answerable}
                 onOpen={() => onOpen(refs, order.indexOf(item))}
                 onAnswered={reload}

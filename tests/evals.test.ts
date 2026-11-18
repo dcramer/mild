@@ -181,7 +181,7 @@ describe('replaying the model over stored examples', () => {
   it('records settings that tell two runs apart', async () => {
     await runEval(deps({}), { accountId: ACCOUNT, fewShot: false });
     await runEval(deps({}), { accountId: ACCOUNT, fewShot: false });
-    await updateLabel(db, ACCOUNT, 'newsletter', { description: 'Anything sent to a list.' });
+    await updateLabel(db, 'newsletter', { description: 'Anything sent to a list.' });
     await runEval(deps({}), { accountId: ACCOUNT, fewShot: false });
     const [c, b, a] = await listEvalRuns(db);
     expect(a?.promptHash).toMatch(/^[0-9a-f]{12}$/);

@@ -277,7 +277,8 @@ function RemoveMailbox({
           onDone={onRemoved}
           onClose={() => setRemoving(false)}
         >
-          Sift stops reading it, revokes its access at Google, and deletes everything it recorded about its mail: decisions, answers, rules and labels.
+          Sift stops reading it, revokes its access at Google, and deletes everything it recorded about its mail: decisions and answers. Your labels and rules
+          stay, for your other mailboxes.
           {signedIn ? ' You are signed in as it, so you will be signed out.' : ''}
         </ConfirmRemoval>
       ) : null}

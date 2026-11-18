@@ -18,8 +18,8 @@ interface StoredRule extends Rule {
   hits: number;
 }
 
-/** An account's rules in evaluation order. */
-export async function listRules(db: Sql, accountId: string): Promise<StoredRule[]> {
+/** The person's rules in evaluation order, for every mailbox of theirs. */
+export async function listRules(db: Sql): Promise<StoredRule[]> {
   const rows = await db
     .select({
       id: rules.id,
@@ -36,7 +36,6 @@ export async function listRules(db: Sql, accountId: string): Promise<StoredRule[
       hits: rules.hits,
     })
     .from(rules)
-    .where(eq(rules.accountId, accountId))
     .orderBy(asc(rules.position), asc(rules.id));
   return rows.map((r) => {
     const except = openJson<RuleMatch[]>(db, ruleName(db, r.id, 'except'), r.except);
@@ -80,35 +79,30 @@ function leaveInInbox<T extends RuleSays>(rule: T): T {
   return { ...rest, labelId: LEAVE_IN_INBOX } as T;
 }
 
-/** Throws, with a sentence for the user, unless `rule` says something sift can act on with the account's labels. */
-async function check(db: Sql, accountId: string, rule: RuleSays): Promise<void> {
+/** Throws, with a sentence for the user, unless `rule` says something sift can act on with the person's labels. */
+async function check(db: Sql, rule: RuleSays): Promise<void> {
   if (rule.labelId === undefined && rule.whenLabel === undefined && rule.disposition === undefined)
     throw new Refusal('A rule needs a label, an action, or both.');
   if (rule.labelId !== undefined && rule.whenLabel !== undefined) throw new Refusal('A rule either says what mail is or waits for a label, not both.');
   if (rule.when?.trim() && rule.labelId === undefined) throw new Refusal('A condition in your own words needs a label for the mail it describes.');
   const named = rule.labelId ?? rule.whenLabel;
-  if (named !== undefined && !(await listLabels(db, accountId)).some((l) => l.id === named)) throw new Refusal(`There is no label "${named}".`);
+  if (named !== undefined && !(await listLabels(db)).some((l) => l.id === named)) throw new Refusal(`There is no label "${named}".`);
 }
 
-/** Append a rule after the account's existing ones. Returns its id. Throws if it has no condition, says nothing, or names no label of the account's. */
+/** Append a rule after the person's existing ones. Returns its id. Throws if it has no condition, says nothing, or names no label of theirs. */
 export async function addRule(
   db: Sql,
-  accountId: string,
   given: Omit<Rule, 'id' | 'learned' | 'name'> & Pick<RuleSays, 'name'>,
   source: RuleSource,
   now: number = Date.now(),
 ): Promise<string> {
   const rule = leaveInInbox({ ...given, match: tidyMatch(given.match), ...(given.except ? { except: given.except.map(tidyMatch) } : {}) });
   if (Object.keys(rule.match).length === 0) throw new Refusal('A rule needs at least one condition.');
-  await check(db, accountId, rule);
+  await check(db, rule);
   const id = `r-${randomBytes(4).toString('hex')}`;
-  const [{ next }] = (await db
-    .select({ next: sql<number>`coalesce(max(${rules.position}), 0) + 1`.mapWith(Number) })
-    .from(rules)
-    .where(eq(rules.accountId, accountId))) as [{ next: number }];
+  const [{ next }] = (await db.select({ next: sql<number>`coalesce(max(${rules.position}), 0) + 1`.mapWith(Number) }).from(rules)) as [{ next: number }];
   await db.insert(rules).values({
     id,
-    accountId,
     position: next,
     match: sealJson(db, ruleName(db, id, 'match'), rule.match),
     except: sealJson(db, ruleName(db, id, 'except'), rule.except ?? []),
@@ -143,40 +137,35 @@ export async function countRuleHit(db: Sql, id: string): Promise<void> {
  * for all their mail and one for each label it might be, so `whenLabel` says which is meant: null for the
  * rule that waits for no label.
  */
-async function ruleMatching(
-  db: Sql,
-  accountId: string,
-  match: RuleMatch,
-  whenLabel: string | null = null,
-): Promise<{ id: string; source: RuleSource } | undefined> {
+async function ruleMatching(db: Sql, match: RuleMatch, whenLabel: string | null = null): Promise<{ id: string; source: RuleSource } | undefined> {
   const [row] = await db
     .select({ id: rules.id, source: rules.source })
     .from(rules)
-    .where(and(eq(rules.accountId, accountId), eq(rules.conditions, conditionsHash(db, match)), sql`${rules.whenLabel} IS NOT DISTINCT FROM ${whenLabel}`))
+    .where(and(eq(rules.conditions, conditionsHash(db, match)), sql`${rules.whenLabel} IS NOT DISTINCT FROM ${whenLabel}`))
     .orderBy(asc(rules.position))
     .limit(1);
   return row;
 }
 
 /** Whether a rule has exactly these conditions and waits for `whenLabel` (none: a rule for all the mail they match). */
-export async function hasRuleFor(db: Sql, accountId: string, match: RuleMatch, whenLabel: string | null = null): Promise<boolean> {
-  return (await ruleMatching(db, accountId, match, whenLabel)) !== undefined;
+export async function hasRuleFor(db: Sql, match: RuleMatch, whenLabel: string | null = null): Promise<boolean> {
+  return (await ruleMatching(db, match, whenLabel)) !== undefined;
 }
 
 /**
  * Say what mail matching `match` is or what happens to it, replacing the rule with exactly the same
  * conditions (and the same awaited label) if there is one. Returns the rule's id.
  */
-export async function setRule(db: Sql, accountId: string, match: RuleMatch, says: RuleSays, source: RuleSource, now: number = Date.now()): Promise<string> {
+export async function setRule(db: Sql, match: RuleMatch, says: RuleSays, source: RuleSource, now: number = Date.now()): Promise<string> {
   const rule = leaveInInbox(says);
-  // Whatever sift was proposing for this mail is settled by the user saying what it is.
+  // Whatever sift was proposing for this mail, in any mailbox, is settled by the user saying what it is.
   await db
     .update(proposals)
     .set({ status: 'accepted', resolvedAt: now })
-    .where(and(eq(proposals.accountId, accountId), eq(proposals.conditions, conditionsHash(db, match)), eq(proposals.status, 'open')));
-  const existing = await ruleMatching(db, accountId, match, rule.whenLabel ?? null);
-  if (!existing) return await addRule(db, accountId, { match, ...rule }, source, now);
-  await check(db, accountId, rule);
+    .where(and(eq(proposals.conditions, conditionsHash(db, match)), eq(proposals.status, 'open')));
+  const existing = await ruleMatching(db, match, rule.whenLabel ?? null);
+  if (!existing) return await addRule(db, { match, ...rule }, source, now);
+  await check(db, rule);
   await db
     .update(rules)
     .set({
@@ -196,15 +185,15 @@ export async function setRule(db: Sql, accountId: string, match: RuleMatch, says
  * Block a sender: from now on their mail is `labelId` without being judged, whatever that label does.
  * A rule already made for exactly that sender is left alone. Returns true if a rule was written.
  */
-export async function blockSender(db: Sql, accountId: string, address: string, labelId: string, now: number = Date.now()): Promise<boolean> {
-  if (await ruleMatching(db, accountId, { from: [address] })) return false;
-  await addRule(db, accountId, { match: { from: [address] }, labelId }, 'learned', now);
+export async function blockSender(db: Sql, address: string, labelId: string, now: number = Date.now()): Promise<boolean> {
+  if (await ruleMatching(db, { from: [address] })) return false;
+  await addRule(db, { match: { from: [address] }, labelId }, 'learned', now);
   return true;
 }
 
 /** The user's own rule for exactly this address or domain, which is what their standing is read from. */
-export async function standingRule(db: Sql, accountId: string, match: { from: [string] } | { fromDomain: [string] }): Promise<string | null> {
-  return (await ruleMatching(db, accountId, match))?.id ?? null;
+export async function standingRule(db: Sql, match: { from: [string] } | { fromDomain: [string] }): Promise<string | null> {
+  return (await ruleMatching(db, match))?.id ?? null;
 }
 
 const STANDING_DOES = { trusted: 'keep', unwanted: 'archive', blocked: 'spam' } as const;
@@ -225,16 +214,15 @@ function standingOfRule(rule: Rule): Given | null {
  */
 export async function giveStanding(
   db: Sql,
-  accountId: string,
   match: { from: [string] } | { fromDomain: [string] },
   standing: Given,
   now: number,
 ): Promise<{ id: string; was: Given | null } | { theirs: string }> {
-  const existing = await ruleMatching(db, accountId, match);
-  const rule = existing && (await listRules(db, accountId)).find((r) => r.id === existing.id);
+  const existing = await ruleMatching(db, match);
+  const rule = existing && (await listRules(db)).find((r) => r.id === existing.id);
   const was = rule ? standingOfRule(rule) : null;
   if (rule && !was) return { theirs: rule.id };
-  return { id: await setRule(db, accountId, match, { disposition: STANDING_DOES[standing] }, 'user', now), was };
+  return { id: await setRule(db, match, { disposition: STANDING_DOES[standing] }, 'user', now), was };
 }
 
 /** Record a call for a rule before it is made. */

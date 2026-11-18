@@ -1,9 +1,19 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 import { generateDrizzleJson, generateMigration } from 'drizzle-kit/api';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import * as schema from '../src/store/schema.ts';
-import { addMailbox, connectAccount, connectedAddresses, deleteUser, mailboxesOf, makePrimary, recordSync, removeMailbox } from '../src/store/accounts.ts';
+import {
+  addMailbox,
+  connectAccount,
+  connectedAddresses,
+  deleteUser,
+  listAccounts,
+  mailboxesOf,
+  makePrimary,
+  recordSync,
+  removeMailbox,
+} from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { listLabels, updateLabel } from '../src/store/labels.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
@@ -13,11 +23,21 @@ import { openStore, storeOn } from '../src/store/store.ts';
 import { loadKeyring } from '../src/secrets.ts';
 import type { Sql } from '../src/store/sql.ts';
 import type { Disposition } from '../src/triage/types.ts';
-import { startRun } from '../src/store/runs.ts';
 import { freshStore, onePerson, openUserDb, raw, recordEverything, rowsBy, superuser } from './fixtures.ts';
 import { facts, tempDir, withSampleLabels } from './helpers.ts';
 
 const MIGRATIONS = new URL('../src/store/migrations/', import.meta.url);
+
+/** A database migrated up to `tag` and not through it, as an install was then, with a way to run each migration on it. */
+async function migratedBefore(tag: string) {
+  const journal = JSON.parse(readFileSync(new URL('meta/_journal.json', MIGRATIONS), 'utf8')) as { entries: { tag: string }[] };
+  const tags = journal.entries.map((e) => e.tag);
+  const db = new PGlite();
+  onTestFinished(() => db.close());
+  const run = async (each: string) => await db.exec(readFileSync(new URL(`${each}.sql`, MIGRATIONS), 'utf8'));
+  for (const each of tags.slice(0, tags.indexOf(tag))) await run(each);
+  return { db, run, after: tags[tags.indexOf(tag) + 1]! };
+}
 
 describe('migrations', () => {
   it('have been generated for everything in the schema', async () => {
@@ -30,11 +50,11 @@ describe('migrations', () => {
 
   it('enforce what the schema says', async () => {
     const db = await openUserDb('acct');
-    const insert = (account: string, id: string, disposition: Disposition) =>
-      db.insert(labels).values({ accountId: account, id, name: 'N', description: '', disposition, gmailLabel: 'sift/n', position: 0 }).execute();
-    await insert('acct', 'n', 'archive');
-    await expect(insert('acct', 'x', 'delete' as Disposition)).rejects.toThrow();
-    await expect(insert('missing', 'y', 'keep')).rejects.toThrow();
+    const insert = (id: string, disposition: Disposition) =>
+      db.insert(labels).values({ id, name: 'N', description: '', disposition, gmailLabel: 'sift/n', position: 0 }).execute();
+    await insert('n', 'archive');
+    await expect(insert('x', 'delete' as Disposition)).rejects.toThrow();
+    await expect(insert('n', 'keep')).rejects.toThrow();
   });
 
   it('keep the database where they were applied, and refuse one a newer sift has migrated', async () => {
@@ -228,24 +248,28 @@ describe('a primary mailbox', () => {
 
 describe('a model call', () => {
   it('made before calls said which rule they checked is given the rule whose condition it met, by a migration', async () => {
-    const account = 'alpha@example.org';
-    const { db } = await onePerson(account);
-    await recordSync(db, account, [facts({ messageId: 'a' }), facts({ messageId: 'b' })], '1', 1);
-    const checked = await addRule(db, account, { match: { fromDomain: ['example.com'] }, labelId: 'newsletter', when: 'a sale' }, 'user');
-    const waits = await addRule(db, account, { match: { from: ['news@example.com'] }, whenLabel: 'newsletter', disposition: 'archive' }, 'user');
-    const decided = async (messageId: string, ruleId: string) => {
-      const runId = await startRun(db, { accountId: account, messageId, model: 'test/model', now: 2 });
-      await recordDecision(db, account, messageId, { disposition: 'keep', subscription: 'preserve', stage: 'model', ruleId, reason: 'r' }, { now: 3, runId });
-      return runId;
-    };
-    const runs = [await decided('a', checked), await decided('b', waits)];
-    const migration = readFileSync(new URL('0045_rule_runs_from_decisions.sql', MIGRATIONS), 'utf8');
-    await (await superuser()).exec(migration);
-    await (await superuser()).exec(migration);
-    expect(await raw(db).all('SELECT id, rule_id FROM model_runs ORDER BY id')).toEqual([
-      { id: runs[0], rule_id: checked },
+    const { db, run } = await migratedBefore('0045_rule_runs_from_decisions');
+    await db.exec(`
+      INSERT INTO users (id, owner, created_at) VALUES (1, true, 0);
+      INSERT INTO accounts (id, user_id, created_at, "primary") VALUES ('a@example.org', 1, 0, true);
+      INSERT INTO mailboxes (user_id, id) VALUES (1, 'a@example.org');
+      INSERT INTO labels (user_id, account_id, id, name, description, disposition, gmail_label, position) VALUES (1, 'a@example.org', 'news', 'News', '', 'archive', 'sift/news', 0);
+      INSERT INTO messages (user_id, account_id, id, thread_id, sender_hash, domain_hash, received_at, headers, synced_at, facts) VALUES
+        (1, 'a@example.org', 'a', 't', 's', 'd', 0, 'h', 0, '{}'), (1, 'a@example.org', 'b', 't', 's', 'd', 0, 'h', 0, '{}');
+      INSERT INTO rules (user_id, id, account_id, position, match, except_matches, conditions, label_id, condition, source, created_at) VALUES
+        (1, 'checked', 'a@example.org', 1, 'm', 'e', 'c1', 'news', 'a sale', 'user', 0);
+      INSERT INTO rules (user_id, id, account_id, position, match, except_matches, conditions, when_label, disposition, source, created_at) VALUES
+        (1, 'waits', 'a@example.org', 2, 'm', 'e', 'c2', 'news', 'archive', 'user', 0);
+      INSERT INTO model_runs (user_id, id, account_id, message_id, model, started_at) VALUES (1, 1, 'a@example.org', 'a', 'm', 2), (1, 2, 'a@example.org', 'b', 'm', 2);
+      INSERT INTO decisions (user_id, id, account_id, message_id, stage, disposition, subscription, rule_id, reason, run_id, decided_at) VALUES
+        (1, 1, 'a@example.org', 'a', 'model', 'keep', 'preserve', 'checked', 'r', 1, 3), (1, 2, 'a@example.org', 'b', 'model', 'keep', 'preserve', 'waits', 'r', 2, 3);
+    `);
+    await run('0045_rule_runs_from_decisions');
+    await run('0045_rule_runs_from_decisions');
+    expect((await db.query('SELECT id, rule_id FROM model_runs ORDER BY id')).rows).toEqual([
+      { id: 1, rule_id: 'checked' },
       // A rule that waits for a label asks no model a question of its own.
-      { id: runs[1], rule_id: null },
+      { id: 2, rule_id: null },
     ]);
   });
 });
@@ -264,90 +288,110 @@ describe('a proposal', () => {
   });
 });
 
-describe('a new mailbox', () => {
-  it('starts with Leave in inbox alone, once, and keeps its labels when connected again', async () => {
+describe('a person', () => {
+  it('starts with Leave in inbox alone, once, and keeps their labels when a mailbox is connected again', async () => {
     const store = await freshStore();
     const db = await store.user(await connectAccount(store, 'alpha@example.org', '1', 0));
-    expect(await listLabels(db, 'alpha@example.org')).toEqual([{ id: 'everything_else', name: 'Leave in inbox', description: '', disposition: 'keep' }]);
-    await withSampleLabels(db, 'alpha@example.org');
-    await updateLabel(db, 'alpha@example.org', 'newsletter', { name: 'Reading' });
+    expect(await listLabels(db)).toEqual([{ id: 'everything_else', name: 'Leave in inbox', description: '', disposition: 'keep' }]);
+    await withSampleLabels(db);
+    await updateLabel(db, 'newsletter', { name: 'Reading' });
     await connectAccount(store, 'alpha@example.org', '9', 5);
     await addMailbox(db, 'alpha@example.org', '10');
-    expect((await listLabels(db, 'alpha@example.org')).map((l) => l.name)).toContain('Reading');
+    expect((await listLabels(db)).map((l) => l.name)).toContain('Reading');
     // Leave in inbox is listed after the person's own; the page puts it first.
-    expect((await listLabels(db, 'alpha@example.org')).at(-1)?.id).toBe('everything_else');
-    // A store opened afresh puts back a mailbox missing from a person's database, with its one label.
+    expect((await listLabels(db)).at(-1)?.id).toBe('everything_else');
+    // A store opened afresh puts back a mailbox missing from a person's database; their labels were never its.
     await raw(db).run('DELETE FROM mailboxes');
-    expect(await listLabels(db, 'alpha@example.org')).toEqual([]);
     const reopened = await storeOn(pglite(await superuser()), loadKeyring({})).user(1);
-    expect((await listLabels(reopened, 'alpha@example.org')).map((l) => l.id)).toEqual(['everything_else']);
+    expect((await listAccounts(reopened)).map((m) => m.id)).toEqual(['alpha@example.org']);
+    expect((await listLabels(reopened)).map((l) => l.name)).toContain('Reading');
   });
 
-  it("connected later has the labels of the person's other mailboxes, so it is not set up again", async () => {
+  it("has one set of labels and rules for every mailbox of theirs, and none of anyone else's", async () => {
     const store = await freshStore();
     const person = await connectAccount(store, 'alpha@example.org', '1', 0);
     const db = await store.user(person);
-    await withSampleLabels(db, 'alpha@example.org');
-    await updateLabel(db, 'alpha@example.org', 'newsletter', { name: 'Reading' });
+    await withSampleLabels(db);
+    const rule = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     await connectAccount(store, 'beta@example.org', '1', 0, person);
-    const [alpha, beta] = [await listLabels(db, 'alpha@example.org'), await listLabels(db, 'beta@example.org')];
-    expect(beta).toEqual(alpha);
-    expect(beta.find((l) => l.id === 'newsletter')).toMatchObject({ name: 'Reading', gmailLabel: 'sift/newsletters' });
-    // One by the same name, from a mailbox set up on its own, is not copied twice.
-    await raw(db).run(
-      `UPDATE labels SET id = 'reading-elsewhere', gmail_label = 'sift/reading-elsewhere' WHERE account_id = 'beta@example.org' AND id = 'newsletter'`,
-    );
-    await connectAccount(store, 'delta@example.org', '1', 0, person);
-    expect((await listLabels(db, 'delta@example.org')).filter((l) => l.name === 'Reading')).toHaveLength(1);
-    // Someone else's are not theirs.
-    expect((await listLabels(await store.user(await connectAccount(store, 'gamma@example.org', '1', 0)), 'gamma@example.org')).map((l) => l.id)).toEqual([
-      'everything_else',
+    expect((await listLabels(db)).filter((l) => l.id === 'newsletter')).toHaveLength(1);
+    expect((await listRules(db)).map((r) => r.id)).toEqual([rule]);
+    // Removing a mailbox leaves them.
+    await removeMailbox(store, person, 'beta@example.org');
+    expect((await listRules(db)).map((r) => r.id)).toEqual([rule]);
+    const other = await store.user(await connectAccount(store, 'gamma@example.org', '1', 0));
+    expect((await listLabels(other)).map((l) => l.id)).toEqual(['everything_else']);
+    expect(await listRules(other)).toEqual([]);
+  });
+
+  it("had each mailbox's labels and rules made one set by a migration, the primary mailbox's first", async () => {
+    const { db, run, after } = await migratedBefore('0048_labels_and_rules_are_the_persons');
+    // One person with two mailboxes, the later one primary, as before 0048.
+    await db.exec(`
+      INSERT INTO users (id, owner, created_at) VALUES (1, true, 0);
+      INSERT INTO accounts (id, user_id, created_at, "primary") VALUES ('a@example.org', 1, 0, false), ('b@example.org', 1, 1, true);
+      INSERT INTO mailboxes (user_id, id) VALUES (1, 'a@example.org'), (1, 'b@example.org');
+      INSERT INTO labels (user_id, account_id, id, name, description, disposition, gmail_label, position) VALUES
+        (1, 'a@example.org', 'everything_else', 'Leave in inbox', '', 'keep', NULL, 30),
+        (1, 'b@example.org', 'everything_else', 'Leave in inbox', '', 'keep', NULL, 30),
+        (1, 'a@example.org', 'news', 'News', 'from a', 'archive', 'sift/news', 0),
+        (1, 'b@example.org', 'news', 'News', 'from b', 'keep', 'sift/news', 0),
+        (1, 'a@example.org', 'reading', 'Bills', 'renamed', 'keep', 'sift/reading', 1),
+        (1, 'b@example.org', 'bills', 'Bills', 'its own', 'keep', 'sift/bills', 1),
+        (1, 'a@example.org', 'trips', 'Trips', '', 'archive', 'sift/trips', 2);
+      INSERT INTO rules (user_id, id, account_id, position, match, except_matches, conditions, label_id, source, hits, created_at, filter_id, filter_state, filter_written, filter_checked_at) VALUES
+        (1, 'r-a1', 'a@example.org', 1, 'm', 'e', 'same', 'news', 'user', 2, 0, 'gmail-a', 'active', 'w', 5),
+        (1, 'r-b1', 'b@example.org', 1, 'm', 'e', 'same', 'news', 'user', 3, 0, 'gmail-b', 'active', 'w', 5),
+        (1, 'r-a2', 'a@example.org', 2, 'm', 'e', 'other', 'reading', 'user', 0, 0, NULL, NULL, NULL, NULL);
+    `);
+    await run('0048_labels_and_rules_are_the_persons');
+    await run(after);
+    const labelRows = (await db.query<{ id: string; description: string; position: number }>('SELECT id, description, position FROM labels ORDER BY position'))
+      .rows;
+    // The primary mailbox's wins where they differ, and two labels with one name are one.
+    expect(labelRows).toEqual([
+      { id: 'news', description: 'from b', position: 0 },
+      { id: 'bills', description: 'its own', position: 1 },
+      { id: 'trips', description: '', position: 3 },
+      { id: 'everything_else', description: '', position: 30 },
+    ]);
+    // Rules that said the same are one, with both counts; one naming the label merged away names the one kept.
+    const ruleRows = (await db.query<{ id: string; label_id: string; hits: number }>('SELECT id, label_id, hits FROM rules ORDER BY position')).rows;
+    expect(ruleRows).toEqual([
+      { id: 'r-b1', label_id: 'news', hits: 5 },
+      { id: 'r-a2', label_id: 'bills', hits: 0 },
+    ]);
+    // Each mailbox's Gmail filter stays its own, where its rule was kept.
+    expect((await db.query('SELECT rule_id, account_id, filter_id FROM rule_filters')).rows).toEqual([
+      { rule_id: 'r-b1', account_id: 'b@example.org', filter_id: 'gmail-b' },
     ]);
   });
 
-  it("connected later with no labels of its own is given the person's by a migration", async () => {
-    const store = await freshStore();
-    const person = await connectAccount(store, 'alpha@example.org', '1', 0);
-    const db = await store.user(person);
-    await withSampleLabels(db, 'alpha@example.org');
-    await connectAccount(store, 'beta@example.org', '1', 0, person);
-    // As one was made before: Leave in inbox alone, and a label it once had, removed.
-    await raw(db).run(`DELETE FROM labels WHERE account_id = 'beta@example.org' AND id NOT IN ('everything_else', 'newsletter')`);
-    await raw(db).run(`UPDATE labels SET removed_at = 1 WHERE account_id = 'beta@example.org' AND id = 'newsletter'`);
-    const migration = readFileSync(new URL('0038_later_mailboxes_have_labels.sql', MIGRATIONS), 'utf8');
-    await (await superuser()).exec(migration);
-    await (await superuser()).exec(migration);
-    expect(await listLabels(db, 'beta@example.org')).toEqual(await listLabels(db, 'alpha@example.org'));
-  });
-
-  it('made before Everything Else existed is given it by a migration, after its own labels, and it becomes Leave in inbox', async () => {
+  it('had Everything Else become Leave in inbox by a migration', async () => {
     const { db } = await onePerson('alpha@example.org');
-    await raw(db).run(`DELETE FROM labels WHERE id = 'everything_else'`);
-    const migration = readFileSync(new URL('0030_every_mailbox_has_everything_else.sql', MIGRATIONS), 'utf8');
-    await (await superuser()).exec(migration);
-    await (await superuser()).exec(migration);
-    expect((await listLabels(db, 'alpha@example.org')).filter((l) => l.id === 'everything_else')).toHaveLength(1);
-    expect((await listLabels(db, 'alpha@example.org')).at(-1)?.id).toBe('everything_else');
+    await raw(db).run(
+      `UPDATE labels SET name = 'Everything Else', description = 'Mail that is plainly none of the other labels.' WHERE id = 'everything_else'`,
+    );
     // Its old default said nothing of the person's, so it goes; what they wrote stays theirs.
     const renamed = readFileSync(new URL('0034_leave_in_inbox.sql', MIGRATIONS), 'utf8');
     await (await superuser()).exec(renamed);
-    expect((await listLabels(db, 'alpha@example.org')).at(-1)).toEqual({ id: 'everything_else', name: 'Leave in inbox', description: '', disposition: 'keep' });
+    expect((await listLabels(db)).at(-1)).toEqual({ id: 'everything_else', name: 'Leave in inbox', description: '', disposition: 'keep' });
     await raw(db).run(`UPDATE labels SET name = 'The rest', description = 'Bills I still owe.' WHERE id = 'everything_else'`);
     await (await superuser()).exec(renamed);
-    expect((await listLabels(db, 'alpha@example.org')).at(-1)).toMatchObject({ name: 'Leave in inbox', description: 'Bills I still owe.' });
+    expect((await listLabels(db)).at(-1)).toMatchObject({ name: 'Leave in inbox', description: 'Bills I still owe.' });
     // Then it stops being the person's to write in at all.
     await (await superuser()).exec(readFileSync(new URL('0037_leave_in_inbox_is_fixed.sql', MIGRATIONS), 'utf8'));
-    expect((await listLabels(db, 'alpha@example.org')).at(-1)).toMatchObject({ name: 'Leave in inbox', description: '' });
+    expect((await listLabels(db)).at(-1)).toMatchObject({ name: 'Leave in inbox', description: '' });
   });
 
   it('turns a rule made before that only keeps mail into Leave in inbox, and leaves one with an extra', async () => {
     const { db } = await onePerson('alpha@example.org');
-    const trusted = await addRule(db, 'alpha@example.org', { match: { from: ['ada@example.org'] }, disposition: 'archive' }, 'user');
-    const read = await addRule(db, 'alpha@example.org', { match: { from: ['digest@example.com'] }, disposition: 'archive', markRead: true }, 'user');
+    const trusted = await addRule(db, { match: { from: ['ada@example.org'] }, disposition: 'archive' }, 'user');
+    const read = await addRule(db, { match: { from: ['digest@example.com'] }, disposition: 'archive', markRead: true }, 'user');
     // As they were stored before: an action that keeps, with no label.
     await raw(db).run(`UPDATE rules SET disposition = 'keep'`);
     await (await superuser()).exec(readFileSync(new URL('0035_leave_in_inbox_rules.sql', MIGRATIONS), 'utf8'));
-    const rules = await listRules(db, 'alpha@example.org');
+    const rules = await listRules(db);
     expect(rules.find((r) => r.id === trusted)).toMatchObject({ labelId: 'everything_else' });
     expect(rules.find((r) => r.id === trusted)).not.toHaveProperty('disposition');
     expect(rules.find((r) => r.id === read)).toMatchObject({ disposition: 'keep', markRead: true });
@@ -362,7 +406,7 @@ describe('a new mailbox', () => {
     ).rejects.toThrow();
     await expect(
       raw(db).run(
-        `INSERT INTO rules (id, account_id, position, match, except_matches, conditions, when_label, source, created_at) VALUES ('r', 'alpha@example.org', 0, '{}', '[]', 'c', 'nonsense', 'user', 0)`,
+        `INSERT INTO rules (id, position, match, except_matches, conditions, when_label, source, created_at) VALUES ('r', 0, '{}', '[]', 'c', 'nonsense', 'user', 0)`,
       ),
     ).rejects.toThrow();
   });

@@ -55,10 +55,8 @@ async function pulledInWaiting(db: Sql, scope: Scope): Promise<boolean> {
 }
 
 export async function listSuggestions(db: Sql, scope: Scope, options: { includeKept?: boolean; fact?: FactFilter } = {}): Promise<Suggestions> {
-  const accounts = scope.accounts.map((id) => ({ id }));
-  const labels = new Map<string, Label[]>();
-  for (const { id } of accounts) labels.set(id, await listLabels(db, id));
-  const names = new Map([...labels].flatMap(([account, list]) => list.map((l) => [`${account}\n${l.id}`, l.name] as const)));
+  const labels = await listLabels(db);
+  const names = new Map(labels.map((l) => [l.id, l.name] as const));
   const waitingNow = (await pendingSuggestions(db, { accounts: scope.accounts, ...(options.fact ? { facts: FACT_FILTERS[options.fact] } : {}) })).filter(
     (s) => options.includeKept || s.disposition !== 'keep',
   );
@@ -98,7 +96,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
       .toSorted((a, b) => b[1] - a[1])
       .slice(0, 2)
       .flatMap(([id, n]) => {
-        const name = names.get(`${s.accountId}\n${id}`);
+        const name = names.get(id);
         return name ? [{ id, name, share: n / total }] : [];
       });
   };
@@ -132,7 +130,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
     receivedAt: s.receivedAt,
     disposition: s.block ? 'block' : s.disposition,
     labelId: s.labelId,
-    labelName: (s.labelId && names.get(`${s.accountId}\n${s.labelId}`)) ?? null,
+    labelName: (s.labelId && names.get(s.labelId)) ?? null,
     stage: s.stage,
     confidence: s.confidence,
     alternatives: alternatives(s),
@@ -140,7 +138,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
   }));
   const { reviewed, right } = await accuracy(db, 0, scope.accounts);
   return {
-    labels: Object.fromEntries([...labels].map(([id, list]) => [id, list.map((l) => ({ id: l.id, name: l.name, disposition: outcomeOf(l) }))])),
+    labels: labels.map((l) => ({ id: l.id, name: l.name, disposition: outcomeOf(l) })),
     proposals: await proposalSummaries(db, scope, labels),
     items,
     waiting: waitingNow.length,
@@ -150,10 +148,10 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
   };
 }
 
-async function proposalSummaries(db: Sql, scope: Scope, labels: Map<string, Label[]>): Promise<Suggestions['proposals']> {
+async function proposalSummaries(db: Sql, scope: Scope, labels: readonly Label[]): Promise<Suggestions['proposals']> {
   const summaries: Suggestions['proposals'] = [];
   for (const p of await listProposals(db)) {
-    const label = labels.get(p.accountId)?.find((l) => l.id === p.labelId);
+    const label = labels.find((l) => l.id === p.labelId);
     // A proposal whose label has been removed has nothing to offer.
     if (!sees(scope, p.accountId) || !label) continue;
     summaries.push({

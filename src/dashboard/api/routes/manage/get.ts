@@ -26,7 +26,7 @@ async function manageState({ db, controls, person }: Context, scope: Scope): Pro
     accounts: await Promise.all(
       accounts.map(async (a) => ({ id: a.id, email: a.email, lastSyncedAt: await lastSyncedAt(db, a.id), primary: a.id === person?.primary })),
     ),
-    labels: Object.fromEntries(await Promise.all(accounts.map(async (a) => [a.id, await listLabelSummaries(db, scope, a.id)] as const))),
+    labels: await listLabelSummaries(db, scope),
     labelLimit: MAX_LABELS,
     inbox: await inboxProgress(
       db,

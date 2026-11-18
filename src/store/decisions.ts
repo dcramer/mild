@@ -4,7 +4,7 @@ import { openPart, sealPart } from './content.ts';
 import type { Decision, Disposition } from '../triage/types.ts';
 
 /** A decision's label, whose Gmail label is the one the decision applies. */
-const ofLabel = and(eq(labels.accountId, decisions.accountId), eq(labels.id, decisions.labelId));
+const ofLabel = eq(labels.id, decisions.labelId);
 
 type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
 

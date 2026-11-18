@@ -86,8 +86,8 @@ describe('searching the inbox for a rule', () => {
 
 describe('applying a rule to the inbox', () => {
   it('finds what the rule decides, seen or not, and leaves out what another rule or the user has decided', async () => {
-    const rule = await addRule(db, ACCOUNT, { match: { fromDomain: ['news.example.com'] }, labelId: 'marketing' }, 'user');
-    await addRule(db, ACCOUNT, { match: { from: ['vip@news.example.com'] }, disposition: 'keep' }, 'user');
+    const rule = await addRule(db, { match: { fromDomain: ['news.example.com'] }, labelId: 'marketing' }, 'user');
+    await addRule(db, { match: { from: ['vip@news.example.com'] }, disposition: 'keep' }, 'user');
     const seen = message('seen', 'deals@news.example.com');
     const answered = message('answered', 'deals@news.example.com');
     await recordSync(db, ACCOUNT, [seen, answered], '2');
@@ -112,7 +112,7 @@ describe('applying a rule to the inbox', () => {
   });
 
   it("checks only the newest, and scales what they say to Gmail's guess at how many there are", async () => {
-    const rule = await addRule(db, ACCOUNT, { match: { fromDomain: ['news.example.com'] }, labelId: 'marketing' }, 'user');
+    const rule = await addRule(db, { match: { fromDomain: ['news.example.com'] }, labelId: 'marketing' }, 'user');
     // Of the newest twenty, the even ones are the rule's.
     const inbox = Array.from({ length: 40 }, (_, i) => message(`m${i}`, i % 2 === 0 ? 'deals@news.example.com' : 'ada@example.org'));
     const { api, fetched } = gmail(inbox, { more: 300 });
@@ -127,7 +127,7 @@ describe('applying a rule to the inbox', () => {
   });
 
   it("records each as the user's press, to be carried out while Sift is off, and no longer waiting", async () => {
-    const rule = await addRule(db, ACCOUNT, { match: { fromDomain: ['news.example.com'] }, labelId: 'marketing' }, 'user');
+    const rule = await addRule(db, { match: { fromDomain: ['news.example.com'] }, labelId: 'marketing' }, 'user');
     const seen = message('seen', 'deals@news.example.com');
     await recordSync(db, ACCOUNT, [seen], '2');
     await recordDecision(db, ACCOUNT, 'seen', { disposition: 'review', subscription: 'preserve', stage: 'model', reason: 'unsure' }, { now: 1 });
@@ -162,7 +162,7 @@ describe('applying a rule to the inbox', () => {
   });
 
   it('marks mail a model must read first, and carries out what the rule decides once it has', async () => {
-    const rule = await addRule(db, ACCOUNT, { match: { fromDomain: ['news.example.com'] }, whenLabel: 'marketing', disposition: 'spam' }, 'user');
+    const rule = await addRule(db, { match: { fromDomain: ['news.example.com'] }, whenLabel: 'marketing', disposition: 'spam' }, 'user');
     const sale = message('sale', 'deals@news.example.com');
     const note = message('note', 'ceo@news.example.com');
     const { api } = gmail([sale, note]);
@@ -189,8 +189,8 @@ describe('applying a rule to the inbox', () => {
   });
 
   it('goes on a slice at a time, stops when asked or when its rule is removed, and leaves going through the inbox alone', async () => {
-    const rule = await addRule(db, ACCOUNT, { match: { fromDomain: ['news.example.com'] }, labelId: 'marketing' }, 'user');
-    const other = await addRule(db, ACCOUNT, { match: { from: ['ada@example.org'] }, disposition: 'archive' }, 'user');
+    const rule = await addRule(db, { match: { fromDomain: ['news.example.com'] }, labelId: 'marketing' }, 'user');
+    const other = await addRule(db, { match: { from: ['ada@example.org'] }, disposition: 'archive' }, 'user');
     const { api } = gmail(Array.from({ length: 300 }, (_, i) => message(`m${i}`, 'deals@news.example.com')));
     await startInboxRuns(db, [ACCOUNT], { acts: false, most: REACH.inbox, now: 1 });
     await startInboxRuns(db, [ACCOUNT], { acts: true, most: REACH.inbox, now: 1, ruleId: rule });

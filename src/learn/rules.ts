@@ -18,7 +18,7 @@ export async function draftRule(
   const { db } = deps;
   const now = deps.now ?? Date.now;
   const id = await startRuleDraft(db, { ...request, model: deps.model, now: now() });
-  const labels = await listLabels(db, request.accountId);
+  const labels = await listLabels(db);
   // Read once, on the first look-up: most of what is asked for names no sender.
   let senders: Promise<FoundSender[]> | undefined;
   const find = async (query: string) => searchSenders(await (senders ??= senderDirectory(db, request.accountId)), query);

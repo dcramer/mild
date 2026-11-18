@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, examples, inArray, isNotNull, isNull, labelProposals, labels, ne, or, rules, sql } from './query.ts';
+import { and, asc, desc, eq, examples, inArray, isNotNull, isNull, labelProposals, labels, or, rules, sql } from './query.ts';
 import { labelProposalName, openJson, sealJson } from './content.ts';
 import type { LabelDraft } from '../triage/proposal.ts';
 import type { Usage } from '../triage/stages/model.ts';
@@ -7,13 +7,12 @@ import { type Disposition, LEAVE_IN_INBOX, LEAVE_IN_INBOX_NAME, type Label } fro
 import { Refusal } from '../refusal.ts';
 
 /**
- * The only choice a new mailbox has; the labels are the person's own, from what they want of Sift. Listed after
+ * The only choice a new person has; the labels are their own, from what they want of Sift. Listed after
  * every label of theirs. Nothing about it changes: mail to treat differently gets a label of the person's own.
  */
 const leaveInInbox: Label = { id: LEAVE_IN_INBOX, name: LEAVE_IN_INBOX_NAME, description: '', disposition: 'keep' };
 
-const toRow = (accountId: string, l: Label, position: number) => ({
-  accountId,
+const toRow = (l: Label, position: number) => ({
   id: l.id,
   name: l.name,
   description: l.description,
@@ -25,14 +24,11 @@ const toRow = (accountId: string, l: Label, position: number) => ({
   unsubscribe: l.unsubscribe ?? false,
 });
 
-/** A new mailbox's one label, written with it (`ensureMailbox`). */
-export const inboxRow = (accountId: string) => toRow(accountId, leaveInInbox, MAX_LABELS);
+/** A person's one label before they have any of their own, written with their first mailbox (`ensureMailbox`). */
+export const inboxRow = () => toRow(leaveInInbox, MAX_LABELS);
 
-/**
- * The labels of the person's other mailboxes, each once, as rows for `accountId`. Where two mailboxes have one
- * (by id, or by name, as `draft` refuses a second), the first mailbox's wins.
- */
-export async function labelsOfTheirOtherMailboxes(db: Sql, accountId: string): Promise<ReturnType<typeof toRow>[]> {
+/** The person's labels in order, leaving out removed ones. */
+export async function listLabels(db: Sql): Promise<Label[]> {
   const rows = await db
     .select({
       id: labels.id,
@@ -45,37 +41,7 @@ export async function labelsOfTheirOtherMailboxes(db: Sql, accountId: string): P
       unsubscribe: labels.unsubscribe,
     })
     .from(labels)
-    .where(and(ne(labels.accountId, accountId), ne(labels.id, LEAVE_IN_INBOX), isNull(labels.removedAt)))
-    .orderBy(asc(labels.accountId), asc(labels.position), asc(labels.id));
-  const ids = new Set<string>();
-  const names = new Set<string>();
-  return rows
-    .filter((r) => {
-      const name = r.name.toLowerCase();
-      if (ids.has(r.id) || names.has(name)) return false;
-      ids.add(r.id);
-      names.add(name);
-      return true;
-    })
-    .slice(0, MAX_LABELS)
-    .map((r, position) => ({ ...r, accountId, position }));
-}
-
-/** An account's labels in order, leaving out removed ones. */
-export async function listLabels(db: Sql, accountId: string): Promise<Label[]> {
-  const rows = await db
-    .select({
-      id: labels.id,
-      name: labels.name,
-      description: labels.description,
-      disposition: labels.disposition,
-      gmailLabel: labels.gmailLabel,
-      block: labels.block,
-      markRead: labels.markRead,
-      unsubscribe: labels.unsubscribe,
-    })
-    .from(labels)
-    .where(and(eq(labels.accountId, accountId), isNull(labels.removedAt)))
+    .where(isNull(labels.removedAt))
     .orderBy(asc(labels.position), asc(labels.id));
   return rows.map((r) => ({
     id: r.id,
@@ -89,9 +55,9 @@ export async function listLabels(db: Sql, accountId: string): Promise<Label[]> {
   }));
 }
 
-/** What each of an account's labels is called, removed ones too, for naming what mail was. */
-export async function labelNames(db: Sql, accountId: string): Promise<Map<string, string>> {
-  const rows = await db.select({ id: labels.id, name: labels.name }).from(labels).where(eq(labels.accountId, accountId));
+/** What each of the person's labels is called, removed ones too, for naming what mail was. */
+export async function labelNames(db: Sql): Promise<Map<string, string>> {
+  const rows = await db.select({ id: labels.id, name: labels.name }).from(labels);
   return new Map(rows.map((r) => [r.id, r.name]));
 }
 
@@ -113,7 +79,7 @@ function normalise(disposition: Disposition, block: boolean, markRead: boolean):
   };
 }
 
-/** Labels an account may have of its own, besides Leave in inbox. Each is a choice the model weighs on every message and the reader answers with, so a long list makes both worse. */
+/** Labels a person may have of their own, besides Leave in inbox. Each is a choice the model weighs on every message and the reader answers with, so a long list makes both worse. */
 export const MAX_LABELS = 30;
 
 type NewLabel = { name: string; description: string; disposition: Disposition; block?: boolean; markRead?: boolean; unsubscribe?: boolean };
@@ -147,16 +113,16 @@ function draft(existing: readonly Label[], label: NewLabel): Label {
 }
 
 /** Add labels of the user's own, all or none. Throws if a name is unusable or already taken. A removed label's name brings it back, as this. */
-export async function addLabels(db: Sql, accountId: string, added: readonly NewLabel[]): Promise<Label[]> {
-  const existing = await listLabels(db, accountId);
+export async function addLabels(db: Sql, added: readonly NewLabel[]): Promise<Label[]> {
+  const existing = await listLabels(db);
   const created: Label[] = [];
   for (const label of added) created.push(draft([...existing, ...created], label));
   if (created.length > 0)
     await db
       .insert(labels)
-      .values(created.map((l, index) => toRow(accountId, l, existing.length + index)))
+      .values(created.map((l, index) => toRow(l, existing.length + index)))
       .onConflictDoUpdate({
-        target: [labels.userId, labels.accountId, labels.id],
+        target: [labels.userId, labels.id],
         set: {
           name: sql`excluded.name`,
           description: sql`excluded.description`,
@@ -176,21 +142,21 @@ export async function addLabels(db: Sql, accountId: string, added: readonly NewL
  * said to be stays named. Gmail filters of those rules are the caller's to take out first. False if there
  * is no such label.
  */
-export async function removeLabel(db: Sql, accountId: string, id: string, now: number): Promise<boolean> {
+export async function removeLabel(db: Sql, id: string, now: number): Promise<boolean> {
   const removed = await db
     .update(labels)
     .set({ removedAt: now })
-    .where(and(eq(labels.accountId, accountId), eq(labels.id, id), isNull(labels.removedAt)))
+    .where(and(eq(labels.id, id), isNull(labels.removedAt)))
     .returning({ id: labels.id });
   if (removed.length === 0) return false;
-  await db.delete(rules).where(and(eq(rules.accountId, accountId), or(eq(rules.labelId, id), eq(rules.whenLabel, id))));
-  await db.delete(examples).where(and(eq(examples.accountId, accountId), eq(examples.labelId, id)));
+  await db.delete(rules).where(or(eq(rules.labelId, id), eq(rules.whenLabel, id)));
+  await db.delete(examples).where(eq(examples.labelId, id));
   return true;
 }
 
-/** Whether the account has a label of its own, besides Leave in inbox. Until it does, Sift reads nothing from its Gmail. */
-export async function hasOwnLabels(db: Sql, accountId: string): Promise<boolean> {
-  return (await listLabels(db, accountId)).some((l) => l.id !== LEAVE_IN_INBOX);
+/** Whether the person has a label of their own, besides Leave in inbox. Until they do, Sift reads nothing from their Gmail. */
+export async function hasOwnLabels(db: Sql): Promise<boolean> {
+  return (await listLabels(db)).some((l) => l.id !== LEAVE_IN_INBOX);
 }
 
 /**
@@ -199,11 +165,10 @@ export async function hasOwnLabels(db: Sql, accountId: string): Promise<boolean>
  */
 export async function updateLabel(
   db: Sql,
-  accountId: string,
   id: string,
   change: { name?: string; description?: string; disposition?: Disposition; block?: boolean; markRead?: boolean; unsubscribe?: boolean },
 ): Promise<boolean> {
-  const current = (await listLabels(db, accountId)).find((l) => l.id === id);
+  const current = (await listLabels(db)).find((l) => l.id === id);
   if (!current) return false;
   if (id === LEAVE_IN_INBOX)
     throw new Refusal('Leave in inbox is Sift’s own and does not change. Add a label of your own for mail you want treated differently.');
@@ -224,7 +189,7 @@ export async function updateLabel(
       markRead: extras.markRead ?? false,
       unsubscribe: change.unsubscribe ?? current.unsubscribe ?? false,
     })
-    .where(and(eq(labels.accountId, accountId), eq(labels.id, id)));
+    .where(eq(labels.id, id));
   return true;
 }
 

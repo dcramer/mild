@@ -343,9 +343,9 @@ describe('preferences in the database', () => {
   }
   it('lets the user change a label, but nothing of Leave in inbox', async () => {
     const db = await seeded();
-    expect(await updateLabel(db, ACCOUNT, 'cold_outreach', { disposition: 'keep', name: 'Pitches', description: 'Things I read.' })).toBe(true);
+    expect(await updateLabel(db, 'cold_outreach', { disposition: 'keep', name: 'Pitches', description: 'Things I read.' })).toBe(true);
     // The id and the Gmail label never change, so nothing already labelled is orphaned.
-    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'cold_outreach')).toEqual({
+    expect((await listLabels(db)).find((l) => l.id === 'cold_outreach')).toEqual({
       id: 'cold_outreach',
       name: 'Pitches',
       description: 'Things I read.',
@@ -353,7 +353,7 @@ describe('preferences in the database', () => {
       gmailLabel: 'sift/cold-outreach',
       unsubscribe: true,
     });
-    expect(await updateLabel(db, ACCOUNT, 'nope', { disposition: 'keep' })).toBe(false);
+    expect(await updateLabel(db, 'nope', { disposition: 'keep' })).toBe(false);
 
     // Leave in inbox is Sift's own: nothing about it changes, whatever is sent.
     for (const change of [
@@ -365,8 +365,8 @@ describe('preferences in the database', () => {
       { unsubscribe: true },
       { disposition: 'spam' as const, block: true },
     ])
-      await expect(updateLabel(db, ACCOUNT, 'everything_else', change)).rejects.toThrow('does not change');
-    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'everything_else')).toEqual({
+      await expect(updateLabel(db, 'everything_else', change)).rejects.toThrow('does not change');
+    expect((await listLabels(db)).find((l) => l.id === 'everything_else')).toEqual({
       id: 'everything_else',
       name: 'Leave in inbox',
       description: '',
@@ -379,13 +379,13 @@ describe('preferences in the database', () => {
 
   it('keeps only the extras that go with what a label does', async () => {
     const db = await seeded();
-    await updateLabel(db, ACCOUNT, 'phishing', { block: true, markRead: true });
-    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'phishing')).toMatchObject({ disposition: 'spam', block: true });
-    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'phishing')).not.toHaveProperty('markRead');
+    await updateLabel(db, 'phishing', { block: true, markRead: true });
+    expect((await listLabels(db)).find((l) => l.id === 'phishing')).toMatchObject({ disposition: 'spam', block: true });
+    expect((await listLabels(db)).find((l) => l.id === 'phishing')).not.toHaveProperty('markRead');
     // Changing what the label does drops the block, and marking read can now be asked for.
-    await updateLabel(db, ACCOUNT, 'phishing', { disposition: 'archive', markRead: true });
-    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'phishing')).toEqual(expect.objectContaining({ disposition: 'archive', markRead: true }));
-    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'phishing')).not.toHaveProperty('block');
+    await updateLabel(db, 'phishing', { disposition: 'archive', markRead: true });
+    expect((await listLabels(db)).find((l) => l.id === 'phishing')).toEqual(expect.objectContaining({ disposition: 'archive', markRead: true }));
+    expect((await listLabels(db)).find((l) => l.id === 'phishing')).not.toHaveProperty('block');
   });
 });
 
@@ -498,32 +498,32 @@ describe('standing', () => {
     await rememberCorrespondent(d, ACCOUNT, 'ada@example.org', true);
     expect(await senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'known', why: 'you have written to them' });
 
-    await addRule(d, ACCOUNT, { match: { from: ['ada@example.org'] }, labelId: 'personal' }, 'user');
+    await addRule(d, { match: { from: ['ada@example.org'] }, labelId: 'personal' }, 'user');
     expect(await senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'trusted', why: 'a rule keeps their mail' });
   });
 
   it('makes a rule that only keeps their mail Leave in inbox, which trusts them; one with an extra stays an action', async () => {
     const d = await db();
-    const ada = await addRule(d, ACCOUNT, { match: { from: ['ada@example.org'] }, disposition: 'keep' }, 'user');
-    expect((await listRules(d, ACCOUNT)).find((r) => r.id === ada)).toMatchObject({ labelId: 'everything_else' });
-    expect((await listRules(d, ACCOUNT)).find((r) => r.id === ada)).not.toHaveProperty('disposition');
+    const ada = await addRule(d, { match: { from: ['ada@example.org'] }, disposition: 'keep' }, 'user');
+    expect((await listRules(d)).find((r) => r.id === ada)).toMatchObject({ labelId: 'everything_else' });
+    expect((await listRules(d)).find((r) => r.id === ada)).not.toHaveProperty('disposition');
     expect(await senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'trusted' });
-    const read = await addRule(d, ACCOUNT, { match: { from: ['digest@example.com'] }, disposition: 'keep', markRead: true }, 'user');
-    expect((await listRules(d, ACCOUNT)).find((r) => r.id === read)).toMatchObject({ disposition: 'keep' });
-    expect((await listRules(d, ACCOUNT)).find((r) => r.id === read)).not.toHaveProperty('labelId');
+    const read = await addRule(d, { match: { from: ['digest@example.com'] }, disposition: 'keep', markRead: true }, 'user');
+    expect((await listRules(d)).find((r) => r.id === read)).toMatchObject({ disposition: 'keep' });
+    expect((await listRules(d)).find((r) => r.id === read)).not.toHaveProperty('labelId');
   });
 
   it('is unwanted or blocked by a rule that hides their mail, but not by one that waits for a label', async () => {
     const d = await db();
     await mail(d, 'a', 'promo@example.com', 'marketing');
-    await addRule(d, ACCOUNT, { match: { from: ['promo@example.com'] }, whenLabel: 'marketing' }, 'user');
+    await addRule(d, { match: { from: ['promo@example.com'] }, whenLabel: 'marketing' }, 'user');
     expect((await senderFacts(d, ACCOUNT, 'promo@example.com')).standing).toBe('new');
     // One rule for them and another sender says how the owner regards both, not this one.
-    await addRule(d, ACCOUNT, { match: { from: ['promo@example.com', 'deals@example.com'] }, disposition: 'archive' }, 'user');
+    await addRule(d, { match: { from: ['promo@example.com', 'deals@example.com'] }, disposition: 'archive' }, 'user');
     expect((await senderFacts(d, ACCOUNT, 'promo@example.com')).standing).toBe('new');
-    await addRule(d, ACCOUNT, { match: { from: ['promo@example.com'] }, disposition: 'archive' }, 'user');
+    await addRule(d, { match: { from: ['promo@example.com'] }, disposition: 'archive' }, 'user');
     expect((await senderFacts(d, ACCOUNT, 'promo@example.com')).standing).toBe('unwanted');
-    await addRule(d, ACCOUNT, { match: { from: ['scam@example.net'] }, labelId: 'phishing' }, 'user');
+    await addRule(d, { match: { from: ['scam@example.net'] }, labelId: 'phishing' }, 'user');
     expect((await senderFacts(d, ACCOUNT, 'scam@example.net')).standing).toBe('blocked');
   });
 
@@ -531,7 +531,7 @@ describe('standing', () => {
     const d = await db();
     await mail(d, 'a', 'one@example.com', 'newsletter');
     await mail(d, 'b', 'two@example.com', 'newsletter');
-    await addRule(d, ACCOUNT, { match: { fromDomain: ['example.com'] }, labelId: 'personal' }, 'user');
+    await addRule(d, { match: { fromDomain: ['example.com'] }, labelId: 'personal' }, 'user');
     expect(await domainFacts(d, ACCOUNT, 'example.com')).toMatchObject({ messages: 2, senders: 2, standing: 'trusted' });
     expect(await domainFacts(d, ACCOUNT, 'gmail.com')).toBeNull();
   });

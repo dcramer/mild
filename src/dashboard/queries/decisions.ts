@@ -66,7 +66,7 @@ export const decisionsJoined = (db: Sql) =>
     .select(DECISION_FIELDS)
     .from(decisions)
     .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
-    .leftJoin(labels, and(eq(labels.accountId, decisions.accountId), eq(labels.id, decisions.labelId)))
+    .leftJoin(labels, eq(labels.id, decisions.labelId))
     .leftJoin(modelRuns, eq(modelRuns.id, decisions.runId))
     .leftJoin(
       actions,

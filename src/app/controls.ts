@@ -7,7 +7,7 @@ import { forgetPassStatus, passStatus } from '../work/status.ts';
 import { REACH, modelShare } from '../store/inbox.ts';
 import { averageCall } from '../store/runs.ts';
 import { hasOwnLabels } from '../store/labels.ts';
-import { ruleInbox } from '../work/apply.ts';
+import { EXAMPLES as RULE_EXAMPLES, ruleInbox } from '../work/apply.ts';
 import { createGmailApi } from '../gmail/api.ts';
 import { startEval } from '../learn/evals.ts';
 import { proposeLabels } from '../learn/labels.ts';
@@ -24,7 +24,6 @@ import { modelChoices, offerModel, openModels, priceOf, resolveModel, saveApiKey
 import { listAccounts, personOf } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
 import { credentials } from '../store/credentials.ts';
-import { getRuleFilter } from '../store/filters.ts';
 import { preferences } from '../store/preferences.ts';
 import type { Sql } from '../store/sql.ts';
 import { Refusal } from '../refusal.ts';
@@ -154,7 +153,7 @@ export async function buildControls(
     inboxEstimate: async (db, mailboxes, reach) => {
       let messages = 0;
       for (const account of await listAccounts(db)) {
-        if (!mailboxes.includes(account.id) || !(await hasOwnLabels(db, account.id))) continue;
+        if (!mailboxes.includes(account.id) || !(await hasOwnLabels(db))) continue;
         messages += Math.min(await (await gmailFor(config, live.ephemeral, db, account.id)).api.inboxSize(), REACH[reach]);
       }
       // As much of it as went to the model lately; with nothing to go by, all of it.
@@ -186,18 +185,34 @@ export async function buildControls(
       return await draftRule({ db, draft: createRuleDrafter(opened.models, opened.model), model: opened.spec }, request);
     },
     ruleFilter: async (db, ruleId, on) => {
-      const rule = await getRuleFilter(db, ruleId);
-      if (!rule) throw new Refusal('That rule no longer exists.');
-      const deps = { db, mailbox: (await gmailFor(config, live.ephemeral, db, rule.accountId)).mailbox };
-      if (on) await writeRuleFilter(deps, ruleId);
-      else await removeRuleFilter(deps, ruleId);
+      // Every mailbox is tried, so one Gmail refusing does not leave the others as they were.
+      let failed: unknown;
+      for (const account of await listAccounts(db)) {
+        const deps = { db, mailbox: (await gmailFor(config, live.ephemeral, db, account.id)).mailbox };
+        await (on ? writeRuleFilter(deps, ruleId, account.id) : removeRuleFilter(deps, ruleId, account.id)).catch((error: unknown) => {
+          failed ??= error;
+        });
+      }
+      if (failed !== undefined) throw failed;
     },
     ruleInbox: async (db, ruleId) => {
-      const rule = await getRuleFilter(db, ruleId);
-      if (!rule) throw new Refusal('That rule no longer exists.');
-      const { api } = await gmailFor(config, live.ephemeral, db, rule.accountId);
-      const sample = await ruleInbox(db, api, rule.accountId, ruleId);
-      return { ...sample, examples: sample.examples.map((m) => ({ accountId: rule.accountId, ...m })), costEach: await costEach(db) };
+      const samples = [];
+      for (const account of await listAccounts(db)) {
+        const sample = await ruleInbox(db, (await gmailFor(config, live.ephemeral, db, account.id)).api, account.id, ruleId);
+        samples.push({ ...sample, examples: sample.examples.map((m) => ({ accountId: account.id, ...m })) });
+      }
+      const capped = samples.some((s) => s.most !== null);
+      return {
+        examples: samples
+          .flatMap((s) => s.examples)
+          .toSorted((a, b) => b.receivedAt - a.receivedAt)
+          .slice(0, RULE_EXAMPLES),
+        messages: samples.reduce((n, s) => n + s.messages, 0),
+        reading: samples.reduce((n, s) => n + s.reading, 0),
+        exact: samples.every((s) => s.exact),
+        most: capped ? samples.reduce((n, s) => n + (s.most ?? s.messages), 0) : null,
+        costEach: await costEach(db),
+      };
     },
     revokeGmail: async (db, email) => {
       await forgetPassStatus(live.ephemeral, email);

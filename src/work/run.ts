@@ -104,9 +104,10 @@ export async function dueWork(store: Store, options: RunOptions, people?: readon
     const db = await store.user(person);
     if ((await options.ephemeral.get(upkeepKey(person, day))) === null) due.push({ kind: 'upkeep', person });
     const runs = await goingInboxRuns(db);
+    // Nothing is read from their Gmail until the person has said, with a label of their own, what they want of it.
+    const reading = await hasOwnLabels(db);
     for (const account of await listAccounts(db)) {
-      // Nothing is read from Gmail for a mailbox until the person has said, with a label of their own, what they want of it.
-      if (!(await hasOwnLabels(db, account.id))) continue;
+      if (!reading) continue;
       due.push({ kind: 'pass', person, account: account.id });
       for (const run of runs) if (run.accountId === account.id) due.push({ kind: 'inbox', person, account: account.id, run: run.id });
     }

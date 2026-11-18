@@ -51,8 +51,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
   const query = { days, status, search, fact, label, limit: PAGE, offset };
   const { data, error, loading } = useLoaded(`decisions-${JSON.stringify(query)}`, (signal) => api.decisions(query, signal));
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
-  // A label is one thing across the mailboxes, with the same id in each.
-  const labels = new Map(Object.values(manage.data?.labels ?? {}).flatMap((list) => list.map((l) => [l.id, l.name] as const)));
+  const labels = new Map((manage.data?.labels ?? []).map((l) => [l.id, l.name] as const));
   const summary = useLoaded(`summary-${days}-${label}`, (signal) => api.summary(days, signal, label));
   const daily = summary.data?.daily ?? [];
   // A day's column is worth drawing only beside others, and only once something happened.

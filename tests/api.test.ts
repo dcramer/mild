@@ -29,7 +29,7 @@ describe('what the API accepts and sends', () => {
 
   it('names the field it refused, never what was in it', async () => {
     const { call } = await startDashboard(people(store));
-    const { status, body } = await call('POST', '/api/standing/clear', { accountId: ACCOUNT, address: 'private words' });
+    const { status, body } = await call('POST', '/api/standing/clear', { address: 'private words' });
     expect(status).toBe(400);
     expect(body['error']).toMatch(/^address: /);
     expect(body['error']).not.toContain('private words');

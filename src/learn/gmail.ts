@@ -78,7 +78,7 @@ const moves = (labels: string[]) => labels.includes('INBOX') || labels.includes(
  * Returns how many answers were recorded.
  */
 export async function learnFromGmail(db: Sql, accountId: string, changes: readonly MessageChange[], gmail: GmailState, now: number): Promise<number> {
-  const labels = await listLabels(db, accountId);
+  const labels = await listLabels(db);
   let names: Map<string, string> | undefined;
   let learned = 0;
 

@@ -304,19 +304,19 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
   // A standing is a rule for exactly them that says only what happens to their mail, so it is given in one press, with Undo.
   const giveStanding = (standing: Given) =>
     give.run(async () => {
-      const given = await api.giveStanding(accountId, who, standing);
+      const given = await api.giveStanding(who, standing);
       // Their own rule says more than a standing would: the dialog shows what replacing it loses.
       if ('theirs' in given) return setStarting(standingStart(who, standing));
       const takeBack = () =>
         later.run(
           () =>
-            (given.was ? api.giveStanding(accountId, who, given.was) : api.clearStanding(accountId, who)).catch((failure: unknown) => {
+            (given.was ? api.giveStanding(who, given.was) : api.clearStanding(who)).catch((failure: unknown) => {
               toast('Could not take the rule back', { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) });
               throw failure;
             }),
           reload,
         );
-      toast(addedWords(standingStart(who, standing), manage.data?.labels[accountId] ?? []), {
+      toast(addedWords(standingStart(who, standing), manage.data?.labels ?? []), {
         kind: given.was ? 'Rule replaced' : 'Rule added',
         undo: takeBack,
         // Mail already in the inbox stays until the rule is applied there, as the dialog offers.
@@ -393,7 +393,7 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
 
       <div className={charted ? 'grid grid-cols-[minmax(0,1fr)] gap-x-16 gap-y-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]' : ''}>
         <div className="flex flex-col gap-5">
-          <NextMail data={data} rule={rule} labels={manage.data?.labels[accountId]} more={charted ? null : volume} />
+          <NextMail data={data} rule={rule} labels={manage.data?.labels} more={charted ? null : volume} />
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <ChoiceGroup
               label={`Where ${title ?? key} stands`}
@@ -401,7 +401,7 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
               options={GIVE}
               clearable
               disabled={give.busy}
-              onChange={(standing) => (standing ? giveStanding(standing) : give.run(() => api.clearStanding(accountId, who), reload))}
+              onChange={(standing) => (standing ? giveStanding(standing) : give.run(() => api.clearStanding(who), reload))}
             />
             <Button variant="quiet" onClick={() => setStarting(messageStart(key, top?.id ?? null))}>
               Make a rule…
@@ -474,13 +474,7 @@ export function SenderView({ accountId, who, onOpen }: { accountId: string; who:
       </Section>
 
       {starting ? (
-        <AddRuleDialog
-          accountId={accountId}
-          labels={manage.data?.labels[accountId] ?? []}
-          start={starting}
-          onClose={() => setStarting(null)}
-          onAdded={reload}
-        />
+        <AddRuleDialog accountId={accountId} labels={manage.data?.labels ?? []} start={starting} onClose={() => setStarting(null)} onAdded={reload} />
       ) : null}
     </div>
   );

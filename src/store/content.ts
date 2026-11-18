@@ -19,6 +19,7 @@ import {
   or,
   proposals,
   ruleDrafts,
+  ruleFilters,
   rules,
   sql,
   suggestionBodies,
@@ -245,27 +246,26 @@ function asLists(stored: unknown): RuleMatch {
  */
 async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): Promise<void> {
   const behind = (stored: string | null) => stored !== null && prefix !== null && !stored.startsWith(prefix);
-  const ruleRows = await db
-    .select({ id: rules.id, match: rules.match, except: rules.except, filter: rules.filterWritten, name: rules.name, conditions: rules.conditions })
-    .from(rules);
+  const ruleRows = await db.select({ id: rules.id, match: rules.match, except: rules.except, name: rules.name, conditions: rules.conditions }).from(rules);
   const ruleUpdates = ruleRows
-    .filter((r) => r.conditions.startsWith(UNSET) || behind(r.match) || behind(r.except) || behind(r.filter) || behind(r.name))
+    .filter((r) => r.conditions.startsWith(UNSET) || behind(r.match) || behind(r.except) || behind(r.name))
     .map((r) => {
       const match = asLists(JSON.parse(reopen(db, ruleName(db, r.id, 'match'), r.match)));
       const except = (JSON.parse(reopen(db, ruleName(db, r.id, 'except'), r.except)) as unknown[]).map(asLists);
-      const filter = r.filter === null ? null : reopen(db, ruleName(db, r.id, 'filter'), r.filter);
       const name = r.name === null ? null : reopen(db, ruleName(db, r.id, 'name'), r.name);
       return {
         id: r.id,
         set: {
           match: sealJson(db, ruleName(db, r.id, 'match'), match),
           except: sealJson(db, ruleName(db, r.id, 'except'), except),
-          filterWritten: filter === null ? null : seal(db, ruleName(db, r.id, 'filter'), filter),
           name: name === null ? null : seal(db, ruleName(db, r.id, 'name'), name),
           conditions: conditionsHash(db, match, except),
         },
       };
     });
+  const filterUpdates = (await db.select({ ruleId: ruleFilters.ruleId, accountId: ruleFilters.accountId, written: ruleFilters.written }).from(ruleFilters))
+    .filter((r) => behind(r.written))
+    .map((r) => ({ ...r, written: seal(db, ruleName(db, r.ruleId, 'filter'), reopen(db, ruleName(db, r.ruleId, 'filter'), r.written!)) }));
   const proposalRows = await db
     .select({ id: proposals.id, accountId: proposals.accountId, match: proposals.match, conditions: proposals.conditions, status: proposals.status })
     .from(proposals)
@@ -315,6 +315,11 @@ async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): 
     await db.transaction(async (tx) => {
       for (const { id, set } of draftUpdates) await tx.update(ruleDrafts).set(set).where(eq(ruleDrafts.id, id));
       for (const { id, set } of ruleUpdates) await tx.update(rules).set(set).where(eq(rules.id, id));
+      for (const { ruleId, accountId, written } of filterUpdates)
+        await tx
+          .update(ruleFilters)
+          .set({ written })
+          .where(and(eq(ruleFilters.ruleId, ruleId), eq(ruleFilters.accountId, accountId)));
       if (duplicates.length > 0) await tx.delete(proposals).where(inArray(proposals.id, duplicates));
       for (const { id, set } of proposalUpdates) if (!duplicates.includes(id)) await tx.update(proposals).set(set).where(eq(proposals.id, id));
       for (const { id, set } of labelProposalUpdates) await tx.update(labelProposals).set(set).where(eq(labelProposals.id, id));
