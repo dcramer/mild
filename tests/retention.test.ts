@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { RETENTION_DAYS, pruneOld } from '../src/work/retention.ts';
 import { KEEP_BODY_DAYS } from '../src/work/bodies.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { type RunOptions, dueWork, upkeep } from '../src/work/run.ts';
+import { type RunOptions, type Work, dueWork, runWork, upkeep } from '../src/work/run.ts';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { recordSync } from '../src/store/accounts.ts';
 import { type ActionType, finishAction, insertPendingAction, unsubscribedAt } from '../src/store/actions.ts';
@@ -13,7 +13,7 @@ import { listUndecided } from '../src/store/messages.ts';
 import { addRule } from '../src/store/rules.ts';
 import { MAX_ATTEMPTS, startRun } from '../src/store/runs.ts';
 import type { Decision } from '../src/triage/types.ts';
-import { modelRun, raw, onePerson } from './fixtures.ts';
+import { modelRun, raw, onePerson, superuser } from './fixtures.ts';
 import { ACCOUNT, DAY, facts, workDue } from './helpers.ts';
 import type { Store } from '../src/store/store.ts';
 
@@ -174,6 +174,36 @@ describe('retention', () => {
       'Forgot 1 message with nothing newer than 365 days',
     ]);
     expect(await left('messages', 'id')).toEqual([]);
+  });
+
+  it('that fails is said in the log, and is due again at the next tick', async () => {
+    const logs: string[] = [];
+    const options: RunOptions = {
+      ephemeral: memoryEphemeral(),
+      connect: () => Promise.reject(new Error('not connected')),
+      log: (line) => logs.push(line),
+      now: () => NOW,
+    };
+    const pg = await superuser();
+    await pg.exec('REVOKE DELETE ON examples FROM sift_app');
+    try {
+      await runWork(store, { kind: 'upkeep', person: db.person! }, options, Infinity);
+    } finally {
+      await pg.exec('GRANT DELETE ON examples TO sift_app');
+    }
+    expect(logs).toEqual([expect.stringMatching(/^Deleting old records failed, will retry: permission denied/)]);
+    expect((await dueWork(store, options)).filter((work) => work.kind === 'upkeep')).toHaveLength(1);
+  });
+
+  it('is done once a day, however many runs begin it', async () => {
+    const options: RunOptions = { ephemeral: memoryEphemeral(), connect: () => Promise.reject(new Error('not connected')), log: () => {}, now: () => NOW };
+    const piece: Work = { kind: 'upkeep', person: db.person! };
+    await acted('first');
+    await runWork(store, piece, options, Infinity);
+    await acted('second');
+    // Two ticks can each find it due before either run starts it.
+    await runWork(store, piece, options, Infinity);
+    expect(await left('messages', 'id')).toEqual(['second']);
   });
 
   it('is due again when it was found due and never run', async () => {

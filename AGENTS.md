@@ -21,6 +21,7 @@ Package manager is **pnpm**. Node 24 (`.nvmrc`). Node runs the server's `.ts` so
 | `pnpm check` | The gate: typecheck + lint + unused code (knip) + format check + tests + browser tests. Must pass before every commit. |
 | `pnpm check:fast` | All of it but the tests. |
 | `pnpm vitest run tests/foo.test.ts` | One test file. Add `-t "name"` for one test. |
+| `pnpm coverage` | The unit tests with line and branch coverage, written to `coverage/`. The browser tests, and the Workflow tests' build of `src/`, are not in it. |
 | `pnpm e2e` | The browser tests in `e2e/`: Playwright against a real dashboard per test, on a copy of verify-sift's seed. `pnpm e2e e2e/foo.spec.ts`, `-g "name"` for one, `--headed` to watch. The first time on a machine, `pnpm exec playwright install chromium`. |
 | `pnpm format` | `oxlint --fix` then `oxfmt`. |
 | `pnpm sift <command>` | Run the CLI from source. `pnpm start` is `pnpm sift run`. |

@@ -13,7 +13,9 @@ import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { firstAccount, modelRun, openUserDb, raw, startDashboard, onePerson, unmarked } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 import { addRule, removeRule } from '../src/store/rules.ts';
-import { ACCOUNT, DAY, everything, facts, quietSources, testModel } from './helpers.ts';
+import { ACCOUNT, DAY, codeSignIn, everything, facts, quietSources, testModel } from './helpers.ts';
+import { dashboardListener } from '../src/cli/host.ts';
+import type { AddressInfo } from 'node:net';
 import { conditionsHash } from '../src/store/content.ts';
 import { triageAccount } from '../src/work/triage.ts';
 
@@ -569,6 +571,28 @@ describe('dashboard server', () => {
     const reply = await fetch(`${base}/api/message?account=${encodeURIComponent(ACCOUNT)}&id=c`);
     expect([reply.status, await reply.json()]).toEqual([500, { error: 'Sift could not do that. Why is in its log.' }]);
     expect(logged).toEqual([expect.stringMatching(/^GET \/api\/message: .*SIFT_KEY/)]);
+  });
+
+  it("answers an error of sift run's own listener with no words of it", async () => {
+    const server = dashboardListener(async () => {
+      throw new Error('ENOENT: /home/someone/.config/sift/database');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const reply = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/summary`);
+      expect([reply.status, await reply.json()]).toEqual([500, { error: 'Sift could not do that.' }]);
+    } finally {
+      server.close();
+    }
+  });
+
+  it('lets someone sign in behind tailscale serve, which tells this machine the browser used HTTPS', async () => {
+    const { store } = await seededStore();
+    const dashboard = await startDashboard(people(store), { signIn: codeSignIn, sessionSecret: 'secret', allowedHosts: ['devbox.tail1234.ts.net'] });
+    const session = async (headers: Record<string, string>) =>
+      (await dashboard.call('GET', '/api/session', undefined, { host: 'devbox.tail1234.ts.net', ...headers })).body;
+    expect(await session({})).toMatchObject({ canSignIn: false, reason: 'address' });
+    expect(await session({ 'x-forwarded-proto': 'https' })).toMatchObject({ canSignIn: true, reason: null });
   });
 
   it('rejects bad input, other methods and unknown paths', async () => {
