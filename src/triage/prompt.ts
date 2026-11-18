@@ -35,6 +35,10 @@ Rules:
   owner labelled their earlier mail says what they usually send, not what this message is. Earlier
   emails under the same sender name or with the same kind of subject say more, and this one says most.
 - The owner having written to a sender makes it more likely, not certain, that their mail is wanted.
+- Mail from the owner's own domain is from people they work with or their organisation's own systems.
+  That too makes it more likely, not certain, that it is wanted: it can still be an announcement or an
+  automated notice. Mail from the owner's own address or domain that fails DMARC is pretending to be
+  them or their organisation, which is a sign of deceit.
 - A sender being new, or a message the owner may not have expected (a first order from a shop, a
   sign-up), is no sign of phishing. Phishing needs a sign of deceit: a sender, link or reply address
   that does not belong to who the message claims to be from, failed authentication, or a request for
