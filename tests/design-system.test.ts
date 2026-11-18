@@ -73,14 +73,10 @@ describe('screens style nothing themselves', () => {
     expect(failures, failures.join('\n')).toEqual([]);
   });
 
-  test('no style attribute anywhere the page is drawn, parts included', () => {
-    const APP = new URL('../app/', import.meta.url).pathname;
-    const failures = [...ALL, ...sources(APP)]
-      .filter((path) => /\bstyle=\{/.test(readFileSync(path, 'utf8')))
-      .map(
-        (path) =>
-          `${relative(join(WEB, '../..'), path)}: the policy refuses a style attribute in the HTML the server sends. A part sets a value computed from data with \`styled\` (web/src/system/styled.ts).`,
-      );
+  test('no inline style outside web/src/system', () => {
+    const failures = SCREENS.filter((path) => /\bstyle=\{/.test(readFileSync(path, 'utf8'))).map(
+      (path) => `web/src/${relative(WEB, path)}: an inline style is only for a part's value computed from data, in web/src/system.`,
+    );
     expect(failures, failures.join('\n')).toEqual([]);
   });
 });

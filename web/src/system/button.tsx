@@ -1,5 +1,7 @@
+'use client';
 import { type ComponentProps, type ReactNode, useId, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { Anchor } from './anchor.tsx';
 import { useShortcut } from './keys.tsx';
 import { Tooltip } from './tooltip.tsx';
 
@@ -71,9 +73,9 @@ export function Button({ variant = 'plain', size = 'md', busy = false, shortcut,
   );
   if (rest.href !== undefined) {
     return (
-      <a ref={element} className={classes} aria-busy={busy || undefined} {...(key ? { 'aria-keyshortcuts': key } : {})} {...rest}>
+      <Anchor ref={element} className={classes} aria-busy={busy || undefined} {...(key ? { 'aria-keyshortcuts': key } : {})} {...rest}>
         {content}
-      </a>
+      </Anchor>
     );
   }
   const { type = 'button', disabled, ...button } = rest;

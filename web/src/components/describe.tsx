@@ -1,3 +1,4 @@
+'use client';
 import { Button, Dialog, Failure, Field, Form, TextArea } from '@/system';
 
 /**

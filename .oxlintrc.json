@@ -124,8 +124,6 @@
         "jsx-a11y/prefer-tag-over-role": "off",
         // eslint-plugin-jsx-a11y's recommended handlers: a hover or focus that only shows a tooltip is not an interaction.
         "jsx-a11y/no-noninteractive-element-interactions": ["error", { "handlers": ["onClick", "onError", "onLoad", "onMouseDown", "onMouseUp", "onKeyPress", "onKeyDown", "onKeyUp"] }],
-        // The page has its own router (web/src/lib/route.ts), which takes a press on a link to itself.
-        "nextjs/no-html-link-for-pages": "off",
         // next/image is served by /_next/image, which next.config.js turns off.
         "nextjs/no-img-element": "off",
         "no-restricted-imports": ["error", { "patterns": [{ "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." }] }]
@@ -151,7 +149,8 @@
       }
     },
     {
-      // The frame Next.js draws on the server: it hands the page nothing, so the page's data comes only from /api/.
+      // The routes Next.js draws on the server: the page's own parts and screens from web/src, which take only types from
+      // src/, so nothing of the server's is reached from here and handed to the browser. The page's data comes only from /api/.
       "files": ["app/**/*.tsx"],
       "rules": {
         "no-restricted-imports": [
@@ -159,8 +158,8 @@
           {
             "patterns": [
               {
-                "group": ["**", "!next", "!next/navigation", "!next/server", "!react", "!@/client.tsx", "!@/index.css"],
-                "message": "app/ only frames the page (@/client.tsx), which gets its data from /api/. Server code reached from here could be handed to the browser."
+                "group": ["**", "!next", "!next/*", "!react", "!@/**"],
+                "message": "app/ draws the page from web/src (@/…), which gets its data from /api/. Server code reached from here could be handed to the browser."
               }
             ]
           }

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Anchor } from './anchor.tsx';
 
 /**
  * A state of sift itself, true on every screen, so it goes in the masthead: sift cannot be reached, a
@@ -17,9 +18,9 @@ export function Notice({ tone = 'plain', href, action, children }: { tone?: 'pla
         </>
       )}
       {href && action ? (
-        <a className="underline underline-offset-2" href={href}>
+        <Anchor className="underline underline-offset-2" href={href}>
           {action}
-        </a>
+        </Anchor>
       ) : null}
     </p>
   );

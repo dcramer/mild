@@ -46,7 +46,7 @@ Each run is started with `experimental_retention: 0`: once it ends, Workflow del
 
 ## Hosts
 
-Each host builds a `Host` and calls `createSift`. What differs is who calls `respond`, and which Workflow world keeps the runs. Both serve the page with Next.js, from the same `app/` and the same policy (`proxy.ts`), and Workflow's flow route with it (`withWorkflow`, `next.config.js`).
+Each host builds a `Host` and calls `createSift`. What differs is who calls `respond`, and which Workflow world keeps the runs. Both serve the page with Next.js, from the same `app/` and the same headers (`next.config.js`), and Workflow's flow route with it (`withWorkflow`, `next.config.js`).
 
 | | `sift run` (`src/cli/`) | Vercel (`src/vercel/`, `app/`, `vercel.json`) |
 | --- | --- | --- |
@@ -67,7 +67,7 @@ The Local World keeps its queue in memory, so a run cut off by a stop or a crash
 
 ### On Vercel
 
-Setting it up, and every variable it needs: [vercel.md](vercel.md). Next.js bundles the route handlers, except the packages in `serverExternalPackages` (`next.config.js`), loaded from `node_modules` as they are because some read files beside their own modules. It copies `src/store/migrations` into the functions (`outputFileTracingIncludes`), and `src/store/db.ts` finds it from its own path, not with `new URL('./migrations/', import.meta.url)`, which the bundler would take for one file to bundle. Each route handler of Sift's own sets `maxDuration` to the limit the code assumes (`MAX_DURATION_S`, held by `tests/vercel.test.ts`). Workflow writes its routes into `app/.well-known/workflow/` at build, with a flow route that Vercel's queue calls and whose limit is the plan's longest, and a webhook route that `proxy.ts` refuses, since Sift makes no webhooks; a piece still starts nothing after 300 seconds less a minute, the shortest of those limits (Hobby's).
+Setting it up, and every variable it needs: [vercel.md](vercel.md). Next.js bundles the route handlers, except the packages in `serverExternalPackages` (`next.config.js`), loaded from `node_modules` as they are because some read files beside their own modules. It copies `src/store/migrations` into the functions (`outputFileTracingIncludes`), and `src/store/db.ts` finds it from its own path, not with `new URL('./migrations/', import.meta.url)`, which the bundler would take for one file to bundle. Each route handler of Sift's own sets `maxDuration` to the limit the code assumes (`MAX_DURATION_S`, held by `tests/vercel.test.ts`). Workflow writes its routes into `app/.well-known/workflow/` at build, with a flow route that Vercel's queue calls and whose limit is the plan's longest, and a webhook route that `next.config.js` rewrites to a page that is not there, since Sift makes no webhooks; a piece still starts nothing after 300 seconds less a minute, the shortest of those limits (Hobby's).
 
 A run's piece names a person and their mailbox by id; Sift opens that person's database and finds the mailbox among their own. `/api/cron` takes only Vercel Cron's call, with `CRON_SECRET`. Every other `/api/` path, and `/auth/`, goes to `respond`, which keeps the dashboard's own checks: a session for every `/api/` route, the Host one of the deployment's names, writes only from the page.
 
@@ -87,6 +87,7 @@ The rule is in [AGENTS.md](../AGENTS.md#cheap-to-run): cost follows mail, not ti
 | A pass, begun by a look that found something | idle: 30 (the day's first sync), 2,900 while a rule is a Gmail filter (a check every 15 minutes); 300 messages a day arriving spread out: about 8,100, one a message, few sharing a minute; in 6 bursts of 50: about 330, a burst taken in one or two | mail; the filter check, time |
 | Workflow events: 6 a pass or upkeep (3 for its run, 3 for its one step; the start hook that holds its key adds none, since `run_created` stands for its creation and the run's end releases it) | idle: (30 + 30 upkeep) × 6 ≈ 360, or 17,600 with a filter; spread out: (8,100 + 30) × 6 ≈ 49,000 (about $1 at $0.02 per 1,000); in bursts: (330 + 30) × 6 ≈ 2,200. Before Sift's own changes were told apart, each pass that changed mail began a second, up to twice those; before the look, 260,000 whatever came | mail |
 | Model calls | one per message no rule or sender answers, with the cost recorded in `model_runs` | mail |
+| The page | none: every page is built once and served as a file, a screen fetched ahead by the masthead too; what a visit costs is its `/api/` calls | visits |
 
 The pass and look counts are a month of minute ticks simulated under the gap, counting arrivals only, with mail arriving at random times (spread out) or 50 within 5 minutes six times a day (bursts). Spread-out mail comes about every 5 minutes, so the gap stays at a minute and each message gets its pass; bursts wait for the first look after a quiet spell (3.8 minutes on average, 7 at most) and arrive in one batch.
 
@@ -95,7 +96,7 @@ What still follows time: the tick itself, and the filter check while a rule is a
 ## Code
 
 - `src/app/`: what every host shares. `createSift(host)` (`sift.ts`), the Workflow run each piece is (`flow.ts`, the only file Workflow transforms) and what the two copies of `src/` offer each other (`process.ts`), the controls the dashboard is given, the sign-ins.
-- `app/`, `proxy.ts`, `next.config.js`, `instrumentation.ts`: the page, its policy, how Next.js builds both for each host with Workflow's routes, and what each server offers as it starts.
+- `app/`, `next.config.js`, `instrumentation.ts`: the page, its headers, how Next.js builds both for each host with Workflow's routes, and what each server offers as it starts.
 - `src/cli/`: the commands and the Node host (`host.ts`: `nodeHost`, the listener, Next.js in the same process; `page-build.ts`).
 - `src/vercel/host.ts`, the route handlers under `app/api/` and `app/auth/`, `vercel.json`: the Vercel host. `src/vercel/migrate.ts` runs in its build, after `next build`.
 - `tests/runtime.test.ts`: no module state outside the hosts, and flows whose steps reach different instances. `tests/vercel.test.ts`: `vercel.json` and the route handlers against the code, and who may call `/api/cron`. `tests/look.test.ts`: when the timed tick begins a pass (Sift's own changes and the gap between looks among it), an inbox run's slice (applying a rule among them) or a test run's. `tests/flow.workflow.test.ts`: a piece done by a run, one run per key, nothing kept once it ends, in Workflow's own test world (`@workflow/vitest`, `vitest.config.ts`). `tests/restart.workflow.test.ts`: a run cut off mid-step finished by a World started again on its data. `e2e/settings.spec.ts` (Check now): a run begun from the page, delivered through Next.js to the process that began it, its step passing the mailboxes; `e2e/rules.spec.ts` (Apply to your inbox, with what is due begun): applying a rule, begun by its press, going on in a run of its own until it finishes.

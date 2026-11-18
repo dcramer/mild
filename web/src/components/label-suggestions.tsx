@@ -1,3 +1,4 @@
+'use client';
 import type { LabelProposal } from '@/lib/api.ts';
 import { ACTIONS } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';

@@ -1,3 +1,4 @@
+'use client';
 import { useState } from 'react';
 import { Dialog } from './dialog.tsx';
 import { liveShortcuts, useShortcut } from './keys.tsx';

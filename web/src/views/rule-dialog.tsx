@@ -1,6 +1,7 @@
+'use client';
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
-import { paramNow, setParams } from '@/lib/route.ts';
+import { paramNow, setParams } from '@/lib/params.ts';
 import { type LabelSummary, type RuleDraft, type RuleFilter, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
 import { type By, type Condition, type RuleStart, addedWords, conditionsOf, matchOf, replacedBy, startWords } from '@/lib/rule-start.ts';
 import {

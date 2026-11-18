@@ -1,6 +1,8 @@
+'use client';
 import { ArrowRightIcon, ArrowUpRightIcon, PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { type Next, ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
+import { leave } from '@/lib/before-paint.ts';
 import { type LabelProposal, type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
 import { count } from '@/lib/format.ts';
 import { InboxFigures, useInboxEstimate } from '@/components/inbox.tsx';
@@ -48,8 +50,8 @@ export function SetUp({ signedInAs, onSettings, children }: { signedInAs: string
   const [made, setMade] = useState(false);
   const [teaching, setTeaching] = useState(false);
   const state = manage.data;
-  // Nothing until it is known which: the dashboard drawn first would be replaced by a step a moment later.
-  if (!state) return manage.error ? children : null;
+  // Until it is known which, the dashboard, as the server drew it: most who open it have set up long ago.
+  if (!state) return children;
   const inUse = state.model.chosen?.split('/')[0] ?? null;
   const walled = inUse === null || !state.model.signedIn.includes(inUse);
   const bare = !made && !state.labels.some((l) => l.gmailLabel !== null);
@@ -58,7 +60,7 @@ export function SetUp({ signedInAs, onSettings, children }: { signedInAs: string
     ? {
         name: state.accounts.find((a) => a.primary)?.email ?? signedInAs,
         onSettings,
-        onSignOut: () => void api.signOut().then(() => window.location.assign('/')),
+        onSignOut: () => void api.signOut().then(() => leave('/')),
       }
     : undefined;
   const steps = ['Connect a model', 'What you want', 'Your labels', 'Older mail'];

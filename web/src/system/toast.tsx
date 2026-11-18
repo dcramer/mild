@@ -1,3 +1,4 @@
+'use client';
 import { Toast as Base } from '@base-ui/react/toast';
 import { XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';

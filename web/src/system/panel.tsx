@@ -1,3 +1,4 @@
+'use client';
 import { Dialog as Base } from '@base-ui/react/dialog';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { type ReactNode, useRef } from 'react';

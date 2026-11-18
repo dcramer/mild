@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Tooltip } from './tooltip.tsx';
+import { Anchor } from './anchor.tsx';
 
 /** A stroke of highlighter. It means "look here", so a screen has few of them. */
 export function Highlight({ children, className }: { children: ReactNode; className?: string }) {
@@ -58,13 +59,13 @@ export function Hint({ icon: Icon, says, tone = 'plain' }: { icon: LucideIcon; s
  */
 export function TextLink({ href, away, children, className }: { href: string; away?: boolean; children: ReactNode; className?: string }) {
   return (
-    <a
+    <Anchor
       href={href}
       {...(away ? { target: '_blank', rel: 'noreferrer' } : {})}
       className={cn('underline decoration-foreground/35 underline-offset-[0.2em] hover:decoration-foreground', className)}
     >
       {children}
-    </a>
+    </Anchor>
   );
 }
 

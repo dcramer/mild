@@ -1,26 +1,26 @@
 import type { Metadata, Viewport } from 'next';
-import { connection } from 'next/server';
 import type { ReactNode } from 'react';
 import '@/index.css';
-import { Client } from '@/client.tsx';
+import { BEFORE_PAINT } from '@/lib/before-paint.ts';
+import { Providers } from '@/providers.tsx';
 
 export const metadata: Metadata = {
-  title: 'Sift',
+  title: { default: 'Sift', template: '%s · Sift' },
   manifest: '/manifest.webmanifest',
   icons: { icon: { url: '/icons/icon.svg', type: 'image/svg+xml' }, apple: '/icons/apple-touch-icon.png' },
 };
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, colorScheme: 'dark', themeColor: '#111110' };
 
-/** The page's frame. The dashboard in it runs in the browser and gets everything from the API. */
-export default async function Layout({ children }: { children: ReactNode }) {
-  // Next's scripts carry the nonce proxy.ts puts in each request's policy, so the page is made per request.
-  await connection();
+/** Every page, the same for everyone who opens it: what is theirs the page fetches from /api/. */
+export default function Layout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <head>
+        <script>{BEFORE_PAINT}</script>
+      </head>
       <body>
-        <Client />
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

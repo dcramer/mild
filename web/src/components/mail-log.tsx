@@ -1,9 +1,10 @@
-import { messageKey } from '@/lib/route.ts';
+'use client';
+import { messageKey } from '@/lib/params.ts';
 import { SenderCell, SenderCellLoading } from '@/components/sender.tsx';
 import type { DecisionRow, ListedDecision } from '@/lib/api.ts';
 import { INBOX, clock, dateTime, dayName, happened, status } from '@/lib/format.ts';
 import { Heads, Blank, Button, Does, Loading, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from '@/system';
-import type { OpenMessages } from '@/views/message-panel.tsx';
+import type { OpenMessages } from '@/lib/open-messages.ts';
 
 /**
  * What happened to a message, with the label and whether it was the user's own answer. In its own cell

@@ -127,7 +127,7 @@ A page is drawn before its data arrives, and what arrives must not push what is 
 - A page's action button is shown from the start and disabled until it can work. It does not appear late.
 - Anything above other content whose height depends on data goes in a `Reserve`.
 - A list's rows may grow downward: nothing is below them. While they load, its `Loading` shows its own rows, not lines.
-- Every screen but the home page is fetched when first needed (`lazyView` in `web/src/lib/lazy.tsx`) and, once the page is idle, ahead of need. While one is on its way the page shows that screen's own header, its search bar and row placeholders.
+- Every screen is drawn on the server with its header, its search bar and its row placeholders, so the first paint is the page as it will be, rows to come. The masthead's sections are fetched ahead while in view.
 
 ## Rules for adding to it
 
@@ -141,5 +141,5 @@ A page is drawn before its data arrives, and what arrives must not push what is 
 - A part says when to use it in its doc comment; that is the line the specimen page shows.
 - No inline styles, no fills, frames, corners, shadows or colours written outside `web/src/system/`; red is `Failure` and yellow comes only from a part's tone. If a value is missing, it is a missing token. `tests/design-system.test.ts` fails on any of these and names the file and line.
 - Behaviour that is hard to get right (a list that opens, a focus trap) comes from an unstyled primitive, today Base UI. Only files in `web/src/system/` import it (a lint error elsewhere), so the library can change without a screen changing.
-- Nothing has a `style` attribute: the policy refuses one in the HTML the server sends. A part sets a value computed from data (a bar's height, a series colour) from script, with `styled` (`web/src/system/styled.ts`).
+- A part's inline `style` is only for a value computed from data (a bar's height, a series colour).
 - Motion is short (80 to 150ms): a press, a dialog opening, rows pulsing while they load. All off under `prefers-reduced-motion`.

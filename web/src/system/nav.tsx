@@ -1,6 +1,8 @@
+'use client';
 import { Dialog } from '@base-ui/react/dialog';
 import { MenuIcon, XIcon } from 'lucide-react';
 import { type ReactNode, useContext, useState } from 'react';
+import { Anchor } from './anchor.tsx';
 import { Button } from './button.tsx';
 import { Cloud, FinePrint } from './fine-print.tsx';
 import { Avatar, Menu, type MenuItem } from './menu.tsx';
@@ -23,14 +25,15 @@ function Sections({ items, current }: { items: readonly NavItem[]; current: stri
       <ul className="flex flex-wrap gap-x-6 gap-y-1">
         {items.map((item) => (
           <li key={item.to}>
-            <a
+            <Anchor
               href={`/${item.to}`}
+              prefetch
               aria-current={item.to === current ? 'page' : undefined}
               className="relative flex items-baseline gap-1.5 py-1 text-base leading-normal font-semibold text-muted-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] hover:text-foreground aria-[current=page]:text-foreground aria-[current=page]:after:bg-highlight"
             >
               {item.label}
               {item.count ? <span className="text-sm tabular-nums opacity-70">{item.count}</span> : null}
-            </a>
+            </Anchor>
           </li>
         ))}
       </ul>
@@ -74,9 +77,9 @@ export function Masthead({
 
   return (
     <header className="flex flex-wrap items-center gap-x-5 pt-4 pb-6 md:pt-5 md:pb-7">
-      <a href={`/${items[0]?.to ?? ''}`} aria-label="sift">
+      <Anchor href={`/${items[0]?.to ?? ''}`} aria-label="sift">
         <Wordmark />
-      </a>
+      </Anchor>
       <div className="hidden min-w-0 flex-1 items-center gap-x-5 md:flex">
         <Sections items={items} current={current} />
         <div className="ml-auto flex items-center gap-4 text-sm text-muted-foreground">
@@ -118,7 +121,7 @@ export function Masthead({
               <ul className="flex flex-col gap-1">
                 {items.map((item) => (
                   <li key={item.to}>
-                    <a
+                    <Anchor
                       href={`/${item.to}`}
                       aria-current={item.to === current ? 'page' : undefined}
                       className="statement flex min-h-12 items-center gap-3 text-muted-foreground"
@@ -126,7 +129,7 @@ export function Masthead({
                     >
                       <span className={item.to === current ? 'hl mx-0 px-2' : undefined}>{item.label}</span>
                       {item.count ? <span className="text-base font-medium tabular-nums">{item.count}</span> : null}
-                    </a>
+                    </Anchor>
                   </li>
                 ))}
               </ul>

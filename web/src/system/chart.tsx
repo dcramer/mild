@@ -1,5 +1,5 @@
+'use client';
 import { useState } from 'react';
-import { styled } from './styled.ts';
 import { useTouch } from './touch.ts';
 
 interface Series {
@@ -20,7 +20,7 @@ interface ChartRow {
 
 /** A series' or a tier's colour, always beside its name. */
 export function Swatch({ color }: { color: string }) {
-  return <span aria-hidden className="size-2.5 shrink-0 rounded-[1px] ring-1 ring-foreground/20" ref={styled({ background: color })} />;
+  return <span aria-hidden className="size-2.5 shrink-0 rounded-[1px] ring-1 ring-foreground/20" style={{ background: color }} />;
 }
 
 /** The gridlines, top to bottom: each one's share of the scale, and where it sits. */
@@ -102,7 +102,7 @@ export function StackedBars({ series, rows, line, compact }: { series: readonly 
                   <span
                     key={s.key}
                     className={`w-full max-w-6 ${position === drawn.length - 1 ? 'rounded-t-[4px]' : ''}`}
-                    ref={styled({ height: `${((row.values[s.key] ?? 0) / max) * 100}%`, minHeight: '2px', background: s.color })}
+                    style={{ height: `${((row.values[s.key] ?? 0) / max) * 100}%`, minHeight: 2, background: s.color }}
                     onMouseEnter={() => setUnder(s.key)}
                     onMouseLeave={() => setUnder(null)}
                   />
@@ -122,18 +122,18 @@ export function StackedBars({ series, rows, line, compact }: { series: readonly 
           <span
             aria-hidden
             className="pointer-events-none absolute size-2.5 -translate-x-1/2 translate-y-1/2 rounded-full bg-foreground ring-2 ring-background"
-            ref={styled({ left: `${x(at)}%`, bottom: `${100 - y(line.values[at] ?? 0)}%` })}
+            style={{ left: `${x(at)}%`, bottom: `${100 - y(line.values[at] ?? 0)}%` }}
           />
         ) : null}
         {shown && at !== null && !touch ? (
           <div
             aria-hidden
             className="sheet pointer-events-none absolute top-0 z-10 flex w-max flex-col gap-1 bg-popover px-3 py-2 text-sm tabular-nums"
-            ref={styled(
+            style={
               at < rows.length / 2
-                ? { left: `calc(${((at + 1) / rows.length) * 100}% + 8px)`, right: '' }
-                : { left: '', right: `calc(${((rows.length - at) / rows.length) * 100}% + 8px)` },
-            )}
+                ? { left: `calc(${((at + 1) / rows.length) * 100}% + 8px)` }
+                : { right: `calc(${((rows.length - at) / rows.length) * 100}% + 8px)` }
+            }
           >
             <p className="font-medium">{shown.title}</p>
             {series

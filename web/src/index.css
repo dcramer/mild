@@ -317,11 +317,7 @@ thead .row:last-child {
   outline: none;
 }
 
-/* Base UI normally injects this rule as an inline <style> for select popups; main.tsx turns that off
-   (CSPProvider disableStyleElements) because the content security policy forbids inline styles. */
-.base-ui-disable-scrollbar {
-  scrollbar-width: none;
-}
-.base-ui-disable-scrollbar::-webkit-scrollbar {
-  display: none;
+/* A browser where nobody was signed in last time draws no frame until Sift says who is (web/src/lib/before-paint.ts). */
+.signed-out [data-frame] {
+  visibility: hidden;
 }

@@ -1,3 +1,4 @@
+'use client';
 import { type ReactNode, createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Kbd } from './type.tsx';
 import { useTouch } from './touch.ts';

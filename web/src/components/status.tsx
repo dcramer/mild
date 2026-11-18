@@ -1,3 +1,4 @@
+'use client';
 import { RefreshCwIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { ManageState, Usage } from '@/lib/api.ts';

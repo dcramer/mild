@@ -1,12 +1,13 @@
+'use client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { MailLog, MailLogLoading } from '@/components/mail-log.tsx';
 import { type Days, type DecisionRow, api, useLoaded } from '@/lib/api.ts';
-import { paramNow, setParams, useParam } from '@/lib/route.ts';
+import { paramNow, setParams, useParam } from '@/lib/params.ts';
 import { FACT_FILTER_OPTIONS, HANDLED, PERIODS, count, inboxFirst, labelSeries, factFilterName, longDay, money, moneyTick, shortDay } from '@/lib/format.ts';
 import { Button, Empty, FilterGroup, ListView, Reserve, Select, StackedBars, useToast } from '@/system';
-import type { OpenMessages } from '@/views/message-panel.tsx';
+import { useOpenMessages } from '@/lib/open-messages.ts';
 import { usePlan } from '@/components/model-connect.tsx';
 import { costName } from '@/lib/prices.ts';
 
@@ -21,7 +22,8 @@ const VIEWS = [
 const narrow = (name: string) => (value: string) => setParams({ [name]: value, page: '' });
 
 /** What sift did to mail, by day, newest first, with a way to undo it. */
-export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
+export function ActivityView() {
+  const onOpen = useOpenMessages();
   const plan = usePlan();
   const [chosen] = useParam('days');
   const days = (PERIODS.some(([key]) => key === chosen) ? Number(chosen) : 7) as Days;
@@ -29,7 +31,8 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
   const [search] = useParam('q');
   const [fact] = useParam('fact', FACT_FILTER_OPTIONS);
   const [label] = useParam('label');
-  const [typed, setTyped] = useState(search);
+  // What the viewer typed, until it is in the address; the address's, before they type.
+  const [typed, setTyped] = useState<string | null>(null);
   const [page, setPage] = useParam('page');
   const offset = (Math.max(1, Math.floor(Number(page)) || 1) - 1) * PAGE;
   const goTo = (at: number) => setPage(at === 0 ? '' : String(at / PAGE + 1));
@@ -38,6 +41,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
 
   // Search as the viewer types, but not on every keystroke.
   useEffect(() => {
+    if (typed === null) return;
     const timer = setTimeout(() => {
       if (typed.trim() !== paramNow('q')) narrow('q')(typed.trim());
     }, 250);
@@ -74,7 +78,7 @@ export function ActivityView({ onOpen }: { onOpen: OpenMessages }) {
           onChange={(value) => narrow('days')(value === '7' ? '' : value)}
         />
       }
-      search={{ value: typed, onChange: setTyped, placeholder: 'Search subject or sender' }}
+      search={{ value: typed ?? search, onChange: setTyped, placeholder: 'Search subject or sender' }}
       view={{
         label: 'Show',
         value: view,

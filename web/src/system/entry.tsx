@@ -1,3 +1,4 @@
+'use client';
 import { type ReactNode, useContext } from 'react';
 import { Sheet } from './sheet.tsx';
 import { Cloud, FinePrint } from './fine-print.tsx';

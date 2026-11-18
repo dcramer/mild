@@ -1,3 +1,4 @@
+'use client';
 import { CheckIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react';
 import { type ReactNode, useState, useRef } from 'react';
 import { cn } from '@/lib/utils';

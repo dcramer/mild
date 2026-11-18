@@ -2,8 +2,8 @@
 // and then says so. It never keeps anything under /api/ or /auth/: that is private mail data and sign-in.
 
 const CACHE = 'sift-shell';
-/** The one page, as last fetched: every address is it. */
-const PAGE = '/';
+/** Each screen's page is the same for everyone; a sender's and a domain's is one page for all of them. */
+const pageOf = (url) => url.pathname.replace(/^\/(sender|domain)\/.*/, '/$1');
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -21,15 +21,16 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin || /^\/(api|auth)\//.test(url.pathname)) return;
 
-  // The server's copy when it answers, since it may be newer; kept, with its policy and the nonce it names.
+  // The server's copy when it answers, since it may be newer; without it, the one kept for that screen, or else For review.
   if (request.mode === 'navigate') {
+    const page = pageOf(url);
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok) void caches.open(CACHE).then((cache) => cache.put(PAGE, response.clone()));
+          if (response.ok) void caches.open(CACHE).then((cache) => cache.put(page, response.clone()));
           return response;
         })
-        .catch(async () => (await caches.match(PAGE, { cacheName: CACHE })) ?? Response.error()),
+        .catch(async () => (await caches.match(page, { cacheName: CACHE })) ?? (await caches.match('/', { cacheName: CACHE })) ?? Response.error()),
     );
     return;
   }

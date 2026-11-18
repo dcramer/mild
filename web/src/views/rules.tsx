@@ -1,12 +1,13 @@
+'use client';
 import { ArrowRightIcon, FunnelIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
-import { setParams, useParam } from '@/lib/route.ts';
+import { setParams, useParam } from '@/lib/params.ts';
 import { filterStanding } from '@/views/gmail-filter.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { RulePanel, Who, checked, homeOf, whoText } from '@/views/rule-panel.tsx';
-import type { OpenMessages } from '@/views/message-panel.tsx';
+import { useOpenMessages } from '@/lib/open-messages.ts';
 import { INBOX, MADE_BY, ago, count, dateTime, describeMatch, doesName, inboxFirst, outcomeName, plural } from '@/lib/format.ts';
 import {
   Heads,
@@ -67,7 +68,8 @@ function Result({ rule }: { rule: RuleSummary }) {
 }
 
 /** Everything sift knows without asking a model: the user's rules and the ones it learned. */
-export function Rules({ onOpen }: { onOpen: OpenMessages }) {
+export function Rules() {
+  const onOpen = useOpenMessages();
   const plan = usePlan();
   const { data, error, loading, reload } = useLoaded('rules', (signal) => api.rules(signal));
   const manage = useLoaded('rule-accounts', (signal) => api.manage(signal), 60_000);

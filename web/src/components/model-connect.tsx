@@ -1,3 +1,4 @@
+'use client';
 import { ChevronRightIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';

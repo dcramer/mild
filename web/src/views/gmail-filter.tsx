@@ -1,3 +1,4 @@
+'use client';
 import { useState } from 'react';
 import { type RuleFilter, type RuleSummary, api, useAction } from '@/lib/api.ts';
 import { dateTime } from '@/lib/format.ts';

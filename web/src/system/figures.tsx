@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { Anchor } from './anchor.tsx';
 import { Highlight } from './type.tsx';
 
 /** A line of headline numbers, straight on the page. `compact`: in a column as narrow as a card, the figures at a name's size, in even columns. */
@@ -33,9 +34,9 @@ export function Figure({
       <dt className="slug whitespace-nowrap text-muted-foreground">{label}</dt>
       <dd className={cn(compact ? 'name tabular-nums' : 'figure')}>
         {href ? (
-          <a href={href} className="underline decoration-current/35 decoration-2 underline-offset-[0.15em] hover:decoration-current">
+          <Anchor href={href} className="underline decoration-current/35 decoration-2 underline-offset-[0.15em] hover:decoration-current">
             {shown}
-          </a>
+          </Anchor>
         ) : (
           shown
         )}

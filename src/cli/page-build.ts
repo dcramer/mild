@@ -19,7 +19,6 @@ const SOURCES = [
   'app',
   'web/src',
   'public',
-  'proxy.ts',
   'instrumentation.ts',
   'src/app/flow.ts',
   'src/app/process.ts',

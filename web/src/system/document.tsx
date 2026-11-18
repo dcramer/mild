@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Anchor } from './anchor.tsx';
 import { Wordmark } from './type.tsx';
 
 /**
@@ -8,9 +9,9 @@ import { Wordmark } from './type.tsx';
 export function Document({ title, updated, children }: { title: string; updated: string; children: ReactNode }) {
   return (
     <article className="mx-auto flex w-full max-w-[42rem] flex-col gap-10 px-4 py-8 md:px-6 md:py-12">
-      <a href="/" className="self-start">
+      <Anchor href="/" className="self-start">
         <Wordmark />
-      </a>
+      </Anchor>
       <header className="flex flex-col gap-2">
         <h1 className="statement">{title}</h1>
         <p className="text-muted-foreground">Last changed {updated}</p>
