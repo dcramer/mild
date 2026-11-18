@@ -23,5 +23,5 @@ export async function removeFilter({ db, controls }: Context, id: string): Promi
 export async function removeRuleAndFilter(ctx: Context, id: string): Promise<number> {
   const source = (await removeFilter(ctx, id)) ? await removeRule(ctx.db, id) : null;
   if (source === null) throw new Refusal('That rule no longer exists.');
-  return await redecide(ctx.db, ctx.now, source === 'learned' ? id : undefined);
+  return await redecide(ctx, source === 'learned' ? id : undefined);
 }

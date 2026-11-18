@@ -57,7 +57,8 @@ export default write({
    */
   reply: z.object({ id: z.string(), replaced: z.boolean(), redecided: z.number(), filter: RuleFilter.nullable() }),
   touches: self,
-  run: async ({ db, now }, { match, label, whenLabel, disposition, markRead, unsubscribe, when, name, proposal }) => {
+  run: async (ctx, { match, label, whenLabel, disposition, markRead, unsubscribe, when, name, proposal }) => {
+    const { db, now } = ctx;
     const { created, replaced } = await db.transaction(async (tx) => {
       // First: making the rule also settles any proposal for exactly that mail.
       if (proposal !== undefined && !(await madeFromProposal(tx, proposal, now()))) throw new Refusal('That proposal is no longer open.');
@@ -80,7 +81,7 @@ export default write({
       );
       return { created: id, replaced: before.has(id) };
     });
-    const redecided = await redecide(db, now);
+    const redecided = await redecide(ctx);
     const filter = (await ruleFilterStatus(db)).get(created);
     const offer = filter?.possible && !filter.filterId && (await preferences(db)).active;
     return { id: created, replaced, redecided, filter: offer ? filter : null };

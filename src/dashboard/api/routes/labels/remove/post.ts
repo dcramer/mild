@@ -26,6 +26,6 @@ export default write({
       throw new Refusal(`${label.name} is the last of your labels, and Sift reads no mail without one. Add another first.`);
     for (const rule of await listRules(db)) if (rule.labelId === id || rule.whenLabel === id) await removeFilter(ctx, rule.id);
     await removeLabel(db, id, now());
-    return { ok: true as const, redecided: await redecide(db, now) };
+    return { ok: true as const, redecided: await redecide(ctx) };
   },
 });

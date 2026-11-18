@@ -28,7 +28,6 @@ The working list for sift. Remove an item when it lands; add what you find. What
 - [ ] **Undo an apply as one.** Applying a rule to the inbox can move hundreds of messages, each with its own Undo in Activity and none for the press as a whole.
 - [ ] **Rules for one mailbox.** A rule is the person's, for every mailbox. Someone with a personal and a work account may want one in one and not the other: decide how a rule says so, likely a condition on the mailbox the mail came to, and on which of the user's own addresses it was sent to, for aliases.
 - [ ] **What is still per mailbox now that labels and rules are the person's.** A sender's and a domain's page are one mailbox's, so a rule's links open the primary mailbox's; the rule drafter looks senders up in one mailbox (`senderDirectory`); a proposal comes from one mailbox's answers, so two can propose the same rule; and a rule's Gmail filter is not written to a mailbox connected after the press.
-- [ ] **A new rule leaves mail Sift marked for review while on.** Making a rule skips waiting suggestions that carry the review label in Gmail (`redecideWaiting`); only applying the rule to the inbox, or answering each one, clears them. Decide whether making a rule of the user's settles them, taking the review label back.
 
 ## Teaching loop
 
