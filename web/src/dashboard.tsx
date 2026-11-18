@@ -1,5 +1,5 @@
 'use client';
-import { type DehydratedState, HydrationBoundary } from '@tanstack/react-query';
+import { type DehydratedState, HydrationBoundary, useIsFetching } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
@@ -10,7 +10,8 @@ import { OpenMessagesContext } from '@/lib/open-messages.ts';
 import { isMessageKey, panelEntry, setParams, useHere, useParam } from '@/lib/params.ts';
 import { useHidden } from '@/lib/action.ts';
 import { subscription } from '@/lib/prices.ts';
-import { Cloud, Masthead, Notice, PageFoot } from '@/system';
+import { startTelemetry } from '@/lib/telemetry.ts';
+import { Cloud, LoadingBar, Masthead, Notice, PageFoot, useGoing } from '@/system';
 import { Boot } from '@/views/boot.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
 import type { MessageRef } from '@/views/message-panel.tsx';
@@ -72,10 +73,12 @@ function Signed({ children }: { children: ReactNode }) {
   const session = useLoaded('session', (signal) => api.session(signal), 300_000);
   const online = useOnline();
   const known = session.data;
+  const telemetry = known?.telemetry ?? null;
+  useEffect(() => startTelemetry(telemetry), [telemetry]);
   const nobody = known?.required === true && known.email === null;
-  // Drawn for everyone (`drawn` null), or the server could not read the session: nothing until the browser has, so a
+  // Drawn for everyone (`drawn` null), or the server could not read the session: only the opening until the browser has, so a
   // sign-in screen is not drawn over a dashboard, nor one over the other. Not set up, or not answering, it says so.
-  if (!known) return session.missing || session.error || !online ? <Boot missing={session.missing} error={session.error} online={online} /> : null;
+  if (!known) return session.missing || session.error || !online ? <Boot missing={session.missing} error={session.error} online={online} /> : <Opening />;
   if (nobody)
     return (
       <Cloud value={known.cloud}>
@@ -91,6 +94,22 @@ function Signed({ children }: { children: ReactNode }) {
     </Cloud>
   );
 }
+
+/**
+ * The page while the server draws its frame, or the browser asks who is signed in: the name where the masthead and the
+ * sign-in page both have it, and the loading bar. Built once for everyone, so nothing that only someone signed in sees.
+ */
+export function Opening() {
+  return (
+    <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col px-4 md:px-6">
+      <LoadingBar on />
+      <Masthead current="" items={[]} />
+    </div>
+  );
+}
+
+/** Data a screen or panel has none of yet: a search, a sender's page, a message just opened. Not a list read again. */
+const firstLoad = { predicate: (query: { state: { data: unknown } }) => query.state.data === undefined };
 
 function Frame({ signedInAs, children }: { signedInAs: string | null; children: ReactNode }) {
   usePanelsAhead();
@@ -131,9 +150,13 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   // An answer on its way has left the list, so it leaves the count with it until the count is read again.
   const waiting = Math.max(0, (manage.data?.waiting ?? 0) - [...useHidden(manage.at)].filter(isMessageKey).length);
 
+  const going = useGoing();
+  const fetching = useIsFetching(firstLoad);
+
   return (
     <OpenMessagesContext value={openMessages}>
       <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col px-4 md:px-6">
+        <LoadingBar on={going || fetching > 0} />
         <Masthead
           current={section ?? ''}
           items={SECTIONS.map((s) => ({ ...s, ...(s.to === '' && waiting ? { count: waiting } : {}) }))}

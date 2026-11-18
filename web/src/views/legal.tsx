@@ -298,7 +298,7 @@ export function SecurityView() {
           <ul>
             <li>You sign in with Google, and see only your own mailboxes. A sign-in lasts 30 days, in a cookie the page’s scripts cannot read.</li>
             <li>A change is accepted only from the dashboard’s own page, so another site cannot make one on your behalf.</li>
-            <li>The page runs only its own code and loads nothing from any other site.</li>
+            <li>The page runs only its own code, loads nothing from any other site, and sends nothing to one but what is said of Sentry below.</li>
             <li>
               An email opened in the dashboard is shown walled off from the rest of the page: nothing in it runs and nothing loads, not even its images, so
               opening it does not tell the sender you read it.
@@ -312,6 +312,10 @@ export function SecurityView() {
             <li>
               The server’s logs may name a mailbox, never a sender. Error reports, which go to Sentry, name a message or sender only by a meaningless id, carry
               nothing from your mail, and have email addresses removed before they leave.
+            </li>
+            <li>
+              Your browser sends Sentry how long each page took and what failed on it, in the same way: no address, and no part of a link that names a message
+              or sender.
             </li>
             <li>An error from the model provider is recorded as its kind, never its text, which can quote your mail.</li>
           </ul>

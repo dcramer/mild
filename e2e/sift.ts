@@ -42,8 +42,11 @@ const FRAME_ONLY = [...directives(FRAME_POLICY)].filter((d) => !onPage.has(d));
  */
 const framePolicy = (text: string) => text.includes('/api/message/html?') || FRAME_ONLY.some((d) => text.includes(`directive: "${d}"`));
 
+/** A Sentry project on a port nothing listens on, on this machine: what the server sends there is refused, and nothing leaves it. */
+export const SENTRY_DSN = 'http://key@127.0.0.1:1/1';
+
 /** Starts verify-sift's `serve.ts` (the app, with stand-ins for Gmail and the model) on a copy of the seeded home. */
-async function start(variant: Variant, cloud: boolean, listing: boolean, signedOut: boolean) {
+async function start(variant: Variant, cloud: boolean, listing: boolean, signedOut: boolean, sentry: boolean) {
   const template = JSON.parse(process.env[`${TEMPLATES}_${variant}`] ?? 'null') as { dir: string; cookie: string } | null;
   if (!template) throw new Error('e2e/global-setup.ts did not run');
   const dir = mkdtempSync(join(tmpdir(), 'sift-e2e-run-'));
@@ -68,6 +71,7 @@ async function start(variant: Variant, cloud: boolean, listing: boolean, signedO
           ...process.env,
           SIFT_CLOUD: String(cloud),
           ...(signedOut ? { SIFT_GOOGLE_CLIENT_ID: 'synthetic', SIFT_GOOGLE_CLIENT_SECRET: 'synthetic' } : {}),
+          ...(sentry ? { SENTRY_DSN: SENTRY_DSN } : {}),
         },
         // A group of its own, with the Next.js server it starts, to end together.
         detached: true,
@@ -108,6 +112,7 @@ export const test = base.extend<{
   cloud: boolean;
   listing: boolean;
   signedOut: boolean;
+  sentry: boolean;
   allow: string[];
   sift: Awaited<ReturnType<typeof start>>;
 }>({
@@ -118,10 +123,12 @@ export const test = base.extend<{
   listing: [false, { option: true }],
   /** A visitor nobody is signed in as, on a Sift that can sign them in. */
   signedOut: [false, { option: true }],
+  /** Sending to Sentry, at `SENTRY_DSN`: the page's reports are the test's to catch (`page.route`), and the server's go nowhere. */
+  sentry: [false, { option: true }],
   /** Console errors a test expects, by part of their text: `status of 409` where the server refuses and the page says why. */
   allow: [[], { option: true }],
-  sift: async ({ variant, cloud, listing, signedOut }, use) => {
-    const sift = await start(variant, cloud, listing, signedOut);
+  sift: async ({ variant, cloud, listing, signedOut, sentry }, use) => {
+    const sift = await start(variant, cloud, listing, signedOut, sentry);
     await use(sift);
     await sift.stop();
   },

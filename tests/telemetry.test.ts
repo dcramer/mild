@@ -20,7 +20,20 @@ import { PROPOSAL_PROMPT, PROPOSAL_TOOL } from '../src/triage/proposal.ts';
 import { FILL_TOOL, FIND_TOOL } from '../src/triage/rule-draft.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
 import { loadKeyring } from '../src/secrets.ts';
-import { checkedIn, flushTelemetry, identify, invokeAgent, logged, reportError, scrub, startTelemetry, traced, tracedFetch } from '../src/telemetry.ts';
+import {
+  asked,
+  checkedIn,
+  flushTelemetry,
+  forThePage,
+  identify,
+  invokeAgent,
+  logged,
+  reportError,
+  scrub,
+  startTelemetry,
+  traced,
+  tracedFetch,
+} from '../src/telemetry.ts';
 import { triageAccount } from '../src/work/triage.ts';
 import { firstAccount, freshStore, openUserDb, personWith, raw } from './fixtures.ts';
 import { ACCOUNT, facts, quietSources, SAMPLE_LABELS, storeExample } from './helpers.ts';
@@ -30,7 +43,7 @@ const SUBJECT = 'Your invoice 8812 is overdue';
 const BODY = 'Pay 4,200 by Friday or your account at Acme closes.';
 const REASON = 'An overdue invoice from Acme.';
 
-type Span = { name: string; status: string; trace_id: string; attributes: Record<string, { value: unknown }> };
+type Span = { name: string; status: string; trace_id: string; span_id: string; parent_span_id?: string; attributes: Record<string, { value: unknown }> };
 type Envelope = [unknown, [{ type: string }, unknown][]];
 
 /** Everything sent to Sentry, as the transport was handed it. */
@@ -285,6 +298,30 @@ describe('whom a trace is for', () => {
       (events as { exception: { values: { value: string }[] }; user: unknown }[]).map((e) => [e.exception.values[0]!.value, e.user]),
     );
     expect(users).toEqual({ 'refused 1': { id: '1', email: ACCOUNT }, 'refused 2': { id: '2', email: OTHER } });
+  });
+});
+
+describe('a request from the page', () => {
+  const TRACE = '0123456789abcdef0123456789abcdef';
+  const PAGE_SPAN = '0123456789abcdef';
+  const fromPage = new Headers({ 'sentry-trace': `${TRACE}-${PAGE_SPAN}-1`, baggage: `sentry-trace_id=${TRACE},sentry-sampled=true` });
+
+  it('is under the page load or press that made it', async () => {
+    await asked(fromPage, () => traced('http.server', 'GET /api/suggestions', {}, async () => {}));
+    const { spans } = await delivered();
+    expect(spans.map((s) => [s.name, s.trace_id, s.parent_span_id])).toEqual([['GET /api/suggestions', TRACE, PAGE_SPAN]]);
+  });
+
+  it('read for the frame stays under the frame', async () => {
+    await traced('sift.frame', 'frame', {}, () => asked(fromPage, () => traced('http.server', 'GET /api/session', {}, async () => {})));
+    const { spans } = await delivered();
+    const frame = spans.find((s) => s.name === 'frame')!;
+    expect(frame.trace_id).not.toBe(TRACE);
+    expect(spans.find((s) => s.name === 'GET /api/session')).toMatchObject({ trace_id: frame.trace_id, parent_span_id: frame.span_id });
+  });
+
+  it('is told where the page sends its own', () => {
+    expect(forThePage()).toMatchObject({ dsn: 'https://key@o0.ingest.example.org/1' });
   });
 });
 

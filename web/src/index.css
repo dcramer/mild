@@ -239,6 +239,38 @@
     }
   }
 
+  /* `LoadingBar`: a stretch of ink running along the top of the window, faded in once the wait is long enough to notice. */
+  .loading-bar {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 60;
+    height: 2px;
+    overflow: hidden;
+    pointer-events: none;
+    animation: loading-bar-in 150ms 200ms both;
+  }
+  .loading-bar::after {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 30%;
+    background: color-mix(in oklab, var(--foreground) 70%, transparent);
+    animation: loading-bar-run 1100ms ease-in-out infinite;
+  }
+  @keyframes loading-bar-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes loading-bar-run {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(340%);
+    }
+  }
+
   /* On a touch screen, controls are tall enough for a thumb. */
   @media (pointer: coarse) {
     .press,
@@ -249,9 +281,15 @@
 
   @media (prefers-reduced-motion: reduce) {
     .press,
-    .busy-dots {
+    .busy-dots,
+    .loading-bar::after {
       transition: none;
       animation: none;
+    }
+    /* Still, the whole width, fainter. */
+    .loading-bar::after {
+      width: 100%;
+      opacity: 0.4;
     }
     .press:active {
       transform: none;

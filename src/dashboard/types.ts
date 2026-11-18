@@ -669,6 +669,8 @@ export const Session = z.object({
   addresses: z.array(z.string()),
   /** `SIFT_CLOUD`: this Sift is a service for other people. Someone's own copy has no terms, privacy policy or security page. */
   cloud: z.boolean(),
+  /** Where the page sends how long it took and what failed in it: this server's Sentry project. Null when the server sends nothing. */
+  telemetry: z.object({ dsn: z.string(), release: z.string().nullable(), environment: z.string().nullable() }).nullable(),
 });
 export type Session = z.infer<typeof Session>;
 

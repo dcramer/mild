@@ -1,7 +1,7 @@
 import { type DehydratedState, QueryClient, dehydrate } from '@tanstack/react-query';
 import type { Confidential } from '../confidential.ts';
 import type { ManageState, Session, Usage } from '../dashboard/types.ts';
-import { respond } from './instance.ts';
+import { framed, respond } from './instance.ts';
 
 /** Whether `T` holds a `Confidential` anywhere in it. */
 type Holds<T> = T extends Confidential ? true : T extends object ? (true extends { [K in keyof T]-?: Holds<T[K]> }[keyof T] ? true : false) : false;
@@ -28,7 +28,9 @@ const PATHS: { [K in keyof Drawn]: Holds<Drawn[K]> extends true ? never : string
  * them: the same session, Host and scope checks (`respond`), in this process. A visitor nobody is signed in as gets
  * only the session, which says so.
  */
-export async function drawnFor(asked: Headers): Promise<DehydratedState> {
+export const drawnFor = (asked: Headers): Promise<DehydratedState> => framed(() => drawn(asked));
+
+async function drawn(asked: Headers): Promise<DehydratedState> {
   const client = new QueryClient();
   const base = `${asked.get('x-forwarded-proto') === 'https' ? 'https' : 'http'}://${asked.get('host') ?? 'localhost'}`;
   const read = async <K extends keyof Drawn>(key: K): Promise<Drawn[K] | null> => {

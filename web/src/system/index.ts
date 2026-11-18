@@ -35,6 +35,7 @@ export { ActionIcon, Does } from './does.tsx';
 export { Entry } from './entry.tsx';
 export { Onboarding } from './onboarding.tsx';
 export { Blank, Empty, Loading } from './state.tsx';
+export { LoadingBar, useGoing } from './loading-bar.tsx';
 export { Heads, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from './table.tsx';
 export { Timeline, TimelineEvent } from './timeline.tsx';
 export { Toaster, useToast } from './toast.tsx';

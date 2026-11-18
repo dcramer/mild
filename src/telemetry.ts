@@ -155,6 +155,22 @@ export async function traced<T>(op: string, name: string, attributes: Attributes
   return await (parent ? start() : Sentry.withIsolationScope(start));
 }
 
+/**
+ * Run `work` in the trace the page's request carries (`sentry-trace`, `baggage`), so what the server did is under
+ * the page load or the press that asked for it. Already under a span, as when the frame reads through the API, it
+ * stays there.
+ */
+export const asked = <T>(headers: Headers, work: () => Promise<T>): Promise<T> => {
+  const sentryTrace = headers.get('sentry-trace');
+  return sentryTrace && !Sentry.getActiveSpan() ? Sentry.continueTrace({ sentryTrace, baggage: headers.get('baggage') ?? undefined }, work) : work();
+};
+
+/** Where the page sends its own traces and errors: this server's project, release and environment. Null when nothing is sent. */
+export function forThePage(): { dsn: string; release: string | null; environment: string | null } | null {
+  const options = Sentry.getClient()?.getOptions();
+  return options?.dsn ? { dsn: options.dsn, release: options.release ?? null, environment: options.environment ?? null } : null;
+}
+
 const untraced: Traced = { set: () => {}, fail: () => {} };
 
 /** As `traced`, but only under a span already started: on its own it would be a trace of one query. */
