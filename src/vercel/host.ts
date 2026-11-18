@@ -1,7 +1,7 @@
 import { loadConfig } from '../config.ts';
 import { openEphemeral } from '../ephemeral/open.ts';
-import { begin } from '../app/flow.ts';
-import type { Host } from '../app/sift.ts';
+import { begin } from '../sift/flow.ts';
+import type { Host } from '../sift/sift.ts';
 import { openStore } from '../store/store.ts';
 import { startTelemetry } from '../telemetry.ts';
 

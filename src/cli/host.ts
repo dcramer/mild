@@ -1,8 +1,8 @@
 import { type Config, type Env, loadConfig, loadEnvFiles, resolveHome } from '../config.ts';
 import { sessionSecret } from './session.ts';
 import { openEphemeral } from '../ephemeral/open.ts';
-import { begin } from '../app/flow.ts';
-import type { Host, StandIns } from '../app/sift.ts';
+import { begin } from '../sift/flow.ts';
+import type { Host, StandIns } from '../sift/sift.ts';
 import { openStore } from '../store/store.ts';
 import { startTelemetry } from '../telemetry.ts';
 import { fromHere, machineNames, signInAddresses } from './network.ts';

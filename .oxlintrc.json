@@ -54,7 +54,7 @@
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "triage/ is pure: no I/O. Inject what you need through a port (see src/triage/stages)." },
               {
                 // Every module in src/ but this one; a new one goes here too.
-                "group": ["**/actions/**", "**/app/**", "**/cli/**", "**/dashboard/**", "**/ephemeral/**", "**/gmail/**", "**/learn/**", "**/model/**", "**/store/**", "**/vercel/**", "**/work/**", "**/config.ts", "**/plain.ts", "**/refusal.ts", "**/secrets.ts", "**/telemetry.ts"],
+                "group": ["**/actions/**", "**/cli/**", "**/dashboard/**", "**/ephemeral/**", "**/gmail/**", "**/learn/**", "**/model/**", "**/sift/**", "**/store/**", "**/vercel/**", "**/work/**", "**/config.ts", "**/plain.ts", "**/refusal.ts", "**/secrets.ts", "**/telemetry.ts"],
                 "message": "triage/ is pure and depends on nothing else in src/."
               }
             ]
@@ -96,7 +96,7 @@
               },
               { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. The dashboard reaches it through Controls (src/dashboard/controls.ts)." },
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
-              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/app and src/work/run.ts hold the store. Take the Sql you are given; the dashboard asks People (src/store/people.ts)." }
+              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/sift and src/work/run.ts hold the store. Take the Sql you are given; the dashboard asks People (src/store/people.ts)." }
             ]
           }
         ]
@@ -167,8 +167,8 @@
             "patterns": [
               { "group": ["**/plain.ts"], "message": "src/plain.ts reads what Sift stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." },
               {
-                "group": ["**", "!next", "!next/*", "!react", "!@/**", "!**/src/app/page-data.ts"],
-                "message": "app/ draws the page from web/src (@/…), which gets the rest of its data from /api/: from the server only what src/app/page-data.ts reads, which holds nothing encrypted. Server code reached from here could be handed to the browser."
+                "group": ["**", "!next", "!next/*", "!react", "!@/**", "!**/src/sift/page-data.ts"],
+                "message": "app/ draws the page from web/src (@/…), which gets the rest of its data from /api/: from the server only what src/sift/page-data.ts reads, which holds nothing encrypted. Server code reached from here could be handed to the browser."
               }
             ]
           }
@@ -209,15 +209,15 @@
               { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." },
               { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
-              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/app and src/work/run.ts hold the store. Take the Sql you are given; the dashboard asks People (src/store/people.ts)." }
+              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/sift and src/work/run.ts hold the store. Take the Sql you are given; the dashboard asks People (src/store/people.ts)." }
             ]
           }
         ]
       }
     },
     {
-      // What starts sift wires the store up (the hosts: src/cli, src/vercel; the app they build, src/app), and a tick hands each piece of work one person's database.
-      "files": ["src/cli/**/*.ts", "src/app/**/*.ts", "src/vercel/**/*.ts", "src/work/run.ts"],
+      // What starts sift wires the store up (the hosts: src/cli, src/vercel; the app they build, src/sift), and a tick hands each piece of work one person's database.
+      "files": ["src/cli/**/*.ts", "src/sift/**/*.ts", "src/vercel/**/*.ts", "src/work/run.ts"],
       "rules": {
         "no-restricted-imports": [
           "error",
@@ -241,7 +241,7 @@
               { "group": ["**/plain.ts"], "message": "gmail/ is given what to write as text by its callers; it reads nothing stored." },
               { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
-              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/app and src/work/run.ts hold the store. Take the Sql you are given." }
+              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/sift and src/work/run.ts hold the store. Take the Sql you are given." }
             ]
           }
         ]
@@ -257,7 +257,7 @@
               { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." },
               { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
-              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/app and src/work/run.ts hold the store. Take the Sql you are given." }
+              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/sift and src/work/run.ts hold the store. Take the Sql you are given." }
             ]
           }
         ]
@@ -274,7 +274,7 @@
               { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." },
               { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
-              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/app and src/work/run.ts hold the store. Take the Sql you are given." }
+              { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/sift and src/work/run.ts hold the store. Take the Sql you are given." }
             ]
           }
         ]

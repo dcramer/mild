@@ -3,9 +3,9 @@ import { join, resolve } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { expect, it } from 'vitest';
 import { getWorld } from 'workflow/runtime';
-import { begin } from '../src/app/flow.ts';
-import { offerSift } from '../src/app/instance.ts';
-import { runKey } from '../src/app/sift.ts';
+import { begin } from '../src/sift/flow.ts';
+import { offerSift } from '../src/sift/instance.ts';
+import { runKey } from '../src/sift/sift.ts';
 import type { Work } from '../src/work/run.ts';
 
 /** Where `@workflow/vitest` builds and keeps its runs (`rootDir`, vitest.config.ts). */
@@ -34,7 +34,7 @@ const startAgain = (key: string) =>
         const world = createWorld({ dataDir: workerData.dataDir, tag: workerData.tag });
         world.registerHandler('__wkf_workflow_', POST);
         setWorld(world);
-        // As instrumentation.ts does once the server is up (takeUpRuns, src/app/instance.ts).
+        // As instrumentation.ts does once the server is up (takeUpRuns, src/sift/instance.ts).
         await world.start();
         let outcome = 'held';
         for (let tries = 0; tries < 100 && outcome === 'held'; tries++) {
