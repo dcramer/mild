@@ -1,6 +1,6 @@
 'use client';
 import { ArrowRightIcon, FunnelIcon, PlusIcon, Trash2Icon } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { setParams, useParam } from '@/lib/params.ts';
@@ -9,26 +9,7 @@ import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { RulePanel, Who, checked, homeOf, whoText } from '@/views/rule-panel.tsx';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { INBOX, MADE_BY, ago, count, dateTime, describeMatch, doesName, inboxFirst, outcomeName, plural } from '@/lib/format.ts';
-import {
-  Heads,
-  Blank,
-  Button,
-  ConfirmButton,
-  Does,
-  Empty,
-  Failure,
-  FilterGroup,
-  Hint,
-  ListView,
-  Loading,
-  RowActions,
-  Sub,
-  Table,
-  Td,
-  Th,
-  Tr,
-  useToast,
-} from '@/system';
+import { Heads, Button, ConfirmButton, Does, Empty, Failure, FilterGroup, Hint, ListView, RowActions, Sub, Table, Td, Th, Tr, useToast } from '@/system';
 import { usePlan } from '@/components/model-connect.tsx';
 import { approx, atApiPrices } from '@/lib/prices.ts';
 
@@ -67,11 +48,29 @@ function Result({ rule }: { rule: RuleSummary }) {
   );
 }
 
-/** Everything sift knows without asking a model: the user's rules and the ones it learned. */
-export function Rules() {
+/** Rules' own action: adding one, shown from the start and pressable once the account is known, so it does not arrive late and move the page. */
+export function AddRule() {
+  const manage = useLoaded('rule-accounts', (signal) => api.manage(signal), 60_000);
+  const rules = useLoaded('rules', (signal) => api.rules(signal));
+  const [adding, setAdding] = useState(false);
+  const home = homeOf(manage.data);
+  return (
+    <>
+      {/* Shown from the start and enabled once the account is known, so it does not arrive late and move the page. */}
+      <Button disabled={!home} onClick={() => setAdding(true)}>
+        <PlusIcon aria-hidden />
+        Add a rule
+      </Button>
+      {adding && home ? <AddRuleDialog accountId={home} labels={manage.data?.labels ?? []} onClose={() => setAdding(false)} onAdded={rules.reload} /> : null}
+    </>
+  );
+}
+
+/** Everything sift knows without asking a model: the user's rules and the ones it learned. `loading` stands in for the rows until they come. */
+export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
   const onOpen = useOpenMessages();
   const plan = usePlan();
-  const { data, error, loading, reload } = useLoaded('rules', (signal) => api.rules(signal));
+  const { data, error, loading } = useLoaded('rules', (signal) => api.rules(signal));
   const manage = useLoaded('rule-accounts', (signal) => api.manage(signal), 60_000);
   const remove = useAction();
   const toast = useToast();
@@ -80,7 +79,6 @@ export function Rules() {
   const [source, setSource] = useParam('by', SOURCES);
   const [gmail, setGmail] = useParam('gmail', GMAIL);
   const [open, setOpen] = useParam('rule');
-  const [adding, setAdding] = useState(false);
   const home = homeOf(manage.data);
   const labels = (manage.data?.labels ?? []).map((l) => [l.id, l.name] as const);
   const needle = search.trim().toLowerCase();
@@ -116,14 +114,6 @@ export function Rules() {
 
   return (
     <ListView
-      title="Rules"
-      actions={
-        // Shown from the start and enabled once the account is known, so it does not arrive late and move the page.
-        <Button disabled={!home} onClick={() => setAdding(true)}>
-          <PlusIcon aria-hidden />
-          Add a rule
-        </Button>
-      }
       search={{ value: search, onChange: setSearch, placeholder: 'Search senders, domains and labels' }}
       filters={{
         active: [
@@ -143,17 +133,7 @@ export function Rules() {
       {error ? <ErrorNote message={error} /> : null}
       <Failure>{remove.error}</Failure>
       {loading ? (
-        <Loading>
-          <Td className="max-w-0 md:w-full">
-            <Blank />
-          </Td>
-          <Td phone="hide" num className="md:w-28">
-            <Blank word />
-          </Td>
-          <Td phone="hide" num className="md:w-32">
-            <Blank word />
-          </Td>
-        </Loading>
+        loadingRows
       ) : rules.length === 0 ? (
         <Empty>{data && data.rules.length > 0 ? 'No rule matches.' : 'No rules yet.'}</Empty>
       ) : (
@@ -230,7 +210,6 @@ export function Rules() {
           onClose={() => setParams({ rule: '', apply: '' })}
         />
       ) : null}
-      {adding && home ? <AddRuleDialog accountId={home} labels={manage.data?.labels ?? []} onClose={() => setAdding(false)} onAdded={reload} /> : null}
     </ListView>
   );
 }

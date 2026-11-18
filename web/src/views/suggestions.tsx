@@ -1,9 +1,9 @@
 'use client';
 import { PlusIcon } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
-import { MatchWords, SenderCell, SenderCellLoading } from '@/components/sender.tsx';
+import { MatchWords, SenderCell } from '@/components/sender.tsx';
 import { messageKey, useParam } from '@/lib/params.ts';
 import { type SuggestionItem, type Suggestions, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, ago, inboxFirst, count, factFilterName, outcomeName, plural, sureness } from '@/lib/format.ts';
@@ -11,7 +11,6 @@ import {
   Heads,
   AnswerPicker,
   Button,
-  Blank,
   Callout,
   CalloutKey,
   Check,
@@ -19,7 +18,6 @@ import {
   Failure,
   FilterGroup,
   ListView,
-  Loading,
   Meter,
   OnPhone,
   Sub,
@@ -197,7 +195,7 @@ function SuggestionRow({
 const DOES = [['', 'Anything'] as const, ...ACTIONS.filter(([key]) => key !== 'keep'), ['review', outcomeName('review')] as const];
 
 /** The home page: what sift would do with each waiting message, for the user to agree with in one press or change. */
-export function SuggestionsView() {
+export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }) {
   const onOpen = useOpenMessages();
   const [kept, setKept] = useParam('kept');
   const includeKept = kept === '1';
@@ -227,7 +225,6 @@ export function SuggestionsView() {
 
   return (
     <ListView
-      title="For review"
       intro={
         <>
           {/* Most people start off, so the room is held for it. */}
@@ -279,28 +276,7 @@ export function SuggestionsView() {
         </ul>
       ) : null}
       {loading ? (
-        <Loading>
-          <SenderCellLoading>
-            <OnPhone>
-              <span className="w-full text-base">
-                <Blank />
-              </span>
-              <Blank />
-            </OnPhone>
-          </SenderCellLoading>
-          <Td phone="hide" className="max-w-0 md:w-full">
-            <Blank />
-            <Sub>
-              <Blank />
-            </Sub>
-          </Td>
-          <Td phone="hide" num>
-            <Blank word />
-          </Td>
-          <RowActions>
-            <Blank className="h-(--control) w-60 py-0" />
-          </RowActions>
-        </Loading>
+        loadingRows
       ) : shown.length === 0 ? (
         <Empty>
           {(data && data.items.length > 0) || fact !== ''

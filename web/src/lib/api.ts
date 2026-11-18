@@ -1,4 +1,4 @@
-import { QueryCache, QueryClient, isServer, keepPreviousData, onlineManager, useQuery, useQueryClient } from '@tanstack/react-query';
+import { QueryCache, QueryClient, environmentManager, keepPreviousData, onlineManager, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useContext, useState, useSyncExternalStore } from 'react';
 
 export type {
@@ -302,7 +302,7 @@ let browserClient: QueryClient | undefined;
  * every page loading and never fetches, makes one for each page it draws, so that nothing one draw asked for is held
  * for the next.
  */
-export const queryClientFor = (): QueryClient => (isServer ? makeClient() : (browserClient ??= makeClient()));
+export const queryClientFor = (): QueryClient => (environmentManager.isServer() ? makeClient() : (browserClient ??= makeClient()));
 
 /** False while sift cannot be reached. */
 export function useOnline(): boolean {

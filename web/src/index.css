@@ -44,10 +44,10 @@
   color-scheme: dark;
 
   /* Type, by role. */
-  --face-wordmark: 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
-  --face-display: 'Hanken Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
-  --face-text: 'Karla Variable', ui-sans-serif, system-ui, sans-serif;
-  --face-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --face-wordmark: var(--typeface-wordmark), 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
+  --face-display: var(--typeface-display), 'Hanken Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+  --face-text: var(--typeface-text), 'Karla Variable', ui-sans-serif, system-ui, sans-serif;
+  --face-mono: var(--typeface-mono), 'IBM Plex Mono', ui-monospace, monospace;
 
   /* The dashboard is dark only: ink-black paper, off-white ink. */
   --background: #111110;

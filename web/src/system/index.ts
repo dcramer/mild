@@ -21,7 +21,7 @@ export { Masthead } from './nav.tsx';
 export { Failure, Note } from './note.tsx';
 export { Callout, CalloutKey } from './callout.tsx';
 export { Notice } from './notice.tsx';
-export { PageHeader, Section } from './page.tsx';
+export { ListPage, PageHeader, Section } from './page.tsx';
 export { Panel } from './panel.tsx';
 export { Reserve } from './reserve.tsx';
 export { Select } from './select.tsx';
