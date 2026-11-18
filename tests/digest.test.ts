@@ -265,6 +265,28 @@ describe('a daily digest', () => {
     expect(asked).toBe(2);
   });
 
+  it('keeps track of a digest Gmail took, even once its mail has all been answered', async () => {
+    await arrive(ACCOUNT, ['b1', 'Run 1 passed']);
+    clock = SEVEN + 5 * 60_000;
+    const box = mailboxes.get(ACCOUNT)!;
+    box.failInsert = 'after';
+    await runWork(store, DIGEST, options(), clock + 60_000);
+    box.failInsert = null;
+    await recordDecision(
+      db,
+      ACCOUNT,
+      'b1',
+      { disposition: 'keep', subscription: 'preserve', labelId: 'notification', stage: 'rules', reason: 'you said' },
+      { byUser: true, now: clock },
+    );
+
+    await runWork(store, DIGEST, options(), clock + 60_000);
+    expect(box.inserted.size).toBe(1);
+    expect(await raw(db).all('SELECT gmail_id FROM digests')).toEqual([{ gmail_id: 'inserted-1' }]);
+    expect(await raw(db).all("SELECT status FROM actions WHERE type = 'digest'")).toEqual([{ status: 'done' }]);
+    expect(await digestsDue()).toEqual([]);
+  });
+
   it('heads the digest with what the model picks, and goes without when it fails', async () => {
     await arrive(ACCOUNT, ['b1', 'Run 1 passed'], ['b2', 'Run 2 failed'], ['b3', 'Run 3 passed']);
     let shown = '';
