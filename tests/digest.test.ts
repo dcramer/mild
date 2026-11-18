@@ -312,13 +312,19 @@ describe('a daily digest', () => {
       ],
     });
     const account = { id: ACCOUNT, number: 1, email: ACCOUNT, historyId: '1' };
-    const gmail = (ids: string[]): GmailApi => ({
+    const gmail = (ids: string[], read: string[] = []): GmailApi => ({
       ...api(ACCOUNT),
-      listHistory: async () => ({ additions: ids.map((i) => ({ id: i, labelIds: ['INBOX'] })), labelChanges: [], historyId: '9' }),
+      listHistory: async () => ({
+        additions: ids.map((i) => ({ id: i, labelIds: ['INBOX'] })),
+        labelChanges: read.map((i) => ({ messageId: i, added: [], removed: ['UNREAD'] })),
+        historyId: '9',
+      }),
       getMetadata: async (i) => (i === id ? asGmail : null),
     });
-    // By Gmail's id, without reading it; and by its Message-ID before Sift has that.
+    // By Gmail's id, without reading it, arriving or read; and by its Message-ID before Sift has that.
     expect(await syncWants(db, gmail([id]), account)).toBe(false);
+    expect(await syncWants(db, gmail([], [id]), account)).toBe(false);
+    expect(await syncWants(db, gmail([], ['b1']), account)).toBe(true);
     expect(await syncAccount(db, gmail([id]), account, () => clock)).toMatchObject({ added: [], skipped: 0 });
     await raw(db).run('UPDATE digests SET gmail_id = NULL');
     expect(await syncAccount(db, gmail([id]), account, () => clock)).toMatchObject({ added: [], skipped: 1 });
