@@ -4,9 +4,11 @@ import type { Sql } from '../src/store/sql.ts';
 import { pendingSuggestions } from '../src/learn/feedback.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
 import { recordSync } from '../src/store/accounts.ts';
-import { recordDecision } from '../src/store/decisions.ts';
+import { execute } from '../src/actions/executor.ts';
+import { planAction } from '../src/actions/plan.ts';
+import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { addRule } from '../src/store/rules.ts';
-import type { MessageFacts } from '../src/triage/types.ts';
+import type { Decision, MessageFacts } from '../src/triage/types.ts';
 import { REACH, goingInboxRuns, inboxProgress, startInboxRuns, stopInboxRuns } from '../src/store/inbox.ts';
 import { removeRule } from '../src/store/rules.ts';
 import { inboxQuery, ruleInbox } from '../src/work/apply.ts';
@@ -57,10 +59,17 @@ function gmail(inbox: MessageFacts[], { gone = [], more }: { gone?: string[]; mo
 }
 
 /** Press Apply on `rule` and go through the run it starts, as the ticks would. */
-async function applyRule(api: ReturnType<typeof gmail>['api'], rule: string, now: number) {
+async function applyRule(api: ReturnType<typeof gmail>['api'], rule: string, now: number, mailbox = new FakeMailbox()) {
   await startInboxRuns(db, [ACCOUNT], { acts: true, most: REACH.inbox, now, ruleId: rule });
   const [run] = await goingInboxRuns(db);
-  return await continueRuleRun({ db, api, now: () => now }, run!.id);
+  return await continueRuleRun({ db, api, mailbox, now: () => now }, run!.id);
+}
+
+/** What Sift does to a message while on: records the decision and carries it out in `mailbox`. */
+async function decidedWhileOn(mailbox: FakeMailbox, messageId: string, decision: Decision) {
+  const id = await recordDecision(db, ACCOUNT, messageId, decision, { now: 1, carryOut: true });
+  const action = planAction(decision);
+  await settleDecision(db, id, action ? (await execute({ db, mailbox, now: () => 1 }, ACCOUNT, messageId, action, id)).status : 'none');
 }
 
 const decisionsOf = async (id: string) =>
@@ -72,14 +81,13 @@ beforeEach(async () => {
 
 describe('searching the inbox for a rule', () => {
   it('asks Gmail only for what the rule names, and leaves out what could change the search', () => {
-    expect(inboxQuery({ fromDomain: ['news.example.com'], subjectContains: ['Weekly'] })).toBe('from:news.example.com subject:"Weekly"');
     expect(inboxQuery({ from: ['a@example.com'], to: ['me+x@example.org'], listId: ['list.example.com'] })).toBe(
       'from:a@example.com to:me+x@example.org list:list.example.com',
     );
-    expect(inboxQuery({ from: ['a@example.com OR in:sent'], subjectContains: ['say "hi"'] })).toBe('');
-    expect(inboxQuery({ from: ['a@example.com'], fromDomain: ['example.org'], subjectContains: ['receipt', 'invoice'] })).toBe(
-      'from:(a@example.com OR example.org) subject:("receipt" OR "invoice")',
-    );
+    expect(inboxQuery({ from: ['a@example.com OR in:sent'] })).toBe('');
+    expect(inboxQuery({ from: ['a@example.com'], fromDomain: ['example.org'] })).toBe('from:(a@example.com OR example.org)');
+    // Gmail finds whole words only, so a search for part of one would miss mail the rule matches.
+    expect(inboxQuery({ fromDomain: ['news.example.com'], subjectContains: ['order conf'] })).toBe('from:news.example.com');
     expect(inboxQuery({ from: ['a@example.com', 'b@example.com OR in:sent'] })).toBe('');
   });
 });
@@ -161,6 +169,35 @@ describe('applying a rule to the inbox', () => {
     expect(await pendingSuggestions(db)).toEqual([]);
   });
 
+  it('replaces what Sift did to mail it left in the inbox while on, and leaves mail waiting to be carried out', async () => {
+    const rule = await addRule(db, { match: { fromDomain: ['news.example.com'] }, labelId: 'marketing' }, 'user');
+    const asked = message('asked', 'deals@news.example.com');
+    const kept = message('kept', 'tips@news.example.com');
+    const waiting = message('waiting', 'news@news.example.com');
+    await recordSync(db, ACCOUNT, [asked, kept, waiting], '2');
+    const mailbox = new FakeMailbox();
+    for (const id of ['asked', 'kept', 'waiting']) mailbox.labels.set(id, ['INBOX']);
+    const model = { subscription: 'preserve', stage: 'model' } as const;
+    await decidedWhileOn(mailbox, 'asked', { ...model, disposition: 'review', reason: 'unsure' });
+    await decidedWhileOn(mailbox, 'kept', { ...model, disposition: 'keep', labelId: 'everything_else', reason: 'from a person' });
+    // Carried out at the next pass.
+    await recordDecision(db, ACCOUNT, 'waiting', { ...model, disposition: 'keep', reason: 'r' }, { now: 1, carryOut: true });
+    expect(mailbox.labels.get('asked')).toContain('L:sift/review');
+    const { api } = gmail([asked, kept, waiting]);
+
+    expect(await ruleInbox(db, api, ACCOUNT, rule)).toMatchObject({ messages: 2, exact: true });
+    await applyRule(api, rule, 3, mailbox);
+    expect(mailbox.labels.get('asked')).toEqual(['INBOX']);
+    expect((await decisionsOf('asked')).at(-1)).toMatchObject({ rule_id: rule, carry_out: true, by_user: true });
+    expect((await decisionsOf('kept')).at(-1)).toMatchObject({ rule_id: rule, carry_out: true, by_user: true });
+    expect(await decisionsOf('waiting')).toHaveLength(1);
+
+    await triageAccount({ db, mailbox: null, answers: mailbox }, await firstAccount(db));
+    for (const id of ['asked', 'kept']) expect(mailbox.labels.get(id)).toEqual(['L:sift/marketing', 'L:sift/did/archived']);
+    // Done, the rule has nothing left to do there.
+    expect(await ruleInbox(db, api, ACCOUNT, rule)).toMatchObject({ messages: 0, exact: true });
+  });
+
   it('marks mail a model must read first, and carries out what the rule decides once it has', async () => {
     const rule = await addRule(db, { match: { fromDomain: ['news.example.com'] }, whenLabel: 'marketing', disposition: 'spam' }, 'user');
     const sale = message('sale', 'deals@news.example.com');
@@ -201,13 +238,14 @@ describe('applying a rule to the inbox', () => {
       (await raw(db).get<{ id: number }>('SELECT id FROM inbox_runs WHERE rule_id IS NOT DISTINCT FROM ?', ruleId))!.id;
     const [whole, mine, theirs] = [await runOf(null), await runOf(rule), await runOf(other)];
 
-    expect(await continueRuleRun({ db, api, now: () => 2 }, mine)).toEqual({ from: 0, to: 250, of: 300 });
+    const mailbox = new FakeMailbox();
+    expect(await continueRuleRun({ db, api, mailbox, now: () => 2 }, mine)).toEqual({ from: 0, to: 250, of: 300 });
     await stopInboxRuns(db, rule, 3);
-    expect(await continueRuleRun({ db, api, now: () => 4 }, mine)).toBeNull();
+    expect(await continueRuleRun({ db, api, mailbox, now: () => 4 }, mine)).toBeNull();
     expect(await raw(db).get(`SELECT count(*) AS n FROM decisions WHERE rule_id = ?`, rule)).toEqual({ n: 250 });
 
     await removeRule(db, other);
-    expect(await continueRuleRun({ db, api, now: () => 5 }, theirs)).toBeNull();
+    expect(await continueRuleRun({ db, api, mailbox, now: () => 5 }, theirs)).toBeNull();
     expect((await goingInboxRuns(db)).map((r) => r.id)).toEqual([whole]);
   });
 });
