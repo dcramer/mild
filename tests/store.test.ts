@@ -28,14 +28,27 @@ import { facts, tempDir, withSampleLabels } from './helpers.ts';
 
 const MIGRATIONS = new URL('../src/store/migrations/', import.meta.url);
 
-/** A database migrated up to `tag` and not through it, as an install was then, with a way to run each migration on it. */
-async function migratedBefore(tag: string) {
+/**
+ * A database migrated up to `tag` and not through it, as an install was then, with a way to run each migration on it:
+ * as a Postgres server runs it, by the tables' owner, whom row-level security holds as it holds sift; or `asSuperuser`,
+ * as PGlite runs it on a machine.
+ */
+async function migratedBefore(tag: string, { asSuperuser = false } = {}) {
   const journal = JSON.parse(readFileSync(new URL('meta/_journal.json', MIGRATIONS), 'utf8')) as { entries: { tag: string }[] };
   const tags = journal.entries.map((e) => e.tag);
   const db = new PGlite();
   onTestFinished(() => db.close());
-  const run = async (each: string) => await db.exec(readFileSync(new URL(`${each}.sql`, MIGRATIONS), 'utf8'));
-  for (const each of tags.slice(0, tags.indexOf(tag))) await run(each);
+  const sql = (each: string) => readFileSync(new URL(`${each}.sql`, MIGRATIONS), 'utf8');
+  for (const each of tags.slice(0, tags.indexOf(tag))) await db.exec(sql(each));
+  // As on a Postgres server: the tables' owner runs the migration, and row-level security holds it as it holds sift.
+  await db.exec(`
+    CREATE ROLE migrator NOSUPERUSER NOBYPASSRLS;
+    GRANT CREATE ON SCHEMA public TO migrator;
+    DO $$ DECLARE t text; BEGIN
+      FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP EXECUTE format('ALTER TABLE %I OWNER TO migrator', t); END LOOP;
+    END $$;
+  `);
+  const run = async (each: string) => await db.exec(asSuperuser ? sql(each) : `SET ROLE migrator; ${sql(each)}; RESET ROLE;`);
   return { db, run, after: tags[tags.indexOf(tag) + 1]! };
 }
 
@@ -248,7 +261,8 @@ describe('a primary mailbox', () => {
 
 describe('a model call', () => {
   it('made before calls said which rule they checked is given the rule whose condition it met, by a migration', async () => {
-    const { db, run } = await migratedBefore('0045_rule_runs_from_decisions');
+    // On a Postgres server row-level security hid every row from it, so only a machine's install was given them.
+    const { db, run } = await migratedBefore('0045_rule_runs_from_decisions', { asSuperuser: true });
     await db.exec(`
       INSERT INTO users (id, owner, created_at) VALUES (1, true, 0);
       INSERT INTO accounts (id, user_id, created_at, "primary") VALUES ('a@example.org', 1, 0, true);
@@ -365,6 +379,8 @@ describe('a person', () => {
     expect((await db.query('SELECT rule_id, account_id, filter_id FROM rule_filters')).rows).toEqual([
       { rule_id: 'r-b1', account_id: 'b@example.org', filter_id: 'gmail-b' },
     ]);
+    // Row-level security holds the owner again afterwards.
+    expect((await db.query(`SELECT relname FROM pg_class WHERE relrowsecurity AND NOT relforcerowsecurity AND relkind = 'r'`)).rows).toEqual([]);
   });
 
   it('had Everything Else become Leave in inbox by a migration', async () => {
