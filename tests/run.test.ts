@@ -477,6 +477,13 @@ describe('teaching from Gmail', () => {
     expect(mailbox.labels.get('news')).not.toContain('INBOX');
   });
 
+  it('knows a sift label whose case was changed in Gmail', async () => {
+    await run(true);
+    mailbox.byUser('news', { remove: ['L:sift/newsletters'], add: ['L:Sift/Receipts'] });
+    expect(await pass(true)).toBe(1);
+    expect(await feedback()).toEqual([{ message_id: 'news', verdict: 'wrong', disposition: 'archive', label_id: 'transactional', via: 'gmail' }]);
+  });
+
   it("ignores labels that are not sift's, stars, and messages that are gone or in the trash", async () => {
     await run(true);
     mailbox.byUser('news', { add: ['L:travel', 'STARRED'] });

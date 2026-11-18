@@ -2,7 +2,7 @@ import { gmail } from '@googleapis/gmail';
 import type { OAuth2Client } from 'google-auth-library';
 import { validateFilter } from '../actions/filters.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
-import { calls, isNotFound } from './call.ts';
+import { calls, isConflict, isNotFound, labelKey } from './call.ts';
 import type { Pace } from './quota.ts';
 
 /** Gmail implementation of the Mailbox port. Deliberately has no send, forward, trash or delete. Calls are paced as `createGmailApi`'s are. */
@@ -11,6 +11,10 @@ export function createGmailMailbox(auth: OAuth2Client, pace: Pace): Mailbox {
   const userId = 'me';
   const call = calls(pace);
   let labelIdsByName: Map<string, string> | null = null;
+  const listLabelIds = async () => {
+    const data = await call('users.labels.list', 1, () => client.users.labels.list({ userId }));
+    return new Map((data.labels ?? []).flatMap((l) => (l.name && l.id ? [[labelKey(l.name), l.id] as const] : [])));
+  };
 
   return {
     async getLabelIds(messageId) {
@@ -32,19 +36,24 @@ export function createGmailMailbox(auth: OAuth2Client, pace: Pace): Mailbox {
     },
 
     async ensureLabel(name) {
-      if (!labelIdsByName) {
-        const data = await call('users.labels.list', 1, () => client.users.labels.list({ userId }));
-        labelIdsByName = new Map();
-        for (const label of data.labels ?? []) if (label.name && label.id) labelIdsByName.set(label.name, label.id);
-      }
-      const existing = labelIdsByName.get(name);
+      labelIdsByName ??= await listLabelIds();
+      const existing = labelIdsByName.get(labelKey(name));
       if (existing) return existing;
-      const data = await call('users.labels.create', 5, () =>
-        client.users.labels.create({ userId, requestBody: { name, labelListVisibility: 'labelShow', messageListVisibility: 'show' } }),
-      );
-      if (!data.id) throw new Error(`Gmail did not return an id for label ${name}`);
-      labelIdsByName.set(name, data.id);
-      return data.id;
+      try {
+        const data = await call('users.labels.create', 5, () =>
+          client.users.labels.create({ userId, requestBody: { name, labelListVisibility: 'labelShow', messageListVisibility: 'show' } }),
+        );
+        if (!data.id) throw new Error(`Gmail did not return an id for label ${name}`);
+        labelIdsByName.set(labelKey(name), data.id);
+        return data.id;
+      } catch (error) {
+        // Made since the list was read: by another pass, or by the person in Gmail.
+        if (!isConflict(error)) throw error;
+        labelIdsByName = await listLabelIds();
+        const made = labelIdsByName.get(labelKey(name));
+        if (made) return made;
+        throw error;
+      }
     },
 
     async hasSentTo(address) {

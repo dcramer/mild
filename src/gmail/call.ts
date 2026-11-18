@@ -26,6 +26,14 @@ export const isNotFound = (error: unknown) => {
   return e?.status === 404 || e?.code === 404 || e?.code === '404';
 };
 
+export const isConflict = (error: unknown) => {
+  const e = error as { status?: unknown; code?: unknown };
+  return e?.status === 409 || e?.code === 409 || e?.code === '409';
+};
+
+/** Gmail compares label names without case: "Sift/news" is the label "sift/news", and creating one beside the other is refused. */
+export const labelKey = (name: string) => name.toLowerCase();
+
 /**
  * Requests that each wait their turn under the mailbox's quota, then go as an `http.client` span named by
  * the method's path with its ids left out, since they name the message. A 404 is an answer (the message
