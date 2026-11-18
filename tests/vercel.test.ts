@@ -2,7 +2,7 @@ import { globSync, readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { runKey } from '../src/app/sift.ts';
 import { READS, WRITES } from '../src/dashboard/api/index.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { listAccounts, recordSync } from '../src/store/accounts.ts';
 import type { Store } from '../src/store/store.ts';
 import { MAX_DURATION_S, cron, respond } from '../src/vercel/host.ts';
 import type { Work } from '../src/work/run.ts';
@@ -123,9 +123,9 @@ describe('a Vercel instance of a project that is set up', () => {
     const person = db.person!;
     const due: Work[] = [
       { kind: 'upkeep', person },
-      { kind: 'pass', person, account: ACCOUNT },
+      { kind: 'pass', person, mailbox: (await listAccounts(db))[0]!.number },
     ];
-    expect(deploy.begun).toEqual(due.map((piece) => [piece, runKey(piece, SET_UP.SIFT_SESSION_SECRET)]));
+    expect(deploy.begun).toEqual(due.map((piece) => [piece, runKey(piece)]));
   });
 
   it("does a Workflow run's piece with the instance's own Sift", async () => {

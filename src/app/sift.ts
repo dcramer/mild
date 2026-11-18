@@ -1,4 +1,4 @@
-import { createHash, createHmac } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { unsubscribe } from '../actions/unsubscribe.ts';
 import type { Config } from '../config.ts';
 import { type PassResult, type RunOptions, type Work, describeWork, dueWork, runWork } from '../work/run.ts';
@@ -45,16 +45,15 @@ export interface Sift {
 
 /**
  * The key a piece's run holds, so each piece has one run at a time wherever it was begun. Workflow keeps keys
- * unencrypted, so a mailbox is named by a keyed hash of its address. Upkeep's names no day: the claim it makes
+ * unencrypted, so a mailbox is named by its number, never its address. Upkeep's names no day: the claim it makes
  * inside keeps it to once a day.
  */
-export function runKey(piece: Work, secret: string): string {
-  const mailbox = (address: string) => createHmac('sha256', `sift run key:${secret}`).update(address).digest('base64url').slice(0, 22);
+export function runKey(piece: Work): string {
   switch (piece.kind) {
     case 'pass':
-      return `pass:${mailbox(piece.account)}`;
+      return `pass:${piece.mailbox}`;
     case 'inbox':
-      return `inbox:${mailbox(piece.account)}:${piece.run}`;
+      return `inbox:${piece.mailbox}:${piece.run}`;
     case 'eval':
       return `eval:${piece.person}:${piece.run}`;
     case 'upkeep':
@@ -111,7 +110,7 @@ export async function createSift(host: Host): Promise<Sift> {
     if (!begin) return;
     for (const piece of await dueWork(store, options, who)) {
       // What is not begun is due again at the next tick.
-      const beginning = await begin(piece, runKey(piece, host.sessionSecret)).catch((error: unknown) => {
+      const beginning = await begin(piece, runKey(piece)).catch((error: unknown) => {
         reportError(error);
         log(`Could not begin ${piece.kind}, will retry: ${error instanceof Error ? error.message : String(error)}`);
       });

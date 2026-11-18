@@ -8,6 +8,8 @@ import type { MessageFacts } from '../triage/types.ts';
 
 export interface Account {
   id: string;
+  /** The mailbox's own number, the same while it stays connected: what names it in a Workflow run. */
+  number: number;
   email: string;
   historyId: string | null;
 }
@@ -169,8 +171,8 @@ export async function lastSyncedAt(db: Sql, accountId: string): Promise<number |
 
 /** The mailboxes in one person's database. */
 export async function listAccounts(db: Sql): Promise<Account[]> {
-  const rows = await db.select({ id: mailboxes.id, historyId: mailboxes.historyId }).from(mailboxes).orderBy(asc(mailboxes.id));
-  return rows.map((r) => ({ id: r.id, email: r.id, historyId: r.historyId }));
+  const rows = await db.select({ id: mailboxes.id, number: mailboxes.number, historyId: mailboxes.historyId }).from(mailboxes).orderBy(asc(mailboxes.id));
+  return rows.map((r) => ({ id: r.id, number: r.number, email: r.id, historyId: r.historyId }));
 }
 
 /** The mailbox's other addresses in Gmail, as its last sync found them. */

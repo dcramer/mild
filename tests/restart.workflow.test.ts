@@ -70,8 +70,8 @@ it('a run cut off while its step ran is taken up when Sift starts again, and let
     },
   }));
   // Its own mailbox: keys are shared by every test file on the data directory.
-  const pass: Work = { kind: 'pass', person: 1, account: 'restarted@example.org' };
-  const key = runKey(pass, 'synthetic-secret');
+  const pass: Work = { kind: 'pass', person: 1, mailbox: 4 };
+  const key = runKey(pass);
   expect(await begin(pass, key)).toEqual({ begun: true });
   await running;
   // The process stops with the step under way: the World's queue, held only in memory, goes with it.
