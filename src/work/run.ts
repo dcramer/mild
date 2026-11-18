@@ -194,14 +194,14 @@ function readingOnce(api: GmailApi): { api: GmailApi; held: (messageId: string) 
 }
 
 /**
- * Go on with an inbox run over one mailbox. Applying a rule needs only Gmail: the pass carries out what it
- * records. Going through the inbox uses what a pass would: its model, Gmail read once per message, and the
- * mailbox only while Sift is on. Without a model it waits; deciding only what rules cover would leave the rest behind it.
+ * Go on with an inbox run over one mailbox. Applying a rule needs no model: it takes back what Sift did to the
+ * mail it replaces, and the pass carries out what it records. Going through the inbox uses what a pass would:
+ * its model, Gmail read once per message, and the mailbox only while Sift is on. Without a model it waits; deciding only what rules cover would leave the rest behind it.
  */
 async function goThroughInbox(db: Sql, account: Account, run: number, options: RunOptions, until: number): Promise<void> {
   if ((await goingInboxRun(db, run))?.ruleId) {
-    const { api } = await options.connect(db, account);
-    const went = await continueRuleRun({ db, api, until, ...(options.now ? { now: options.now } : {}) }, run);
+    const { api, mailbox } = await options.connect(db, account);
+    const went = await continueRuleRun({ db, api, mailbox, until, ...(options.now ? { now: options.now } : {}) }, run);
     if (went && went.to > went.from) options.log(`${account.email}: applied a rule to ${went.to} of ${went.of} in the inbox`);
     return;
   }
