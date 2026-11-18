@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { chatgptPending, checkChatGPT, finishChatGPT, forgetChatGPT, startChatGPT } from '../src/app/chatgpt.ts';
+import { chatgptPending, checkChatGPT, finishChatGPT, forgetChatGPT, startChatGPT } from '../src/sift/chatgpt.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { memorySignIns } from './helpers.ts';
 

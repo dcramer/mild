@@ -32,6 +32,6 @@ The page is a React app in `web/`, styled with Tailwind and built from Sift's ow
 
 - `sift run` builds it the first time and whenever its sources are newer than the build. `pnpm build:web` does the same by hand, into `.next`.
 - `pnpm dev` runs Sift from source under `next dev`, which reloads the page and the server as their code changes. Give it `--home <scratch>`.
-- Each screen is a route in `app/`, drawn on the server for whoever asked with what is not encrypted (`src/app/page-data.ts`); the rest the page fetches from `/api/`. A hydration mismatch shows only in the browser console, which every browser test (`pnpm e2e`) fails on.
+- Each screen is a route in `app/`, drawn on the server for whoever asked with what is not encrypted (`src/sift/page-data.ts`); the rest the page fetches from `/api/`. A hydration mismatch shows only in the browser console, which every browser test (`pnpm e2e`) fails on.
 
 Why it is built this way is in [architecture.md](architecture.md#dashboard).

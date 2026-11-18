@@ -74,7 +74,7 @@ export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[
 
 /**
  * A piece of work a tick found due: ids only, so it can be the argument of a Workflow run of its own
- * (`src/app/flow.ts`), and whatever runs it opens everything it touches from them.
+ * (`src/sift/flow.ts`), and whatever runs it opens everything it touches from them.
  */
 export type Work =
   | { kind: 'pass'; person: number; mailbox: number }
@@ -125,7 +125,7 @@ export const describeWork = (work: Work) =>
 /**
  * Run one piece of due work, starting nothing after `until`. Everything it touches is opened here from the
  * piece's ids. A failure is logged; the piece is due again at the next tick. One piece at a time is the caller's
- * to hold to: a Workflow run's key (`src/app/flow.ts`).
+ * to hold to: a Workflow run's key (`src/sift/flow.ts`).
  */
 export const runWork = (store: Store, work: Work, options: RunOptions, until: number): Promise<PassResult | null> =>
   traced('sift.work', work.kind, {}, async (span) => {

@@ -1,6 +1,6 @@
 import { globSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { createSift, runKey } from '../src/app/sift.ts';
+import { createSift, runKey } from '../src/sift/sift.ts';
 import { loadConfig } from '../src/config.ts';
 import { fromHere } from '../src/cli/network.ts';
 import { type Ephemeral, memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
@@ -21,7 +21,7 @@ const CACHES: Record<string, string[]> = {
   // Keys derived from SIFT_KEY.
   'src/secrets.ts': ['derived', 'hashKeys'],
   // Sift put together over the process's host, again by each copy of the module `next dev` loads.
-  'src/app/instance.ts': ['opened'],
+  'src/sift/instance.ts': ['opened'],
 };
 
 describe('nothing is kept in module memory between calls', () => {
