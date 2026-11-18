@@ -1,4 +1,4 @@
-import { preferences as preferenceRows } from './query.ts';
+import { isNull, preferences as preferenceRows } from './query.ts';
 import type { Sql } from './sql.ts';
 
 export interface Preferences {
@@ -25,4 +25,13 @@ export async function setActive(db: Sql, active: boolean): Promise<void> {
 
 export async function setModel(db: Sql, model: string | null): Promise<void> {
   await db.update(preferenceRows).set({ model });
+}
+
+export async function setDigestTime(db: Sql, hour: number, timeZone: string): Promise<void> {
+  await db.update(preferenceRows).set({ digestHour: hour, timeZone });
+}
+
+/** The zone a browser said, kept only when none is: a label set to Digest from another device does not move the digest's hour. */
+export async function rememberTimeZone(db: Sql, timeZone: string): Promise<void> {
+  await db.update(preferenceRows).set({ timeZone }).where(isNull(preferenceRows.timeZone));
 }

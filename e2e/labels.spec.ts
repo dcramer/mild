@@ -3,6 +3,7 @@ import {
   addALabelDialog,
   addLabelsDialog,
   choose,
+  closeSettings,
   expect,
   messageQuery,
   openMessage,
@@ -13,6 +14,7 @@ import {
   refused,
   row,
   section,
+  settingsActive,
   settled,
   suggestLabels,
   test,
@@ -70,7 +72,7 @@ test.describe('Labels', () => {
     await expect(opened.getByRole('button', { name: 'Save' })).toBeDisabled();
 
     await opened.getByRole('combobox', { name: 'What Sift does with it' }).click();
-    await expect(page.getByRole('option')).toHaveText([/Keep/, /Archive/, /Spam/, /Block/]);
+    await expect(page.getByRole('option')).toHaveText([/Keep/, /Archive/, /Digest/, /Spam/, /Block/]);
     await page.getByRole('option', { name: 'Keep' }).click();
     await opened.getByRole('button', { name: 'Save' }).click();
 
@@ -87,6 +89,35 @@ test.describe('Labels', () => {
     await page.reload();
     await expect(section(page, 'Kept in your inbox').getByText('Newsletters', { exact: true })).toBeVisible();
     await expect(labelPanel(page, 'Newsletters')).toHaveCount(0);
+  });
+
+  test('a label set to Digest is listed under its own heading, and Settings sets the hour its digest comes', async ({ page }) => {
+    await page.goto('/labels?settings=1');
+    await expect(settingsActive(page).getByText(/^(On|Off)$/)).toBeVisible();
+    await expect(settingsActive(page).getByText('Daily digest')).toHaveCount(0);
+    await closeSettings(page);
+
+    const opened = await openLabel(page, 'Newsletters');
+    await opened.getByRole('combobox', { name: 'What Sift does with it' }).click();
+    await page.getByRole('option', { name: 'Digest' }).click();
+    await expect(opened.getByText('once a day one email lists it', { exact: false })).toBeVisible();
+    await expect(opened.getByRole('checkbox', { name: 'Mark it read' })).toBeVisible();
+    await opened.getByRole('button', { name: 'Save' }).click();
+    await expect(opened.getByRole('button', { name: 'Save' })).toBeDisabled();
+    await opened.getByRole('button', { name: 'Close' }).click();
+    await expect(section(page, 'In a daily digest').getByText('Newsletters', { exact: true })).toBeVisible();
+
+    // The label told Sift this browser's time zone, which the digest's hour is read in.
+    const zone = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+    await page.goto('/labels?settings=1');
+    await expect(settingsActive(page).getByText(`One email each for Newsletters, in me@example.org, on ${zone.split('/').at(-1)} time.`)).toBeVisible();
+    const hour = settingsActive(page).getByRole('combobox', { name: 'Digest time' });
+    await expect(hour).toHaveText(/^7:00 AM/);
+    await hour.click();
+    await page.getByRole('option', { name: '6:00 AM', exact: true }).click();
+    await expect(hour).toHaveText(/^6:00 AM/);
+    await page.reload();
+    await expect(settingsActive(page).getByRole('combobox', { name: 'Digest time' })).toHaveText(/^6:00 AM/);
   });
 
   test('Spam has no Mark it read, and Undo changes puts the form back', async ({ page }) => {

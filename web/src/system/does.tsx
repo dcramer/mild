@@ -1,8 +1,8 @@
-import { ArchiveIcon, BanIcon, CircleDashedIcon, CircleHelpIcon, InboxIcon, ShieldAlertIcon } from 'lucide-react';
+import { ArchiveIcon, BanIcon, CircleDashedIcon, CircleHelpIcon, InboxIcon, NewspaperIcon, ShieldAlertIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-const ICONS = { keep: InboxIcon, archive: ArchiveIcon, spam: ShieldAlertIcon, block: BanIcon, review: CircleDashedIcon } as const;
+const ICONS = { keep: InboxIcon, archive: ArchiveIcon, digest: NewspaperIcon, spam: ShieldAlertIcon, block: BanIcon, review: CircleDashedIcon } as const;
 
 /** An action's icon alone, where its word is said beside it by something else, such as an option in a `Select`. */
 export function ActionIcon({ action }: { action: string }) {

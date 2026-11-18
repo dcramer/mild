@@ -535,7 +535,7 @@ export const LabelSummary = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string(),
-  /** What sift does with it: `keep`, `archive`, `spam`, or `block` (spam, and the sender's later mail too). */
+  /** What sift does with it: `keep`, `archive`, `spam`, `block` (spam, and the sender's later mail too) or `digest` (archive, and list it once a day). */
   disposition: z.string(),
   /** Also mark the mail read. Only with `keep` and `archive`. */
   markRead: z.boolean(),
@@ -638,6 +638,8 @@ export const ManageState = z.object({
   /** Mail waiting on the viewer that Sift would move or could not place: For review's count. */
   waiting: z.number(),
   inbox: InboxProgress,
+  /** The hour of the viewer's day a label's digest arrives, and the zone it is read in: null when their browser never said, which is UTC. */
+  digest: z.object({ hour: z.number(), timeZone: z.string().nullable() }),
 });
 export type ManageState = z.infer<typeof ManageState>;
 

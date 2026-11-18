@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { Person } from '../../store/people.ts';
 import type { Sql } from '../../store/sql.ts';
 import { DECIDED } from '../../triage/types.ts';
+import { knownZone } from '../../digest/schedule.ts';
 import { text } from '../types.ts';
 import { redecideWaiting } from '../../learn/redecide.ts';
 import { listAccounts } from '../../store/accounts.ts';
@@ -102,10 +103,16 @@ export const ownerOf =
 export { decided, labelId, text } from '../types.ts';
 export const accountId = text();
 export const id = z.int().positive();
-/** What a label can be set to do. `block` is spam plus blocking the sender. */
-export const outcome = z.enum([...DECIDED, 'block']);
+/** What a label can be set to do. `block` is spam plus blocking the sender; `digest` is archive plus listing it once a day. */
+export const outcome = z.enum([...DECIDED, 'block', 'digest']);
 export const fromOutcome = (value: z.output<typeof outcome>) =>
-  value === 'block' ? { disposition: 'spam' as const, block: true } : { disposition: value, block: false };
+  value === 'block'
+    ? { disposition: 'spam' as const, block: true, digest: false }
+    : value === 'digest'
+      ? { disposition: 'archive' as const, block: false, digest: true }
+      : { disposition: value, block: false, digest: false };
+/** The viewer's time zone, as their browser names it. */
+export const timeZone = z.string().max(64).refine(knownZone, 'must be a time zone');
 /** A flag in a URL: present as `1`. */
 export const flag = z.literal('1').optional();
 /** The period a read covers, from `?days=`, one the page offers. */

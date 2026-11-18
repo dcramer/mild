@@ -138,7 +138,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
     contact: known.get(`${s.accountId}\n${plain(s.fromAddress)}`) ?? null,
     subject: s.subject,
     receivedAt: s.receivedAt,
-    disposition: s.block ? 'block' : s.disposition,
+    disposition: s.block ? 'block' : s.digest ? 'digest' : s.disposition,
     labelId: s.labelId,
     labelName: (s.labelId && names.get(s.labelId)) ?? null,
     stage: s.stage,

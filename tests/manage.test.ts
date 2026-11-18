@@ -537,6 +537,31 @@ describe('managing sift from the dashboard', () => {
     expect((await listLabels(db)).at(-2)).toMatchObject({ id: 'scams', disposition: 'spam', block: true });
   });
 
+  it('sets a label to put its mail in a daily digest, and keeps the first time zone a label write tells it', async () => {
+    const { call } = await start();
+    const does = async () => (await listLabels(db)).find((l) => l.id === 'marketing');
+    expect((await call('POST', '/api/labels', { id: 'marketing', disposition: 'digest', timeZone: 'America/Denver' })).status).toBe(200);
+    expect(await does()).toMatchObject({ disposition: 'archive', digest: true });
+    expect((await call('GET', '/api/manage')).body).toMatchObject({ digest: { hour: 7, timeZone: 'America/Denver' } });
+    expect(((await call('GET', '/api/manage')).body['labels'] as { id: string; disposition: string }[]).find((l) => l.id === 'marketing')).toMatchObject({
+      disposition: 'digest',
+    });
+    // Another device's zone does not move the hour; Settings, where the hour is set, does.
+    await call('POST', '/api/labels/add', { labels: [{ name: 'Builds', description: '', disposition: 'digest' }], timeZone: 'Asia/Tokyo' });
+    expect(await preferences(db)).toMatchObject({ digestHour: 7, timeZone: 'America/Denver' });
+    expect((await call('POST', '/api/digest', { hour: 6, timeZone: 'Asia/Tokyo' })).status).toBe(200);
+    expect(await preferences(db)).toMatchObject({ digestHour: 6, timeZone: 'Asia/Tokyo' });
+    for (const body of [
+      { hour: 24, timeZone: 'Asia/Tokyo' },
+      { hour: 6.5, timeZone: 'Asia/Tokyo' },
+      { hour: 6, timeZone: 'Somewhere/Else' },
+    ])
+      expect((await call('POST', '/api/digest', body)).status, JSON.stringify(body)).toBe(400);
+    expect((await call('POST', '/api/labels', { id: 'marketing', disposition: 'digest', timeZone: 'Not a zone' })).status).toBe(400);
+    expect((await call('POST', '/api/labels', { id: 'marketing', disposition: 'archive' })).status).toBe(200);
+    expect(await does()).not.toHaveProperty('digest');
+  });
+
   it('puts a corrected message right in Gmail, and still saves the answer if it cannot', async () => {
     await recordSync(db, ACCOUNT, [facts({ messageId: 'done' }), facts({ messageId: 'gone' })], '2');
     for (const id of ['done', 'gone'])

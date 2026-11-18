@@ -78,6 +78,7 @@ function Active({ state, reload }: { state: ManageState; reload: () => void }) {
           )}
         </SettingRow>
         <InboxRow state={state} reload={reload} onGoThrough={() => setGoingThrough(true)} />
+        <DigestRow state={state} reload={reload} />
         {activity.running ? (
           <SettingRow
             title="Check for mail"
@@ -100,6 +101,39 @@ function Active({ state, reload }: { state: ManageState; reload: () => void }) {
       <Failure>{error}</Failure>
       {goingThrough ? <GoThroughInbox model={state.model} onClose={() => setGoingThrough(false)} onStarted={reload} /> : null}
     </SettingsGroup>
+  );
+}
+
+/** The hours of a day, as a clock in any zone reads them: "7:00 AM". */
+const HOURS = Array.from({ length: 24 }, (_, hour) => [String(hour), `${hour % 12 || 12}:00 ${hour < 12 ? 'AM' : 'PM'}`] as const);
+
+/** A time zone as its place reads: "Los Angeles" for `America/Los_Angeles`. */
+const placeOf = (zone: string) => (zone.split('/').at(-1) ?? zone).replace(/_/g, ' ');
+
+/** When the digests arrive, while some label puts its mail in one. Saving it takes this browser's time zone too. */
+function DigestRow({ state, reload }: { state: ManageState; reload: () => void }) {
+  const { busy, error, run } = useAction();
+  const digesting = state.labels.filter((label) => label.disposition === 'digest').map((label) => label.name);
+  if (digesting.length === 0) return null;
+  const primary = state.accounts.find((a) => a.primary)?.email ?? state.accounts[0]?.email;
+  return (
+    <SettingRow
+      title="Daily digest"
+      note={
+        <>
+          One email each for {digesting.join(', ')}, in {primary}, on {placeOf(state.digest.timeZone ?? 'UTC')} time.
+          <Failure>{error}</Failure>
+        </>
+      }
+    >
+      <Select
+        label="Digest time"
+        value={String(state.digest.hour)}
+        options={HOURS}
+        disabled={busy}
+        onChange={(hour) => run(() => api.setDigestTime(Number(hour)), reload)}
+      />
+    </SettingRow>
   );
 }
 

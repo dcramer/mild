@@ -178,6 +178,11 @@ async function post<T = unknown>(path: string, body: unknown): Promise<T> {
   return result;
 }
 
+/** This browser's time zone, which the server reads a person's digest hour in. */
+const browserZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+/** Sent with labels that digest: until the hour is set under Settings, it is this browser's day the digest keeps to. */
+const zoneFor = (labels: readonly { disposition?: string }[]) => (labels.some((l) => l.disposition === 'digest') ? { timeZone: browserZone() } : {});
+
 export const api = {
   /** With `label`, each day also says how much of its mail was that label. */
   summary: (days: Days, signal: AbortSignal, label = '') => get<Summary>('/api/summary', { days, label }, signal),
@@ -219,19 +224,21 @@ export const api = {
   saveModelKey: (provider: string, key: string) => post('/api/model/key', { provider, key }),
   signOutModel: (provider: string) => post('/api/model/signout', { provider }),
   saveLabel: (id: string, change: { name?: string; description?: string; disposition?: string; markRead?: boolean; unsubscribe?: boolean }) =>
-    post('/api/labels', { id, ...change }),
+    post('/api/labels', { id, ...change, ...zoneFor([change]) }),
   /** Remove a label, with the rules that name it. */
   removeLabel: (id: string) => post('/api/labels/remove', { id }),
   /** Add labels: by hand, or kept from what the model suggested. */
   addLabels: (labels: { name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }[]) =>
-    post<{ ids: string[] }>('/api/labels/add', { labels }),
+    post<{ ids: string[] }>('/api/labels/add', { labels, ...zoneFor(labels) }),
   /** Ask the model for labels from what the person wants. Its own call; it can take a minute. */
   proposeLabels: (goal: string) => post<LabelProposal>('/api/labels/propose', { goal }),
   /** The latest labels the model suggested, so a reload keeps them. */
   labelProposal: (signal: AbortSignal) => get<{ proposal: LabelProposal | null }>('/api/labels/proposal', {}, signal),
   /** Make these labels, when the person has none yet. */
   acceptLabels: (labels: { name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }[]) =>
-    post<{ ids: string[] }>('/api/labels/accept', { labels }),
+    post<{ ids: string[] }>('/api/labels/accept', { labels, ...zoneFor(labels) }),
+  /** The hour of the reader's day their digests arrive, in this browser's time zone. */
+  setDigestTime: (hour: number) => post('/api/digest', { hour, timeZone: browserZone() }),
   /** The model fills in a rule from the person's words, for the rule dialog. Nothing is made. */
   draftRule: (accountId: string, goal: string) => post<RuleDraft>('/api/rules/draft', { accountId, goal }),
   /** A rule carries a label, an action (`disposition`), or both; or an action for mail that turns out to be `whenLabel`. */

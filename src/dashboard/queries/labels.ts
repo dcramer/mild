@@ -5,7 +5,8 @@ import { type Scope, within } from '../scope.ts';
 import type { LabelSummary } from '../types.ts';
 
 /** What a label does, as the one word the dashboard shows and sets. */
-export const outcomeOf = (label: { disposition: string; block?: boolean }) => (label.block ? 'block' : label.disposition);
+export const outcomeOf = (label: { disposition: string; block?: boolean; digest?: boolean }) =>
+  label.block ? 'block' : label.digest ? 'digest' : label.disposition;
 
 /** The person's labels, each with how much depends on it and how often sift has had it right, over the scope's mailboxes. */
 export async function listLabelSummaries(db: Sql, scope: Scope): Promise<LabelSummary[]> {
