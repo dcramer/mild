@@ -84,6 +84,7 @@ describe('a piece of work', () => {
       { kind: 'inbox', person: 2, mailbox: 5, run: 7 },
       { kind: 'eval', person: 2, run: 8 },
       { kind: 'upkeep', person: 2 },
+      { kind: 'digest', person: 2 },
     ];
     for (const piece of pieces) expect(await begin(piece, runKey(piece))).toEqual({ begun: true });
     const world = await getWorld();
@@ -96,6 +97,7 @@ describe('a piece of work', () => {
           'inboxRun {"kind":"inbox","person":"2","mailbox":"5","run":"7","$retention":"0"}',
           'testRun {"kind":"eval","person":"2","run":"8","$retention":"0"}',
           'upkeep {"kind":"upkeep","person":"2","$retention":"0"}',
+          'dailyDigests {"kind":"digest","person":"2","$retention":"0"}',
         ]),
       );
     });
