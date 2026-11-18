@@ -2,6 +2,7 @@ import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 
 /** How a mailbox's last pass went, for the dashboard. Kept a week: a mailbox not passed in that long shows as never checked. */
 export interface PassStatus {
+  /** When it began, before it read Gmail: the gap before the next look counts from here, so a long pass does not stretch it. */
   at: number;
   error?: string;
   /** Google refused the sign-in: only signing in again helps. */

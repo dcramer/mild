@@ -233,10 +233,11 @@ async function goThroughInbox(db: Sql, account: Account, run: number, options: R
 
 /** One pass, its outcome kept for the dashboard. Null when the mailbox was removed while it ran. */
 async function passMailbox(db: Sql, account: Account, options: RunOptions, until: number): Promise<PassResult | null> {
+  const began = (options.now ?? Date.now)();
   const result = await runMailbox(db, account, options, until);
   if (result)
     await recordPassStatus(options.ephemeral, account.id, {
-      at: (options.now ?? Date.now)(),
+      at: began,
       ...(result.error ? { error: result.error } : {}),
       ...(result.expired ? { expired: true } : {}),
       ...(result.unfinished ? { unfinished: true } : {}),
@@ -256,7 +257,7 @@ async function passWanted(db: Sql, account: Account, options: RunOptions): Promi
     // An expired sign-in fails every pass alike until the person signs in again, which only Gmail answering shows.
     if (!last?.expired && (await recordWants(db, account, options, now, last))) return true;
     // Looked at once the next tick would be past the gap, so a minute's gap is every tick however long the last pass took.
-    const arrived = await latestArrival(db, account.id);
+    const arrived = await latestArrival(db, account.id, now);
     if (last && now - last.at <= lookGap(arrived === null ? null : now - arrived) - TICK_MS) return false;
     const { api } = await options.connect(db, account);
     const wanted = await syncWants(db, api, account);

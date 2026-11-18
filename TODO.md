@@ -91,6 +91,8 @@ Sift has run on the owner's inbox while off. Nothing that changes the mailbox ha
 - [ ] History paging on a busy day, recovery from an expired cursor, and the volume now that history is not narrowed to the inbox.
 - [ ] Gmail filters: whether `from:@domain` leaves out subdomains, whether Gmail rewrites a filter's criteria after it is created, whether editing a filter in Gmail keeps its id, and how a snoozed message appears in history (docs/gmail.md lists all four).
 - [ ] Encrypted credentials, the installed app and offline state, on the real install.
+- [ ] Whether sending a draft (DRAFT removed, SENT added) or Gmail's own importance and category marks show in history as label changes. If they do, `userChanges` counts them as the person's and each begins a pass.
+- [ ] The look's cost after Sift's own changes in bulk (going through an inbox): it begins no pass, so the cursor stays put, and every look until the day's first sync reads every history page and every action since the cursor again. Cost, not correctness.
 
 ## Deployment and isolation
 
@@ -100,12 +102,11 @@ Sift has run on the owner's inbox while off. Nothing that changes the mailbox ha
   - **Setup in the browser.** No `sift init`: the Google client and settings entered in the dashboard, with the first visitor claiming the install safely.
   - **A public address.** Sign-in is the only gate there; review the session and write protections with that in mind.
 - [ ] **Fewer Gmail calls.** Each pass fetches a new Google access token for each mailbox (`clientFor`); keeping it until it expires needs it encrypted in `Ephemeral`. The minute look at an idle mailbox (`passWanted`) still lists its waiting suggestions and their text to see whether any is to be fetched or let go, and opens the model sign-in while mail waits undecided; each could be one count in SQL.
-- [ ] **Passes for changes sync ignores.** Any change the person makes in Gmail begins a pass (`syncWants`), though sync reads only moves, Sift's labels and mail opened; Gmail's own importance and category marks, and mail marked unread, begin one that finds nothing. Narrowing it means one test of a change shared with `learnFromGmail`.
+- [ ] **Passes for changes sync ignores.** Any change the person makes in Gmail begins a pass (`syncWants`), though sync reads only moves, Sift's labels and mail opened; mail marked unread, and Gmail's own importance and category marks if history shows them, begin one that finds nothing. Narrowing it means one test of a change shared with `learnFromGmail`.
 - [ ] **A lost key has no way back** short of a new database: the rekey pass refuses to start while any sealed row does not open. Let the owner drop what does not open (sign-ins, sealed mail and rule text) and start ([docs/secrets.md](docs/secrets.md#losing-the-key)).
 - [ ] Restrict the core container's egress to Google and the model providers. The unsubscribe request is the one call to an arbitrary host and needs a relay container of its own first; the plan is in [docs/deploy.md](docs/deploy.md).
 - [ ] Publish the image (registry, tags, multi-arch). It is 1.32 GB, up from 337 MB before Next.js and the Workflow SDK: Next.js itself is about 207 MB, and its compiler binary about 94 MB more. Next.js's `output: 'standalone'` would ship only the files the server uses; not tried.
 - [ ] The page (Next.js) is not behind Sift's Host check: it holds no mail, and Workflow's routes check their own key. Decide whether it should be.
-- [ ] `/_next/static/*` is served without the content security policy or `nosniff` header.
 - [ ] A run that never ends is only logged and reported (`STUCK_MS`, `src/app/sift.ts`); its piece is not begun again until someone cancels it with Workflow's CLI. Decide whether Sift should cancel it.
 - [ ] Optional Pub/Sub push for lower latency, keeping polling as the fallback. It needs a Google Cloud topic, so it is a lot of setup for a self-hosted tool.
 - [ ] **An agent you talk to** ("why did you archive that", "clean up my rules"), if ever built, gets its own sandbox container: shell and files, no credentials, a read-only snapshot of the database, no network except a tool channel to the core. Decide how it reaches its model without holding the key: a proxy in the core that adds it, or the core making the calls for it.

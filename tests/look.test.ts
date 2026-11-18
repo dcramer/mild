@@ -66,10 +66,11 @@ function gmail(): GmailApi {
   };
 }
 
-function arrive(id: string, from: string) {
+/** Mail reaching the inbox, dated `sent` (when Gmail received it, unless it was imported or inserted). */
+function arrive(id: string, from: string, sent = clock) {
   historyNow();
   history++;
-  const raw = rawMessage(id, { from, internalDate: clock });
+  const raw = rawMessage(id, { from, internalDate: sent });
   arrived.push({ at: history, raw });
   mailbox.labels.set(id, [...raw.labelIds]);
 }
@@ -334,6 +335,36 @@ describe('the gap between looks at Gmail', () => {
     expect(await minutesToLook()).toBe(10);
     await workDue(store, options(), Infinity);
     expect(await minutesToLook()).toBe(1);
+  });
+
+  it('counts from when the last pass read Gmail, so mail that came while a long pass ran still waits at most ten minutes', async () => {
+    await quiet();
+    // Something for the pass to fetch after it has read Gmail: the fetch takes four minutes, and mail comes as it begins.
+    await db.insert(examples).values({ accountId: ACCOUNT, messageId: 'news', markedAt: clock });
+    let came: number | null = null;
+    const slow = (): GmailApi => ({
+      ...gmail(),
+      getContent: async (id) => {
+        if (came === null) {
+          came = clock;
+          arrive('ada', 'Ada <ada@example.org>');
+          clock += 4 * MINUTE;
+        }
+        return await gmail().getContent(id);
+      },
+    });
+    await workDue(store, options({ connect: () => ({ api: slow(), mailbox }) }), Infinity, [person]);
+    expect(came).not.toBeNull();
+    while (!(await timedTickPasses())) expect(clock - came!).toBeLessThan(15 * MINUTE);
+    expect(clock - came!).toBeLessThanOrEqual(10 * MINUTE);
+  });
+
+  it('takes mail dated later than now as no sign the mailbox is busy', async () => {
+    await quiet();
+    arrive('later', 'Ada <ada@example.org>', clock + DAY);
+    await workDue(store, options(), Infinity, [person]);
+    expect(await raw(db).get('SELECT count(*) AS n FROM messages')).toEqual({ n: 2 });
+    expect(await minutesToLook()).toBe(10);
   });
 
   it('does not hold back what the record says a pass is wanted for', async () => {

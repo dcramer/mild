@@ -23,7 +23,7 @@ From a checkout, `pnpm sift <command>` runs it from source.
 | `--port <port>` | The dashboard's port for this run. |
 | `--host <address>` | Listen on this address instead of `SIFT_DASHBOARD_HOST`. A container uses `0.0.0.0` and lets its port mapping decide who can reach it. |
 
-Each minute Sift looks at every mailbox and passes over the ones with something to do, each person's mailboxes changed in Gmail only if that person turned Sift on under Settings in the dashboard. A change there applies from the next pass, without a restart; a change to a setting needs one.
+Each minute Sift reads its record for every mailbox, and Gmail once the mailbox's gap has passed (a minute while mail keeps coming, up to 10 when it is quiet), and passes over the ones with something to do, each person's mailboxes changed in Gmail only if that person turned Sift on under Settings in the dashboard. A change there applies from the next pass, without a restart; a change to a setting needs one.
 
 ## Models
 

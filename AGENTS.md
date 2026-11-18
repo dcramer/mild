@@ -81,8 +81,8 @@ The database is the full account of what sift saw and did. Every message synced 
 
 Whoever runs Sift pays for everything it does: Vercel bills each function call, queue message and Workflow event, and the model provider each call. What Sift costs must follow the mail it gets, not how long it has been on. A mailbox that got nothing costs close to nothing.
 
-- **Look before working.** Something that runs on a timer first checks, as cheaply as it can, whether there is anything to do (the record, then one small Gmail call), and starts nothing when there isn't. Nothing polls by looping or sleeping.
-- **Batch.** Each Workflow run and step is billed by its events (about three a step, one more for each retry, two for each sleep or hook). A step does a batch of mail, never one message; a run starts only when there is work.
+- **Look before working.** Something that runs on a timer first checks, as cheaply as it can, whether there is anything to do (the record, then Gmail's history from the sync cursor, 2 quota units a page, no more often than the mailbox's gap), and starts nothing when there isn't. Nothing polls by looping or sleeping.
+- **Batch.** Each Workflow run and step is billed by its events (three a run, about three a step, one more for each retry, two for each sleep or hook; the start hook that holds a run's key adds none). A step does a batch of mail, never one message; a run starts only when there is work.
 - **Safe to repeat.** A failed step runs its whole batch again, so a step must be safe to run twice: pick up what is not yet recorded, and check Gmail before changing it again.
 - **Ids between steps.** What a step is given and returns is kept by Workflow outside Sift's record (encrypted on Vercel, plain in a file on a machine), so it is ids and counts only; the step reads and writes the record itself.
 - **Cheapest answer first.** A model call costs the most, so a cheaper tier that can answer goes first.
@@ -107,7 +107,7 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | The page takes only types from `src/`; the frame (`app/**/*.tsx`) imports only Next.js, React and `@/client.tsx`, and reads no environment | `no-restricted-imports` (`allowTypeImports`) and `no-restricted-globals`, `.oxlintrc.json` |
 | No Server Action, no `NEXT_PUBLIC_` variable, and nothing in `app/` but the frame, the page and the routes that hand a request to Sift | `tests/next.test.ts` |
 | The page keeps React's rules (hooks, keys, effects that only sync with what is outside React), sets no HTML from a string, runs no string as code, and passes accessibility checks; a rule wrong for this code is turned off with its reason, never disabled in a file | oxlint's `react`, `jsx-a11y` and `nextjs` plugins, `.oxlintrc.json` |
-| Whatever Next.js answers carries a policy: the page's with a nonce (`proxy.ts`), or the API's on built files and what stands in for a missing one (`next.config.js`). Workflow's webhook route and `/_next/image` answer nothing | `e2e/page.spec.ts` |
+| Whatever Next.js answers carries a policy, the page's with a nonce (`proxy.ts`) or the API's on built files and what stands in for a missing one (`next.config.js`), except Workflow's flow route, which answers only Workflow, with JSON. Workflow's webhook route and `/_next/image` answer nothing | `e2e/page.spec.ts` |
 | Next.js, React and Workflow are kept up to date | `.github/dependabot.yml`, a pull request a week |
 | Only `src/store/` imports a database driver (`pg`, PGlite, Drizzle), and inside it only the handle, its builder and the schema | `no-restricted-imports`, `.oxlintrc.json` |
 | Every `/api/` route is run as two people, one asking for the other's mail | `tests/tenants.test.ts` fails on a registered route none of its tests calls |

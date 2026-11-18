@@ -183,7 +183,7 @@ There is no shell and no filesystem here. A sandboxed agent with those is planne
 
 ## The command line
 
-Six commands: `init` sets Sift up, `run` reads and classifies mail and serves the dashboard, `status` says what is set up, `dev` is `run` for working on Sift, `reset-db` moves the local database aside, and `dashboard` serves the dashboard without reading mail. Everything else (rules, labels, the log of changes, undo, choosing a model) is in the dashboard and has no command. Options are in [cli.md](cli.md).
+Five commands: `init` sets Sift up, `run` reads and classifies mail and serves the dashboard, `status` says what is set up, `dev` is `run` for working on Sift, and `reset-db` moves the local database aside. Everything else (rules, labels, the log of changes, undo, choosing a model) is in the dashboard and has no command. Options are in [cli.md](cli.md).
 
 ## Home directory
 
@@ -197,7 +197,7 @@ Everything Sift keeps is in one directory, the home: `~/.config/sift` by default
 
 - Every one is encrypted and decrypted through `src/secrets.ts`, which knows ciphertext and nothing about what is inside. Each is bound to what it is for (a file's name; a row's person, kind and key), so it cannot be moved into another's place.
 - Each value records the id of the key that encrypted it. `SIFT_OLD_KEYS` are accepted for reading; a value is re-encrypted with the current key whenever it is written, and `sift run` re-encrypts all of them at start, in files and in every person's database, and encrypts any still plain, so an old key can be retired. On Vercel the build does it for the database, after migrating (`src/vercel/migrate.ts`), so a key set or changed there takes effect with the next deploy.
-- A credential whose key is missing stops `run`, `dashboard` and `status` at start, naming it. The alternative is a sign-in that stops working for no visible reason.
+- A credential whose key is missing stops `init`, `run` and `status` at start, naming it. The alternative is a sign-in that stops working for no visible reason.
 - Without a key Sift runs as before, storing them plain, and says so at start.
 - So is what came from mail, and everything that names a sender (`src/store/content.ts`): the text and HTML Sift holds, each record's headers (its sender, recipients, subject and list id are read from them, `envelopeOf`), a rule's conditions, name and Gmail filter, proposal conditions, a change's details, a decision's reason, and the person's words to the label and rule models with what those suggested. Senders, domains and conditions are found by a keyed hash per person (docs/security.md); a record's facts say only whether it has a list id. Search and sorting by address decrypt in Sift, not in the database. Who the owner has written to is kept only as hashes, so a new key empties that cache.
 - `setup.json`: how far `sift init` has got, so it resumes.
