@@ -184,6 +184,17 @@ test.describe('Labels', () => {
     await expect(labelCount(page)).toHaveText(/^11 of /);
   });
 
+  test('a suggested Digest label is made as one, under its own heading', async ({ page }) => {
+    await page.goto('/labels');
+    await page.getByRole('button', { name: 'Add labels' }).click();
+    const dialog = await askForLabels(page, 'Only show me builds when one fails');
+    await expect(dialog.getByRole('row').filter({ hasText: 'Build results' })).toContainText('Digest');
+    await dialog.getByRole('button', { name: 'Add this label' }).click();
+
+    await expect(dialog).toHaveCount(0);
+    await expect(section(page, 'In a daily digest').getByText('Build results', { exact: true })).toBeVisible();
+  });
+
   test('a suggestion left unticked is not added', async ({ page }) => {
     await page.goto('/labels');
     await page.getByRole('button', { name: 'Add labels' }).click();

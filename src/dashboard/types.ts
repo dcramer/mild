@@ -10,6 +10,7 @@ import { z } from 'zod';
 import type { Confidential } from '../confidential.ts';
 import { RULE_FACTS, type RuleFacts as Conditions, factCondition } from '../triage/facts.ts';
 import { GIVEN } from '../triage/standing.ts';
+import { DRAFT_ACTIONS } from '../triage/proposal.ts';
 import { DECIDED } from '../triage/types.ts';
 
 export const STAGES = ['rules', 'classifier', 'model', 'fallback'] as const;
@@ -556,7 +557,7 @@ export type LabelSummary = z.infer<typeof LabelSummary>;
 const LabelDraft = z.object({
   name: held,
   description: held,
-  disposition: z.enum(['keep', 'archive', 'spam']),
+  disposition: z.enum(DRAFT_ACTIONS),
   markRead: z.literal(true).optional(),
   unsubscribe: z.literal(true).optional(),
   /** Which part of what they asked for it serves. */
