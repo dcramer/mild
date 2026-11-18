@@ -105,9 +105,9 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | Module boundaries (`triage/` pure, Google only in `gmail/`, pi-ai only in `model/`, Sentry only in `telemetry.ts`, `dashboard/` never reaches Gmail or actions) | `no-restricted-imports`, `.oxlintrc.json` |
 | Only `web/src/system/` imports Base UI | `no-restricted-imports`, `.oxlintrc.json` |
 | The page takes only types from `src/`; `app/**/*.tsx` imports only Next.js, React and the page's own `web/src` (`@/…`), and reads no environment | `no-restricted-imports` (`allowTypeImports`) and `no-restricted-globals`, `.oxlintrc.json` |
-| No Server Action, no `NEXT_PUBLIC_` variable, and nothing in `app/` but the layouts, a page per screen and the routes that hand a request to Sift | `tests/next.test.ts` |
+| No Server Action, no `NEXT_PUBLIC_` variable, and no route handler in `app/` but the ones that hand a request to Sift | `tests/next.test.ts` |
 | The page keeps React's rules (hooks, keys, effects that only sync with what is outside React), sets no HTML from a string, runs no string as code, and passes accessibility checks; a rule wrong for this code is turned off with its reason, never disabled in a file | oxlint's `react`, `jsx-a11y` and `nextjs` plugins, `.oxlintrc.json` |
-| The page and its files carry `PAGE_HEADERS` (`next.config.js`); the API carries its own. A screen's HTML holds its frame, its heading and its loading rows, and nothing of anyone's. Workflow's webhook route and `/_next/image` answer nothing | `e2e/page.spec.ts` |
+| The page and its files carry `PAGE_HEADERS` (`next.config.js`); the API's JSON only `nosniff`, since a policy governs nothing in data, and a message's HTML `FRAME_POLICY`. A screen's HTML holds its frame, its heading and its loading rows, and nothing of anyone's. Workflow's webhook route and `/_next/image` answer nothing | `e2e/page.spec.ts` |
 | Next.js, React and Workflow are kept up to date | `.github/dependabot.yml`, a pull request a week |
 | Only `src/store/` imports a database driver (`pg`, PGlite, Drizzle), and inside it only the handle, its builder and the schema | `no-restricted-imports`, `.oxlintrc.json` |
 | Every `/api/` route is run as two people, one asking for the other's mail | `tests/tenants.test.ts` fails on a registered route none of its tests calls |

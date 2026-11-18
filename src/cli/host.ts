@@ -4,7 +4,7 @@ import { type Duplex, Readable } from 'node:stream';
 import nextModule from 'next';
 import { getWorld } from 'workflow/runtime';
 import type { Config, Env } from '../config.ts';
-import { HEADERS } from '../dashboard/policy.ts';
+import { NOSNIFF } from '../dashboard/policy.ts';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 import type { Host, Sift } from '../app/sift.ts';
 import type { Store } from '../store/store.ts';
@@ -85,7 +85,7 @@ export function dashboardListener(respond: (request: Request) => Promise<Respons
         reportError(error);
         if (!res.headersSent)
           res
-            .writeHead(500, { ...HEADERS, 'content-type': 'application/json', 'cache-control': 'no-store' })
+            .writeHead(500, { ...NOSNIFF, 'content-type': 'application/json', 'cache-control': 'no-store' })
             .end(JSON.stringify({ error: 'Sift could not do that.' }));
       }),
   );

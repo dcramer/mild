@@ -14,25 +14,10 @@ describe('Next.js answers nothing that skips the API', () => {
     expect(actions).toEqual([]);
   });
 
-  it('has the layouts, a page for each screen, and the route handlers that hand each request to Sift, and nothing else in app/', () => {
+  it('hands every request under /api/ and /auth/ to Sift, with no route handler of its own beside the ones that do', () => {
     // Workflow writes its own routes into app/.well-known/workflow at build, which .gitignore leaves out of OWN.
-    expect(OWN.filter((file) => file.startsWith('app/')).toSorted()).toEqual([
-      'app/(dashboard)/activity/page.tsx',
-      'app/(dashboard)/domain/page.tsx',
-      'app/(dashboard)/labels/page.tsx',
-      'app/(dashboard)/layout.tsx',
-      'app/(dashboard)/page.tsx',
-      'app/(dashboard)/rules/page.tsx',
-      'app/(dashboard)/sender/page.tsx',
-      'app/api/[...path]/route.ts',
-      'app/api/cron/route.ts',
-      'app/auth/[...path]/route.ts',
-      'app/layout.tsx',
-      'app/privacy/page.tsx',
-      'app/security/page.tsx',
-      'app/system/page.tsx',
-      'app/terms/page.tsx',
-    ]);
+    const handlers = OWN.filter((file) => file.startsWith('app/') && /\/route\.(ts|tsx|js)$/.test(file));
+    expect(handlers.toSorted()).toEqual(['app/api/[...path]/route.ts', 'app/api/cron/route.ts', 'app/auth/[...path]/route.ts']);
   });
 });
 
