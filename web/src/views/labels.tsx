@@ -1,12 +1,12 @@
 'use client';
 import { PlusIcon } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type LabelSummary, api, useLoaded } from '@/lib/api.ts';
 import { useParam } from '@/lib/params.ts';
 import { AddLabelsDialog, LabelPanel, weak } from '@/views/label-panel.tsx';
 import { INBOX, count, percent } from '@/lib/format.ts';
-import { Heads, Blank, Button, Empty, ListView, Look, Loading, Section, Share, Sub, Table, Td, Th, Tr } from '@/system';
+import { Heads, Blank, Button, Empty, ListView, Look, Section, Share, Sub, Table, Td, Th, Tr } from '@/system';
 
 /** What Sift does with a label's mail, as the page groups it: blocking is marking spam, and more. */
 const GROUPS = [
@@ -28,13 +28,35 @@ function Right({ label }: { label: LabelSummary }) {
   return weak(label) ? <Look>{text}</Look> : <span className="text-muted-foreground">{text}</span>;
 }
 
+/** Labels' own action, adding some, with how many there are of how many Sift keeps. */
+export function LabelActions() {
+  const { data, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
+  const [adding, setAdding] = useState(false);
+  // Leave in inbox is not one of the labels the limit counts.
+  const own = data ? data.labels.filter((label) => label.id !== INBOX).length : 0;
+  const full = !!data && own >= data.labelLimit;
+  return (
+    <>
+      <span className="text-sm text-muted-foreground tabular-nums max-sm:hidden">{data ? `${count(own)} of ${data.labelLimit}` : <Blank word />}</span>
+      <Button
+        disabled={!data || data.accounts.length === 0 || full}
+        {...(full ? { why: `Sift keeps at most ${data?.labelLimit} labels. Remove one you no longer use first.` } : {})}
+        onClick={() => setAdding(true)}
+      >
+        <PlusIcon aria-hidden />
+        Add labels
+      </Button>
+      {adding ? <AddLabelsDialog onClose={() => setAdding(false)} onSaved={reload} /> : null}
+    </>
+  );
+}
+
 /**
  * The labels, under what Sift does with their mail, so the page reads as what happens to it: each with what
  * it is, how much of the mail it is and how often Sift has had it right.
  */
-export function LabelsView() {
+export function LabelsView({ loading: loadingRows }: { loading: ReactNode }) {
   const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
-  const [adding, setAdding] = useState(false);
   const [open, setOpen] = useParam('label');
   const all = data?.labels ?? [];
   const mail = all.reduce((sum, label) => sum + label.messages, 0);
@@ -42,45 +64,12 @@ export function LabelsView() {
   // Previous and next go down the page as it reads.
   const listed = groups.flatMap((g) => g.rows);
   const at = listed.findIndex((label) => label.id === open);
-  // Leave in inbox is not one of the labels the limit counts.
-  const own = all.filter((label) => label.id !== INBOX).length;
-  const full = !!data && own >= data.labelLimit;
 
   return (
-    <ListView
-      title="Labels"
-      actions={
-        <>
-          <span className="text-sm text-muted-foreground tabular-nums max-sm:hidden">{data ? `${count(own)} of ${data.labelLimit}` : <Blank word />}</span>
-          <Button
-            disabled={!data || data.accounts.length === 0 || full}
-            {...(full ? { why: `Sift keeps at most ${data?.labelLimit} labels. Remove one you no longer use first.` } : {})}
-            onClick={() => setAdding(true)}
-          >
-            <PlusIcon aria-hidden />
-            Add labels
-          </Button>
-        </>
-      }
-    >
+    <ListView>
       {error ? <ErrorNote message={error} /> : null}
       {loading ? (
-        <Loading>
-          <Td className="max-w-0">
-            <span className="name">
-              <Blank />
-            </span>
-            <Sub>
-              <Blank />
-            </Sub>
-          </Td>
-          <Td phone="hide" className="w-48">
-            <Blank />
-          </Td>
-          <Td phone="hide" num className="w-28">
-            <Blank word />
-          </Td>
-        </Loading>
+        loadingRows
       ) : all.length === 0 ? (
         <Empty>No labels yet.</Empty>
       ) : (
@@ -148,7 +137,6 @@ export function LabelsView() {
           onSaved={reload}
         />
       ) : null}
-      {adding ? <AddLabelsDialog onClose={() => setAdding(false)} onSaved={reload} /> : null}
     </ListView>
   );
 }

@@ -84,7 +84,7 @@ Stored state, read-only: `$V sql "$RUN" "SELECT … FROM rules"`, from a copy of
 Write everything into `$RUN/evidence/`; `down` keeps it. For each feature proved, capture:
 
 1. A snapshot or screenshot before the action and after it (`$V ab "$RUN" screenshot "$RUN/evidence/<feature>-after.png"`, `$V ab "$RUN" snapshot > "$RUN/evidence/<feature>-after.txt"`).
-2. `$V ab "$RUN" console` and `$V ab "$RUN" errors`, both empty. A content security policy violation appears only here, never in the build.
+2. `$V ab "$RUN" console` and `$V ab "$RUN" errors`, both empty. A hydration mismatch appears only here, never in the build.
 3. The stored side effect, from `sql`, and a second view that reads it back (the Rules screen after an answer, the Labels screen after a label edit). For a Gmail filter, also `$RUN/gmail.json` and its `filter` or `unfilter` row in `actions`.
 4. `SELECT count(*) AS n FROM actions WHERE type NOT IN ('filter', 'unfilter')` is still `0`. sift is off here; a row there means something tried to change a mailbox. Filter rows are the seed's and any the run made.
 

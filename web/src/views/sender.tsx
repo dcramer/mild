@@ -10,7 +10,6 @@ import { nextMail } from '@/lib/next-mail.ts';
 import { messageKey, setParams, useParam } from '@/lib/params.ts';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import {
-  Blank,
   Heads,
   Button,
   ChoiceGroup,
@@ -297,17 +296,11 @@ function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMess
  * A sender's or a domain's page, `/sender/<account>/<address>` or `/domain/<account>/<domain>`. The server draws the
  * same page for every one of them, so no address is in its HTML: the page reads it from the address bar.
  */
-export function WhoView({ kind }: { kind: 'sender' | 'domain' }) {
+export function WhoView({ kind, shell }: { kind: 'sender' | 'domain'; shell: ReactNode }) {
   // The server drew this page once for every address, so the address is read only once the page has started.
   const path = usePathname();
   const [, , account, key] = (useStarted() ? path : '').split('/');
-  if (!account || !key)
-    return (
-      <div className="flex flex-col gap-10">
-        <PageHeader title={<Blank className="w-2/5" />} meta={null} />
-        <Loading />
-      </div>
-    );
+  if (!account || !key) return shell;
   const accountId = decodeURIComponent(account);
   const value = decodeURIComponent(key);
   return <SenderView key={`${kind}/${accountId}/${value}`} accountId={accountId} who={kind === 'sender' ? { address: value } : { domain: value }} />;

@@ -41,6 +41,7 @@ import {
   HoverCard,
   Input,
   Kbd,
+  ListPage,
   ListView,
   Hint,
   Look,
@@ -475,30 +476,31 @@ export function SystemView() {
           </Sheet>
         </Section>
 
-        <Section title="List view" meta="how every screen shows many of one thing">
+        <Section title="List page, list view" meta="how every screen shows many of one thing: the page drawn on the server, the list in it">
           <Sheet className="p-5">
-            <ListView
-              title="For review"
-              search={{ value: search, onChange: setSearch, placeholder: 'Search' }}
-              filters={{
-                active: made === '' ? [] : [{ label: `Then: ${outcomeName(made)}`, clear: () => setMade('') }],
-                panel: (
-                  <>
-                    <FilterGroup label="Label" value={labelled} options={[['', 'Any'], null, ...inboxFirst(LABELS)]} onChange={setLabelled} />
-                    <FilterGroup label="Then" value={made} options={[['', 'Anything'], ...ACTIONS]} onChange={setMade} />
-                  </>
-                ),
-              }}
-            >
-              <Table keys>
-                <Heads>
-                  <Th>Sender</Th>
-                  <Th phone="hide">Subject</Th>
-                  <Th>Label</Th>
-                </Heads>
-                <tbody>
-                  {ROWS.filter((row) => (made === '' || row.does === made) && `${row.sender} ${row.subject}`.toLowerCase().includes(search.toLowerCase())).map(
-                    (row) => (
+            <ListPage title="For review">
+              <ListView
+                search={{ value: search, onChange: setSearch, placeholder: 'Search' }}
+                filters={{
+                  active: made === '' ? [] : [{ label: `Then: ${outcomeName(made)}`, clear: () => setMade('') }],
+                  panel: (
+                    <>
+                      <FilterGroup label="Label" value={labelled} options={[['', 'Any'], null, ...inboxFirst(LABELS)]} onChange={setLabelled} />
+                      <FilterGroup label="Then" value={made} options={[['', 'Anything'], ...ACTIONS]} onChange={setMade} />
+                    </>
+                  ),
+                }}
+              >
+                <Table keys>
+                  <Heads>
+                    <Th>Sender</Th>
+                    <Th phone="hide">Subject</Th>
+                    <Th>Label</Th>
+                  </Heads>
+                  <tbody>
+                    {ROWS.filter(
+                      (row) => (made === '' || row.does === made) && `${row.sender} ${row.subject}`.toLowerCase().includes(search.toLowerCase()),
+                    ).map((row) => (
                       <Tr key={row.address} onOpen={() => setPanel(true)}>
                         <Td className="max-w-0 md:w-1/3">
                           <span className="name block truncate">{row.sender}</span>
@@ -528,11 +530,11 @@ export function SystemView() {
                           />
                         </RowActions>
                       </Tr>
-                    ),
-                  )}
-                </tbody>
-              </Table>
-            </ListView>
+                    ))}
+                  </tbody>
+                </Table>
+              </ListView>
+            </ListPage>
           </Sheet>
           <p className="text-muted-foreground">
             On a phone the table keeps its first column; what the others said moves under it, and the row opens for the rest.
@@ -541,50 +543,51 @@ export function SystemView() {
 
         <Section title="A log" meta="a few ways to see the list; one table, a heading for each day">
           <Sheet className="p-5">
-            <ListView
-              title="Activity"
-              view={{
-                label: 'Show',
-                value: shown,
-                options: [
-                  ['', 'Changed'],
-                  ['all', 'Everything'],
-                ],
-                onChange: setShown,
-              }}
-            >
-              <Table keys>
-                <Heads>
-                  <Th>Sender</Th>
-                  <Th phone="hide">Subject</Th>
-                  <Th phone="hide">What happened</Th>
-                </Heads>
-                {(
-                  [
-                    ['Today', ROWS.slice(0, 2)],
-                    ['Yesterday', ROWS.slice(2, 3)],
-                  ] as const
-                ).map(([day, rows]) => (
-                  <tbody key={day}>
-                    <TrGroup title={day} span={3} />
-                    {rows.map((row) => (
-                      <Tr key={row.address} onOpen={() => setPanel(true)}>
-                        <Td className="max-w-0 md:w-1/3">
-                          <span className="name block truncate">{row.sender}</span>
-                        </Td>
-                        <Td phone="hide" quiet className="max-w-0 md:w-full">
-                          <span className="block truncate">{row.subject}</span>
-                        </Td>
-                        <Td phone="hide" className="whitespace-nowrap">
-                          <span className="font-semibold">Archived</span>
-                          <span className="text-muted-foreground"> · {row.label ?? 'Newsletters'}</span>
-                        </Td>
-                      </Tr>
-                    ))}
-                  </tbody>
-                ))}
-              </Table>
-            </ListView>
+            <ListPage title="Activity">
+              <ListView
+                view={{
+                  label: 'Show',
+                  value: shown,
+                  options: [
+                    ['', 'Changed'],
+                    ['all', 'Everything'],
+                  ],
+                  onChange: setShown,
+                }}
+              >
+                <Table keys>
+                  <Heads>
+                    <Th>Sender</Th>
+                    <Th phone="hide">Subject</Th>
+                    <Th phone="hide">What happened</Th>
+                  </Heads>
+                  {(
+                    [
+                      ['Today', ROWS.slice(0, 2)],
+                      ['Yesterday', ROWS.slice(2, 3)],
+                    ] as const
+                  ).map(([day, rows]) => (
+                    <tbody key={day}>
+                      <TrGroup title={day} span={3} />
+                      {rows.map((row) => (
+                        <Tr key={row.address} onOpen={() => setPanel(true)}>
+                          <Td className="max-w-0 md:w-1/3">
+                            <span className="name block truncate">{row.sender}</span>
+                          </Td>
+                          <Td phone="hide" quiet className="max-w-0 md:w-full">
+                            <span className="block truncate">{row.subject}</span>
+                          </Td>
+                          <Td phone="hide" className="whitespace-nowrap">
+                            <span className="font-semibold">Archived</span>
+                            <span className="text-muted-foreground"> · {row.label ?? 'Newsletters'}</span>
+                          </Td>
+                        </Tr>
+                      ))}
+                    </tbody>
+                  ))}
+                </Table>
+              </ListView>
+            </ListPage>
           </Sheet>
         </Section>
 

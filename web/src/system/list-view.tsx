@@ -4,7 +4,6 @@ import { type ReactNode, useState, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from './button.tsx';
 import { useShortcut } from './keys.tsx';
-import { PageHeader } from './page.tsx';
 
 interface ActiveFilter {
   /** What is being narrowed and to what: "Label: Newsletters". */
@@ -13,26 +12,20 @@ interface ActiveFilter {
 }
 
 /**
- * The standard way to show many of one thing: the page header (with how many there are), then `intro`
- * (anything the page shows before its list), then one outlined bar holding the search and the filter
- * button, then the rows. Every screen that lists something uses it.
+ * The standard way to show many of one thing, inside a `ListPage`: `intro` (anything the page shows before its
+ * list), then one outlined bar holding the search and the filter button, then the rows.
  *
  * The filter button opens a panel on the right that pushes the list left; closing it puts the list
  * back. While closed, the button shows how many filters are on and each is listed under the search
  * box with a way to clear it, so a narrowed list never looks like the whole of it.
  */
 export function ListView({
-  title,
-  actions,
   intro,
   search,
   view,
   filters,
   children,
 }: {
-  title: string;
-  /** What can be done to the list as a whole, such as adding to it. */
-  actions?: ReactNode;
   /** What the page shows between its header and its list. */
   intro?: ReactNode;
   search?: { value: string; onChange: (value: string) => void; placeholder: string };
@@ -46,8 +39,7 @@ export function ListView({
   const slash = useShortcut('/', 'Search', () => searchBox.current?.focus(), { enabled: search !== undefined });
   const on = filters?.active.length ?? 0;
   return (
-    <section className="flex flex-col gap-6">
-      <PageHeader title={title} actions={actions} />
+    <>
       {intro}
 
       <div className="flex flex-col gap-3">
@@ -149,7 +141,7 @@ export function ListView({
           ) : null}
         </div>
       </div>
-    </section>
+    </>
   );
 }
 

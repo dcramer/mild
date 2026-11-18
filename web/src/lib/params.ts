@@ -83,7 +83,7 @@ export function useParam<T extends string = string>(name: string, options?: read
 export function useQueryFollowsScreens() {
   const path = usePathname();
   useEffect(() => {
-    wrote = null;
+    if (wrote?.path !== path) wrote = null;
     changed();
   }, [path]);
 }

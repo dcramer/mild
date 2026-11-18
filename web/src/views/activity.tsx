@@ -1,8 +1,8 @@
 'use client';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
-import { MailLog, MailLogLoading } from '@/components/mail-log.tsx';
+import { MailLog } from '@/components/mail-log.tsx';
 import { type Days, type DecisionRow, api, useLoaded } from '@/lib/api.ts';
 import { paramNow, setParams, useParam } from '@/lib/params.ts';
 import { FACT_FILTER_OPTIONS, HANDLED, PERIODS, count, inboxFirst, labelSeries, factFilterName, longDay, money, moneyTick, shortDay } from '@/lib/format.ts';
@@ -21,12 +21,30 @@ const VIEWS = [
 /** A narrower list starts at its first page; a page in the address it was opened with stands. */
 const narrow = (name: string) => (value: string) => setParams({ [name]: value, page: '' });
 
-/** What sift did to mail, by day, newest first, with a way to undo it. */
-export function ActivityView() {
+/** The period Activity covers, in the address. */
+const usePeriod = () => {
+  const [chosen] = useParam('days');
+  return (PERIODS.some(([key]) => key === chosen) ? Number(chosen) : 7) as Days;
+};
+
+/** Activity's own control: the period it covers. */
+export function ActivityPeriod() {
+  const days = usePeriod();
+  return (
+    <Select
+      label="Period"
+      value={String(days) as (typeof PERIODS)[number][0]}
+      options={PERIODS}
+      onChange={(value) => narrow('days')(value === '7' ? '' : value)}
+    />
+  );
+}
+
+/** What sift did to mail, by day, newest first, with a way to undo it. `loading` stands in for the rows until they come. */
+export function ActivityView({ loading: loadingRows }: { loading: ReactNode }) {
   const onOpen = useOpenMessages();
   const plan = usePlan();
-  const [chosen] = useParam('days');
-  const days = (PERIODS.some(([key]) => key === chosen) ? Number(chosen) : 7) as Days;
+  const days = usePeriod();
   const [view] = useParam('show', VIEWS);
   const [search] = useParam('q');
   const [fact] = useParam('fact', FACT_FILTER_OPTIONS);
@@ -69,15 +87,6 @@ export function ActivityView() {
 
   return (
     <ListView
-      title="Activity"
-      actions={
-        <Select
-          label="Period"
-          value={String(days) as (typeof PERIODS)[number][0]}
-          options={PERIODS}
-          onChange={(value) => narrow('days')(value === '7' ? '' : value)}
-        />
-      }
       search={{ value: typed ?? search, onChange: setTyped, placeholder: 'Search subject or sender' }}
       view={{
         label: 'Show',
@@ -126,7 +135,7 @@ export function ActivityView() {
     >
       {error ? <ErrorNote message={error} /> : null}
       {loading ? (
-        <MailLogLoading />
+        loadingRows
       ) : !data || data.rows.length === 0 ? (
         <Empty>
           {search !== '' || fact !== '' || label !== ''

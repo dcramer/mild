@@ -25,6 +25,19 @@ export function PageHeader({ title, badge, meta, actions }: { title: ReactNode; 
 }
 
 /**
+ * The page a list is on: its header, with the page's own action, then the `ListView`. Every screen that lists
+ * something is one. The server draws it; what is in it that moves or loads is the `ListView` and the action.
+ */
+export function ListPage({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-6">
+      <PageHeader title={title} actions={actions} />
+      {children}
+    </section>
+  );
+}
+
+/**
  * A part of a page or a panel under its own heading: the heading, a count or short fact beside it, and
  * at most one action on the right. Space sets it apart; it has no rule or box.
  */
