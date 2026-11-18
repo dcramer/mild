@@ -274,6 +274,21 @@ describe('a primary mailbox', () => {
   });
 });
 
+describe("a mailbox's number", () => {
+  it('is given by a migration to every mailbox connected before mailboxes had one, each its own', async () => {
+    const { db, run } = await migratedBefore('0050_mailboxes_have_numbers');
+    await db.exec(`
+      INSERT INTO users (id, owner, created_at) VALUES (1, true, 0), (2, false, 0);
+      INSERT INTO accounts (id, user_id, created_at, "primary") VALUES ('a@example.org', 1, 0, true), ('a@work.example.com', 1, 1, false), ('b@example.net', 2, 2, true);
+      INSERT INTO mailboxes (user_id, id) VALUES (1, 'a@example.org'), (1, 'a@work.example.com'), (2, 'b@example.net');
+    `);
+    await run('0050_mailboxes_have_numbers');
+    const numbers = (await db.query<{ number: number }>('SELECT number FROM mailboxes')).rows.map((row) => row.number);
+    expect(numbers).toHaveLength(3);
+    expect(new Set(numbers).size).toBe(3);
+  });
+});
+
 describe('a model call', () => {
   it('made before calls said which rule they checked is given the rule whose condition it met, by a migration', async () => {
     // On a Postgres server row-level security hid every row from it, so only a machine's install was given them.

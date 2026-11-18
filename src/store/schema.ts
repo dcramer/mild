@@ -118,6 +118,8 @@ export const mailboxes = pgTable(
   {
     userId: userId(),
     id: text('id').notNull(),
+    // Names the mailbox where its address must not be written: the key of its Workflow runs, which Workflow keeps unencrypted.
+    number: integer('number').notNull().unique().generatedByDefaultAsIdentity(),
     historyId: text('history_id'), // Gmail history cursor; null forces a full sync
     lastSyncedAt: time('last_synced_at'),
     filtersCheckedAt: time('filters_checked_at'),

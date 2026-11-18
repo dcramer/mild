@@ -351,6 +351,13 @@
       "when": 1794968340830,
       "tag": "0049_labels_and_rules_leave_the_mailbox",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1794977407117,
+      "tag": "0050_mailboxes_have_numbers",
+      "breakpoints": true
     }
   ]
 }

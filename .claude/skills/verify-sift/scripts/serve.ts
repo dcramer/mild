@@ -91,8 +91,7 @@ const built = await buildControls(config, {
   running: working,
   ...(working
     ? {
-        kick: async (person: number) =>
-          void (await Promise.all((await dueWork(store, options, [person])).map((piece) => begin(piece, runKey(piece, host.sessionSecret))))),
+        kick: async (person: number) => void (await Promise.all((await dueWork(store, options, [person])).map((piece) => begin(piece, runKey(piece))))),
       }
     : {}),
 });

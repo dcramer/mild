@@ -77,9 +77,9 @@ export async function runOnce(db: Sql, options: RunOptions): Promise<PassResult[
  * (`src/app/flow.ts`), and whatever runs it opens everything it touches from them.
  */
 export type Work =
-  | { kind: 'pass'; person: number; account: string }
+  | { kind: 'pass'; person: number; mailbox: number }
   | { kind: 'upkeep'; person: number }
-  | { kind: 'inbox'; person: number; account: string; run: number }
+  | { kind: 'inbox'; person: number; mailbox: number; run: number }
   | { kind: 'eval'; person: number; run: number };
 
 /**
@@ -102,11 +102,11 @@ export async function dueWork(store: Store, options: RunOptions, people?: readon
     const modelled = Boolean(people) || ((runs.some((run) => !run.ruleId) || evals.length > 0) && Boolean(options.model && (await options.model(db))));
     for (const account of await listAccounts(db)) {
       if (!reading) continue;
-      if (people || (await passWanted(db, account, options))) due.push({ kind: 'pass', person, account: account.id });
+      if (people || (await passWanted(db, account, options))) due.push({ kind: 'pass', person, mailbox: account.number });
       const going = runs.filter((run) => run.accountId === account.id && (run.ruleId || modelled));
       // An expired sign-in fails a slice as it fails a pass; the look above finds when Gmail answers again.
       if (going.length === 0 || (!people && (await lastPass(options.ephemeral, account.id))?.expired)) continue;
-      for (const run of going) due.push({ kind: 'inbox', person, account: account.id, run: run.id });
+      for (const run of going) due.push({ kind: 'inbox', person, mailbox: account.number, run: run.id });
     }
     if (modelled) for (const run of evals) due.push({ kind: 'eval', person, run });
   }
@@ -115,9 +115,9 @@ export async function dueWork(store: Store, options: RunOptions, people?: readon
 
 export const describeWork = (work: Work) =>
   work.kind === 'pass'
-    ? `${work.account}: pass`
+    ? `Mailbox ${work.mailbox}: pass`
     : work.kind === 'inbox'
-      ? `${work.account}: inbox run ${work.run}`
+      ? `Mailbox ${work.mailbox}: inbox run ${work.run}`
       : work.kind === 'eval'
         ? 'A test run'
         : 'Deleting old records';
@@ -133,7 +133,7 @@ export const runWork = (store: Store, work: Work, options: RunOptions, until: nu
       identify({ id: work.person });
       if (!(await stillThere(store, work.person))) return null;
       const db = await store.user(work.person);
-      const account = 'account' in work ? (await listAccounts(db)).find((a) => a.id === work.account) : undefined;
+      const account = 'mailbox' in work ? (await listAccounts(db)).find((a) => a.number === work.mailbox) : undefined;
       if (account) identify({ id: work.person, email: account.email });
       switch (work.kind) {
         case 'upkeep': {

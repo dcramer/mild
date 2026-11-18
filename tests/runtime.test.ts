@@ -7,6 +7,7 @@ import { fromHere } from '../src/cli/host.ts';
 import { type Ephemeral, memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import type { RunOptions } from '../src/work/run.ts';
 import { startInboxRuns } from '../src/store/inbox.ts';
+import { listAccounts } from '../src/store/accounts.ts';
 import { people } from '../src/store/people.ts';
 import { setModel } from '../src/store/preferences.ts';
 import type { Store } from '../src/store/store.ts';
@@ -89,20 +90,20 @@ describe('a flow whose steps reach different instances', () => {
 });
 
 describe("a piece's run key", () => {
-  it('names a mailbox only by a keyed hash, since Workflow keeps keys unencrypted', () => {
-    const pass = { kind: 'pass', person: 1, account: 'me@example.org' } as const;
-    const key = runKey(pass, 'one secret');
-    expect(key).not.toContain('example.org');
-    expect(runKey(pass, 'one secret')).toBe(key);
-    expect(runKey(pass, 'another secret')).not.toBe(key);
-    expect(runKey({ ...pass, kind: 'inbox', run: 1 }, 'one secret')).not.toBe(key);
-    expect(runKey({ ...pass, account: 'other@example.org' }, 'one secret')).not.toBe(key);
+  it('names a mailbox by its number, never its address, since Workflow keeps keys unencrypted', async () => {
+    const { db } = await onePerson(ACCOUNT, 'me@work.example.org');
+    const [one, two] = await listAccounts(db);
+    const pass = (mailbox: number) => runKey({ kind: 'pass', person: db.person!, mailbox });
+    expect([pass(one!.number), pass(two!.number)].join()).not.toContain('example.org');
+    expect(pass(one!.number)).not.toBe(pass(two!.number));
+    expect(runKey({ kind: 'inbox', person: db.person!, mailbox: one!.number, run: 1 })).not.toBe(pass(one!.number));
+    expect((await listAccounts(db)).map((a) => a.number)).toEqual([one!.number, two!.number]);
   });
 });
 
 describe('beginning a piece in a process where Workflow has not started', () => {
   it('rejects, so a tick that catches it goes on to its other pieces', async () => {
-    const pass = { kind: 'pass', person: 1, account: ACCOUNT } as const;
+    const pass = { kind: 'pass', person: 1, mailbox: 1 } as const;
     expect(await begin(pass, 'key').catch((error: unknown) => String(error))).toBe('Error: Workflow has not started in this process.');
   });
 });
@@ -161,7 +162,7 @@ describe("a person's model that cannot be reached", () => {
     const { store, db } = await onePerson(ACCOUNT);
     const logged: string[] = [];
     const sift = await siftOn(store, logged);
-    const pass = { kind: 'pass', person: db.person!, account: ACCOUNT } as const;
+    const pass = { kind: 'pass', person: db.person!, mailbox: (await listAccounts(db))[0]!.number } as const;
     // Each pass also fails for want of a Gmail sign-in, and says so each time.
     const said = () => logged.filter((line) => !line.includes('pass failed'));
     await setModel(db, 'openai/gpt-5-mini');
