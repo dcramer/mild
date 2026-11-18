@@ -1,6 +1,8 @@
 'use client';
-import { api, useAction } from '@/lib/api.ts';
+import { api } from '@/lib/api.ts';
+import { useAction } from '@/lib/action.ts';
 import { INBOX, outcomeName, plural } from '@/lib/format.ts';
+import { messageKey } from '@/lib/params.ts';
 import { Meter, type Pick, useToast } from '@/system';
 
 /** A message whose label the user can say, as the list and the panel both hold it. */
@@ -23,10 +25,11 @@ export interface AnswerLabel {
 /**
  * Saying what one message is, like a spam button with more than two outcomes: sift records it, does what
  * that label does to the message in Gmail, and keeps it as an example. No rule is made. When the sender
- * has other mail waiting that sift guessed the same way, the toast offers the same answer for those.
+ * has other mail waiting that sift guessed the same way, the toast offers the same answer for those. An answered
+ * message leaves the list, and `onDone` is called, as soon as it is pressed; the toasts wait for the save.
  */
-export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answerable[], onDone: () => void) {
-  const { busy, error, run } = useAction();
+export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answerable[], onDone?: () => void) {
+  const { hide } = useAction();
   const toast = useToast();
   const say = (target: Answerable, labelId: string) =>
     api.feedback({
@@ -44,8 +47,8 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
     return label ? `${outcomeName(label.disposition)} as ${label.name}` : 'Answered';
   };
 
-  const answer = (target: Answerable, labelId: string) =>
-    run(async () => {
+  const answer = (target: Answerable, labelId: string) => {
+    hide([messageKey(target)], 'Could not save your answer', async () => {
       const reply = await say(target, labelId);
       // The answer is saved; what sift itself did to the message could not be taken back in Gmail.
       if (reply.notFixed !== null) toast('Could not put the message back in Gmail', { tone: 'failure', description: reply.notFixed });
@@ -57,23 +60,20 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
           ? {
               action: {
                 label: `Same for ${alike.length} more`,
-                // Pressed later, maybe after this message's row or panel has gone: so it refreshes what is shown, and never
-                // calls `onDone`, which would move or close a panel the reader has since moved on in.
+                // Pressed later, maybe after this message's row or panel has gone: so it never calls `onDone`, which
+                // would move or close a panel the reader has since moved on in.
                 onPress: () =>
-                  run(async () => {
-                    try {
-                      await Promise.all(alike.map((w) => say(w, labelId)));
-                      toast(`${said}: ${alike.length} more`);
-                    } catch (failure) {
-                      toast('Could not answer the rest', { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) });
-                    }
+                  hide(alike.map(messageKey), 'Could not answer the rest', async () => {
+                    await Promise.all(alike.map((w) => say(w, labelId)));
+                    toast(`${said}: ${alike.length} more`);
                   }),
               },
             }
           : {},
       );
-      onDone();
     });
+    onDone?.();
+  };
 
   /**
    * What a message might be, for the answer's dropdown: Leave in inbox, always first; then sift's label and its
@@ -96,12 +96,13 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
   };
 
   /** One answer for several messages, as a folded row gives it. */
-  const answerAll = (targets: readonly Answerable[], labelId: string) =>
-    run(async () => {
+  const answerAll = (targets: readonly Answerable[], labelId: string) => {
+    hide(targets.map(messageKey), 'Could not save your answer', async () => {
       await Promise.all(targets.map((t) => say(t, labelId)));
       toast(`${saying(labelId)}: ${plural(targets.length, 'message')}`);
-      onDone();
     });
+    onDone?.();
+  };
 
-  return { answer, answerAll, choices, busy, error };
+  return { answer, answerAll, choices };
 }

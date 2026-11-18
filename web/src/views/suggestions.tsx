@@ -5,7 +5,8 @@ import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answe
 import { ErrorNote } from '@/components/bits.tsx';
 import { MatchWords, SenderCell } from '@/components/sender.tsx';
 import { messageKey, useParam } from '@/lib/params.ts';
-import { type SuggestionItem, type Suggestions, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type SuggestionItem, type Suggestions, api, useLoaded } from '@/lib/api.ts';
+import { useAction, useHidden } from '@/lib/action.ts';
 import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, inboxFirst, count, factFilterName, outcomeName, plural, sureness } from '@/lib/format.ts';
 import {
   Ago,
@@ -16,7 +17,6 @@ import {
   CalloutKey,
   Check,
   Empty,
-  Failure,
   FilterGroup,
   ListView,
   Meter,
@@ -41,6 +41,8 @@ const UNSURE = '-';
 
 type Proposal = Suggestions['proposals'][number];
 
+const proposalKey = (p: Proposal) => `proposal/${p.id}`;
+
 /** What the user has been doing to a label's mail, and what the label does instead: "You kept the last 2, but the label archives them". */
 const USER_DID: Record<string, (n: string) => string> = {
   keep: (n) => `kept the last ${n}`,
@@ -60,7 +62,7 @@ const LABEL_DOES: Record<string, string> = {
  * that label, which the model cannot learn. Nothing changes until the user has seen the rule and said yes.
  */
 function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonly AnswerLabel[] }) {
-  const { busy, error, run } = useAction();
+  const { hide } = useAction();
   const [open, setOpen] = useState(false);
   const n = count(proposal.agreed);
   return (
@@ -72,13 +74,10 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
         <span className="text-muted-foreground">
           You {USER_DID[proposal.disposition]?.(n)}, but the label {LABEL_DOES[proposal.labelDisposition]}.
         </span>
-        <Failure>{error}</Failure>
       </p>
       <span className="flex items-center gap-1.5">
-        <Button disabled={busy} onClick={() => setOpen(true)}>
-          Make a rule…
-        </Button>
-        <Button variant="quiet" busy={busy} onClick={() => run(() => api.dismissProposal(proposal.id))}>
+        <Button onClick={() => setOpen(true)}>Make a rule…</Button>
+        <Button variant="quiet" onClick={() => hide([proposalKey(proposal)], 'Could not dismiss it', () => api.dismissProposal(proposal.id))}>
           Dismiss
         </Button>
       </span>
@@ -115,17 +114,15 @@ function SuggestionRow({
   labels,
   waiting,
   onOpen,
-  onAnswered,
 }: {
   item: SuggestionItem;
   rest: readonly SuggestionItem[];
   labels: readonly AnswerLabel[];
   waiting: readonly Answerable[];
   onOpen: () => void;
-  onAnswered: () => void;
 }) {
   const target = answerableOf(item);
-  const { answer, answerAll, choices, busy, error } = useAnswer(labels, waiting, onAnswered);
+  const { answer, answerAll, choices } = useAnswer(labels, waiting);
   const folded = rest.length > 0;
   const subjects = [item, ...rest].map((i) => reveal(i.subject) || '(no subject)').join(' · ');
   // A message none of the labels fits gets a new one; it is then among the choices.
@@ -175,7 +172,6 @@ function SuggestionRow({
             {item.preview ? <Sub>{reveal(item.preview)}</Sub> : null}
           </>
         )}
-        <Failure className="mt-1">{error}</Failure>
       </Td>
       <Td phone="hide" num quiet>
         <Ago at={item.receivedAt} />
@@ -188,12 +184,11 @@ function SuggestionRow({
           value={item.labelId}
           groups={groups}
           empty={outcomeName('review')}
-          busy={busy}
           onSubmit={(id) => (folded ? answerAll([item, ...rest].map(answerableOf), id) : answer(target, id))}
           extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
         />
       </RowActions>
-      {adding ? <AddLabelsDialog onClose={() => setAdding(false)} onSaved={onAnswered} /> : null}
+      {adding ? <AddLabelsDialog onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
     </Tr>
   );
 }
@@ -211,24 +206,28 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
   // Narrowed to Leave in inbox, the mail it would leave there is what was asked for.
   const withKept = includeKept || label === INBOX;
   // Unnarrowed, the same list the masthead counts.
-  const { data, error, loading, reload } = useLoaded(`suggestions-${withKept}${fact ? `-${fact}` : ''}`, (signal) => api.suggestions(withKept, fact, signal));
+  const { data, error, loading } = useLoaded(`suggestions-${withKept}${fact ? `-${fact}` : ''}`, (signal) => api.suggestions(withKept, fact, signal));
   // The server draws the page with this, so whether Sift is off is said before the list arrives.
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const [search, setSearch] = useParam('q');
   const [does, setDoes] = useParam('does', DOES);
 
+  // An answer or dismissal on its way is left out at once.
+  const hidden = useHidden();
+  const items = (data?.items ?? []).filter((i) => !hidden.has(messageKey(i)));
+  const proposals = (data?.proposals ?? []).filter((p) => !hidden.has(proposalKey(p)));
   const names = new Map((data?.labels ?? []).map((l) => [l.id, l.name] as const));
   const needle = search.trim().toLowerCase();
-  const shown = (data?.items ?? []).filter(
+  const shown = items.filter(
     (i) =>
       (label === '' || (label === UNSURE ? i.labelId === null : i.labelId === label)) &&
       (does === '' || i.disposition === does) &&
       (needle === '' || [i.sender, i.senderName ?? '', i.subject].some((text) => reveal(text).toLowerCase().includes(needle))),
   );
-  const answerable = (data?.items ?? []).map(answerableOf);
+  const answerable = items.map(answerableOf);
   const narrowed = search !== '' || label !== '' || does !== '' || fact !== '' || includeKept;
   // Nothing at all is waiting: there is nothing to search or narrow.
-  const nothing = data !== null && !loading && data.items.length === 0 && data.proposals.length === 0 && !data.importing && !narrowed;
+  const nothing = data !== null && !loading && items.length === 0 && proposals.length === 0 && !data.importing && !narrowed;
   const rows = fold(shown);
   // The panel steps through the messages as the list draws them: a folded row's together.
   const order = rows.flatMap(({ item, rest }) => [item, ...rest]);
@@ -285,9 +284,9 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
       }
     >
       {error ? <ErrorNote message={error} /> : null}
-      {data && data.proposals.length > 0 ? (
+      {data && proposals.length > 0 ? (
         <ul className="sheet flex flex-col">
-          {data.proposals.map((proposal) => (
+          {proposals.map((proposal) => (
             <ProposalRow key={proposal.id} proposal={proposal} labels={data.labels} />
           ))}
         </ul>
@@ -309,7 +308,7 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
           >
             Nothing is waiting on you.
           </Empty>
-        ) : (data && data.items.length > 0) || narrowed ? (
+        ) : items.length > 0 || narrowed ? (
           <Empty>Nothing waiting matches.</Empty>
         ) : data?.importing ? (
           <Empty>Sift is going through your inbox. What it reads shows here.</Empty>
@@ -334,7 +333,6 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
                 labels={data?.labels ?? []}
                 waiting={answerable}
                 onOpen={() => onOpen(refs, order.indexOf(item))}
-                onAnswered={reload}
               />
             ))}
           </tbody>

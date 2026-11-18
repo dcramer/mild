@@ -5,7 +5,8 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { GoThroughInbox, InboxRow } from '@/components/inbox.tsx';
 import { ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { costLine, spentLine, subscription } from '@/lib/prices.ts';
-import { type ManageState, type Removed, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type ManageState, type Removed, api, useLoaded } from '@/lib/api.ts';
+import { useAction } from '@/lib/action.ts';
 import { useParam } from '@/lib/params.ts';
 import {
   Ago,

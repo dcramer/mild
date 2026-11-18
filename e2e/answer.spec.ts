@@ -1,5 +1,22 @@
+import type { Page } from '@playwright/test';
 import { makeRule, proposal, ruleDialog, seededRulesOnly } from './rule.ts';
-import { choose, expect, forReviewLink, messageQuery, openMessage, panel, panelHeading, param, query, reviewSearch, row, test, toast } from './sift.ts';
+import {
+  choose,
+  expect,
+  failureToast,
+  forReviewLink,
+  messageQuery,
+  openMessage,
+  panel,
+  panelHeading,
+  param,
+  query,
+  refused,
+  reviewSearch,
+  row,
+  test,
+  toast,
+} from './sift.ts';
 
 test.describe('Answering mail', () => {
   test('agreeing from a row answers it, opens nothing and makes no rule', async ({ page }) => {
@@ -219,5 +236,68 @@ test.describe('A rule from For review', () => {
     await expect(row(page, 'Winter sale starts now')).toBeVisible();
     await expect(proposal(page)).toHaveCount(0);
     await seededRulesOnly(page);
+  });
+});
+
+test.describe('An answer on its way', () => {
+  // A service worker's page is out of reach of page.route.
+  test.use({ serviceWorkers: 'block' });
+
+  type Reply = { status: number; json: object } | undefined;
+
+  /** Holds every answer until the returned function lets them through, or answers them with the reply it is given. */
+  const holdAnswers = async (page: Page) => {
+    let release: (reply?: Reply) => void = () => {};
+    const held = new Promise<Reply>((done) => (release = done));
+    await page.route(
+      (url) => url.pathname === '/api/feedback',
+      async (route) => {
+        const reply = await held;
+        await (reply ? route.fulfill(reply) : route.continue());
+      },
+    );
+    return release;
+  };
+
+  test('takes its row away before it is saved, and says so once it is', async ({ page }) => {
+    const release = await holdAnswers(page);
+    await page.goto('/');
+    await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
+    await expect(row(page, 'Winter sale starts now')).toHaveCount(0);
+    await expect(toast(page, 'Archive as Marketing')).toHaveCount(0);
+
+    release();
+    await expect(toast(page, 'Archive as Marketing')).toBeVisible();
+    await expect(forReviewLink(page)).toHaveAccessibleName('For review 11');
+    await expect(row(page, 'Winter sale starts now')).toHaveCount(0);
+  });
+
+  refused('that fails puts its row back and says why', async ({ page }) => {
+    const release = await holdAnswers(page);
+    await page.goto('/');
+    await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
+    await expect(row(page, 'Winter sale starts now')).toHaveCount(0);
+
+    release({ status: 409, json: { error: 'That message has changed.' } });
+    const failed = failureToast(page, 'Could not save your answer');
+    await expect(failed).toBeVisible();
+    await expect(failed).toContainText('That message has changed.');
+    await expect(row(page, 'Winter sale starts now')).toBeVisible();
+    await expect(forReviewLink(page)).toHaveAccessibleName('For review 12');
+  });
+
+  refused('from the panel moves on at once, and a failure puts it back in the list', async ({ page }) => {
+    const release = await holdAnswers(page);
+    await page.goto('/');
+    const open = await openMessage(page, 'Replica lag on db-3');
+    await choose(open, 'Notifications');
+    await open.getByRole('button', { name: 'Save: Notifications' }).click();
+    await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+
+    release({ status: 409, json: { error: 'That message has changed.' } });
+    await expect(failureToast(page, 'Could not save your answer')).toBeVisible();
+    await open.getByRole('button', { name: 'Close' }).click();
+    await expect(open).toHaveCount(0);
+    await expect(row(page, 'Replica lag on db-3')).toBeVisible();
   });
 });
