@@ -14,7 +14,7 @@ It suggests before it acts. Every decision appears in a dashboard for you to cor
 
 ## Set up
 
-Needs Node 24 and pnpm.
+Needs Node 26 and pnpm.
 
 ```bash
 pnpm install

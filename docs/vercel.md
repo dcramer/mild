@@ -16,7 +16,7 @@ Upstash is expected to set `REDIS_URL`; if the site says it is missing, copy the
 
 ## 1. The project
 
-Import this repository as a Vercel project and deploy it as it is: Vercel adds databases only to a project that exists. Root Directory: `./`, the repository root. `vercel.json` sets the Framework Preset (Next.js), the build (`next build`, then the migration) and the minute's cron, and Node comes from `package.json` (24.x).
+Import this repository as a Vercel project and deploy it as it is: Vercel adds databases only to a project that exists. Root Directory: `./`, the repository root. `vercel.json` sets the Framework Preset (Next.js), the build (`next build`, then the migration) and the minute's cron, and Node comes from `package.json` (26.x).
 
 This first deploy builds without a database. Until steps 2 and 3 are done, the site lists the variables it still needs.
 
