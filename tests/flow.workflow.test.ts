@@ -75,4 +75,29 @@ describe('a piece of work', () => {
       expect(ended.map((run) => run.input)).toEqual(ended.map(() => undefined));
     });
   });
+
+  it('is listed by what it does, with the ids it was for', async () => {
+    offerSift({ work: async () => null });
+    const since = new Date();
+    const pieces: Work[] = [
+      { kind: 'pass', person: 2, mailbox: 5 },
+      { kind: 'inbox', person: 2, mailbox: 5, run: 7 },
+      { kind: 'eval', person: 2, run: 8 },
+      { kind: 'upkeep', person: 2 },
+    ];
+    for (const piece of pieces) expect(await begin(piece, runKey(piece))).toEqual({ begun: true });
+    const world = await getWorld();
+    await vi.waitFor(async () => {
+      const { data } = await world.runs.list();
+      const ended = data.filter((run) => run.status === 'completed' && run.createdAt >= since);
+      expect(new Set(ended.map((run) => `${run.workflowName.split('//').pop()} ${JSON.stringify(run.attributes)}`))).toEqual(
+        new Set([
+          'mailboxPass {"kind":"pass","person":"2","mailbox":"5","$retention":"0"}',
+          'inboxRun {"kind":"inbox","person":"2","mailbox":"5","run":"7","$retention":"0"}',
+          'testRun {"kind":"eval","person":"2","run":"8","$retention":"0"}',
+          'upkeep {"kind":"upkeep","person":"2","$retention":"0"}',
+        ]),
+      );
+    });
+  });
 });
