@@ -136,14 +136,22 @@ async function pick(db: Sql, record: DigestRecord, items: readonly DigestItem[],
   return highlights;
 }
 
-/** Put a written digest into its mailbox. One whose mail has all been answered or put back since is dropped. */
+/**
+ * Put a written digest into its mailbox. One whose mail has all been answered or put back since is dropped, unless an
+ * earlier try landed in Gmail: dropped, it would no longer be known as Sift's own, and sync would read it as new mail.
+ */
 async function finish(deps: DigestDeps, record: DigestRecord, zone: string, listed?: readonly DigestItem[]): Promise<boolean> {
   const { db } = deps;
   const now = deps.now ?? Date.now;
   const items = listed ?? (await digestItems(db, record.labelId, record.since, record.until));
   if (items.length === 0) {
-    await dropDigest(db, record.id);
-    return false;
+    const landed = await putDigest({ db, mailbox: await deps.mailbox(record.accountId), now }, record, null);
+    if (landed === null) {
+      await dropDigest(db, record.id);
+      return false;
+    }
+    await digestInserted(db, record.id, landed, now());
+    return true;
   }
   const label = await labelOfDigest(db, record.labelId);
   const mail = writeDigest({
