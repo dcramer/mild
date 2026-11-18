@@ -9,6 +9,10 @@ export default withWorkflow({
   // `pnpm typecheck` checks the page and the server with their own settings (tsconfig.web.json, tsconfig.json).
   typescript: { tsconfigPath: 'tsconfig.web.json', ignoreBuildErrors: true },
   poweredByHeader: false,
+  // Each screen is built once and only the dashboard's frame is drawn per request (app/(dashboard)/layout.tsx), so a
+  // link fetches the screen behind it ahead, from the build's files, and pressing it waits on nothing.
+  cacheComponents: true,
+  partialPrefetching: true,
   // The image runs the server Next.js traces here, with only the files it loads (docker/Dockerfile). Vercel builds its own.
   output: 'standalone',
   // Nothing uses next/image, so /_next/image optimizes nothing for anyone.

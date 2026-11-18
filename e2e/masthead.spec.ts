@@ -58,3 +58,32 @@ test.describe("The masthead's line", () => {
     await expect(settings(page)).toBeVisible();
   });
 });
+
+test.describe('The sections', () => {
+  // A service worker's page is out of reach of page.route.
+  test.use({ serviceWorkers: 'block' });
+
+  test('each opens as it is pressed, without waiting on the server', async ({ page }) => {
+    // Whatever is asked for on a press waits until the end, as a server starting cold would make it.
+    let answer = () => {};
+    const answered = new Promise<void>((done) => (answer = done));
+    await page.route(/[?&]_rsc=/, async (route) => {
+      if (!route.request().headers()['next-router-prefetch']) await answered;
+      await route.continue();
+    });
+    const ahead = new Set<string>();
+    page.on('requestfinished', (request) => {
+      if (request.headers()['next-router-segment-prefetch']?.endsWith('__PAGE__')) ahead.add(new URL(request.url()).pathname);
+    });
+    await page.goto('/');
+    await expect.poll(() => ['/activity', '/labels', '/rules'].filter((screen) => !ahead.has(screen))).toEqual([]);
+
+    const sections = page.getByRole('navigation', { name: 'Sections' }).first();
+    // For review last: the router keeps nothing of the screen the page opened on, so going back asks again, behind it.
+    for (const name of ['Activity', 'Labels', 'Rules', 'For review']) {
+      await sections.getByRole('link', { name }).click();
+      await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible();
+    }
+    answer();
+  });
+});
