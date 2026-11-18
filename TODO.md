@@ -45,6 +45,7 @@ The working list for sift. Remove an item when it lands; add what you find. What
 
 ## Dashboard
 
+- [ ] **The "Your labels" setup step is a dead end when labels can't meet the goal.** Asked for "Never miss mail from a person", the label model rightly answers with no labels and a note that this takes a rule per sender, and the step offers only Start over: no way on to rules, to a label of the person's own, or to the next step. The page is weak visually too (the wordmark's size, the lone note, the one button). Redesign it the usual way: a few directions from the real parts, David's pick (`web/src/components/set-up.tsx`).
 - [ ] **The message panel.** Mail Sift already acted on or kept has no text held, so it opens without it. Correcting one message does not fix the sender's other mail Sift already moved.
 - [ ] **Say why Sift would ask.** For review's meter says only whether Sift would have acted by itself; why it would ask (not sure enough, no label, or a protection: you have written to them, a reply in your thread, could not check) is buried in the reason. Say which wherever such a decision is shown.
 - [ ] **What Sift costs, and why.** Spend by tier and by model, cost per message, which senders and kinds of mail cost the most, what rules saved, and what a change would save. Label suggestions and rule drafts are left out of spend (`src/dashboard/queries/summary.ts` and the masthead's `src/dashboard/queries/usage.ts` sum only `model_runs`) and kept until the mailbox goes; count them and decide how long to keep them.
