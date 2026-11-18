@@ -26,6 +26,7 @@ import { type DecisionRow, FACT_FILTERS, FACT_FILTER_KEYS, type ListedDecision }
 import { factsWhere } from '../../store/messages.ts';
 import { contacts } from '../../store/senders.ts';
 import { LEAVE_IN_INBOX } from '../../triage/types.ts';
+import { plain } from '../../plain.ts';
 
 export const DAY_MS = 86_400_000;
 
@@ -155,7 +156,7 @@ export async function listDecisions(
     // Subjects and names are encrypted, so the database cannot look inside them.
     const found = (await decisionsJoined(db).where(clause).orderBy(desc(decisions.id)))
       .map((r) => toDecisionRow(db, r))
-      .filter((r) => [r.subject, r.fromAddress, r.fromName ?? ''].some((s) => s.toLowerCase().includes(search)));
+      .filter((r) => [r.subject, r.fromAddress, r.fromName].some((s) => plain(s)?.toLowerCase().includes(search)));
     total = found.length;
     rows = found.slice(offset, offset + limit);
   } else {
@@ -164,7 +165,7 @@ export async function listDecisions(
   }
   const known = await contacts(
     db,
-    rows.map((r) => ({ accountId: r.accountId, address: r.fromAddress })),
+    rows.map((r) => ({ accountId: r.accountId, address: plain(r.fromAddress) })),
   );
-  return { total, rows: rows.map((r) => ({ ...r, contact: known.get(`${r.accountId}\n${r.fromAddress}`) ?? null })) };
+  return { total, rows: rows.map((r) => ({ ...r, contact: known.get(`${r.accountId}\n${plain(r.fromAddress)}`) ?? null })) };
 }

@@ -34,6 +34,7 @@ import { addRule } from '../../../../src/store/rules.ts';
 import type { JudgeInput } from '../../../../src/triage/stages/model.ts';
 import { LEAVE_IN_INBOX } from '../../../../src/triage/types.ts';
 import { FakeMailbox, withSampleLabels, workDue } from '../../../../tests/helpers.ts';
+import { plain } from '../../../../src/plain.ts';
 
 const ACCOUNT = 'me@example.org';
 const WORK = 'me@work.example.org';
@@ -205,7 +206,7 @@ for (const waiting of await pendingSuggestions(db, { accountId: ACCOUNT, sender:
     db,
     {
       accountId: ACCOUNT,
-      sender: waiting.fromAddress,
+      sender: plain(waiting.fromAddress),
       label: 'transactional',
       disposition: 'keep',
       decisionId: waiting.decisionId,

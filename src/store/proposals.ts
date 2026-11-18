@@ -5,6 +5,7 @@ import type { RuleMatch } from '../triage/stages/rules.ts';
 import type { DecidedDisposition } from '../triage/types.ts';
 import { listLabels } from './labels.ts';
 import { hasRuleFor } from './rules.ts';
+import type { Sealed } from '../confidential.ts';
 
 /** A rule Sift thinks is worth having: "from them, when it is this label → what the user has been doing to it". */
 export interface Proposal {
@@ -29,7 +30,7 @@ const COLUMNS = {
   createdAt: proposals.createdAt,
 };
 
-export async function listProposals(db: Sql, accountId?: string): Promise<Proposal[]> {
+export async function listProposals(db: Sql, accountId?: string): Promise<(Omit<Proposal, 'match'> & { match: Sealed<RuleMatch> })[]> {
   const rows = await db
     .select(COLUMNS)
     .from(proposals)
@@ -38,7 +39,7 @@ export async function listProposals(db: Sql, accountId?: string): Promise<Propos
   return rows.map((r) => opened(db, r));
 }
 
-const opened = <R extends { accountId: string; match: string }>(db: Sql, r: R): Omit<R, 'match'> & { match: RuleMatch } => ({
+const opened = <R extends { accountId: string; match: string }>(db: Sql, r: R): Omit<R, 'match'> & { match: Sealed<RuleMatch> } => ({
   ...r,
   match: openJson<RuleMatch>(db, proposalName(db, r.accountId), r.match),
 });

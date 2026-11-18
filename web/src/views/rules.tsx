@@ -12,6 +12,7 @@ import { INBOX, MADE_BY, ago, count, dateTime, describeMatch, doesName, inboxFir
 import { Heads, Button, ConfirmButton, Does, Empty, Failure, FilterGroup, Hint, ListView, RowActions, Sub, Table, Td, Th, Tr, useToast } from '@/system';
 import { usePlan } from '@/components/model-connect.tsx';
 import { approx, atApiPrices } from '@/lib/prices.ts';
+import { reveal } from '@/lib/reveal.ts';
 
 const SOURCES = [['', 'Anyone'] as const, ...MADE_BY];
 
@@ -89,7 +90,7 @@ export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
         (label === '' || r.labelId === label || r.whenLabel === label || (label === INBOX && r.labelId === null && r.disposition === 'keep')) &&
         (source === '' || r.source === source) &&
         (gmail === '' || (gmail === 'filter' ? r.filterId !== null : filterStanding(r) === gmail)) &&
-        (needle === '' || [r.name ?? '', whoText(r.match), r.labelName ?? ''].some((text) => text.toLowerCase().includes(needle))),
+        (needle === '' || [r.name ?? '', whoText(reveal(r.match)), r.labelName ?? ''].some((text) => reveal(text).toLowerCase().includes(needle))),
     )
     .toSorted((a, b) => b.hits - a.hits);
   const at = rules.findIndex((r) => r.id === open);
@@ -104,7 +105,7 @@ export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
       onConfirm={() =>
         remove.run(
           () => api.removeRule(rule.id),
-          () => toast(rule.name ?? `Mail ${describeMatch(rule.match)}`, { kind: 'Rule removed' }),
+          () => toast(reveal(rule.name) ?? `Mail ${describeMatch(reveal(rule.match))}`, { kind: 'Rule removed' }),
         )
       }
     >
@@ -167,11 +168,11 @@ export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
                 <Td className="max-w-0 md:w-full">
                   <span className="block break-words md:truncate">
                     {rule.name ? (
-                      <span className="name">{rule.name}</span>
+                      <span className="name">{reveal(rule.name)}</span>
                     ) : home ? (
-                      <Who accountId={home} match={rule.match} />
+                      <Who accountId={home} match={reveal(rule.match)} />
                     ) : (
-                      <span className="name">{whoText(rule.match)}</span>
+                      <span className="name">{whoText(reveal(rule.match))}</span>
                     )}
                     {rule.kind === 'when-label' ? <span className="text-muted-foreground"> as {rule.labelName}</span> : null}
                     <ArrowRightIcon aria-label="is" className="mx-2 inline size-4 align-[-0.15em] text-muted-foreground" />

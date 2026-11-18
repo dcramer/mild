@@ -26,6 +26,7 @@ import type { FoundSender } from '../triage/rule-draft.ts';
 import { type Standing, isSharedDomain, standingOf } from '../triage/standing.ts';
 import { labelNames, listLabels } from './labels.ts';
 import { listRules } from './rules.ts';
+import { plain } from '../plain.ts';
 
 const later = alias(decisions, 'later');
 
@@ -263,7 +264,7 @@ export async function senderDirectory(db: Sql, accountId: string): Promise<Found
     .groupBy(messages.senderHash)
     .orderBy(desc(count()), asc(messages.senderHash));
   return rows.map((r) => {
-    const newest = openNewest(db, r.newest);
+    const newest = plain(openNewest(db, r.newest));
     return {
       address: newest.fromAddress,
       name: newest.fromName,

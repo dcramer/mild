@@ -21,6 +21,7 @@ import { addRule, listRules } from '../src/store/rules.ts';
 import { ACCOUNT, DAY, FakeMailbox, UNSURE, facts, quietSources, rawMessage, storeExample, testModel, workDue } from './helpers.ts';
 import { type Reply, firstAccount, modelRun, raw, startDashboard, onePerson, withReason } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
+import { seal } from '../src/plain.ts';
 
 let db: Sql;
 let store: Store;
@@ -48,16 +49,18 @@ const controls: Controls = {
   },
   proposeLabels: async (_db, { accountId, goal }) => {
     calls.push(`propose ${accountId}`);
-    return {
+    return seal({
       id: 3,
       goal,
-      drafts: [{ name: 'Cold outreach', description: 'Pitches from strangers.', disposition: 'archive', unsubscribe: true, why: 'fewer pitches' }],
+      drafts: [
+        { name: 'Cold outreach', description: 'Pitches from strangers.', disposition: 'archive' as const, unsubscribe: true as const, why: 'fewer pitches' },
+      ],
       at: 1,
-    };
+    });
   },
   draftRule: async (_db, { accountId, goal }) => (
     calls.push(`draft ${accountId} ${goal}`),
-    { match: { fromDomain: ['example.org'] }, disposition: 'archive', note: 'And another.' }
+    seal({ match: { fromDomain: ['example.org'] }, disposition: 'archive' as const, note: 'And another.' })
   ),
   ruleFilter: async (target, ruleId, on) => {
     calls.push(`filter ${ruleId} ${on ? 'on' : 'off'}`);
@@ -66,7 +69,7 @@ const controls: Controls = {
   ruleInbox: async (_db, ruleId) => (
     calls.push(`inbox ${ruleId}`),
     {
-      examples: [{ accountId: ACCOUNT, messageId: 'g1', subject: 'Found', receivedAt: 1 }],
+      examples: [{ accountId: ACCOUNT, messageId: 'g1', subject: seal<string>('Found'), receivedAt: 1 }],
       messages: 40,
       reading: 40,
       exact: false,

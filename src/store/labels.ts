@@ -5,6 +5,7 @@ import type { Usage } from '../triage/stages/model.ts';
 import type { Sql } from './sql.ts';
 import { type Disposition, LEAVE_IN_INBOX, LEAVE_IN_INBOX_NAME, type Label } from '../triage/types.ts';
 import { Refusal } from '../refusal.ts';
+import type { Confidential, Sealed } from '../confidential.ts';
 
 /**
  * The only choice a new person has; the labels are their own, from what they want of Sift. Listed after
@@ -233,7 +234,7 @@ export async function finishLabelProposal(
 export async function latestLabelProposal(
   db: Sql,
   accountIds: readonly string[],
-): Promise<{ id: number; goal: string; drafts: LabelDraft[]; note?: string; at: number } | null> {
+): Promise<{ id: number; goal: Confidential; drafts: Sealed<LabelDraft[]>; note?: Confidential; at: number } | null> {
   if (accountIds.length === 0) return null;
   const [row] = await db
     .select({

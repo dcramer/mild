@@ -4,6 +4,7 @@ import { Fragment, type ReactNode } from 'react';
 import { type Contact, type RuleMatch, type SenderProfile, api, useLoaded } from '@/lib/api.ts';
 import { CONTACT_SAYS, INBOX, MATCH_WORDS, type Said, doesName, factAnswers, factWords, outcomeName, plural, saidOf, shortDate } from '@/lib/format.ts';
 import { Blank, Fact, Facts, Failure, Hint, HoverCard, Marked, Sub, Td } from '@/system';
+import { reveal } from '@/lib/reveal.ts';
 
 /** A sender's page; with `name`, their mail under that name. */
 export const senderHref = (accountId: string, address: string, name?: string | null) =>
@@ -24,9 +25,9 @@ function Rules({ accountId, rules }: { accountId: string; rules: SenderProfile['
     <ul className="flex flex-col gap-1">
       {rules.map((rule) => (
         <li key={rule.id}>
-          {rule.name ?? (
+          {reveal(rule.name) ?? (
             <>
-              Mail <MatchWords accountId={accountId} match={rule.match} />
+              Mail <MatchWords accountId={accountId} match={reveal(rule.match)} />
             </>
           )}
           {rule.kind === 'action' || rule.labelId === INBOX ? (
@@ -82,7 +83,7 @@ export function SenderFacts({ accountId, profile, brief }: { accountId: string; 
       {!brief && profile.domain ? (
         <Fact term="Domain">
           <span className="inline-flex items-center gap-2">
-            <DomainLink accountId={accountId} domain={profile.domain.name} />
+            <DomainLink accountId={accountId} domain={reveal(profile.domain.name)} />
             <ContactHint contact={profile.domain.contact} />
           </span>
         </Fact>
@@ -112,7 +113,7 @@ function Preview({ accountId, who }: { accountId: string; who: Who }) {
     <div className="flex flex-col gap-3">
       <div>
         <p className="flex items-center gap-2">
-          <span className="name truncate">{data.name ?? key}</span>
+          <span className="name truncate">{reveal(data.name) ?? key}</span>
           <ContactHint contact={data.profile.contact} />
         </p>
         {data.name ? <p className="truncate text-muted-foreground">{key}</p> : null}

@@ -6,6 +6,8 @@ import { type FilterPlan, type FilterVerdict, filterFor } from '../triage/filter
 import type { RuleMatch } from '../triage/stages/rules.ts';
 import { listLabels } from './labels.ts';
 import { listRules } from './rules.ts';
+import { plain, seal } from '../plain.ts';
+import type { Sealed } from '../confidential.ts';
 
 /** What became of the Gmail filter sift wrote for a rule. */
 type FilterState = (typeof FILTER_STATES)[number];
@@ -39,8 +41,8 @@ const opened = (
 ): RuleFilterRow => ({
   ...r,
   accountId,
-  match: openJson<RuleMatch>(db, ruleName(db, r.ruleId, 'match'), match),
-  written: written === null ? null : openJson<Record<string, unknown>>(db, ruleName(db, r.ruleId, 'filter'), written),
+  match: plain(openJson<RuleMatch>(db, ruleName(db, r.ruleId, 'match'), match)),
+  written: written === null ? null : plain(openJson<Record<string, unknown>>(db, ruleName(db, r.ruleId, 'filter'), written)),
 });
 
 const inMailbox = (accountId: string) => and(eq(ruleFilters.ruleId, ruleRows.id), eq(ruleFilters.accountId, accountId));
@@ -105,7 +107,8 @@ interface RuleFilterStatus {
   state: 'none' | FilterState;
   possible: boolean;
   reason: string | null;
-  plan: FilterPlan | null;
+  /** Its criteria name senders, so the page is sent them held. */
+  plan: (Omit<FilterPlan, 'criteria'> & { criteria: Sealed<FilterPlan['criteria']> }) | null;
   differs: string[];
   checkedAt: number | null;
   history: { type: 'filter' | 'unfilter'; status: string; error: string | null; at: number }[];
@@ -147,7 +150,7 @@ export async function ruleFilterStatus(db: Sql): Promise<Map<string, RuleFilterS
       filterId: mine.find((r) => r.filterId !== null)?.filterId ?? null,
       possible: verdict.possible,
       reason: verdict.possible ? null : verdict.reason,
-      plan: verdict.possible ? verdict.plan : null,
+      plan: verdict.possible ? { ...verdict.plan, criteria: seal(verdict.plan.criteria) } : null,
       differs: verdict.possible ? verdict.differs : [],
       checkedAt: mine.reduce<number | null>((at, r) => (at === null || r.checkedAt > at ? r.checkedAt : at), null),
       history: history.get(ruleId) ?? [],

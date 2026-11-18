@@ -9,6 +9,7 @@ import { listLabels } from './labels.ts';
 import { LEAVE_IN_INBOX } from '../triage/types.ts';
 import type { Given } from '../triage/standing.ts';
 import { Refusal } from '../refusal.ts';
+import { plain } from '../plain.ts';
 
 /** `user`: the user wrote it. `correction`: it came from the user correcting sift. `learned`: sift made it when it blocked the sender. */
 type RuleSource = (typeof RULE_SOURCES)[number];
@@ -38,10 +39,10 @@ export async function listRules(db: Sql): Promise<StoredRule[]> {
     .from(rules)
     .orderBy(asc(rules.position), asc(rules.id));
   return rows.map((r) => {
-    const except = openJson<RuleMatch[]>(db, ruleName(db, r.id, 'except'), r.except);
+    const except = plain(openJson<RuleMatch[]>(db, ruleName(db, r.id, 'except'), r.except));
     return {
       id: r.id,
-      match: openJson<RuleMatch>(db, ruleName(db, r.id, 'match'), r.match),
+      match: plain(openJson<RuleMatch>(db, ruleName(db, r.id, 'match'), r.match)),
       ...(except.length > 0 ? { except } : {}),
       ...(r.labelId ? { labelId: r.labelId } : {}),
       ...(r.whenLabel ? { whenLabel: r.whenLabel } : {}),
@@ -50,7 +51,7 @@ export async function listRules(db: Sql): Promise<StoredRule[]> {
       ...(r.markRead ? { markRead: true } : {}),
       ...(r.condition ? { when: r.condition } : {}),
       ...(r.source === 'learned' ? { learned: true } : {}),
-      ...(r.name === null ? {} : { name: openJson<string>(db, ruleName(db, r.id, 'name'), r.name) }),
+      ...(r.name === null ? {} : { name: plain(openJson<string>(db, ruleName(db, r.id, 'name'), r.name)) }),
       source: r.source,
       hits: r.hits,
     };

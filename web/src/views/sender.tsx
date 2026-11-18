@@ -32,6 +32,7 @@ import {
 } from '@/system';
 import { type OpenMessages, useOpenMessages } from '@/lib/open-messages.ts';
 import { useStarted } from '@/system/started.ts';
+import { reveal } from '@/lib/reveal.ts';
 
 const GIVE = [
   ['trusted', 'Trust'],
@@ -66,7 +67,7 @@ const decidingRule = (data: SenderPage): Rule | null => data.profile.rules.find(
 const ruleHref = (id: string) => `/rules?rule=${encodeURIComponent(id)}`;
 
 const ruleWords = (rule: Rule) =>
-  `${rule.name ?? `Mail ${describeMatch(rule.match)}`}${
+  `${reveal(rule.name) ?? `Mail ${describeMatch(reveal(rule.match))}`}${
     rule.kind === 'action' || rule.labelId === INBOX
       ? `: ${rule.disposition || rule.labelId === INBOX ? doesName(rule.labelId, rule.disposition ?? 'keep') : 'nothing'}`
       : `${rule.kind === 'when-label' ? ', when it is ' : ' is '}${rule.labelName ?? ''}`
@@ -154,7 +155,7 @@ function Labels({ data, onStart }: { data: SenderPage; onStart: (s: RuleStart) =
               {count(label.messages)} <span className="text-muted-foreground">· {percent(label.messages, whole)}</span>
             </Td>
             <RowActions>
-              <Button variant="quiet" onClick={() => onStart(messageStart(data.profile.address, label.id))}>
+              <Button variant="quiet" onClick={() => onStart(messageStart(reveal(data.profile.address), label.id))}>
                 Make a rule…
               </Button>
             </RowActions>
@@ -190,8 +191,8 @@ function Names({ data, onStart }: { data: SenderPage; onStart: (s: RuleStart) =>
       </Heads>
       <tbody>
         {data.names.map((n) => (
-          <Tr key={n.name ?? ''}>
-            <NameCell accountId={data.accountId} address={data.profile.address} name={n.name}>
+          <Tr key={reveal(n.name) ?? ''}>
+            <NameCell accountId={data.accountId} address={reveal(data.profile.address)} name={reveal(n.name)}>
               <OnPhone>
                 <NameIs name={n} />
                 <span>{count(n.messages)}</span>
@@ -208,7 +209,10 @@ function Names({ data, onStart }: { data: SenderPage; onStart: (s: RuleStart) =>
             </Td>
             <RowActions phone="keep">
               {n.name === null ? null : (
-                <Button variant="quiet" onClick={() => n.name !== null && onStart(nameStart(data.profile.address, n.name, n.labels[0]?.id ?? null))}>
+                <Button
+                  variant="quiet"
+                  onClick={() => n.name !== null && onStart(nameStart(reveal(data.profile.address), reveal(n.name), n.labels[0]?.id ?? null))}
+                >
                   Make a rule…
                 </Button>
               )}
@@ -243,7 +247,7 @@ function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMess
           const subject = row.subject || '(no subject)';
           const onPhone = (
             <OnPhone>
-              {oneSender ? null : <span className="w-full truncate text-base text-foreground">{subject}</span>}
+              {oneSender ? null : <span className="w-full truncate text-base text-foreground">{reveal(subject)}</span>}
               <Verdict labelId={row.labelId} labelName={row.labelName} disposition={row.disposition} />
               <span>{ago(row.receivedAt)}</span>
             </OnPhone>
@@ -252,22 +256,22 @@ function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMess
             <Tr key={row.id} onOpen={() => onOpen(items, index)} holds={[messageKey(row)]}>
               {oneSender ? (
                 <Td className="max-w-0 md:w-1/2">
-                  <span className="block truncate font-medium">{subject}</span>
+                  <span className="block truncate font-medium">{reveal(subject)}</span>
                   {onPhone}
                 </Td>
               ) : (
                 <>
                   {from === 'sender' ? (
-                    <SenderCell accountId={row.accountId} address={row.fromAddress} name={row.fromName} contact={row.contact}>
+                    <SenderCell accountId={row.accountId} address={reveal(row.fromAddress)} name={reveal(row.fromName)} contact={row.contact}>
                       {onPhone}
                     </SenderCell>
                   ) : (
-                    <NameCell accountId={row.accountId} address={row.fromAddress} name={row.fromName}>
+                    <NameCell accountId={row.accountId} address={reveal(row.fromAddress)} name={reveal(row.fromName)}>
                       {onPhone}
                     </NameCell>
                   )}
                   <Td phone="hide" className="max-w-0 md:w-full">
-                    <span className="block truncate">{subject}</span>
+                    <span className="block truncate">{reveal(subject)}</span>
                   </Td>
                 </>
               )}
@@ -362,7 +366,7 @@ function SenderView({ accountId, who }: { accountId: string; who: Who }) {
   const { profile } = data;
   const several = data.names.length > 1;
   // One name would stand for all their mail; with several, the address is who they are.
-  const title = several ? null : data.name;
+  const title = several ? null : reveal(data.name);
   const mail = byMessage(data.decisions);
   const listed = under !== '' && narrowed.data ? byMessage(narrowed.data.decisions) : mail;
   const waiting = mail.filter(isWaiting);
@@ -392,7 +396,7 @@ function SenderView({ accountId, who }: { accountId: string; who: Who }) {
                   {title ? <span aria-hidden>·</span> : null}
                   {/* The hint belongs to the domain: on a phone it wraps with it, never onto a line of its own. */}
                   <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                    <DomainLink accountId={accountId} domain={profile.domain.name} />
+                    <DomainLink accountId={accountId} domain={reveal(profile.domain.name)} />
                     <ContactHint contact={profile.domain.contact} />
                   </span>
                 </>
@@ -457,8 +461,8 @@ function SenderView({ accountId, who }: { accountId: string; who: Who }) {
             </Heads>
             <tbody>
               {data.senders.map((sender) => (
-                <Tr key={sender.address}>
-                  <SenderCell accountId={accountId} address={sender.address} name={sender.name} contact={sender.contact} />
+                <Tr key={reveal(sender.address)}>
+                  <SenderCell accountId={accountId} address={reveal(sender.address)} name={reveal(sender.name)} contact={sender.contact} />
                   <Td num>{count(sender.messages)}</Td>
                   <Td phone="hide" num quiet>
                     {ago(sender.lastSeenAt)}
@@ -478,7 +482,7 @@ function SenderView({ accountId, who }: { accountId: string; who: Who }) {
             <Select
               label="From"
               value={under}
-              options={[['', 'Every name'] as const, ...data.names.flatMap((n) => (n.name === null ? [] : [[n.name, n.name] as const]))]}
+              options={[['', 'Every name'] as const, ...data.names.flatMap((n) => (n.name === null ? [] : [[reveal(n.name), reveal(n.name)] as const]))]}
               onChange={setUnder}
             />
           ) : undefined

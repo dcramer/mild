@@ -2,6 +2,7 @@ import { type DECISION_OUTCOMES, and, asc, decisions, desc, eq, feedback, isNull
 import type { Sql } from './sql.ts';
 import { openPart, sealPart } from './content.ts';
 import type { Decision, Disposition } from '../triage/types.ts';
+import { plain } from '../plain.ts';
 
 /** A decision's label, whose Gmail label is the one the decision applies. */
 const ofLabel = eq(labels.id, decisions.labelId);
@@ -128,7 +129,7 @@ export async function currentDecision(
     disposition: row.disposition,
     subscription: row.subscription,
     stage: row.stage,
-    reason: openPart(db, accountId, messageId, 'reason', row.reason)!,
+    reason: plain(openPart(db, accountId, messageId, 'reason', row.reason))!,
     ...(row.labelId === null ? {} : { labelId: row.labelId }),
     ...(gmailLabel === null ? {} : { gmailLabel }),
     ...(row.block ? { block: true } : {}),

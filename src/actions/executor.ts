@@ -15,6 +15,7 @@ import {
 import type { Mailbox } from './mailbox.ts';
 import { Refusal } from '../refusal.ts';
 import { traced } from '../telemetry.ts';
+import { plain } from '../plain.ts';
 
 export interface MessageAction {
   /** `label` leaves the message where it is; `archive` and `spam` take it out of the inbox. */
@@ -167,7 +168,7 @@ async function spamRefusal(deps: ActionDeps, accountId: string, messageId: strin
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
   if (!row) return 'sender is unknown, so spam is refused';
   try {
-    if (await deps.mailbox.hasSentTo(openEnvelope(deps.db, accountId, messageId, row).fromAddress))
+    if (await deps.mailbox.hasSentTo(plain(openEnvelope(deps.db, accountId, messageId, row).fromAddress)))
       return 'you have written to this sender, so spam is refused';
   } catch (error) {
     return `could not check correspondence with the sender (${message(error)}), so spam is refused`;

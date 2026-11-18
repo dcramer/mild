@@ -26,6 +26,8 @@ import { type Scorecard, score } from '../triage/score.ts';
 import { type Evidence, type Judge, type JudgeFailure, describeFailure } from '../triage/stages/model.ts';
 import type { MessageFacts } from '../triage/types.ts';
 import { Refusal } from '../refusal.ts';
+import { plain, seal } from '../plain.ts';
+import type { Confidential } from '../confidential.ts';
 
 /** Every example judged is a model call the user pays for, so one run is bounded. */
 export const MAX_EVAL_EXAMPLES = 200;
@@ -151,7 +153,7 @@ export async function continueEval(deps: EvalDeps, runId: number, until: number)
     // often in one go for a sender's waiting mail, would show the model the answer to a message just like it.
     const shots = run.fewShot ? await examplesFor(db, facts, labels, facts.receivedAt) : [];
     const started = performance.now();
-    const evidence = await storedEvidence(db, facts, openPart(db, run.accountId, messageId, 'text', example.bodyText));
+    const evidence = await storedEvidence(db, facts, plain(openPart(db, run.accountId, messageId, 'text', example.bodyText)));
     // A conversation per message of the run, named by where it is in the run rather than by the message.
     const answer = await invokeAgent(
       'eval',
@@ -220,8 +222,8 @@ export interface EvalRun {
 
 interface EvalResult {
   messageId: string;
-  fromAddress: string;
-  subject: string;
+  fromAddress: Confidential;
+  subject: Confidential;
   expected: string;
   got: string | null;
   /** Why the call failed, when `got` is null. */
@@ -274,7 +276,7 @@ async function results(db: Sql, runId: number): Promise<EvalResult[]> {
     .orderBy(evalResults.messageId);
   return rows.map(({ accountId, ...r }) => {
     const opened = openEnvelope(db, accountId, r.messageId, r);
-    return { ...opened, fromAddress: opened.fromAddress ?? '', subject: opened.subject ?? '' };
+    return { ...opened, fromAddress: opened.fromAddress ?? seal<string>(''), subject: opened.subject ?? seal<string>('') };
   });
 }
 

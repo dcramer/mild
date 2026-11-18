@@ -16,6 +16,7 @@ import { addRule, removeRule } from '../src/store/rules.ts';
 import { ACCOUNT, DAY, codeSignIn, everything, facts, quietSources, testModel } from './helpers.ts';
 import { conditionsHash } from '../src/store/content.ts';
 import { triageAccount } from '../src/work/triage.ts';
+import { plain } from '../src/plain.ts';
 
 const NOW = Date.UTC(2026, 5, 15, 12);
 
@@ -452,7 +453,7 @@ describe('dashboard server', () => {
     const sender = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
     expect(sender).toMatchObject({ kind: 'sender', name: 'Example News', profile: { address: 'news@example.com', messages: 4, contact: null, given: null } });
     expect(sender.profile.domain).toMatchObject({ name: 'example.com', contact: null });
-    expect(sender.decisions.every((d) => d.fromAddress === 'news@example.com')).toBe(true);
+    expect(sender.decisions.every((d) => plain(d.fromAddress) === 'news@example.com')).toBe(true);
     expect(sender.decisions.map((d) => d.messageId)).toContain('a');
 
     const write = (path: string, body: object) =>
@@ -461,7 +462,8 @@ describe('dashboard server', () => {
         headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' },
         body: JSON.stringify(body),
       });
-    const theirs = async () => (await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => r.match['from']?.[0] === 'news@example.com');
+    const theirs = async () =>
+      (await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => plain(r.match['from']?.[0]) === 'news@example.com');
     await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     // Trust is given in the rule dialog, as what Trust starts it on: a rule for exactly them that only keeps their mail, which is Leave in inbox. It replaces the rule for exactly them.
     // It says it replaced one, so the page offers no Undo: removing it would not bring the old rule back.
@@ -505,7 +507,8 @@ describe('dashboard server', () => {
       });
       return { status: response.status, body: await response.json() };
     };
-    const theirs = async () => (await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => r.match['from']?.[0] === 'news@example.com');
+    const theirs = async () =>
+      (await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => plain(r.match['from']?.[0]) === 'news@example.com');
 
     const fresh = await give({ address: 'News@example.com', standing: 'trusted' });
     expect(fresh).toEqual({ status: 200, body: { id: expect.any(String), was: null } });
@@ -542,7 +545,8 @@ describe('dashboard server', () => {
     const post = (path: string, body: object) =>
       fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' }, body: JSON.stringify(body) });
     const open = async () => ((await (await fetch(`${base}/api/suggestions`)).json()) as { proposals: { id: number }[] }).proposals.map((p) => p.id);
-    const fromNews = async () => (await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => r.match['fromDomain']?.[0] === 'example.com');
+    const fromNews = async () =>
+      (await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => plain(r.match['fromDomain']?.[0]) === 'example.com');
 
     // Accepting it without a rule in hand is not a way to make one.
     expect((await post('/api/proposals', { id: proposal, accept: true })).status).toBe(400);
@@ -553,12 +557,12 @@ describe('dashboard server', () => {
     const made = await post('/api/rules', { match: { fromDomain: ['example.com'] }, label: 'transactional', proposal });
     expect(made.status).toBe(200);
     expect(await fromNews()).toMatchObject([{ labelId: 'transactional', source: 'user' }]);
-    expect((await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => r.match['from']?.[0] === 'news@example.com')).toEqual([]);
+    expect((await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => plain(r.match['from']?.[0]) === 'news@example.com')).toEqual([]);
     expect(await open()).toEqual([]);
     expect(await raw(db).get('SELECT status FROM proposals WHERE id = ?', proposal)).toEqual({ status: 'accepted' });
     // Made once: the same proposal again makes no second rule.
     expect((await post('/api/rules', { match: { fromDomain: ['example.org'] }, label: 'transactional', proposal })).status).toBe(409);
-    expect((await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => r.match['fromDomain']?.[0] === 'example.org')).toEqual([]);
+    expect((await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => plain(r.match['fromDomain']?.[0]) === 'example.org')).toEqual([]);
   });
 
   it("tells the page only that something failed when it is Sift's own error, and logs why", async () => {

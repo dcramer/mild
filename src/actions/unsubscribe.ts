@@ -7,6 +7,7 @@ import { openEnvelope, traceIds } from '../store/content.ts';
 import { finishAction, insertPendingAction, lastUnsubscribeFailure, unsubscribedAt } from '../store/actions.ts';
 import { bulkSignals, passedDmarc } from '../triage/features.ts';
 import { traced } from '../telemetry.ts';
+import { plain } from '../plain.ts';
 
 export type UnsubscribeOutcome =
   /** The sender's server accepted the request. */
@@ -102,7 +103,7 @@ async function leave(deps: UnsubscribeDeps, accountId: string, messageId: string
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
   if (!stored) return { status: 'refused', reason: 'There is no such message.' };
-  const message = openEnvelope(deps.db, accountId, messageId, stored);
+  const message = plain(openEnvelope(deps.db, accountId, messageId, stored));
   const signals = bulkSignals(message.headers);
   if (!signals.oneClickUnsubscribeUrl) {
     return {

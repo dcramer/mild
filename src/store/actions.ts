@@ -1,6 +1,7 @@
 import { type ACTION_STATUSES, type ACTION_TYPES, actions, and, asc, desc, eq, inArray, isNotNull, max, messages, min, notInArray } from './query.ts';
 import type { Sql } from './sql.ts';
 import { actionName, hashOf, openJson, sealJson } from './content.ts';
+import { plain } from '../plain.ts';
 
 type ActionStatus = (typeof ACTION_STATUSES)[number];
 export type ActionType = (typeof ACTION_TYPES)[number];
@@ -47,7 +48,7 @@ const COLUMNS = {
 };
 
 /** A change's details as stored: they can name a sender (an unsubscribe's host, a filter's criteria). */
-export const openPayload = (db: Sql, accountId: string, stored: string): ActionPayload => openJson<ActionPayload>(db, actionName(db, accountId), stored);
+export const openPayload = (db: Sql, accountId: string, stored: string): ActionPayload => plain(openJson<ActionPayload>(db, actionName(db, accountId), stored));
 
 const fromRow =
   (db: Sql) =>

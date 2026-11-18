@@ -10,6 +10,7 @@ import { SURE } from '../triage/stages/model.ts';
 import { rulesStage, settle } from '../triage/stages/rules.ts';
 import { type Decision, type Disposition, labelled } from '../triage/types.ts';
 import { type Suggestion, pendingSuggestions } from './feedback.ts';
+import { plain } from '../plain.ts';
 
 const STANDING = {
   id: decisions.id,
@@ -124,7 +125,7 @@ async function redecide(db: Sql, accountId: string, now: number): Promise<number
     const facts = await getFacts(db, accountId, messageId);
     const [standing] = await db.select(STANDING).from(decisions).where(eq(decisions.id, decisionId));
     if (!facts || !standing) continue;
-    const current = openEnvelope(db, accountId, messageId, standing);
+    const current = plain(openEnvelope(db, accountId, messageId, standing));
     known = await cachedCorrespondent(db, accountId, facts.from.address, now);
 
     let next: Decision | null = null;
@@ -145,7 +146,7 @@ async function redecide(db: Sql, accountId: string, now: number): Promise<number
               .where(and(eq(decisions.accountId, accountId), eq(decisions.messageId, messageId), ne(decisions.stage, 'rules'), isNull(decisions.ruleId)))
               .orderBy(desc(decisions.id))
               .limit(1)
-          ).map((r) => openEnvelope(db, accountId, messageId, r))[0]
+          ).map((r) => plain(openEnvelope(db, accountId, messageId, r)))[0]
         : current;
       const label = labels.find((l) => l.id === base?.labelId);
       if (base && label) {

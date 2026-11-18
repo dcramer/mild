@@ -99,7 +99,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const [ruleId] = useParam('rule');
   const [accountId] = useParam('account');
   const listed = list.findIndex((item) => item.messageId === messageId && item.accountId === accountId);
-  const open = messageId === '' ? null : listed === -1 ? { items: [{ accountId, messageId, subject: '' }], index: 0 } : { items: list, index: listed };
+  const open = messageId === '' ? null : listed === -1 ? { items: [{ accountId, messageId, subject: null }], index: 0 } : { items: list, index: listed };
   const show = (item: MessageRef | undefined, push?: { state: { panel: boolean } }) =>
     setParams({ message: item?.messageId ?? '', account: item?.accountId ?? '' }, push);
   const online = useOnline();

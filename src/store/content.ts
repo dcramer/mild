@@ -1,3 +1,5 @@
+import type { Confidential, Sealed } from '../confidential.ts';
+import { seal as held } from '../plain.ts';
 import { currentPrefix, keyedHash, openSecret, openToRekey, sealSecret, staleSecret } from '../secrets.ts';
 import type { Facts } from '../triage/facts.ts';
 import { envelopeOf, parseListId } from '../triage/features.ts';
@@ -58,14 +60,16 @@ export function sealPart(db: Sql, accountId: string, messageId: string, part: Pa
   return value === null ? null : seal(db, nameOf(db, accountId, messageId, part), value);
 }
 
+const openText = (db: Sql, accountId: string, messageId: string, part: Part, stored: string | null): string | null =>
+  stored === null ? null : open(db, nameOf(db, accountId, messageId, part), stored);
+
 /** A stored part, decrypted. Refuses a plain one once there is a key, as `openSecret` does: every one was encrypted at start. */
-export function openPart(db: Sql, accountId: string, messageId: string, part: Part, stored: string | null): string | null {
-  return stored === null ? null : open(db, nameOf(db, accountId, messageId, part), stored);
-}
+export const openPart = (db: Sql, accountId: string, messageId: string, part: Part, stored: string | null): Confidential | null =>
+  held(openText(db, accountId, messageId, part, stored));
 
 /** JSON that names senders without being part of a message: a rule's or proposal's conditions, a change's details. */
 export const sealJson = (db: Sql, name: string, value: unknown): string => seal(db, name, JSON.stringify(value));
-export const openJson = <T>(db: Sql, name: string, stored: string): T => JSON.parse(open(db, name, stored)) as T;
+export const openJson = <T>(db: Sql, name: string, stored: string): Sealed<T> => held(JSON.parse(open(db, name, stored)) as T);
 
 /**
  * Key order does not matter, as it did not to `jsonb` equality; a missing key and an undefined one are the
@@ -128,7 +132,7 @@ export function exampleKeys(db: Sql, message: Pick<MessageFacts, 'from' | 'subje
 }
 
 const keysOfStored = (db: Sql, accountId: string, messageId: string, headers: string) =>
-  exampleKeys(db, envelopeOf(JSON.parse(openPart(db, accountId, messageId, 'headers', headers)!) as Record<string, string>)!);
+  exampleKeys(db, envelopeOf(JSON.parse(openText(db, accountId, messageId, 'headers', headers)!) as Record<string, string>)!);
 
 /** `exampleKeys` of a recorded message, for its example. */
 export async function exampleKeysOf(db: Sql, accountId: string, messageId: string): Promise<ReturnType<typeof exampleKeys>> {
@@ -176,8 +180,8 @@ function envelopeFrom(text: string | null): Envelope | Nullable<Envelope> {
 }
 
 type Opened<R> = Omit<R, 'headers' | 'reason'> &
-  (R extends { headers: infer H } ? (null extends H ? Nullable<Envelope> : Envelope) : unknown) &
-  (R extends { reason: infer V } ? { reason: null extends V ? string | null : string } : unknown);
+  (R extends { headers: infer H } ? (null extends H ? Nullable<Sealed<Envelope>> : Sealed<Envelope>) : unknown) &
+  (R extends { reason: infer V } ? { reason: null extends V ? Confidential | null : Confidential } : unknown);
 
 /**
  * `row` with what it read of a message decrypted: its `headers` as the envelope they say (sender, recipients,
@@ -186,8 +190,8 @@ type Opened<R> = Omit<R, 'headers' | 'reason'> &
 export function openEnvelope<R extends { headers?: string | null; reason?: string | null }>(db: Sql, accountId: string, messageId: string, row: R): Opened<R> {
   const { headers, reason, ...rest } = row;
   const opened: Record<string, unknown> = rest;
-  if ('reason' in row) opened['reason'] = openPart(db, accountId, messageId, 'reason', reason ?? null);
-  if ('headers' in row) Object.assign(opened, envelopeFrom(openPart(db, accountId, messageId, 'headers', headers ?? null)));
+  if ('reason' in row) opened['reason'] = openText(db, accountId, messageId, 'reason', reason ?? null);
+  if ('headers' in row) Object.assign(opened, envelopeFrom(openText(db, accountId, messageId, 'headers', headers ?? null)));
   return opened as Opened<R>;
 }
 
@@ -202,8 +206,8 @@ export const newestOfGroup = () =>
     typeof v === 'string' ? JSON.parse(v) : v,
   );
 
-export const openNewest = (db: Sql, [accountId, messageId, headers]: [string, string, string]): Envelope =>
-  envelopeFrom(openPart(db, accountId, messageId, 'headers', headers)) as Envelope;
+export const openNewest = (db: Sql, [accountId, messageId, headers]: [string, string, string]): Sealed<Envelope> =>
+  held(envelopeFrom(openText(db, accountId, messageId, 'headers', headers)) as Envelope);
 
 const forRekey = (db: Sql, accountId: string, messageId: string, part: Part, stored: string | null) =>
   stored === null ? null : reopen(db, nameOf(db, accountId, messageId, part), stored);

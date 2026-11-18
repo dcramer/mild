@@ -8,6 +8,8 @@ import { type Scope, sees } from '../scope.ts';
 import type { MessageDetail } from '../types.ts';
 import { decisionsJoined, toDecisionRow } from './decisions.ts';
 import { senderProfile } from './senders.ts';
+import { plain, seal } from '../../plain.ts';
+import type { Confidential } from '../../confidential.ts';
 
 /** One message with its full history, or null if sift has not seen it. */
 export async function messageDetail(db: Sql, scope: Scope, accountId: string, messageId: string): Promise<MessageDetail | null> {
@@ -65,19 +67,19 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
     headers: m.headers,
     body: body?.text ?? null,
     hasHtml: body?.html != null,
-    facts,
-    unsubscribe: await canUnsubscribe(db, accountId, m.fromAddress, m.headers),
-    sender: (await senderProfile(db, scope, accountId, m.fromAddress))!,
+    facts: { ...facts, listId: seal(facts.listId) },
+    unsubscribe: await canUnsubscribe(db, accountId, plain(m.fromAddress), plain(m.headers)),
+    sender: (await senderProfile(db, scope, accountId, plain(m.fromAddress)))!,
     decisions: shown.map((r) => ({ ...toDecisionRow(db, r), ...costs.get(r.id)! })),
     actions: changes.map(({ payload: stored, ...a }) => {
       const payload = openPayload(db, accountId, stored);
-      return { ...a, added: payload.add, removed: payload.remove };
+      return { ...a, added: seal(payload.add), removed: seal(payload.remove) };
     }),
   };
 }
 
 /** A message as sift holds it, as text and HTML: a suggestion's temporary copy, or an example the user made. */
-async function storedBody(db: Sql, accountId: string, messageId: string): Promise<{ text: string; html: string | null } | null> {
+async function storedBody(db: Sql, accountId: string, messageId: string): Promise<{ text: Confidential; html: Confidential | null } | null> {
   const [held] = await db
     .select({ text: suggestionBodies.bodyText, html: suggestionBodies.bodyHtml })
     .from(suggestionBodies)
@@ -95,7 +97,7 @@ async function storedBody(db: Sql, accountId: string, messageId: string): Promis
 /** The HTML of one of the scope's messages, as sift holds it; null when it holds none. */
 export async function storedHtml(db: Sql, scope: Scope, accountId: string, messageId: string): Promise<string | null> {
   if (!sees(scope, accountId)) return null;
-  return (await storedBody(db, accountId, messageId))?.html ?? null;
+  return plain((await storedBody(db, accountId, messageId))?.html ?? null);
 }
 
 /** Whether sift can leave the list a message came from. Mirrors what `unsubscribe` in src/actions will agree to. */

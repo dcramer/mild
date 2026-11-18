@@ -54,7 +54,7 @@
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "triage/ is pure: no I/O. Inject what you need through a port (see src/triage/stages)." },
               {
                 // Every module in src/ but this one; a new one goes here too.
-                "group": ["**/actions/**", "**/app/**", "**/cli/**", "**/dashboard/**", "**/ephemeral/**", "**/gmail/**", "**/learn/**", "**/model/**", "**/store/**", "**/vercel/**", "**/work/**", "**/config.ts", "**/refusal.ts", "**/secrets.ts", "**/telemetry.ts"],
+                "group": ["**/actions/**", "**/app/**", "**/cli/**", "**/dashboard/**", "**/ephemeral/**", "**/gmail/**", "**/learn/**", "**/model/**", "**/store/**", "**/vercel/**", "**/work/**", "**/config.ts", "**/plain.ts", "**/refusal.ts", "**/secrets.ts", "**/telemetry.ts"],
                 "message": "triage/ is pure and depends on nothing else in src/."
               }
             ]
@@ -69,6 +69,10 @@
           "error",
           {
             "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." }, 
+              {
+                "group": ["**/plain.ts"],
+                "message": "model/ is given the text it needs by its callers, which choose what of a person's mail it is shown."
+              },
               {
                 "group": ["**/gmail/**", "**/actions/**", "**/store/**", "**/work/**", "@googleapis/*", "googleapis", "google-auth-library"],
                 "message": "model/ only turns evidence into a verdict, and a person's words into suggested labels. It never reaches Gmail, the database or anything that acts."
@@ -126,7 +130,10 @@
         "jsx-a11y/no-noninteractive-element-interactions": ["error", { "handlers": ["onClick", "onError", "onLoad", "onMouseDown", "onMouseUp", "onKeyPress", "onKeyDown", "onKeyUp"] }],
         // next/image is served by /_next/image, which next.config.js turns off.
         "nextjs/no-img-element": "off",
-        "no-restricted-imports": ["error", { "patterns": [{ "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." }] }]
+        // A Confidential (src/confidential.ts) is opaque to React, but a template literal or String() would take it as text unrevealed.
+        "typescript/restrict-template-expressions": ["error", { "allowNumber": true, "allowBoolean": true, "allowNullish": true }],
+        "typescript/no-base-to-string": "error",
+        "no-restricted-imports": ["error", { "patterns": [{ "group": ["**/src/plain.ts"], "message": "src/plain.ts reads what Sift stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." }, { "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." }] }]
       }
     },
     {
@@ -141,6 +148,7 @@
           "error",
           {
             "patterns": [
+              { "group": ["**/src/plain.ts"], "message": "src/plain.ts reads what Sift stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." },
               { "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." },
               { "group": ["@base-ui/**"], "message": "Only web/src/system imports Base UI. Use or extend a part from '@/system' (docs/design.md)." }
             ]
@@ -157,6 +165,7 @@
           "error",
           {
             "patterns": [
+              { "group": ["**/plain.ts"], "message": "src/plain.ts reads what Sift stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." },
               {
                 "group": ["**", "!next", "!next/*", "!react", "!@/**"],
                 "message": "app/ draws the page from web/src (@/…), which gets its data from /api/. Server code reached from here could be handed to the browser."
@@ -229,6 +238,7 @@
           "error",
           {
             "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." },
+              { "group": ["**/plain.ts"], "message": "gmail/ is given what to write as text by its callers; it reads nothing stored." },
               { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },
               { "group": ["**/store/store.ts", "**/store/db.ts"], "message": "Only the hosts (src/cli, src/vercel), src/app and src/work/run.ts hold the store. Take the Sql you are given." }
@@ -260,6 +270,7 @@
           "error",
           {
             "patterns": [
+              { "group": ["**/plain.ts"], "message": "What telemetry carries never holds mail or a sender: it names them by traceIds (src/store/content.ts)." },
               { "group": ["@googleapis/*", "googleapis", "google-auth-library"], "message": "Only src/gmail talks to Google. Use the Mailbox port in src/actions/mailbox.ts." },
               { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. Use the Judge port in src/triage/stages/model.ts." },
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },

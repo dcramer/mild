@@ -4,6 +4,8 @@ import { exampleKeys, hashOf, openEnvelope, openFacts, openPart } from './conten
 import { type Candidate, PER_LOOKUP, type Shot, excerptOf, nameKey, pickShots, withinBudget } from '../triage/fewshot.ts';
 import { isSharedDomain } from '../triage/standing.ts';
 import type { Address, Label, MessageFacts } from '../triage/types.ts';
+import { plain } from '../plain.ts';
+import type { Confidential } from '../confidential.ts';
 
 const CANDIDATE = {
   messageId: examples.messageId,
@@ -65,16 +67,18 @@ export async function examplesFor(
       .innerJoin(messages, withMessage)
       .where(lte(ranked.nth, PER_LOOKUP))),
   ];
-  const candidates = [...new Map(rows.map((r) => [r.messageId, openEnvelope(db, facts.accountId, r.messageId, r)] as const)).values()].map((r): Candidate => ({
-    messageId: r.messageId,
-    fromAddress: r.fromAddress,
-    fromDomain: r.fromDomain,
-    ...(r.fromName ? { fromName: r.fromName } : {}),
-    subject: r.subject,
-    facts: openFacts(r.facts, r.headers),
-    labelId: r.labelId!,
-    markedAt: r.markedAt,
-  }));
+  const candidates = [...new Map(rows.map((r) => [r.messageId, plain(openEnvelope(db, facts.accountId, r.messageId, r))] as const)).values()].map(
+    (r): Candidate => ({
+      messageId: r.messageId,
+      fromAddress: r.fromAddress,
+      fromDomain: r.fromDomain,
+      ...(r.fromName ? { fromName: r.fromName } : {}),
+      subject: r.subject,
+      facts: openFacts(r.facts, r.headers),
+      labelId: r.labelId!,
+      markedAt: r.markedAt,
+    }),
+  );
   const picked = pickShots(candidates, facts, labels);
   if (picked.length === 0) return [];
   const bodies = new Map(
@@ -96,7 +100,7 @@ export async function examplesFor(
   return withinBudget(
     picked.map((p) => ({
       ...p,
-      excerpt: excerptOf(openPart(db, facts.accountId, p.messageId, 'text', bodies.get(p.messageId) ?? null)?.slice(0, 2000) ?? ''),
+      excerpt: excerptOf(plain(openPart(db, facts.accountId, p.messageId, 'text', bodies.get(p.messageId) ?? null))?.slice(0, 2000) ?? ''),
     })),
   );
 }
@@ -116,9 +120,9 @@ export async function answersUnderName(db: Sql, accountId: string, from: Address
 interface StoredExample {
   accountId: string;
   messageId: string;
-  fromAddress: string;
-  fromName: string | null;
-  subject: string;
+  fromAddress: Confidential;
+  fromName: Confidential | null;
+  subject: Confidential;
   /** The user's answer. */
   labelId: string | null;
   markedAt: number;
