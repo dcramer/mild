@@ -357,7 +357,7 @@ describe("a rule's Gmail filter", () => {
       history: [],
     });
     await writeRuleFilter(deps(), id, ACCOUNT);
-    expect((await ruleFilterStatus(db)).get(id)?.history).toEqual([{ type: 'filter', status: 'done', error: null, at: clock }]);
+    expect((await ruleFilterStatus(db)).get(id)?.history).toEqual([{ type: 'filter', status: 'done', error: null, at: clock, mailbox: ACCOUNT }]);
     mailbox.failFilters = true;
     await expect(removeRuleFilter(deps(), id, ACCOUNT)).rejects.toThrow('network down');
     expect((await ruleFilterStatus(db)).get(id)?.history.at(-1)).toMatchObject({ type: 'unfilter', status: 'unknown', error: 'network down' });

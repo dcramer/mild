@@ -62,7 +62,11 @@ test.describe('A rule as a Gmail filter', () => {
     await expect(toast(page, 'Added to Gmail as a filter')).toBeVisible();
     await expect(ask).toHaveCount(0);
     await expect(news.getByText('Gmail runs this rule itself, as one of your Gmail filters')).toBeVisible();
-    await expect(news.getByRole('listitem').last()).toContainText('Filter added');
+    // Written to each of the seed's two mailboxes, so each row says which.
+    const added = news.getByRole('listitem').filter({ hasText: 'Filter added' });
+    await expect(added).toHaveCount(2);
+    await expect(added.filter({ hasText: 'me@example.org' })).toHaveCount(1);
+    await expect(added.filter({ hasText: 'me@work.example.org' })).toHaveCount(1);
 
     await news.getByRole('button', { name: 'Close' }).click();
     await expect(row(page, 'anyone at news.example.com')).toContainText('Gmail filter');

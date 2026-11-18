@@ -368,8 +368,8 @@ export const RuleFilter = z.object({
   differs: z.array(z.string()),
   /** When sift last compared it with Gmail. */
   checkedAt: z.number().nullable(),
-  /** Each time sift wrote the filter to Gmail (`filter`) or took it out, and how that went, oldest first. */
-  history: z.array(z.object({ type: z.enum(['filter', 'unfilter']), status: z.string(), error: z.string().nullable(), at: z.number() })),
+  /** Each time sift wrote the filter to a mailbox's Gmail (`filter`) or took it out, and how that went, oldest first: one press is one per mailbox. */
+  history: z.array(z.object({ type: z.enum(['filter', 'unfilter']), status: z.string(), error: z.string().nullable(), at: z.number(), mailbox: z.string() })),
 });
 export type RuleFilter = z.infer<typeof RuleFilter>;
 

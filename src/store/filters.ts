@@ -111,7 +111,7 @@ interface RuleFilterStatus {
   plan: (Omit<FilterPlan, 'criteria'> & { criteria: Sealed<FilterPlan['criteria']> }) | null;
   differs: string[];
   checkedAt: number | null;
-  history: { type: 'filter' | 'unfilter'; status: string; error: string | null; at: number }[];
+  history: { type: 'filter' | 'unfilter'; status: string; error: string | null; at: number; mailbox: string }[];
 }
 
 /** Each rule's filter changes, oldest first, by rule id: every account's, or one account's. */
@@ -124,7 +124,7 @@ export async function filterHistory(db: Sql, accountId?: string): Promise<Map<st
     .orderBy(asc(actions.id));
   for (const { accountId: owner, payload, ...change } of changes) {
     const { ruleId } = openPayload(db, owner, payload).filter!;
-    history.set(ruleId, [...(history.get(ruleId) ?? []), change as RuleFilterStatus['history'][number]]);
+    history.set(ruleId, [...(history.get(ruleId) ?? []), { ...change, mailbox: owner } as RuleFilterStatus['history'][number]]);
   }
   return history;
 }
