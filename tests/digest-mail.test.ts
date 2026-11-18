@@ -21,6 +21,7 @@ const digest = (over: Partial<Digest> = {}): Digest => ({
   label: { name: 'Notifications', gmailLabel: 'sift/notifications' },
   mailbox: 'me@example.org',
   since: until - 24 * HOUR,
+  until,
   entries: [entry('a1', 5, 'Run passed'), entry('a2', 1, 'Run failed'), entry('a3', 3, 'Run passed again')],
   highlights: [],
   timeZone: 'America/Los_Angeles',
@@ -50,16 +51,23 @@ describe('writeDigest', () => {
 
   it('says what Sift did and since when, and counts what is worth a look in the subject', () => {
     const mail = writeDigest(digest({ highlights: [{ id: 'a2', why: 'The only failure.' }] }));
-    expect(mail.subject).toBe('Notifications: 3 messages, 1 worth a look');
+    expect(mail.subject).toBe('Notifications digest for Wed, Nov 18: 3 messages, 1 worth a look');
     expect(mail.text).toContain('3 messages Sift archived since Tue, Nov 17, 7:00 AM');
     expect(mail.preheader).toBe('Worth a look: Run failed');
     expect(mail.html).toContain('Worth a look');
     expect(mail.text).toMatch(/WORTH A LOOK\n\nBuilds: Run failed\n {2}The only failure\./);
   });
 
+  it('names the day it is for, or every day when it waited longer', () => {
+    // 15:00 UTC is 7:00 in Los Angeles; the day after a clock change is 25 hours long.
+    const fallBack = Date.UTC(2026, 10, 2, 15);
+    expect(writeDigest(digest({ since: fallBack - 25 * HOUR, until: fallBack })).subject).toMatch(/^Notifications digest for Mon, Nov 2:/);
+    expect(writeDigest(digest({ since: Date.UTC(2026, 9, 30, 14) })).subject).toMatch(/^Notifications digest for Oct 30\u2009–\u2009Nov 18:/);
+  });
+
   it('drops a highlight for a message that is not in the digest', () => {
     const mail = writeDigest(digest({ highlights: [{ id: 'elsewhere', why: 'Not here.' }] }));
-    expect(mail.subject).toBe('Notifications: 3 messages');
+    expect(mail.subject).toBe('Notifications digest for Wed, Nov 18: 3 messages');
     expect(mail.html).not.toContain('Worth a look');
     expect(mail.text).not.toContain('Not here.');
   });
@@ -87,7 +95,7 @@ describe('writeDigest', () => {
   it('lists the newest and links to the label for the rest', () => {
     const many = Array.from({ length: LISTED + 12 }, (_, i) => entry(`m${i}`, i / 10, `Run ${i}`));
     const { text, subject } = writeDigest(digest({ entries: many }));
-    expect(subject).toBe(`Notifications: ${LISTED + 12} messages`);
+    expect(subject).toBe(`Notifications digest for Wed, Nov 18: ${LISTED + 12} messages`);
     expect(text).toContain('Run 0\n');
     expect(text).not.toContain(`Run ${LISTED}\n`);
     expect(text).toContain('12 more in Gmail');
@@ -107,7 +115,7 @@ describe('toRfc822', () => {
     expect(raw).toContain('From: Sift <me@example.org>\r\n');
     expect(raw).toContain('Message-ID: <digest-1@sift.invalid>\r\n');
     const subject = /Subject: =\?UTF-8\?B\?([^?]+)\?=/.exec(raw)?.[1] ?? '';
-    expect(new TextDecoder().decode(Uint8Array.from(atob(subject), (c) => c.charCodeAt(0)))).toBe('Reçus: 1 message');
+    expect(new TextDecoder().decode(Uint8Array.from(atob(subject), (c) => c.charCodeAt(0)))).toBe('Reçus digest for Wed, Nov 18: 1 message');
     const [text, html] = decode(raw);
     expect(text).toEqual({ type: 'text/plain', body: mail.text });
     expect(html).toEqual({ type: 'text/html', body: mail.html });

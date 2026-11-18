@@ -123,7 +123,7 @@ describe('a daily digest', () => {
     expect(await digestsDue()).toEqual([DIGEST]);
     await runWork(store, DIGEST, options(), clock + 60_000);
     const [digest] = delivered();
-    expect(digest?.subject).toBe('Notifications: 2 messages');
+    expect(digest?.subject).toBe('Notifications digest for Wed, Nov 18: 2 messages');
     expect(digest?.text).toContain('Run 2 failed');
     expect(digest?.text).toContain('https://mail.google.com/mail/u/work%40example.com/#all/w1');
     expect(digest?.text).toContain('2 messages Sift archived since Tue, Nov 17, 7:00\u00a0AM');
@@ -143,7 +143,7 @@ describe('a daily digest', () => {
     await arrive(ACCOUNT, ['b2', 'Run 3 passed']);
     clock = SEVEN + 24 * HOUR + 5 * 60_000;
     await runWork(store, DIGEST, options(), clock + 60_000);
-    expect(delivered().map((d) => d.subject)).toEqual(['Notifications: 2 messages', 'Notifications: 1 message']);
+    expect(delivered().map((d) => d.subject)).toEqual(['Notifications digest for Wed, Nov 18: 2 messages', 'Notifications digest for Thu, Nov 19: 1 message']);
     expect(delivered()[1]!.text).not.toContain('Run 1');
   });
 
@@ -167,7 +167,11 @@ describe('a daily digest', () => {
     await arrive(ACCOUNT, ['b2', 'Run 2 passed']);
     clock += 24 * HOUR;
     await runWork(store, DIGEST, options(), clock + 60_000);
-    expect(delivered().map((d) => d.subject)).toEqual(['Notifications: 1 message', 'Notifications: 1 message']);
+    // The second waited two days for mail, and says so.
+    expect(delivered().map((d) => d.subject)).toEqual([
+      'Notifications digest for Wed, Nov 18: 1 message',
+      'Notifications digest for Nov 18\u2009–\u200920: 1 message',
+    ]);
     expect(await raw(db).all('SELECT since, until FROM digests ORDER BY id')).toEqual([
       { since: Date.UTC(2026, 10, 17, 14), until: Date.UTC(2026, 10, 18, 14) },
       { since: Date.UTC(2026, 10, 18, 14), until: Date.UTC(2026, 10, 20, 14) },
@@ -226,7 +230,7 @@ describe('a daily digest', () => {
     clock = SEVEN + 5 * 60_000;
     await runWork(store, DIGEST, options(), clock + 60_000);
     const [digest] = delivered();
-    expect(digest?.subject).toBe('Notifications: 1 message');
+    expect(digest?.subject).toBe('Notifications digest for Wed, Nov 18: 1 message');
     expect(digest?.text).toContain('Subject in\n');
     for (const out of ['answered', 'kept-as-archive', 'undone', 'later', 'then-answered']) expect(digest?.text).not.toContain(`Subject ${out}\n`);
   });
@@ -300,7 +304,7 @@ describe('a daily digest', () => {
     clock = SEVEN + 5 * 60_000;
     await runWork(store, DIGEST, options(), clock + 60_000);
     expect(shown).not.toContain('Body');
-    expect(delivered()[0]).toMatchObject({ subject: 'Notifications: 3 messages, 1 worth a look' });
+    expect(delivered()[0]).toMatchObject({ subject: 'Notifications digest for Wed, Nov 18: 3 messages, 1 worth a look' });
     expect(delivered()[0]!.text).toMatch(/WORTH A LOOK\n\nBuilds: Run 2 failed\n {2}The only failure\./);
     expect(await raw(db).get('SELECT model, error, input_tokens, cost_usd FROM digests')).toEqual({
       model: 'test/model',
@@ -313,7 +317,7 @@ describe('a daily digest', () => {
     highlight = async () => ({ failed: 'timeout' });
     clock += 24 * HOUR;
     await runWork(store, DIGEST, options(), clock + 60_000);
-    expect(delivered()[1]).toMatchObject({ subject: 'Notifications: 1 message' });
+    expect(delivered()[1]).toMatchObject({ subject: 'Notifications digest for Thu, Nov 19: 1 message' });
     expect(await raw(db).all('SELECT error FROM digests ORDER BY id')).toEqual([{ error: null }, { error: 'timeout' }]);
     expect(asked).toBe(2);
   });
@@ -329,7 +333,7 @@ describe('a daily digest', () => {
       headers: [
         { name: 'From', value: `Sift <${ACCOUNT}>` },
         { name: 'To', value: ACCOUNT },
-        { name: 'Subject', value: 'Notifications: 1 message' },
+        { name: 'Subject', value: 'Notifications digest for Wed, Nov 18: 1 message' },
         { name: 'Message-ID', value: /Message-ID: (\S+)/.exec(text)![1]! },
       ],
     });
