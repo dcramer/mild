@@ -7,7 +7,6 @@ import { ProviderList, providerName, useProviderConnect } from '@/components/mod
 import { costLine, spentLine, subscription } from '@/lib/prices.ts';
 import { type ManageState, type Removed, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago } from '@/lib/format.ts';
-import { leave } from '@/lib/before-paint.ts';
 import { useParam } from '@/lib/params.ts';
 import {
   Button,
@@ -380,7 +379,7 @@ function ConfirmRemoval({
       const reply = await send();
       const note = notRevoked(reply);
       // Never settles, so nothing is fetched again with the session just ended while the page leaves.
-      if (reply.signedOut) return new Promise<never>(() => leave(note ? `/?signin=${encodeURIComponent(note)}` : '/'));
+      if (reply.signedOut) return new Promise<never>(() => window.location.assign(note ? `/?signin=${encodeURIComponent(note)}` : '/'));
       onClose();
       onDone?.(note);
     });

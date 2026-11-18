@@ -316,8 +316,3 @@ thead .row:last-child {
 .focus-within-shown:focus-visible {
   outline: none;
 }
-
-/* A browser where nobody was signed in last time draws no frame until Sift says who is (web/src/lib/before-paint.ts). */
-.signed-out [data-frame] {
-  visibility: hidden;
-}

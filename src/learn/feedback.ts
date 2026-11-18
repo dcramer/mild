@@ -93,35 +93,47 @@ export async function pendingSuggestions(
     .from(decisions)
     .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
     .leftJoin(rules, eq(rules.id, decisions.ruleId))
-    .where(
-      and(
-        eq(
-          decisions.id,
-          db
-            .select({ id: max(x.id) })
-            .from(x)
-            .where(and(eq(x.accountId, decisions.accountId), eq(x.messageId, decisions.messageId))),
-        ),
-        // Mail Sift asked about while on is waiting on the user as much as what it would have done while off.
-        or(eq(decisions.carryOut, false), eq(decisions.disposition, 'review')),
-        eq(decisions.byUser, false),
-        notExists(
-          db
-            .select({ one: sql`1` })
-            .from(feedback)
-            .where(eq(feedback.decisionId, decisions.id)),
-        ),
-        not(and(isNotNull(decisions.ruleId), ne(sql`coalesce(${rules.source}, 'user')`, 'learned'))!),
-        filter.accounts === undefined ? undefined : inArray(decisions.accountId, filter.accounts),
-        filter.accountId === undefined ? undefined : eq(decisions.accountId, filter.accountId),
-        filter.sender === undefined ? undefined : eq(messages.senderHash, hashOf(db, filter.sender)),
-        filter.facts === undefined ? undefined : factsWhere(filter.facts),
-      ),
-    )
+    .where(waiting(db, filter))
     .orderBy(desc(decisions.decidedAt), desc(decisions.id))
     .limit(filter.limit ?? 5000);
   return rows.map((r) => toSuggestion(db, r));
 }
+
+/** How many of `pendingSuggestions` would leave the mail where it is not: what For review counts in the masthead. Nothing is decrypted. */
+export async function waitingCount(db: Sql, accounts: readonly string[]): Promise<number> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(decisions)
+    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .leftJoin(rules, eq(rules.id, decisions.ruleId))
+    .where(and(waiting(db, { accounts }), ne(decisions.disposition, 'keep')));
+  return row?.n ?? 0;
+}
+
+const waiting = (db: Sql, filter: { accountId?: string; accounts?: readonly string[]; sender?: string; facts?: RuleFacts }) =>
+  and(
+    eq(
+      decisions.id,
+      db
+        .select({ id: max(x.id) })
+        .from(x)
+        .where(and(eq(x.accountId, decisions.accountId), eq(x.messageId, decisions.messageId))),
+    ),
+    // Mail Sift asked about while on is waiting on the user as much as what it would have done while off.
+    or(eq(decisions.carryOut, false), eq(decisions.disposition, 'review')),
+    eq(decisions.byUser, false),
+    notExists(
+      db
+        .select({ one: sql`1` })
+        .from(feedback)
+        .where(eq(feedback.decisionId, decisions.id)),
+    ),
+    not(and(isNotNull(decisions.ruleId), ne(sql`coalesce(${rules.source}, 'user')`, 'learned'))!),
+    filter.accounts === undefined ? undefined : inArray(decisions.accountId, filter.accounts),
+    filter.accountId === undefined ? undefined : eq(decisions.accountId, filter.accountId),
+    filter.sender === undefined ? undefined : eq(messages.senderHash, hashOf(db, filter.sender)),
+    filter.facts === undefined ? undefined : factsWhere(filter.facts),
+  );
 
 /** A message sift never decided (the model could not judge it), with who sent it, or null. */
 async function undecided(db: Sql, accountId: string, messageId: string): Promise<{ fromAddress: string } | null> {

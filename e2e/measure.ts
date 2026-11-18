@@ -8,8 +8,8 @@
  * reads first and largest contentful paint, layout shift, the JavaScript fetched until the screen is ready (bytes on
  * the wire and unpacked), and when the screen's heading and then its rows showed, as the page saw them (`performance.now()`
  * in the page, polled each frame). The navigation sample loads `/`, waits for the network to rest, then presses Rules
- * in the masthead and times the press to the Rules heading and its rows. Four profiles: a desktop, the same with the
- * CPU slowed four times and a phone's width, each in a browser someone was signed in on before, and a first visit.
+ * in the masthead and times the press to the Rules heading and its rows. Three profiles: a desktop, the same with the
+ * CPU slowed four times, and a phone's width.
  * `--root` measures another checkout (its seed, its server and its build),
  * so two can be run side by side. `--shots` also saves `/` and `/rules` once their rows show, at each profile's width.
  */
@@ -34,12 +34,10 @@ const PAGES = [
   { name: '/rules', path: '/rules', heading: 'Rules' },
   { name: 'sender', path: `/sender/${ME}/${encodeURIComponent('notifications@code.example.com')}`, heading: null },
 ] as const;
-// `returning` is a browser someone was signed in on before, with nothing cached: the page keeps that (web/src/lib/before-paint.ts).
 const PROFILES = [
-  { name: 'desktop', viewport: { width: 1440, height: 900 }, cpu: 1, returning: true },
-  { name: 'desktop, first visit', viewport: { width: 1440, height: 900 }, cpu: 1, returning: false },
-  { name: 'desktop, CPU ÷4', viewport: { width: 1440, height: 900 }, cpu: 4, returning: true },
-  { name: 'phone', viewport: { width: 390, height: 844 }, cpu: 1, returning: true },
+  { name: 'desktop', viewport: { width: 1440, height: 900 }, cpu: 1 },
+  { name: 'desktop, CPU ÷4', viewport: { width: 1440, height: 900 }, cpu: 4 },
+  { name: 'phone', viewport: { width: 390, height: 844 }, cpu: 1 },
 ] as const;
 
 const freePort = () =>
@@ -159,7 +157,6 @@ async function contextFor(browser: Browser, sift: { url: string; cookie: string 
   const context = await browser.newContext({ viewport: profile.viewport, serviceWorkers: 'block', locale: 'en-US' });
   await context.addCookies([{ name: 'sift_session', value: sift.cookie, url: sift.url, httpOnly: true }]);
   await context.addInitScript(PROBE.replace('WANT', JSON.stringify(want ?? '*')));
-  if (profile.returning) await context.addInitScript("localStorage.setItem('sift:signed-in', '1')");
   return context;
 }
 
@@ -270,7 +267,7 @@ try {
     }
   }
   if (values.shots) {
-    for (const profile of [PROFILES[0], PROFILES[3]]) {
+    for (const profile of [PROFILES[0], PROFILES[2]]) {
       for (const target of PAGES.slice(0, 2)) {
         const context = await contextFor(browser, sift, profile, target.heading);
         const { page } = await open(context, profile);

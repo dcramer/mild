@@ -27,7 +27,6 @@ function Sections({ items, current }: { items: readonly NavItem[]; current: stri
           <li key={item.to}>
             <Anchor
               href={`/${item.to}`}
-              prefetch
               aria-current={item.to === current ? 'page' : undefined}
               className="relative flex items-baseline gap-1.5 py-1 text-base leading-normal font-semibold text-muted-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] hover:text-foreground aria-[current=page]:text-foreground aria-[current=page]:after:bg-highlight"
             >

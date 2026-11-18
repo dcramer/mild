@@ -13,12 +13,12 @@ const plainPress = (event: MouseEvent) => event.button === 0 && !event.metaKey &
 
 /**
  * Every link a part draws. To a screen of the dashboard it is Next.js's `Link`, which goes there without loading the
- * page again; `prefetch` fetches that screen ahead while the link is in view (the masthead's sections), which costs a
- * request to the server each time. A link that only changes the query (`?settings=1`) opens what it names over the
+ * page again. Nothing is fetched ahead: a screen is drawn for whoever asks, so each fetch is a call to the server
+ * (docs/runtime.md, "What it costs"). A link that only changes the query (`?settings=1`) opens what it names over the
  * page, and Back closes it, without asking the server for anything. Anything else is a plain link. A press with a
  * modifier key, or on a link that opens a new tab, is the browser's.
  */
-export function Anchor({ href, prefetch = false, onClick, children, ...props }: ComponentProps<'a'> & { href: string; prefetch?: boolean }) {
+export function Anchor({ href, onClick, children, ...props }: ComponentProps<'a'> & { href: string }) {
   if (href.startsWith('?') || samePath(href))
     return (
       <a
@@ -36,7 +36,7 @@ export function Anchor({ href, prefetch = false, onClick, children, ...props }: 
     );
   if (href.startsWith('/') && !SERVER.test(href) && !props.target)
     return (
-      <Link href={href} prefetch={prefetch} {...(onClick ? { onClick } : {})} {...props}>
+      <Link href={href} prefetch={false} {...(onClick ? { onClick } : {})} {...props}>
         {children}
       </Link>
     );

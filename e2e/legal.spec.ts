@@ -1,23 +1,28 @@
-import { boxOf, expect, patchJson, path, PHONE, test } from './sift.ts';
+import { boxOf, expect, path, PHONE, test } from './sift.ts';
 
 test.describe('A Sift run as a service', () => {
   test.use({ cloud: true });
 
-  test('the security page is linked at the foot of the signed-out page, says where to report a problem privately, and links to the privacy policy', async ({
-    page,
-  }) => {
-    // The seeded dashboard has no Google sign-in, so its session reply is made into a signed-out visitor's.
-    await patchJson(page, '**/api/session?*', (session) => ({ ...session, required: true, email: null, canSignIn: true }));
-    await page.goto('/');
-    await page.getByRole('contentinfo').getByRole('link', { name: 'Security' }).click();
-    await expect(page.getByRole('heading', { name: 'Security', level: 1 })).toBeVisible();
-    await path(page).toBe('/security');
-    await expect(page.getByRole('heading', { name: 'What it does not protect against' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'privately on GitHub' })).toHaveAttribute('href', 'https://github.com/dcramer/sift/security/advisories/new');
+  test.describe('signed out', () => {
+    test.use({ signedOut: true });
 
-    await page.getByRole('link', { name: 'privacy policy' }).click();
-    await expect(page.getByRole('heading', { name: 'Privacy policy', level: 1 })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'an issue on GitHub' })).toHaveAttribute('href', 'https://github.com/dcramer/sift/issues');
+    test('the security page is linked at the foot of the sign-in page, drawn by the server, says where to report a problem privately, and links to the privacy policy', async ({
+      page,
+    }) => {
+      const html = await (await page.request.get('/')).text();
+      expect(html).toContain('Sign in with Google');
+      expect(html).not.toContain('aria-label="Sections"');
+      await page.goto('/');
+      await page.getByRole('contentinfo').getByRole('link', { name: 'Security' }).click();
+      await expect(page.getByRole('heading', { name: 'Security', level: 1 })).toBeVisible();
+      await path(page).toBe('/security');
+      await expect(page.getByRole('heading', { name: 'What it does not protect against' })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'privately on GitHub' })).toHaveAttribute('href', 'https://github.com/dcramer/sift/security/advisories/new');
+
+      await page.getByRole('link', { name: 'privacy policy' }).click();
+      await expect(page.getByRole('heading', { name: 'Privacy policy', level: 1 })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'an issue on GitHub' })).toHaveAttribute('href', 'https://github.com/dcramer/sift/issues');
+    });
   });
 
   test('signed in, the foot of a screen links to the terms, privacy and security', async ({ page }) => {

@@ -127,7 +127,7 @@ A page is drawn before its data arrives, and what arrives must not push what is 
 - A page's action button is shown from the start and disabled until it can work. It does not appear late.
 - Anything above other content whose height depends on data goes in a `Reserve`.
 - A list's rows may grow downward: nothing is below them. While they load, its `Loading` shows its own rows, not lines.
-- Every screen is drawn on the server with its header, its search bar and its row placeholders, so the first paint is the page as it will be, rows to come. The masthead's sections are fetched ahead while in view.
+- Every screen is drawn on the server with its header, its search bar, what is not encrypted (labels, counts, Settings) and placeholders for the rest, so the first paint is the page as it will be, rows to come.
 
 ## Rules for adding to it
 

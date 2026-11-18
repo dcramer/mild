@@ -37,23 +37,28 @@ test.describe('Settings', () => {
     await expect(settingsActive(page).getByRole('button', { name: /^Go through/ })).toHaveCount(0);
   });
 
-  test('through a ChatGPT plan, prices are said to be API prices the plan covers', async ({ page }) => {
-    await throughChatGPT(page);
-    await patchJson(page, '**/api/usage*', (usage) => ({ ...usage, day: 0.1, week: 1, month: 4.2 }));
-    await patchJson(page, '**/api/summary?days=30*', (summary) => ({ ...summary, totals: { ...summary.totals, costUsd: 4.2, judged: 1234 } }));
-    await page.goto('/?settings=1');
-    await expect(
-      settings(page).getByText('Classifies what no rule covers. $4.20 at API prices in the last 30 days, for 1,234 messages, which your ChatGPT plan covers.'),
-    ).toBeVisible();
-    await expect(settings(page).getByText('About $0.40 per 1,000 messages at API prices, which your ChatGPT plan covers.')).toBeVisible();
-    await expect(settingsActive(page).getByText('2,412 messages. About $3.10 at API prices, which your ChatGPT plan covers.')).toBeVisible();
-    await settingsActive(page).getByRole('button', { name: 'Go through…' }).click();
-    await expect(goThrough(page).getByText('on gpt-5.6-luna, at API prices')).toBeVisible();
-    await goThrough(page).getByRole('button', { name: 'Not now' }).click();
-    await closeSettings(page);
-    // The masthead's month is only about what the API would have charged, and its card says so.
-    await pointAt(page.getByRole('link', { name: '≈$4.20 30D' }));
-    await expect(page.getByText('At API prices, which your ChatGPT plan covers.', { exact: true }).filter({ visible: true })).toBeVisible();
+  test.describe(() => {
+    test.use({ variant: 'chatgpt' });
+
+    test('through a ChatGPT plan, prices are said to be API prices the plan covers', async ({ page }) => {
+      await throughChatGPT(page);
+      await patchJson(page, '**/api/summary?days=30*', (summary) => ({ ...summary, totals: { ...summary.totals, costUsd: 4.2, judged: 1234 } }));
+      await page.goto('/?settings=1');
+      await expect(
+        settings(page).getByText(
+          'Classifies what no rule covers. $4.20 at API prices in the last 30 days, for 1,234 messages, which your ChatGPT plan covers.',
+        ),
+      ).toBeVisible();
+      await expect(settings(page).getByText('About $0.40 per 1,000 messages at API prices, which your ChatGPT plan covers.')).toBeVisible();
+      await expect(settingsActive(page).getByText('2,412 messages. About $3.10 at API prices, which your ChatGPT plan covers.')).toBeVisible();
+      await settingsActive(page).getByRole('button', { name: 'Go through…' }).click();
+      await expect(goThrough(page).getByText('on gpt-5.6-luna, at API prices')).toBeVisible();
+      await goThrough(page).getByRole('button', { name: 'Not now' }).click();
+      await closeSettings(page);
+      // The masthead's month is only about what the API would have charged, and its card says so.
+      await pointAt(page.getByRole('link', { name: /30D$/ }));
+      await expect(page.getByText('At API prices, which your ChatGPT plan covers.', { exact: true }).filter({ visible: true })).toBeVisible();
+    });
   });
 
   test('goes through the inbox from Settings, and stops', async ({ page }) => {
