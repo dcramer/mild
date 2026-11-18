@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { lastSyncedAt, listAccounts } from '../../../../store/accounts.ts';
 import { inboxProgress } from '../../../../store/inbox.ts';
 import { MAX_LABELS } from '../../../../store/labels.ts';
+import { waitingCount } from '../../../../learn/feedback.ts';
 import { preferences } from '../../../../store/preferences.ts';
 import { listLabelSummaries } from '../../../queries/labels.ts';
 import { type Scope, sees } from '../../../scope.ts';
@@ -28,6 +29,10 @@ async function manageState({ db, controls, person }: Context, scope: Scope): Pro
     ),
     labels: await listLabelSummaries(db, scope),
     labelLimit: MAX_LABELS,
+    waiting: await waitingCount(
+      db,
+      accounts.map((a) => a.id),
+    ),
     inbox: await inboxProgress(
       db,
       accounts.map((a) => a.id),

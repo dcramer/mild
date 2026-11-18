@@ -10,11 +10,13 @@ const SCRIPTS = resolve(import.meta.dirname, '../.claude/skills/verify-sift/scri
 export const SEED = join(SCRIPTS, 'seed.ts');
 /** The environment variable, one per variant, global setup leaves each seeded home's place and cookie in. */
 export const TEMPLATES = 'SIFT_E2E_TEMPLATE';
+/** Where global setup leaves what the `full` seed holds encrypted, decrypted (`heldValues`, e2e/held.ts). */
+export const HELD = 'SIFT_E2E_HELD';
 /**
  * `full` is verify-sift's seed (its SKILL.md says what is in it); `bare` leaves the work mailbox without labels, so the page is the setting-up steps;
- * `on` has had a pass with Sift on (`--on` in the seed).
+ * `on` has had a pass with Sift on (`--on` in the seed); `chatgpt` reaches its model through a ChatGPT plan.
  */
-export type Variant = 'full' | 'bare' | 'on';
+export type Variant = 'full' | 'bare' | 'on' | 'chatgpt';
 
 const freePort = () =>
   new Promise<number>((done, fail) => {
@@ -41,7 +43,7 @@ const FRAME_ONLY = [...directives(FRAME_POLICY)].filter((d) => !onPage.has(d));
 const framePolicy = (text: string) => text.includes('/api/message/html?') || FRAME_ONLY.some((d) => text.includes(`directive: "${d}"`));
 
 /** Starts verify-sift's `serve.ts` (the app, with stand-ins for Gmail and the model) on a copy of the seeded home. */
-async function start(variant: Variant, cloud: boolean, listing: boolean) {
+async function start(variant: Variant, cloud: boolean, listing: boolean, signedOut: boolean) {
   const template = JSON.parse(process.env[`${TEMPLATES}_${variant}`] ?? 'null') as { dir: string; cookie: string } | null;
   if (!template) throw new Error('e2e/global-setup.ts did not run');
   const dir = mkdtempSync(join(tmpdir(), 'sift-e2e-run-'));
@@ -61,7 +63,12 @@ async function start(variant: Variant, cloud: boolean, listing: boolean) {
       ],
       {
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, SIFT_CLOUD: String(cloud) },
+        // Signed out, Sift is set up to sign in with a Google client that is made up: nothing goes to Google unless pressed.
+        env: {
+          ...process.env,
+          SIFT_CLOUD: String(cloud),
+          ...(signedOut ? { SIFT_GOOGLE_CLIENT_ID: 'synthetic', SIFT_GOOGLE_CLIENT_SECRET: 'synthetic' } : {}),
+        },
         // A group of its own, with the Next.js server it starts, to end together.
         detached: true,
       },
@@ -96,22 +103,31 @@ async function start(variant: Variant, cloud: boolean, listing: boolean) {
  * Every test gets a signed-in page on its own seeded dashboard, at `/`-relative URLs, and fails if the page logs
  * an error or throws: a content security policy violation shows up only there.
  */
-export const test = base.extend<{ variant: Variant; cloud: boolean; listing: boolean; allow: string[]; sift: Awaited<ReturnType<typeof start>> }>({
+export const test = base.extend<{
+  variant: Variant;
+  cloud: boolean;
+  listing: boolean;
+  signedOut: boolean;
+  allow: string[];
+  sift: Awaited<ReturnType<typeof start>>;
+}>({
   variant: ['full', { option: true }],
   /** `SIFT_CLOUD`: a Sift run as a service. False is someone's own copy. */
   cloud: [false, { option: true }],
   /** Gmail still listing any search of the inbox, for good, so applying a rule goes on until stopped. */
   listing: [false, { option: true }],
+  /** A visitor nobody is signed in as, on a Sift that can sign them in. */
+  signedOut: [false, { option: true }],
   /** Console errors a test expects, by part of their text: `status of 409` where the server refuses and the page says why. */
   allow: [[], { option: true }],
-  sift: async ({ variant, cloud, listing }, use) => {
-    const sift = await start(variant, cloud, listing);
+  sift: async ({ variant, cloud, listing, signedOut }, use) => {
+    const sift = await start(variant, cloud, listing, signedOut);
     await use(sift);
     await sift.stop();
   },
   baseURL: async ({ sift }, use) => use(sift.url),
-  context: async ({ context, sift }, use) => {
-    await context.addCookies([{ name: 'sift_session', value: sift.cookie, url: sift.url, httpOnly: true }]);
+  context: async ({ context, sift, signedOut }, use) => {
+    if (!signedOut) await context.addCookies([{ name: 'sift_session', value: sift.cookie, url: sift.url, httpOnly: true }]);
     await use(context);
   },
   page: async ({ page, allow }, use) => {
@@ -293,15 +309,10 @@ export const patchJson = (page: Page, url: string, change: (json: any) => object
   });
 
 /**
- * The page as someone whose model is through a ChatGPT plan sees it: the seed's own model is behind an API key,
- * and no harness can sign in to ChatGPT, so Settings' data says so instead. Their model is `gpt-5.6-luna`, at $0.40 per 1,000.
+ * With the `chatgpt` variant, whose model is through a ChatGPT plan: what the provider lists, which no harness can sign
+ * in to ask. Their model is `gpt-5.6-luna`, at $0.40 per 1,000.
  */
 export async function throughChatGPT(page: Page) {
   const model = 'openai-codex/gpt-5.6-luna';
-  const chatgpt = { provider: 'openai-codex', label: 'ChatGPT', how: 'device-code' };
-  await patchJson(page, '**/api/manage*', (state) => ({
-    ...state,
-    model: { ...state.model, chosen: model, choices: [chatgpt, ...state.model.choices], signedIn: ['openai-codex'] },
-  }));
   await patchJson(page, '**/api/models*', (models) => ({ ...models, models: [model], shortlist: { 'openai-codex': [model] }, costs: { [model]: 0.4 } }));
 }

@@ -1,5 +1,5 @@
 import { QueryCache, QueryClient, environmentManager, keepPreviousData, onlineManager, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createContext, useContext, useState, useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 
 export type {
   Contact,
@@ -299,9 +299,9 @@ const makeClient = (): QueryClient => {
 let browserClient: QueryClient | undefined;
 
 /**
- * Where what the page loaded is kept. The browser keeps one for as long as the page is open. The server, which draws
- * every page loading and never fetches, makes one for each page it draws, so that nothing one draw asked for is held
- * for the next.
+ * Where what the page loaded is kept. The browser keeps one for as long as the page is open. The server never fetches:
+ * it makes one for each page it draws, holding only what that page was drawn with (`src/app/page-data.ts`), so that
+ * nothing one draw had is held for the next.
  */
 export const queryClientFor = (): QueryClient => (environmentManager.isServer() ? makeClient() : (browserClient ??= makeClient()));
 
@@ -330,17 +330,12 @@ export interface Loaded<T> {
  * tab is returned to and when sift comes back after being unreachable. Views that share a `key` share
  * one request. A failed refresh keeps the last good data on screen and reports the error beside it.
  */
-/** Whether the page may ask the API for more than who is signed in: not while that may be nobody. */
-export const MayLoad = createContext(true);
-
 export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Promise<T>, refreshMs = 30_000): Loaded<T> {
-  const may = useContext(MayLoad);
   const query = useQuery({
     queryKey: [key],
     queryFn: ({ signal }) => fetcher(signal),
     refetchInterval: refreshMs,
     placeholderData: keepPreviousData,
-    enabled: may || key === 'session',
   });
   return {
     data: query.data ?? null,

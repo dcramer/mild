@@ -633,6 +633,8 @@ export const ManageState = z.object({
   labels: z.array(LabelSummary),
   /** How many labels a person may have. */
   labelLimit: z.number(),
+  /** Mail waiting on the viewer that Sift would move or could not place: For review's count. */
+  waiting: z.number(),
   inbox: InboxProgress,
 });
 export type ManageState = z.infer<typeof ManageState>;

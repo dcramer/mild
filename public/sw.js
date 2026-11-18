@@ -1,11 +1,15 @@
 // The service worker: keeps the page and its files so the installed app opens when Sift cannot be reached,
 // and then says so. It never keeps anything under /api/ or /auth/: that is private mail data and sign-in.
 
-const CACHE = 'sift-shell';
-/** Each screen's page is the same for everyone; a sender's and a domain's is one page for all of them. */
+const CACHE = 'sift-shell-2';
+/** A sender's and a domain's page is one page for all of them. */
 const pageOf = (url) => url.pathname.replace(/^\/(sender|domain)\/.*/, '/$1');
+/** Only a page drawn the same for everyone is kept: a screen drawn for whoever asked is theirs, and says so (`no-store`). */
+const forEveryone = (response) => response.ok && !/no-store|private/.test(response.headers.get('cache-control') ?? '');
+/** Drawn for everyone, and with no session to read says Sift cannot be reached: where a screen not kept falls back to. */
+const SHELL = '/sender';
 
-self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('install', (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.add(SHELL)).then(() => self.skipWaiting())));
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
@@ -21,16 +25,16 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin || /^\/(api|auth)\//.test(url.pathname)) return;
 
-  // The server's copy when it answers, since it may be newer; without it, the one kept for that screen, or else For review.
+  // The server's copy when it answers, since it may be newer; without it, the one kept for that page, or else the shell.
   if (request.mode === 'navigate') {
     const page = pageOf(url);
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok) void caches.open(CACHE).then((cache) => cache.put(page, response.clone()));
+          if (forEveryone(response)) void caches.open(CACHE).then((cache) => cache.put(page, response.clone()));
           return response;
         })
-        .catch(async () => (await caches.match(page, { cacheName: CACHE })) ?? (await caches.match('/', { cacheName: CACHE })) ?? Response.error()),
+        .catch(async () => (await caches.match(page, { cacheName: CACHE })) ?? (await caches.match(SHELL, { cacheName: CACHE })) ?? Response.error()),
     );
     return;
   }

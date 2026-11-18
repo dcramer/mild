@@ -22,6 +22,14 @@ export function Backdrop() {
 }
 
 /**
+ * Layers drawn open together (a message and Settings over it, from the address) open a frame apart in the order they
+ * are drawn, so the last is on top and the others are under it: opened in one frame, each would take the other for
+ * the page under it.
+ */
+let opening = Promise.resolve();
+const nextFrame = () => new Promise<void>((done) => requestAnimationFrame(() => done()));
+
+/**
  * The Root's open state for a layer that is drawn already open. Base UI does not animate a popup that
  * mounts open, so it opens on the next frame; and a layer the reader dismisses (Escape, a press outside,
  * the close button) slides away before `onClose` takes it off the page; `onClosing` is told as it starts to.
@@ -31,8 +39,13 @@ export function useLayerOpen(open: boolean, onClose: () => void, onClosing?: () 
   const [shown, setShown] = useState(false);
   const [leaving, setLeaving] = useState(false);
   useEffect(() => {
-    const frame = requestAnimationFrame(() => setShown(true));
-    return () => cancelAnimationFrame(frame);
+    let drawn = true;
+    opening = opening.then(nextFrame).then(() => {
+      if (drawn) setShown(true);
+    });
+    return () => {
+      drawn = false;
+    };
   }, []);
   const [wasOpen, setWasOpen] = useState(open);
   if (wasOpen !== open) {

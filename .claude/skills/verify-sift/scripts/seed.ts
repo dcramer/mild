@@ -2,7 +2,7 @@
 /**
  * Verification scaffolding: fills an empty sift home with synthetic mail and prints a session cookie for it.
  *
- *   node .claude/skills/verify-sift/scripts/seed.ts <home> <gmail.json> [--bare | --on]
+ *   node .claude/skills/verify-sift/scripts/seed.ts <home> <gmail.json> [--bare | --on | --chatgpt]
  *
  * The mail goes through the real pass (`workDue`, with sift off), so decisions, labels, suggestion
  * bodies and proposals are what sift itself would record. Only Gmail is faked, at the `GmailApi` and
@@ -11,6 +11,7 @@
  *
  * `--on` then turns sift on and runs one more pass over two new messages: Lin's, which it cannot place, so it is left
  * for the user with sift's Gmail label; and the Store's last-day sale, archived as Marketing and then undone.
+ * `--chatgpt` has the model reached through a ChatGPT plan instead of an API key.
  */
 import { createHmac, randomBytes } from 'node:crypto';
 import { existsSync, writeFileSync } from 'node:fs';
@@ -41,7 +42,7 @@ const WORK = 'me@work.example.org';
 const OTHER = 'bravo@example.net';
 
 const [home, gmailFile, variant] = process.argv.slice(2);
-if (!home || !gmailFile) throw new Error('usage: seed.ts <home> <gmail.json> [--bare | --on]');
+if (!home || !gmailFile) throw new Error('usage: seed.ts <home> <gmail.json> [--bare | --on | --chatgpt]');
 process.env['SIFT_HOME'] = resolve(home);
 const config = loadConfig();
 if (existsSync(config.databaseDir)) throw new Error(`${config.databaseDir} already exists. Seed an empty home.`);
@@ -252,10 +253,17 @@ await connectAccount(store, WORK, '1', now - 23 * HOUR, user);
 // `--bare` takes the person's labels out, as before they chose any, so every screen is the setting-up steps.
 if (variant === '--bare') for (const label of await listLabels(db)) if (label.id !== LEAVE_IN_INBOX) await removeLabel(db, label.id, now - 23 * HOUR);
 await connectAccount(store, OTHER, '1', now - 22 * HOUR);
-// A model in use, so the dashboard is not behind its setting-up steps. The key is made up, and this
-// instance runs no passes, so nothing ever calls Anthropic with it.
-await saveApiKey({ ...(await credentials(db, 'model')), exclusive: (work) => work() }, 'anthropic', 'sk-ant-synthetic-seed');
-await setModel(db, 'anthropic/claude-haiku-4-5');
+// A model in use, so the dashboard is not behind its setting-up steps. The key and the sign-in are made up, and the
+// model is a stand-in (stand-ins.ts), so nothing ever calls Anthropic or OpenAI with them.
+if (variant === '--chatgpt') {
+  await (
+    await credentials(db, 'model')
+  ).write('openai-codex', JSON.stringify({ type: 'oauth', access: 'synthetic', refresh: 'synthetic', expires: now + 86_400_000 }));
+  await setModel(db, 'openai-codex/gpt-5.6-luna');
+} else {
+  await saveApiKey({ ...(await credentials(db, 'model')), exclusive: (work) => work() }, 'anthropic', 'sk-ant-synthetic-seed');
+  await setModel(db, 'anthropic/claude-haiku-4-5');
+}
 await store.close();
 writeFileSync(gmailFile, JSON.stringify({ [ACCOUNT]: mailbox.filters }, null, 1));
 
