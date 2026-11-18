@@ -1,6 +1,16 @@
 -- Labels and rules become the person's, for every mailbox of theirs; 0049 drops their account_id. Where mailboxes
--- disagree, the primary mailbox wins, then the earliest connected.
-ALTER TABLE "rule_filters" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+-- disagree, the primary mailbox wins, then the earliest connected. Every person's rows are moved at once, so the
+-- tables' owner, which migrates on a Postgres server, is let past their policies until the end of the migration.
+ALTER TABLE "labels" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "rules" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "rule_filters" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "decisions" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "feedback" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "examples" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "proposals" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "eval_results" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "model_runs" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "inbox_runs" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TEMP TABLE "mailbox_order" AS
 SELECT "user_id", "id" AS "account_id", row_number() OVER (PARTITION BY "user_id" ORDER BY "primary" DESC, "created_at", "id") AS "n" FROM "accounts";--> statement-breakpoint
 
@@ -65,4 +75,14 @@ FROM (
   FROM "rules" r JOIN "mailbox_order" m ON m."user_id" = r."user_id" AND m."account_id" = r."account_id"
 ) o
 WHERE o."user_id" = r."user_id" AND o."id" = r."id";--> statement-breakpoint
-DROP TABLE "mailbox_order", "label_kept", "label_moves", "rule_moves";
+DROP TABLE "mailbox_order", "label_kept", "label_moves", "rule_moves";--> statement-breakpoint
+ALTER TABLE "labels" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "rules" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "rule_filters" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "decisions" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "feedback" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "examples" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "proposals" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "eval_results" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "model_runs" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "inbox_runs" FORCE ROW LEVEL SECURITY;
