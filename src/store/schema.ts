@@ -186,6 +186,8 @@ export const messages = pgTable(
     applyRule: text('apply_rule'), // pulled in by "Apply to inbox" on this rule: what it decides here is carried out, Sift on or off
     facts: jsonb('facts').$type<Facts>().notNull(),
     readAt: time('read_at'), // when a sync saw the user had opened it
+    // A decision has been recorded for it (`recordDecision`). What has none is the triage queue, which a tick looks at every minute.
+    decided: boolean('decided').notNull().default(false),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.accountId, t.id] }),
@@ -193,6 +195,9 @@ export const messages = pgTable(
     index('messages_sender').on(t.accountId, t.senderHash),
     index('messages_domain').on(t.accountId, t.domainHash),
     index('messages_received').on(t.accountId, t.receivedAt),
+    index('messages_undecided')
+      .on(t.accountId, t.receivedAt)
+      .where(sql`NOT ${t.decided}`),
     // Lists narrowed by a fact ask `facts @> {…}`.
     index('messages_facts').using('gin', t.facts),
     own(),
@@ -262,8 +267,9 @@ export const modelRuns = pgTable(
     message(t),
     index('model_runs_message').on(t.accountId, t.messageId),
     index('model_runs_time').on(t.accountId, t.startedAt),
+    // A rule is the person's, so its calls are asked for across their mailboxes.
     index('model_runs_rule')
-      .on(t.accountId, t.ruleId, t.startedAt)
+      .on(t.userId, t.ruleId, t.startedAt)
       .where(sql`${t.ruleId} IS NOT NULL`),
     own(),
   ],
@@ -312,8 +318,9 @@ export const decisions = pgTable(
     index('decisions_message').on(t.accountId, t.messageId, t.id),
     index('decisions_time').on(t.accountId, t.decidedAt),
     index('decisions_run').on(t.userId, t.runId),
+    // A rule is the person's, so what it decided is asked for across their mailboxes.
     index('decisions_rule')
-      .on(t.accountId, t.ruleId, t.decidedAt)
+      .on(t.userId, t.ruleId, t.decidedAt)
       .where(sql`${t.ruleId} IS NOT NULL`),
     // What the next digest of a label lists is looked for every minute until it goes.
     index('decisions_digest')
@@ -353,12 +360,17 @@ export const actions = pgTable(
     decision(t),
     oneOf('actions_type', t.type, ACTION_TYPES),
     oneOf('actions_status', t.status, ACTION_STATUSES),
-    index('actions_message').on(t.accountId, t.messageId),
+    // Led by user_id, as the other tables' keys are, for deleting a person.
+    index('actions_message').on(t.userId, t.accountId, t.messageId),
     index('actions_time').on(t.accountId, t.createdAt),
     index('actions_open')
       .on(t.status)
       .where(sql`${t.status} IN ('pending', 'unknown')`),
     index('actions_decision').on(t.decisionId),
+    // A rule's filter history is read across the person's mailboxes.
+    index('actions_filters')
+      .on(t.userId, t.accountId, t.id)
+      .where(sql`${t.type} IN ('filter', 'unfilter')`),
     own(),
   ],
 ).enableRLS();

@@ -16,12 +16,12 @@ import {
   modelRuns,
   ne,
   not,
-  notExists,
   sql,
 } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import { newestOfGroup, openNewest } from '../../store/content.ts';
 import { outOfTries } from '../../store/runs.ts';
+import { noDecision } from '../../store/messages.ts';
 import { accuracy } from '../../learn/feedback.ts';
 import { type Scope, within } from '../scope.ts';
 import { type DayChanges, STAGES, type StageKey, type Summary } from '../types.ts';
@@ -167,18 +167,7 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
         await db
           .select({ n: count() })
           .from(messages)
-          .where(
-            and(
-              within(scope, messages.accountId),
-              notExists(
-                db
-                  .select({ one: sql`1` })
-                  .from(decisions)
-                  .where(and(eq(decisions.accountId, messages.accountId), eq(decisions.messageId, messages.id))),
-              ),
-              not(outOfTries(db, messages.accountId, messages.id)),
-            ),
-          )
+          .where(and(within(scope, messages.accountId), noDecision(db), not(outOfTries(db, messages.accountId, messages.id))))
       )[0]!.n,
     },
     byStage,

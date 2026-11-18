@@ -666,6 +666,18 @@ describe('Gmail filters', () => {
 });
 
 describe('triage queue', () => {
+  it('loses each message as it is decided, by its record and by its decisions', async () => {
+    await runOnce(await active(false), {
+      ...options(),
+      model: unsure,
+      connect: () => ({ api: { ...api(), listHistory: async () => ({ additions: [{ id: 'news', labelIds: ['INBOX'] }], historyId: '9' }) }, mailbox }),
+    });
+    expect(await raw(db).all('SELECT id, decided FROM messages')).toEqual([{ id: 'news', decided: true }]);
+    // As code from before the record said so left it.
+    await raw(db).run('UPDATE messages SET decided = false');
+    expect(await listUndecided(db, ACCOUNT, 10)).toEqual([]);
+  });
+
   it('rebuilds triage input from the database without refetching', async () => {
     await runOnce(await active(false), {
       ...options(),
@@ -966,6 +978,7 @@ describe('unsubscribing', () => {
     expect(await raw(db).get('SELECT subscription FROM decisions')).toEqual({ subscription: 'unsubscribe' });
 
     await raw(db).run('DELETE FROM decisions');
+    await raw(db).run('UPDATE messages SET decided = false');
     await runOnce(await active(true), withUnsubscribe());
     expect(asked).toEqual(['news']);
     expect(mailbox.labels.get('news')).toContain('L:sift/did/archived');
@@ -994,6 +1007,7 @@ describe('unsubscribing', () => {
 
     await raw(db).run('DELETE FROM actions');
     await raw(db).run('DELETE FROM decisions');
+    await raw(db).run('UPDATE messages SET decided = false');
     await raw(db).run('DELETE FROM correspondents');
     mailbox.labels.set('news', ['UNREAD']);
     await runOnce(await active(true), withUnsubscribe());

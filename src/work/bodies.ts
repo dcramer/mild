@@ -10,7 +10,8 @@ export const KEEP_BODY_DAYS = 30;
 /** The waiting mail whose text is to be kept, what of it is stored, and what is stored that is not to be kept. */
 async function bodies(db: Sql, accountId: string, now: number) {
   const cutoff = now - KEEP_BODY_DAYS * 86_400_000;
-  const waiting = (await pendingSuggestions(db, { accountId })).filter((s) => s.disposition !== 'keep' && s.decidedAt >= cutoff).map((s) => s.messageId);
+  // Bounded in the query: this runs every tick, and a mailbox's suggestions go back a year.
+  const waiting = (await pendingSuggestions(db, { accountId, since: cutoff })).filter((s) => s.disposition !== 'keep').map((s) => s.messageId);
   const wanted = new Set(waiting);
   const stored = await db
     .select({ messageId: suggestionBodies.messageId, fetchedAt: suggestionBodies.fetchedAt })

@@ -1,4 +1,5 @@
-import { alias, and, count, decisions, eq, isNotNull, max, messages as messageRows, not, notExists, suggestionBodies } from '../../store/query.ts';
+import { alias, and, count, decisions, eq, isNotNull, max, messages as messageRows, not, suggestionBodies } from '../../store/query.ts';
+import { noDecision } from '../../store/messages.ts';
 import { goingInboxRuns } from '../../store/inbox.ts';
 import { outOfTries } from '../../store/runs.ts';
 import type { Sql } from '../../store/sql.ts';
@@ -39,17 +40,7 @@ async function pulledInWaiting(db: Sql, scope: Scope): Promise<boolean> {
     .select({ id: messageRows.id })
     .from(messageRows)
     .where(
-      and(
-        within(scope, messageRows.accountId),
-        eq(messageRows.suggestOnly, true),
-        notExists(
-          db
-            .select({ id: decisions.id })
-            .from(decisions)
-            .where(and(eq(decisions.accountId, messageRows.accountId), eq(decisions.messageId, messageRows.id))),
-        ),
-        not(outOfTries(db, messageRows.accountId, messageRows.id)),
-      ),
+      and(within(scope, messageRows.accountId), eq(messageRows.suggestOnly, true), noDecision(db), not(outOfTries(db, messageRows.accountId, messageRows.id))),
     )
     .limit(1);
   return row !== undefined;

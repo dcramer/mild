@@ -89,7 +89,7 @@ const toSuggestion = (db: Sql, r: Omit<Suggestion, 'fromAddress' | 'fromName' | 
  */
 export async function pendingSuggestions(
   db: Sql,
-  filter: { accountId?: string; accounts?: readonly string[]; sender?: string; facts?: RuleFacts; limit?: number } = {},
+  filter: { accountId?: string; accounts?: readonly string[]; sender?: string; facts?: RuleFacts; since?: number; limit?: number } = {},
 ): Promise<Suggestion[]> {
   const rows = await db
     .select(SUGGESTION)
@@ -113,7 +113,7 @@ export async function waitingCount(db: Sql, accounts: readonly string[]): Promis
   return row?.n ?? 0;
 }
 
-const waiting = (db: Sql, filter: { accountId?: string; accounts?: readonly string[]; sender?: string; facts?: RuleFacts }) =>
+const waiting = (db: Sql, filter: { accountId?: string; accounts?: readonly string[]; sender?: string; facts?: RuleFacts; since?: number }) =>
   and(
     eq(
       decisions.id,
@@ -136,6 +136,7 @@ const waiting = (db: Sql, filter: { accountId?: string; accounts?: readonly stri
     filter.accountId === undefined ? undefined : eq(decisions.accountId, filter.accountId),
     filter.sender === undefined ? undefined : eq(messages.senderHash, hashOf(db, filter.sender)),
     filter.facts === undefined ? undefined : factsWhere(filter.facts),
+    filter.since === undefined ? undefined : gte(decisions.decidedAt, filter.since),
   );
 
 /** A message sift never decided (the model could not judge it), with who sent it, or null. */

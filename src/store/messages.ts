@@ -56,6 +56,21 @@ export interface QueuedMessage {
 }
 
 /**
+ * For a query over messages: no decision has been recorded for it. `decided` narrows it to the few that may not have
+ * one (`messages_undecided`); the decisions themselves say, so mail decided by code that did not set it is still left out.
+ */
+export const noDecision = (db: Sql) =>
+  and(
+    eq(messages.decided, false),
+    notExists(
+      db
+        .select({ id: decisions.id })
+        .from(decisions)
+        .where(and(eq(decisions.accountId, messages.accountId), eq(decisions.messageId, messages.id))),
+    ),
+  );
+
+/**
  * Recorded messages that have no decision yet, newest first, rebuilt as triage input. This is the triage queue.
  * Newest first because mail can wait in it (with no model, what no rule covers is left there), and what waits
  * must never keep new mail from being classified.
@@ -64,17 +79,7 @@ export async function listUndecided(db: Sql, accountId: string, limit: number): 
   const rows = await db
     .select({ ...COLUMNS, outOfTries: outOfTries(db, messages.accountId, messages.id).mapWith(Boolean) })
     .from(messages)
-    .where(
-      and(
-        eq(messages.accountId, accountId),
-        notExists(
-          db
-            .select({ id: decisions.id })
-            .from(decisions)
-            .where(and(eq(decisions.accountId, messages.accountId), eq(decisions.messageId, messages.id))),
-        ),
-      ),
-    )
+    .where(and(eq(messages.accountId, accountId), noDecision(db)))
     .orderBy(desc(messages.receivedAt), asc(messages.id))
     .limit(limit);
   return rows.map((r) => ({ suggestOnly: r.suggestOnly, applyRule: r.applyRule, outOfTries: r.outOfTries, facts: toMessage(db, accountId, r) }));

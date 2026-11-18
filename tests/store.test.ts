@@ -289,6 +289,28 @@ describe("a mailbox's number", () => {
   });
 });
 
+describe('a message', () => {
+  it('decided before messages said so is marked decided by a migration, as a Postgres server runs it', async () => {
+    const { db, run } = await migratedBefore('0054_mail_already_decided');
+    await db.exec(`
+      INSERT INTO users (id, owner, created_at) VALUES (1, true, 0), (2, false, 0);
+      INSERT INTO accounts (id, user_id, created_at, "primary") VALUES ('a@example.org', 1, 0, true), ('b@example.net', 2, 0, true);
+      INSERT INTO mailboxes (user_id, id) VALUES (1, 'a@example.org'), (2, 'b@example.net');
+      INSERT INTO messages (user_id, account_id, id, thread_id, sender_hash, domain_hash, received_at, headers, synced_at, facts) VALUES
+        (1, 'a@example.org', 'decided', 't', 's', 'd', 0, 'h', 0, '{}'), (1, 'a@example.org', 'waiting', 't', 's', 'd', 0, 'h', 0, '{}'),
+        (2, 'b@example.net', 'decided', 't', 's', 'd', 0, 'h', 0, '{}');
+      INSERT INTO decisions (user_id, account_id, message_id, stage, disposition, subscription, reason, decided_at) VALUES
+        (1, 'a@example.org', 'decided', 'rules', 'keep', 'preserve', 'r', 1), (2, 'b@example.net', 'decided', 'rules', 'keep', 'preserve', 'r', 1);
+    `);
+    await run('0054_mail_already_decided');
+    expect((await db.query('SELECT user_id, id, decided FROM messages ORDER BY user_id, id')).rows).toEqual([
+      { user_id: 1, id: 'decided', decided: true },
+      { user_id: 1, id: 'waiting', decided: false },
+      { user_id: 2, id: 'decided', decided: true },
+    ]);
+  });
+});
+
 describe('a model call', () => {
   it('made before calls said which rule they checked is given the rule whose condition it met, by a migration', async () => {
     // On a Postgres server row-level security hid every row from it, so only a machine's install was given them.

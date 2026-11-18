@@ -1,4 +1,4 @@
-import { type DECISION_OUTCOMES, and, asc, decisions, desc, eq, feedback, isNull, labels } from './query.ts';
+import { type DECISION_OUTCOMES, and, asc, decisions, desc, eq, feedback, isNull, labels, messages } from './query.ts';
 import type { Sql } from './sql.ts';
 import { openPart, sealPart } from './content.ts';
 import type { Decision, Disposition } from '../triage/types.ts';
@@ -45,6 +45,10 @@ export async function recordDecision(
       byUser: options.byUser ?? false,
     })
     .returning({ id: decisions.id });
+  await db
+    .update(messages)
+    .set({ decided: true })
+    .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId), eq(messages.decided, false)));
   return row!.id;
 }
 
