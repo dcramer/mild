@@ -195,9 +195,9 @@ export const api = {
     get<SenderPage>('/api/sender', name === undefined ? { account, address } : { account, address, name }, signal),
   domain: (account: string, domain: string, signal: AbortSignal) => get<SenderPage>('/api/domain', { account, domain }, signal),
   /** `theirs`: their own rule says more than a standing, so nothing was written and the rule dialog is for this. */
-  giveStanding: (accountId: string, who: { address: string } | { domain: string }, standing: Given) =>
-    post<{ id: string; was: Given | null } | { theirs: string }>('/api/standing', { accountId, ...who, standing }),
-  clearStanding: (accountId: string, who: { address: string } | { domain: string }) => post('/api/standing/clear', { accountId, ...who }),
+  giveStanding: (who: { address: string } | { domain: string }, standing: Given) =>
+    post<{ id: string; was: Given | null } | { theirs: string }>('/api/standing', { ...who, standing }),
+  clearStanding: (who: { address: string } | { domain: string }) => post('/api/standing/clear', who),
   rules: (signal: AbortSignal) => get<{ rules: RuleSummary[] }>('/api/rules', {}, signal),
   suggestions: (includeKept: boolean, fact: FactFilter | '', signal: AbortSignal) =>
     get<Suggestions>('/api/suggestions', { ...(includeKept ? { kept: 1 } : {}), ...(fact ? { fact } : {}) }, signal),
@@ -217,26 +217,24 @@ export const api = {
   finishChatGPT: (address: string) => post('/api/model/chatgpt/finish', { address }),
   saveModelKey: (provider: string, key: string) => post('/api/model/key', { provider, key }),
   signOutModel: (provider: string) => post('/api/model/signout', { provider }),
-  /** Change a label in every mailbox that has it. */
   saveLabel: (id: string, change: { name?: string; description?: string; disposition?: string; markRead?: boolean; unsubscribe?: boolean }) =>
     post('/api/labels', { id, ...change }),
-  /** Remove a label from every mailbox that has it, with the rules that name it. */
+  /** Remove a label, with the rules that name it. */
   removeLabel: (id: string) => post('/api/labels/remove', { id }),
-  /** Add labels in every mailbox: by hand, or kept from what the model suggested. */
+  /** Add labels: by hand, or kept from what the model suggested. */
   addLabels: (labels: { name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }[]) =>
     post<{ ids: string[] }>('/api/labels/add', { labels }),
   /** Ask the model for labels from what the person wants. Its own call; it can take a minute. */
   proposeLabels: (goal: string) => post<LabelProposal>('/api/labels/propose', { goal }),
   /** The latest labels the model suggested, so a reload keeps them. */
   labelProposal: (signal: AbortSignal) => get<{ proposal: LabelProposal | null }>('/api/labels/proposal', {}, signal),
-  /** Make these labels in every mailbox of the person's that has none yet. */
+  /** Make these labels, when the person has none yet. */
   acceptLabels: (labels: { name: string; description: string; disposition: string; markRead?: boolean; unsubscribe?: boolean }[]) =>
     post<{ ids: string[] }>('/api/labels/accept', { labels }),
   /** The model fills in a rule from the person's words, for the rule dialog. Nothing is made. */
   draftRule: (accountId: string, goal: string) => post<RuleDraft>('/api/rules/draft', { accountId, goal }),
   /** A rule carries a label, an action (`disposition`), or both; or an action for mail that turns out to be `whenLabel`. */
   addRule: (rule: {
-    accountId: string;
     match: RuleMatch;
     /** What the mail is. */
     label?: string;

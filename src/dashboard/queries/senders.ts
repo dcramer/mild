@@ -80,16 +80,14 @@ async function profileOf(db: Sql, scope: Scope, accountId: string, who: { addres
   if (!here) return null;
   const known = 'address' in who ? await senderFacts(db, accountId, who.address, now) : await domainFacts(db, accountId, who.domain, now);
   if (!known) return null;
-  const names = await labelNames(db, accountId);
+  const names = await labelNames(db);
   const domainName = 'address' in who ? (who.address.split('@')[1] ?? '') : who.domain;
   const ofDomain = 'address' in who ? await domainFacts(db, accountId, domainName, now) : null;
   const rules = (await listRuleSummaries(db, here, now))
-    .filter(
-      (r) =>
-        r.accountId === accountId &&
-        ('address' in who
-          ? (r.match.from ?? []).includes(who.address) || (r.match.fromDomain ?? []).includes(domainName)
-          : (r.match.fromDomain ?? []).includes(domainName) || (r.match.from ?? []).some((a) => a.endsWith(`@${domainName}`))),
+    .filter((r) =>
+      'address' in who
+        ? (r.match.from ?? []).includes(who.address) || (r.match.fromDomain ?? []).includes(domainName)
+        : (r.match.fromDomain ?? []).includes(domainName) || (r.match.from ?? []).some((a) => a.endsWith(`@${domainName}`)),
     )
     .map((r) => ({
       id: r.id,
@@ -142,7 +140,7 @@ export async function senderPage(
   const profile = await profileOf(db, scope, accountId, who, now);
   if (!profile) return null;
   const filter = 'address' in who ? { sender: who.address } : { domain: who.domain };
-  const named = 'address' in who ? await namesOf(db, accountId, who.address, await labelNames(db, accountId)) : null;
+  const named = 'address' in who ? await namesOf(db, accountId, who.address, await labelNames(db)) : null;
   const writing =
     'domain' in who
       ? (

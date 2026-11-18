@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import { getRuleFilter, ruleFilterStatus } from '../../../../store/filters.ts';
+import { ruleFilterStatus } from '../../../../store/filters.ts';
 import { preferences } from '../../../../store/preferences.ts';
 import { madeFromProposal } from '../../../../store/proposals.ts';
 import { listRules, setRule } from '../../../../store/rules.ts';
 import { nameAlone, tidyMatch } from '../../../../triage/stages/rules.ts';
 
 import { RuleFacts, RuleFilter, type RuleMatch } from '../../../types.ts';
-import { accountId, decided, id, labelId, named, redecide, write } from '../../route.ts';
+import { decided, id, labelId, redecide, self, write } from '../../route.ts';
 import { Refusal } from '../../../../refusal.ts';
 
 /** More alternatives than this for one condition is a list of senders to keep somewhere else. */
@@ -32,7 +32,6 @@ export default write({
   path: '/api/rules',
   body: z
     .strictObject({
-      accountId,
       match: conditions,
       label: labelId.optional(),
       whenLabel: labelId.optional(),
@@ -57,16 +56,15 @@ export default write({
    * `filter`: the Gmail filter the rule can also be, to offer next; null when it cannot be one, already has one, or Sift is off.
    */
   reply: z.object({ id: z.string(), replaced: z.boolean(), redecided: z.number(), filter: RuleFilter.nullable() }),
-  touches: named,
-  run: async ({ db, now }, { accountId, match, label, whenLabel, disposition, markRead, unsubscribe, when, name, proposal }) => {
+  touches: self,
+  run: async ({ db, now }, { match, label, whenLabel, disposition, markRead, unsubscribe, when, name, proposal }) => {
     const { created, replaced } = await db.transaction(async (tx) => {
       // First: making the rule also settles any proposal for exactly that mail.
-      if (proposal !== undefined && !(await madeFromProposal(tx, proposal, accountId, now()))) throw new Refusal('That proposal is no longer open.');
-      const before = new Set((await listRules(tx, accountId)).map((r) => r.id));
+      if (proposal !== undefined && !(await madeFromProposal(tx, proposal, now()))) throw new Refusal('That proposal is no longer open.');
+      const before = new Set((await listRules(tx)).map((r) => r.id));
       // A rule with exactly these conditions is replaced; the dialog shows which.
       const id = await setRule(
         tx,
-        accountId,
         match,
         {
           ...(label === undefined ? {} : { labelId: label }),
@@ -82,9 +80,9 @@ export default write({
       );
       return { created: id, replaced: before.has(id) };
     });
-    const redecided = await redecide(db, now, accountId);
+    const redecided = await redecide(db, now);
     const filter = (await ruleFilterStatus(db)).get(created);
-    const offer = filter?.possible && !(await getRuleFilter(db, created))?.filterId && (await preferences(db)).active;
+    const offer = filter?.possible && !filter.filterId && (await preferences(db)).active;
     return { id: created, replaced, redecided, filter: offer ? filter : null };
   },
 });

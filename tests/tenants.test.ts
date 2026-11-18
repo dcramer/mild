@@ -35,7 +35,7 @@ const called = new Set<string>();
 
 async function seed(account: string): Promise<void> {
   const db = await dbOf(account);
-  await withSampleLabels(db, account);
+  await withSampleLabels(db);
   const asked = await startLabelProposal(db, { accountId: account, goal: `Quiet ${MARK[account]}`, model: 'p/m', now: 1 });
   await finishLabelProposal(db, account, asked, { drafts: [{ name: `Pitches ${MARK[account]}`, description: 'd', disposition: 'archive', why: 'w' }], now: 2 });
   const mark = MARK[account]!;
@@ -48,7 +48,7 @@ async function seed(account: string): Promise<void> {
     { disposition: 'archive', subscription: 'preserve', stage: 'model', labelId: 'newsletter', reason: `because ${mark}` },
     { now: 1000 },
   );
-  const rule = await addRule(db, account, { match: { from: [sender.address] }, disposition: 'archive' }, 'user', 1000);
+  const rule = await addRule(db, { match: { from: [sender.address] }, disposition: 'archive' }, 'user', 1000);
   const { id: action } = (await raw(db).get<{ id: number }>(
     `INSERT INTO actions (account_id, message_id, type, payload, original_labels, status, created_at, decision_id) VALUES (?, ?, 'archive', '{}', '[]', 'done', 1000, ?) RETURNING id`,
     account,
@@ -194,8 +194,9 @@ describe('users and their mailboxes', () => {
     const bravo = await dbOf(BRAVO);
     expect(alpha).not.toBe(bravo);
     expect((await raw(alpha).all<{ id: string }>('SELECT id FROM mailboxes ORDER BY id')).map((m) => m.id)).toEqual([ALPHA, ALPHA_WORK]);
-    for (const table of ['mailboxes', 'messages', 'decisions', 'actions', 'rules', 'proposals', 'examples'])
+    for (const table of ['mailboxes', 'messages', 'decisions', 'actions', 'proposals', 'examples'])
       expect(await raw(bravo).all(`SELECT DISTINCT ${table === 'mailboxes' ? 'id' : 'account_id'} AS id FROM ${table}`), table).toEqual([{ id: BRAVO }]);
+    expect(await raw(bravo).all('SELECT id FROM rules')).toEqual([{ id: ids[BRAVO]!.rule }]);
   });
 });
 
@@ -231,9 +232,10 @@ describe("nobody sees or changes another person's mail", () => {
       expect(rules).toContain(MARK[ALPHA]);
       expect(rules).toContain(MARK[ALPHA_WORK]);
     }
+    // Rules are the person's, for every mailbox of theirs, whichever one is asked about.
     const one = await call('GET', `/api/rules?mailbox=${encodeURIComponent(ALPHA_WORK)}`, ALPHA);
     expect(one.text).toContain(MARK[ALPHA_WORK]);
-    expect(one.text).not.toContain(MARK[ALPHA]);
+    expect(one.text).toContain(MARK[ALPHA]);
     const summary = JSON.parse((await call('GET', `/api/summary?mailbox=${encodeURIComponent(ALPHA_WORK)}`, ALPHA)).text) as { totals: { decided: number } };
     expect(summary.totals.decided).toBe(1);
     // Narrowed by a fact, a list is still only theirs.
@@ -262,7 +264,7 @@ describe("nobody sees or changes another person's mail", () => {
     const db = await dbOf(ALPHA);
     const state = async () =>
       JSON.stringify([
-        await listRules(db, ALPHA),
+        await listRules(db),
         await raw(db).all('SELECT * FROM labels'),
         await raw(db).all('SELECT * FROM proposals'),
         await raw(db).all('SELECT * FROM model_runs'),
@@ -276,31 +278,11 @@ describe("nobody sees or changes another person's mail", () => {
         { accountId: ALPHA, sender: `sender@${MARK[ALPHA]}.example.com`, label: 'newsletter', disposition: 'keep', messageId: `m-${MARK[ALPHA]}` },
         { accountId: NOBODY, sender: `sender@${MARK[ALPHA]}.example.com`, label: 'newsletter', disposition: 'keep', messageId: `m-${MARK[ALPHA]}` },
       ],
+      // A rule, with a proposal of someone else's: none of theirs has that id.
       [
         '/api/rules',
-        { accountId: ALPHA, match: { from: ['x@example.com'] }, disposition: 'spam' },
-        { accountId: NOBODY, match: { from: ['x@example.com'] }, disposition: 'spam' },
-      ],
-      [
-        '/api/standing',
-        { accountId: ALPHA, address: `sender@${MARK[ALPHA]}.example.com`, standing: 'blocked' },
-        { accountId: NOBODY, address: `sender@${MARK[ALPHA]}.example.com`, standing: 'blocked' },
-      ],
-      [
-        '/api/standing/clear',
-        { accountId: ALPHA, address: `sender@${MARK[ALPHA]}.example.com` },
-        { accountId: NOBODY, address: `sender@${MARK[ALPHA]}.example.com` },
-      ],
-      [
-        '/api/rules',
-        { accountId: ALPHA, match: { from: ['x@example.com'] }, label: 'newsletter', proposal: theirs.proposal },
-        { accountId: NOBODY, match: { from: ['x@example.com'] }, label: 'newsletter', proposal: 9999 },
-      ],
-      // Their own mailbox, with a proposal of someone else's: none of theirs has that id.
-      [
-        '/api/rules',
-        { accountId: BRAVO, match: { from: ['x@example.com'] }, label: 'newsletter', proposal: theirs.proposal },
-        { accountId: BRAVO, match: { from: ['x@example.com'] }, label: 'newsletter', proposal: 9999 },
+        { match: { from: ['x@example.com'] }, label: 'newsletter', proposal: theirs.proposal },
+        { match: { from: ['x@example.com'] }, label: 'newsletter', proposal: 9999 },
       ],
       ['/api/rules/remove', { id: theirs.rule }, { id: 'r-nobody' }],
       ['/api/rules/filter', { id: theirs.rule, on: true }, { id: 'r-nobody', on: true }],
@@ -330,7 +312,7 @@ describe("nobody sees or changes another person's mail", () => {
     expect((await call('POST', '/api/rules/draft', ALPHA, { accountId: ALPHA_WORK, goal: 'Archive x' })).status).toBe(200);
     expect(calls).toEqual([`inbox ${theirs.rule}`, 'check', `draft ${ALPHA_WORK}`]);
     expect((await call('POST', '/api/rules/remove', ALPHA, { id: theirs.rule })).status).toBe(200);
-    const fromProposal = { accountId: ALPHA_WORK, match: { from: ['x@example.com'] }, label: 'newsletter', proposal: theirs.proposal };
+    const fromProposal = { match: { from: ['x@example.com'] }, label: 'newsletter', proposal: theirs.proposal };
     expect((await call('POST', '/api/rules', ALPHA, fromProposal)).status).toBe(200);
     expect(await raw(db).get('SELECT status FROM proposals WHERE id = ?', theirs.proposal)).toEqual({ status: 'accepted' });
     expect((await call('POST', '/api/undo', ALPHA_WORK, { id: theirs.action })).status).toBe(200);
@@ -358,21 +340,33 @@ describe("nobody sees or changes another person's mail", () => {
   it('lets each person change their own labels, and only their own', async () => {
     const alpha = await dbOf(ALPHA);
     const labels = async () =>
-      JSON.stringify([await raw(alpha).all('SELECT * FROM labels ORDER BY account_id, id'), await raw(alpha).all('SELECT * FROM label_proposals')]);
+      JSON.stringify([await raw(alpha).all('SELECT * FROM labels ORDER BY id'), await raw(alpha).all('SELECT * FROM label_proposals')]);
     const before = await labels();
     const bravo = await dbOf(BRAVO);
     const label = { name: 'Bravo only', description: 'Mail only Bravo has.', disposition: 'archive' };
     expect((await call('POST', '/api/labels', BRAVO, { id: 'newsletter', name: 'Bravo reading' })).status).toBe(200);
     expect((await call('POST', '/api/labels/add', BRAVO, { labels: [label] })).status).toBe(200);
     expect((await call('POST', '/api/labels/propose', BRAVO, { goal: 'Less noise' })).status).toBe(200);
-    // Bravo's mailbox has labels already, so there is nothing to accept into: refused, and Alpha's untouched either way.
+    // Bravo has labels already, so there is nothing to accept: refused, and Alpha's untouched either way.
     expect((await call('POST', '/api/labels/accept', BRAVO, { labels: [label] })).status).toBe(409);
     expect(calls).toEqual([`propose ${BRAVO}`]);
-    expect((await listLabels(bravo, BRAVO)).map((l) => l.name)).toEqual(expect.arrayContaining(['Bravo reading', 'Bravo only']));
+    expect((await listLabels(bravo)).map((l) => l.name)).toEqual(expect.arrayContaining(['Bravo reading', 'Bravo only']));
     // Alpha has a label by this id too.
     expect((await call('POST', '/api/labels/remove', BRAVO, { id: 'newsletter' })).status).toBe(200);
-    expect((await listLabels(bravo, BRAVO)).map((l) => l.id)).not.toContain('newsletter');
+    expect((await listLabels(bravo)).map((l) => l.id)).not.toContain('newsletter');
     expect(await labels()).toBe(before);
+  });
+
+  it('lets each person make rules and give senders a standing of their own, and only their own', async () => {
+    const alpha = await dbOf(ALPHA);
+    const rules = async () => JSON.stringify(await raw(alpha).all('SELECT * FROM rules ORDER BY id'));
+    const before = await rules();
+    const sender = `sender@${MARK[ALPHA]}.example.com`;
+    expect((await call('POST', '/api/rules', BRAVO, { match: { from: [sender] }, disposition: 'spam' })).status).toBe(200);
+    expect((await call('POST', '/api/standing', BRAVO, { address: sender, standing: 'trusted' })).status).toBe(200);
+    expect((await call('POST', '/api/standing/clear', BRAVO, { address: sender })).status).toBe(200);
+    expect(await raw(await dbOf(BRAVO)).all('SELECT id FROM rules')).toEqual([{ id: ids[BRAVO]!.rule }]);
+    expect(await rules()).toBe(before);
   });
 
   it("goes through only the asker's own inboxes, and stops only theirs", async () => {

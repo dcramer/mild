@@ -5,7 +5,7 @@ import { type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import { setParams, useParam } from '@/lib/route.ts';
 import { filterStanding } from '@/views/gmail-filter.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
-import { RulePanel, Who, checked, whoText } from '@/views/rule-panel.tsx';
+import { RulePanel, Who, checked, homeOf, whoText } from '@/views/rule-panel.tsx';
 import type { OpenMessages } from '@/views/message-panel.tsx';
 import { INBOX, MADE_BY, ago, count, dateTime, describeMatch, doesName, inboxFirst, outcomeName, plural } from '@/lib/format.ts';
 import {
@@ -79,8 +79,8 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
   const [gmail, setGmail] = useParam('gmail', GMAIL);
   const [open, setOpen] = useParam('rule');
   const [adding, setAdding] = useState(false);
-  const accountId = manage.data?.accounts[0]?.id;
-  const labels = accountId ? (manage.data?.labels[accountId] ?? []).map((l) => [l.id, l.name] as const) : [];
+  const home = homeOf(manage.data);
+  const labels = (manage.data?.labels ?? []).map((l) => [l.id, l.name] as const);
   const needle = search.trim().toLowerCase();
   const rules = (data?.rules ?? [])
     .filter(
@@ -117,7 +117,7 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
       title="Rules"
       actions={
         // Shown from the start and enabled once the account is known, so it does not arrive late and move the page.
-        <Button disabled={!accountId} onClick={() => setAdding(true)}>
+        <Button disabled={!home} onClick={() => setAdding(true)}>
           <PlusIcon aria-hidden />
           Add a rule
         </Button>
@@ -184,7 +184,13 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
               <Tr key={rule.id} onOpen={() => setOpen(rule.id)}>
                 <Td className="max-w-0 md:w-full">
                   <span className="block break-words md:truncate">
-                    {rule.name ? <span className="name">{rule.name}</span> : <Who accountId={rule.accountId} match={rule.match} />}
+                    {rule.name ? (
+                      <span className="name">{rule.name}</span>
+                    ) : home ? (
+                      <Who accountId={home} match={rule.match} />
+                    ) : (
+                      <span className="name">{whoText(rule.match)}</span>
+                    )}
                     {rule.kind === 'when-label' ? <span className="text-muted-foreground"> as {rule.labelName}</span> : null}
                     <ArrowRightIcon aria-label="is" className="mx-2 inline size-4 align-[-0.15em] text-muted-foreground" />
                     <Result rule={rule} />
@@ -209,10 +215,11 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
           </tbody>
         </Table>
       )}
-      {at !== -1 ? (
+      {at !== -1 && home ? (
         <RulePanel
           key={rules[at].id}
           rule={rules[at]}
+          home={home}
           active={manage.data?.active ?? false}
           position={`${at + 1} of ${rules.length}`}
           onOpen={onOpen}
@@ -221,9 +228,7 @@ export function Rules({ onOpen }: { onOpen: OpenMessages }) {
           onClose={() => setParams({ rule: '', apply: '' })}
         />
       ) : null}
-      {adding && accountId ? (
-        <AddRuleDialog accountId={accountId} labels={manage.data?.labels[accountId] ?? []} onClose={() => setAdding(false)} onAdded={reload} />
-      ) : null}
+      {adding && home ? <AddRuleDialog accountId={home} labels={manage.data?.labels ?? []} onClose={() => setAdding(false)} onAdded={reload} /> : null}
     </ListView>
   );
 }

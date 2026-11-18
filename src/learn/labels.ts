@@ -17,7 +17,7 @@ export async function proposeLabels(
   const now = deps.now ?? Date.now;
   const at = now();
   const id = await startLabelProposal(db, { ...request, model: deps.model, now: at });
-  const labels = (await listLabels(db, request.accountId)).filter((l) => l.id !== LEAVE_IN_INBOX);
+  const labels = (await listLabels(db)).filter((l) => l.id !== LEAVE_IN_INBOX);
   const answer = await invokeAgent('labels', [db.person, id], { 'sift.label_proposal': id }, () => deps.propose({ goal: request.goal, labels }));
   const usage = answer.usage ? { usage: answer.usage } : {};
   if ('failed' in answer) {

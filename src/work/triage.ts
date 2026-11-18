@@ -88,14 +88,10 @@ const FAILURES_IN_A_ROW = 3;
  * without asking, rather than given to a rule that would have deferred to it. When a rule asks what only
  * the whole message shows (an attachment), each message is read before the rules, model or not.
  */
-async function cascadeFor(
-  deps: TriageDeps,
-  accountId: string,
-  asking: () => boolean = () => true,
-): Promise<(facts: MessageFacts) => Promise<Decision | Unfinished>> {
+async function cascadeFor(deps: TriageDeps, asking: () => boolean = () => true): Promise<(facts: MessageFacts) => Promise<Decision | Unfinished>> {
   const { db, model, sources } = deps;
-  const labels = await listLabels(db, accountId);
-  const rules = await listRules(db, accountId);
+  const labels = await listLabels(db);
+  const rules = await listRules(db);
   // The rules ask whether the owner has written to the sender as they rank; the answer is read before
   // each message, and again whenever something in the cascade may have just found out.
   let written: boolean | undefined;
@@ -269,10 +265,10 @@ export async function deciderFor(
   const box = mailbox ?? deps.answers;
 
   const { model: _given, ...modelless } = deps;
-  const decide = await cascadeFor(model ? { ...deps, model } : modelless, account.id, () => asking);
+  const decide = await cascadeFor(model ? { ...deps, model } : modelless, () => asking);
   // Mail the model failed on every time it was asked is not asked again: a rule may still say what it is, and otherwise
   // it is the user's to say, like any mail no tier could place.
-  const decideByRules = await cascadeFor(modelless, account.id);
+  const decideByRules = await cascadeFor(modelless);
   const unjudged = (decision: Decision | Unfinished): Decision | Unfinished =>
     'unfinished' in decision || decision.stage !== 'fallback' ? decision : { ...decision, reason: 'the model failed on it each time it was asked' };
 
@@ -332,7 +328,7 @@ export async function deciderFor(
       decision.block &&
       decision.labelId &&
       passedDmarc(facts.headers) &&
-      (await blockSender(db, account.id, facts.from.address, decision.labelId, now()))
+      (await blockSender(db, facts.from.address, decision.labelId, now()))
     )
       report.blocked++;
     // Unsubscribing follows the mailbox change, never goes ahead of it, and never happens to someone the user writes to.

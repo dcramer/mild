@@ -196,7 +196,7 @@ const DO: Record<DecidedDisposition, string> = { keep: 'keep it', archive: 'arch
  * Throws if the label does not exist, or the answer refers to nothing that is waiting.
  */
 export async function applyFeedback(db: Sql, input: FeedbackInput, now: number = Date.now()): Promise<FeedbackResult> {
-  const label = (await listLabels(db, input.accountId)).find((l) => l.id === input.label);
+  const label = (await listLabels(db)).find((l) => l.id === input.label);
   if (!label) throw new Refusal(`There is no label "${input.label}".`);
   const outcome = input.disposition ?? label.disposition;
   if (label.id === LEAVE_IN_INBOX && outcome !== 'keep') throw new Refusal('Mail left in your inbox stays there. Choose the label for mail to move.');
@@ -306,12 +306,11 @@ export async function accuracy(db: Sql, since = 0, accounts?: readonly string[])
     .where(scored())
     .groupBy(decisions.stage)
     .orderBy(asc(decisions.stage));
-  // Each mailbox names its own labels; across several, the same id shows one of its names.
   const byLabel = (await db
     .select({ labelId: decisions.labelId, labelName: min(labels.name), reviewed: count(), right })
     .from(feedback)
     .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
-    .innerJoin(labels, and(eq(labels.accountId, decisions.accountId), eq(labels.id, decisions.labelId)))
+    .innerJoin(labels, eq(labels.id, decisions.labelId))
     .where(scored())
     .groupBy(decisions.labelId)
     .orderBy(desc(count()), asc(decisions.labelId))) as { labelId: string; labelName: string; reviewed: number; right: number }[];

@@ -14,12 +14,13 @@ import { MONTH } from './usage.ts';
  * message, and what checking its condition cost over the last 30 days.
  */
 export async function listRuleSummaries(db: Sql, scope: Scope, now: number): Promise<RuleSummary[]> {
+  // The rules are the person's own; a scope of none of their mailboxes sees none of them.
+  if (scope.accounts.length === 0) return [];
   const filters = await ruleFilterStatus(db);
-  const checking = and(eq(modelRuns.accountId, rules.accountId), eq(modelRuns.ruleId, rules.id), gte(modelRuns.startedAt, now - MONTH * DAY_MS));
+  const checking = and(eq(modelRuns.ruleId, rules.id), gte(modelRuns.startedAt, now - MONTH * DAY_MS));
   const rows = await db
     .select({
       id: rules.id,
-      accountId: rules.accountId,
       match: rules.match,
       except: rules.except,
       name: rules.name,
@@ -33,12 +34,11 @@ export async function listRuleSummaries(db: Sql, scope: Scope, now: number): Pro
       condition: rules.condition,
       source: rules.source,
       hits: rules.hits,
-      filterId: rules.filterId,
       createdAt: rules.createdAt,
       lastHitAt: sql<number | null>`${db
         .select({ at: max(decisions.decidedAt) })
         .from(decisions)
-        .where(and(eq(decisions.accountId, rules.accountId), eq(decisions.ruleId, rules.id)))}`.mapWith(Number),
+        .where(eq(decisions.ruleId, rules.id))}`.mapWith(Number),
       checks: sql<number>`${db.select({ n: count() }).from(modelRuns).where(checking)}`.mapWith(Number),
       checkCost: sql<number>`${db
         .select({ usd: sql`coalesce(sum(${modelRuns.costUsd}), 0)` })
@@ -46,33 +46,43 @@ export async function listRuleSummaries(db: Sql, scope: Scope, now: number): Pro
         .where(checking)}`.mapWith(Number),
     })
     .from(rules)
-    .leftJoin(labels, and(eq(labels.accountId, rules.accountId), eq(labels.id, sql`coalesce(${rules.labelId}, ${rules.whenLabel})`)))
-    .where(within(scope, rules.accountId))
-    .orderBy(asc(rules.accountId), asc(rules.position), asc(rules.id));
-  return rows.map((r) => ({
-    id: r.id,
-    accountId: r.accountId,
-    match: openJson<RuleMatch>(db, ruleName(db, r.id, 'match'), r.match),
-    except: openJson<RuleMatch[]>(db, ruleName(db, r.id, 'except'), r.except),
-    kind: r.labelId !== null ? 'label' : r.whenLabel !== null ? 'when-label' : 'action',
-    name: r.name === null ? null : openJson<string>(db, ruleName(db, r.id, 'name'), r.name),
-    labelId: r.labelId,
-    whenLabel: r.whenLabel,
-    labelName: r.labelName,
-    override: r.override,
-    disposition: r.override ?? r.labelDoes,
-    markRead: r.markRead,
-    unsubscribe: r.unsubscribe,
-    when: r.condition,
-    source: r.source,
-    hits: r.hits,
-    lastHitAt: r.lastHitAt,
-    checks: r.checks,
-    checkCost: r.checkCost,
-    filterId: r.filterId,
-    filter: filters.get(r.id) ?? { state: 'none', possible: false, reason: null, plan: null, differs: [], checkedAt: null, history: [] },
-    createdAt: r.createdAt,
-  }));
+    .leftJoin(labels, eq(labels.id, sql`coalesce(${rules.labelId}, ${rules.whenLabel})`))
+    .orderBy(asc(rules.position), asc(rules.id));
+  return rows.map((r) => {
+    const { filterId, ...filter } = filters.get(r.id) ?? {
+      filterId: null,
+      state: 'none',
+      possible: false,
+      reason: null,
+      plan: null,
+      differs: [],
+      checkedAt: null,
+      history: [],
+    };
+    return {
+      id: r.id,
+      match: openJson<RuleMatch>(db, ruleName(db, r.id, 'match'), r.match),
+      except: openJson<RuleMatch[]>(db, ruleName(db, r.id, 'except'), r.except),
+      kind: r.labelId !== null ? 'label' : r.whenLabel !== null ? 'when-label' : 'action',
+      name: r.name === null ? null : openJson<string>(db, ruleName(db, r.id, 'name'), r.name),
+      labelId: r.labelId,
+      whenLabel: r.whenLabel,
+      labelName: r.labelName,
+      override: r.override,
+      disposition: r.override ?? r.labelDoes,
+      markRead: r.markRead,
+      unsubscribe: r.unsubscribe,
+      when: r.condition,
+      source: r.source,
+      hits: r.hits,
+      lastHitAt: r.lastHitAt,
+      checks: r.checks,
+      checkCost: r.checkCost,
+      filterId,
+      filter,
+      createdAt: r.createdAt,
+    };
+  });
 }
 
 /** Shown of what a rule has decided and not carried out; the count says how many in all. */

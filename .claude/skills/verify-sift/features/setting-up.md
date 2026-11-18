@@ -1,6 +1,6 @@
 # Setting up
 
-Until Sift can work (a model in use, and every mailbox with labels of its own), the dashboard is a page of steps instead: `Connect a model`, `What you want`, `Your labels`, and `Older mail`. A step already done is ticked and skipped. The user says what they want in their own words, keeps what they like of the labels suggested, then chooses whether Sift goes through the newest of the inbox.
+Until Sift can work (a model in use, and labels of the person's own), the dashboard is a page of steps instead: `Connect a model`, `What you want`, `Your labels`, and `Older mail`. A step already done is ticked and skipped. The user says what they want in their own words, keeps what they like of the labels suggested, then chooses whether Sift goes through the newest of the inbox.
 
 ## Sub-features
 
@@ -31,4 +31,4 @@ Preconditions:
 
 - `Suggest labels` is `serve.ts`'s stand-in (SKILL.md): words naming pitches get `Sales pitches`, receipts the note, neither an error.
 - `Go through 300` starts the run, but nothing goes on with it: `serve.ts` runs no tick. Settings shows it `Reading your inbox · 0 found`.
-- Every mailbox needs labels of its own: one bare mailbox is enough to show the steps to its person.
+- Labels are the person's, for every mailbox: `--bare` removes them, which shows the steps.

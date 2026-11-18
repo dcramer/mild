@@ -15,6 +15,7 @@ import { type Store, storeOn } from '../src/store/store.ts';
 import { type Keyring, loadKeyring } from '../src/secrets.ts';
 import { type Account, connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
+import { setRuleFilter } from '../src/store/filters.ts';
 import { addRule } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import { conditionsHash } from '../src/store/content.ts';
@@ -197,7 +198,7 @@ export async function personWith(keys: Keyring, ...accounts: string[]): Promise<
   let user: number | undefined;
   for (const account of accounts) user = await connectAccount(store, account, '1', 0, user);
   const db = await store.user(user ?? 1);
-  for (const account of accounts) await withSampleLabels(db, account);
+  if (accounts.length > 0) await withSampleLabels(db);
   return { store, db };
 }
 
@@ -234,7 +235,7 @@ export async function modelRun(
  * `db`): what deleting a mailbox or a person must take with it. Its message is `m-<account>`.
  */
 export async function recordEverything(db: Sql, account: string): Promise<void> {
-  await withSampleLabels(db, account);
+  await withSampleLabels(db);
   const message = `m-${account}`;
   await recordSync(
     db,
@@ -263,7 +264,8 @@ export async function recordEverything(db: Sql, account: string): Promise<void> 
     labelId: 'newsletter',
     reason: 'r',
   });
-  await addRule(db, account, { match: { from: ['news@example.com'] }, whenLabel: 'newsletter' }, 'user', 0);
+  const rule = await addRule(db, { match: { from: ['news@example.com'] }, whenLabel: 'newsletter' }, 'user', 0);
+  await setRuleFilter(db, rule, account, { filterId: 'f-1', state: 'active', written: null }, 0);
   await rememberCorrespondent(db, account, 'news@example.com', true, 0);
   const { id: run } = (await raw(db).get<{ id: number }>(
     `INSERT INTO eval_runs (account_id, started_at, status, model, prompt_hash, labels_hash, labels, few_shot, total)

@@ -15,7 +15,7 @@ import { Refusal } from '../refusal.ts';
 /** How many of the newest the preview checks the rule on, to say about how many it would decide. */
 const SAMPLE = 20;
 /** The newest of those the preview shows. */
-const EXAMPLES = 5;
+export const EXAMPLES = 5;
 
 /** What the rule would do to one message: decide it now, or wait for a model to say what it is. */
 type Plan = { decide: Decision; again: boolean } | { read: true };
@@ -58,11 +58,11 @@ export function inboxQuery(match: RuleMatch): string {
   return terms.join(' ');
 }
 
-/** A mailbox's rules and labels, with `ruleId` among them; null once it has been removed. */
+/** The person's rules and labels, with `ruleId` among them, to apply in one of their mailboxes; null once it has been removed. */
 export async function rulesWith(db: Sql, accountId: string, ruleId: string) {
-  const rules = await listRules(db, accountId);
+  const rules = await listRules(db);
   const rule = rules.find((r) => r.id === ruleId);
-  return rule ? { accountId, rule, rules, labels: await listLabels(db, accountId) } : null;
+  return rule ? { accountId, rule, rules, labels: await listLabels(db) } : null;
 }
 type Given = NonNullable<Awaited<ReturnType<typeof rulesWith>>>;
 

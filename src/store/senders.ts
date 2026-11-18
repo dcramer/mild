@@ -197,10 +197,10 @@ async function facts(db: Sql, accountId: string, who: { address: string } | { do
   const userHasWritten = written?.yes ?? null;
 
   // Only a rule for exactly this sender or domain that decides by itself says how the owner regards them.
-  const dispositions = new Map((await listLabels(db, accountId)).map((l) => [l.id, l.disposition]));
+  const dispositions = new Map((await listLabels(db)).map((l) => [l.id, l.disposition]));
   // A rule naming them among others is about all of those senders, not how the owner regards this one.
   const only = (values: readonly string[] | undefined) => (values?.length === 1 ? values[0] : undefined);
-  const rule = (await listRules(db, accountId)).find((r) => {
+  const rule = (await listRules(db)).find((r) => {
     const keys = Object.keys(r.match);
     return (
       keys.length === 1 &&
@@ -245,7 +245,7 @@ const sent = alias(messages, 'sent');
  * of each and the caller searches it.
  */
 export async function senderDirectory(db: Sql, accountId: string): Promise<FoundSender[]> {
-  const names = await labelNames(db, accountId);
+  const names = await labelNames(db);
   const rows = await db
     .select({
       newest: newestOfGroup(),

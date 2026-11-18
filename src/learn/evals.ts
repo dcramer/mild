@@ -95,7 +95,7 @@ export async function startEval(deps: Pick<EvalDeps, 'db' | 'model' | 'now'>, re
     .limit(limit);
   if (examples.length === 0) throw new Refusal('There are no stored examples to test against yet. Answer some mail in For review first.');
 
-  const shown = (await listLabels(db, request.accountId)).map((l) => ({ id: l.id, name: l.name, description: l.description }));
+  const shown = (await listLabels(db)).map((l) => ({ id: l.id, name: l.name, description: l.description }));
   const [{ id }] = (await db
     .insert(evalRuns)
     .values({
@@ -137,7 +137,7 @@ export async function continueEval(deps: EvalDeps, runId: number, until: number)
 
   const judged = new Set((await db.select({ id: evalResults.messageId }).from(evalResults).where(eq(evalResults.runId, runId))).map((r) => r.id));
   const left = run.examples.filter((id) => !judged.has(id));
-  const labels = await listLabels(db, run.accountId);
+  const labels = await listLabels(db);
 
   const judgeOne = async (messageId: string) => {
     const [example] = await db

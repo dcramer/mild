@@ -197,12 +197,11 @@ export const messages = pgTable(
 const message = (t: { userId: AnyPgColumn; accountId: AnyPgColumn; messageId: AnyPgColumn }) =>
   foreignKey({ columns: [t.userId, t.accountId, t.messageId], foreignColumns: [messages.userId, messages.accountId, messages.id] });
 
-/** What mail can be, and what sift does with each. */
+/** What mail can be, and what sift does with each: the person's, for every mailbox of theirs. */
 export const labels = pgTable(
   'labels',
   {
     userId: userId(),
-    accountId: text('account_id').notNull(),
     id: text('id').notNull(), // stable; the name can change without orphaning history
     name: text('name').notNull(),
     description: text('description').notNull(), // how to recognise it; shown to the model
@@ -216,8 +215,7 @@ export const labels = pgTable(
     removedAt: time('removed_at'),
   },
   (t) => [
-    primaryKey({ columns: [t.userId, t.accountId, t.id] }),
-    mailbox(t),
+    primaryKey({ columns: [t.userId, t.id] }),
     oneOf('labels_disposition', t.disposition, DISPOSITIONS),
     check('labels_gmail_label', sql`(${t.id} = ${sql.raw(`'${LEAVE_IN_INBOX}'`)}) = (${t.gmailLabel} IS NULL)`),
     check(
@@ -228,9 +226,9 @@ export const labels = pgTable(
   ],
 ).enableRLS();
 
-/** What a row says mail is: one of its mailbox's labels. Labels are never deleted, only removed (`removed_at`). */
-const label = (name: string, t: { userId: AnyPgColumn; accountId: AnyPgColumn }, column: AnyPgColumn) =>
-  foreignKey({ name, columns: [t.userId, t.accountId, column], foreignColumns: [labels.userId, labels.accountId, labels.id] });
+/** What a row says mail is: one of the person's labels. Labels are never deleted, only removed (`removed_at`). */
+const label = (name: string, t: { userId: AnyPgColumn }, column: AnyPgColumn) =>
+  foreignKey({ name, columns: [t.userId, column], foreignColumns: [labels.userId, labels.id] });
 
 /** Every call to the model about a message, with what it cost. One that failed reached no decision, so the message is asked about again on a later pass. */
 export const modelRuns = pgTable(
@@ -353,14 +351,13 @@ export const actions = pgTable(
 
 /**
  * Conditions, then what mail is (label_id), what happens to it (disposition), or both; with when_label,
- * what happens only once a tier has said it is that label.
+ * what happens only once a tier has said it is that label. The person's, for every mailbox of theirs.
  */
 export const rules = pgTable(
   'rules',
   {
     userId: userId(),
     id: text('id').notNull(),
-    accountId: text('account_id').notNull(),
     position: integer('position').notNull(),
     // Conditions name senders, so they are encrypted JSON (src/store/content.ts), found by the keyed hash of both.
     match: text('match').notNull(),
@@ -375,27 +372,41 @@ export const rules = pgTable(
     condition: text('condition'), // a condition in the user's words; needs label_id
     source: text('source', { enum: RULE_SOURCES }).notNull(),
     hits: integer('hits').notNull().default(0),
-    // The Gmail filter, while the user has it in Gmail too. filter_written is what each side last said,
-    // as src/actions/rule-filters.ts keeps it.
-    filterId: text('filter_id'),
-    filterState: text('filter_state', { enum: FILTER_STATES }),
-    filterWritten: text('filter_written'), // encrypted JSON
-    filterCheckedAt: time('filter_checked_at'),
     createdAt: time('created_at').notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),
-    mailbox(t),
     label('rules_label', t, t.labelId),
     label('rules_when_label', t, t.whenLabel),
     oneOf('rules_disposition', t.disposition, DECIDED),
     oneOf('rules_subscription', t.subscription, SUBSCRIPTION_ACTIONS),
     oneOf('rules_source', t.source, RULE_SOURCES),
-    oneOf('rules_filter_state', t.filterState, FILTER_STATES),
     check('rules_says_something', sql`${t.labelId} IS NOT NULL OR ${t.whenLabel} IS NOT NULL OR ${t.disposition} IS NOT NULL`),
     check('rules_label_or_wait', sql`${t.labelId} IS NULL OR ${t.whenLabel} IS NULL`),
     check('rules_condition_needs_label', sql`${t.condition} IS NULL OR ${t.labelId} IS NOT NULL`),
-    index('rules_account').on(t.accountId, t.position),
+    index('rules_order').on(t.userId, t.position),
+    own(),
+  ],
+).enableRLS();
+
+/** A rule's Gmail filter in one mailbox. A rule is the person's; each of their mailboxes keeps its own filters. */
+export const ruleFilters = pgTable(
+  'rule_filters',
+  {
+    userId: userId(),
+    ruleId: text('rule_id').notNull(),
+    accountId: text('account_id').notNull(),
+    filterId: text('filter_id'), // the filter in Gmail, while there is one
+    state: text('state', { enum: FILTER_STATES }),
+    // What each side last said, as src/actions/rule-filters.ts keeps it: encrypted JSON.
+    written: text('written'),
+    checkedAt: time('checked_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.ruleId, t.accountId] }),
+    foreignKey({ columns: [t.userId, t.ruleId], foreignColumns: [rules.userId, rules.id] }).onDelete('cascade'),
+    mailbox(t),
+    oneOf('rule_filters_state', t.state, FILTER_STATES),
     own(),
   ],
 ).enableRLS();

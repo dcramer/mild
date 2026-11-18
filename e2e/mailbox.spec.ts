@@ -13,6 +13,7 @@ test.describe('Removing a mailbox', () => {
     await page.goto('/?settings=1');
     await settings(page).getByRole('button', { name: 'Remove me@work.example.org' }).click();
     const confirm = page.getByRole('dialog', { name: 'Remove me@work.example.org' });
+    await expect(confirm).toContainText('Your labels and rules stay, for your other mailboxes.');
     await expect(confirm).toContainText('The filters Sift made in Gmail stay there, as do its labels on your mail');
     const remove = confirm.getByRole('button', { name: 'Remove mailbox' });
     await expect(remove).toBeDisabled();
@@ -27,6 +28,9 @@ test.describe('Removing a mailbox', () => {
     await expect(only).toBeDisabled();
     await expect(only).toHaveAccessibleDescription('You cannot delete your only remaining mailbox.');
     await param(page, 'settings').toBe('1');
+
+    await page.goto('/rules');
+    await expect(page.getByRole('row', { name: /news\.example\.com/ })).toBeVisible();
   });
 
   test('Cancel, or Escape, closes only the confirm, and the mailbox stays', async ({ page }) => {

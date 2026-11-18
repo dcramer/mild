@@ -179,7 +179,7 @@ function Body({
   const current = detail.decisions.at(-1);
   const waitingNow = waiting.data?.messages ?? [];
   const others = waitingNow.filter((m) => m.messageId !== detail.messageId);
-  const labels = manage.data?.labels[detail.accountId] ?? [];
+  const labels = manage.data?.labels ?? [];
   // Mail sift never decided (the model could not judge it) is answered all the same.
   const target = {
     accountId: detail.accountId,

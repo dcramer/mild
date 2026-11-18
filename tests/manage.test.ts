@@ -1,4 +1,5 @@
 import type { Sql } from '../src/store/sql.ts';
+import { setRuleFilter } from '../src/store/filters.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { continueInboxRun } from '../src/work/inbox.ts';
 import { REACH, goingInboxRuns, inboxProgress, modelShare, startInboxRuns, stopInboxRuns } from '../src/store/inbox.ts';
@@ -61,7 +62,7 @@ const controls: Controls = {
   ),
   ruleFilter: async (target, ruleId, on) => {
     calls.push(`filter ${ruleId} ${on ? 'on' : 'off'}`);
-    await raw(target).run(`UPDATE rules SET filter_id = ?, filter_state = ? WHERE id = ?`, on ? 'f1' : null, on ? 'active' : null, ruleId);
+    await setRuleFilter(target, ruleId, ACCOUNT, on ? { filterId: 'f1', state: 'active', written: null } : { filterId: null, state: null, written: null }, 0);
   },
   ruleInbox: async (_db, ruleId) => (
     calls.push(`inbox ${ruleId}`),
@@ -101,7 +102,7 @@ describe('managing sift from the dashboard', () => {
       activity: { running: true, expired: [ACCOUNT] },
       accounts: [{ id: ACCOUNT }],
     });
-    expect((body['labels'] as Record<string, { id: string; gmailLabel: string; rules: number }[]>)[ACCOUNT]).toContainEqual(
+    expect(body['labels'] as { id: string; gmailLabel: string; rules: number }[]).toContainEqual(
       expect.objectContaining({ id: 'newsletter', gmailLabel: 'sift/newsletters', rules: 0, messages: 0, record: { reviewed: 0, right: 0 } }),
     );
     expect((await call('GET', '/api/models')).body).toEqual({
@@ -178,37 +179,31 @@ describe('managing sift from the dashboard', () => {
     expect((await call('GET', '/api/rules')).body['rules']).toEqual([]);
   });
 
-  it('asks the model for labels from what the person wants, and makes the ones they keep in every mailbox without any, all or none', async () => {
+  it('asks the model for labels from what the person wants, and makes the ones they keep when they have none, all or none', async () => {
     const { call } = await start();
-    const NEW = 'new@example.org';
     expect((await call('GET', '/api/labels/proposal')).body).toEqual({ proposal: null });
-    // Every mailbox has labels: nothing to make them in.
+    // They have labels already.
     const pitches = { name: 'Pitches', description: 'From strangers.', disposition: 'archive', unsubscribe: true };
     expect((await call('POST', '/api/labels/accept', { labels: [pitches] })).status).toBe(409);
 
-    await connectAccount(store, NEW, '1', 0, 1);
-    // As if added while setting up, before there were labels to give it.
-    await raw(db).run(`DELETE FROM labels WHERE account_id = ? AND id <> 'everything_else'`, NEW);
+    // As before they chose any.
+    await raw(db).run(`UPDATE labels SET removed_at = 1 WHERE id <> 'everything_else'`);
     const proposed = await call('POST', '/api/labels/propose', { goal: '  Fewer sales pitches  ' });
     expect(proposed.body).toMatchObject({ goal: 'Fewer sales pitches', drafts: [{ name: 'Cold outreach', disposition: 'archive', unsubscribe: true }] });
-    for (const bad of [{}, { goal: '   ' }, { goal: 'x', accountId: NEW }]) expect((await call('POST', '/api/labels/propose', bad)).status).toBe(400);
-    // Recorded on the mailbox that has no labels yet.
-    expect(calls).toEqual([`propose ${NEW}`]);
+    for (const bad of [{}, { goal: '   ' }, { goal: 'x', accountId: ACCOUNT }]) expect((await call('POST', '/api/labels/propose', bad)).status).toBe(400);
+    expect(calls).toEqual([`propose ${ACCOUNT}`]);
 
-    const before = await listLabels(db, ACCOUNT);
     // One name taken refuses the lot.
     expect((await call('POST', '/api/labels/accept', { labels: [pitches, { ...pitches }] })).status).toBe(409);
-    expect(await listLabels(db, NEW)).toHaveLength(1);
+    expect(await listLabels(db)).toHaveLength(1);
     const accepted = await call('POST', '/api/labels/accept', { labels: [pitches, { name: 'Lies', description: 'Scams.', disposition: 'block' }] });
     expect(accepted.body).toEqual({ ids: ['pitches', 'lies'] });
-    expect(await listLabels(db, NEW)).toEqual([
+    expect(await listLabels(db)).toEqual([
       { id: 'pitches', name: 'Pitches', description: 'From strangers.', disposition: 'archive', gmailLabel: 'sift/pitches', unsubscribe: true },
       { id: 'lies', name: 'Lies', description: 'Scams.', disposition: 'spam', gmailLabel: 'sift/lies', block: true },
       expect.objectContaining({ id: 'everything_else' }),
     ]);
-    // A mailbox that had labels keeps its own.
-    expect(await listLabels(db, ACCOUNT)).toEqual(before);
-    // With labels of their own, the mailbox's mail starts coming in.
+    // With labels of their own, their mail starts coming in.
     expect(calls.at(-1)).toBe('check');
     expect((await call('POST', '/api/labels/accept', { labels: [] })).status).toBe(400);
   });
@@ -267,7 +262,7 @@ describe('managing sift from the dashboard', () => {
     expect(label.body).toEqual({ ok: true, redecided: 2 });
     expect(await latest('w1')).toEqual({ stage: 'model', disposition: 'keep', label_id: 'marketing' });
 
-    const rule = await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: [from.address] }, label: 'newsletter' });
+    const rule = await call('POST', '/api/rules', { match: { from: [from.address] }, label: 'newsletter' });
     expect(rule.body).toMatchObject({ redecided: 2 });
     expect(await latest('w2')).toEqual({ stage: 'rules', disposition: 'archive', label_id: 'newsletter' });
     expect(((await call('GET', '/api/suggestions')).body as { waiting: number }).waiting).toBe(0);
@@ -282,7 +277,6 @@ describe('managing sift from the dashboard', () => {
     expect((await replies()).map((i) => i.messageId)).toEqual(['w1']);
     expect((await call('GET', '/api/suggestions?fact=nonsense')).status).toBe(400);
     const keepReplies = await call('POST', '/api/rules', {
-      accountId: ACCOUNT,
       match: { from: [from.address], facts: { isReply: true } },
       disposition: 'keep',
     });
@@ -310,14 +304,14 @@ describe('managing sift from the dashboard', () => {
     await recordDecision(db, ACCOUNT, 'w1', marketing, { now: 10 });
     await storeExample(db, ACCOUNT, { id: 'e1', from: from.address, label: 'marketing' });
     await storeExample(db, ACCOUNT, { id: 'e2', from: from.address, label: 'newsletter' });
-    const rule = await addRule(db, ACCOUNT, { match: { from: [from.address] }, whenLabel: 'marketing', disposition: 'spam' }, 'user');
-    const kept = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+    const rule = await addRule(db, { match: { from: [from.address] }, whenLabel: 'marketing', disposition: 'spam' }, 'user');
+    const kept = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     calls = [];
 
     expect((await call('POST', '/api/labels/remove', { id: 'marketing' })).body).toEqual({ ok: true, redecided: 1 });
     expect(calls).toEqual([`filter ${rule} off`]);
-    expect((await listLabels(db, ACCOUNT)).map((l) => l.id)).not.toContain('marketing');
-    expect((await listRules(db, ACCOUNT)).map((r) => r.id)).toEqual([kept]);
+    expect((await listLabels(db)).map((l) => l.id)).not.toContain('marketing');
+    expect((await listRules(db)).map((r) => r.id)).toEqual([kept]);
     expect(await raw(db).all('SELECT message_id FROM examples ORDER BY message_id')).toEqual([{ message_id: 'e2' }]);
     expect(
       withReason(await raw(db).get(`SELECT stage, disposition, label_id, reason FROM decisions WHERE message_id = 'w1' ORDER BY id DESC LIMIT 1`)),
@@ -330,14 +324,14 @@ describe('managing sift from the dashboard', () => {
     // What Sift said of it before still names the label.
     const before = await raw(db).get(`SELECT label_id FROM decisions WHERE message_id = 'w1' ORDER BY id LIMIT 1`);
     expect(before).toEqual({ label_id: 'marketing' });
-    expect(await raw(db).get(`SELECT name FROM labels WHERE id = 'marketing' AND account_id = ?`, ACCOUNT)).toEqual({ name: 'Marketing' });
+    expect(await raw(db).get(`SELECT name FROM labels WHERE id = 'marketing'`)).toEqual({ name: 'Marketing' });
 
     expect((await call('POST', '/api/labels/remove', { id: 'marketing' })).status).toBe(409);
     expect((await call('POST', '/api/labels/remove', { id: LEAVE_IN_INBOX })).status).toBe(409);
     expect((await call('POST', '/api/labels', { id: 'marketing', name: 'Sales' })).status).toBe(409);
 
     // A mailbox is never left without a label of its own.
-    for (const l of await listLabels(db, ACCOUNT))
+    for (const l of await listLabels(db))
       if (l.id !== LEAVE_IN_INBOX && l.id !== 'newsletter') expect((await call('POST', '/api/labels/remove', { id: l.id })).status, l.id).toBe(200);
     const last = await call('POST', '/api/labels/remove', { id: 'newsletter' });
     expect(last.status).toBe(409);
@@ -346,20 +340,20 @@ describe('managing sift from the dashboard', () => {
     // The name again brings it back, as the label it is now.
     const again = await call('POST', '/api/labels/add', { labels: [{ name: 'Marketing', description: 'Sales pitches.', disposition: 'keep' }] });
     expect(again.body).toEqual({ ids: ['marketing'] });
-    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'marketing')).toMatchObject({ description: 'Sales pitches.', disposition: 'keep' });
+    expect((await listLabels(db)).find((l) => l.id === 'marketing')).toMatchObject({ description: 'Sales pitches.', disposition: 'keep' });
   });
 
   it('changes nothing of Leave in inbox', async () => {
     const { call } = await start();
     expect((await call('POST', '/api/labels', { id: LEAVE_IN_INBOX, description: 'Bills I still owe' })).status).toBe(409);
-    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === LEAVE_IN_INBOX)?.description).toBe('');
+    expect((await listLabels(db)).find((l) => l.id === LEAVE_IN_INBOX)?.description).toBe('');
   });
 
   it('edits labels and rules', async () => {
     const { call } = await start();
 
     expect((await call('POST', '/api/labels', { id: 'newsletter', disposition: 'keep', name: 'Reading' })).status).toBe(200);
-    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'newsletter')).toMatchObject({
+    expect((await listLabels(db)).find((l) => l.id === 'newsletter')).toMatchObject({
       disposition: 'keep',
       name: 'Reading',
       gmailLabel: 'sift/newsletters',
@@ -371,7 +365,7 @@ describe('managing sift from the dashboard', () => {
       labels: [{ name: 'Investor updates', description: 'Updates from companies I invested in.', disposition: 'keep' }],
     });
     expect(mine.body).toEqual({ ids: ['investor-updates'] });
-    expect((await listLabels(db, ACCOUNT)).at(-2)).toEqual({
+    expect((await listLabels(db)).at(-2)).toEqual({
       id: 'investor-updates',
       name: 'Investor updates',
       description: 'Updates from companies I invested in.',
@@ -382,7 +376,7 @@ describe('managing sift from the dashboard', () => {
       expect((await call('POST', '/api/labels/add', { labels: [{ name: taken, description: '', disposition: 'keep' }] })).status).toBe(409);
     // Up to the limit, and no further.
     // Leave in inbox is not one the limit counts.
-    const own = async () => (await listLabels(db, ACCOUNT)).filter((l) => l.id !== LEAVE_IN_INBOX).length;
+    const own = async () => (await listLabels(db)).filter((l) => l.id !== LEAVE_IN_INBOX).length;
     for (let n = await own(); n < MAX_LABELS; n++)
       expect((await call('POST', '/api/labels/add', { labels: [{ name: `Extra ${n}`, description: '', disposition: 'keep' }] })).status).toBe(200);
     const full = await call('POST', '/api/labels/add', { labels: [{ name: 'One too many', description: '', disposition: 'keep' }] });
@@ -390,41 +384,39 @@ describe('managing sift from the dashboard', () => {
     expect(await own()).toBe(MAX_LABELS);
 
     const added = await call('POST', '/api/rules', {
-      accountId: ACCOUNT,
       // Blank and repeated values are dropped, and a condition left with none.
       match: { fromDomain: ['example.com', ' example.net ', 'EXAMPLE.com', ''], subjectContains: [''] },
       label: 'investor-updates',
     });
-    const excepted = await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: ['a@example.com'] }, label: 'marketing', disposition: 'keep' });
-    expect(await listRules(db, ACCOUNT)).toMatchObject([
+    const excepted = await call('POST', '/api/rules', { match: { from: ['a@example.com'] }, label: 'marketing', disposition: 'keep' });
+    expect(await listRules(db)).toMatchObject([
       { id: added.body['id'], match: { fromDomain: ['example.com', 'example.net'] }, labelId: 'investor-updates', source: 'user' },
       { id: excepted.body['id'], labelId: 'marketing', disposition: 'keep' },
     ]);
-    expect((await listRules(db, ACCOUNT))[0]).not.toHaveProperty('disposition');
+    expect((await listRules(db))[0]).not.toHaveProperty('disposition');
     expect((await call('GET', '/api/rules')).body['rules']).toMatchObject([
       { labelName: 'Investor updates', override: null, disposition: 'keep' },
       { labelName: 'Marketing', override: 'keep', disposition: 'keep' },
     ]);
     // A name is said in place of the conditions; adding the same conditions again with none takes it away.
-    const again = { accountId: ACCOUNT, match: { fromDomain: ['example.net', 'example.com'] }, label: 'investor-updates' };
+    const again = { match: { fromDomain: ['example.net', 'example.com'] }, label: 'investor-updates' };
     expect((await call('POST', '/api/rules', { ...again, name: ' Investor  mail ' })).body).toMatchObject({ id: added.body['id'], replaced: true });
     expect((await call('GET', '/api/rules')).body['rules']).toMatchObject([{ id: added.body['id'], name: 'Investor mail' }, { name: null }]);
     await call('POST', '/api/rules', { ...again, name: '' });
-    expect((await listRules(db, ACCOUNT))[0]).not.toHaveProperty('name');
-    expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: {}, label: 'marketing' })).status).toBe(400);
-    expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: { fromName: ['Dependabot'] }, label: 'marketing' })).status).toBe(400);
-    const named = await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: ['a@example.com'], fromNameContains: ['bot'] }, label: 'marketing' });
+    expect((await listRules(db))[0]).not.toHaveProperty('name');
+    expect((await call('POST', '/api/rules', { match: {}, label: 'marketing' })).status).toBe(400);
+    expect((await call('POST', '/api/rules', { match: { fromName: ['Dependabot'] }, label: 'marketing' })).status).toBe(400);
+    const named = await call('POST', '/api/rules', { match: { from: ['a@example.com'], fromNameContains: ['bot'] }, label: 'marketing' });
     expect((await call('GET', '/api/rules')).body['rules']).toContainEqual(
       expect.objectContaining({ id: named.body['id'], match: { from: ['a@example.com'], fromNameContains: ['bot'] } }),
     );
     await call('POST', '/api/rules/remove', { id: named.body['id'] });
     const onFacts = await call('POST', '/api/rules', {
-      accountId: ACCOUNT,
       match: { fromDomain: ['example.org'], facts: { isReply: false, unsubscribe: ['header', 'none'], category: 'promotions' } },
       disposition: 'archive',
     });
     expect(onFacts.status).toBe(200);
-    expect((await listRules(db, ACCOUNT)).find((r) => r.id === onFacts.body['id'])).toMatchObject({
+    expect((await listRules(db)).find((r) => r.id === onFacts.body['id'])).toMatchObject({
       match: { fromDomain: ['example.org'], facts: { isReply: false, unsubscribe: ['header', 'none'], category: 'promotions' } },
     });
     for (const facts of [
@@ -437,30 +429,25 @@ describe('managing sift from the dashboard', () => {
       { unsubscribe: ['one-click', 'header'] },
       { listId: 'news.example.com' },
     ])
-      expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: { facts }, disposition: 'archive' })).status, JSON.stringify(facts)).toBe(400);
-    expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: { body: 'x' }, label: 'marketing' })).status).toBe(400);
-    expect((await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: ['a@example.com'] }, label: 'no-such-label' })).status).toBe(409);
-    expect(
-      (await call('POST', '/api/rules', { accountId: ACCOUNT, match: { from: ['a@example.com'] }, label: 'marketing', disposition: 'review' })).status,
-    ).toBe(400);
+      expect((await call('POST', '/api/rules', { match: { facts }, disposition: 'archive' })).status, JSON.stringify(facts)).toBe(400);
+    expect((await call('POST', '/api/rules', { match: { body: 'x' }, label: 'marketing' })).status).toBe(400);
+    expect((await call('POST', '/api/rules', { match: { from: ['a@example.com'] }, label: 'no-such-label' })).status).toBe(409);
+    expect((await call('POST', '/api/rules', { match: { from: ['a@example.com'] }, label: 'marketing', disposition: 'review' })).status).toBe(400);
     // With no filter recorded, Gmail is still asked: one sift wrote and lost track of goes with the rule.
     expect((await call('POST', '/api/rules/remove', { id: added.body['id'] })).status).toBe(200);
     expect(calls).toContain(`filter ${String(added.body['id'])} off`);
     expect((await call('POST', '/api/rules/remove', { id: added.body['id'] })).status).toBe(409);
   });
 
-  it('makes and changes a label in every mailbox of the person, all or none', async () => {
+  it('makes and changes a label of the person, all or none', async () => {
     const { call } = await start();
-    const OTHER = 'other@example.org';
-    await connectAccount(store, OTHER, '1', 0, 1);
     expect((await call('POST', '/api/labels/add', { labels: [{ name: 'Travel', description: 'Bookings.', disposition: 'keep' }] })).body).toEqual({
       ids: ['travel'],
     });
-    for (const account of [ACCOUNT, OTHER]) expect((await listLabels(db, account)).map((l) => l.id)).toContain('travel');
+    expect((await listLabels(db)).map((l) => l.id)).toContain('travel');
     expect((await call('POST', '/api/labels', { id: 'travel', disposition: 'archive', name: 'Trips' })).status).toBe(200);
-    for (const account of [ACCOUNT, OTHER])
-      expect((await listLabels(db, account)).find((l) => l.id === 'travel')).toMatchObject({ name: 'Trips', disposition: 'archive' });
-    // A name one mailbox already has refuses the lot.
+    expect((await listLabels(db)).find((l) => l.id === 'travel')).toMatchObject({ name: 'Trips', disposition: 'archive' });
+    // A name already taken refuses the lot.
     await call('POST', '/api/labels', { id: 'newsletter', name: 'Reading' });
     expect(
       (
@@ -472,38 +459,37 @@ describe('managing sift from the dashboard', () => {
         })
       ).status,
     ).toBe(409);
-    for (const account of [ACCOUNT, OTHER]) expect((await listLabels(db, account)).map((l) => l.id)).not.toContain('shopping');
+    expect((await listLabels(db)).map((l) => l.id)).not.toContain('shopping');
   });
 
   it('sets what a label does, including blocking and marking read', async () => {
     const { call } = await start();
-    const does = async () => (await listLabels(db, ACCOUNT)).find((l) => l.id === 'marketing');
+    const does = async () => (await listLabels(db)).find((l) => l.id === 'marketing');
     expect((await call('POST', '/api/labels', { id: 'marketing', disposition: 'block' })).status).toBe(200);
     expect(await does()).toMatchObject({ disposition: 'spam', block: true });
     expect((await call('POST', '/api/labels', { id: 'marketing', disposition: 'archive', markRead: true })).status).toBe(200);
     expect(await does()).toMatchObject({ disposition: 'archive', markRead: true });
     expect(await does()).not.toHaveProperty('block');
-    const shown = ((await call('GET', '/api/manage')).body['labels'] as Record<string, { id: string; disposition: string; markRead: boolean }[]>)[ACCOUNT];
-    expect(shown?.find((l) => l.id === 'marketing')).toMatchObject({ disposition: 'archive', markRead: true });
-    expect(shown?.find((l) => l.id === 'phishing')).toMatchObject({ disposition: 'spam', markRead: false });
+    const shown = (await call('GET', '/api/manage')).body['labels'] as { id: string; disposition: string; markRead: boolean }[];
+    expect(shown.find((l) => l.id === 'marketing')).toMatchObject({ disposition: 'archive', markRead: true });
+    expect(shown.find((l) => l.id === 'phishing')).toMatchObject({ disposition: 'spam', markRead: false });
     expect((await call('POST', '/api/labels', { id: 'personal', unsubscribe: true })).status).toBe(200);
-    expect((await listLabels(db, ACCOUNT)).find((l) => l.id === 'personal')).toMatchObject({ disposition: 'keep', unsubscribe: true });
+    expect((await listLabels(db)).find((l) => l.id === 'personal')).toMatchObject({ disposition: 'keep', unsubscribe: true });
     expect((await call('POST', '/api/labels', { id: 'personal', unsubscribe: 'yes' })).status).toBe(400);
     const extra = await call('POST', '/api/rules', {
-      accountId: ACCOUNT,
       match: { from: ['x@example.com'] },
       label: 'security',
       unsubscribe: true,
       markRead: true,
     });
-    expect((await listRules(db, ACCOUNT)).find((r) => r.id === extra.body['id'])).toMatchObject({ subscription: 'unsubscribe', markRead: true });
+    expect((await listRules(db)).find((r) => r.id === extra.body['id'])).toMatchObject({ subscription: 'unsubscribe', markRead: true });
     // "Leave it for me" is no longer something a label can be set to do.
     expect((await call('POST', '/api/labels', { id: 'marketing', disposition: 'review' })).status).toBe(400);
     expect((await call('POST', '/api/labels', { id: 'marketing', markRead: 'yes' })).status).toBe(400);
     expect((await call('POST', '/api/labels/add', { labels: [{ name: 'Scams', description: '', disposition: 'block' }] })).body).toEqual({
       ids: ['scams'],
     });
-    expect((await listLabels(db, ACCOUNT)).at(-2)).toMatchObject({ id: 'scams', disposition: 'spam', block: true });
+    expect((await listLabels(db)).at(-2)).toMatchObject({ id: 'scams', disposition: 'spam', block: true });
   });
 
   it('puts a corrected message right in Gmail, and still saves the answer if it cannot', async () => {
@@ -599,7 +585,7 @@ describe('managing sift from the dashboard', () => {
 
   it("lists what a rule decided and has not moved, passes the inbox on for the rule's mailbox, and applies it there in the background", async () => {
     const { call } = await start();
-    const id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+    const id = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     await recordSync(db, ACCOUNT, [facts({ messageId: 'w1', subject: 'Waiting' }), facts({ messageId: 'w2' })], '2');
     const byRule = { disposition: 'archive', subscription: 'preserve', stage: 'rules', labelId: 'newsletter', ruleId: id, reason: 'rule' } as const;
     await recordDecision(db, ACCOUNT, 'w1', byRule, { now: 5 });
@@ -625,7 +611,7 @@ describe('managing sift from the dashboard', () => {
   it('charts what a rule decided by itself over 30 days, carried out or not, and what the model calls behind it cost', async () => {
     const now = Date.UTC(2026, 5, 15, 12);
     const { call } = await start({ now });
-    const id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter', when: 'only the digests' }, 'user');
+    const id = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter', when: 'only the digests' }, 'user');
     await recordSync(
       db,
       ACCOUNT,
@@ -650,8 +636,8 @@ describe('managing sift from the dashboard', () => {
 
   it('writes a rule to Gmail as a filter only while sift is on, and removes the filter with the rule', async () => {
     const { call } = await start();
-    const id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
-    const spam = await addRule(db, ACCOUNT, { match: { from: ['scam@example.com'] }, labelId: 'phishing' }, 'user');
+    const id = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+    const spam = await addRule(db, { match: { from: ['scam@example.com'] }, labelId: 'phishing' }, 'user');
     const listed = (await call('GET', '/api/rules')).body['rules'] as { id: string; filter: Record<string, unknown> }[];
     expect(listed.find((r) => r.id === id)?.filter).toMatchObject({ state: 'none', possible: true, reason: null });
     expect(listed.find((r) => r.id === spam)?.filter).toMatchObject({ state: 'none', possible: false, reason: 'Gmail filters cannot mark mail as spam.' });
@@ -671,12 +657,12 @@ describe('managing sift from the dashboard', () => {
     await setActive(db, false);
     expect((await call('POST', '/api/rules/remove', { id })).status).toBe(200);
     expect(calls).toEqual([`filter ${id} on`, `filter ${id} off`]);
-    expect((await listRules(db, ACCOUNT)).map((r) => r.id)).toEqual([spam]);
+    expect((await listRules(db)).map((r) => r.id)).toEqual([spam]);
   });
 
   it('offers a new rule as a Gmail filter only when it can be one and Sift is on', async () => {
     const { call } = await start();
-    const add = async (rule: Record<string, unknown>) => (await call('POST', '/api/rules', { accountId: ACCOUNT, ...rule })).body['filter'];
+    const add = async (rule: Record<string, unknown>) => (await call('POST', '/api/rules', { ...rule })).body['filter'];
     expect(await add({ match: { from: ['news@example.com'] }, label: 'newsletter' })).toBeNull();
     await setActive(db, true);
     expect(await add({ match: { from: ['digest@example.com'] }, label: 'newsletter' })).toMatchObject({
@@ -690,12 +676,12 @@ describe('managing sift from the dashboard', () => {
 
   it('takes a standing back with its Gmail filter, as removing the rule does', async () => {
     const { call } = await start();
-    const id = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, disposition: 'archive' }, 'user');
+    const id = await addRule(db, { match: { from: ['news@example.com'] }, disposition: 'archive' }, 'user');
     await setActive(db, true);
     expect((await call('POST', '/api/rules/filter', { id, on: true })).status).toBe(200);
-    expect((await call('POST', '/api/standing/clear', { accountId: ACCOUNT, address: 'news@example.com' })).status).toBe(200);
+    expect((await call('POST', '/api/standing/clear', { address: 'news@example.com' })).status).toBe(200);
     expect(calls).toEqual([`filter ${id} on`, `filter ${id} off`]);
-    expect(await listRules(db, ACCOUNT)).toEqual([]);
+    expect(await listRules(db)).toEqual([]);
   });
 
   it('can only look, not manage, when no controls are given', async () => {
@@ -987,7 +973,7 @@ describe('going through the inbox', () => {
   });
 
   it('carries out what it decides only when Sift was on at the press and still is', async () => {
-    await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+    await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     inGmail(rawMessage('a'), rawMessage('b'), rawMessage('c'));
     // Off at the press: a suggestion, even with Sift turned on since.
     await goOn(await begin(false), { on: true });
@@ -1011,7 +997,7 @@ describe('going through the inbox', () => {
     const marked = mailbox.labels.get('a')!;
     expect(marked.length).toBeGreaterThan(1);
     // Now a rule says what it is.
-    await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+    await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     await goOn(await begin(true), { on: true, now: () => 200 });
     const now = mailbox.labels.get('a')!;
     expect(now).not.toContain('INBOX');

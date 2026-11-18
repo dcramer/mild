@@ -319,13 +319,12 @@ export const SAMPLE_LABELS: readonly Label[] = [
   },
 ];
 
-/** Give `account` the sample labels, before its own Leave in inbox, unless it has them. */
-export async function withSampleLabels(db: Sql, account: string): Promise<void> {
+/** Give the person the sample labels, before their Leave in inbox, unless they have them. */
+export async function withSampleLabels(db: Sql): Promise<void> {
   await db
     .insert(labels)
     .values(
       SAMPLE_LABELS.map((l, position) => ({
-        accountId: account,
         id: l.id,
         name: l.name,
         description: l.description,

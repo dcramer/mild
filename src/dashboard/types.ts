@@ -355,7 +355,6 @@ export type RuleFilter = z.infer<typeof RuleFilter>;
 
 export const RuleSummary = z.object({
   id: z.string(),
-  accountId: z.string(),
   match,
   except: z.array(match),
   /**
@@ -482,8 +481,8 @@ export const Suggestions = z.object({
   waiting: z.number(),
   /** From the user's answers so far. */
   accuracy: answered,
-  /** The labels the user can say something is, per account, with what sift does for each. */
-  labels: z.record(z.string(), z.array(z.object({ id: z.string(), name: z.string(), disposition: z.string() }))),
+  /** The labels the user can say something is, with what sift does for each. */
+  labels: z.array(z.object({ id: z.string(), name: z.string(), disposition: z.string() })),
   /** Whether Sift is on for the viewer. Off, nothing listed has been done in Gmail. */
   active: z.boolean(),
   /** Sift is going through the inbox, or mail it found there waits for the model: more suggestions are coming. */
@@ -612,9 +611,9 @@ export const ManageState = z.object({
   }),
   activity: z.object({ running: z.boolean(), lastPassAt: z.number().nullable(), problems: z.array(z.string()), expired: z.array(z.string()) }),
   accounts: z.array(z.object({ id: z.string(), email: z.string(), lastSyncedAt: z.number().nullable(), primary: z.boolean() })),
-  /** Per account, in order. */
-  labels: z.record(z.string(), z.array(LabelSummary)),
-  /** How many labels an account may have. */
+  /** In order. */
+  labels: z.array(LabelSummary),
+  /** How many labels a person may have. */
   labelLimit: z.number(),
   inbox: InboxProgress,
 });

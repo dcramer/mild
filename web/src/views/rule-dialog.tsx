@@ -156,7 +156,7 @@ export function AddRuleDialog({
     : [readBack, facts.some((f) => READ.has(f.key)) ? 'Sift reads each message to check this.' : undefined].filter(Boolean).join(' ') || undefined;
   // Adding a rule with exactly the conditions of one already there replaces it, so the dialog says which.
   const rules = useLoaded('rules', (signal) => api.rules(signal));
-  const replaces = ready ? replacedBy(rules.data?.rules ?? [], accountId, match, waitsFor?.id ?? null) : undefined;
+  const replaces = ready ? replacedBy(rules.data?.rules ?? [], match, waitsFor?.id ?? null) : undefined;
   const replacing = replaces ? (replaces.kind === 'label' ? replaces.override : replaces.disposition) : null;
   // What a line can be: any kind of value, or an answer about a fact no other line asks.
   const kinds = (row: Row) => [
@@ -195,7 +195,6 @@ export function AddRuleDialog({
     run(
       async () => {
         added = await api.addRule({
-          accountId,
           match,
           ...(chosen ? { label: chosen.id } : {}),
           ...(waitsFor ? { whenLabel: waitsFor.id } : {}),

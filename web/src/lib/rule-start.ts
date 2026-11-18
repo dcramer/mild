@@ -106,10 +106,10 @@ const canonical = (value: unknown): unknown =>
         )
       : value;
 
-/** The rule adding `match` would replace: one of the account's with exactly those conditions, no exceptions, waiting for the same label or none. */
-export function replacedBy(rules: readonly RuleSummary[], accountId: string, match: RuleMatch, whenLabel: string | null): RuleSummary | undefined {
+/** The rule adding `match` would replace: one with exactly those conditions, no exceptions, waiting for the same label or none. */
+export function replacedBy(rules: readonly RuleSummary[], match: RuleMatch, whenLabel: string | null): RuleSummary | undefined {
   const key = JSON.stringify(canonical(match));
-  return rules.find((r) => r.accountId === accountId && r.whenLabel === whenLabel && r.except.length === 0 && JSON.stringify(canonical(r.match)) === key);
+  return rules.find((r) => r.whenLabel === whenLabel && r.except.length === 0 && JSON.stringify(canonical(r.match)) === key);
 }
 
 const WHICH: Record<By, string> = {

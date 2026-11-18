@@ -33,8 +33,8 @@ const EXAMPLES = [
 const OFFERED = 6;
 
 /**
- * Nothing of the dashboard shows until Sift can work: a model in use, and labels in every mailbox (Sift
- * reads nothing from a mailbox without them). The steps come in order; one already done is ticked and
+ * Nothing of the dashboard shows until Sift can work: a model in use, and labels of the person's own (Sift
+ * reads nothing of theirs without them). The steps come in order; one already done is ticked and
  * skipped. A model that is lost later (its sign-in removed or expired) brings back only that step. Once
  * the labels are made, Sift may go through the newest of the inbox to suggest about. Settings opens over it.
  */
@@ -52,7 +52,7 @@ export function SetUp({ signedInAs, onSettings, children }: { signedInAs: string
   if (!state) return manage.error ? children : null;
   const inUse = state.model.chosen?.split('/')[0] ?? null;
   const walled = inUse === null || !state.model.signedIn.includes(inUse);
-  const bare = !made && state.accounts.some((a) => !(state.labels[a.id] ?? []).some((l) => l.gmailLabel !== null));
+  const bare = !made && !state.labels.some((l) => l.gmailLabel !== null);
   if (!walled && !bare && !teaching) return children;
   const account: Account = signedInAs
     ? {

@@ -211,7 +211,7 @@ type Stage = { at: 'describe' } | { at: 'suggested'; proposal: LabelProposal } |
 const BLANK: LabelDraft = { name: '', description: '', disposition: 'archive', markRead: false, unsubscribe: false };
 
 /**
- * Add labels, made in every mailbox: describe the mail and what should happen to it, and keep what fits of
+ * Add labels, the person's for every mailbox: describe the mail and what should happen to it, and keep what fits of
  * the one label or several the model suggests (it is shown the labels there are, so it does not repeat
  * them); or write one by hand. Changing a label is in its panel.
  */

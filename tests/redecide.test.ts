@@ -67,7 +67,7 @@ describe('when a rule changes', () => {
   it("a new rule of the user's settles the waiting mail it matches, and nothing else", async () => {
     const sale = await decided('sales@example.com', MARKETING);
     const other = await decided('ada@example.org', { disposition: 'keep', labelId: 'personal' });
-    const ruleId = await addRule(db, ACCOUNT, { match: { from: ['sales@example.com'] }, labelId: 'newsletter' }, 'user');
+    const ruleId = await addRule(db, { match: { from: ['sales@example.com'] }, labelId: 'newsletter' }, 'user');
 
     expect(await redecideWaiting(db, ACCOUNT, 50)).toBe(1);
     expect(await current(sale)).toMatchObject({
@@ -79,14 +79,14 @@ describe('when a rule changes', () => {
       carry_out: false,
     });
     expect(await waiting()).toEqual([other]);
-    expect((await listRules(db, ACCOUNT))[0]?.hits).toBe(1);
+    expect((await listRules(db))[0]?.hits).toBe(1);
     expect(await redecideWaiting(db, ACCOUNT, 60)).toBe(0);
   });
 
   it('removing that rule brings the suggestion back as the model left it', async () => {
     const sale = await decided('sales@example.com', { ...MARKETING, confidence: 0.9 });
     const arrivedUnderRule = await (async () => {
-      const ruleId = await addRule(db, ACCOUNT, { match: { from: ['sales@example.com'] }, labelId: 'newsletter' }, 'user');
+      const ruleId = await addRule(db, { match: { from: ['sales@example.com'] }, labelId: 'newsletter' }, 'user');
       const id = await decided('sales@example.com', { stage: 'rules', ruleId, disposition: 'archive', labelId: 'newsletter' });
       return { id, ruleId };
     })();
@@ -110,7 +110,7 @@ describe('when a rule changes', () => {
   it('a rule waiting for the label the model gave says what happens, and removing it brings the suggestion back', async () => {
     const sale = await decided('sales@example.com', { ...MARKETING, confidence: 0.9 });
     const other = await decided('sales@example.com', { disposition: 'keep', labelId: 'personal' });
-    const ruleId = await addRule(db, ACCOUNT, { match: { from: ['sales@example.com'] }, whenLabel: 'marketing', disposition: 'keep' }, 'user');
+    const ruleId = await addRule(db, { match: { from: ['sales@example.com'] }, whenLabel: 'marketing', disposition: 'keep' }, 'user');
 
     expect(await redecideWaiting(db, ACCOUNT, 50)).toBe(1);
     expect(await current(sale)).toMatchObject({
@@ -132,7 +132,7 @@ describe('when a rule changes', () => {
 
   it('goes back to review when no tier had placed it before the rule', async () => {
     const lost = await decided('who@example.com', { stage: 'fallback', reason: 'no stage reached a decision' });
-    const ruleId = await addRule(db, ACCOUNT, { match: { from: ['who@example.com'] }, labelId: 'phishing' }, 'user');
+    const ruleId = await addRule(db, { match: { from: ['who@example.com'] }, labelId: 'phishing' }, 'user');
     await redecideWaiting(db, ACCOUNT);
     await removeRule(db, ruleId);
     await redecideWaiting(db, ACCOUNT);
@@ -157,7 +157,7 @@ describe('when a rule changes', () => {
 
   it('an answer given while it runs stands', async () => {
     const sale = await decided('sales@example.com', MARKETING);
-    await addRule(db, ACCOUNT, { match: { from: ['sales@example.com'] }, labelId: 'newsletter' }, 'user');
+    await addRule(db, { match: { from: ['sales@example.com'] }, labelId: 'newsletter' }, 'user');
     // The user answers after the waiting mail was listed and before its new decision is recorded.
     meanwhile = async (on) =>
       void (await applyFeedback(on, { accountId: ACCOUNT, sender: 'sales@example.com', label: 'personal', messageId: sale, carryOut: true }, 70));
@@ -167,13 +167,13 @@ describe('when a rule changes', () => {
 
   it('a rule sift learned changes a suggestion only when the outcome differs', async () => {
     const sale = await decided('sales@example.com', MARKETING);
-    await addRule(db, ACCOUNT, { match: { from: ['sales@example.com'] }, labelId: 'marketing' }, 'learned');
+    await addRule(db, { match: { from: ['sales@example.com'] }, labelId: 'marketing' }, 'learned');
     expect(await redecideWaiting(db, ACCOUNT)).toBe(0);
 
-    await updateLabel(db, ACCOUNT, 'marketing', { disposition: 'keep' });
+    await updateLabel(db, 'marketing', { disposition: 'keep' });
     const underLearned = await decided('sales@example.com', {
       stage: 'rules',
-      ruleId: (await listRules(db, ACCOUNT))[0]!.id,
+      ruleId: (await listRules(db))[0]!.id,
       disposition: 'archive',
       labelId: 'marketing',
     });
@@ -190,7 +190,7 @@ describe("when a label's outcome changes", () => {
     const run = await startRun(db, { accountId: ACCOUNT, messageId: sale, model: 'p/m', now: 0 });
     await raw(db).run(`UPDATE decisions SET run_id = ? WHERE message_id = ?`, run, sale);
     const other = await decided('news@example.com', { disposition: 'archive', labelId: 'newsletter', subscription: 'preserve' });
-    await updateLabel(db, ACCOUNT, 'marketing', { disposition: 'keep', unsubscribe: false });
+    await updateLabel(db, 'marketing', { disposition: 'keep', unsubscribe: false });
 
     expect(await redecideWaiting(db, ACCOUNT, 80)).toBe(1);
     expect(await current(sale)).toEqual({
@@ -209,7 +209,7 @@ describe("when a label's outcome changes", () => {
     expect(await redecideWaiting(db, ACCOUNT)).toBe(0);
 
     // Changing it again does not pile explanations up.
-    await updateLabel(db, ACCOUNT, 'marketing', { disposition: 'spam' });
+    await updateLabel(db, 'marketing', { disposition: 'spam' });
     await redecideWaiting(db, ACCOUNT);
     expect(await current(sale)).toMatchObject({
       disposition: 'review',
@@ -223,7 +223,7 @@ describe("when a label's outcome changes", () => {
     const friend = await decided('cy@example.org', { disposition: 'keep', labelId: 'personal', reason: 'Personal: a note' });
     await rememberCorrespondent(db, ACCOUNT, 'bob@example.org', false, 90);
     await rememberCorrespondent(db, ACCOUNT, 'cy@example.org', true, 90);
-    await updateLabel(db, ACCOUNT, 'personal', { disposition: 'archive' });
+    await updateLabel(db, 'personal', { disposition: 'archive' });
 
     expect(await redecideWaiting(db, ACCOUNT, 100)).toBe(3);
     expect(await current(unknown)).toMatchObject({ disposition: 'review', label_id: 'personal', reason: expect.stringContaining('is not known') });
@@ -233,12 +233,12 @@ describe("when a label's outcome changes", () => {
 
   it('asks about a label the model was not sure enough of, whatever the label now does', async () => {
     const guess = await decided('sales@example.com', { disposition: 'review', labelId: 'marketing', gmailLabel: 'sift/marketing', confidence: 0.6 });
-    await updateLabel(db, ACCOUNT, 'marketing', { disposition: 'keep', unsubscribe: false });
+    await updateLabel(db, 'marketing', { disposition: 'keep', unsubscribe: false });
     expect(await redecideWaiting(db, ACCOUNT)).toBe(0);
     expect(await current(guess)).toMatchObject({ disposition: 'review', label_id: 'marketing', reason: 'Marketing: a sale' });
     // Decided as the label said before the bar, it is held once the label changes.
     const before = await decided('deals@example.com', { ...MARKETING, confidence: 0.6 });
-    await updateLabel(db, ACCOUNT, 'marketing', { disposition: 'archive' });
+    await updateLabel(db, 'marketing', { disposition: 'archive' });
     await redecideWaiting(db, ACCOUNT);
     expect(await current(before)).toMatchObject({
       disposition: 'review',
@@ -250,7 +250,7 @@ describe("when a label's outcome changes", () => {
   it('leaves mail sift could not place alone', async () => {
     await decided('who@example.com', { stage: 'fallback' });
     await decided('unsure@example.com', { stage: 'model', reason: 'could be either' });
-    await updateLabel(db, ACCOUNT, 'marketing', { disposition: 'keep' });
+    await updateLabel(db, 'marketing', { disposition: 'keep' });
     expect(await redecideWaiting(db, ACCOUNT)).toBe(0);
   });
 });

@@ -4,7 +4,7 @@ import { closeSettings, expect, param, path, PHONE, query, refused, settings, si
 const steps = (page: Page) => page.locator('ol > li');
 const current = (page: Page) => page.locator('[aria-current="step"]');
 
-test.describe('Setting up a mailbox with no labels', () => {
+test.describe('Setting up with no labels', () => {
   test.use({ variant: 'bare' });
 
   test('starts at what you want, with the model step done', async ({ page }) => {
@@ -49,9 +49,9 @@ test.describe('Setting up a mailbox with no labels', () => {
     await page.reload();
     await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toBeVisible();
 
-    // Made only in the mailbox that had no labels.
+    // The person's label, for every mailbox of theirs.
     await page.goto('/labels');
-    await expect(page.getByRole('row', { name: /^Sales pitches / })).toContainText('Only in me@work.example.org');
+    await expect(page.getByRole('row', { name: /^Sales pitches / })).toBeVisible();
   });
 
   test('the newest of the inbox is gone through to suggest about, and Settings says how far it has got', async ({ page }) => {

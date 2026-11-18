@@ -113,11 +113,11 @@ const inbox = [
 const store = await openStore(config);
 const user = await connectAccount(store, ACCOUNT, '1', now - 24 * HOUR);
 const db = await store.user(user);
-await withSampleLabels(db, ACCOUNT);
+await withSampleLabels(db);
 // Two label rules and an action rule; a fourth, which cannot be a filter, is added after the passes.
-const newsRule = await addRule(db, ACCOUNT, { match: { fromDomain: ['news.example.com'] }, labelId: 'newsletter' }, 'user');
-const ordersRule = await addRule(db, ACCOUNT, { match: { from: ['orders@shop.example.com'] }, labelId: 'transactional' }, 'user');
-const ciRule = await addRule(db, ACCOUNT, { match: { fromDomain: ['ci.example.org'] }, disposition: 'archive' }, 'user');
+const newsRule = await addRule(db, { match: { fromDomain: ['news.example.com'] }, labelId: 'newsletter' }, 'user');
+const ordersRule = await addRule(db, { match: { from: ['orders@shop.example.com'] }, labelId: 'transactional' }, 'user');
+const ciRule = await addRule(db, { match: { fromDomain: ['ci.example.org'] }, disposition: 'archive' }, 'user');
 
 /**
  * The Deals mail (m4) as its HTML part, stored by the pass as it would be from Gmail: a remote image, a background from elsewhere, inline styles,
@@ -232,21 +232,20 @@ if (variant === '--on') {
 // Three rules written to the fake Gmail as filters, as the dashboard asks: the CI one lands; the Shop one
 // lands and is then deleted in Gmail, which a check notices; Gmail does not answer for the news one.
 // A rule added after the passes, so it decides nothing, that cannot be one (Gmail cannot mark spam).
-await addRule(db, ACCOUNT, { match: { fromDomain: ['promo.example.com'] }, disposition: 'spam' }, 'user');
-await writeRuleFilter({ db, mailbox, now: () => now - 3 * HOUR }, ordersRule);
+await addRule(db, { match: { fromDomain: ['promo.example.com'] }, disposition: 'spam' }, 'user');
+await writeRuleFilter({ db, mailbox, now: () => now - 3 * HOUR }, ordersRule, ACCOUNT);
 mailbox.filters = [];
 await checkRuleFilters({ db, mailbox, now: () => now - 150 * 60_000 }, ACCOUNT, false);
-await writeRuleFilter({ db, mailbox, now: () => now - 2 * HOUR }, ciRule);
+await writeRuleFilter({ db, mailbox, now: () => now - 2 * HOUR }, ciRule, ACCOUNT);
 mailbox.createFilter = async () => {
   throw new Error('Gmail did not answer');
 };
-await writeRuleFilter({ db, mailbox, now: () => now - HOUR }, newsRule).catch(() => undefined);
+await writeRuleFilter({ db, mailbox, now: () => now - HOUR }, newsRule, ACCOUNT).catch(() => undefined);
 // A second mailbox of the same person, with no mail (connected after the passes, so none comes to it), to remove; and a second person, who owns nothing yet and
 // takes over the install when the first deletes their account. Neither can be signed in to here.
 await connectAccount(store, WORK, '1', now - 23 * HOUR, user);
-// It comes with the person's labels; `--bare` takes them out, as for a mailbox added while setting up, so every screen is the setting-up steps.
-if (variant === '--bare')
-  for (const label of await listLabels(db, WORK)) if (label.id !== LEAVE_IN_INBOX) await removeLabel(db, WORK, label.id, now - 23 * HOUR);
+// `--bare` takes the person's labels out, as before they chose any, so every screen is the setting-up steps.
+if (variant === '--bare') for (const label of await listLabels(db)) if (label.id !== LEAVE_IN_INBOX) await removeLabel(db, label.id, now - 23 * HOUR);
 await connectAccount(store, OTHER, '1', now - 22 * HOUR);
 // A model in use, so the dashboard is not behind its setting-up steps. The key is made up, and this
 // instance runs no passes, so nothing ever calls Anthropic with it.

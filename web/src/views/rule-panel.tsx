@@ -1,4 +1,4 @@
-import { type RuleMatch, type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type ManageState, type RuleMatch, type RuleSummary, api, useAction, useLoaded } from '@/lib/api.ts';
 import {
   HANDLED,
   INBOX_NAME,
@@ -301,9 +301,13 @@ function Use({ rule }: { rule: RuleSummary }) {
   );
 }
 
+/** The mailbox whose sender and domain pages a rule's links open, a rule being the person's: their primary one. */
+export const homeOf = (state: ManageState | null) => (state?.accounts.find((a) => a.primary) ?? state?.accounts[0])?.id;
+
 /** One rule, opened from the Rules list or wherever it was just made. */
 export function RulePanel({
   rule,
+  home,
   active,
   position,
   onPrevious,
@@ -312,6 +316,7 @@ export function RulePanel({
   onClose,
 }: {
   rule: RuleSummary;
+  home: string;
   /** Whether Sift is on, which writing a filter to Gmail needs. */
   active: boolean;
   position?: string;
@@ -334,7 +339,7 @@ export function RulePanel({
         <Facts>
           {rule.name ? (
             <Fact term="Mail">
-              <Who accountId={rule.accountId} match={rule.match} />
+              <Who accountId={home} match={rule.match} />
             </Fact>
           ) : null}
           {rule.kind === 'when-label' ? <Fact term="When it is">{rule.labelName}</Fact> : null}
@@ -343,7 +348,7 @@ export function RulePanel({
             <Fact term="Unless">
               {rule.except.map((except, index) => (
                 <span key={index} className="block">
-                  <Who accountId={rule.accountId} match={except} />
+                  <Who accountId={home} match={except} />
                 </span>
               ))}
             </Fact>
@@ -392,5 +397,6 @@ export function RuleSheet({ id, onOpen, onClose }: { id: string; onOpen: OpenMes
   const rules = useLoaded('rules', (signal) => api.rules(signal));
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const rule = rules.data?.rules.find((r) => r.id === id);
-  return rule ? <RulePanel key={rule.id} rule={rule} active={manage.data?.active ?? false} onOpen={onOpen} onClose={onClose} /> : null;
+  const home = homeOf(manage.data);
+  return rule && home ? <RulePanel key={rule.id} rule={rule} home={home} active={manage.data?.active ?? false} onOpen={onOpen} onClose={onClose} /> : null;
 }

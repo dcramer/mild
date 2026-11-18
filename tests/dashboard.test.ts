@@ -10,7 +10,7 @@ import { summarize } from '../src/dashboard/queries/summary.ts';
 import { usage } from '../src/dashboard/queries/usage.ts';
 import type { SenderPage } from '../src/dashboard/types.ts';
 import { people } from '../src/store/people.ts';
-import { connectAccount, recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/accounts.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { builtAssets, firstAccount, modelRun, openUserDb, raw, startDashboard, onePerson, unmarked } from './fixtures.ts';
@@ -485,12 +485,11 @@ describe('dashboard server', () => {
 
   it('lists rules with their hits', async () => {
     const db = await seeded();
-    const id = await addRule(db, ACCOUNT, { match: { fromDomain: ['example.com'] }, labelId: 'cold_outreach' }, 'user', NOW);
+    const id = await addRule(db, { match: { fromDomain: ['example.com'] }, labelId: 'cold_outreach' }, 'user', NOW);
     await recordDecision(db, ACCOUNT, 'waiting', { disposition: 'archive', subscription: 'preserve', stage: 'rules', ruleId: id, reason: 'r' }, { now: NOW });
     expect(await listRuleSummaries(db, await everything(db), NOW)).toEqual([
       {
         id,
-        accountId: ACCOUNT,
         match: { fromDomain: ['example.com'] },
         except: [],
         labelId: 'cold_outreach',
@@ -527,7 +526,7 @@ describe('dashboard server', () => {
     const { db } = await onePerson(ACCOUNT);
     const from = { address: 'deals@shop.example.com', domain: 'shop.example.com' };
     await recordSync(db, ACCOUNT, [facts({ messageId: 'sale', from }), facts({ messageId: 'receipt', from })], '1', NOW);
-    const id = await addRule(db, ACCOUNT, { match: { fromDomain: ['shop.example.com'] }, labelId: 'newsletter', when: 'a sale' }, 'user', NOW);
+    const id = await addRule(db, { match: { fromDomain: ['shop.example.com'] }, labelId: 'newsletter', when: 'a sale' }, 'user', NOW);
     const usage = { model: 'test/model', inputTokens: 1, outputTokens: 1, costUsd: 0.03 };
     const model = testModel(async ({ evidence }) => ({ label: evidence.facts.messageId === 'sale' ? 'newsletter' : 'personal', reason: 'r', usage }));
     await triageAccount({ db, mailbox: null, model, sources: quietSources(), now: () => NOW }, await firstAccount(db));
@@ -587,35 +586,35 @@ describe('dashboard server', () => {
         body: JSON.stringify(body),
       });
     const theirs = async () => (await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => r.match['from']?.[0] === 'news@example.com');
-    await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+    await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     // Trust is given in the rule dialog, as what Trust starts it on: a rule for exactly them that only keeps their mail, which is Leave in inbox. It replaces the rule for exactly them.
     // It says it replaced one, so the page offers no Undo: removing it would not bring the old rule back.
-    const replacing = await write('/api/rules', { accountId: ACCOUNT, match: { from: ['news@example.com'] }, disposition: 'keep' });
+    const replacing = await write('/api/rules', { match: { from: ['news@example.com'] }, disposition: 'keep' });
     expect(replacing.status).toBe(200);
     expect(await replacing.json()).toMatchObject({ replaced: true });
     expect(await theirs()).toMatchObject([{ kind: 'label', labelId: 'everything_else', source: 'user' }]);
     const trusted = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
     expect(trusted.profile).toMatchObject({ given: 'trusted' });
 
-    const fresh = await write('/api/rules', { accountId: ACCOUNT, match: { fromDomain: ['example.net'] }, disposition: 'spam' });
+    const fresh = await write('/api/rules', { match: { fromDomain: ['example.net'] }, disposition: 'spam' });
     expect(fresh.status).toBe(200);
     expect(await fresh.json()).toMatchObject({ replaced: false });
     const domain = (await (await fetch(`${base}/api/domain?account=${ACCOUNT}&domain=example.net`)).json()) as SenderPage;
     expect(domain).toMatchObject({ kind: 'domain', profile: { given: 'blocked' }, senders: [{ address: 'cold@example.net', contact: 'new' }] });
 
     // Taking it back is one press.
-    expect((await write('/api/standing/clear', { accountId: ACCOUNT, address: 'news@example.com' })).status).toBe(200);
+    expect((await write('/api/standing/clear', { address: 'news@example.com' })).status).toBe(200);
     expect(await theirs()).toEqual([]);
 
     // A rule naming them among others is on their page but is not their standing, and taking a standing back leaves it.
-    await addRule(db, ACCOUNT, { match: { from: ['news@example.com', 'other@example.org'] }, disposition: 'archive' }, 'user');
+    await addRule(db, { match: { from: ['news@example.com', 'other@example.org'] }, disposition: 'archive' }, 'user');
     const among = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
     expect(among.profile).toMatchObject({ given: null, rules: [{ match: { from: ['news@example.com', 'other@example.org'] } }] });
-    expect((await write('/api/standing/clear', { accountId: ACCOUNT, address: 'news@example.com' })).status).toBe(200);
+    expect((await write('/api/standing/clear', { address: 'news@example.com' })).status).toBe(200);
     expect(await theirs()).toHaveLength(1);
 
-    expect((await write('/api/standing/clear', { accountId: ACCOUNT, address: 'news@example.com', domain: 'example.com' })).status).toBe(400);
-    expect((await write('/api/standing/clear', { accountId: ACCOUNT, address: 'not an address' })).status).toBe(400);
+    expect((await write('/api/standing/clear', { address: 'news@example.com', domain: 'example.com' })).status).toBe(400);
+    expect((await write('/api/standing/clear', { address: 'not an address' })).status).toBe(400);
     expect((await fetch(`${base}/api/domain?account=${ACCOUNT}&domain=gmail.com`)).status).toBe(404);
   });
 
@@ -626,7 +625,7 @@ describe('dashboard server', () => {
       const response = await fetch(`${base}/api/standing`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' },
-        body: JSON.stringify({ accountId: ACCOUNT, ...body }),
+        body: JSON.stringify(body),
       });
       return { status: response.status, body: await response.json() };
     };
@@ -645,10 +644,10 @@ describe('dashboard server', () => {
 
     // A rule for exactly them that says more than what happens to their mail is theirs to change in the dialog: nothing is written.
     await removeRule(db, id);
-    const labelled = await addRule(db, ACCOUNT, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+    const labelled = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     expect((await give({ address: 'news@example.com', standing: 'blocked' })).body).toEqual({ theirs: labelled });
     expect(await theirs()).toMatchObject([{ id: labelled, labelId: 'newsletter' }]);
-    const reading = await addRule(db, ACCOUNT, { match: { fromDomain: ['example.net'] }, disposition: 'archive', markRead: true }, 'user');
+    const reading = await addRule(db, { match: { fromDomain: ['example.net'] }, disposition: 'archive', markRead: true }, 'user');
     expect((await give({ domain: 'example.net', standing: 'unwanted' })).body).toEqual({ theirs: reading });
 
     expect((await give({ domain: 'example.org', standing: 'unwanted' })).body).toEqual({ id: expect.any(String), was: null });
@@ -672,23 +671,17 @@ describe('dashboard server', () => {
     // Accepting it without a rule in hand is not a way to make one.
     expect((await post('/api/proposals', { id: proposal, accept: true })).status).toBe(400);
     // A rule made some other way, or the dialog closed, leaves it open.
-    expect((await post('/api/rules', { accountId: ACCOUNT, match: { from: ['other@example.com'] }, label: 'newsletter' })).status).toBe(200);
+    expect((await post('/api/rules', { match: { from: ['other@example.com'] }, label: 'newsletter' })).status).toBe(200);
     expect(await open()).toEqual([proposal]);
-    // A proposal of another mailbox's is refused, and with it the rule.
-    await connectAccount(store, 'work@example.org', '1', 0, db.person!);
-    const elsewhere = await post('/api/rules', { accountId: 'work@example.org', match: { fromDomain: ['example.com'] }, disposition: 'archive', proposal });
-    expect([elsewhere.status, await elsewhere.json()]).toEqual([409, { error: 'That proposal is no longer open.' }]);
-    expect(await fromNews()).toEqual([]);
-
     // Edited in the dialog: everyone at the domain, as Receipts, not the sender as Newsletters.
-    const made = await post('/api/rules', { accountId: ACCOUNT, match: { fromDomain: ['example.com'] }, label: 'transactional', proposal });
+    const made = await post('/api/rules', { match: { fromDomain: ['example.com'] }, label: 'transactional', proposal });
     expect(made.status).toBe(200);
     expect(await fromNews()).toMatchObject([{ labelId: 'transactional', source: 'user' }]);
     expect((await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => r.match['from']?.[0] === 'news@example.com')).toEqual([]);
     expect(await open()).toEqual([]);
     expect(await raw(db).get('SELECT status FROM proposals WHERE id = ?', proposal)).toEqual({ status: 'accepted' });
     // Made once: the same proposal again makes no second rule.
-    expect((await post('/api/rules', { accountId: ACCOUNT, match: { fromDomain: ['example.org'] }, label: 'transactional', proposal })).status).toBe(409);
+    expect((await post('/api/rules', { match: { fromDomain: ['example.org'] }, label: 'transactional', proposal })).status).toBe(409);
     expect((await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => r.match['fromDomain']?.[0] === 'example.org')).toEqual([]);
   });
 

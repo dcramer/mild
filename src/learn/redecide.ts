@@ -74,8 +74,8 @@ async function stillWaiting(db: Sql, accountId: string, messageId: string, decis
 }
 
 async function redecide(db: Sql, accountId: string, now: number): Promise<number> {
-  const labels = await listLabels(db, accountId);
-  const stored = await listRules(db, accountId);
+  const labels = await listLabels(db);
+  const stored = await listRules(db);
   let known: boolean | undefined;
   const rules = rulesStage(stored, labels, { hasWritten: () => known });
   // Decided by a rule that no longer exists, after another tier had already decided it, and never answered.
