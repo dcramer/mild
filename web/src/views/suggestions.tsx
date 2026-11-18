@@ -33,6 +33,7 @@ import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { fold } from '@/lib/fold.ts';
 import { proposalStart } from '@/lib/rule-start.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
+import { reveal } from '@/lib/reveal.ts';
 
 const UNSURE = '-';
 
@@ -63,7 +64,7 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
     <li className="row flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
       <p className="min-w-0 flex-1 basis-80">
         <span className="font-semibold">
-          {outcomeName(proposal.disposition)} {proposal.labelName} <MatchWords accountId={proposal.accountId} match={proposal.match} />?
+          {outcomeName(proposal.disposition)} {proposal.labelName} <MatchWords accountId={proposal.accountId} match={reveal(proposal.match)} />?
         </span>{' '}
         <span className="text-muted-foreground">
           You {USER_DID[proposal.disposition]?.(n)}, but the label {LABEL_DOES[proposal.labelDisposition]}.
@@ -82,7 +83,7 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
         <AddRuleDialog
           accountId={proposal.accountId}
           labels={labels}
-          start={proposalStart(proposal.match, proposal.labelId, proposal.disposition)}
+          start={proposalStart(reveal(proposal.match), proposal.labelId, proposal.disposition)}
           proposal={proposal.id}
           onClose={() => setOpen(false)}
         />
@@ -93,7 +94,7 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
 
 const answerableOf = (i: SuggestionItem): Answerable => ({
   accountId: i.accountId,
-  sender: i.sender,
+  sender: reveal(i.sender),
   messageId: i.messageId,
   decisionId: i.decisionId,
   labelId: i.labelId,
@@ -123,7 +124,7 @@ function SuggestionRow({
   const target = answerableOf(item);
   const { answer, answerAll, choices, busy, error } = useAnswer(labels, waiting, onAnswered);
   const folded = rest.length > 0;
-  const subjects = [item, ...rest].map((i) => i.subject || '(no subject)').join(' · ');
+  const subjects = [item, ...rest].map((i) => reveal(i.subject) || '(no subject)').join(' · ');
   // A message none of the labels fits gets a new one; it is then among the choices.
   const [adding, setAdding] = useState(false);
   const groups = choices(target, sureness(item), item.alternatives);
@@ -133,8 +134,8 @@ function SuggestionRow({
       {/* On a phone the row reads like a mail app's: who and what sift thinks, the subject, a line of the text. It opens to answer. */}
       <SenderCell
         accountId={item.accountId}
-        address={item.sender}
-        name={item.senderName}
+        address={reveal(item.sender)}
+        name={reveal(item.senderName)}
         contact={item.contact}
         aside={
           <span className="shrink-0 text-sm md:hidden">
@@ -152,8 +153,10 @@ function SuggestionRow({
         }
       >
         <OnPhone>
-          <span className="w-full truncate text-base text-foreground">{folded ? plural(rest.length + 1, 'message') : item.subject || '(no subject)'}</span>
-          {folded ? <span className="w-full truncate">{subjects}</span> : item.preview ? <span className="w-full truncate">{item.preview}</span> : null}
+          <span className="w-full truncate text-base text-foreground">
+            {folded ? plural(rest.length + 1, 'message') : reveal(item.subject) || '(no subject)'}
+          </span>
+          {folded ? <span className="w-full truncate">{subjects}</span> : item.preview ? <span className="w-full truncate">{reveal(item.preview)}</span> : null}
         </OnPhone>
       </SenderCell>
       {/* What it is about, and as much of what it says as fits: enough to answer without opening it. */}
@@ -165,8 +168,8 @@ function SuggestionRow({
           </>
         ) : (
           <>
-            <span className="block truncate">{item.subject || '(no subject)'}</span>
-            {item.preview ? <Sub>{item.preview}</Sub> : null}
+            <span className="block truncate">{reveal(item.subject) || '(no subject)'}</span>
+            {item.preview ? <Sub>{reveal(item.preview)}</Sub> : null}
           </>
         )}
         <Failure className="mt-1">{error}</Failure>
@@ -215,7 +218,7 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
     (i) =>
       (label === '' || (label === UNSURE ? i.labelId === null : i.labelId === label)) &&
       (does === '' || i.disposition === does) &&
-      (needle === '' || [i.sender, i.senderName ?? '', i.subject].some((text) => text.toLowerCase().includes(needle))),
+      (needle === '' || [i.sender, i.senderName ?? '', i.subject].some((text) => reveal(text).toLowerCase().includes(needle))),
   );
   const answerable = (data?.items ?? []).map(answerableOf);
   const rows = fold(shown);

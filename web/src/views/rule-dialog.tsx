@@ -21,6 +21,7 @@ import {
 import { Button, Check, Dialog, Does, Failure, Field, FieldGroup, Form, Input, Note, Select, useToast } from '@/system';
 import { useFilterOffer } from '@/views/gmail-filter.tsx';
 import { DescribeStep } from '@/components/describe.tsx';
+import { reveal } from '@/lib/reveal.ts';
 
 const BY = [
   ['from', 'from'],
@@ -107,16 +108,16 @@ export function AddRuleDialog({
   const [goal, setGoal] = useState(() => (start ? startWords(start, labels) : ''));
   const [note, setNote] = useState<string | null>(null);
   const fill = ({ match: drafted, ...rule }: RuleDraft) => {
-    setRows(rowsOf(conditionsOf(drafted), factAnswers(drafted.facts)));
+    setRows(rowsOf(conditionsOf(reveal(drafted)), factAnswers(drafted.facts)));
     setGrown(false);
-    setLabel(startLabel({ ...rule, ...(rule.disposition ? { action: rule.disposition } : {}) }));
-    setWhenLabel(rule.whenLabel ?? '');
-    setCondition(rule.when ?? '');
-    setName(rule.name ?? '');
+    setLabel(startLabel(reveal({ ...rule, ...(rule.disposition ? { action: rule.disposition } : {}) })));
+    setWhenLabel(reveal(rule.whenLabel) ?? '');
+    setCondition(reveal(rule.when) ?? '');
+    setName(reveal(rule.name) ?? '');
     setThen(rule.disposition ?? '');
     setMarkRead(rule.markRead ?? false);
     setUnsubscribe(rule.unsubscribe ?? false);
-    setNote(rule.note ?? null);
+    setNote(reveal(rule.note) ?? null);
     setDescribing(false);
   };
   const describe = () => goal.trim() !== '' && drafting.run(async () => fill(await api.draftRule(accountId, goal.trim())));

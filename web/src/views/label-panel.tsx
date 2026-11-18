@@ -23,6 +23,7 @@ import {
   TextArea,
   useToast,
 } from '@/system';
+import { reveal } from '@/lib/reveal.ts';
 
 const canMarkRead = (does: string) => does === 'keep' || does === 'archive';
 /** Wrong often enough to look at: under 85% right, over at least ten answers. */
@@ -304,10 +305,10 @@ export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onS
         }
       >
         <div className="flex flex-col gap-4">
-          <p className="text-muted-foreground">“{stage.proposal.goal}”</p>
+          <p className="text-muted-foreground">“{reveal(stage.proposal.goal)}”</p>
           {stage.proposal.note ? (
             <Note tone="look" title="Not in these labels">
-              {stage.proposal.note}
+              {reveal(stage.proposal.note)}
             </Note>
           ) : null}
           {suggestions.length > 0 ? (

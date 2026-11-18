@@ -5,6 +5,7 @@ import { openEnvelope } from '../store/content.ts';
 import { listLabels } from '../store/labels.ts';
 import { type DecidedDisposition, LEAVE_IN_INBOX } from '../triage/types.ts';
 import { applyFeedback } from './feedback.ts';
+import { plain } from '../plain.ts';
 
 /** Labels put on or taken off one message in Gmail. */
 interface MessageChange {
@@ -98,7 +99,7 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
       .orderBy(desc(decisions.id))
       .limit(1);
     if (!decision) continue;
-    const sender = openEnvelope(db, accountId, change.messageId, { headers: decision.headers }).fromAddress;
+    const sender = plain(openEnvelope(db, accountId, change.messageId, { headers: decision.headers }).fromAddress);
     const touched = [...change.added, ...change.removed];
     const moved = moves(touched);
     if (!moved && !touched.some(isUserLabel)) continue;

@@ -9,6 +9,7 @@ import { InboxFigures, useInboxEstimate } from '@/components/inbox.tsx';
 import { Button, Dialog, Failure, Form, Note, Onboarding, TextArea } from '@/system';
 import { type LabelDraft, LabelFields } from '@/views/label-panel.tsx';
 import { type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
+import { reveal } from '@/lib/reveal.ts';
 
 type Choice = ManageState['model']['choices'][number];
 type Account = { name: string; onSettings: () => void; onSignOut: () => void } | undefined;
@@ -88,7 +89,7 @@ export function SetUp({ signedInAs, onSettings, children }: { signedInAs: string
     );
   return (
     <Want
-      start={suggested?.goal ?? ''}
+      start={reveal(suggested?.goal) ?? ''}
       steps={steps}
       account={account}
       onSuggested={(next) => {
@@ -236,10 +237,10 @@ function Labels({
   const change = (index: number, next: Partial<Suggestion>) => setSuggestions((all) => all.map((d, i) => (i === index ? { ...d, ...next } : d)));
   const use = () => kept.length > 0 && run(() => api.acceptLabels(kept), onDone);
   return (
-    <Onboarding steps={steps} current={2} title="Your labels" intro={`“${proposal.goal}”`} account={account}>
+    <Onboarding steps={steps} current={2} title="Your labels" intro={`“${reveal(proposal.goal)}”`} account={account}>
       {proposal.note ? (
         <Note tone="look" title="Not in these labels">
-          {proposal.note}
+          {reveal(proposal.note)}
         </Note>
       ) : null}
       {suggestions.length > 0 ? (

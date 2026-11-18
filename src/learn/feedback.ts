@@ -34,6 +34,8 @@ import type { RuleFacts } from '../triage/facts.ts';
 import { factsWhere } from '../store/messages.ts';
 import { type DecidedDisposition, type Decision, type Disposition, LEAVE_IN_INBOX, type StageName, labelled } from '../triage/types.ts';
 import { Refusal } from '../refusal.ts';
+import { plain } from '../plain.ts';
+import type { Confidential } from '../confidential.ts';
 
 /** A decision sift only suggested, that the user has not yet confirmed or corrected. */
 export interface Suggestion {
@@ -51,9 +53,9 @@ export interface Suggestion {
   confidence: number | null;
   decidedAt: number;
   receivedAt: number;
-  fromAddress: string;
-  fromName: string | null;
-  subject: string;
+  fromAddress: Confidential;
+  fromName: Confidential | null;
+  subject: Confidential;
 }
 
 const x = alias(decisions, 'x');
@@ -138,7 +140,7 @@ async function undecided(db: Sql, accountId: string, messageId: string): Promise
         ),
       ),
     );
-  return row ? openEnvelope(db, accountId, messageId, row) : null;
+  return row ? plain(openEnvelope(db, accountId, messageId, row)) : null;
 }
 
 /** The decision that currently stands for a message, in the shape of a suggestion, or null if it has none. */
@@ -249,7 +251,7 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
       const [kept] = await tx.select({ text: suggestionBodies.bodyText, html: suggestionBodies.bodyHtml }).from(suggestionBodies).where(waiting);
       // A message gone from Gmail was kept empty; fetching it again records it as gone.
       const held =
-        kept && (kept.html !== null || openPart(tx, target.accountId, target.messageId, 'text', kept.text) !== '')
+        kept && (kept.html !== null || plain(openPart(tx, target.accountId, target.messageId, 'text', kept.text)) !== '')
           ? { status: 'captured' as const, bodyText: kept.text, bodyHtml: kept.html }
           : {};
       const marked = { labelId: label.id, markedAt: now, ...held };

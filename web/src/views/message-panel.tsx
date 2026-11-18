@@ -9,7 +9,7 @@ import { AddLabelsDialog } from '@/views/label-panel.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { type RuleStart, keepStart, messageStart } from '@/lib/rule-start.ts';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
-import { type MessageDetail, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
+import { type Confidential, type MessageDetail, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
 import { ago, capitalised, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
 import {
   Th,
@@ -34,13 +34,15 @@ import {
 } from '@/system';
 import { usePlan } from '@/components/model-connect.tsx';
 import { AT_API_PRICES } from '@/lib/prices.ts';
+import { reveal } from '@/lib/reveal.ts';
 
 /** Open the message panel on one item of a list, so it can step through the rest. */
 
 export interface MessageRef {
   accountId: string;
   messageId: string;
-  subject: string;
+  /** Null when the list it was opened from does not know it. */
+  subject: Confidential | null;
 }
 
 type Decision = MessageDetail['decisions'][number];
@@ -75,7 +77,7 @@ function DecisionEvent({ d }: { d: Decision }) {
         </>
       }
     >
-      <p className="text-foreground">{capitalised(d.reason)}</p>
+      <p className="text-foreground">{capitalised(reveal(d.reason))}</p>
       <p>
         By {tier(d.stage).name.toLowerCase()}
         {facts.length > 0 ? ` · ${facts.join(' · ')}` : ''}
@@ -120,8 +122,8 @@ function ActionEvent({ a, onUndo, busy }: { a: Action; onUndo: (id: number) => v
           }
         : {})}
     >
-      {labels('Added', a.added)}
-      {labels('Removed', a.removed)}
+      {labels('Added', reveal(a.added))}
+      {labels('Removed', reveal(a.removed))}
     </TimelineEvent>
   );
 }
@@ -145,8 +147,8 @@ function Body({
   onUndone: () => void;
 }) {
   const waiting = useLoaded(
-    `suggestion/${detail.accountId}/${detail.fromAddress}`,
-    (signal) => api.suggestion(detail.accountId, detail.fromAddress, signal),
+    `suggestion/${detail.accountId}/${reveal(detail.fromAddress)}`,
+    (signal) => api.suggestion(detail.accountId, reveal(detail.fromAddress), signal),
     120_000,
   );
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
@@ -190,7 +192,13 @@ function Body({
   };
   const { answer, choices, busy, error } = useAnswer(
     labels,
-    waitingNow.map((m) => ({ accountId: detail.accountId, sender: detail.fromAddress, messageId: m.messageId, decisionId: m.decisionId, labelId: m.labelId })),
+    waitingNow.map((m) => ({
+      accountId: detail.accountId,
+      sender: reveal(detail.fromAddress),
+      messageId: m.messageId,
+      decisionId: m.decisionId,
+      labelId: m.labelId,
+    })),
     onAnswered,
   );
   // What else it might be: the labels the sender's other mail has had, most first.
@@ -199,7 +207,7 @@ function Body({
     .filter((l) => l.id !== current?.labelId)
     .slice(0, 2)
     .map((l) => ({ id: l.id, name: l.name, share: total ? l.messages / total : 0 }));
-  const groups = choices(target, current ? sureness(current) : 1, alternatives);
+  const groups = choices(reveal(target), current ? sureness(current) : 1, alternatives);
   // Mail that is what Sift says but matters anyway: a rule keeps the sender's mail of that kind, and this message with it.
   const given = labels.find((l) => l.id === current?.labelId);
   const keepable = given && current?.disposition !== 'keep' && given.disposition !== 'keep' && given.disposition !== 'review' ? given : null;
@@ -207,12 +215,12 @@ function Body({
   const keep = useAction();
   const covers = (match: RuleMatch) =>
     Object.keys(match).length === 1 &&
-    ((match.from ?? []).includes(detail.fromAddress) || (match.fromDomain ?? []).includes(detail.fromAddress.split('@')[1] ?? ''));
+    ((match.from ?? []).includes(reveal(detail.fromAddress)) || (match.fromDomain ?? []).includes(reveal(detail.fromAddress).split('@')[1] ?? ''));
   const keepThis = (labelId: string) =>
     keep.run(async () => {
       const reply = await api.feedback({
         accountId: detail.accountId,
-        sender: detail.fromAddress,
+        sender: reveal(detail.fromAddress),
         messageId: detail.messageId,
         ...(current ? { decisionId: current.id } : {}),
         label: labelId,
@@ -240,12 +248,12 @@ function Body({
             groups={groups}
             empty={outcomeName('review')}
             busy={busy}
-            onSubmit={(id) => answer(target, id)}
+            onSubmit={(id) => answer(reveal(target), id)}
             extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
           />
           {current ? (
             <p className="text-muted-foreground">
-              {capitalised(current.reason)}
+              {capitalised(reveal(current.reason))}
               {current.carryOut ? (
                 <>
                   {' · '}
@@ -256,11 +264,11 @@ function Body({
           ) : null}
           <div className="-ml-3 flex flex-wrap items-center gap-1">
             {keepable ? (
-              <Button variant="quiet" busy={keep.busy} onClick={() => setRuling(keepStart(detail.fromAddress, keepable.id))}>
+              <Button variant="quiet" busy={keep.busy} onClick={() => setRuling(keepStart(reveal(detail.fromAddress), keepable.id))}>
                 Keep as {keepable.name}…
               </Button>
             ) : null}
-            <Button variant="quiet" onClick={() => setRuling(messageStart(detail.fromAddress, current?.labelId ?? null))}>
+            <Button variant="quiet" onClick={() => setRuling(messageStart(reveal(detail.fromAddress), current?.labelId ?? null))}>
               Make a rule…
             </Button>
           </div>
@@ -281,7 +289,7 @@ function Body({
           ) : null}
         </div>
         <div className="flex min-w-0 flex-col gap-8 max-lg:order-3">
-          <Section title="Sender" action={<TextLink href={senderHref(detail.accountId, detail.fromAddress)}>All their mail</TextLink>}>
+          <Section title="Sender" action={<TextLink href={senderHref(detail.accountId, reveal(detail.fromAddress))}>All their mail</TextLink>}>
             <SenderFacts accountId={detail.accountId} profile={detail.sender} />
           </Section>
           <SeenFacts detail={detail} onRule={setRuling} />
@@ -296,7 +304,7 @@ function Body({
                   <tbody>
                     {others.map((m) => (
                       <Tr key={m.messageId} onOpen={() => onPick(m.messageId)}>
-                        <Td className="w-full max-w-0 truncate">{m.subject || '(no subject)'}</Td>
+                        <Td className="w-full max-w-0 truncate">{reveal(m.subject) || '(no subject)'}</Td>
                         <Td num quiet>
                           {ago(m.receivedAt)}
                         </Td>
@@ -320,11 +328,11 @@ function Body({
   );
 }
 
-const people = (list: MessageDetail['to']) => list.map((p) => p.address).join(', ');
+const people = (list: MessageDetail['to']) => list.map((p) => reveal(p.address)).join(', ');
 
 /** Who a message went to, unless that was the account alone, which says nothing. */
 function addressedTo(detail: MessageDetail): string | null {
-  if (detail.cc.length === 0 && detail.to.every((p) => p.address === detail.accountId)) return null;
+  if (detail.cc.length === 0 && detail.to.every((p) => reveal(p.address) === detail.accountId)) return null;
   const to = detail.to.length > 0 ? `To ${people(detail.to)}` : '';
   return detail.cc.length > 0 ? `${to}${to ? ', cc ' : 'Cc '}${people(detail.cc)}` : to;
 }
@@ -367,16 +375,16 @@ export function MessagePanel({
       onClose={onClose}
       onClosing={onClosing}
       returnTo={messageKey(item)}
-      title={(data?.subject ?? (picked ? '' : item.subject)) || '(no subject)'}
+      title={(reveal(data?.subject) ?? (picked ? null : reveal(item.subject))) || '(no subject)'}
       subtitle={
         data ? (
           <>
             <span className="flex flex-wrap items-center gap-x-2">
-              <SenderLink accountId={data.accountId} address={data.fromAddress} name={data.fromName} className="text-foreground">
-                {data.fromName ?? data.fromAddress}
+              <SenderLink accountId={data.accountId} address={reveal(data.fromAddress)} name={reveal(data.fromName)} className="text-foreground">
+                {reveal(data.fromName) ?? reveal(data.fromAddress)}
               </SenderLink>
               <ContactHint contact={data.sender.contact} />
-              {data.fromName ? <SenderLink accountId={data.accountId} address={data.fromAddress} className="min-w-0 break-all" /> : null}
+              {data.fromName ? <SenderLink accountId={data.accountId} address={reveal(data.fromAddress)} className="min-w-0 break-all" /> : null}
               <span aria-hidden className="max-sm:hidden">
                 ·
               </span>

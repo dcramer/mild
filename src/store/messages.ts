@@ -4,6 +4,7 @@ import type { Sql } from './sql.ts';
 import type { Facts, RuleFacts } from '../triage/facts.ts';
 import type { MessageFacts } from '../triage/types.ts';
 import { openEnvelope, openFacts, sealFacts } from './content.ts';
+import { plain } from '../plain.ts';
 
 const COLUMNS = {
   id: messages.id,
@@ -28,7 +29,7 @@ interface Row {
 }
 
 const toMessage = (db: Sql, accountId: string, stored: Row): MessageFacts => {
-  const r = openEnvelope(db, accountId, stored.id, stored);
+  const r = plain(openEnvelope(db, accountId, stored.id, stored));
   return {
     accountId,
     messageId: r.id,
@@ -94,7 +95,7 @@ export async function storedFacts(db: Sql, accountId: string, messageId: string)
     .select({ facts: messages.facts, headers: messages.headers })
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
-  return row ? openFacts(row.facts, openEnvelope(db, accountId, messageId, { headers: row.headers }).headers) : null;
+  return row ? openFacts(row.facts, plain(openEnvelope(db, accountId, messageId, { headers: row.headers }).headers)) : null;
 }
 
 /** Replace a message's recorded facts, once reading the whole message has added to them. */

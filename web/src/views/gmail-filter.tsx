@@ -3,14 +3,17 @@ import { useState } from 'react';
 import { type RuleFilter, type RuleSummary, api, useAction } from '@/lib/api.ts';
 import { dateTime } from '@/lib/format.ts';
 import { Button, Code, Dialog, Fact, Facts, Failure, Section, Timeline, TimelineEvent, useToast } from '@/system';
+import { reveal } from '@/lib/reveal.ts';
 
 type Plan = NonNullable<RuleFilter['plan']>;
 
 /** In the words of Gmail's own list of filters, so the user can find it there. */
-const gmailMatches = (criteria: Plan['criteria']) =>
-  [criteria.from && `from:(${criteria.from})`, criteria.to && `to:(${criteria.to})`, criteria.subject && `subject:(${criteria.subject})`]
+const gmailMatches = (held: Plan['criteria']) => {
+  const criteria = reveal(held);
+  return [criteria.from && `from:(${criteria.from})`, criteria.to && `to:(${criteria.to})`, criteria.subject && `subject:(${criteria.subject})`]
     .filter(Boolean)
     .join(' ');
+};
 const doThis = (plan: Plan) => [plan.archive ? 'Skip Inbox' : null, plan.gmailLabel ? `Apply label “${plan.gmailLabel}”` : null].filter(Boolean).join(', ');
 
 /**

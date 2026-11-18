@@ -4,13 +4,14 @@ import { ACTIONS } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
 import { Heads, Button, Check, Does, OnPhone, RowActions, Sub, Table, Td, Th, Tr } from '@/system';
 import type { LabelDraft } from '@/views/label-panel.tsx';
+import { reveal } from '@/lib/reveal.ts';
 
 /** A label the model suggested, as the person is shaping it: kept unless unticked. */
 export type Suggestion = LabelDraft & { on: boolean };
 
 export const suggestionOf = (d: LabelProposal['drafts'][number]): Suggestion => ({
-  name: d.name,
-  description: d.description,
+  name: reveal(d.name),
+  description: reveal(d.description),
   disposition: d.disposition,
   markRead: d.markRead ?? false,
   unsubscribe: d.unsubscribe ?? false,

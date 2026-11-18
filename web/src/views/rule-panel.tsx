@@ -54,6 +54,7 @@ import {
 } from '@/system';
 import { usePlan } from '@/components/model-connect.tsx';
 import { AT_API_PRICES, approx, costName, priceNote } from '@/lib/prices.ts';
+import { reveal } from '@/lib/reveal.ts';
 
 const QUIET: Record<string, string> = {
   fromDomain: 'anyone at',
@@ -91,7 +92,7 @@ export function Who({ accountId, match }: { accountId: string; match: RuleMatch 
 }
 
 /** What a rule is called: its name, or its conditions. */
-const ruleTitle = (rule: Pick<RuleSummary, 'name' | 'match'>) => rule.name ?? whoText(rule.match);
+const ruleTitle = (rule: Pick<RuleSummary, 'name' | 'match'>) => reveal(rule.name) ?? whoText(reveal(rule.match));
 
 export function whoText(match: RuleMatch): string {
   const said = saidOf(match);
@@ -184,7 +185,7 @@ function ApplyDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => void
                   <TrGroup title="Newest" span={2} />
                   {sample.examples.map((m) => (
                     <Tr key={m.messageId}>
-                      <Td className="w-full max-w-0 truncate">{m.subject || '(no subject)'}</Td>
+                      <Td className="w-full max-w-0 truncate">{reveal(m.subject) || '(no subject)'}</Td>
                       <Td num quiet>
                         {ago(m.receivedAt)}
                       </Td>
@@ -248,7 +249,7 @@ function InInbox({ rule, onOpen }: { rule: RuleSummary; onOpen: OpenMessages }) 
             <tbody>
               {messages.map((m, index) => (
                 <Tr key={m.messageId} onOpen={() => onOpen(messages, index)} holds={[messageKey(m)]}>
-                  <Td className="w-full max-w-0 truncate">{m.subject || '(no subject)'}</Td>
+                  <Td className="w-full max-w-0 truncate">{reveal(m.subject) || '(no subject)'}</Td>
                   <Td num quiet>
                     {ago(m.receivedAt)}
                   </Td>
@@ -340,7 +341,7 @@ export function RulePanel({
         <Facts>
           {rule.name ? (
             <Fact term="Mail">
-              <Who accountId={home} match={rule.match} />
+              <Who accountId={home} match={reveal(rule.match)} />
             </Fact>
           ) : null}
           {rule.kind === 'when-label' ? <Fact term="When it is">{rule.labelName}</Fact> : null}
@@ -349,7 +350,7 @@ export function RulePanel({
             <Fact term="Unless">
               {rule.except.map((except, index) => (
                 <span key={index} className="block">
-                  <Who accountId={home} match={except} />
+                  <Who accountId={home} match={reveal(except)} />
                 </span>
               ))}
             </Fact>
@@ -378,7 +379,7 @@ export function RulePanel({
               remove.run(
                 () => api.removeRule(rule.id),
                 () => {
-                  toast(rule.name ?? `Mail ${describeMatch(rule.match)}`, { kind: 'Rule removed' });
+                  toast(reveal(rule.name) ?? `Mail ${describeMatch(reveal(rule.match))}`, { kind: 'Rule removed' });
                   onClose();
                 },
               )

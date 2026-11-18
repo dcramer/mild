@@ -5,6 +5,7 @@ import type { DecisionRow, ListedDecision } from '@/lib/api.ts';
 import { INBOX, clock, dateTime, dayName, happened, status } from '@/lib/format.ts';
 import { Heads, Blank, Button, Does, Loading, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from '@/system';
 import type { OpenMessages } from '@/lib/open-messages.ts';
+import { reveal } from '@/lib/reveal.ts';
 
 /**
  * What happened to a message, with the label and whether it was the user's own answer. In its own cell
@@ -78,15 +79,15 @@ export function MailLog({
             const s = status(row);
             return (
               <Tr key={row.id} onOpen={() => onOpen(items, index)} holds={[messageKey(row)]}>
-                <SenderCell accountId={row.accountId} address={row.fromAddress} name={row.fromName} contact={row.contact} {...term}>
+                <SenderCell accountId={row.accountId} address={reveal(row.fromAddress)} name={reveal(row.fromName)} contact={row.contact} {...term}>
                   <OnPhone>
-                    <span className="w-full truncate text-foreground">{row.subject || '(no subject)'}</span>
+                    <span className="w-full truncate text-foreground">{reveal(row.subject) || '(no subject)'}</span>
                     <Happened row={row} labelled={labelled} />
                     <span>{clock(row.decidedAt)}</span>
                   </OnPhone>
                 </SenderCell>
                 <Td phone="hide" className="max-w-0 md:w-full">
-                  <span className="block truncate">{row.subject ? <Marked text={row.subject} {...term} /> : '(no subject)'}</span>
+                  <span className="block truncate">{row.subject ? <Marked text={reveal(row.subject)} {...term} /> : '(no subject)'}</span>
                 </Td>
                 <Td phone="hide" className="max-w-0 md:min-w-60">
                   <span className="block truncate">

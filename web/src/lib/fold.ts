@@ -1,8 +1,10 @@
+import type { Confidential } from '../../../src/confidential.ts';
+
 /** What a waiting message is folded by: whose it is, the name it came under, and the label Sift gave it. */
 interface Foldable {
   accountId: string;
-  sender: string;
-  senderName: string | null;
+  sender: Confidential;
+  senderName: Confidential | null;
   labelId: string | null;
 }
 

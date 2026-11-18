@@ -12,6 +12,7 @@ import { contacts } from '../../store/senders.ts';
 import { type Scope, sees, within } from '../scope.ts';
 import { FACT_FILTERS, type FactFilter, type SuggestionDetail, type SuggestionItem, type Suggestions } from '../types.ts';
 import { outcomeOf } from './labels.ts';
+import { plain, seal } from '../../plain.ts';
 
 /** One sender's waiting mail, newest first. */
 export async function suggestionDetail(db: Sql, scope: Scope, accountId: string, sender: string): Promise<SuggestionDetail | null> {
@@ -63,7 +64,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
   const shown = waitingNow.slice(0, MAX_ITEMS);
   // What each sender's mail has been labelled, by its current decision, to offer as other likely labels.
   const history = new Map<string, Map<string, number>>();
-  const senders = [...new Set(shown.map((s) => `${s.accountId}\n${s.fromAddress}`))];
+  const senders = [...new Set(shown.map((s) => `${s.accountId}\n${plain(s.fromAddress)}`))];
   const later = alias(decisions, 'later');
   for (const key of senders) {
     const [accountId = '', address = ''] = key.split('\n');
@@ -89,7 +90,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
     history.set(key, new Map(rows.map((r) => [r.labelId!, r.n])));
   }
   const alternatives = (s: (typeof shown)[number]) => {
-    const counts = history.get(`${s.accountId}\n${s.fromAddress}`) ?? new Map<string, number>();
+    const counts = history.get(`${s.accountId}\n${plain(s.fromAddress)}`) ?? new Map<string, number>();
     const total = [...counts.values()].reduce((sum, n) => sum + n, 0);
     return [...counts]
       .filter(([id]) => id !== s.labelId)
@@ -112,12 +113,21 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
         .from(suggestionBodies)
         .where(within(scope, suggestionBodies.accountId))
     ).map(
-      (r) => [`${r.accountId}\n${r.messageId}`, openPart(db, r.accountId, r.messageId, 'text', r.text)!.slice(0, 400).replace(/\s+/g, ' ').trim()] as const,
+      (r) =>
+        [
+          `${r.accountId}\n${r.messageId}`,
+          seal(
+            plain(openPart(db, r.accountId, r.messageId, 'text', r.text))!
+              .slice(0, 400)
+              .replace(/\s+/g, ' ')
+              .trim(),
+          ),
+        ] as const,
     ),
   );
   const known = await contacts(
     db,
-    shown.map((s) => ({ accountId: s.accountId, address: s.fromAddress })),
+    shown.map((s) => ({ accountId: s.accountId, address: plain(s.fromAddress) })),
   );
   const items = shown.map((s): SuggestionItem => ({
     accountId: s.accountId,
@@ -125,7 +135,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
     decisionId: s.decisionId,
     sender: s.fromAddress,
     senderName: s.fromName,
-    contact: known.get(`${s.accountId}\n${s.fromAddress}`) ?? null,
+    contact: known.get(`${s.accountId}\n${plain(s.fromAddress)}`) ?? null,
     subject: s.subject,
     receivedAt: s.receivedAt,
     disposition: s.block ? 'block' : s.disposition,

@@ -28,6 +28,7 @@ import { preferences } from '../store/preferences.ts';
 import type { Sql } from '../store/sql.ts';
 import { Refusal } from '../refusal.ts';
 import type { StandIns } from './sift.ts';
+import { seal } from '../plain.ts';
 
 const DAY_MS = 86_400_000;
 /** How far back an estimate looks for how much mail went to the model: recent enough to reflect the rules as they are. */
@@ -181,12 +182,12 @@ export async function buildControls(
     proposeLabels: async (db, request) => {
       const opened = await chosen(db);
       if (!opened) throw new Refusal('Choose a model first.');
-      return await proposeLabels({ db, propose: createProposer(opened.models, opened.model), model: opened.spec }, request);
+      return seal(await proposeLabels({ db, propose: createProposer(opened.models, opened.model), model: opened.spec }, request));
     },
     draftRule: async (db, request) => {
       const opened = await chosen(db);
       if (!opened) throw new Refusal('Choose a model first.');
-      return await draftRule({ db, draft: createRuleDrafter(opened.models, opened.model), model: opened.spec }, request);
+      return seal(await draftRule({ db, draft: createRuleDrafter(opened.models, opened.model), model: opened.spec }, request));
     },
     ruleFilter: async (db, ruleId, on) => {
       // Every mailbox is tried, so one Gmail refusing does not leave the others as they were.
@@ -203,7 +204,7 @@ export async function buildControls(
       const samples = [];
       for (const account of await listAccounts(db)) {
         const sample = await ruleInbox(db, (await gmail(db, account.id)).api, account.id, ruleId);
-        samples.push({ ...sample, examples: sample.examples.map((m) => ({ accountId: account.id, ...m })) });
+        samples.push({ ...sample, examples: sample.examples.map((m) => ({ accountId: account.id, ...m, subject: seal(m.subject) })) });
       }
       const capped = samples.some((s) => s.most !== null);
       return {

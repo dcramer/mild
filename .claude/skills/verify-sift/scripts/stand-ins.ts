@@ -24,6 +24,7 @@ import type { GmailApi } from '../../../../src/gmail/api.ts';
 import { PROPOSAL_TOOL } from '../../../../src/triage/proposal.ts';
 import { FILL_TOOL, FIND_TOOL } from '../../../../src/triage/rule-draft.ts';
 import { FakeMailbox } from '../../../../tests/helpers.ts';
+import { seal } from '../../../../src/plain.ts';
 
 const file = process.env['SIFT_STAND_INS'];
 if (!file) throw new Error('SIFT_STAND_INS names no file of filters');
@@ -118,7 +119,7 @@ const standIns: StandIns = {
       examples: Array.from({ length: 5 }, (_, i) => ({
         accountId: 'me@example.org',
         messageId: `g${i + 1}`,
-        subject: `Found in Gmail ${i + 1}`,
+        subject: seal(`Found in Gmail ${i + 1}`),
         receivedAt: Date.now() - (i + 1) * 3_600_000,
       })),
       messages: 1240,

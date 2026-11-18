@@ -42,6 +42,7 @@ Decided 2026-11-16: mail is not sealed to a key only the person's browser holds 
 
 ## What follows from it
 
+- What is stored encrypted is never drawn into HTML on the server. It is `Confidential` from `src/store/content.ts` to the page, which draws it only in the browser (`reveal`, `web/src/lib/reveal.ts`); the type checker, `next build` and the linter refuse anything else (docs/architecture.md, "The page").
 - The server's own logs may name a mailbox, never a sender.
 - Nobody running Sift reads a person's mail, and no tool is built that would show it (Google's Limited Use).
 - Deleting a person is one statement that takes every row of theirs, and removing a mailbox one more after its token is deleted, by cascading keys a test holds every table to; their Gmail access is revoked at Google first. Backups keep them no longer than the stated retention.

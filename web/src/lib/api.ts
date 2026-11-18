@@ -30,6 +30,7 @@ export type {
   Summary,
   Usage,
 } from '../../../src/dashboard/types.ts';
+export type { Confidential } from '../../../src/confidential.ts';
 import type {
   DecisionPage,
   InboxEstimate,

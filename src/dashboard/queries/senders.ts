@@ -8,6 +8,7 @@ import { type Scope, narrow } from '../scope.ts';
 import type { SenderPage, SenderProfile } from '../types.ts';
 import { listDecisions } from './decisions.ts';
 import { listRuleSummaries } from './rules.ts';
+import { plain, seal } from '../../plain.ts';
 
 const later = alias(decisions, 'later');
 
@@ -53,7 +54,7 @@ async function namesOf(
   const names = new Map<string, { name: string | null; messages: number; lastSeenAt: number; labels: Map<string, number> }>();
   let newest: string | null = null;
   for (const row of rows) {
-    const name = openEnvelope(db, accountId, row.id, row).fromName?.trim() || null;
+    const name = plain(openEnvelope(db, accountId, row.id, row).fromName)?.trim() || null;
     newest ??= name;
     const key = name === null ? '' : plainName(name);
     const entry = names.get(key) ?? { name, messages: 0, lastSeenAt: row.receivedAt, labels: new Map<string, number>() };
@@ -66,8 +67,9 @@ async function namesOf(
   return {
     names: [...names.values()]
       .toSorted((a, b) => b.messages - a.messages || b.lastSeenAt - a.lastSeenAt)
-      .map(({ labels, ...n }) => ({
+      .map(({ labels, name, ...n }) => ({
         ...n,
+        name: seal(name),
         labels: [...labels].toSorted(([, a], [, b]) => b - a).map(([id, messages]) => ({ id, name: labelNames.get(id) ?? id, messages })),
       })),
     newest,
@@ -86,8 +88,8 @@ async function profileOf(db: Sql, scope: Scope, accountId: string, who: { addres
   const rules = (await listRuleSummaries(db, here, now))
     .filter((r) =>
       'address' in who
-        ? (r.match.from ?? []).includes(who.address) || (r.match.fromDomain ?? []).includes(domainName)
-        : (r.match.fromDomain ?? []).includes(domainName) || (r.match.from ?? []).some((a) => a.endsWith(`@${domainName}`)),
+        ? plain(r.match.from ?? []).includes(who.address) || plain(r.match.fromDomain ?? []).includes(domainName)
+        : plain(r.match.fromDomain ?? []).includes(domainName) || plain(r.match.from ?? []).some((a) => a.endsWith(`@${domainName}`)),
     )
     .map((r) => ({
       id: r.id,
@@ -101,7 +103,7 @@ async function profileOf(db: Sql, scope: Scope, accountId: string, who: { addres
       when: r.when,
     }));
   return {
-    address: 'address' in who ? who.address : who.domain,
+    address: seal('address' in who ? who.address : who.domain),
     contact: known.contact,
     given: known.standing === 'trusted' || known.standing === 'unwanted' || known.standing === 'blocked' ? known.standing : null,
     messages: known.messages,
@@ -112,7 +114,7 @@ async function profileOf(db: Sql, scope: Scope, accountId: string, who: { addres
     answers: known.answers,
     userHasWritten: known.userHasWritten,
     labels: known.labels.map((l) => ({ id: l.id, name: names.get(l.id) ?? l.id, messages: l.messages })),
-    domain: ofDomain ? { name: domainName, contact: ofDomain.contact } : null,
+    domain: ofDomain ? { name: seal(domainName), contact: ofDomain.contact } : null,
     rules,
   };
 }
@@ -162,13 +164,13 @@ export async function senderPage(
       : [];
   const known = await contacts(
     db,
-    writing.map((s) => ({ accountId, address: s.address })),
+    writing.map((s) => ({ accountId, address: plain(s.address) })),
   );
-  const senders = writing.map((s) => ({ ...s, lastSeenAt: s.lastSeenAt!, contact: known.get(`${accountId}\n${s.address}`) ?? null }));
+  const senders = writing.map((s) => ({ ...s, lastSeenAt: s.lastSeenAt!, contact: known.get(`${accountId}\n${plain(s.address)}`) ?? null }));
   return {
     accountId,
     kind: 'address' in who ? 'sender' : 'domain',
-    name: named?.newest ?? null,
+    name: seal(named?.newest ?? null),
     profile,
     names: named?.names ?? [],
     senders,
@@ -176,7 +178,7 @@ export async function senderPage(
       under === undefined
         ? (await listDecisions(db, scope, { days: 36_500, limit: LISTED, accountId, ...filter }, now)).rows
         : (await listDecisions(db, scope, { days: 36_500, limit: NAMES_FROM, accountId, ...filter }, now)).rows
-            .filter((row) => plainName(row.fromName ?? '') === plainName(under))
+            .filter((row) => plainName(plain(row.fromName) ?? '') === plainName(under))
             .slice(0, LISTED),
   };
 }
