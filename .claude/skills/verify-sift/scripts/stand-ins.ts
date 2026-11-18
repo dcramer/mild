@@ -1,6 +1,6 @@
 /**
  * Preloaded into the Next.js server `serve.ts` starts (`NODE_OPTIONS=--import`), before any of Sift loads: it
- * offers the app stand-ins for what Sift reaches outside this machine for (`StandIns`, src/app/sift.ts). Everything
+ * offers the app stand-ins for what Sift reaches outside this machine for (`StandIns`, src/sift/sift.ts). Everything
  * else is the real app on the seeded home.
  *
  * - Gmail: nothing has happened since the seed's last pass, and each mailbox's filters are a fake mailbox's,
@@ -19,7 +19,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from '@earendil-works/pi-ai';
 import type { ExistingFilter } from '../../../../src/actions/filters.ts';
-import type { StandIns } from '../../../../src/app/sift.ts';
+import type { StandIns } from '../../../../src/sift/sift.ts';
 import type { GmailApi } from '../../../../src/gmail/api.ts';
 import { PROPOSAL_TOOL } from '../../../../src/triage/proposal.ts';
 import { FILL_TOOL, FIND_TOOL } from '../../../../src/triage/rule-draft.ts';

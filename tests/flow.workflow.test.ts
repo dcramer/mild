@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { getWorld } from 'workflow/runtime';
-import { begin } from '../src/app/flow.ts';
-import { runKey } from '../src/app/sift.ts';
-import { offerSift } from '../src/app/instance.ts';
+import { begin } from '../src/sift/flow.ts';
+import { runKey } from '../src/sift/sift.ts';
+import { offerSift } from '../src/sift/instance.ts';
 import type { Work } from '../src/work/run.ts';
 
 describe('a piece of work', () => {
@@ -25,7 +25,7 @@ describe('a piece of work', () => {
     await vi.waitFor(() => expect(done).toEqual([pass]));
     const refused = await begin(pass, runKey(pass));
     expect(refused.begun).toBe(false);
-    // When the run holding the key began, so a run that never ends shows (src/app/sift.ts).
+    // When the run holding the key began, so a run that never ends shows (src/sift/sift.ts).
     expect(!refused.begun && refused.since).toBeGreaterThanOrEqual(before - 1000);
     expect(await begin(other, runKey(other))).toEqual({ begun: true });
     await vi.waitFor(() => expect(done).toEqual([pass, other]));

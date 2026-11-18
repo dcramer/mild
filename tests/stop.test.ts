@@ -13,7 +13,7 @@ it("leaves the home's PGlite shut down when the server is stopped as Next.js sto
   const home = tempDir();
   // A process that opens the host with one request, then stops as Next.js does on SIGTERM: its own handler exits once the requests under way are done.
   const child = `
-    const { respond } = await import(${JSON.stringify(new URL('../src/app/instance.ts', import.meta.url).href)});
+    const { respond } = await import(${JSON.stringify(new URL('../src/sift/instance.ts', import.meta.url).href)});
     await respond(new Request('http://localhost/api/session'));
     process.once('SIGTERM', () => setTimeout(() => process.exit(143), 10));
     process.kill(process.pid, 'SIGTERM');

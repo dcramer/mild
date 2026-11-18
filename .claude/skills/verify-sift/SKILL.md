@@ -7,7 +7,7 @@ description: Launch a disposable, signed-in sift dashboard seeded with synthetic
 
 `pnpm e2e` (`e2e/`) runs the same seed and server under Playwright, one copy per test: a change to what the seed leaves changes what those tests can expect.
 
-sift's surface is the dashboard (`web/`, served by `src/dashboard/server.ts`). Every `/api/` route needs a Google sign-in as a connected account, and there is no Gmail behind a scratch home, so this skill stands in for what Sift reaches outside the machine for, and nothing else: Gmail, at the `GmailApi` and `Mailbox` ports, the model that suggests labels and drafts rules, and what Gmail would count in an inbox (`scripts/stand-ins.ts`, preloaded into the app's server, which takes them as `StandIns`, src/app/sift.ts); and the sign-in, by minting the same `sift_session` cookie `/auth/callback` would set. The app is the real one, started as `sift run` starts it (`scripts/serve.ts`), on the build as it is.
+sift's surface is the dashboard (`web/`, served by `src/dashboard/server.ts`). Every `/api/` route needs a Google sign-in as a connected account, and there is no Gmail behind a scratch home, so this skill stands in for what Sift reaches outside the machine for, and nothing else: Gmail, at the `GmailApi` and `Mailbox` ports, the model that suggests labels and drafts rules, and what Gmail would count in an inbox (`scripts/stand-ins.ts`, preloaded into the app's server, which takes them as `StandIns`, src/sift/sift.ts); and the sign-in, by minting the same `sift_session` cookie `/auth/callback` would set. The app is the real one, started as `sift run` starts it (`scripts/serve.ts`), on the build as it is.
 
 `scripts/verify.sh` does all of it. Each run owns one directory; nothing is shared between runs, so several can run at once. Never point it at a real home (`~/.config/sift`) and never drive a dashboard this run did not start: the user's own sift usually listens on 8787 and holds real mail.
 
@@ -100,7 +100,7 @@ Closes this run's browser session, stops the process by the pid `up` recorded, d
 
 ## Upkeep
 
-A SessionStart hook (`.claude/settings.json`) runs `scripts/maintain-check.sh`. When `app/`, `web/src`, `public/`, `src/dashboard`, `src/cli`, `src/store`, `src/work`, `src/app` or `tests/helpers.ts` changed on `origin/main` since the last audit, the session is told to offer `/pstack:maintain-verification-skill`. It speaks at most once a day per machine, and never runs the pass itself. It reads local refs only, so it knows only as much of main as the last fetch.
+A SessionStart hook (`.claude/settings.json`) runs `scripts/maintain-check.sh`. When `app/`, `web/src`, `public/`, `src/dashboard`, `src/cli`, `src/store`, `src/work`, `src/sift` or `tests/helpers.ts` changed on `origin/main` since the last audit, the session is told to offer `/pstack:maintain-verification-skill`. It speaks at most once a day per machine, and never runs the pass itself. It reads local refs only, so it knows only as much of main as the last fetch.
 
 After a maintenance pass ends clean or changed, record it, or tomorrow's first session asks again:
 

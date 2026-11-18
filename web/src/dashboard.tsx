@@ -53,7 +53,7 @@ const closeSettings = () => (panelEntry() ? window.history.back() : setParams({ 
 
 /**
  * The dashboard around `children`, the screen the address names, for whoever the server read the session as (`drawn`,
- * `src/app/page-data.ts`, with what else it holds that is not encrypted): the sign-in screen for nobody, the
+ * `src/sift/page-data.ts`, with what else it holds that is not encrypted): the sign-in screen for nobody, the
  * setting-up steps until there is something to show, and otherwise the masthead, the screen and its foot.
  */
 export function Dashboard({ drawn, children }: { drawn: DehydratedState | null; children: ReactNode }) {
