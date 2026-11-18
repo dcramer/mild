@@ -111,6 +111,7 @@ A button, a link, a row that opens, a choice in a menu or a select, a checkbox w
 A control asks for its key and draws the keycap itself (`shortcut` on a `Button`, `useShortcut` anywhere else), so a key that is shown always works and a key that works is always shown. Never bind a key with a listener of your own.
 
 - **The keys are Gmail's:** `J` and `K` to move, `Enter` or `O` to open, `Esc` to close, `/` to search, `Z` to undo from a toast, `?` for the list of every key live where the reader is.
+- **The arrows work too, for whoever does not know Gmail's keys:** `↓` and `↑` move down a list, as `J` and `K` do. In a panel `←` and `→` step to the previous and next item, the way its buttons point, and `↑` and `↓` are left to scroll what it shows. One control's keys are one binding (`useShortcut` takes a list), drawn together and on one line of `?`.
 - **A keycap** (`Kbd`) sits after the label, outlined; on a filled control it takes that control's ink.
 - **Keys are for working through a list**, one item after another: For review and Activity (`Table keys`), and the panel they open. Every other list, form and step has none: it is pressed, or tabbed through. Don't add keys to a screen because the parts allow it.
 - **Down a list** only the row the reader is on shows and answers to its keys.

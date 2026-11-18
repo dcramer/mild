@@ -42,7 +42,7 @@ export function Panel({
   onNext?: (() => void) | undefined;
   /** For one item that is a few facts and a short form (a label), rather than something to read beside the list. */
   narrow?: boolean;
-  /** K and J step through the list, and the footer shows them. Only for a list someone works through (docs/design.md, Keys). */
+  /** K and J, or ← and →, step through the list, and the footer shows them. ↑ and ↓ are left to scroll what it shows. Only for a list someone works through (docs/design.md, Keys). */
   keys?: boolean;
   /** What it shows, as the list's rows name it (`holds` on a `Tr`): closing goes back to that row, wherever it was opened from. */
   returnTo?: string;
@@ -60,6 +60,10 @@ export function Panel({
           tabIndex={-1}
           initialFocus={popup}
           finalFocus={() => (returnTo === undefined ? null : rowHolding(returnTo)) ?? true}
+          // Base UI keeps arrow keys from leaving a dialog, for the menus behind it; the page behind a panel hears no keys anyway.
+          onKeyDown={(event) => {
+            if (keys && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) event.preventBaseUIHandler();
+          }}
           className={`focus-within-shown fixed inset-y-0 right-0 z-50 flex w-full flex-col border-(--frame) bg-card [--surface:var(--card)] text-sm outline-none transition-transform duration-150 ease-out data-ending-style:pointer-events-none data-ending-style:translate-x-full data-starting-style:translate-x-full motion-reduce:transition-none md:border-l ${narrow ? 'md:w-[min(44rem,100vw)]' : 'md:w-[min(max(75vw,66rem),80rem,100vw)]'}`}
         >
           <KeyLayer moves>
@@ -67,10 +71,15 @@ export function Panel({
             <LayerBody>{children}</LayerBody>
             {stepping ? (
               <ControlBar start={position} className="border-t border-(--rule) px-3 py-1.5 md:px-4">
-                <Step label="Previous" shortcut={keys ? 'k' : undefined} onPress={onPrevious} icon={<ChevronLeftIcon aria-hidden className="size-4" />} />
+                <Step
+                  label="Previous"
+                  shortcut={keys ? ['k', 'ArrowLeft'] : undefined}
+                  onPress={onPrevious}
+                  icon={<ChevronLeftIcon aria-hidden className="size-4" />}
+                />
                 <Step
                   label="Next"
-                  shortcut={keys ? 'j' : undefined}
+                  shortcut={keys ? ['j', 'ArrowRight'] : undefined}
                   onPress={onNext}
                   icon={<ChevronRightIcon aria-hidden className="size-4" />}
                   iconAfter
@@ -95,7 +104,7 @@ function Step({
   className,
 }: {
   label: string;
-  shortcut: string | undefined;
+  shortcut: readonly string[] | undefined;
   onPress: (() => void) | undefined;
   icon: ReactNode;
   iconAfter?: boolean;
@@ -104,7 +113,7 @@ function Step({
   void useShortcut(shortcut, label, () => onPress?.(), { enabled: onPress !== undefined });
   return (
     <Control
-      keys={shortcut ? [shortcut] : []}
+      keys={shortcut ?? []}
       label={label}
       icon={icon}
       iconAfter={iconAfter ?? false}

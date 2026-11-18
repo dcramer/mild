@@ -86,6 +86,32 @@ test.describe('Working through For review', () => {
     await expect(reviewRows(page)).toHaveCount(1);
   });
 
+  test('the arrows move through the rows, and step the panel left and right', async ({ page }) => {
+    await page.goto('/');
+    await expect(reviewRows(page)).toHaveCount(9);
+    await page.keyboard.press('ArrowDown');
+    await expect(row(page, 'Replica lag on db-3')).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(row(page, 'Disk 91% full on db-2')).toBeFocused();
+    await page.keyboard.press('ArrowUp');
+    await expect(row(page, 'Replica lag on db-3')).toBeFocused();
+
+    await page.keyboard.press('Enter');
+    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
+    await page.keyboard.press('ArrowRight');
+    await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    // Up and down are the message's, to scroll it.
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowUp');
+    await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await page.keyboard.press('ArrowLeft');
+    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
+
+    await page.keyboard.press('?');
+    const keys = page.getByRole('dialog', { name: 'Keys' });
+    await expect(keys.getByRole('listitem').filter({ hasText: 'Next' })).toHaveText('J→Next');
+  });
+
   test('the panel steps through the list, by its buttons and by J and K', async ({ page }) => {
     await page.goto('/');
     const open = await openMessage(page, 'Replica lag on db-3');

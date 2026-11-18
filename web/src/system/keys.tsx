@@ -12,7 +12,7 @@ import { useTouch } from './touch.ts';
  */
 
 interface Binding {
-  key: string;
+  keys: readonly string[];
   label: string;
   layer: number;
   run: () => void;
@@ -66,7 +66,7 @@ export const useHintsShown = () => {
   return useShortcutsOn() && !touch;
 };
 
-const NAMES: Record<string, string> = { Enter: '↵', Escape: 'esc', ArrowUp: '↑', ArrowDown: '↓', ' ': 'space' };
+const NAMES: Record<string, string> = { Enter: '↵', Escape: 'esc', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', ' ': 'space' };
 /** A key as it is drawn: letters in capitals, the named keys by their sign. */
 export const keyName = (key: string) => NAMES[key] ?? (key.length === 1 ? key.toUpperCase() : key);
 
@@ -80,7 +80,7 @@ if (typeof window !== 'undefined') {
     // Enter on something focused already presses it; a shortcut on Enter must not press a second thing.
     if (event.key === 'Enter' && event.target instanceof Element && event.target.closest('button, a, [tabindex="0"]')) return;
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
-    const live = [...bindings.values()].filter((b) => (b.layer === top() || b.layer === EVERYWHERE) && b.key === key);
+    const live = [...bindings.values()].filter((b) => (b.layer === top() || b.layer === EVERYWHERE) && b.keys.includes(key));
     const match = live.find((b) => b.within?.()?.contains(document.activeElement)) ?? live[0];
     if (!match) return;
     event.preventDefault();
@@ -94,7 +94,7 @@ export const RowActive = createContext(true);
 
 /**
  * What floats over the page (a panel, a dialog) wraps its content in a layer: while it is open only its
- * own keys are live. `moves` says the layer uses J and K itself, so a table inside it leaves them alone.
+ * own keys are live. `moves` says the layer steps through a list itself (J and K, ← and →), so a table inside it leaves them alone.
  */
 export function KeyLayer({ moves = false, children }: { moves?: boolean; children: ReactNode }) {
   const [layer] = useState(() => nextLayer++);
@@ -105,7 +105,7 @@ export function KeyLayer({ moves = false, children }: { moves?: boolean; childre
   return <Layer value={{ layer, moves }}>{children}</Layer>;
 }
 
-/** Whether the layer this is in keeps J and K for itself. */
+/** Whether the layer this is in steps through a list itself, so a table in it leaves its keys alone. */
 export const useLayerMoves = () => useContext(Layer).moves;
 
 /** Whether this is on the page itself rather than in something floating over it. */
@@ -114,11 +114,12 @@ export const useOnPage = () => useContext(Layer).layer === 0;
 /**
  * Bind `key` to `run` for as long as the caller is on the page, and get back the hint to draw beside
  * the control (nothing when shortcuts are off or the screen is a touch screen). `label` says what the
- * key does in the list of all keys. No `key`, or `enabled` false, binds and draws nothing. `everywhere`
- * is for the one key that must work whatever is open.
+ * key does in the list of all keys. Several keys for one thing (J and ↓) are one binding and one line
+ * in that list. No `key`, or `enabled` false, binds and draws nothing. `everywhere` is for the one key
+ * that must work whatever is open.
  */
 export function useShortcut(
-  key: string | undefined,
+  key: string | readonly string[] | undefined,
   label: string,
   run: () => void,
   options: { enabled?: boolean; within?: () => Element | null; tone?: 'ink'; everywhere?: boolean } = {},
@@ -126,30 +127,33 @@ export function useShortcut(
   const id = useId();
   const here = useContext(Layer).layer;
   const layer = options.everywhere ? EVERYWHERE : here;
-  const active = useContext(RowActive) && options.enabled !== false && key !== undefined;
+  const keys = key === undefined ? [] : typeof key === 'string' ? [key] : key;
+  // A list made afresh each render is the same keys; the effect below watches them by name.
+  const named = keys.join('\n');
+  const active = useContext(RowActive) && options.enabled !== false && keys.length > 0;
   const hints = useHintsShown();
   const latest = useRef({ run, within: options.within });
   useLayoutEffect(() => {
     latest.current = { run, within: options.within };
   });
   useEffect(() => {
-    if (!active || key === undefined) return;
-    bindings.set(id, { key, label, layer, run: () => latest.current.run(), within: () => latest.current.within?.() ?? null });
+    if (!active) return;
+    bindings.set(id, { keys: named.split('\n'), label, layer, run: () => latest.current.run(), within: () => latest.current.within?.() ?? null });
     return () => void bindings.delete(id);
-  }, [active, id, key, label, layer]);
-  if (!active || key === undefined || !hints) return null;
-  return (
-    <Kbd className="hidden md:inline-flex" {...(options.tone ? { tone: options.tone } : {})}>
-      {keyName(key)}
+  }, [active, id, named, label, layer]);
+  if (!active || !hints) return null;
+  return keys.map((one) => (
+    <Kbd key={one} className="hidden md:inline-flex" {...(options.tone ? { tone: options.tone } : {})}>
+      {keyName(one)}
     </Kbd>
-  );
+  ));
 }
 
-/** Every key that is live right now, for the list the reader opens with `?`. One line per key and meaning. */
-export function liveShortcuts(): { key: string; label: string }[] {
+/** Every key that is live right now, for the list the reader opens with `?`. One line per meaning and its keys. */
+export function liveShortcuts(): { keys: string[]; label: string }[] {
   const seen = new Set<string>();
   return [...bindings.values()]
     .filter((b) => b.layer === top() || b.layer === EVERYWHERE)
-    .filter((b) => !seen.has(`${b.key}\n${b.label}`) && seen.add(`${b.key}\n${b.label}`))
-    .map((b) => ({ key: keyName(b.key), label: b.label }));
+    .filter((b) => !seen.has(`${b.keys.join(' ')}\n${b.label}`) && seen.add(`${b.keys.join(' ')}\n${b.label}`))
+    .map((b) => ({ keys: b.keys.map(keyName), label: b.label }));
 }
