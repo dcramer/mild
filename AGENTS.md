@@ -13,7 +13,7 @@ A reason, a consequence, a limit or a gotcha is not obvious. Keep those.
 
 ## Commands
 
-Package manager is **pnpm**. Node 24 (`.nvmrc`). Node runs the server's `.ts` sources directly, with no build step; Next.js builds the page. Relative imports use the `.ts` extension and only erasable TypeScript syntax is allowed (no enums, namespaces or parameter properties).
+Package manager is **pnpm**. Node 26 (`.nvmrc`). Node runs the server's `.ts` sources directly, with no build step; Next.js builds the page. Relative imports use the `.ts` extension and only erasable TypeScript syntax is allowed (no enums, namespaces or parameter properties).
 
 | Command | Use |
 | --- | --- |

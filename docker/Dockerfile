@@ -1,14 +1,14 @@
 # Build from the repository root: docker build -f docker/Dockerfile .
 
 # Alpine works because sift has no native dependencies; PGlite is WebAssembly.
-FROM node:24-alpine AS base
+FROM node:26-alpine AS base
 WORKDIR /app
 
 # Stage 1: the app, built by Next.js as a standalone server: its bundles and only the packages they load.
 FROM base AS build
-RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile --ignore-scripts
+# Node 25 dropped corepack; this installs the pnpm `packageManager` names.
+RUN npm install -g "$(node -p 'require("./package.json").packageManager')" && pnpm install --frozen-lockfile --ignore-scripts
 COPY . .
 RUN NEXT_TELEMETRY_DISABLED=1 pnpm exec next build
 # The packages the command line loads, laid out as pnpm laid them out, to sit beside the server's (docker/cli-modules.ts).
@@ -21,8 +21,8 @@ RUN node --disable-warning=ExperimentalWarning --import ./docker/cli-modules.ts 
 # database and starts the standalone server beside it (src/cli/next.ts).
 FROM base
 ENV NODE_ENV=production SIFT_HOME=/data NEXT_TELEMETRY_DISABLED=1
-# Nothing installs packages at run time. This takes npm and yarn out of reach; their bytes stay in the base layer.
-RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn-* \
+# Nothing installs packages at run time. This takes npm out of reach; its bytes stay in the base layer.
+RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx \
   && mkdir /data && chown node:node /data
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/cli/node_modules ./node_modules
