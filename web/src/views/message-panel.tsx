@@ -10,8 +10,9 @@ import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { type RuleStart, keepStart, messageStart } from '@/lib/rule-start.ts';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { type Confidential, type MessageDetail, type RuleMatch, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ago, capitalised, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
+import { capitalised, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
 import {
+  Ago,
   Th,
   Heads,
   AnswerPicker,
@@ -306,7 +307,7 @@ function Body({
                       <Tr key={m.messageId} onOpen={() => onPick(m.messageId)}>
                         <Td className="w-full max-w-0 truncate">{reveal(m.subject) || '(no subject)'}</Td>
                         <Td num quiet>
-                          {ago(m.receivedAt)}
+                          <Ago at={m.receivedAt} />
                         </Td>
                       </Tr>
                     ))}

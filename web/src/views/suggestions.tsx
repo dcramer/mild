@@ -6,8 +6,9 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { MatchWords, SenderCell } from '@/components/sender.tsx';
 import { messageKey, useParam } from '@/lib/params.ts';
 import { type SuggestionItem, type Suggestions, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, ago, inboxFirst, count, factFilterName, outcomeName, plural, sureness } from '@/lib/format.ts';
+import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, inboxFirst, count, factFilterName, outcomeName, plural, sureness } from '@/lib/format.ts';
 import {
+  Ago,
   Heads,
   AnswerPicker,
   Button,
@@ -175,7 +176,7 @@ function SuggestionRow({
         <Failure className="mt-1">{error}</Failure>
       </Td>
       <Td phone="hide" num quiet>
-        {ago(item.receivedAt)}
+        <Ago at={item.receivedAt} />
       </Td>
       <RowActions>
         <AnswerPicker

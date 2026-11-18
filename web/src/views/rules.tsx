@@ -8,8 +8,8 @@ import { filterStanding } from '@/views/gmail-filter.tsx';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import { RulePanel, Who, checked, homeOf, whoText } from '@/views/rule-panel.tsx';
 import { useOpenMessages } from '@/lib/open-messages.ts';
-import { INBOX, MADE_BY, ago, count, dateTime, describeMatch, doesName, inboxFirst, outcomeName, plural } from '@/lib/format.ts';
-import { Heads, Button, ConfirmButton, Does, Empty, Failure, FilterGroup, Hint, ListView, RowActions, Sub, Table, Td, Th, Tr, useToast } from '@/system';
+import { INBOX, MADE_BY, count, dateTime, describeMatch, doesName, inboxFirst, outcomeName, plural } from '@/lib/format.ts';
+import { Ago, Heads, Button, ConfirmButton, Does, Empty, Failure, FilterGroup, Hint, ListView, RowActions, Sub, Table, Td, Th, Tr, useToast } from '@/system';
 import { usePlan } from '@/components/model-connect.tsx';
 import { approx, atApiPrices } from '@/lib/prices.ts';
 import { reveal } from '@/lib/reveal.ts';
@@ -185,7 +185,7 @@ export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
                   {count(rule.hits)}
                 </Td>
                 <Td phone="hide" num quiet className="md:w-32" says={rule.lastHitAt ? dateTime(rule.lastHitAt) : null}>
-                  {rule.lastHitAt ? ago(rule.lastHitAt) : 'Never'}
+                  {rule.lastHitAt ? <Ago at={rule.lastHitAt} /> : 'Never'}
                 </Td>
                 {costs ? (
                   <Td phone="hide" num className="md:w-28" says={checked(rule) ? `${plural(rule.checks, 'message')} checked` : null}>

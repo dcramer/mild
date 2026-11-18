@@ -223,6 +223,14 @@ test("a table's column heads are Heads of Th, so every list shows or hides them 
   expect(failures, failures.join('\n')).toEqual([]);
 });
 
+test('how long ago is drawn only by Ago, so the server and the browser never draw it differently', () => {
+  // The server draws a screen at one moment and the browser takes it over at another, in the reader's zone.
+  const drawn = ALL.map((path) => relative(WEB, path)).filter(
+    (file) => file !== 'system/ago.tsx' && file !== 'lib/format.ts' && /\bago\(/.test(readFileSync(join(WEB, file), 'utf8')),
+  );
+  expect(drawn, 'use <Ago at={…} /> from @/system').toEqual([]);
+});
+
 test('every part is on the specimen page', () => {
   const index = readFileSync(join(WEB, 'system/index.ts'), 'utf8');
   const parts = [...index.matchAll(/export \{([^}]*)\}/g)]

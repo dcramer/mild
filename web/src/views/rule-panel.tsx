@@ -3,7 +3,6 @@ import { type ManageState, type RuleMatch, type RuleSummary, api, useAction, use
 import {
   HANDLED,
   INBOX_NAME,
-  ago,
   saidOf,
   count,
   doesName,
@@ -27,6 +26,7 @@ import { MatchValue } from '@/components/sender.tsx';
 import type { OpenMessages } from '@/lib/open-messages.ts';
 import { GmailFilter } from '@/views/gmail-filter.tsx';
 import {
+  Ago,
   Th,
   Heads,
   Blank,
@@ -187,7 +187,7 @@ function ApplyDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => void
                     <Tr key={m.messageId}>
                       <Td className="w-full max-w-0 truncate">{reveal(m.subject) || '(no subject)'}</Td>
                       <Td num quiet>
-                        {ago(m.receivedAt)}
+                        <Ago at={m.receivedAt} />
                       </Td>
                     </Tr>
                   ))}
@@ -251,7 +251,7 @@ function InInbox({ rule, onOpen }: { rule: RuleSummary; onOpen: OpenMessages }) 
                 <Tr key={m.messageId} onOpen={() => onOpen(messages, index)} holds={[messageKey(m)]}>
                   <Td className="w-full max-w-0 truncate">{reveal(m.subject) || '(no subject)'}</Td>
                   <Td num quiet>
-                    {ago(m.receivedAt)}
+                    <Ago at={m.receivedAt} />
                   </Td>
                 </Tr>
               ))}
@@ -280,7 +280,17 @@ function Use({ rule }: { rule: RuleSummary }) {
       <div className="flex flex-col gap-5">
         <Failure>{usage.error}</Failure>
         <Figures>
-          <Figure label="Matched, 30 days" value={count(matched)} note={rule.lastHitAt ? `last ${ago(rule.lastHitAt)}` : null} />
+          <Figure
+            label="Matched, 30 days"
+            value={count(matched)}
+            note={
+              rule.lastHitAt ? (
+                <>
+                  last <Ago at={rule.lastHitAt} />
+                </>
+              ) : null
+            }
+          />
           {checked(rule) ? (
             <Figure
               label="Cost, 30 days"

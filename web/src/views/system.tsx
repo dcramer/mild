@@ -6,6 +6,7 @@ import { ContactHint } from '@/components/sender.tsx';
 import { SiftStatus, UsageDetail } from '@/components/status.tsx';
 import { ACTIONS, INBOX, INBOX_NAME, STATUS_NAMES, TIERS, inboxFirst, money, moneyTick, outcomeName } from '@/lib/format.ts';
 import {
+  Ago,
   Heads,
   Blank,
   Does,
@@ -230,6 +231,9 @@ export function SystemView() {
 
         <Section title="Words" meta="lib/format.ts: one name for each thing, everywhere">
           <Sheet>
+            <Row label="Ago" note="How long since, drawn only in the browser: the server's clock and zone are not the reader's.">
+              <Ago at={SYNCED} />
+            </Row>
             <Row label="Sift does" note="Its icon and its word, the same whether suggested, done or a setting. Never what comes with it.">
               {ACTIONS.map(([key]) => (
                 <Does key={key} action={key}>

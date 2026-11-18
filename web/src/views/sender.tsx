@@ -4,12 +4,13 @@ import { type ReactNode, useState } from 'react';
 import { ErrorNote, StatusWord, Verdict } from '@/components/bits.tsx';
 import { ContactHint, DomainLink, NameCell, SenderCell } from '@/components/sender.tsx';
 import { type Given, type ListedDecision, type SenderPage, api, useAction, useLoaded } from '@/lib/api.ts';
-import { INBOX, ago, count, dateTime, describeMatch, doesName, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
+import { INBOX, count, dateTime, describeMatch, doesName, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
 import { type RuleStart, addedWords, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
 import { nextMail } from '@/lib/next-mail.ts';
 import { messageKey, setParams, useParam } from '@/lib/params.ts';
 import { AddRuleDialog } from '@/views/rule-dialog.tsx';
 import {
+  Ago,
   Heads,
   Button,
   ChoiceGroup,
@@ -249,7 +250,9 @@ function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMess
             <OnPhone>
               {oneSender ? null : <span className="w-full truncate text-base text-foreground">{reveal(subject)}</span>}
               <Verdict labelId={row.labelId} labelName={row.labelName} disposition={row.disposition} />
-              <span>{ago(row.receivedAt)}</span>
+              <span>
+                <Ago at={row.receivedAt} />
+              </span>
             </OnPhone>
           );
           return (
@@ -282,7 +285,7 @@ function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMess
                 <StatusWord row={row} />
               </Td>
               <Td phone="hide" num quiet says={dateTime(row.receivedAt)}>
-                {ago(row.receivedAt)}
+                <Ago at={row.receivedAt} />
               </Td>
             </Tr>
           );
@@ -378,7 +381,14 @@ function SenderView({ accountId, who }: { accountId: string; who: Who }) {
   const charted = profile.messages >= CHARTED;
   const volume = (
     <span>
-      {count(profile.recent)} in the last 30 days{profile.lastSeenAt ? `, latest ${ago(profile.lastSeenAt)}` : ''}
+      {count(profile.recent)} in the last 30 days
+      {profile.lastSeenAt ? (
+        <>
+          , latest <Ago at={profile.lastSeenAt} />
+        </>
+      ) : (
+        ''
+      )}
     </span>
   );
 
@@ -465,7 +475,7 @@ function SenderView({ accountId, who }: { accountId: string; who: Who }) {
                   <SenderCell accountId={accountId} address={reveal(sender.address)} name={reveal(sender.name)} contact={sender.contact} />
                   <Td num>{count(sender.messages)}</Td>
                   <Td phone="hide" num quiet>
-                    {ago(sender.lastSeenAt)}
+                    <Ago at={sender.lastSeenAt} />
                   </Td>
                 </Tr>
               ))}

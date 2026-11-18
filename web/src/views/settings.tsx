@@ -6,9 +6,9 @@ import { GoThroughInbox, InboxRow } from '@/components/inbox.tsx';
 import { ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { costLine, spentLine, subscription } from '@/lib/prices.ts';
 import { type ManageState, type Removed, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ago } from '@/lib/format.ts';
 import { useParam } from '@/lib/params.ts';
 import {
+  Ago,
   Button,
   ConfirmButton,
   Dialog,
@@ -79,7 +79,18 @@ function Active({ state, reload }: { state: ManageState; reload: () => void }) {
         </SettingRow>
         <InboxRow state={state} reload={reload} onGoThrough={() => setGoingThrough(true)} />
         {activity.running ? (
-          <SettingRow title="Check for mail" note={activity.lastPassAt ? `Last checked ${ago(activity.lastPassAt)}.` : 'Starting.'}>
+          <SettingRow
+            title="Check for mail"
+            note={
+              activity.lastPassAt ? (
+                <>
+                  Last checked <Ago at={activity.lastPassAt} />.
+                </>
+              ) : (
+                'Starting.'
+              )
+            }
+          >
             <Button disabled={busy} onClick={() => run(() => api.checkNow(), reload)}>
               Check now
             </Button>
@@ -301,7 +312,18 @@ function Mailboxes({ state, signedInAs, reload }: { state: ManageState; signedIn
           <SettingRow
             key={account.id}
             title={account.email}
-            note={`${account.lastSyncedAt ? `Synced ${ago(account.lastSyncedAt)}` : 'Not synced yet'}${account.email === signedInAs ? ' · Signed in as this one' : ''}`}
+            note={
+              <>
+                {account.lastSyncedAt ? (
+                  <>
+                    Synced <Ago at={account.lastSyncedAt} />
+                  </>
+                ) : (
+                  'Not synced yet'
+                )}
+                {account.email === signedInAs ? ' · Signed in as this one' : ''}
+              </>
+            }
           >
             <RemoveMailbox
               email={account.email}

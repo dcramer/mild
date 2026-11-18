@@ -1,7 +1,7 @@
 'use client';
 import { type InboxEstimate, type ManageState, api, useAction, useLoaded } from '@/lib/api.ts';
-import { ago, count, money, plural } from '@/lib/format.ts';
-import { Blank, Button, Dialog, Failure, Figure, Figures, SettingRow, Share } from '@/system';
+import { count, money, plural } from '@/lib/format.ts';
+import { Ago, Blank, Button, Dialog, Failure, Figure, Figures, SettingRow, Share } from '@/system';
 import { costOfMessages, priceNote, subscription } from '@/lib/prices.ts';
 import { useNow } from '@/components/status.tsx';
 
@@ -116,7 +116,9 @@ export function InboxRow({ state, reload, onGoThrough }: { state: ManageState; r
       title="Your inbox"
       note={
         last ? (
-          `${last.stopped ? 'Stopped after' : 'Went through'} ${plural(last.total, 'message')} ${ago(last.finishedAt)} · ${money(last.spent)}`
+          <>
+            {last.stopped ? 'Stopped after' : 'Went through'} {plural(last.total, 'message')} <Ago at={last.finishedAt} /> · {money(last.spent)}
+          </>
         ) : said ? (
           [`${plural(said.messages, 'message')}.`, costs].filter(Boolean).join(' ')
         ) : (
