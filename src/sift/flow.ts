@@ -3,11 +3,34 @@ import { HookConflictError } from 'workflow/errors';
 import type { Work } from '../work/run.ts';
 import type { Beginning } from './sift.ts';
 
-/** @public Workflow's build registers only an exported workflow. */
-export async function work(piece: Work): Promise<void> {
+// One workflow per kind of piece: Workflow's dashboards list a run by its workflow's function name.
+// Workflow's build registers only an exported workflow.
+
+/** @public */
+export async function mailboxPass(piece: Work): Promise<void> {
   'use workflow';
   await doPiece(piece);
 }
+
+/** @public */
+export async function inboxRun(piece: Work): Promise<void> {
+  'use workflow';
+  await doPiece(piece);
+}
+
+/** @public */
+export async function testRun(piece: Work): Promise<void> {
+  'use workflow';
+  await doPiece(piece);
+}
+
+/** @public */
+export async function upkeep(piece: Work): Promise<void> {
+  'use workflow';
+  await doPiece(piece);
+}
+
+const FLOWS = { pass: mailboxPass, inbox: inboxRun, eval: testRun, upkeep } satisfies Record<Work['kind'], unknown>;
 
 /** Runs in the process Workflow delivered the run to, with that process's Sift. */
 async function doPiece(piece: Work): Promise<void> {
@@ -19,8 +42,13 @@ async function doPiece(piece: Work): Promise<void> {
 /** Starts a run for `piece`, holding `key` until it ends; refused while a run holds it already. */
 export async function begin(piece: Work, key: string): Promise<Beginning> {
   try {
-    // Nothing of the run is kept once it ends: its input names the mailbox, and Vercel bills what it keeps.
-    await start(work, [piece], { experimental_hook: { token: key }, experimental_retention: 0 });
+    await start(FLOWS[piece.kind], [piece], {
+      experimental_hook: { token: key },
+      // Nothing of the run is kept once it ends: its input names the mailbox, and Vercel bills what it keeps.
+      experimental_retention: 0,
+      // Kept after that, in plain text, so the run can be found by its person or mailbox: numbers only.
+      attributes: Object.fromEntries(Object.entries(piece).map(([name, value]) => [name, String(value)])),
+    });
     return { begun: true };
   } catch (error) {
     if (!HookConflictError.is(error)) throw error;
