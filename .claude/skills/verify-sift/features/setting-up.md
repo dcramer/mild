@@ -17,13 +17,13 @@ Until Sift can work (a model in use, and labels of the person's own), the dashbo
 
 Preconditions:
 
-- `Connect a model`: a fresh seed. The rest: a run started with `verify.sh up "$RUN" --bare`, whose `me@work.example.org` has no labels of its own. The dashboard refuses to remove the last label, so a normal seed cannot get there.
+- `Connect a model`: a fresh seed. The rest: a run started with `verify.sh up "$RUN" --bare`, whose person has no label but Leave in inbox. The dashboard refuses to remove the last label, so a normal seed cannot get there.
 
 - **Connect.** Sign the model out (SKILL.md, `/api/model/signout`) and reload: the heading is `No model connected`, with no steps listed (a model lost after setting up is the only thing to do).
 - **Reach the rest.** In the `--bare` run, `ab open "$B/"`. The steps are listed with `Connect a model` ticked, and the heading is `What do you want from Sift?`, with example words to start from (`Get sales pitches out of my inbox`, …). Once suggestions have been asked for, the latest decide the step (`Your labels`; `Start over` goes back).
 - **Only a note.** `ab find role textbox fill "Just my receipts" --name "What do you want from Sift?"`, `Suggest labels`. `Your labels` shows `Not in these labels` and only `Start over`.
-- **Labels.** `Start over`, `No more sales pitches`, `Suggest labels`: `Sales pitches`, checked, and `Use this label`. Press it: the heading is `Older mail`, with `In your inbox` 300, `Need the model` 228 and `About` $0.39 (`serve.ts`'s stand-in for Gmail), `Go through 300` and `New mail only`.
-- **Done.** `ab find role button click --name "New mail only"`: For review. `SELECT name FROM labels WHERE account_id = 'me@work.example.org' AND gmail_label IS NOT NULL` is `Sales pitches`: the labels are made in the mailboxes that had none.
+- **Labels.** `Start over` (the words typed stay; an example's button adds to them), `ab find role textbox fill "No more sales pitches" --name "What do you want from Sift?"`, `Suggest labels`: `Sales pitches`, checked (`Use Sales pitches`), and `Use this label`. Press it: the heading is `Older mail`, naming both mailboxes, with `In your inbox` 300, `Need the model` 228 and `About` $0.39 (`serve.ts`'s stand-in for Gmail), `Go through 300` and `New mail only`.
+- **Done.** `ab find role button click --name "New mail only"`: For review. `SELECT name FROM labels WHERE user_id = 1 AND removed_at IS NULL AND gmail_label IS NOT NULL` is `Sales pitches`: made once, for the person and every mailbox.
 - **Phone.** `ab set viewport 390 844`: `document.documentElement.scrollWidth - document.documentElement.clientWidth` is `0`.
 - `ab console` and `ab errors` print nothing.
 
@@ -31,4 +31,4 @@ Preconditions:
 
 - `Suggest labels` is `serve.ts`'s stand-in (SKILL.md): words naming pitches get `Sales pitches`, receipts the note, neither an error.
 - `Go through 300` starts the run, but nothing goes on with it: `serve.ts` runs no tick. Settings shows it `Reading your inbox · 0 found`.
-- Labels are the person's, for every mailbox: `--bare` removes them, which shows the steps.
+- Labels are the person's, for every mailbox: `--bare` removes all but Leave in inbox, which shows the steps. Each removed label keeps its row, with `removed_at` set.

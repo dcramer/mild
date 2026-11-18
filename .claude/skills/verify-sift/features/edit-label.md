@@ -1,6 +1,6 @@
 # Edit a label
 
-A label is what mail is; its outcome is what happens to it. The Labels screen lists each label once, under what Sift does with its mail, whatever mailboxes have it; changing one changes it in all of them, and mail with that label follows.
+A label is what mail is; its outcome is what happens to it. Labels are the person's, one set for all their mailboxes: the Labels screen lists each under what Sift does with its mail, and mail with that label follows a change.
 
 ## Sub-features
 
@@ -27,11 +27,11 @@ Preconditions:
 - **Save.** `ab find role button click --name "Save"`. The panel stays open (`?label=newsletter`). `Close`: Newsletters is now under `Kept in your inbox`.
 - **Second view.** `ab reload`. It is still under `Kept in your inbox`. `ab open "$B/"`: Deals (`48 hours only: 30% off`) is gone (see Gotchas).
 - **Spam drops Mark it read.** `ab open "$B/labels?label=marketing"`, tick `Mark it read`, then choose `Spam`: the box goes. `Save`; `SELECT disposition, mark_read FROM labels WHERE id = 'marketing'` is `spam`, `false`.
-- **Add, suggested.** `Add labels`, `ab find role textbox fill "Archive sales pitches and my receipts" --name "What mail"`, `Suggest labels`. `Not in these labels` says `Your Receipts and transactions label covers receipts already.`, above one suggestion, `Sales pitches`, checked (`Keep Sales pitches`). `ab find role button click --name "Add this label"`: it is under `Archived`, in both mailboxes. Words naming neither pitches nor receipts show `The model could not suggest labels (the model did not suggest any usable labels). Try again.`; words naming only receipts show the note alone, with `Back` and no add button.
+- **Add, suggested.** `Add labels`, `ab find role textbox fill "Archive sales pitches and my receipts" --name "What mail"`, `Suggest labels`. `Not in these labels` says `Your Receipts and transactions label covers receipts already.`, above one suggestion, `Sales pitches`, checked (`Use Sales pitches`). `ab find role button click --name "Add this label"`: it is under `Archived`, and the `N of 30` count above `Add labels` goes up by one. Words naming neither pitches nor receipts show `The model could not suggest labels (the model did not suggest any usable labels). Try again.`; words naming only receipts show the note alone, with `Back` and no add button.
 - **Add, by hand.** `Write one yourself`, `ab find role textbox fill "Field trips" --name "Name"`, `ab find role button click --name "Add label" --exact`.
-- **Stored.** `verify.sh sql "$RUN" "SELECT disposition, block, mark_read, unsubscribe FROM labels WHERE id = 'newsletter'"` returns `keep`, `false`, `false`, `false` for each of `me@example.org` and `me@work.example.org`. No `actions` row but the seed's filters.
-- **Remove.** In the Newsletters panel, `ab find role button click --name "Remove" --exact`. It asks `Remove Newsletters and its 1 rule?` beside a second `Remove` and `Cancel`; the second `Remove` is inside the group named by the question. Pressing it closes the panel with the toast `Label removed` over `Newsletters`, and the count beside `Add labels` drops by one.
-- **Stored after removing.** `verify.sh sql "$RUN" "SELECT account_id, removed_at IS NOT NULL AS removed FROM labels WHERE id = 'newsletter'"` is `true` for both mailboxes: the row stays. `SELECT label_id FROM rules` no longer has `newsletter`. `m1` and `m2` keep their `newsletter` decisions, and the sender page for `digest@news.example.com` still names Newsletters.
+- **Stored.** `verify.sh sql "$RUN" "SELECT disposition, block, mark_read, unsubscribe FROM labels WHERE user_id = 1 AND id = 'newsletter'"` returns one row, `keep`, `false`, `false`, `false`. No `actions` row but the seed's filters.
+- **Remove.** In the Newsletters panel, `ab find role button click --name "Remove" --exact`. It asks `Remove Newsletters and its 1 rule?` beside a second `Remove` and `Cancel`; the second `Remove` is inside the group named by the question. Pressing it closes the panel with the toast `Label removed` over `Newsletters`, and the `N of 30` count drops by one.
+- **Stored after removing.** `verify.sh sql "$RUN" "SELECT removed_at IS NOT NULL AS removed FROM labels WHERE user_id = 1 AND id = 'newsletter'"` is `true`: the row stays. `SELECT label_id FROM rules` no longer has `newsletter`. `m1` and `m2` keep their `newsletter` decisions, and the sender page for `digest@news.example.com` still names Newsletters.
 
 ## Gotchas
 

@@ -1,12 +1,13 @@
 # Agree with a suggestion
 
-A message sift placed shows the label it gave in the row's answer: a dropdown starting on that label, after a meter of how sure sift is, and a check. Pressing the check agrees: sift records the answer, keeps the message as an example, and carries out what the label does to that message in Gmail on the next pass, even while sift is off. No rule is made.
+A message sift placed shows the label it gave in the row's answer: a dropdown starting on that label, after a meter of how sure sift is, and a check. Pressing the check agrees: sift records the answer, keeps the message as an example, and begins a pass that carries out what the label does to that message in Gmail, even while sift is off. No rule is made.
 
 ## Sub-features
 
 - `agree-check` is the check beside the dropdown; its name is `Agree:` then the label.
 - `agree-change` is choosing another label in the dropdown (`What this message is`), which turns the check into `Save:` and inks it; nothing is sent until it is pressed.
-- `agree-more` is the toast's `Same for N more`, offered when the sender has other waiting mail sift guessed the same way.
+- `agree-fold`: a folded row's check answers every message in it.
+- `agree-more` is the toast's `Same for N more`, offered when the sender has other waiting mail sift guessed the same way. On For review that mail is folded into the same row, so it shows only after agreeing in the message panel.
 
 ## How to get to it (user POV)
 
@@ -20,8 +21,10 @@ Preconditions:
 - Fresh seed. The Store row (`Winter sale starts now`) has a dropdown (`What this message is`, like every row's) holding a `Sure` meter and `Marketing`, and the check `Agree: Marketing`; the Notifications rows have `Agree: Notifications`; the six `Unlabelled` rows have the check disabled (`Choose what it is first`).
 
 - **Agree.** `ab open "$B/"`, then `ab find role button click --name "Agree: Marketing"`. A toast reads `Archive as Marketing`. The link's count is one fewer, the Store row is gone, and no panel opens.
-- **Second view.** `ab open "$B/rules"`. No rule mentions `sale@store.example.com`.
-- **Stored.** `verify.sh sql "$RUN" "SELECT label_id, carry_out, by_user, outcome FROM decisions WHERE message_id = 'm8' ORDER BY id DESC LIMIT 1"` returns `marketing`, `true`, `true`, null: the answer waits for the next pass to be carried out (`serve.ts` runs none). `SELECT e.message_id, e.label_id, f.verdict FROM examples e JOIN decisions d ON d.message_id = e.message_id JOIN feedback f ON f.decision_id = d.id WHERE e.message_id = 'm8'` returns `m8`, `marketing`, `right`.
+- **A folded row.** `ab find role button click --name "Agree: Notifications"` on Dependabot's row (`3 messages`; take its ref from `ab snapshot -i`, as both Notifications rows have that name). The toast reads `Archive as Notifications: 3 messages` and the count drops by three.
+- **Same for more.** `ab find role cell click --name "Run failed: CI on main"` opens github-actions[bot]'s fold on one message; `ab find role button click --name "Agree: Notifications"` in the panel. The toast reads `Archive as Notifications` with `Same for 1 more`, and the panel moves on.
+- **Second view.** `ab open "$B/rules"`. No rule mentions `sale@store.example.com`. The message's panel (`ab open "$B/activity?show=all&message=m8&account=me%40example.org"`) reads `You said this is Marketing · Skipped`.
+- **Stored.** `verify.sh sql "$RUN" "SELECT label_id, carry_out, by_user, outcome FROM decisions WHERE message_id = 'm8' ORDER BY id DESC LIMIT 1"` returns `marketing`, `true`, `true`, `skipped`, and `outcome_detail` is `message no longer exists`: the answer began a pass at once, and the stand-in Gmail holds no mail. `SELECT e.message_id, e.label_id, f.verdict FROM examples e JOIN decisions d ON d.message_id = e.message_id JOIN feedback f ON f.decision_id = d.id WHERE e.message_id = 'm8'` returns `m8`, `marketing`, `right`.
 
 ## Gotchas
 
