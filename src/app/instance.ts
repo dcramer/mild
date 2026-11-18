@@ -27,10 +27,32 @@ const slots = globalThis as typeof globalThis & { [HOST]?: Promise<Host>; [OFFER
 const host = (): Promise<Host> =>
   (slots[HOST] ??= chosen()
     .open()
+    .then((opened) => {
+      if (chosen() === HOSTS.local) closeOnStop(opened);
+      return opened;
+    })
     .catch((error: unknown) => {
       slots[HOST] = undefined;
       throw error;
     }));
+
+/**
+ * Next.js stops on SIGTERM or SIGINT by letting the requests under way finish, then calling `process.exit`. PGlite
+ * not closed by then is left as after a crash, recovered at the next open, and a copy of it may not open
+ * (docs/deploy.md), so that exit waits for the store to close.
+ */
+function closeOnStop(opened: Host) {
+  const stopping = () => {
+    const exit = process.exit.bind(process);
+    process.exit = ((code?: number) =>
+      void opened.store
+        .close()
+        .catch(reportError)
+        .finally(() => exit(code))) as typeof process.exit;
+  };
+  process.once('SIGTERM', stopping);
+  process.once('SIGINT', stopping);
+}
 
 /** Put together by each copy of this module, so a change `next dev` reloads is in the next request. */
 let opened: Promise<Sift> | undefined;
