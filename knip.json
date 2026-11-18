@@ -8,7 +8,8 @@
       "entry": [
         "src/vercel/migrate.ts",
         "public/sw.js",
-        ".claude/skills/verify-sift/scripts/*.ts"
+        ".claude/skills/verify-sift/scripts/*.ts",
+        "docker/cli-modules.ts"
       ],
       "paths": {
         "@/*": [

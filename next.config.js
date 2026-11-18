@@ -2,11 +2,15 @@
 import { withWorkflow } from 'workflow/next';
 import { PAGE_HEADERS } from './src/dashboard/policy.ts';
 
+const WORLD_VERSION = 'node_modules/.pnpm/@workflow+world-local@*/node_modules/@workflow/world-local/package.json';
+
 /** @type {import('next').NextConfig} */
 export default withWorkflow({
   // `pnpm typecheck` checks the page and the server with their own settings (tsconfig.web.json, tsconfig.json).
   typescript: { tsconfigPath: 'tsconfig.web.json', ignoreBuildErrors: true },
   poweredByHeader: false,
+  // The image runs the server Next.js traces here, with only the files it loads (docker/Dockerfile). Vercel builds its own.
+  output: 'standalone',
   // Nothing uses next/image, so /_next/image optimizes nothing for anyone.
   images: { unoptimized: true },
   // The page and its files. The API and sign-in send their own (src/dashboard/server.ts), the message frame's among them.
@@ -33,10 +37,11 @@ export default withWorkflow({
     'pg',
     'redis',
   ],
-  // The migrations are read at run time (`src/store/db.ts`), and Workflow's flow route opens the database too.
+  // The migrations are read at run time (`src/store/db.ts`), and Workflow's flow route opens the database too. The
+  // Local World reads its own package.json to compare with the version its data was written by, which tracing misses.
   outputFileTracingIncludes: {
-    '/api/**': ['src/store/migrations/**'],
-    '/auth/**': ['src/store/migrations/**'],
-    '/.well-known/workflow/**': ['src/store/migrations/**'],
+    '/api/**': ['src/store/migrations/**', WORLD_VERSION],
+    '/auth/**': ['src/store/migrations/**', WORLD_VERSION],
+    '/.well-known/workflow/**': ['src/store/migrations/**', WORLD_VERSION],
   },
 });
