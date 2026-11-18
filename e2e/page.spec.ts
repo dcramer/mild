@@ -1,6 +1,6 @@
 import { PAGE_HEADERS } from '../src/dashboard/policy.ts';
 import type { ManageState, Session } from '../src/dashboard/types.ts';
-import { HELD, domainPage, expect, senderPage, test } from './sift.ts';
+import { HELD, PHONE, boxOf, domainPage, expect, senderPage, sideScroll, test } from './sift.ts';
 
 test("the page cannot be framed by another site, sends no referrer, and holds nothing of anyone's", async ({ page }) => {
   const { request } = page;
@@ -99,4 +99,29 @@ test("a screen's HTML is drawn for whoever asked, with what Sift does not encryp
     expect(html, path).not.toContain(session.email!);
     holdsNothing(path, html);
   }
+});
+
+test.describe('signed out', () => {
+  test.use({ signedOut: true });
+
+  test('the sign-in page draws the rope over its line', async ({ page }) => {
+    await page.goto('/');
+    const line = page.getByRole('heading', { name: 'Your inbox, without the pesky salespeople.', level: 1 });
+    const drawing = page.getByRole('main').locator('svg');
+    await expect(drawing).toBeVisible();
+    const box = await boxOf(drawing);
+    expect(box.y + box.height).toBeLessThanOrEqual((await boxOf(line)).y);
+  });
+
+  test.describe('On a phone', () => {
+    test.use({ viewport: PHONE });
+
+    test('the rope on the sign-in page fits the screen, and the button stays under the thumb', async ({ page }) => {
+      await page.goto('/');
+      await expect(page.getByRole('main').locator('svg')).toBeVisible();
+      await sideScroll(page).toBe(0);
+      const button = await boxOf(page.getByRole('link', { name: 'Sign in with Google' }));
+      expect(button.y + button.height).toBeLessThanOrEqual(PHONE.height);
+    });
+  });
 });
