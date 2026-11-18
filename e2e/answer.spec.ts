@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { makeRule, proposal, ruleDialog, seededRulesOnly } from './rule.ts';
 import {
+  answersSent,
   choose,
   expect,
   failureToast,
@@ -10,8 +11,10 @@ import {
   panel,
   panelHeading,
   param,
+  putAway,
   query,
   refused,
+  reviewRows,
   reviewSearch,
   row,
   test,
@@ -34,18 +37,21 @@ test.describe('Answering mail', () => {
     await expect(page.getByRole('main')).not.toContainText('sale@store.example.com');
   });
 
-  test('choosing another label only changes the check until it is pressed', async ({ page }) => {
+  test('picking another label answers it', async ({ page }) => {
     await page.goto('/');
     const store = row(page, 'Winter sale starts now');
     await choose(store, 'Notifications');
-    await expect(store.getByRole('button', { name: 'Save: Notifications' })).toBeVisible();
-    await expect(store.getByRole('button', { name: 'Agree: Marketing' })).toHaveCount(0);
-    await expect(forReviewLink(page)).toHaveAccessibleName('For review 12');
-    await expect(panel(page)).toHaveCount(0);
-
-    await store.getByRole('button', { name: 'Save: Notifications' }).click();
     await expect(toast(page, 'Archive as Notifications')).toBeVisible();
     await expect(store).toHaveCount(0);
+    await expect(forReviewLink(page)).toHaveAccessibleName('For review 11');
+    await expect(panel(page)).toHaveCount(0);
+  });
+
+  test('picking Sift’s own label from the list answers it too', async ({ page }) => {
+    await page.goto('/');
+    await choose(row(page, 'Winter sale starts now'), 'Marketing');
+    await expect(toast(page, 'Archive as Marketing')).toBeVisible();
+    await expect(row(page, 'Winter sale starts now')).toHaveCount(0);
   });
 
   test('a folded row is answered as all of its messages', async ({ page }) => {
@@ -64,10 +70,9 @@ test.describe('Answering mail', () => {
     const open = await openMessage(page, 'Lunch on Thursday?');
     await param(page, 'message').toBe('m6');
     await expect(open.getByRole('combobox', { name: 'What this message is' })).toHaveText('Unlabelled');
-    await expect(open.getByRole('button', { name: 'Choose what it is first' })).toBeDisabled();
+    await expect(open.getByRole('button', { name: 'Choose what it is' })).toBeDisabled();
 
     await choose(open, 'Marketing');
-    await open.getByRole('button', { name: 'Save: Marketing' }).click();
     await expect(toast(page, 'Archive as Marketing')).toBeVisible();
     await expect(open).toHaveCount(0);
     await param(page, 'message').toBeNull();
@@ -79,7 +84,6 @@ test.describe('Answering mail', () => {
     await page.goto('/');
     const open = await openMessage(page, 'Replica lag on db-3');
     await choose(open, 'Notifications');
-    await open.getByRole('button', { name: 'Save: Notifications' }).click();
 
     const said = toast(page, 'Archive as Notifications');
     await expect(said.getByRole('button', { name: 'Same for 1 more' })).toBeVisible();
@@ -97,12 +101,12 @@ test.describe('Answering mail', () => {
     await page.goto('/');
     const open = await openMessage(page, 'Replica lag on db-3');
     await choose(open, 'Notifications');
-    await open.getByRole('button', { name: 'Save: Notifications' }).click();
     await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
 
     await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
     await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
     await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await putAway(page);
     await expect(open.getByRole('combobox', { name: 'What this message is' })).toHaveText('Notifications');
   });
 
@@ -110,7 +114,6 @@ test.describe('Answering mail', () => {
     await page.goto('/');
     const open = await openMessage(page, 'Replica lag on db-3');
     await choose(open, 'Notifications');
-    await open.getByRole('button', { name: 'Save: Notifications' }).click();
     await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
     await open.getByRole('button', { name: 'Next' }).click();
     await expect(panelHeading(page, 'Re: Fix the release script (#412)')).toBeVisible();
@@ -124,7 +127,6 @@ test.describe('Answering mail', () => {
   test('“Same for 1 more” after the panel closed leaves a panel opened since open', async ({ page }) => {
     await page.goto('/?q=db-');
     await choose(await openMessage(page, 'Disk 91% full on db-2'), 'Notifications');
-    await panel(page).getByRole('button', { name: 'Save: Notifications' }).click();
     await expect(panel(page)).toHaveCount(0);
 
     await reviewSearch(page).fill('');
@@ -139,7 +141,6 @@ test.describe('Answering mail', () => {
     await page.goto('/');
     const open = await openMessage(page, 'Replica lag on db-3');
     await choose(open, 'Notifications');
-    await open.getByRole('button', { name: 'Save: Notifications' }).click();
     await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
     await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
     await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
@@ -153,7 +154,6 @@ test.describe('Answering mail', () => {
   test('“Same for 1 more” answers the sender’s other waiting message', async ({ page }) => {
     await page.goto('/');
     await choose(row(page, 'Replica lag on db-3'), 'Notifications');
-    await row(page, 'Replica lag on db-3').getByRole('button', { name: 'Save: Notifications' }).click();
     await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
     await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
     await expect(row(page, 'Disk 91% full on db-2')).toHaveCount(0);
@@ -259,23 +259,80 @@ test.describe('An answer on its way', () => {
     return release;
   };
 
-  test('takes its row away before it is saved, and says so once it is', async ({ page }) => {
-    const release = await holdAnswers(page);
+  test('is sent only once its toast goes', async ({ page }) => {
+    const sent = answersSent(page);
     await page.goto('/');
     await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
-    await expect(row(page, 'Winter sale starts now')).toHaveCount(0);
-    await expect(toast(page, 'Archive as Marketing')).toHaveCount(0);
-
-    release();
     await expect(toast(page, 'Archive as Marketing')).toBeVisible();
-    await expect(forReviewLink(page)).toHaveAccessibleName('For review 11');
     await expect(row(page, 'Winter sale starts now')).toHaveCount(0);
+    await expect(forReviewLink(page)).toHaveAccessibleName('For review 11');
+    expect(sent()).toBe(0);
+
+    await putAway(page);
+    await expect(toast(page, 'Archive as Marketing')).toHaveCount(0);
+    await expect.poll(sent).toBe(1);
+    await expect(forReviewLink(page)).toHaveAccessibleName('For review 11');
+    await page.reload();
+    await expect(reviewRows(page).first()).toBeVisible();
+    await expect(row(page, 'Winter sale starts now')).toHaveCount(0);
+  });
+
+  test('is sent when its toast times out', async ({ page }) => {
+    const sent = answersSent(page);
+    await page.clock.install();
+    await page.goto('/');
+    await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
+    await expect(toast(page, 'Archive as Marketing')).toBeVisible();
+    await page.clock.runFor(8000);
+    await page.clock.resume();
+    await expect(toast(page, 'Archive as Marketing')).toHaveCount(0);
+    await expect.poll(sent).toBe(1);
+  });
+
+  test('Undo puts the row back and sends nothing', async ({ page }) => {
+    const sent = answersSent(page);
+    await page.goto('/');
+    await choose(row(page, 'Winter sale starts now'), 'Notifications');
+    await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Undo' }).click();
+    await expect(toast(page, 'Archive as Notifications')).toHaveCount(0);
+    await expect(row(page, 'Winter sale starts now')).toBeVisible();
+    await expect(forReviewLink(page)).toHaveAccessibleName('For review 12');
+
+    await putAway(page);
+    await page.reload();
+    await expect(row(page, 'Winter sale starts now')).toBeVisible();
+    expect(sent()).toBe(0);
+  });
+
+  test('Z undoes only the latest, and the one before it is sent', async ({ page }) => {
+    const sent = answersSent(page);
+    await page.goto('/');
+    await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
+    await choose(row(page, 'Notes from the review'), 'Notifications');
+    await expect(toast(page, 'Archive as Notifications')).toBeVisible();
+    await expect.poll(sent).toBe(1);
+
+    await page.keyboard.press('z');
+    await expect(row(page, 'Notes from the review')).toBeVisible();
+    await expect(row(page, 'Winter sale starts now')).toHaveCount(0);
+    await expect(forReviewLink(page)).toHaveAccessibleName('For review 11');
+    expect(sent()).toBe(1);
+  });
+
+  test('a folded row comes back whole on Undo', async ({ page }) => {
+    await page.goto('/');
+    await row(page, '3 messages').getByRole('button', { name: 'Agree: Notifications' }).click();
+    await expect(row(page, '3 messages')).toHaveCount(0);
+    await toast(page, 'Archive as Notifications: 3 messages').getByRole('button', { name: 'Undo' }).click();
+    await expect(row(page, '3 messages')).toBeVisible();
+    await expect(forReviewLink(page)).toHaveAccessibleName('For review 12');
   });
 
   refused('that fails puts its row back and says why', async ({ page }) => {
     const release = await holdAnswers(page);
     await page.goto('/');
     await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
+    await putAway(page);
     await expect(row(page, 'Winter sale starts now')).toHaveCount(0);
 
     release({ status: 409, json: { error: 'That message has changed.' } });
@@ -291,8 +348,8 @@ test.describe('An answer on its way', () => {
     await page.goto('/');
     const open = await openMessage(page, 'Replica lag on db-3');
     await choose(open, 'Notifications');
-    await open.getByRole('button', { name: 'Save: Notifications' }).click();
     await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await putAway(page);
 
     release({ status: 409, json: { error: 'That message has changed.' } });
     await expect(failureToast(page, 'Could not save your answer')).toBeVisible();

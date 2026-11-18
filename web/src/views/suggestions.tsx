@@ -4,7 +4,7 @@ import { type ReactNode, useState } from 'react';
 import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
 import { MatchWords, SenderCell } from '@/components/sender.tsx';
-import { messageKey, useParam } from '@/lib/params.ts';
+import { messageKey, proposalKey, useParam } from '@/lib/params.ts';
 import { type SuggestionItem, type Suggestions, api, useLoaded } from '@/lib/api.ts';
 import { useAction, useHidden } from '@/lib/action.ts';
 import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, inboxFirst, count, factFilterName, outcomeName, plural, sureness } from '@/lib/format.ts';
@@ -40,8 +40,6 @@ import { reveal } from '@/lib/reveal.ts';
 const UNSURE = '-';
 
 type Proposal = Suggestions['proposals'][number];
-
-const proposalKey = (p: Proposal) => `proposal/${p.id}`;
 
 /** What the user has been doing to a label's mail, and what the label does instead: "You kept the last 2, but the label archives them". */
 const USER_DID: Record<string, (n: string) => string> = {

@@ -4,6 +4,13 @@ import { useEffect, useSyncExternalStore } from 'react';
 /** A message as a list's rows name it (`holds`), which is how the panel finds its way back to one. */
 export const messageKey = (m: { accountId: string; messageId: string }) => `${m.accountId}/${m.messageId}`;
 
+const PROPOSAL = 'proposal/';
+
+/** A proposal as For review's list names it, for hiding it while its dismissal is on its way. */
+export const proposalKey = (p: { id: number }) => `${PROPOSAL}${p.id}`;
+
+export const isMessageKey = (key: string) => !key.startsWith(PROPOSAL);
+
 /** The marks this page puts on a history entry: a panel opened over a list, which Back closes. */
 interface Marks {
   panel?: boolean;

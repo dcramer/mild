@@ -7,6 +7,8 @@ interface Change {
   work: () => Promise<unknown>;
   /** The rows it takes off the page while it is on its way. */
   hides: readonly string[];
+  /** When its work was done, which what is read after it already shows. */
+  done?: number;
 }
 
 const CHANGE = ['change'];
@@ -30,7 +32,10 @@ export function useAction(): {
   const reload = () => client.invalidateQueries({ predicate: (query) => !String(query.queryKey[0]).startsWith('models ') });
   const change = useMutation({
     mutationKey: CHANGE,
-    mutationFn: ({ work }: Change) => work(),
+    mutationFn: async (change: Change) => {
+      await change.work();
+      change.done = Date.now();
+    },
     // A change that hid rows is done only once the lists have loaded without them, so they do not flash back meanwhile.
     onSuccess: (_, { hides }) => (hides.length > 0 ? reload() : void reload()),
     // Several messages answered together may have been saved in part.
@@ -55,11 +60,14 @@ export function useAction(): {
   };
 }
 
-/** The rows `hide` has taken off the page, which every list it names them in leaves out. */
-export function useHidden(): ReadonlySet<string> {
+/**
+ * The rows `hide` has taken off the page, which every list it names them in leaves out. Given when a count was read
+ * (`asOf`), only those whose change it does not already show, so a count can take them off too.
+ */
+export function useHidden(asOf?: number): ReadonlySet<string> {
   const hidden = useMutationState({
     filters: { mutationKey: CHANGE, status: 'pending' },
-    select: (mutation) => (mutation.state.variables as Change | undefined)?.hides ?? [],
+    select: (mutation) => mutation.state.variables as Change | undefined,
   });
-  return new Set(hidden.flat());
+  return new Set(hidden.flatMap((c) => (c && (asOf === undefined || c.done === undefined || c.done > asOf) ? c.hides : [])));
 }

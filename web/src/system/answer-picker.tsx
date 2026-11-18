@@ -16,11 +16,9 @@ export interface Pick {
 }
 
 /**
- * Saying what something is: a dropdown that starts on sift's answer, and a check that commits it.
- * Choosing only chooses; the check commits, so agreeing is one press and a change is two. Once the choice
- * differs from where it started, the check is inked, the one ink allowed down a list, because something is
- * now waiting on the reader's press. `groups` run most likely first; `empty` is what shows, in quiet ink, when
- * there is no answer yet, and the check waits for a choice.
+ * Saying what something is: a dropdown that starts on sift's answer, and a check that agrees with it.
+ * Picking from the list is the answer, so agreeing is one press and a change is two. `groups` run most
+ * likely first; `empty` is what shows, in quiet ink, when there is no answer yet, and the check is off.
  */
 export function AnswerPicker({
   label,
@@ -47,13 +45,18 @@ export function AnswerPicker({
   const [chosen, setChosen] = useState<string | null>(value);
   const all = groups.flat();
   const current = all.find((p) => p.id === chosen);
-  const changed = chosen !== value;
   return (
     <span className={cn('inline-flex items-center gap-1.5', className)}>
       <Base.Root
         items={all.map((p) => ({ value: p.id, label: p.label }))}
         value={chosen}
-        onValueChange={(next) => (next === EXTRA ? extra?.onSelect() : next !== null && setChosen(next))}
+        onValueChange={(next, { reason }) => {
+          if (next === EXTRA) return extra?.onSelect();
+          // Base UI also sets a value of its own accord (one no longer listed), which is no answer.
+          if (next === null || reason !== 'item-press') return;
+          setChosen(next);
+          onSubmit(next);
+        }}
       >
         <Base.Trigger
           aria-label={label}
@@ -118,11 +121,11 @@ export function AnswerPicker({
         </Base.Portal>
       </Base.Root>
       <Button
-        aria-label={current ? `${changed ? 'Save' : 'Agree'}: ${current.label}` : 'Choose what it is first'}
+        aria-label={current ? `Agree: ${current.label}` : 'Choose what it is'}
         disabled={chosen === null}
         busy={busy ?? false}
         onClick={() => chosen !== null && onSubmit(chosen)}
-        className={cn('px-2', changed && 'bg-foreground text-background hover:bg-foreground/85')}
+        className="px-2"
       >
         <CheckIcon aria-hidden />
       </Button>

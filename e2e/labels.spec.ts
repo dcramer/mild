@@ -13,6 +13,7 @@ import {
   query,
   refused,
   row,
+  toasts,
   section,
   settingsActive,
   settled,
@@ -347,7 +348,7 @@ test.describe('Adding a label from an open message', () => {
     await expect(page).toHaveURL(AT);
   };
 
-  test('the new label is a choice in the same panel, on the same message', async ({ page }) => {
+  test('the new label is a choice in the same panel, and picking it answers the message', async ({ page }) => {
     await open(page);
     await choose(panel(page), 'Add a label…');
     await expect(addLabelsDialog(page)).toBeVisible();
@@ -357,7 +358,7 @@ test.describe('Adding a label from an open message', () => {
     await expect(panel(page)).toBeVisible();
     await expect(page).toHaveURL(AT);
     await choose(panel(page), 'Field trips');
-    await expect(panel(page).getByRole('combobox', { name: 'What this message is' })).toHaveText(/Field trips/);
+    await expect(toasts(page)).toContainText('as Field trips');
   });
 
   test('a suggested label is a choice in the same panel', async ({ page }) => {

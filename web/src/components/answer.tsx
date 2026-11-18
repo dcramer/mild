@@ -26,7 +26,8 @@ export interface AnswerLabel {
  * Saying what one message is, like a spam button with more than two outcomes: sift records it, does what
  * that label does to the message in Gmail, and keeps it as an example. No rule is made. When the sender
  * has other mail waiting that sift guessed the same way, the toast offers the same answer for those. An answered
- * message leaves the list, and `onDone` is called, as soon as it is pressed; the toasts wait for the save.
+ * message leaves the list, and `onDone` is called, as soon as it is pressed. The answer is sent only once its
+ * toast goes, so Undo puts the row back with nothing to take back in Gmail or the record.
  */
 export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answerable[], onDone?: () => void) {
   const { hide } = useAction();
@@ -47,31 +48,36 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
     return label ? `${outcomeName(label.disposition)} as ${label.name}` : 'Answered';
   };
 
-  const answer = (target: Answerable, labelId: string) => {
-    hide([messageKey(target)], 'Could not save your answer', async () => {
-      const reply = await say(target, labelId);
+  /** Says it with Undo, and resolves with whether to send it: false when Undo was pressed. */
+  const held = (title: string, action?: { label: string; onPress: () => void }) =>
+    new Promise<boolean>((done) => toast(title, { ...(action ? { action } : {}), undo: () => done(false), onGone: () => done(true) }));
+
+  /** Takes `targets` off the page, holds them while their toast shows, and then sends them. */
+  const send = (targets: readonly Answerable[], labelId: string, title: string, action?: { label: string; onPress: () => void }) =>
+    hide(targets.map(messageKey), 'Could not save your answer', async () => {
+      if (!(await held(title, action))) return;
+      const replies = await Promise.all(targets.map((t) => say(t, labelId)));
       // The answer is saved; what sift itself did to the message could not be taken back in Gmail.
-      if (reply.notFixed !== null) toast('Could not put the message back in Gmail', { tone: 'failure', description: reply.notFixed });
-      const alike = waiting.filter((w) => w.messageId !== target.messageId && w.sender === target.sender && w.labelId === target.labelId);
-      const said = saying(labelId);
-      toast(
-        said,
-        alike.length > 0
-          ? {
-              action: {
-                label: `Same for ${alike.length} more`,
-                // Pressed later, maybe after this message's row or panel has gone: so it never calls `onDone`, which
-                // would move or close a panel the reader has since moved on in.
-                onPress: () =>
-                  hide(alike.map(messageKey), 'Could not answer the rest', async () => {
-                    await Promise.all(alike.map((w) => say(w, labelId)));
-                    toast(`${said}: ${alike.length} more`);
-                  }),
-              },
-            }
-          : {},
-      );
+      const notFixed = replies.find((r) => r.notFixed !== null)?.notFixed;
+      if (notFixed) toast('Could not put the message back in Gmail', { tone: 'failure', description: notFixed });
     });
+
+  const answer = (target: Answerable, labelId: string) => {
+    const alike = waiting.filter((w) => w.messageId !== target.messageId && w.sender === target.sender && w.labelId === target.labelId);
+    const said = saying(labelId);
+    send(
+      [target],
+      labelId,
+      said,
+      alike.length > 0
+        ? {
+            label: `Same for ${alike.length} more`,
+            // Pressed later, maybe after this message's row or panel has gone: so it never calls `onDone`, which
+            // would move or close a panel the reader has since moved on in.
+            onPress: () => send(alike, labelId, `${said}: ${alike.length} more`),
+          }
+        : undefined,
+    );
     onDone?.();
   };
 
@@ -97,10 +103,7 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
 
   /** One answer for several messages, as a folded row gives it. */
   const answerAll = (targets: readonly Answerable[], labelId: string) => {
-    hide(targets.map(messageKey), 'Could not save your answer', async () => {
-      await Promise.all(targets.map((t) => say(t, labelId)));
-      toast(`${saying(labelId)}: ${plural(targets.length, 'message')}`);
-    });
+    send(targets, labelId, `${saying(labelId)}: ${plural(targets.length, 'message')}`);
     onDone?.();
   };
 
