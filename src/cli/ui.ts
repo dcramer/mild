@@ -1,16 +1,25 @@
 import { homedir } from 'node:os';
 import { emitKeypressEvents } from 'node:readline';
-import { stripVTControlCharacters } from 'node:util';
-import pc from 'picocolors';
+import { stripVTControlCharacters, styleText } from 'node:util';
 import { ask, readLine, suspendReader } from './terminal.ts';
 
 /**
  * How sift looks in a terminal. The same language as the dashboard: plain ink, quiet secondary
  * text, and one colour, a yellow highlighter, kept for the name and for what needs the reader.
  * Red is only for failures. Colour and motion switch off by themselves when output is not a
- * terminal (picocolors honours NO_COLOR and pipes), so everything here still reads as plain text.
+ * terminal (`styleText` honours NO_COLOR, FORCE_COLOR and pipes), so everything here still reads as plain text.
  */
 const interactive = process.stdout.isTTY && process.stdin.isTTY;
+
+const style = (format: Parameters<typeof styleText>[0]) => (text: string) => styleText(format, text);
+const pc = {
+  dim: style('dim'),
+  bold: style('bold'),
+  underline: style('underline'),
+  red: style('red'),
+  yellow: style('yellow'),
+  mark: style(['bgYellow', 'black']),
+};
 
 // Rows written since `mark()`, so a finished section can be folded away. Counts wrapped rows too.
 let tracking = false;
@@ -30,7 +39,7 @@ const tilde = (path: string) => (path.startsWith(homedir()) ? `~${path.slice(hom
 
 export const paint = {
   /** The highlighter. */
-  mark: (text: string) => pc.bgYellow(pc.black(text)),
+  mark: pc.mark,
   dim: pc.dim,
   bold: pc.bold,
   /** Something to type. */
