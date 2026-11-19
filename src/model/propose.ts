@@ -2,6 +2,7 @@ import type { Api, AssistantMessage, Context, Model, Models, Tool } from '@earen
 import { DRAFT_ACTIONS, MAX_DRAFTS, PROPOSAL_PROMPT, PROPOSAL_TOOL, type Proposer, buildProposalPrompt, readProposal } from '../triage/proposal.ts';
 import { describeFailure as failure } from '../triage/stages/model.ts';
 import { chat, executeTool } from './chat.ts';
+import type { Reasoning } from './reasoning.ts';
 
 /** One attempt, as for the judge; the person asks again. Longer, since it writes several labels. */
 const CALL = { timeoutMs: 120_000, maxRetries: 0 };
@@ -10,7 +11,7 @@ const CALL = { timeoutMs: 120_000, maxRetries: 0 };
  * A Proposer backed by a pi-ai model: one request with the person's own words, no mail, and no tool but the
  * one that records its suggestions, which are checked here before use.
  */
-export function createProposer(models: Models, model: Model<Api>): Proposer {
+export function createProposer(models: Models, model: Model<Api>, reasoning: Reasoning): Proposer {
   return async (input) => {
     const tool: Tool = {
       name: PROPOSAL_TOOL,
@@ -51,7 +52,7 @@ export function createProposer(models: Models, model: Model<Api>): Proposer {
     let message: AssistantMessage;
     try {
       // Asked with the person's own words and labels, never mail, so the call's prompt and answer go on its span.
-      message = await chat(models, model, context, CALL, true);
+      message = await chat(models, model, context, { ...CALL, reasoning }, true);
     } catch (error) {
       return { failed: failure(error) };
     }

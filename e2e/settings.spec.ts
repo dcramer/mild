@@ -168,6 +168,17 @@ test.describe('Settings', () => {
     await query(page).toBe('');
   });
 
+  test('the model thinks a little by default, and as hard as chosen once changed', async ({ page }) => {
+    await page.goto('/?settings=1');
+    const reasoning = settings(page).getByRole('radiogroup', { name: 'Reasoning' });
+    await expect(reasoning.getByRole('radio', { name: 'Low' })).toBeChecked();
+    await reasoning.getByRole('radio', { name: 'Medium' }).click();
+    await expect(reasoning.getByRole('radio', { name: 'Medium' })).toBeChecked();
+    await page.reload();
+    await expect(reasoning.getByRole('radio', { name: 'Medium' })).toBeChecked();
+    await expect(reasoning.getByRole('radio', { name: 'Low' })).not.toBeChecked();
+  });
+
   test('Change provider opens over Settings, and closing it leaves Settings open', async ({ page }) => {
     await page.goto('/?settings=1');
     await settings(page).getByRole('button', { name: 'Change provider' }).click();

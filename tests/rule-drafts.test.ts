@@ -151,7 +151,7 @@ describe('the model filling in a rule', () => {
     const provider = fauxProvider();
     const models = createModels();
     models.setProvider(provider.provider);
-    return { provider, complete: vi.spyOn(models, 'complete'), draft: createRuleDrafter(models, provider.getModel()) };
+    return { provider, complete: vi.spyOn(models, 'completeSimple'), draft: createRuleDrafter(models, provider.getModel(), 'low') };
   }
   const input = { goal: 'Archive the Example digest', labels: LABELS };
 

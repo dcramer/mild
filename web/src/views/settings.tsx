@@ -11,6 +11,7 @@ import { useParam } from '@/lib/params.ts';
 import {
   Ago,
   Button,
+  ChoiceGroup,
   ConfirmButton,
   DeleteButton,
   Dialog,
@@ -107,6 +108,12 @@ function Active({ state, reload }: { state: ManageState; reload: () => void }) {
 const HOURS = Array.from({ length: 24 }, (_, hour) => [String(hour), `${hour % 12 || 12}:00 ${hour < 12 ? 'AM' : 'PM'}`] as const);
 
 /** A time zone as its place reads: "Los Angeles" for `America/Los_Angeles`. */
+const REASONING = [
+  ['low', 'Low'],
+  ['medium', 'Medium'],
+  ['high', 'High'],
+] as const satisfies readonly (readonly [ManageState['model']['reasoning'], string])[];
+
 const placeOf = (zone: string) => (zone.split('/').at(-1) ?? zone).replace(/_/g, ' ');
 
 /** When the digests arrive, while some label puts its mail in one. Saving it takes this browser's time zone too. */
@@ -262,6 +269,15 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
             options={offered.map((m) => [m, m.slice(provider.length + 1)] as const)}
             disabled={busy}
             onChange={(model) => run(() => api.setModel(model), reload)}
+          />
+        </SettingRow>
+        <SettingRow title="Reasoning" note="How long it thinks before it answers. Higher is slower, and each message takes more tokens.">
+          <ChoiceGroup
+            label="Reasoning"
+            value={state.model.reasoning}
+            options={REASONING}
+            disabled={busy}
+            onChange={(reasoning) => reasoning && run(() => api.setReasoning(reasoning), reload)}
           />
         </SettingRow>
         {others.map((p) => (

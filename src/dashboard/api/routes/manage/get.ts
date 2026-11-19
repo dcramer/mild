@@ -17,7 +17,7 @@ async function manageState({ db, controls, person }: Context, scope: Scope): Pro
   return {
     owner: scope.owner,
     active: own.active,
-    model: { chosen: own.model, ...(controls ? await controls.modelSignIns(db) : { choices: [], signedIn: [], pending: null }) },
+    model: { chosen: own.model, reasoning: own.reasoning, ...(controls ? await controls.modelSignIns(db) : { choices: [], signedIn: [], pending: null }) },
     activity: {
       ...activity,
       // Only these mailboxes were asked about; checked again here, since a leak would be someone else's mail.

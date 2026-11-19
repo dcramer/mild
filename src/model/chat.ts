@@ -1,5 +1,6 @@
 import type { Api, AssistantMessage, Context, Message, Model, Models } from '@earendil-works/pi-ai';
 import { type Attributes, type Traced, traced } from '../telemetry.ts';
+import type { Reasoning } from './reasoning.ts';
 
 /** Why the model stopped, as OpenTelemetry says it. */
 const finishOf = (message: AssistantMessage) => (message.stopReason === 'toolUse' ? 'tool_call' : message.stopReason);
@@ -56,7 +57,7 @@ const otelMessage = (message: Message) => ({
 });
 
 /**
- * One request to the model, as a `gen_ai.chat` span. Rejects as `complete` does. `transcript` puts the
+ * One request to the model, as a `gen_ai.chat` span, thinking as hard as `reasoning` says. Rejects as `completeSimple` does. `transcript` puts the
  * prompt, the tools and the answer on the span, for an agent that is never shown mail; the scrubber drops
  * them from any other (`SHOWS_PROMPT`, src/telemetry.ts).
  */
@@ -64,7 +65,7 @@ export const chat = (
   models: Models,
   model: Model<Api>,
   context: Context,
-  options: { timeoutMs: number; maxRetries: number },
+  options: { timeoutMs: number; maxRetries: number; reasoning: Reasoning },
   transcript = false,
 ): Promise<AssistantMessage> =>
   traced(
@@ -85,7 +86,7 @@ export const chat = (
         : {}),
     },
     async (span) => {
-      const settled = await models.complete(model, context, options);
+      const settled = await models.completeSimple(model, context, options);
       span.set(answered(settled));
       if (transcript) span.set({ 'gen_ai.output.messages': JSON.stringify([{ ...otelMessage(settled), finish_reason: finishOf(settled) }]) });
       if (settled.stopReason === 'error' || settled.stopReason === 'aborted') span.fail();

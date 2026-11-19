@@ -267,7 +267,7 @@ describe('judge', () => {
     const faux = fauxProvider();
     const models = createModels();
     models.setProvider(faux.provider);
-    const judge = createJudge(models, faux.getModel());
+    const judge = createJudge(models, faux.getModel(), 'low');
     const ask = () => judge({ evidence: evidence(), labels: SAMPLE_LABELS });
     return { faux, ask };
   }
@@ -293,7 +293,19 @@ describe('judge', () => {
     faux.setResponses([
       fauxAssistantMessage([fauxToolCall(VERDICT_TOOL, { reason: 'r', label: 'leave_in_inbox', confidence: 0.9 })], { stopReason: 'toolUse' }),
     ]);
-    expect(await createJudge(models, faux.getModel())({ evidence: evidence(), labels: [...SAMPLE_LABELS, inbox] })).toMatchObject({ label: 'everything_else' });
+    expect(await createJudge(models, faux.getModel(), 'low')({ evidence: evidence(), labels: [...SAMPLE_LABELS, inbox] })).toMatchObject({
+      label: 'everything_else',
+    });
+  });
+
+  it('thinks as hard as the person chose', async () => {
+    const faux = fauxProvider();
+    const models = createModels();
+    models.setProvider(faux.provider);
+    faux.setResponses([fauxAssistantMessage([fauxToolCall(VERDICT_TOOL, { reason: 'r', label: 'marketing', confidence: 0.9 })], { stopReason: 'toolUse' })]);
+    const complete = vi.spyOn(models, 'completeSimple');
+    await createJudge(models, faux.getModel(), 'medium')({ evidence: evidence(), labels: SAMPLE_LABELS });
+    expect(complete.mock.calls[0]?.[2]).toMatchObject({ reasoning: 'medium' });
   });
 
   it('asks for the reason before the label, so the label follows from it', async () => {
@@ -301,8 +313,8 @@ describe('judge', () => {
     const models = createModels();
     models.setProvider(faux.provider);
     faux.setResponses([fauxAssistantMessage([fauxToolCall(VERDICT_TOOL, { reason: 'r', label: 'marketing', confidence: 0.9 })], { stopReason: 'toolUse' })]);
-    const complete = vi.spyOn(models, 'complete');
-    await createJudge(models, faux.getModel())({ evidence: evidence(), labels: SAMPLE_LABELS });
+    const complete = vi.spyOn(models, 'completeSimple');
+    await createJudge(models, faux.getModel(), 'low')({ evidence: evidence(), labels: SAMPLE_LABELS });
     const parameters = complete.mock.calls[0]?.[1].tools?.find((t) => t.name === VERDICT_TOOL)?.parameters as { properties: object; required: string[] };
     expect(Object.keys(parameters.properties)).toEqual(['reason', 'label', 'confidence']);
     expect(parameters.required).toEqual(['reason', 'label', 'confidence']);

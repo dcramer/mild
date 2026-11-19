@@ -101,7 +101,7 @@ function answering(): { models: Models; model: Model<Api> } {
       cost: { input: 0.0009, output: 0.0004, cacheRead: 0.00001, cacheWrite: 0, total: 0.00131 },
     },
   };
-  return { models: { complete: async () => answer } as unknown as Models, model };
+  return { models: { completeSimple: async () => answer } as unknown as Models, model };
 }
 
 describe('the model call, as Sentry is sent it', () => {
@@ -110,6 +110,7 @@ describe('the model call, as Sentry is sent it', () => {
     const verdict = await createJudge(
       models,
       model,
+      'low',
     )({
       evidence: { facts: message, known: deriveFacts(message), body: BODY, sender: { messagesSeen: 1, userHasWritten: false } },
       labels: SAMPLE_LABELS,
@@ -141,7 +142,7 @@ describe('the model call, as Sentry is sent it', () => {
     await recordSync(db, ACCOUNT, [message], '2', 0);
     const { models, model } = answering();
     await triageAccount(
-      { db, mailbox: null, model: { judge: createJudge(models, model), model: 'faux/model' }, sources: quietSources() },
+      { db, mailbox: null, model: { judge: createJudge(models, model, 'low'), model: 'faux/model' }, sources: quietSources() },
       await firstAccount(db),
     );
 
@@ -192,7 +193,7 @@ describe('each conversation with the model', () => {
         { stopReason: 'toolUse' },
       ),
     );
-    await draftRule({ db, draft: createRuleDrafter(models, model), model: 'faux/model' }, { accountId: ACCOUNT, goal: GOAL });
+    await draftRule({ db, draft: createRuleDrafter(models, model, 'low'), model: 'faux/model' }, { accountId: ACCOUNT, goal: GOAL });
 
     const { spans, text } = await delivered();
     const draft = await raw(db).get<{ id: number }>('SELECT id FROM rule_drafts');
@@ -213,7 +214,7 @@ describe('each conversation with the model', () => {
     const { db } = await keyedPerson();
     await storeExample(db, ACCOUNT, { id: 'abc123', from: SENDER, label: 'transactional', subject: SUBJECT, body: BODY });
     const { models, model } = answering();
-    const deps = { db, judge: createJudge(models, model), model: 'faux/model' };
+    const deps = { db, judge: createJudge(models, model, 'low'), model: 'faux/model' };
     const run = await startEval(deps, { accountId: ACCOUNT, fewShot: false });
     expect(await continueEval(deps, run, Infinity)).toBe(true);
 
@@ -227,7 +228,7 @@ describe('each conversation with the model', () => {
   it('is a digest’s picks, shown mail, so none of what it was asked or answered', async () => {
     const { db } = await keyedPerson();
     const { models, model } = scripted(fauxAssistantMessage([fauxToolCall(HIGHLIGHT_TOOL, { picks: [{ item: 1, why: REASON }] })], { stopReason: 'toolUse' }));
-    const highlight = createHighlighter(models, model);
+    const highlight = createHighlighter(models, model, 'low');
     const answer = await invokeAgent('digest', [db.person, 4], { 'sift.digest': 4 }, () =>
       highlight({
         label: { name: 'Bills', description: 'Invoices.' },
@@ -250,7 +251,7 @@ describe('each conversation with the model', () => {
     const PITCHES = { why: 'w', name: 'Sales pitches', description: 'Pitches.', action: 'archive', markRead: false, unsubscribe: true };
     const answer = () => fauxAssistantMessage([fauxToolCall(PROPOSAL_TOOL, { labels: [PITCHES] })], { stopReason: 'toolUse' });
     const { models, model } = scripted(answer(), answer());
-    const propose = createProposer(models, model);
+    const propose = createProposer(models, model, 'low');
     await proposeLabels({ db, propose, model: 'faux/model' }, { accountId: ACCOUNT, goal: GOAL });
     await proposeLabels({ db, propose, model: 'faux/model' }, { accountId: ACCOUNT, goal: GOAL });
 

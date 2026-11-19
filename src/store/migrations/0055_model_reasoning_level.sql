@@ -1,0 +1,2 @@
+ALTER TABLE "preferences" ADD COLUMN "reasoning" text DEFAULT 'low' NOT NULL;--> statement-breakpoint
+ALTER TABLE "preferences" ADD CONSTRAINT "preferences_reasoning" CHECK ("preferences"."reasoning" IN ('low', 'medium', 'high'));

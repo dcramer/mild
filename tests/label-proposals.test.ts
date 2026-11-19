@@ -68,8 +68,8 @@ describe('what the model suggests', () => {
     const faux = fauxProvider();
     const models = createModels();
     models.setProvider(faux.provider);
-    const complete = vi.spyOn(models, 'complete');
-    const propose = createProposer(models, faux.getModel());
+    const complete = vi.spyOn(models, 'completeSimple');
+    const propose = createProposer(models, faux.getModel(), 'low');
     faux.setResponses([fauxAssistantMessage([fauxToolCall(PROPOSAL_TOOL, { labels: [PITCHES] })], { stopReason: 'toolUse' })]);
     expect(await propose({ goal: 'Fewer pitches', labels: [] })).toMatchObject({
       drafts: [{ name: 'Cold outreach', disposition: 'archive', unsubscribe: true }],
